@@ -1,5 +1,7 @@
-from jax import config
-config.update("jax_enable_x64", True)
+# Initialize JAX configuration through central config
+from nlsq.config import JAXConfig
+_jax_config = JAXConfig()
+
 import jax.numpy as jnp
 from jax import jit
 

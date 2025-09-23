@@ -1,74 +1,38 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar 14 19:26:59 2022
+NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU
 
-@author: hofer
+A JAX-based implementation of curve fitting algorithms with automatic
+differentiation and GPU/TPU acceleration.
 """
 
-# Explicit imports from minpack module
+# Version information
+try:
+    from ._version import __version__
+except ImportError:
+    __version__ = "0.0.0+unknown"
+
+# Main API imports
 from .minpack import CurveFit, curve_fit
-
-# Explicit imports from least_squares module
-from .least_squares import LeastSquares, prepare_bounds
-
-# Explicit imports from loss_functions module
-from .loss_functions import LossFunctionsJIT
-
-# Explicit imports from trf module
-from .trf import TrustRegionReflective
-
-# Explicit imports from common_jax module
-from .common_jax import CommonJIT
-
-# Explicit imports from common_scipy module
-from .common_scipy import (
-    EPS,
-    in_bounds,
-    make_strictly_feasible,
-    update_tr_radius,
-    solve_lsq_trust_region,
-    check_termination,
-    CL_scaling_vector,
-    find_active_constraints,
-    step_size_to_bound,
-    intersect_trust_region,
-    minimize_quadratic_1d,
-    print_header_nonlinear,
-    print_iteration_nonlinear
-)
-
-# Explicit imports from _optimize module
+from .least_squares import LeastSquares
 from ._optimize import OptimizeResult, OptimizeWarning
 
-# Explicitly define exported names
+# Public API - only expose main user-facing functions
 __all__ = [
-    # Main API
-    'CurveFit',
+    # Main curve fitting API
     'curve_fit',
-    # Least squares
+    'CurveFit',
+    # Advanced API
     'LeastSquares',
-    'prepare_bounds',
-    # Loss functions
-    'LossFunctionsJIT',
-    # Trust region
-    'TrustRegionReflective',
-    # Common JAX
-    'CommonJIT',
-    # Common SciPy utilities
-    'EPS',
-    'in_bounds',
-    'make_strictly_feasible',
-    'update_tr_radius',
-    'solve_lsq_trust_region',
-    'check_termination',
-    'CL_scaling_vector',
-    'find_active_constraints',
-    'step_size_to_bound',
-    'intersect_trust_region',
-    'minimize_quadratic_1d',
-    'print_header_nonlinear',
-    'print_iteration_nonlinear',
-    # Optimize results
+    # Result types
     'OptimizeResult',
-    'OptimizeWarning'
+    'OptimizeWarning',
+    # Version
+    '__version__',
 ]
+
+# Optional: Provide convenience access to submodules for advanced users
+# Users can still access internal functions via:
+# from nlsq.loss_functions import LossFunctionsJIT
+# from nlsq.trf import TrustRegionReflective
+# etc.

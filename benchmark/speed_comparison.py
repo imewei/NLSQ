@@ -34,7 +34,7 @@ class PlotResults():
         # dkeys = ['JAX_ut', 'SciPy']
         dkeys = ['JAX', 'SciPy']
         
-        label_dict = {'SciPy': 'SciPy', 'Gpufit':'Gpufit', 'JAX':'JAXFit', 'JAX_ut':'JAXFit'}
+        label_dict = {'SciPy': 'SciPy', 'Gpufit':'Gpufit', 'JAX':'NLSQ', 'JAX_ut':'NLSQ'}
         
         for key, ls, color, marker in zip(dkeys, lstyles, colors, markers):
           tdict = df_dict[key]

@@ -4,8 +4,10 @@ large data operations and are therefore better suited to be compiled with
 JAX.  They are compiled with JAX and then added to the CommonJIT class.
 """
 import numpy as np
-from jax import config
-config.update("jax_enable_x64", True)
+
+# Initialize JAX configuration through central config
+from nlsq.config import JAXConfig
+_jax_config = JAXConfig()
 import jax.numpy as jnp
 from jax import jit
 import time

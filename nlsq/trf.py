@@ -90,12 +90,19 @@ from numpy.linalg import norm
 import time
 from typing import Callable, Optional, Tuple, Union, List, Dict, Any, Sequence
 
-from jax import config
-config.update("jax_enable_x64", True)
+# Initialize JAX configuration through central config
+from nlsq.config import JAXConfig
+_jax_config = JAXConfig()
 import jax.numpy as jnp
 from jax.scipy.linalg import svd as jax_svd
 from jax import jit
 from jax.tree_util import tree_flatten
+
+# Logging support
+from nlsq.logging import get_logger
+
+# Optimizer base class
+from nlsq.optimizer_base import TrustRegionOptimizerBase
 
 from nlsq.common_scipy import (update_tr_radius, solve_lsq_trust_region,
                     check_termination, CL_scaling_vector,
@@ -330,11 +337,12 @@ class TrustRegionJITFunctions():
         self.check_isfinite = isfinite
 
 
-class TrustRegionReflective(TrustRegionJITFunctions):
+class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
     
     def __init__(self):
         """Initialize the TrustRegionReflective class."""
-        super().__init__()
+        TrustRegionJITFunctions.__init__(self)
+        TrustRegionOptimizerBase.__init__(self, name='trf')
         self.cJIT = CommonJIT()
 
 
@@ -549,7 +557,11 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         nfev = 1
         njev = 1
         m, n = J.shape
-    
+
+        # Log optimization start
+        self.logger.info("Starting TRF optimization (no bounds)",
+                        n_params=n, n_residuals=m, max_nfev=max_nfev)
+
         if loss_function is not None:
             rho = loss_function(f, f_scale)
             cost_jnp = self.calculate_cost(rho, data_mask)
@@ -574,44 +586,58 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             max_nfev = x0.size * 100
     
         alpha = 0.0  # "Levenberg-Marquardt" parameter
-    
+
         termination_status = None
         iteration = 0
         step_norm = None
         actual_reduction = None
-    
+
         if verbose == 2:
             print_header_nonlinear()
-    
-        while True:
-            g_norm = norm(g, ord=np.inf)
-            if g_norm < gtol:
-                termination_status = 1
-                  
-            if verbose == 2:
-                print_iteration_nonlinear(iteration, nfev, cost, actual_reduction,
-                                          step_norm, g_norm)
-    
-            if termination_status is not None or nfev == max_nfev:
-                break
-    
-            d = scale
-            d_jnp = jnp.array(scale)
-            g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
-            svd_output = self.svd_no_bounds(J, d_jnp, f)
 
-            J_h = svd_output[0]
-            s, V, uf = [np.array(val) for val in svd_output[2:]]
+        # Start optimization timer
+        with self.logger.timer('optimization', log_result=False):
+            while True:
+                g_norm = norm(g, ord=np.inf)
+                if g_norm < gtol:
+                    termination_status = 1
+                    self.logger.debug("Convergence: gradient tolerance satisfied", g_norm=g_norm, gtol=gtol)
 
-            actual_reduction = -1
-            while actual_reduction <= 0 and nfev < max_nfev:
-                step_h, alpha, n_iter = solve_lsq_trust_region(
-                    n, m, uf, s, V, Delta, initial_alpha=alpha)
-    
-                predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(J_h, 
-                                                                        g_h_jnp, 
+                if verbose == 2:
+                    print_iteration_nonlinear(iteration, nfev, cost, actual_reduction,
+                                              step_norm, g_norm)
+
+                if termination_status is not None or nfev == max_nfev:
+                    if nfev == max_nfev:
+                        self.logger.warning("Maximum number of function evaluations reached", nfev=nfev)
+                    break
+
+                # Log iteration details
+                self.logger.optimization_step(
+                    iteration=iteration,
+                    cost=cost,
+                    gradient_norm=g_norm,
+                    step_size=Delta if iteration > 0 else None,
+                    nfev=nfev
+                )
+
+                d = scale
+                d_jnp = jnp.array(scale)
+                g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
+                svd_output = self.svd_no_bounds(J, d_jnp, f)
+
+                J_h = svd_output[0]
+                s, V, uf = [np.array(val) for val in svd_output[2:]]
+
+                actual_reduction = -1
+                while actual_reduction <= 0 and nfev < max_nfev:
+                    step_h, alpha, n_iter = solve_lsq_trust_region(
+                        n, m, uf, s, V, Delta, initial_alpha=alpha)
+
+                    predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(J_h,
+                                                                        g_h_jnp,
                                                                         step_h)
-                predicted_reduction = np.array(predicted_reduction_jnp)
+                    predicted_reduction = np.array(predicted_reduction_jnp)
 
                 step = d * step_h
                 x_new = x + step

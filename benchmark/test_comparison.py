@@ -169,7 +169,7 @@ print(params)
 print(popt)
 
 plt.figure()
-plt.plot(times[1:], label='JAXFit')
+plt.plot(times[1:], label='NLSQ')
 plt.plot(stimes[1:], label='SciPy')
 plt.legend()
 plt.show()

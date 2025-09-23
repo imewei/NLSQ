@@ -4,8 +4,9 @@ from inspect import signature
 import time
 from typing import Optional, Callable, Tuple, Union, List, Dict, Any
 
-from jax import config
-config.update("jax_enable_x64", True)
+# Initialize JAX configuration through central config
+from nlsq.config import JAXConfig
+_jax_config = JAXConfig()
 
 import jax.numpy as jnp
 from jax import jit
@@ -15,6 +16,7 @@ from jax.scipy.linalg import cholesky as jax_cholesky
 from nlsq._optimize import OptimizeWarning
 from nlsq.least_squares import prepare_bounds, LeastSquares
 from nlsq.common_scipy import EPS
+from nlsq.logging import get_logger
 
 __all__ = ['CurveFit', 'curve_fit']
 
@@ -76,10 +78,11 @@ class CurveFit():
         Parameters
         ----------
         flength : float, optional
-            fixed data length for fits, JAXFit pads input data to this length 
+            fixed data length for fits, JAXFit pads input data to this length
             to avoid retracing.
         """
         self.flength = flength
+        self.logger = get_logger('curve_fit')
         self.create_sigma_transform_funcs()
         self.create_covariance_svd()
         self.ls = LeastSquares()
@@ -371,6 +374,10 @@ class CurveFit():
         else:
             p0 = np.atleast_1d(p0)
             n = p0.size
+
+        # Log curve fit start
+        self.logger.info("Starting curve fit", n_params=n, n_data_points=len(ydata),
+                        method=method if method else 'trf', has_bounds=bounds != (-np.inf, np.inf))
                     
         lb, ub = prepare_bounds(bounds, n)
         if p0 is None:
@@ -406,7 +413,6 @@ class CurveFit():
         else:
             xlen = len(xdata[0])
         if xlen != m:
-            print(xdata.shape, ydata.shape)
             raise ValueError('X and Y data lengths dont match')
         
         if data_mask is None:
@@ -433,8 +439,9 @@ class CurveFit():
             if len_diff >= 0:
                 xdata, ydata = self.pad_fit_data(xdata, ydata, xdims, len_diff)
             else:
-                print('Data length greater than fixed length. This means retracing will occur')
-            
+                # Data length greater than fixed length - retracing will occur
+                pass
+
                    # Determine type of sigma
         if sigma is not None:   
             if not isinstance(sigma, np.ndarray):
@@ -455,12 +462,25 @@ class CurveFit():
                         sigma = sigma_padded
                     # scipy.linalg.cholesky requires lower=True to return L L^T = A
                     transform = self.sigma_transform2d(sigma, data_mask)
-                except:
-                    raise ValueError("Probably:`sigma` must be positive definite.")
+                except (np.linalg.LinAlgError, ValueError) as e:
+                    # Check eigenvalues to provide more informative error
+                    try:
+                        eigenvalues = np.linalg.eigvalsh(sigma[:ysize, :ysize])
+                        min_eig = np.min(eigenvalues)
+                        if min_eig <= 0:
+                            raise ValueError(
+                                f"Covariance matrix `sigma` is not positive definite. "
+                                f"Minimum eigenvalue: {min_eig:.6e}. "
+                                "All eigenvalues must be positive."
+                            ) from e
+                    except Exception:
+                        # If eigenvalue check fails, provide generic error
+                        pass
+                    raise ValueError(
+                        "Failed to compute Cholesky decomposition of `sigma`. "
+                        "The covariance matrix must be symmetric and positive definite."
+                    ) from e
             else:
-                print('sigma shape', sigma.shape)
-                print('y shape', ydata.shape, ydata.size)
-                print(len_diff)
                 raise ValueError("`sigma` has incorrect shape.")
         else:
             transform = None
@@ -477,22 +497,32 @@ class CurveFit():
         
         st = time.time()
         if timeit:
-            jnp_xdata = jnp.array(np.copy(xdata)).block_until_ready()
-            jnp_ydata = jnp.array(np.copy(ydata)).block_until_ready()
+            # Use jnp.asarray for efficient conversion without unnecessary copying
+            jnp_xdata = jnp.asarray(xdata).block_until_ready()
+            jnp_ydata = jnp.asarray(ydata).block_until_ready()
         else:
-            jnp_xdata = jnp.array(np.copy(xdata))
-            jnp_ydata = jnp.array(np.copy(ydata))
+            jnp_xdata = jnp.asarray(xdata)
+            jnp_ydata = jnp.asarray(ydata)
         ctime = time.time() - st
 
         jnp_data_mask = jnp.array(data_mask, dtype=bool)
-        res = self.ls.least_squares(f, p0, jac=jac, xdata=jnp_xdata, 
-                                    ydata=jnp_ydata, data_mask=jnp_data_mask, 
-                                    transform=transform, bounds=bounds, 
-                                    method=method, timeit=timeit, **kwargs)
+
+        # Start curve fit timer and call least squares
+        with self.logger.timer('curve_fit'):
+            self.logger.debug("Calling least squares solver", has_sigma=sigma is not None,
+                             has_jacobian=jac is not None)
+            res = self.ls.least_squares(f, p0, jac=jac, xdata=jnp_xdata,
+                                        ydata=jnp_ydata, data_mask=jnp_data_mask,
+                                        transform=transform, bounds=bounds,
+                                        method=method, timeit=timeit, **kwargs)
 
         if not res.success:
+            self.logger.error("Optimization failed", message=res.message, status=res.status)
             raise RuntimeError("Optimal parameters not found: " + res.message)
+
         popt = res.x
+        self.logger.debug("Optimization succeeded", final_cost=res.cost,
+                         nfev=res.nfev, optimality=getattr(res, 'optimality', None))
 
         st = time.time()
         # ysize = len(res.fun)
@@ -502,7 +532,8 @@ class CurveFit():
         # Do Moore-Penrose inverse discarding zero singular values.
         # _, s, VT = svd(res.jac, full_matrices=False)
         outputs = self.covariance_svd(res.jac)
-        s, VT = [np.array(output) for output in outputs]
+        # Convert JAX arrays to NumPy more efficiently using np.asarray
+        s, VT = [np.asarray(output) for output in outputs]
         threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
         s = s[s > threshold]
         VT = VT[:s.size]
@@ -524,11 +555,17 @@ class CurveFit():
                 warn_cov = True
     
         if warn_cov:
+            self.logger.warning("Covariance could not be estimated", reason="insufficient_data" if ysize <= p0.size else "singular_jacobian")
             warnings.warn('Covariance of the parameters could not be estimated',
                           category=OptimizeWarning)
 
         # self.res = res
         post_time = time.time() - st
+
+        # Log curve fit completion
+        total_time = self.logger.timers.get('curve_fit', 0)
+        self.logger.info("Curve fit completed", total_time=total_time,
+                        final_cost=cost, covariance_warning=warn_cov)
 
         if return_eval:
             feval = f(jnp_xdata, *popt)

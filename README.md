@@ -1,23 +1,23 @@
 <div align="center">
-<img src="docs/images/JAXFit_small.jpg" alt="logo"></img>
+<img src="docs/images/NLSQ_logo.png" alt="logo"></img>
 </div>
 
-# JAXFit: Nonlinear least squares curve fitting for the GPU/TPU
+# NLSQ: Nonlinear least squares curve fitting for the GPU/TPU
 
 
 [**Quickstart**](#quickstart-colab-in-the-cloud)
 | [**Install guide**](#installation)
 | [**ArXiv Paper**](https://doi.org/10.48550/arXiv.2208.12187)
-| [**Documentation**](https://jaxfit.readthedocs.io/)
+| [**Documentation**](https://nlsq.readthedocs.io/)
 
-## What is JAXFit?
+## What is NLSQ?
 
-JAXFit takes well tested and developed SciPy nonlinear least squares (NLSQ) curve fitting algorithms, but runs them on the GPU/TPU using [JAX](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) for a massive fit speed up. The package is very easy to use as the fit functions are defined only in Python with no CUDA programming needed. An introductory paper detailing the algorithm and performance improvements over SciPy/Gpufit can be found [here](https://doi.org/10.48550/arXiv.2208.12187).
+NLSQ takes well tested and developed SciPy nonlinear least squares (NLSQ) curve fitting algorithms, but runs them on the GPU/TPU using [JAX](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) for a massive fit speed up. The package is very easy to use as the fit functions are defined only in Python with no CUDA programming needed. An introductory paper detailing the algorithm and performance improvements over SciPy/Gpufit can be found [here](https://doi.org/10.48550/arXiv.2208.12187).
 
-JAXFit also improves on SciPy's algorithm by taking advantage of JAX's in-built [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html) (autodiff) of Python functions. We use JAX's autodiff to calculate the Jacobians in the NLSQ algorithms rather than requiring the user to give analytic partial derivatives or using numeric approximation techniques.
+NLSQ also improves on SciPy's algorithm by taking advantage of JAX's in-built [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html) (autodiff) of Python functions. We use JAX's autodiff to calculate the Jacobians in the NLSQ algorithms rather than requiring the user to give analytic partial derivatives or using numeric approximation techniques.
 
 
-We've designed JAXFit to be a drop-in replacement for SciPy's curve_fit function. Below we show how to fit a linear function with some data
+We've designed NLSQ to be a drop-in replacement for SciPy's curve_fit function. Below we show how to fit a linear function with some data
 
 ```python
 import numpy as np
@@ -33,7 +33,7 @@ cf = CurveFit()
 popt, pcov = cf.curve_fit(linear, x, y)
 ```
 
-JAXFit takes advantage of JAX's just-in-time compilation (JIT) of Python code to [XLA](https://www.tensorflow.org/xla) which runs on GPU or TPU hardware. 
+NLSQ takes advantage of JAX's just-in-time compilation (JIT) of Python code to [XLA](https://www.tensorflow.org/xla) which runs on GPU or TPU hardware. 
 This means the fit functions you define must be JIT compilable. For basic fit functions this should cause no issues as we simply replace NumPy functions
 with their drop-in JAX equivalents. For example we show an exponential fit function
 
@@ -53,27 +53,27 @@ article for a more in-depth look at JAX specific caveats).
 * [Quickstart: Colab in the Cloud](#quickstart-colab-in-the-cloud)
 * [Current gotchas](#current-gotchas)
 * [Installation](#installation)
-* [Citing JAXFit](#citing-jax)
+* [Citing NLSQ](#citing-nlsq)
 * [Reference documentation](#reference-documentation)
 
 ## Quickstart: Colab in the Cloud
-The easiest way to test out JAXFit is using a Colab notebook connected to a Google Cloud GPU. JAX comes pre-installed so you'll be able to start fitting right away.
+The easiest way to test out NLSQ is using a Colab notebook connected to a Google Cloud GPU. JAX comes pre-installed so you'll be able to start fitting right away.
 
 We have a few tutorial notebooks including:
-- [The basics: fitting basic functions with JAXFit](https://colab.research.google.com/github/Dipolar-Quantum-Gases/jaxfit/blob/main/docs/notebooks/JAXFit_Quickstart.ipynb)
-- [Fitting 2D images with JAXFit](https://colab.research.google.com/github/Dipolar-Quantum-Gases/jaxfit/blob/main/docs/notebooks/JAXFit_2D_Gaussian_Demo.ipynb)
+- [The basics: fitting basic functions with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/docs/notebooks/NLSQ_Quickstart.ipynb)
+- [Fitting 2D images with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/docs/notebooks/NLSQ_2D_Gaussian_Demo.ipynb)
 
 ## Current gotchas
 
-Full disclosure we've copied most of this from the [JAX repo](https://github.com/google/jax#current-gotchas), but JAXFit inherits
+Full disclosure we've copied most of this from the [JAX repo](https://github.com/google/jax#current-gotchas), but NLSQ inherits
 JAX's idiosyncrasies and so the "gotchas" are mostly the same.
 
 ### Double precision required
-First and foremost by default JAX enforces single precision (32-bit, e.g. `float32`), but JAXFit needs double precision (64-bit, e.g. `float64`). 
+First and foremost by default JAX enforces single precision (32-bit, e.g. `float32`), but NLSQ needs double precision (64-bit, e.g. `float64`).
 [To enable double-precision](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#double-64bit-precision)
-(64-bit, e.g. `float64`) one needs to set the `jax_enable_x64` variable at startup (or set the environment variable `JAX_ENABLE_X64=True`). 
-   
-JAXFit does this when it is imported, but should you import JAX before JAXFit, then you'll need to set this flag yourself e.g.
+(64-bit, e.g. `float64`) one needs to set the `jax_enable_x64` variable at startup (or set the environment variable `JAX_ENABLE_X64=True`).
+
+NLSQ does this when it is imported, but should you import JAX before NLSQ, then you'll need to set this flag yourself e.g.
 
 ```python
 from jax.config import config
@@ -97,7 +97,7 @@ Some standouts:
 
 ## Installation
 
-JAXFit is written in pure Python and is based on the JAX package. JAX therefore needs to be installed before installing JAXFit via pip. JAX installation requires 
+NLSQ is written in pure Python and is based on the JAX package. JAX therefore needs to be installed before installing NLSQ via pip. JAX installation requires 
 a bit of effort since it is optimized for the computer hardware you'll be using (GPU vs. CPU). 
 
 Installing JAX on Linux is natively supported by the JAX team and instructions
@@ -106,7 +106,7 @@ to do so can be found [here](https://github.com/google/jax#installation).
 For Windows systems, the officially supported method is building directly from the source code 
 (see [Building JAX from source](https://jax.readthedocs.io/en/latest/developer.html#building-from-source)). However, we've found it easier to use pre-built JAX wheels which can be found in [this Github repo](https://github.com/cloudhan/jax-windows-builder) and we've included detailed instructions on this installation process below.
 
-After installing JAX, you can now install JAXFit via the following pip command
+After installing JAX, you can now install NLSQ via the following pip command
 
 ```
 pip install NLSQ
@@ -162,13 +162,13 @@ pip install jax==0.3.14
 <!--For more detail on using these pre-built wheels please see the docs.-->
 
 
-## Citing JAXFit
+## Citing NLSQ
 
-If you use JAXFit consider citing the [introductory paper](https://doi.org/10.48550/arXiv.2208.12187):
+If you use NLSQ consider citing the [introductory paper](https://doi.org/10.48550/arXiv.2208.12187):
 
 ```
-@article{jaxfit,
-  title={JAXFit: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
+@article{nlsq,
+  title={NLSQ: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
   author={Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
   journal={arXiv preprint arXiv:2208.12187},
   year={2022}
@@ -179,5 +179,5 @@ If you use JAXFit consider citing the [introductory paper](https://doi.org/10.48
 
 ## Reference documentation
 
-For details about the JAXFit API, see the
-[reference documentation](https://jaxfit.readthedocs.io/).
+For details about the NLSQ API, see the
+[reference documentation](https://nlsq.readthedocs.io/).

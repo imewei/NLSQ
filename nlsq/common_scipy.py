@@ -249,40 +249,6 @@ def update_tr_radius(Delta, actual_reduction, predicted_reduction,
 # Construction and minimization of quadratic functions.
 
 
-# def build_quadratic_1d(J, g, s, diag=None, s0=None):
-#     """Parameterize a multivariate quadratic function along a line.
-#     The resulting univariate quadratic function is given as follows:
-#     ::
-#         f(t) = 0.5 * (s0 + s*t).T * (J.T*J + diag) * (s0 + s*t) +
-#                g.T * (s0 + s*t)
-#     Parameters
-#     ----------
-#     J : ndarray, sparse matrix or LinearOperator shape (m, n)
-#         Jacobian matrix, affects the quadratic term.
-#     g : ndarray, shape (n,)
-#         Gradient, defines the linear term.
-#     s : ndarray, shape (n,)
-#         Direction vector of a line.
-#     diag : None or ndarray with shape (n,), optional
-#         Addition diagonal part, affects the quadratic term.
-#         If None, assumed to be 0.
-#     s0 : None or ndarray with shape (n,), optional
-#         Initial point. If None, assumed to be 0.
-#     Returns
-#     -------
-#     a : float
-#         Coefficient for t**2.
-#     b : float
-#         Coefficient for t.
-#     c : float
-#         Free term. Returned only if `s0` is provided.
-#     """
-#     v = J.dot(s)
-#     a = np.dot(v, v)
-#     if diag is not None:
-#         a += np.dot(s * diag, s)
-#     a *= 0.5
-
 #     b = np.dot(g, s)
 
 #     if s0 is not None:
@@ -585,21 +551,6 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm,
 # Simple helper functions.
 
 
-# def compute_grad(J, f):
-#     """Compute gradient of the least-squares cost function."""
-#     if isinstance(J, LinearOperator):
-#         return J.rmatvec(f)
-#     else:
-#         print('isdot')
-#         return J.T.dot(f)
-
-
-# def compute_jac_scale(J, scale_inv_old=None):
-#     """Compute variables scale based on the Jacobian matrix."""
-#     if issparse(J):
-#         scale_inv = np.asarray(J.power(2).sum(axis=0)).ravel()**0.5
-#     else:
-#         scale_inv = np.sum(J**2, axis=0)**0.5
 
 #     if scale_inv_old is None:
 #         scale_inv[scale_inv == 0] = 1
@@ -608,10 +559,6 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm,
 
 #     return 1 / scale_inv, scale_inv
 
-
-# def left_multiplied_operator(J, d):
-#     """Return diag(d) J as LinearOperator."""
-#     J = aslinearoperator(J)
 
 #     def matvec(x):
 #         return d * J.matvec(x)
@@ -626,10 +573,6 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm,
 #                           rmatvec=rmatvec)
 
 
-# def right_multiplied_operator(J, d):
-#     """Return J diag(d) as LinearOperator."""
-#     J = aslinearoperator(J)
-
 #     def matvec(x):
 #         return J.matvec(np.ravel(x) * d)
 
@@ -643,16 +586,6 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm,
 #                           rmatvec=rmatvec)
 
 
-# def regularized_lsq_operator(J, diag):
-#     """Return a matrix arising in regularized least squares as LinearOperator.
-#     The matrix is
-#         [ J ]
-#         [ D ]
-#     where D is diagonal matrix with elements from `diag`.
-#     """
-#     J = aslinearoperator(J)
-#     m, n = J.shape
-
 #     def matvec(x):
 #         return np.hstack((J.matvec(x), diag * x))
 
@@ -664,13 +597,6 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm,
 #     return LinearOperator((m + n, n), matvec=matvec, rmatvec=rmatvec)
 
 
-# def right_multiply(J, d, copy=True):
-#     """Compute J diag(d).
-#     If `copy` is False, `J` is modified in place (unless being LinearOperator).
-#     """
-#     if copy and not isinstance(J, LinearOperator):
-#         J = J.copy()
-
 #     if issparse(J):
 #         J.data *= d.take(J.indices, mode='clip')  # scikit-learn recipe.
 #     elif isinstance(J, LinearOperator):
@@ -680,13 +606,6 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm,
 
 #     return J
 
-
-# def left_multiply(J, d, copy=True):
-#     """Compute diag(d) J.
-#     If `copy` is False, `J` is modified in place (unless being LinearOperator).
-#     """
-#     if copy and not isinstance(J, LinearOperator):
-#         J = J.copy()
 
 #     if issparse(J):
 #         J.data *= np.repeat(d, np.diff(J.indptr))  # scikit-learn recipe.
@@ -712,14 +631,6 @@ def check_termination(dF, F, dx_norm, x_norm, ratio, ftol, xtol):
     else:
         return None
 
-
-# def scale_for_robust_loss_function(J, f, rho):
-#     """Scale Jacobian and residuals for a robust loss function.
-#     Arrays are modified in place.
-#     """
-#     J_scale = rho[1] + 2 * rho[2] * f**2
-#     J_scale[J_scale < EPS] = EPS
-#     J_scale **= 0.5
 
 #     f *= rho[1] / J_scale
 
