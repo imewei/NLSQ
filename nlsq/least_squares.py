@@ -30,8 +30,8 @@ TERMINATION_MESSAGES = {
 def prepare_bounds(bounds, n) -> Tuple[np.ndarray, np.ndarray]:
     """Prepare bounds for optimization.
 
-    This function prepares the bounds for the optimization by ensuring that 
-    they are both 1-D arrays of length `n`. If either bound is a scalar, it is 
+    This function prepares the bounds for the optimization by ensuring that
+    they are both 1-D arrays of length `n`. If either bound is a scalar, it is
     resized to an array of length `n`.
 
     Parameters
@@ -56,17 +56,17 @@ def prepare_bounds(bounds, n) -> Tuple[np.ndarray, np.ndarray]:
     return lb, ub
 
 
-def check_tolerance(ftol: float, 
-                    xtol: float, 
-                    gtol: float, 
+def check_tolerance(ftol: float,
+                    xtol: float,
+                    gtol: float,
                     method: str
                     ) -> Tuple[float, float, float]:
     """Check and prepare tolerance values for optimization.
 
-    This function checks the tolerance values for the optimization and 
-    prepares them for use. If any of the tolerances is `None`, it is set to 
-    0. If any of the tolerances is lower than the machine epsilon, a warning 
-    is issued and the tolerance is set to the machine epsilon. If all 
+    This function checks the tolerance values for the optimization and
+    prepares them for use. If any of the tolerances is `None`, it is set to
+    0. If any of the tolerances is lower than the machine epsilon, a warning
+    is issued and the tolerance is set to the machine epsilon. If all
     tolerances are lower than the machine epsilon, a `ValueError` is raised.
 
     Parameters
@@ -110,9 +110,9 @@ def check_x_scale(x_scale: Union[str, Sequence[float]],
                   ) -> Union[str, Sequence[float]]:
     """Check and prepare the `x_scale` parameter for optimization.
 
-    This function checks and prepares the `x_scale` parameter for the 
+    This function checks and prepares the `x_scale` parameter for the
     optimization. `x_scale` can either be 'jac' or an array_like with positive
-    numbers. If it's 'jac' the jacobian is used as the scaling. 
+    numbers. If it's 'jac' the jacobian is used as the scaling.
 
     Parameters
     ----------
@@ -151,17 +151,17 @@ def check_x_scale(x_scale: Union[str, Sequence[float]],
 """Wraps the given function such that a masked jacfwd is performed on it
 thereby giving the autodiff jacobian."""
 class AutoDiffJacobian():
-    """Wraps the residual fit function such that a masked jacfwd is performed 
-    on it. thereby giving the autodiff Jacobian. This needs to be a class since 
+    """Wraps the residual fit function such that a masked jacfwd is performed
+    on it. thereby giving the autodiff Jacobian. This needs to be a class since
     we need to maintain in memory three different versions of the Jacobian.
     """
 
-    def create_ad_jacobian(self, 
-                           func: Callable, 
-                           num_args: int, 
+    def create_ad_jacobian(self,
+                           func: Callable,
+                           num_args: int,
                            masked: bool = True
                            ) -> Callable:
-        """Creates a function that returns the autodiff jacobian of the 
+        """Creates a function that returns the autodiff jacobian of the
         residual fit function. The Jacobian of the residual fit function is
         equivalent to the Jacobian of the fit function.
 
@@ -185,7 +185,7 @@ class AutoDiffJacobian():
         # will correspond to the arguments of the residual fit function and
         # will be past to JAX's jacfwd function.
         arg_list = [4 + i for i in range(num_args)]
-            
+
         @cached_jit()
         def wrap_func(*all_args: List[Any]) -> jnp.ndarray:
             """Wraps the residual fit function such that it can be passed to the
@@ -195,7 +195,7 @@ class AutoDiffJacobian():
             xdata, ydata, data_mask, atransform = all_args[:4]
             args = all_args[4:]
             return func(args, xdata, ydata, data_mask, atransform)
-        
+
         @cached_jit()
         def jac_func(args: List[float],
                      xdata: jnp.ndarray,
@@ -210,11 +210,11 @@ class AutoDiffJacobian():
             is only the arguments of the original fit function.
             """
 
-            fixed_args = [xdata, ydata, data_mask, atransform] 
+            fixed_args = [xdata, ydata, data_mask, atransform]
             all_args = [*fixed_args, *args]
             jac_fwd = jacfwd(wrap_func, argnums=arg_list)(*all_args)
             return jnp.array(jac_fwd)
-        
+
         @cached_jit()
         def masked_jac(args: List[float],
                        xdata: jnp.ndarray,
@@ -224,30 +224,30 @@ class AutoDiffJacobian():
                        ) -> jnp.ndarray:
             """Returns the masked jacobian."""
             Jt = jac_func(args, xdata, ydata, data_mask, atransform)
-            J = jnp.where(data_mask, Jt, 0).T 
+            J = jnp.where(data_mask, Jt, 0).T
             return jnp.atleast_2d(J)
-         
+
         @cached_jit()
         def no_mask_jac(args: List[float],
                         xdata: jnp.ndarray,
                         ydata: jnp.ndarray,
-                        data_mask: jnp.ndarray, 
+                        data_mask: jnp.ndarray,
                         atransform: jnp.ndarray
                         ) -> jnp.ndarray:
             """Returns the unmasked jacobian."""
             J = jac_func(args, xdata, ydata, data_mask, atransform).T
             return jnp.atleast_2d(J)
-        
+
         if masked:
             self.jac = masked_jac
         else:
             self.jac = no_mask_jac
         return self.jac
-    
+
 
 
 class LeastSquares():
-    
+
     def __init__(self):
         super().__init__() # not sure if this is needed
         self.trf = TrustRegionReflective()
@@ -262,61 +262,61 @@ class LeastSquares():
         self.adjn = AutoDiffJacobian()
         self.adj1d = AutoDiffJacobian()
         self.adj2d = AutoDiffJacobian()
-    
 
-    def least_squares(self, 
-                      fun: Callable, 
-                      x0: np.ndarray, 
-                      jac: Optional[Callable] = None, 
+
+    def least_squares(self,
+                      fun: Callable,
+                      x0: np.ndarray,
+                      jac: Optional[Callable] = None,
                       bounds: Tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
                       method: str = 'trf',
                       ftol: float = 1e-8,
-                      xtol: float = 1e-8, 
-                      gtol: float = 1e-8, 
+                      xtol: float = 1e-8,
+                      gtol: float = 1e-8,
                       x_scale: Union[str, np.ndarray, float] = 1.0,
                       loss: str = 'linear',
                       f_scale: float = 1.0,
-                      diff_step=None, 
-                      tr_solver=None, 
+                      diff_step=None,
+                      tr_solver=None,
                       tr_options={},
-                      jac_sparsity=None, 
-                      max_nfev: Optional[float] = None, 
-                      verbose: int = 0, 
-                      xdata: Optional[jnp.ndarray] = None, 
-                      ydata: Optional[jnp.ndarray] = None, 
-                      data_mask: Optional[jnp.ndarray] = None, 
-                      transform: Optional[jnp.ndarray] = None, 
+                      jac_sparsity=None,
+                      max_nfev: Optional[float] = None,
+                      verbose: int = 0,
+                      xdata: Optional[jnp.ndarray] = None,
+                      ydata: Optional[jnp.ndarray] = None,
+                      data_mask: Optional[jnp.ndarray] = None,
+                      transform: Optional[jnp.ndarray] = None,
                       timeit: bool = False,
-                      args=(), 
+                      args=(),
                       kwargs={}):
-        
-        
+
+
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
-            
+
         if loss not in self.ls.IMPLEMENTED_LOSSES and not callable(loss):
             raise ValueError("`loss` must be one of {0} or a callable."
                              .format(self.ls.IMPLEMENTED_LOSSES.keys()))
-        
+
         if method not in ['trf']:
             raise ValueError("`method` must be 'trf")
-            
+
         if jac not in [None] and not callable(jac):
             raise ValueError("`jac` must be None or "
                              "callable.")
-    
+
         if verbose not in [0, 1, 2]:
             raise ValueError("`verbose` must be in [0, 1, 2].")
-    
+
         if len(bounds) != 2:
             raise ValueError("`bounds` must contain 2 elements.")
-    
+
         if max_nfev is not None and max_nfev <= 0:
             raise ValueError("`max_nfev` must be None or positive integer.")
-    
+
         if np.iscomplexobj(x0):
             raise ValueError("`x0` must be real.")
-    
+
         x0 = np.atleast_1d(x0).astype(float)
 
         if x0.ndim > 1:
@@ -329,24 +329,24 @@ class LeastSquares():
                         method=method, n_params=self.n, loss=loss,
                         ftol=ftol, xtol=xtol, gtol=gtol)
 
-    
+
         lb, ub = prepare_bounds(bounds, x0.shape[0])
-    
+
         if lb.shape != x0.shape or ub.shape != x0.shape:
             raise ValueError("Inconsistent shapes between bounds and `x0`.")
-    
+
         if np.any(lb >= ub):
             raise ValueError("Each lower bound must be strictly less than each "
                              "upper bound.")
-    
+
         if not in_bounds(x0, lb, ub):
             raise ValueError("`x0` is infeasible.")
-            
-    
+
+
         x_scale = check_x_scale(x_scale, x0)
         ftol, xtol, gtol = check_tolerance(ftol, xtol, gtol, method)
         x0 = make_strictly_feasible(x0, lb, ub)
-        
+
 
         if xdata is not None and ydata is not None:
             # checks to see if the fit function is the same. Can't directly
@@ -359,7 +359,7 @@ class LeastSquares():
                 # this only updates the the jacobian if using autodiff (jac=None)
                 if jac is None:
                     self.autdiff_jac(jac)
-                    
+
             # if using an analytical jacobian
             if jac is not None:
                 # if we are in the first function call
@@ -372,7 +372,7 @@ class LeastSquares():
                     self.wrap_jac(jac)
             elif self.jac is not None and not func_update:
                 self.autdiff_jac(jac)
-        
+
             # determines the correct residual function and jacobian to use
             # depending on whether data uncertainty transform is None, 1D, or 2D
             if transform is None:
@@ -391,19 +391,19 @@ class LeastSquares():
             # function to be compatible with JAX JIT compilation
             def wrap_func(fargs, xdata, ydata, data_mask, atransform):
                 return jnp.atleast_1d(fun(fargs, *args, **kwargs))
-            
+
             def wrap_jac(fargs, xdata, ydata, data_mask, atransform):
                 return jnp.atleast_2d(jac(fargs, *args, **kwargs))
-            
+
             rfunc = wrap_func
             if jac is None:
                 adj = AutoDiffJacobian()
                 jac_func = adj.create_ad_jacobian(wrap_func, self.n, masked=False)
             else:
                 jac_func = wrap_jac
-            
-                
-                
+
+
+
         f0 = rfunc(x0, xdata, ydata, data_mask, transform)
         J0 = jac_func(x0, xdata, ydata, data_mask, transform)
 
@@ -416,16 +416,16 @@ class LeastSquares():
 
         n = x0.size
         m = f0.size
-        
+
         if J0 is not None:
             if J0.shape != (m, n):
                 raise ValueError(
                     "The return value of `jac` has wrong shape: expected {0}, "
                     "actual {1}.".format((m, n), J0.shape))
-                
+
         if data_mask is None:
             data_mask = jnp.ones(m)
-        
+
         loss_function = self.ls.get_loss_function(loss)
 
         self.logger.debug("Computing initial cost", loss_type=loss, f_scale=f_scale)
@@ -437,12 +437,12 @@ class LeastSquares():
                                  "shape.")
             initial_cost_jnp = self.trf.calculate_cost(rho, data_mask)
         elif loss_function is not None:
-            initial_cost_jnp = loss_function(f0, f_scale, data_mask=data_mask, 
+            initial_cost_jnp = loss_function(f0, f_scale, data_mask=data_mask,
                                              cost_only=True)
         else:
             initial_cost_jnp = self.trf.default_loss_func(f0)
         initial_cost = np.array(initial_cost_jnp)
-        
+
         # Start optimization timer and call TRF
         with self.logger.timer('optimization'):
             self.logger.debug("Calling TRF optimizer", initial_cost=initial_cost)
@@ -450,8 +450,8 @@ class LeastSquares():
                                   transform, x0, f0, J0, lb, ub, ftol, xtol,
                          gtol, max_nfev, f_scale, x_scale, loss_function,
                          tr_options.copy(), verbose, timeit)
-    
-    
+
+
         result.message = TERMINATION_MESSAGES[result.status]
         result.success = result.status > 0
 
@@ -470,10 +470,10 @@ class LeastSquares():
                   "{2:.4e}, first-order optimality {3:.2e}."
                   .format(result.nfev, initial_cost, result.cost,
                           result.optimality))
-            
+
         return result
-   
-            
+
+
     def autdiff_jac(self, jac: None) -> None:
         """We do this for all three sigma transformed functions such
         that if sigma is changed from none to 1D to covariance sigma then no
@@ -510,7 +510,7 @@ class LeastSquares():
         -------
         None
         """
- 
+
         @cached_jit()
         def masked_residual_func(args: List[float],
                                  xdata: jnp.ndarray,
@@ -518,14 +518,14 @@ class LeastSquares():
                                  data_mask: jnp.ndarray
                                  ) -> jnp.ndarray:
 
-            """Compute the residual of the function evaluated at `args` with 
+            """Compute the residual of the function evaluated at `args` with
             respect to the data.
 
-            This function computes the residual of the user fit function 
-            evaluated at `args` with respect to the data `(xdata, ydata)`, 
-            masked by `data_mask`. The residual is defined as the difference 
-            between the function evaluation and the data. The masked residual 
-            is obtained by setting the residual to 0 wherever the corresponding 
+            This function computes the residual of the user fit function
+            evaluated at `args` with respect to the data `(xdata, ydata)`,
+            masked by `data_mask`. The residual is defined as the difference
+            between the function evaluation and the data. The masked residual
+            is obtained by setting the residual to 0 wherever the corresponding
             element of `data_mask` is 0.
 
             Parameters
@@ -552,12 +552,12 @@ class LeastSquares():
         # for each case. In future could remove the no transfore bit by setting
         # the uncertainty transform to all ones in the case where there is no
         # uncertainty transform.
-        
+
         @cached_jit()
-        def func_no_transform(args: List[float], 
-                              xdata: jnp.ndarray, 
-                              ydata: jnp.ndarray, 
-                              data_mask: jnp.ndarray, 
+        def func_no_transform(args: List[float],
+                              xdata: jnp.ndarray,
+                              ydata: jnp.ndarray,
+                              data_mask: jnp.ndarray,
                               atransform: jnp.ndarray
                               ) -> jnp.ndarray:
 
@@ -565,95 +565,95 @@ class LeastSquares():
             The atranform argument is not used in this case, but is included
             for consistency with the other cases."""
             return masked_residual_func(args, xdata, ydata, data_mask)
-        
+
         @cached_jit()
-        def func_1d_transform(args: List[float], 
-                              xdata: jnp.ndarray, 
-                              ydata: jnp.ndarray, 
-                              data_mask: jnp.ndarray, 
+        def func_1d_transform(args: List[float],
+                              xdata: jnp.ndarray,
+                              ydata: jnp.ndarray,
+                              data_mask: jnp.ndarray,
                               atransform: jnp.ndarray
                               ) -> jnp.ndarray:
             """The residual function when there is a 1D uncertainty transform,
             that is when only the diagonal elements of the inverse covariance
             matrix are used."""
-            return atransform * masked_residual_func(args, xdata, 
+            return atransform * masked_residual_func(args, xdata,
                                                      ydata, data_mask)
-        
+
         @cached_jit()
-        def func_2d_transform(args: List[float], 
-                              xdata: jnp.ndarray, 
-                              ydata: jnp.ndarray, 
-                              data_mask: jnp.ndarray, 
+        def func_2d_transform(args: List[float],
+                              xdata: jnp.ndarray,
+                              ydata: jnp.ndarray,
+                              data_mask: jnp.ndarray,
                               atransform: jnp.ndarray
                               ) -> jnp.ndarray:
             """The residual function when there is a 2D uncertainty transform,
             that is when the full covariance matrix is given."""
             f = masked_residual_func(args, xdata, ydata, data_mask)
             return jax_solve_triangular(atransform, f, lower=True)
-        
+
         self.func_none = func_no_transform
         self.func_1d = func_1d_transform
         self.func_2d = func_2d_transform
         self.f = func
-    
+
 
     def wrap_jac(self, jac: Callable) -> None:
         """Wraps an user defined Jacobian function to allow for data masking
         and uncertainty transforms. The wrapped function is in a JAX JIT
         compatible format which is purely functional. This requires that both
         the data mask and the uncertainty transform are passed to the function.
-        
+
         Using an analytical Jacobian of the fit function is equivalent to
         the Jacobian of the residual function.
 
         Also note that the analytical Jacobian doesn't require the independent
         ydata, but we still need to pass it to the function to maintain
         compatibility with autdiff version which does require the ydata.
-        
+
         Parameters
         ----------
         jac : Callable
             The Jacobian function to wrap.
-            
+
         Returns
         -------
         jnp.ndarray
             The masked Jacobian of the function evaluated at `args` with respect to the data.
         """
-        
+
         @cached_jit()
         def jac_func(coords: jnp.ndarray,
                      args: List[float]
                      ) -> jnp.ndarray:
             jac_fwd = jac(coords, *args)
             return jnp.array(jac_fwd)
-        
+
         @cached_jit()
-        def masked_jac(coords: jnp.ndarray, 
-                       args: List[float], 
+        def masked_jac(coords: jnp.ndarray,
+                       args: List[float],
                        data_mask: jnp.ndarray
                        ) -> jnp.ndarray:
-             """Compute the wrapped Jacobian but masks out the padded elements 
+             """Compute the wrapped Jacobian but masks out the padded elements
              with 0s"""
              Jt = jac_func(coords, args)
-             return jnp.where(data_mask, Jt, 0).T        
-        
+             return jnp.where(data_mask, Jt, 0).T
+
         @cached_jit()
-        def jac_no_transform(args: List[float], 
-                             coords: jnp.ndarray, 
-                             ydata: jnp.ndarray, 
-                             data_mask: jnp.ndarray, 
+        def jac_no_transform(args: List[float],
+                             coords: jnp.ndarray,
+                             ydata: jnp.ndarray,
+                             data_mask: jnp.ndarray,
                              atransform: jnp.ndarray
                              ) -> jnp.ndarray:
-            """The wrapped Jacobian function when there is no 
+            """The wrapped Jacobian function when there is no
             uncertainty transform."""
             return jnp.atleast_2d(masked_jac(coords, args, data_mask))
 
         @cached_jit()
-        def jac_1d_transform(args: List[float], 
-                             coords: jnp.ndarray, 
-                             ydata: jnp.ndarray, 
-                             data_mask: jnp.ndarray, 
+        def jac_1d_transform(args: List[float],
+                             coords: jnp.ndarray,
+                             ydata: jnp.ndarray,
+                             data_mask: jnp.ndarray,
                              atransform: jnp.ndarray
                              ) -> jnp.ndarray:
             """The wrapped Jacobian function when there is a 1D uncertainty
@@ -661,20 +661,20 @@ class LeastSquares():
             covariance matrix are used."""
             J = masked_jac(coords, args, data_mask)
             return jnp.atleast_2d(atransform[:, jnp.newaxis] * jnp.asarray(J))
-        
+
         @cached_jit()
-        def jac_2d_transform(args: List[float], 
-                             coords: jnp.ndarray, 
-                             ydata: jnp.ndarray, 
-                             data_mask: jnp.ndarray, 
+        def jac_2d_transform(args: List[float],
+                             coords: jnp.ndarray,
+                             ydata: jnp.ndarray,
+                             data_mask: jnp.ndarray,
                              atransform: jnp.ndarray
                              ) -> jnp.ndarray:
             """The wrapped Jacobian function when there is a 2D uncertainty
             transform, that is when the full covariance matrix is given."""
 
             J = masked_jac(coords, args, data_mask)
-            return jnp.atleast_2d(jax_solve_triangular(atransform, 
-                                                       jnp.asarray(J), 
+            return jnp.atleast_2d(jax_solve_triangular(atransform,
+                                                       jnp.asarray(J),
                                                        lower=True))
         # we need all three versions of the Jacobian function to allow for
         # changing the sigma transform from none to 1D to 2D without having

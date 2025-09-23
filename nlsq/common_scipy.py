@@ -23,7 +23,7 @@ def intersect_trust_region(x, s, Delta):
     -------
     t_neg, t_pos : tuple of float
         Negative and positive roots.
-        
+
     Raises
     ------
     ValueError
@@ -51,8 +51,8 @@ def intersect_trust_region(x, s, Delta):
         return t1, t2
     else:
         return t2, t1
-    
-    
+
+
 def solve_lsq_trust_region(n, m, uf, s, V, Delta, initial_alpha=None,
                            rtol=0.01, max_iter=10):
     """Solve a trust-region problem arising in least-squares minimization.
@@ -112,7 +112,7 @@ def solve_lsq_trust_region(n, m, uf, s, V, Delta, initial_alpha=None,
         phi = p_norm - Delta
         phi_prime = -np.sum(suf ** 2 / denom**3) / p_norm
         return phi, phi_prime
-    
+
 
     suf = s * uf
 
@@ -345,7 +345,7 @@ def step_size_to_bound(x, s, lb, ub):
     hits : ndarray of int with shape of x
         Each element indicates whether a corresponding variable reaches the
         bound:
-        
+
              *  0 - the bound was not hit.
              * -1 - the lower bound was hit.
              *  1 - the upper bound was hit.

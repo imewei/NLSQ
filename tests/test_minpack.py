@@ -50,7 +50,7 @@ class TestCurveFit:
     def test_one_argument(self):
         def func(x,a):
             return x**a
-        
+
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
             popt, pcov = curve_fit(func, self.x, self.y)
@@ -58,7 +58,7 @@ class TestCurveFit:
             assert_(pcov.shape == (1,1))
             assert_almost_equal(popt[0], 1.9149, decimal=4)
             assert_almost_equal(pcov[0,0], 0.0016, decimal=4)
-    
+
             # Test if we get the same with full_output. Regression test for #1415.
             # Also test if check_finite can be turned off.
             popt2, pcov2 = curve_fit(func, self.x, self.y, check_finite=False)
@@ -68,7 +68,7 @@ class TestCurveFit:
     def test_two_argument(self):
         def func(x, a, b):
             return b*x**a
-        
+
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
             popt, pcov = curve_fit(func, self.x, self.y)
@@ -112,10 +112,10 @@ class TestCurveFit:
     #     def f_double_gauss(x, x0, x1, A0, A1, sigma, c):
     #         return (A0*jnp.exp(-(x-x0)**2/(2.*sigma**2))
     #                 + A1*jnp.exp(-(x-x1)**2/(2.*sigma**2)) + c)
-        
+
     #     for flength in [None, self.flength]:
     #         curve_fit = CurveFit(flength=flength).curve_fit
-    #         # popt, pcov = curve_fit2(f_double_gauss, x, y, guess, maxfev=10000, 
+    #         # popt, pcov = curve_fit2(f_double_gauss, x, y, guess, maxfev=10000,
     #         #                         method='trf', verbose=2)
     #         # print(popt)
     #         popt, pcov = curve_fit(f_double_gauss, x, y, guess, maxfev=10000, verbose=2)
@@ -129,7 +129,7 @@ class TestCurveFit:
 
         def f(x, a, b):
             return a*x + b
-        
+
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
             for method in ['trf']:
@@ -137,17 +137,17 @@ class TestCurveFit:
                                         method=method)
                 perr_scaled = np.sqrt(np.diag(pcov))
                 assert_allclose(perr_scaled, [0.20659803, 0.57204404], rtol=1e-3)
-    
+
                 popt, pcov = curve_fit(f, xdata, ydata, p0=[2, 0], sigma=3*sigma,
                                         method=method)
                 perr_scaled = np.sqrt(np.diag(pcov))
                 assert_allclose(perr_scaled, [0.20659803, 0.57204404], rtol=1e-3)
-    
+
                 popt, pcov = curve_fit(f, xdata, ydata, p0=[2, 0], sigma=sigma,
                                         absolute_sigma=True, method=method)
                 perr = np.sqrt(np.diag(pcov))
                 assert_allclose(perr, [0.30714756, 0.85045308], rtol=1e-3)
-    
+
                 popt, pcov = curve_fit(f, xdata, ydata, p0=[2, 0], sigma=3*sigma,
                                         absolute_sigma=True, method=method)
                 perr = np.sqrt(np.diag(pcov))
@@ -180,7 +180,7 @@ class TestCurveFit:
 
         x = [1, 2, 3, 4]
         y = [3, 5, 7, 9]
-        
+
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
             assert_allclose(curve_fit(f_linear, x, y)[0], [2, 1], atol=1e-10)
@@ -207,7 +207,7 @@ class TestCurveFit:
                           lambda x, a, b: a*x + b, xdata, ydata)
             assert_raises(ValueError, curve_fit,
                           lambda x, a, b: a*x + b, ydata, xdata)
-    
+
             assert_raises(ValueError, curve_fit, lambda x, a, b: a*x + b,
                           xdata, ydata, **{"check_finite": True})
 
@@ -245,7 +245,7 @@ class TestCurveFit:
             for method in ['trf', None]:
                 popt, pcov = curve_fit(f, xdata, ydata, method=method)
                 assert_allclose(popt, [2., 2.])
-    
+
             assert_raises(ValueError, curve_fit, f, xdata, ydata, method='unknown')
 
     # # def test_full_output(self):
@@ -284,12 +284,12 @@ class TestCurveFit:
                 popt, pcov = curve_fit(f, xdata, ydata, bounds=bounds,
                                         method=method)
                 assert_allclose(popt[0], 1.5)
-        
+
             # With bounds, the starting estimate is feasible.
             popt, pcov = curve_fit(f, xdata, ydata, method='trf',
                                     bounds=([0., 0], [0.6, np.inf]))
             assert_allclose(popt[0], 0.6)
-        
+
             # method='lm' doesn't support bounds.
             assert_raises(ValueError, curve_fit, f, xdata, ydata, bounds=bounds,
                           method='lm')
@@ -309,7 +309,7 @@ class TestCurveFit:
                 popt_1, _ = curve_fit(f, xdata, ydata, p0=2.1*np.pi)
                 popt_2, _ = curve_fit(f, xdata, ydata, p0=2.1*np.pi,
                                       bounds=bounds, method=method)
-    
+
                 # If the initial guess is ignored, then popt_2 would be close 0.
                 assert_allclose(popt_1, popt_2)
 
@@ -336,14 +336,14 @@ class TestCurveFit:
                                             method=method)
                     print('popt', popt)
                     assert_allclose(popt, [2, 2])
-    
+
             # Test the analytic option.
             for method in ['trf']:
                 popt, pcov = curve_fit(f, xdata, ydata, method=method, jac=jac)
                 # popt, pcov = curve_fit(f, xdata, ydata, method=method, verbose=2)
 
                 assert_allclose(popt, [2, 2])
-    
+
             # Now add an outlier and provide sigma.
             ydata_modified = np.copy(ydata)
             ydata_modified[5] = 100
@@ -353,7 +353,7 @@ class TestCurveFit:
             for method in ['trf']:
                 popt, pcov = curve_fit(f, xdata, ydata, sigma=sigma, method=method,
                                         jac=jac)
-  
+
                 # Still the optimization process is influenced somehow,
                 # have to set rtol=1e-3.
                 assert_allclose(popt, [2, 2], rtol=1e-3)
@@ -367,11 +367,11 @@ class TestCurveFit:
             y = 2*x
             popt1, _ = curve_fit(lambda x,p: p*x, x, y, bounds=(0, 3), maxfev=100)
             popt2, _ = curve_fit(lambda x,p: p*x, x, y, bounds=(0, 3), max_nfev=100)
-    
+
             assert_allclose(popt1, 2, atol=1e-14)
             assert_allclose(popt2, 2, atol=1e-14)
-                
-                
+
+
     def test_curvefit_simplecovariance(self):
 
         def func(x, a, b):
@@ -380,27 +380,27 @@ class TestCurveFit:
         def jac(x, a, b):
             e = jnp.exp(-b*x)
             return jnp.vstack((e, -a * x * e))
-        
+
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
-            
+
             np.random.seed(0)
             xdata = np.linspace(0, 4, 50)
             y = func(xdata, 2.5, 1.3)
             ydata = y + 0.2 * np.random.normal(size=len(xdata))
-    
+
             sigma = np.zeros(len(xdata)) + 0.2
             covar = np.diag(sigma**2)
-    
+
             for jac1, jac2 in [(jac, jac), (None, None)]:
             # for jac1, jac2 in [(None, None)]:
-    
+
                 for absolute_sigma in [False, True]:
                     popt1, pcov1 = curve_fit(func, xdata, ydata, sigma=sigma,
                             jac=jac1, absolute_sigma=absolute_sigma)
                     popt2, pcov2 = curve_fit(func, xdata, ydata, sigma=covar,
                             jac=jac2, absolute_sigma=absolute_sigma)
-    
+
                     assert_allclose(popt1, popt2, atol=1e-14)
                     assert_allclose(pcov1, pcov2, atol=1e-14)
 
@@ -408,15 +408,15 @@ class TestCurveFit:
     def test_curvefit_covariance(self):
 
         def funcp(x, a, b):
-            rotn = jnp.array([[1./jnp.sqrt(2), -1./jnp.sqrt(2), 0], 
-                             [1./jnp.sqrt(2), 1./jnp.sqrt(2), 0], 
+            rotn = jnp.array([[1./jnp.sqrt(2), -1./jnp.sqrt(2), 0],
+                             [1./jnp.sqrt(2), 1./jnp.sqrt(2), 0],
                              [0, 0, 1.0]])
-            
+
             return rotn.dot(a * jnp.exp(-b*x))
 
         def jacp(x, a, b):
-            rotn = jnp.array([[1./jnp.sqrt(2), -1./jnp.sqrt(2), 0], 
-                             [1./jnp.sqrt(2), 1./jnp.sqrt(2), 0], 
+            rotn = jnp.array([[1./jnp.sqrt(2), -1./jnp.sqrt(2), 0],
+                             [1./jnp.sqrt(2), 1./jnp.sqrt(2), 0],
                              [0, 0, 1.0]])
             e = jnp.exp(-b*x)
             return rotn.dot(jnp.vstack((e, -a * x * e)).T).T
@@ -427,7 +427,7 @@ class TestCurveFit:
         def jac(x, a, b):
             e = jnp.exp(-b*x)
             return jnp.vstack((e, -a * x * e))
-        
+
         for flength in [None]:
             curve_fit = CurveFit(flength=flength).curve_fit
 
@@ -443,19 +443,19 @@ class TestCurveFit:
             #       = ydatap^T Cp^{-1} ydatap
             # Cp^{-1} = R C^{-1} R^T
             # Cp      = R C R^T, since R^-1 = R^T
-            rotn = np.array([[1./np.sqrt(2), -1./np.sqrt(2), 0], 
-                             [1./np.sqrt(2), 1./np.sqrt(2), 0], 
+            rotn = np.array([[1./np.sqrt(2), -1./np.sqrt(2), 0],
+                             [1./np.sqrt(2), 1./np.sqrt(2), 0],
                              [0, 0, 1.0]])
             ydatap = rotn.dot(ydata)
             covarp = rotn.dot(covar).dot(rotn.T)
-    
+
             for jac1, jac2 in [(jac, jacp), (None, None)]:
                 for absolute_sigma in [False, True]:
                     popt1, pcov1 = curve_fit(func, xdata, ydata, sigma=sigma,
                             jac=jac1, absolute_sigma=absolute_sigma)
                     popt2, pcov2 = curve_fit(funcp, xdata, ydatap, sigma=covarp,
                             jac=jac2, absolute_sigma=absolute_sigma)
-    
+
                     assert_allclose(popt1, popt2, rtol=1.2e-7, atol=1e-14)
                     assert_allclose(pcov1, pcov2, rtol=1.2e-7, atol=1e-14)
 
@@ -529,18 +529,18 @@ class TestCurveFit:
 
         def func(x, a, b):
             return a * x + b
-        
+
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
-            
+
             with assert_raises(ValueError):
                 curve_fit(func,
                           xdata=[1, 2, 3, 4],
                           ydata=[5, 9, 13, 17],
                           p0=[1],
                           args=(1,))
-    
-   ################################################# 
+
+   #################################################
 
     # def test_data_point_number_validation(self):
     #     def func(x, a, b, c, d, e):
@@ -550,7 +550,7 @@ class TestCurveFit:
     #         curve_fit(func,
     #                   xdata=[1, 2, 3, 4],
     #                   ydata=[5, 9, 13, 17])
-            
+
 
 
 
@@ -701,8 +701,8 @@ class TestCurveFit:
 
 #         with assert_raises(TypeError,
 #                            match='Improper input: func input vector length N='):
-#             optimize.leastsq(func, x0=[0, 1])            
-            
+#             optimize.leastsq(func, x0=[0, 1])
+
 
 # Function and Jacobian for tests of solvers for systems of nonlinear
 # equations
@@ -765,4 +765,3 @@ class TestCurveFit:
 # def pressure_network_fun_and_grad(flow_rates, Qtot, k):
 #     return (pressure_network(flow_rates, Qtot, k),
 #             pressure_network_jacobian(flow_rates, Qtot, k))
-

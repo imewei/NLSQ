@@ -783,13 +783,13 @@ def test_fp32_gh12991():
 
 
 
-################################################################################# 
+#################################################################################
 # class TestDogbox(BaseMixin, BoundsMixin, SparseMixin, LossFunctionMixin):
     # method = 'dogbox'
 
 
-    
-    
+
+
 
 # class TestLM(BaseMixin):
 #     method = 'lm'

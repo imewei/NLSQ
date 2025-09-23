@@ -17,21 +17,21 @@ EPS = np.finfo(float).eps
 
 
 class CommonJIT():
-    
+
     def __init__(self):
-        """Initialize the class and create the JAX/JIT functions that will be 
+        """Initialize the class and create the JAX/JIT functions that will be
         compiled"""
         self.create_quadratic_funcs()
         self.create_js_dot()
         self.create_jac_sum()
         self.create_scale_for_robust_loss_function()
-        
-    
+
+
     def create_scale_for_robust_loss_function(self):
         """Create the scaling function for the loss functions"""
 
         @jit
-        def scale_for_robust_loss_function(J: jnp.ndarray, 
+        def scale_for_robust_loss_function(J: jnp.ndarray,
                                            f: jnp.ndarray,
                                            rho: jnp.ndarray
                                            ) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -56,16 +56,16 @@ class CommonJIT():
             f = f * fscale
             J = J * J_scale[:, jnp.newaxis]
             return J, f
-        self.scale_for_robust_loss_function = scale_for_robust_loss_function    
-    
-    
-    def build_quadratic_1d(self, 
-                           J: jnp.ndarray, 
-                           g: jnp.ndarray, 
-                           s: jnp.ndarray, 
-                           diag: Optional[jnp.ndarray] = None, 
+        self.scale_for_robust_loss_function = scale_for_robust_loss_function
+
+
+    def build_quadratic_1d(self,
+                           J: jnp.ndarray,
+                           g: jnp.ndarray,
+                           s: jnp.ndarray,
+                           diag: Optional[jnp.ndarray] = None,
                            s0: Optional[jnp.ndarray] = None
-                           ) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray], 
+                           ) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray],
                                       Tuple[np.ndarray, np.ndarray]]:
 
         """Parameterize a multivariate quadratic function along a line.
@@ -96,7 +96,7 @@ class CommonJIT():
             Coefficient for t.
         c : float
             Free term. Returned only if `s0` is provided.
-            
+
         """
 
         s_jnp = jnp.array(s)
@@ -107,9 +107,9 @@ class CommonJIT():
         if diag is not None:
             a += np.dot(s * diag, s)
         a *= 0.5
-    
+
         b = np.dot(g, s)
-    
+
         if s0 is not None:
             s0_jnp = jnp.array(s0)
             u_jnp = self.js0_dot(J, s0_jnp)
@@ -125,11 +125,11 @@ class CommonJIT():
             return a, b
 
 
-    def compute_jac_scale(self, J: jnp.ndarray, 
+    def compute_jac_scale(self, J: jnp.ndarray,
                           scale_inv_old: Optional[np.ndarray] = None
                           ) -> Tuple[np.ndarray, np.ndarray]:
         """Compute variables scale based on the Jacobian matrix.
-        
+
         Parameters
         ----------
         J : jnp.ndarray
@@ -147,14 +147,14 @@ class CommonJIT():
 
         scale_inv_jnp = self.jac_sum_func(J)
         scale_inv = np.array(scale_inv_jnp)
-    
+
         if scale_inv_old is None:
             scale_inv[scale_inv == 0] = 1
         else:
             scale_inv = np.maximum(scale_inv, scale_inv_old)
 
         return 1 / scale_inv, scale_inv
-    
+
 
     def create_js_dot(self):
         """Create the functions for the dot product of the Jacobian and the
@@ -173,11 +173,11 @@ class CommonJIT():
         self.js_dot = js_dot
         self.js0_dot = js0_dot
 
-  
-    def evaluate_quadratic(self, 
-                           J: jnp.ndarray, 
-                           g: jnp.ndarray, 
-                           s_np: np.ndarray, 
+
+    def evaluate_quadratic(self,
+                           J: jnp.ndarray,
+                           g: jnp.ndarray,
+                           s_np: np.ndarray,
                            diag: Optional[np.ndarray] = None
                            ) -> jnp.ndarray:
         """Compute values of a quadratic function arising in least squares.
@@ -201,7 +201,7 @@ class CommonJIT():
             returned, otherwise, float is returned.
         """
         s = jnp.array(s_np) #comes in as np array
-        
+
         if s.ndim == 1:
             if diag is None:
                 return self.evaluate_quadratic1(J, g, s)
@@ -212,38 +212,38 @@ class CommonJIT():
                 return self.evaluate_quadratic2(J, g, s)
             else:
                 return self.evaluate_quadratic_diagonal2(J, g, s, diag)
-    
-    
+
+
     def create_quadratic_funcs(self):
-        
+
         @jit
         def evaluate_quadratic1(J, g, s):
             Js = J.dot(s)
             q = jnp.dot(Js, Js)
             l = jnp.dot(s, g)
             return 0.5 * q + l
-        
+
         @jit
         def evaluate_quadratic_diagonal1(J, g, s, diag):
             Js = J.dot(s)
             q = jnp.dot(Js, Js) + jnp.dot(s * diag, s)
             l = jnp.dot(s, g)
             return 0.5 * q + l
-        
+
         @jit
         def evaluate_quadratic2(J, g, s):
             Js = J.dot(s.T)
             q = jnp.sum(Js**2, axis=0)
             l = jnp.dot(s, g)
             return 0.5 * q + l
-        
+
         @jit
         def evaluate_quadratic_diagonal2(J, g, s, diag):
             Js = J.dot(s.T)
             q = jnp.sum(Js**2, axis=0) + jnp.sum(diag * s**2, axis=1)
             l = jnp.dot(s, g)
             return 0.5 * q + l
-        
+
         self.evaluate_quadratic1 = evaluate_quadratic1
         self.evaluate_quadratic_diagonal1 = evaluate_quadratic_diagonal1
         self.evaluate_quadratic2 = evaluate_quadratic2

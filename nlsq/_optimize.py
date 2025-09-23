@@ -56,8 +56,8 @@ class OptimizeResult(dict):
 
     def __dir__(self):
         return list(self.keys())
-    
-    
+
+
 def _check_unknown_options(unknown_options):
     if unknown_options:
         msg = ", ".join(map(str, unknown_options.keys()))
@@ -65,7 +65,7 @@ def _check_unknown_options(unknown_options):
         # called from another function in SciPy. Level 4 is the first
         # level in user code.
         warnings.warn("Unknown solver options: %s" % msg, OptimizeWarning, 4)
-        
-        
+
+
 class OptimizeWarning(UserWarning):
     pass
