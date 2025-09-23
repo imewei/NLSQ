@@ -62,8 +62,6 @@ docs = [
     "sphinx>=7.2",
     "sphinx-rtd-theme>=2.0",
     "sphinx-autodoc-typehints>=1.25",
-    "nbsphinx>=0.9",
-    "ipykernel>=6.27",
     "ipython>=8.18",
     "myst-parser>=2.0",
 ]
@@ -93,8 +91,6 @@ all = [
     "sphinx>=7.2",
     "sphinx-rtd-theme>=2.0",
     "sphinx-autodoc-typehints>=1.25",
-    "nbsphinx>=0.9",
-    "ipykernel>=6.27",
     "myst-parser>=2.0",
     # Test dependencies
     "hypothesis>=6.92",

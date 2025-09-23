@@ -13,7 +13,6 @@ NLSQ Documentation
 .. toctree::
    :maxdepth: 1
 
-   notebooks
    autodoc/modules
 
 

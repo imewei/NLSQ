@@ -71,8 +71,8 @@ Contents
 -  `Quickstart: Colab in the Cloud <#quickstart-colab-in-the-cloud>`__
 -  `Current gotchas <#current-gotchas>`__
 -  `Installation <#installation>`__
--  `Citing NLSQ <#citing-jax>`__
--  :doc:`Reference documentation <autodoc/NLSQ>`.
+-  `Citing NLSQ <#citing-nlsq>`__
+-  :doc:`Reference documentation <autodoc/modules>`.
 
 Quickstart: Colab in the Cloud
 ------------------------------
@@ -81,10 +81,12 @@ The easiest way to test out NLSQ is using a Colab notebook connected
 to a Google Cloud GPU. JAX comes pre-installed so you’ll be able to
 start fitting right away.
 
-Tutorial notebooks:
+Example notebooks are available in the `examples/ directory <https://github.com/Dipolar-Quantum-Gases/nlsq/tree/main/examples>`__ of the repository:
 
-- `The basics: fitting basic functions with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%20Quickstart.ipynb>`__
-- `Fitting 2D images with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%202D%20Gaussian%20Demo.ipynb>`__
+- **NLSQ Quickstart**: Learn the basics of fitting functions with NLSQ
+- **NLSQ 2D Gaussian Demo**: Advanced example for fitting 2D images
+
+You can run these notebooks on Google Colab by opening them directly from the GitHub repository.
 
 Current gotchas
 ---------------

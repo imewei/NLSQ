@@ -54,7 +54,6 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.mathjax',
     'sphinx.ext.githubpages',
-    'nbsphinx',
     'myst_parser',
 ]
     
@@ -79,10 +78,8 @@ napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = False
 napoleon_include_private_with_doc = False
 
-# Notebook configuration
-nbsphinx_execute = 'never'
-nbsphinx_allow_errors = True
-nbsphinx_timeout = 300
+# Notebooks are not included in the documentation build
+# Example notebooks are available in the examples/ directory
 
 # MyST configuration
 myst_enable_extensions = [
