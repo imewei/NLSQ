@@ -8,22 +8,11 @@ from numpy.testing import (assert_, assert_almost_equal, assert_array_equal,
                            assert_warns, suppress_warnings)
 from pytest import raises as assert_raises
 import numpy as np
-from numpy import array#, float64
+from numpy import array
 from multiprocessing.pool import ThreadPool
 
-# from scipy import optimize
-# from scipy.special import lambertw
-# from scipy.optimize._minpack_py import leastsq, curve_fit, fixed_point
-import sys
-sys.path.append('../')
-
-from jaxfit import CurveFit
+from nlsq import CurveFit
 import jax.numpy as jnp
-# jcf = CurveFit()
-# curve_fit = jcf.curve_fit
-# from scipy.optimize._minpack_py import curve_fit as curve_fit2
-# from scipy.optimize import OptimizeWarning
-# import matplotlib.pyplot as plt
 
 
 class ReturnShape:

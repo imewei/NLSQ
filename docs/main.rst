@@ -1,16 +1,16 @@
-.. figure:: images/JAXFit_small.jpg
+.. figure:: images/NLSQ_small.jpg
 
-JAXFit: Nonlinear least squares curve fitting for the GPU/TPU
+NLSQ: Nonlinear least squares curve fitting for the GPU/TPU
 =============================================================
 
 `Quickstart <#quickstart-colab-in-the-cloud>`__ \| `Install
 guide <#installation>`__ \| `ArXiv
 Paper <https://doi.org/10.48550/arXiv.2208.12187>`__ \| :doc:`API Docs <autodoc/modules>` 
 
-What is JAXFit?
+What is NLSQ?
 ---------------
 
-JAXFit takes well tested and developed SciPy nonlinear least squares
+NLSQ takes well tested and developed SciPy nonlinear least squares
 (NLSQ) curve fitting algorithms, but runs them on the GPU/TPU using
 `JAX <https://jax.readthedocs.io/en/latest/notebooks/quickstart.html>`__
 for a massive fit speed up. The package is very easy to use as the fit
@@ -19,20 +19,20 @@ introductory paper detailing the algorithm and performance improvements
 over SciPy/Gpufit can be found
 `here <https://doi.org/10.48550/arXiv.2208.12187>`__.
 
-JAXFit also improves on SciPy’s algorithm by taking advantage of JAX’s
+NLSQ also improves on SciPy’s algorithm by taking advantage of JAX’s
 in-built `automatic
 differentiation <https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html>`__
 (autodiff) of Python functions. We use JAX’s autodiff to calculate the
 Jacobians in the NLSQ algorithms rather than requiring the user to give
 analytic partial derivatives or using numeric approximation techniques.
 
-We’ve designed JAXFit to be a drop-in replacement for SciPy’s curve_fit
+We’ve designed NLSQ to be a drop-in replacement for SciPy’s curve_fit
 function. Below we show how to fit a linear function with some data
 
 .. code:: python
 
    import numpy as np
-   from jaxfit import CurveFit
+   from NLSQ import CurveFit
 
    def linear(x, m, b): # fit function
    	return m * x + b
@@ -43,7 +43,7 @@ function. Below we show how to fit a linear function with some data
    cf = CurveFit()
    popt, pcov = cf.curve_fit(linear, x, y)
 
-JAXFit takes advantage of JAX’s just-in-time compilation (JIT) of Python
+NLSQ takes advantage of JAX’s just-in-time compilation (JIT) of Python
 code to `XLA <https://www.tensorflow.org/xla>`__ which runs on GPU or
 TPU hardware. This means the fit functions you define must be JIT
 compilable. For basic fit functions this should cause no issues as we
@@ -69,41 +69,41 @@ Contents
 -  `Quickstart: Colab in the Cloud <#quickstart-colab-in-the-cloud>`__
 -  `Current gotchas <#current-gotchas>`__
 -  `Installation <#installation>`__
--  `Citing JAXFit <#citing-jax>`__
--  :doc:`Reference documentation <autodoc/jaxfit>`.
+-  `Citing NLSQ <#citing-jax>`__
+-  :doc:`Reference documentation <autodoc/NLSQ>`.
 
 Quickstart: Colab in the Cloud
 ------------------------------
 
-The easiest way to test out JAXFit is using a Colab notebook connected
+The easiest way to test out NLSQ is using a Colab notebook connected
 to a Google Cloud GPU. JAX comes pre-installed so you’ll be able to
 start fitting right away.
 
 We have a few tutorial notebooks including: 
 
-- `The basics: fitting basic functions with JAXFit <https://colab.research.google.com/github/Dipolar-Quantum-Gases/jaxfit/blob/main/docs/notebooks/JAXFit_Quickstart.ipynb>`__
-- `Fitting 2D images with JAXFit <https://colab.research.google.com/github/Dipolar-Quantum-Gases/jaxfit/blob/main/docs/notebooks/JAXFit_2D_Gaussian_Demo.ipynb>`__
+- `The basics: fitting basic functions with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/NLSQ/blob/main/docs/notebooks/NLSQ_Quickstart.ipynb>`__
+- `Fitting 2D images with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/NLSQ/blob/main/docs/notebooks/NLSQ_2D_Gaussian_Demo.ipynb>`__
 
 Current gotchas
 ---------------
 
 Full disclosure we’ve copied most of this from the `JAX
-repo <https://github.com/google/jax#current-gotchas>`__, but JAXFit
+repo <https://github.com/google/jax#current-gotchas>`__, but NLSQ
 inherits JAX’s idiosyncrasies and so the “gotchas” are mostly the same.
 
 Double precision required
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First and foremost by default JAX enforces single precision (32-bit,
-e.g. ``float32``), but JAXFit needs double precision (64-bit,
+e.g. ``float32``), but NLSQ needs double precision (64-bit,
 e.g. ``float64``). `To enable
 double-precision <https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#double-64bit-precision>`__
 (64-bit, e.g. ``float64``) one needs to set the ``jax_enable_x64``
 variable at startup (or set the environment variable
 ``JAX_ENABLE_X64=True``).
 
-JAXFit does this when it is imported, but should you import JAX before
-JAXFit, then you’ll need to set this flag yourself e.g.
+NLSQ does this when it is imported, but should you import JAX before
+NLSQ, then you’ll need to set this flag yourself e.g.
 
 .. code:: python
 
@@ -111,7 +111,7 @@ JAXFit, then you’ll need to set this flag yourself e.g.
    config.update("jax_enable_x64", True)
 
    import jax.numpy as jnp
-   from jaxfit import CurveFit
+   from NLSQ import CurveFit
 
 Other caveats
 ~~~~~~~~~~~~~
@@ -156,8 +156,8 @@ Some standouts:
 Installation
 ------------
 
-JAXFit is written in pure Python and is based on the JAX package. JAX
-therefore needs to be installed before installing JAXFit via pip. JAX
+NLSQ is written in pure Python and is based on the JAX package. JAX
+therefore needs to be installed before installing NLSQ via pip. JAX
 installation requires a bit of effort since it is optimized for the
 computer hardware you’ll be using (GPU vs. CPU).
 
@@ -173,12 +173,12 @@ found in `this Github
 repo <https://github.com/cloudhan/jax-windows-builder>`__ and we’ve
 included detailed instructions on this installation process below.
 
-After installing JAX, you can now install JAXFit via the following pip
+After installing JAX, you can now install NLSQ via the following pip
 command
 
 ::
 
-   pip install jaxfit
+   pip install NLSQ
 
 Windows JAX install
 ~~~~~~~~~~~~~~~~~~~
@@ -251,16 +251,16 @@ list of jaxlib and JAX releases can be found
 
    <!--For more detail on using these pre-built wheels please see the docs.-->
 
-Citing JAXFit
+Citing NLSQ
 -------------
 
-If you use JAXFit consider citing the `introductory
+If you use NLSQ consider citing the `introductory
 paper <https://doi.org/10.48550/arXiv.2208.12187>`__:
 
 ::
 
-   @article{jaxfit,
-     title={JAXFit: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
+   @article{NLSQ,
+     title={NLSQ: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
      author={Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
      journal={arXiv preprint arXiv:2208.12187},
      year={2022}
@@ -270,4 +270,4 @@ paper <https://doi.org/10.48550/arXiv.2208.12187>`__:
 API Documentation
 -----------------------
 
-For details about the JAXFit API, see the :doc:`reference documentation <autodoc/modules>`.
+For details about the NLSQ API, see the :doc:`reference documentation <autodoc/modules>`.

@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath('..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'JAXFit'
+project = 'NLSQ'
 copyright = '2022'
 author = 'Lucas Hofer'
 

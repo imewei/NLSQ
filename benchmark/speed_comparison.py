@@ -10,7 +10,7 @@ import sys
 import matplotlib.pyplot as plt
 
 sys.path.append(r'../')
-from jaxfit import CurveFit
+from nlsq import CurveFit
     
 sys.path.append(r'./timed_scipy_curve_fit')
 from scipy_minpack import curve_fit

@@ -4,13 +4,13 @@ API Documentation
 .. toctree::
    :maxdepth: 4
 
-   jaxfit
+   NLSQ
 
 
 Module contents
 ---------------
 
-.. automodule:: jaxfit
+.. automodule:: NLSQ
    :members:
    :undoc-members:
    :show-inheritance:

@@ -7,7 +7,7 @@
 .. include:: main.rst
 
 
-JAXFit Documentation
+NLSQ Documentation
 =====================================
 
 .. toctree::

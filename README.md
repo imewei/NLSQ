@@ -21,7 +21,7 @@ We've designed JAXFit to be a drop-in replacement for SciPy's curve_fit function
 
 ```python
 import numpy as np
-from jaxfit import CurveFit
+from nlsq import CurveFit
 
 def linear(x, m, b): # fit function
 	return m * x + b
@@ -80,7 +80,7 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp
-from jaxfit import CurveFit
+from nlsq import CurveFit
 ```
 
 ### Other caveats
@@ -109,7 +109,7 @@ For Windows systems, the officially supported method is building directly from t
 After installing JAX, you can now install JAXFit via the following pip command
 
 ```
-pip install jaxfit
+pip install NLSQ
 ```
 
 ### Windows JAX install

@@ -12,7 +12,7 @@ import sys
 
 sys.path.append(r'../')
 
-from jaxfit import CurveFit
+from nlsq import CurveFit
 import jax.numpy as jnp
 
 sys.path.append(r'./timed_scipy_curve_fit')

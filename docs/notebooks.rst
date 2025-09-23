@@ -9,5 +9,5 @@ Example Notebooks
 .. toctree::
    :maxdepth: 1
 
-   notebooks/JAXFit_Quickstart
-   notebooks/JAXFit_2D_Gaussian_Demo
+   notebooks/NLSQ_Quickstart
+   notebooks/NLSQ_2D_Gaussian_Demo
