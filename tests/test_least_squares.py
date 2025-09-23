@@ -5,6 +5,7 @@ from numpy.linalg import norm
 from numpy.testing import (assert_, assert_allclose,
                            assert_equal, suppress_warnings)
 from pytest import raises as assert_raises
+import pytest
 from scipy.sparse import issparse, lil_matrix
 from scipy.sparse.linalg import aslinearoperator
 
@@ -57,7 +58,7 @@ def fun_rosenbrock_cropped(x):
 
 
 def jac_rosenbrock_cropped(x):
-    return (jac_rosenbrock(x)[0])
+    return jac_rosenbrock(x)[:1, :]
 
 
 # When x is 1-D array, return is 2-D array.
@@ -715,6 +716,7 @@ class LossFunctionMixin:
 # class TestTRF(BaseMixin, BoundsMixin, SparseMixin, LossFunctionMixin):
 
 # class TestTRF(BaseMixin, LossFunctionMixin):
+@pytest.mark.slow
 class TestTRF(BaseMixin, BoundsMixin, LossFunctionMixin):
 # class TestTRF(LossFunctionMixin):
 # class TestTRF(SparseMixin):
@@ -737,6 +739,8 @@ xdata_def = None
 ydata_def = None
 dmask_def = None
 trans_def = None
+
+@pytest.mark.slow
 def test_basic():
     # test that 'method' arg is really optional
     res = least_squares(fun_trivial, 2.0)
@@ -751,6 +755,7 @@ def test_basic():
 #                       ftol=ftol, gtol=gtol, method='lm')
 
 
+@pytest.mark.slow
 def test_fp32_gh12991():
     # checks that smaller FP sizes can be used in least_squares
     # this is the minimum working example reported for gh12991

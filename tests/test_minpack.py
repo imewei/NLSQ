@@ -7,6 +7,7 @@ from numpy.testing import (assert_, assert_almost_equal, assert_array_equal,
                            assert_array_almost_equal, assert_allclose,
                            assert_warns, suppress_warnings)
 from pytest import raises as assert_raises
+import pytest
 import numpy as np
 from numpy import array
 from multiprocessing.pool import ThreadPool
@@ -41,6 +42,7 @@ def sequence_parallel(fs):
         return pool.map(lambda f: f(), fs)
 
 
+@pytest.mark.slow
 class TestCurveFit:
     def setup_method(self):
         self.y = array([1.0, 3.2, 9.5, 13.7])

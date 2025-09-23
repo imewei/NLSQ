@@ -1,10 +1,30 @@
 include LICENSE.txt
 include README.md
 include CHANGELOG.md
+include CLAUDE.md
 include pyproject.toml
+include Makefile
+include tox.ini
+include .editorconfig
 recursive-include nlsq *.py *.pyi py.typed
+recursive-include examples *.ipynb
+recursive-include docs *.py *.rst *.md *.txt *.yml *.yaml
 recursive-exclude * __pycache__
 recursive-exclude * *.pyc
 recursive-exclude * *.pyo
+recursive-exclude * .DS_Store
+recursive-exclude * *.so
 recursive-exclude tests *
+recursive-exclude benchmark *
+recursive-exclude .github *
+recursive-exclude .agent-os *
+recursive-exclude venv *
 prune docs/_build
+prune htmlcov
+exclude .gitignore
+exclude .pre-commit-config.yaml
+exclude .readthedocs.yaml
+exclude nlsq_debug_*.log
+exclude *.log
+exclude .coverage
+exclude coverage.xml

@@ -1,9 +1,9 @@
-NLSQ API Docs
-======
+NLSQ API Documentation
+======================
 
-These are the docs for all the functions and objects. Generally only the ``NLSQ.minpack`` submodule is needed by the user.
+Complete API documentation for all functions and classes. Most users only need the ``nlsq.minpack`` module for curve fitting.
 
 .. toctree::
    :maxdepth: 3
 
-   NLSQ
+   nlsq

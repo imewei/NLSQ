@@ -517,7 +517,7 @@ class CurveFit():
                                         method=method, timeit=timeit, **kwargs)
 
         if not res.success:
-            self.logger.error("Optimization failed", message=res.message, status=res.status)
+            self.logger.error("Optimization failed", reason=res.message, status=res.status)
             raise RuntimeError("Optimal parameters not found: " + res.message)
 
         popt = res.x

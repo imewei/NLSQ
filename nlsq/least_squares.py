@@ -19,6 +19,8 @@ from nlsq.caching import cached_jit, get_cached_jit
 
 
 TERMINATION_MESSAGES = {
+    -3: "Inner optimization loop exceeded maximum iterations.",
+    -2: "Maximum iterations reached.",
     -1: "Improper input parameters status returned from `leastsq`",
     0: "The maximum number of function evaluations is exceeded.",
     1: "`gtol` termination condition is satisfied.",
@@ -186,7 +188,7 @@ class AutoDiffJacobian():
         # will be past to JAX's jacfwd function.
         arg_list = [4 + i for i in range(num_args)]
 
-        @cached_jit()
+        @jit
         def wrap_func(*all_args: List[Any]) -> jnp.ndarray:
             """Wraps the residual fit function such that it can be passed to the
             jacfwd function. Jacfwd requires the function to a single list
@@ -196,7 +198,7 @@ class AutoDiffJacobian():
             args = all_args[4:]
             return func(args, xdata, ydata, data_mask, atransform)
 
-        @cached_jit()
+        @jit
         def jac_func(args: List[float],
                      xdata: jnp.ndarray,
                      ydata: jnp.ndarray,
@@ -215,7 +217,7 @@ class AutoDiffJacobian():
             jac_fwd = jacfwd(wrap_func, argnums=arg_list)(*all_args)
             return jnp.array(jac_fwd)
 
-        @cached_jit()
+        @jit
         def masked_jac(args: List[float],
                        xdata: jnp.ndarray,
                        ydata: jnp.ndarray,
@@ -227,7 +229,7 @@ class AutoDiffJacobian():
             J = jnp.where(data_mask, Jt, 0).T
             return jnp.atleast_2d(J)
 
-        @cached_jit()
+        @jit
         def no_mask_jac(args: List[float],
                         xdata: jnp.ndarray,
                         ydata: jnp.ndarray,
@@ -288,8 +290,12 @@ class LeastSquares():
                       transform: Optional[jnp.ndarray] = None,
                       timeit: bool = False,
                       args=(),
-                      kwargs={}):
+                      kwargs={},
+                      **timeout_kwargs):
 
+        # Check for incorrect usage of 'options' parameter
+        if 'options' in timeout_kwargs:
+            raise TypeError("'options' is not a supported keyword argument")
 
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
@@ -398,7 +404,7 @@ class LeastSquares():
             rfunc = wrap_func
             if jac is None:
                 adj = AutoDiffJacobian()
-                jac_func = adj.create_ad_jacobian(wrap_func, self.n, masked=False)
+                jac_func = adj.create_ad_jacobian(wrap_func, x0.size, masked=False)
             else:
                 jac_func = wrap_jac
 
@@ -449,7 +455,7 @@ class LeastSquares():
             result = self.trf.trf(rfunc, xdata, ydata, jac_func, data_mask,
                                   transform, x0, f0, J0, lb, ub, ftol, xtol,
                          gtol, max_nfev, f_scale, x_scale, loss_function,
-                         tr_options.copy(), verbose, timeit)
+                         tr_options.copy(), verbose, timeit, **timeout_kwargs)
 
 
         result.message = TERMINATION_MESSAGES[result.status]
@@ -511,7 +517,7 @@ class LeastSquares():
         None
         """
 
-        @cached_jit()
+        @jit
         def masked_residual_func(args: List[float],
                                  xdata: jnp.ndarray,
                                  ydata: jnp.ndarray,
@@ -553,7 +559,7 @@ class LeastSquares():
         # the uncertainty transform to all ones in the case where there is no
         # uncertainty transform.
 
-        @cached_jit()
+        @jit
         def func_no_transform(args: List[float],
                               xdata: jnp.ndarray,
                               ydata: jnp.ndarray,
@@ -566,7 +572,7 @@ class LeastSquares():
             for consistency with the other cases."""
             return masked_residual_func(args, xdata, ydata, data_mask)
 
-        @cached_jit()
+        @jit
         def func_1d_transform(args: List[float],
                               xdata: jnp.ndarray,
                               ydata: jnp.ndarray,
@@ -579,7 +585,7 @@ class LeastSquares():
             return atransform * masked_residual_func(args, xdata,
                                                      ydata, data_mask)
 
-        @cached_jit()
+        @jit
         def func_2d_transform(args: List[float],
                               xdata: jnp.ndarray,
                               ydata: jnp.ndarray,
@@ -621,14 +627,14 @@ class LeastSquares():
             The masked Jacobian of the function evaluated at `args` with respect to the data.
         """
 
-        @cached_jit()
+        @jit
         def jac_func(coords: jnp.ndarray,
                      args: List[float]
                      ) -> jnp.ndarray:
             jac_fwd = jac(coords, *args)
             return jnp.array(jac_fwd)
 
-        @cached_jit()
+        @jit
         def masked_jac(coords: jnp.ndarray,
                        args: List[float],
                        data_mask: jnp.ndarray
@@ -638,7 +644,7 @@ class LeastSquares():
              Jt = jac_func(coords, args)
              return jnp.where(data_mask, Jt, 0).T
 
-        @cached_jit()
+        @jit
         def jac_no_transform(args: List[float],
                              coords: jnp.ndarray,
                              ydata: jnp.ndarray,
@@ -649,7 +655,7 @@ class LeastSquares():
             uncertainty transform."""
             return jnp.atleast_2d(masked_jac(coords, args, data_mask))
 
-        @cached_jit()
+        @jit
         def jac_1d_transform(args: List[float],
                              coords: jnp.ndarray,
                              ydata: jnp.ndarray,
@@ -662,7 +668,7 @@ class LeastSquares():
             J = masked_jac(coords, args, data_mask)
             return jnp.atleast_2d(atransform[:, jnp.newaxis] * jnp.asarray(J))
 
-        @cached_jit()
+        @jit
         def jac_2d_transform(args: List[float],
                              coords: jnp.ndarray,
                              ydata: jnp.ndarray,

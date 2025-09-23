@@ -132,7 +132,7 @@ class TestJAXConfig(unittest.TestCase):
 class TestJAXConfigIntegration(unittest.TestCase):
     """Integration tests for JAXConfig with JAX library."""
 
-    @patch('nlsq.config.config')
+    @patch('jax.config')
     def test_jax_config_update_called(self, mock_jax_config):
         """Test that JAX config.update is called correctly."""
         # Create a fresh config instance

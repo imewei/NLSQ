@@ -1,7 +1,9 @@
-.. figure:: images/NLSQ_small.jpg
+.. figure:: images/NLSQ_logo.png
 
 NLSQ: Nonlinear least squares curve fitting for the GPU/TPU
 =============================================================
+
+**Note:** NLSQ is forked from `JAXFit <https://github.com/Dipolar-Quantum-Gases/JAXFit>`__ with significant optimizations and improvements.
 
 `Quickstart <#quickstart-colab-in-the-cloud>`__ \| `Install
 guide <#installation>`__ \| `ArXiv
@@ -10,14 +12,14 @@ Paper <https://doi.org/10.48550/arXiv.2208.12187>`__ \| :doc:`API Docs <autodoc/
 What is NLSQ?
 ---------------
 
-NLSQ takes well tested and developed SciPy nonlinear least squares
-(NLSQ) curve fitting algorithms, but runs them on the GPU/TPU using
+NLSQ is a fork of JAXFit that implements SciPy's nonlinear least squares
+curve fitting algorithms using
 `JAX <https://jax.readthedocs.io/en/latest/notebooks/quickstart.html>`__
-for a massive fit speed up. The package is very easy to use as the fit
-functions are defined only in Python with no CUDA programming needed. An
-introductory paper detailing the algorithm and performance improvements
-over SciPy/Gpufit can be found
-`here <https://doi.org/10.48550/arXiv.2208.12187>`__.
+for GPU/TPU acceleration. This fork includes significant optimizations,
+enhanced testing, and improved API design. Fit functions are written
+in Python without CUDA programming. Performance improvements over
+SciPy/Gpufit are documented in
+`this paper <https://doi.org/10.48550/arXiv.2208.12187>`__.
 
 NLSQ also improves on SciPy’s algorithm by taking advantage of JAX’s
 in-built `automatic
@@ -32,10 +34,10 @@ function. Below we show how to fit a linear function with some data
 .. code:: python
 
    import numpy as np
-   from NLSQ import CurveFit
+   from nlsq import CurveFit
 
-   def linear(x, m, b): # fit function
-   	return m * x + b
+   def linear(x, m, b):  # fit function
+       return m * x + b
 
    x = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
    y = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
@@ -54,8 +56,8 @@ example we show an exponential fit function
 
    import jax.numpy as jnp
 
-   def exp(x, a, b): # fit function
-   	return jnp.exp(a * x) + b
+   def exponential(x, a, b):  # fit function
+       return jnp.exp(a * x) + b
 
 For more complex fit functions there are a few JIT function caveats (see
 `Current gotchas <#current-gotchas>`__) such as avoiding control code
@@ -79,10 +81,10 @@ The easiest way to test out NLSQ is using a Colab notebook connected
 to a Google Cloud GPU. JAX comes pre-installed so you’ll be able to
 start fitting right away.
 
-We have a few tutorial notebooks including: 
+Tutorial notebooks:
 
-- `The basics: fitting basic functions with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/NLSQ/blob/main/docs/notebooks/NLSQ_Quickstart.ipynb>`__
-- `Fitting 2D images with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/NLSQ/blob/main/docs/notebooks/NLSQ_2D_Gaussian_Demo.ipynb>`__
+- `The basics: fitting basic functions with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%20Quickstart.ipynb>`__
+- `Fitting 2D images with NLSQ <https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%202D%20Gaussian%20Demo.ipynb>`__
 
 Current gotchas
 ---------------
@@ -111,7 +113,7 @@ NLSQ, then you’ll need to set this flag yourself e.g.
    config.update("jax_enable_x64", True)
 
    import jax.numpy as jnp
-   from NLSQ import CurveFit
+   from nlsq import CurveFit
 
 Other caveats
 ~~~~~~~~~~~~~
@@ -178,7 +180,7 @@ command
 
 ::
 
-   pip install NLSQ
+   pip install nlsq
 
 Windows JAX install
 ~~~~~~~~~~~~~~~~~~~

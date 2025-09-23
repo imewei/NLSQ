@@ -1,23 +1,40 @@
 <div align="center">
-<img src="docs/images/NLSQ_logo.png" alt="logo"></img>
+<img src="docs/images/NLSQ_logo.png" alt="NLSQ logo"></img>
 </div>
 
-# NLSQ: Nonlinear least squares curve fitting for the GPU/TPU
+# NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU
 
+**Note:** NLSQ is forked from [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit) with significant optimizations and improvements.
+
+[![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
+[![Documentation Status](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/en/latest/?badge=latest)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![JAX](https://img.shields.io/badge/JAX-0.4.20+-green.svg)](https://github.com/google/jax)
 
 [**Quickstart**](#quickstart-colab-in-the-cloud)
 | [**Install guide**](#installation)
 | [**ArXiv Paper**](https://doi.org/10.48550/arXiv.2208.12187)
 | [**Documentation**](https://nlsq.readthedocs.io/)
+| [**Examples**](examples/)
 
 ## What is NLSQ?
 
-NLSQ takes well tested and developed SciPy nonlinear least squares (NLSQ) curve fitting algorithms, but runs them on the GPU/TPU using [JAX](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) for a massive fit speed up. The package is very easy to use as the fit functions are defined only in Python with no CUDA programming needed. An introductory paper detailing the algorithm and performance improvements over SciPy/Gpufit can be found [here](https://doi.org/10.48550/arXiv.2208.12187).
+NLSQ is a fork of JAXFit that implements SciPy's nonlinear least squares curve fitting algorithms using [JAX](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) for GPU/TPU acceleration. This fork includes significant optimizations, enhanced testing, and improved API design. Fit functions are written in Python without CUDA programming. Performance improvements over SciPy/Gpufit are documented in [this paper](https://doi.org/10.48550/arXiv.2208.12187).
 
-NLSQ also improves on SciPy's algorithm by taking advantage of JAX's in-built [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html) (autodiff) of Python functions. We use JAX's autodiff to calculate the Jacobians in the NLSQ algorithms rather than requiring the user to give analytic partial derivatives or using numeric approximation techniques.
+NLSQ uses JAX's [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html) to calculate Jacobians automatically, eliminating the need for manual partial derivatives or numerical approximation.
 
 
-We've designed NLSQ to be a drop-in replacement for SciPy's curve_fit function. Below we show how to fit a linear function with some data
+NLSQ provides a drop-in replacement for SciPy's curve_fit function with the following features:
+
+- **GPU/TPU acceleration** via JAX JIT compilation
+- **Automatic differentiation** for Jacobian calculation
+- **Trust Region Reflective** and **Levenberg-Marquardt** algorithms
+- **Bounded optimization** with parameter constraints
+- **Robust loss functions** for outlier handling
+- **Fixed array size optimization** to avoid recompilation
+- **Comprehensive test coverage** (>80%) ensuring reliability
+
+## Basic Usage
 
 ```python
 import numpy as np
@@ -59,9 +76,9 @@ article for a more in-depth look at JAX specific caveats).
 ## Quickstart: Colab in the Cloud
 The easiest way to test out NLSQ is using a Colab notebook connected to a Google Cloud GPU. JAX comes pre-installed so you'll be able to start fitting right away.
 
-We have a few tutorial notebooks including:
-- [The basics: fitting basic functions with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/docs/notebooks/NLSQ_Quickstart.ipynb)
-- [Fitting 2D images with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/docs/notebooks/NLSQ_2D_Gaussian_Demo.ipynb)
+Tutorial notebooks:
+- [The basics: fitting basic functions with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%20Quickstart.ipynb)
+- [Fitting 2D images with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%202D%20Gaussian%20Demo.ipynb)
 
 ## Current gotchas
 
@@ -106,10 +123,18 @@ to do so can be found [here](https://github.com/google/jax#installation).
 For Windows systems, the officially supported method is building directly from the source code 
 (see [Building JAX from source](https://jax.readthedocs.io/en/latest/developer.html#building-from-source)). However, we've found it easier to use pre-built JAX wheels which can be found in [this Github repo](https://github.com/cloudhan/jax-windows-builder) and we've included detailed instructions on this installation process below.
 
-After installing JAX, you can now install NLSQ via the following pip command
+After installing JAX, install NLSQ:
 
+```bash
+pip install nlsq
 ```
-pip install NLSQ
+
+For development:
+
+```bash
+git clone https://github.com/Dipolar-Quantum-Gases/nlsq.git
+cd nlsq
+pip install -e ".[dev,test,docs]"
 ```
 
 ### Windows JAX install
@@ -166,12 +191,12 @@ pip install jax==0.3.14
 
 If you use NLSQ consider citing the [introductory paper](https://doi.org/10.48550/arXiv.2208.12187):
 
-```
-@article{nlsq,
+```bibtex
+@article{nlsq2022,
   title={NLSQ: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
   author={Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
   journal={arXiv preprint arXiv:2208.12187},
-  year={2022}
+  year={2022},
   url={https://doi.org/10.48550/arXiv.2208.12187}
 }
 ```

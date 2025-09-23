@@ -32,6 +32,10 @@ class JAXConfig:
         # Import here to avoid circular imports
         from jax import config
 
+        # Force CPU backend if requested (useful for testing)
+        if os.getenv('NLSQ_FORCE_CPU', '0') == '1' or os.getenv('JAX_PLATFORM_NAME') == 'cpu':
+            config.update("jax_platform_name", "cpu")
+
         # Enable 64-bit precision by default for NLSQ
         if not self._x64_enabled and os.getenv('NLSQ_DISABLE_X64') != '1':
             config.update("jax_enable_x64", True)

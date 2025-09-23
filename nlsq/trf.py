@@ -367,7 +367,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             loss_function: Union[None, Callable],
             tr_options: Dict,
             verbose: int,
-            timeit: bool=False
+            timeit: bool=False,
+            **kwargs
             ) -> Dict:
         """Minimize a scalar function of one or more variables using the
         trust-region reflective algorithm. Although I think this is not good
@@ -447,7 +448,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 return self.trf_no_bounds(fun, xdata, ydata, jac, data_mask,
                                           transform, x0, f0, J0,
                 lb, ub, ftol, xtol, gtol, max_nfev, f_scale, x_scale,
-                loss_function, tr_options, verbose)
+                loss_function, tr_options, verbose, **kwargs)
             else:
                 return self.trf_no_bounds_timed(fun, xdata, ydata, jac, data_mask, transform, x0,
                 f0, J0, lb, ub, ftol, xtol, gtol, max_nfev, f_scale, x_scale,
@@ -455,7 +456,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         else:
             return self.trf_bounds(fun, xdata, ydata, jac, data_mask, transform, x0,
                     f0, J0, lb, ub, ftol, xtol, gtol, max_nfev, f_scale, x_scale,
-                    loss_function, tr_options, verbose)
+                    loss_function, tr_options, verbose, **kwargs)
 
 
     def trf_no_bounds(self,
@@ -478,7 +479,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                       x_scale: np.ndarray,
                       loss_function: Union[None, Callable],
                       tr_options: Dict,
-                      verbose: int
+                      verbose: int,
+                      **kwargs
                       ) -> Dict:
         """Unbounded version of the trust-region reflective algorithm.
 
@@ -630,7 +632,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 s, V, uf = [np.array(val) for val in svd_output[2:]]
 
                 actual_reduction = -1
-                while actual_reduction <= 0 and nfev < max_nfev:
+                inner_loop_count = 0
+                max_inner_iterations = 100  # Prevent infinite loops
+                while actual_reduction <= 0 and nfev < max_nfev and inner_loop_count < max_inner_iterations:
+                    inner_loop_count += 1
                     step_h, alpha, n_iter = solve_lsq_trust_region(
                         n, m, uf, s, V, Delta, initial_alpha=alpha)
 
@@ -639,63 +644,74 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                                                                         step_h)
                     predicted_reduction = np.array(predicted_reduction_jnp)
 
-                step = d * step_h
-                x_new = x + step
+                    step = d * step_h
+                    x_new = x + step
 
-                f_new = fun(x_new, xdata, ydata, data_mask, transform)
+                    f_new = fun(x_new, xdata, ydata, data_mask, transform)
 
-                nfev += 1
+                    nfev += 1
 
-                step_h_norm = norm(step_h)
+                    step_h_norm = norm(step_h)
 
-                if not self.check_isfinite(f_new):
-                    Delta = 0.25 * step_h_norm
-                    continue
+                    if not self.check_isfinite(f_new):
+                        Delta = 0.25 * step_h_norm
+                        continue
 
-                if loss_function is not None:
-                    cost_new_jnp = loss_function(f_new, f_scale, data_mask,
-                                                 cost_only=True)
+                    if loss_function is not None:
+                        cost_new_jnp = loss_function(f_new, f_scale, data_mask,
+                                                     cost_only=True)
+                    else:
+                        cost_new_jnp = self.default_loss_func(f_new)
+                    cost_new = np.array(cost_new_jnp)
+
+                    actual_reduction = cost - cost_new
+
+                    Delta_new, ratio = update_tr_radius(
+                        Delta, actual_reduction, predicted_reduction,
+                        step_h_norm, step_h_norm > 0.95 * Delta)
+
+                    step_norm = norm(step)
+                    termination_status = check_termination(
+                        actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol)
+
+                    if termination_status is not None:
+                        break
+
+                    alpha *= Delta / Delta_new
+                    Delta = Delta_new
+
+                    # Exit inner loop if we have a successful step
+                    if actual_reduction > 0:
+                        break
+
+                # Check if inner loop hit iteration limit
+                if inner_loop_count >= max_inner_iterations:
+                    self.logger.warning("Inner optimization loop hit iteration limit",
+                                      inner_iterations=inner_loop_count,
+                                      actual_reduction=actual_reduction)
+                    termination_status = -3  # Inner loop limit exceeded
+
+                if actual_reduction > 0:
+                    x = x_new
+                    f = f_new
+                    f_true = f
+                    cost = cost_new
+                    J = jac(x, xdata, ydata, data_mask, transform)
+                    njev += 1
+
+                    if loss_function is not None:
+                        rho = loss_function(f, f_scale)
+                        J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
+
+                    g_jnp = self.compute_grad(J, f)
+                    g = np.array(g_jnp)
+                    if jac_scale:
+                        scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
                 else:
-                    cost_new_jnp = self.default_loss_func(f_new)
-                cost_new = np.array(cost_new_jnp)
+                    step_norm = 0
+                    actual_reduction = 0
 
-                actual_reduction = cost - cost_new
-
-                Delta_new, ratio = update_tr_radius(
-                    Delta, actual_reduction, predicted_reduction,
-                    step_h_norm, step_h_norm > 0.95 * Delta)
-
-                step_norm = norm(step)
-                termination_status = check_termination(
-                    actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol)
-
-                if termination_status is not None:
-                    break
-
-                alpha *= Delta / Delta_new
-                Delta = Delta_new
-
-            if actual_reduction > 0:
-                x = x_new
-                f = f_new
-                f_true = f
-                cost = cost_new
-                J = jac(x, xdata, ydata, data_mask, transform)
-                njev += 1
-
-                if loss_function is not None:
-                    rho = loss_function(f, f_scale)
-                    J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
-
-                g_jnp = self.compute_grad(J, f)
-                g = np.array(g_jnp)
-                if jac_scale:
-                    scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
-            else:
-                step_norm = 0
-                actual_reduction = 0
-
-            iteration += 1
+                iteration += 1
 
         if termination_status is None:
             termination_status = 0
@@ -727,7 +743,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                    x_scale: np.ndarray,
                    loss_function: Union[None, Callable],
                    tr_options: Dict,
-                   verbose: int
+                   verbose: int,
+                   **kwargs
                    ) -> Dict:
 
         """Bounded version of the trust-region reflective algorithm.
@@ -906,7 +923,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             theta = max(0.995, 1 - g_norm)
 
             actual_reduction = -1
-            while actual_reduction <= 0 and nfev < max_nfev:
+            inner_loop_count = 0
+            max_inner_iterations = 100  # Prevent infinite loops
+            while actual_reduction <= 0 and nfev < max_nfev and inner_loop_count < max_inner_iterations:
+                inner_loop_count += 1
                 p_h, alpha, n_iter = solve_lsq_trust_region(
                     n, m, uf, s, V, Delta, initial_alpha=alpha)
 
@@ -946,7 +966,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha *= Delta / Delta_new
                 Delta = Delta_new
 
-
+            # Check if inner loop hit iteration limit
+            if inner_loop_count >= max_inner_iterations:
+                self.logger.warning("Inner optimization loop hit iteration limit",
+                                  inner_iterations=inner_loop_count,
+                                  actual_reduction=actual_reduction)
+                termination_status = -3  # Inner loop limit exceeded
 
             if actual_reduction > 0:
                 x = x_new
@@ -1314,7 +1339,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
 
             actual_reduction = -1
-            while actual_reduction <= 0 and nfev < max_nfev:
+            inner_loop_count = 0
+            max_inner_iterations = 100  # Prevent infinite loops
+            while actual_reduction <= 0 and nfev < max_nfev and inner_loop_count < max_inner_iterations:
+                inner_loop_count += 1
                 step_h, alpha, n_iter = solve_lsq_trust_region(
                     n, m, uf, s, V, Delta, initial_alpha=alpha)
 
@@ -1371,6 +1399,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha *= Delta / Delta_new
                 Delta = Delta_new
 
+            # Check if inner loop hit iteration limit
+            if inner_loop_count >= max_inner_iterations:
+                self.logger.warning("Inner optimization loop hit iteration limit",
+                                  inner_iterations=inner_loop_count,
+                                  actual_reduction=actual_reduction)
+                termination_status = -3  # Inner loop limit exceeded
+
             if actual_reduction > 0:
                 x = x_new
 
@@ -1423,3 +1458,45 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             x=x, cost=cost, fun=f_true, jac=J, grad=g, optimality=g_norm,
             active_mask=active_mask, nfev=nfev, njev=njev,
             status=termination_status, all_times=tdicts)
+
+    def optimize(self,
+                fun: Callable,
+                x0: np.ndarray,
+                jac: Optional[Callable] = None,
+                bounds: Tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+                **kwargs) -> OptimizeResult:
+        """Perform optimization using trust region reflective algorithm.
+
+        This method provides a simplified interface to the TRF algorithm.
+        For full control and curve fitting applications, use the `trf` method directly.
+
+        Parameters
+        ----------
+        fun : callable
+            The objective function to minimize. Should return residuals.
+        x0 : np.ndarray
+            Initial guess for parameters
+        jac : callable, optional
+            Jacobian function. If None, uses automatic differentiation.
+        bounds : tuple of arrays
+            Lower and upper bounds for parameters
+        **kwargs
+            Additional optimization parameters
+
+        Returns
+        -------
+        OptimizeResult
+            The optimization result
+
+        Raises
+        ------
+        NotImplementedError
+            This simplified interface is not yet implemented.
+            Use the `trf` method for full curve fitting functionality.
+        """
+        raise NotImplementedError(
+            "The simplified optimize() interface is not yet implemented for TrustRegionReflective. "
+            "This class is designed for curve fitting applications. "
+            "Use the `trf()` method directly, or use the higher-level interfaces in "
+            "`nlsq.curve_fit()` or `LeastSquares.least_squares()`."
+        )

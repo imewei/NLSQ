@@ -45,6 +45,12 @@ class NLSQLogger:
         """
         self.name = f"nlsq.{name}"
         self.logger = logging.getLogger(self.name)
+
+        # Override level for debug mode
+        debug_mode = os.getenv('NLSQ_DEBUG', '0') == '1'
+        if debug_mode:
+            level = LogLevel.DEBUG
+
         self.logger.setLevel(level)
 
         # Prevent duplicate handlers

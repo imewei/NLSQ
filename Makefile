@@ -14,11 +14,36 @@ dev:  ## Install all development dependencies
 	pip install -e ".[dev,test,docs]"
 	pre-commit install
 
-test:  ## Run tests with pytest
+dev-all:  ## Install ALL dependencies (dev, test, docs, benchmark)
+	pip install --upgrade pip
+	pip install -e ".[all]"
+	pre-commit install
+
+test:  ## Run all tests with pytest
 	pytest
+
+test-fast:  ## Run only fast tests (excludes optimization tests)
+	pytest -m "not slow"
+
+test-slow:  ## Run only slow optimization tests
+	pytest -m "slow"
+
+test-debug:  ## Run slow tests with debug logging
+	NLSQ_DEBUG=1 pytest -m "slow" -s
+
+test-cpu:  ## Run tests with CPU backend (avoids GPU compilation issues)
+	NLSQ_FORCE_CPU=1 pytest
+
+test-cpu-debug:  ## Run slow tests with debug logging on CPU backend
+	NLSQ_DEBUG=1 NLSQ_FORCE_CPU=1 pytest -m "slow" -s
 
 test-cov:  ## Run tests with coverage report
 	pytest --cov-report=html
+	@echo "Opening coverage report..."
+	@python -m webbrowser htmlcov/index.html 2>/dev/null || open htmlcov/index.html 2>/dev/null || echo "Please open htmlcov/index.html manually"
+
+test-cov-fast:  ## Run fast tests with coverage report
+	pytest -m "not slow" --cov-report=html
 	@echo "Opening coverage report..."
 	@python -m webbrowser htmlcov/index.html 2>/dev/null || open htmlcov/index.html 2>/dev/null || echo "Please open htmlcov/index.html manually"
 
@@ -38,16 +63,30 @@ clean:  ## Clean build artifacts and cache files
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name "*.pyo" -delete
 	find . -type f -name "*~" -delete
-	rm -rf coverage.xml
+	find . -type f -name "nlsq_debug_*.log" -delete
+	rm -rf coverage.xml .benchmarks
 
 docs:  ## Build documentation
 	cd docs && make clean html
 	@echo "Opening documentation..."
 	@python -m webbrowser docs/_build/html/index.html 2>/dev/null || open docs/_build/html/index.html 2>/dev/null || echo "Please open docs/_build/html/index.html manually"
 
+benchmark:  ## Run performance benchmarks
+	pytest benchmark/ --benchmark-only
+
+profile:  ## Run memory profiling tests
+	python -m memory_profiler benchmark/speed_comparison.py
+
 build:  ## Build distribution packages
 	python -m pip install --upgrade build
 	python -m build
+
+validate:  ## Validate package build
+	python -m pip install --upgrade twine
+	twine check dist/*
+
+install-local:  ## Install from local build
+	pip install dist/*.whl --force-reinstall
 
 publish-test:  ## Publish to TestPyPI
 	python -m pip install --upgrade twine
@@ -56,3 +95,6 @@ publish-test:  ## Publish to TestPyPI
 publish:  ## Publish to PyPI
 	python -m pip install --upgrade twine
 	twine upload dist/*
+
+examples:  ## Test example notebooks
+	python -c "import nbformat; from nbconvert.preprocessors import ExecutePreprocessor; [ExecutePreprocessor(timeout=600).preprocess(nbformat.read(f, as_version=4), {}) for f in ['examples/NLSQ Quickstart.ipynb', 'examples/NLSQ 2D Gaussian Demo.ipynb']]"
