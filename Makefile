@@ -64,7 +64,7 @@ clean:  ## Clean build artifacts and cache files
 	find . -type f -name "*.pyo" -delete
 	find . -type f -name "*~" -delete
 	find . -type f -name "nlsq_debug_*.log" -delete
-	rm -rf coverage.xml .benchmarks
+	rm -rf coverage.xml .benchmarks checkpoint_iter_100.npz
 
 docs:  ## Build documentation
 	cd docs && make clean html

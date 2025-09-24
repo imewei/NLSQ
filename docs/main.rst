@@ -69,6 +69,7 @@ Contents
 ~~~~~~~~
 
 -  `Quickstart: Colab in the Cloud <#quickstart-colab-in-the-cloud>`__
+-  `Large Dataset Support <#large-dataset-support>`__
 -  `Current gotchas <#current-gotchas>`__
 -  `Installation <#installation>`__
 -  `Citing NLSQ <#citing-nlsq>`__
@@ -85,8 +86,144 @@ Example notebooks are available in the `examples/ directory <https://github.com/
 
 - **NLSQ Quickstart**: Learn the basics of fitting functions with NLSQ
 - **NLSQ 2D Gaussian Demo**: Advanced example for fitting 2D images
+- **Large Dataset Demo**: Fitting datasets with millions of points
 
 You can run these notebooks on Google Colab by opening them directly from the GitHub repository.
+
+Large Dataset Support
+--------------------
+
+NLSQ includes comprehensive support for handling very large datasets (20M+ points) that may exceed available memory. These features are designed to handle scientific and engineering datasets with millions to billions of data points.
+
+Memory Management and Estimation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before fitting large datasets, NLSQ can estimate memory requirements:
+
+.. code:: python
+
+   from nlsq import estimate_memory_requirements
+
+   # Check memory requirements for 50 million points
+   stats = estimate_memory_requirements(50_000_000, n_params=3)
+   print(f"Memory required: {stats.total_memory_estimate_gb:.2f} GB")
+   print(f"Recommended chunks: {stats.n_chunks}")
+   print(f"Requires sampling: {stats.requires_sampling}")
+
+LargeDatasetFitter Class
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``LargeDatasetFitter`` class provides automatic memory management:
+
+.. code:: python
+
+   from nlsq import LargeDatasetFitter
+   import numpy as np
+
+   # Create fitter with 4GB memory limit
+   fitter = LargeDatasetFitter(memory_limit_gb=4.0)
+
+   # Generate large dataset (50M points)
+   x = np.linspace(0, 10, 50_000_000)
+   y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, len(x))
+
+   def exponential(x, a, b, c):
+       return a * np.exp(-b * x) + c
+
+   # Fit with automatic chunking
+   result = fitter.fit_with_progress(
+       exponential, x, y, p0=[2.5, 0.6, 0.2]
+   )
+
+Convenience Function
+~~~~~~~~~~~~~~~~~~~~
+
+For simple use cases, use the ``fit_large_dataset`` function:
+
+.. code:: python
+
+   from nlsq import fit_large_dataset
+
+   result = fit_large_dataset(
+       exponential, x, y,
+       p0=[2.5, 0.6, 0.2],
+       memory_limit_gb=4.0,
+       show_progress=True  # Show progress bar
+   )
+
+Sparse Jacobian Optimization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For problems with sparse Jacobian structure:
+
+.. code:: python
+
+   from nlsq import SparseJacobianComputer, SparseOptimizer
+
+   # Detect sparsity pattern
+   sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
+   sparsity_pattern = sparse_computer.detect_sparsity(func, x_sample, p0)
+
+   # Optimize with sparse methods if beneficial
+   if sparse_computer.is_sparse(sparsity_pattern):
+       optimizer = SparseOptimizer()
+       result = optimizer.optimize_with_sparsity(
+           func, x, y, p0, sparsity_pattern
+       )
+
+Streaming Optimizer
+~~~~~~~~~~~~~~~~~~~
+
+For datasets that don't fit in memory or are generated on-the-fly:
+
+.. code:: python
+
+   from nlsq import StreamingOptimizer, StreamingConfig
+   from nlsq import create_hdf5_dataset
+
+   # Create or load HDF5 dataset
+   create_hdf5_dataset(
+       "large_data.h5", func, params,
+       n_samples=100_000_000, chunk_size=10000
+   )
+
+   # Configure streaming
+   config = StreamingConfig(
+       batch_size=10000,
+       max_epochs=100,
+       convergence_tol=1e-6
+   )
+
+   optimizer = StreamingOptimizer(config)
+   result = optimizer.fit_from_hdf5("large_data.h5", func, p0)
+
+Memory-Efficient Solvers
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+NLSQ includes iterative solvers that reduce memory usage:
+
+.. code:: python
+
+   from nlsq import CurveFit
+
+   cf = CurveFit()
+
+   # Use conjugate gradient solver (memory efficient)
+   popt, pcov = cf.curve_fit(
+       func, x, y, p0,
+       solver='cg'  # Or 'lsqr' for sparse problems
+   )
+
+Key Features:
+
+- **Automatic Memory Management**: Detects available memory and chunks data accordingly
+- **Progress Reporting**: Real-time progress for long-running fits
+- **Sparse Optimization**: Exploits sparsity in Jacobian matrices
+- **Streaming Support**: Process data that doesn't fit in memory
+- **HDF5 Integration**: Work with datasets stored on disk
+- **Iterative Solvers**: CG and LSQR solvers for reduced memory footprint
+
+For detailed information, see the :doc:`Large Dataset Guide <large_dataset_guide>` and :doc:`API documentation <autodoc/modules>`.
 
 Current gotchas
 ---------------

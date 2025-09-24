@@ -11,11 +11,24 @@ NLSQ Documentation
 =====================================
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
+   :caption: User Guide
 
+   main
+   large_dataset_guide
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+
+   api_large_datasets
    autodoc/modules
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Additional Resources
 
+   performance_benchmarks
 
 Indices and tables
 ==================

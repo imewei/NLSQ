@@ -31,6 +31,10 @@ NLSQ provides a drop-in replacement for SciPy's curve_fit function with the foll
 - **Trust Region Reflective** and **Levenberg-Marquardt** algorithms
 - **Bounded optimization** with parameter constraints
 - **Robust loss functions** for outlier handling
+- **Large dataset support** for 20M+ points with automatic memory management
+- **Sparse Jacobian optimization** for problems with sparse structure
+- **Streaming optimizer** for unlimited-size datasets
+- **Memory-efficient solvers** (CG, LSQR) for reduced memory footprint
 - **Fixed array size optimization** to avoid recompilation
 - **Comprehensive test coverage** (>80%) ensuring reliability
 
@@ -88,6 +92,7 @@ article for a more in-depth look at JAX specific caveats).
 
 ### Contents
 * [Quickstart: Colab in the Cloud](#quickstart-colab-in-the-cloud)
+* [Large Dataset Support](#large-dataset-support)
 * [Current gotchas](#current-gotchas)
 * [Installation](#installation)
 * [Citing NLSQ](#citing-nlsq)
@@ -99,6 +104,103 @@ The easiest way to test out NLSQ is using a Colab notebook connected to a Google
 Tutorial notebooks:
 - [The basics: fitting basic functions with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%20Quickstart.ipynb)
 - [Fitting 2D images with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%202D%20Gaussian%20Demo.ipynb)
+- [Large dataset fitting demonstration](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/large_dataset_demo.ipynb)
+
+## Large Dataset Support
+
+NLSQ includes advanced features for handling very large datasets (20M+ points) that may not fit in memory:
+
+### Automatic Memory Management
+
+```python
+from nlsq import LargeDatasetFitter, estimate_memory_requirements
+import numpy as np
+
+# Check memory requirements for your dataset
+n_points = 50_000_000  # 50 million points
+n_params = 3
+stats = estimate_memory_requirements(n_points, n_params)
+print(f"Memory required: {stats.total_memory_estimate_gb:.2f} GB")
+print(f"Recommended chunks: {stats.n_chunks}")
+
+# Automatic chunking for large datasets
+fitter = LargeDatasetFitter(memory_limit_gb=4.0)  # 4GB memory limit
+
+# Generate large dataset
+x = np.linspace(0, 10, n_points)
+y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, n_points)
+
+# Fit with automatic memory management
+def exponential(x, a, b, c):
+    return a * np.exp(-b * x) + c
+
+result = fitter.fit(exponential, x, y, p0=[2.5, 0.6, 0.2])
+print(f"Fitted parameters: {result.popt}")
+```
+
+### Convenience Function for Large Datasets
+
+```python
+from nlsq import fit_large_dataset
+
+# Simple API for large dataset fitting
+result = fit_large_dataset(
+    exponential, x, y,
+    p0=[2.5, 0.6, 0.2],
+    memory_limit_gb=4.0,
+    show_progress=True  # Progress bar for long fits
+)
+```
+
+### Sparse Jacobian Optimization
+
+For problems with sparse Jacobian structure (e.g., fitting multiple independent components):
+
+```python
+from nlsq import SparseJacobianComputer
+
+# Automatically detect and exploit sparsity
+sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
+sparsity_pattern = sparse_computer.detect_sparsity(func, x_sample, p0)
+
+if sparse_computer.is_sparse(sparsity_pattern):
+    print(f"Jacobian is {sparse_computer.compute_sparsity_ratio(sparsity_pattern):.1%} sparse")
+    # Optimization will automatically use sparse methods
+```
+
+### Streaming Optimizer for Unlimited Datasets
+
+For datasets that don't fit in memory or are generated on-the-fly:
+
+```python
+from nlsq import StreamingOptimizer, StreamingConfig
+
+# Configure streaming optimization
+config = StreamingConfig(
+    batch_size=10000,
+    max_epochs=100,
+    convergence_tol=1e-6
+)
+
+optimizer = StreamingOptimizer(config)
+
+# Stream data from file or generator
+result = optimizer.fit_unlimited_data(
+    func, data_generator, x0=p0,
+    n_params=3
+)
+```
+
+### Key Features for Large Datasets:
+
+- **Memory Estimation**: Predict memory requirements before fitting
+- **Automatic Chunking**: Split large datasets into manageable chunks
+- **Progress Reporting**: Track progress during long-running fits
+- **Sparse Optimization**: Exploit sparsity in Jacobian matrices
+- **Streaming Support**: Process data that doesn't fit in memory
+- **Memory-Efficient Solvers**: CG and LSQR solvers for reduced memory usage
+
+For more details, see the [large dataset guide](https://nlsq.readthedocs.io/en/latest/large_datasets.html) and [API documentation](https://nlsq.readthedocs.io/en/latest/api.html).
 
 ## Current gotchas
 

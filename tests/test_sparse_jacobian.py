@@ -169,8 +169,9 @@ class TestSparseOptimizer(unittest.TestCase):
         self.assertFalse(optimizer.should_use_sparse(10000, 10))
 
         # For extremely large problems (>100M elements), sparse methods may be recommended
-        # The threshold is 100M elements (1e8)
-        should_use = optimizer.should_use_sparse(20_000_000, 10)
+        # Use auto_detect=False to get size-based heuristic
+        optimizer_size_based = SparseOptimizer(min_sparsity=0.5, auto_detect=False)
+        should_use = optimizer_size_based.should_use_sparse(20_000_000, 10)
         # 20M * 10 = 200M > 100M threshold
         self.assertTrue(should_use)
 
@@ -342,7 +343,7 @@ class TestSparseJacobianIntegration(unittest.TestCase):
 
         # Detect sparsity
         x0 = np.zeros(n_params)
-        computer = SparseJacobianComputer(threshold=1e-8)
+        computer = SparseJacobianComputer(sparsity_threshold=1e-8)
 
         # Sample to detect pattern (use subset for efficiency)
         # Create a dummy xdata for pattern detection

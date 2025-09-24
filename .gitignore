@@ -74,6 +74,7 @@ test_report.html
 bandit_re*.json
 bandit-re*.json
 pip_audit_report.json
+checkpoint_iter_100.npz
 
 # Translations
 *.mo
@@ -248,5 +249,5 @@ Thumbs.db
 *.orig
 
 # Project specific documentation files (not ignored)
-# CLAUDE.md - Claude Code instructions
+CLAUDE.md - Claude Code instructions
 # WARP.md - Warp instructions
