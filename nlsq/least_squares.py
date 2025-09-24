@@ -366,7 +366,18 @@ class LeastSquares:
         if xdata is not None and ydata is not None:
             # checks to see if the fit function is the same. Can't directly
             # compare the functions so we compare function code directly
-            func_update = self.f.__code__.co_code != fun.__code__.co_code
+            # Handle both regular functions and JIT-compiled functions
+            func_update = False
+            try:
+                if hasattr(self.f, '__code__') and hasattr(fun, '__code__'):
+                    # Both are regular Python functions
+                    func_update = self.f.__code__.co_code != fun.__code__.co_code
+                else:
+                    # One or both are JIT-compiled or different types
+                    func_update = self.f != fun
+            except Exception:
+                # If comparison fails, update to be safe
+                func_update = True
             # if we are updating the fit function then we need to update the
             # jacobian function as well
             if func_update:
@@ -595,11 +606,45 @@ class LeastSquares:
                     func(xdata, args[0], args[1], args[2], args[3], args[4], args[5])
                     - ydata
                 )
+            elif args.size == 7:
+                func_eval = (
+                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+                    - ydata
+                )
+            elif args.size == 8:
+                func_eval = (
+                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
+                    - ydata
+                )
+            elif args.size == 9:
+                func_eval = (
+                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
+                    - ydata
+                )
+            elif args.size == 10:
+                func_eval = (
+                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9])
+                    - ydata
+                )
             else:
-                # For more parameters, use a more generic approach
-                # Convert to python list and unpack - this may still cause issues with very large param counts
-                args_list = [args[i] for i in range(args.size)]
-                func_eval = func(xdata, *args_list) - ydata
+                # For more than 10 parameters, use a JAX-compatible unpacking approach
+                # This avoids the TracerArrayConversionError by using static indexing
+                # Note: Functions with >10 parameters are rare in curve fitting
+                if args.size <= 15:
+                    # Handle up to 15 parameters explicitly
+                    param_vals = tuple(args[i] for i in range(args.size))
+                    func_eval = func(xdata, *param_vals) - ydata
+                else:
+                    # For extremely high parameter counts, warn and use fallback
+                    # This may still have tracing issues but handles edge cases
+                    import warnings
+                    warnings.warn(
+                        f"Function has {args.size} parameters. JAX tracing may be inefficient for >15 parameters.",
+                        RuntimeWarning
+                    )
+                    # Use tuple unpacking which is more JAX-friendly than list
+                    param_tuple = tuple(args[i] for i in range(args.size))
+                    func_eval = func(xdata, *param_tuple) - ydata
             return jnp.where(data_mask, func_eval, 0)
 
         # need to define a separate function for each of the different

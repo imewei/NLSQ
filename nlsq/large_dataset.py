@@ -665,6 +665,9 @@ class LargeDatasetFitter:
                 success=False,
                 message=f"Fit failed: {e}",
             )
+            # Add empty popt and pcov for consistency
+            result["popt"] = result.x
+            result["pcov"] = np.eye(len(result.x))
             return result
 
     def _fit_with_sampling(
@@ -731,6 +734,9 @@ class LargeDatasetFitter:
                 success=False,
                 message=f"Sampling fit failed: {e}",
             )
+            # Add empty popt and pcov for consistency
+            result["popt"] = result.x
+            result["pcov"] = np.eye(len(result.x))
             return result
 
     def _fit_chunked(
@@ -755,9 +761,11 @@ class LargeDatasetFitter:
             ProgressReporter(stats.n_chunks, self.logger) if show_progress else None
         )
 
-        # Initialize parameters
+        # Initialize parameters and tracking variables
         current_params = np.array(p0) if p0 is not None else None
         chunk_results = []
+        param_history = []  # Track parameter evolution
+        convergence_metric = np.inf  # Track convergence
 
         try:
             # Process chunks
@@ -777,15 +785,39 @@ class LargeDatasetFitter:
                         **kwargs,
                     )
 
-                    # Update parameters (simple averaging for now)
+                    # Update parameters using adaptive exponential moving average
                     if current_params is None:
                         current_params = popt_chunk.copy()
+                        param_history = [popt_chunk.copy()]
+                        convergence_metric = np.inf
                     else:
-                        # Weighted average based on chunk size
-                        weight = len(x_chunk) / len(xdata)
-                        current_params = (
-                            1 - weight
-                        ) * current_params + weight * popt_chunk
+                        # Adaptive learning rate based on chunk progress and convergence
+                        # Earlier chunks have higher learning rate, later chunks have lower
+                        progress_factor = np.exp(-2 * chunk_idx / stats.n_chunks)
+
+                        # Measure parameter change to assess convergence
+                        param_change = np.linalg.norm(popt_chunk - current_params)
+                        relative_change = param_change / (np.linalg.norm(current_params) + 1e-10)
+
+                        # Adaptive learning rate: higher when parameters are changing significantly
+                        # Lower when converging (relative_change is small)
+                        base_lr = 0.5 * progress_factor
+                        adaptive_lr = base_lr * min(1.0, relative_change * 10)
+
+                        # Exponential moving average with adaptive learning rate
+                        current_params = (1 - adaptive_lr) * current_params + adaptive_lr * popt_chunk
+
+                        # Track convergence
+                        param_history.append(current_params.copy())
+                        if len(param_history) > 3:
+                            # Check if parameters are stabilizing
+                            recent_std = np.std([np.linalg.norm(p) for p in param_history[-3:]])
+                            convergence_metric = recent_std / (np.mean([np.linalg.norm(p) for p in param_history[-3:]]) + 1e-10)
+
+                            # Early stopping if converged
+                            if convergence_metric < 0.001 and chunk_idx > stats.n_chunks // 2:
+                                self.logger.info(f"Parameters converged after {chunk_idx + 1} chunks")
+                                break
 
                     chunk_result = {
                         "chunk_idx": chunk_idx,
@@ -796,12 +828,44 @@ class LargeDatasetFitter:
 
                 except Exception as e:
                     self.logger.warning(f"Chunk {chunk_idx} failed: {e}")
-                    chunk_result = {
-                        "chunk_idx": chunk_idx,
-                        "n_points": len(x_chunk),
-                        "success": False,
-                        "error": str(e),
-                    }
+                    # Retry once with adjusted initial parameters if we have a current estimate
+                    retry_success = False
+                    if current_params is not None:
+                        try:
+                            self.logger.info(f"Retrying chunk {chunk_idx} with current parameters")
+                            # Add small perturbation to avoid local minima
+                            perturbed_params = current_params * (1 + 0.01 * np.random.randn(len(current_params)))
+                            popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
+                                f,
+                                x_chunk,
+                                y_chunk,
+                                p0=perturbed_params,
+                                bounds=bounds,
+                                method=method,
+                                solver=solver,
+                                **kwargs,
+                            )
+                            retry_success = True
+                            # Use the retry result with lower weight
+                            adaptive_lr = 0.1  # Lower weight for retry results
+                            current_params = (1 - adaptive_lr) * current_params + adaptive_lr * popt_chunk
+                            chunk_result = {
+                                "chunk_idx": chunk_idx,
+                                "n_points": len(x_chunk),
+                                "parameters": popt_chunk,
+                                "success": True,
+                                "retry": True,
+                            }
+                        except Exception as retry_e:
+                            self.logger.warning(f"Retry for chunk {chunk_idx} also failed: {retry_e}")
+
+                    if not retry_success:
+                        chunk_result = {
+                            "chunk_idx": chunk_idx,
+                            "n_points": len(x_chunk),
+                            "success": False,
+                            "error": str(e),
+                        }
 
                 chunk_results.append(chunk_result)
 
@@ -819,11 +883,15 @@ class LargeDatasetFitter:
                 self.logger.error(
                     f"Too many chunks failed ({success_rate:.1%} success rate)"
                 )
-                return OptimizeResult(
+                result = OptimizeResult(
                     x=current_params or np.ones(2),
                     success=False,
                     message=f"Chunked fit failed: {success_rate:.1%} success rate",
                 )
+                # Add empty popt and pcov for consistency
+                result["popt"] = current_params or np.ones(2)
+                result["pcov"] = np.eye(len(result["popt"]))
+                return result
 
             # Final result
             self.logger.info(
@@ -836,6 +904,15 @@ class LargeDatasetFitter:
                 message=f"Chunked fit completed ({stats.n_chunks} chunks, {success_rate:.1%} success)",
             )
             result["popt"] = current_params
+            # Create approximate covariance matrix
+            # In chunked fitting, we can estimate it from parameter variations
+            if len(param_history) > 1:
+                param_variations = np.array(param_history[-min(10, len(param_history)):])  # Last few iterations
+                pcov = np.cov(param_variations.T)
+            else:
+                # Fallback: identity matrix scaled by parameter magnitudes
+                pcov = np.diag(np.abs(current_params) * 0.01 + 0.001)
+            result["pcov"] = pcov
             result["chunk_results"] = chunk_results
             result["n_chunks"] = stats.n_chunks
             result["success_rate"] = success_rate
@@ -844,11 +921,15 @@ class LargeDatasetFitter:
 
         except Exception as e:
             self.logger.error(f"Chunked fitting failed: {e}")
-            return OptimizeResult(
+            result = OptimizeResult(
                 x=current_params or np.ones(2),
                 success=False,
                 message=f"Chunked fit failed: {e}",
             )
+            # Add empty popt and pcov for consistency
+            result["popt"] = current_params or np.ones(2)
+            result["pcov"] = np.eye(len(result["popt"]))
+            return result
 
     @contextmanager
     def memory_monitor(self):
