@@ -194,18 +194,18 @@ class AutoDiffJacobian:
         arg_list = [4 + i for i in range(num_args)]
 
         @jit
-        def wrap_func(*all_args: list[Any]) -> jnp.ndarray:
+        def wrap_func(*all_args) -> jnp.ndarray:
             """Wraps the residual fit function such that it can be passed to the
             jacfwd function. Jacfwd requires the function to a single list
             of arguments.
             """
             xdata, ydata, data_mask, atransform = all_args[:4]
-            args = all_args[4:]
+            args = jnp.array(all_args[4:])
             return func(args, xdata, ydata, data_mask, atransform)
 
         @jit
         def jac_func(
-            args: list[float],
+            args: jnp.ndarray,
             xdata: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -225,7 +225,7 @@ class AutoDiffJacobian:
 
         @jit
         def masked_jac(
-            args: list[float],
+            args: jnp.ndarray,
             xdata: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -238,7 +238,7 @@ class AutoDiffJacobian:
 
         @jit
         def no_mask_jac(
-            args: list[float],
+            args: jnp.ndarray,
             xdata: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -487,6 +487,7 @@ class LeastSquares:
                 tr_options.copy(),
                 verbose,
                 timeit,
+                solver=tr_solver if tr_solver else "exact",
                 **timeout_kwargs,
             )
 
@@ -549,7 +550,7 @@ class LeastSquares:
 
         @jit
         def masked_residual_func(
-            args: list[float],
+            args: jnp.ndarray,
             xdata: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -566,7 +567,7 @@ class LeastSquares:
 
             Parameters
             ----------
-            args : List[float]
+            args : jnp.ndarray
                 The parameters of the function.
             xdata : jnp.ndarray
                 The independent variable data.
@@ -580,7 +581,25 @@ class LeastSquares:
             jnp.ndarray
                 The masked residual of the function evaluated at `args` with respect to the data.
             """
-            func_eval = func(xdata, *args) - ydata
+            # Create individual arguments from the array for JAX compatibility
+            # This avoids the TracerArrayConversionError with dynamic unpacking
+            if args.size == 1:
+                func_eval = func(xdata, args[0]) - ydata
+            elif args.size == 2:
+                func_eval = func(xdata, args[0], args[1]) - ydata
+            elif args.size == 3:
+                func_eval = func(xdata, args[0], args[1], args[2]) - ydata
+            elif args.size == 4:
+                func_eval = func(xdata, args[0], args[1], args[2], args[3]) - ydata
+            elif args.size == 5:
+                func_eval = func(xdata, args[0], args[1], args[2], args[3], args[4]) - ydata
+            elif args.size == 6:
+                func_eval = func(xdata, args[0], args[1], args[2], args[3], args[4], args[5]) - ydata
+            else:
+                # For more parameters, use a more generic approach
+                # Convert to python list and unpack - this may still cause issues with very large param counts
+                args_list = [args[i] for i in range(args.size)]
+                func_eval = func(xdata, *args_list) - ydata
             return jnp.where(data_mask, func_eval, 0)
 
         # need to define a separate function for each of the different
@@ -591,7 +610,7 @@ class LeastSquares:
 
         @jit
         def func_no_transform(
-            args: list[float],
+            args: jnp.ndarray,
             xdata: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -604,7 +623,7 @@ class LeastSquares:
 
         @jit
         def func_1d_transform(
-            args: list[float],
+            args: jnp.ndarray,
             xdata: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -617,7 +636,7 @@ class LeastSquares:
 
         @jit
         def func_2d_transform(
-            args: list[float],
+            args: jnp.ndarray,
             xdata: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -658,13 +677,30 @@ class LeastSquares:
         """
 
         @jit
-        def jac_func(coords: jnp.ndarray, args: list[float]) -> jnp.ndarray:
-            jac_fwd = jac(coords, *args)
+        def jac_func(coords: jnp.ndarray, args: jnp.ndarray) -> jnp.ndarray:
+            # Create individual arguments from the array for JAX compatibility
+            # This avoids the TracerArrayConversionError with dynamic unpacking
+            if args.size == 1:
+                jac_fwd = jac(coords, args[0])
+            elif args.size == 2:
+                jac_fwd = jac(coords, args[0], args[1])
+            elif args.size == 3:
+                jac_fwd = jac(coords, args[0], args[1], args[2])
+            elif args.size == 4:
+                jac_fwd = jac(coords, args[0], args[1], args[2], args[3])
+            elif args.size == 5:
+                jac_fwd = jac(coords, args[0], args[1], args[2], args[3], args[4])
+            elif args.size == 6:
+                jac_fwd = jac(coords, args[0], args[1], args[2], args[3], args[4], args[5])
+            else:
+                # For more parameters, use a more generic approach
+                args_list = [args[i] for i in range(args.size)]
+                jac_fwd = jac(coords, *args_list)
             return jnp.array(jac_fwd)
 
         @jit
         def masked_jac(
-            coords: jnp.ndarray, args: list[float], data_mask: jnp.ndarray
+            coords: jnp.ndarray, args: jnp.ndarray, data_mask: jnp.ndarray
         ) -> jnp.ndarray:
             """Compute the wrapped Jacobian but masks out the padded elements
             with 0s"""
@@ -673,7 +709,7 @@ class LeastSquares:
 
         @jit
         def jac_no_transform(
-            args: list[float],
+            args: jnp.ndarray,
             coords: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -685,7 +721,7 @@ class LeastSquares:
 
         @jit
         def jac_1d_transform(
-            args: list[float],
+            args: jnp.ndarray,
             coords: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,
@@ -699,7 +735,7 @@ class LeastSquares:
 
         @jit
         def jac_2d_transform(
-            args: list[float],
+            args: jnp.ndarray,
             coords: jnp.ndarray,
             ydata: jnp.ndarray,
             data_mask: jnp.ndarray,

@@ -9,8 +9,13 @@ import pandas as pd
 
 
 class GaussianParameters:
-    def __init__(self):
-        pass
+    def __init__(self, rng=None):
+        """Initialize with a random number generator.
+
+        Args:
+            rng: numpy.random.Generator instance. If None, creates a new one.
+        """
+        self.rng = rng if rng is not None else np.random.default_rng()
 
     def lab_widths(self, wx, wy, theta):
         wxx = ((wx * np.cos(theta)) ** 2 + (wy * np.sin(theta)) ** 2) ** 0.5
@@ -33,7 +38,7 @@ class GaussianParameters:
         emask = self.edge_mask(img_dimensions, wx, wy, theta, scale)
         valid_xcoords = X[emask]
         valid_ycoords = Y[emask]
-        random_index = np.random.randint(len(valid_xcoords))
+        random_index = self.rng.integers(len(valid_xcoords))
         x0 = valid_xcoords[random_index]
         y0 = valid_ycoords[random_index]
         return x0, y0
@@ -42,20 +47,27 @@ class GaussianParameters:
         self, X, Y, a_vals, w_vals, theta_vals, offset_vals, noise_vals, img_dims
     ):
         w_vals = np.array(w_vals) * np.amin(img_dims)
-        wx = w_vals[0] + w_vals[2] * np.random.random()
-        wy = w_vals[0] + w_vals[2] * np.random.random()
-        amplitude = a_vals[0] + a_vals[2] * np.random.random()
-        theta = theta_vals[0] + theta_vals[2] * np.random.random()
+        wx = w_vals[0] + w_vals[2] * self.rng.random()
+        wy = w_vals[0] + w_vals[2] * self.rng.random()
+        amplitude = a_vals[0] + a_vals[2] * self.rng.random()
+        theta = theta_vals[0] + theta_vals[2] * self.rng.random()
 
-        offset = offset_vals[0] + offset_vals[2] * np.random.random()
+        offset = offset_vals[0] + offset_vals[2] * self.rng.random()
         x0, y0 = self.get_valid_random_coords(X, Y, wx, wy, theta)
         fits = [amplitude, x0, y0, wx, wy, theta, offset]
-        noise_std = noise_vals[0] + noise_vals[2] * np.random.random()
+        noise_std = noise_vals[0] + noise_vals[2] * self.rng.random()
         return fits, noise_std
 
 
 class SimulationParameters:
-    def __init__(self, sampling_params=None):
+    def __init__(self, sampling_params=None, rng=None):
+        """Initialize with sampling parameters and random number generator.
+
+        Args:
+            sampling_params: Optional sampling parameters tuple.
+            rng: numpy.random.Generator instance. If None, creates a new one.
+        """
+        self.rng = rng if rng is not None else np.random.default_rng()
         self.define_simulation_parameters()
         if sampling_params is None:
             self.define_sampling_parameters()
@@ -92,7 +104,7 @@ class SimulationParameters:
 
     def get_random_float(self, low, high):
         delta = high - low
-        return low + delta * np.random.random()
+        return low + delta * self.rng.random()
 
     def get_param_range(self, minv, maxv):
         span = maxv - minv
@@ -150,7 +162,7 @@ class SimulationParameters:
         simulation_params.to_json(text_path / "simulation_paramters.json")
 
     def create_simulation_params(self):
-        gbp = GaussianParameters()
+        gbp = GaussianParameters(rng=self.rng)
         all_params = self.get_simulation_parameters()
         noise_vals, w_vals, theta_vals, a_vals, offset_vals, seed_vals = all_params
         num_samples, dmin, dmax, dstep = self.define_sampling_parameters()

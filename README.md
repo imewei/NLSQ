@@ -150,10 +150,10 @@ Some standouts:
 
 ```bash
 # For CPU-only
-pip install --upgrade "jax[cpu]" nlsq
+pip install --upgrade "jax[cpu]>=0.4.20" nlsq
 
 # For GPU with CUDA 12
-pip install --upgrade "jax[cuda12]" nlsq
+pip install --upgrade "jax[cuda12]>=0.4.20" nlsq
 ```
 
 #### Development Installation
@@ -183,8 +183,8 @@ Use Windows Subsystem for Linux 2 (WSL2) and follow the Linux installation instr
 conda create -n nlsq python=3.12
 conda activate nlsq
 
-# Install JAX CPU version
-pip install jax[cpu]==0.4.30
+# Install JAX CPU version (latest compatible)
+pip install "jax[cpu]>=0.4.20"
 pip install nlsq
 ```
 
@@ -199,8 +199,8 @@ conda activate nlsq
 # Install CUDA toolkit
 conda install -c conda-forge cuda-toolkit=12.1
 
-# Install JAX with CUDA support
-pip install jax[cuda12_local]==0.4.30
+# Install JAX with CUDA support (latest compatible)
+pip install "jax[cuda12_local]>=0.4.20"
 pip install nlsq
 ```
 

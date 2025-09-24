@@ -132,6 +132,7 @@ class TrustRegionJITFunctions:
         self.create_grad_func()
         self.create_grad_hat()
         self.create_svd_funcs()
+        self.create_iterative_solvers()
         self.create_default_loss_func()
         self.create_calculate_cost()
         self.create_check_isfinite()
@@ -300,6 +301,173 @@ class TrustRegionJITFunctions:
         self.svd_no_bounds = svd_no_bounds
         self.svd_bounds = svd_bounds
 
+    def create_iterative_solvers(self):
+        """Create iterative solvers for trust region subproblems as alternatives to SVD."""
+
+        @jit
+        def conjugate_gradient_solve(
+            J: jnp.ndarray,
+            f: jnp.ndarray,
+            d: jnp.ndarray,
+            alpha: float = 0.0,
+            max_iter: int = None,
+            tol: float = 1e-6
+        ) -> tuple[jnp.ndarray, jnp.ndarray, int]:
+            """Solve the normal equations using conjugate gradient method.
+
+            Solves (J^T J + alpha*I) p = -J^T f using CG without forming J^T J explicitly.
+
+            Parameters
+            ----------
+            J : jnp.ndarray
+                Jacobian matrix (m x n)
+            f : jnp.ndarray
+                Residual vector (m,)
+            d : jnp.ndarray
+                Scaling diagonal (n,)
+            alpha : float
+                Regularization parameter
+            max_iter : int, optional
+                Maximum CG iterations (default: min(n, 100))
+            tol : float
+                Convergence tolerance
+
+            Returns
+            -------
+            p : jnp.ndarray
+                Solution vector (n,)
+            residual_norm : jnp.ndarray
+                Final residual norm
+            n_iter : int
+                Number of CG iterations
+            """
+            m, n = J.shape
+            if max_iter is None:
+                max_iter = min(n, 100)
+
+            # Scale Jacobian with diagonal matrix D
+            J_scaled = J * d[None, :]
+
+            # Right hand side: -J^T f
+            b = -J_scaled.T @ f
+
+            # Initial guess
+            x = jnp.zeros(n)
+
+            # Initial residual r = b - Ax = b (since x=0)
+            r = b
+            p = r.copy()
+            rsold = jnp.dot(r, r)
+
+            # CG iterations
+            for i in range(max_iter):
+                # Matrix-vector product: Ap = (J^T J + alpha*I) p
+                Jp = J_scaled @ p
+                JTJp = J_scaled.T @ Jp
+                Ap = JTJp + alpha * p
+
+                pAp = jnp.dot(p, Ap)
+                # Avoid division by zero
+                pAp = jnp.where(jnp.abs(pAp) < 1e-14, 1e-14, pAp)
+                alpha_cg = rsold / pAp
+
+                x = x + alpha_cg * p
+                r = r - alpha_cg * Ap
+                rsnew = jnp.dot(r, r)
+
+                # Check convergence
+                if jnp.sqrt(rsnew) < tol:
+                    return x, jnp.sqrt(rsnew), i + 1
+
+                beta = rsnew / rsold
+                p = r + beta * p
+                rsold = rsnew
+
+            return x, jnp.sqrt(rsold), max_iter
+
+        @jit
+        def solve_tr_subproblem_cg(
+            J: jnp.ndarray,
+            f: jnp.ndarray,
+            d: jnp.ndarray,
+            Delta: float,
+            alpha: float = 0.0,
+            max_iter: int = None
+        ) -> jnp.ndarray:
+            """Solve trust region subproblem using conjugate gradient.
+
+            This replaces the SVD-based solve_lsq_trust_region function.
+            """
+            # First try to solve without regularization (alpha=0)
+            p_gn, residual_norm, n_iter = conjugate_gradient_solve(
+                J, f, d, 0.0, max_iter
+            )
+
+            # Check if Gauss-Newton step is within trust region
+            p_gn_norm = jnp.linalg.norm(p_gn)
+
+            # If within trust region, return Gauss-Newton step
+            if p_gn_norm <= Delta:
+                return p_gn
+
+            # Otherwise, need to find optimal alpha using regularized CG
+            # Use simple approach: solve with current alpha
+            p_reg, _, _ = conjugate_gradient_solve(J, f, d, alpha, max_iter)
+
+            # Scale to trust region boundary
+            p_reg_norm = jnp.linalg.norm(p_reg)
+            p_reg_norm = jnp.where(p_reg_norm < 1e-14, 1e-14, p_reg_norm)
+            scaling = Delta / p_reg_norm
+
+            return scaling * p_reg
+
+        @jit
+        def solve_tr_subproblem_cg_bounds(
+            J: jnp.ndarray,
+            f: jnp.ndarray,
+            d: jnp.ndarray,
+            J_diag: jnp.ndarray,
+            f_zeros: jnp.ndarray,
+            Delta: float,
+            alpha: float = 0.0,
+            max_iter: int = None
+        ) -> jnp.ndarray:
+            """Solve trust region subproblem with bounds using conjugate gradient."""
+            # Augment the system for bounds
+            J_augmented = jnp.concatenate([J * d[None, :], J_diag])
+            f_augmented = jnp.concatenate([f, f_zeros])
+            d_augmented = jnp.ones(J_augmented.shape[1])  # Already scaled
+
+            # First try to solve without regularization (alpha=0)
+            p_gn, residual_norm, n_iter = conjugate_gradient_solve(
+                J_augmented, f_augmented, d_augmented, 0.0, max_iter
+            )
+
+            # Check if Gauss-Newton step is within trust region
+            p_gn_norm = jnp.linalg.norm(p_gn)
+
+            # If within trust region, return Gauss-Newton step
+            if p_gn_norm <= Delta:
+                return p_gn
+
+            # Otherwise, need to find optimal alpha using regularized CG
+            # Use simple approach: solve with current alpha
+            p_reg, _, _ = conjugate_gradient_solve(
+                J_augmented, f_augmented, d_augmented, alpha, max_iter
+            )
+
+            # Scale to trust region boundary
+            p_reg_norm = jnp.linalg.norm(p_reg)
+            p_reg_norm = jnp.where(p_reg_norm < 1e-14, 1e-14, p_reg_norm)
+            scaling = Delta / p_reg_norm
+
+            return scaling * p_reg
+
+        # Store the iterative solver functions
+        self.conjugate_gradient_solve = conjugate_gradient_solve
+        self.solve_tr_subproblem_cg = solve_tr_subproblem_cg
+        self.solve_tr_subproblem_cg_bounds = solve_tr_subproblem_cg_bounds
+
     def create_calculate_cost(self):
         """Create the function to calculate the cost function."""
 
@@ -376,6 +544,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         tr_options: dict,
         verbose: int,
         timeit: bool = False,
+        solver: str = "exact",
         **kwargs,
     ) -> dict:
         """Minimize a scalar function of one or more variables using the
@@ -474,6 +643,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     loss_function,
                     tr_options,
                     verbose,
+                    solver,
                     **kwargs,
                 )
             else:
@@ -498,6 +668,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     loss_function,
                     tr_options,
                     verbose,
+                    solver,
                 )
         else:
             return self.trf_bounds(
@@ -521,6 +692,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 loss_function,
                 tr_options,
                 verbose,
+                solver,
                 **kwargs,
             )
 
@@ -546,6 +718,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         loss_function: None | Callable,
         tr_options: dict,
         verbose: int,
+        solver: str = "exact",
         **kwargs,
     ) -> dict:
         """Unbounded version of the trust-region reflective algorithm.
@@ -703,10 +876,18 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 d = scale
                 d_jnp = jnp.array(scale)
                 g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
-                svd_output = self.svd_no_bounds(J, d_jnp, f)
 
-                J_h = svd_output[0]
-                s, V, uf = [np.array(val) for val in svd_output[2:]]
+                # Choose solver based on solver parameter
+                if solver == "cg":
+                    # Use conjugate gradient solver
+                    J_h = J * d_jnp
+                    step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
+                    s, V, uf = None, None, None  # Not needed for CG path
+                else:
+                    # Use exact SVD solver (default)
+                    svd_output = self.svd_no_bounds(J, d_jnp, f)
+                    J_h = svd_output[0]
+                    s, V, uf = [np.array(val) for val in svd_output[2:]]
 
                 actual_reduction = -1
                 inner_loop_count = 0
@@ -717,9 +898,18 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     and inner_loop_count < max_inner_iterations
                 ):
                     inner_loop_count += 1
-                    step_h, alpha, _n_iter = solve_lsq_trust_region(
-                        n, m, uf, s, V, Delta, initial_alpha=alpha
-                    )
+
+                    if solver == "cg":
+                        # CG path: step already computed
+                        # For subsequent iterations in inner loop, re-solve with updated alpha
+                        if inner_loop_count > 1:
+                            step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
+                        _n_iter = 1  # Dummy value for compatibility
+                    else:
+                        # SVD path: use exact solver
+                        step_h, alpha, _n_iter = solve_lsq_trust_region(
+                            n, m, uf, s, V, Delta, initial_alpha=alpha
+                        )
 
                     predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
                         J_h, g_h_jnp, step_h
@@ -843,6 +1033,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         loss_function: None | Callable,
         tr_options: dict,
         verbose: int,
+        solver: str = "exact",
         **kwargs,
     ) -> dict:
         """Bounded version of the trust-region reflective algorithm.
@@ -1010,9 +1201,19 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             J_diag = jnp.diag(diag_h**0.5)
             d_jnp = jnp.array(d)
 
-            output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
-            J_h = output[0]
-            s, V, uf = [np.array(val) for val in output[2:]]
+            # Choose solver based on solver parameter
+            if solver == "cg":
+                # Use conjugate gradient solver
+                J_h = J * d_jnp
+                p_h = self.solve_tr_subproblem_cg_bounds(
+                    J, f, d_jnp, J_diag, f_zeros, Delta, alpha
+                )
+                s, V, uf = None, None, None  # Not needed for CG path
+            else:
+                # Use exact SVD solver (default)
+                output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
+                J_h = output[0]
+                s, V, uf = [np.array(val) for val in output[2:]]
 
             # theta controls step back step ratio from the bounds.
             theta = max(0.995, 1 - g_norm)
@@ -1026,9 +1227,20 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 and inner_loop_count < max_inner_iterations
             ):
                 inner_loop_count += 1
-                p_h, alpha, _n_iter = solve_lsq_trust_region(
-                    n, m, uf, s, V, Delta, initial_alpha=alpha
-                )
+
+                if solver == "cg":
+                    # CG path: step already computed
+                    # For subsequent iterations in inner loop, re-solve with updated alpha
+                    if inner_loop_count > 1:
+                        p_h = self.solve_tr_subproblem_cg_bounds(
+                            J, f, d_jnp, J_diag, f_zeros, Delta, alpha
+                        )
+                    _n_iter = 1  # Dummy value for compatibility
+                else:
+                    # SVD path: use exact solver
+                    p_h, alpha, _n_iter = solve_lsq_trust_region(
+                        n, m, uf, s, V, Delta, initial_alpha=alpha
+                    )
 
                 p = d * p_h  # Trust-region solution in the original space.
                 step, step_h, predicted_reduction = self.select_step(
@@ -1263,6 +1475,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         loss_function: None | Callable,
         tr_options: dict,
         verbose: int,
+        solver: str = "exact",
     ) -> dict:
         """Trust Region Reflective algorithm with no bounds and all the
         operations performed on JAX and the GPU are timed. We need a separate
@@ -1434,15 +1647,28 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             # g_h = d * g
             g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
 
-            st = time.time()
-            svd_output = self.svd_no_bounds(J, d_jnp, f)
-            tree_flatten(svd_output)[0][0].block_until_ready()
-            svd_times.append(time.time() - st)
-            J_h = svd_output[0]
+            # Choose solver based on solver parameter
+            if solver == "cg":
+                # Use conjugate gradient solver (timed)
+                st = time.time()
+                J_h = (J * d_jnp).block_until_ready()
+                step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha).block_until_ready()
+                svd_times.append(time.time() - st)
 
-            st = time.time()
-            s, V, uf = [np.array(val) for val in svd_output[2:]]
-            svd_ctimes.append(time.time() - st)
+                st = time.time()
+                s, V, uf = None, None, None  # Not needed for CG path
+                svd_ctimes.append(time.time() - st)
+            else:
+                # Use exact SVD solver (default)
+                st = time.time()
+                svd_output = self.svd_no_bounds(J, d_jnp, f)
+                tree_flatten(svd_output)[0][0].block_until_ready()
+                svd_times.append(time.time() - st)
+                J_h = svd_output[0]
+
+                st = time.time()
+                s, V, uf = [np.array(val) for val in svd_output[2:]]
+                svd_ctimes.append(time.time() - st)
 
             actual_reduction = -1
             inner_loop_count = 0
@@ -1453,9 +1679,18 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 and inner_loop_count < max_inner_iterations
             ):
                 inner_loop_count += 1
-                step_h, alpha, _n_iter = solve_lsq_trust_region(
-                    n, m, uf, s, V, Delta, initial_alpha=alpha
-                )
+
+                if solver == "cg":
+                    # CG path: step already computed
+                    # For subsequent iterations in inner loop, re-solve with updated alpha
+                    if inner_loop_count > 1:
+                        step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha).block_until_ready()
+                    _n_iter = 1  # Dummy value for compatibility
+                else:
+                    # SVD path: use exact solver
+                    step_h, alpha, _n_iter = solve_lsq_trust_region(
+                        n, m, uf, s, V, Delta, initial_alpha=alpha
+                    )
 
                 st1 = time.time()
                 predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(

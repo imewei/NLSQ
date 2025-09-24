@@ -170,7 +170,7 @@ NLSQ has been tested with the following versions:
 - **NumPy**: 1.26.0 or higher
 - **SciPy**: 1.11.0 or higher
 - **Operating Systems**: Linux (recommended), macOS, Windows (via WSL2 or native)
-- **Hardware**: CPU, NVIDIA GPU (CUDA 11.8+), Google TPU
+- **Hardware**: CPU, NVIDIA GPU (CUDA 12+), Google TPU
 
 Quick Install
 ~~~~~~~~~~~~~
@@ -180,10 +180,10 @@ Quick Install
 ::
 
    # For CPU-only
-   pip install --upgrade "jax[cpu]" nlsq
+   pip install --upgrade "jax[cpu]>=0.4.20" nlsq
 
    # For GPU with CUDA 12
-   pip install --upgrade "jax[cuda12]" nlsq
+   pip install --upgrade "jax[cuda12]>=0.4.20" nlsq
 
 **Development Installation:**
 
@@ -237,10 +237,10 @@ Install JAX with CUDA support using the standard pip packages:
 ::
 
    # For CPU-only
-   pip install "jax[cpu]==0.4.30"
+   pip install "jax[cpu]>=0.4.20"
 
    # For GPU with CUDA 12
-   pip install "jax[cuda12_local]==0.4.30"
+   pip install "jax[cuda12_local]>=0.4.20"
 
    # Then install NLSQ
    pip install nlsq

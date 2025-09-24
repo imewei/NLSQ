@@ -829,3 +829,57 @@ class TestCurveFit:
 # def pressure_network_fun_and_grad(flow_rates, Qtot, k):
 #     return (pressure_network(flow_rates, Qtot, k),
 #             pressure_network_jacobian(flow_rates, Qtot, k))
+
+
+class TestCurveFitEnhancements:
+    """Test new features: dynamic sizing, solver options, batch processing."""
+
+    def setup_method(self):
+        self.cf_default = CurveFit()  # Default configuration
+        self.cf_dynamic = CurveFit(flength=100, use_dynamic_sizing=True)
+        self.cf_fixed = CurveFit(flength=100, use_dynamic_sizing=False)
+
+    def exponential_func(self, x, a, b, c):
+        """Test function: exponential decay."""
+        return a * jnp.exp(-b * x) + c
+
+    def generate_test_data(self, n_points=50, noise_level=0.01):
+        """Generate test data for fitting."""
+        np.random.seed(42)  # For reproducible tests
+        x = np.linspace(0, 4, n_points)
+        y_true = self.exponential_func(x, 2.5, 1.3, 0.5)
+        y_noise = noise_level * np.random.normal(size=n_points)
+        y = y_true + y_noise
+        return x, y
+
+    def test_backward_compatibility(self):
+        """Test that default behavior is unchanged."""
+        x, y = self.generate_test_data()
+
+        # Default behavior should work exactly as before
+        popt1, pcov1 = self.cf_default.curve_fit(self.exponential_func, x, y)
+
+        # Test that results are reasonable
+        assert len(popt1) == 3
+        assert_allclose(popt1, [2.5, 1.3, 0.5], rtol=0.1)
+        assert pcov1.shape == (3, 3)
+        assert np.all(np.diag(pcov1) > 0)  # Positive variances
+
+    def test_solver_parameter_validation(self):
+        """Test solver parameter validation."""
+        x, y = self.generate_test_data()
+
+        # Valid solvers should work
+        valid_solvers = ["auto", "svd", "cg", "lsqr", "minibatch"]
+        for solver in valid_solvers:
+            popt, pcov = self.cf_default.curve_fit(
+                self.exponential_func, x, y, solver=solver
+            )
+            assert len(popt) == 3
+            assert pcov.shape == (3, 3)
+
+        # Invalid solver should raise error
+        with pytest.raises(ValueError, match="Invalid solver"):
+            self.cf_default.curve_fit(
+                self.exponential_func, x, y, solver="invalid_solver"
+            )

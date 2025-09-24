@@ -4,7 +4,7 @@ Created on Tue May 10 16:22:03 2022
 @author: hofer
 """
 
-from jax.config import config
+from jax import config
 
 config.update("jax_enable_x64", True)
 import jax.numpy as jnp
