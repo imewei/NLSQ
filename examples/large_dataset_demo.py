@@ -7,9 +7,11 @@ fit curve parameters to very large datasets with automatic memory management.
 """
 
 import time
-import numpy as np
+
 import jax.numpy as jnp
-from nlsq import LargeDatasetFitter, fit_large_dataset, estimate_memory_requirements
+import numpy as np
+
+from nlsq import LargeDatasetFitter, estimate_memory_requirements, fit_large_dataset
 
 
 def exponential_decay(x, a, b, c):
@@ -24,9 +26,9 @@ def polynomial_model(x, a, b, c, d):
 
 def demo_memory_estimation():
     """Demonstrate memory estimation capabilities."""
-    print("="*60)
+    print("=" * 60)
     print("MEMORY ESTIMATION DEMO")
-    print("="*60)
+    print("=" * 60)
 
     # Estimate requirements for different dataset sizes
     test_cases = [
@@ -46,18 +48,18 @@ def demo_memory_estimation():
         print(f"  Number of chunks: {stats.n_chunks}")
 
         if stats.requires_sampling:
-            print(f"  Strategy: Sampling recommended")
+            print("  Strategy: Sampling recommended")
         elif stats.n_chunks == 1:
-            print(f"  Strategy: Single chunk (fits in memory)")
+            print("  Strategy: Single chunk (fits in memory)")
         else:
-            print(f"  Strategy: Chunked processing")
+            print("  Strategy: Chunked processing")
 
 
 def demo_basic_large_dataset_fitting():
     """Demonstrate basic large dataset fitting."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("BASIC LARGE DATASET FITTING DEMO")
-    print("="*60)
+    print("=" * 60)
 
     # Generate synthetic large dataset (1M points)
     print("Generating 1M point exponential decay dataset...")
@@ -71,17 +73,21 @@ def demo_basic_large_dataset_fitting():
     y_data = y_true + np.random.normal(0, noise_level, n_points)
 
     print(f"Dataset: {n_points:,} points")
-    print(f"True parameters: a={true_params[0]}, b={true_params[1]}, c={true_params[2]}")
+    print(
+        f"True parameters: a={true_params[0]}, b={true_params[1]}, c={true_params[2]}"
+    )
 
     # Fit using convenience function
     print("\nFitting with automatic memory management...")
     start_time = time.time()
 
     result = fit_large_dataset(
-        exponential_decay, x_data, y_data,
+        exponential_decay,
+        x_data,
+        y_data,
         p0=[4.0, 1.0, 0.4],
         memory_limit_gb=2.0,  # 2GB limit
-        show_progress=True
+        show_progress=True,
     )
 
     fit_time = time.time() - start_time
@@ -92,18 +98,22 @@ def demo_basic_large_dataset_fitting():
         rel_errors = errors / np.array(true_params) * 100
 
         print(f"\n✅ Fit completed in {fit_time:.2f} seconds")
-        print(f"Fitted parameters: [{fitted_params[0]:.3f}, {fitted_params[1]:.3f}, {fitted_params[2]:.3f}]")
+        print(
+            f"Fitted parameters: [{fitted_params[0]:.3f}, {fitted_params[1]:.3f}, {fitted_params[2]:.3f}]"
+        )
         print(f"Absolute errors: [{errors[0]:.4f}, {errors[1]:.4f}, {errors[2]:.4f}]")
-        print(f"Relative errors: [{rel_errors[0]:.2f}%, {rel_errors[1]:.2f}%, {rel_errors[2]:.2f}%]")
+        print(
+            f"Relative errors: [{rel_errors[0]:.2f}%, {rel_errors[1]:.2f}%, {rel_errors[2]:.2f}%]"
+        )
     else:
         print(f"❌ Fit failed: {result.message}")
 
 
 def demo_chunked_processing():
     """Demonstrate chunked processing with progress reporting."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("CHUNKED PROCESSING DEMO")
-    print("="*60)
+    print("=" * 60)
 
     # Generate a dataset that will require chunking
     print("Generating 2M point polynomial dataset...")
@@ -113,10 +123,12 @@ def demo_chunked_processing():
     true_params = [0.5, -1.2, 2.0, 1.5]
     noise_level = 0.1
 
-    y_true = (true_params[0] * x_data**3 +
-              true_params[1] * x_data**2 +
-              true_params[2] * x_data +
-              true_params[3])
+    y_true = (
+        true_params[0] * x_data**3
+        + true_params[1] * x_data**2
+        + true_params[2] * x_data
+        + true_params[3]
+    )
     y_data = y_true + np.random.normal(0, noise_level, n_points)
 
     print(f"Dataset: {n_points:,} points")
@@ -130,15 +142,16 @@ def demo_chunked_processing():
     print(f"\nProcessing strategy: {recs['processing_strategy']}")
     print(f"Chunk size: {recs['recommendations']['chunk_size']:,}")
     print(f"Number of chunks: {recs['recommendations']['n_chunks']}")
-    print(f"Memory estimate: {recs['recommendations']['total_memory_estimate_gb']:.2f} GB")
+    print(
+        f"Memory estimate: {recs['recommendations']['total_memory_estimate_gb']:.2f} GB"
+    )
 
     # Fit with progress reporting
     print("\nFitting with chunked processing...")
     start_time = time.time()
 
     result = fitter.fit_with_progress(
-        polynomial_model, x_data, y_data,
-        p0=[0.4, -1.0, 1.8, 1.2]
+        polynomial_model, x_data, y_data, p0=[0.4, -1.0, 1.8, 1.2]
     )
 
     fit_time = time.time() - start_time
@@ -149,7 +162,9 @@ def demo_chunked_processing():
         rel_errors = errors / np.abs(np.array(true_params)) * 100
 
         print(f"\n✅ Chunked fit completed in {fit_time:.2f} seconds")
-        print(f"Used {result.n_chunks} chunks with {result.success_rate:.1%} success rate")
+        print(
+            f"Used {result.n_chunks} chunks with {result.success_rate:.1%} success rate"
+        )
         print(f"Fitted parameters: {fitted_params}")
         print(f"Absolute errors: {errors}")
         print(f"Relative errors: {rel_errors}%")
@@ -159,9 +174,9 @@ def demo_chunked_processing():
 
 def demo_sampling_strategy():
     """Demonstrate sampling for extremely large datasets."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SAMPLING STRATEGY DEMO")
-    print("="*60)
+    print("=" * 60)
 
     # Simulate a very large dataset scenario
     print("Simulating extremely large dataset (100M points)...")
@@ -173,8 +188,11 @@ def demo_sampling_strategy():
     np.random.seed(456)
     n_sample = 1_000_000  # 1M sample for demo
     x_sample = np.sort(np.random.uniform(0, 5, n_sample))
-    y_sample = (true_params[0] * np.exp(-true_params[1] * x_sample) +
-                true_params[2] + np.random.normal(0, 0.05, n_sample))
+    y_sample = (
+        true_params[0] * np.exp(-true_params[1] * x_sample)
+        + true_params[2]
+        + np.random.normal(0, 0.05, n_sample)
+    )
 
     print(f"Full dataset size: {n_points_full:,} points (simulated)")
     print(f"Demo sample size: {n_sample:,} points")
@@ -187,6 +205,7 @@ def demo_sampling_strategy():
 
     # Create fitter with sampling enabled
     from nlsq.large_dataset import LDMemoryConfig
+
     config = LDMemoryConfig(memory_limit_gb=4.0, enable_sampling=True)
     fitter = LargeDatasetFitter(config=config)
 
@@ -208,8 +227,10 @@ def demo_sampling_strategy():
         print(f"Absolute errors: {errors}")
         print(f"Relative errors: {rel_errors}%")
 
-        if hasattr(result, 'was_sampled') and result.was_sampled:
-            print(f"Used sampling: {result.sample_size:,} points from {result.original_size:,}")
+        if hasattr(result, "was_sampled") and result.was_sampled:
+            print(
+                f"Used sampling: {result.sample_size:,} points from {result.original_size:,}"
+            )
     else:
         print(f"❌ Sampling fit failed: {result.message}")
 
@@ -227,9 +248,9 @@ def main():
     demo_chunked_processing()
     demo_sampling_strategy()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DEMO COMPLETED")
-    print("="*60)
+    print("=" * 60)
     print("\nKey takeaways:")
     print("• NLSQ automatically handles memory management for large datasets")
     print("• Chunked processing works for datasets that don't fit in memory")

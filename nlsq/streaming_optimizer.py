@@ -4,15 +4,15 @@ This module provides true streaming optimization that can handle
 datasets of unlimited size by processing them in an online fashion.
 """
 
-import numpy as np
-import jax.numpy as jnp
-from typing import Generator, Callable, Optional, Tuple, Any, Dict
-from dataclasses import dataclass
 import time
+from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
 import h5py
-import mmap
-from functools import partial
+import jax.numpy as jnp
+import numpy as np
 
 
 @dataclass
@@ -42,6 +42,7 @@ class StreamingConfig:
     adam_eps : float
         Adam epsilon for numerical stability
     """
+
     batch_size: int = 10000
     learning_rate: float = 0.01
     momentum: float = 0.9
@@ -59,7 +60,7 @@ class StreamingConfig:
 class DataGenerator:
     """Generate data batches from various sources without loading all into memory."""
 
-    def __init__(self, source, source_type: str = 'auto'):
+    def __init__(self, source, source_type: str = "auto"):
         """Initialize data generator.
 
         Parameters
@@ -75,50 +76,50 @@ class DataGenerator:
 
     def _detect_source_type(self, source, source_type):
         """Detect the type of data source."""
-        if source_type != 'auto':
+        if source_type != "auto":
             return source_type
 
         if isinstance(source, (str, Path)):
             path = Path(source)
-            if path.suffix in ['.h5', '.hdf5']:
-                return 'hdf5'
-            elif path.suffix in ['.npy', '.npz']:
-                return 'mmap'
+            if path.suffix in [".h5", ".hdf5"]:
+                return "hdf5"
+            elif path.suffix in [".npy", ".npz"]:
+                return "mmap"
             else:
-                return 'file'
-        elif hasattr(source, '__next__'):
-            return 'generator'
-        elif hasattr(source, '__getitem__'):
-            return 'array'
+                return "file"
+        elif hasattr(source, "__next__"):
+            return "generator"
+        elif hasattr(source, "__getitem__"):
+            return "array"
         else:
             raise ValueError(f"Cannot detect source type for {type(source)}")
 
     def _setup_source(self):
         """Set up the data source for streaming."""
-        if self.source_type == 'hdf5':
-            self.file = h5py.File(self.source, 'r')
-            self.x_data = self.file['x']
-            self.y_data = self.file['y']
+        if self.source_type == "hdf5":
+            self.file = h5py.File(self.source, "r")
+            self.x_data = self.file["x"]
+            self.y_data = self.file["y"]
             self.n_samples = len(self.y_data)
 
-        elif self.source_type == 'mmap':
+        elif self.source_type == "mmap":
             # Memory-mapped numpy array
-            data = np.load(self.source, mmap_mode='r')
+            data = np.load(self.source, mmap_mode="r")
             if isinstance(data, np.lib.npyio.NpzFile):
-                self.x_data = data['x']
-                self.y_data = data['y']
+                self.x_data = data["x"]
+                self.y_data = data["y"]
             else:
                 # Assume it's a structured array
                 self.x_data = data[:, :-1]
                 self.y_data = data[:, -1]
             self.n_samples = len(self.y_data)
 
-        elif self.source_type == 'array':
+        elif self.source_type == "array":
             # In-memory array (but we'll still chunk it)
             self.x_data, self.y_data = self.source
             self.n_samples = len(self.y_data)
 
-        elif self.source_type == 'generator':
+        elif self.source_type == "generator":
             # Generator doesn't have a fixed size
             self.n_samples = None
 
@@ -137,7 +138,7 @@ class DataGenerator:
         x_batch, y_batch : tuple
             Batch of x and y data
         """
-        if self.source_type == 'generator':
+        if self.source_type == "generator":
             # Pass through generator
             for batch in self.source:
                 yield batch
@@ -157,7 +158,7 @@ class DataGenerator:
                 batch_indices = indices[start:end]
 
                 # For HDF5, indices must be sorted in increasing order
-                if self.source_type == 'hdf5':
+                if self.source_type == "hdf5":
                     batch_indices = np.sort(batch_indices)
 
                 x_batch = self.x_data[batch_indices]
@@ -173,7 +174,7 @@ class DataGenerator:
 
     def close(self):
         """Clean up resources."""
-        if self.source_type == 'hdf5' and hasattr(self, 'file'):
+        if self.source_type == "hdf5" and hasattr(self, "file"):
             self.file.close()
 
 
@@ -184,7 +185,7 @@ class StreamingOptimizer:
     optimization on datasets of unlimited size.
     """
 
-    def __init__(self, config: Optional[StreamingConfig] = None):
+    def __init__(self, config: StreamingConfig | None = None):
         """Initialize streaming optimizer.
 
         Parameters
@@ -199,7 +200,7 @@ class StreamingOptimizer:
         """Reset optimizer state."""
         self.iteration = 0
         self.epoch = 0
-        self.best_loss = float('inf')
+        self.best_loss = float("inf")
         self.best_params = None
 
         # Optimizer state
@@ -209,13 +210,15 @@ class StreamingOptimizer:
         else:
             self.velocity = None  # Momentum
 
-    def fit_streaming(self,
-                      func: Callable,
-                      data_source,
-                      x0: np.ndarray,
-                      bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-                      callback: Optional[Callable] = None,
-                      verbose: int = 1) -> Dict[str, Any]:
+    def fit_streaming(
+        self,
+        func: Callable,
+        data_source,
+        x0: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None = None,
+        callback: Callable | None = None,
+        verbose: int = 1,
+    ) -> dict[str, Any]:
         """Fit model using streaming data.
 
         Parameters
@@ -259,8 +262,12 @@ class StreamingOptimizer:
         losses = []
 
         if verbose >= 1:
-            print(f"Starting streaming optimization with batch_size={self.config.batch_size}")
-            print(f"Using {'Adam' if self.config.use_adam else 'SGD with momentum'} optimizer")
+            print(
+                f"Starting streaming optimization with batch_size={self.config.batch_size}"
+            )
+            print(
+                f"Using {'Adam' if self.config.use_adam else 'SGD with momentum'} optimizer"
+            )
 
         try:
             for epoch in range(self.config.max_epochs):
@@ -299,7 +306,9 @@ class StreamingOptimizer:
 
                     # Verbose output
                     if verbose >= 2 and batch_idx % 10 == 0:
-                        print(f"  Batch {batch_idx}: loss={loss:.6f}, grad_norm={grad_norm:.6f}")
+                        print(
+                            f"  Batch {batch_idx}: loss={loss:.6f}, grad_norm={grad_norm:.6f}"
+                        )
 
                     # Callback
                     if callback is not None:
@@ -310,7 +319,9 @@ class StreamingOptimizer:
                         self._save_checkpoint(params, losses)
 
                 # Epoch statistics
-                avg_epoch_loss = epoch_loss / epoch_samples if epoch_samples > 0 else float('inf')
+                avg_epoch_loss = (
+                    epoch_loss / epoch_samples if epoch_samples > 0 else float("inf")
+                )
 
                 if verbose >= 1:
                     elapsed = time.time() - start_time
@@ -338,26 +349,28 @@ class StreamingOptimizer:
         # Prepare result
         elapsed_time = time.time() - start_time
         result = {
-            'x': self.best_params,
-            'fun': self.best_loss,
-            'success': True,
-            'message': 'Streaming optimization completed',
-            'nit': self.iteration,
-            'n_epochs': self.epoch + 1,
-            'total_samples': total_samples,
-            'time': elapsed_time,
-            'samples_per_sec': total_samples / elapsed_time,
-            'final_loss': losses[-1] if losses else float('inf'),
-            'loss_history': np.array(losses)
+            "x": self.best_params,
+            "fun": self.best_loss,
+            "success": True,
+            "message": "Streaming optimization completed",
+            "nit": self.iteration,
+            "n_epochs": self.epoch + 1,
+            "total_samples": total_samples,
+            "time": elapsed_time,
+            "samples_per_sec": total_samples / elapsed_time,
+            "final_loss": losses[-1] if losses else float("inf"),
+            "loss_history": np.array(losses),
         }
 
         return result
 
-    def _compute_loss_and_gradient(self,
-                                  func: Callable,
-                                  params: np.ndarray,
-                                  x_batch: np.ndarray,
-                                  y_batch: np.ndarray) -> Tuple[float, np.ndarray]:
+    def _compute_loss_and_gradient(
+        self,
+        func: Callable,
+        params: np.ndarray,
+        x_batch: np.ndarray,
+        y_batch: np.ndarray,
+    ) -> tuple[float, np.ndarray]:
         """Compute loss and gradient for a batch.
 
         Parameters
@@ -405,10 +418,12 @@ class StreamingOptimizer:
 
         return loss, grad
 
-    def _update_parameters(self,
-                          params: np.ndarray,
-                          grad: np.ndarray,
-                          bounds: Optional[Tuple[np.ndarray, np.ndarray]]) -> np.ndarray:
+    def _update_parameters(
+        self,
+        params: np.ndarray,
+        grad: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
+    ) -> np.ndarray:
         """Update parameters using gradient.
 
         Parameters
@@ -430,13 +445,23 @@ class StreamingOptimizer:
             lr = self.config.learning_rate * self.iteration / self.config.warmup_steps
         else:
             # Cosine annealing
-            progress = (self.iteration - self.config.warmup_steps) / max(1, self.config.max_epochs * 1000)
-            lr = self.config.learning_rate * 0.5 * (1 + np.cos(np.pi * min(1.0, progress)))
+            progress = (self.iteration - self.config.warmup_steps) / max(
+                1, self.config.max_epochs * 1000
+            )
+            lr = (
+                self.config.learning_rate
+                * 0.5
+                * (1 + np.cos(np.pi * min(1.0, progress)))
+            )
 
         if self.config.use_adam:
             # Adam optimizer
-            self.m = self.config.adam_beta1 * self.m + (1 - self.config.adam_beta1) * grad
-            self.v = self.config.adam_beta2 * self.v + (1 - self.config.adam_beta2) * grad**2
+            self.m = (
+                self.config.adam_beta1 * self.m + (1 - self.config.adam_beta1) * grad
+            )
+            self.v = (
+                self.config.adam_beta2 * self.v + (1 - self.config.adam_beta2) * grad**2
+            )
 
             # Bias correction
             m_hat = self.m / (1 - self.config.adam_beta1**self.iteration)
@@ -468,12 +493,12 @@ class StreamingOptimizer:
             Loss history
         """
         checkpoint = {
-            'params': params,
-            'iteration': self.iteration,
-            'epoch': self.epoch,
-            'losses': losses[-1000:],  # Keep last 1000 losses
-            'best_params': self.best_params,
-            'best_loss': self.best_loss
+            "params": params,
+            "iteration": self.iteration,
+            "epoch": self.epoch,
+            "losses": losses[-1000:],  # Keep last 1000 losses
+            "best_params": self.best_params,
+            "best_loss": self.best_loss,
         }
 
         # Save to file
@@ -481,12 +506,14 @@ class StreamingOptimizer:
         np.savez_compressed(checkpoint_path, **checkpoint)
 
 
-def create_hdf5_dataset(filename: str,
-                        func: Callable,
-                        params: np.ndarray,
-                        n_samples: int,
-                        chunk_size: int = 10000,
-                        noise_level: float = 0.01):
+def create_hdf5_dataset(
+    filename: str,
+    func: Callable,
+    params: np.ndarray,
+    n_samples: int,
+    chunk_size: int = 10000,
+    noise_level: float = 0.01,
+):
     """Create an HDF5 dataset for testing streaming optimization.
 
     Parameters
@@ -504,10 +531,14 @@ def create_hdf5_dataset(filename: str,
     noise_level : float
         Noise level to add to y data
     """
-    with h5py.File(filename, 'w') as f:
+    with h5py.File(filename, "w") as f:
         # Create datasets
-        x_dataset = f.create_dataset('x', (n_samples,), dtype='f8', chunks=(chunk_size,))
-        y_dataset = f.create_dataset('y', (n_samples,), dtype='f8', chunks=(chunk_size,))
+        x_dataset = f.create_dataset(
+            "x", (n_samples,), dtype="f8", chunks=(chunk_size,)
+        )
+        y_dataset = f.create_dataset(
+            "y", (n_samples,), dtype="f8", chunks=(chunk_size,)
+        )
 
         # Generate data in chunks
         for i in range(0, n_samples, chunk_size):
@@ -524,18 +555,20 @@ def create_hdf5_dataset(filename: str,
             y_dataset[i:end] = y_noisy
 
         # Store metadata
-        f.attrs['n_samples'] = n_samples
-        f.attrs['true_params'] = params
-        f.attrs['noise_level'] = noise_level
+        f.attrs["n_samples"] = n_samples
+        f.attrs["true_params"] = params
+        f.attrs["noise_level"] = noise_level
 
     print(f"Created HDF5 dataset with {n_samples} samples in {filename}")
 
 
-def fit_unlimited_data(func: Callable,
-                       data_source,
-                       x0: np.ndarray,
-                       config: Optional[StreamingConfig] = None,
-                       **kwargs) -> Dict[str, Any]:
+def fit_unlimited_data(
+    func: Callable,
+    data_source,
+    x0: np.ndarray,
+    config: StreamingConfig | None = None,
+    **kwargs,
+) -> dict[str, Any]:
     """Fit model to unlimited data using streaming optimization.
 
     This is the main entry point for fitting models to datasets that

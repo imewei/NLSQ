@@ -5,14 +5,10 @@ This module provides utilities for efficiently fitting curve parameters to very 
 """
 
 import gc
-import os
-import platform
 import time
-import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Generator, Optional, Union
 
 import numpy as np
 import psutil
@@ -22,11 +18,8 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
-import jax
-import jax.numpy as jnp
-from jax import jit
 
-from nlsq._optimize import OptimizeResult, OptimizeWarning
+from nlsq._optimize import OptimizeResult
 from nlsq.logging import get_logger
 from nlsq.minpack import CurveFit
 
@@ -52,6 +45,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     max_sampled_size : int
         Maximum size when sampling (default: 10_000_000)
     """
+
     memory_limit_gb: float = 8.0
     safety_factor: float = 0.8
     min_chunk_size: int = 1000
@@ -82,6 +76,7 @@ class DatasetStats:
     requires_sampling : bool
         Whether sampling is recommended
     """
+
     n_points: int
     n_params: int
     memory_per_point_bytes: float
@@ -142,9 +137,7 @@ class MemoryEstimator:
 
     @staticmethod
     def calculate_optimal_chunk_size(
-        n_points: int,
-        n_params: int,
-        memory_config: LDMemoryConfig
+        n_points: int, n_params: int, memory_config: LDMemoryConfig
     ) -> tuple[int, DatasetStats]:
         """Calculate optimal chunk size based on memory constraints.
 
@@ -168,10 +161,10 @@ class MemoryEstimator:
         memory_per_point = estimator.estimate_memory_per_point(n_params)
 
         # Calculate available memory for processing
-        available_memory_gb = min(
-            memory_config.memory_limit_gb,
-            estimator.get_available_memory_gb()
-        ) * memory_config.safety_factor
+        available_memory_gb = (
+            min(memory_config.memory_limit_gb, estimator.get_available_memory_gb())
+            * memory_config.safety_factor
+        )
 
         available_memory_bytes = available_memory_gb * (1024**3)
 
@@ -181,7 +174,7 @@ class MemoryEstimator:
         # Apply constraints
         chunk_size = max(
             memory_config.min_chunk_size,
-            min(memory_config.max_chunk_size, theoretical_chunk_size)
+            min(memory_config.max_chunk_size, theoretical_chunk_size),
         )
 
         # If we can fit all data in memory, use all points
@@ -194,9 +187,9 @@ class MemoryEstimator:
         # Check if sampling is needed
         total_memory_gb = (n_points * memory_per_point) / (1024**3)
         requires_sampling = (
-            memory_config.enable_sampling and
-            n_points > memory_config.sampling_threshold and
-            total_memory_gb > memory_config.memory_limit_gb * 2
+            memory_config.enable_sampling
+            and n_points > memory_config.sampling_threshold
+            and total_memory_gb > memory_config.memory_limit_gb * 2
         )
 
         stats = DatasetStats(
@@ -206,7 +199,7 @@ class MemoryEstimator:
             total_memory_estimate_gb=total_memory_gb,
             recommended_chunk_size=chunk_size,
             n_chunks=n_chunks,
-            requires_sampling=requires_sampling
+            requires_sampling=requires_sampling,
         )
 
         return chunk_size, stats
@@ -230,7 +223,7 @@ class ProgressReporter:
         self.start_time = time.time()
         self.completed_chunks = 0
 
-    def update(self, chunk_idx: int, chunk_result: Optional[dict] = None):
+    def update(self, chunk_idx: int, chunk_result: dict | None = None):
         """Update progress.
 
         Parameters
@@ -270,7 +263,7 @@ class DataChunker:
         ydata: np.ndarray,
         chunk_size: int,
         shuffle: bool = False,
-        random_seed: Optional[int] = None
+        random_seed: int | None = None,
     ) -> Generator[tuple[np.ndarray, np.ndarray, int], None, None]:
         """Create data chunks for processing.
 
@@ -314,7 +307,7 @@ class DataChunker:
         ydata: np.ndarray,
         target_size: int,
         strategy: str = "random",
-        random_seed: Optional[int] = None
+        random_seed: int | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Sample from very large datasets.
 
@@ -360,7 +353,7 @@ class DataChunker:
                 stratum_indices = rng.choice(
                     range(start, end),
                     size=min(points_per_stratum, end - start),
-                    replace=False
+                    replace=False,
                 )
                 indices.extend(stratum_indices)
 
@@ -418,8 +411,8 @@ class LargeDatasetFitter:
     def __init__(
         self,
         memory_limit_gb: float = 8.0,
-        config: Optional[LDMemoryConfig] = None,
-        curve_fit_class: Optional[CurveFit] = None
+        config: LDMemoryConfig | None = None,
+        curve_fit_class: CurveFit | None = None,
     ):
         """Initialize LargeDatasetFitter.
 
@@ -445,14 +438,10 @@ class LargeDatasetFitter:
             self.curve_fit = curve_fit_class
 
         # Statistics tracking
-        self.last_stats: Optional[DatasetStats] = None
+        self.last_stats: DatasetStats | None = None
         self.fit_history: list[dict] = []
 
-    def estimate_requirements(
-        self,
-        n_points: int,
-        n_params: int
-    ) -> DatasetStats:
+    def estimate_requirements(self, n_points: int, n_params: int) -> DatasetStats:
         """Estimate memory requirements and processing strategy.
 
         Parameters
@@ -474,9 +463,15 @@ class LargeDatasetFitter:
         self.last_stats = stats
 
         # Log recommendations
-        self.logger.info(f"Dataset analysis for {n_points:,} points, {n_params} parameters:")
-        self.logger.info(f"  Estimated memory per point: {stats.memory_per_point_bytes:.1f} bytes")
-        self.logger.info(f"  Total memory estimate: {stats.total_memory_estimate_gb:.2f} GB")
+        self.logger.info(
+            f"Dataset analysis for {n_points:,} points, {n_params} parameters:"
+        )
+        self.logger.info(
+            f"  Estimated memory per point: {stats.memory_per_point_bytes:.1f} bytes"
+        )
+        self.logger.info(
+            f"  Total memory estimate: {stats.total_memory_estimate_gb:.2f} GB"
+        )
         self.logger.info(f"  Recommended chunk size: {stats.recommended_chunk_size:,}")
         self.logger.info(f"  Number of chunks: {stats.n_chunks}")
 
@@ -493,11 +488,11 @@ class LargeDatasetFitter:
         f: Callable,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        p0: Optional[Union[np.ndarray, list]] = None,
+        p0: np.ndarray | list | None = None,
         bounds: tuple = (-np.inf, np.inf),
         method: str = "trf",
         solver: str = "auto",
-        **kwargs
+        **kwargs,
     ) -> OptimizeResult:
         """Fit curve to large dataset with automatic memory management.
 
@@ -526,8 +521,7 @@ class LargeDatasetFitter:
             Optimization result with fitted parameters and statistics
         """
         return self._fit_implementation(
-            f, xdata, ydata, p0, bounds, method, solver,
-            show_progress=False, **kwargs
+            f, xdata, ydata, p0, bounds, method, solver, show_progress=False, **kwargs
         )
 
     def fit_with_progress(
@@ -535,11 +529,11 @@ class LargeDatasetFitter:
         f: Callable,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        p0: Optional[Union[np.ndarray, list]] = None,
+        p0: np.ndarray | list | None = None,
         bounds: tuple = (-np.inf, np.inf),
         method: str = "trf",
         solver: str = "auto",
-        **kwargs
+        **kwargs,
     ) -> OptimizeResult:
         """Fit curve with progress reporting for long-running fits.
 
@@ -568,8 +562,7 @@ class LargeDatasetFitter:
             Optimization result with fitted parameters and statistics
         """
         return self._fit_implementation(
-            f, xdata, ydata, p0, bounds, method, solver,
-            show_progress=True, **kwargs
+            f, xdata, ydata, p0, bounds, method, solver, show_progress=True, **kwargs
         )
 
     def _fit_implementation(
@@ -577,12 +570,12 @@ class LargeDatasetFitter:
         f: Callable,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        p0: Optional[Union[np.ndarray, list]],
+        p0: np.ndarray | list | None,
         bounds: tuple,
         method: str,
         solver: str,
         show_progress: bool,
-        **kwargs
+        **kwargs,
     ) -> OptimizeResult:
         """Internal implementation of fitting algorithm."""
 
@@ -596,6 +589,7 @@ class LargeDatasetFitter:
             # Try to infer from function signature
             try:
                 from inspect import signature
+
                 sig = signature(f)
                 n_params = len(sig.parameters) - 1  # Subtract x parameter
             except Exception:
@@ -626,11 +620,11 @@ class LargeDatasetFitter:
         f: Callable,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        p0: Optional[Union[np.ndarray, list]],
+        p0: np.ndarray | list | None,
         bounds: tuple,
         method: str,
         solver: str,
-        **kwargs
+        **kwargs,
     ) -> OptimizeResult:
         """Fit data that can be processed in a single chunk."""
 
@@ -639,8 +633,14 @@ class LargeDatasetFitter:
         # Use standard curve_fit
         try:
             popt, pcov = self.curve_fit.curve_fit(
-                f, xdata, ydata, p0=p0, bounds=bounds,
-                method=method, solver=solver, **kwargs
+                f,
+                xdata,
+                ydata,
+                p0=p0,
+                bounds=bounds,
+                method=method,
+                solver=solver,
+                **kwargs,
             )
 
             # Create result object
@@ -649,12 +649,12 @@ class LargeDatasetFitter:
                 success=True,
                 fun=None,  # Could compute final residuals if needed
                 nfev=1,  # Approximation
-                message="Single-chunk fit completed successfully"
+                message="Single-chunk fit completed successfully",
             )
 
             # Add covariance matrix and parameters
-            result['pcov'] = pcov
-            result['popt'] = popt
+            result["pcov"] = pcov
+            result["popt"] = popt
 
             return result
 
@@ -663,7 +663,7 @@ class LargeDatasetFitter:
             result = OptimizeResult(
                 x=p0 if p0 is not None else np.ones(2),
                 success=False,
-                message=f"Fit failed: {e}"
+                message=f"Fit failed: {e}",
             )
             return result
 
@@ -672,12 +672,12 @@ class LargeDatasetFitter:
         f: Callable,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        p0: Optional[Union[np.ndarray, list]],
+        p0: np.ndarray | list | None,
         bounds: tuple,
         method: str,
         solver: str,
         show_progress: bool,
-        **kwargs
+        **kwargs,
     ) -> OptimizeResult:
         """Fit very large dataset using sampling."""
 
@@ -696,8 +696,14 @@ class LargeDatasetFitter:
         # Fit on sample
         try:
             popt, pcov = self.curve_fit.curve_fit(
-                f, x_sample, y_sample, p0=p0, bounds=bounds,
-                method=method, solver=solver, **kwargs
+                f,
+                x_sample,
+                y_sample,
+                p0=p0,
+                bounds=bounds,
+                method=method,
+                solver=solver,
+                **kwargs,
             )
 
             self.logger.info(f"Sampling fit completed with parameters: {popt}")
@@ -708,13 +714,13 @@ class LargeDatasetFitter:
             result = OptimizeResult(
                 x=popt,
                 success=True,
-                message=f"Fit completed using {len(x_sample):,} sampled points"
+                message=f"Fit completed using {len(x_sample):,} sampled points",
             )
-            result['pcov'] = pcov
-            result['popt'] = popt
-            result['was_sampled'] = True
-            result['sample_size'] = len(x_sample)
-            result['original_size'] = len(xdata)
+            result["pcov"] = pcov
+            result["popt"] = popt
+            result["was_sampled"] = True
+            result["sample_size"] = len(x_sample)
+            result["original_size"] = len(xdata)
 
             return result
 
@@ -723,7 +729,7 @@ class LargeDatasetFitter:
             result = OptimizeResult(
                 x=p0 if p0 is not None else np.ones(2),
                 success=False,
-                message=f"Sampling fit failed: {e}"
+                message=f"Sampling fit failed: {e}",
             )
             return result
 
@@ -732,20 +738,22 @@ class LargeDatasetFitter:
         f: Callable,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        p0: Optional[Union[np.ndarray, list]],
+        p0: np.ndarray | list | None,
         bounds: tuple,
         method: str,
         solver: str,
         show_progress: bool,
         stats: DatasetStats,
-        **kwargs
+        **kwargs,
     ) -> OptimizeResult:
         """Fit dataset using chunked processing with parameter refinement."""
 
         self.logger.info(f"Fitting dataset using {stats.n_chunks} chunks")
 
         # Initialize progress reporter
-        progress = ProgressReporter(stats.n_chunks, self.logger) if show_progress else None
+        progress = (
+            ProgressReporter(stats.n_chunks, self.logger) if show_progress else None
+        )
 
         # Initialize parameters
         current_params = np.array(p0) if p0 is not None else None
@@ -756,16 +764,17 @@ class LargeDatasetFitter:
             for x_chunk, y_chunk, chunk_idx in DataChunker.create_chunks(
                 xdata, ydata, stats.recommended_chunk_size
             ):
-
                 try:
                     # Fit current chunk
                     popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
-                        f, x_chunk, y_chunk,
+                        f,
+                        x_chunk,
+                        y_chunk,
                         p0=current_params,
                         bounds=bounds,
                         method=method,
                         solver=solver,
-                        **kwargs
+                        **kwargs,
                     )
 
                     # Update parameters (simple averaging for now)
@@ -774,22 +783,24 @@ class LargeDatasetFitter:
                     else:
                         # Weighted average based on chunk size
                         weight = len(x_chunk) / len(xdata)
-                        current_params = (1 - weight) * current_params + weight * popt_chunk
+                        current_params = (
+                            1 - weight
+                        ) * current_params + weight * popt_chunk
 
                     chunk_result = {
-                        'chunk_idx': chunk_idx,
-                        'n_points': len(x_chunk),
-                        'parameters': popt_chunk,
-                        'success': True
+                        "chunk_idx": chunk_idx,
+                        "n_points": len(x_chunk),
+                        "parameters": popt_chunk,
+                        "success": True,
                     }
 
                 except Exception as e:
                     self.logger.warning(f"Chunk {chunk_idx} failed: {e}")
                     chunk_result = {
-                        'chunk_idx': chunk_idx,
-                        'n_points': len(x_chunk),
-                        'success': False,
-                        'error': str(e)
+                        "chunk_idx": chunk_idx,
+                        "n_points": len(x_chunk),
+                        "success": False,
+                        "error": str(e),
                     }
 
                 chunk_results.append(chunk_result)
@@ -801,29 +812,33 @@ class LargeDatasetFitter:
                 gc.collect()
 
             # Compute final statistics
-            successful_chunks = [r for r in chunk_results if r.get('success', False)]
+            successful_chunks = [r for r in chunk_results if r.get("success", False)]
             success_rate = len(successful_chunks) / len(chunk_results)
 
             if success_rate < 0.5:
-                self.logger.error(f"Too many chunks failed ({success_rate:.1%} success rate)")
+                self.logger.error(
+                    f"Too many chunks failed ({success_rate:.1%} success rate)"
+                )
                 return OptimizeResult(
                     x=current_params or np.ones(2),
                     success=False,
-                    message=f"Chunked fit failed: {success_rate:.1%} success rate"
+                    message=f"Chunked fit failed: {success_rate:.1%} success rate",
                 )
 
             # Final result
-            self.logger.info(f"Chunked fit completed with {success_rate:.1%} success rate")
+            self.logger.info(
+                f"Chunked fit completed with {success_rate:.1%} success rate"
+            )
 
             result = OptimizeResult(
                 x=current_params,
                 success=True,
-                message=f"Chunked fit completed ({stats.n_chunks} chunks, {success_rate:.1%} success)"
+                message=f"Chunked fit completed ({stats.n_chunks} chunks, {success_rate:.1%} success)",
             )
-            result['popt'] = current_params
-            result['chunk_results'] = chunk_results
-            result['n_chunks'] = stats.n_chunks
-            result['success_rate'] = success_rate
+            result["popt"] = current_params
+            result["chunk_results"] = chunk_results
+            result["n_chunks"] = stats.n_chunks
+            result["success_rate"] = success_rate
 
             return result
 
@@ -832,7 +847,7 @@ class LargeDatasetFitter:
             return OptimizeResult(
                 x=current_params or np.ones(2),
                 success=False,
-                message=f"Chunked fit failed: {e}"
+                message=f"Chunked fit failed: {e}",
             )
 
     @contextmanager
@@ -848,7 +863,9 @@ class LargeDatasetFitter:
             try:
                 final_memory = process.memory_info().rss / (1024**3)  # GB
                 memory_delta = final_memory - initial_memory
-                self.logger.debug(f"Final memory usage: {final_memory:.2f} GB (Δ{memory_delta:+.2f} GB)")
+                self.logger.debug(
+                    f"Final memory usage: {final_memory:.2f} GB (Δ{memory_delta:+.2f} GB)"
+                )
             except Exception:
                 pass  # Memory monitoring is best effort
 
@@ -870,19 +887,21 @@ class LargeDatasetFitter:
         stats = self.estimate_requirements(n_points, n_params)
 
         return {
-            'dataset_stats': stats,
-            'memory_limit_gb': self.config.memory_limit_gb,
-            'processing_strategy': (
-                'sampling' if stats.requires_sampling else
-                'single_chunk' if stats.n_chunks == 1 else
-                'chunked'
+            "dataset_stats": stats,
+            "memory_limit_gb": self.config.memory_limit_gb,
+            "processing_strategy": (
+                "sampling"
+                if stats.requires_sampling
+                else "single_chunk"
+                if stats.n_chunks == 1
+                else "chunked"
             ),
-            'recommendations': {
-                'chunk_size': stats.recommended_chunk_size,
-                'n_chunks': stats.n_chunks,
-                'memory_per_point_bytes': stats.memory_per_point_bytes,
-                'total_memory_estimate_gb': stats.total_memory_estimate_gb,
-            }
+            "recommendations": {
+                "chunk_size": stats.recommended_chunk_size,
+                "n_chunks": stats.n_chunks,
+                "memory_per_point_bytes": stats.memory_per_point_bytes,
+                "total_memory_estimate_gb": stats.total_memory_estimate_gb,
+            },
         }
 
 
@@ -891,10 +910,10 @@ def fit_large_dataset(
     f: Callable,
     xdata: np.ndarray,
     ydata: np.ndarray,
-    p0: Optional[Union[np.ndarray, list]] = None,
+    p0: np.ndarray | list | None = None,
     memory_limit_gb: float = 8.0,
     show_progress: bool = False,
-    **kwargs
+    **kwargs,
 ) -> OptimizeResult:
     """Convenience function for fitting large datasets.
 
@@ -985,5 +1004,5 @@ __all__ = [
     "ProgressReporter",
     "DataChunker",
     "fit_large_dataset",
-    "estimate_memory_requirements"
+    "estimate_memory_requirements",
 ]

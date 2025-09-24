@@ -60,7 +60,7 @@ config = MemoryConfig(
     memory_limit_gb=8.0,
     safety_factor=0.8,
     min_chunk_size=1000,
-    max_chunk_size=1_000_000
+    max_chunk_size=1_000_000,
 )
 fitter = LargeDatasetFitter(config=config)
 ```
@@ -90,10 +90,12 @@ fitter = LargeDatasetFitter(config=config)
 ```python
 # Drop-in replacement for large datasets
 result = fit_large_dataset(
-    model_function, x_data, y_data,
+    model_function,
+    x_data,
+    y_data,
     p0=[1.0, 2.0],
     memory_limit_gb=4.0,
-    show_progress=True
+    show_progress=True,
 )
 ```
 
@@ -132,16 +134,15 @@ from nlsq import fit_large_dataset
 x_data = np.linspace(0, 10, 5_000_000)
 y_data = 2.5 * np.exp(-1.3 * x_data) + noise
 
+
 # JAX-compatible model function
 def model(x, a, b):
     return a * jnp.exp(-b * x)
 
+
 # Fit with automatic memory management
 result = fit_large_dataset(
-    model, x_data, y_data,
-    p0=[2.0, 1.0],
-    memory_limit_gb=4.0,
-    show_progress=True
+    model, x_data, y_data, p0=[2.0, 1.0], memory_limit_gb=4.0, show_progress=True
 )
 
 print(f"Fitted parameters: {result.popt}")
@@ -158,7 +159,7 @@ config = MemoryConfig(
     min_chunk_size=5000,
     max_chunk_size=500000,
     enable_sampling=True,
-    sampling_threshold=50_000_000
+    sampling_threshold=50_000_000,
 )
 
 fitter = LargeDatasetFitter(config=config)
@@ -179,8 +180,10 @@ from nlsq import estimate_memory_requirements
 # Analyze different dataset sizes
 for n_points in [1_000_000, 10_000_000, 100_000_000]:
     stats = estimate_memory_requirements(n_points, n_params=3)
-    print(f"{n_points:,} points: {stats.total_memory_estimate_gb:.2f} GB, "
-          f"{stats.n_chunks} chunks, sampling: {stats.requires_sampling}")
+    print(
+        f"{n_points:,} points: {stats.total_memory_estimate_gb:.2f} GB, "
+        f"{stats.n_chunks} chunks, sampling: {stats.requires_sampling}"
+    )
 ```
 
 ## Performance Characteristics

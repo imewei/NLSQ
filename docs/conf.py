@@ -25,10 +25,7 @@ copyright = "2022-2025, Lucas Hofer"
 author = "Lucas Hofer"
 
 # Get version dynamically
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath(".."))
+# (imports already done above)
 
 try:
     from nlsq import __version__

@@ -4,12 +4,11 @@ This module provides sparse matrix support for Jacobian computations,
 enabling efficient handling of problems with 20M+ data points.
 """
 
-import numpy as np
-from scipy.sparse import csr_matrix, issparse, lil_matrix
-from typing import Optional, Union, Tuple, Callable
+from collections.abc import Callable
+
 import jax.numpy as jnp
-from jax import jit
-from functools import partial
+import numpy as np
+from scipy.sparse import csr_matrix, lil_matrix
 
 
 class SparseJacobianComputer:
@@ -33,11 +32,13 @@ class SparseJacobianComputer:
         self._sparsity_pattern = None
         self._sparse_indices = None
 
-    def detect_sparsity_pattern(self,
-                               func: Callable,
-                               x0: np.ndarray,
-                               xdata_sample: np.ndarray,
-                               n_samples: int = 100) -> Tuple[np.ndarray, float]:
+    def detect_sparsity_pattern(
+        self,
+        func: Callable,
+        x0: np.ndarray,
+        xdata_sample: np.ndarray,
+        n_samples: int = 100,
+    ) -> tuple[np.ndarray, float]:
         """Detect sparsity pattern of Jacobian from sample evaluations.
 
         Parameters
@@ -85,13 +86,15 @@ class SparseJacobianComputer:
         self._sparsity_pattern = pattern
         return pattern, sparsity
 
-    def compute_sparse_jacobian(self,
-                              jac_func: Callable,
-                              x: np.ndarray,
-                              xdata: np.ndarray,
-                              ydata: np.ndarray,
-                              data_mask: Optional[np.ndarray] = None,
-                              chunk_size: int = 10000) -> csr_matrix:
+    def compute_sparse_jacobian(
+        self,
+        jac_func: Callable,
+        x: np.ndarray,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        data_mask: np.ndarray | None = None,
+        chunk_size: int = 10000,
+    ) -> csr_matrix:
         """Compute Jacobian in sparse format with chunking.
 
         Parameters
@@ -130,7 +133,7 @@ class SparseJacobianComputer:
             end = min((chunk_idx + 1) * chunk_size, n_data)
 
             # Compute dense Jacobian for chunk
-            x_chunk = xdata[start:end] if hasattr(xdata, '__getitem__') else xdata
+            x_chunk = xdata[start:end] if hasattr(xdata, "__getitem__") else xdata
             y_chunk = ydata[start:end]
             mask_chunk = data_mask[start:end]
 
@@ -147,7 +150,7 @@ class SparseJacobianComputer:
                 )
 
             # Convert to numpy if needed
-            if hasattr(J_chunk, 'block_until_ready'):
+            if hasattr(J_chunk, "block_until_ready"):
                 J_chunk = np.array(J_chunk)
 
             # Apply sparsity threshold and store
@@ -159,13 +162,15 @@ class SparseJacobianComputer:
         # Convert to CSR format for efficient operations
         return J_sparse.tocsr()
 
-    def _finite_diff_jacobian(self,
-                             func: Callable,
-                             x: np.ndarray,
-                             xdata: np.ndarray,
-                             ydata: np.ndarray,
-                             data_mask: np.ndarray,
-                             eps: float = 1e-8) -> np.ndarray:
+    def _finite_diff_jacobian(
+        self,
+        func: Callable,
+        x: np.ndarray,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        data_mask: np.ndarray,
+        eps: float = 1e-8,
+    ) -> np.ndarray:
         """Compute Jacobian using finite differences as fallback.
 
         Parameters
@@ -193,7 +198,7 @@ class SparseJacobianComputer:
         J = np.zeros((n_data, n_params))
 
         # Base function evaluation
-        f0 = func(xdata, *x) if not hasattr(xdata, '__len__') else func(xdata, *x)
+        f0 = func(xdata, *x) if not hasattr(xdata, "__len__") else func(xdata, *x)
         f0 = f0 - ydata
         f0 = np.where(data_mask, f0, 0)
 
@@ -202,7 +207,11 @@ class SparseJacobianComputer:
             x_perturb = x.copy()
             x_perturb[j] += eps
 
-            f_perturb = func(xdata, *x_perturb) if not hasattr(xdata, '__len__') else func(xdata, *x_perturb)
+            f_perturb = (
+                func(xdata, *x_perturb)
+                if not hasattr(xdata, "__len__")
+                else func(xdata, *x_perturb)
+            )
             f_perturb = f_perturb - ydata
             f_perturb = np.where(data_mask, f_perturb, 0)
 
@@ -210,9 +219,9 @@ class SparseJacobianComputer:
 
         return J
 
-    def sparse_matrix_vector_product(self,
-                                    J_sparse: csr_matrix,
-                                    v: np.ndarray) -> np.ndarray:
+    def sparse_matrix_vector_product(
+        self, J_sparse: csr_matrix, v: np.ndarray
+    ) -> np.ndarray:
         """Efficient sparse matrix-vector product.
 
         Parameters
@@ -229,9 +238,9 @@ class SparseJacobianComputer:
         """
         return J_sparse @ v
 
-    def sparse_normal_equations(self,
-                               J_sparse: csr_matrix,
-                               f: np.ndarray) -> Tuple[callable, np.ndarray]:
+    def sparse_normal_equations(
+        self, J_sparse: csr_matrix, f: np.ndarray
+    ) -> tuple[callable, np.ndarray]:
         """Set up normal equations with sparse Jacobian.
 
         Solves (J^T @ J) @ p = -J^T @ f without forming J^T @ J explicitly.
@@ -250,6 +259,7 @@ class SparseJacobianComputer:
         rhs : np.ndarray
             Right-hand side -J^T @ f
         """
+
         def matvec(v):
             """Compute (J^T @ J) @ v without forming J^T @ J."""
             Jv = J_sparse @ v
@@ -259,10 +269,9 @@ class SparseJacobianComputer:
 
         return matvec, rhs
 
-    def estimate_memory_usage(self,
-                            n_data: int,
-                            n_params: int,
-                            sparsity: float = 0.99) -> dict:
+    def estimate_memory_usage(
+        self, n_data: int, n_params: int, sparsity: float = 0.99
+    ) -> dict:
         """Estimate memory usage for sparse vs dense Jacobian.
 
         Parameters
@@ -295,12 +304,12 @@ class SparseJacobianComputer:
         savings = (dense_gb - sparse_gb) / dense_gb * 100
 
         return {
-            'dense_gb': dense_gb,
-            'sparse_gb': sparse_gb,
-            'savings_percent': savings,
-            'sparsity': sparsity,
-            'nnz': nnz,
-            'reduction_factor': dense_gb / sparse_gb if sparse_gb > 0 else float('inf')
+            "dense_gb": dense_gb,
+            "sparse_gb": sparse_gb,
+            "savings_percent": savings,
+            "sparsity": sparsity,
+            "nnz": nnz,
+            "reduction_factor": dense_gb / sparse_gb if sparse_gb > 0 else float("inf"),
         }
 
 
@@ -311,10 +320,12 @@ class SparseOptimizer:
     beneficial and switches to sparse computations transparently.
     """
 
-    def __init__(self,
-                 sparsity_threshold: float = 0.01,
-                 min_sparsity: float = 0.9,
-                 auto_detect: bool = True):
+    def __init__(
+        self,
+        sparsity_threshold: float = 0.01,
+        min_sparsity: float = 0.9,
+        auto_detect: bool = True,
+    ):
         """Initialize sparse optimizer.
 
         Parameters
@@ -333,10 +344,9 @@ class SparseOptimizer:
         self._use_sparse = False
         self._detected_sparsity = 0.0
 
-    def should_use_sparse(self,
-                         n_data: int,
-                         n_params: int,
-                         force_check: bool = False) -> bool:
+    def should_use_sparse(
+        self, n_data: int, n_params: int, force_check: bool = False
+    ) -> bool:
         """Determine if sparse methods should be used.
 
         Parameters
@@ -369,12 +379,14 @@ class SparseOptimizer:
 
         return expected_sparsity >= self.min_sparsity
 
-    def optimize_with_sparsity(self,
-                              func: Callable,
-                              x0: np.ndarray,
-                              xdata: np.ndarray,
-                              ydata: np.ndarray,
-                              **kwargs) -> dict:
+    def optimize_with_sparsity(
+        self,
+        func: Callable,
+        x0: np.ndarray,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        **kwargs,
+    ) -> dict:
         """Optimize using sparse Jacobian methods.
 
         Parameters
@@ -419,7 +431,9 @@ class SparseOptimizer:
                 n_data, n_params, sparsity
             )
             print(f"Memory savings: {memory_info['savings_percent']:.1f}%")
-            print(f"Dense: {memory_info['dense_gb']:.2f}GB → Sparse: {memory_info['sparse_gb']:.2f}GB")
+            print(
+                f"Dense: {memory_info['dense_gb']:.2f}GB → Sparse: {memory_info['sparse_gb']:.2f}GB"
+            )
 
             # Use sparse methods if beneficial
             if sparsity >= self.min_sparsity:
@@ -428,14 +442,17 @@ class SparseOptimizer:
         # Fall back to standard dense optimization
         print(f"Using standard dense methods for {n_data}×{n_params} problem")
         from nlsq import curve_fit
+
         return curve_fit(func, xdata, ydata, x0, **kwargs)
 
-    def _optimize_sparse(self,
-                        func: Callable,
-                        x0: np.ndarray,
-                        xdata: np.ndarray,
-                        ydata: np.ndarray,
-                        **kwargs):
+    def _optimize_sparse(
+        self,
+        func: Callable,
+        x0: np.ndarray,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        **kwargs,
+    ):
         """Internal sparse optimization implementation.
 
         This would integrate with the existing TRF optimizer but using
@@ -446,18 +463,17 @@ class SparseOptimizer:
 
         # For now, return a placeholder indicating sparse methods would be used
         return {
-            'x': x0,
-            'success': True,
-            'message': 'Sparse optimization placeholder',
-            'sparsity': self._detected_sparsity,
-            'method': 'sparse'
+            "x": x0,
+            "success": True,
+            "message": "Sparse optimization placeholder",
+            "sparsity": self._detected_sparsity,
+            "method": "sparse",
         }
 
 
-def detect_jacobian_sparsity(func: Callable,
-                            x0: np.ndarray,
-                            xdata_sample: np.ndarray,
-                            threshold: float = 0.01) -> Tuple[float, dict]:
+def detect_jacobian_sparsity(
+    func: Callable, x0: np.ndarray, xdata_sample: np.ndarray, threshold: float = 0.01
+) -> tuple[float, dict]:
     """Detect and analyze Jacobian sparsity for a given problem.
 
     Parameters
@@ -489,14 +505,14 @@ def detect_jacobian_sparsity(func: Callable,
     nnz_per_col = np.sum(pattern, axis=0)
 
     info = {
-        'sparsity': sparsity,
-        'nnz': np.sum(pattern),
-        'avg_nnz_per_row': np.mean(nnz_per_row),
-        'avg_nnz_per_col': np.mean(nnz_per_col),
-        'max_nnz_per_row': np.max(nnz_per_row),
-        'max_nnz_per_col': np.max(nnz_per_col),
-        'pattern_shape': pattern.shape,
-        'memory_reduction': sparsity * 100
+        "sparsity": sparsity,
+        "nnz": np.sum(pattern),
+        "avg_nnz_per_row": np.mean(nnz_per_row),
+        "avg_nnz_per_col": np.mean(nnz_per_col),
+        "max_nnz_per_row": np.max(nnz_per_row),
+        "max_nnz_per_col": np.max(nnz_per_col),
+        "pattern_shape": pattern.shape,
+        "memory_reduction": sparsity * 100,
     }
 
     return sparsity, info

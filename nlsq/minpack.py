@@ -25,8 +25,8 @@ __all__ = ["CurveFit", "curve_fit"]
 
 def curve_fit(f, xdata, ydata, *args, **kwargs):
     # Extract CurveFit constructor parameters from kwargs
-    flength = kwargs.pop('flength', None)
-    use_dynamic_sizing = kwargs.pop('use_dynamic_sizing', False)
+    flength = kwargs.pop("flength", None)
+    use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
 
     # Create CurveFit instance with appropriate parameters
     jcf = CurveFit(flength=flength, use_dynamic_sizing=use_dynamic_sizing)
@@ -178,7 +178,9 @@ class CurveFit:
 
         self.covariance_svd = covariance_svd
 
-    def _select_tr_solver(self, solver: str, m: int, n: int, batch_size: int | None = None) -> str | None:
+    def _select_tr_solver(
+        self, solver: str, m: int, n: int, batch_size: int | None = None
+    ) -> str | None:
         """Select appropriate trust region solver based on solver type and problem size.
 
         Parameters
@@ -202,13 +204,13 @@ class CurveFit:
             if m * n < 10000:  # Small problems
                 return "exact"  # Use SVD-based exact solver
             else:  # Large problems
-                return "lsmr"   # Use iterative LSMR solver
+                return "lsmr"  # Use iterative LSMR solver
         elif solver == "svd":
             return "exact"  # SVD-based exact solver
         elif solver == "cg":
-            return "lsmr"   # LSMR is the closest to CG in current implementation
+            return "lsmr"  # LSMR is the closest to CG in current implementation
         elif solver == "lsqr":
-            return "lsmr"   # Direct mapping
+            return "lsmr"  # Direct mapping
         elif solver == "minibatch":
             # For minibatch, we'll use lsmr but need to handle batching separately
             # This is a placeholder - full minibatch implementation would require
@@ -444,7 +446,9 @@ class CurveFit:
         # Validate solver parameter
         valid_solvers = {"auto", "svd", "cg", "lsqr", "minibatch"}
         if solver not in valid_solvers:
-            raise ValueError(f"Invalid solver '{solver}'. Must be one of {valid_solvers}.")
+            raise ValueError(
+                f"Invalid solver '{solver}'. Must be one of {valid_solvers}."
+            )
 
         # Validate batch_size if minibatch solver is used
         if solver == "minibatch" and batch_size is not None and batch_size <= 0:
@@ -513,7 +517,7 @@ class CurveFit:
 
             if data_mask is not None:
                 if len(data_mask) != m:
-                    raise ValueError("Data mask doesnt match data lengths.")
+                    raise ValueError("Data mask doesn't match data lengths.")
             else:
                 data_mask = np.ones(m, dtype=bool)
                 if should_pad and len_diff > 0:
@@ -539,7 +543,7 @@ class CurveFit:
             # With dynamic sizing, reset len_diff to 0 for large datasets
             len_diff = 0
 
-                # Determine type of sigma
+            # Determine type of sigma
         if sigma is not None:
             if not isinstance(sigma, np.ndarray):
                 raise ValueError("Sigma must be numpy array.")
@@ -667,7 +671,7 @@ class CurveFit:
         # _, s, VT = svd(res.jac, full_matrices=False)
         outputs = self.covariance_svd(res.jac)
         # Convert JAX arrays to NumPy more efficiently using np.asarray
-        s, VT = [np.asarray(output) for output in outputs]
+        s, VT = (np.asarray(output) for output in outputs)
         threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
         s = s[s > threshold]
         VT = VT[: s.size]

@@ -44,9 +44,11 @@ NLSQ provides a drop-in replacement for SciPy's curve_fit function with the foll
 import numpy as np
 from nlsq import CurveFit
 
+
 # Define your fit function
 def linear(x, m, b):
     return m * x + b
+
 
 # Prepare data
 x = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
@@ -66,9 +68,11 @@ import jax.numpy as jnp
 import numpy as np
 from nlsq import CurveFit
 
+
 # Define exponential fit function using JAX numpy
 def exponential(x, a, b):
     return jnp.exp(a * x) + b
+
 
 # Generate synthetic data
 x = np.linspace(0, 4, 50)
@@ -86,7 +90,7 @@ print(f"Uncertainties: σ_a={perr[0]:.3f}, σ_b={perr[1]:.3f}")
 ```
 
 
-For more complex fit functions there are a few JIT function caveats (see [Current gotchas](#current-gotchas)) such as avoiding control code within the fit function (see [JAX's sharp edges](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html) 
+For more complex fit functions there are a few JIT function caveats (see [Current gotchas](#current-gotchas)) such as avoiding control code within the fit function (see [JAX's sharp edges](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html)
 article for a more in-depth look at JAX specific caveats).
 
 
@@ -130,9 +134,11 @@ fitter = LargeDatasetFitter(memory_limit_gb=4.0)  # 4GB memory limit
 x = np.linspace(0, 10, n_points)
 y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, n_points)
 
+
 # Fit with automatic memory management
 def exponential(x, a, b, c):
     return a * np.exp(-b * x) + c
+
 
 result = fitter.fit(exponential, x, y, p0=[2.5, 0.6, 0.2])
 print(f"Fitted parameters: {result.popt}")
@@ -145,10 +151,12 @@ from nlsq import fit_large_dataset
 
 # Simple API for large dataset fitting
 result = fit_large_dataset(
-    exponential, x, y,
+    exponential,
+    x,
+    y,
     p0=[2.5, 0.6, 0.2],
     memory_limit_gb=4.0,
-    show_progress=True  # Progress bar for long fits
+    show_progress=True,  # Progress bar for long fits
 )
 ```
 
@@ -164,7 +172,9 @@ sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
 sparsity_pattern = sparse_computer.detect_sparsity(func, x_sample, p0)
 
 if sparse_computer.is_sparse(sparsity_pattern):
-    print(f"Jacobian is {sparse_computer.compute_sparsity_ratio(sparsity_pattern):.1%} sparse")
+    print(
+        f"Jacobian is {sparse_computer.compute_sparsity_ratio(sparsity_pattern):.1%} sparse"
+    )
     # Optimization will automatically use sparse methods
 ```
 
@@ -176,19 +186,12 @@ For datasets that don't fit in memory or are generated on-the-fly:
 from nlsq import StreamingOptimizer, StreamingConfig
 
 # Configure streaming optimization
-config = StreamingConfig(
-    batch_size=10000,
-    max_epochs=100,
-    convergence_tol=1e-6
-)
+config = StreamingConfig(batch_size=10000, max_epochs=100, convergence_tol=1e-6)
 
 optimizer = StreamingOptimizer(config)
 
 # Stream data from file or generator
-result = optimizer.fit_unlimited_data(
-    func, data_generator, x0=p0,
-    n_params=3
-)
+result = optimizer.fit_unlimited_data(func, data_generator, x0=p0, n_params=3)
 ```
 
 ### Key Features for Large Datasets:
@@ -215,6 +218,7 @@ NLSQ **automatically enables double precision** when imported. However, if you i
 ```python
 # If importing JAX first (not recommended)
 from jax import config
+
 config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp

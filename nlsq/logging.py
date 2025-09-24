@@ -428,33 +428,4 @@ def enable_performance_tracking():
     set_global_level(LogLevel.PERFORMANCE)
 
 
-# Usage examples in docstring
-"""
-Examples
---------
-Basic usage:
->>> from nlsq.logging import get_logger
->>> logger = get_logger(__name__)
->>> logger.info("Starting optimization")
-
-Debug mode:
->>> import os
->>> os.environ['NLSQ_DEBUG'] = '1'
->>> logger = get_logger('minpack')
->>> logger.debug("Detailed debug information")
-
-Performance tracking:
->>> logger = get_logger('trf')
->>> with logger.timer('jacobian'):
-...     J = compute_jacobian(x)
->>> logger.optimization_step(iter=1, cost=1.23e-4, gradient_norm=5.67e-3)
-
-JAX compilation tracking:
->>> os.environ['NLSQ_TRACE_JAX'] = '1'
->>> logger.jax_compilation('curve_fit', input_shape=(100, 3))
-
-Save optimization history:
->>> os.environ['NLSQ_SAVE_ITERATIONS'] = './optimization_logs'
->>> # ... run optimization ...
->>> logger.save_iteration_data()
-"""
+# Usage examples - see module docstring for details

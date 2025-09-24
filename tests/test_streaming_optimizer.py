@@ -5,21 +5,20 @@ Tests the StreamingOptimizer for handling unlimited-size datasets
 through streaming and batch processing.
 """
 
-import unittest
-import numpy as np
-import jax.numpy as jnp
-import tempfile
-import h5py
 import os
-from unittest.mock import patch, MagicMock, call
-import io
+import tempfile
+import unittest
+
+import h5py
+import jax.numpy as jnp
+import numpy as np
 
 from nlsq.streaming_optimizer import (
-    StreamingOptimizer,
-    StreamingConfig,
     DataGenerator,
-    fit_unlimited_data,
+    StreamingConfig,
+    StreamingOptimizer,
     create_hdf5_dataset,
+    fit_unlimited_data,
 )
 
 
@@ -40,10 +39,7 @@ class TestStreamingConfig(unittest.TestCase):
     def test_custom_config(self):
         """Test custom configuration."""
         config = StreamingConfig(
-            batch_size=5000,
-            learning_rate=0.001,
-            max_epochs=50,
-            use_adam=True
+            batch_size=5000, learning_rate=0.001, max_epochs=50, use_adam=True
         )
 
         self.assertEqual(config.batch_size, 5000)
@@ -81,7 +77,7 @@ class TestStreamingOptimizer(unittest.TestCase):
         self.assertEqual(optimizer.config.batch_size, 500)
         self.assertEqual(optimizer.iteration, 0)
         self.assertEqual(optimizer.epoch, 0)
-        self.assertEqual(optimizer.best_loss, float('inf'))
+        self.assertEqual(optimizer.best_loss, float("inf"))
         self.assertIsNone(optimizer.best_params)
 
     def test_reset_state(self):
@@ -99,11 +95,12 @@ class TestStreamingOptimizer(unittest.TestCase):
 
         self.assertEqual(optimizer.iteration, 0)
         self.assertEqual(optimizer.epoch, 0)
-        self.assertEqual(optimizer.best_loss, float('inf'))
+        self.assertEqual(optimizer.best_loss, float("inf"))
         self.assertIsNone(optimizer.best_params)
 
     def test_fit_streaming_with_generator(self):
         """Test streaming fit with data generator."""
+
         def data_generator():
             """Generate batches of data."""
             batch_size = 100
@@ -113,32 +110,25 @@ class TestStreamingOptimizer(unittest.TestCase):
                 y = np.array(y) + np.random.normal(0, 0.05, batch_size)
                 yield x, y
 
-        config = StreamingConfig(
-            batch_size=100,
-            max_epochs=2,
-            learning_rate=0.1
-        )
+        config = StreamingConfig(batch_size=100, max_epochs=2, learning_rate=0.1)
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit_streaming(
-            self.model,
-            data_generator(),
-            x0=np.array([2.0, 1.0]),
-            verbose=0
+            self.model, data_generator(), x0=np.array([2.0, 1.0]), verbose=0
         )
 
-        self.assertIn('x', result)
-        self.assertIn('fun', result)
-        self.assertIn('nit', result)
+        self.assertIn("x", result)
+        self.assertIn("fun", result)
+        self.assertIn("nit", result)
 
         # Check convergence (rough check due to SGD nature)
-        fitted_params = result['x']
+        fitted_params = result["x"]
         self.assertEqual(len(fitted_params), 2)
 
     def test_fit_streaming_with_hdf5(self):
         """Test streaming fit with HDF5 file."""
         # Create temporary HDF5 file
-        with tempfile.NamedTemporaryFile(suffix='.h5', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
             h5_file = tmp.name
 
         try:
@@ -149,23 +139,20 @@ class TestStreamingOptimizer(unittest.TestCase):
             y_data = np.array(y_data) + np.random.normal(0, 0.05, n_points)
 
             # Write to HDF5
-            with h5py.File(h5_file, 'w') as f:
-                f.create_dataset('x', data=x_data)
-                f.create_dataset('y', data=y_data)
+            with h5py.File(h5_file, "w") as f:
+                f.create_dataset("x", data=x_data)
+                f.create_dataset("y", data=y_data)
 
             # Fit with streaming
             config = StreamingConfig(batch_size=200, max_epochs=1)
             optimizer = StreamingOptimizer(config)
 
             result = optimizer.fit_streaming(
-                self.model,
-                h5_file,
-                x0=np.array([2.0, 1.0]),
-                verbose=0
+                self.model, h5_file, x0=np.array([2.0, 1.0]), verbose=0
             )
 
-            self.assertIn('x', result)
-            self.assertIn('fun', result)
+            self.assertIn("x", result)
+            self.assertIn("fun", result)
 
         finally:
             # Clean up
@@ -174,10 +161,7 @@ class TestStreamingOptimizer(unittest.TestCase):
 
     def test_adaptive_learning_rate(self):
         """Test learning rate behavior."""
-        config = StreamingConfig(
-            learning_rate=0.1,
-            warmup_steps=10
-        )
+        config = StreamingConfig(learning_rate=0.1, warmup_steps=10)
         optimizer = StreamingOptimizer(config)
 
         # Generate simple data
@@ -192,21 +176,15 @@ class TestStreamingOptimizer(unittest.TestCase):
             yield x, y
 
         result = optimizer.fit_streaming(
-            model,
-            data_gen(),
-            x0=np.array([1.5, 0.5]),
-            verbose=0
+            model, data_gen(), x0=np.array([1.5, 0.5]), verbose=0
         )
 
         # Check that optimization completed
-        self.assertIn('x', result)
+        self.assertIn("x", result)
 
     def test_adam_optimizer(self):
         """Test using Adam optimizer instead of SGD."""
-        config = StreamingConfig(
-            use_adam=True,
-            learning_rate=0.01
-        )
+        config = StreamingConfig(use_adam=True, learning_rate=0.01)
         optimizer = StreamingOptimizer(config)
 
         # Generate test data
@@ -220,19 +198,16 @@ class TestStreamingOptimizer(unittest.TestCase):
             yield x[250:], y[250:]
 
         result = optimizer.fit_streaming(
-            self.model,
-            data_gen(),
-            x0=np.array([2.0, 1.0]),
-            verbose=0
+            self.model, data_gen(), x0=np.array([2.0, 1.0]), verbose=0
         )
 
-        self.assertIn('x', result)
+        self.assertIn("x", result)
 
     def test_convergence_detection(self):
         """Test early stopping on convergence."""
         config = StreamingConfig(
             convergence_tol=0.1,  # Large tolerance for quick convergence
-            max_epochs=100
+            max_epochs=100,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -250,11 +225,11 @@ class TestStreamingOptimizer(unittest.TestCase):
             model,
             data_gen(),  # Use generator
             x0=np.array([2.0, 1.0]),  # Start at true values
-            verbose=0
+            verbose=0,
         )
 
         # Should complete
-        self.assertIn('nit', result)
+        self.assertIn("nit", result)
 
 
 class TestDataGenerator(unittest.TestCase):
@@ -267,16 +242,16 @@ class TestDataGenerator(unittest.TestCase):
 
         # DataGenerator is instantiated with source data
         # Pass both x and y as tuple
-        generator = DataGenerator((x, y), 'array')
+        generator = DataGenerator((x, y), "array")
 
         # Test that generator is created and has expected attributes
         self.assertIsNotNone(generator)
-        self.assertEqual(generator.source_type, 'array')
+        self.assertEqual(generator.source_type, "array")
 
     def test_hdf5_generator(self):
         """Test generating batches from HDF5 file."""
         # Create temporary HDF5 file
-        with tempfile.NamedTemporaryFile(suffix='.h5', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
             h5_file = tmp.name
 
         try:
@@ -284,12 +259,12 @@ class TestDataGenerator(unittest.TestCase):
             x = np.arange(500)
             y = 3 * x - 2
 
-            with h5py.File(h5_file, 'w') as f:
-                f.create_dataset('x', data=x)
-                f.create_dataset('y', data=y)
+            with h5py.File(h5_file, "w") as f:
+                f.create_dataset("x", data=x)
+                f.create_dataset("y", data=y)
 
             # Create generator from HDF5 file
-            generator = DataGenerator(h5_file, 'hdf5')
+            generator = DataGenerator(h5_file, "hdf5")
 
             # Test that generator is created
             self.assertIsNotNone(generator)
@@ -301,7 +276,7 @@ class TestDataGenerator(unittest.TestCase):
     def test_csv_generator(self):
         """Test generating batches from CSV file."""
         # Create temporary CSV file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
             csv_file = tmp.name
             tmp.write("x,y\n")
             for i in range(200):
@@ -309,7 +284,7 @@ class TestDataGenerator(unittest.TestCase):
 
         try:
             # DataGenerator doesn't have from_csv, but can read files
-            generator = DataGenerator(csv_file, 'file')
+            generator = DataGenerator(csv_file, "file")
 
             # Test that generator is created
             self.assertIsNotNone(generator)
@@ -320,6 +295,7 @@ class TestDataGenerator(unittest.TestCase):
 
     def test_infinite_generator(self):
         """Test infinite data generator for continuous streams."""
+
         def infinite_data():
             """Simulate infinite data stream."""
             i = 0
@@ -330,7 +306,7 @@ class TestDataGenerator(unittest.TestCase):
                 i += 1
 
         # DataGenerator can handle generators
-        generator = DataGenerator(infinite_data(), 'generator')
+        generator = DataGenerator(infinite_data(), "generator")
 
         # Test that generator is created
         self.assertIsNotNone(generator)
@@ -346,6 +322,7 @@ class TestFitUnlimitedData(unittest.TestCase):
 
     def test_fit_unlimited_basic(self):
         """Test basic unlimited data fitting."""
+
         # Create data generator
         def data_gen():
             for i in range(5):
@@ -358,12 +335,12 @@ class TestFitUnlimitedData(unittest.TestCase):
             self.model,
             data_gen(),
             x0=[1.5, 0.5],
-            config=StreamingConfig(batch_size=100, max_epochs=2)
+            config=StreamingConfig(batch_size=100, max_epochs=2),
         )
 
-        self.assertIn('x', result)
-        self.assertIn('fun', result)
-        self.assertEqual(len(result['x']), 2)
+        self.assertIn("x", result)
+        self.assertIn("fun", result)
+        self.assertEqual(len(result["x"]), 2)
 
     def test_fit_unlimited_with_bounds(self):
         """Test unlimited data fitting with parameter bounds."""
@@ -384,10 +361,10 @@ class TestFitUnlimitedData(unittest.TestCase):
             data_gen(),
             x0=[1.5, 0.5],
             config=StreamingConfig(batch_size=100),
-            bounds=bounds
+            bounds=bounds,
         )
 
-        params = result['x']
+        params = result["x"]
         # Check bounds are respected
         self.assertTrue(params[0] >= bounds[0][0] and params[0] <= bounds[1][0])
         self.assertTrue(params[1] >= bounds[0][1] and params[1] <= bounds[1][1])
@@ -398,27 +375,24 @@ class TestCreateHDF5Dataset(unittest.TestCase):
 
     def test_create_hdf5_from_function(self):
         """Test creating HDF5 dataset from a function."""
+
         def test_func(x, a, b):
             return a * x + b
 
-        with tempfile.NamedTemporaryFile(suffix='.h5', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
             h5_file = tmp.name
 
         try:
             # Create HDF5 dataset using function
             params = np.array([2.0, 3.0])
             create_hdf5_dataset(
-                h5_file,
-                test_func,
-                params,
-                n_samples=1000,
-                chunk_size=100
+                h5_file, test_func, params, n_samples=1000, chunk_size=100
             )
 
             # Verify dataset was created
-            with h5py.File(h5_file, 'r') as f:
-                self.assertIn('x', f)
-                self.assertIn('y', f)
+            with h5py.File(h5_file, "r") as f:
+                self.assertIn("x", f)
+                self.assertIn("y", f)
 
         finally:
             if os.path.exists(h5_file):
@@ -426,11 +400,12 @@ class TestCreateHDF5Dataset(unittest.TestCase):
 
     def test_create_hdf5_with_metadata(self):
         """Test creating HDF5 dataset with function and verifying it exists."""
+
         # Define a function that works with parameters
         def linear_func(x, a, b):
             return a * x + b
 
-        with tempfile.NamedTemporaryFile(suffix='.h5', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
             h5_file = tmp.name
 
         try:
@@ -440,18 +415,18 @@ class TestCreateHDF5Dataset(unittest.TestCase):
                 linear_func,
                 np.array([2.0, 3.0]),  # Parameters for linear function
                 n_samples=500,
-                chunk_size=100
+                chunk_size=100,
             )
 
             # Verify file was created with correct structure
-            with h5py.File(h5_file, 'r') as f:
-                self.assertIn('x', f)
-                self.assertIn('y', f)
-                self.assertEqual(f['x'].shape, (500,))
-                self.assertEqual(f['y'].shape, (500,))
+            with h5py.File(h5_file, "r") as f:
+                self.assertIn("x", f)
+                self.assertIn("y", f)
+                self.assertEqual(f["x"].shape, (500,))
+                self.assertEqual(f["y"].shape, (500,))
                 # Check metadata
-                self.assertEqual(f.attrs['n_samples'], 500)
-                np.testing.assert_array_equal(f.attrs['true_params'], [2.0, 3.0])
+                self.assertEqual(f.attrs["n_samples"], 500)
+                np.testing.assert_array_equal(f.attrs["true_params"], [2.0, 3.0])
 
         finally:
             if os.path.exists(h5_file):
@@ -459,32 +434,32 @@ class TestCreateHDF5Dataset(unittest.TestCase):
 
     def test_append_to_hdf5(self):
         """Test creating HDF5 dataset with quadratic function."""
-        with tempfile.NamedTemporaryFile(suffix='.h5', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
             h5_file = tmp.name
 
         try:
             # Create dataset with quadratic function
             def quad_func(x, a, b):
                 # Ensure output shape matches input shape
-                return a * x ** 2 + b
+                return a * x**2 + b
 
             create_hdf5_dataset(
                 h5_file,
                 quad_func,
                 np.array([1.0, 0.5]),  # Two parameters
                 n_samples=100,
-                chunk_size=50
+                chunk_size=50,
             )
 
             # Verify dataset was created correctly
-            with h5py.File(h5_file, 'r') as f:
-                self.assertIn('x', f)
-                self.assertIn('y', f)
-                self.assertEqual(f['x'].shape, (100,))
-                self.assertEqual(f['y'].shape, (100,))
+            with h5py.File(h5_file, "r") as f:
+                self.assertIn("x", f)
+                self.assertIn("y", f)
+                self.assertEqual(f["x"].shape, (100,))
+                self.assertEqual(f["y"].shape, (100,))
                 # Check that data was actually written
-                x_data = f['x'][:]
-                y_data = f['y'][:]
+                x_data = f["x"][:]
+                y_data = f["y"][:]
                 self.assertEqual(len(x_data), 100)
                 self.assertEqual(len(y_data), 100)
 
@@ -519,24 +494,21 @@ class TestStreamingIntegration(unittest.TestCase):
             batch_size=1000,
             max_epochs=1,  # Single pass through data
             learning_rate=0.01,
-            use_adam=True
+            use_adam=True,
         )
 
         optimizer = StreamingOptimizer(config)
 
         # Fit the model
         result = optimizer.fit_streaming(
-            model,
-            data_stream(),
-            x0=np.array([1.5, 0.4, 0.8]),
-            verbose=0
+            model, data_stream(), x0=np.array([1.5, 0.4, 0.8]), verbose=0
         )
 
-        self.assertIn('x', result)
-        self.assertIn('fun', result)
+        self.assertIn("x", result)
+        self.assertIn("fun", result)
 
         # Check that we got a result
-        self.assertIn('nit', result)
+        self.assertIn("nit", result)
 
     def test_online_learning_scenario(self):
         """Test online learning with continuously arriving data."""
@@ -553,24 +525,18 @@ class TestStreamingIntegration(unittest.TestCase):
                 y = param_drift * x + np.random.normal(0, 0.05, 20)
                 yield x, y
 
-        config = StreamingConfig(
-            batch_size=20,
-            learning_rate=0.05
-        )
+        config = StreamingConfig(batch_size=20, learning_rate=0.05)
 
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit_streaming(
-            model,
-            online_data(),
-            x0=np.array([2.0]),
-            verbose=0
+            model, online_data(), x0=np.array([2.0]), verbose=0
         )
 
-        self.assertIn('x', result)
+        self.assertIn("x", result)
         # Should have a result
-        self.assertIsNotNone(result['x'][0])
+        self.assertIsNotNone(result["x"][0])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

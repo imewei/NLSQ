@@ -309,37 +309,4 @@ def compare_functions(func1: Callable, func2: Callable) -> bool:
     return hash1 == hash2
 
 
-# Usage examples in docstring
-"""
-Examples
---------
-Basic caching of a JIT-compiled function:
-
->>> from nlsq.caching import get_cached_jit
->>>
->>> def expensive_function(x, y):
-...     return jnp.sum(x @ y)
->>>
->>> # First call compiles the function
->>> compiled = get_cached_jit(expensive_function)
->>> result = compiled(x, y)
->>>
->>> # Second call uses cached version
->>> compiled2 = get_cached_jit(expensive_function)  # No recompilation
-
-Using the decorator:
-
->>> from nlsq.caching import cached_jit
->>>
->>> @cached_jit(static_argnums=(1,))
->>> def parameterized_function(x, n_iter):
-...     for _ in range(n_iter):
-...         x = x @ x
-...     return x
-
-Checking cache statistics:
-
->>> from nlsq.caching import get_cache_stats
->>> stats = get_cache_stats()
->>> print(f"Cache hit rate: {stats['hit_rate']:.2%}")
-"""
+# Usage examples - see module docstring for details

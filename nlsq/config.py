@@ -5,7 +5,7 @@ import os
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Union
+from typing import Optional
 
 
 @dataclass
@@ -35,10 +35,11 @@ class MemoryConfig:
     max_chunk_size : int
         Maximum chunk size in data points
     """
+
     memory_limit_gb: float = 8.0
-    gpu_memory_fraction: Optional[float] = None
+    gpu_memory_fraction: float | None = None
     enable_mixed_precision_fallback: bool = True
-    chunk_size_mb: Optional[int] = None
+    chunk_size_mb: int | None = None
     out_of_memory_strategy: str = "fallback"
     safety_factor: float = 0.8
     auto_chunk_threshold_gb: float = 4.0
@@ -49,20 +50,30 @@ class MemoryConfig:
     def __post_init__(self):
         """Validate configuration values."""
         if not 0.1 <= self.memory_limit_gb <= 1024:
-            raise ValueError(f"memory_limit_gb must be between 0.1 and 1024, got {self.memory_limit_gb}")
+            raise ValueError(
+                f"memory_limit_gb must be between 0.1 and 1024, got {self.memory_limit_gb}"
+            )
 
         if self.gpu_memory_fraction is not None:
             if not 0.0 < self.gpu_memory_fraction <= 1.0:
-                raise ValueError(f"gpu_memory_fraction must be between 0.0 and 1.0, got {self.gpu_memory_fraction}")
+                raise ValueError(
+                    f"gpu_memory_fraction must be between 0.0 and 1.0, got {self.gpu_memory_fraction}"
+                )
 
         if not 0.1 <= self.safety_factor <= 1.0:
-            raise ValueError(f"safety_factor must be between 0.1 and 1.0, got {self.safety_factor}")
+            raise ValueError(
+                f"safety_factor must be between 0.1 and 1.0, got {self.safety_factor}"
+            )
 
         if self.out_of_memory_strategy not in ["fallback", "reduce", "error"]:
-            raise ValueError(f"out_of_memory_strategy must be 'fallback', 'reduce', or 'error', got {self.out_of_memory_strategy}")
+            raise ValueError(
+                f"out_of_memory_strategy must be 'fallback', 'reduce', or 'error', got {self.out_of_memory_strategy}"
+            )
 
         if self.min_chunk_size > self.max_chunk_size:
-            raise ValueError(f"min_chunk_size ({self.min_chunk_size}) cannot be larger than max_chunk_size ({self.max_chunk_size})")
+            raise ValueError(
+                f"min_chunk_size ({self.min_chunk_size}) cannot be larger than max_chunk_size ({self.max_chunk_size})"
+            )
 
 
 @dataclass
@@ -84,21 +95,26 @@ class LargeDatasetConfig:
     solver_selection_thresholds : Dict[str, int]
         Thresholds for automatic solver selection
     """
+
     enable_sampling: bool = True
     sampling_threshold: int = 100_000_000
     max_sampled_size: int = 10_000_000
     sampling_strategy: str = "stratified"
     enable_automatic_solver_selection: bool = True
-    solver_selection_thresholds: Dict[str, int] = field(default_factory=lambda: {
-        "direct": 100_000,      # Use direct solver below this size
-        "iterative": 10_000_000,  # Use iterative solver below this size
-        "chunked": 100_000_000,   # Use chunked processing above this size
-    })
+    solver_selection_thresholds: dict[str, int] = field(
+        default_factory=lambda: {
+            "direct": 100_000,  # Use direct solver below this size
+            "iterative": 10_000_000,  # Use iterative solver below this size
+            "chunked": 100_000_000,  # Use chunked processing above this size
+        }
+    )
 
     def __post_init__(self):
         """Validate configuration values."""
         if self.sampling_strategy not in ["random", "uniform", "stratified"]:
-            raise ValueError(f"sampling_strategy must be 'random', 'uniform', or 'stratified', got {self.sampling_strategy}")
+            raise ValueError(
+                f"sampling_strategy must be 'random', 'uniform', or 'stratified', got {self.sampling_strategy}"
+            )
 
         if self.max_sampled_size > self.sampling_threshold:
             warnings.warn(
@@ -118,8 +134,8 @@ class JAXConfig:
     _instance: Optional["JAXConfig"] = None
     _x64_enabled: bool = False
     _initialized: bool = False
-    _memory_config: Optional[MemoryConfig] = None
-    _large_dataset_config: Optional[LargeDatasetConfig] = None
+    _memory_config: MemoryConfig | None = None
+    _large_dataset_config: LargeDatasetConfig | None = None
     _gpu_memory_configured: bool = False
 
     def __new__(cls) -> "JAXConfig":
@@ -169,11 +185,17 @@ class JAXConfig:
                 if 0.0 < fraction <= 1.0:
                     # Note: JAX memory fraction is handled differently and may not have a direct config option
                     # This is stored in our config for use by downstream components
-                    logging.info(f"Set GPU memory fraction to {fraction} (stored for downstream use)")
+                    logging.info(
+                        f"Set GPU memory fraction to {fraction} (stored for downstream use)"
+                    )
                 else:
-                    warnings.warn(f"Invalid NLSQ_GPU_MEMORY_FRACTION: {gpu_memory_fraction}. Must be between 0.0 and 1.0.")
+                    warnings.warn(
+                        f"Invalid NLSQ_GPU_MEMORY_FRACTION: {gpu_memory_fraction}. Must be between 0.0 and 1.0."
+                    )
             except ValueError:
-                warnings.warn(f"Invalid NLSQ_GPU_MEMORY_FRACTION: {gpu_memory_fraction}. Must be a number.")
+                warnings.warn(
+                    f"Invalid NLSQ_GPU_MEMORY_FRACTION: {gpu_memory_fraction}. Must be a number."
+                )
 
         # Configure memory preallocation
         if os.getenv("NLSQ_DISABLE_GPU_PREALLOCATION") == "1":
@@ -182,7 +204,9 @@ class JAXConfig:
                 logging.info("Disabled GPU memory preallocation")
             except AttributeError:
                 # JAX version may not support this option
-                logging.warning("JAX version does not support jax_preallocate_gpu_memory option")
+                logging.warning(
+                    "JAX version does not support jax_preallocate_gpu_memory option"
+                )
 
         self._gpu_memory_configured = True
 
@@ -199,13 +223,19 @@ class JAXConfig:
             try:
                 memory_config.memory_limit_gb = float(os.getenv("NLSQ_MEMORY_LIMIT_GB"))
             except ValueError:
-                warnings.warn(f"Invalid NLSQ_MEMORY_LIMIT_GB: {os.getenv('NLSQ_MEMORY_LIMIT_GB')}")
+                warnings.warn(
+                    f"Invalid NLSQ_MEMORY_LIMIT_GB: {os.getenv('NLSQ_MEMORY_LIMIT_GB')}"
+                )
 
         if os.getenv("NLSQ_GPU_MEMORY_FRACTION"):
             try:
-                memory_config.gpu_memory_fraction = float(os.getenv("NLSQ_GPU_MEMORY_FRACTION"))
+                memory_config.gpu_memory_fraction = float(
+                    os.getenv("NLSQ_GPU_MEMORY_FRACTION")
+                )
             except ValueError:
-                warnings.warn(f"Invalid NLSQ_GPU_MEMORY_FRACTION: {os.getenv('NLSQ_GPU_MEMORY_FRACTION')}")
+                warnings.warn(
+                    f"Invalid NLSQ_GPU_MEMORY_FRACTION: {os.getenv('NLSQ_GPU_MEMORY_FRACTION')}"
+                )
 
         if os.getenv("NLSQ_DISABLE_MIXED_PRECISION_FALLBACK") == "1":
             memory_config.enable_mixed_precision_fallback = False
@@ -214,20 +244,26 @@ class JAXConfig:
             try:
                 memory_config.chunk_size_mb = int(os.getenv("NLSQ_CHUNK_SIZE_MB"))
             except ValueError:
-                warnings.warn(f"Invalid NLSQ_CHUNK_SIZE_MB: {os.getenv('NLSQ_CHUNK_SIZE_MB')}")
+                warnings.warn(
+                    f"Invalid NLSQ_CHUNK_SIZE_MB: {os.getenv('NLSQ_CHUNK_SIZE_MB')}"
+                )
 
         if os.getenv("NLSQ_OOM_STRATEGY"):
             strategy = os.getenv("NLSQ_OOM_STRATEGY")
             if strategy in ["fallback", "reduce", "error"]:
                 memory_config.out_of_memory_strategy = strategy
             else:
-                warnings.warn(f"Invalid NLSQ_OOM_STRATEGY: {strategy}. Must be 'fallback', 'reduce', or 'error'.")
+                warnings.warn(
+                    f"Invalid NLSQ_OOM_STRATEGY: {strategy}. Must be 'fallback', 'reduce', or 'error'."
+                )
 
         if os.getenv("NLSQ_SAFETY_FACTOR"):
             try:
                 memory_config.safety_factor = float(os.getenv("NLSQ_SAFETY_FACTOR"))
             except ValueError:
-                warnings.warn(f"Invalid NLSQ_SAFETY_FACTOR: {os.getenv('NLSQ_SAFETY_FACTOR')}")
+                warnings.warn(
+                    f"Invalid NLSQ_SAFETY_FACTOR: {os.getenv('NLSQ_SAFETY_FACTOR')}"
+                )
 
         if os.getenv("NLSQ_DISABLE_PROGRESS_REPORTING") == "1":
             memory_config.progress_reporting = False
@@ -248,22 +284,32 @@ class JAXConfig:
 
         if os.getenv("NLSQ_SAMPLING_THRESHOLD"):
             try:
-                large_dataset_config.sampling_threshold = int(os.getenv("NLSQ_SAMPLING_THRESHOLD"))
+                large_dataset_config.sampling_threshold = int(
+                    os.getenv("NLSQ_SAMPLING_THRESHOLD")
+                )
             except ValueError:
-                warnings.warn(f"Invalid NLSQ_SAMPLING_THRESHOLD: {os.getenv('NLSQ_SAMPLING_THRESHOLD')}")
+                warnings.warn(
+                    f"Invalid NLSQ_SAMPLING_THRESHOLD: {os.getenv('NLSQ_SAMPLING_THRESHOLD')}"
+                )
 
         if os.getenv("NLSQ_MAX_SAMPLED_SIZE"):
             try:
-                large_dataset_config.max_sampled_size = int(os.getenv("NLSQ_MAX_SAMPLED_SIZE"))
+                large_dataset_config.max_sampled_size = int(
+                    os.getenv("NLSQ_MAX_SAMPLED_SIZE")
+                )
             except ValueError:
-                warnings.warn(f"Invalid NLSQ_MAX_SAMPLED_SIZE: {os.getenv('NLSQ_MAX_SAMPLED_SIZE')}")
+                warnings.warn(
+                    f"Invalid NLSQ_MAX_SAMPLED_SIZE: {os.getenv('NLSQ_MAX_SAMPLED_SIZE')}"
+                )
 
         if os.getenv("NLSQ_SAMPLING_STRATEGY"):
             strategy = os.getenv("NLSQ_SAMPLING_STRATEGY")
             if strategy in ["random", "uniform", "stratified"]:
                 large_dataset_config.sampling_strategy = strategy
             else:
-                warnings.warn(f"Invalid NLSQ_SAMPLING_STRATEGY: {strategy}. Must be 'random', 'uniform', or 'stratified'.")
+                warnings.warn(
+                    f"Invalid NLSQ_SAMPLING_STRATEGY: {strategy}. Must be 'random', 'uniform', or 'stratified'."
+                )
 
         if os.getenv("NLSQ_DISABLE_AUTO_SOLVER_SELECTION") == "1":
             large_dataset_config.enable_automatic_solver_selection = False
@@ -360,10 +406,13 @@ class JAXConfig:
         # Apply GPU memory settings immediately if possible
         try:
             from jax import config as jax_config
+
             if config.gpu_memory_fraction is not None:
                 # Note: JAX memory fraction handling varies by version and backend
                 # This is stored in our config for use by downstream components
-                logging.info(f"Updated GPU memory fraction to {config.gpu_memory_fraction} (stored for downstream use)")
+                logging.info(
+                    f"Updated GPU memory fraction to {config.gpu_memory_fraction} (stored for downstream use)"
+                )
         except ImportError:
             pass  # JAX not available
 
@@ -511,8 +560,8 @@ def get_memory_config() -> MemoryConfig:
 
 def set_memory_limits(
     memory_limit_gb: float,
-    gpu_memory_fraction: Optional[float] = None,
-    safety_factor: float = 0.8
+    gpu_memory_fraction: float | None = None,
+    safety_factor: float = 0.8,
 ):
     """Set memory limits for NLSQ operations.
 
@@ -585,7 +634,7 @@ def configure_for_large_datasets(
     enable_sampling: bool = True,
     enable_chunking: bool = True,
     progress_reporting: bool = True,
-    mixed_precision_fallback: bool = True
+    mixed_precision_fallback: bool = True,
 ):
     """Configure NLSQ for optimal large dataset performance.
 
@@ -619,7 +668,9 @@ def configure_for_large_datasets(
     memory_config = MemoryConfig(
         memory_limit_gb=memory_limit_gb,
         enable_mixed_precision_fallback=mixed_precision_fallback,
-        auto_chunk_threshold_gb=memory_limit_gb * 0.5 if enable_chunking else float('inf'),
+        auto_chunk_threshold_gb=memory_limit_gb * 0.5
+        if enable_chunking
+        else float("inf"),
         progress_reporting=progress_reporting,
     )
     JAXConfig.set_memory_config(memory_config)
@@ -631,12 +682,16 @@ def configure_for_large_datasets(
     )
     JAXConfig.set_large_dataset_config(large_dataset_config)
 
-    logging.info(f"Configured NLSQ for large datasets:")
+    logging.info("Configured NLSQ for large datasets:")
     logging.info(f"  Memory limit: {memory_limit_gb} GB")
     logging.info(f"  Sampling: {'enabled' if enable_sampling else 'disabled'}")
     logging.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
-    logging.info(f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}")
-    logging.info(f"  Mixed precision fallback: {'enabled' if mixed_precision_fallback else 'disabled'}")
+    logging.info(
+        f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}"
+    )
+    logging.info(
+        f"  Mixed precision fallback: {'enabled' if mixed_precision_fallback else 'disabled'}"
+    )
 
 
 def get_large_dataset_config() -> LargeDatasetConfig:

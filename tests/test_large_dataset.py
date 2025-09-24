@@ -6,25 +6,22 @@ and optimized fitting for datasets >20M points.
 """
 
 import unittest
-import numpy as np
+from unittest.mock import MagicMock, patch
+
 import jax.numpy as jnp
-from unittest.mock import patch, MagicMock
-import warnings
-import tempfile
-import os
+import numpy as np
 
 from nlsq import (
-    estimate_memory_requirements,
-    curve_fit_large,
     LargeDatasetFitter,
+    curve_fit_large,
+    estimate_memory_requirements,
     fit_large_dataset,
 )
 from nlsq.large_dataset import (
-    LDMemoryConfig,
-    DatasetStats,
-    MemoryEstimator,
     DataChunker,
-    ProgressReporter,
+    DatasetStats,
+    LDMemoryConfig,
+    MemoryEstimator,
 )
 
 
@@ -129,17 +126,17 @@ class TestLargeDatasetFitter(unittest.TestCase):
 
         # Small dataset - should fit in memory
         recs = fitter.get_memory_recommendations(100_000, 3)
-        self.assertEqual(recs['processing_strategy'], 'single_chunk')
-        self.assertEqual(recs['recommendations']['n_chunks'], 1)
+        self.assertEqual(recs["processing_strategy"], "single_chunk")
+        self.assertEqual(recs["recommendations"]["n_chunks"], 1)
 
         # Large dataset - should require chunking
         recs = fitter.get_memory_recommendations(10_000_000, 3)
-        self.assertEqual(recs['processing_strategy'], 'chunked')
-        self.assertGreater(recs['recommendations']['n_chunks'], 1)
+        self.assertEqual(recs["processing_strategy"], "chunked")
+        self.assertGreater(recs["recommendations"]["n_chunks"], 1)
 
         # Very large dataset - may recommend sampling
         recs = fitter.get_memory_recommendations(100_000_000, 5)
-        self.assertIn(recs['processing_strategy'], ['chunked', 'sampling_recommended'])
+        self.assertIn(recs["processing_strategy"], ["chunked", "sampling_recommended"])
 
     def test_fit_small_dataset(self):
         """Test fitting a small dataset that fits in memory."""
@@ -163,12 +160,14 @@ class TestLargeDatasetFitter(unittest.TestCase):
         y = np.array(y) + np.random.normal(0, 0.05, n_points)
 
         # Force chunking with very small memory limit
-        fitter = LargeDatasetFitter(memory_limit_gb=0.001)  # Very small to force chunking
+        fitter = LargeDatasetFitter(
+            memory_limit_gb=0.001
+        )  # Very small to force chunking
         result = fitter.fit(self.model, x, y, p0=[2.0, 1.0])
 
         self.assertTrue(result.success)
         # Should have used multiple chunks (check if n_chunks is available)
-        if hasattr(result, 'n_chunks'):
+        if hasattr(result, "n_chunks"):
             self.assertGreater(result.n_chunks, 1)
         np.testing.assert_allclose(result.popt, self.true_params, rtol=0.2)
 
@@ -206,9 +205,7 @@ class TestCurveFitLarge(unittest.TestCase):
         y = np.array(y) + np.random.normal(0, 0.05, n_points)
 
         popt, pcov = curve_fit_large(
-            self.model, x, y,
-            p0=[2.5, 1.0, 0.3],
-            memory_limit_gb=2.0
+            self.model, x, y, p0=[2.5, 1.0, 0.3], memory_limit_gb=2.0
         )
 
         self.assertEqual(len(popt), 3)
@@ -226,10 +223,7 @@ class TestCurveFitLarge(unittest.TestCase):
         bounds = ([0, 0, 0], [10, 10, 2])
 
         popt, pcov = curve_fit_large(
-            self.model, x, y,
-            p0=[2.5, 1.0, 0.3],
-            bounds=bounds,
-            memory_limit_gb=1.0
+            self.model, x, y, p0=[2.5, 1.0, 0.3], bounds=bounds, memory_limit_gb=1.0
         )
 
         # Check bounds are respected
@@ -247,10 +241,12 @@ class TestCurveFitLarge(unittest.TestCase):
 
         # Simulate large dataset behavior with small memory limit
         popt, pcov = curve_fit_large(
-            self.model, x, y,
+            self.model,
+            x,
+            y,
             p0=[2.5, 1.0, 0.3],
             memory_limit_gb=0.01,  # Very small to force extreme chunking
-            show_progress=False
+            show_progress=False,
         )
 
         self.assertEqual(len(popt), 3)
@@ -310,14 +306,16 @@ class TestSamplingFunctionality(unittest.TestCase):
         config = LDMemoryConfig(
             enable_sampling=True,
             sampling_threshold=50_000_000,
-            max_sampled_size=10_000_000
+            max_sampled_size=10_000_000,
         )
 
         # Check if the config affects recommendations
         fitter = LargeDatasetFitter(config=config)
         recs = fitter.get_memory_recommendations(100_000_000, 5)
         # Very large datasets may recommend sampling or chunking
-        self.assertIn(recs['processing_strategy'], ['chunked', 'sampling', 'sampling_recommended'])
+        self.assertIn(
+            recs["processing_strategy"], ["chunked", "sampling", "sampling_recommended"]
+        )
 
 
 class TestMemoryEstimator(unittest.TestCase):
@@ -349,24 +347,20 @@ class TestMemoryEstimator(unittest.TestCase):
 
         # Small dataset - single chunk
         chunk_size, stats = MemoryEstimator.calculate_optimal_chunk_size(
-            n_points=10_000,
-            n_params=3,
-            memory_config=config
+            n_points=10_000, n_params=3, memory_config=config
         )
         self.assertEqual(chunk_size, 10_000)  # All in one chunk
         self.assertEqual(stats.n_chunks, 1)
 
         # Large dataset - multiple chunks
         chunk_size, stats = MemoryEstimator.calculate_optimal_chunk_size(
-            n_points=50_000_000,
-            n_params=5,
-            memory_config=config
+            n_points=50_000_000, n_params=5, memory_config=config
         )
         self.assertLess(chunk_size, 50_000_000)  # Should be chunked
         self.assertGreater(stats.n_chunks, 1)
         self.assertEqual(chunk_size, stats.recommended_chunk_size)
 
-    @patch('nlsq.large_dataset.psutil')
+    @patch("nlsq.large_dataset.psutil")
     def test_available_memory_detection(self, mock_psutil):
         """Test detecting available system memory."""
         # Mock psutil to return specific memory info
@@ -401,10 +395,12 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
 
         # Step 2: Fit with automatic strategy selection
         result = fit_large_dataset(
-            self.model, x, y,
+            self.model,
+            x,
+            y,
             p0=[2.0, 1.0],
             memory_limit_gb=0.1,  # Small limit to force chunking
-            show_progress=False
+            show_progress=False,
         )
 
         self.assertTrue(result.success)
@@ -412,24 +408,19 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
 
     def test_memory_config_context_manager(self):
         """Test using memory configuration context manager."""
-        from nlsq import memory_context, MemoryConfig
+        from nlsq import MemoryConfig, memory_context
 
         n_points = 10_000
         x = np.linspace(0, 5, n_points)
         y = self.model(x, *self.true_params)
         y = np.array(y) + np.random.normal(0, 0.05, n_points)
 
-        config = MemoryConfig(
-            memory_limit_gb=2.0,
-            enable_mixed_precision_fallback=True
-        )
+        config = MemoryConfig(memory_limit_gb=2.0, enable_mixed_precision_fallback=True)
 
         with memory_context(config):
             # Fit within the context
             popt, pcov = curve_fit_large(
-                self.model, x, y,
-                p0=[2.0, 1.0],
-                memory_limit_gb=1.0
+                self.model, x, y, p0=[2.0, 1.0], memory_limit_gb=1.0
             )
 
             np.testing.assert_allclose(popt, self.true_params, rtol=0.1)
@@ -448,7 +439,7 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
 
         self.assertTrue(result.success)
         # Check n_chunks if it exists in the result
-        if hasattr(result, 'n_chunks'):
+        if hasattr(result, "n_chunks"):
             self.assertGreater(result.n_chunks, 1)
         np.testing.assert_allclose(result.popt, self.true_params, rtol=0.2)
 
@@ -473,7 +464,7 @@ class TestErrorHandling(unittest.TestCase):
 
         # Should fail gracefully
         self.assertFalse(result.success)
-        self.assertIn('lengths', result.message.lower())
+        self.assertIn("lengths", result.message.lower())
 
     def test_convergence_failure_handling(self):
         """Test handling of convergence failures."""
@@ -484,9 +475,11 @@ class TestErrorHandling(unittest.TestCase):
 
         fitter = LargeDatasetFitter()
         result = fitter.fit(
-            model, x, y,
+            model,
+            x,
+            y,
             p0=[1.0, 1.0, 0.0, 0.0],
-            max_nfev=10  # Very limited iterations
+            max_nfev=10,  # Very limited iterations
         )
 
         # Should handle failure gracefully
@@ -494,5 +487,5 @@ class TestErrorHandling(unittest.TestCase):
         self.assertIsNotNone(result.message)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

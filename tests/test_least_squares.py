@@ -521,7 +521,7 @@ class BoundsMixin:
             bounds=(1.0, [2.0, 3.0]),
             method=self.method,
         )
-        # 1-D array wont't be broadcasted
+        # 1-D array won't be broadcasted
         assert_raises(
             ValueError,
             least_squares,

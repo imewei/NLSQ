@@ -311,7 +311,7 @@ class TrustRegionJITFunctions:
             d: jnp.ndarray,
             alpha: float = 0.0,
             max_iter: int = None,
-            tol: float = 1e-6
+            tol: float = 1e-6,
         ) -> tuple[jnp.ndarray, jnp.ndarray, int]:
             """Solve the normal equations using conjugate gradient method.
 
@@ -392,7 +392,7 @@ class TrustRegionJITFunctions:
             d: jnp.ndarray,
             Delta: float,
             alpha: float = 0.0,
-            max_iter: int = None
+            max_iter: int = None,
         ) -> jnp.ndarray:
             """Solve trust region subproblem using conjugate gradient.
 
@@ -430,7 +430,7 @@ class TrustRegionJITFunctions:
             f_zeros: jnp.ndarray,
             Delta: float,
             alpha: float = 0.0,
-            max_iter: int = None
+            max_iter: int = None,
         ) -> jnp.ndarray:
             """Solve trust region subproblem with bounds using conjugate gradient."""
             # Augment the system for bounds
@@ -887,7 +887,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     # Use exact SVD solver (default)
                     svd_output = self.svd_no_bounds(J, d_jnp, f)
                     J_h = svd_output[0]
-                    s, V, uf = [np.array(val) for val in svd_output[2:]]
+                    s, V, uf = (np.array(val) for val in svd_output[2:])
 
                 actual_reduction = -1
                 inner_loop_count = 0
@@ -903,7 +903,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         # CG path: step already computed
                         # For subsequent iterations in inner loop, re-solve with updated alpha
                         if inner_loop_count > 1:
-                            step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
+                            step_h = self.solve_tr_subproblem_cg(
+                                J, f, d_jnp, Delta, alpha
+                            )
                         _n_iter = 1  # Dummy value for compatibility
                     else:
                         # SVD path: use exact solver
@@ -1213,7 +1215,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 # Use exact SVD solver (default)
                 output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
                 J_h = output[0]
-                s, V, uf = [np.array(val) for val in output[2:]]
+                s, V, uf = (np.array(val) for val in output[2:])
 
             # theta controls step back step ratio from the bounds.
             theta = max(0.995, 1 - g_norm)
@@ -1652,7 +1654,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 # Use conjugate gradient solver (timed)
                 st = time.time()
                 J_h = (J * d_jnp).block_until_ready()
-                step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha).block_until_ready()
+                step_h = self.solve_tr_subproblem_cg(
+                    J, f, d_jnp, Delta, alpha
+                ).block_until_ready()
                 svd_times.append(time.time() - st)
 
                 st = time.time()
@@ -1667,7 +1671,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 J_h = svd_output[0]
 
                 st = time.time()
-                s, V, uf = [np.array(val) for val in svd_output[2:]]
+                s, V, uf = (np.array(val) for val in svd_output[2:])
                 svd_ctimes.append(time.time() - st)
 
             actual_reduction = -1
@@ -1684,7 +1688,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     # CG path: step already computed
                     # For subsequent iterations in inner loop, re-solve with updated alpha
                     if inner_loop_count > 1:
-                        step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha).block_until_ready()
+                        step_h = self.solve_tr_subproblem_cg(
+                            J, f, d_jnp, Delta, alpha
+                        ).block_until_ready()
                     _n_iter = 1  # Dummy value for compatibility
                 else:
                     # SVD path: use exact solver

@@ -7,7 +7,7 @@ NLSQ: Nonlinear least squares curve fitting for the GPU/TPU
 
 `Quickstart <#quickstart-colab-in-the-cloud>`__ \| `Install
 guide <#installation>`__ \| `ArXiv
-Paper <https://doi.org/10.48550/arXiv.2208.12187>`__ \| :doc:`API Docs <autodoc/modules>` 
+Paper <https://doi.org/10.48550/arXiv.2208.12187>`__ \| :doc:`API Docs <autodoc/modules>`
 
 What is NLSQ?
 ---------------
@@ -36,8 +36,10 @@ function. Below we show how to fit a linear function with some data
    import numpy as np
    from nlsq import CurveFit
 
+
    def linear(x, m, b):  # fit function
        return m * x + b
+
 
    x = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
    y = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
@@ -55,6 +57,7 @@ example we show an exponential fit function
 .. code:: python
 
    import jax.numpy as jnp
+
 
    def exponential(x, a, b):  # fit function
        return jnp.exp(a * x) + b
@@ -127,13 +130,13 @@ The ``LargeDatasetFitter`` class provides automatic memory management:
    x = np.linspace(0, 10, 50_000_000)
    y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, len(x))
 
+
    def exponential(x, a, b, c):
        return a * np.exp(-b * x) + c
 
+
    # Fit with automatic chunking
-   result = fitter.fit_with_progress(
-       exponential, x, y, p0=[2.5, 0.6, 0.2]
-   )
+   result = fitter.fit_with_progress(exponential, x, y, p0=[2.5, 0.6, 0.2])
 
 Convenience Function
 ~~~~~~~~~~~~~~~~~~~~
@@ -145,10 +148,12 @@ For simple use cases, use the ``fit_large_dataset`` function:
    from nlsq import fit_large_dataset
 
    result = fit_large_dataset(
-       exponential, x, y,
+       exponential,
+       x,
+       y,
        p0=[2.5, 0.6, 0.2],
        memory_limit_gb=4.0,
-       show_progress=True  # Show progress bar
+       show_progress=True,  # Show progress bar
    )
 
 Sparse Jacobian Optimization
@@ -167,9 +172,7 @@ For problems with sparse Jacobian structure:
    # Optimize with sparse methods if beneficial
    if sparse_computer.is_sparse(sparsity_pattern):
        optimizer = SparseOptimizer()
-       result = optimizer.optimize_with_sparsity(
-           func, x, y, p0, sparsity_pattern
-       )
+       result = optimizer.optimize_with_sparsity(func, x, y, p0, sparsity_pattern)
 
 Streaming Optimizer
 ~~~~~~~~~~~~~~~~~~~
@@ -183,16 +186,11 @@ For datasets that don't fit in memory or are generated on-the-fly:
 
    # Create or load HDF5 dataset
    create_hdf5_dataset(
-       "large_data.h5", func, params,
-       n_samples=100_000_000, chunk_size=10000
+       "large_data.h5", func, params, n_samples=100_000_000, chunk_size=10000
    )
 
    # Configure streaming
-   config = StreamingConfig(
-       batch_size=10000,
-       max_epochs=100,
-       convergence_tol=1e-6
-   )
+   config = StreamingConfig(batch_size=10000, max_epochs=100, convergence_tol=1e-6)
 
    optimizer = StreamingOptimizer(config)
    result = optimizer.fit_from_hdf5("large_data.h5", func, p0)
@@ -209,10 +207,7 @@ NLSQ includes iterative solvers that reduce memory usage:
    cf = CurveFit()
 
    # Use conjugate gradient solver (memory efficient)
-   popt, pcov = cf.curve_fit(
-       func, x, y, p0,
-       solver='cg'  # Or 'lsqr' for sparse problems
-   )
+   popt, pcov = cf.curve_fit(func, x, y, p0, solver="cg")  # Or 'lsqr' for sparse problems
 
 Key Features:
 
@@ -245,6 +240,7 @@ import JAX before NLSQ, you must enable it manually:
 
    # If importing JAX first (not recommended)
    from jax import config
+
    config.update("jax_enable_x64", True)
 
    import jax.numpy as jnp

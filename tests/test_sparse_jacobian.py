@@ -6,11 +6,9 @@ for problems with sparse structure.
 """
 
 import unittest
-import numpy as np
-import jax
+
 import jax.numpy as jnp
-from unittest.mock import patch, MagicMock
-import warnings
+import numpy as np
 
 from nlsq.sparse_jacobian import (
     SparseJacobianComputer,
@@ -35,6 +33,7 @@ class TestSparseJacobianComputer(unittest.TestCase):
 
     def test_sparse_function_detection(self):
         """Test detecting sparsity in a sparse function."""
+
         # Function where each output depends on only some inputs
         def sparse_func(x, a, b, c):
             result = jnp.zeros_like(x)
@@ -65,15 +64,16 @@ class TestSparseJacobianComputer(unittest.TestCase):
 
     def test_block_diagonal_jacobian(self):
         """Test detecting block-diagonal Jacobian structure."""
+
         # Function with block-diagonal Jacobian
         def block_func(x, a, b):
             # Simple numpy implementation for clearer sparsity
             y = np.zeros_like(x)
             n = len(x)
             # First half depends only on 'a'
-            y[:n//2] = a * x[:n//2]
+            y[: n // 2] = a * x[: n // 2]
             # Second half depends only on 'b'
-            y[n//2:] = b * x[n//2:] ** 2
+            y[n // 2 :] = b * x[n // 2 :] ** 2
             return y
 
         x = np.linspace(0, 10, 100)
@@ -89,6 +89,7 @@ class TestSparseJacobianComputer(unittest.TestCase):
 
     def test_compute_sparse_jacobian(self):
         """Test computing sparse Jacobian matrix."""
+
         # Simple linear function for predictable Jacobian
         def linear_func(x, a, b):
             return a * x + b
@@ -105,6 +106,7 @@ class TestSparseJacobianComputer(unittest.TestCase):
 
     def test_sparse_vs_dense_jacobian(self):
         """Compare sparse and dense Jacobian computation."""
+
         # Function with known sparse structure
         def sparse_func(x, a, b, c):
             result = jnp.zeros_like(x)
@@ -127,12 +129,15 @@ class TestSparseJacobianComputer(unittest.TestCase):
 
     def test_adaptive_threshold(self):
         """Test adaptive threshold selection for sparsity detection."""
+
         # Function with varying magnitudes
         def varying_func(x, a, b):
-            return jnp.concatenate([
-                a * x[:5] * 1e-8,  # Very small values
-                b * x[5:] * 1e3    # Large values
-            ])
+            return jnp.concatenate(
+                [
+                    a * x[:5] * 1e-8,  # Very small values
+                    b * x[5:] * 1e3,  # Large values
+                ]
+            )
 
         x = np.linspace(1, 10, 10)
         params = np.array([1.0, 2.0])
@@ -180,6 +185,7 @@ class TestSparseOptimizer(unittest.TestCase):
 
     def test_optimize_with_sparse_jacobian(self):
         """Test optimization with sparse Jacobian."""
+
         # Create a problem with sparse structure
         def sparse_residual(params, x):
             a, b, c = params
@@ -207,7 +213,7 @@ class TestSparseOptimizer(unittest.TestCase):
             lambda x, *p: sparse_residual(p, x),
             x0=np.array([1.5, 1.0, 0.5]),
             xdata=x,
-            ydata=y_obs
+            ydata=y_obs,
         )
 
         # Handle both tuple (from curve_fit) and dict (from sparse) returns
@@ -219,11 +225,11 @@ class TestSparseOptimizer(unittest.TestCase):
             np.testing.assert_allclose(popt, true_params, rtol=0.1)
         else:
             # dict or OptimizeResult from sparse methods
-            self.assertTrue(hasattr(result, 'x') or 'x' in result)
-            if hasattr(result, 'x'):
+            self.assertTrue(hasattr(result, "x") or "x" in result)
+            if hasattr(result, "x"):
                 np.testing.assert_allclose(result.x, true_params, rtol=0.1)
-            elif 'x' in result:
-                np.testing.assert_allclose(result['x'], true_params, rtol=0.1)
+            elif "x" in result:
+                np.testing.assert_allclose(result["x"], true_params, rtol=0.1)
 
     def test_memory_savings_calculation(self):
         """Test that sparsity detection works."""
@@ -239,13 +245,14 @@ class TestDetectJacobianSparsity(unittest.TestCase):
 
     def test_basic_sparsity_detection(self):
         """Test basic sparsity detection."""
+
         # Function with clear sparse structure
         def func(x, a, b):
             y = jnp.zeros_like(x)
             # First half depends on 'a'
-            y = y.at[:len(x)//2].set(a * x[:len(x)//2])
+            y = y.at[: len(x) // 2].set(a * x[: len(x) // 2])
             # Second half depends on 'b'
-            y = y.at[len(x)//2:].set(b * x[len(x)//2:])
+            y = y.at[len(x) // 2 :].set(b * x[len(x) // 2 :])
             return y
 
         x = np.linspace(0, 10, 100)
@@ -257,17 +264,18 @@ class TestDetectJacobianSparsity(unittest.TestCase):
         self.assertAlmostEqual(sparsity, 0.5, places=1)
 
         # Check info dictionary
-        self.assertIn('sparsity', info)
-        self.assertIn('nnz', info)
-        self.assertIn('avg_nnz_per_row', info)
-        self.assertIn('avg_nnz_per_col', info)
-        self.assertIn('memory_reduction', info)
+        self.assertIn("sparsity", info)
+        self.assertIn("nnz", info)
+        self.assertIn("avg_nnz_per_row", info)
+        self.assertIn("avg_nnz_per_col", info)
+        self.assertIn("memory_reduction", info)
 
         # Memory reduction should be approximately sparsity percentage
-        self.assertAlmostEqual(info['memory_reduction'], sparsity * 100, places=0)
+        self.assertAlmostEqual(info["memory_reduction"], sparsity * 100, places=0)
 
     def test_dense_function_detection(self):
         """Test detection on dense (non-sparse) function."""
+
         # Fully coupled function
         def dense_func(x, a, b, c):
             return a * x + b * x**2 + c * x**3
@@ -282,29 +290,28 @@ class TestDetectJacobianSparsity(unittest.TestCase):
         # Should detect very low sparsity (dense)
         self.assertLess(sparsity, 0.1)
         # Most elements should be non-zero
-        self.assertGreater(info['nnz'], 140)  # Nearly all non-zero
+        self.assertGreater(info["nnz"], 140)  # Nearly all non-zero
 
     def test_custom_threshold(self):
         """Test sparsity detection with custom threshold."""
+
         # Function with small but non-zero elements
         def func(x, a, b):
-            return jnp.array([
-                a * x[0] + 1e-7 * b,  # Small coupling
-                b * x[1] + 1e-7 * a   # Small coupling
-            ])
+            return jnp.array(
+                [
+                    a * x[0] + 1e-7 * b,  # Small coupling
+                    b * x[1] + 1e-7 * a,  # Small coupling
+                ]
+            )
 
         x = np.array([1.0, 2.0])
         params = np.array([1.0, 2.0])
 
         # With small threshold - detect coupling
-        sparsity1, _ = detect_jacobian_sparsity(
-            func, params, x, threshold=1e-10
-        )
+        sparsity1, _ = detect_jacobian_sparsity(func, params, x, threshold=1e-10)
 
         # With larger threshold - ignore small coupling
-        sparsity2, _ = detect_jacobian_sparsity(
-            func, params, x, threshold=1e-5
-        )
+        sparsity2, _ = detect_jacobian_sparsity(func, params, x, threshold=1e-5)
 
         # Larger threshold should give more sparsity
         self.assertGreater(sparsity2, sparsity1)
@@ -315,6 +322,7 @@ class TestSparseJacobianIntegration(unittest.TestCase):
 
     def test_large_sparse_problem(self):
         """Test optimization of large sparse problem."""
+
         # Create banded matrix problem (common sparse structure)
         def banded_system(params, n=1000):
             """Create a banded system where each param affects local region."""
@@ -353,7 +361,7 @@ class TestSparseJacobianIntegration(unittest.TestCase):
         def wrapped_func(x, *params):
             # Compute full objective and return subset
             full_result = objective(params)
-            return full_result[:len(x)] if len(full_result) > len(x) else full_result
+            return full_result[: len(x)] if len(full_result) > len(x) else full_result
 
         pattern, sparsity = computer.detect_sparsity_pattern(
             wrapped_func, x0, xdata_sample, n_samples=100
@@ -367,10 +375,7 @@ class TestSparseJacobianIntegration(unittest.TestCase):
         optimizer._detected_sparsity = sparsity
 
         result = optimizer.optimize_with_sparsity(
-            lambda x, *p: objective(p),
-            x0,
-            np.arange(n_data),
-            np.zeros(n_data)
+            lambda x, *p: objective(p), x0, np.arange(n_data), np.zeros(n_data)
         )
 
         # Check that we got a result
@@ -378,6 +383,7 @@ class TestSparseJacobianIntegration(unittest.TestCase):
 
     def test_sparse_vs_dense_performance(self):
         """Compare performance of sparse vs dense methods."""
+
         # Problem with block-sparse structure
         def block_sparse_func(x, params):
             n_blocks = 4
@@ -390,8 +396,8 @@ class TestSparseJacobianIntegration(unittest.TestCase):
                 param_idx = i * 2
                 if param_idx < len(params):
                     y = y.at[start:end].set(
-                        params[param_idx] * x[start:end] +
-                        params[param_idx + 1] * x[start:end] ** 2
+                        params[param_idx] * x[start:end]
+                        + params[param_idx + 1] * x[start:end] ** 2
                     )
             return y
 
@@ -407,16 +413,13 @@ class TestSparseJacobianIntegration(unittest.TestCase):
             return block_sparse_func(x, params) - y_obs
 
         # Optimize with sparse detection
-        optimizer_sparse = SparseOptimizer(
-            min_sparsity=0.3,
-            auto_detect=True
-        )
+        optimizer_sparse = SparseOptimizer(min_sparsity=0.3, auto_detect=True)
 
         result_sparse = optimizer_sparse.optimize_with_sparsity(
             lambda xd, *p: block_sparse_func(xd, p),
             x0=np.zeros(n_params),
             xdata=x,
-            ydata=y_obs
+            ydata=y_obs,
         )
 
         # Check that we got a result (tuple or object with attributes)
@@ -425,7 +428,7 @@ class TestSparseJacobianIntegration(unittest.TestCase):
         if isinstance(result_sparse, tuple):
             self.assertEqual(len(result_sparse), 2)  # popt, pcov
         else:
-            self.assertTrue(hasattr(result_sparse, 'x') or 'x' in result_sparse)
+            self.assertTrue(hasattr(result_sparse, "x") or "x" in result_sparse)
 
 
 class TestSparseJacobianEdgeCases(unittest.TestCase):
@@ -433,6 +436,7 @@ class TestSparseJacobianEdgeCases(unittest.TestCase):
 
     def test_zero_jacobian(self):
         """Test handling of zero Jacobian."""
+
         # Constant function has zero Jacobian
         def constant_func(x, a, b):
             return jnp.ones_like(x) * 5.0
@@ -450,22 +454,22 @@ class TestSparseJacobianEdgeCases(unittest.TestCase):
 
     def test_single_parameter(self):
         """Test with single parameter."""
+
         def single_param_func(x, a):
             return a * x
 
         x = np.array([1.0, 2.0, 3.0])
         params = np.array([2.0])
 
-        sparsity, info = detect_jacobian_sparsity(
-            single_param_func, params, x
-        )
+        sparsity, info = detect_jacobian_sparsity(single_param_func, params, x)
 
         # Single parameter should be fully dense
         self.assertEqual(sparsity, 0.0)
-        self.assertEqual(info['nnz'], 3)  # 3 data points, 1 param
+        self.assertEqual(info["nnz"], 3)  # 3 data points, 1 param
 
     def test_empty_data(self):
         """Test handling of empty data."""
+
         def func(x, a):
             return a * x
 
@@ -477,6 +481,7 @@ class TestSparseJacobianEdgeCases(unittest.TestCase):
 
     def test_incompatible_dimensions(self):
         """Test handling of incompatible dimensions."""
+
         def func(x, a):
             return a * x[:5]  # Returns wrong size
 
@@ -488,5 +493,5 @@ class TestSparseJacobianEdgeCases(unittest.TestCase):
             computer.detect_sparsity_pattern(func, params, x, n_samples=10)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

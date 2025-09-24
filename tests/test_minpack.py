@@ -211,7 +211,7 @@ class TestCurveFit:
 
     # # def test_indeterminate_covariance(self):
     # #     # Test that a warning is returned when pcov is indeterminate
-    # #     #This test only works with minpacks LM and doesnt
+    # #     #This test only works with minpacks LM and doesn't
     # #     #throw an error for the trf method
     # #     xdata = np.array([1, 2, 3, 4, 5, 6])
     # #     ydata = np.array([1, 2, 3, 4, 5.5, 6])
@@ -807,7 +807,7 @@ class TestCurveFit:
 #     """Return the jacobian of the equation system F(flow_rates)
 #     computed by `pressure_network` with respect to
 #     *flow_rates*. See `pressure_network` for the detailed
-#     description of parrameters.
+#     description of parameters.
 
 #     Returns
 #     -------

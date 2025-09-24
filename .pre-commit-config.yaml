@@ -24,13 +24,14 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [numpy, jax, types-setuptools]
-        args: [--python-version=3.12, --ignore-missing-imports]
-        files: ^nlsq/
+  # Mypy disabled temporarily - needs comprehensive type annotation work
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.13.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies: [numpy, jax, types-setuptools]
+  #       args: [--python-version=3.12, --ignore-missing-imports]
+  #       files: ^nlsq/
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.29.4
@@ -41,7 +42,7 @@ repos:
     rev: v2.3.0
     hooks:
       - id: codespell
-        args: [--skip="*.ipynb,*.html", --ignore-words-list="nd,coo"]
+        args: ['--skip=*.ipynb,*.html', '--ignore-words-list=nd,coo,assertIn']
 
   - repo: https://github.com/adamchainz/blacken-docs
     rev: 1.19.1

@@ -13,16 +13,29 @@ except ImportError:
 
 # Main API imports
 from nlsq._optimize import OptimizeResult, OptimizeWarning
-from nlsq.least_squares import LeastSquares
-from nlsq.minpack import CurveFit, curve_fit
+
+# Configuration support
+from nlsq.config import (
+    LargeDatasetConfig,
+    MemoryConfig,
+    configure_for_large_datasets,
+    enable_mixed_precision_fallback,
+    get_large_dataset_config,
+    get_memory_config,
+    large_dataset_context,
+    memory_context,
+    set_memory_limits,
+)
 
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
     LDMemoryConfig,  # Use renamed class to avoid conflicts with config.py MemoryConfig
+    estimate_memory_requirements,
     fit_large_dataset,
-    estimate_memory_requirements
 )
+from nlsq.least_squares import LeastSquares
+from nlsq.minpack import CurveFit, curve_fit
 
 # Sparse Jacobian support
 from nlsq.sparse_jacobian import (
@@ -33,24 +46,11 @@ from nlsq.sparse_jacobian import (
 
 # Streaming optimizer support
 from nlsq.streaming_optimizer import (
-    StreamingOptimizer,
-    StreamingConfig,
     DataGenerator,
-    fit_unlimited_data,
+    StreamingConfig,
+    StreamingOptimizer,
     create_hdf5_dataset,
-)
-
-# Configuration support
-from nlsq.config import (
-    MemoryConfig,
-    LargeDatasetConfig,
-    configure_for_large_datasets,
-    set_memory_limits,
-    enable_mixed_precision_fallback,
-    memory_context,
-    large_dataset_context,
-    get_memory_config,
-    get_large_dataset_config
+    fit_unlimited_data,
 )
 
 # Public API - only expose main user-facing functions
@@ -93,6 +93,7 @@ __all__ = [
     "get_large_dataset_config",
 ]
 
+
 # Convenience function for large dataset curve fitting
 def curve_fit_large(
     f,
@@ -102,7 +103,7 @@ def curve_fit_large(
     sigma=None,
     absolute_sigma=False,
     check_finite=True,
-    bounds=(-float('inf'), float('inf')),
+    bounds=(-float("inf"), float("inf")),
     method=None,
     # Large dataset specific parameters
     memory_limit_gb=None,
@@ -113,7 +114,7 @@ def curve_fit_large(
     sampling_threshold=100_000_000,
     max_sampled_size=10_000_000,
     chunk_size=None,
-    **kwargs
+    **kwargs,
 ):
     """Curve fitting with automatic large dataset handling.
 
@@ -208,15 +209,15 @@ def curve_fit_large(
         # Rebuild kwargs for curve_fit
         fit_kwargs = kwargs.copy()
         if p0 is not None:
-            fit_kwargs['p0'] = p0
+            fit_kwargs["p0"] = p0
         if sigma is not None:
-            fit_kwargs['sigma'] = sigma
-        if bounds != (-float('inf'), float('inf')):
-            fit_kwargs['bounds'] = bounds
+            fit_kwargs["sigma"] = sigma
+        if bounds != (-float("inf"), float("inf")):
+            fit_kwargs["bounds"] = bounds
         if method is not None:
-            fit_kwargs['method'] = method
-        fit_kwargs['absolute_sigma'] = absolute_sigma
-        fit_kwargs['check_finite'] = check_finite
+            fit_kwargs["method"] = method
+        fit_kwargs["absolute_sigma"] = absolute_sigma
+        fit_kwargs["check_finite"] = check_finite
 
         return curve_fit(f, xdata, ydata, **fit_kwargs)
 
@@ -226,6 +227,7 @@ def curve_fit_large(
         # Auto-detect available memory
         try:
             import psutil
+
             available_gb = psutil.virtual_memory().available / (1024**3)
             memory_limit_gb = min(8.0, available_gb * 0.7)  # Use 70% of available
         except ImportError:
@@ -236,14 +238,16 @@ def curve_fit_large(
         memory_limit_gb=memory_limit_gb,
         progress_reporting=show_progress,
         min_chunk_size=max(1000, n_points // 10000),  # Dynamic min chunk size
-        max_chunk_size=min(1_000_000, n_points // 10) if chunk_size is None else chunk_size
+        max_chunk_size=min(1_000_000, n_points // 10)
+        if chunk_size is None
+        else chunk_size,
     )
 
     # Create large dataset configuration
     large_dataset_config = LargeDatasetConfig(
         enable_sampling=enable_sampling,
         sampling_threshold=sampling_threshold,
-        max_sampled_size=max_sampled_size
+        max_sampled_size=max_sampled_size,
     )
 
     # Use context managers to temporarily set configuration
@@ -257,17 +261,17 @@ def curve_fit_large(
                 sampling_threshold=sampling_threshold,
                 max_sampled_size=max_sampled_size,
                 min_chunk_size=memory_config.min_chunk_size,
-                max_chunk_size=memory_config.max_chunk_size
-            )
+                max_chunk_size=memory_config.max_chunk_size,
+            ),
         )
 
         # Handle sigma parameter by including it in kwargs if provided
         if sigma is not None:
-            kwargs['sigma'] = sigma
+            kwargs["sigma"] = sigma
         if not absolute_sigma:
-            kwargs['absolute_sigma'] = absolute_sigma
+            kwargs["absolute_sigma"] = absolute_sigma
         if not check_finite:
-            kwargs['check_finite'] = check_finite
+            kwargs["check_finite"] = check_finite
 
         # Perform the fit
         if show_progress:
@@ -280,16 +284,18 @@ def curve_fit_large(
             )
 
         # Extract popt and pcov from result
-        if hasattr(result, 'popt') and hasattr(result, 'pcov'):
+        if hasattr(result, "popt") and hasattr(result, "pcov"):
             return result.popt, result.pcov
-        elif hasattr(result, 'x'):
+        elif hasattr(result, "x"):
             # Fallback: construct basic covariance matrix
             popt = result.x
             # Create identity covariance matrix if not available
             pcov = np.eye(len(popt))
             return popt, pcov
         else:
-            raise RuntimeError(f"Unexpected result format from large dataset fitter: {result}")
+            raise RuntimeError(
+                f"Unexpected result format from large dataset fitter: {result}"
+            )
 
 
 # Optional: Provide convenience access to submodules for advanced users

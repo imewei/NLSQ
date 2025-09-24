@@ -1,7 +1,6 @@
 """Generic interface for least-squares minimization."""
 
 from collections.abc import Callable, Sequence
-from typing import Any
 from warnings import warn
 
 import numpy as np
@@ -50,7 +49,7 @@ def prepare_bounds(bounds, n) -> tuple[np.ndarray, np.ndarray]:
     Tuple[np.ndarray, np.ndarray]
         The prepared lower and upper bounds arrays.
     """
-    lb, ub = [np.asarray(b, dtype=float) for b in bounds]
+    lb, ub = (np.asarray(b, dtype=float) for b in bounds)
     if lb.ndim == 0:
         lb = np.resize(lb, n)
 
@@ -153,10 +152,6 @@ def check_x_scale(
         raise ValueError("Inconsistent shapes between `x_scale` and `x0`.")
 
     return x_scale
-
-
-"""Wraps the given function such that a masked jacfwd is performed on it
-thereby giving the autodiff jacobian."""
 
 
 class AutoDiffJacobian:
@@ -592,9 +587,14 @@ class LeastSquares:
             elif args.size == 4:
                 func_eval = func(xdata, args[0], args[1], args[2], args[3]) - ydata
             elif args.size == 5:
-                func_eval = func(xdata, args[0], args[1], args[2], args[3], args[4]) - ydata
+                func_eval = (
+                    func(xdata, args[0], args[1], args[2], args[3], args[4]) - ydata
+                )
             elif args.size == 6:
-                func_eval = func(xdata, args[0], args[1], args[2], args[3], args[4], args[5]) - ydata
+                func_eval = (
+                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5])
+                    - ydata
+                )
             else:
                 # For more parameters, use a more generic approach
                 # Convert to python list and unpack - this may still cause issues with very large param counts
@@ -691,7 +691,9 @@ class LeastSquares:
             elif args.size == 5:
                 jac_fwd = jac(coords, args[0], args[1], args[2], args[3], args[4])
             elif args.size == 6:
-                jac_fwd = jac(coords, args[0], args[1], args[2], args[3], args[4], args[5])
+                jac_fwd = jac(
+                    coords, args[0], args[1], args[2], args[3], args[4], args[5]
+                )
             else:
                 # For more parameters, use a more generic approach
                 args_list = [args[i] for i in range(args.size)]
