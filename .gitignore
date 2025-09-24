@@ -3,9 +3,20 @@ scripts/dev_cleanup/
 
 # Benchmark
 .benchmarks
+benchmark/results/*.json
+benchmark/results/*.csv
+benchmark/results/*.png
+benchmark/*.prof
 
 # Test reports (generated)
 test_reports/
+
+# NLSQ specific
+nlsq_debug_*.log
+nlsq_profile_*.txt
+nlsq_cache/
+*.h5
+*.hdf5
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -236,5 +247,6 @@ Thumbs.db
 *.bak
 *.orig
 
-CLAUDE.md
-WARP.md
+# Project specific documentation files (not ignored)
+# CLAUDE.md - Claude Code instructions
+# WARP.md - Warp instructions

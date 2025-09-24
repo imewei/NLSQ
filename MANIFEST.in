@@ -7,7 +7,7 @@ include Makefile
 include tox.ini
 include .editorconfig
 recursive-include nlsq *.py *.pyi py.typed
-recursive-include examples *.ipynb
+recursive-include examples *.ipynb *.py
 recursive-include docs *.py *.rst *.md *.txt *.yml *.yaml
 recursive-exclude * __pycache__
 recursive-exclude * *.pyc
@@ -21,6 +21,10 @@ recursive-exclude .agent-os *
 recursive-exclude venv *
 prune docs/_build
 prune htmlcov
+prune .mypy_cache
+prune .ruff_cache
+prune .pytest_cache
+prune .benchmarks
 exclude .gitignore
 exclude .pre-commit-config.yaml
 exclude .readthedocs.yaml
@@ -28,3 +32,4 @@ exclude nlsq_debug_*.log
 exclude *.log
 exclude .coverage
 exclude coverage.xml
+exclude .coverage.*

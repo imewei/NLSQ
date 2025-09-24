@@ -1,0 +1,95 @@
+name: Benchmark Suite
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+  workflow_dispatch:
+    inputs:
+      run_large:
+        description: 'Run large dataset benchmarks'
+        required: false
+        type: boolean
+        default: false
+  push:
+    paths:
+      - 'nlsq/**'
+      - 'benchmark/**'
+      - '.github/workflows/benchmark.yml'
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.12']
+        include:
+          - os: ubuntu-latest
+            python-version: '3.12'
+            gpu: false
+          # Uncomment for GPU benchmarking if self-hosted runners available
+          # - os: self-hosted-gpu
+          #   python-version: '3.12'
+          #   gpu: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[all]"
+        pip install memory_profiler
+
+    - name: Run standard benchmarks
+      run: |
+        python benchmark/benchmark.py --output-format markdown > benchmark_results.md
+
+    - name: Run large dataset benchmarks
+      if: github.event.inputs.run_large == 'true' || github.event_name == 'schedule'
+      run: |
+        python benchmark/benchmark.py --large-datasets >> benchmark_results.md
+
+    - name: Profile memory usage
+      run: |
+        python -m memory_profiler benchmark/benchmark.py --memory-profile >> benchmark_results.md
+
+    - name: Generate benchmark report
+      run: |
+        echo "# Benchmark Report - $(date)" > BENCHMARK_REPORT.md
+        echo "## System Information" >> BENCHMARK_REPORT.md
+        echo "- OS: ${{ matrix.os }}" >> BENCHMARK_REPORT.md
+        echo "- Python: ${{ matrix.python-version }}" >> BENCHMARK_REPORT.md
+        echo "- GPU: ${{ matrix.gpu }}" >> BENCHMARK_REPORT.md
+        echo "" >> BENCHMARK_REPORT.md
+        cat benchmark_results.md >> BENCHMARK_REPORT.md
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ matrix.os }}-py${{ matrix.python-version }}
+        path: |
+          BENCHMARK_REPORT.md
+          benchmark_results.md
+
+    - name: Store benchmark results
+      if: github.ref == 'refs/heads/main'
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'customBiggerIsBetter'
+        output-file-path: benchmark_results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        comment-on-alert: true
+        alert-threshold: '150%'
+        fail-on-alert: false

@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly run on Sunday
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          # Exclude Python 3.13 on Windows until JAX supports it
+          - os: windows-latest
+            python-version: "3.13"
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # For setuptools-scm
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip wheel setuptools
+        pip install -e ".[test,dev]"
+
+    - name: Lint with ruff
+      run: |
+        ruff check .
+        ruff format --check .
+
+    - name: Type check with mypy
+      run: |
+        mypy nlsq --ignore-missing-imports
+
+    - name: Test with pytest (fast tests)
+      run: |
+        pytest -m "not slow" --cov=nlsq --cov-report=xml --cov-report=term
+
+    - name: Test large dataset features
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      run: |
+        pytest tests/test_large_dataset.py tests/test_sparse_jacobian.py tests/test_streaming_optimizer.py -v
+
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+        verbose: true
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+  benchmark:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[all]"
+
+    - name: Run benchmarks
+      run: |
+        python benchmark/benchmark.py --quick
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: benchmark/BENCHMARK_REPORT.md
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[docs]"
+        sudo apt-get update
+        sudo apt-get install -y graphviz
+
+    - name: Build documentation
+      run: |
+        cd docs
+        make clean
+        make html
+
+    - name: Check documentation build
+      run: |
+        test -d docs/_build/html
+
+  examples:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[all]"
+        pip install nbformat nbconvert jupyter
+
+    - name: Test example notebooks
+      run: |
+        make examples
+      env:
+        JAX_PLATFORMS: cpu
+        NLSQ_FORCE_CPU: 1

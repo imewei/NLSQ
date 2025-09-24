@@ -72,10 +72,13 @@ docs:  ## Build documentation
 	@python -m webbrowser docs/_build/html/index.html 2>/dev/null || open docs/_build/html/index.html 2>/dev/null || echo "Please open docs/_build/html/index.html manually"
 
 benchmark:  ## Run performance benchmarks
-	pytest benchmark/ --benchmark-only
+	python benchmark/benchmark.py
+
+benchmark-large:  ## Run large dataset benchmarks
+	python benchmark/benchmark.py --large-datasets
 
 profile:  ## Run memory profiling tests
-	python -m memory_profiler benchmark/speed_comparison.py
+	python -m memory_profiler benchmark/benchmark.py
 
 build:  ## Build distribution packages
 	python -m pip install --upgrade build
@@ -97,4 +100,10 @@ publish:  ## Publish to PyPI
 	twine upload dist/*
 
 examples:  ## Test example notebooks
-	python -c "import nbformat; from nbconvert.preprocessors import ExecutePreprocessor; [ExecutePreprocessor(timeout=600).preprocess(nbformat.read(f, as_version=4), {}) for f in ['examples/NLSQ Quickstart.ipynb', 'examples/NLSQ 2D Gaussian Demo.ipynb']]"
+	python -c "import nbformat; from nbconvert.preprocessors import ExecutePreprocessor; [ExecutePreprocessor(timeout=600).preprocess(nbformat.read(f, as_version=4), {}) for f in ['examples/NLSQ Quickstart.ipynb', 'examples/NLSQ 2D Gaussian Demo.ipynb', 'examples/large_dataset_demo.ipynb']]"
+
+test-large:  ## Run tests for large dataset features
+	pytest tests/test_large_dataset.py tests/test_sparse_jacobian.py tests/test_streaming_optimizer.py -v
+
+test-all:  ## Run all tests including large dataset tests
+	pytest tests/ -v
