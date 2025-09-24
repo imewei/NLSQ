@@ -124,7 +124,53 @@ from nlsq.optimizer_base import TrustRegionOptimizerBase
 
 
 class TrustRegionJITFunctions:
-    """JIT functions for trust region algorithm."""
+    """JIT-compiled functions for Trust Region Reflective optimization algorithm.
+
+    This class contains all JAX JIT-compiled functions required for the Trust Region
+    Reflective algorithm. It provides optimized GPU/TPU-accelerated implementations
+    of core mathematical operations including gradient computation, SVD decomposition,
+    iterative solvers, and quadratic evaluations.
+
+    Core Operations
+    ---------------
+    - **Gradient Computation**: JAX-accelerated gradient calculation using J^T * f
+    - **SVD Decomposition**: Singular value decomposition for trust region subproblems
+    - **Conjugate Gradient**: Iterative solver for large-scale problems
+    - **Cost Function Evaluation**: Loss function computation with masking support
+    - **Hat Space Transformation**: Scaled variable transformations for bounds handling
+
+    JIT Compilation Benefits
+    -----------------------
+    - **GPU Acceleration**: All operations optimized for GPU/TPU hardware
+    - **Memory Efficiency**: Reduced memory allocations through compilation
+    - **Automatic Differentiation**: JAX autodiff for exact Jacobian computation
+    - **XLA Optimization**: Advanced compiler optimizations for performance
+
+    Algorithm Integration
+    --------------------
+    The class implements two solution methods:
+    1. **Exact SVD**: Uses singular value decomposition for small to medium problems
+    2. **Conjugate Gradient**: Iterative method for large sparse problems
+
+    Memory Management
+    ----------------
+    - Bounded Problems: Augmented system handling for constraint optimization
+    - Unbounded Problems: Direct system solving for unconstrained optimization
+    - Scaling Matrices: Efficient diagonal matrix operations in hat space
+
+    Technical Implementation
+    -----------------------
+    All functions use JAX JIT compilation for performance. The class automatically
+    creates optimized versions during initialization. Functions handle both bounded
+    and unbounded optimization variants with appropriate augmentation strategies.
+
+    Performance Characteristics
+    --------------------------
+    - **Small Problems**: Direct SVD solution O(mn^2 + n^3)
+    - **Large Problems**: CG iteration O(k*mn) where k is iteration count
+    - **GPU Memory**: Optimized for batch processing and memory reuse
+    - **Numerical Stability**: Double precision arithmetic with condition monitoring
+    """
 
     def __init__(self):
         """Call all of the create functions which create the JAX/JIT functions
@@ -341,36 +387,33 @@ class TrustRegionJITFunctions:
             n_iter : int
                 Number of CG iterations
             """
+            # Solve (J^T J + α I) x = -J^T f using conjugate gradient
             m, n = J.shape
             if max_iter is None:
                 max_iter = min(n, 100)
 
-            # Scale Jacobian with diagonal matrix D
+            # Scale Jacobian and setup RHS
             J_scaled = J * d[None, :]
-
-            # Right hand side: -J^T f
             b = -J_scaled.T @ f
 
-            # Initial guess
+            # Initialize CG
             x = jnp.zeros(n)
-
-            # Initial residual r = b - Ax = b (since x=0)
             r = b
             p = r.copy()
             rsold = jnp.dot(r, r)
 
-            # CG iterations
             for i in range(max_iter):
-                # Matrix-vector product: Ap = (J^T J + alpha*I) p
+                # Matrix-vector product: (J^T J + α I) p
                 Jp = J_scaled @ p
                 JTJp = J_scaled.T @ Jp
                 Ap = JTJp + alpha * p
 
+                # Step size
                 pAp = jnp.dot(p, Ap)
-                # Avoid division by zero
                 pAp = jnp.where(jnp.abs(pAp) < 1e-14, 1e-14, pAp)
                 alpha_cg = rsold / pAp
 
+                # Update solution and residual
                 x = x + alpha_cg * p
                 r = r - alpha_cg * Ap
                 rsnew = jnp.dot(r, r)
@@ -379,6 +422,7 @@ class TrustRegionJITFunctions:
                 if jnp.sqrt(rsnew) < tol:
                     return x, jnp.sqrt(rsnew), i + 1
 
+                # Update search direction
                 beta = rsnew / rsold
                 p = r + beta * p
                 rsold = rsnew
@@ -515,8 +559,19 @@ class TrustRegionJITFunctions:
 
 
 class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
+    """Trust Region Reflective algorithm for bounded least squares optimization.
+
+    Implements the TRF algorithm with variable scaling to handle parameter bounds.
+    Supports exact (SVD) and iterative (CG) solvers for trust region subproblems.
+    """
+
     def __init__(self):
-        """Initialize the TrustRegionReflective class."""
+        """Initialize the TrustRegionReflective optimizer.
+
+        Creates JIT-compiled functions and sets up logging infrastructure.
+        All optimization functions are compiled during initialization for
+        maximum performance during solve operations.
+        """
         TrustRegionJITFunctions.__init__(self)
         TrustRegionOptimizerBase.__init__(self, name="trf")
         self.cJIT = CommonJIT()
@@ -840,9 +895,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if verbose == 2:
             print_header_nonlinear()
 
-        # Start optimization timer
+        # Trust region optimization loop
         with self.logger.timer("optimization", log_result=False):
             while True:
+                # Check gradient convergence
                 g_norm = norm(g, ord=np.inf)
                 if g_norm < gtol:
                     termination_status = 1
@@ -873,25 +929,25 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     nfev=nfev,
                 )
 
+                # Setup scaled variables
                 d = scale
                 d_jnp = jnp.array(scale)
                 g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
 
-                # Choose solver based on solver parameter
+                # Solve trust region subproblem
                 if solver == "cg":
-                    # Use conjugate gradient solver
                     J_h = J * d_jnp
                     step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
-                    s, V, uf = None, None, None  # Not needed for CG path
+                    s, V, uf = None, None, None
                 else:
-                    # Use exact SVD solver (default)
                     svd_output = self.svd_no_bounds(J, d_jnp, f)
                     J_h = svd_output[0]
                     s, V, uf = (np.array(val) for val in svd_output[2:])
 
+                # Step acceptance loop
                 actual_reduction = -1
                 inner_loop_count = 0
-                max_inner_iterations = 100  # Prevent infinite loops
+                max_inner_iterations = 100
                 while (
                     actual_reduction <= 0
                     and nfev < max_nfev
@@ -899,38 +955,37 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 ):
                     inner_loop_count += 1
 
+                    # Solve subproblem
                     if solver == "cg":
-                        # CG path: step already computed
-                        # For subsequent iterations in inner loop, re-solve with updated alpha
                         if inner_loop_count > 1:
                             step_h = self.solve_tr_subproblem_cg(
                                 J, f, d_jnp, Delta, alpha
                             )
                         _n_iter = 1  # Dummy value for compatibility
                     else:
-                        # SVD path: use exact solver
                         step_h, alpha, _n_iter = solve_lsq_trust_region(
                             n, m, uf, s, V, Delta, initial_alpha=alpha
                         )
 
+                    # Compute predicted reduction
                     predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
                         J_h, g_h_jnp, step_h
                     )
                     predicted_reduction = np.array(predicted_reduction_jnp)
 
+                    # Transform step and evaluate objective
                     step = d * step_h
                     x_new = x + step
-
                     f_new = fun(x_new, xdata, ydata, data_mask, transform)
-
                     nfev += 1
-
                     step_h_norm = norm(step_h)
 
+                    # Check for numerical issues
                     if not self.check_isfinite(f_new):
                         Delta = 0.25 * step_h_norm
                         continue
 
+                    # Compute actual reduction
                     if loss_function is not None:
                         cost_new_jnp = loss_function(
                             f_new, f_scale, data_mask, cost_only=True
@@ -938,9 +993,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     else:
                         cost_new_jnp = self.default_loss_func(f_new)
                     cost_new = np.array(cost_new_jnp)
-
                     actual_reduction = cost - cost_new
 
+                    # Update trust region radius
                     Delta_new, ratio = update_tr_radius(
                         Delta,
                         actual_reduction,
@@ -949,6 +1004,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         step_h_norm > 0.95 * Delta,
                     )
 
+                    # Check termination criteria
                     step_norm = norm(step)
                     termination_status = check_termination(
                         actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol

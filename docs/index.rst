@@ -12,9 +12,16 @@ NLSQ Documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide
+   :caption: Getting Started
 
    main
+   installation
+   tutorials
+
+.. toctree::
+   :maxdepth: 2
+   :caption: User Guide
+
    large_dataset_guide
 
 .. toctree::

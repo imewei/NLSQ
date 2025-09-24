@@ -24,6 +24,57 @@ __all__ = ["CurveFit", "curve_fit"]
 
 
 def curve_fit(f, xdata, ydata, *args, **kwargs):
+    """
+    Use nonlinear least squares to fit a function to data with GPU/TPU acceleration.
+
+    This is the main user-facing function that provides a drop-in replacement for
+    `scipy.optimize.curve_fit` with GPU/TPU acceleration via JAX. The function
+    automatically handles JAX JIT compilation, double precision configuration,
+    and optimization algorithm selection.
+
+    Parameters
+    ----------
+    f : callable
+        The model function f(x, *popt) -> y. Must be JAX-compatible, meaning it should
+        use `jax.numpy` instead of `numpy` for mathematical operations to enable
+        GPU acceleration and automatic differentiation.
+    xdata : array_like
+        The independent variable where the data is measured.
+    ydata : array_like
+        The dependent data, nominally ``f(xdata, *popt)``.
+    *args, **kwargs
+        Additional arguments passed to CurveFit.curve_fit method.
+
+    Returns
+    -------
+    popt : ndarray
+        Optimal values for the parameters.
+    pcov : ndarray
+        The estimated covariance of popt.
+
+    Notes
+    -----
+    This function creates a CurveFit instance internally and calls its curve_fit method.
+    For multiple fits with the same function signature, consider creating a CurveFit
+    instance directly to benefit from JAX compilation caching.
+
+    See Also
+    --------
+    CurveFit.curve_fit : The underlying method with full parameter documentation
+    curve_fit_large : For datasets with millions of points requiring special handling
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import numpy as np
+    >>>
+    >>> def exponential(x, a, b):
+    ...     return a * jnp.exp(-b * x)
+    >>>
+    >>> x = np.linspace(0, 4, 50)
+    >>> y = 2.5 * np.exp(-1.3 * x) + 0.1 * np.random.normal(size=len(x))
+    >>> popt, pcov = curve_fit(exponential, x, y, p0=[2, 1])
+    """
     # Extract CurveFit constructor parameters from kwargs
     flength = kwargs.pop("flength", None)
     use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
@@ -79,20 +130,54 @@ def _initialize_feasible(lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
 
 
 class CurveFit:
+    """Main class for nonlinear least squares curve fitting with JAX acceleration.
+
+    This class provides the core curve fitting functionality with JAX JIT compilation,
+    automatic differentiation for Jacobian computation, and multiple optimization
+    algorithms. It handles data preprocessing, optimization algorithm selection,
+    and covariance matrix computation.
+
+    The class maintains compiled versions of fitting functions to avoid recompilation
+    overhead when fitting multiple datasets with the same function signature.
+
+    Attributes
+    ----------
+    flength : float or None
+        Fixed data length for input padding to avoid JAX retracing.
+    use_dynamic_sizing : bool
+        Whether to use dynamic sizing instead of fixed padding.
+    logger : Logger
+        Internal logger for debugging and performance monitoring.
+
+    Methods
+    -------
+    curve_fit : Main fitting method
+    create_sigma_transform_funcs : Internal method for sigma transformation setup
+    """
+
     def __init__(self, flength: float | None = None, use_dynamic_sizing: bool = False):
-        """CurveFit class for fitting
+        """Initialize CurveFit instance.
 
         Parameters
         ----------
         flength : float, optional
-            fixed data length for fits, JAXFit pads input data to this length
-            to avoid retracing. If use_dynamic_sizing is True, this parameter
-            is ignored for large datasets.
-        use_dynamic_sizing : bool, optional
-            If True, enables dynamic sizing capability to avoid memory waste
-            from fixed-size padding. When enabled, padding is only applied
-            when data size is smaller than flength. Default is False to
-            maintain backward compatibility.
+            Fixed data length for JAX compilation. Input data is padded to this length
+            to avoid recompilation when fitting datasets of different sizes. If None,
+            no padding is applied and each dataset size triggers recompilation.
+            Ignored when use_dynamic_sizing=True for large datasets.
+
+        use_dynamic_sizing : bool, default False
+            Enable dynamic sizing to reduce memory usage. When True, padding is only
+            applied when data size is smaller than flength. For large datasets,
+            uses actual size to prevent excessive memory allocation. Default False
+            maintains backward compatibility with fixed padding behavior.
+
+        Notes
+        -----
+        Fixed length compilation trades memory usage for compilation speed:
+        - flength=None: Minimal memory, recompiles for each dataset size
+        - flength=large_value: Higher memory, avoids recompilation
+        - use_dynamic_sizing=True: Balanced approach for mixed dataset sizes
         """
         self.flength = flength
         self.use_dynamic_sizing = use_dynamic_sizing
@@ -283,7 +368,7 @@ class CurveFit:
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Use non-linear least squares to fit a function, f, to data.
-        Assumes ``ydata = f(xdata, *params) + eps``.
+        Assumes ``ydata = f(xdata, \\*params) + eps``.
 
         Parameters
         ----------

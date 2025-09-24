@@ -30,49 +30,21 @@ Example::
 LargeDatasetFitter
 ------------------
 
-.. autoclass:: nlsq.LargeDatasetFitter
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 The main class for handling large datasets with automatic memory management.
+
+For complete API documentation, see :class:`nlsq.LargeDatasetFitter` in the :doc:`autodoc/modules` section.
+
+**Key Features:**
+
+- Automatic memory management and chunking
+- Progress reporting for long-running fits
+- Configurable memory limits and chunk sizes
+- Integration with existing NLSQ optimization algorithms
 
 **Constructor Parameters:**
 
 - ``memory_limit_gb`` (float): Maximum memory to use (default: 4.0)
 - ``config`` (LDMemoryConfig, optional): Advanced configuration object
-
-**Key Methods:**
-
-.. automethod:: nlsq.LargeDatasetFitter.fit
-
-Main fitting method with automatic chunking.
-
-Parameters:
-    - ``func``: Model function to fit
-    - ``xdata``: Independent variable data
-    - ``ydata``: Dependent variable data
-    - ``p0``: Initial parameter guess
-    - ``bounds``: Optional parameter bounds
-    - ``**kwargs``: Additional options passed to underlying solver
-
-Returns:
-    ``LDResult`` object with attributes:
-
-    - ``popt``: Optimized parameters
-    - ``pcov``: Covariance matrix
-    - ``success``: Whether fit succeeded
-    - ``message``: Status message
-    - ``n_chunks``: Number of chunks used
-    - ``chunk_size``: Size of chunks
-
-.. automethod:: nlsq.LargeDatasetFitter.fit_with_progress
-
-Fitting with progress bar for long-running fits.
-
-.. automethod:: nlsq.LargeDatasetFitter.get_memory_recommendations
-
-Get memory usage recommendations before fitting.
 
 Example::
 
@@ -90,9 +62,55 @@ Example::
 Convenience Functions
 ---------------------
 
-.. autofunction:: nlsq.fit_large_dataset
+``curve_fit_large`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-High-level convenience function for large dataset fitting.
+**Primary large dataset fitting function with automatic dataset size detection.**
+
+For complete API documentation, see :func:`nlsq.curve_fit_large` in the :doc:`autodoc/modules` section.
+
+This function provides a drop-in replacement for ``curve_fit`` with automatic
+detection and handling of large datasets. For small datasets (< 1M points),
+it behaves identically to ``curve_fit``. For larger datasets, it automatically
+switches to memory-efficient processing with chunking and progress reporting.
+
+Parameters:
+    - ``func``: Model function f(x, \\*params) -> y
+    - ``xdata``: Independent variable data
+    - ``ydata``: Dependent variable data
+    - ``p0``: Initial parameter guess
+    - ``memory_limit_gb``: Memory limit in GB (default: auto-detect)
+    - ``auto_size_detection``: Automatically detect dataset size (default: True)
+    - ``size_threshold``: Threshold for switching to large dataset processing (default: 1M)
+    - ``show_progress``: Show progress bar for large datasets (default: False)
+    - ``enable_sampling``: Enable sampling for extremely large datasets (default: True)
+    - ``**kwargs``: Additional fitting options
+
+Returns:
+    ``popt, pcov`` tuple (same as scipy.optimize.curve_fit)
+
+Example::
+
+    from nlsq import curve_fit_large
+    import jax.numpy as jnp
+
+    # Automatic handling - uses standard curve_fit for small datasets
+    popt, pcov = curve_fit_large(func, x_small, y_small, p0=[1, 0.5])
+
+    # Automatic chunking for large datasets
+    popt, pcov = curve_fit_large(
+        func, x_large, y_large,
+        p0=[1, 0.5],
+        memory_limit_gb=8.0,
+        show_progress=True
+    )
+
+``fit_large_dataset`` Function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Advanced large dataset fitting with OptimizeResult return format.**
+
+For complete API documentation, see :func:`nlsq.fit_large_dataset` in the :doc:`autodoc/modules` section.
 
 Parameters:
     - ``func``: Model function
@@ -104,7 +122,7 @@ Parameters:
     - ``**kwargs``: Additional fitting options
 
 Returns:
-    ``LDResult`` object
+    ``OptimizeResult`` object with detailed fitting information
 
 Example::
 
@@ -116,141 +134,39 @@ Example::
         memory_limit_gb=4.0,
         show_progress=True
     )
+    print(f"Success: {result.success}")
+    print(f"Parameters: {result.popt}")
+    print(f"Chunks used: {result.n_chunks}")
 
-Sparse Jacobian Support
------------------------
+Advanced Features (Future Development)
+---------------------------------------
 
-.. autoclass:: nlsq.SparseJacobianComputer
-   :members:
-   :undoc-members:
+The following features are planned for future releases and may not be fully available in the current version:
 
-Detects and exploits sparsity in Jacobian matrices.
+**Sparse Jacobian Support (Planned)**
 
-**Key Methods:**
+For problems with sparse Jacobian structures, NLSQ will include:
 
-.. automethod:: nlsq.SparseJacobianComputer.detect_sparsity
+- Automatic sparsity detection
+- Sparse matrix optimizations
+- Memory-efficient sparse solvers
 
-Detect sparsity pattern in Jacobian.
+**Streaming Optimization (Experimental)**
 
-.. automethod:: nlsq.SparseJacobianComputer.is_sparse
+For unlimited-size datasets:
 
-Check if Jacobian is sufficiently sparse.
+- Batch processing from disk or generators
+- Incremental parameter updates
+- HDF5 file integration
 
-.. automethod:: nlsq.SparseJacobianComputer.compute_sparsity_ratio
-
-Compute ratio of zero elements.
-
-.. autoclass:: nlsq.SparseOptimizer
-   :members:
-   :undoc-members:
-
-Optimizer that exploits sparse Jacobian structure.
-
-.. automethod:: nlsq.SparseOptimizer.optimize_with_sparsity
-
-Optimize using sparse methods.
-
-Example::
-
-    from nlsq import SparseJacobianComputer, SparseOptimizer
-
-    # Detect sparsity
-    computer = SparseJacobianComputer(sparsity_threshold=0.01)
-    pattern = computer.detect_sparsity(func, x[:1000], p0)
-
-    if computer.is_sparse(pattern):
-        # Use sparse optimization
-        optimizer = SparseOptimizer()
-        result = optimizer.optimize_with_sparsity(
-            func, x, y, p0, pattern
-        )
-
-Streaming Optimizer
--------------------
-
-.. autoclass:: nlsq.StreamingOptimizer
-   :members:
-   :undoc-members:
-
-Optimizer for datasets that don't fit in memory.
-
-.. autoclass:: nlsq.StreamingConfig
-   :members:
-   :undoc-members:
-
-Configuration for streaming optimization.
-
-**Parameters:**
-
-- ``batch_size``: Size of data batches (default: 10000)
-- ``max_epochs``: Maximum training epochs (default: 100)
-- ``convergence_tol``: Convergence tolerance (default: 1e-6)
-- ``use_adam``: Use Adam optimizer (default: True)
-- ``learning_rate``: Initial learning rate (default: 0.001)
-
-**Key Methods:**
-
-.. automethod:: nlsq.StreamingOptimizer.fit_unlimited_data
-
-Fit using data generator or iterator.
-
-.. automethod:: nlsq.StreamingOptimizer.fit_from_hdf5
-
-Fit directly from HDF5 file.
-
-HDF5 Dataset Support
---------------------
-
-.. autofunction:: nlsq.create_hdf5_dataset
-
-Create HDF5 dataset for streaming.
-
-Parameters:
-    - ``filename``: Output HDF5 file path
-    - ``func``: Function to generate data
-    - ``params``: True parameters
-    - ``n_samples``: Number of samples
-    - ``chunk_size``: HDF5 chunk size
-    - ``noise_level``: Noise to add (default: 0.1)
-
-.. autofunction:: nlsq.stream_from_hdf5
-
-Stream data from HDF5 file.
-
-Returns:
-    Generator yielding (x, y) batches
-
-Example::
-
-    from nlsq import (StreamingOptimizer, StreamingConfig,
-                     create_hdf5_dataset, stream_from_hdf5)
-
-    # Create large dataset on disk
-    create_hdf5_dataset(
-        "data.h5", exponential, [2.0, 0.5, 0.1],
-        n_samples=100_000_000,
-        chunk_size=10000
-    )
-
-    # Configure streaming
-    config = StreamingConfig(
-        batch_size=10000,
-        max_epochs=50,
-        use_adam=True
-    )
-
-    # Fit from HDF5
-    optimizer = StreamingOptimizer(config)
-    result = optimizer.fit_from_hdf5("data.h5", exponential, p0)
+These features are under active development. Check the `GitHub repository <https://github.com/Dipolar-Quantum-Gases/nlsq>`_ for the latest updates.
 
 Memory Configuration
 --------------------
 
-.. autoclass:: nlsq.large_dataset.LDMemoryConfig
-   :members:
-   :undoc-members:
-
 Advanced memory configuration options.
+
+For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` in the :doc:`autodoc/modules` section.
 
 **Parameters:**
 
@@ -281,15 +197,9 @@ Example::
 Data Chunking
 -------------
 
-.. autoclass:: nlsq.large_dataset.DataChunker
-   :members:
-   :undoc-members:
-
 Utility class for chunking large arrays.
 
-.. automethod:: nlsq.large_dataset.DataChunker.create_chunks
-
-Create iterator of data chunks.
+For complete API documentation, see :class:`nlsq.large_dataset.DataChunker` in the :doc:`autodoc/modules` section.
 
 Returns:
     Iterator yielding (x_chunk, y_chunk, indices) tuples

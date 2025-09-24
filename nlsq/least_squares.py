@@ -251,7 +251,48 @@ class AutoDiffJacobian:
 
 
 class LeastSquares:
+    """Core least squares optimization engine with JAX acceleration.
+
+    This class implements the main optimization algorithms for nonlinear least squares
+    problems, including Trust Region Reflective (TRF) and Levenberg-Marquardt (LM).
+    It handles automatic differentiation, bound constraints, loss functions, and
+    uncertainty propagation.
+
+    The class maintains separate automatic differentiation instances for different
+    sigma configurations (no sigma, 1D sigma, 2D covariance matrix) to optimize
+    compilation and execution performance.
+
+    Attributes
+    ----------
+    trf : TrustRegionReflective
+        Trust Region Reflective algorithm implementation
+    ls : LossFunctionsJIT
+        JIT-compiled loss function implementations
+    logger : Logger
+        Internal logger for debugging and performance tracking
+    f : callable
+        Current objective function being optimized
+    jac : callable or None
+        Current Jacobian function (None for automatic differentiation)
+    adjn : AutoDiffJacobian
+        Automatic differentiation instance for unweighted problems
+    adj1d : AutoDiffJacobian
+        Automatic differentiation instance for 1D sigma weighting
+    adj2d : AutoDiffJacobian
+        Automatic differentiation instance for 2D covariance matrix weighting
+
+    Methods
+    -------
+    least_squares : Main optimization method
+    """
+
     def __init__(self):
+        """Initialize LeastSquares with optimization algorithms and autodiff instances.
+
+        Sets up the Trust Region Reflective solver, loss functions, and separate
+        automatic differentiation instances for different weighting schemes to
+        maximize JAX compilation efficiency.
+        """
         super().__init__()  # not sure if this is needed
         self.trf = TrustRegionReflective()
         self.ls = LossFunctionsJIT()
@@ -294,6 +335,51 @@ class LeastSquares:
         kwargs=None,
         **timeout_kwargs,
     ):
+        """Solve nonlinear least squares problem using JAX-accelerated algorithms.
+
+        Parameters
+        ----------
+        fun : callable
+            Residual function. Must use jax.numpy operations.
+        x0 : array_like
+            Initial parameter guess.
+        jac : callable or None, optional
+            Jacobian function. If None, uses JAX autodiff.
+
+        bounds : 2-tuple, optional
+            Parameter bounds as (lower, upper).
+        method : str, optional
+            Optimization algorithm ('trf').
+        ftol, xtol, gtol : float, optional
+            Convergence tolerances for function, parameters, and gradient.
+        x_scale : str or array_like, optional
+            Parameter scaling ('jac' for automatic).
+        loss : str or callable, optional
+            Robust loss function ('linear', 'huber', 'soft_l1', etc.).
+        f_scale : float, optional
+            Scale parameter for robust loss functions.
+        max_nfev : int, optional
+            Maximum function evaluations.
+        verbose : int, optional
+            Verbosity level (0, 1, or 2).
+        xdata, ydata : array_like, optional
+            Data for curve fitting applications.
+        data_mask : array_like, optional
+            Boolean mask for data exclusion.
+        transform : array_like, optional
+            Transformation matrix for weighted fitting.
+        timeit : bool, optional
+            Enable detailed timing analysis.
+        args : tuple, optional
+            Additional arguments for objective function.
+        kwargs : dict, optional
+            Additional optimization parameters.
+
+        Returns
+        -------
+        result : OptimizeResult
+            Optimization result with solution, convergence info, and statistics.
+        """
         # Check for incorrect usage of 'options' parameter
         if kwargs is None:
             kwargs = {}

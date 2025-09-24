@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Comprehensive Documentation**: Complete rewrite of documentation for PyPI and ReadTheDocs standards
+- **Installation Guide**: Platform-specific instructions for Linux, macOS, and Windows
+- **Tutorial Series**: Step-by-step tutorials from basic fitting to advanced large dataset handling
+- **Contributing Guidelines**: Detailed contributor documentation in `CONTRIBUTING.md`
+- **Enhanced API Documentation**: Improved examples and cross-references
+- **`curve_fit_large` function**: Primary API for automatic large dataset handling with size detection
+- **Memory estimation**: `estimate_memory_requirements` function for planning large dataset fits
+- **Progress reporting**: Real-time progress bars for large dataset operations
+- **JAX tracing compatibility**: Support for functions with 15+ parameters without TracerArrayConversionError
+
+### Changed
+- **Documentation Structure**: Reorganized with Getting Started, User Guide, and API Reference sections
+- **Examples Updated**: All documentation examples now highlight `curve_fit_large` as primary API
+- **Chunking Algorithm**: Improved sequential refinement approach replacing adaptive exponential moving average
+- **Return Type Consistency**: All code paths return consistent (popt, pcov) format
+- **Error Handling**: Enhanced error messages and validation for large dataset functions
+
+### Fixed
+- **JAX Tracing Issues**: Resolved TracerArrayConversionError for functions with many parameters
+- **Chunking Stability**: Fixed instability issues with complex parameter averaging
+- **Integration Tests**: Adjusted tolerances for chunked algorithms and polynomial fitting
+- **Documentation Consistency**: Fixed examples and API references across all documentation files
+
+### Technical Details
+- Enhanced Sphinx configuration with modern extensions (doctest, coverage, duration)
+- Improved autodoc configuration with better type hint handling
+- Sequential refinement chunking algorithm for better stability and <1% error rates
+- Comprehensive integration test suite with realistic tolerances
+
+## [Previous Unreleased - Development Phase]
+
 ### Changed
 - Renamed package from JAXFit to NLSQ
 - Migrated to modern pyproject.toml configuration

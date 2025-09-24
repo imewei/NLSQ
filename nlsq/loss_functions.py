@@ -8,6 +8,123 @@ from jax import jit
 
 
 class LossFunctionsJIT:
+    """JIT-compiled robust loss functions for nonlinear least squares optimization.
+
+    This class provides GPU/TPU-accelerated implementations of robust loss functions
+    that reduce the influence of outliers in curve fitting. All loss functions are
+    JIT-compiled for maximum performance and include analytical derivatives required
+    for efficient optimization.
+
+    Robust Loss Function Theory
+    --------------------------
+    Standard least squares minimizes sum of squared residuals, making it sensitive
+    to outliers. Robust loss functions ρ(z) replace z (squared residuals) with
+    functions that grow more slowly for large residuals:
+
+    Standard LS: min Σ f_i²
+    Robust LS:   min Σ ρ(f_i²/σ²)
+
+    where σ is the scaling parameter (f_scale) and z = (f/σ)².
+
+    Available Loss Functions
+    -----------------------
+    1. **linear**: Standard least squares (ρ(z) = z)
+       - No outlier protection
+       - Fastest computation
+       - Optimal for clean data without outliers
+
+    2. **huber**: Huber loss function
+       - ρ(z) = z if z ≤ 1, else 2√z - 1
+       - Quadratic for small residuals, linear for large ones
+       - Good balance between efficiency and robustness
+       - Recommended for data with moderate outliers
+
+    3. **soft_l1**: Soft L1 loss function
+       - ρ(z) = 2(√(1+z) - 1)
+       - Smooth approximation to L1 norm
+       - More robust than Huber for severe outliers
+       - Preserves differentiability everywhere
+
+    4. **cauchy**: Cauchy (Lorentzian) loss function
+       - ρ(z) = ln(1 + z)
+       - Extremely robust to outliers
+       - Can handle heavy-tailed error distributions
+       - May converge slowly for well-behaved data
+
+    5. **arctan**: Arctangent loss function
+       - ρ(z) = arctan(z)
+       - Bounded loss function
+       - Very robust to extreme outliers
+       - Useful for data with unknown error characteristics
+
+    Mathematical Implementation
+    --------------------------
+    Each loss function computes three quantities:
+    - **ρ(z)**: Loss function value
+    - **ρ'(z)**: First derivative for gradient computation
+    - **ρ''(z)**: Second derivative for Hessian approximation
+
+    The derivatives are used in the optimization algorithm:
+    - Gradient: g = J^T (ρ'(z) ⊙ f)
+    - Hessian: H ≈ J^T diag(ρ'(z)) J + J^T diag(ρ''(z) ⊙ f²) J
+
+    Performance Characteristics
+    --------------------------
+    - **JIT Compilation**: All functions compiled for GPU/TPU acceleration
+    - **Vectorized Operations**: Efficient batch processing of residuals
+    - **Memory Optimization**: In-place operations where possible
+    - **Numerical Stability**: Careful handling of edge cases and overflow
+
+    Usage Example
+    ------------
+    ```python
+    from nlsq.loss_functions import LossFunctionsJIT
+
+    # Initialize loss function handler
+    loss_jit = LossFunctionsJIT()
+
+    # Get robust loss function
+    huber_loss = loss_jit.get_loss_function('huber')
+
+    # Apply to residuals
+    residuals = jnp.array([0.1, 5.0, 0.2, 10.0])  # Contains outliers
+    f_scale = 1.0
+    data_mask = jnp.ones_like(residuals, dtype=bool)
+
+    # Compute loss with derivatives
+    rho = huber_loss(residuals, f_scale, data_mask, cost_only=False)
+    # rho[0] = loss values, rho[1] = first derivatives, rho[2] = second derivatives
+
+    # Compute total cost only
+    cost = huber_loss(residuals, f_scale, data_mask, cost_only=True)
+    ```
+
+    Loss Function Selection Guidelines
+    ---------------------------------
+    - **Clean Data**: Use 'linear' for maximum efficiency
+    - **Few Outliers**: Use 'huber' for balanced robustness
+    - **Many Outliers**: Use 'soft_l1' or 'cauchy'
+    - **Unknown Data Quality**: Start with 'huber', upgrade if needed
+    - **Extreme Outliers**: Use 'cauchy' or 'arctan'
+
+    Scale Parameter (f_scale)
+    ------------------------
+    The scale parameter σ (f_scale) determines the transition point between
+    quadratic and robust behavior:
+    - **Too Small**: All residuals treated as outliers
+    - **Too Large**: No outlier protection
+    - **Optimal**: ~median absolute residual or robust MAD estimate
+    - **Adaptive**: Can be estimated during optimization
+
+    Technical Implementation Details
+    --------------------------------
+    - All functions handle both scalar and vector inputs
+    - Derivatives computed analytically for accuracy
+    - Special handling for z=0 to avoid numerical issues
+    - Efficient masking for missing data points
+    - Compatible with JAX transformations (grad, jit, vmap)
+    """
+
     def __init__(self):
         self.stack_rhos = self.create_stack_rhos()
 

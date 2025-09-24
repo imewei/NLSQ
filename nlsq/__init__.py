@@ -1,8 +1,17 @@
 """
-NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU
+NLSQ: JAX-accelerated nonlinear least squares curve fitting.
 
-A JAX-based implementation of curve fitting algorithms with automatic
-differentiation and GPU/TPU acceleration.
+GPU/TPU-accelerated curve fitting with automatic differentiation.
+Provides drop-in SciPy compatibility with curve_fit function.
+Supports large datasets through automatic chunking and sampling.
+
+Examples
+--------
+>>> import jax.numpy as jnp
+>>> from nlsq import curve_fit
+>>> def model(x, a, b): return a * jnp.exp(-b * x)
+>>> popt, pcov = curve_fit(model, xdata, ydata)
+
 """
 
 # Version information
@@ -116,88 +125,69 @@ def curve_fit_large(
     chunk_size=None,
     **kwargs,
 ):
-    """Curve fitting with automatic large dataset handling.
+    """Curve fitting with automatic memory management for large datasets.
 
-    This function provides a drop-in replacement for `curve_fit` with automatic
-    detection and handling of large datasets. For small datasets (< 1M points),
-    it behaves identically to `curve_fit`. For larger datasets, it automatically
-    switches to memory-efficient processing with chunking, sampling, and progress
-    reporting.
+    Automatically selects processing strategy based on dataset size:
+    - Small (< 1M points): Standard curve_fit
+    - Medium (1M - 100M points): Chunked processing
+    - Large (> 100M points): Sampling with chunking
 
     Parameters
     ----------
     f : callable
-        The model function f(x, *params) -> y
-    xdata : np.ndarray
-        Independent variable data
-    ydata : np.ndarray
-        Dependent variable data
-    p0 : array-like, optional
-        Initial parameter guess
-    sigma : array-like, optional
-        Uncertainties in ydata (for weighted fitting)
+        Model function f(x, *params) -> y. Must use jax.numpy operations.
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : array_like, optional
+        Initial parameter guess.
+    sigma : array_like, optional
+        Uncertainties in ydata for weighted fitting.
     absolute_sigma : bool, optional
-        Whether sigma represents absolute uncertainties (default: False)
+        Whether sigma represents absolute uncertainties.
     check_finite : bool, optional
-        Whether to check for finite values in inputs (default: True)
+        Check for finite input values.
     bounds : tuple, optional
-        Parameter bounds as (lower, upper) (default: (-inf, inf))
+        Parameter bounds as (lower, upper).
     method : str, optional
-        Optimization method (default: None for automatic selection)
+        Optimization algorithm ('trf', 'lm', or None for auto).
     memory_limit_gb : float, optional
-        Memory limit in GB (default: None for automatic detection)
+        Maximum memory usage in GB.
     auto_size_detection : bool, optional
-        Whether to automatically detect dataset size and switch methods (default: True)
+        Auto-detect dataset size for processing strategy.
     size_threshold : int, optional
-        Point count threshold for switching to large dataset processing (default: 1M)
+        Point threshold for large dataset processing (default: 1M).
     show_progress : bool, optional
-        Whether to show progress for large dataset processing (default: False)
+        Display progress bar for long operations.
     enable_sampling : bool, optional
-        Whether to enable sampling for extremely large datasets (default: True)
+        Enable sampling for extremely large datasets.
     sampling_threshold : int, optional
-        Point count threshold above which sampling is considered (default: 100M)
+        Point threshold for sampling (default: 100M).
     max_sampled_size : int, optional
-        Maximum size when sampling is enabled (default: 10M)
+        Maximum sample size when sampling (default: 10M).
     chunk_size : int, optional
-        Override automatic chunk size calculation
+        Override automatic chunk size calculation.
     **kwargs
-        Additional arguments passed to the underlying curve_fit implementation
+        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
 
     Returns
     -------
-    popt : np.ndarray
-        Optimal parameters
-    pcov : np.ndarray
-        Covariance matrix of the parameters
+    popt : ndarray
+        Fitted parameters.
+    pcov : ndarray
+        Parameter covariance matrix.
 
     Examples
     --------
-    Small dataset (uses regular curve_fit):
+    Basic usage:
 
-    >>> x = np.linspace(0, 4, 50)
-    >>> y = 2.5 * np.exp(-1.3 * x) + noise
-    >>> popt, pcov = curve_fit_large(lambda x, a, b: a * np.exp(-b * x), x, y)
+    >>> popt, pcov = curve_fit_large(model_func, xdata, ydata, p0=[1, 2, 3])
 
-    Large dataset (automatic large dataset processing):
+    Large dataset with progress bar:
 
-    >>> x_large = np.linspace(0, 10, 10_000_000)
-    >>> y_large = 2.5 * np.exp(-1.3 * x_large) + noise
-    >>> popt, pcov = curve_fit_large(
-    ...     lambda x, a, b: a * np.exp(-b * x),
-    ...     x_large, y_large,
-    ...     memory_limit_gb=8.0,
-    ...     show_progress=True
-    ... )
-
-    Custom configuration for very large datasets:
-
-    >>> popt, pcov = curve_fit_large(
-    ...     func, x_very_large, y_very_large,
-    ...     memory_limit_gb=16.0,
-    ...     enable_sampling=True,
-    ...     sampling_threshold=50_000_000,
-    ...     show_progress=True
-    ... )
+    >>> popt, pcov = curve_fit_large(model_func, big_xdata, big_ydata,
+    ...                             show_progress=True, memory_limit_gb=8)
     """
     import numpy as np
 

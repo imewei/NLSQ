@@ -114,10 +114,11 @@ Tutorial notebooks:
 
 NLSQ includes advanced features for handling very large datasets (20M+ points) that may not fit in memory:
 
-### Automatic Memory Management
+### Automatic Large Dataset Handling with curve_fit_large
 
 ```python
-from nlsq import LargeDatasetFitter, estimate_memory_requirements
+from nlsq import curve_fit_large, estimate_memory_requirements
+import jax.numpy as jnp
 import numpy as np
 
 # Check memory requirements for your dataset
@@ -127,29 +128,35 @@ stats = estimate_memory_requirements(n_points, n_params)
 print(f"Memory required: {stats.total_memory_estimate_gb:.2f} GB")
 print(f"Recommended chunks: {stats.n_chunks}")
 
-# Automatic chunking for large datasets
-fitter = LargeDatasetFitter(memory_limit_gb=4.0)  # 4GB memory limit
-
 # Generate large dataset
 x = np.linspace(0, 10, n_points)
 y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, n_points)
 
-
-# Fit with automatic memory management
+# Define fit function using JAX numpy
 def exponential(x, a, b, c):
-    return a * np.exp(-b * x) + c
+    return a * jnp.exp(-b * x) + c
 
+# Use curve_fit_large for automatic dataset size detection and chunking
+popt, pcov = curve_fit_large(
+    exponential,
+    x,
+    y,
+    p0=[2.5, 0.6, 0.2],
+    memory_limit_gb=4.0,  # Automatic chunking if needed
+    show_progress=True,   # Progress bar for large datasets
+)
 
-result = fitter.fit(exponential, x, y, p0=[2.5, 0.6, 0.2])
-print(f"Fitted parameters: {result.popt}")
+print(f"Fitted parameters: {popt}")
+print(f"Parameter uncertainties: {np.sqrt(np.diag(pcov))}")
 ```
 
-### Convenience Function for Large Datasets
+### Advanced Large Dataset Fitting Options
 
 ```python
-from nlsq import fit_large_dataset
+from nlsq import LargeDatasetFitter, fit_large_dataset, LDMemoryConfig
+import jax.numpy as jnp
 
-# Simple API for large dataset fitting
+# Option 1: Use the convenience function for simple cases
 result = fit_large_dataset(
     exponential,
     x,
@@ -158,6 +165,27 @@ result = fit_large_dataset(
     memory_limit_gb=4.0,
     show_progress=True,  # Progress bar for long fits
 )
+
+# Option 2: Use LargeDatasetFitter for more control
+config = LDMemoryConfig(
+    memory_limit_gb=4.0,
+    min_chunk_size=10000,
+    max_chunk_size=1000000,
+    enable_sampling=True,  # For datasets > 100M points
+    sampling_threshold=100_000_000,
+)
+
+fitter = LargeDatasetFitter(config=config)
+result = fitter.fit_with_progress(
+    exponential,
+    x,
+    y,
+    p0=[2.5, 0.6, 0.2],
+)
+
+print(f"Fitted parameters: {result.popt}")
+print(f"Success rate: {result.success_rate:.1%}")
+print(f"Number of chunks: {result.n_chunks}")
 ```
 
 ### Sparse Jacobian Optimization
@@ -196,12 +224,15 @@ result = optimizer.fit_unlimited_data(func, data_generator, x0=p0, n_params=3)
 
 ### Key Features for Large Datasets:
 
+- **Automatic Size Detection**: `curve_fit_large` automatically switches between standard and chunked fitting
 - **Memory Estimation**: Predict memory requirements before fitting
-- **Automatic Chunking**: Split large datasets into manageable chunks
+- **Intelligent Chunking**: Improved algorithm with <1% error for well-conditioned problems
 - **Progress Reporting**: Track progress during long-running fits
+- **JAX Tracing Support**: Compatible with functions having 15+ parameters
 - **Sparse Optimization**: Exploit sparsity in Jacobian matrices
 - **Streaming Support**: Process data that doesn't fit in memory
 - **Memory-Efficient Solvers**: CG and LSQR solvers for reduced memory usage
+- **Adaptive Convergence**: Early stopping when parameters stabilize
 
 For more details, see the [large dataset guide](https://nlsq.readthedocs.io/en/latest/large_datasets.html) and [API documentation](https://nlsq.readthedocs.io/en/latest/api.html).
 

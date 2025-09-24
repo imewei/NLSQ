@@ -94,66 +94,81 @@ Example notebooks are available in the `examples/ directory <https://github.com/
 You can run these notebooks on Google Colab by opening them directly from the GitHub repository.
 
 Large Dataset Support
---------------------
+---------------------
 
 NLSQ includes comprehensive support for handling very large datasets (20M+ points) that may exceed available memory. These features are designed to handle scientific and engineering datasets with millions to billions of data points.
 
-Memory Management and Estimation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Automatic Large Dataset Handling with curve_fit_large
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Before fitting large datasets, NLSQ can estimate memory requirements:
+The ``curve_fit_large`` function provides automatic dataset size detection and intelligent chunking:
 
 .. code:: python
 
-   from nlsq import estimate_memory_requirements
+   from nlsq import curve_fit_large, estimate_memory_requirements
+   import jax.numpy as jnp
+   import numpy as np
 
    # Check memory requirements for 50 million points
    stats = estimate_memory_requirements(50_000_000, n_params=3)
    print(f"Memory required: {stats.total_memory_estimate_gb:.2f} GB")
    print(f"Recommended chunks: {stats.n_chunks}")
-   print(f"Requires sampling: {stats.requires_sampling}")
-
-LargeDatasetFitter Class
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-The ``LargeDatasetFitter`` class provides automatic memory management:
-
-.. code:: python
-
-   from nlsq import LargeDatasetFitter
-   import numpy as np
-
-   # Create fitter with 4GB memory limit
-   fitter = LargeDatasetFitter(memory_limit_gb=4.0)
 
    # Generate large dataset (50M points)
    x = np.linspace(0, 10, 50_000_000)
    y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, len(x))
 
-
+   # Define fit function using JAX numpy
    def exponential(x, a, b, c):
-       return a * np.exp(-b * x) + c
+       return a * jnp.exp(-b * x) + c
 
+   # Use curve_fit_large - automatic chunking if needed
+   popt, pcov = curve_fit_large(
+       exponential,
+       x,
+       y,
+       p0=[2.5, 0.6, 0.2],
+       memory_limit_gb=4.0,  # Automatic chunking if needed
+       show_progress=True,   # Progress bar for large datasets
+   )
 
-   # Fit with automatic chunking
-   result = fitter.fit_with_progress(exponential, x, y, p0=[2.5, 0.6, 0.2])
+   print(f"Fitted parameters: {popt}")
+   print(f"Parameter uncertainties: {np.sqrt(np.diag(pcov))}")
 
-Convenience Function
-~~~~~~~~~~~~~~~~~~~~
+Advanced Options
+~~~~~~~~~~~~~~~~
 
-For simple use cases, use the ``fit_large_dataset`` function:
+For more control, use the ``LargeDatasetFitter`` class or ``fit_large_dataset`` function:
 
 .. code:: python
 
-   from nlsq import fit_large_dataset
+   from nlsq import LargeDatasetFitter, fit_large_dataset, LDMemoryConfig
+   import jax.numpy as jnp
 
+   # Option 1: Use the convenience function
    result = fit_large_dataset(
        exponential,
        x,
        y,
        p0=[2.5, 0.6, 0.2],
        memory_limit_gb=4.0,
-       show_progress=True,  # Show progress bar
+       show_progress=True,
+   )
+
+   # Option 2: Use LargeDatasetFitter for more control
+   config = LDMemoryConfig(
+       memory_limit_gb=4.0,
+       min_chunk_size=10000,
+       max_chunk_size=1000000,
+       enable_sampling=True,  # For datasets > 100M points
+   )
+
+   fitter = LargeDatasetFitter(config=config)
+   result = fitter.fit_with_progress(
+       exponential,
+       x,
+       y,
+       p0=[2.5, 0.6, 0.2],
    )
 
 Sparse Jacobian Optimization
@@ -211,12 +226,16 @@ NLSQ includes iterative solvers that reduce memory usage:
 
 Key Features:
 
-- **Automatic Memory Management**: Detects available memory and chunks data accordingly
+- **Automatic Size Detection**: ``curve_fit_large`` automatically switches between standard and chunked fitting
+- **Intelligent Chunking**: Improved algorithm with <1% error for well-conditioned problems
+- **JAX Tracing Support**: Compatible with functions having 15+ parameters
+- **Memory Estimation**: Predict memory requirements before fitting
 - **Progress Reporting**: Real-time progress for long-running fits
 - **Sparse Optimization**: Exploits sparsity in Jacobian matrices
 - **Streaming Support**: Process data that doesn't fit in memory
 - **HDF5 Integration**: Work with datasets stored on disk
 - **Iterative Solvers**: CG and LSQR solvers for reduced memory footprint
+- **Adaptive Convergence**: Early stopping when parameters stabilize
 
 For detailed information, see the :doc:`Large Dataset Guide <large_dataset_guide>` and :doc:`API documentation <autodoc/modules>`.
 
