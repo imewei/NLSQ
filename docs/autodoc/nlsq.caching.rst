@@ -7,3 +7,4 @@ Function caching and JIT compilation utilities.
    :members:
    :undoc-members:
    :show-inheritance:
+   :imported-members: False

@@ -7,3 +7,4 @@ Configuration management and environment setup.
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:

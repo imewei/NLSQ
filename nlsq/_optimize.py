@@ -9,7 +9,7 @@ class OptimizeResult(dict):
     dictionary-style and attribute-style access to optimization results.
 
     Core Attributes
-    --------------
+    ---------------
     x : jax.numpy.ndarray or numpy.ndarray
         Optimized parameter vector containing the final fitted parameters.
         These represent the solution to the nonlinear least squares problem.
@@ -23,7 +23,7 @@ class OptimizeResult(dict):
 
         - 1: Gradient convergence (||g||_inf < gtol)
         - 2: Step size convergence (||dx||/||x|| < xtol)
-        - 3: Function value convergence (|df|/f < ftol)
+        - 3: Function value convergence (delta_f/f < ftol)
         - 0: Maximum iterations reached
         - -1: Evaluation limit exceeded
         - -3: Inner loop iteration limit (algorithm-specific)
@@ -33,7 +33,7 @@ class OptimizeResult(dict):
         information about convergence status or failure reasons.
 
     Objective Function Results
-    -------------------------
+    ---------------------------
     fun : jax.numpy.ndarray
         Final residual vector f(x) at the solution. For curve fitting, these
         are the differences between model predictions and data points.
@@ -51,7 +51,7 @@ class OptimizeResult(dict):
         convergence checking and parameter uncertainty estimation.
 
     Convergence Metrics
-    ------------------
+    -------------------
     optimality : float
         Final gradient norm ||g||_inf used for convergence assessment.
         Should be less than gtol for successful convergence.
@@ -61,7 +61,7 @@ class OptimizeResult(dict):
         optimization). Shape (n,) with True for parameters at constraints.
 
     Iteration Statistics
-    -------------------
+    --------------------
     nfev : int
         Total number of objective function evaluations during optimization.
         Each evaluation computes residuals f(x) for given parameters.
@@ -75,7 +75,7 @@ class OptimizeResult(dict):
         for all algorithms.
 
     Algorithm-Specific Results
-    -------------------------
+    ---------------------------
     pcov : jax.numpy.ndarray, optional
         Parameter covariance matrix with shape (n, n). Provides parameter
         uncertainty estimates. Available when uncertainty estimation is requested.
@@ -90,76 +90,70 @@ class OptimizeResult(dict):
         computation, linear algebra operations, etc.).
 
     Usage Examples
-    -------------
-    Basic result access:
+    --------------
+    Basic result access::
 
-    ```python
-    import nlsq
+        import nlsq
 
-    # Perform curve fitting
-    result = nlsq.curve_fit(model_func, x_data, y_data, p0=initial_guess)
+        # Perform curve fitting
+        result = nlsq.curve_fit(model_func, x_data, y_data, p0=initial_guess)
 
-    # Access optimized parameters
-    fitted_params = result.x
+        # Access optimized parameters
+        fitted_params = result.x
 
-    # Check convergence
-    if result.success:
-        print(f"Optimization converged: {result.message}")
-        print(f"Final cost: {result.cost}")
-        print(f"Function evaluations: {result.nfev}")
-    else:
-        print(f"Optimization failed: {result.message}")
+        # Check convergence
+        if result.success:
+            print(f"Optimization converged: {result.message}")
+            print(f"Final cost: {result.cost}")
+            print(f"Function evaluations: {result.nfev}")
+        else:
+            print(f"Optimization failed: {result.message}")
 
-    # Parameter uncertainties (if covariance computed)
-    if hasattr(result, 'pcov'):
-        param_errors = jnp.sqrt(jnp.diag(result.pcov))
-        print(f"Parameter uncertainties: {param_errors}")
-    ```
+        # Parameter uncertainties (if covariance computed)
+        if hasattr(result, 'pcov'):
+            param_errors = jnp.sqrt(jnp.diag(result.pcov))
+            print(f"Parameter uncertainties: {param_errors}")
 
-    Advanced result inspection:
+    Advanced result inspection::
 
-    ```python
-    # Examine residuals and fit quality
-    final_residuals = result.fun
-    rms_error = jnp.sqrt(jnp.mean(final_residuals**2))
+        # Examine residuals and fit quality
+        final_residuals = result.fun
+        rms_error = jnp.sqrt(jnp.mean(final_residuals**2))
 
-    # Check gradient convergence
-    gradient_norm = result.optimality
-    print(f"Final gradient norm: {gradient_norm}")
+        # Check gradient convergence
+        gradient_norm = result.optimality
+        print(f"Final gradient norm: {gradient_norm}")
 
-    # Analyze Jacobian condition
-    jacobian = result.jac
-    condition_number = jnp.linalg.cond(jacobian)
-    print(f"Jacobian condition number: {condition_number}")
+        # Analyze Jacobian condition
+        jacobian = result.jac
+        condition_number = jnp.linalg.cond(jacobian)
+        print(f"Jacobian condition number: {condition_number}")
 
-    # For bounded problems, check active constraints
-    if hasattr(result, 'active_mask'):
-        constrained_params = jnp.where(result.active_mask)[0]
-        print(f"Parameters at bounds: {constrained_params}")
-    ```
+        # For bounded problems, check active constraints
+        if hasattr(result, 'active_mask'):
+            constrained_params = jnp.where(result.active_mask)[0]
+            print(f"Parameters at bounds: {constrained_params}")
 
     Dictionary Interface
-    -------------------
+    --------------------
     Since OptimizeResult inherits from dict, all attributes are also
-    accessible via dictionary syntax:
+    accessible via dictionary syntax::
 
-    ```python
-    # Dictionary-style access
-    parameters = result['x']
-    success_flag = result['success']
+        # Dictionary-style access
+        parameters = result['x']
+        success_flag = result['success']
 
-    # List all available results
-    print("Available results:", list(result.keys()))
-    ```
+        # List all available results
+        print("Available results:", list(result.keys()))
 
     Integration with SciPy
-    ---------------------
+    ----------------------
     This class maintains compatibility with scipy.optimize.OptimizeResult
     while adding JAX-specific features and NLSQ-specific results. It can
     be used interchangeably with SciPy optimization results in most contexts.
 
     Technical Notes
-    --------------
+    ---------------
     - All JAX arrays are automatically converted to NumPy arrays for compatibility
     - Covariance matrices use double precision for numerical stability
     - Large dataset results may include memory management statistics

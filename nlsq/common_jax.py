@@ -25,21 +25,21 @@ class CommonJIT:
     functions are JIT-compiled for maximum performance and memory efficiency.
 
     Core Functionality
-    -----------------
+    ------------------
     - **Quadratic Function Operations**: Build and evaluate quadratic forms
     - **Matrix-Vector Products**: Optimized Jacobian operations
     - **Robust Loss Scaling**: Jacobian and residual scaling for robust methods
     - **Numerical Utilities**: Condition-aware computations with overflow protection
 
     JIT Compilation Benefits
-    -----------------------
+    -------------------------
     - **GPU/TPU Acceleration**: All operations optimized for parallel hardware
     - **Memory Efficiency**: Reduced allocations through compilation optimization
     - **Automatic Fusion**: Operations automatically fused for better performance
     - **Type Specialization**: Functions compiled for specific array shapes/types
 
     Mathematical Operations
-    ----------------------
+    ------------------------
     The class implements several categories of operations:
 
     1. **Quadratic Functions**: For trust region subproblems
@@ -58,14 +58,14 @@ class CommonJIT:
        - Numerical stability for extreme scaling factors
 
     Performance Characteristics
-    --------------------------
+    ----------------------------
     - **Memory Usage**: O(1) additional memory overhead
     - **Compilation Time**: One-time cost during initialization
     - **Execution Speed**: 10-100x faster than pure NumPy on GPU
     - **Numerical Precision**: Full double precision support
 
     Technical Implementation
-    -----------------------
+    ------------------------
     All functions use JAX JIT compilation with the following features:
     - Static argument handling for shape polymorphism
     - Automatic differentiation compatibility
@@ -73,7 +73,7 @@ class CommonJIT:
     - Memory layout optimization for cache efficiency
 
     Integration with Optimization Algorithms
-    ---------------------------------------
+    -----------------------------------------
     This class is used by:
     - Trust Region Reflective (TRF) algorithm for quadratic models
     - Levenberg-Marquardt algorithm for step computation
@@ -81,30 +81,30 @@ class CommonJIT:
     - Large dataset processing for memory-efficient operations
 
     Usage Example
-    ------------
-    ```python
-    from nlsq.common_jax import CommonJIT
-    import jax.numpy as jnp
+    -------------
+    ::
 
-    # Initialize JIT-compiled functions
-    cjit = CommonJIT()
+        from nlsq.common_jax import CommonJIT
+        import jax.numpy as jnp
 
-    # Example: Scale Jacobian for robust loss
-    jacobian = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-    residuals = jnp.array([0.1, 2.5])  # Contains outlier
-    rho = jnp.array([loss_val, loss_deriv1, loss_deriv2])
+        # Initialize JIT-compiled functions
+        cjit = CommonJIT()
 
-    # Apply robust scaling
-    scaled_J, scaled_f = cjit.scale_for_robust_loss_function(jacobian, residuals, rho)
+        # Example: Scale Jacobian for robust loss
+        jacobian = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        residuals = jnp.array([0.1, 2.5])  # Contains outlier
+        rho = jnp.array([loss_val, loss_deriv1, loss_deriv2])
 
-    # Example: Build quadratic model
-    gradient = jnp.array([0.1, -0.3])
-    direction = jnp.array([1.0, 0.5])
-    a, b, c = cjit.build_quadratic_1d(jacobian, gradient, direction)
-    ```
+        # Apply robust scaling
+        scaled_J, scaled_f = cjit.scale_for_robust_loss_function(jacobian, residuals, rho)
+
+        # Example: Build quadratic model
+        gradient = jnp.array([0.1, -0.3])
+        direction = jnp.array([1.0, 0.5])
+        a, b, c = cjit.build_quadratic_1d(jacobian, gradient, direction)
 
     Numerical Considerations
-    -----------------------
+    -------------------------
     - **Overflow Protection**: Automatic handling of extreme scaling factors
     - **Underflow Prevention**: Minimum threshold enforcement (EPS)
     - **Condition Monitoring**: Numerical stability checks for ill-conditioned operations
@@ -119,7 +119,7 @@ class CommonJIT:
         reused across multiple optimization runs.
 
         Compiled Functions Created
-        -------------------------
+        ---------------------------
         - Quadratic function builders and evaluators
         - Matrix-vector dot products with broadcasting
         - Jacobian sum operations for constraint handling

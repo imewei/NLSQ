@@ -140,32 +140,32 @@ class TrustRegionJITFunctions:
     - **Hat Space Transformation**: Scaled variable transformations for bounds handling
 
     JIT Compilation Benefits
-    -----------------------
+    ------------------------
     - **GPU Acceleration**: All operations optimized for GPU/TPU hardware
     - **Memory Efficiency**: Reduced memory allocations through compilation
     - **Automatic Differentiation**: JAX autodiff for exact Jacobian computation
     - **XLA Optimization**: Advanced compiler optimizations for performance
 
     Algorithm Integration
-    --------------------
+    ---------------------
     The class implements two solution methods:
     1. **Exact SVD**: Uses singular value decomposition for small to medium problems
     2. **Conjugate Gradient**: Iterative method for large sparse problems
 
     Memory Management
-    ----------------
+    -----------------
     - Bounded Problems: Augmented system handling for constraint optimization
     - Unbounded Problems: Direct system solving for unconstrained optimization
     - Scaling Matrices: Efficient diagonal matrix operations in hat space
 
     Technical Implementation
-    -----------------------
+    ------------------------
     All functions use JAX JIT compilation for performance. The class automatically
     creates optimized versions during initialization. Functions handle both bounded
     and unbounded optimization variants with appropriate augmentation strategies.
 
     Performance Characteristics
-    --------------------------
+    ---------------------------
     - **Small Problems**: Direct SVD solution O(mn^2 + n^3)
     - **Large Problems**: CG iteration O(k*mn) where k is iteration count
     - **GPU Memory**: Optimized for batch processing and memory reuse

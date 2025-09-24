@@ -16,7 +16,7 @@ class LossFunctionsJIT:
     for efficient optimization.
 
     Robust Loss Function Theory
-    --------------------------
+    ----------------------------
     Standard least squares minimizes sum of squared residuals, making it sensitive
     to outliers. Robust loss functions ρ(z) replace z (squared residuals) with
     functions that grow more slowly for large residuals:
@@ -27,7 +27,7 @@ class LossFunctionsJIT:
     where σ is the scaling parameter (f_scale) and z = (f/σ)².
 
     Available Loss Functions
-    -----------------------
+    -------------------------
     1. **linear**: Standard least squares (ρ(z) = z)
        - No outlier protection
        - Fastest computation
@@ -58,49 +58,49 @@ class LossFunctionsJIT:
        - Useful for data with unknown error characteristics
 
     Mathematical Implementation
-    --------------------------
+    ----------------------------
     Each loss function computes three quantities:
     - **ρ(z)**: Loss function value
     - **ρ'(z)**: First derivative for gradient computation
     - **ρ''(z)**: Second derivative for Hessian approximation
 
     The derivatives are used in the optimization algorithm:
-    - Gradient: g = J^T (ρ'(z) ⊙ f)
-    - Hessian: H ≈ J^T diag(ρ'(z)) J + J^T diag(ρ''(z) ⊙ f²) J
+    - Gradient: g = J^T (rho'(z) ⊙ f)
+    - Hessian: H ≈ J^T diag(rho'(z)) J + J^T diag(rho''(z) ⊙ f²) J
 
     Performance Characteristics
-    --------------------------
+    ----------------------------
     - **JIT Compilation**: All functions compiled for GPU/TPU acceleration
     - **Vectorized Operations**: Efficient batch processing of residuals
     - **Memory Optimization**: In-place operations where possible
     - **Numerical Stability**: Careful handling of edge cases and overflow
 
     Usage Example
-    ------------
-    ```python
-    from nlsq.loss_functions import LossFunctionsJIT
+    -------------
+    ::
 
-    # Initialize loss function handler
-    loss_jit = LossFunctionsJIT()
+        from nlsq.loss_functions import LossFunctionsJIT
 
-    # Get robust loss function
-    huber_loss = loss_jit.get_loss_function('huber')
+        # Initialize loss function handler
+        loss_jit = LossFunctionsJIT()
 
-    # Apply to residuals
-    residuals = jnp.array([0.1, 5.0, 0.2, 10.0])  # Contains outliers
-    f_scale = 1.0
-    data_mask = jnp.ones_like(residuals, dtype=bool)
+        # Get robust loss function
+        huber_loss = loss_jit.get_loss_function('huber')
 
-    # Compute loss with derivatives
-    rho = huber_loss(residuals, f_scale, data_mask, cost_only=False)
-    # rho[0] = loss values, rho[1] = first derivatives, rho[2] = second derivatives
+        # Apply to residuals
+        residuals = jnp.array([0.1, 5.0, 0.2, 10.0])  # Contains outliers
+        f_scale = 1.0
+        data_mask = jnp.ones_like(residuals, dtype=bool)
 
-    # Compute total cost only
-    cost = huber_loss(residuals, f_scale, data_mask, cost_only=True)
-    ```
+        # Compute loss with derivatives
+        rho = huber_loss(residuals, f_scale, data_mask, cost_only=False)
+        # rho[0] = loss values, rho[1] = first derivatives, rho[2] = second derivatives
+
+        # Compute total cost only
+        cost = huber_loss(residuals, f_scale, data_mask, cost_only=True)
 
     Loss Function Selection Guidelines
-    ---------------------------------
+    -----------------------------------
     - **Clean Data**: Use 'linear' for maximum efficiency
     - **Few Outliers**: Use 'huber' for balanced robustness
     - **Many Outliers**: Use 'soft_l1' or 'cauchy'
@@ -108,7 +108,7 @@ class LossFunctionsJIT:
     - **Extreme Outliers**: Use 'cauchy' or 'arctan'
 
     Scale Parameter (f_scale)
-    ------------------------
+    --------------------------
     The scale parameter σ (f_scale) determines the transition point between
     quadratic and robust behavior:
     - **Too Small**: All residuals treated as outliers

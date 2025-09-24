@@ -35,7 +35,7 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
     Parameters
     ----------
     f : callable
-        The model function f(x, *popt) -> y. Must be JAX-compatible, meaning it should
+        The model function f(x, \\*popt) -> y. Must be JAX-compatible, meaning it should
         use `jax.numpy` instead of `numpy` for mathematical operations to enable
         GPU acceleration and automatic differentiation.
     xdata : array_like

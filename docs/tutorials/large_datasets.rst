@@ -1,5 +1,5 @@
 Large Dataset Tutorial
-=====================
+======================
 
 Learn how to efficiently handle datasets with millions to billions of points using NLSQ's advanced large dataset features.
 
@@ -516,8 +516,8 @@ Next Steps
 
 Congratulations! You now have the tools to handle datasets of any size. Continue with:
 
-1. :doc:`advanced_features` - Robust fitting and parameter constraints
-2. :doc:`performance_optimization` - Squeeze out maximum performance
+1. :doc:`../api_large_datasets` - Advanced fitting APIs and parameter constraints
+2. :doc:`../performance_benchmarks` - Performance analysis and optimization
 3. Browse the `examples directory <https://github.com/Dipolar-Quantum-Gases/nlsq/tree/main/examples>`_ for more complex scenarios
 
 Further Reading

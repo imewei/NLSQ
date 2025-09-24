@@ -7,6 +7,7 @@ Memory Estimation
 -----------------
 
 .. autofunction:: nlsq.estimate_memory_requirements
+   :no-index:
 
 The ``estimate_memory_requirements`` function returns a ``DatasetStats`` object with the following attributes:
 

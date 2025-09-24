@@ -135,7 +135,7 @@ def curve_fit_large(
     Parameters
     ----------
     f : callable
-        Model function f(x, *params) -> y. Must use jax.numpy operations.
+        Model function f(x, \\*params) -> y. Must use jax.numpy operations.
     xdata : array_like
         Independent variable data.
     ydata : array_like

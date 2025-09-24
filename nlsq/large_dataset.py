@@ -375,7 +375,7 @@ class LargeDatasetFitter:
     through dynamic memory monitoring and chunk size optimization.
 
     Core Capabilities
-    ----------------
+    -----------------
     - Automatic memory estimation based on data size and parameter count
     - Dynamic chunk size calculation considering available system memory
     - Sequential parameter refinement across data chunks with convergence tracking
@@ -391,14 +391,14 @@ class LargeDatasetFitter:
     4. Automatically switches to sampling if chunking cannot fit within memory limits
 
     Processing Strategies
-    --------------------
+    ---------------------
     - **Single Pass**: For datasets fitting within memory limits
     - **Sequential Chunking**: Processes data in optimal-sized chunks with parameter propagation
     - **Stratified Sampling**: Maintains statistical representativeness for extremely large datasets
     - **Hybrid Approach**: Combines chunking and sampling based on memory constraints
 
     Performance Characteristics
-    --------------------------
+    ---------------------------
     - Maintains <1% parameter error for well-conditioned problems using chunking
     - Achieves 5-50x speedup over naive approaches through memory optimization
     - Scales to datasets with billions of points using intelligent sampling
