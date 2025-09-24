@@ -9,7 +9,7 @@
 [![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
 [![Documentation Status](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/en/latest/?badge=latest)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![JAX](https://img.shields.io/badge/JAX-0.4.20+-green.svg)](https://github.com/google/jax)
+[![JAX](https://img.shields.io/badge/JAX-0.4.20--0.7.2-green.svg)](https://github.com/google/jax)
 
 [**Quickstart**](#quickstart-colab-in-the-cloud)
 | [**Install guide**](#installation)
@@ -40,25 +40,45 @@ NLSQ provides a drop-in replacement for SciPy's curve_fit function with the foll
 import numpy as np
 from nlsq import CurveFit
 
-def linear(x, m, b): # fit function
-	return m * x + b
+# Define your fit function
+def linear(x, m, b):
+    return m * x + b
 
-x = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-y = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+# Prepare data
+x = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+y = np.array([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
 
+# Perform the fit
 cf = CurveFit()
 popt, pcov = cf.curve_fit(linear, x, y)
+print(f"Fitted parameters: m={popt[0]:.2f}, b={popt[1]:.2f}")
 ```
 
-NLSQ takes advantage of JAX's just-in-time compilation (JIT) of Python code to [XLA](https://www.tensorflow.org/xla) which runs on GPU or TPU hardware. 
-This means the fit functions you define must be JIT compilable. For basic fit functions this should cause no issues as we simply replace NumPy functions
-with their drop-in JAX equivalents. For example we show an exponential fit function
+NLSQ leverages JAX's just-in-time (JIT) compilation to [XLA](https://www.tensorflow.org/xla) for GPU/TPU acceleration.
+Fit functions must be JIT-compilable. For functions using special operations, use JAX's numpy:
 
 ```python
 import jax.numpy as jnp
+import numpy as np
+from nlsq import CurveFit
 
-def exp(x, a, b): # fit function
-	return jnp.exp(a * x) + b
+# Define exponential fit function using JAX numpy
+def exponential(x, a, b):
+    return jnp.exp(a * x) + b
+
+# Generate synthetic data
+x = np.linspace(0, 4, 50)
+y_true = np.exp(0.5 * x) + 2.0
+y = y_true + 0.1 * np.random.normal(size=len(x))
+
+# Fit with initial guess
+cf = CurveFit()
+popt, pcov = cf.curve_fit(exponential, x, y, p0=[0.5, 2.0])
+print(f"Fitted: a={popt[0]:.3f}, b={popt[1]:.3f}")
+
+# Get parameter uncertainties from covariance
+perr = np.sqrt(np.diag(pcov))
+print(f"Uncertainties: σ_a={perr[0]:.3f}, σ_b={perr[1]:.3f}")
 ```
 
 
@@ -86,18 +106,21 @@ Full disclosure we've copied most of this from the [JAX repo](https://github.com
 JAX's idiosyncrasies and so the "gotchas" are mostly the same.
 
 ### Double precision required
-First and foremost by default JAX enforces single precision (32-bit, e.g. `float32`), but NLSQ needs double precision (64-bit, e.g. `float64`).
-[To enable double-precision](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#double-64bit-precision)
-(64-bit, e.g. `float64`) one needs to set the `jax_enable_x64` variable at startup (or set the environment variable `JAX_ENABLE_X64=True`).
+NLSQ requires double precision (64-bit, `float64`) for numerical stability. By default, JAX uses single precision (32-bit, `float32`).
 
-NLSQ does this when it is imported, but should you import JAX before NLSQ, then you'll need to set this flag yourself e.g.
+NLSQ **automatically enables double precision** when imported. However, if you import JAX before NLSQ, you must enable it manually:
 
 ```python
-from jax.config import config
+# If importing JAX first (not recommended)
+from jax import config
 config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp
 from nlsq import CurveFit
+
+# Recommended: Import NLSQ first (auto-enables double precision)
+from nlsq import CurveFit
+import jax.numpy as jnp
 ```
 
 ### Other caveats
@@ -114,22 +137,26 @@ Some standouts:
 
 ## Installation
 
-NLSQ is written in pure Python and is based on the JAX package. JAX therefore needs to be installed before installing NLSQ via pip. JAX installation requires 
-a bit of effort since it is optimized for the computer hardware you'll be using (GPU vs. CPU). 
+### Requirements
 
-Installing JAX on Linux is natively supported by the JAX team and instructions
-to do so can be found [here](https://github.com/google/jax#installation). 
+- **Python 3.12 or higher** (3.13 also supported)
+- **JAX 0.4.20 - 0.7.2** (tested with latest versions)
+- **NumPy 1.26.0+**
+- **SciPy 1.11.0+**
 
-For Windows systems, the officially supported method is building directly from the source code 
-(see [Building JAX from source](https://jax.readthedocs.io/en/latest/developer.html#building-from-source)). However, we've found it easier to use pre-built JAX wheels which can be found in [this Github repo](https://github.com/cloudhan/jax-windows-builder) and we've included detailed instructions on this installation process below.
+### Quick Install
 
-After installing JAX, install NLSQ:
+#### Linux/Mac (Recommended)
 
 ```bash
-pip install nlsq
+# For CPU-only
+pip install --upgrade "jax[cpu]" nlsq
+
+# For GPU with CUDA 12
+pip install --upgrade "jax[cuda12]" nlsq
 ```
 
-For development:
+#### Development Installation
 
 ```bash
 git clone https://github.com/Dipolar-Quantum-Gases/nlsq.git
@@ -137,52 +164,47 @@ cd nlsq
 pip install -e ".[dev,test,docs]"
 ```
 
-### Windows JAX install
+### Platform-Specific Installation
 
-If you are installing JAX on a Windows machine with a CUDA compatible GPU then you'll need to read the first part. If you're only installing the CPU version
+For detailed installation instructions including Windows support and CUDA configuration, see below.
 
-#### Installing CUDA Toolkit
-If you'll be running JAX on a CUDA compatible GPU you'll need a CUDA toolkit and CUDnn. We recommend using an Anaconda environment to do all this installation.
+### Windows Installation
 
-First make sure your GPU driver is CUDA compatible and that the latest NVIDIA driver has been installed.
+Windows users have several options for installing JAX:
 
-To create a Conda environment with Python 3.9 open up Anaconda Prompt and do the following:
+#### Option 1: WSL2 (Recommended)
 
-```
-conda create -n jaxenv python=3.9
-```
+Use Windows Subsystem for Linux 2 (WSL2) and follow the Linux installation instructions above.
 
-Now activate the environment
+#### Option 2: Native Windows with CPU
 
-```
-conda activate jaxenv
-```
+```bash
+# Create a Python 3.12+ environment
+conda create -n nlsq python=3.12
+conda activate nlsq
 
-Since all the the pre-built Windows wheels rely on CUDA 11.1 and CUDnn 8.2, we use conda to install these as follows
-
-```
-conda install -c conda-forge cudatoolkit=11.1 cudnn=8.2.0
+# Install JAX CPU version
+pip install jax[cpu]==0.4.30
+pip install nlsq
 ```
 
-However, this toolkit doesn't include the developer tools which JAX also need and therefore these need to be separately installed using
+#### Option 3: Native Windows with GPU (CUDA 12)
 
-```
-conda install -c conda-forge cudatoolkit-dev
+```bash
+# Ensure you have CUDA 12.x installed
+# Create environment
+conda create -n nlsq python=3.12
+conda activate nlsq
+
+# Install CUDA toolkit
+conda install -c conda-forge cuda-toolkit=12.1
+
+# Install JAX with CUDA support
+pip install jax[cuda12_local]==0.4.30
+pip install nlsq
 ```
 
-#### Pip installing pre-built JAX wheel
-
-Pick a jaxlib wheel from the CloudHan repo's list of [pre-built wheels](https://whls.blob.core.windows.net/unstable/index.html). We recommend the latest build (0.3.14) as we've had issues with earlier versions. The Python version of the wheel needs to correspond to the conda environment's Python version (e.g. cp39 corresponds to Python 3.9 for our example) and pip install it. Additionally, you can pick a GPU version (CUDA111) or CPU only version, but we pick a GPU version below.
-
-```
-pip install https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.14+cuda11.cudnn82-cp39-none-win_amd64.whl
-```
-
-Next, install the JAX version corresponding to the jaxlib library (a list of jaxlib and JAX releases can be found [here](https://github.com/google/jax/blob/main/CHANGELOG.md)
-
-```
-pip install jax==0.3.14
-```
+For the latest JAX installation instructions, see the [official JAX documentation](https://jax.readthedocs.io/en/latest/installation.html).
 
 <!--For more detail on using these pre-built wheels please see the docs.-->
 

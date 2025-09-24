@@ -1,15 +1,17 @@
 """Base class for optimization algorithms in NLSQ."""
+
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Tuple, Union, Dict, Any
+from collections.abc import Callable
+
 import numpy as np
-import jax.numpy as jnp
 
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
+
 _jax_config = JAXConfig()
 
-from nlsq.logging import get_logger
 from nlsq._optimize import OptimizeResult
+from nlsq.logging import get_logger
 
 
 class OptimizerBase(ABC):
@@ -29,17 +31,19 @@ class OptimizerBase(ABC):
             Name of the optimizer for logging purposes
         """
         self.name = name
-        self.logger = get_logger(f'optimizer.{name}')
+        self.logger = get_logger(f"optimizer.{name}")
         self._nfev = 0
         self._njev = 0
 
     @abstractmethod
-    def optimize(self,
-                fun: Callable,
-                x0: np.ndarray,
-                jac: Optional[Callable] = None,
-                bounds: Tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
-                **kwargs) -> OptimizeResult:
+    def optimize(
+        self,
+        fun: Callable,
+        x0: np.ndarray,
+        jac: Callable | None = None,
+        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        **kwargs,
+    ) -> OptimizeResult:
         """Perform optimization.
 
         This is the main optimization method that must be implemented
@@ -89,16 +93,18 @@ class OptimizerBase(ABC):
         """Number of Jacobian evaluations."""
         return self._njev
 
-    def create_result(self,
-                     x: np.ndarray,
-                     fun: np.ndarray,
-                     jac: Optional[np.ndarray] = None,
-                     cost: float = None,
-                     status: int = 0,
-                     message: str = "",
-                     optimality: float = None,
-                     active_mask: Optional[np.ndarray] = None,
-                     **kwargs) -> OptimizeResult:
+    def create_result(
+        self,
+        x: np.ndarray,
+        fun: np.ndarray,
+        jac: np.ndarray | None = None,
+        cost: float | None = None,
+        status: int = 0,
+        message: str = "",
+        optimality: float | None = None,
+        active_mask: np.ndarray | None = None,
+        **kwargs,
+    ) -> OptimizeResult:
         """Create a standardized optimization result.
 
         Parameters
@@ -138,25 +144,29 @@ class OptimizerBase(ABC):
             message=message,
             optimality=optimality,
             active_mask=active_mask,
-            **kwargs
+            **kwargs,
         )
 
-        self.logger.debug("Result created",
-                         final_cost=cost,
-                         nfev=self.nfev,
-                         njev=self.njev,
-                         status=status)
+        self.logger.debug(
+            "Result created",
+            final_cost=cost,
+            nfev=self.nfev,
+            njev=self.njev,
+            status=status,
+        )
 
         return result
 
-    def check_convergence(self,
-                         actual_reduction: float,
-                         cost: float,
-                         step_norm: float,
-                         x_norm: float,
-                         ratio: float,
-                         ftol: float,
-                         xtol: float) -> Optional[int]:
+    def check_convergence(
+        self,
+        actual_reduction: float,
+        cost: float,
+        step_norm: float,
+        x_norm: float,
+        ratio: float,
+        ftol: float,
+        xtol: float,
+    ) -> int | None:
         """Check convergence criteria.
 
         Parameters
@@ -183,14 +193,22 @@ class OptimizerBase(ABC):
         """
         # Check function tolerance
         if actual_reduction < ftol * cost:
-            self.logger.debug("Convergence: function tolerance satisfied",
-                             actual_reduction=actual_reduction, ftol=ftol, cost=cost)
+            self.logger.debug(
+                "Convergence: function tolerance satisfied",
+                actual_reduction=actual_reduction,
+                ftol=ftol,
+                cost=cost,
+            )
             return 2
 
         # Check parameter tolerance
         if step_norm < xtol * (xtol + x_norm):
-            self.logger.debug("Convergence: parameter tolerance satisfied",
-                             step_norm=step_norm, xtol=xtol, x_norm=x_norm)
+            self.logger.debug(
+                "Convergence: parameter tolerance satisfied",
+                step_norm=step_norm,
+                xtol=xtol,
+                x_norm=x_norm,
+            )
             return 3
 
         # Check combined criteria
@@ -200,12 +218,14 @@ class OptimizerBase(ABC):
 
         return None
 
-    def log_iteration(self,
-                     iteration: int,
-                     cost: float,
-                     gradient_norm: float = None,
-                     step_size: float = None,
-                     **kwargs):
+    def log_iteration(
+        self,
+        iteration: int,
+        cost: float,
+        gradient_norm: float | None = None,
+        step_size: float | None = None,
+        **kwargs,
+    ):
         """Log optimization iteration details.
 
         Parameters
@@ -227,15 +247,17 @@ class OptimizerBase(ABC):
             gradient_norm=gradient_norm,
             step_size=step_size,
             nfev=self.nfev,
-            **kwargs
+            **kwargs,
         )
 
-    def log_convergence(self,
-                       reason: str,
-                       iterations: int,
-                       final_cost: float,
-                       time_elapsed: float = None,
-                       **kwargs):
+    def log_convergence(
+        self,
+        reason: str,
+        iterations: int,
+        final_cost: float,
+        time_elapsed: float | None = None,
+        **kwargs,
+    ):
         """Log convergence information.
 
         Parameters
@@ -256,7 +278,7 @@ class OptimizerBase(ABC):
             iterations=iterations,
             final_cost=final_cost,
             time_elapsed=time_elapsed,
-            **kwargs
+            **kwargs,
         )
 
 
@@ -282,12 +304,14 @@ class TrustRegionOptimizerBase(OptimizerBase):
         """Set trust region radius."""
         self._trust_radius = max(0.0, value)
 
-    def update_trust_radius(self,
-                           Delta: float,
-                           actual_reduction: float,
-                           predicted_reduction: float,
-                           step_norm: float,
-                           step_at_boundary: bool = False) -> Tuple[float, float]:
+    def update_trust_radius(
+        self,
+        Delta: float,
+        actual_reduction: float,
+        predicted_reduction: float,
+        step_norm: float,
+        step_at_boundary: bool = False,
+    ) -> tuple[float, float]:
         """Update trust region radius based on step quality.
 
         Parameters
@@ -322,12 +346,14 @@ class TrustRegionOptimizerBase(OptimizerBase):
 
         self.trust_radius = Delta_new
 
-        self.logger.debug("Trust radius updated",
-                         old_radius=Delta,
-                         new_radius=Delta_new,
-                         ratio=ratio,
-                         step_norm=step_norm,
-                         at_boundary=step_at_boundary)
+        self.logger.debug(
+            "Trust radius updated",
+            old_radius=Delta,
+            new_radius=Delta_new,
+            ratio=ratio,
+            step_norm=step_norm,
+            at_boundary=step_at_boundary,
+        )
 
         return Delta_new, ratio
 
@@ -347,6 +373,7 @@ class TrustRegionOptimizerBase(OptimizerBase):
             True if step should be accepted
         """
         accepted = ratio > threshold
-        self.logger.debug("Step acceptance check", ratio=ratio,
-                         threshold=threshold, accepted=accepted)
+        self.logger.debug(
+            "Step acceptance check", ratio=ratio, threshold=threshold, accepted=accepted
+        )
         return accepted

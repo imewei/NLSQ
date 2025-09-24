@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU
 
@@ -13,22 +12,22 @@ except ImportError:
     __version__ = "0.0.0+unknown"
 
 # Main API imports
-from .minpack import CurveFit, curve_fit
-from .least_squares import LeastSquares
 from ._optimize import OptimizeResult, OptimizeWarning
+from .least_squares import LeastSquares
+from .minpack import CurveFit, curve_fit
 
 # Public API - only expose main user-facing functions
 __all__ = [
-    # Main curve fitting API
-    'curve_fit',
-    'CurveFit',
+    "CurveFit",
     # Advanced API
-    'LeastSquares',
+    "LeastSquares",
     # Result types
-    'OptimizeResult',
-    'OptimizeWarning',
+    "OptimizeResult",
+    "OptimizeWarning",
     # Version
-    '__version__',
+    "__version__",
+    # Main curve fitting API
+    "curve_fit",
 ]
 
 # Optional: Provide convenience access to submodules for advanced users

@@ -85,37 +85,45 @@ References
 .. [JJMore] More, J. J., "The Levenberg-Marquardt Algorithm: Implementation
     and Theory," Numerical Analysis, ed. G. A. Watson, Lecture
 """
+
+import time
+from collections.abc import Callable
+
 import numpy as np
 from numpy.linalg import norm
-import time
-from typing import Callable, Optional, Tuple, Union, List, Dict, Any, Sequence
 
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
+
 _jax_config = JAXConfig()
 import jax.numpy as jnp
-from jax.scipy.linalg import svd as jax_svd
 from jax import jit
+from jax.scipy.linalg import svd as jax_svd
 from jax.tree_util import tree_flatten
 
-# Logging support
-from nlsq.logging import get_logger
+from nlsq._optimize import OptimizeResult
+from nlsq.common_jax import CommonJIT
+from nlsq.common_scipy import (
+    CL_scaling_vector,
+    check_termination,
+    find_active_constraints,
+    in_bounds,
+    intersect_trust_region,
+    make_strictly_feasible,
+    minimize_quadratic_1d,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+    solve_lsq_trust_region,
+    step_size_to_bound,
+    update_tr_radius,
+)
 
+# Logging support
 # Optimizer base class
 from nlsq.optimizer_base import TrustRegionOptimizerBase
 
-from nlsq.common_scipy import (update_tr_radius, solve_lsq_trust_region,
-                    check_termination, CL_scaling_vector,
-                    make_strictly_feasible, find_active_constraints, in_bounds,
-                    step_size_to_bound, intersect_trust_region,
-                    minimize_quadratic_1d, print_header_nonlinear,
-                    print_iteration_nonlinear)
 
-from nlsq.common_jax import CommonJIT
-from nlsq._optimize import OptimizeResult
-
-
-class TrustRegionJITFunctions():
+class TrustRegionJITFunctions:
     """JIT functions for trust region algorithm."""
 
     def __init__(self):
@@ -128,10 +136,10 @@ class TrustRegionJITFunctions():
         self.create_calculate_cost()
         self.create_check_isfinite()
 
-
     def create_default_loss_func(self):
         """Create the default loss function which is simply the sum of the
         squares of the residuals."""
+
         @jit
         def loss_function(f: jnp.ndarray) -> jnp.ndarray:
             """The default loss function is the sum of the squares of the
@@ -152,10 +160,10 @@ class TrustRegionJITFunctions():
 
         self.default_loss_func = loss_function
 
-
     def create_grad_func(self):
         """Create the function to compute the gradient of the loss function
         which is simply the function evaluation dotted with the Jacobian."""
+
         @jit
         def compute_grad(J: jnp.ndarray, f: jnp.ndarray) -> jnp.ndarray:
             """Compute the gradient of the loss function.
@@ -173,14 +181,15 @@ class TrustRegionJITFunctions():
                 The gradient of the loss function.
             """
             return f.dot(J)
-        self.compute_grad = compute_grad
 
+        self.compute_grad = compute_grad
 
     def create_grad_hat(self):
         """Calculate the gradient in the "hat" space, which is just multiplying
         the gradient by the diagonal matrix D. This is used in the trust region
         algorithm. Here we only use the diagonals of D, since D is diagonal.
         """
+
         @jit
         def compute_grad_hat(g: jnp.ndarray, d: jnp.ndarray) -> jnp.ndarray:
             """Compute the gradient in the "hat" space.
@@ -198,8 +207,8 @@ class TrustRegionJITFunctions():
             The gradient in the "hat" space.
             """
             return d * g
-        self.compute_grad_hat = compute_grad_hat
 
+        self.compute_grad_hat = compute_grad_hat
 
     def create_svd_funcs(self):
         """Create the functions to compute the SVD of the Jacobian matrix.
@@ -208,11 +217,9 @@ class TrustRegionJITFunctions():
         slightly more complicated."""
 
         @jit
-        def svd_no_bounds(J: jnp.ndarray,
-                          d: jnp.ndarray,
-                          f: jnp.ndarray
-                          ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray,
-                                     jnp.ndarray, jnp.ndarray]:
+        def svd_no_bounds(
+            J: jnp.ndarray, d: jnp.ndarray, f: jnp.ndarray
+        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
             """Compute the SVD of the Jacobian matrix, J, in the "hat" space.
             This is the version for problems without bounds.
 
@@ -245,13 +252,13 @@ class TrustRegionJITFunctions():
             return J_h, U, s, V, uf
 
         @jit
-        def svd_bounds(f: jnp.ndarray,
-                       J: jnp.ndarray,
-                       d: jnp.ndarray,
-                       J_diag: jnp.ndarray,
-                       f_zeros: jnp.ndarray
-                       ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray,
-                                  jnp.ndarray, jnp.ndarray]:
+        def svd_bounds(
+            f: jnp.ndarray,
+            J: jnp.ndarray,
+            d: jnp.ndarray,
+            J_diag: jnp.ndarray,
+            f_zeros: jnp.ndarray,
+        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
             """Compute the SVD of the Jacobian matrix, J, in the "hat" space.
             This is the version for problems with bounds.
 
@@ -293,9 +300,9 @@ class TrustRegionJITFunctions():
         self.svd_no_bounds = svd_no_bounds
         self.svd_bounds = svd_bounds
 
-
     def create_calculate_cost(self):
         """Create the function to calculate the cost function."""
+
         @jit
         def calculate_cost(rho, data_mask):
             """Calculate the cost function.
@@ -314,11 +321,12 @@ class TrustRegionJITFunctions():
             """
             cost_array = jnp.where(data_mask, rho[0], 0)
             return 0.5 * jnp.sum(cost_array)
-        self.calculate_cost = calculate_cost
 
+        self.calculate_cost = calculate_cost
 
     def create_check_isfinite(self):
         """Create the function to check if the evaluated residuals are finite."""
+
         @jit
         def isfinite(f_new: jnp.ndarray) -> bool:
             """Check if the evaluated residuals are finite.
@@ -334,42 +342,42 @@ class TrustRegionJITFunctions():
                 True if all residuals are finite, False otherwise.
             """
             return jnp.all(jnp.isfinite(f_new))
+
         self.check_isfinite = isfinite
 
 
 class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
-
     def __init__(self):
         """Initialize the TrustRegionReflective class."""
         TrustRegionJITFunctions.__init__(self)
-        TrustRegionOptimizerBase.__init__(self, name='trf')
+        TrustRegionOptimizerBase.__init__(self, name="trf")
         self.cJIT = CommonJIT()
 
-
-    def trf(self,
-            fun: Callable,
-            xdata: Union[jnp.ndarray, Tuple[jnp.ndarray]],
-            ydata: jnp.ndarray,
-            jac: Callable,
-            data_mask: jnp.ndarray,
-            transform: jnp.ndarray,
-            x0: np.ndarray,
-            f0: jnp.ndarray,
-            J0: jnp.ndarray,
-            lb: np.ndarray,
-            ub: np.ndarray,
-            ftol: float,
-            xtol: float,
-            gtol: float,
-            max_nfev: int,
-            f_scale: float,
-            x_scale: np.ndarray,
-            loss_function: Union[None, Callable],
-            tr_options: Dict,
-            verbose: int,
-            timeit: bool=False,
-            **kwargs
-            ) -> Dict:
+    def trf(
+        self,
+        fun: Callable,
+        xdata: jnp.ndarray | tuple[jnp.ndarray],
+        ydata: jnp.ndarray,
+        jac: Callable,
+        data_mask: jnp.ndarray,
+        transform: jnp.ndarray,
+        x0: np.ndarray,
+        f0: jnp.ndarray,
+        J0: jnp.ndarray,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        ftol: float,
+        xtol: float,
+        gtol: float,
+        max_nfev: int,
+        f_scale: float,
+        x_scale: np.ndarray,
+        loss_function: None | Callable,
+        tr_options: dict,
+        verbose: int,
+        timeit: bool = False,
+        **kwargs,
+    ) -> dict:
         """Minimize a scalar function of one or more variables using the
         trust-region reflective algorithm. Although I think this is not good
         coding style, I maintained the original code format from SciPy such
@@ -445,43 +453,101 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if np.all(lb == -np.inf) and np.all(ub == np.inf):
             # unbounded version as timed and untimed version
             if not timeit:
-                return self.trf_no_bounds(fun, xdata, ydata, jac, data_mask,
-                                          transform, x0, f0, J0,
-                lb, ub, ftol, xtol, gtol, max_nfev, f_scale, x_scale,
-                loss_function, tr_options, verbose, **kwargs)
+                return self.trf_no_bounds(
+                    fun,
+                    xdata,
+                    ydata,
+                    jac,
+                    data_mask,
+                    transform,
+                    x0,
+                    f0,
+                    J0,
+                    lb,
+                    ub,
+                    ftol,
+                    xtol,
+                    gtol,
+                    max_nfev,
+                    f_scale,
+                    x_scale,
+                    loss_function,
+                    tr_options,
+                    verbose,
+                    **kwargs,
+                )
             else:
-                return self.trf_no_bounds_timed(fun, xdata, ydata, jac, data_mask, transform, x0,
-                f0, J0, lb, ub, ftol, xtol, gtol, max_nfev, f_scale, x_scale,
-                loss_function, tr_options, verbose)
+                return self.trf_no_bounds_timed(
+                    fun,
+                    xdata,
+                    ydata,
+                    jac,
+                    data_mask,
+                    transform,
+                    x0,
+                    f0,
+                    J0,
+                    lb,
+                    ub,
+                    ftol,
+                    xtol,
+                    gtol,
+                    max_nfev,
+                    f_scale,
+                    x_scale,
+                    loss_function,
+                    tr_options,
+                    verbose,
+                )
         else:
-            return self.trf_bounds(fun, xdata, ydata, jac, data_mask, transform, x0,
-                    f0, J0, lb, ub, ftol, xtol, gtol, max_nfev, f_scale, x_scale,
-                    loss_function, tr_options, verbose, **kwargs)
+            return self.trf_bounds(
+                fun,
+                xdata,
+                ydata,
+                jac,
+                data_mask,
+                transform,
+                x0,
+                f0,
+                J0,
+                lb,
+                ub,
+                ftol,
+                xtol,
+                gtol,
+                max_nfev,
+                f_scale,
+                x_scale,
+                loss_function,
+                tr_options,
+                verbose,
+                **kwargs,
+            )
 
-
-    def trf_no_bounds(self,
-                      fun: Callable,
-                      xdata: Union[jnp.ndarray, Tuple[jnp.ndarray]],
-                      ydata: jnp.ndarray,
-                      jac: Callable,
-                      data_mask: jnp.ndarray,
-                      transform: jnp.ndarray,
-                      x0: np.ndarray,
-                      f: jnp.ndarray,
-                      J: jnp.ndarray,
-                      lb: np.ndarray,
-                      ub: np.ndarray,
-                      ftol: float,
-                      xtol: float,
-                      gtol: float,
-                      max_nfev: int,
-                      f_scale: float,
-                      x_scale: np.ndarray,
-                      loss_function: Union[None, Callable],
-                      tr_options: Dict,
-                      verbose: int,
-                      **kwargs
-                      ) -> Dict:
+    def trf_no_bounds(
+        self,
+        fun: Callable,
+        xdata: jnp.ndarray | tuple[jnp.ndarray],
+        ydata: jnp.ndarray,
+        jac: Callable,
+        data_mask: jnp.ndarray,
+        transform: jnp.ndarray,
+        x0: np.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        ftol: float,
+        xtol: float,
+        gtol: float,
+        max_nfev: int,
+        f_scale: float,
+        x_scale: np.ndarray,
+        loss_function: None | Callable,
+        tr_options: dict,
+        verbose: int,
+        **kwargs,
+    ) -> dict:
         """Unbounded version of the trust-region reflective algorithm.
 
         Parameters
@@ -561,8 +627,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         m, n = J.shape
 
         # Log optimization start
-        self.logger.info("Starting TRF optimization (no bounds)",
-                        n_params=n, n_residuals=m, max_nfev=max_nfev)
+        self.logger.info(
+            "Starting TRF optimization (no bounds)",
+            n_params=n,
+            n_residuals=m,
+            max_nfev=max_nfev,
+        )
 
         if loss_function is not None:
             rho = loss_function(f, f_scale)
@@ -574,7 +644,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         g_jnp = self.compute_grad(J, f)
         g = np.array(g_jnp)
-        jac_scale = isinstance(x_scale, str) and x_scale == 'jac'
+        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
             scale, scale_inv = self.cJIT.compute_jac_scale(J)
         else:
@@ -598,20 +668,27 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             print_header_nonlinear()
 
         # Start optimization timer
-        with self.logger.timer('optimization', log_result=False):
+        with self.logger.timer("optimization", log_result=False):
             while True:
                 g_norm = norm(g, ord=np.inf)
                 if g_norm < gtol:
                     termination_status = 1
-                    self.logger.debug("Convergence: gradient tolerance satisfied", g_norm=g_norm, gtol=gtol)
+                    self.logger.debug(
+                        "Convergence: gradient tolerance satisfied",
+                        g_norm=g_norm,
+                        gtol=gtol,
+                    )
 
                 if verbose == 2:
-                    print_iteration_nonlinear(iteration, nfev, cost, actual_reduction,
-                                              step_norm, g_norm)
+                    print_iteration_nonlinear(
+                        iteration, nfev, cost, actual_reduction, step_norm, g_norm
+                    )
 
                 if termination_status is not None or nfev == max_nfev:
                     if nfev == max_nfev:
-                        self.logger.warning("Maximum number of function evaluations reached", nfev=nfev)
+                        self.logger.warning(
+                            "Maximum number of function evaluations reached", nfev=nfev
+                        )
                     break
 
                 # Log iteration details
@@ -620,7 +697,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     cost=cost,
                     gradient_norm=g_norm,
                     step_size=Delta if iteration > 0 else None,
-                    nfev=nfev
+                    nfev=nfev,
                 )
 
                 d = scale
@@ -634,14 +711,19 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 actual_reduction = -1
                 inner_loop_count = 0
                 max_inner_iterations = 100  # Prevent infinite loops
-                while actual_reduction <= 0 and nfev < max_nfev and inner_loop_count < max_inner_iterations:
+                while (
+                    actual_reduction <= 0
+                    and nfev < max_nfev
+                    and inner_loop_count < max_inner_iterations
+                ):
                     inner_loop_count += 1
-                    step_h, alpha, n_iter = solve_lsq_trust_region(
-                        n, m, uf, s, V, Delta, initial_alpha=alpha)
+                    step_h, alpha, _n_iter = solve_lsq_trust_region(
+                        n, m, uf, s, V, Delta, initial_alpha=alpha
+                    )
 
-                    predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(J_h,
-                                                                        g_h_jnp,
-                                                                        step_h)
+                    predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
+                        J_h, g_h_jnp, step_h
+                    )
                     predicted_reduction = np.array(predicted_reduction_jnp)
 
                     step = d * step_h
@@ -658,8 +740,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         continue
 
                     if loss_function is not None:
-                        cost_new_jnp = loss_function(f_new, f_scale, data_mask,
-                                                     cost_only=True)
+                        cost_new_jnp = loss_function(
+                            f_new, f_scale, data_mask, cost_only=True
+                        )
                     else:
                         cost_new_jnp = self.default_loss_func(f_new)
                     cost_new = np.array(cost_new_jnp)
@@ -667,12 +750,17 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     actual_reduction = cost - cost_new
 
                     Delta_new, ratio = update_tr_radius(
-                        Delta, actual_reduction, predicted_reduction,
-                        step_h_norm, step_h_norm > 0.95 * Delta)
+                        Delta,
+                        actual_reduction,
+                        predicted_reduction,
+                        step_h_norm,
+                        step_h_norm > 0.95 * Delta,
+                    )
 
                     step_norm = norm(step)
                     termination_status = check_termination(
-                        actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol)
+                        actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
+                    )
 
                     if termination_status is not None:
                         break
@@ -686,9 +774,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 # Check if inner loop hit iteration limit
                 if inner_loop_count >= max_inner_iterations:
-                    self.logger.warning("Inner optimization loop hit iteration limit",
-                                      inner_iterations=inner_loop_count,
-                                      actual_reduction=actual_reduction)
+                    self.logger.warning(
+                        "Inner optimization loop hit iteration limit",
+                        inner_iterations=inner_loop_count,
+                        actual_reduction=actual_reduction,
+                    )
                     termination_status = -3  # Inner loop limit exceeded
 
                 if actual_reduction > 0:
@@ -718,35 +808,43 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         active_mask = np.zeros_like(x)
         return OptimizeResult(
-            x=x, cost=cost, fun=f_true, jac=J, grad=g, optimality=g_norm,
-            active_mask=active_mask, nfev=nfev, njev=njev,
-            status=termination_status, all_times={})
+            x=x,
+            cost=cost,
+            fun=f_true,
+            jac=J,
+            grad=g,
+            optimality=g_norm,
+            active_mask=active_mask,
+            nfev=nfev,
+            njev=njev,
+            status=termination_status,
+            all_times={},
+        )
 
-
-    def trf_bounds(self,
-                   fun: Callable,
-                    xdata: Union[jnp.ndarray, Tuple[jnp.ndarray]],
-                   ydata: jnp.ndarray,
-                   jac: Callable,
-                   data_mask: jnp.ndarray,
-                   transform: jnp.ndarray,
-                   x0: np.ndarray,
-                   f: jnp.ndarray,
-                   J: jnp.ndarray,
-                   lb: np.ndarray,
-                   ub: np.ndarray,
-                   ftol: float,
-                   xtol: float,
-                   gtol: float,
-                   max_nfev: int,
-                   f_scale: float,
-                   x_scale: np.ndarray,
-                   loss_function: Union[None, Callable],
-                   tr_options: Dict,
-                   verbose: int,
-                   **kwargs
-                   ) -> Dict:
-
+    def trf_bounds(
+        self,
+        fun: Callable,
+        xdata: jnp.ndarray | tuple[jnp.ndarray],
+        ydata: jnp.ndarray,
+        jac: Callable,
+        data_mask: jnp.ndarray,
+        transform: jnp.ndarray,
+        x0: np.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        ftol: float,
+        xtol: float,
+        gtol: float,
+        max_nfev: int,
+        f_scale: float,
+        x_scale: np.ndarray,
+        loss_function: None | Callable,
+        tr_options: dict,
+        verbose: int,
+        **kwargs,
+    ) -> dict:
         """Bounded version of the trust-region reflective algorithm.
 
         Parameters
@@ -845,12 +943,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         g_jnp = self.compute_grad(J, f)
         g = np.array(g_jnp)
 
-        jac_scale = isinstance(x_scale, str) and x_scale == 'jac'
+        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
             scale, scale_inv = self.cJIT.compute_jac_scale(J)
         else:
             scale, scale_inv = x_scale, 1 / x_scale
-
 
         v, dv = CL_scaling_vector(x, g, lb, ub)
 
@@ -876,7 +973,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         f_zeros = jnp.zeros([n])
         while True:
-
             v, dv = CL_scaling_vector(x, g, lb, ub)
 
             g_norm = norm(g * v, ord=np.inf)
@@ -918,21 +1014,26 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             J_h = output[0]
             s, V, uf = [np.array(val) for val in output[2:]]
 
-
             # theta controls step back step ratio from the bounds.
             theta = max(0.995, 1 - g_norm)
 
             actual_reduction = -1
             inner_loop_count = 0
             max_inner_iterations = 100  # Prevent infinite loops
-            while actual_reduction <= 0 and nfev < max_nfev and inner_loop_count < max_inner_iterations:
+            while (
+                actual_reduction <= 0
+                and nfev < max_nfev
+                and inner_loop_count < max_inner_iterations
+            ):
                 inner_loop_count += 1
-                p_h, alpha, n_iter = solve_lsq_trust_region(
-                    n, m, uf, s, V, Delta, initial_alpha=alpha)
+                p_h, alpha, _n_iter = solve_lsq_trust_region(
+                    n, m, uf, s, V, Delta, initial_alpha=alpha
+                )
 
                 p = d * p_h  # Trust-region solution in the original space.
                 step, step_h, predicted_reduction = self.select_step(
-                    x, J_h, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta)
+                    x, J_h, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta
+                )
 
                 x_new = make_strictly_feasible(x + step.copy(), lb, ub, rstep=0)
                 f_new = fun(x_new, xdata, ydata, data_mask, transform)
@@ -945,21 +1046,26 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     continue
 
                 if loss_function is not None:
-                    cost_new_jnp = loss_function(f_new, f_scale, data_mask,
-                                                 cost_only=True)
+                    cost_new_jnp = loss_function(
+                        f_new, f_scale, data_mask, cost_only=True
+                    )
                 else:
                     cost_new_jnp = self.default_loss_func(f_new)
                 cost_new = np.array(cost_new_jnp)
 
                 actual_reduction = cost - cost_new
                 Delta_new, ratio = update_tr_radius(
-                    Delta, actual_reduction, predicted_reduction,
-                    step_h_norm, step_h_norm > 0.95 * Delta)
-
+                    Delta,
+                    actual_reduction,
+                    predicted_reduction,
+                    step_h_norm,
+                    step_h_norm > 0.95 * Delta,
+                )
 
                 step_norm = norm(step)
                 termination_status = check_termination(
-                    actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol)
+                    actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
+                )
                 if termination_status is not None:
                     break
 
@@ -968,9 +1074,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             # Check if inner loop hit iteration limit
             if inner_loop_count >= max_inner_iterations:
-                self.logger.warning("Inner optimization loop hit iteration limit",
-                                  inner_iterations=inner_loop_count,
-                                  actual_reduction=actual_reduction)
+                self.logger.warning(
+                    "Inner optimization loop hit iteration limit",
+                    inner_iterations=inner_loop_count,
+                    actual_reduction=actual_reduction,
+                )
                 termination_status = -3  # Inner loop limit exceeded
 
             if actual_reduction > 0:
@@ -1003,23 +1111,32 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
         return OptimizeResult(
-            x=x, cost=cost, fun=f_true, jac=J, grad=g, optimality=g_norm,
-            active_mask=active_mask, nfev=nfev, njev=njev,
-            status=termination_status)
+            x=x,
+            cost=cost,
+            fun=f_true,
+            jac=J,
+            grad=g,
+            optimality=g_norm,
+            active_mask=active_mask,
+            nfev=nfev,
+            njev=njev,
+            status=termination_status,
+        )
 
-    def select_step(self,
-                    x: np.ndarray,
-                    J_h: jnp.ndarray,
-                    diag_h: jnp.ndarray,
-                    g_h: jnp.ndarray,
-                    p: np.ndarray,
-                    p_h: np.ndarray,
-                    d: np.ndarray,
-                    Delta: float,
-                    lb: np.ndarray,
-                    ub: np.ndarray,
-                    theta: float
-                    ):
+    def select_step(
+        self,
+        x: np.ndarray,
+        J_h: jnp.ndarray,
+        diag_h: jnp.ndarray,
+        g_h: jnp.ndarray,
+        p: np.ndarray,
+        p_h: np.ndarray,
+        d: np.ndarray,
+        Delta: float,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        theta: float,
+    ):
         """Select the best step according to Trust Region Reflective algorithm.
 
         Parameters
@@ -1084,21 +1201,16 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         r_stride = min(to_bound, to_tr)
         if r_stride > 0:
             r_stride_l = (1 - theta) * p_stride / r_stride
-            if r_stride == to_bound:
-                r_stride_u = theta * to_bound
-            else:
-                r_stride_u = to_tr
+            r_stride_u = theta * to_bound if r_stride == to_bound else to_tr
         else:
             r_stride_l = 0
             r_stride_u = -1
 
         # Check if reflection step is available.
         if r_stride_l <= r_stride_u:
-            a, b, c = self.cJIT.build_quadratic_1d(J_h, g_h, r_h, s0=p_h,
-                                                   diag=diag_h)
+            a, b, c = self.cJIT.build_quadratic_1d(J_h, g_h, r_h, s0=p_h, diag=diag_h)
 
-            r_stride, r_value = minimize_quadratic_1d(
-                a, b, r_stride_l, r_stride_u, c=c)
+            r_stride, r_value = minimize_quadratic_1d(a, b, r_stride_l, r_stride_u, c=c)
             r_h *= r_stride
             r_h += p_h
             r = r_h * d
@@ -1115,10 +1227,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         to_tr = Delta / norm(ag_h)
         to_bound, _ = step_size_to_bound(x, ag, lb, ub)
-        if to_bound < to_tr:
-            ag_stride = theta * to_bound
-        else:
-            ag_stride = to_tr
+        ag_stride = theta * to_bound if to_bound < to_tr else to_tr
 
         a, b = self.cJIT.build_quadratic_1d(J_h, g_h, ag_h, diag=diag_h)
         ag_stride, ag_value = minimize_quadratic_1d(a, b, 0, ag_stride)
@@ -1132,29 +1241,29 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         else:
             return ag, ag_h, -ag_value
 
-
-    def trf_no_bounds_timed(self,
-                      fun: Callable,
-                      xdata: Union[jnp.ndarray, Tuple[jnp.ndarray]],
-                      ydata: jnp.ndarray,
-                      jac: Callable,
-                      data_mask: jnp.ndarray,
-                      transform: jnp.ndarray,
-                      x0: np.ndarray,
-                      f: jnp.ndarray,
-                      J: jnp.ndarray,
-                      lb: np.ndarray,
-                      ub: np.ndarray,
-                      ftol: float,
-                      xtol: float,
-                      gtol: float,
-                      max_nfev: int,
-                      f_scale: float,
-                      x_scale: np.ndarray,
-                      loss_function: Union[None, Callable],
-                      tr_options: Dict,
-                      verbose: int
-                      ) -> Dict:
+    def trf_no_bounds_timed(
+        self,
+        fun: Callable,
+        xdata: jnp.ndarray | tuple[jnp.ndarray],
+        ydata: jnp.ndarray,
+        jac: Callable,
+        data_mask: jnp.ndarray,
+        transform: jnp.ndarray,
+        x0: np.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        ftol: float,
+        xtol: float,
+        gtol: float,
+        max_nfev: int,
+        f_scale: float,
+        x_scale: np.ndarray,
+        loss_function: None | Callable,
+        tr_options: dict,
+        verbose: int,
+    ) -> dict:
         """Trust Region Reflective algorithm with no bounds and all the
         operations performed on JAX and the GPU are timed. We need a separate
         function for this because to time each operation we need a
@@ -1258,7 +1367,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         J = jac(x, xdata, ydata, data_mask, transform).block_until_ready()
         jtimes.append(time.time() - st)
 
-
         njev = 1
         m, n = J.shape
 
@@ -1282,11 +1390,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         g = np.array(g_jnp)
         st3 = time.time()
 
-
         gtimes.append(st2 - st1)
         g_ctimes.append(st3 - st2)
 
-        jac_scale = isinstance(x_scale, str) and x_scale == 'jac'
+        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
             scale, scale_inv = self.cJIT.compute_jac_scale(J)
         else:
@@ -1337,18 +1444,23 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             s, V, uf = [np.array(val) for val in svd_output[2:]]
             svd_ctimes.append(time.time() - st)
 
-
             actual_reduction = -1
             inner_loop_count = 0
             max_inner_iterations = 100  # Prevent infinite loops
-            while actual_reduction <= 0 and nfev < max_nfev and inner_loop_count < max_inner_iterations:
+            while (
+                actual_reduction <= 0
+                and nfev < max_nfev
+                and inner_loop_count < max_inner_iterations
+            ):
                 inner_loop_count += 1
-                step_h, alpha, n_iter = solve_lsq_trust_region(
-                    n, m, uf, s, V, Delta, initial_alpha=alpha)
+                step_h, alpha, _n_iter = solve_lsq_trust_region(
+                    n, m, uf, s, V, Delta, initial_alpha=alpha
+                )
 
                 st1 = time.time()
-                predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(J_h, g_h_jnp,
-                                                                    step_h).block_until_ready()
+                predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
+                    J_h, g_h_jnp, step_h
+                ).block_until_ready()
                 st2 = time.time()
                 predicted_reduction = np.array(predicted_reduction_jnp)
                 st3 = time.time()
@@ -1359,7 +1471,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 x_new = x + step
 
                 st = time.time()
-                f_new = fun(x_new, xdata, ydata, data_mask, transform).block_until_ready()
+                f_new = fun(
+                    x_new, xdata, ydata, data_mask, transform
+                ).block_until_ready()
                 ftimes.append(time.time() - st)
 
                 nfev += 1
@@ -1371,8 +1485,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     continue
 
                 if loss_function is not None:
-                    cost_new_jnp = loss_function(f_new, f_scale, data_mask,
-                                                 cost_only=True)
+                    cost_new_jnp = loss_function(
+                        f_new, f_scale, data_mask, cost_only=True
+                    )
                 else:
                     st1 = time.time()
                     cost_new_jnp = self.default_loss_func(f_new).block_until_ready()
@@ -1386,12 +1501,17 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 actual_reduction = cost - cost_new
 
                 Delta_new, ratio = update_tr_radius(
-                    Delta, actual_reduction, predicted_reduction,
-                    step_h_norm, step_h_norm > 0.95 * Delta)
+                    Delta,
+                    actual_reduction,
+                    predicted_reduction,
+                    step_h_norm,
+                    step_h_norm > 0.95 * Delta,
+                )
 
                 step_norm = norm(step)
                 termination_status = check_termination(
-                    actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol)
+                    actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
+                )
 
                 if termination_status is not None:
                     break
@@ -1401,9 +1521,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             # Check if inner loop hit iteration limit
             if inner_loop_count >= max_inner_iterations:
-                self.logger.warning("Inner optimization loop hit iteration limit",
-                                  inner_iterations=inner_loop_count,
-                                  actual_reduction=actual_reduction)
+                self.logger.warning(
+                    "Inner optimization loop hit iteration limit",
+                    inner_iterations=inner_loop_count,
+                    actual_reduction=actual_reduction,
+                )
                 termination_status = -3  # Inner loop limit exceeded
 
             if actual_reduction > 0:
@@ -1423,7 +1545,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 if loss_function is not None:
                     rho = loss_function(f, f_scale)
                     J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
-
 
                 st1 = time.time()
                 g_jnp = self.compute_grad(J, f).block_until_ready()
@@ -1448,23 +1569,56 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         active_mask = np.zeros_like(x)
 
-        tlabels = ['ftimes', 'jtimes', 'svd_times', 'ctimes', 'gtimes', 'ptimes',
-                   'g_ctimes', 'c_ctimes', 'svd_ctimes', 'p_ctimes', 'gtimes2']
-        all_times = [ftimes, jtimes, svd_times, ctimes, gtimes, ptimes,
-                     g_ctimes, c_ctimes, svd_ctimes, p_ctimes, gtimes2]
+        tlabels = [
+            "ftimes",
+            "jtimes",
+            "svd_times",
+            "ctimes",
+            "gtimes",
+            "ptimes",
+            "g_ctimes",
+            "c_ctimes",
+            "svd_ctimes",
+            "p_ctimes",
+            "gtimes2",
+        ]
+        all_times = [
+            ftimes,
+            jtimes,
+            svd_times,
+            ctimes,
+            gtimes,
+            ptimes,
+            g_ctimes,
+            c_ctimes,
+            svd_ctimes,
+            p_ctimes,
+            gtimes2,
+        ]
 
-        tdicts = dict(zip(tlabels, all_times))
+        tdicts = dict(zip(tlabels, all_times, strict=False))
         return OptimizeResult(
-            x=x, cost=cost, fun=f_true, jac=J, grad=g, optimality=g_norm,
-            active_mask=active_mask, nfev=nfev, njev=njev,
-            status=termination_status, all_times=tdicts)
+            x=x,
+            cost=cost,
+            fun=f_true,
+            jac=J,
+            grad=g,
+            optimality=g_norm,
+            active_mask=active_mask,
+            nfev=nfev,
+            njev=njev,
+            status=termination_status,
+            all_times=tdicts,
+        )
 
-    def optimize(self,
-                fun: Callable,
-                x0: np.ndarray,
-                jac: Optional[Callable] = None,
-                bounds: Tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
-                **kwargs) -> OptimizeResult:
+    def optimize(
+        self,
+        fun: Callable,
+        x0: np.ndarray,
+        jac: Callable | None = None,
+        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        **kwargs,
+    ) -> OptimizeResult:
         """Perform optimization using trust region reflective algorithm.
 
         This method provides a simplified interface to the TRF algorithm.

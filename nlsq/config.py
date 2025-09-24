@@ -1,7 +1,8 @@
 """Central configuration management for NLSQ package."""
-from typing import Optional
+
 import os
 from contextlib import contextmanager
+from typing import Optional
 
 
 class JAXConfig:
@@ -11,11 +12,11 @@ class JAXConfig:
     across all NLSQ modules, avoiding duplicate configuration calls.
     """
 
-    _instance: Optional['JAXConfig'] = None
+    _instance: Optional["JAXConfig"] = None
     _x64_enabled: bool = False
     _initialized: bool = False
 
-    def __new__(cls) -> 'JAXConfig':
+    def __new__(cls) -> "JAXConfig":
         """Ensure singleton pattern."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -33,11 +34,14 @@ class JAXConfig:
         from jax import config
 
         # Force CPU backend if requested (useful for testing)
-        if os.getenv('NLSQ_FORCE_CPU', '0') == '1' or os.getenv('JAX_PLATFORM_NAME') == 'cpu':
+        if (
+            os.getenv("NLSQ_FORCE_CPU", "0") == "1"
+            or os.getenv("JAX_PLATFORM_NAME") == "cpu"
+        ):
             config.update("jax_platform_name", "cpu")
 
         # Enable 64-bit precision by default for NLSQ
-        if not self._x64_enabled and os.getenv('NLSQ_DISABLE_X64') != '1':
+        if not self._x64_enabled and os.getenv("NLSQ_DISABLE_X64") != "1":
             config.update("jax_enable_x64", True)
             self._x64_enabled = True
 
@@ -52,6 +56,7 @@ class JAXConfig:
             Default is True.
         """
         from jax import config
+
         instance = cls()
 
         if enable and not instance._x64_enabled:

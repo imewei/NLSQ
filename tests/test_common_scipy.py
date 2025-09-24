@@ -1,17 +1,20 @@
 """Tests for common_scipy module."""
+
 import unittest
+
 import numpy as np
+
 from nlsq.common_scipy import (
-    in_bounds,
-    make_strictly_feasible,
     check_termination,
     evaluate_quadratic,
-    step_size_to_bound,
     find_active_constraints,
-    solve_trust_region_2d,
-    update_tr_radius,
+    in_bounds,
+    make_strictly_feasible,
     print_header_nonlinear,
-    print_iteration_nonlinear
+    print_iteration_nonlinear,
+    solve_trust_region_2d,
+    step_size_to_bound,
+    update_tr_radius,
 )
 
 
@@ -88,29 +91,25 @@ class TestCommonScipy(unittest.TestCase):
         """Test check_termination function."""
         # Test ftol termination
         status = check_termination(
-            dF=0.5, F=10.0, dx_norm=1.0, x_norm=5.0,
-            ratio=0.5, ftol=0.1, xtol=1e-8
+            dF=0.5, F=10.0, dx_norm=1.0, x_norm=5.0, ratio=0.5, ftol=0.1, xtol=1e-8
         )
         self.assertEqual(status, 2)  # ftol satisfied
 
         # Test xtol termination
         status = check_termination(
-            dF=0.1, F=10.0, dx_norm=1e-10, x_norm=1.0,
-            ratio=0.5, ftol=1e-8, xtol=1e-8
+            dF=0.1, F=10.0, dx_norm=1e-10, x_norm=1.0, ratio=0.5, ftol=1e-8, xtol=1e-8
         )
         self.assertEqual(status, 3)  # xtol satisfied
 
         # Test both satisfied
         status = check_termination(
-            dF=0.5, F=10.0, dx_norm=1e-10, x_norm=1.0,
-            ratio=0.5, ftol=0.1, xtol=1e-8
+            dF=0.5, F=10.0, dx_norm=1e-10, x_norm=1.0, ratio=0.5, ftol=0.1, xtol=1e-8
         )
         self.assertEqual(status, 4)  # both satisfied
 
         # Test none satisfied
         status = check_termination(
-            dF=1e-10, F=10.0, dx_norm=1.0, x_norm=1.0,
-            ratio=0.5, ftol=1e-12, xtol=1e-12
+            dF=1e-10, F=10.0, dx_norm=1.0, x_norm=1.0, ratio=0.5, ftol=1e-12, xtol=1e-12
         )
         self.assertIsNone(status)
 
@@ -179,7 +178,7 @@ class TestCommonScipy(unittest.TestCase):
             actual_reduction=0.9,
             predicted_reduction=1.0,
             step_norm=1.0,
-            bound_hit=True
+            bound_hit=True,
         )
         self.assertEqual(ratio, 0.9)
         self.assertEqual(Delta_new, 2.0)  # Should double
@@ -190,7 +189,7 @@ class TestCommonScipy(unittest.TestCase):
             actual_reduction=0.1,
             predicted_reduction=1.0,
             step_norm=0.5,
-            bound_hit=False
+            bound_hit=False,
         )
         self.assertEqual(ratio, 0.1)
         self.assertEqual(Delta_new, 0.125)  # 0.25 * step_norm
@@ -201,7 +200,7 @@ class TestCommonScipy(unittest.TestCase):
             actual_reduction=0.5,
             predicted_reduction=1.0,
             step_norm=0.8,
-            bound_hit=False
+            bound_hit=False,
         )
         self.assertEqual(ratio, 0.5)
         self.assertEqual(Delta_new, 1.0)  # Unchanged
@@ -218,9 +217,9 @@ class TestCommonScipy(unittest.TestCase):
             cost=1.5,
             cost_reduction=0.5,
             step_norm=0.1,
-            optimality=0.01
+            optimality=0.01,
         )  # Should not raise
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

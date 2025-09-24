@@ -2,7 +2,7 @@ import warnings
 
 
 class OptimizeResult(dict):
-    """ Represents the optimization result.
+    """Represents the optimization result.
     Attributes
     ----------
     x : ndarray
@@ -49,23 +49,24 @@ class OptimizeResult(dict):
     def __repr__(self):
         if self.keys():
             m = max(map(len, list(self.keys()))) + 1
-            return '\n'.join([k.rjust(m) + ': ' + repr(v)
-                              for k, v in sorted(self.items())])
+            return "\n".join(
+                [k.rjust(m) + ": " + repr(v) for k, v in sorted(self.items())]
+            )
         else:
             return self.__class__.__name__ + "()"
 
     def __dir__(self):
         return list(self.keys())
-    
-    
+
+
 def _check_unknown_options(unknown_options):
     if unknown_options:
         msg = ", ".join(map(str, unknown_options.keys()))
         # Stack level 4: this is called from _minimize_*, which is
         # called from another function in SciPy. Level 4 is the first
         # level in user code.
-        warnings.warn("Unknown solver options: %s" % msg, OptimizeWarning, 4)
-        
-        
+        warnings.warn(f"Unknown solver options: {msg}", OptimizeWarning, 4)
+
+
 class OptimizeWarning(UserWarning):
     pass

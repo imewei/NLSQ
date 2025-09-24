@@ -1,13 +1,13 @@
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
+
 _jax_config = JAXConfig()
 
 import jax.numpy as jnp
 from jax import jit
 
 
-class LossFunctionsJIT():
-
+class LossFunctionsJIT:
     def __init__(self):
         self.stack_rhos = self.create_stack_rhos()
 
@@ -16,10 +16,13 @@ class LossFunctionsJIT():
         self.create_cauchy_funcs()
         self.create_arctan_funcs()
 
-        self.IMPLEMENTED_LOSSES = dict(linear=None, huber=self.huber,
-                                       soft_l1=self.soft_l1,
-                                       cauchy=self.cauchy,
-                                       arctan=self.arctan)
+        self.IMPLEMENTED_LOSSES = {
+            "linear": None,
+            "huber": self.huber,
+            "soft_l1": self.soft_l1,
+            "cauchy": self.cauchy,
+            "arctan": self.arctan,
+        }
         self.loss_funcs = self.construct_all_loss_functions()
 
         self.create_zscale()
@@ -44,12 +47,12 @@ class LossFunctionsJIT():
         def huber1(z):
             mask = z <= 1
 
-            return jnp.where(mask, z, 2 * z ** 0.5 - 1), mask
+            return jnp.where(mask, z, 2 * z**0.5 - 1), mask
 
         @jit
         def huber2(z, mask):
-            rho1 = jnp.where(mask, 1, z ** -0.5)
-            rho2 = jnp.where(mask, 0, -0.5 * z ** -1.5)
+            rho1 = jnp.where(mask, 1, z**-0.5)
+            rho2 = jnp.where(mask, 0, -0.5 * z**-1.5)
             return rho1, rho2
 
         self.huber1 = huber1
@@ -67,12 +70,12 @@ class LossFunctionsJIT():
         @jit
         def soft_l1_1(z):
             t = 1 + z
-            return 2 * (t ** 0.5 - 1), t
+            return 2 * (t**0.5 - 1), t
 
         @jit
         def soft_l1_2(t):
-            rho1 = t ** -0.5
-            rho2 = -0.5 * t ** -1.5
+            rho1 = t**-0.5
+            rho2 = -0.5 * t**-1.5
             return rho1, rho2
 
         self.soft_l1_1 = soft_l1_1
@@ -95,7 +98,7 @@ class LossFunctionsJIT():
         def cauchy2(z):
             t = 1 + z
             rho1 = 1 / t
-            rho2 = -1 / t ** 2
+            rho2 = -1 / t**2
             return rho1, rho2
 
         self.cauchy1 = cauchy1
@@ -116,8 +119,8 @@ class LossFunctionsJIT():
 
         @jit
         def arctan2(z):
-            t = 1 + z ** 2
-            return 1 / t, -2 * z / t ** 2
+            t = 1 + z**2
+            return 1 / t, -2 * z / t**2
 
         self.arctan1 = arctan1
         self.arctan2 = arctan2
@@ -141,16 +144,16 @@ class LossFunctionsJIT():
         @jit
         def calculate_cost(f_scale, rho, data_mask):
             cost_array = jnp.where(data_mask, rho[0], 0)
-            return 0.5 * f_scale ** 2 * jnp.sum(cost_array)
+            return 0.5 * f_scale**2 * jnp.sum(cost_array)
 
         self.calculate_cost = calculate_cost
 
     def create_scale_rhos(self):
         @jit
         def scale_rhos(rho, f_scale):
-            rho0 = rho[0] * f_scale ** 2
+            rho0 = rho[0] * f_scale**2
             rho1 = rho[1]
-            rho2 = rho[2] / f_scale ** 2
+            rho2 = rho[2] / f_scale**2
             return self.stack_rhos(rho0, rho1, rho2)
 
         self.scale_rhos = scale_rhos
@@ -174,12 +177,13 @@ class LossFunctionsJIT():
         return loss_funcs
 
     def get_loss_function(self, loss):
-        if loss == 'linear':
+        if loss == "linear":
             return None
 
         if not callable(loss):
             return self.loss_funcs[loss]
         else:
+
             def loss_function(f, f_scale, data_mask=None, cost_only=False):
                 z = self.zscale(f, f_scale)
                 rho = loss(z)

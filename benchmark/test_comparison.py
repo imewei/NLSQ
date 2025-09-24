@@ -1,27 +1,29 @@
-# -*- coding: utf-8 -*-
 """
 Created on Mon Apr  4 15:16:42 2022
 
 @author: hofer
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
-import time
 import sys
+import time
 
-sys.path.append(r'../')
+import matplotlib.pyplot as plt
+import numpy as np
 
-from nlsq import CurveFit
+sys.path.append(r"../")
+
 import jax.numpy as jnp
 
-sys.path.append(r'./timed_scipy_curve_fit')
+from nlsq import CurveFit
+
+sys.path.append(r"./timed_scipy_curve_fit")
 from scipy_minpack import curve_fit
 
-sys.path.append('./classes')
+sys.path.append("./classes")
 
-from gauss2d_numpy import gaussian2d as gaussian2d_np
 from gauss2d_jax import gaussian2d as gaussian2d_jax
+from gauss2d_numpy import gaussian2d as gaussian2d_np
+
 
 def get_coordinates(width, height):
     x = np.linspace(0, width - 1, width)
@@ -29,31 +31,31 @@ def get_coordinates(width, height):
     X, Y = np.meshgrid(x, y)
     return X, Y
 
+
 def approximate_jonquieress_function(z, gamma, n_max=10):
     Li = jnp.zeros(z.shape)
     for n in range(1, n_max + 1):
-        Li += z ** n / n ** gamma
+        Li += z**n / n**gamma
     return Li
-    
+
 
 def rotate_coordinates2D(coords, theta):
-    R = jnp.array([[jnp.cos(theta), -jnp.sin(theta)],
-                  [jnp.sin(theta), jnp.cos(theta)]])
+    R = jnp.array([[jnp.cos(theta), -jnp.sin(theta)], [jnp.sin(theta), jnp.cos(theta)]])
     rcoords = R @ coords
     return rcoords
 
 
 def translate_coordinates2D(coords, x0, y0):
-    xcoords = coords[0] - x0  
+    xcoords = coords[0] - x0
     ycoords = coords[1] - y0
     return jnp.stack([xcoords, ycoords])
-    
+
 
 def coordinate_transformation2D(XY_tuple, x0=0, y0=0, theta=0):
     XY_tuple = translate_coordinates2D(XY_tuple, x0, y0)
     XY_tuple = rotate_coordinates2D(XY_tuple, theta)
     return XY_tuple
-    
+
 
 def parabola_base(coords, n0, Rx, Ry):
     X, Y = coords
@@ -65,7 +67,7 @@ def parabola_base(coords, n0, Rx, Ry):
 def thomas_fermi_bec(coords, n0, x0, y0, Rx, Ry, theta, offset):
     coords = coordinate_transformation2D(coords, x0, y0, theta)
     parabola = parabola_base(coords, 1, Rx, Ry)
-    density = n0 * parabola**(3 / 2)
+    density = n0 * parabola ** (3 / 2)
     return density + offset
 
 
@@ -77,7 +79,7 @@ def parabola2d(coords, n0, x0, y0, Rx, Ry, theta, offset):
 
 def gaussian2d_base(coords, n0, sigma_x, sigma_y):
     X, Y = coords
-    return n0 * jnp.exp(-.5 * (X**2 / sigma_x**2 + Y**2 / sigma_y**2))
+    return n0 * jnp.exp(-0.5 * (X**2 / sigma_x**2 + Y**2 / sigma_y**2))
 
 
 def gaussian2d(coords, n0, x0, y0, sigma_x, sigma_y, theta, offset):
@@ -92,6 +94,7 @@ def thermal_cloud(coords, n0, x0, y0, sigma_x, sigma_y, theta, offset):
     density = n0 * approximate_jonquieress_function(inside, 2)
     return density + offset
 
+
 def wrap_1d_func(func, coords, function_parameters):
     if type(coords) is not np.array:
         coords = np.asarray(coords)
@@ -104,11 +107,9 @@ def wrap_1d_func(func, coords, function_parameters):
     return np.reshape(func_vals, shape)
 
 
-
 def get_random_float(low, high):
     delta = high - low
     return low + delta * np.random.random()
-
 
 
 length = 700
@@ -122,7 +123,7 @@ sigx = length / 6
 sigy = length / 8
 theta = np.pi / 3
 
-offset = .1 * n0
+offset = 0.1 * n0
 params = [n0, x0, y0, sigx, sigy, theta, offset]
 min_bounds = [-np.inf, -np.inf, -np.inf, 0, 0, -np.inf, -np.inf]
 max_bounds = [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]
@@ -146,18 +147,31 @@ stimes = []
 for i in range(loop):
     print(i)
     # seed = [param * get_random_float(.7, 1.4) for param in params]
-    seed = [val * get_random_float(.7, 1.3) for val in params]
-
+    seed = [val * get_random_float(0.7, 1.3) for val in params]
 
     st = time.time()
-    popt, pcov = jcf.curve_fit(gaussian2d_jax, flat_XY, flat_data, p0=seed, 
-                            method='trf', bounds=bounds, sigma=sigma)
-                            # x_scale='jac', timeit=True)
+    popt, pcov = jcf.curve_fit(
+        gaussian2d_jax,
+        flat_XY,
+        flat_data,
+        p0=seed,
+        method="trf",
+        bounds=bounds,
+        sigma=sigma,
+    )
+    # x_scale='jac', timeit=True)
     st2 = time.time()
     # popt, pcov = curve_fit(gaussian2d, flat_XY, flat_data, p0=seed, x_scale='jac')
-    popt2, pcov2, res2, post_time2, ctime2 = curve_fit(gaussian2d_np, flat_XY, flat_data, p0=seed, 
-                            method='trf', bounds=bounds, sigma=sigma)
-                            # x_scale='jac')
+    popt2, pcov2, res2, post_time2, ctime2 = curve_fit(
+        gaussian2d_np,
+        flat_XY,
+        flat_data,
+        p0=seed,
+        method="trf",
+        bounds=bounds,
+        sigma=sigma,
+    )
+    # x_scale='jac')
     stimes.append(time.time() - st2)
     times.append(st2 - st)
 
@@ -169,8 +183,8 @@ print(params)
 print(popt)
 
 plt.figure()
-plt.plot(times[1:], label='NLSQ')
-plt.plot(stimes[1:], label='SciPy')
+plt.plot(times[1:], label="NLSQ")
+plt.plot(stimes[1:], label="SciPy")
 plt.legend()
 plt.show()
 

@@ -1,19 +1,21 @@
-import warnings
 # from . import _minpack
 import time
+import warnings
+
 import numpy as np
-from numpy import (atleast_1d, dot, take, triu, shape, eye,
-                   transpose, zeros, prod, greater,
-                   asarray, inf,
-                   finfo, inexact, issubdtype, dtype)
-from scipy.linalg import svd, cholesky, solve_triangular, LinAlgError, inv
+from numpy import (
+    inf,
+    zeros,
+)
+
 # from scipy._lib._util import _asarray_validated, _lazywhere
 from scipy._lib._util import getfullargspec_no_self as _getfullargspec
+from scipy.linalg import LinAlgError, cholesky, solve_triangular, svd
 from scipy.optimize.optimize import OptimizeWarning
+
 # import least_squares
 # from ._lsq.common import make_strictly_feasible
-from scipy_least_squares import prepare_bounds
-from scipy_least_squares import least_squares
+from scipy_least_squares import least_squares, prepare_bounds
 
 # error = _minpack.error
 
@@ -455,11 +457,15 @@ from scipy_least_squares import least_squares
 
 def _wrap_func(func, xdata, ydata, transform):
     if transform is None:
+
         def func_wrapped(params):
             return func(xdata, *params) - ydata
+
     elif transform.ndim == 1:
+
         def func_wrapped(params):
             return transform * (func(xdata, *params) - ydata)
+
     else:
         # Chisq = (y - yd)^T C^{-1} (y-yd)
         # transform = L such that C = L L^T
@@ -471,19 +477,28 @@ def _wrap_func(func, xdata, ydata, transform):
         # and minimize (y-yd)'^T (y-yd)'
         def func_wrapped(params):
             return solve_triangular(transform, func(xdata, *params) - ydata, lower=True)
+
     return func_wrapped
 
 
 def _wrap_jac(jac, xdata, transform):
     if transform is None:
+
         def jac_wrapped(params):
             return jac(xdata, *params)
+
     elif transform.ndim == 1:
+
         def jac_wrapped(params):
             return transform[:, np.newaxis] * np.asarray(jac(xdata, *params))
+
     else:
+
         def jac_wrapped(params):
-            return solve_triangular(transform, np.asarray(jac(xdata, *params)), lower=True)
+            return solve_triangular(
+                transform, np.asarray(jac(xdata, *params)), lower=True
+            )
+
     return jac_wrapped
 
 
@@ -504,9 +519,19 @@ def _initialize_feasible(lb, ub):
     return p0
 
 
-def curve_fit(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False,
-              check_finite=True, bounds=(-np.inf, np.inf), method=None,
-              jac=None, **kwargs):
+def curve_fit(
+    f,
+    xdata,
+    ydata,
+    p0=None,
+    sigma=None,
+    absolute_sigma=False,
+    check_finite=True,
+    bounds=(-np.inf, np.inf),
+    method=None,
+    jac=None,
+    **kwargs,
+):
     """
     Use non-linear least squares to fit a function, f, to data.
     Assumes ``ydata = f(xdata, *params) + eps``.
@@ -664,14 +689,13 @@ def curve_fit(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False,
 
     bounded_problem = np.any((lb > -np.inf) | (ub < np.inf))
     if method is None:
-        if bounded_problem:
-            method = 'trf'
-        else:
-            method = 'lm'
+        method = "trf" if bounded_problem else "lm"
 
-    if method == 'lm' and bounded_problem:
-        raise ValueError("Method 'lm' only works for unconstrained problems. "
-                         "Use 'trf' or 'dogbox' instead.")
+    if method == "lm" and bounded_problem:
+        raise ValueError(
+            "Method 'lm' only works for unconstrained problems. "
+            "Use 'trf' or 'dogbox' instead."
+        )
 
     # optimization may produce garbage for float32 inputs, cast them to float64
 
@@ -697,7 +721,7 @@ def curve_fit(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False,
         sigma = np.asarray(sigma)
 
         # if 1-D, sigma are errors, define transform = 1/sigma
-        if sigma.shape == (ydata.size, ):
+        if sigma.shape == (ydata.size,):
             transform = 1.0 / sigma
         # if 2-D, sigma is the covariance matrix,
         # define transform = L such that L L^T = C
@@ -715,19 +739,19 @@ def curve_fit(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False,
     func = _wrap_func(f, xdata, ydata, transform)
     if callable(jac):
         jac = _wrap_jac(jac, xdata, transform)
-    elif jac is None and method != 'lm':
-        jac = '2-point'
+    elif jac is None and method != "lm":
+        jac = "2-point"
 
-    if 'args' in kwargs:
+    if "args" in kwargs:
         # The specification for the model function `f` does not support
         # additional arguments. Refer to the `curve_fit` docstring for
         # acceptable call signatures of `f`.
         raise ValueError("'args' is not a supported keyword argument.")
 
-    if method == 'lm':
-        method = 'trf'
+    if method == "lm":
+        method = "trf"
         # raise RuntimeError("LM not implemented.")
-        
+
         # # if ydata.size == 1, this might be used for broadcast.
         # if ydata.size != 1 and n > ydata.size:
         #     raise TypeError(f"The number of func parameters={n} must not"
@@ -742,15 +766,13 @@ def curve_fit(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False,
         #     raise RuntimeError("Optimal parameters not found: " + errmsg)
     else:
         # Rename maxfev (leastsq) to max_nfev (least_squares), if specified.
-        if 'max_nfev' not in kwargs:
-            kwargs['max_nfev'] = kwargs.pop('maxfev', None)
+        if "max_nfev" not in kwargs:
+            kwargs["max_nfev"] = kwargs.pop("maxfev", None)
 
-        res = least_squares(func, p0, jac=jac, bounds=bounds, method=method,
-                            **kwargs)
+        res = least_squares(func, p0, jac=jac, bounds=bounds, method=method, **kwargs)
 
         if not res.success:
             raise RuntimeError("Optimal parameters not found: " + res.message)
-
 
         popt = res.x
         st = time.time()
@@ -760,7 +782,7 @@ def curve_fit(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False,
         _, s, VT = svd(res.jac, full_matrices=False)
         threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
         s = s[s > threshold]
-        VT = VT[:s.size]
+        VT = VT[: s.size]
         pcov = np.dot(VT.T / s**2, VT)
         return_full = False
 
@@ -779,11 +801,14 @@ def curve_fit(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False,
             warn_cov = True
 
     if warn_cov:
-        warnings.warn('Covariance of the parameters could not be estimated',
-                      category=OptimizeWarning)
-        
-    res.pop('jac')
-    res.pop('fun')
+        warnings.warn(
+            "Covariance of the parameters could not be estimated",
+            stacklevel=2,
+            category=OptimizeWarning,
+        )
+
+    res.pop("jac")
+    res.pop("fun")
     post_time = time.time() - st
 
     if return_full:

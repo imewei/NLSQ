@@ -1,9 +1,11 @@
 """Tests for the optimizer_base module."""
+
 import unittest
+
 import numpy as np
-import jax.numpy as jnp
-from nlsq.optimizer_base import OptimizerBase, TrustRegionOptimizerBase
+
 from nlsq._optimize import OptimizeResult
+from nlsq.optimizer_base import OptimizerBase, TrustRegionOptimizerBase
 
 
 class TestOptimizerBase(unittest.TestCase):
@@ -11,6 +13,7 @@ class TestOptimizerBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+
         # Create a concrete implementation for testing
         class ConcreteOptimizer(OptimizerBase):
             def optimize(self, fun, x0, jac=None, bounds=(-np.inf, np.inf), **kwargs):
@@ -25,7 +28,7 @@ class TestOptimizerBase(unittest.TestCase):
                     jac=np.eye(len(x0)),
                     nfev=self._nfev,
                     njev=self._njev,
-                    nit=1
+                    nit=1,
                 )
 
         self.optimizer = ConcreteOptimizer(name="test_optimizer")
@@ -39,6 +42,7 @@ class TestOptimizerBase(unittest.TestCase):
 
     def test_optimize(self):
         """Test the optimize method."""
+
         def test_fun(x):
             return np.sum(x**2)
 
@@ -53,6 +57,7 @@ class TestOptimizerBase(unittest.TestCase):
 
     def test_optimize_with_bounds(self):
         """Test optimization with bounds."""
+
         def test_fun(x):
             return np.sum(x**2)
 
@@ -65,6 +70,7 @@ class TestOptimizerBase(unittest.TestCase):
 
     def test_optimize_with_jacobian(self):
         """Test optimization with Jacobian."""
+
         def test_fun(x):
             return np.sum(x**2)
 
@@ -79,6 +85,7 @@ class TestOptimizerBase(unittest.TestCase):
 
     def test_reset_counters(self):
         """Test counter reset functionality."""
+
         # Create a new optimizer with method to reset counters
         class ResettableOptimizer(OptimizerBase):
             def optimize(self, fun, x0, jac=None, bounds=(-np.inf, np.inf), **kwargs):
@@ -93,7 +100,7 @@ class TestOptimizerBase(unittest.TestCase):
                     fun=np.zeros(1),
                     jac=np.eye(len(x0)),
                     nfev=self._nfev,
-                    njev=self._njev
+                    njev=self._njev,
                 )
 
             def reset_counters(self):
@@ -124,6 +131,7 @@ class TestTrustRegionOptimizerBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+
         # Create a concrete implementation for testing
         class ConcreteTrustRegion(TrustRegionOptimizerBase):
             def optimize(self, fun, x0, jac=None, bounds=(-np.inf, np.inf), **kwargs):
@@ -136,7 +144,7 @@ class TestTrustRegionOptimizerBase(unittest.TestCase):
                     message="Trust region test",
                     fun=fun(x0) if callable(fun) else np.zeros(1),
                     jac=np.eye(len(x0)),
-                    nfev=self._nfev
+                    nfev=self._nfev,
                 )
 
         self.optimizer = ConcreteTrustRegion(name="test_trust_region")
@@ -167,7 +175,7 @@ class TestTrustRegionOptimizerBase(unittest.TestCase):
             actual_reduction=0.1,
             predicted_reduction=1.0,
             step_norm=0.5,
-            step_at_boundary=False
+            step_at_boundary=False,
         )
         self.assertEqual(ratio, 0.1)
         self.assertEqual(Delta_new, 0.125)  # 0.25 * step_norm
@@ -178,7 +186,7 @@ class TestTrustRegionOptimizerBase(unittest.TestCase):
             actual_reduction=0.9,
             predicted_reduction=1.0,
             step_norm=1.0,
-            step_at_boundary=True
+            step_at_boundary=True,
         )
         self.assertEqual(ratio, 0.9)
         self.assertEqual(Delta_new, 2.0)  # 2 * Delta
@@ -189,7 +197,7 @@ class TestTrustRegionOptimizerBase(unittest.TestCase):
             actual_reduction=0.5,
             predicted_reduction=1.0,
             step_norm=0.8,
-            step_at_boundary=False
+            step_at_boundary=False,
         )
         self.assertEqual(ratio, 0.5)
         self.assertEqual(Delta_new, 1.0)  # Unchanged
@@ -209,5 +217,5 @@ class TestTrustRegionOptimizerBase(unittest.TestCase):
         self.assertFalse(accepted)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

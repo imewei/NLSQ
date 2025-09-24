@@ -1,14 +1,16 @@
 """Tests for the caching module."""
+
 import unittest
-import numpy as np
+
 import jax.numpy as jnp
+
 from nlsq.caching import (
     FunctionCache,
-    get_cached_jit,
     cached_jit,
     clear_cache,
+    compare_functions,
     get_cache_stats,
-    compare_functions
+    get_cached_jit,
 )
 
 
@@ -29,6 +31,7 @@ class TestFunctionCache(unittest.TestCase):
 
     def test_function_hashing(self):
         """Test function hashing works correctly."""
+
         def func1(x):
             return x * 2
 
@@ -47,6 +50,7 @@ class TestFunctionCache(unittest.TestCase):
 
     def test_cache_function(self):
         """Test caching a function."""
+
         def test_func(x):
             return x + 1
 
@@ -56,6 +60,7 @@ class TestFunctionCache(unittest.TestCase):
 
     def test_get_cached_function(self):
         """Test retrieving a cached function."""
+
         def test_func(x):
             return jnp.array(x) * 2
 
@@ -70,6 +75,7 @@ class TestFunctionCache(unittest.TestCase):
 
     def test_compile_function(self):
         """Test JIT compilation of function."""
+
         def test_func(x):
             return jnp.array(x) * 2
 
@@ -83,6 +89,7 @@ class TestFunctionCache(unittest.TestCase):
 
     def test_get_compiled_function(self):
         """Test getting compiled function from cache."""
+
         def test_func(x):
             return jnp.array(x) * 2
 
@@ -108,9 +115,14 @@ class TestFunctionCache(unittest.TestCase):
         """Test cache eviction when maxsize is reached."""
         cache = FunctionCache(maxsize=2)
 
-        def func1(x): return x + 1
-        def func2(x): return x + 2
-        def func3(x): return x + 3
+        def func1(x):
+            return x + 1
+
+        def func2(x):
+            return x + 2
+
+        def func3(x):
+            return x + 3
 
         hash1 = cache.cache_function(func1)
         hash2 = cache.cache_function(func2)
@@ -129,6 +141,7 @@ class TestFunctionCache(unittest.TestCase):
 
     def test_clear_cache(self):
         """Test clearing the cache."""
+
         def test_func(x):
             return x * 2
 
@@ -150,6 +163,7 @@ class TestFunctionCache(unittest.TestCase):
 
     def test_get_stats(self):
         """Test getting cache statistics."""
+
         def test_func(x):
             return jnp.array(x) * 2
 
@@ -166,14 +180,14 @@ class TestFunctionCache(unittest.TestCase):
         stats = self.cache.get_stats()
 
         # Verify stats structure
-        self.assertIn('hits', stats)
-        self.assertIn('misses', stats)
-        self.assertIn('cached_functions', stats)
-        self.assertIn('compiled_versions', stats)
-        self.assertIn('hit_rate', stats)
+        self.assertIn("hits", stats)
+        self.assertIn("misses", stats)
+        self.assertIn("cached_functions", stats)
+        self.assertIn("compiled_versions", stats)
+        self.assertIn("hit_rate", stats)
 
         # Should have at least one cached function
-        self.assertGreaterEqual(stats['cached_functions'], 1)
+        self.assertGreaterEqual(stats["cached_functions"], 1)
 
 
 class TestCachedJIT(unittest.TestCase):
@@ -185,6 +199,7 @@ class TestCachedJIT(unittest.TestCase):
 
     def test_get_cached_jit(self):
         """Test get_cached_jit function."""
+
         def test_func(x, y):
             return jnp.array(x) + jnp.array(y)
 
@@ -197,6 +212,7 @@ class TestCachedJIT(unittest.TestCase):
 
     def test_cached_jit_decorator(self):
         """Test cached_jit decorator."""
+
         @cached_jit()
         def test_func(x):
             return jnp.array(x) ** 2
@@ -211,6 +227,7 @@ class TestCachedJIT(unittest.TestCase):
 
     def test_cached_jit_with_static_args(self):
         """Test cached_jit with static arguments."""
+
         @cached_jit(static_argnums=(1,))
         def test_func(x, n):
             return jnp.array(x) ** n
@@ -224,6 +241,7 @@ class TestCachedJIT(unittest.TestCase):
 
     def test_compare_functions(self):
         """Test compare_functions utility."""
+
         def func1(x):
             return x * 2
 
@@ -257,17 +275,17 @@ class TestCachedJIT(unittest.TestCase):
 
         # Get stats before clearing
         stats_before = get_cache_stats()
-        self.assertGreater(stats_before['compiled_versions'], 0)
+        self.assertGreater(stats_before["compiled_versions"], 0)
 
         # Clear cache
         clear_cache()
 
         # Get stats after clearing
         stats_after = get_cache_stats()
-        self.assertEqual(stats_after['compiled_versions'], 0)
-        self.assertEqual(stats_after['cached_functions'], 0)
-        self.assertEqual(stats_after['hits'], 0)
-        self.assertEqual(stats_after['misses'], 0)
+        self.assertEqual(stats_after["compiled_versions"], 0)
+        self.assertEqual(stats_after["cached_functions"], 0)
+        self.assertEqual(stats_after["hits"], 0)
+        self.assertEqual(stats_after["misses"], 0)
 
     def test_cache_stats_global(self):
         """Test getting global cache statistics."""
@@ -279,15 +297,15 @@ class TestCachedJIT(unittest.TestCase):
 
         # Initial stats
         stats1 = get_cache_stats()
-        self.assertEqual(stats1['hits'], 0)
-        self.assertEqual(stats1['misses'], 0)
+        self.assertEqual(stats1["hits"], 0)
+        self.assertEqual(stats1["misses"], 0)
 
         # First call - should compile the function
         test_func(2.0)
         stats2 = get_cache_stats()
         # Note: The decorator itself may not track misses the same way
         # Just verify that we have a compiled function
-        self.assertGreater(stats2['compiled_versions'], 0)
+        self.assertGreater(stats2["compiled_versions"], 0)
 
         # Second call with different input value
         # JAX will reuse the compiled function for different input values
@@ -299,9 +317,15 @@ class TestFunctionComparison(unittest.TestCase):
 
     def test_compare_lambdas(self):
         """Test comparing lambda functions."""
-        f1 = lambda x: x + 1
-        f2 = lambda x: x + 1
-        f3 = lambda x: x + 2
+
+        def f1(x):
+            return x + 1
+
+        def f2(x):
+            return x + 1
+
+        def f3(x):
+            return x + 2
 
         # Same lambda should compare equal to itself
         self.assertTrue(compare_functions(f1, f1))
@@ -316,9 +340,11 @@ class TestFunctionComparison(unittest.TestCase):
 
     def test_compare_with_closures(self):
         """Test comparing functions with closures."""
+
         def make_adder(n):
             def adder(x):
                 return x + n
+
             return adder
 
         adder1 = make_adder(1)
@@ -331,11 +357,12 @@ class TestFunctionComparison(unittest.TestCase):
         # Different closure value - different code due to constant
         # Note: This might actually be True depending on implementation
         # since the code structure is the same
-        result = compare_functions(adder1, adder3)
+        compare_functions(adder1, adder3)
         # We don't assert here as behavior may vary
 
     def test_compare_methods(self):
         """Test comparing class methods."""
+
         class TestClass:
             def method1(self, x):
                 return x * 2
@@ -359,5 +386,5 @@ class TestFunctionComparison(unittest.TestCase):
         self.assertFalse(compare_functions(obj.method1, obj.method3))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

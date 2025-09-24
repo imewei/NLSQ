@@ -1,24 +1,27 @@
-import warnings
-import numpy as np
-from inspect import signature
 import time
-from typing import Optional, Callable, Tuple, Union, List, Dict, Any
+import warnings
+from collections.abc import Callable
+from inspect import signature
+
+import numpy as np
 
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
+
 _jax_config = JAXConfig()
 
 import jax.numpy as jnp
 from jax import jit
-from jax.scipy.linalg import svd as jax_svd
 from jax.scipy.linalg import cholesky as jax_cholesky
+from jax.scipy.linalg import svd as jax_svd
 
 from nlsq._optimize import OptimizeWarning
-from nlsq.least_squares import prepare_bounds, LeastSquares
 from nlsq.common_scipy import EPS
+from nlsq.least_squares import LeastSquares, prepare_bounds
 from nlsq.logging import get_logger
 
-__all__ = ['CurveFit', 'curve_fit']
+__all__ = ["CurveFit", "curve_fit"]
+
 
 def curve_fit(f, xdata, ydata, *args, **kwargs):
     jcf = CurveFit()
@@ -70,9 +73,8 @@ def _initialize_feasible(lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
     return p0
 
 
-class CurveFit():
-
-    def __init__(self, flength: Optional[float] = None):
+class CurveFit:
+    def __init__(self, flength: float | None = None):
         """CurveFit class for fitting
 
         Parameters
@@ -82,11 +84,10 @@ class CurveFit():
             to avoid retracing.
         """
         self.flength = flength
-        self.logger = get_logger('curve_fit')
+        self.logger = get_logger("curve_fit")
         self.create_sigma_transform_funcs()
         self.create_covariance_svd()
         self.ls = LeastSquares()
-
 
     def update_flength(self, flength: float):
         """Set the fixed input data length.
@@ -98,7 +99,6 @@ class CurveFit():
         """
         self.flength = flength
 
-
     def create_sigma_transform_funcs(self):
         """Create JIT-compiled sigma transform functions.
 
@@ -109,9 +109,9 @@ class CurveFit():
         """
 
         @jit
-        def sigma_transform1d(sigma: jnp.ndarray,
-                      data_mask: jnp.ndarray
-                     ) -> jnp.ndarray:
+        def sigma_transform1d(
+            sigma: jnp.ndarray, data_mask: jnp.ndarray
+        ) -> jnp.ndarray:
             """Compute the sigma transform for 1D data.
 
             Parameters
@@ -130,9 +130,9 @@ class CurveFit():
             return transform
 
         @jit
-        def sigma_transform2d(sigma: jnp.ndarray,
-                              data_mask: jnp.ndarray
-                              ) -> jnp.ndarray:
+        def sigma_transform2d(
+            sigma: jnp.ndarray, data_mask: jnp.ndarray
+        ) -> jnp.ndarray:
             """Compute the sigma transform for 2D data.
 
             Parameters
@@ -158,18 +158,17 @@ class CurveFit():
 
     def create_covariance_svd(self):
         """Create JIT-compiled SVD function for covariance computation."""
+
         @jit
         def covariance_svd(jac):
             _, s, VT = jax_svd(jac, full_matrices=False)
             return s, VT
+
         self.covariance_svd = covariance_svd
 
-
-    def pad_fit_data(self, xdata: np.ndarray,
-                     ydata: np.ndarray,
-                     xdims: int,
-                     len_diff: int
-                     ) -> Tuple[np.ndarray, np.ndarray]:
+    def pad_fit_data(
+        self, xdata: np.ndarray, ydata: np.ndarray, xdims: int, len_diff: int
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Pad fit data to match the fixed input data length.
 
         This function pads the input data arrays with small values to match the
@@ -206,24 +205,23 @@ class CurveFit():
         ydata = np.concatenate([ydata, ypad])
         return xdata, ydata
 
-
-
-    def curve_fit(self,
-                  f: Callable,
-                  xdata: Union[np.ndarray, Tuple[np.ndarray]],
-                  ydata: np.ndarray,
-                  p0: Optional[np.ndarray] = None,
-                  sigma: Optional[np.ndarray] = None,
-                  absolute_sigma: bool = False,
-                  check_finite: bool = True,
-                  bounds: Tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
-                  method: Optional[str] = None,
-                  jac: Optional[Callable] = None,
-                  data_mask: Optional[np.ndarray] = None,
-                  timeit: bool = False,
-                  return_eval: bool = False,
-                  **kwargs
-                  ) -> Tuple[np.ndarray, np.ndarray]:
+    def curve_fit(
+        self,
+        f: Callable,
+        xdata: np.ndarray | tuple[np.ndarray],
+        ydata: np.ndarray,
+        p0: np.ndarray | None = None,
+        sigma: np.ndarray | None = None,
+        absolute_sigma: bool = False,
+        check_finite: bool = True,
+        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        method: str | None = None,
+        jac: Callable | None = None,
+        data_mask: np.ndarray | None = None,
+        timeit: bool = False,
+        return_eval: bool = False,
+        **kwargs,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Use non-linear least squares to fit a function, f, to data.
         Assumes ``ydata = f(xdata, *params) + eps``.
@@ -376,15 +374,20 @@ class CurveFit():
             n = p0.size
 
         # Log curve fit start
-        self.logger.info("Starting curve fit", n_params=n, n_data_points=len(ydata),
-                        method=method if method else 'trf', has_bounds=bounds != (-np.inf, np.inf))
+        self.logger.info(
+            "Starting curve fit",
+            n_params=n,
+            n_data_points=len(ydata),
+            method=method if method else "trf",
+            has_bounds=bounds != (-np.inf, np.inf),
+        )
 
         lb, ub = prepare_bounds(bounds, n)
         if p0 is None:
             p0 = _initialize_feasible(lb, ub)
 
         if method is None:
-            method = 'trf'
+            method = "trf"
 
         # NaNs cannot be handled
         if check_finite:
@@ -393,7 +396,7 @@ class CurveFit():
             ydata = np.asarray(ydata, float)
 
         if isinstance(xdata, (list, tuple, np.ndarray)):
-            #should we be able to pass jax arrays
+            # should we be able to pass jax arrays
             # `xdata` is passed straight to the user-defined `f`, so allow
             # non-array_like `xdata`.
             if check_finite:
@@ -401,39 +404,33 @@ class CurveFit():
             else:
                 xdata = np.asarray(xdata, float)
         else:
-            raise ValueError('X needs arrays')
+            raise ValueError("X needs arrays")
 
         if ydata.size == 0:
             raise ValueError("`ydata` must not be empty!")
 
         m = len(ydata)
         xdims = xdata.ndim
-        if xdims == 1:
-            xlen = len(xdata)
-        else:
-            xlen = len(xdata[0])
+        xlen = len(xdata) if xdims == 1 else len(xdata[0])
         if xlen != m:
-            raise ValueError('X and Y data lengths dont match')
+            raise ValueError("X and Y data lengths dont match")
 
-        if data_mask is None:
-            none_mask = True
-        else:
-            none_mask = False
+        none_mask = data_mask is None
 
         if self.flength is not None:
             len_diff = self.flength - m
             if data_mask is not None:
                 if len(data_mask) != m:
-                    raise ValueError('Data mask doesnt match data lengths.')
+                    raise ValueError("Data mask doesnt match data lengths.")
             else:
                 data_mask = np.ones(m, dtype=bool)
                 if len_diff > 0:
-                    data_mask = np.concatenate([data_mask,
-                                                np.zeros(len_diff, dtype=bool)])
+                    data_mask = np.concatenate(
+                        [data_mask, np.zeros(len_diff, dtype=bool)]
+                    )
         else:
             len_diff = 0
             data_mask = np.ones(m, dtype=bool)
-
 
         if self.flength is not None:
             if len_diff >= 0:
@@ -442,13 +439,13 @@ class CurveFit():
                 # Data length greater than fixed length - retracing will occur
                 pass
 
-                   # Determine type of sigma
+                # Determine type of sigma
         if sigma is not None:
             if not isinstance(sigma, np.ndarray):
-                raise ValueError('Sigma must be numpy array.')
+                raise ValueError("Sigma must be numpy array.")
             # if 1-D, sigma are errors, define transform = 1/sigma
             ysize = ydata.size - len_diff
-            if sigma.shape == (ysize, ):
+            if sigma.shape == (ysize,):
                 if len_diff > 0:
                     sigma = np.concatenate([sigma, np.ones([len_diff])])
                 transform = self.sigma_transform1d(sigma, data_mask)
@@ -458,7 +455,7 @@ class CurveFit():
                 try:
                     if len_diff >= 0:
                         sigma_padded = np.identity(m + len_diff)
-                        sigma_padded[:m,:m] = sigma
+                        sigma_padded[:m, :m] = sigma
                         sigma = sigma_padded
                     # scipy.linalg.cholesky requires lower=True to return L L^T = A
                     transform = self.sigma_transform2d(sigma, data_mask)
@@ -485,15 +482,14 @@ class CurveFit():
         else:
             transform = None
 
-
-        if 'args' in kwargs:
+        if "args" in kwargs:
             # The specification for the model function `f` does not support
             # additional arguments. Refer to the `curve_fit` docstring for
             # acceptable call signatures of `f`.
             raise ValueError("'args' is not a supported keyword argument.")
 
-        if 'max_nfev' not in kwargs:
-            kwargs['max_nfev'] = kwargs.pop('maxfev', None)
+        if "max_nfev" not in kwargs:
+            kwargs["max_nfev"] = kwargs.pop("maxfev", None)
 
         st = time.time()
         if timeit:
@@ -508,21 +504,39 @@ class CurveFit():
         jnp_data_mask = jnp.array(data_mask, dtype=bool)
 
         # Start curve fit timer and call least squares
-        with self.logger.timer('curve_fit'):
-            self.logger.debug("Calling least squares solver", has_sigma=sigma is not None,
-                             has_jacobian=jac is not None)
-            res = self.ls.least_squares(f, p0, jac=jac, xdata=jnp_xdata,
-                                        ydata=jnp_ydata, data_mask=jnp_data_mask,
-                                        transform=transform, bounds=bounds,
-                                        method=method, timeit=timeit, **kwargs)
+        with self.logger.timer("curve_fit"):
+            self.logger.debug(
+                "Calling least squares solver",
+                has_sigma=sigma is not None,
+                has_jacobian=jac is not None,
+            )
+            res = self.ls.least_squares(
+                f,
+                p0,
+                jac=jac,
+                xdata=jnp_xdata,
+                ydata=jnp_ydata,
+                data_mask=jnp_data_mask,
+                transform=transform,
+                bounds=bounds,
+                method=method,
+                timeit=timeit,
+                **kwargs,
+            )
 
         if not res.success:
-            self.logger.error("Optimization failed", reason=res.message, status=res.status)
+            self.logger.error(
+                "Optimization failed", reason=res.message, status=res.status
+            )
             raise RuntimeError("Optimal parameters not found: " + res.message)
 
         popt = res.x
-        self.logger.debug("Optimization succeeded", final_cost=res.cost,
-                         nfev=res.nfev, optimality=getattr(res, 'optimality', None))
+        self.logger.debug(
+            "Optimization succeeded",
+            final_cost=res.cost,
+            nfev=res.nfev,
+            optimality=getattr(res, "optimality", None),
+        )
 
         st = time.time()
         # ysize = len(res.fun)
@@ -536,7 +550,7 @@ class CurveFit():
         s, VT = [np.asarray(output) for output in outputs]
         threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
         s = s[s > threshold]
-        VT = VT[:s.size]
+        VT = VT[: s.size]
         pcov = np.dot(VT.T / s**2, VT)
         return_full = False
 
@@ -555,17 +569,27 @@ class CurveFit():
                 warn_cov = True
 
         if warn_cov:
-            self.logger.warning("Covariance could not be estimated", reason="insufficient_data" if ysize <= p0.size else "singular_jacobian")
-            warnings.warn('Covariance of the parameters could not be estimated',
-                          category=OptimizeWarning)
+            self.logger.warning(
+                "Covariance could not be estimated",
+                reason="insufficient_data" if ysize <= p0.size else "singular_jacobian",
+            )
+            warnings.warn(
+                "Covariance of the parameters could not be estimated",
+                stacklevel=2,
+                category=OptimizeWarning,
+            )
 
         # self.res = res
         post_time = time.time() - st
 
         # Log curve fit completion
-        total_time = self.logger.timers.get('curve_fit', 0)
-        self.logger.info("Curve fit completed", total_time=total_time,
-                        final_cost=cost, covariance_warning=warn_cov)
+        total_time = self.logger.timers.get("curve_fit", 0)
+        self.logger.info(
+            "Curve fit completed",
+            total_time=total_time,
+            final_cost=cost,
+            covariance_warning=warn_cov,
+        )
 
         if return_eval:
             feval = f(jnp_xdata, *popt)
@@ -576,9 +600,9 @@ class CurveFit():
             else:
                 return popt, pcov, feval
         else:
-            #lower GPU memory usage
-            res.pop('jac')
-            res.pop('fun')
+            # lower GPU memory usage
+            res.pop("jac")
+            res.pop("fun")
 
         if return_full:
             raise RuntimeError("Return full only works for LM")

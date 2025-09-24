@@ -1,4 +1,5 @@
 """Comprehensive logging system for NLSQ package."""
+
 import logging
 import os
 import sys
@@ -7,13 +8,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
 
 class LogLevel(IntEnum):
     """Custom log levels for NLSQ."""
+
     DEBUG = logging.DEBUG  # 10
     INFO = logging.INFO  # 20
     PERFORMANCE = 25  # Custom level for performance logs
@@ -33,7 +34,7 @@ class NLSQLogger:
     - Debug mode with detailed tracing
     """
 
-    def __init__(self, name: str, level: Union[int, LogLevel] = LogLevel.INFO):
+    def __init__(self, name: str, level: int | LogLevel = LogLevel.INFO):
         """Initialize NLSQ logger.
 
         Parameters
@@ -47,7 +48,7 @@ class NLSQLogger:
         self.logger = logging.getLogger(self.name)
 
         # Override level for debug mode
-        debug_mode = os.getenv('NLSQ_DEBUG', '0') == '1'
+        debug_mode = os.getenv("NLSQ_DEBUG", "0") == "1"
         if debug_mode:
             level = LogLevel.DEBUG
 
@@ -58,13 +59,13 @@ class NLSQLogger:
             self._setup_handlers()
 
         # Performance tracking
-        self.timers: Dict[str, float] = {}
+        self.timers: dict[str, float] = {}
 
         # Optimization tracking
         self.optimization_history: list = []
 
         # Register custom log level
-        if not hasattr(logging, 'PERFORMANCE'):
+        if not hasattr(logging, "PERFORMANCE"):
             logging.addLevelName(LogLevel.PERFORMANCE, "PERFORMANCE")
 
     def _setup_handlers(self):
@@ -73,42 +74,38 @@ class NLSQLogger:
         console_handler = logging.StreamHandler(sys.stdout)
 
         # Check for debug mode
-        debug_mode = os.getenv('NLSQ_DEBUG', '0') == '1'
-        verbose_mode = os.getenv('NLSQ_VERBOSE', '0') == '1'
+        debug_mode = os.getenv("NLSQ_DEBUG", "0") == "1"
+        verbose_mode = os.getenv("NLSQ_VERBOSE", "0") == "1"
 
         if debug_mode:
             console_handler.setLevel(logging.DEBUG)
             formatter = logging.Formatter(
-                '%(asctime)s - [%(levelname)s] %(name)s:%(lineno)d - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
+                "%(asctime)s - [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
             )
         elif verbose_mode:
             console_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter(
-                '[%(levelname)s] %(name)s - %(message)s'
-            )
+            formatter = logging.Formatter("[%(levelname)s] %(name)s - %(message)s")
         else:
             console_handler.setLevel(logging.WARNING)
-            formatter = logging.Formatter(
-                '[%(levelname)s] %(message)s'
-            )
+            formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
 
         # Optional file handler for debug mode
         if debug_mode:
-            log_dir = Path(os.getenv('NLSQ_LOG_DIR', '.'))
+            log_dir = Path(os.getenv("NLSQ_LOG_DIR", "."))
             log_dir.mkdir(exist_ok=True)
 
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            log_file = log_dir / f'nlsq_debug_{timestamp}.log'
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = log_dir / f"nlsq_debug_{timestamp}.log"
 
             file_handler = logging.FileHandler(log_file)
             file_handler.setLevel(logging.DEBUG)
             file_formatter = logging.Formatter(
-                '%(asctime)s - [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S.%f'
+                "%(asctime)s - [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S.%f",
             )
             file_handler.setFormatter(file_formatter)
             self.logger.addHandler(file_handler)
@@ -155,10 +152,10 @@ class NLSQLogger:
         self,
         iteration: int,
         cost: float,
-        gradient_norm: Optional[float] = None,
-        step_size: Optional[float] = None,
-        nfev: Optional[int] = None,
-        **kwargs
+        gradient_norm: float | None = None,
+        step_size: float | None = None,
+        nfev: int | None = None,
+        **kwargs,
     ):
         """Log optimization iteration details.
 
@@ -178,29 +175,26 @@ class NLSQLogger:
             Additional metrics to log
         """
         metrics = {
-            'iter': iteration,
-            'cost': f'{cost:.6e}',
+            "iter": iteration,
+            "cost": f"{cost:.6e}",
         }
 
         if gradient_norm is not None:
-            metrics['‖∇f‖'] = f'{gradient_norm:.6e}'
+            metrics["‖∇f‖"] = f"{gradient_norm:.6e}"
 
         if step_size is not None:
-            metrics['step'] = f'{step_size:.6e}'
+            metrics["step"] = f"{step_size:.6e}"
 
         if nfev is not None:
-            metrics['nfev'] = nfev
+            metrics["nfev"] = nfev
 
         metrics.update(kwargs)
 
         # Store in history
-        self.optimization_history.append({
-            'timestamp': time.time(),
-            **metrics
-        })
+        self.optimization_history.append({"timestamp": time.time(), **metrics})
 
         # Format message
-        message = ' | '.join(f'{k}={v}' for k, v in metrics.items())
+        message = " | ".join(f"{k}={v}" for k, v in metrics.items())
         self.performance(f"Optimization: {message}")
 
     def convergence(
@@ -208,8 +202,8 @@ class NLSQLogger:
         reason: str,
         iterations: int,
         final_cost: float,
-        time_elapsed: Optional[float] = None,
-        **kwargs
+        time_elapsed: float | None = None,
+        **kwargs,
     ):
         """Log convergence information.
 
@@ -227,25 +221,25 @@ class NLSQLogger:
             Additional convergence metrics
         """
         metrics = {
-            'reason': reason,
-            'iterations': iterations,
-            'final_cost': f'{final_cost:.6e}',
+            "reason": reason,
+            "iterations": iterations,
+            "final_cost": f"{final_cost:.6e}",
         }
 
         if time_elapsed is not None:
-            metrics['time'] = f'{time_elapsed:.3f}s'
+            metrics["time"] = f"{time_elapsed:.3f}s"
 
         metrics.update(kwargs)
 
-        message = ' | '.join(f'{k}={v}' for k, v in metrics.items())
+        message = " | ".join(f"{k}={v}" for k, v in metrics.items())
         self.info(f"Convergence: {message}")
 
     def jax_compilation(
         self,
         function_name: str,
-        input_shape: Optional[tuple] = None,
-        compilation_time: Optional[float] = None,
-        **kwargs
+        input_shape: tuple | None = None,
+        compilation_time: float | None = None,
+        **kwargs,
     ):
         """Log JAX compilation events.
 
@@ -260,20 +254,20 @@ class NLSQLogger:
         **kwargs
             Additional compilation details
         """
-        if os.getenv('NLSQ_TRACE_JAX') != '1':
+        if os.getenv("NLSQ_TRACE_JAX") != "1":
             return
 
-        metrics = {'function': function_name}
+        metrics = {"function": function_name}
 
         if input_shape is not None:
-            metrics['shape'] = str(input_shape)
+            metrics["shape"] = str(input_shape)
 
         if compilation_time is not None:
-            metrics['time'] = f'{compilation_time:.3f}s'
+            metrics["time"] = f"{compilation_time:.3f}s"
 
         metrics.update(kwargs)
 
-        message = ' | '.join(f'{k}={v}' for k, v in metrics.items())
+        message = " | ".join(f"{k}={v}" for k, v in metrics.items())
         self.debug(f"JAX Compilation: {message}")
 
     @contextmanager
@@ -305,10 +299,7 @@ class NLSQLogger:
                 self.performance(f"Timer: {name} took {elapsed:.6f}s")
 
     def matrix_info(
-        self,
-        name: str,
-        matrix: np.ndarray,
-        compute_condition: bool = False
+        self, name: str, matrix: np.ndarray, compute_condition: bool = False
     ):
         """Log information about a matrix.
 
@@ -322,24 +313,24 @@ class NLSQLogger:
             Whether to compute condition number (expensive)
         """
         info = {
-            'shape': matrix.shape,
-            'dtype': str(matrix.dtype),
-            'min': f'{np.min(matrix):.6e}',
-            'max': f'{np.max(matrix):.6e}',
-            'mean': f'{np.mean(matrix):.6e}',
+            "shape": matrix.shape,
+            "dtype": str(matrix.dtype),
+            "min": f"{np.min(matrix):.6e}",
+            "max": f"{np.max(matrix):.6e}",
+            "mean": f"{np.mean(matrix):.6e}",
         }
 
         if compute_condition and matrix.ndim == 2:
             try:
                 cond = np.linalg.cond(matrix)
-                info['condition'] = f'{cond:.2e}'
+                info["condition"] = f"{cond:.2e}"
             except:
-                info['condition'] = 'failed'
+                info["condition"] = "failed"
 
-        message = ' | '.join(f'{k}={v}' for k, v in info.items())
+        message = " | ".join(f"{k}={v}" for k, v in info.items())
         self.debug(f"Matrix {name}: {message}")
 
-    def save_iteration_data(self, output_dir: Optional[str] = None):
+    def save_iteration_data(self, output_dir: str | None = None):
         """Save optimization history to file.
 
         Parameters
@@ -350,26 +341,26 @@ class NLSQLogger:
         if not self.optimization_history:
             return
 
-        save_dir = output_dir or os.getenv('NLSQ_SAVE_ITERATIONS')
+        save_dir = output_dir or os.getenv("NLSQ_SAVE_ITERATIONS")
         if not save_dir:
             return
 
         save_path = Path(save_dir)
         save_path.mkdir(exist_ok=True)
 
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = save_path / f'optimization_history_{self.name}_{timestamp}.npz'
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = save_path / f"optimization_history_{self.name}_{timestamp}.npz"
 
         # Convert history to arrays
         data = {}
-        for key in self.optimization_history[0].keys():
+        for key in self.optimization_history[0]:
             values = []
             for entry in self.optimization_history:
                 val = entry.get(key, np.nan)
                 # Handle string values
                 if isinstance(val, str):
                     try:
-                        val = float(val.replace('e', 'E'))
+                        val = float(val.replace("e", "E"))
                     except:
                         val = np.nan
                 values.append(val)
@@ -380,10 +371,10 @@ class NLSQLogger:
 
 
 # Module-level convenience functions
-_loggers: Dict[str, NLSQLogger] = {}
+_loggers: dict[str, NLSQLogger] = {}
 
 
-def get_logger(name: str, level: Union[int, LogLevel] = LogLevel.INFO) -> NLSQLogger:
+def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
     """Get or create a logger for the given name.
 
     Parameters
@@ -403,7 +394,7 @@ def get_logger(name: str, level: Union[int, LogLevel] = LogLevel.INFO) -> NLSQLo
     return _loggers[name]
 
 
-def set_global_level(level: Union[int, LogLevel]):
+def set_global_level(level: int | LogLevel):
     """Set logging level for all NLSQ loggers.
 
     Parameters
@@ -415,13 +406,13 @@ def set_global_level(level: Union[int, LogLevel]):
         logger.logger.setLevel(level)
 
     # Also set for root NLSQ logger
-    root_logger = logging.getLogger('nlsq')
+    root_logger = logging.getLogger("nlsq")
     root_logger.setLevel(level)
 
 
 def enable_debug_mode():
     """Enable debug mode with detailed logging."""
-    os.environ['NLSQ_DEBUG'] = '1'
+    os.environ["NLSQ_DEBUG"] = "1"
     set_global_level(LogLevel.DEBUG)
 
     # Recreate handlers for existing loggers
@@ -432,8 +423,8 @@ def enable_debug_mode():
 
 def enable_performance_tracking():
     """Enable performance tracking mode."""
-    os.environ['NLSQ_TRACE_JAX'] = '1'
-    os.environ['NLSQ_SAVE_ITERATIONS'] = '1'
+    os.environ["NLSQ_TRACE_JAX"] = "1"
+    os.environ["NLSQ_SAVE_ITERATIONS"] = "1"
     set_global_level(LogLevel.PERFORMANCE)
 
 

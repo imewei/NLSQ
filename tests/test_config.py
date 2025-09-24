@@ -1,14 +1,10 @@
 """Tests for the NLSQ configuration module."""
-import unittest
-import os
-from unittest.mock import patch, MagicMock
 
-from nlsq.config import (
-    JAXConfig,
-    enable_x64,
-    is_x64_enabled,
-    precision_context
-)
+import os
+import unittest
+from unittest.mock import patch
+
+from nlsq.config import JAXConfig, enable_x64, is_x64_enabled, precision_context
 
 
 class TestJAXConfig(unittest.TestCase):
@@ -17,11 +13,11 @@ class TestJAXConfig(unittest.TestCase):
     def setUp(self):
         """Reset environment before each test."""
         # Clean up any existing environment variables
-        os.environ.pop('NLSQ_DISABLE_X64', None)
+        os.environ.pop("NLSQ_DISABLE_X64", None)
 
     def tearDown(self):
         """Clean up after each test."""
-        os.environ.pop('NLSQ_DISABLE_X64', None)
+        os.environ.pop("NLSQ_DISABLE_X64", None)
 
     def test_singleton_pattern(self):
         """Test that JAXConfig follows singleton pattern."""
@@ -91,11 +87,11 @@ class TestJAXConfig(unittest.TestCase):
         """Test that x64 can be disabled via environment variable."""
         # This test would require reloading the module, which is complex
         # We'll test the logic instead
-        os.environ['NLSQ_DISABLE_X64'] = '1'
+        os.environ["NLSQ_DISABLE_X64"] = "1"
 
         # In reality, this would be checked during initialization
         # Here we just verify the environment variable is set
-        self.assertEqual(os.environ.get('NLSQ_DISABLE_X64'), '1')
+        self.assertEqual(os.environ.get("NLSQ_DISABLE_X64"), "1")
 
     def test_multiple_enable_calls(self):
         """Test that multiple enable calls work correctly."""
@@ -132,7 +128,7 @@ class TestJAXConfig(unittest.TestCase):
 class TestJAXConfigIntegration(unittest.TestCase):
     """Integration tests for JAXConfig with JAX library."""
 
-    @patch('jax.config')
+    @patch("jax.config")
     def test_jax_config_update_called(self, mock_jax_config):
         """Test that JAX config.update is called correctly."""
         # Create a fresh config instance
@@ -169,5 +165,5 @@ class TestJAXConfigIntegration(unittest.TestCase):
             self.skipTest("JAX not installed")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -1,22 +1,23 @@
 """Generic interface for least-squares minimization."""
+
+from collections.abc import Callable, Sequence
+from typing import Any
 from warnings import warn
+
 import numpy as np
-import time
-from typing import Callable, Optional, Tuple, Union, Sequence, List, Any
 
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
+
 _jax_config = JAXConfig()
 import jax.numpy as jnp
-from jax import jit, jacfwd
+from jax import jacfwd, jit
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
 
-from nlsq.trf import TrustRegionReflective
-from nlsq.loss_functions import LossFunctionsJIT
 from nlsq.common_scipy import EPS, in_bounds, make_strictly_feasible
 from nlsq.logging import get_logger
-from nlsq.caching import cached_jit, get_cached_jit
-
+from nlsq.loss_functions import LossFunctionsJIT
+from nlsq.trf import TrustRegionReflective
 
 TERMINATION_MESSAGES = {
     -3: "Inner optimization loop exceeded maximum iterations.",
@@ -26,10 +27,11 @@ TERMINATION_MESSAGES = {
     1: "`gtol` termination condition is satisfied.",
     2: "`ftol` termination condition is satisfied.",
     3: "`xtol` termination condition is satisfied.",
-    4: "Both `ftol` and `xtol` termination conditions are satisfied."
+    4: "Both `ftol` and `xtol` termination conditions are satisfied.",
 }
 
-def prepare_bounds(bounds, n) -> Tuple[np.ndarray, np.ndarray]:
+
+def prepare_bounds(bounds, n) -> tuple[np.ndarray, np.ndarray]:
     """Prepare bounds for optimization.
 
     This function prepares the bounds for the optimization by ensuring that
@@ -58,11 +60,9 @@ def prepare_bounds(bounds, n) -> Tuple[np.ndarray, np.ndarray]:
     return lb, ub
 
 
-def check_tolerance(ftol: float,
-                    xtol: float,
-                    gtol: float,
-                    method: str
-                    ) -> Tuple[float, float, float]:
+def check_tolerance(
+    ftol: float, xtol: float, gtol: float, method: str
+) -> tuple[float, float, float]:
     """Check and prepare tolerance values for optimization.
 
     This function checks the tolerance values for the optimization and
@@ -87,13 +87,16 @@ def check_tolerance(ftol: float,
     Tuple[float, float, float]
         The prepared tolerance values.
     """
+
     def check(tol: float, name: str) -> float:
         if tol is None:
             tol = 0
         elif tol < EPS:
-            warn("Setting `{}` below the machine epsilon ({:.2e}) effectively "
-                 "disables the corresponding termination condition."
-                 .format(name, EPS))
+            warn(
+                f"Setting `{name}` below the machine epsilon ({EPS:.2e}) effectively "
+                "disables the corresponding termination condition.",
+                stacklevel=2,
+            )
         return tol
 
     ftol = check(ftol, "ftol")
@@ -101,15 +104,17 @@ def check_tolerance(ftol: float,
     gtol = check(gtol, "gtol")
 
     if ftol < EPS and xtol < EPS and gtol < EPS:
-        raise ValueError("At least one of the tolerances must be higher than "
-                         "machine epsilon ({:.2e}).".format(EPS))
+        raise ValueError(
+            "At least one of the tolerances must be higher than "
+            f"machine epsilon ({EPS:.2e})."
+        )
 
     return ftol, xtol, gtol
 
 
-def check_x_scale(x_scale: Union[str, Sequence[float]],
-                  x0: Sequence[float]
-                  ) -> Union[str, Sequence[float]]:
+def check_x_scale(
+    x_scale: str | Sequence[float], x0: Sequence[float]
+) -> str | Sequence[float]:
     """Check and prepare the `x_scale` parameter for optimization.
 
     This function checks and prepares the `x_scale` parameter for the
@@ -129,7 +134,7 @@ def check_x_scale(x_scale: Union[str, Sequence[float]],
         The prepared `x_scale` parameter.
     """
 
-    if isinstance(x_scale, str) and x_scale == 'jac':
+    if isinstance(x_scale, str) and x_scale == "jac":
         return x_scale
 
     try:
@@ -139,8 +144,7 @@ def check_x_scale(x_scale: Union[str, Sequence[float]],
         valid = False
 
     if not valid:
-        raise ValueError("`x_scale` must be 'jac' or array_like with "
-                         "positive numbers.")
+        raise ValueError("`x_scale` must be 'jac' or array_like with positive numbers.")
 
     if x_scale.ndim == 0:
         x_scale = np.resize(x_scale, x0.shape)
@@ -150,19 +154,20 @@ def check_x_scale(x_scale: Union[str, Sequence[float]],
 
     return x_scale
 
+
 """Wraps the given function such that a masked jacfwd is performed on it
 thereby giving the autodiff jacobian."""
-class AutoDiffJacobian():
+
+
+class AutoDiffJacobian:
     """Wraps the residual fit function such that a masked jacfwd is performed
     on it. thereby giving the autodiff Jacobian. This needs to be a class since
     we need to maintain in memory three different versions of the Jacobian.
     """
 
-    def create_ad_jacobian(self,
-                           func: Callable,
-                           num_args: int,
-                           masked: bool = True
-                           ) -> Callable:
+    def create_ad_jacobian(
+        self, func: Callable, num_args: int, masked: bool = True
+    ) -> Callable:
         """Creates a function that returns the autodiff jacobian of the
         residual fit function. The Jacobian of the residual fit function is
         equivalent to the Jacobian of the fit function.
@@ -189,7 +194,7 @@ class AutoDiffJacobian():
         arg_list = [4 + i for i in range(num_args)]
 
         @jit
-        def wrap_func(*all_args: List[Any]) -> jnp.ndarray:
+        def wrap_func(*all_args: list[Any]) -> jnp.ndarray:
             """Wraps the residual fit function such that it can be passed to the
             jacfwd function. Jacfwd requires the function to a single list
             of arguments.
@@ -199,12 +204,13 @@ class AutoDiffJacobian():
             return func(args, xdata, ydata, data_mask, atransform)
 
         @jit
-        def jac_func(args: List[float],
-                     xdata: jnp.ndarray,
-                     ydata: jnp.ndarray,
-                     data_mask: jnp.ndarray,
-                     atransform: jnp.ndarray
-                     ) -> jnp.ndarray:
+        def jac_func(
+            args: list[float],
+            xdata: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """Returns the jacobian. Places all the residual fit function
             arguments into a single list for the wrapped residual fit function.
             Then calls the jacfwd function on the wrapped function with the
@@ -218,24 +224,26 @@ class AutoDiffJacobian():
             return jnp.array(jac_fwd)
 
         @jit
-        def masked_jac(args: List[float],
-                       xdata: jnp.ndarray,
-                       ydata: jnp.ndarray,
-                       data_mask: jnp.ndarray,
-                       atransform: jnp.ndarray
-                       ) -> jnp.ndarray:
+        def masked_jac(
+            args: list[float],
+            xdata: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """Returns the masked jacobian."""
             Jt = jac_func(args, xdata, ydata, data_mask, atransform)
             J = jnp.where(data_mask, Jt, 0).T
             return jnp.atleast_2d(J)
 
         @jit
-        def no_mask_jac(args: List[float],
-                        xdata: jnp.ndarray,
-                        ydata: jnp.ndarray,
-                        data_mask: jnp.ndarray,
-                        atransform: jnp.ndarray
-                        ) -> jnp.ndarray:
+        def no_mask_jac(
+            args: list[float],
+            xdata: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """Returns the unmasked jacobian."""
             J = jac_func(args, xdata, ydata, data_mask, atransform).T
             return jnp.atleast_2d(J)
@@ -247,15 +255,13 @@ class AutoDiffJacobian():
         return self.jac
 
 
-
-class LeastSquares():
-
+class LeastSquares:
     def __init__(self):
-        super().__init__() # not sure if this is needed
+        super().__init__()  # not sure if this is needed
         self.trf = TrustRegionReflective()
         self.ls = LossFunctionsJIT()
-        self.logger = get_logger('least_squares')
-        #initialize jacobian to None and f to a dummy function
+        self.logger = get_logger("least_squares")
+        # initialize jacobian to None and f to a dummy function
         self.f = lambda x: None
         self.jac = None
 
@@ -265,51 +271,55 @@ class LeastSquares():
         self.adj1d = AutoDiffJacobian()
         self.adj2d = AutoDiffJacobian()
 
-
-    def least_squares(self,
-                      fun: Callable,
-                      x0: np.ndarray,
-                      jac: Optional[Callable] = None,
-                      bounds: Tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
-                      method: str = 'trf',
-                      ftol: float = 1e-8,
-                      xtol: float = 1e-8,
-                      gtol: float = 1e-8,
-                      x_scale: Union[str, np.ndarray, float] = 1.0,
-                      loss: str = 'linear',
-                      f_scale: float = 1.0,
-                      diff_step=None,
-                      tr_solver=None,
-                      tr_options={},
-                      jac_sparsity=None,
-                      max_nfev: Optional[float] = None,
-                      verbose: int = 0,
-                      xdata: Optional[jnp.ndarray] = None,
-                      ydata: Optional[jnp.ndarray] = None,
-                      data_mask: Optional[jnp.ndarray] = None,
-                      transform: Optional[jnp.ndarray] = None,
-                      timeit: bool = False,
-                      args=(),
-                      kwargs={},
-                      **timeout_kwargs):
-
+    def least_squares(
+        self,
+        fun: Callable,
+        x0: np.ndarray,
+        jac: Callable | None = None,
+        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        method: str = "trf",
+        ftol: float = 1e-8,
+        xtol: float = 1e-8,
+        gtol: float = 1e-8,
+        x_scale: str | np.ndarray | float = 1.0,
+        loss: str = "linear",
+        f_scale: float = 1.0,
+        diff_step=None,
+        tr_solver=None,
+        tr_options=None,
+        jac_sparsity=None,
+        max_nfev: float | None = None,
+        verbose: int = 0,
+        xdata: jnp.ndarray | None = None,
+        ydata: jnp.ndarray | None = None,
+        data_mask: jnp.ndarray | None = None,
+        transform: jnp.ndarray | None = None,
+        timeit: bool = False,
+        args=(),
+        kwargs=None,
+        **timeout_kwargs,
+    ):
         # Check for incorrect usage of 'options' parameter
-        if 'options' in timeout_kwargs:
+        if kwargs is None:
+            kwargs = {}
+        if tr_options is None:
+            tr_options = {}
+        if "options" in timeout_kwargs:
             raise TypeError("'options' is not a supported keyword argument")
 
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
 
         if loss not in self.ls.IMPLEMENTED_LOSSES and not callable(loss):
-            raise ValueError("`loss` must be one of {0} or a callable."
-                             .format(self.ls.IMPLEMENTED_LOSSES.keys()))
+            raise ValueError(
+                f"`loss` must be one of {self.ls.IMPLEMENTED_LOSSES.keys()} or a callable."
+            )
 
-        if method not in ['trf']:
+        if method not in ["trf"]:
             raise ValueError("`method` must be 'trf")
 
         if jac not in [None] and not callable(jac):
-            raise ValueError("`jac` must be None or "
-                             "callable.")
+            raise ValueError("`jac` must be None or callable.")
 
         if verbose not in [0, 1, 2]:
             raise ValueError("`verbose` must be in [0, 1, 2].")
@@ -331,10 +341,15 @@ class LeastSquares():
         self.n = len(x0)
 
         # Log optimization setup
-        self.logger.info("Starting least squares optimization",
-                        method=method, n_params=self.n, loss=loss,
-                        ftol=ftol, xtol=xtol, gtol=gtol)
-
+        self.logger.info(
+            "Starting least squares optimization",
+            method=method,
+            n_params=self.n,
+            loss=loss,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+        )
 
         lb, ub = prepare_bounds(bounds, x0.shape[0])
 
@@ -342,17 +357,16 @@ class LeastSquares():
             raise ValueError("Inconsistent shapes between bounds and `x0`.")
 
         if np.any(lb >= ub):
-            raise ValueError("Each lower bound must be strictly less than each "
-                             "upper bound.")
+            raise ValueError(
+                "Each lower bound must be strictly less than each upper bound."
+            )
 
         if not in_bounds(x0, lb, ub):
             raise ValueError("`x0` is infeasible.")
 
-
         x_scale = check_x_scale(x_scale, x0)
         ftol, xtol, gtol = check_tolerance(ftol, xtol, gtol, method)
         x0 = make_strictly_feasible(x0, lb, ub)
-
 
         if xdata is not None and ydata is not None:
             # checks to see if the fit function is the same. Can't directly
@@ -408,14 +422,13 @@ class LeastSquares():
             else:
                 jac_func = wrap_jac
 
-
-
         f0 = rfunc(x0, xdata, ydata, data_mask, transform)
         J0 = jac_func(x0, xdata, ydata, data_mask, transform)
 
         if f0.ndim != 1:
-            raise ValueError("`fun` must return at most 1-d array_like. "
-                             "f0.shape: {0}".format(f0.shape))
+            raise ValueError(
+                f"`fun` must return at most 1-d array_like. f0.shape: {f0.shape}"
+            )
 
         if not np.all(np.isfinite(f0)):
             raise ValueError("Residuals are not finite in the initial point.")
@@ -423,11 +436,11 @@ class LeastSquares():
         n = x0.size
         m = f0.size
 
-        if J0 is not None:
-            if J0.shape != (m, n):
-                raise ValueError(
-                    "The return value of `jac` has wrong shape: expected {0}, "
-                    "actual {1}.".format((m, n), J0.shape))
+        if J0 is not None and J0.shape != (m, n):
+            raise ValueError(
+                f"The return value of `jac` has wrong shape: expected {(m, n)}, "
+                f"actual {J0.shape}."
+            )
 
         if data_mask is None:
             data_mask = jnp.ones(m)
@@ -439,24 +452,43 @@ class LeastSquares():
         if callable(loss):
             rho = loss_function(f0, f_scale, data_mask=data_mask)
             if rho.shape != (3, m):
-                raise ValueError("The return value of `loss` callable has wrong "
-                                 "shape.")
+                raise ValueError("The return value of `loss` callable has wrong shape.")
             initial_cost_jnp = self.trf.calculate_cost(rho, data_mask)
         elif loss_function is not None:
-            initial_cost_jnp = loss_function(f0, f_scale, data_mask=data_mask,
-                                             cost_only=True)
+            initial_cost_jnp = loss_function(
+                f0, f_scale, data_mask=data_mask, cost_only=True
+            )
         else:
             initial_cost_jnp = self.trf.default_loss_func(f0)
         initial_cost = np.array(initial_cost_jnp)
 
         # Start optimization timer and call TRF
-        with self.logger.timer('optimization'):
+        with self.logger.timer("optimization"):
             self.logger.debug("Calling TRF optimizer", initial_cost=initial_cost)
-            result = self.trf.trf(rfunc, xdata, ydata, jac_func, data_mask,
-                                  transform, x0, f0, J0, lb, ub, ftol, xtol,
-                         gtol, max_nfev, f_scale, x_scale, loss_function,
-                         tr_options.copy(), verbose, timeit, **timeout_kwargs)
-
+            result = self.trf.trf(
+                rfunc,
+                xdata,
+                ydata,
+                jac_func,
+                data_mask,
+                transform,
+                x0,
+                f0,
+                J0,
+                lb,
+                ub,
+                ftol,
+                xtol,
+                gtol,
+                max_nfev,
+                f_scale,
+                x_scale,
+                loss_function,
+                tr_options.copy(),
+                verbose,
+                timeit,
+                **timeout_kwargs,
+            )
 
         result.message = TERMINATION_MESSAGES[result.status]
         result.success = result.status > 0
@@ -464,21 +496,20 @@ class LeastSquares():
         # Log convergence
         self.logger.convergence(
             reason=result.message,
-            iterations=getattr(result, 'nit', None),
+            iterations=getattr(result, "nit", None),
             final_cost=result.cost,
-            time_elapsed=self.logger.timers.get('optimization', 0),
-            final_gradient_norm=getattr(result, 'optimality', None)
+            time_elapsed=self.logger.timers.get("optimization", 0),
+            final_gradient_norm=getattr(result, "optimality", None),
         )
 
         if verbose >= 1:
             print(result.message)
-            print("Function evaluations {0}, initial cost {1:.4e}, final cost "
-                  "{2:.4e}, first-order optimality {3:.2e}."
-                  .format(result.nfev, initial_cost, result.cost,
-                          result.optimality))
+            print(
+                f"Function evaluations {result.nfev}, initial cost {initial_cost:.4e}, final cost "
+                f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}."
+            )
 
         return result
-
 
     def autdiff_jac(self, jac: None) -> None:
         """We do this for all three sigma transformed functions such
@@ -496,7 +527,6 @@ class LeastSquares():
         self.jac_2d = self.adj2d.create_ad_jacobian(self.func_2d, self.n)
         # jac is
         self.jac = jac
-
 
     def update_function(self, func: Callable) -> None:
         """Wraps the given fit function to be a residual function using the
@@ -518,12 +548,12 @@ class LeastSquares():
         """
 
         @jit
-        def masked_residual_func(args: List[float],
-                                 xdata: jnp.ndarray,
-                                 ydata: jnp.ndarray,
-                                 data_mask: jnp.ndarray
-                                 ) -> jnp.ndarray:
-
+        def masked_residual_func(
+            args: list[float],
+            xdata: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+        ) -> jnp.ndarray:
             """Compute the residual of the function evaluated at `args` with
             respect to the data.
 
@@ -560,38 +590,39 @@ class LeastSquares():
         # uncertainty transform.
 
         @jit
-        def func_no_transform(args: List[float],
-                              xdata: jnp.ndarray,
-                              ydata: jnp.ndarray,
-                              data_mask: jnp.ndarray,
-                              atransform: jnp.ndarray
-                              ) -> jnp.ndarray:
-
+        def func_no_transform(
+            args: list[float],
+            xdata: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """The residual function when there is no uncertainty transform.
             The atranform argument is not used in this case, but is included
             for consistency with the other cases."""
             return masked_residual_func(args, xdata, ydata, data_mask)
 
         @jit
-        def func_1d_transform(args: List[float],
-                              xdata: jnp.ndarray,
-                              ydata: jnp.ndarray,
-                              data_mask: jnp.ndarray,
-                              atransform: jnp.ndarray
-                              ) -> jnp.ndarray:
+        def func_1d_transform(
+            args: list[float],
+            xdata: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """The residual function when there is a 1D uncertainty transform,
             that is when only the diagonal elements of the inverse covariance
             matrix are used."""
-            return atransform * masked_residual_func(args, xdata,
-                                                     ydata, data_mask)
+            return atransform * masked_residual_func(args, xdata, ydata, data_mask)
 
         @jit
-        def func_2d_transform(args: List[float],
-                              xdata: jnp.ndarray,
-                              ydata: jnp.ndarray,
-                              data_mask: jnp.ndarray,
-                              atransform: jnp.ndarray
-                              ) -> jnp.ndarray:
+        def func_2d_transform(
+            args: list[float],
+            xdata: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """The residual function when there is a 2D uncertainty transform,
             that is when the full covariance matrix is given."""
             f = masked_residual_func(args, xdata, ydata, data_mask)
@@ -601,7 +632,6 @@ class LeastSquares():
         self.func_1d = func_1d_transform
         self.func_2d = func_2d_transform
         self.f = func
-
 
     def wrap_jac(self, jac: Callable) -> None:
         """Wraps an user defined Jacobian function to allow for data masking
@@ -628,40 +658,39 @@ class LeastSquares():
         """
 
         @jit
-        def jac_func(coords: jnp.ndarray,
-                     args: List[float]
-                     ) -> jnp.ndarray:
+        def jac_func(coords: jnp.ndarray, args: list[float]) -> jnp.ndarray:
             jac_fwd = jac(coords, *args)
             return jnp.array(jac_fwd)
 
         @jit
-        def masked_jac(coords: jnp.ndarray,
-                       args: List[float],
-                       data_mask: jnp.ndarray
-                       ) -> jnp.ndarray:
-             """Compute the wrapped Jacobian but masks out the padded elements
-             with 0s"""
-             Jt = jac_func(coords, args)
-             return jnp.where(data_mask, Jt, 0).T
+        def masked_jac(
+            coords: jnp.ndarray, args: list[float], data_mask: jnp.ndarray
+        ) -> jnp.ndarray:
+            """Compute the wrapped Jacobian but masks out the padded elements
+            with 0s"""
+            Jt = jac_func(coords, args)
+            return jnp.where(data_mask, Jt, 0).T
 
         @jit
-        def jac_no_transform(args: List[float],
-                             coords: jnp.ndarray,
-                             ydata: jnp.ndarray,
-                             data_mask: jnp.ndarray,
-                             atransform: jnp.ndarray
-                             ) -> jnp.ndarray:
+        def jac_no_transform(
+            args: list[float],
+            coords: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """The wrapped Jacobian function when there is no
             uncertainty transform."""
             return jnp.atleast_2d(masked_jac(coords, args, data_mask))
 
         @jit
-        def jac_1d_transform(args: List[float],
-                             coords: jnp.ndarray,
-                             ydata: jnp.ndarray,
-                             data_mask: jnp.ndarray,
-                             atransform: jnp.ndarray
-                             ) -> jnp.ndarray:
+        def jac_1d_transform(
+            args: list[float],
+            coords: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """The wrapped Jacobian function when there is a 1D uncertainty
             transform, that is when only the diagonal elements of the inverse
             covariance matrix are used."""
@@ -669,19 +698,21 @@ class LeastSquares():
             return jnp.atleast_2d(atransform[:, jnp.newaxis] * jnp.asarray(J))
 
         @jit
-        def jac_2d_transform(args: List[float],
-                             coords: jnp.ndarray,
-                             ydata: jnp.ndarray,
-                             data_mask: jnp.ndarray,
-                             atransform: jnp.ndarray
-                             ) -> jnp.ndarray:
+        def jac_2d_transform(
+            args: list[float],
+            coords: jnp.ndarray,
+            ydata: jnp.ndarray,
+            data_mask: jnp.ndarray,
+            atransform: jnp.ndarray,
+        ) -> jnp.ndarray:
             """The wrapped Jacobian function when there is a 2D uncertainty
             transform, that is when the full covariance matrix is given."""
 
             J = masked_jac(coords, args, data_mask)
-            return jnp.atleast_2d(jax_solve_triangular(atransform,
-                                                       jnp.asarray(J),
-                                                       lower=True))
+            return jnp.atleast_2d(
+                jax_solve_triangular(atransform, jnp.asarray(J), lower=True)
+            )
+
         # we need all three versions of the Jacobian function to allow for
         # changing the sigma transform from none to 1D to 2D without having
         # to retrace the function

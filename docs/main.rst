@@ -98,24 +98,24 @@ inherits JAX’s idiosyncrasies and so the “gotchas” are mostly the same.
 Double precision required
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-First and foremost by default JAX enforces single precision (32-bit,
-e.g. ``float32``), but NLSQ needs double precision (64-bit,
-e.g. ``float64``). `To enable
-double-precision <https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#double-64bit-precision>`__
-(64-bit, e.g. ``float64``) one needs to set the ``jax_enable_x64``
-variable at startup (or set the environment variable
-``JAX_ENABLE_X64=True``).
+NLSQ requires double precision (64-bit, ``float64``) for numerical stability.
+By default, JAX uses single precision (32-bit, ``float32``).
 
-NLSQ does this when it is imported, but should you import JAX before
-NLSQ, then you’ll need to set this flag yourself e.g.
+NLSQ **automatically enables double precision** when imported. However, if you
+import JAX before NLSQ, you must enable it manually:
 
 .. code:: python
 
-   from jax.config import config
+   # If importing JAX first (not recommended)
+   from jax import config
    config.update("jax_enable_x64", True)
 
    import jax.numpy as jnp
    from nlsq import CurveFit
+
+   # Recommended: Import NLSQ first (auto-enables double precision)
+   from nlsq import CurveFit
+   import jax.numpy as jnp
 
 Other caveats
 ~~~~~~~~~~~~~
@@ -160,29 +160,38 @@ Some standouts:
 Installation
 ------------
 
-NLSQ is written in pure Python and is based on the JAX package. JAX
-therefore needs to be installed before installing NLSQ via pip. JAX
-installation requires a bit of effort since it is optimized for the
-computer hardware you’ll be using (GPU vs. CPU).
+Requirements
+~~~~~~~~~~~~
 
-Installing JAX on Linux is natively supported by the JAX team and
-instructions to do so can be found
-`here <https://github.com/google/jax#installation>`__.
+NLSQ has been tested with the following versions:
 
-For Windows systems, the officially supported method is building
-directly from the source code (see `Building JAX from
-source <https://jax.readthedocs.io/en/latest/developer.html#building-from-source>`__).
-However, we’ve found it easier to use pre-built JAX wheels which can be
-found in `this Github
-repo <https://github.com/cloudhan/jax-windows-builder>`__ and we’ve
-included detailed instructions on this installation process below.
+- **Python**: 3.12 or higher (3.13 also supported)
+- **JAX**: 0.4.20 to 0.7.2
+- **NumPy**: 1.26.0 or higher
+- **SciPy**: 1.11.0 or higher
+- **Operating Systems**: Linux (recommended), macOS, Windows (via WSL2 or native)
+- **Hardware**: CPU, NVIDIA GPU (CUDA 11.8+), Google TPU
 
-After installing JAX, you can now install NLSQ via the following pip
-command
+Quick Install
+~~~~~~~~~~~~~
+
+**Linux/macOS (Recommended):**
 
 ::
 
-   pip install nlsq
+   # For CPU-only
+   pip install --upgrade "jax[cpu]" nlsq
+
+   # For GPU with CUDA 12
+   pip install --upgrade "jax[cuda12]" nlsq
+
+**Development Installation:**
+
+::
+
+   git clone https://github.com/Dipolar-Quantum-Gases/nlsq.git
+   cd nlsq
+   pip install -e ".[dev,test,docs]"
 
 Windows JAX install
 ~~~~~~~~~~~~~~~~~~~
@@ -201,55 +210,42 @@ this installation.
 First make sure your GPU driver is CUDA compatible and that the latest
 NVIDIA driver has been installed.
 
-To create a Conda environment with Python 3.9 open up Anaconda Prompt
+To create a Conda environment with Python 3.12 open up Anaconda Prompt
 and do the following:
 
 ::
 
-   conda create -n jaxenv python=3.9
+   conda create -n nlsq python=3.12
 
 Now activate the environment
 
 ::
 
-   conda activate jaxenv
+   conda activate nlsq
 
-Since all the the pre-built Windows wheels rely on CUDA 11.1 and CUDnn
-8.2, we use conda to install these as follows
-
-::
-
-   conda install -c conda-forge cudatoolkit=11.1 cudnn=8.2.0
-
-However, this toolkit doesn’t include the developer tools which JAX also
-need and therefore these need to be separately installed using
+For CUDA 12 support, install the toolkit:
 
 ::
 
-   conda install -c conda-forge cudatoolkit-dev
+   conda install -c conda-forge cuda-toolkit=12.1
 
-Pip installing pre-built JAX wheel
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Installing JAX and NLSQ
+^^^^^^^^^^^^^^^^^^^^^^^
 
-Pick a jaxlib wheel from the CloudHan repo’s list of `pre-built
-wheels <https://whls.blob.core.windows.net/unstable/index.html>`__. We
-recommend the latest build (0.3.14) as we’ve had issues with earlier
-versions. The Python version of the wheel needs to correspond to the
-conda environment’s Python version (e.g. cp39 corresponds to Python 3.9
-for our example) and pip install it. Additionally, you can pick a GPU
-version (CUDA111) or CPU only version, but we pick a GPU version below.
+Install JAX with CUDA support using the standard pip packages:
 
 ::
 
-   pip install https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.14+cuda11.cudnn82-cp39-none-win_amd64.whl
+   # For CPU-only
+   pip install "jax[cpu]==0.4.30"
 
-Next, install the JAX version corresponding to the jaxlib library (a
-list of jaxlib and JAX releases can be found
-`here <https://github.com/google/jax/blob/main/CHANGELOG.md>`__
+   # For GPU with CUDA 12
+   pip install "jax[cuda12_local]==0.4.30"
 
-::
+   # Then install NLSQ
+   pip install nlsq
 
-   pip install jax==0.3.14
+For the latest JAX installation instructions, see the `official JAX documentation <https://jax.readthedocs.io/en/latest/installation.html>`__.
 
 .. raw:: html
 

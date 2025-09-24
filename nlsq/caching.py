@@ -1,18 +1,19 @@
 """Function caching mechanism for NLSQ to avoid JAX recompilation."""
+
 import hashlib
 import inspect
-import weakref
-from functools import lru_cache, wraps
-from typing import Callable, Any, Tuple, Optional, Dict
 import logging
+import weakref
+from collections.abc import Callable
+from functools import cache, wraps
+from typing import Any
 
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
+
 _jax_config = JAXConfig()
 
 import jax
-import jax.numpy as jnp
-
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,9 @@ class FunctionCache:
             Maximum number of functions to cache
         """
         self.maxsize = maxsize
-        self._cache: Dict[str, Any] = {}
-        self._compiled_funcs: Dict[str, Callable] = {}
-        self._func_refs: Dict[str, weakref.ref] = {}
+        self._cache: dict[str, Any] = {}
+        self._compiled_funcs: dict[str, Callable] = {}
+        self._func_refs: dict[str, weakref.ref] = {}
         self._hit_count = 0
         self._miss_count = 0
 
@@ -56,8 +57,8 @@ class FunctionCache:
             # Try to get source code for regular functions
             source = inspect.getsource(func)
             signature = str(inspect.signature(func))
-            module = getattr(func, '__module__', 'unknown')
-            name = getattr(func, '__name__', 'unknown')
+            module = getattr(func, "__module__", "unknown")
+            name = getattr(func, "__name__", "unknown")
 
             # Combine all identifying information
             combined = f"{module}.{name}:{signature}\n{source}"
@@ -67,7 +68,7 @@ class FunctionCache:
             # Use function identity and string representation
             try:
                 # For lambdas and simple functions, use their code object
-                if hasattr(func, '__code__'):
+                if hasattr(func, "__code__"):
                     code = func.__code__
                     code_hash = hashlib.sha256(code.co_code).hexdigest()[:8]
                     return f"code_{code_hash}_{code.co_argcount}"
@@ -77,11 +78,13 @@ class FunctionCache:
             except:
                 return f"id_{id(func)}"
 
-    @lru_cache(maxsize=None)
-    def get_compiled_function(self,
-                            func_hash: str,
-                            static_argnums: Tuple[int, ...] = (),
-                            static_argnames: Tuple[str, ...] = ()) -> Callable:
+    @cache
+    def get_compiled_function(
+        self,
+        func_hash: str,
+        static_argnums: tuple[int, ...] = (),
+        static_argnames: tuple[str, ...] = (),
+    ) -> Callable:
         """Get or create compiled version of function.
 
         Parameters
@@ -114,8 +117,9 @@ class FunctionCache:
                 logger.debug(f"Cache miss, compiling function {func_hash[:8]}")
 
                 # Compile the function
-                compiled = jax.jit(func, static_argnums=static_argnums,
-                                 static_argnames=static_argnames)
+                compiled = jax.jit(
+                    func, static_argnums=static_argnums, static_argnames=static_argnames
+                )
                 self._compiled_funcs[cache_key] = compiled
                 return compiled
 
@@ -142,11 +146,10 @@ class FunctionCache:
         # Clean up if cache is too large
         if len(self._func_refs) > self.maxsize:
             # Remove oldest entries (simple FIFO for now)
-            oldest = list(self._func_refs.keys())[0]
+            oldest = next(iter(self._func_refs.keys()))
             del self._func_refs[oldest]
             # Also remove compiled versions
-            keys_to_remove = [k for k in self._compiled_funcs.keys()
-                            if k.startswith(oldest)]
+            keys_to_remove = [k for k in self._compiled_funcs if k.startswith(oldest)]
             for key in keys_to_remove:
                 del self._compiled_funcs[key]
 
@@ -170,7 +173,7 @@ class FunctionCache:
             return 0.0
         return self._hit_count / total
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns
@@ -179,11 +182,11 @@ class FunctionCache:
             Dictionary with cache statistics
         """
         return {
-            'hits': self._hit_count,
-            'misses': self._miss_count,
-            'hit_rate': self.hit_rate,
-            'cached_functions': len(self._func_refs),
-            'compiled_versions': len(self._compiled_funcs)
+            "hits": self._hit_count,
+            "misses": self._miss_count,
+            "hit_rate": self.hit_rate,
+            "cached_functions": len(self._func_refs),
+            "compiled_versions": len(self._compiled_funcs),
         }
 
 
@@ -191,9 +194,11 @@ class FunctionCache:
 _function_cache = FunctionCache()
 
 
-def get_cached_jit(func: Callable,
-                  static_argnums: Tuple[int, ...] = (),
-                  static_argnames: Tuple[str, ...] = ()) -> Callable:
+def get_cached_jit(
+    func: Callable,
+    static_argnums: tuple[int, ...] = (),
+    static_argnames: tuple[str, ...] = (),
+) -> Callable:
     """Get cached JIT-compiled version of function.
 
     This is a convenience function that uses the global cache to get or create
@@ -214,12 +219,14 @@ def get_cached_jit(func: Callable,
         JIT-compiled function
     """
     func_hash = _function_cache.cache_function(func)
-    return _function_cache.get_compiled_function(func_hash, static_argnums,
-                                                static_argnames)
+    return _function_cache.get_compiled_function(
+        func_hash, static_argnums, static_argnames
+    )
 
 
-def cached_jit(static_argnums: Tuple[int, ...] = (),
-              static_argnames: Tuple[str, ...] = ()):
+def cached_jit(
+    static_argnums: tuple[int, ...] = (), static_argnames: tuple[str, ...] = ()
+):
     """Decorator for cached JIT compilation.
 
     This decorator can be used to automatically cache JIT-compiled versions
@@ -243,6 +250,7 @@ def cached_jit(static_argnums: Tuple[int, ...] = (),
     ... def my_function(x, static_param):
     ...     return x * static_param
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -261,7 +269,7 @@ def clear_cache():
     _function_cache.clear()
 
 
-def get_cache_stats() -> Dict[str, Any]:
+def get_cache_stats() -> dict[str, Any]:
     """Get statistics from the global cache.
 
     Returns
