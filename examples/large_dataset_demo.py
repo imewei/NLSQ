@@ -11,7 +11,13 @@ import time
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq import LargeDatasetFitter, estimate_memory_requirements, fit_large_dataset
+from nlsq import (
+    LargeDatasetFitter,
+    LDMemoryConfig,
+    curve_fit_large,
+    estimate_memory_requirements,
+    fit_large_dataset,
+)
 
 
 def exponential_decay(x, a, b, c):
@@ -204,8 +210,6 @@ def demo_sampling_strategy():
     print(f"Sampling recommended: {stats.requires_sampling}")
 
     # Create fitter with sampling enabled
-    from nlsq.large_dataset import LDMemoryConfig
-
     config = LDMemoryConfig(memory_limit_gb=4.0, enable_sampling=True)
     fitter = LargeDatasetFitter(config=config)
 
@@ -235,6 +239,58 @@ def demo_sampling_strategy():
         print(f"❌ Sampling fit failed: {result.message}")
 
 
+def demo_curve_fit_large():
+    """Demonstrate the curve_fit_large convenience function."""
+    print("\n" + "=" * 60)
+    print("CURVE_FIT_LARGE CONVENIENCE FUNCTION DEMO")
+    print("=" * 60)
+
+    # Generate test dataset
+    print("Generating 3M point dataset for curve_fit_large demo...")
+    np.random.seed(789)
+    n_points = 3_000_000
+    x_data = np.linspace(0, 10, n_points, dtype=np.float64)
+
+    # Gaussian model with 4 parameters
+    def gaussian(x, a, mu, sigma, offset):
+        return a * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2)) + offset
+
+    true_params = [5.0, 5.0, 1.5, 0.5]
+    y_true = gaussian(x_data, *true_params)
+    y_data = y_true + np.random.normal(0, 0.1, n_points)
+
+    print(f"Dataset: {n_points:,} points")
+    print(f"True parameters: a={true_params[0]:.2f}, mu={true_params[1]:.2f}, sigma={true_params[2]:.2f}, offset={true_params[3]:.2f}")
+
+    # Use curve_fit_large - automatic large dataset handling
+    print("\nUsing curve_fit_large with automatic optimization...")
+    start_time = time.time()
+
+    popt, pcov = curve_fit_large(
+        gaussian,
+        x_data,
+        y_data,
+        p0=[4.5, 4.8, 1.3, 0.4],
+        memory_limit_gb=1.0,  # Force chunking with low memory limit
+        show_progress=True,
+        auto_size_detection=True,  # Automatically detect large dataset
+    )
+
+    fit_time = time.time() - start_time
+
+    errors = np.abs(popt - np.array(true_params))
+    rel_errors = errors / np.array(true_params) * 100
+
+    print(f"\n✅ curve_fit_large completed in {fit_time:.2f} seconds")
+    print(f"Fitted parameters: {popt}")
+    print(f"Absolute errors: {errors}")
+    print(f"Relative errors: {rel_errors}%")
+
+    # Show parameter uncertainties from covariance matrix
+    param_std = np.sqrt(np.diag(pcov))
+    print(f"Parameter uncertainties (std): {param_std}")
+
+
 def main():
     """Run all demonstration examples."""
     print("NLSQ Large Dataset Fitting Demonstration")
@@ -247,6 +303,7 @@ def main():
     demo_basic_large_dataset_fitting()
     demo_chunked_processing()
     demo_sampling_strategy()
+    demo_curve_fit_large()
 
     print("\n" + "=" * 60)
     print("DEMO COMPLETED")
@@ -254,6 +311,8 @@ def main():
     print("\nKey takeaways:")
     print("• NLSQ automatically handles memory management for large datasets")
     print("• Chunked processing works for datasets that don't fit in memory")
+    print("• curve_fit_large provides automatic dataset size detection")
+    print("• Improved chunking algorithm achieves <1% error for well-conditioned problems")
     print("• Sampling strategies can handle extremely large datasets efficiently")
     print("• Progress reporting helps track long-running fits")
     print("• Memory estimation helps plan processing strategies")
