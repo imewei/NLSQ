@@ -41,7 +41,7 @@ class NLSQLogger:
         ----------
         name : str
             Logger name, typically the module name
-        level : Union[int, LogLevel]
+        level : int | LogLevel
             Initial logging level
         """
         self.name = f"nlsq.{name}"
@@ -381,7 +381,7 @@ def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
     ----------
     name : str
         Logger name
-    level : Union[int, LogLevel]
+    level : int | LogLevel
         Logging level
 
     Returns
@@ -399,7 +399,7 @@ def set_global_level(level: int | LogLevel):
 
     Parameters
     ----------
-    level : Union[int, LogLevel]
+    level : int | LogLevel
         New logging level
     """
     for logger in _loggers.values():

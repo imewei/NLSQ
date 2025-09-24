@@ -122,14 +122,14 @@ def check_x_scale(
 
     Parameters
     ----------
-    x_scale : Union[str, Sequence[float]]
+    x_scale : str | Sequence[float]
         The scaling for the optimization variables.
     x0 : Sequence[float]
         The initial guess for the optimization variables.
 
     Returns
     -------
-    Union[str, Sequence[float]]
+    str | Sequence[float]
         The prepared `x_scale` parameter.
     """
 

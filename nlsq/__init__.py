@@ -197,13 +197,13 @@ def curve_fit_large(
 
     # Check for edge cases
     if len(xdata) == 0:
-        raise ValueError("xdata cannot be empty")
+        raise ValueError("`xdata` cannot be empty.")
     if len(ydata) == 0:
-        raise ValueError("ydata cannot be empty")
+        raise ValueError("`ydata` cannot be empty.")
     if len(xdata) != len(ydata):
-        raise ValueError(f"xdata and ydata must have the same length: got {len(xdata)} vs {len(ydata)}")
+        raise ValueError(f"`xdata` and `ydata` must have the same length: {len(xdata)} vs {len(ydata)}.")
     if len(xdata) < 2:
-        raise ValueError(f"Need at least 2 data points for fitting, got {len(xdata)}")
+        raise ValueError(f"Need at least 2 data points for fitting, got {len(xdata)}.")
 
     n_points = len(xdata)
 
