@@ -785,37 +785,28 @@ class LargeDatasetFitter:
                         **kwargs,
                     )
 
-                    # Update parameters using adaptive exponential moving average
+                    # Update parameters - use each chunk result as the initial guess for the next
+                    # This is more appropriate than averaging since each chunk sees different data
                     if current_params is None:
                         current_params = popt_chunk.copy()
                         param_history = [popt_chunk.copy()]
                         convergence_metric = np.inf
                     else:
-                        # Adaptive learning rate based on chunk progress and convergence
-                        # Earlier chunks have higher learning rate, later chunks have lower
-                        progress_factor = np.exp(-2 * chunk_idx / stats.n_chunks)
-
-                        # Measure parameter change to assess convergence
-                        param_change = np.linalg.norm(popt_chunk - current_params)
-                        relative_change = param_change / (np.linalg.norm(current_params) + 1e-10)
-
-                        # Adaptive learning rate: higher when parameters are changing significantly
-                        # Lower when converging (relative_change is small)
-                        base_lr = 0.5 * progress_factor
-                        adaptive_lr = base_lr * min(1.0, relative_change * 10)
-
-                        # Exponential moving average with adaptive learning rate
-                        current_params = (1 - adaptive_lr) * current_params + adaptive_lr * popt_chunk
+                        # Simply use the latest result as our best estimate
+                        # Each chunk refines the parameters based on new data
+                        previous_params = current_params.copy()
+                        current_params = popt_chunk.copy()
 
                         # Track convergence
                         param_history.append(current_params.copy())
-                        if len(param_history) > 3:
+                        if len(param_history) > 2:
                             # Check if parameters are stabilizing
-                            recent_std = np.std([np.linalg.norm(p) for p in param_history[-3:]])
-                            convergence_metric = recent_std / (np.mean([np.linalg.norm(p) for p in param_history[-3:]]) + 1e-10)
+                            param_change = np.linalg.norm(current_params - previous_params)
+                            relative_change = param_change / (np.linalg.norm(current_params) + 1e-10)
+                            convergence_metric = relative_change
 
-                            # Early stopping if converged
-                            if convergence_metric < 0.001 and chunk_idx > stats.n_chunks // 2:
+                            # Early stopping if converged (but not too early)
+                            if convergence_metric < 0.001 and chunk_idx >= min(stats.n_chunks - 1, 3):
                                 self.logger.info(f"Parameters converged after {chunk_idx + 1} chunks")
                                 break
 
