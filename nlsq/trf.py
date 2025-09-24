@@ -101,6 +101,12 @@ from jax import jit
 from jax.scipy.linalg import svd as jax_svd
 from jax.tree_util import tree_flatten
 
+# Import safe SVD with fallback
+from nlsq.svd_fallback import compute_svd_with_fallback, initialize_gpu_safely
+
+# Initialize GPU settings safely
+initialize_gpu_safely()
+
 from nlsq._optimize import OptimizeResult
 from nlsq.common_jax import CommonJIT
 from nlsq.common_scipy import (
@@ -293,8 +299,8 @@ class TrustRegionJITFunctions:
                  the dot product of U.T and f.
             """
             J_h = J * d
-            U, s, V = jax_svd(J_h, full_matrices=False)
-            V = V.T
+            # Use safe SVD with fallback
+            U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
             uf = U.T.dot(f)
             return J_h, U, s, V, uf
 
@@ -339,8 +345,8 @@ class TrustRegionJITFunctions:
             J_h = J * d
             J_augmented = jnp.concatenate([J_h, J_diag])
             f_augmented = jnp.concatenate([f, f_zeros])
-            U, s, V = jax_svd(J_augmented, full_matrices=False)
-            V = V.T
+            # Use safe SVD with fallback
+            U, s, V = compute_svd_with_fallback(J_augmented, full_matrices=False)
             uf = U.T.dot(f_augmented)
             return J_h, U, s, V, uf
 
