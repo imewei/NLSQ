@@ -1,6 +1,7 @@
+---
 name: Benchmark Suite
 
-on:
+'on':
   schedule:
     - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
   workflow_dispatch:
@@ -45,6 +46,10 @@ jobs:
   benchmark:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    if: >
+      matrix.run-condition != 'cross-platform' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'release'
     strategy:
       fail-fast: false
       matrix:
@@ -67,12 +72,12 @@ jobs:
             python-version: '3.12'
             benchmark-type: 'performance'
             gpu: false
-            if: github.event_name == 'schedule' || github.event_name == 'release'
+            run-condition: cross-platform
           - os: macos-latest
             python-version: '3.12'
             benchmark-type: 'performance'
             gpu: false
-            if: github.event_name == 'schedule' || github.event_name == 'release'
+            run-condition: cross-platform
           # Uncomment for GPU benchmarking if self-hosted runners available
           # - os: self-hosted-gpu
           #   python-version: '3.12'
@@ -80,197 +85,230 @@ jobs:
           #   gpu: true
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1  # Shallow clone for speed
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Shallow clone for speed
 
-    - name: Free disk space (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-        sudo apt-get clean
-        df -h
+      - name: Free disk space (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo apt-get clean
+          df -h
 
-    - name: Free disk space (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID,Size,FreeSpace
-      shell: powershell
+      - name: Free disk space (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Get-WmiObject -Class Win32_LogicalDisk |
+            Select-Object DeviceID,Size,FreeSpace
+        shell: powershell
 
-    - name: Free disk space (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        df -h
-        brew cleanup --prune=all || true
+      - name: Free disk space (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          df -h
+          brew cleanup --prune=all || true
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
         # Remove cache to fix pip cache issues
         # cache: 'pip'
         # cache-dependency-path: |
         #   pyproject.toml
         #   benchmark/requirements.txt
 
-    - name: Cache package installation
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          build/
-        key: benchmark-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-        restore-keys: |
-          benchmark-${{ runner.os }}-py${{ matrix.python-version }}-
-          benchmark-${{ runner.os }}-
+      - name: Cache package installation
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            build/
+          key: >
+            benchmark-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            benchmark-${{ runner.os }}-py${{ matrix.python-version }}-
+            benchmark-${{ runner.os }}-
 
-    - name: Install dependencies (optimized)
-      run: |
-        python -m pip install --upgrade pip wheel setuptools
-        # Install benchmark dependencies efficiently
-        pip install --only-binary=all -e ".[benchmark]" || pip install -e ".[all]"
-        pip install memory_profiler psutil
+      - name: Install dependencies (optimized)
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          # Install benchmark dependencies efficiently
+          pip install --only-binary=all -e ".[benchmark]" ||
+            pip install -e ".[all]"
+          pip install memory_profiler psutil
 
-    - name: System information (Linux/macOS)
-      if: runner.os != 'Windows'
-      run: |
-        python -c "import sys; print(f'Python: {sys.version}')"
-        python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
-        python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
-        free -h || vm_stat || true
-        nproc || sysctl -n hw.ncpu || true
+      - name: System information (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          python -c "import sys; print(f'Python: {sys.version}')"
+          python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+          python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            free -h || true
+            nproc || true
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            vm_stat | head -10 || true
+            sysctl -n hw.ncpu || true
+          fi
 
-    - name: System information (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        python -c "import sys; print(f'Python: {sys.version}')"
-        python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
-        python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
-        systeminfo | findstr /C:"Total Physical Memory"
-        echo "Processor Count: %NUMBER_OF_PROCESSORS%"
-      shell: cmd
+      - name: System information (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -c "import sys; print(f'Python: {sys.version}')"
+          python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+          python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
+          systeminfo | findstr /C:"Total Physical Memory"
+          echo "Processor Count: %NUMBER_OF_PROCESSORS%"
+        shell: cmd
 
-    - name: Run performance benchmarks
-      if: matrix.benchmark-type == 'performance'
-      run: |
-        # Create results directory
-        mkdir -p benchmark_results
+      - name: Run performance benchmarks
+        if: matrix.benchmark-type == 'performance'
+        run: |
+          # Create results directory
+          mkdir -p benchmark_results
 
-        # Determine suite based on inputs
-        SUITE="${{ github.event.inputs.benchmark_suite }}"
-        if [ -z "$SUITE" ] || [ "$SUITE" == "null" ]; then
-          SUITE="basic"
-        fi
+          # Determine suite based on inputs
+          SUITE="${{ github.event.inputs.benchmark_suite }}"
+          if [ -z "$SUITE" ] || [ "$SUITE" == "null" ]; then
+            SUITE="basic"
+          fi
 
-        echo "Running $SUITE benchmark suite..."
-        timeout 1800 python benchmark/benchmark.py \
-          --suite "$SUITE" \
-          --save \
-          --output-dir benchmark_results \
-          --format markdown \
-          --timeout 300 \
-          > benchmark_results/performance_results.md || echo "Some benchmarks timed out"
+          echo "Running $SUITE benchmark suite..."
+          timeout 1800 python benchmark/benchmark.py \
+            --suite "$SUITE" \
+            --save \
+            --output-dir benchmark_results \
+            --format markdown \
+            --timeout 300 \
+            > benchmark_results/performance_results.md || echo "Some benchmarks timed out"
 
-    - name: Run large dataset benchmarks
-      if: |
-        (github.event.inputs.run_large == 'true' || github.event_name == 'schedule') &&
-        matrix.benchmark-type == 'performance'
-      run: |
-        echo "Running large dataset benchmarks..."
-        timeout 1800 python benchmark/benchmark.py \
-          --suite large \
-          --save \
-          --output-dir benchmark_results \
-          --format markdown \
-          --timeout 600 \
-          >> benchmark_results/performance_results.md || echo "Large benchmarks timed out"
+      - name: Run large dataset benchmarks
+        if: |
+          (github.event.inputs.run_large == 'true' || github.event_name == 'schedule') &&
+          matrix.benchmark-type == 'performance'
+        run: |
+          echo "Running large dataset benchmarks..."
+          timeout 1800 python benchmark/benchmark.py \
+            --suite large \
+            --save \
+            --output-dir benchmark_results \
+            --format markdown \
+            --timeout 600 \
+            >> benchmark_results/performance_results.md || echo "Large benchmarks timed out"
 
-    - name: Profile memory usage
-      if: matrix.benchmark-type == 'memory' || github.event_name == 'schedule'
-      run: |
-        echo "Profiling memory usage..."
-        mkdir -p benchmark_results
-        python -m memory_profiler benchmark/benchmark.py \
-          --suite basic \
-          --memory-profile \
-          > benchmark_results/memory_profile.md || echo "Memory profiling completed with warnings"
+      - name: Profile memory usage
+        if: matrix.benchmark-type == 'memory' || github.event_name == 'schedule'
+        run: |
+          echo "Profiling memory usage..."
+          mkdir -p benchmark_results
+          python -m memory_profiler benchmark/benchmark.py \
+            --suite basic \
+            --memory-profile \
+            > benchmark_results/memory_profile.md || echo "Memory profiling completed with warnings"
 
-    - name: Generate comprehensive benchmark report
-      run: |
-        # Create comprehensive report
-        cat > benchmark_results/BENCHMARK_REPORT.md << 'EOF'
-        # Benchmark Report - $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+      - name: Generate comprehensive benchmark report
+        run: |
+          # Create comprehensive report
+          mkdir -p benchmark_results
 
-        ## System Information
-        - **OS**: ${{ matrix.os }}
-        - **Python**: ${{ matrix.python-version }}
-        - **Benchmark Type**: ${{ matrix.benchmark-type }}
-        - **GPU**: ${{ matrix.gpu }}
-        - **CPU Cores**: $(nproc)
-        - **Available Memory**: $(free -h | grep 'Mem:' | awk '{print $2}')
-        - **JAX Platform**: ${{ env.JAX_PLATFORMS }}
-        - **OMP Threads**: ${{ env.OMP_NUM_THREADS }}
+          # Get system information in a cross-platform way
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            CPU_COUNT=$(nproc)
+            MEMORY_INFO=$(free -h | grep 'Mem:' | awk '{print $2}')
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            CPU_COUNT=$(sysctl -n hw.ncpu)
+            MEMORY_INFO=$(sysctl -n hw.memsize | awk '{printf "%.1fG", $1/1024/1024/1024}')
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            CPU_COUNT=$NUMBER_OF_PROCESSORS
+            MEMORY_INFO="N/A"
+          else
+            CPU_COUNT="N/A"
+            MEMORY_INFO="N/A"
+          fi
 
-        ## Benchmark Configuration
-        - **Suite**: ${{ github.event.inputs.benchmark_suite || 'basic' }}
-        - **Large Datasets**: ${{ github.event.inputs.run_large || 'false' }}
-        - **Trigger**: ${{ github.event_name }}
+          cat > benchmark_results/BENCHMARK_REPORT.md << EOF
+          # Benchmark Report - $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
-        ---
+          ## System Information
+          - **OS**: ${{ matrix.os }}
+          - **Python**: ${{ matrix.python-version }}
+          - **Benchmark Type**: ${{ matrix.benchmark-type }}
+          - **GPU**: ${{ matrix.gpu }}
+          - **CPU Cores**: ${CPU_COUNT}
+          - **Available Memory**: ${MEMORY_INFO}
+          - **JAX Platform**: ${{ env.JAX_PLATFORMS }}
+          - **OMP Threads**: ${{ env.OMP_NUM_THREADS }}
 
-        EOF
+          ## Benchmark Configuration
+          - **Suite**: ${{ github.event.inputs.benchmark_suite || 'basic' }}
+          - **Large Datasets**: ${{ github.event.inputs.run_large || 'false' }}
+          - **Trigger**: ${{ github.event_name }}
 
-        # Append performance results if they exist
-        if [ -f "benchmark_results/performance_results.md" ]; then
-          echo "## Performance Results" >> benchmark_results/BENCHMARK_REPORT.md
-          cat benchmark_results/performance_results.md >> benchmark_results/BENCHMARK_REPORT.md
-          echo "" >> benchmark_results/BENCHMARK_REPORT.md
-        fi
+          ---
 
-        # Append memory profile if it exists
-        if [ -f "benchmark_results/memory_profile.md" ]; then
-          echo "## Memory Profile" >> benchmark_results/BENCHMARK_REPORT.md
-          cat benchmark_results/memory_profile.md >> benchmark_results/BENCHMARK_REPORT.md
-        fi
+          EOF
 
-        # Add system resource usage
-        echo "## System Resources (Post-Benchmark)" >> benchmark_results/BENCHMARK_REPORT.md
-        echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
-        free -h >> benchmark_results/BENCHMARK_REPORT.md
-        df -h / >> benchmark_results/BENCHMARK_REPORT.md
-        echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
+          # Append performance results if they exist
+          if [ -f "benchmark_results/performance_results.md" ]; then
+            echo "## Performance Results" >> benchmark_results/BENCHMARK_REPORT.md
+            cat benchmark_results/performance_results.md >> benchmark_results/BENCHMARK_REPORT.md
+            echo "" >> benchmark_results/BENCHMARK_REPORT.md
+          fi
 
-    - name: Upload benchmark artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-results-${{ matrix.benchmark-type }}-${{ matrix.os }}-py${{ matrix.python-version }}
-        path: benchmark_results/
-        retention-days: 30
+          # Append memory profile if it exists
+          if [ -f "benchmark_results/memory_profile.md" ]; then
+            echo "## Memory Profile" >> benchmark_results/BENCHMARK_REPORT.md
+            cat benchmark_results/memory_profile.md >> benchmark_results/BENCHMARK_REPORT.md
+          fi
 
-    - name: Performance regression check
-      if: matrix.benchmark-type == 'performance' && github.ref == 'refs/heads/main'
-      continue-on-error: true
-      run: |
-        # Simple performance regression detection
-        if [ -f "benchmark_results/performance_results.md" ]; then
-          echo "Checking for performance regressions..."
-          # Extract timing information and compare with previous runs
-          grep -E "Time:|seconds" benchmark_results/performance_results.md || echo "No timing data found"
-        fi
+          # Add system resource usage (cross-platform)
+          echo "## System Resources (Post-Benchmark)" >> benchmark_results/BENCHMARK_REPORT.md
+          echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            free -h >> benchmark_results/BENCHMARK_REPORT.md
+            df -h / >> benchmark_results/BENCHMARK_REPORT.md
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            vm_stat | head -10 >> benchmark_results/BENCHMARK_REPORT.md
+            df -h / >> benchmark_results/BENCHMARK_REPORT.md
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            systeminfo | findstr /C:"Available Physical Memory" >> benchmark_results/BENCHMARK_REPORT.md || echo "Memory info not available" >> benchmark_results/BENCHMARK_REPORT.md
+          fi
+          echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
 
-    - name: Store benchmark history
-      if: false  # Enable when JSON output is implemented
-      # if: github.ref == 'refs/heads/main' && matrix.benchmark-type == 'performance'
-      uses: benchmark-action/github-action-benchmark@v1
-      with:
-        tool: 'customBiggerIsBetter'
-        output-file-path: benchmark_results/results.json
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        auto-push: true
-        comment-on-alert: true
-        alert-threshold: '150%'
-        fail-on-alert: false
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: >
+            benchmark-results-${{ matrix.benchmark-type }}-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: benchmark_results/
+          retention-days: 30
+
+      - name: Performance regression check
+        if: matrix.benchmark-type == 'performance' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          # Simple performance regression detection
+          if [ -f "benchmark_results/performance_results.md" ]; then
+            echo "Checking for performance regressions..."
+            # Extract timing information and compare with previous runs
+            grep -E "Time:|seconds" benchmark_results/performance_results.md || echo "No timing data found"
+          fi
+
+      - name: Store benchmark history
+        if: false  # Enable when JSON output is implemented
+        # if: github.ref == 'refs/heads/main' && matrix.benchmark-type == 'performance'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'customBiggerIsBetter'
+          output-file-path: benchmark_results/results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '150%'
+          fail-on-alert: false
 
   # Summary job to report overall benchmark status
   benchmark-summary:
@@ -279,30 +317,30 @@ jobs:
     if: always()
 
     steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
 
-    - name: Generate summary
-      run: |
-        echo "# Benchmark Summary" > BENCHMARK_SUMMARY.md
-        echo "" >> BENCHMARK_SUMMARY.md
-        echo "**Workflow**: ${{ github.workflow }}" >> BENCHMARK_SUMMARY.md
-        echo "**Trigger**: ${{ github.event_name }}" >> BENCHMARK_SUMMARY.md
-        echo "**Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> BENCHMARK_SUMMARY.md
-        echo "" >> BENCHMARK_SUMMARY.md
+      - name: Generate summary
+        run: |
+          echo "# Benchmark Summary" > BENCHMARK_SUMMARY.md
+          echo "" >> BENCHMARK_SUMMARY.md
+          echo "**Workflow**: ${{ github.workflow }}" >> BENCHMARK_SUMMARY.md
+          echo "**Trigger**: ${{ github.event_name }}" >> BENCHMARK_SUMMARY.md
+          echo "**Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> BENCHMARK_SUMMARY.md
+          echo "" >> BENCHMARK_SUMMARY.md
 
-        # List all benchmark results
-        echo "## Available Results" >> BENCHMARK_SUMMARY.md
-        find . -name "BENCHMARK_REPORT.md" -exec echo "- {}" \; >> BENCHMARK_SUMMARY.md
+          # List all benchmark results
+          echo "## Available Results" >> BENCHMARK_SUMMARY.md
+          find . -name "BENCHMARK_REPORT.md" -exec echo "- {}" \; >> BENCHMARK_SUMMARY.md
 
-        # Job status summary
-        echo "" >> BENCHMARK_SUMMARY.md
-        echo "## Job Status" >> BENCHMARK_SUMMARY.md
-        echo "- Benchmark job: ${{ needs.benchmark.result }}" >> BENCHMARK_SUMMARY.md
+          # Job status summary
+          echo "" >> BENCHMARK_SUMMARY.md
+          echo "## Job Status" >> BENCHMARK_SUMMARY.md
+          echo "- Benchmark job: ${{ needs.benchmark.result }}" >> BENCHMARK_SUMMARY.md
 
-    - name: Upload summary
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-summary
-        path: BENCHMARK_SUMMARY.md
-        retention-days: 90
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-summary
+          path: BENCHMARK_SUMMARY.md
+          retention-days: 90

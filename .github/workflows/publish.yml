@@ -1,6 +1,7 @@
+---
 name: Publish to PyPI
 
-on:
+'on':
   release:
     types: [published]
   workflow_dispatch:
@@ -30,70 +31,73 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Full history for setuptools-scm
-        clean: true
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for setuptools-scm
+          clean: true
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
         # Remove cache to fix pip cache issues
         # cache: 'pip'
 
-    - name: Cache build dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: build-deps-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
-        restore-keys: |
-          build-deps-${{ runner.os }}-
+      - name: Cache build dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: build-deps-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            build-deps-${{ runner.os }}-
 
-    - name: Install build dependencies (optimized)
-      run: |
-        python -m pip install --upgrade pip wheel setuptools
-        pip install --only-binary=all build twine || pip install build twine
+      - name: Install build dependencies (optimized)
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install --only-binary=all build twine || pip install build twine
 
-    - name: Verify package metadata
-      run: |
-        python -c "import setuptools_scm; print(f'Version: {setuptools_scm.get_version()}')"
-        python setup.py --version --name --author --description 2>/dev/null || echo "Package metadata check complete"
+      - name: Verify package metadata
+        run: |
+          python -c "import setuptools_scm; print(f'Version: {setuptools_scm.get_version()}')"
+          python setup.py --version --name --author --description 2>/dev/null || echo "Package metadata check complete"
 
-    - name: Build package (with timeout)
-      run: |
-        timeout 300 python -m build --wheel --sdist --outdir dist/ || exit 1
-        echo "Build completed successfully"
+      - name: Build package (with timeout)
+        run: |
+          timeout 300 python -m build --wheel --sdist --outdir dist/ || exit 1
+          echo "Build completed successfully"
 
-    - name: Verify build integrity
-      run: |
-        twine check dist/* --strict
-        ls -lah dist/
+      - name: Verify build integrity
+        run: |
+          twine check dist/* --strict
+          ls -lah dist/
 
-        # Verify wheel contents
-        python -m zipfile -l dist/*.whl | head -20
+          # Verify wheel contents
+          python -m zipfile -l dist/*.whl | head -20
 
-        # Check package size
-        du -sh dist/*
+          # Check package size
+          du -sh dist/*
 
-        # Ensure both wheel and sdist exist
-        test -f dist/*.whl && test -f dist/*.tar.gz
-        echo "Package integrity verified"
+          # Ensure both wheel and sdist exist
+          test -f dist/*.whl && test -f dist/*.tar.gz
+          echo "Package integrity verified"
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dist-packages
-        path: dist/
-        retention-days: 30
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
+          retention-days: 30
 
   # Fast package validation job
   test-package:
     needs: build
     runs-on: ${{ matrix.os }}
     timeout-minutes: 8
-    if: github.event.inputs.skip_tests != 'true'
+    if: >
+      github.event.inputs.skip_tests != 'true' &&
+      (matrix.run-condition != 'cross-platform' ||
+       github.event_name == 'release')
 
     strategy:
       fail-fast: true
@@ -114,90 +118,90 @@ jobs:
           - os: windows-latest
             python-version: '3.12'
             package-type: 'wheel'
-            if: github.event_name == 'release'
+            run-condition: cross-platform
           - os: macos-latest
             python-version: '3.12'
             package-type: 'wheel'
-            if: github.event_name == 'release'
+            run-condition: cross-platform
 
     steps:
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-        # Remove cache to fix pip cache issues
-        # cache: 'pip'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          # Remove cache to fix pip cache issues
+          # cache: 'pip'
 
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: dist-packages
-        path: dist/
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
 
-    - name: Test wheel installation (Linux/macOS)
-      if: matrix.package-type == 'wheel' && runner.os != 'Windows'
-      run: |
-        python -m pip install --upgrade pip
-        pip install dist/*.whl
-        echo "Wheel installed successfully"
+      - name: Test wheel installation (Linux/macOS)
+        if: matrix.package-type == 'wheel' && runner.os != 'Windows'
+        run: |
+          python -m pip install --upgrade pip
+          pip install dist/*.whl
+          echo "Wheel installed successfully"
 
-    - name: Test wheel installation (Windows)
-      if: matrix.package-type == 'wheel' && runner.os == 'Windows'
-      run: |
-        python -m pip install --upgrade pip
-        for %%f in (dist\*.whl) do pip install "%%f"
-        echo "Wheel installed successfully"
-      shell: cmd
+      - name: Test wheel installation (Windows)
+        if: matrix.package-type == 'wheel' && runner.os == 'Windows'
+        run: |
+          python -m pip install --upgrade pip
+          for /f %%f in ('dir /b dist\*.whl') do pip install "dist\%%f"
+          echo "Wheel installed successfully"
+        shell: cmd
 
-    - name: Test sdist installation (Linux/macOS)
-      if: matrix.package-type == 'sdist' && runner.os != 'Windows'
-      run: |
-        python -m pip install --upgrade pip build
-        pip install dist/*.tar.gz
-        echo "Sdist installed successfully"
+      - name: Test sdist installation (Linux/macOS)
+        if: matrix.package-type == 'sdist' && runner.os != 'Windows'
+        run: |
+          python -m pip install --upgrade pip build
+          pip install dist/*.tar.gz
+          echo "Sdist installed successfully"
 
-    - name: Test sdist installation (Windows)
-      if: matrix.package-type == 'sdist' && runner.os == 'Windows'
-      run: |
-        python -m pip install --upgrade pip build
-        for %%f in (dist\*.tar.gz) do pip install "%%f"
-        echo "Sdist installed successfully"
-      shell: cmd
+      - name: Test sdist installation (Windows)
+        if: matrix.package-type == 'sdist' && runner.os == 'Windows'
+        run: |
+          python -m pip install --upgrade pip build
+          for /f %%f in ('dir /b dist\*.tar.gz') do pip install "dist\%%f"
+          echo "Sdist installed successfully"
+        shell: cmd
 
-    - name: Verify package functionality
-      timeout-minutes: 3
-      run: |
-        # Test basic imports
-        python -c "import nlsq; print(f'NLSQ version: {nlsq.__version__}')"
-        python -c "from nlsq import curve_fit; print('curve_fit imported successfully')"
+      - name: Verify package functionality
+        timeout-minutes: 3
+        run: |
+          # Test basic imports
+          python -c "import nlsq; print(f'NLSQ version: {nlsq.__version__}')"
+          python -c "from nlsq import curve_fit; print('curve_fit imported successfully')"
 
-        # Test basic functionality without heavy dependencies
-        python -c "
-        import nlsq
-        import numpy as np
-        print('Basic numpy import works')
-        try:
-            x = np.array([1, 2, 3, 4])
-            y = np.array([2, 4, 6, 8])
-            # Simple test without JAX to avoid compilation overhead
-            print('Package verification complete')
-        except Exception as e:
-            print(f'Warning: {e}')
-        "
+          # Test basic functionality without heavy dependencies
+          python -c "
+          import nlsq
+          import numpy as np
+          print('Basic numpy import works')
+          try:
+              x = np.array([1, 2, 3, 4])
+              y = np.array([2, 4, 6, 8])
+              # Simple test without JAX to avoid compilation overhead
+              print('Package verification complete')
+          except Exception as e:
+              print(f'Warning: {e}')
+          "
 
-    - name: Package validation summary
-      run: |
-        python -c "
-        import pkg_resources
-        try:
-            dist = pkg_resources.get_distribution('nlsq')
-            print(f'✓ Package installed: {dist.project_name} {dist.version}')
-            print(f'✓ Location: {dist.location}')
-            print('✓ Package validation passed')
-        except Exception as e:
-            print(f'✗ Validation failed: {e}')
-            exit(1)
-        "
+      - name: Package validation summary
+        run: |
+          python -c "
+          import pkg_resources
+          try:
+              dist = pkg_resources.get_distribution('nlsq')
+              print(f'✓ Package installed: {dist.project_name} {dist.version}')
+              print(f'✓ Location: {dist.location}')
+              print('✓ Package validation passed')
+          except Exception as e:
+              print(f'✗ Validation failed: {e}')
+              exit(1)
+          "
 
   # TestPyPI publishing job
   publish-testpypi:
@@ -212,28 +216,28 @@ jobs:
       url: https://test.pypi.org/p/nlsq
 
     steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: dist-packages
-        path: dist/
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
 
-    - name: Verify artifacts before publish
-      run: |
-        ls -la dist/
-        twine check dist/* --strict
+      - name: Verify artifacts before publish
+        run: |
+          ls -la dist/
+          twine check dist/* --strict
 
-    - name: Publish to TestPyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        repository-url: https://test.pypi.org/legacy/
-        skip-existing: true
-        verbose: true
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          verbose: true
 
-    - name: Verify TestPyPI publication
-      run: |
-        echo "Package published to TestPyPI"
-        echo "Check: https://test.pypi.org/project/nlsq/"
+      - name: Verify TestPyPI publication
+        run: |
+          echo "Package published to TestPyPI"
+          echo "Check: https://test.pypi.org/project/nlsq/"
 
   # Production PyPI publishing job
   publish-pypi:
@@ -248,55 +252,58 @@ jobs:
       url: https://pypi.org/p/nlsq
 
     steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: dist-packages
-        path: dist/
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
 
-    - name: Final verification before production publish
-      run: |
-        ls -la dist/
-        twine check dist/* --strict
-        echo "Final verification complete - ready for PyPI"
+      - name: Final verification before production publish
+        run: |
+          ls -la dist/
+          twine check dist/* --strict
+          echo "Final verification complete - ready for PyPI"
 
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        skip-existing: true
-        verbose: true
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          verbose: true
 
-    - name: Publication success notification
-      run: |
-        echo "🎉 Package successfully published to PyPI!"
-        echo "📦 Available at: https://pypi.org/project/nlsq/"
-        echo "📖 Install with: pip install nlsq"
+      - name: Publication success notification
+        run: |
+          echo "🎉 Package successfully published to PyPI!"
+          echo "📦 Available at: https://pypi.org/project/nlsq/"
+          echo "📖 Install with: pip install nlsq"
 
   # Post-publication validation
   post-publish-validation:
-    if: always() && (needs.publish-pypi.result == 'success' || needs.publish-testpypi.result == 'success')
+    if: >
+      always() &&
+      (needs.publish-pypi.result == 'success' ||
+       needs.publish-testpypi.result == 'success')
     needs: [publish-pypi, publish-testpypi]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-    - name: Wait for package availability
-      run: |
-        echo "Waiting for package to be available on PyPI..."
-        sleep 60
+      - name: Wait for package availability
+        run: |
+          echo "Waiting for package to be available on PyPI..."
+          sleep 60
 
-    - name: Validate PyPI installation
-      if: needs.publish-pypi.result == 'success'
-      continue-on-error: true
-      run: |
-        python -m pip install --upgrade pip
-        pip install nlsq --no-cache-dir
-        python -c "import nlsq; print(f'✓ PyPI package verified: {nlsq.__version__}')" || echo "PyPI validation pending"
+      - name: Validate PyPI installation
+        if: needs.publish-pypi.result == 'success'
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip
+          pip install nlsq --no-cache-dir
+          python -c "import nlsq; print(f'✓ PyPI package verified: {nlsq.__version__}')" || echo "PyPI validation pending"
 
-    - name: Validate TestPyPI installation
-      if: needs.publish-testpypi.result == 'success'
-      continue-on-error: true
-      run: |
-        python -m pip install --upgrade pip
-        pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ nlsq --no-cache-dir
-        python -c "import nlsq; print(f'✓ TestPyPI package verified: {nlsq.__version__}')" || echo "TestPyPI validation pending"
+      - name: Validate TestPyPI installation
+        if: needs.publish-testpypi.result == 'success'
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip
+          pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ nlsq --no-cache-dir
+          python -c "import nlsq; print(f'✓ TestPyPI package verified: {nlsq.__version__}')" || echo "TestPyPI validation pending"

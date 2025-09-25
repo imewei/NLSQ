@@ -1,6 +1,7 @@
+---
 name: CI
 
-on:
+'on':
   push:
     branches: [main, develop]
   pull_request:
@@ -47,7 +48,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pre-commit
-        key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+        key: >
+          pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
         restore-keys: |
           pre-commit-${{ runner.os }}-
 
@@ -77,6 +79,16 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    if: >
+      (matrix.run-condition != 'cross-platform' &&
+       matrix.run-condition != 'extended-versions') ||
+      (matrix.run-condition == 'cross-platform' &&
+       (github.event_name == 'release' ||
+        github.ref == 'refs/heads/main' ||
+        github.event_name == 'schedule')) ||
+      (matrix.run-condition == 'extended-versions' &&
+       (github.event_name == 'release' ||
+        github.ref == 'refs/heads/main'))
     strategy:
       fail-fast: false
       matrix:
@@ -92,117 +104,120 @@ jobs:
           - os: windows-latest
             python-version: '3.12'
             test-suite: 'fast'
-            if: github.event_name == 'release' || github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+            run-condition: cross-platform
           - os: macos-latest
             python-version: '3.12'
             test-suite: 'fast'
-            if: github.event_name == 'release' || github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+            run-condition: cross-platform
           # Extended Python version testing for Ubuntu
           - os: ubuntu-latest
             python-version: '3.11'
             test-suite: 'fast'
-            if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+            run-condition: extended-versions
           - os: ubuntu-latest
             python-version: '3.13'
             test-suite: 'fast'
-            if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+            run-condition: extended-versions
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Needed for setuptools-scm
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for setuptools-scm
 
-    - name: Free disk space
-      if: runner.os == 'Linux'
-      run: |
-        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-        sudo apt-get clean
-        df -h
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo apt-get clean
+          df -h
 
-    - name: Free disk space (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        # Free space on Windows
-        Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID,Size,FreeSpace
-      shell: powershell
+      - name: Free disk space (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # Free space on Windows
+          Get-WmiObject -Class Win32_LogicalDisk |
+            Select-Object DeviceID,Size,FreeSpace
+        shell: powershell
 
-    - name: Free disk space (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        # Show disk usage on macOS
-        df -h
-        # Clean Homebrew cache if needed
-        brew cleanup --prune=all || true
+      - name: Free disk space (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Show disk usage on macOS
+          df -h
+          # Clean Homebrew cache if needed
+          brew cleanup --prune=all || true
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
         # Remove cache to fix pip cache issues
         # cache: 'pip'
         # cache-dependency-path: |
         #   pyproject.toml
         #   requirements*.txt
 
-    - name: Cache package installation
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          build/
-        key: pip-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-        restore-keys: |
-          pip-${{ runner.os }}-py${{ matrix.python-version }}-
-          pip-${{ runner.os }}-
+      - name: Cache package installation
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            build/
+          key: >
+            pip-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py${{ matrix.python-version }}-
+            pip-${{ runner.os }}-
 
-    - name: Install dependencies (Linux/macOS)
-      if: runner.os != 'Windows'
-      run: |
-        python -m pip install --upgrade pip wheel setuptools
-        # Install only test dependencies for speed
-        pip install --only-binary=all -e ".[test]" || pip install -e ".[test]"
+      - name: Install dependencies (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          # Install only test dependencies for speed
+          pip install --only-binary=all -e ".[test]" ||
+            pip install -e ".[test]"
 
-    - name: Install dependencies (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        python -m pip install --upgrade pip wheel setuptools
-        # Windows-specific installation with better error handling
-        pip install -e ".[test]"
-      shell: cmd
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          # Windows-specific installation with better error handling
+          pip install -e ".[test]"
+        shell: cmd
 
-    - name: Install JAX CPU (Linux/macOS)
-      if: runner.os != 'Windows'
-      run: |
-        # Use CPU-only JAX for faster installation and testing
-        pip install --upgrade "jax[cpu]"
+      - name: Install JAX CPU (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          # Use CPU-only JAX for faster installation and testing
+          pip install --upgrade "jax[cpu]"
 
-    - name: Install JAX CPU (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        # Install JAX on Windows
-        pip install --upgrade jax jaxlib
-      shell: cmd
+      - name: Install JAX CPU (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # Install JAX on Windows
+          pip install --upgrade jax jaxlib
+        shell: cmd
 
-    - name: Test core functionality (parallel)
-      run: |
-        # Run critical tests in parallel with timeout
-        pytest tests/test_minpack.py::TestCurveFit::test_one_argument \
-               tests/test_minpack.py::TestCurveFit::test_two_argument \
-               tests/test_least_squares.py::TestLeastSquares::test_trf_bounds \
-               -v --tb=short --timeout=60 -x
+      - name: Test core functionality (parallel)
+        run: |
+          # Run critical tests in parallel with timeout
+          pytest tests/test_minpack.py::TestCurveFit::test_one_argument \
+                 tests/test_minpack.py::TestCurveFit::test_two_argument \
+                 tests/test_least_squares.py::TestLeastSquares::test_trf_bounds \
+                 -v --tb=short --timeout=60 -x
 
-    - name: Test extended suite
-      if: matrix.test-suite == 'fast' || github.event_name == 'schedule'
-      run: |
-        # Run more comprehensive tests for scheduled runs
-        pytest tests/test_minpack.py tests/test_least_squares.py \
-               -v --tb=short --maxfail=3 --timeout=120
+      - name: Test extended suite
+        if: matrix.test-suite == 'fast' || github.event_name == 'schedule'
+        run: |
+          # Run more comprehensive tests for scheduled runs
+          pytest tests/test_minpack.py tests/test_least_squares.py \
+                 -v --tb=short --maxfail=3 --timeout=120
 
-    - name: Test import and basic usage
-      run: |
-        python -c "import nlsq; print(f'NLSQ {nlsq.__version__} imported successfully')"
-        python -c "from nlsq import curve_fit; import numpy as np; x = np.array([1,2,3,4]); y = np.array([2,4,6,8]); popt, _ = curve_fit(lambda x, a: a*x, x, y); print(f'Basic curve_fit test: popt={popt}')"
+      - name: Test import and basic usage
+        run: |
+          python -c "import nlsq; print(f'NLSQ {nlsq.__version__} imported successfully')"
+          python -c "from nlsq import curve_fit; import numpy as np; x = np.array([1,2,3,4]); y = np.array([2,4,6,8]); popt, _ = curve_fit(lambda x, a: a*x, x, y); print(f'Basic curve_fit test: popt={popt}')"
 
   # Documentation build - runs in parallel
   docs:
@@ -211,39 +226,39 @@ jobs:
     continue-on-error: true
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-        # Remove cache to fix pip cache issues
-        # cache: 'pip'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          # Remove cache to fix pip cache issues
+          # cache: 'pip'
 
-    - name: Install docs dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[docs]" --quiet || pip install -e "." --quiet
+      - name: Install docs dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]" --quiet || pip install -e "." --quiet
 
-    - name: Build documentation
-      run: |
-        if [ -d "docs" ]; then
-          cd docs
-          make clean || true
-          timeout 300 make html || echo "Docs build timed out or failed"
-        fi
-      continue-on-error: true
+      - name: Build documentation
+        run: |
+          if [ -d "docs" ]; then
+            cd docs
+            make clean || true
+            timeout 300 make html || echo "Docs build timed out or failed"
+          fi
+        continue-on-error: true
 
-    - name: Upload docs artifacts
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: documentation
-        path: docs/_build/html/
-        retention-days: 7
+      - name: Upload docs artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/_build/html/
+          retention-days: 7
 
   # Package integrity check - lightweight
   package-check:
@@ -251,33 +266,33 @@ jobs:
     timeout-minutes: 8
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-    - name: Build and check package
-      run: |
-        python -m pip install --upgrade pip build twine
-        python -m build --wheel --outdir dist/
-        twine check dist/* --strict
+      - name: Build and check package
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build --wheel --outdir dist/
+          twine check dist/* --strict
 
-    - name: Test wheel installation
-      run: |
-        pip install dist/*.whl
-        python -c "import nlsq; print(f'Wheel test: NLSQ {nlsq.__version__}')"
+      - name: Test wheel installation
+        run: |
+          pip install dist/*.whl
+          python -c "import nlsq; print(f'Wheel test: NLSQ {nlsq.__version__}')"
 
-    - name: Upload wheel artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: wheel-python312
-        path: dist/*.whl
-        retention-days: 7
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-python312
+          path: dist/*.whl
+          retention-days: 7
 
   # Security and dependency check
   security:
@@ -286,40 +301,40 @@ jobs:
     continue-on-error: true
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-        # Remove cache to fix pip cache issues
-        # cache: 'pip'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          # Remove cache to fix pip cache issues
+          # cache: 'pip'
 
-    - name: Install security tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install safety bandit pip-audit
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit pip-audit
 
-    - name: Check dependencies for vulnerabilities
-      run: |
-        pip-audit --desc --output json || true
-        safety check --json || true
-      continue-on-error: true
+      - name: Check dependencies for vulnerabilities
+        run: |
+          pip-audit --desc --output json || true
+          safety check --json || true
+        continue-on-error: true
 
-    - name: Run security scan
-      run: |
-        bandit -r nlsq/ -f json -o bandit-report.json || true
-      continue-on-error: true
+      - name: Run security scan
+        run: |
+          bandit -r nlsq/ -f json -o bandit-report.json || true
+        continue-on-error: true
 
-    - name: Upload security reports
-      uses: actions/upload-artifact@v4
-      with:
-        name: security-reports
-        path: '*-report.json'
-        retention-days: 30
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: '*-report.json'
+          retention-days: 30
 
   # Status check job - waits for all critical jobs
   check-status:
@@ -328,21 +343,21 @@ jobs:
     if: always()
 
     steps:
-    - name: Check job results
-      run: |
-        echo "Quality job: ${{ needs.quality.result }}"
-        echo "Test job: ${{ needs.test.result }}"
-        echo "Package job: ${{ needs.package-check.result }}"
+      - name: Check job results
+        run: |
+          echo "Quality job: ${{ needs.quality.result }}"
+          echo "Test job: ${{ needs.test.result }}"
+          echo "Package job: ${{ needs.package-check.result }}"
 
-        # Fail if critical jobs failed
-        if [[ "${{ needs.test.result }}" == "failure" ]]; then
-          echo "Critical test job failed"
-          exit 1
-        fi
+          # Fail if critical jobs failed
+          if [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "Critical test job failed"
+            exit 1
+          fi
 
-        if [[ "${{ needs.package-check.result }}" == "failure" ]]; then
-          echo "Package check failed"
-          exit 1
-        fi
+          if [[ "${{ needs.package-check.result }}" == "failure" ]]; then
+            echo "Package check failed"
+            exit 1
+          fi
 
-        echo "All critical checks passed!"
+          echo "All critical checks passed!"
