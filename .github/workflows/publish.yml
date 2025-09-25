@@ -23,8 +23,8 @@ concurrency:
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: 1
-  PIP_NO_CACHE_DIR: 0  # Enable pip caching
-  UV_SYSTEM_PYTHON: 1  # Use uv for faster installs
+  PIP_NO_CACHE_DIR: 1  # Disable pip caching to avoid issues
+  JAX_ENABLE_X64: true  # Enable 64-bit precision for NLSQ
 
 jobs:
   # Build distribution packages
@@ -47,10 +47,7 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install uv || true
-          if command -v uv &> /dev/null; then
-            echo "Using uv for installation"
-            uv pip install build twine setuptools-scm
+          pip install build twine setuptools-scm
           else
             echo "Using pip for installation"
             pip install build twine setuptools-scm

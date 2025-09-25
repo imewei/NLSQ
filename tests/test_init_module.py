@@ -326,7 +326,7 @@ class TestInitModule(unittest.TestCase):
         self.assertAlmostEqual(popt[1], 0.0, places=1)
 
         # Check covariance matrix shape
-        self.assertEqual(pcov.shape, (2, 2))
+        self.assertEqual(_pcov.shape, (2, 2))
 
     def test_least_squares_class(self):
         """Test LeastSquares class through public API."""

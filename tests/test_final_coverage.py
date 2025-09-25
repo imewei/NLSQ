@@ -42,7 +42,7 @@ class TestFinalCoverage(unittest.TestCase):
         self.assertAlmostEqual(popt[1], 1.0, places=10)
 
         # Check covariance is small for perfect fit
-        self.assertLess(np.max(np.abs(pcov)), 1e-10)
+        self.assertLess(np.max(np.abs(_pcov)), 1e-10)
 
     def test_exponential_decay(self):
         """Test exponential decay fitting."""

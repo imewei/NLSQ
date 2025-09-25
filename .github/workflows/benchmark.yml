@@ -37,11 +37,11 @@ env:
   MKL_NUM_THREADS: 4
   OPENBLAS_NUM_THREADS: 4
   JAX_PLATFORMS: cpu
+  JAX_ENABLE_X64: true  # Enable 64-bit precision for NLSQ
   PYTHONHASHSEED: 0
   PYTHONIOENCODING: utf-8
   PIP_DISABLE_PIP_VERSION_CHECK: 1
-  PIP_NO_CACHE_DIR: 0  # Enable pip caching
-  UV_SYSTEM_PYTHON: 1  # Use uv for faster installs
+  PIP_NO_CACHE_DIR: 1  # Disable pip caching to avoid issues
 
 jobs:
   # Primary benchmarking job
@@ -84,25 +84,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install uv for faster installs
-        run: |
-          python -m pip install --upgrade pip
-          pip install uv || true
-        continue-on-error: true
-
       - name: Install dependencies
         run: |
-          # Try uv first for speed, fallback to pip
-          if command -v uv &> /dev/null; then
-            echo "Using uv for installation"
-            uv pip install -e ".[benchmark]" || uv pip install -e ".[all]"
-            uv pip install memory_profiler psutil
-          else
-            echo "Using pip for installation"
-            pip install --only-binary=:all: -e ".[benchmark]" || pip install -e ".[all]"
-            pip install memory_profiler psutil
-          fi
-        shell: bash
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e ".[benchmark]" || pip install -e ".[all]"
+          pip install memory_profiler psutil
 
       - name: System information
         run: |

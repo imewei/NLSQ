@@ -72,7 +72,7 @@ class TestValidatorsCoverage(unittest.TestCase):
         )
 
         # Fast mode might not detect outliers, but should not error
-        self.assertIsInstance(warnings, list)
+        self.assertIsInstance(_warnings, list)
 
     def test_validate_bounds(self):
         """Test bounds validation."""
