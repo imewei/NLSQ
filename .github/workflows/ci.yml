@@ -126,7 +126,7 @@ jobs:
         run: |
           pytest tests/test_minpack.py::TestCurveFit::test_one_argument \
                  tests/test_minpack.py::TestCurveFit::test_two_argument \
-                 tests/test_least_squares.py::TestLeastSquares::test_trf_bounds \
+                 tests/test_least_squares.py::test_basic \
                  -v --tb=short --timeout=60 -x
 
       - name: Test extended suite
@@ -215,7 +215,7 @@ jobs:
         run: |
           pytest tests/test_minpack.py::TestCurveFit::test_one_argument \
                  tests/test_minpack.py::TestCurveFit::test_two_argument \
-                 tests/test_least_squares.py::TestLeastSquares::test_trf_bounds \
+                 tests/test_least_squares.py::test_basic \
                  -v --tb=short --timeout=60 -x
 
       - name: Test import and basic usage
@@ -276,7 +276,7 @@ jobs:
         run: |
           pytest tests/test_minpack.py::TestCurveFit::test_one_argument \
                  tests/test_minpack.py::TestCurveFit::test_two_argument \
-                 tests/test_least_squares.py::TestLeastSquares::test_trf_bounds \
+                 tests/test_least_squares.py::test_basic \
                  -v --tb=short --timeout=60 -x
 
       - name: Test import and basic usage
