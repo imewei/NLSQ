@@ -88,6 +88,7 @@ References
 
 import time
 from collections.abc import Callable
+from typing import Optional
 
 import numpy as np
 from numpy.linalg import norm
@@ -109,6 +110,9 @@ initialize_gpu_safely()
 
 from nlsq._optimize import OptimizeResult
 from nlsq.common_jax import CommonJIT
+from nlsq.diagnostics import OptimizationDiagnostics
+from nlsq.robust_decomposition import robust_decomp
+from nlsq.stability import NumericalStabilityGuard
 from nlsq.common_scipy import (
     CL_scaling_vector,
     check_termination,
@@ -571,16 +575,26 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
     Supports exact (SVD) and iterative (CG) solvers for trust region subproblems.
     """
 
-    def __init__(self):
+    def __init__(self, enable_stability: bool = False):
         """Initialize the TrustRegionReflective optimizer.
 
         Creates JIT-compiled functions and sets up logging infrastructure.
         All optimization functions are compiled during initialization for
         maximum performance during solve operations.
+
+        Parameters
+        ----------
+        enable_stability : bool, default False
+            Enable numerical stability checks and fixes
         """
         TrustRegionJITFunctions.__init__(self)
         TrustRegionOptimizerBase.__init__(self, name="trf")
         self.cJIT = CommonJIT()
+
+        # Initialize stability system
+        self.enable_stability = enable_stability
+        if enable_stability:
+            self.stability_guard = NumericalStabilityGuard()
 
     def trf(
         self,
@@ -606,6 +620,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         verbose: int,
         timeit: bool = False,
         solver: str = "exact",
+        diagnostics: Optional[OptimizationDiagnostics] = None,
         **kwargs,
     ) -> dict:
         """Minimize a scalar function of one or more variables using the

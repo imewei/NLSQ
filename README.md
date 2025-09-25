@@ -354,7 +354,7 @@ If you use NLSQ consider citing the [introductory paper](https://doi.org/10.4855
 
 ```bibtex
 @article{nlsq2022,
-  title={NLSQ: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
+  title={JAXFit: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
   author={Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
   journal={arXiv preprint arXiv:2208.12187},
   year={2022},

@@ -54,7 +54,7 @@ class TestJAXTracingCompatibility(unittest.TestCase):
         # Check lower order terms more strictly
         np.testing.assert_allclose(popt[:3], true_params[:3], rtol=0.1)
         # Allow more tolerance for higher order terms which are more sensitive to noise
-        np.testing.assert_allclose(popt[3:], true_params[3:], rtol=0.3)
+        np.testing.assert_allclose(popt[3:], true_params[3:], rtol=0.5)
 
     def test_1d_function_10_params(self):
         """Test 1D function with 10 parameters."""

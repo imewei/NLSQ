@@ -46,6 +46,28 @@ from nlsq.large_dataset import (
 from nlsq.least_squares import LeastSquares
 from nlsq.minpack import CurveFit, curve_fit
 
+# Stability and optimization imports
+from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
+from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
+from nlsq.memory_manager import (
+    MemoryManager,
+    clear_memory_pool,
+    get_memory_manager,
+    get_memory_stats,
+)
+from nlsq.recovery import OptimizationRecovery
+from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
+from nlsq.smart_cache import (
+    SmartCache,
+    cached_function,
+    cached_jacobian,
+    clear_all_caches,
+    get_global_cache,
+    get_jit_cache,
+)
+from nlsq.stability import NumericalStabilityGuard
+from nlsq.validators import InputValidator
+
 # Sparse Jacobian support
 from nlsq.sparse_jacobian import (
     SparseJacobianComputer,
@@ -100,6 +122,26 @@ __all__ = [
     "large_dataset_context",
     "get_memory_config",
     "get_large_dataset_config",
+    # Stability and optimization modules
+    "AlgorithmSelector",
+    "auto_select_algorithm",
+    "NumericalStabilityGuard",
+    "InputValidator",
+    "OptimizationDiagnostics",
+    "ConvergenceMonitor",
+    "OptimizationRecovery",
+    "RobustDecomposition",
+    "robust_decomp",
+    "SmartCache",
+    "cached_function",
+    "cached_jacobian",
+    "get_global_cache",
+    "get_jit_cache",
+    "clear_all_caches",
+    "MemoryManager",
+    "get_memory_manager",
+    "get_memory_stats",
+    "clear_memory_pool",
 ]
 
 

@@ -16,9 +16,15 @@ from jax.scipy.linalg import cholesky as jax_cholesky
 from jax.scipy.linalg import svd as jax_svd
 
 from nlsq._optimize import OptimizeWarning
+from nlsq.algorithm_selector import auto_select_algorithm
 from nlsq.common_scipy import EPS
+from nlsq.diagnostics import OptimizationDiagnostics
 from nlsq.least_squares import LeastSquares, prepare_bounds
 from nlsq.logging import get_logger
+from nlsq.memory_manager import get_memory_manager
+from nlsq.recovery import OptimizationRecovery
+from nlsq.stability import NumericalStabilityGuard
+from nlsq.validators import InputValidator
 
 __all__ = ["CurveFit", "curve_fit"]
 
@@ -155,7 +161,9 @@ class CurveFit:
     create_sigma_transform_funcs : Internal method for sigma transformation setup
     """
 
-    def __init__(self, flength: float | None = None, use_dynamic_sizing: bool = False):
+    def __init__(self, flength: float | None = None, use_dynamic_sizing: bool = False,
+                 enable_stability: bool = False, enable_recovery: bool = False,
+                 enable_overflow_check: bool = False):
         """Initialize CurveFit instance.
 
         Parameters
@@ -172,6 +180,17 @@ class CurveFit:
             uses actual size to prevent excessive memory allocation. Default False
             maintains backward compatibility with fixed padding behavior.
 
+        enable_stability : bool, default False
+            Enable numerical stability checks and fixes (validation, algorithm selection).
+            Note: This does NOT include overflow checking which adds overhead.
+
+        enable_recovery : bool, default False
+            Enable automatic recovery from optimization failures.
+
+        enable_overflow_check : bool, default False
+            Enable overflow/underflow checking in function evaluations. This adds
+            ~30% overhead so it's separate from other stability features.
+
         Notes
         -----
         Fixed length compilation trades memory usage for compilation speed:
@@ -185,6 +204,21 @@ class CurveFit:
         self.create_sigma_transform_funcs()
         self.create_covariance_svd()
         self.ls = LeastSquares()
+
+        # Initialize stability and recovery systems
+        self.enable_stability = enable_stability
+        self.enable_recovery = enable_recovery
+        self.enable_overflow_check = enable_overflow_check
+
+        if enable_stability:
+            self.stability_guard = NumericalStabilityGuard()
+            # Use fast validation mode by default for performance
+            self.validator = InputValidator(fast_mode=True)
+            self.memory_manager = get_memory_manager()
+
+        if enable_recovery:
+            self.recovery = OptimizationRecovery()
+            self.diagnostics = OptimizationDiagnostics()
 
     def update_flength(self, flength: float):
         """Set the fixed input data length.
@@ -555,8 +589,52 @@ class CurveFit:
         if p0 is None:
             p0 = _initialize_feasible(lb, ub)
 
+        # Auto-select algorithm if stability is enabled and method not specified
         if method is None:
-            method = "trf"
+            if self.enable_stability:
+                # Use intelligent algorithm selection
+                recommendations = auto_select_algorithm(
+                    f, xdata, ydata, p0, bounds
+                )
+                method = recommendations['algorithm']
+                self.logger.info(
+                    "Auto-selected algorithm",
+                    method=method,
+                    loss=recommendations.get('loss', 'linear')
+                )
+
+                # Apply recommended parameters to kwargs
+                for key in ['ftol', 'xtol', 'gtol', 'max_nfev', 'x_scale']:
+                    if key in recommendations and key not in kwargs:
+                        kwargs[key] = recommendations[key]
+            else:
+                method = "trf"
+
+        # Validate and sanitize inputs if stability checks are enabled
+        if self.enable_stability:
+            try:
+                errors, warnings_list, xdata_clean, ydata_clean = self.validator.validate_curve_fit_inputs(
+                    f, xdata, ydata, p0
+                )
+
+                # Handle errors
+                if errors:
+                    error_msg = f"Input validation failed: {'; '.join(errors)}"
+                    self.logger.error("Input validation failed", error=error_msg)
+                    raise ValueError(error_msg)
+
+                # Handle warnings
+                for warning in warnings_list:
+                    self.logger.warning("Input validation warning", warning=warning)
+
+                # Use cleaned data
+                xdata = xdata_clean
+                ydata = ydata_clean
+
+            except ValueError as e:
+                if "too many values to unpack" not in str(e):
+                    self.logger.error("Input validation failed", error=str(e))
+                raise
 
         # NaNs cannot be handled
         if check_finite:
@@ -712,6 +790,19 @@ class CurveFit:
 
         jnp_data_mask = jnp.array(data_mask, dtype=bool)
 
+        # Check memory requirements if stability is enabled
+        if self.enable_stability:
+            memory_required = self.memory_manager.predict_memory_requirement(
+                m, n, method
+            )
+            is_available, msg = self.memory_manager.check_memory_availability(
+                memory_required
+            )
+            if not is_available:
+                self.logger.warning("Memory constraint detected", message=msg)
+                # Switch to memory-efficient solver
+                kwargs["tr_solver"] = "lsmr"
+
         # Start curve fit timer and call least squares
         with self.logger.timer("curve_fit"):
             self.logger.debug(
@@ -719,19 +810,79 @@ class CurveFit:
                 has_sigma=sigma is not None,
                 has_jacobian=jac is not None,
             )
-            res = self.ls.least_squares(
-                f,
-                p0,
-                jac=jac,
-                xdata=jnp_xdata,
-                ydata=jnp_ydata,
-                data_mask=jnp_data_mask,
-                transform=transform,
-                bounds=bounds,
-                method=method,
-                timeit=timeit,
-                **kwargs,
-            )
+
+            # Create wrapper for overflow checking if enabled
+            # Note: This is separate from stability to avoid performance overhead
+            if self.enable_overflow_check:
+                original_f = f
+                # Use a more efficient overflow check
+                def stable_f(x, *params):
+                    result = original_f(x, *params)
+                    # Only apply clipping when needed to reduce overhead
+                    # Check max/min values first (faster than checking all elements)
+                    max_val = jnp.max(jnp.abs(result))
+                    # Only clip if we have extreme values
+                    result = jnp.where(
+                        max_val > 1e8,  # Only check/clip for very large values
+                        jnp.clip(result, -1e10, 1e10),
+                        result
+                    )
+                    return result
+                f_to_use = stable_f
+            else:
+                f_to_use = f
+
+            try:
+                res = self.ls.least_squares(
+                    f_to_use,
+                    p0,
+                    jac=jac,
+                    xdata=jnp_xdata,
+                    ydata=jnp_ydata,
+                    data_mask=jnp_data_mask,
+                    transform=transform,
+                    bounds=bounds,
+                    method=method,
+                    timeit=timeit,
+                    **kwargs,
+                )
+            except Exception as e:
+                if self.enable_recovery:
+                    self.logger.warning("Optimization failed, attempting recovery", error=str(e))
+                    # Prepare recovery state
+                    recovery_state = {
+                        'params': p0,
+                        'xdata': xdata,
+                        'ydata': ydata,
+                        'method': method if method is not None else 'trf',
+                        'bounds': bounds
+                    }
+
+                    # Attempt recovery
+                    success, result = self.recovery.recover_from_failure(
+                        'optimization_error',
+                        recovery_state,
+                        lambda **state: self.ls.least_squares(
+                            f_to_use,
+                            state['params'],
+                            jac=jac,
+                            xdata=jnp.asarray(state['xdata']),
+                            ydata=jnp.asarray(state['ydata']),
+                            data_mask=jnp_data_mask,
+                            transform=transform,
+                            bounds=state['bounds'],
+                            method=state['method'],
+                            timeit=timeit,
+                            **kwargs
+                        )
+                    )
+
+                    if success:
+                        res = result
+                    else:
+                        raise RuntimeError(f"Optimization failed and recovery unsuccessful: {e}") from e
+                else:
+                    raise
 
         if not res.success:
             self.logger.error(

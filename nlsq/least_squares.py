@@ -14,8 +14,12 @@ from jax import jacfwd, jit
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
 
 from nlsq.common_scipy import EPS, in_bounds, make_strictly_feasible
+from nlsq.diagnostics import OptimizationDiagnostics
 from nlsq.logging import get_logger
 from nlsq.loss_functions import LossFunctionsJIT
+from nlsq.memory_manager import get_memory_manager
+from nlsq.robust_decomposition import robust_decomp
+from nlsq.stability import NumericalStabilityGuard
 from nlsq.trf import TrustRegionReflective
 
 TERMINATION_MESSAGES = {
@@ -286,12 +290,19 @@ class LeastSquares:
     least_squares : Main optimization method
     """
 
-    def __init__(self):
+    def __init__(self, enable_stability: bool = False, enable_diagnostics: bool = False):
         """Initialize LeastSquares with optimization algorithms and autodiff instances.
 
         Sets up the Trust Region Reflective solver, loss functions, and separate
         automatic differentiation instances for different weighting schemes to
         maximize JAX compilation efficiency.
+
+        Parameters
+        ----------
+        enable_stability : bool, default False
+            Enable numerical stability checks and fixes
+        enable_diagnostics : bool, default False
+            Enable optimization diagnostics collection
         """
         super().__init__()  # not sure if this is needed
         self.trf = TrustRegionReflective()
@@ -306,6 +317,17 @@ class LeastSquares:
         self.adjn = AutoDiffJacobian()
         self.adj1d = AutoDiffJacobian()
         self.adj2d = AutoDiffJacobian()
+
+        # Stability and diagnostics systems
+        self.enable_stability = enable_stability
+        self.enable_diagnostics = enable_diagnostics
+
+        if enable_stability:
+            self.stability_guard = NumericalStabilityGuard()
+            self.memory_manager = get_memory_manager()
+
+        if enable_diagnostics:
+            self.diagnostics = OptimizationDiagnostics()
 
     def least_squares(
         self,
@@ -397,7 +419,7 @@ class LeastSquares:
             )
 
         if method not in ["trf"]:
-            raise ValueError("`method` must be 'trf")
+            raise ValueError("`method` must be 'trf'")
 
         if jac not in [None] and not callable(jac):
             raise ValueError("`jac` must be None or callable.")
@@ -523,7 +545,20 @@ class LeastSquares:
             )
 
         if not np.all(np.isfinite(f0)):
-            raise ValueError("Residuals are not finite in the initial point.")
+            if self.enable_stability:
+                self.logger.warning("Non-finite residuals detected, attempting to fix")
+                f0 = self.stability_guard.safe_clip(f0, -1e10, 1e10)
+                if not np.all(np.isfinite(f0)):
+                    raise ValueError("Residuals are not finite after stabilization")
+            else:
+                raise ValueError("Residuals are not finite in the initial point.")
+
+        # Check and fix Jacobian if stability is enabled
+        if self.enable_stability and J0 is not None:
+            J0_fixed, issues = self.stability_guard.check_and_fix_jacobian(J0)
+            if issues:
+                self.logger.warning("Jacobian issues detected and fixed", issues=issues)
+                J0 = J0_fixed
 
         n = x0.size
         m = f0.size
@@ -554,9 +589,49 @@ class LeastSquares:
             initial_cost_jnp = self.trf.default_loss_func(f0)
         initial_cost = np.array(initial_cost_jnp)
 
+        # Check memory requirements if stability is enabled
+        if self.enable_stability:
+            memory_required = self.memory_manager.predict_memory_requirement(m, n, method)
+            is_available, msg = self.memory_manager.check_memory_availability(
+                memory_required
+            )
+            if not is_available:
+                self.logger.warning("Memory constraint detected", message=msg)
+                # Switch to memory-efficient solver
+                tr_solver = "lsmr"
+
+        # Create wrapper functions with stability checks if enabled
+        if self.enable_stability:
+            original_rfunc = rfunc
+            original_jac_func = jac_func
+
+            def stable_rfunc(x, xd, yd, dm, tf):
+                result = original_rfunc(x, xd, yd, dm, tf)
+                if not jnp.all(jnp.isfinite(result)):
+                    result = self.stability_guard.safe_clip(result, -1e10, 1e10)
+                return result
+
+            def stable_jac_func(x, xd, yd, dm, tf):
+                J = original_jac_func(x, xd, yd, dm, tf)
+                J_fixed, _ = self.stability_guard.check_and_fix_jacobian(J)
+                return J_fixed
+
+            rfunc = stable_rfunc
+            jac_func = stable_jac_func
+
         # Start optimization timer and call TRF
         with self.logger.timer("optimization"):
             self.logger.debug("Calling TRF optimizer", initial_cost=initial_cost)
+
+            # Initialize diagnostics if enabled
+            if self.enable_diagnostics:
+                self.diagnostics.start_optimization(
+                    n_params=n,
+                    n_data=m,
+                    method=method,
+                    loss=loss
+                )
+
             result = self.trf.trf(
                 rfunc,
                 xdata,
@@ -580,6 +655,7 @@ class LeastSquares:
                 verbose,
                 timeit,
                 solver=tr_solver if tr_solver else "exact",
+                diagnostics=self.diagnostics if self.enable_diagnostics else None,
                 **timeout_kwargs,
             )
 
