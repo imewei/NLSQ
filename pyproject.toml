@@ -50,6 +50,7 @@ dependencies = [
     "matplotlib>=3.8.0",
     "psutil>=5.9.0",  # For memory monitoring
     "tqdm>=4.65.0",   # For progress bars
+    "h5py>=3.8.0",   # For HDF5 file handling in streaming optimizer
 ]
 
 [project.optional-dependencies]
