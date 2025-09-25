@@ -43,45 +43,15 @@ env:
   PIP_NO_CACHE_DIR: 1
 
 jobs:
+  # Primary Ubuntu benchmarking
   benchmark:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: ${{ matrix.run-condition == 'always' || github.event_name == 'schedule' || github.event_name == 'release' || (matrix.run-condition == 'cross-platform' && (github.event_name == 'schedule' || github.event_name == 'release')) }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
         python-version: ['3.12']
-        benchmark-type: ['performance']
-        include:
-          # Ubuntu (primary benchmarking platform) - always runs
-          - os: ubuntu-latest
-            python-version: '3.12'
-            benchmark-type: 'performance'
-            gpu: false
-            run-condition: 'always'
-          # Memory benchmarking for Ubuntu - always runs
-          - os: ubuntu-latest
-            python-version: '3.12'
-            benchmark-type: 'memory'
-            gpu: false
-            run-condition: 'always'
-          # Cross-platform benchmarking for scheduled runs and releases
-          - os: windows-latest
-            python-version: '3.12'
-            benchmark-type: 'performance'
-            gpu: false
-            run-condition: cross-platform
-          - os: macos-latest
-            python-version: '3.12'
-            benchmark-type: 'performance'
-            gpu: false
-            run-condition: cross-platform
-          # Uncomment for GPU benchmarking if self-hosted runners available
-          # - os: self-hosted-gpu
-          #   python-version: '3.12'
-          #   benchmark-type: 'gpu-performance'
-          #   gpu: true
+        benchmark-type: ['performance', 'memory']
 
     steps:
       - name: Checkout code
@@ -90,34 +60,15 @@ jobs:
           fetch-depth: 1  # Shallow clone for speed
 
       - name: Free disk space (Linux)
-        if: runner.os == 'Linux'
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
           sudo apt-get clean
           df -h
 
-      - name: Free disk space (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Get-WmiObject -Class Win32_LogicalDisk |
-            Select-Object DeviceID,Size,FreeSpace
-        shell: powershell
-
-      - name: Free disk space (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          df -h
-          brew cleanup --prune=all || true
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-        # Remove cache to fix pip cache issues
-        # cache: 'pip'
-        # cache-dependency-path: |
-        #   pyproject.toml
-        #   benchmark/requirements.txt
 
       - name: Cache package installation
         uses: actions/cache@v4
@@ -125,10 +76,10 @@ jobs:
           path: |
             ~/.cache/pip
             build/
-          key: benchmark-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          key: benchmark-ubuntu-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
-            benchmark-${{ runner.os }}-py${{ matrix.python-version }}-
-            benchmark-${{ runner.os }}-
+            benchmark-ubuntu-py${{ matrix.python-version }}-
+            benchmark-ubuntu-
 
       - name: Install dependencies (optimized)
         run: |
@@ -138,29 +89,13 @@ jobs:
             pip install -e ".[all]"
           pip install memory_profiler psutil
 
-      - name: System information (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: System information
         run: |
           python -c "import sys; print(f'Python: {sys.version}')"
           python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
           python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            free -h || true
-            nproc || true
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            vm_stat | head -10 || true
-            sysctl -n hw.ncpu || true
-          fi
-
-      - name: System information (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          python -c "import sys; print(f'Python: {sys.version}')"
-          python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
-          python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
-          systeminfo | findstr /C:"Total Physical Memory"
-          echo "Processor Count: %NUMBER_OF_PROCESSORS%"
-        shell: cmd
+          free -h || true
+          nproc || true
 
       - name: Run performance benchmarks
         if: matrix.benchmark-type == 'performance'
@@ -212,29 +147,18 @@ jobs:
           # Create comprehensive report
           mkdir -p benchmark_results
 
-          # Get system information in a cross-platform way
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            CPU_COUNT=$(nproc)
-            MEMORY_INFO=$(free -h | grep 'Mem:' | awk '{print $2}')
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            CPU_COUNT=$(sysctl -n hw.ncpu)
-            MEMORY_INFO=$(sysctl -n hw.memsize | awk '{printf "%.1fG", $1/1024/1024/1024}')
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            CPU_COUNT=$NUMBER_OF_PROCESSORS
-            MEMORY_INFO="N/A"
-          else
-            CPU_COUNT="N/A"
-            MEMORY_INFO="N/A"
-          fi
+          # Get system information
+          CPU_COUNT=$(nproc)
+          MEMORY_INFO=$(free -h | grep 'Mem:' | awk '{print $2}')
 
           cat > benchmark_results/BENCHMARK_REPORT.md << EOF
           # Benchmark Report - $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
           ## System Information
-          - **OS**: ${{ matrix.os }}
+          - **OS**: ubuntu-latest
           - **Python**: ${{ matrix.python-version }}
           - **Benchmark Type**: ${{ matrix.benchmark-type }}
-          - **GPU**: ${{ matrix.gpu }}
+          - **GPU**: false
           - **CPU Cores**: ${CPU_COUNT}
           - **Available Memory**: ${MEMORY_INFO}
           - **JAX Platform**: ${{ env.JAX_PLATFORMS }}
@@ -262,25 +186,18 @@ jobs:
             cat benchmark_results/memory_profile.md >> benchmark_results/BENCHMARK_REPORT.md
           fi
 
-          # Add system resource usage (cross-platform)
+          # Add system resource usage
           echo "## System Resources (Post-Benchmark)" >> benchmark_results/BENCHMARK_REPORT.md
           echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            free -h >> benchmark_results/BENCHMARK_REPORT.md
-            df -h / >> benchmark_results/BENCHMARK_REPORT.md
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            vm_stat | head -10 >> benchmark_results/BENCHMARK_REPORT.md
-            df -h / >> benchmark_results/BENCHMARK_REPORT.md
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            systeminfo | findstr /C:"Available Physical Memory" >> benchmark_results/BENCHMARK_REPORT.md || echo "Memory info not available" >> benchmark_results/BENCHMARK_REPORT.md
-          fi
+          free -h >> benchmark_results/BENCHMARK_REPORT.md
+          df -h / >> benchmark_results/BENCHMARK_REPORT.md
           echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
 
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
           name: >
-            benchmark-results-${{ matrix.benchmark-type }}-${{ matrix.os }}-py${{ matrix.python-version }}
+            benchmark-results-${{ matrix.benchmark-type }}-ubuntu-py${{ matrix.python-version }}
           path: benchmark_results/
           retention-days: 30
 
@@ -295,18 +212,103 @@ jobs:
             grep -E "Time:|seconds" benchmark_results/performance_results.md || echo "No timing data found"
           fi
 
-      - name: Store benchmark history
-        if: false  # Enable when JSON output is implemented
-        # if: github.ref == 'refs/heads/main' && matrix.benchmark-type == 'performance'
-        uses: benchmark-action/github-action-benchmark@v1
+  # Cross-platform benchmarking - conditional
+  benchmark-cross-platform:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    if: github.event_name == 'schedule' || github.event_name == 'release'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        python-version: ['3.12']
+        benchmark-type: ['performance']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          tool: 'customBiggerIsBetter'
-          output-file-path: benchmark_results/results.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-          comment-on-alert: true
-          alert-threshold: '150%'
-          fail-on-alert: false
+          fetch-depth: 1
+
+      - name: Free disk space (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Get-WmiObject -Class Win32_LogicalDisk |
+            Select-Object DeviceID,Size,FreeSpace
+        shell: powershell
+
+      - name: Free disk space (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          df -h
+          brew cleanup --prune=all || true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache package installation
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            build/
+          key: benchmark-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            benchmark-${{ runner.os }}-py${{ matrix.python-version }}-
+            benchmark-${{ runner.os }}-
+
+      - name: Install dependencies (optimized)
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install --only-binary=all -e ".[benchmark]" ||
+            pip install -e ".[all]"
+          pip install memory_profiler psutil
+
+      - name: System information (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -c "import sys; print(f'Python: {sys.version}')"
+          python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+          python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
+          systeminfo | findstr /C:"Total Physical Memory"
+          echo "Processor Count: %NUMBER_OF_PROCESSORS%"
+        shell: cmd
+
+      - name: System information (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          python -c "import sys; print(f'Python: {sys.version}')"
+          python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+          python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
+          vm_stat | head -10 || true
+          sysctl -n hw.ncpu || true
+
+      - name: Run performance benchmarks
+        run: |
+          mkdir -p benchmark_results
+          SUITE="${{ github.event.inputs.benchmark_suite }}"
+          if [ -z "$SUITE" ] || [ "$SUITE" == "null" ]; then
+            SUITE="basic"
+          fi
+
+          echo "Running $SUITE benchmark suite..."
+          timeout 1800 python benchmark/benchmark.py \
+            --suite "$SUITE" \
+            --save \
+            --output-dir benchmark_results \
+            --format markdown \
+            --timeout 300 \
+            > benchmark_results/performance_results.md || echo "Some benchmarks timed out"
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: >
+            benchmark-results-${{ matrix.benchmark-type }}-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: benchmark_results/
+          retention-days: 30
 
   # Summary job to report overall benchmark status
   benchmark-summary:
