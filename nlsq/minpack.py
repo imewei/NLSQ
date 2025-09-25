@@ -953,6 +953,9 @@ class CurveFit:
                 category=OptimizeWarning,
             )
 
+        # Assign final covariance matrix
+        _pcov = pcov
+
         # self.res = res
         post_time = time.time() - st
 

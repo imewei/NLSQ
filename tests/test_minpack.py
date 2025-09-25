@@ -60,9 +60,9 @@ class TestCurveFit:
             curve_fit = CurveFit(flength=flength).curve_fit
             popt, _pcov = curve_fit(func, self.x, self.y)
             assert_(len(popt) == 1)
-            assert_(pcov.shape == (1, 1))
+            assert_(__pcov.shape == (1, 1))
             assert_almost_equal(popt[0], 1.9149, decimal=4)
-            assert_almost_equal(pcov[0, 0], 0.0016, decimal=4)
+            assert_almost_equal(_pcov[0, 0], 0.0016, decimal=4)
 
             # Test if we get the same with full_output. Regression test for #1415.
             # Also test if check_finite can be turned off.
@@ -78,10 +78,10 @@ class TestCurveFit:
             curve_fit = CurveFit(flength=flength).curve_fit
             popt, _pcov = curve_fit(func, self.x, self.y)
             assert_(len(popt) == 2)
-            assert_(pcov.shape == (2, 2))
+            assert_(_pcov.shape == (2, 2))
             assert_array_almost_equal(popt, [1.7989, 1.1642], decimal=4)
             assert_array_almost_equal(
-                pcov, [[0.0852, -0.1260], [-0.1260, 0.1912]], decimal=4
+                _pcov, [[0.0852, -0.1260], [-0.1260, 0.1912]], decimal=4
             )
 
     def test_func_is_classmethod(self):
@@ -97,10 +97,10 @@ class TestCurveFit:
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
             popt, _pcov = curve_fit(test_self_inst.func, self.x, self.y)
-            assert_(pcov.shape == (2, 2))
+            assert_(_pcov.shape == (2, 2))
             assert_array_almost_equal(popt, [1.7989, 1.1642], decimal=4)
             assert_array_almost_equal(
-                pcov, [[0.0852, -0.1260], [-0.1260, 0.1912]], decimal=4
+                _pcov, [[0.0852, -0.1260], [-0.1260, 0.1912]], decimal=4
             )
 
     # def test_regression_2639(self):
@@ -173,7 +173,7 @@ class TestCurveFit:
                     absolute_sigma=True,
                     method=method,
                 )
-                perr = np.sqrt(np.diag(pcov))
+                perr = np.sqrt(np.diag(_pcov))
                 assert_allclose(perr, [3 * 0.30714756, 3 * 0.85045308], rtol=1e-3)
 
         # infinite variances
@@ -191,7 +191,7 @@ class TestCurveFit:
         #     popt, _pcov = curve_fit(f_flat, xdata, ydata, p0=[2, 0], sigma=sigma)
         #     popt1, pcov1 = curve_fit(f, xdata[:2], ydata[:2], p0=[2, 0])
 
-        # assert_(pcov.shape == (2, 2))
+        # assert_(_pcov.shape == (2, 2))
         # assert_array_equal(pcov, pcov_expected)
 
         # assert_(pcov1.shape == (2, 2))
@@ -876,7 +876,7 @@ class TestCurveFitEnhancements:
                 self.exponential_func, x, y, solver=solver
             )
             assert len(popt) == 3
-            assert pcov.shape == (3, 3)
+            assert _pcov.shape == (3, 3)
 
         # Invalid solver should raise error
         with pytest.raises(ValueError, match="Invalid solver"):
