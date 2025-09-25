@@ -250,5 +250,5 @@ Thumbs.db
 *.orig
 
 # Project specific documentation files (not ignored)
-CLAUDE.md - Claude Code instructions
+# CLAUDE.md - Claude Code instructions
 # WARP.md - Warp instructions
