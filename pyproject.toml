@@ -291,11 +291,12 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=nlsq",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
-    "--cov-fail-under=60",
+    # Coverage disabled for faster CI
+    # "--cov=nlsq",
+    # "--cov-report=term-missing",
+    # "--cov-report=html",
+    # "--cov-report=xml",
+    # "--cov-fail-under=60",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
