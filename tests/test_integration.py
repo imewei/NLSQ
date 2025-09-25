@@ -235,8 +235,8 @@ class TestEndToEndValidation(unittest.TestCase):
         popt, _pcov = curve_fit_large(linear, x, y, p0=[1, 0])
 
         np.testing.assert_allclose(popt, [2.5, 1.0], rtol=0.1)
-        self.assertIsNotNone(pcov)
-        self.assertEqual(pcov.shape, (2, 2))
+        self.assertIsNotNone(_pcov)
+        self.assertEqual(_pcov.shape, (2, 2))
 
     def test_curve_fit_large_big_dataset(self):
         """Test curve_fit_large with dataset that triggers chunking."""
@@ -262,7 +262,7 @@ class TestEndToEndValidation(unittest.TestCase):
         # For heavily chunked fitting (10 chunks), just verify reasonable results
         # Exponential fitting with many chunks is challenging
         self.assertIsNotNone(popt)
-        self.assertEqual(pcov.shape, (3, 3))
+        self.assertEqual(_pcov.shape, (3, 3))
         # Check that parameters are in reasonable ranges
         self.assertGreater(popt[0], 0.5)  # a should be positive
         self.assertLess(popt[0], 10.0)  # a shouldn't be too large

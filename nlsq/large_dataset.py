@@ -733,7 +733,7 @@ class LargeDatasetFitter:
             )
 
             # Add covariance matrix and parameters
-            result["pcov"] = pcov
+            result["pcov"] = _pcov
             result["popt"] = popt
 
             return result
@@ -799,7 +799,7 @@ class LargeDatasetFitter:
                 success=True,
                 message=f"Fit completed using {len(x_sample):,} sampled points",
             )
-            result["pcov"] = pcov
+            result["pcov"] = _pcov
             result["popt"] = popt
             result["was_sampled"] = True
             result["sample_size"] = len(x_sample)

@@ -506,7 +506,7 @@ class TestIntegration(unittest.TestCase):
 
         # Check that parameters are reasonable
         self.assertTrue(np.all(np.isfinite(popt)))
-        self.assertTrue(np.all(np.isfinite(pcov)))
+        self.assertTrue(np.all(np.isfinite(_pcov)))
         self.assertAlmostEqual(popt[0], 2.5, delta=0.5)  # Close to true value
         self.assertAlmostEqual(
             popt[1], 0.5, delta=0.25

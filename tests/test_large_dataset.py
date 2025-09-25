@@ -209,7 +209,7 @@ class TestCurveFitLarge(unittest.TestCase):
         )
 
         self.assertEqual(len(popt), 3)
-        self.assertEqual(pcov.shape, (3, 3))
+        self.assertEqual(_pcov.shape, (3, 3))
         np.testing.assert_allclose(popt, self.true_params, rtol=0.1)
 
     def test_curve_fit_large_with_bounds(self):
