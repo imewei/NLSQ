@@ -10,16 +10,65 @@ For most users, the simplest installation method is:
 
 **Linux/macOS**::
 
-    # For CPU-only
+    # For CPU-only (basic features)
     pip install --upgrade "jax[cpu]>=0.4.20" nlsq
 
-    # For GPU with CUDA 12
+    # For GPU with CUDA 12 (basic features)
     pip install --upgrade "jax[cuda12]>=0.4.20" nlsq
+
+    # With all advanced features (recommended)
+    pip install --upgrade "jax[cpu]>=0.4.20" nlsq[all]
 
 **Windows**::
 
     # CPU-only (works on all Windows versions)
     pip install "jax[cpu]>=0.4.20" nlsq
+
+    # With all advanced features (recommended)
+    pip install "jax[cpu]>=0.4.20" nlsq[all]
+
+Installation Options
+--------------------
+
+NLSQ offers different installation options depending on your needs:
+
+**Basic Installation (nlsq):**
+- Core curve fitting functionality
+- GPU/TPU acceleration via JAX
+- SciPy compatibility
+- Basic error handling
+
+**Full Installation (nlsq[all]):**
+- All basic features
+- Advanced memory management with automatic monitoring
+- Intelligent algorithm selection
+- Real-time diagnostics and convergence monitoring
+- Smart caching system for performance optimization
+- Robust error recovery and fallback strategies
+- Comprehensive input validation
+- Large dataset support with progress reporting
+- Sparse Jacobian optimization
+- Streaming optimizer for unlimited datasets
+
+**Development Installation (nlsq[dev]):**
+- All features from nlsq[all]
+- Development tools (pytest, mypy, ruff)
+- Pre-commit hooks
+- Documentation building tools
+- Security analysis tools (bandit)
+
+Choose the appropriate installation based on your use case:
+
+.. code-block:: bash
+
+    # Minimal installation for basic curve fitting
+    pip install nlsq
+
+    # Recommended for most users
+    pip install nlsq[all]
+
+    # For developers and contributors
+    pip install nlsq[dev,test,docs]
 
 System Requirements
 -------------------
@@ -39,10 +88,23 @@ System Requirements
 
 **Software Dependencies:**
 
-- JAX 0.4.20 - 0.7.2
-- NumPy 1.26.0+
-- SciPy 1.11.0+
-- psutil (for memory monitoring)
+Core dependencies:
+
+- JAX 0.4.20 - 0.7.2 (JIT compilation and automatic differentiation)
+- NumPy 1.26.0+ (numerical arrays)
+- SciPy 1.11.0+ (optimization algorithms)
+
+Advanced feature dependencies:
+
+- psutil 5.9.0+ (memory monitoring and management)
+- tqdm 4.65.0+ (progress bars for large dataset processing)
+
+Optional dependencies for development:
+
+- pytest (testing)
+- mypy (type checking)
+- ruff (code formatting and linting)
+- bandit (security analysis)
 
 Platform-Specific Installation
 -------------------------------
@@ -176,7 +238,7 @@ For contributors and advanced users who want to modify NLSQ:
 .. code-block:: bash
 
     # Clone repository
-    git clone https://github.com/Dipolar-Quantum-Gases/nlsq.git
+    git clone https://github.com/imewei/NLSQ.git
     cd nlsq
 
     # Create development environment
@@ -233,6 +295,9 @@ Verification and Testing
 
 After installation, verify NLSQ is working correctly:
 
+Basic Verification
+~~~~~~~~~~~~~~~~~~
+
 .. code-block:: python
 
     import numpy as np
@@ -241,17 +306,14 @@ After installation, verify NLSQ is working correctly:
 
     # Check NLSQ version
     import nlsq
-
     print(f"NLSQ version: {nlsq.__version__}")
 
     # Check JAX devices
     print(f"JAX devices: {jax.devices()}")
 
-
     # Test basic functionality
     def linear(x, m, b):
         return m * x + b
-
 
     x = np.linspace(0, 10, 100)
     y = 2 * x + 1 + 0.1 * np.random.normal(size=len(x))
@@ -264,7 +326,82 @@ After installation, verify NLSQ is working correctly:
     popt2, pcov2 = curve_fit_large(linear, x, y)
     print("Large dataset fitting: OK")
 
-    print("Installation verification complete!")
+    print("Basic installation verification complete!")
+
+Advanced Features Verification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you installed with ``nlsq[all]``, test the advanced features:
+
+.. code-block:: python
+
+    from nlsq import (
+        MemoryConfig, memory_context,
+        AlgorithmSelector, SmartCache,
+        DiagnosticMonitor, InputValidator
+    )
+
+    print("Testing advanced features...")
+
+    # Test memory management
+    config = MemoryConfig(memory_limit_gb=4.0)
+    print(f"✓ Memory management available")
+
+    # Test algorithm selection
+    selector = AlgorithmSelector()
+    print(f"✓ Algorithm selection available")
+
+    # Test caching
+    cache = SmartCache()
+    print(f"✓ Smart caching available")
+
+    # Test diagnostics
+    monitor = DiagnosticMonitor()
+    print(f"✓ Diagnostic monitoring available")
+
+    # Test input validation
+    validator = InputValidator()
+    print(f"✓ Input validation available")
+
+    # Test advanced curve fitting
+    with memory_context(config):
+        cf_advanced = CurveFit(
+            algorithm_selector=selector,
+            cache=cache,
+            diagnostic_monitor=monitor
+        )
+
+        result = cf_advanced.curve_fit(linear, x, y)
+        print(f"✓ Advanced curve fitting successful")
+
+    print("All advanced features verified successfully!")
+
+Memory and Performance Verification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Test memory management with different dataset sizes:
+
+.. code-block:: python
+
+    from nlsq import curve_fit_large, get_memory_stats, estimate_memory_requirements
+
+    # Test memory estimation
+    n_points = 10000
+    n_params = 3
+    stats = estimate_memory_requirements(n_points, n_params)
+    print(f"Memory estimate for {n_points:,} points: {stats.total_memory_estimate_gb:.2f} GB")
+
+    # Test automatic dataset size handling
+    sizes = [1000, 100000, 1000000]
+
+    for size in sizes:
+        x_test = np.linspace(0, 10, size)
+        y_test = 2 * x_test + 1 + 0.1 * np.random.normal(size=size)
+
+        popt, pcov = curve_fit_large(linear, x_test, y_test, show_progress=True)
+        print(f"✓ Processed {size:,} points successfully")
+
+    print("Memory and performance verification complete!")
 
 Performance Testing
 ~~~~~~~~~~~~~~~~~~~
@@ -351,9 +488,9 @@ Getting Help
 
 If you encounter issues:
 
-1. Check the `GitHub Issues <https://github.com/Dipolar-Quantum-Gases/nlsq/issues>`_
+1. Check the `GitHub Issues <https://github.com/imewei/NLSQ/issues>`_
 2. Review the `JAX installation guide <https://jax.readthedocs.io/en/latest/installation.html>`_
-3. Ask questions in `GitHub Discussions <https://github.com/Dipolar-Quantum-Gases/nlsq/discussions>`_
+3. Ask questions in `GitHub Discussions <https://github.com/imewei/NLSQ/discussions>`_
 
 Version Compatibility
 ----------------------

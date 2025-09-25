@@ -23,6 +23,8 @@ NLSQ Documentation
    :caption: User Guide
 
    large_dataset_guide
+   advanced_features
+   migration_guide
 
 .. toctree::
    :maxdepth: 2

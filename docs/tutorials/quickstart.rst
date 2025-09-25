@@ -249,8 +249,8 @@ Interactive Examples
 
 Try these examples in Google Colab:
 
-- `Basic Fitting Examples <https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%20Quickstart.ipynb>`_
-- `Large Dataset Demo <https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/large_dataset_demo.ipynb>`_
+- `Basic Fitting Examples <https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%20Quickstart.ipynb>`_
+- `Large Dataset Demo <https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb>`_
 
 Troubleshooting
 ---------------
@@ -261,4 +261,4 @@ Troubleshooting
 2. **Convergence failures**: Try different initial guesses or check data quality
 3. **Performance issues**: Use ``curve_fit_large`` for datasets > 100k points
 
-Need help? Check the `GitHub Issues <https://github.com/Dipolar-Quantum-Gases/nlsq/issues>`_ or `Discussions <https://github.com/Dipolar-Quantum-Gases/nlsq/discussions>`_.
+Need help? Check the `GitHub Issues <https://github.com/imewei/NLSQ/issues>`_ or `Discussions <https://github.com/imewei/NLSQ/discussions>`_.

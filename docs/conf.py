@@ -25,8 +25,8 @@ sys.path.insert(0, os.path.abspath(".."))
 # -- Project information -----------------------------------------------------
 
 project = "NLSQ"
-copyright = "2022-2025, Lucas Hofer"
-author = "Lucas Hofer"
+copyright = "2024-2025, Wei Chen (Argonne National Laboratory) | 2022, Original JAXFit Authors"
+author = "Wei Chen"
 
 # Get version dynamically
 # (imports already done above)
@@ -169,7 +169,7 @@ html_theme_options = {
 
 html_context = {
     "display_github": True,
-    "github_user": "Dipolar-Quantum-Gases",
+    "github_user": "imewei",
     "github_repo": "nlsq",
     "github_version": "main",
     "conf_py_path": "/docs/",

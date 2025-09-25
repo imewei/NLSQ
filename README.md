@@ -4,12 +4,13 @@
 
 # NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU
 
-**Note:** NLSQ is forked from [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit) with significant optimizations and improvements.
-
 [![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
 [![Documentation Status](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/en/latest/?badge=latest)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![JAX](https://img.shields.io/badge/JAX-0.4.20--0.7.2-green.svg)](https://github.com/google/jax)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**Maintained by Wei Chen (wchen@anl.gov) at Argonne National Laboratory**
 
 [**Quickstart**](#quickstart-colab-in-the-cloud)
 | [**Install guide**](#installation)
@@ -17,26 +18,61 @@
 | [**Documentation**](https://nlsq.readthedocs.io/)
 | [**Examples**](examples/)
 
+## Acknowledgments
+
+NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit), originally developed by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith. We gratefully acknowledge their foundational work on GPU-accelerated curve fitting with JAX. The original JAXFit paper: [arXiv:2208.12187](https://doi.org/10.48550/arXiv.2208.12187).
+
 ## What is NLSQ?
 
-NLSQ is a fork of JAXFit that implements SciPy's nonlinear least squares curve fitting algorithms using [JAX](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) for GPU/TPU acceleration. This fork includes significant optimizations, enhanced testing, and improved API design. Fit functions are written in Python without CUDA programming. Performance improvements over SciPy/Gpufit are documented in [this paper](https://doi.org/10.48550/arXiv.2208.12187).
+NLSQ builds upon JAXFit's foundation, implementing SciPy's nonlinear least squares curve fitting algorithms using [JAX](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) for GPU/TPU acceleration. This fork adds significant optimizations, enhanced testing, improved API design, and advanced features for production use. Fit functions are written in Python without CUDA programming.
 
 NLSQ uses JAX's [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html) to calculate Jacobians automatically, eliminating the need for manual partial derivatives or numerical approximation.
 
 
-NLSQ provides a drop-in replacement for SciPy's curve_fit function with the following features:
+NLSQ provides a drop-in replacement for SciPy's curve_fit function with advanced features:
 
+## Core Features
 - **GPU/TPU acceleration** via JAX JIT compilation
 - **Automatic differentiation** for Jacobian calculation
 - **Trust Region Reflective** and **Levenberg-Marquardt** algorithms
 - **Bounded optimization** with parameter constraints
 - **Robust loss functions** for outlier handling
-- **Large dataset support** for 20M+ points with automatic memory management
-- **Sparse Jacobian optimization** for problems with sparse structure
-- **Streaming optimizer** for unlimited-size datasets
-- **Memory-efficient solvers** (CG, LSQR) for reduced memory footprint
 - **Fixed array size optimization** to avoid recompilation
 - **Comprehensive test coverage** (>80%) ensuring reliability
+
+## Large Dataset Support
+- **Automatic dataset handling** for 100M+ points with `curve_fit_large`
+- **Intelligent chunking** with <1% error for well-conditioned problems
+- **Memory estimation** and automatic memory management
+- **Streaming optimizer** for unlimited-size datasets that don't fit in memory
+- **Sparse Jacobian optimization** for problems with sparse structure
+- **Progress reporting** for long-running optimizations
+
+## Advanced Memory Management
+- **Context-based configuration** with temporary memory settings
+- **Automatic memory detection** and chunk sizing
+- **Mixed precision fallback** for memory-constrained environments
+- **Memory leak prevention** with cleanup
+- **Cache management** with eviction policies
+
+## Algorithm Selection
+- **Automatic algorithm selection** based on problem characteristics
+- **Performance optimization** with problem-specific tuning
+- **Convergence analysis** and parameter adjustment
+- **Robustness testing** with multiple initialization strategies
+
+## Diagnostics & Monitoring
+- **Convergence monitoring** with diagnostics
+- **Optimization recovery** from failed fits with fallback strategies
+- **Numerical stability analysis** with condition number monitoring
+- **Input validation** and error handling
+- **Logging** and debugging capabilities
+
+## Caching System
+- **JIT compilation caching** to avoid recompilation overhead
+- **Function evaluation caching** for repeated calls
+- **Jacobian caching** with automatic invalidation
+- **Memory-aware cache policies** with size limits
 
 ## Basic Usage
 
@@ -106,9 +142,9 @@ article for a more in-depth look at JAX specific caveats).
 The easiest way to test out NLSQ is using a Colab notebook connected to a Google Cloud GPU. JAX comes pre-installed so you'll be able to start fitting right away.
 
 Tutorial notebooks:
-- [The basics: fitting basic functions with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%20Quickstart.ipynb)
-- [Fitting 2D images with NLSQ](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/NLSQ%202D%20Gaussian%20Demo.ipynb)
-- [Large dataset fitting demonstration](https://colab.research.google.com/github/Dipolar-Quantum-Gases/nlsq/blob/main/examples/large_dataset_demo.ipynb)
+- [The basics: fitting basic functions with NLSQ](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%20Quickstart.ipynb)
+- [Fitting 2D images with NLSQ](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%202D%20Gaussian%20Demo.ipynb)
+- [Large dataset fitting demonstration](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb)
 
 ## Large Dataset Support
 
@@ -238,6 +274,187 @@ result = optimizer.fit_unlimited_data(func, data_generator, x0=p0, n_params=3)
 
 For more details, see the [large dataset guide](https://nlsq.readthedocs.io/en/latest/large_datasets.html) and [API documentation](https://nlsq.readthedocs.io/en/latest/api.html).
 
+## Advanced Features
+
+### Memory Management & Configuration
+
+NLSQ provides memory management with context-based configuration:
+
+```python
+from nlsq import MemoryConfig, memory_context, get_memory_config
+import numpy as np
+
+# Configure memory settings
+config = MemoryConfig(
+    memory_limit_gb=8.0,
+    enable_mixed_precision=True,
+    enable_memory_monitoring=True,
+    max_cache_size_gb=2.0,
+    enable_garbage_collection=True,
+    chunk_size_factor=0.8
+)
+
+# Use memory context for temporary settings
+with memory_context(config):
+    # Memory-optimized fitting
+    cf = CurveFit()
+    popt, pcov = cf.curve_fit(func, x, y, p0=p0)
+
+# Check current memory configuration
+current_config = get_memory_config()
+print(f"Memory limit: {current_config.memory_limit_gb} GB")
+print(f"Mixed precision: {current_config.enable_mixed_precision}")
+```
+
+### Algorithm Selection
+
+NLSQ can select the best algorithm based on problem characteristics:
+
+```python
+from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
+from nlsq import curve_fit
+import jax.numpy as jnp
+
+# Define your model
+def model_nonlinear(x, a, b, c):
+    return a * jnp.exp(-b * x) + c
+
+# Auto-select best algorithm
+recommendations = auto_select_algorithm(
+    f=model_nonlinear,
+    xdata=x,
+    ydata=y,
+    p0=[1.0, 0.5, 0.1]
+)
+
+# Use recommended algorithm
+method = recommendations.get('algorithm', 'trf')
+popt, pcov = curve_fit(
+    model_nonlinear,
+    x,
+    y,
+    p0=[1.0, 0.5, 0.1],
+    method=method
+)
+
+print(f"Selected algorithm: {method}")
+print(f"Fitted parameters: {popt}")
+```
+
+### Diagnostics & Monitoring
+
+Monitor optimization progress:
+
+```python
+from nlsq import ConvergenceMonitor, CurveFit
+from nlsq.diagnostics import OptimizationDiagnostics
+import numpy as np
+
+# Create convergence monitor
+monitor = ConvergenceMonitor(
+    window_size=10,
+    sensitivity=1.0
+)
+
+# Use CurveFit with stability features
+cf = CurveFit(
+    enable_stability=True,
+    enable_recovery=True
+)
+
+# Perform fitting
+popt, pcov = cf.curve_fit(func, x, y, p0=p0)
+print(f"Fitted parameters: {popt}")
+
+# For detailed diagnostics, create separate diagnostics object
+diagnostics = OptimizationDiagnostics()
+# (diagnostics would be populated during optimization)
+```
+
+### Caching System
+
+Optimize performance with caching:
+
+```python
+from nlsq import SmartCache, cached_function, curve_fit
+import jax.numpy as jnp
+
+# Configure caching
+cache = SmartCache(
+    max_memory_items=1000,
+    disk_cache_enabled=True
+)
+
+# Use cached function decorator
+@cached_function
+def exponential(x, a, b):
+    return a * jnp.exp(-b * x)
+
+# First fit - compiles function
+popt1, pcov1 = curve_fit(exponential, x1, y1, p0=[1.0, 0.1])
+
+# Second fit - may use cached JIT compilation
+popt2, pcov2 = curve_fit(exponential, x2, y2, p0=[1.2, 0.15])
+
+# Check cache statistics
+stats = cache.get_stats()
+print(f"Cache statistics available")
+```
+
+### Optimization Recovery & Fallback
+
+Error handling with recovery from failed optimizations:
+
+```python
+from nlsq import OptimizationRecovery, CurveFit, curve_fit
+import numpy as np
+
+# Create recovery handler
+recovery = OptimizationRecovery(
+    max_attempts=3,
+    perturbation_factor=0.1
+)
+
+# CurveFit with recovery enabled
+cf = CurveFit(enable_recovery=True)
+
+try:
+    popt, pcov = cf.curve_fit(func, x, y, p0=p0_initial)
+    print(f"Fitted parameters: {popt}")
+except Exception as e:
+    print(f"Optimization failed: {e}")
+    # Try with perturbed parameters
+    p0_perturbed = recovery.perturb_parameters(p0_initial)
+    popt, pcov = curve_fit(func, x, y, p0=p0_perturbed)
+```
+
+### Input Validation & Error Handling
+
+Input validation for robust operation:
+
+```python
+from nlsq import InputValidator, curve_fit
+import numpy as np
+
+# Create validator
+validator = InputValidator(fast_mode=True)
+
+# Validate inputs before fitting
+warnings, errors, clean_x, clean_y = validator.validate_curve_fit_inputs(
+    f=func,
+    xdata=x,
+    ydata=y,
+    p0=p0
+)
+
+if errors:
+    print(f"Validation errors: {errors}")
+else:
+    # Use validated data
+    popt, pcov = curve_fit(func, clean_x, clean_y, p0=p0)
+    print(f"Fitted parameters: {popt}")
+```
+
 ## Current gotchas
 
 Full disclosure we've copied most of this from the [JAX repo](https://github.com/google/jax#current-gotchas), but NLSQ inherits
@@ -298,7 +515,7 @@ pip install --upgrade "jax[cuda12]>=0.4.20" nlsq
 #### Development Installation
 
 ```bash
-git clone https://github.com/Dipolar-Quantum-Gases/nlsq.git
+git clone https://github.com/imewei/NLSQ.git
 cd nlsq
 pip install -e ".[dev,test,docs]"
 ```
@@ -350,10 +567,24 @@ For the latest JAX installation instructions, see the [official JAX documentatio
 
 ## Citing NLSQ
 
-If you use NLSQ consider citing the [introductory paper](https://doi.org/10.48550/arXiv.2208.12187):
+If you use NLSQ in your research, please cite both the NLSQ software and the original JAXFit paper:
+
+### NLSQ Software Citation
 
 ```bibtex
-@article{nlsq2022,
+@software{nlsq2024,
+  title={NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU},
+  author={Chen, Wei and Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
+  year={2024},
+  url={https://github.com/imewei/NLSQ},
+  note={Enhanced fork of JAXFit with advanced features for large datasets, memory management, and algorithm selection}
+}
+```
+
+### Original JAXFit Paper
+
+```bibtex
+@article{jaxfit2022,
   title={JAXFit: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the {GPU}},
   author={Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
   journal={arXiv preprint arXiv:2208.12187},

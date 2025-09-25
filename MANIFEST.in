@@ -6,9 +6,12 @@ include pyproject.toml
 include Makefile
 include tox.ini
 include .editorconfig
-recursive-include nlsq *.py *.pyi py.typed
-recursive-include examples *.ipynb *.py
-recursive-include docs *.py *.rst *.md *.txt *.yml *.yaml
+include requirements.txt
+include requirements-dev.txt
+recursive-include nlsq *.py *.pyi py.typed *.json *.yaml *.yml
+recursive-include examples *.ipynb *.py *.json *.yaml *.md
+recursive-include docs *.py *.rst *.md *.txt *.yml *.yaml *.json
+global-include *.md
 recursive-exclude * __pycache__
 recursive-exclude * *.pyc
 recursive-exclude * *.pyo
@@ -19,12 +22,15 @@ recursive-exclude benchmark *
 recursive-exclude .github *
 recursive-exclude .agent-os *
 recursive-exclude venv *
+recursive-exclude .venv *
 prune docs/_build
 prune htmlcov
 prune .mypy_cache
 prune .ruff_cache
 prune .pytest_cache
 prune .benchmarks
+prune .nlsq_cache
+prune .tox
 exclude .gitignore
 exclude .pre-commit-config.yaml
 exclude .readthedocs.yaml
@@ -33,3 +39,7 @@ exclude *.log
 exclude .coverage
 exclude coverage.xml
 exclude .coverage.*
+exclude checkpoint_iter_*.npz
+exclude *.prof
+exclude .DS_Store
+exclude Thumbs.db

@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+title: "NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU"
+message: "If you use this software, please cite both NLSQ and the original JAXFit paper."
+type: software
+authors:
+  - family-names: "Chen"
+    given-names: "Wei"
+    email: "wchen@anl.gov"
+    affiliation: "Argonne National Laboratory"
+  - family-names: "Hofer"
+    given-names: "Lucas R"
+    note: "Original JAXFit author"
+  - family-names: "Krstajić"
+    given-names: "Milan"
+    note: "Original JAXFit author"
+  - family-names: "Smith"
+    given-names: "Robert P"
+    note: "Original JAXFit author"
+repository-code: "https://github.com/imewei/NLSQ"
+url: "https://nlsq.readthedocs.io/"
+repository: "https://github.com/imewei/NLSQ"
+abstract: "NLSQ is an enhanced fork of JAXFit, providing JAX-accelerated nonlinear least squares curve fitting with GPU/TPU support. Building upon the original JAXFit implementation, NLSQ adds advanced features for large datasets, memory management, algorithm selection, and improved stability. It offers a drop-in replacement for SciPy's curve_fit with automatic differentiation."
+keywords:
+  - curve-fitting
+  - least-squares
+  - optimization
+  - JAX
+  - GPU
+  - TPU
+  - machine-learning
+  - scientific-computing
+license: MIT
+version: 0.2.24
+date-released: 2024-01-01
+references:
+  - type: article
+    authors:
+      - family-names: "Hofer"
+        given-names: "Lucas R"
+      - family-names: "Krstajić"
+        given-names: "Milan"
+      - family-names: "Smith"
+        given-names: "Robert P"
+    title: "JAXFit: Trust Region Method for Nonlinear Least-Squares Curve Fitting on the GPU"
+    journal: "arXiv preprint arXiv:2208.12187"
+    year: 2022
+    doi: "10.48550/arXiv.2208.12187"

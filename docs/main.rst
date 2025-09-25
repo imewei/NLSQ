@@ -85,7 +85,7 @@ The easiest way to test out NLSQ is using a Colab notebook connected
 to a Google Cloud GPU. JAX comes pre-installed so you’ll be able to
 start fitting right away.
 
-Example notebooks are available in the `examples/ directory <https://github.com/Dipolar-Quantum-Gases/nlsq/tree/main/examples>`__ of the repository:
+Example notebooks are available in the `examples/ directory <https://github.com/imewei/NLSQ/tree/main/examples>`__ of the repository:
 
 - **NLSQ Quickstart**: Learn the basics of fitting functions with NLSQ
 - **NLSQ 2D Gaussian Demo**: Advanced example for fitting 2D images
@@ -343,7 +343,7 @@ Quick Install
 
 ::
 
-   git clone https://github.com/Dipolar-Quantum-Gases/nlsq.git
+   git clone https://github.com/imewei/NLSQ.git
    cd nlsq
    pip install -e ".[dev,test,docs]"
 

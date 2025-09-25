@@ -24,8 +24,8 @@ class TestConfigCoverage(unittest.TestCase):
         self.assertIsNotNone(config)
 
         # Test with parameters
-        config = MemoryConfig(max_memory_gb=4.0)
-        self.assertEqual(config.max_memory_gb, 4.0)
+        config = MemoryConfig(memory_limit_gb=4.0)
+        self.assertEqual(config.memory_limit_gb, 4.0)
 
     def test_large_dataset_config_basic(self):
         """Test basic LargeDatasetConfig functionality."""
@@ -33,8 +33,8 @@ class TestConfigCoverage(unittest.TestCase):
         self.assertIsNotNone(config)
 
         # Test with parameters
-        config = LargeDatasetConfig(chunk_size=1000)
-        self.assertEqual(config.chunk_size, 1000)
+        config = LargeDatasetConfig(enable_sampling=False)
+        self.assertEqual(config.enable_sampling, False)
 
     def test_get_configs(self):
         """Test getting global configs."""
@@ -46,9 +46,9 @@ class TestConfigCoverage(unittest.TestCase):
 
     def test_set_memory_limits_simple(self):
         """Test setting memory limits."""
-        set_memory_limits(max_memory_gb=2.0)
+        set_memory_limits(memory_limit_gb=2.0)
         config = get_memory_config()
-        self.assertEqual(config.max_memory_gb, 2.0)
+        self.assertEqual(config.memory_limit_gb, 2.0)
 
     def test_configure_for_large_datasets_simple(self):
         """Test configuring for large datasets."""
@@ -64,13 +64,15 @@ class TestConfigCoverage(unittest.TestCase):
 
     def test_context_managers_simple(self):
         """Test context managers."""
-        with large_dataset_context(chunk_size=500):
+        temp_config = LargeDatasetConfig(enable_sampling=False)
+        with large_dataset_context(temp_config):
             config = get_large_dataset_config()
-            self.assertEqual(config.chunk_size, 500)
+            self.assertEqual(config.enable_sampling, False)
 
-        with memory_context(max_memory_gb=1.0):
+        temp_config = MemoryConfig(memory_limit_gb=1.0)
+        with memory_context(temp_config):
             config = get_memory_config()
-            self.assertEqual(config.max_memory_gb, 1.0)
+            self.assertEqual(config.memory_limit_gb, 1.0)
 
 
 if __name__ == '__main__':

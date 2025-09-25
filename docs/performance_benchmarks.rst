@@ -306,4 +306,4 @@ For detailed implementation, see:
 
 - :doc:`large_dataset_guide` - Implementation guide
 - :doc:`api_large_datasets` - API reference
-- `Benchmark code <https://github.com/Dipolar-Quantum-Gases/nlsq/tree/main/benchmark>`_
+- `Benchmark code <https://github.com/imewei/NLSQ/tree/main/benchmark>`_

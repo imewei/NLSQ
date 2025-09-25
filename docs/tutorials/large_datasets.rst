@@ -534,7 +534,7 @@ Congratulations! You now have the tools to handle datasets of any size. Continue
 
 1. :doc:`../api_large_datasets` - Advanced fitting APIs and parameter constraints
 2. :doc:`../performance_benchmarks` - Performance analysis and optimization
-3. Browse the `examples directory <https://github.com/Dipolar-Quantum-Gases/nlsq/tree/main/examples>`_ for more complex scenarios
+3. Browse the `examples directory <https://github.com/imewei/NLSQ/tree/main/examples>`_ for more complex scenarios
 
 Further Reading
 ---------------

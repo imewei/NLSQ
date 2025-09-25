@@ -160,7 +160,7 @@ For unlimited-size datasets:
 - Incremental parameter updates
 - HDF5 file integration
 
-These features are under active development. Check the `GitHub repository <https://github.com/Dipolar-Quantum-Gases/nlsq>`_ for the latest updates.
+These features are under active development. Check the `GitHub repository <https://github.com/imewei/NLSQ>`_ for the latest updates.
 
 Memory Configuration
 --------------------
@@ -286,4 +286,4 @@ See Also
 - :doc:`main` - Main NLSQ documentation
 - :doc:`large_dataset_guide` - Detailed guide for large datasets
 - :doc:`autodoc/modules` - Complete API reference
-- `Examples notebook <https://github.com/Dipolar-Quantum-Gases/nlsq/blob/main/examples/large_dataset_demo.ipynb>`_
+- `Examples notebook <https://github.com/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb>`_

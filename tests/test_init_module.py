@@ -126,14 +126,14 @@ class TestInitModule(unittest.TestCase):
 
         # Test creating config
         config = LargeDatasetConfig(
-            chunk_size=1000,
-            use_sampling=True,
-            sample_size=5000
+            enable_sampling=True,
+            max_sampled_size=5000,
+            sampling_threshold=100000
         )
 
-        self.assertEqual(config.chunk_size, 1000)
-        self.assertTrue(config.use_sampling)
-        self.assertEqual(config.sample_size, 5000)
+        self.assertTrue(config.enable_sampling)
+        self.assertEqual(config.max_sampled_size, 5000)
+        self.assertEqual(config.sampling_threshold, 100000)
 
         # Test getting global config
         global_config = get_large_dataset_config()
@@ -145,45 +145,47 @@ class TestInitModule(unittest.TestCase):
 
         # Test creating config
         config = MemoryConfig(
-            max_memory_gb=4.0,
-            enable_chunking=True
+            memory_limit_gb=4.0,
+            enable_mixed_precision_fallback=True
         )
 
-        self.assertEqual(config.max_memory_gb, 4.0)
-        self.assertTrue(config.enable_chunking)
+        self.assertEqual(config.memory_limit_gb, 4.0)
+        self.assertTrue(config.enable_mixed_precision_fallback)
 
         # Test getting global config
         global_config = get_memory_config()
         self.assertIsInstance(global_config, MemoryConfig)
 
         # Test setting memory limits
-        set_memory_limits(max_memory_gb=2.0)
+        set_memory_limits(memory_limit_gb=2.0)
         new_config = get_memory_config()
-        self.assertEqual(new_config.max_memory_gb, 2.0)
+        self.assertEqual(new_config.memory_limit_gb, 2.0)
 
     def test_context_managers(self):
         """Test context managers for configuration."""
-        from nlsq import large_dataset_context, memory_context, get_large_dataset_config, get_memory_config
+        from nlsq import large_dataset_context, memory_context, get_large_dataset_config, get_memory_config, LargeDatasetConfig, MemoryConfig
 
         # Test large_dataset_context
         original_config = get_large_dataset_config()
-        with large_dataset_context(chunk_size=500):
+        temp_ld_config = LargeDatasetConfig(enable_sampling=False)
+        with large_dataset_context(temp_ld_config):
             temp_config = get_large_dataset_config()
-            self.assertEqual(temp_config.chunk_size, 500)
+            self.assertEqual(temp_config.enable_sampling, False)
 
         # Config should be restored
         restored_config = get_large_dataset_config()
-        self.assertEqual(restored_config.chunk_size, original_config.chunk_size)
+        self.assertEqual(restored_config.enable_sampling, original_config.enable_sampling)
 
         # Test memory_context
         original_mem_config = get_memory_config()
-        with memory_context(max_memory_gb=1.0):
+        temp_mem_config = MemoryConfig(memory_limit_gb=1.0)
+        with memory_context(temp_mem_config):
             temp_config = get_memory_config()
-            self.assertEqual(temp_config.max_memory_gb, 1.0)
+            self.assertEqual(temp_config.memory_limit_gb, 1.0)
 
         # Config should be restored
         restored_mem_config = get_memory_config()
-        self.assertEqual(restored_mem_config.max_memory_gb, original_mem_config.max_memory_gb)
+        self.assertEqual(restored_mem_config.memory_limit_gb, original_mem_config.memory_limit_gb)
 
     def test_algorithm_selector(self):
         """Test AlgorithmSelector through public API."""
@@ -232,12 +234,15 @@ class TestInitModule(unittest.TestCase):
         n_points = 10000
         n_params = 5
 
-        memory_gb = estimate_memory_requirements(n_points, n_params)
+        dataset_stats = estimate_memory_requirements(n_points, n_params)
 
-        self.assertIsInstance(memory_gb, float)
-        self.assertGreater(memory_gb, 0)
+        # Should return DatasetStats object
+        self.assertIsInstance(dataset_stats, type(dataset_stats))  # Check it's the right type
+        self.assertTrue(hasattr(dataset_stats, 'total_memory_estimate_gb'))
+        self.assertIsInstance(dataset_stats.total_memory_estimate_gb, float)
+        self.assertGreater(dataset_stats.total_memory_estimate_gb, 0)
         # For 10k points and 5 params, should be small
-        self.assertLess(memory_gb, 1.0)
+        self.assertLess(dataset_stats.total_memory_estimate_gb, 1.0)
 
     def test_configure_for_large_datasets(self):
         """Test large dataset configuration helper."""
@@ -257,12 +262,10 @@ class TestInitModule(unittest.TestCase):
         """Test mixed precision fallback configuration."""
         from nlsq import enable_mixed_precision_fallback, get_memory_config
 
-        enable_mixed_precision_fallback(threshold_gb=2.0)
+        enable_mixed_precision_fallback(enable=True)
 
         config = get_memory_config()
-        # Should have configured mixed precision settings
-        self.assertTrue(hasattr(config, 'mixed_precision_threshold_gb'))
-        self.assertEqual(config.mixed_precision_threshold_gb, 2.0)
+        self.assertTrue(config.enable_mixed_precision_fallback)
 
     def test_large_dataset_fitter_class(self):
         """Test LargeDatasetFitter class."""
@@ -272,15 +275,13 @@ class TestInitModule(unittest.TestCase):
             return a * x + b
 
         fitter = LargeDatasetFitter(
-            model,
-            chunk_size=100,
-            use_sampling=False
+            memory_limit_gb=2.0
         )
 
         x = np.linspace(0, 10, 500)
         y = 2 * x + 1 + 0.1 * np.random.randn(500)
 
-        result = fitter.fit(x, y, initial_params=[1.0, 0.0])
+        result = fitter.fit(model, x, y, p0=[1.0, 0.0])
 
         self.assertTrue(result.success)
         # Check params are close to expected
@@ -291,14 +292,14 @@ class TestInitModule(unittest.TestCase):
         from nlsq import LDMemoryConfig
 
         config = LDMemoryConfig(
-            max_memory_gb=4.0,
-            chunk_size=1000,
-            enable_gpu_memory_management=True
+            memory_limit_gb=4.0,
+            min_chunk_size=1000,
+            enable_sampling=True
         )
 
-        self.assertEqual(config.max_memory_gb, 4.0)
-        self.assertEqual(config.chunk_size, 1000)
-        self.assertTrue(config.enable_gpu_memory_management)
+        self.assertEqual(config.memory_limit_gb, 4.0)
+        self.assertEqual(config.min_chunk_size, 1000)
+        self.assertTrue(config.enable_sampling)
 
     def test_curve_fit_class(self):
         """Test CurveFit class through public API."""

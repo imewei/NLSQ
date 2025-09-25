@@ -20,11 +20,14 @@ This project adheres to the Contributor Covenant code of conduct. By participati
 
 ## Getting Started
 
-NLSQ is a JAX-based nonlinear least squares curve fitting library designed for GPU/TPU acceleration. Before contributing:
+NLSQ is an enhanced fork of JAXFit, providing JAX-based nonlinear least squares curve fitting with GPU/TPU acceleration. We build upon the excellent foundation laid by the original JAXFit authors (Lucas R. Hofer, Milan Krstajić, and Robert P. Smith).
+
+Before contributing:
 
 1. **Read the documentation**: Familiarize yourself with the [user guide](https://nlsq.readthedocs.io/) and [API reference](https://nlsq.readthedocs.io/en/latest/api/).
-2. **Check existing issues**: Look at [open issues](https://github.com/Dipolar-Quantum-Gases/nlsq/issues) to see if your idea or bug report already exists.
-3. **Start small**: Consider starting with documentation improvements or small bug fixes before tackling major features.
+2. **Check existing issues**: Look at [open issues](https://github.com/imewei/NLSQ/issues) to see if your idea or bug report already exists.
+3. **Understand the fork**: Review [AUTHORS.md](AUTHORS.md) to understand the relationship between NLSQ and JAXFit.
+4. **Start small**: Consider starting with documentation improvements or small bug fixes before tackling major features.
 
 ## Development Setup
 
