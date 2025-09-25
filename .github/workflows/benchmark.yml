@@ -83,7 +83,8 @@ jobs:
           benchmark_results.md
 
     - name: Store benchmark results
-      if: github.ref == 'refs/heads/main'
+      if: false  # Disabled until JSON output is implemented
+      # if: github.ref == 'refs/heads/main'
       uses: benchmark-action/github-action-benchmark@v1
       with:
         tool: 'customBiggerIsBetter'
