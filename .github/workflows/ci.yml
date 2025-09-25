@@ -48,8 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pre-commit
-        key: >
-          pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+        key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
         restore-keys: |
           pre-commit-${{ runner.os }}-
 
@@ -79,16 +78,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    if: >
-      (matrix.run-condition == null || matrix.run-condition == '' ||
-       (matrix.run-condition != 'cross-platform' && matrix.run-condition != 'extended-versions')) ||
-      (matrix.run-condition == 'cross-platform' &&
-       (github.event_name == 'release' ||
-        github.ref == 'refs/heads/main' ||
-        github.event_name == 'schedule')) ||
-      (matrix.run-condition == 'extended-versions' &&
-       (github.event_name == 'release' ||
-        github.ref == 'refs/heads/main'))
+    if: ${{ (matrix.run-condition == null || matrix.run-condition == '' || matrix.run-condition == 'always') || (matrix.run-condition == 'cross-platform' && (github.event_name == 'release' || github.ref == 'refs/heads/main' || github.event_name == 'schedule')) || (matrix.run-condition == 'extended-versions' && (github.event_name == 'release' || github.ref == 'refs/heads/main')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -165,8 +155,7 @@ jobs:
           path: |
             ~/.cache/pip
             build/
-          key: >
-            pip-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          key: pip-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             pip-${{ runner.os }}-py${{ matrix.python-version }}-
             pip-${{ runner.os }}-

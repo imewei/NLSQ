@@ -46,11 +46,7 @@ jobs:
   benchmark:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    if: >
-      (matrix.run-condition == null || matrix.run-condition == '' ||
-       matrix.run-condition != 'cross-platform') ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'release'
+    if: ${{ (matrix.run-condition == null || matrix.run-condition == '' || matrix.run-condition == 'always') || github.event_name == 'schedule' || github.event_name == 'release' || (matrix.run-condition == 'cross-platform' && (github.event_name == 'schedule' || github.event_name == 'release')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -129,8 +125,7 @@ jobs:
           path: |
             ~/.cache/pip
             build/
-          key: >
-            benchmark-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          key: benchmark-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             benchmark-${{ runner.os }}-py${{ matrix.python-version }}-
             benchmark-${{ runner.os }}-

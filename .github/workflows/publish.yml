@@ -94,11 +94,7 @@ jobs:
     needs: build
     runs-on: ${{ matrix.os }}
     timeout-minutes: 8
-    if: >
-      github.event.inputs.skip_tests != 'true' &&
-      ((matrix.run-condition == null || matrix.run-condition == '' ||
-        matrix.run-condition != 'cross-platform') ||
-       github.event_name == 'release')
+    if: ${{ github.event.inputs.skip_tests != 'true' && ((matrix.run-condition == null || matrix.run-condition == '' || matrix.run-condition == 'always') || github.event_name == 'release') }}
 
     strategy:
       fail-fast: true
@@ -281,10 +277,7 @@ jobs:
 
   # Post-publication validation
   post-publish-validation:
-    if: >
-      always() &&
-      (needs.publish-pypi.result == 'success' ||
-       needs.publish-testpypi.result == 'success')
+    if: ${{ always() && (needs.publish-pypi.result == 'success' || needs.publish-testpypi.result == 'success') }}
     needs: [publish-pypi, publish-testpypi]
     runs-on: ubuntu-latest
     timeout-minutes: 5
