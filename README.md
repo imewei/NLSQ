@@ -2,7 +2,7 @@
 <img src="docs/images/NLSQ_logo.png" alt="NLSQ logo"></img>
 </div>
 
-# NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU
+# NLSQ: Nonlinear Least Squares Curve Fitting
 
 [![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
 [![Documentation Status](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/en/latest/?badge=latest)
