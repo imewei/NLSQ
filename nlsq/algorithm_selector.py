@@ -14,7 +14,6 @@ from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
 
 
-
 class AlgorithmSelector:
     """Automatically select best algorithm based on problem characteristics.
 

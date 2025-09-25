@@ -4,7 +4,6 @@ This module extends the SVD fallback to provide comprehensive fallback
 strategies for all matrix decompositions used in optimization.
 """
 
-
 import jax
 import jax.numpy as jnp
 import numpy as np
