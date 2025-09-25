@@ -78,7 +78,7 @@ jobs:
 
       - name: Checkout code
         if: steps.should-run.outputs.run == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1  # Shallow clone for speed
 
@@ -103,7 +103,7 @@ jobs:
 
       - name: Set up Python ${{ matrix.python-version }}
         if: steps.should-run.outputs.run == 'true'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
