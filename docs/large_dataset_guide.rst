@@ -22,9 +22,11 @@ Automatic Size Detection
     import jax.numpy as jnp
     import numpy as np
 
+
     # Define your model function
     def exponential(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
 
     # Small dataset (< 1M points) - uses standard curve_fit
     x_small = np.linspace(0, 5, 1000)
@@ -168,9 +170,11 @@ Basic Large Dataset Fitting
     x_data = np.linspace(0, 10, 5_000_000)
     y_data = 2.5 * np.exp(-1.3 * x_data) + noise
 
+
     # JAX-compatible model function
     def model(x, a, b):
         return a * jnp.exp(-b * x)
+
 
     # Fit with automatic memory management
     result = fit_large_dataset(

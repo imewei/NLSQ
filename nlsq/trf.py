@@ -393,7 +393,7 @@ class TrustRegionJITFunctions:
             n_iter : int
                 Number of CG iterations
             """
-            # Solve (J^T J + α I) x = -J^T f using conjugate gradient
+            # Solve (J^T J + alpha I) x = -J^T f using conjugate gradient
             m, n = J.shape
             if max_iter is None:
                 max_iter = min(n, 100)
@@ -409,7 +409,7 @@ class TrustRegionJITFunctions:
             rsold = jnp.dot(r, r)
 
             for i in range(max_iter):
-                # Matrix-vector product: (J^T J + α I) p
+                # Matrix-vector product: (J^T J + alpha I) p
                 Jp = J_scaled @ p
                 JTJp = J_scaled.T @ Jp
                 Ap = JTJp + alpha * p

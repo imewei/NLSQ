@@ -132,9 +132,11 @@ print(f"Recommended chunks: {stats.n_chunks}")
 x = np.linspace(0, 10, n_points)
 y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, n_points)
 
+
 # Define fit function using JAX numpy
 def exponential(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 # Use curve_fit_large for automatic dataset size detection and chunking
 popt, pcov = curve_fit_large(
@@ -143,7 +145,7 @@ popt, pcov = curve_fit_large(
     y,
     p0=[2.5, 0.6, 0.2],
     memory_limit_gb=4.0,  # Automatic chunking if needed
-    show_progress=True,   # Progress bar for large datasets
+    show_progress=True,  # Progress bar for large datasets
 )
 
 print(f"Fitted parameters: {popt}")

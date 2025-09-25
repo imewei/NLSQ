@@ -60,7 +60,9 @@ class TestJAXTracingCompatibility(unittest.TestCase):
         """Test 1D function with 10 parameters."""
 
         def poly9(x, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9):
-            return sum(p * x**i for i, p in enumerate([p0, p1, p2, p3, p4, p5, p6, p7, p8, p9]))
+            return sum(
+                p * x**i for i, p in enumerate([p0, p1, p2, p3, p4, p5, p6, p7, p8, p9])
+            )
 
         x = np.linspace(-1, 1, 200)
         true_params = [1.0, -0.5, 0.3, -0.1, 0.05, -0.02, 0.01, -0.005, 0.002, -0.001]
@@ -249,7 +251,12 @@ class TestEndToEndValidation(unittest.TestCase):
 
         # Force chunking with small memory limit
         popt, pcov = curve_fit_large(
-            exponential, x, y, p0=[2.0, 1.0, 0.1], memory_limit_gb=0.1, show_progress=False
+            exponential,
+            x,
+            y,
+            p0=[2.0, 1.0, 0.1],
+            memory_limit_gb=0.1,
+            show_progress=False,
         )
 
         # For heavily chunked fitting (10 chunks), just verify reasonable results
@@ -312,15 +319,15 @@ class TestEndToEndValidation(unittest.TestCase):
     def test_edge_cases(self):
         """Test edge cases in the fitting pipeline."""
         # Test with single data point (should fail gracefully)
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             curve_fit_large(lambda x, a: a * x, [1.0], [2.0], p0=[1.0])
 
         # Test with empty data
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             curve_fit_large(lambda x, a: a * x, [], [], p0=[1.0])
 
         # Test with mismatched data sizes
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             curve_fit_large(lambda x, a: a * x, [1, 2, 3], [1, 2], p0=[1.0])
 
 

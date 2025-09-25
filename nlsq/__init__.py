@@ -201,7 +201,9 @@ def curve_fit_large(
     if len(ydata) == 0:
         raise ValueError("`ydata` cannot be empty.")
     if len(xdata) != len(ydata):
-        raise ValueError(f"`xdata` and `ydata` must have the same length: {len(xdata)} vs {len(ydata)}.")
+        raise ValueError(
+            f"`xdata` and `ydata` must have the same length: {len(xdata)} vs {len(ydata)}."
+        )
     if len(xdata) < 2:
         raise ValueError(f"Need at least 2 data points for fitting, got {len(xdata)}.")
 

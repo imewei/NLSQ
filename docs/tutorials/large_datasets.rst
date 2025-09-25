@@ -83,25 +83,28 @@ Now let's generate and fit this large dataset:
     print(f"Data size: x={x.shape}, y={y.shape}")
     print(f"Memory usage: ~{(x.nbytes + y.nbytes) / 1e6:.1f} MB")
 
+
     # Define model function using JAX
     def exponential_model(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
 
     # Fit using automatic large dataset handling
     print("Starting fit...")
     popt, pcov = curve_fit_large(
         exponential_model,
-        x, y,
+        x,
+        y,
         p0=[2.0, 0.5, 0.2],
         memory_limit_gb=2.0,  # Limit memory usage
-        show_progress=True,   # Show progress bar
+        show_progress=True,  # Show progress bar
     )
 
     # Display results
     param_errors = np.sqrt(np.diag(pcov))
     print("\nFitting Results:")
     print("=" * 40)
-    param_names = ['Amplitude (a)', 'Decay rate (b)', 'Offset (c)']
+    param_names = ["Amplitude (a)", "Decay rate (b)", "Offset (c)"]
 
     for name, true_val, fit_val, error in zip(param_names, true_params, popt, param_errors):
         percent_error = 100 * abs(fit_val - true_val) / true_val
@@ -122,12 +125,12 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
 
     # Create custom configuration
     config = LDMemoryConfig(
-        memory_limit_gb=4.0,           # Maximum memory usage
-        min_chunk_size=50000,          # Minimum points per chunk
-        max_chunk_size=2000000,        # Maximum points per chunk
-        enable_sampling=True,          # Allow sampling for very large datasets
-        sampling_threshold=50_000_000, # Start sampling above this size
-        sample_rate=0.1,               # Sample 10% of data if sampling enabled
+        memory_limit_gb=4.0,  # Maximum memory usage
+        min_chunk_size=50000,  # Minimum points per chunk
+        max_chunk_size=2000000,  # Maximum points per chunk
+        enable_sampling=True,  # Allow sampling for very large datasets
+        sampling_threshold=50_000_000,  # Start sampling above this size
+        sample_rate=0.1,  # Sample 10% of data if sampling enabled
     )
 
     # Create fitter with custom configuration
@@ -145,7 +148,8 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
     # Perform fit with detailed progress reporting
     result = fitter.fit_with_progress(
         exponential_model,
-        x, y,
+        x,
+        y,
         p0=[2.0, 0.5, 0.2],
     )
 
@@ -180,10 +184,10 @@ For datasets too large to process even with chunking, NLSQ can use intelligent s
 
     # Configure for sampling
     sampling_config = LDMemoryConfig(
-        memory_limit_gb=1.0,           # Force small memory limit
-        enable_sampling=True,          # Enable sampling
+        memory_limit_gb=1.0,  # Force small memory limit
+        enable_sampling=True,  # Enable sampling
         sampling_threshold=1_000_000,  # Sample above 1M points
-        sample_rate=0.05,              # Use 5% of data
+        sample_rate=0.05,  # Use 5% of data
     )
 
     sampler = LargeDatasetFitter(config=sampling_config)
@@ -191,7 +195,8 @@ For datasets too large to process even with chunking, NLSQ can use intelligent s
     print(f"\nFitting {n_demo:,} points with 5% sampling...")
     sample_result = sampler.fit_with_progress(
         exponential_model,
-        x_demo, y_demo,
+        x_demo,
+        y_demo,
         p0=[3.0, 0.3, 0.5],
     )
 
@@ -207,6 +212,7 @@ Many large-scale problems have sparse Jacobian structures. NLSQ can detect and e
 
     from nlsq import SparseJacobianComputer
 
+
     # Create a problem with sparse structure
     # Example: Multiple independent exponential components
     def multi_exponential(x, *params):
@@ -215,12 +221,13 @@ Many large-scale problems have sparse Jacobian structures. NLSQ can detect and e
         result = jnp.zeros_like(x)
 
         for i in range(n_components):
-            a = params[3*i]      # amplitude
-            b = params[3*i + 1]  # decay rate
-            c = params[3*i + 2]  # offset
+            a = params[3 * i]  # amplitude
+            b = params[3 * i + 1]  # decay rate
+            c = params[3 * i + 2]  # offset
             result += a * jnp.exp(-b * x) + c
 
         return result
+
 
     # Generate data with 5 components (15 parameters total)
     n_components = 5
@@ -230,11 +237,9 @@ Many large-scale problems have sparse Jacobian structures. NLSQ can detect and e
     # True parameters for 5 components
     true_sparse_params = []
     for i in range(n_components):
-        true_sparse_params.extend([
-            2.0 + 0.5 * i,    # amplitude
-            0.5 + 0.2 * i,    # decay rate
-            0.1 * i           # offset
-        ])
+        true_sparse_params.extend(
+            [2.0 + 0.5 * i, 0.5 + 0.2 * i, 0.1 * i]  # amplitude  # decay rate  # offset
+        )
 
     y_sparse = multi_exponential(x_sparse, *true_sparse_params)
     y_sparse += 0.02 * np.random.normal(size=len(x_sparse))
@@ -276,6 +281,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
     from nlsq import StreamingOptimizer, StreamingConfig
     from nlsq import create_hdf5_dataset, stream_from_hdf5
 
+
     # First, create a large HDF5 dataset on disk
     def create_large_dataset():
         print("Creating large HDF5 dataset...")
@@ -284,21 +290,22 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
             exponential_model,
             [2.8, 0.6, 0.4],  # True parameters
             n_samples=50_000_000,  # 50 million points
-            chunk_size=10000,      # HDF5 chunk size
-            noise_level=0.08
+            chunk_size=10000,  # HDF5 chunk size
+            noise_level=0.08,
         )
         print("Dataset created: large_dataset.h5")
+
 
     # Create the dataset (this may take a few minutes)
     create_large_dataset()
 
     # Configure streaming optimizer
     streaming_config = StreamingConfig(
-        batch_size=50000,        # Points per batch
-        max_epochs=20,           # Maximum training epochs
-        convergence_tol=1e-6,    # Convergence tolerance
-        use_adam=True,           # Use Adam optimizer
-        learning_rate=0.001,     # Initial learning rate
+        batch_size=50000,  # Points per batch
+        max_epochs=20,  # Maximum training epochs
+        convergence_tol=1e-6,  # Convergence tolerance
+        use_adam=True,  # Use Adam optimizer
+        learning_rate=0.001,  # Initial learning rate
     )
 
     # Create streaming optimizer
@@ -307,9 +314,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
     # Fit directly from HDF5 file
     print("Starting streaming optimization...")
     stream_result = stream_optimizer.fit_from_hdf5(
-        "large_dataset.h5",
-        exponential_model,
-        p0=[2.5, 0.4, 0.3]
+        "large_dataset.h5", exponential_model, p0=[2.5, 0.4, 0.3]
     )
 
     print("Streaming Results:")
@@ -317,6 +322,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
     print(f"  Final parameters: {stream_result.x}")
     print(f"  Epochs used: {stream_result.nit}")
     print(f"  Final cost: {stream_result.cost:.6f}")
+
 
     # Alternative: Stream from custom generator
     def data_generator(batch_size=10000):
@@ -328,6 +334,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
             y_batch += 0.08 * np.random.normal(size=batch_size)
             yield x_batch, y_batch
 
+
     # Fit using generator (infinite data stream)
     print("Fitting from data generator...")
     gen_result = stream_optimizer.fit_unlimited_data(
@@ -335,7 +342,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
         data_generator(batch_size=20000),
         x0=[2.5, 0.4, 0.3],
         n_params=3,
-        max_samples=1_000_000  # Stop after 1M total points
+        max_samples=1_000_000,  # Stop after 1M total points
     )
 
     print("Generator Results:")
@@ -357,18 +364,31 @@ Let's compare different strategies for the same large dataset:
     y_test = 1.8 * np.exp(-0.7 * x_test) + 0.2 + np.random.normal(0, 0.03, n_test)
 
     strategies = [
-        ("Standard curve_fit_large", lambda: curve_fit_large(
-            exponential_model, x_test, y_test, p0=[1.5, 0.5, 0.1]
-        )),
-        ("Chunked (4 chunks)", lambda: curve_fit_large(
-            exponential_model, x_test, y_test, p0=[1.5, 0.5, 0.1],
-            memory_limit_gb=0.5  # Force chunking
-        )),
-        ("Sampled (10%)", lambda: curve_fit_large(
-            exponential_model, x_test, y_test, p0=[1.5, 0.5, 0.1],
-            memory_limit_gb=0.1,  # Force sampling
-            enable_sampling=True
-        )),
+        (
+            "Standard curve_fit_large",
+            lambda: curve_fit_large(exponential_model, x_test, y_test, p0=[1.5, 0.5, 0.1]),
+        ),
+        (
+            "Chunked (4 chunks)",
+            lambda: curve_fit_large(
+                exponential_model,
+                x_test,
+                y_test,
+                p0=[1.5, 0.5, 0.1],
+                memory_limit_gb=0.5,  # Force chunking
+            ),
+        ),
+        (
+            "Sampled (10%)",
+            lambda: curve_fit_large(
+                exponential_model,
+                x_test,
+                y_test,
+                p0=[1.5, 0.5, 0.1],
+                memory_limit_gb=0.1,  # Force sampling
+                enable_sampling=True,
+            ),
+        ),
     ]
 
     results = {}
@@ -383,13 +403,13 @@ Let's compare different strategies for the same large dataset:
         try:
             popt, pcov = strategy()
             duration = time.time() - start_time
-            error = np.sqrt(np.mean((y_test - exponential_model(x_test, *popt))**2))
+            error = np.sqrt(np.mean((y_test - exponential_model(x_test, *popt)) ** 2))
 
             results[name] = {
-                'time': duration,
-                'params': popt,
-                'rms_error': error,
-                'success': True
+                "time": duration,
+                "params": popt,
+                "rms_error": error,
+                "success": True,
             }
 
             print(f"  Time: {duration:.2f} seconds")
@@ -398,19 +418,23 @@ Let's compare different strategies for the same large dataset:
 
         except Exception as e:
             print(f"  Failed: {e}")
-            results[name] = {'success': False, 'error': str(e)}
+            results[name] = {"success": False, "error": str(e)}
 
     # Summary
     print("\nSummary:")
     print("-" * 40)
-    successful_results = {k: v for k, v in results.items() if v.get('success', False)}
+    successful_results = {k: v for k, v in results.items() if v.get("success", False)}
 
     if successful_results:
-        fastest = min(successful_results, key=lambda k: successful_results[k]['time'])
-        most_accurate = min(successful_results, key=lambda k: successful_results[k]['rms_error'])
+        fastest = min(successful_results, key=lambda k: successful_results[k]["time"])
+        most_accurate = min(
+            successful_results, key=lambda k: successful_results[k]["rms_error"]
+        )
 
         print(f"Fastest: {fastest} ({successful_results[fastest]['time']:.2f}s)")
-        print(f"Most accurate: {most_accurate} (RMS: {successful_results[most_accurate]['rms_error']:.6f})")
+        print(
+            f"Most accurate: {most_accurate} (RMS: {successful_results[most_accurate]['rms_error']:.6f})"
+        )
 
 Best Practices for Large Datasets
 ----------------------------------
@@ -439,10 +463,11 @@ Always check memory requirements before fitting:
 
     # Check available devices
     import jax
+
     print(f"Available devices: {jax.devices()}")
 
     # GPU memory is typically more limited
-    if jax.devices()[0].device_kind == 'gpu':
+    if jax.devices()[0].device_kind == "gpu":
         memory_limit_gb = 2.0  # Conservative for GPU
     else:
         memory_limit_gb = 8.0  # More generous for CPU
@@ -453,9 +478,7 @@ Always check memory requirements before fitting:
 
     # Always use progress bars for large datasets
     popt, pcov = curve_fit_large(
-        func, x, y,
-        show_progress=True,  # Essential for user experience
-        memory_limit_gb=4.0
+        func, x, y, show_progress=True, memory_limit_gb=4.0  # Essential for user experience
     )
 
 **5. Validate Results**
@@ -482,11 +505,7 @@ Troubleshooting Large Dataset Issues
         popt, pcov = curve_fit_large(func, x, y)
     except MemoryError:
         print("Reducing memory limit and enabling sampling...")
-        popt, pcov = curve_fit_large(
-            func, x, y,
-            memory_limit_gb=1.0,
-            enable_sampling=True
-        )
+        popt, pcov = curve_fit_large(func, x, y, memory_limit_gb=1.0, enable_sampling=True)
 
 **Convergence Issues**
 
@@ -494,10 +513,7 @@ Troubleshooting Large Dataset Issues
 
     # Try different initial guesses or increase tolerances
     popt, pcov = curve_fit_large(
-        func, x, y,
-        p0=better_initial_guess,
-        ftol=1e-6,  # Looser tolerance
-        xtol=1e-6
+        func, x, y, p0=better_initial_guess, ftol=1e-6, xtol=1e-6  # Looser tolerance
     )
 
 **Performance Issues**

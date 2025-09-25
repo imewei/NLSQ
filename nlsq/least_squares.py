@@ -455,7 +455,7 @@ class LeastSquares:
             # Handle both regular functions and JIT-compiled functions
             func_update = False
             try:
-                if hasattr(self.f, '__code__') and hasattr(fun, '__code__'):
+                if hasattr(self.f, "__code__") and hasattr(fun, "__code__"):
                     # Both are regular Python functions
                     func_update = self.f.__code__.co_code != fun.__code__.co_code
                 else:
@@ -694,43 +694,85 @@ class LeastSquares:
                 )
             elif args.size == 7:
                 func_eval = (
-                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+                    func(
+                        xdata,
+                        args[0],
+                        args[1],
+                        args[2],
+                        args[3],
+                        args[4],
+                        args[5],
+                        args[6],
+                    )
                     - ydata
                 )
             elif args.size == 8:
                 func_eval = (
-                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
+                    func(
+                        xdata,
+                        args[0],
+                        args[1],
+                        args[2],
+                        args[3],
+                        args[4],
+                        args[5],
+                        args[6],
+                        args[7],
+                    )
                     - ydata
                 )
             elif args.size == 9:
                 func_eval = (
-                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
+                    func(
+                        xdata,
+                        args[0],
+                        args[1],
+                        args[2],
+                        args[3],
+                        args[4],
+                        args[5],
+                        args[6],
+                        args[7],
+                        args[8],
+                    )
                     - ydata
                 )
             elif args.size == 10:
                 func_eval = (
-                    func(xdata, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9])
+                    func(
+                        xdata,
+                        args[0],
+                        args[1],
+                        args[2],
+                        args[3],
+                        args[4],
+                        args[5],
+                        args[6],
+                        args[7],
+                        args[8],
+                        args[9],
+                    )
                     - ydata
                 )
+            # For more than 10 parameters, use a JAX-compatible unpacking approach
+            # This avoids the TracerArrayConversionError by using static indexing
+            # Note: Functions with >10 parameters are rare in curve fitting
+            elif args.size <= 15:
+                # Handle up to 15 parameters explicitly
+                param_vals = tuple(args[i] for i in range(args.size))
+                func_eval = func(xdata, *param_vals) - ydata
             else:
-                # For more than 10 parameters, use a JAX-compatible unpacking approach
-                # This avoids the TracerArrayConversionError by using static indexing
-                # Note: Functions with >10 parameters are rare in curve fitting
-                if args.size <= 15:
-                    # Handle up to 15 parameters explicitly
-                    param_vals = tuple(args[i] for i in range(args.size))
-                    func_eval = func(xdata, *param_vals) - ydata
-                else:
-                    # For extremely high parameter counts, warn and use fallback
-                    # This may still have tracing issues but handles edge cases
-                    import warnings
-                    warnings.warn(
-                        f"Function has {args.size} parameters. JAX tracing may be inefficient for >15 parameters.",
-                        RuntimeWarning
-                    )
-                    # Use tuple unpacking which is more JAX-friendly than list
-                    param_tuple = tuple(args[i] for i in range(args.size))
-                    func_eval = func(xdata, *param_tuple) - ydata
+                # For extremely high parameter counts, warn and use fallback
+                # This may still have tracing issues but handles edge cases
+                import warnings
+
+                warnings.warn(
+                    f"Function has {args.size} parameters. JAX tracing may be inefficient for >15 parameters.",
+                    RuntimeWarning,
+                )
+                # Use tuple unpacking which is more JAX-friendly than list
+                param_tuple = tuple(args[i] for i in range(args.size))
+                func_eval = func(xdata, *param_tuple) - ydata
             return jnp.where(data_mask, func_eval, 0)
 
         # need to define a separate function for each of the different

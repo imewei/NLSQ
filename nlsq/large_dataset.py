@@ -877,13 +877,21 @@ class LargeDatasetFitter:
                         # Check parameter convergence
                         param_history.append(current_params.copy())
                         if len(param_history) > 2:
-                            param_change = np.linalg.norm(current_params - previous_params)
-                            relative_change = param_change / (np.linalg.norm(current_params) + 1e-10)
+                            param_change = np.linalg.norm(
+                                current_params - previous_params
+                            )
+                            relative_change = param_change / (
+                                np.linalg.norm(current_params) + 1e-10
+                            )
                             convergence_metric = relative_change
 
                             # Early stopping if parameters stabilized
-                            if convergence_metric < 0.001 and chunk_idx >= min(stats.n_chunks - 1, 3):
-                                self.logger.info(f"Parameters converged after {chunk_idx + 1} chunks")
+                            if convergence_metric < 0.001 and chunk_idx >= min(
+                                stats.n_chunks - 1, 3
+                            ):
+                                self.logger.info(
+                                    f"Parameters converged after {chunk_idx + 1} chunks"
+                                )
                                 break
 
                     chunk_result = {
@@ -899,9 +907,13 @@ class LargeDatasetFitter:
                     retry_success = False
                     if current_params is not None:
                         try:
-                            self.logger.info(f"Retrying chunk {chunk_idx} with current parameters")
+                            self.logger.info(
+                                f"Retrying chunk {chunk_idx} with current parameters"
+                            )
                             # Add small perturbation to avoid local minima
-                            perturbed_params = current_params * (1 + 0.01 * np.random.randn(len(current_params)))
+                            perturbed_params = current_params * (
+                                1 + 0.01 * np.random.randn(len(current_params))
+                            )
                             popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                                 f,
                                 x_chunk,
@@ -915,7 +927,9 @@ class LargeDatasetFitter:
                             retry_success = True
                             # Use the retry result with lower weight
                             adaptive_lr = 0.1  # Lower weight for retry results
-                            current_params = (1 - adaptive_lr) * current_params + adaptive_lr * popt_chunk
+                            current_params = (
+                                1 - adaptive_lr
+                            ) * current_params + adaptive_lr * popt_chunk
                             chunk_result = {
                                 "chunk_idx": chunk_idx,
                                 "n_points": len(x_chunk),
@@ -924,7 +938,9 @@ class LargeDatasetFitter:
                                 "retry": True,
                             }
                         except Exception as retry_e:
-                            self.logger.warning(f"Retry for chunk {chunk_idx} also failed: {retry_e}")
+                            self.logger.warning(
+                                f"Retry for chunk {chunk_idx} also failed: {retry_e}"
+                            )
 
                     if not retry_success:
                         chunk_result = {
@@ -974,7 +990,9 @@ class LargeDatasetFitter:
             # Create approximate covariance matrix
             # In chunked fitting, we can estimate it from parameter variations
             if len(param_history) > 1:
-                param_variations = np.array(param_history[-min(10, len(param_history)):])  # Last few iterations
+                param_variations = np.array(
+                    param_history[-min(10, len(param_history)) :]
+                )  # Last few iterations
                 pcov = np.cov(param_variations.T)
             else:
                 # Fallback: identity matrix scaled by parameter magnitudes

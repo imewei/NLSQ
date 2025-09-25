@@ -241,14 +241,17 @@ After installation, verify NLSQ is working correctly:
 
     # Check NLSQ version
     import nlsq
+
     print(f"NLSQ version: {nlsq.__version__}")
 
     # Check JAX devices
     print(f"JAX devices: {jax.devices()}")
 
+
     # Test basic functionality
     def linear(x, m, b):
         return m * x + b
+
 
     x = np.linspace(0, 10, 100)
     y = 2 * x + 1 + 0.1 * np.random.normal(size=len(x))
@@ -280,8 +283,10 @@ Test GPU acceleration (if available):
     x = np.linspace(0, 10, n_points)
     y = 2.5 * np.exp(-0.5 * x) + np.random.normal(0, 0.1, n_points)
 
+
     def exponential(x, a, b):
         return a * jnp.exp(-b * x)
+
 
     cf = CurveFit()
 
@@ -325,9 +330,7 @@ Common Issues and Solutions
     from nlsq import curve_fit_large
 
     popt, pcov = curve_fit_large(
-        func, x, y,
-        memory_limit_gb=4.0,  # Adjust to your system
-        show_progress=True
+        func, x, y, memory_limit_gb=4.0, show_progress=True  # Adjust to your system
     )
 
 **Windows Installation Issues**

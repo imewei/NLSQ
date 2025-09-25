@@ -21,7 +21,7 @@ def with_cpu_fallback(func):
                 warnings.warn(
                     f"GPU operation failed ({e}), falling back to CPU",
                     RuntimeWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
                 # Force CPU execution
                 with jax.default_device(jax.devices("cpu")[0]):
@@ -77,7 +77,7 @@ def compute_svd_with_fallback(J_h, full_matrices=False):
         if "cuSolver" in error_msg or "INTERNAL" in error_msg:
             warnings.warn(
                 "GPU SVD failed with cuSolver error, attempting CPU fallback",
-                RuntimeWarning
+                RuntimeWarning,
             )
 
             try:
@@ -91,8 +91,7 @@ def compute_svd_with_fallback(J_h, full_matrices=False):
             except Exception as cpu_error:
                 # Third attempt: Use numpy as last resort
                 warnings.warn(
-                    "CPU JAX SVD also failed, using NumPy SVD",
-                    RuntimeWarning
+                    "CPU JAX SVD also failed, using NumPy SVD", RuntimeWarning
                 )
                 import numpy as np
 
@@ -116,6 +115,7 @@ def initialize_gpu_safely():
     try:
         # Set memory preallocation to avoid fragmentation
         import os
+
         if "JAX_PREALLOCATE_GPU_MEMORY" not in os.environ:
             os.environ["JAX_PREALLOCATE_GPU_MEMORY"] = "false"
 

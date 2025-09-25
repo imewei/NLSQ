@@ -118,9 +118,11 @@ The ``curve_fit_large`` function provides automatic dataset size detection and i
    x = np.linspace(0, 10, 50_000_000)
    y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, len(x))
 
+
    # Define fit function using JAX numpy
    def exponential(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    # Use curve_fit_large - automatic chunking if needed
    popt, pcov = curve_fit_large(
@@ -129,7 +131,7 @@ The ``curve_fit_large`` function provides automatic dataset size detection and i
        y,
        p0=[2.5, 0.6, 0.2],
        memory_limit_gb=4.0,  # Automatic chunking if needed
-       show_progress=True,   # Progress bar for large datasets
+       show_progress=True,  # Progress bar for large datasets
    )
 
    print(f"Fitted parameters: {popt}")

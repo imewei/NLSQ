@@ -137,8 +137,10 @@ import numpy as np
 import jax.numpy as jnp
 from nlsq import curve_fit
 
+
 def test_exponential_fit_basic():
     """Test basic exponential curve fitting."""
+
     def exponential(x, a, b):
         return a * jnp.exp(b * x)
 
