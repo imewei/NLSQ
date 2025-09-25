@@ -47,7 +47,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     if: >
-      matrix.run-condition != 'cross-platform' ||
+      (matrix.run-condition == null || matrix.run-condition == '' ||
+       matrix.run-condition != 'cross-platform') ||
       github.event_name == 'schedule' ||
       github.event_name == 'release'
     strategy:
@@ -57,16 +58,18 @@ jobs:
         python-version: ['3.12']
         benchmark-type: ['performance']
         include:
-          # Ubuntu (primary benchmarking platform)
+          # Ubuntu (primary benchmarking platform) - always runs
           - os: ubuntu-latest
             python-version: '3.12'
             benchmark-type: 'performance'
             gpu: false
-          # Memory benchmarking for Ubuntu
+            run-condition: 'always'
+          # Memory benchmarking for Ubuntu - always runs
           - os: ubuntu-latest
             python-version: '3.12'
             benchmark-type: 'memory'
             gpu: false
+            run-condition: 'always'
           # Cross-platform benchmarking for scheduled runs and releases
           - os: windows-latest
             python-version: '3.12'

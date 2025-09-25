@@ -96,7 +96,8 @@ jobs:
     timeout-minutes: 8
     if: >
       github.event.inputs.skip_tests != 'true' &&
-      (matrix.run-condition != 'cross-platform' ||
+      ((matrix.run-condition == null || matrix.run-condition == '' ||
+        matrix.run-condition != 'cross-platform') ||
        github.event_name == 'release')
 
     strategy:
@@ -106,14 +107,16 @@ jobs:
         python-version: ['3.12']
         package-type: ['wheel']
         include:
-          # Ubuntu testing (primary)
+          # Ubuntu testing (primary) - always runs
           - os: ubuntu-latest
             python-version: '3.12'
             package-type: 'wheel'
-          # Test sdist on Ubuntu
+            run-condition: 'always'
+          # Test sdist on Ubuntu - always runs
           - os: ubuntu-latest
             python-version: '3.12'
             package-type: 'sdist'
+            run-condition: 'always'
           # Cross-platform testing for releases
           - os: windows-latest
             python-version: '3.12'

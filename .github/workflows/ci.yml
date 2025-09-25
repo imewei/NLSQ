@@ -80,8 +80,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     if: >
-      (matrix.run-condition != 'cross-platform' &&
-       matrix.run-condition != 'extended-versions') ||
+      (matrix.run-condition == null || matrix.run-condition == '' ||
+       (matrix.run-condition != 'cross-platform' && matrix.run-condition != 'extended-versions')) ||
       (matrix.run-condition == 'cross-platform' &&
        (github.event_name == 'release' ||
         github.ref == 'refs/heads/main' ||
@@ -96,10 +96,11 @@ jobs:
         python-version: ['3.12']
         test-suite: ['fast']
         include:
-          # Ubuntu (primary platform)
+          # Ubuntu (primary platform) - always runs
           - os: ubuntu-latest
             python-version: '3.12'
             test-suite: 'fast'
+            run-condition: 'always'
           # Cross-platform testing for releases and main branch
           - os: windows-latest
             python-version: '3.12'
