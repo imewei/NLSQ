@@ -112,7 +112,8 @@ jobs:
           python -c "import psutil; print(f'CPU cores: {psutil.cpu_count()}'); print(f'Memory: {psutil.virtual_memory().total / (1024**3):.2f} GB')"
 
       - name: Run performance benchmarks
-        if: matrix.benchmark-type == 'performance'        run: |
+        if: matrix.benchmark-type == 'performance'
+        run: |
           # Create results directory
           mkdir -p benchmark_results
 
