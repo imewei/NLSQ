@@ -65,58 +65,32 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ['3.12']
-        include:
-          # Extended testing on main branch
-          - os: ubuntu-latest
-            python-version: '3.13'
-            if-condition: github.ref == 'refs/heads/main'
-          # Cross-platform testing on main/release
-          - os: windows-latest
-            python-version: '3.12'
-            if-condition: github.event_name == 'release' || github.ref == 'refs/heads/main'
-          - os: macos-latest
-            python-version: '3.12'
-            if-condition: github.event_name == 'release' || github.ref == 'refs/heads/main'
 
     steps:
-      - name: Check run condition
-        id: should-run
-        run: |
-          if [[ "${{ matrix.if-condition }}" == "" ]] || [[ "${{ matrix.if-condition }}" == "true" ]]; then
-            echo "run=true" >> $GITHUB_OUTPUT
-          else
-            echo "run=false" >> $GITHUB_OUTPUT
-          fi
-        shell: bash
-
       - name: Checkout code
-        if: steps.should-run.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Needed for setuptools-scm
 
       - name: Free disk space (Ubuntu)
-        if: runner.os == 'Linux' && steps.should-run.outputs.run == 'true'
+        if: runner.os == 'Linux'
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
           df -h
 
       - name: Set up Python ${{ matrix.python-version }}
-        if: steps.should-run.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install uv for faster installs
-        if: steps.should-run.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install uv || true
         continue-on-error: true
 
       - name: Install dependencies
-        if: steps.should-run.outputs.run == 'true'
         run: |
           # Try uv first for speed, fallback to pip
           if command -v uv &> /dev/null; then
@@ -131,7 +105,6 @@ jobs:
         shell: bash
 
       - name: Run core tests
-        if: steps.should-run.outputs.run == 'true'
         run: |
           # Match local Makefile test commands
           pytest tests/test_minpack.py::TestCurveFit::test_one_argument \
@@ -140,20 +113,18 @@ jobs:
                  -v --tb=short --timeout=60 -x
 
       - name: Run fast tests
-        if: steps.should-run.outputs.run == 'true'
         run: |
           # Match `make test-fast`
           pytest -m "not slow" -v --tb=short --maxfail=5 --timeout=120
 
       - name: Run import validation
-        if: steps.should-run.outputs.run == 'true'
         run: |
           # Match `make validate-install`
           python -c "import nlsq; print(f'NLSQ {nlsq.__version__} imported successfully')"
           python -c "from nlsq import curve_fit; import numpy as np; x = np.array([1,2,3,4]); y = np.array([2,4,6,8]); popt, _ = curve_fit(lambda x, a: a*x, x, y); print(f'Basic curve_fit test: popt={popt}')"
 
       - name: Upload test results
-        if: failure() && steps.should-run.outputs.run == 'true'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}-py${{ matrix.python-version }}
