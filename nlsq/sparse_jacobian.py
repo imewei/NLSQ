@@ -205,7 +205,7 @@ class SparseJacobianComputer:
         J = np.zeros((n_data, n_params))
 
         # Base function evaluation
-        f0 = func(xdata, *x) if not hasattr(xdata, "__len__") else func(xdata, *x)
+        f0 = func(xdata, *x)
         f0 = f0 - ydata
         f0 = np.where(data_mask, f0, 0)
 
@@ -214,11 +214,7 @@ class SparseJacobianComputer:
             x_perturb = x.copy()
             x_perturb[j] += eps
 
-            f_perturb = (
-                func(xdata, *x_perturb)
-                if not hasattr(xdata, "__len__")
-                else func(xdata, *x_perturb)
-            )
+            f_perturb = func(xdata, *x_perturb)
             f_perturb = f_perturb - ydata
             f_perturb = np.where(data_mask, f_perturb, 0)
 

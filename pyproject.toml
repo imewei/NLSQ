@@ -155,7 +155,7 @@ select = [
     "PERF", # Performance linting
     "FURB", # Refurb (modern Python patterns)
 ]
-ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "RUF001", "RUF002", "RUF013", "SIM102", "SIM108", "SIM113", "UP007", "UP028", "UP031", "UP038", "F401", "F821", "F841", "NPY002", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PLC0415", "RUF001", "RUF002", "RUF013", "SIM102", "SIM108", "SIM113", "UP007", "UP028", "UP031", "UP038", "F401", "F821", "F841", "NPY002", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "E402", "PLR0913", "PLR0912"]
