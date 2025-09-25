@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Performance optimizations for scientific computing
+  # Performance optimizations
   OMP_NUM_THREADS: 4
   MKL_NUM_THREADS: 4
   OPENBLAS_NUM_THREADS: 4
@@ -40,70 +40,112 @@ env:
   PYTHONHASHSEED: 0
   PYTHONIOENCODING: utf-8
   PIP_DISABLE_PIP_VERSION_CHECK: 1
-  PIP_NO_CACHE_DIR: 1
+  PIP_NO_CACHE_DIR: 0  # Enable pip caching
+  UV_SYSTEM_PYTHON: 1  # Use uv for faster installs
 
 jobs:
-  # Primary Ubuntu benchmarking
+  # Primary benchmarking job
   benchmark:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ['3.12']
         benchmark-type: ['performance', 'memory']
+        include:
+          # Cross-platform benchmarking on schedule/release
+          - os: windows-latest
+            python-version: '3.12'
+            benchmark-type: 'performance'
+            if-condition: github.event_name == 'schedule' || github.event_name == 'release'
+          - os: macos-latest
+            python-version: '3.12'
+            benchmark-type: 'performance'
+            if-condition: github.event_name == 'schedule' || github.event_name == 'release'
 
     steps:
+      - name: Check run condition
+        id: should-run
+        run: |
+          if [[ "${{ matrix.if-condition }}" == "" ]] || [[ "${{ matrix.if-condition }}" == "true" ]]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
       - name: Checkout code
-        uses: actions/checkout@v4
+        if: steps.should-run.outputs.run == 'true'
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1  # Shallow clone for speed
 
-      - name: Free disk space (Linux)
+      - name: Free disk space (Ubuntu)
+        if: runner.os == 'Linux' && steps.should-run.outputs.run == 'true'
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
           df -h
 
+      - name: Free disk space (Windows)
+        if: runner.os == 'Windows' && steps.should-run.outputs.run == 'true'
+        run: |
+          Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID,Size,FreeSpace
+        shell: powershell
+
+      - name: Free disk space (macOS)
+        if: runner.os == 'macOS' && steps.should-run.outputs.run == 'true'
+        run: |
+          df -h
+          brew cleanup --prune=all || true
+
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        if: steps.should-run.outputs.run == 'true'
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: pyproject.toml
 
-      - name: Cache package installation
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-            build/
-          key: benchmark-ubuntu-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            benchmark-ubuntu-py${{ matrix.python-version }}-
-            benchmark-ubuntu-
-
-      - name: Install dependencies (optimized)
+      - name: Install uv for faster installs
+        if: steps.should-run.outputs.run == 'true'
         run: |
-          python -m pip install --upgrade pip wheel setuptools
-          # Install benchmark dependencies efficiently
-          pip install --only-binary=all -e ".[benchmark]" ||
-            pip install -e ".[all]"
-          pip install memory_profiler psutil
+          python -m pip install --upgrade pip
+          pip install uv || true
+        continue-on-error: true
+
+      - name: Install dependencies
+        if: steps.should-run.outputs.run == 'true'
+        run: |
+          # Try uv first for speed, fallback to pip
+          if command -v uv &> /dev/null; then
+            echo "Using uv for installation"
+            uv pip install -e ".[benchmark]" || uv pip install -e ".[all]"
+            uv pip install memory_profiler psutil
+          else
+            echo "Using pip for installation"
+            pip install --only-binary=:all: -e ".[benchmark]" || pip install -e ".[all]"
+            pip install memory_profiler psutil
+          fi
+        shell: bash
 
       - name: System information
+        if: steps.should-run.outputs.run == 'true'
         run: |
           python -c "import sys; print(f'Python: {sys.version}')"
           python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
           python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
-          free -h || true
-          nproc || true
+          python -c "import psutil; print(f'CPU cores: {psutil.cpu_count()}'); print(f'Memory: {psutil.virtual_memory().total / (1024**3):.2f} GB')"
 
       - name: Run performance benchmarks
-        if: matrix.benchmark-type == 'performance'
+        if: matrix.benchmark-type == 'performance' && steps.should-run.outputs.run == 'true'
         run: |
           # Create results directory
           mkdir -p benchmark_results
 
-          # Determine suite based on inputs
+          # Determine suite based on inputs - Match `make benchmark`
           SUITE="${{ github.event.inputs.benchmark_suite }}"
           if [ -z "$SUITE" ] || [ "$SUITE" == "null" ]; then
             SUITE="basic"
@@ -121,11 +163,13 @@ jobs:
       - name: Run large dataset benchmarks
         if: |
           (github.event.inputs.run_large == 'true' || github.event_name == 'schedule') &&
-          matrix.benchmark-type == 'performance'
+          matrix.benchmark-type == 'performance' &&
+          steps.should-run.outputs.run == 'true'
         run: |
+          # Match `make benchmark-large`
           echo "Running large dataset benchmarks..."
           timeout 1800 python benchmark/benchmark.py \
-            --suite large \
+            --large-datasets \
             --save \
             --output-dir benchmark_results \
             --format markdown \
@@ -133,34 +177,35 @@ jobs:
             >> benchmark_results/performance_results.md || echo "Large benchmarks timed out"
 
       - name: Profile memory usage
-        if: matrix.benchmark-type == 'memory' || github.event_name == 'schedule'
+        if: matrix.benchmark-type == 'memory' && steps.should-run.outputs.run == 'true'
         run: |
+          # Match `make profile`
           echo "Profiling memory usage..."
           mkdir -p benchmark_results
           python -m memory_profiler benchmark/benchmark.py \
-            --suite basic \
             --memory-profile \
             > benchmark_results/memory_profile.md || echo "Memory profiling completed with warnings"
 
-      - name: Generate comprehensive benchmark report
+      - name: Generate benchmark report
+        if: steps.should-run.outputs.run == 'true'
         run: |
           # Create comprehensive report
           mkdir -p benchmark_results
 
           # Get system information
-          CPU_COUNT=$(nproc)
-          MEMORY_INFO=$(free -h | grep 'Mem:' | awk '{print $2}')
+          CPU_INFO=$(python -c "import psutil; print(f'{psutil.cpu_count()} cores')")
+          MEM_INFO=$(python -c "import psutil; print(f'{psutil.virtual_memory().total / (1024**3):.2f} GB')")
+          OS_INFO="${{ matrix.os }}"
 
           cat > benchmark_results/BENCHMARK_REPORT.md << EOF
           # Benchmark Report - $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
           ## System Information
-          - **OS**: ubuntu-latest
+          - **OS**: ${OS_INFO}
           - **Python**: ${{ matrix.python-version }}
           - **Benchmark Type**: ${{ matrix.benchmark-type }}
-          - **GPU**: false
-          - **CPU Cores**: ${CPU_COUNT}
-          - **Available Memory**: ${MEMORY_INFO}
+          - **CPU**: ${CPU_INFO}
+          - **Memory**: ${MEM_INFO}
           - **JAX Platform**: ${{ env.JAX_PLATFORMS }}
           - **OMP Threads**: ${{ env.OMP_NUM_THREADS }}
 
@@ -168,6 +213,8 @@ jobs:
           - **Suite**: ${{ github.event.inputs.benchmark_suite || 'basic' }}
           - **Large Datasets**: ${{ github.event.inputs.run_large || 'false' }}
           - **Trigger**: ${{ github.event_name }}
+          - **Branch**: ${{ github.ref }}
+          - **Commit**: ${{ github.sha }}
 
           ---
 
@@ -186,131 +233,62 @@ jobs:
             cat benchmark_results/memory_profile.md >> benchmark_results/BENCHMARK_REPORT.md
           fi
 
-          # Add system resource usage
-          echo "## System Resources (Post-Benchmark)" >> benchmark_results/BENCHMARK_REPORT.md
-          echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
-          free -h >> benchmark_results/BENCHMARK_REPORT.md
-          df -h / >> benchmark_results/BENCHMARK_REPORT.md
-          echo "\`\`\`" >> benchmark_results/BENCHMARK_REPORT.md
+          # Add comparison with baseline if on main branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "## Performance Baseline Comparison" >> benchmark_results/BENCHMARK_REPORT.md
+            echo "Baseline comparison would go here if configured" >> benchmark_results/BENCHMARK_REPORT.md
+          fi
+        shell: bash
 
       - name: Upload benchmark artifacts
+        if: steps.should-run.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: >
-            benchmark-results-${{ matrix.benchmark-type }}-ubuntu-py${{ matrix.python-version }}
+          name: benchmark-${{ matrix.benchmark-type }}-${{ matrix.os }}-py${{ matrix.python-version }}
           path: benchmark_results/
           retention-days: 30
 
       - name: Performance regression check
-        if: matrix.benchmark-type == 'performance' && github.ref == 'refs/heads/main'
+        if: |
+          matrix.benchmark-type == 'performance' &&
+          github.ref == 'refs/heads/main' &&
+          steps.should-run.outputs.run == 'true'
         continue-on-error: true
         run: |
           # Simple performance regression detection
           if [ -f "benchmark_results/performance_results.md" ]; then
             echo "Checking for performance regressions..."
-            # Extract timing information and compare with previous runs
-            grep -E "Time:|seconds" benchmark_results/performance_results.md || echo "No timing data found"
+            # Extract timing information and compare with baseline
+            grep -E "Time:|seconds|ms" benchmark_results/performance_results.md || echo "No timing data found"
           fi
 
-  # Cross-platform benchmarking - conditional
-  benchmark-cross-platform:
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    if: github.event_name == 'schedule' || github.event_name == 'release'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-        python-version: ['3.12']
-        benchmark-type: ['performance']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Comment PR with benchmark results
+        if: |
+          github.event_name == 'pull_request' &&
+          matrix.benchmark-type == 'performance' &&
+          matrix.os == 'ubuntu-latest' &&
+          steps.should-run.outputs.run == 'true'
+        uses: actions/github-script@v7
+        continue-on-error: true
         with:
-          fetch-depth: 1
+          script: |
+            const fs = require('fs');
+            const path = 'benchmark_results/BENCHMARK_REPORT.md';
+            if (fs.existsSync(path)) {
+              const report = fs.readFileSync(path, 'utf8');
+              // Truncate if too long
+              const truncated = report.length > 65536 ?
+                report.substring(0, 65000) + '\n\n... (truncated)' : report;
 
-      - name: Free disk space (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Get-WmiObject -Class Win32_LogicalDisk |
-            Select-Object DeviceID,Size,FreeSpace
-        shell: powershell
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '## 📊 Benchmark Results\n\n' + truncated
+              });
+            }
 
-      - name: Free disk space (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          df -h
-          brew cleanup --prune=all || true
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Cache package installation
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-            build/
-          key: benchmark-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            benchmark-${{ runner.os }}-py${{ matrix.python-version }}-
-            benchmark-${{ runner.os }}-
-
-      - name: Install dependencies (optimized)
-        run: |
-          python -m pip install --upgrade pip wheel setuptools
-          pip install --only-binary=all -e ".[benchmark]" ||
-            pip install -e ".[all]"
-          pip install memory_profiler psutil
-
-      - name: System information (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          python -c "import sys; print(f'Python: {sys.version}')"
-          python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
-          python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
-          systeminfo | findstr /C:"Total Physical Memory"
-          echo "Processor Count: %NUMBER_OF_PROCESSORS%"
-        shell: cmd
-
-      - name: System information (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          python -c "import sys; print(f'Python: {sys.version}')"
-          python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
-          python -c "import jax; print(f'JAX: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
-          vm_stat | head -10 || true
-          sysctl -n hw.ncpu || true
-
-      - name: Run performance benchmarks
-        run: |
-          mkdir -p benchmark_results
-          SUITE="${{ github.event.inputs.benchmark_suite }}"
-          if [ -z "$SUITE" ] || [ "$SUITE" == "null" ]; then
-            SUITE="basic"
-          fi
-
-          echo "Running $SUITE benchmark suite..."
-          timeout 1800 python benchmark/benchmark.py \
-            --suite "$SUITE" \
-            --save \
-            --output-dir benchmark_results \
-            --format markdown \
-            --timeout 300 \
-            > benchmark_results/performance_results.md || echo "Some benchmarks timed out"
-
-      - name: Upload benchmark artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: >
-            benchmark-results-${{ matrix.benchmark-type }}-${{ matrix.os }}-py${{ matrix.python-version }}
-          path: benchmark_results/
-          retention-days: 30
-
-  # Summary job to report overall benchmark status
+  # Summary job
   benchmark-summary:
     runs-on: ubuntu-latest
     needs: [benchmark]
@@ -319,26 +297,27 @@ jobs:
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        continue-on-error: true
 
       - name: Generate summary
         run: |
-          echo "# Benchmark Summary" > BENCHMARK_SUMMARY.md
-          echo "" >> BENCHMARK_SUMMARY.md
-          echo "**Workflow**: ${{ github.workflow }}" >> BENCHMARK_SUMMARY.md
-          echo "**Trigger**: ${{ github.event_name }}" >> BENCHMARK_SUMMARY.md
-          echo "**Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> BENCHMARK_SUMMARY.md
-          echo "" >> BENCHMARK_SUMMARY.md
+          echo "# Benchmark Summary" > $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow**: ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ needs.benchmark.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
           # List all benchmark results
-          echo "## Available Results" >> BENCHMARK_SUMMARY.md
-          find . -name "BENCHMARK_REPORT.md" -exec echo "- {}" \; >> BENCHMARK_SUMMARY.md
+          echo "## Available Results" >> $GITHUB_STEP_SUMMARY
+          find . -name "BENCHMARK_REPORT.md" -exec echo "- {}" \; >> $GITHUB_STEP_SUMMARY || echo "No reports found" >> $GITHUB_STEP_SUMMARY
 
-          # Job status summary
-          echo "" >> BENCHMARK_SUMMARY.md
-          echo "## Job Status" >> BENCHMARK_SUMMARY.md
-          echo "- Benchmark job: ${{ needs.benchmark.result }}" >> BENCHMARK_SUMMARY.md
+          # Also create artifact
+          cp $GITHUB_STEP_SUMMARY BENCHMARK_SUMMARY.md || true
 
       - name: Upload summary
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-summary
