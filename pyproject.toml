@@ -155,12 +155,12 @@ select = [
     "PERF", # Performance linting
     "FURB", # Refurb (modern Python patterns)
 ]
-ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PLC0415", "RUF001", "RUF002", "RUF013", "SIM102", "SIM108", "SIM113", "UP007", "UP028", "UP031", "UP038", "F401", "F821", "F841", "NPY002", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PLC0415", "RUF001", "RUF002", "RUF013", "SIM102", "SIM108", "SIM113", "UP007", "UP028", "UP031", "F401", "F821", "F841", "NPY002", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "E402", "PLR0913", "PLR0912"]
 "tests/*" = ["S101", "PLR2004", "NPY002", "B007", "E731", "PLR0913", "B028", "F401"]
-"examples/*" = ["PLR0913", "NPY002", "B007", "F841"]
+"examples/*" = ["PLR0913", "NPY002", "B007", "F841", "RUF059"]
 "docs/conf.py" = ["E402"]
 "nlsq/__init__.py" = ["PLR0913", "PLR0912"]
 "nlsq/_optimize.py" = ["B028", "PLR0912", "PLR0915"]

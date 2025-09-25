@@ -24,7 +24,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2.1, 4.0, 5.9, 8.0, 9.9])
 
-        popt, pcov = curve_fit(linear, x, y)
+        popt, _pcov = curve_fit(linear, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=1)
 
         # Quadratic model
@@ -32,7 +32,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
             return a * x**2 + b * x + c
 
         y = np.array([1.0, 4.1, 9.0, 15.9, 25.1])
-        popt, pcov = curve_fit(quadratic, x, y)
+        popt, _pcov = curve_fit(quadratic, x, y)
         self.assertAlmostEqual(popt[0], 1.0, places=1)
 
         # Exponential model
@@ -43,7 +43,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         y_true = 2.5 * np.exp(0.5 * x)
         y_noisy = y_true + 0.05 * np.random.randn(50)
 
-        popt, pcov = curve_fit(exponential, x, y_noisy, p0=[1, 1])
+        popt, _pcov = curve_fit(exponential, x, y_noisy, p0=[1, 1])
         self.assertAlmostEqual(popt[0], 2.5, places=0)
 
         # Sine model
@@ -66,16 +66,16 @@ class TestComprehensiveCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Test with different tolerances
-        popt, pcov = curve_fit(model, x, y, ftol=1e-10, xtol=1e-10)
+        popt, _pcov = curve_fit(model, x, y, ftol=1e-10, xtol=1e-10)
         self.assertAlmostEqual(popt[0], 2.0, places=5)
 
         # Test with different max evaluations
-        popt, pcov = curve_fit(model, x, y, maxfev=5)
+        popt, _pcov = curve_fit(model, x, y, maxfev=5)
         self.assertEqual(len(popt), 2)
 
         # Test with absolute_sigma
         sigma = np.ones(5) * 0.1
-        popt, pcov = curve_fit(model, x, y, sigma=sigma, absolute_sigma=False)
+        popt, _pcov = curve_fit(model, x, y, sigma=sigma, absolute_sigma=False)
         self.assertEqual(len(popt), 2)
 
         # Test with check_finite
@@ -92,14 +92,14 @@ class TestComprehensiveCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Small dataset
         x = np.array([1, 2])
         y = np.array([2, 4])
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Perfect fit
@@ -123,11 +123,11 @@ class TestComprehensiveCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Tight bounds
-        popt, pcov = curve_fit(model, x, y, bounds=([1.9, -0.1], [2.1, 0.1]))
+        popt, _pcov = curve_fit(model, x, y, bounds=([1.9, -0.1], [2.1, 0.1]))
         self.assertAlmostEqual(popt[0], 2.0, places=1)
 
         # One-sided bounds
-        popt, pcov = curve_fit(model, x, y, bounds=([0, -np.inf], [np.inf, np.inf]))
+        popt, _pcov = curve_fit(model, x, y, bounds=([0, -np.inf], [np.inf, np.inf]))
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Bounds with initial guess
@@ -168,12 +168,12 @@ class TestComprehensiveCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = cf.curve_fit(model, x, y)
+        popt, _pcov = cf.curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Test with fixed flength
         cf2 = CurveFit(flength=100)  # Use integer
-        popt, pcov = cf2.curve_fit(model, x, y)
+        popt, _pcov = cf2.curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Test updating flength
@@ -191,11 +191,11 @@ class TestComprehensiveCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10, 12, 14, 16, 18, 100])  # Last point is outlier
 
         # Should still fit reasonably well despite outlier
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertGreater(popt[0], 1.5)  # Should be somewhat close to 2
 
         # With loss='soft_l1' for robust fitting
-        popt, pcov = curve_fit(model, x, y, loss="soft_l1")
+        popt, _pcov = curve_fit(model, x, y, loss="soft_l1")
         self.assertGreater(popt[0], 1.5)
 
         # With loss='huber' for robust fitting
@@ -236,7 +236,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         x = np.linspace(-5, 5, 100)
         y = 2.0 * np.exp(-(((x - 1.0) / 1.5) ** 2)) + 0.05 * np.random.randn(100)
 
-        popt, pcov = curve_fit(gaussian, x, y, p0=[1, 0, 1])
+        popt, _pcov = curve_fit(gaussian, x, y, p0=[1, 0, 1])
         self.assertAlmostEqual(popt[0], 2.0, places=0)
         self.assertAlmostEqual(popt[1], 1.0, places=0)
 

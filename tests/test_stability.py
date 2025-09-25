@@ -116,7 +116,7 @@ class TestInputValidator(unittest.TestCase):
         ydata = np.array(model(xdata, 2.5, 1.3))  # Convert to numpy for mutability
 
         # Test valid inputs
-        errors, validation_warnings, xdata_valid, ydata_valid = (
+        errors, _validation_warnings, xdata_valid, ydata_valid = (
             self.validator.validate_curve_fit_inputs(model, xdata, ydata, p0=[2.0, 1.0])
         )
         self.assertEqual(errors, [])  # No errors for valid inputs
@@ -146,7 +146,7 @@ class TestInputValidator(unittest.TestCase):
             return x
 
         # Test valid inputs
-        errors, validation_warnings, x0_valid = (
+        errors, _validation_warnings, x0_valid = (
             self.validator.validate_least_squares_inputs(dummy_fun, x0, bounds)
         )
         self.assertEqual(errors, [])  # No errors for valid inputs
@@ -500,7 +500,7 @@ class TestIntegration(unittest.TestCase):
             return a * jnp.exp(-b * x) + c
 
         # This should succeed despite problematic data
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             model, x, y, p0=[3.0, 0.3, 0.5], bounds=([0, 0, 0], [10, 5, 5])
         )
 

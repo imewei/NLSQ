@@ -712,7 +712,7 @@ class LargeDatasetFitter:
 
         # Use standard curve_fit
         try:
-            popt, pcov = self.curve_fit.curve_fit(
+            popt, _pcov = self.curve_fit.curve_fit(
                 f,
                 xdata,
                 ydata,
@@ -778,7 +778,7 @@ class LargeDatasetFitter:
 
         # Fit on sample
         try:
-            popt, pcov = self.curve_fit.curve_fit(
+            popt, _pcov = self.curve_fit.curve_fit(
                 f,
                 x_sample,
                 y_sample,
@@ -854,7 +854,7 @@ class LargeDatasetFitter:
             ):
                 try:
                     # Fit current chunk
-                    popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
+                    popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
                         f,
                         x_chunk,
                         y_chunk,

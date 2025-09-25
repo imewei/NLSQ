@@ -34,7 +34,7 @@ class TestTargetCoverage(unittest.TestCase):
         x = [1, 2, 3, 4, 5]  # List instead of array
         y = [2, 4, 6, 8, 10]
 
-        errors, warnings, x_clean, y_clean = validator.validate_curve_fit_inputs(
+        errors, _warnings, x_clean, y_clean = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 1]
         )
         self.assertEqual(len(errors), 0)
@@ -45,7 +45,7 @@ class TestTargetCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([[2, 3], [4, 5], [6, 7], [8, 9], [10, 11]])
 
-        errors, warnings, x_clean, y_clean = validator.validate_curve_fit_inputs(
+        errors, _warnings, x_clean, y_clean = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 1]
         )
         # Should handle multi-output
@@ -73,7 +73,7 @@ class TestTargetCoverage(unittest.TestCase):
 
         # Test with initial guess that causes singularity
         try:
-            popt, pcov = curve_fit(
+            popt, _pcov = curve_fit(
                 bad_model, x, y, p0=[1, 2]
             )  # b=2 causes division by zero at x=2
             # If it succeeds, should have moved away from singularity
@@ -97,14 +97,14 @@ class TestTargetCoverage(unittest.TestCase):
         x = np.array([1, 2])
         y = np.array([2, 4])
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=5)
 
         # Test with perfect fit (zero residuals)
         x = np.array([0, 1, 2, 3, 4])
         y = np.array([0, 2, 4, 6, 8])  # Exactly 2*x
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=10)
         self.assertAlmostEqual(popt[1], 0.0, places=10)
 
@@ -191,11 +191,11 @@ class TestTargetCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Test with infinite bounds
-        popt, pcov = curve_fit(model, x, y, bounds=(-np.inf, np.inf))
+        popt, _pcov = curve_fit(model, x, y, bounds=(-np.inf, np.inf))
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Test with very tight bounds around true values
-        popt, pcov = curve_fit(model, x, y, bounds=([1.99, -0.01], [2.01, 0.01]))
+        popt, _pcov = curve_fit(model, x, y, bounds=([1.99, -0.01], [2.01, 0.01]))
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
         # Test with one parameter bounded
@@ -228,7 +228,7 @@ class TestTargetCoverage(unittest.TestCase):
         y = np.array([2.01, 3.99, 6.01, 7.99, 10.01])
 
         # Test with very tight tolerance
-        popt, pcov = curve_fit(model, x, y, ftol=1e-15, xtol=1e-15, gtol=1e-15)
+        popt, _pcov = curve_fit(model, x, y, ftol=1e-15, xtol=1e-15, gtol=1e-15)
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
         # Test with very loose tolerance
@@ -246,14 +246,14 @@ class TestTargetCoverage(unittest.TestCase):
         x = np.array([1e-10, 2e-10, 3e-10, 4e-10, 5e-10])
         y = np.array([2e-10, 4e-10, 6e-10, 8e-10, 10e-10])
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
         # Very large scale
         x = np.array([1e10, 2e10, 3e10, 4e10, 5e10])
         y = np.array([2e10, 4e10, 6e10, 8e10, 10e10])
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
         # Mixed scales

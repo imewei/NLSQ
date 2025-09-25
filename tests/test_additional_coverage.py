@@ -99,7 +99,7 @@ class TestAdditionalCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Test tight tolerances
-        popt, pcov = curve_fit(model, x, y, ftol=1e-12, xtol=1e-12, gtol=1e-12)
+        popt, _pcov = curve_fit(model, x, y, ftol=1e-12, xtol=1e-12, gtol=1e-12)
         self.assertAlmostEqual(popt[0], 2.0, places=5)
 
         # Test loose tolerances
@@ -117,7 +117,7 @@ class TestAdditionalCoverage(unittest.TestCase):
         y = np.array([2e-6, 4e-6, 6e-6, 8e-6, 10e-6])
 
         # Test with and without scaling
-        popt, pcov = curve_fit(model, x, y, x_scale="jac")
+        popt, _pcov = curve_fit(model, x, y, x_scale="jac")
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
         popt, _pcov = curve_fit(model, x, y, x_scale=1.0)
@@ -171,7 +171,7 @@ class TestAdditionalCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = cf.curve_fit(model, x, y)
+        popt, _pcov = cf.curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Test with stability features if available
@@ -229,7 +229,7 @@ class TestAdditionalCoverage(unittest.TestCase):
         y = 2.0 * np.sin(1.5 * x + 0.5) + 3.0 + 0.1 * np.random.randn(100)
 
         # Better initial guess and more iterations
-        popt, pcov = curve_fit(sine_model, x, y, p0=[2, 1.5, 0.5, 3], max_nfev=1000)
+        popt, _pcov = curve_fit(sine_model, x, y, p0=[2, 1.5, 0.5, 3], max_nfev=1000)
         # Check amplitude is roughly correct (allow for sign flip)
         self.assertAlmostEqual(abs(popt[0]), 2.0, places=0)
 

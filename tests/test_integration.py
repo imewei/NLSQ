@@ -232,7 +232,7 @@ class TestEndToEndValidation(unittest.TestCase):
         y = 2.5 * x + 1.0 + np.random.normal(0, 0.1, 100)
 
         # Should automatically use regular curve_fit for small data
-        popt, pcov = curve_fit_large(linear, x, y, p0=[1, 0])
+        popt, _pcov = curve_fit_large(linear, x, y, p0=[1, 0])
 
         np.testing.assert_allclose(popt, [2.5, 1.0], rtol=0.1)
         self.assertIsNotNone(pcov)
@@ -250,7 +250,7 @@ class TestEndToEndValidation(unittest.TestCase):
         y = exponential(x, *true_params) + np.random.normal(0, 0.01, 2_000_000)
 
         # Force chunking with small memory limit
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             exponential,
             x,
             y,

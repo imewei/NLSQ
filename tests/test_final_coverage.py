@@ -37,7 +37,7 @@ class TestFinalCoverage(unittest.TestCase):
         x = np.array([0, 1, 2, 3, 4, 5])
         y = np.array([1, 3, 5, 7, 9, 11])
 
-        popt, pcov = curve_fit(linear, x, y)
+        popt, _pcov = curve_fit(linear, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=10)
         self.assertAlmostEqual(popt[1], 1.0, places=10)
 

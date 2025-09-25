@@ -67,7 +67,7 @@ class TestValidatorsCoverage(unittest.TestCase):
         def model(x, a, b):
             return a * x + b
 
-        _errors, warnings, _, _ = validator.validate_curve_fit_inputs(
+        _errors, _warnings, _, _ = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0]
         )
 
@@ -85,13 +85,13 @@ class TestValidatorsCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Test with valid bounds
-        errors, warnings, _, _ = validator.validate_curve_fit_inputs(
+        errors, _warnings, _, _ = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0], bounds=([0, 0], [10, 10])
         )
         self.assertEqual(len(errors), 0)
 
         # Test with invalid bounds (lower > upper)
-        errors, warnings, _, _ = validator.validate_curve_fit_inputs(
+        errors, _warnings, _, _ = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0], bounds=([10, 10], [0, 0])
         )
         # Should have error about invalid bounds
@@ -109,7 +109,7 @@ class TestValidatorsCoverage(unittest.TestCase):
 
         # Test with valid sigma
         sigma = np.array([0.1, 0.1, 0.1])
-        errors, warnings, _, _ = validator.validate_curve_fit_inputs(
+        errors, _warnings, _, _ = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0], sigma=sigma
         )
         self.assertEqual(len(errors), 0)

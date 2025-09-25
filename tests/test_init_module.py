@@ -320,7 +320,7 @@ class TestInitModule(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2.1, 3.9, 6.1, 7.9, 10.1])
 
-        popt, pcov = cf.curve_fit(model, x, y)
+        popt, _pcov = cf.curve_fit(model, x, y)
 
         self.assertAlmostEqual(popt[0], 2.0, places=1)
         self.assertAlmostEqual(popt[1], 0.0, places=1)

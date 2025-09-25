@@ -195,7 +195,7 @@ class MemoryManager:
         if available >= bytes_needed:
             return (
                 True,
-                f"Memory available: {available/1e9:.2f}GB >= {bytes_needed/1e9:.2f}GB needed",
+                f"Memory available: {available / 1e9:.2f}GB >= {bytes_needed / 1e9:.2f}GB needed",
             )
 
         # Try garbage collection
@@ -206,8 +206,8 @@ class MemoryManager:
             return True, "Memory available after garbage collection"
 
         return False, (
-            f"Insufficient memory: need {bytes_needed/1e9:.2f}GB, "
-            f"have {available/1e9:.2f}GB available"
+            f"Insufficient memory: need {bytes_needed / 1e9:.2f}GB, "
+            f"have {available / 1e9:.2f}GB available"
         )
 
     @contextmanager

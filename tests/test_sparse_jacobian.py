@@ -218,7 +218,7 @@ class TestSparseOptimizer(unittest.TestCase):
 
         # Handle both tuple (from curve_fit) and dict (from sparse) returns
         if isinstance(result, tuple):
-            # curve_fit returns (popt, pcov)
+            # curve_fit returns (popt, _pcov)
             popt = result[0]
             self.assertIsNotNone(popt)
             # Check convergence
@@ -424,9 +424,9 @@ class TestSparseJacobianIntegration(unittest.TestCase):
 
         # Check that we got a result (tuple or object with attributes)
         self.assertIsNotNone(result_sparse)
-        # Could be tuple (popt, pcov) or dict/object with 'x'
+        # Could be tuple (popt, _pcov) or dict/object with 'x'
         if isinstance(result_sparse, tuple):
-            self.assertEqual(len(result_sparse), 2)  # popt, pcov
+            self.assertEqual(len(result_sparse), 2)  # popt, _pcov
         else:
             self.assertTrue(hasattr(result_sparse, "x") or "x" in result_sparse)
 

@@ -10,7 +10,7 @@ Examples
 >>> import jax.numpy as jnp
 >>> from nlsq import curve_fit
 >>> def model(x, a, b): return a * jnp.exp(-b * x)
->>> popt, pcov = curve_fit(model, xdata, ydata)
+>>> popt, _pcov = curve_fit(model, xdata, ydata)
 
 """
 
@@ -224,11 +224,11 @@ def curve_fit_large(
     --------
     Basic usage:
 
-    >>> popt, pcov = curve_fit_large(model_func, xdata, ydata, p0=[1, 2, 3])
+    >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata, p0=[1, 2, 3])
 
     Large dataset with progress bar:
 
-    >>> popt, pcov = curve_fit_large(model_func, big_xdata, big_ydata,
+    >>> popt, _pcov = curve_fit_large(model_func, big_xdata, big_ydata,
     ...                             show_progress=True, memory_limit_gb=8)
     """
     import numpy as np
@@ -339,7 +339,7 @@ def curve_fit_large(
             popt = result.x
             # Create identity covariance matrix if not available
             pcov = np.eye(len(popt))
-            return popt, pcov
+            return popt, _pcov
         else:
             raise RuntimeError(
                 f"Unexpected result format from large dataset fitter: {result}"

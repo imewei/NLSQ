@@ -575,7 +575,7 @@ class OptimizationDiagnostics:
         lines.append(f"Final cost: {stats.get('final_cost', 0):.6e}")
         lines.append(f"Absolute reduction: {stats.get('cost_reduction', 0):.6e}")
         lines.append(
-            f"Relative reduction: {stats.get('relative_cost_reduction', 0)*100:.2f}%"
+            f"Relative reduction: {stats.get('relative_cost_reduction', 0) * 100:.2f}%"
         )
 
         # Convergence
@@ -602,7 +602,7 @@ class OptimizationDiagnostics:
             lines.append("\n--- Timing ---")
             lines.append(f"Total time: {stats['total_time_seconds']:.2f} seconds")
             lines.append(
-                f"Time per iteration: {stats['time_per_iteration']*1000:.1f} ms"
+                f"Time per iteration: {stats['time_per_iteration'] * 1000:.1f} ms"
             )
 
         # Memory
@@ -622,7 +622,7 @@ class OptimizationDiagnostics:
                     f"  • {issue}" for issue in self.numerical_issues[:5]
                 )  # Show first 5
                 if len(self.numerical_issues) > 5:
-                    lines.append(f"  ... and {len(self.numerical_issues)-5} more")
+                    lines.append(f"  ... and {len(self.numerical_issues) - 5} more")
 
         lines.append("\n" + "=" * 60)
 

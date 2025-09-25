@@ -93,7 +93,7 @@ class TestTRFBasic(unittest.TestCase):
         y = np.array([2.1, 4.0, 5.9, 8.1, 9.9])
 
         # Test with tight tolerances
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             model, x, y, method="trf", ftol=1e-12, xtol=1e-12, gtol=1e-12
         )
         self.assertAlmostEqual(popt[0], 2.0, places=1)
@@ -158,13 +158,13 @@ class TestTRFBasic(unittest.TestCase):
         # Test with minimal data
         x = np.array([1, 2])
         y = np.array([2, 4])
-        popt, pcov = curve_fit(model, x, y, method="trf")
+        popt, _pcov = curve_fit(model, x, y, method="trf")
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
         # Test with perfect fit
         x = np.array([0, 1, 2, 3, 4])
         y = 2 * x + 1
-        popt, pcov = curve_fit(model, x, y, method="trf")
+        popt, _pcov = curve_fit(model, x, y, method="trf")
         self.assertAlmostEqual(popt[0], 2.0, places=10)
         self.assertAlmostEqual(popt[1], 1.0, places=10)
 

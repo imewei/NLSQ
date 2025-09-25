@@ -204,7 +204,7 @@ class TestCurveFitLarge(unittest.TestCase):
         y = self.model(x, *self.true_params)
         y = np.array(y) + np.random.normal(0, 0.05, n_points)
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.model, x, y, p0=[2.5, 1.0, 0.3], memory_limit_gb=2.0
         )
 
@@ -268,7 +268,7 @@ class TestDataChunker(unittest.TestCase):
         self.assertEqual(len(chunks), 5)  # 5000 / 1000 = 5 chunks
 
         # Check first chunk
-        x_chunk, y_chunk, idx = chunks[0]  # Returns 3 values
+        x_chunk, y_chunk, _idx = chunks[0]  # Returns 3 values
         self.assertEqual(len(x_chunk), 1000)
         self.assertEqual(len(y_chunk), 1000)
         np.testing.assert_array_equal(x_chunk, np.arange(1000))

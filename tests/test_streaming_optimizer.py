@@ -280,7 +280,7 @@ class TestDataGenerator(unittest.TestCase):
             csv_file = tmp.name
             tmp.write("x,y\n")
             for i in range(200):
-                tmp.write(f"{i},{2*i + 3}\n")
+                tmp.write(f"{i},{2 * i + 3}\n")
 
         try:
             # DataGenerator doesn't have from_csv, but can read files

@@ -79,7 +79,7 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
     >>>
     >>> x = np.linspace(0, 4, 50)
     >>> y = 2.5 * np.exp(-1.3 * x) + 0.1 * np.random.normal(size=len(x))
-    >>> popt, pcov = curve_fit(exponential, x, y, p0=[2, 1])
+    >>> popt, _pcov = curve_fit(exponential, x, y, p0=[2, 1])
     """
     # Extract CurveFit constructor parameters from kwargs
     flength = kwargs.pop("flength", None)
@@ -92,12 +92,12 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
     # Extract only popt and pcov regardless of what internal method returns
     if isinstance(result, tuple):
         if len(result) >= 2:
-            popt, pcov = result[0], result[1]
+            popt, _pcov = result[0], result[1]
         else:
             raise RuntimeError("Unexpected result format from curve_fit")
     else:
         raise RuntimeError("Unexpected result format from curve_fit")
-    return popt, pcov
+    return popt, _pcov
 
 
 def _initialize_feasible(lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
@@ -542,7 +542,7 @@ class CurveFit:
         >>> plt.plot(xdata, ydata, 'b-', label='data')
         Fit for the parameters a, b, c of the function `func`:
         >>> cf = CurveFit()
-        >>> popt, pcov = cf.curve_fit(func, xdata, ydata)
+        >>> popt, _pcov = cf.curve_fit(func, xdata, ydata)
         >>> popt
         array([2.56274217, 1.37268521, 0.47427475])
         >>> plt.plot(xdata, func(xdata, *popt), 'r-',
@@ -550,7 +550,7 @@ class CurveFit:
         Constrain the optimization to the region of ``0 <= a <= 3``,
         ``0 <= b <= 1`` and ``0 <= c <= 0.5``:
         >>> cf = CurveFit()
-        >>> popt, pcov = cf.curve_fit(func, xdata, ydata, bounds=(0, [3., 1., 0.5]))
+        >>> popt, _pcov = cf.curve_fit(func, xdata, ydata, bounds=(0, [3., 1., 0.5]))
         >>> popt
         array([2.43736712, 1.        , 0.34463856])
         >>> plt.plot(xdata, func(xdata, *popt), 'g--',
@@ -970,9 +970,9 @@ class CurveFit:
             feval = np.array(feval)
             if none_mask:
                 # data_mask = np.ndarray.astype(data_mask, bool)
-                return popt, pcov, feval[data_mask]
+                return popt, _pcov, feval[data_mask]
             else:
-                return popt, pcov, feval
+                return popt, _pcov, feval
         else:
             # lower GPU memory usage
             res.pop("jac")
@@ -980,8 +980,8 @@ class CurveFit:
 
         if return_full:
             raise RuntimeError("Return full only works for LM")
-            # return popt, pcov, infodict, errmsg, ier
+            # return popt, _pcov, infodict, errmsg, ier
         elif timeit:
-            return popt, pcov, res, post_time, ctime
+            return popt, _pcov, res, post_time, ctime
         else:
-            return popt, pcov
+            return popt, _pcov
