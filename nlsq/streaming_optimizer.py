@@ -213,7 +213,7 @@ class StreamingOptimizer:
         self,
         func: Callable,
         data_source,
-        x0: np.ndarray,
+        p0: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray] | None = None,
         callback: Callable | None = None,
         verbose: int = 1,
@@ -226,7 +226,7 @@ class StreamingOptimizer:
             Model function to fit
         data_source : various
             Source of data (file, generator, etc.)
-        x0 : np.ndarray
+        p0 : np.ndarray
             Initial parameters
         bounds : tuple, optional
             Parameter bounds (lower, upper)
@@ -241,7 +241,7 @@ class StreamingOptimizer:
             Optimization result
         """
         # Initialize
-        params = x0.copy()
+        params = p0.copy()
         n_params = len(params)
         self.reset_state()
 
@@ -564,7 +564,7 @@ def create_hdf5_dataset(
 def fit_unlimited_data(
     func: Callable,
     data_source,
-    x0: np.ndarray,
+    p0: np.ndarray,
     config: StreamingConfig | None = None,
     **kwargs,
 ) -> dict[str, Any]:
@@ -579,7 +579,7 @@ def fit_unlimited_data(
         Model function to fit
     data_source : various
         Data source (file path, generator, etc.)
-    x0 : np.ndarray
+    p0 : np.ndarray
         Initial parameters
     config : StreamingConfig, optional
         Streaming configuration
@@ -597,7 +597,7 @@ def fit_unlimited_data(
     >>> result = fit_unlimited_data(
     ...     lambda x, a, b: a * np.exp(-b * x),
     ...     'huge_dataset.h5',
-    ...     x0=[1.0, 0.5]
+    ...     p0=[1.0, 0.5]
     ... )
 
     >>> # Fit to streaming data generator
@@ -610,9 +610,9 @@ def fit_unlimited_data(
     >>> result = fit_unlimited_data(
     ...     lambda x, a, b: a * x + b,
     ...     data_generator(),
-    ...     x0=[1.0, 0.0],
+    ...     p0=[1.0, 0.0],
     ...     config=StreamingConfig(max_epochs=5)
     ... )
     """
     optimizer = StreamingOptimizer(config)
-    return optimizer.fit_streaming(func, data_source, x0, **kwargs)
+    return optimizer.fit_streaming(func, data_source, p0, **kwargs)

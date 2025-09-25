@@ -102,8 +102,13 @@ from jax import jit
 from jax.scipy.linalg import svd as jax_svd
 from jax.tree_util import tree_flatten
 
+# Setup logging
+from nlsq.logging import get_logger
+
 # Import safe SVD with fallback
 from nlsq.svd_fallback import compute_svd_with_fallback, initialize_gpu_safely
+
+logger = get_logger("trf")
 
 # Initialize GPU settings safely
 initialize_gpu_safely()

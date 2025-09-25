@@ -88,10 +88,15 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
     # Create CurveFit instance with appropriate parameters
     jcf = CurveFit(flength=flength, use_dynamic_sizing=use_dynamic_sizing)
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
-    if len(result) == 5:
-        popt, pcov, _, _, _ = result
+    # Always return exactly 2 values for SciPy compatibility
+    # Extract only popt and pcov regardless of what internal method returns
+    if isinstance(result, tuple):
+        if len(result) >= 2:
+            popt, pcov = result[0], result[1]
+        else:
+            raise RuntimeError("Unexpected result format from curve_fit")
     else:
-        popt, pcov = result
+        raise RuntimeError("Unexpected result format from curve_fit")
     return popt, pcov
 
 

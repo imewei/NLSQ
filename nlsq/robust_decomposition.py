@@ -4,7 +4,6 @@ This module extends the SVD fallback to provide comprehensive fallback
 strategies for all matrix decompositions used in optimization.
 """
 
-import logging
 import warnings
 from typing import Optional
 
@@ -14,6 +13,9 @@ import numpy as np
 from jax.scipy.linalg import cholesky as jax_cholesky
 from jax.scipy.linalg import qr as jax_qr
 from jax.scipy.linalg import svd as jax_svd
+
+# Use NLSQ logging system
+from nlsq.logging import get_logger
 
 # Import the existing SVD fallback utilities
 from nlsq.svd_fallback import with_cpu_fallback
@@ -47,9 +49,11 @@ class RobustDecomposition:
         enable_logging : bool
             Whether to enable detailed logging of fallback attempts
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger("robust_decomposition")
         if enable_logging:
-            self.logger.setLevel(logging.DEBUG)
+            from nlsq.logging import LogLevel
+
+            self.logger.logger.setLevel(LogLevel.DEBUG)
 
         # Build fallback chain
         self.fallback_chain = [
