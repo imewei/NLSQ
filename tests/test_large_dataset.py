@@ -222,7 +222,7 @@ class TestCurveFitLarge(unittest.TestCase):
         # Set bounds
         bounds = ([0, 0, 0], [10, 10, 2])
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.model, x, y, p0=[2.5, 1.0, 0.3], bounds=bounds, memory_limit_gb=1.0
         )
 
@@ -240,7 +240,7 @@ class TestCurveFitLarge(unittest.TestCase):
         y = np.array(y) + np.random.normal(0, 0.05, n_sample)
 
         # Simulate large dataset behavior with small memory limit
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.model,
             x,
             y,
@@ -274,7 +274,7 @@ class TestDataChunker(unittest.TestCase):
         np.testing.assert_array_equal(x_chunk, np.arange(1000))
 
         # Check last chunk
-        x_chunk, y_chunk, idx = chunks[-1]  # Returns 3 values
+        x_chunk, y_chunk, _idx = chunks[-1]  # Returns 3 values
         self.assertEqual(len(x_chunk), 1000)
         np.testing.assert_array_equal(x_chunk, np.arange(4000, 5000))
 
@@ -289,7 +289,7 @@ class TestDataChunker(unittest.TestCase):
         self.assertEqual(len(chunks), 6)  # 5 full + 1 partial
 
         # Check last chunk is smaller
-        x_chunk, y_chunk, idx = chunks[-1]  # Returns 3 values
+        x_chunk, _y_chunk, _idx = chunks[-1]  # Returns 3 values
         self.assertEqual(len(x_chunk), 500)  # Remainder
 
 
@@ -419,7 +419,7 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
 
         with memory_context(config):
             # Fit within the context
-            popt, pcov = curve_fit_large(
+            popt, _pcov = curve_fit_large(
                 self.model, x, y, p0=[2.0, 1.0], memory_limit_gb=1.0
             )
 

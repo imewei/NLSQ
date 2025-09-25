@@ -25,7 +25,9 @@ sys.path.insert(0, os.path.abspath(".."))
 # -- Project information -----------------------------------------------------
 
 project = "NLSQ"
-copyright = "2024-2025, Wei Chen (Argonne National Laboratory) | 2022, Original JAXFit Authors"
+copyright = (
+    "2024-2025, Wei Chen (Argonne National Laboratory) | 2022, Original JAXFit Authors"
+)
 author = "Wei Chen"
 
 # Get version dynamically

@@ -113,7 +113,9 @@ cf = CurveFit(enable_stability=True)  # 25-30% overhead
 cf = CurveFit(enable_stability=True, enable_overflow_check=True)  # 30% overhead
 
 # Critical applications
-cf = CurveFit(enable_stability=True, enable_recovery=True, enable_overflow_check=True)  # 30-60% overhead
+cf = CurveFit(
+    enable_stability=True, enable_recovery=True, enable_overflow_check=True
+)  # 30-60% overhead
 ```
 
 ### Overhead Breakdown

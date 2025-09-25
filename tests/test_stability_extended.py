@@ -1,21 +1,34 @@
 #!/usr/bin/env python3
 """Extended tests for stability modules to improve test coverage."""
 
-import unittest
-import numpy as np
-import jax.numpy as jnp
-import tempfile
 import os
+import tempfile
+import unittest
 from pathlib import Path
 
+import jax.numpy as jnp
+import numpy as np
+
+from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
+from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
+from nlsq.memory_manager import (
+    MemoryManager,
+    clear_memory_pool,
+    get_memory_manager,
+    get_memory_stats,
+)
+from nlsq.recovery import OptimizationRecovery
+from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
+from nlsq.smart_cache import (
+    SmartCache,
+    cached_function,
+    cached_jacobian,
+    clear_all_caches,
+    get_global_cache,
+    get_jit_cache,
+)
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.validators import InputValidator
-from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
-from nlsq.diagnostics import OptimizationDiagnostics, ConvergenceMonitor
-from nlsq.recovery import OptimizationRecovery
-from nlsq.memory_manager import MemoryManager, get_memory_manager, clear_memory_pool, get_memory_stats
-from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
-from nlsq.smart_cache import SmartCache, get_global_cache, get_jit_cache, clear_all_caches, cached_function, cached_jacobian
 
 
 class TestStabilityExtended(unittest.TestCase):
@@ -55,7 +68,7 @@ class TestStabilityExtended(unittest.TestCase):
 
         # Test regularize_hessian (not regularize_matrix)
         A = jnp.array([[1e-20, 0], [0, 1e-20]])
-        if hasattr(guard, 'regularize_hessian'):
+        if hasattr(guard, "regularize_hessian"):
             A_reg = guard.regularize_hessian(A)
             # Check that regularization improves the condition number
             # or at least doesn't make it worse significantly
@@ -66,7 +79,7 @@ class TestStabilityExtended(unittest.TestCase):
 
         # Test condition number checking (method may not exist)
         A = jnp.eye(3)
-        if hasattr(guard, 'check_condition_number'):
+        if hasattr(guard, "check_condition_number"):
             is_ill = guard.check_condition_number(A)
             self.assertFalse(is_ill)
         else:
@@ -76,7 +89,7 @@ class TestStabilityExtended(unittest.TestCase):
 
         # Test safe_norm (method may not exist)
         x = jnp.array([1e200, 1e200, 1e200])
-        if hasattr(guard, 'safe_norm'):
+        if hasattr(guard, "safe_norm"):
             norm = guard.safe_norm(x)
             self.assertTrue(jnp.isfinite(norm))
         else:
@@ -100,12 +113,12 @@ class TestValidatorsExtended(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Fast mode should skip duplicate and outlier checks
-        errors_f, warnings_f, x_f, y_f = validator_fast.validate_curve_fit_inputs(
+        errors_f, _warnings_f, _x_f, _y_f = validator_fast.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0]
         )
 
         # Full mode should check everything
-        errors, warnings, x_c, y_c = validator_full.validate_curve_fit_inputs(
+        errors, _warnings, _x_c, _y_c = validator_full.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0]
         )
 
@@ -127,8 +140,8 @@ class TestValidatorsExtended(unittest.TestCase):
         xdata = (xx.flatten(), yy.flatten())
         ydata = np.random.randn(100)
 
-        errors, warnings, xdata_clean, ydata_clean = validator.validate_curve_fit_inputs(
-            model_2d, xdata, ydata, p0=[1, 1]
+        errors, _warnings, xdata_clean, _ydata_clean = (
+            validator.validate_curve_fit_inputs(model_2d, xdata, ydata, p0=[1, 1])
         )
 
         self.assertEqual(len(errors), 0)
@@ -158,7 +171,7 @@ class TestValidatorsExtended(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
         sigma = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
-        errors, warnings, _, _ = validator.validate_curve_fit_inputs(
+        errors, _warnings, _, _ = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1], sigma=sigma
         )
         self.assertEqual(len(errors), 0)
@@ -179,51 +192,51 @@ class TestAlgorithmSelectorExtended(unittest.TestCase):
 
         # Analyze with memory limit
         analysis = selector.analyze_problem(model, x, y, memory_limit_gb=0.5)
-        self.assertTrue('memory_constrained' in analysis)
+        self.assertTrue("memory_constrained" in analysis)
 
         # Select algorithm for memory-constrained problem
         rec = selector.select_algorithm(analysis)
-        self.assertEqual(rec['algorithm'], 'trf')
-        if analysis['memory_constrained']:
-            self.assertEqual(rec['tr_solver'], 'lsmr')
+        self.assertEqual(rec["algorithm"], "trf")
+        if analysis["memory_constrained"]:
+            self.assertEqual(rec["tr_solver"], "lsmr")
 
     def test_get_explanation(self):
         """Test human-readable explanation generation."""
         selector = AlgorithmSelector()
 
         recommendations = {
-            'algorithm': 'trf',
-            'loss': 'huber',
-            'ftol': 1e-6,
-            'tr_solver': 'lsmr',
-            'max_nfev': 100
+            "algorithm": "trf",
+            "loss": "huber",
+            "ftol": 1e-6,
+            "tr_solver": "lsmr",
+            "max_nfev": 100,
         }
 
         explanation = selector.get_algorithm_explanation(recommendations)
-        self.assertIn('Trust Region Reflective', explanation)
-        self.assertIn('huber', explanation)
-        self.assertIn('iterative solver', explanation)
+        self.assertIn("Trust Region Reflective", explanation)
+        self.assertIn("huber", explanation)
+        self.assertIn("iterative solver", explanation)
 
     def test_user_preferences(self):
         """Test algorithm selection with user preferences."""
         selector = AlgorithmSelector()
 
         analysis = {
-            'n_points': 1000,
-            'n_params': 5,
-            'has_bounds': False,
-            'has_outliers': False
+            "n_points": 1000,
+            "n_params": 5,
+            "has_bounds": False,
+            "has_outliers": False,
         }
 
         # Prioritize speed
-        rec = selector.select_algorithm(analysis, {'prioritize': 'speed'})
-        self.assertEqual(rec['max_nfev'], 100)
-        self.assertAlmostEqual(rec['ftol'], 1e-6)
+        rec = selector.select_algorithm(analysis, {"prioritize": "speed"})
+        self.assertEqual(rec["max_nfev"], 100)
+        self.assertAlmostEqual(rec["ftol"], 1e-6)
 
         # Prioritize accuracy
-        rec = selector.select_algorithm(analysis, {'prioritize': 'accuracy'})
-        self.assertAlmostEqual(rec['ftol'], 1e-10)
-        self.assertAlmostEqual(rec['xtol'], 1e-10)
+        rec = selector.select_algorithm(analysis, {"prioritize": "accuracy"})
+        self.assertAlmostEqual(rec["ftol"], 1e-10)
+        self.assertAlmostEqual(rec["xtol"], 1e-10)
 
 
 class TestDiagnosticsExtended(unittest.TestCase):
@@ -234,7 +247,7 @@ class TestDiagnosticsExtended(unittest.TestCase):
         diag = OptimizationDiagnostics()
 
         # Start optimization
-        diag.start_optimization(x0=np.array([1.0, 2.0, 3.0]), problem_name='test')
+        diag.start_optimization(x0=np.array([1.0, 2.0, 3.0]), problem_name="test")
 
         # Record iterations
         for i in range(10):
@@ -242,20 +255,20 @@ class TestDiagnosticsExtended(unittest.TestCase):
                 iteration=i,
                 x=np.array([1.0, 2.0, 3.0]) * (i + 1),
                 cost=100 / (i + 1),
-                gradient=np.array([10 / (i + 1), 10 / (i + 1), 10 / (i + 1)])
+                gradient=np.array([10 / (i + 1), 10 / (i + 1), 10 / (i + 1)]),
             )
 
         # Record event
-        diag.record_event('regularization', {'lambda': 0.01})
+        diag.record_event("regularization", {"lambda": 0.01})
 
         # Get summary
         summary = diag.get_summary_statistics()
-        self.assertIn('total_iterations', summary)
-        self.assertIn('final_cost', summary)
+        self.assertIn("total_iterations", summary)
+        self.assertIn("final_cost", summary)
 
         # Generate report
         report = diag.generate_report()
-        self.assertIn('Report', report)  # Check for 'Report' instead of 'Summary'
+        self.assertIn("Report", report)  # Check for 'Report' instead of 'Summary'
 
     def test_convergence_patterns(self):
         """Test convergence pattern detection."""
@@ -271,13 +284,13 @@ class TestDiagnosticsExtended(unittest.TestCase):
             monitor.update(cost, np.array([1.0, 2.0]), gradient=gradient)
 
         # Check patterns
-        is_osc, osc_score = monitor.detect_oscillation()
+        is_osc, _osc_score = monitor.detect_oscillation()
         self.assertFalse(is_osc)
 
-        is_stag, stag_score = monitor.detect_stagnation()
+        is_stag, _stag_score = monitor.detect_stagnation()
         self.assertFalse(is_stag)  # Should be converging, not stagnant
 
-        is_div, div_score = monitor.detect_divergence()
+        is_div, _div_score = monitor.detect_divergence()
         self.assertFalse(is_div)
 
 
@@ -290,17 +303,17 @@ class TestRecoveryExtended(unittest.TestCase):
 
         # Test parameter perturbation
         state = {
-            'params': np.array([1.0, 2.0, 3.0]),
-            'iteration': 10,
-            'error': 'Singular matrix'
+            "params": np.array([1.0, 2.0, 3.0]),
+            "iteration": 10,
+            "error": "Singular matrix",
         }
 
         def dummy_opt(**kwargs):
             # Simulate successful optimization after perturbation
-            params = kwargs.get('params', kwargs.get('x', np.array([1.0, 2.0, 3.0])))
-            return {'x': params * 1.1, 'success': True}
+            params = kwargs.get("params", kwargs.get("x", np.array([1.0, 2.0, 3.0])))
+            return {"x": params * 1.1, "success": True}
 
-        result = recovery.recover_from_failure('singular_matrix', state, dummy_opt)
+        result = recovery.recover_from_failure("singular_matrix", state, dummy_opt)
         self.assertIsNotNone(result)
 
     def test_multi_start_optimization(self):
@@ -308,10 +321,12 @@ class TestRecoveryExtended(unittest.TestCase):
         recovery = OptimizationRecovery()
 
         # Test that recovery has the expected methods
-        self.assertTrue(hasattr(recovery, 'recover_from_failure'))
+        self.assertTrue(hasattr(recovery, "recover_from_failure"))
         # Other methods might be private
-        self.assertTrue(hasattr(recovery, '_perturb_parameters') or
-                       hasattr(recovery, 'recover_from_failure'))
+        self.assertTrue(
+            hasattr(recovery, "_perturb_parameters")
+            or hasattr(recovery, "recover_from_failure")
+        )
 
 
 class TestMemoryManagerExtended(unittest.TestCase):
@@ -345,7 +360,9 @@ class TestMemoryManagerExtended(unittest.TestCase):
         manager = get_memory_manager()
 
         # Check memory usage - pass size as integer not tuple
-        result = manager.check_memory_availability(1000 * 1000 * 8)  # 8 bytes per float64
+        result = manager.check_memory_availability(
+            1000 * 1000 * 8
+        )  # 8 bytes per float64
         # Result is a tuple (bool, str)
         self.assertIsInstance(result, tuple)
         self.assertIsInstance(result[0], bool)
@@ -364,7 +381,7 @@ class TestRobustDecompositionExtended(unittest.TestCase):
         # Result is a tuple (L, info_dict)
         if isinstance(result, tuple):
             L, info = result
-            self.assertTrue(info.get('success', False))
+            self.assertTrue(info.get("success", False))
         else:
             # Just L returned
             L = result
@@ -385,6 +402,7 @@ class TestRobustDecompositionExtended(unittest.TestCase):
     def test_robust_decomp_function(self):
         """Test the convenience function."""
         from nlsq.robust_decomposition import RobustDecomposition
+
         decomp = RobustDecomposition()
         A = jnp.array([[1.0, 0.5], [0.5, 1.0]])
         result = decomp.cholesky(A)
@@ -401,14 +419,13 @@ class TestSmartCacheExtended(unittest.TestCase):
     def tearDown(self):
         """Clean up temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_cache_operations(self):
         """Test cache operations."""
         cache = SmartCache(
-            cache_dir=self.temp_dir,
-            max_memory_items=10,
-            disk_cache_enabled=True
+            cache_dir=self.temp_dir, max_memory_items=10, disk_cache_enabled=True
         )
 
         # Test key generation
@@ -422,13 +439,13 @@ class TestSmartCacheExtended(unittest.TestCase):
 
         # Test cache stats
         stats = cache.get_stats()
-        self.assertIn('memory_hits', stats)
+        self.assertIn("memory_hits", stats)
 
         # Test cache clearing - clear method might not exist
         # Try clear_all method
-        if hasattr(cache, 'clear_all'):
+        if hasattr(cache, "clear_all"):
             cache.clear_all()
-        elif hasattr(cache, 'clear_memory_cache'):
+        elif hasattr(cache, "clear_memory_cache"):
             cache.clear_memory_cache()
         # Check that cache operations work
         self.assertIsNotNone(cache)
@@ -447,7 +464,6 @@ class TestSmartCacheExtended(unittest.TestCase):
 
     def test_decorators(self):
         """Test cache decorators."""
-        from nlsq.smart_cache import cached_function
 
         @cached_function
         def expensive_func(x, y):
@@ -465,5 +481,5 @@ class TestSmartCacheExtended(unittest.TestCase):
             pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

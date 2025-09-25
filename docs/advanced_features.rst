@@ -18,14 +18,14 @@ Memory Configuration
 
    # Configure memory settings
    config = MemoryConfig(
-       memory_limit_gb=8.0,                    # Maximum memory usage
-       enable_mixed_precision=True,            # Use mixed precision to save memory
-       enable_memory_monitoring=True,          # Monitor memory usage in real-time
-       max_cache_size_gb=2.0,                 # Limit cache size
-       enable_garbage_collection=True,        # Auto-trigger garbage collection
-       chunk_size_factor=0.8,                 # Conservative chunking
-       min_chunk_size=10000,                  # Minimum chunk size
-       max_chunk_size=1000000                 # Maximum chunk size
+       memory_limit_gb=8.0,  # Maximum memory usage
+       enable_mixed_precision=True,  # Use mixed precision to save memory
+       enable_memory_monitoring=True,  # Monitor memory usage in real-time
+       max_cache_size_gb=2.0,  # Limit cache size
+       enable_garbage_collection=True,  # Auto-trigger garbage collection
+       chunk_size_factor=0.8,  # Conservative chunking
+       min_chunk_size=10000,  # Minimum chunk size
+       max_chunk_size=1000000,  # Maximum chunk size
    )
 
    # Use memory context for temporary settings
@@ -74,27 +74,20 @@ Basic Algorithm Selection
    # Create selector
    selector = AlgorithmSelector()
 
+
    # Define your model
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
 
+
    # Auto-select best algorithm
-   recommendations = auto_select_algorithm(
-       f=model,
-       xdata=x,
-       ydata=y,
-       p0=[1.0, 0.5, 0.1]
-   )
+   recommendations = auto_select_algorithm(f=model, xdata=x, ydata=y, p0=[1.0, 0.5, 0.1])
 
    # Extract method from recommendations
-   method = recommendations.get('algorithm', 'trf')
+   method = recommendations.get("algorithm", "trf")
 
    # Use selected algorithm
-   popt, pcov = curve_fit(
-       model, x, y,
-       p0=[1.0, 0.5, 0.1],
-       method=method
-   )
+   popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5, 0.1], method=method)
 
    print(f"Selected algorithm: {method}")
 
@@ -107,19 +100,12 @@ Advanced Selection Strategies
    from nlsq.algorithm_selector import auto_select_algorithm
 
    recommendations = auto_select_algorithm(
-       func=model,
-       xdata=x,
-       ydata=y,
-       p0=p0,
-       memory_limit_gb=4.0
+       func=model, xdata=x, ydata=y, p0=p0, memory_limit_gb=4.0
    )
 
    # Use the recommended settings
-   optimal_method = recommendations.get('algorithm', 'trf')
-   popt, pcov = curve_fit(
-       model, x, y, p0=p0,
-       method=optimal_method
-   )
+   optimal_method = recommendations.get("algorithm", "trf")
+   popt, pcov = curve_fit(model, x, y, p0=p0, method=optimal_method)
 
 Diagnostics & Monitoring
 ------------------------
@@ -136,15 +122,11 @@ Convergence Monitoring
 
    # Configure convergence monitoring
    conv_monitor = ConvergenceMonitor(
-       window_size=10,        # Moving window size
-       sensitivity=1.2        # Detection sensitivity
+       window_size=10, sensitivity=1.2  # Moving window size  # Detection sensitivity
    )
 
    # Use CurveFit with stability features enabled
-   cf = CurveFit(
-       enable_stability=True,
-       enable_recovery=True
-   )
+   cf = CurveFit(enable_stability=True, enable_recovery=True)
 
    # Perform fitting
    popt, pcov = cf.curve_fit(func, x, y, p0=p0)
@@ -163,10 +145,7 @@ Using OptimizationDiagnostics
    # Record optimization data during fitting
    # (This would typically be done internally by the optimizer)
    diagnostics.record_iteration(
-       iteration=0,
-       residual=1.0,
-       parameters=np.array([1.0, 0.5]),
-       jacobian=None
+       iteration=0, residual=1.0, parameters=np.array([1.0, 0.5]), jacobian=None
    )
 
    # Access diagnostic information
@@ -188,15 +167,15 @@ Basic Caching Setup
 
    # Configure caching
    cache = SmartCache(
-       max_memory_items=1000,
-       disk_cache_enabled=True,
-       cache_dir='.nlsq_cache'
+       max_memory_items=1000, disk_cache_enabled=True, cache_dir=".nlsq_cache"
    )
+
 
    # Define cacheable function
    @cached_function
    def expensive_model(x, a, b, c):
        return a * jnp.exp(-b * x**2) + c * jnp.sin(x)
+
 
    # First fit - compiles and may cache internally
    popt1, pcov1 = curve_fit(expensive_model, x1, y1, p0=[1.0, 0.1, 0.5])
@@ -240,10 +219,7 @@ Using OptimizationRecovery
    import numpy as np
 
    # Create recovery handler
-   recovery = OptimizationRecovery(
-       max_attempts=3,
-       perturbation_factor=0.1
-   )
+   recovery = OptimizationRecovery(max_attempts=3, perturbation_factor=0.1)
 
    # CurveFit with recovery enabled
    cf = CurveFit(enable_recovery=True)
@@ -280,12 +256,7 @@ Basic Input Validation
    # Validate inputs before fitting
    try:
        warnings, errors, clean_x, clean_y = validator.validate_curve_fit_inputs(
-           func=model_function,
-           xdata=x,
-           ydata=y,
-           p0=p0,
-           bounds=bounds,
-           sigma=sigma
+           func=model_function, xdata=x, ydata=y, p0=p0, bounds=bounds, sigma=sigma
        )
 
        # Handle warnings
@@ -313,6 +284,7 @@ Custom Validation Rules
    # Create validator with custom rules
    custom_validator = InputValidator(fast_mode=False)  # Enable all checks
 
+
    # Add custom validation logic
    def custom_validate_physics_model(func, xdata, ydata, p0):
        """Custom validation for physics models."""
@@ -330,6 +302,7 @@ Custom Validation Rules
            warnings.warn("Low signal-to-noise ratio detected", UserWarning)
 
        return True
+
 
    # Use custom validation
    custom_validate_physics_model(physics_model, time_data, signal_data, initial_params)
@@ -351,8 +324,12 @@ Best Practices for Advanced Features
 
    # Example: Combining multiple features
    from nlsq import (
-       CurveFit, MemoryConfig, memory_context,
-       SmartCache, InputValidator, curve_fit_large
+       CurveFit,
+       MemoryConfig,
+       memory_context,
+       SmartCache,
+       InputValidator,
+       curve_fit_large,
    )
    from nlsq.algorithm_selector import auto_select_algorithm
 
@@ -360,6 +337,7 @@ Best Practices for Advanced Features
    memory_config = MemoryConfig(memory_limit_gb=8.0)
    cache = SmartCache(disk_cache_enabled=True)
    validator = InputValidator(fast_mode=True)
+
 
    # Production-ready fitting function
    def robust_curve_fit(func, x, y, p0, bounds=None):
@@ -377,20 +355,25 @@ Best Practices for Advanced Features
            recommendations = auto_select_algorithm(
                f=func, xdata=clean_x, ydata=clean_y, p0=p0, bounds=bounds
            )
-           method = recommendations.get('algorithm', 'trf')
+           method = recommendations.get("algorithm", "trf")
 
            # Fit based on dataset size
            if len(clean_x) > 1_000_000:
                return curve_fit_large(
-                   func, clean_x, clean_y, p0=p0,
-                   bounds=bounds, method=method, show_progress=True
+                   func,
+                   clean_x,
+                   clean_y,
+                   p0=p0,
+                   bounds=bounds,
+                   method=method,
+                   show_progress=True,
                )
            else:
                cf = CurveFit(enable_stability=True, enable_recovery=True)
                return cf.curve_fit(
-                   func, clean_x, clean_y, p0=p0,
-                   bounds=bounds, method=method
+                   func, clean_x, clean_y, p0=p0, bounds=bounds, method=method
                )
+
 
    # Use in production
    popt, pcov = robust_curve_fit(model, xdata, ydata, p0=[1, 2, 3])

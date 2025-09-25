@@ -2,11 +2,13 @@
 """Comprehensive tests to reach 74% coverage."""
 
 import unittest
-import numpy as np
+
 import jax
 import jax.numpy as jnp
-from nlsq.minpack import CurveFit, curve_fit
+import numpy as np
+
 from nlsq.least_squares import LeastSquares
+from nlsq.minpack import CurveFit, curve_fit
 
 
 class TestComprehensiveCoverage(unittest.TestCase):
@@ -48,10 +50,10 @@ class TestComprehensiveCoverage(unittest.TestCase):
         def sine_model(x, a, b, c):
             return a * jnp.sin(b * x + c)
 
-        x = np.linspace(0, 2*np.pi, 100)
+        x = np.linspace(0, 2 * np.pi, 100)
         y = 2.0 * np.sin(1.0 * x + 0.5) + 0.1 * np.random.randn(100)
 
-        popt, pcov = curve_fit(sine_model, x, y, p0=[1, 1, 0])
+        popt, _pcov = curve_fit(sine_model, x, y, p0=[1, 1, 0])
         self.assertAlmostEqual(popt[0], 2.0, places=0)
 
     def test_curve_fit_with_different_options(self):
@@ -77,7 +79,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         self.assertEqual(len(popt), 2)
 
         # Test with check_finite
-        popt, pcov = curve_fit(model, x, y, check_finite=True)
+        popt, _pcov = curve_fit(model, x, y, check_finite=True)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
     def test_curve_fit_edge_cases(self):
@@ -107,7 +109,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         x = np.array([0, 1, 2, 3, 4])
         y = np.array([1, 3, 5, 7, 9])  # Exactly 2*x + 1
 
-        popt, pcov = curve_fit(perfect_model, x, y)
+        popt, _pcov = curve_fit(perfect_model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=6)
         self.assertAlmostEqual(popt[1], 1.0, places=6)
 
@@ -129,7 +131,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Bounds with initial guess
-        popt, pcov = curve_fit(model, x, y, p0=[1, 1], bounds=([0, -10], [10, 10]))
+        popt, _pcov = curve_fit(model, x, y, p0=[1, 1], bounds=([0, -10], [10, 10]))
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
     def test_least_squares_class(self):
@@ -152,7 +154,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
             return residual(params, x, y)
 
         # Test has required attributes/methods
-        self.assertTrue(hasattr(ls, 'least_squares') or hasattr(ls, '__call__'))
+        self.assertTrue(hasattr(ls, "least_squares") or callable(ls))
 
     def test_curve_fit_class_options(self):
         """Test CurveFit class with various options."""
@@ -176,7 +178,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
 
         # Test updating flength
         cf2.update_flength(200)  # Use integer
-        popt, pcov = cf2.curve_fit(model, x, y)
+        popt, _pcov = cf2.curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
     def test_curve_fit_robustness(self):
@@ -193,11 +195,11 @@ class TestComprehensiveCoverage(unittest.TestCase):
         self.assertGreater(popt[0], 1.5)  # Should be somewhat close to 2
 
         # With loss='soft_l1' for robust fitting
-        popt, pcov = curve_fit(model, x, y, loss='soft_l1')
+        popt, pcov = curve_fit(model, x, y, loss="soft_l1")
         self.assertGreater(popt[0], 1.5)
 
         # With loss='huber' for robust fitting
-        popt, pcov = curve_fit(model, x, y, loss='huber')
+        popt, _pcov = curve_fit(model, x, y, loss="huber")
         self.assertGreater(popt[0], 1.5)
 
     def test_curve_fit_multidimensional(self):
@@ -219,7 +221,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         xdata = (xx.ravel(), yy.ravel())
         ydata = zz.ravel()
 
-        popt, pcov = curve_fit(plane_model, xdata, ydata, p0=[1, 1, 0])
+        popt, _pcov = curve_fit(plane_model, xdata, ydata, p0=[1, 1, 0])
         self.assertAlmostEqual(popt[0], 2.0, places=1)
         self.assertAlmostEqual(popt[1], 3.0, places=1)
         self.assertAlmostEqual(popt[2], 1.0, places=1)
@@ -229,10 +231,10 @@ class TestComprehensiveCoverage(unittest.TestCase):
 
         # Gaussian model
         def gaussian(x, amplitude, center, width):
-            return amplitude * jnp.exp(-((x - center) / width) ** 2)
+            return amplitude * jnp.exp(-(((x - center) / width) ** 2))
 
         x = np.linspace(-5, 5, 100)
-        y = 2.0 * np.exp(-((x - 1.0) / 1.5) ** 2) + 0.05 * np.random.randn(100)
+        y = 2.0 * np.exp(-(((x - 1.0) / 1.5) ** 2)) + 0.05 * np.random.randn(100)
 
         popt, pcov = curve_fit(gaussian, x, y, p0=[1, 0, 1])
         self.assertAlmostEqual(popt[0], 2.0, places=0)
@@ -240,11 +242,11 @@ class TestComprehensiveCoverage(unittest.TestCase):
 
         # Lorentzian model
         def lorentzian(x, amplitude, center, width):
-            return amplitude * width**2 / ((x - center)**2 + width**2)
+            return amplitude * width**2 / ((x - center) ** 2 + width**2)
 
-        y = 3.0 * 2.0**2 / ((x - 0.5)**2 + 2.0**2) + 0.05 * np.random.randn(100)
+        y = 3.0 * 2.0**2 / ((x - 0.5) ** 2 + 2.0**2) + 0.05 * np.random.randn(100)
 
-        popt, pcov = curve_fit(lorentzian, x, y, p0=[1, 0, 1])
+        popt, _pcov = curve_fit(lorentzian, x, y, p0=[1, 0, 1])
         self.assertAlmostEqual(popt[0], 3.0, places=0)
 
     def test_curve_fit_convergence_issues(self):
@@ -258,15 +260,11 @@ class TestComprehensiveCoverage(unittest.TestCase):
         y = 2.0 * np.sin(1.5 * x) * np.exp(-0.1 * x) + 0.05 * np.random.randn(100)
 
         # Multiple initial guesses to test convergence
-        initial_guesses = [
-            [1.0, 1.0, 0.1],
-            [3.0, 2.0, 0.2],
-            [2.0, 1.5, 0.1]
-        ]
+        initial_guesses = [[1.0, 1.0, 0.1], [3.0, 2.0, 0.2], [2.0, 1.5, 0.1]]
 
         for p0 in initial_guesses:
             try:
-                popt, pcov = curve_fit(difficult_model, x, y, p0=p0, maxfev=1000)
+                popt, _pcov = curve_fit(difficult_model, x, y, p0=p0, maxfev=1000)
                 # Check if converged to reasonable values
                 self.assertGreater(popt[0], 0)
                 self.assertGreater(popt[1], 0)
@@ -275,5 +273,5 @@ class TestComprehensiveCoverage(unittest.TestCase):
                 pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

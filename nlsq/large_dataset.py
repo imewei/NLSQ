@@ -914,7 +914,7 @@ class LargeDatasetFitter:
                             perturbed_params = current_params * (
                                 1 + 0.01 * np.random.randn(len(current_params))
                             )
-                            popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
+                            popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
                                 f,
                                 x_chunk,
                                 y_chunk,
@@ -1163,12 +1163,12 @@ def estimate_memory_requirements(n_points: int, n_params: int) -> DatasetStats:
 
 
 __all__ = [
-    "LargeDatasetFitter",
-    "LDMemoryConfig",
+    "DataChunker",
     "DatasetStats",
+    "LDMemoryConfig",
+    "LargeDatasetFitter",
     "MemoryEstimator",
     "ProgressReporter",
-    "DataChunker",
-    "fit_large_dataset",
     "estimate_memory_requirements",
+    "fit_large_dataset",
 ]

@@ -2,9 +2,12 @@
 """Additional tests for minpack module to improve coverage."""
 
 import unittest
-import numpy as np
+
 import jax.numpy as jnp
+import numpy as np
+
 from nlsq.minpack import CurveFit, curve_fit
+
 try:
     from nlsq import fit_large_dataset
 except ImportError:
@@ -16,18 +19,20 @@ class TestMinpackCoverage(unittest.TestCase):
 
     def test_curve_fit_basic(self):
         """Test basic curve_fit functionality."""
+
         def model(x, a, b):
             return a * x + b
 
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
         self.assertAlmostEqual(popt[1], 0.0, places=3)
 
     def test_curve_fit_with_bounds(self):
         """Test curve_fit with bounds."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -35,11 +40,12 @@ class TestMinpackCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Test with bounds
-        popt, pcov = curve_fit(model, x, y, bounds=([0, -10], [10, 10]))
+        popt, _pcov = curve_fit(model, x, y, bounds=([0, -10], [10, 10]))
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
     def test_curve_fit_with_sigma(self):
         """Test curve_fit with uncertainties."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -47,29 +53,31 @@ class TestMinpackCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
         sigma = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
 
-        popt, pcov = curve_fit(model, x, y, sigma=sigma)
+        popt, _pcov = curve_fit(model, x, y, sigma=sigma)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
     def test_curve_fit_exponential(self):
         """Test curve_fit with exponential model."""
+
         def model(x, a, b):
             return a * jnp.exp(b * x)
 
         x = np.linspace(0, 1, 50)
         y = 2.5 * np.exp(0.5 * x) + 0.01 * np.random.randn(50)
 
-        popt, pcov = curve_fit(model, x, y, p0=[1, 1])
+        popt, _pcov = curve_fit(model, x, y, p0=[1, 1])
         self.assertAlmostEqual(popt[0], 2.5, places=1)
         self.assertAlmostEqual(popt[1], 0.5, places=1)
 
     def test_curve_fit_2d(self):
         """Test curve_fit with 2D data."""
+
         def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y):
             x, y = xy
             # Use JAX-compatible operations
-            a = 1/(2*sigma_x**2)
-            b = 1/(2*sigma_y**2)
-            g = amplitude * jnp.exp(-(a*(x-xo)**2 + b*(y-yo)**2))
+            a = 1 / (2 * sigma_x**2)
+            b = 1 / (2 * sigma_y**2)
+            g = amplitude * jnp.exp(-(a * (x - xo) ** 2 + b * (y - yo) ** 2))
             return g.ravel()
 
         # Create 2D grid
@@ -82,14 +90,16 @@ class TestMinpackCoverage(unittest.TestCase):
         z += 0.01 * np.random.randn(*z.shape)
 
         # Fit
-        popt, pcov = curve_fit(gaussian_2d, (xx.ravel(), yy.ravel()), z,
-                              p0=[1, 5, 5, 1, 1])
+        popt, _pcov = curve_fit(
+            gaussian_2d, (xx.ravel(), yy.ravel()), z, p0=[1, 5, 5, 1, 1]
+        )
 
         self.assertAlmostEqual(popt[0], 1.0, places=1)
         self.assertAlmostEqual(popt[1], 5.0, places=1)
 
     def test_curve_fit_with_method(self):
         """Test curve_fit with different methods."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -97,18 +107,19 @@ class TestMinpackCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Test with trf method (only one implemented)
-        popt, pcov = curve_fit(model, x, y, method='trf')
+        popt, _pcov = curve_fit(model, x, y, method="trf")
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
     def test_curve_fit_maxfev(self):
         """Test curve_fit with max function evaluations."""
+
         def model(x, a, b):
             return a * x + b
 
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = curve_fit(model, x, y, maxfev=10)
+        popt, _pcov = curve_fit(model, x, y, maxfev=10)
         # Should still converge for simple problem
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
@@ -122,7 +133,7 @@ class TestMinpackCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = cf.curve_fit(model, x, y)
+        popt, _pcov = cf.curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
     def test_fit_large_dataset(self):
@@ -140,9 +151,7 @@ class TestMinpackCoverage(unittest.TestCase):
 
         # Use fit_large_dataset with appropriate parameters
         result = fit_large_dataset(
-            model, x, y,
-            initial_params=[1.0, 0.0],
-            chunk_size=1000
+            model, x, y, initial_params=[1.0, 0.0], chunk_size=1000
         )
 
         # Check that optimization was successful
@@ -152,6 +161,7 @@ class TestMinpackCoverage(unittest.TestCase):
 
     def test_curve_fit_nan_policy(self):
         """Test curve_fit with NaN policy."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -160,7 +170,7 @@ class TestMinpackCoverage(unittest.TestCase):
 
         # With nan_policy='omit' should skip NaN values
         try:
-            popt, pcov = curve_fit(model, x, y, nan_policy='omit')
+            popt, _pcov = curve_fit(model, x, y, nan_policy="omit")
             # Should work with remaining points
             self.assertEqual(len(popt), 2)
         except:
@@ -169,6 +179,7 @@ class TestMinpackCoverage(unittest.TestCase):
 
     def test_curve_fit_full_output(self):
         """Test curve_fit with full_output option."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -179,14 +190,15 @@ class TestMinpackCoverage(unittest.TestCase):
         try:
             result = curve_fit(model, x, y, full_output=True)
             if isinstance(result, tuple) and len(result) > 2:
-                popt, pcov, infodict, mesg, ier = result
-                self.assertIn('nfev', infodict)
+                _popt, _pcov, infodict, _mesg, _ier = result
+                self.assertIn("nfev", infodict)
         except:
             # May not be implemented
             pass
 
     def test_curve_fit_jac(self):
         """Test curve_fit with analytical Jacobian."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -196,9 +208,9 @@ class TestMinpackCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # Without analytical Jacobian
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

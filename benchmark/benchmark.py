@@ -116,7 +116,7 @@ class BasicBenchmark:
             # Time NLSQ
             try:
                 start = time.perf_counter()
-                popt_nlsq, _ = curve_fit(exponential_model_jax, x, y, p0=p0)
+                _popt_nlsq, _ = curve_fit(exponential_model_jax, x, y, p0=p0)
                 nlsq_time = (time.perf_counter() - start) * 1000
                 results["nlsq"].append(nlsq_time)
             except Exception as e:
@@ -127,7 +127,7 @@ class BasicBenchmark:
             # Time SciPy
             try:
                 start = time.perf_counter()
-                popt_scipy, _ = scipy_curve_fit(exponential_model_numpy, x, y, p0=p0)
+                _popt_scipy, _ = scipy_curve_fit(exponential_model_numpy, x, y, p0=p0)
                 scipy_time = (time.perf_counter() - start) * 1000
                 results["scipy"].append(scipy_time)
             except Exception as e:
@@ -184,7 +184,7 @@ class BasicBenchmark:
             try:
                 fitter = CurveFit(use_dynamic_sizing=True)
                 start = time.perf_counter()
-                popt, _ = fitter.curve_fit(gaussian_2d, coords, data, p0=true_params)
+                _popt, _ = fitter.curve_fit(gaussian_2d, coords, data, p0=true_params)
                 nlsq_time = (time.perf_counter() - start) * 1000
                 results["nlsq"].append(nlsq_time)
                 print(f"{size:8} {nlsq_time:12.2f}")
@@ -295,7 +295,7 @@ class LargeDatasetTesting:
                     mem_before = 0
 
                 start = time.perf_counter()
-                popt, pcov = curve_fit_large(
+                popt, _pcov = curve_fit_large(
                     exponential_model_jax,
                     x,
                     y,

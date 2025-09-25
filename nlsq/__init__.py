@@ -23,6 +23,9 @@ except ImportError:
 # Main API imports
 from nlsq._optimize import OptimizeResult, OptimizeWarning
 
+# Stability and optimization imports
+from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
+
 # Configuration support
 from nlsq.config import (
     LargeDatasetConfig,
@@ -35,6 +38,7 @@ from nlsq.config import (
     memory_context,
     set_memory_limits,
 )
+from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 
 # Large dataset support
 from nlsq.large_dataset import (
@@ -44,17 +48,13 @@ from nlsq.large_dataset import (
     fit_large_dataset,
 )
 from nlsq.least_squares import LeastSquares
-from nlsq.minpack import CurveFit, curve_fit
-
-# Stability and optimization imports
-from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
-from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 from nlsq.memory_manager import (
     MemoryManager,
     clear_memory_pool,
     get_memory_manager,
     get_memory_stats,
 )
+from nlsq.minpack import CurveFit, curve_fit
 from nlsq.recovery import OptimizationRecovery
 from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
 from nlsq.smart_cache import (
@@ -65,8 +65,6 @@ from nlsq.smart_cache import (
     get_global_cache,
     get_jit_cache,
 )
-from nlsq.stability import NumericalStabilityGuard
-from nlsq.validators import InputValidator
 
 # Sparse Jacobian support
 from nlsq.sparse_jacobian import (
@@ -74,6 +72,7 @@ from nlsq.sparse_jacobian import (
     SparseOptimizer,
     detect_jacobian_sparsity,
 )
+from nlsq.stability import NumericalStabilityGuard
 
 # Streaming optimizer support
 from nlsq.streaming_optimizer import (
@@ -83,65 +82,66 @@ from nlsq.streaming_optimizer import (
     create_hdf5_dataset,
     fit_unlimited_data,
 )
+from nlsq.validators import InputValidator
 
 # Public API - only expose main user-facing functions
 __all__ = [
-    # Main curve fitting API
-    "curve_fit",
-    "curve_fit_large",
+    # Stability and optimization modules
+    "AlgorithmSelector",
+    "ConvergenceMonitor",
     "CurveFit",
+    "DataGenerator",
+    "InputValidator",
+    "LargeDatasetConfig",
+    "LargeDatasetFitter",
     # Advanced API
     "LeastSquares",
-    "LargeDatasetFitter",
-    # Sparse Jacobian support
-    "SparseJacobianComputer",
-    "SparseOptimizer",
-    "detect_jacobian_sparsity",
-    # Streaming optimizer support
-    "StreamingOptimizer",
-    "StreamingConfig",
-    "DataGenerator",
-    "fit_unlimited_data",
-    "create_hdf5_dataset",
     # Configuration classes
     "MemoryConfig",
-    "LargeDatasetConfig",
+    "MemoryManager",
+    "NumericalStabilityGuard",
+    "OptimizationDiagnostics",
+    "OptimizationRecovery",
     # Result types
     "OptimizeResult",
     "OptimizeWarning",
+    "RobustDecomposition",
+    "SmartCache",
+    # Sparse Jacobian support
+    "SparseJacobianComputer",
+    "SparseOptimizer",
+    "StreamingConfig",
+    # Streaming optimizer support
+    "StreamingOptimizer",
     # Version
     "__version__",
-    # Large dataset utilities
-    "fit_large_dataset",
-    "estimate_memory_requirements",
-    # Configuration functions
-    "configure_for_large_datasets",
-    "set_memory_limits",
-    "enable_mixed_precision_fallback",
-    "memory_context",
-    "large_dataset_context",
-    "get_memory_config",
-    "get_large_dataset_config",
-    # Stability and optimization modules
-    "AlgorithmSelector",
     "auto_select_algorithm",
-    "NumericalStabilityGuard",
-    "InputValidator",
-    "OptimizationDiagnostics",
-    "ConvergenceMonitor",
-    "OptimizationRecovery",
-    "RobustDecomposition",
-    "robust_decomp",
-    "SmartCache",
     "cached_function",
     "cached_jacobian",
+    "clear_all_caches",
+    "clear_memory_pool",
+    # Configuration functions
+    "configure_for_large_datasets",
+    "create_hdf5_dataset",
+    # Main curve fitting API
+    "curve_fit",
+    "curve_fit_large",
+    "detect_jacobian_sparsity",
+    "enable_mixed_precision_fallback",
+    "estimate_memory_requirements",
+    # Large dataset utilities
+    "fit_large_dataset",
+    "fit_unlimited_data",
     "get_global_cache",
     "get_jit_cache",
-    "clear_all_caches",
-    "MemoryManager",
+    "get_large_dataset_config",
+    "get_memory_config",
     "get_memory_manager",
     "get_memory_stats",
-    "clear_memory_pool",
+    "large_dataset_context",
+    "memory_context",
+    "robust_decomp",
+    "set_memory_limits",
 ]
 
 

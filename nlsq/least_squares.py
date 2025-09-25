@@ -290,7 +290,9 @@ class LeastSquares:
     least_squares : Main optimization method
     """
 
-    def __init__(self, enable_stability: bool = False, enable_diagnostics: bool = False):
+    def __init__(
+        self, enable_stability: bool = False, enable_diagnostics: bool = False
+    ):
         """Initialize LeastSquares with optimization algorithms and autodiff instances.
 
         Sets up the Trust Region Reflective solver, loss functions, and separate
@@ -591,7 +593,9 @@ class LeastSquares:
 
         # Check memory requirements if stability is enabled
         if self.enable_stability:
-            memory_required = self.memory_manager.predict_memory_requirement(m, n, method)
+            memory_required = self.memory_manager.predict_memory_requirement(
+                m, n, method
+            )
             is_available, msg = self.memory_manager.check_memory_availability(
                 memory_required
             )
@@ -626,10 +630,7 @@ class LeastSquares:
             # Initialize diagnostics if enabled
             if self.enable_diagnostics:
                 self.diagnostics.start_optimization(
-                    n_params=n,
-                    n_data=m,
-                    method=method,
-                    loss=loss
+                    n_params=n, n_data=m, method=method, loss=loss
                 )
 
             result = self.trf.trf(

@@ -2,16 +2,17 @@
 """Additional tests for config module to reach 60% coverage."""
 
 import unittest
+
 from nlsq.config import (
     LargeDatasetConfig,
     MemoryConfig,
-    get_large_dataset_config,
-    get_memory_config,
-    set_memory_limits,
     configure_for_large_datasets,
     enable_mixed_precision_fallback,
+    get_large_dataset_config,
+    get_memory_config,
     large_dataset_context,
-    memory_context
+    memory_context,
+    set_memory_limits,
 )
 
 
@@ -75,5 +76,5 @@ class TestConfigCoverage(unittest.TestCase):
             self.assertEqual(config.memory_limit_gb, 1.0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

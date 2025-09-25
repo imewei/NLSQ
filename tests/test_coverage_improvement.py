@@ -2,13 +2,14 @@
 """Tests to improve coverage to 74%."""
 
 import unittest
-import numpy as np
-import jax.numpy as jnp
 
-from nlsq.validators import InputValidator
-from nlsq.trf import TrustRegionReflective
-from nlsq.svd_fallback import safe_svd, compute_svd_with_fallback
+import jax.numpy as jnp
+import numpy as np
+
 from nlsq.loss_functions import LossFunctionsJIT
+from nlsq.svd_fallback import compute_svd_with_fallback, safe_svd
+from nlsq.trf import TrustRegionReflective
+from nlsq.validators import InputValidator
 
 
 class TestValidatorsCoverage(unittest.TestCase):
@@ -27,7 +28,9 @@ class TestValidatorsCoverage(unittest.TestCase):
         # Test with good model
         x = np.array([1, 2, 3])
         y = np.array([2, 4, 6])
-        errors, warnings, _, _ = validator.validate_curve_fit_inputs(model_good, x, y, p0=[1, 1])
+        errors, _warnings, _, _ = validator.validate_curve_fit_inputs(
+            model_good, x, y, p0=[1, 1]
+        )
         self.assertEqual(len(errors), 0)
 
         # Test model with wrong signature - will be caught during fitting
@@ -43,7 +46,7 @@ class TestValidatorsCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([1, 4, 9, 16, 25])
 
-        errors, warnings, x_clean, y_clean = validator.validate_curve_fit_inputs(
+        errors, _warnings, x_clean, y_clean = validator.validate_curve_fit_inputs(
             model, x, y, p0=None
         )
 
@@ -64,7 +67,7 @@ class TestValidatorsCoverage(unittest.TestCase):
         def model(x, a, b):
             return a * x + b
 
-        errors, warnings, _, _ = validator.validate_curve_fit_inputs(
+        _errors, warnings, _, _ = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0]
         )
 
@@ -113,7 +116,7 @@ class TestValidatorsCoverage(unittest.TestCase):
 
         # Test with negative sigma
         sigma = np.array([0.1, -0.1, 0.1])
-        errors, warnings, _, _ = validator.validate_curve_fit_inputs(
+        errors, _warnings, _, _ = validator.validate_curve_fit_inputs(
             model, x, y, p0=[1, 0], sigma=sigma
         )
         # Should have error about negative sigma
@@ -126,22 +129,25 @@ class TestTRFCoverage(unittest.TestCase):
     def test_trf_basic_operations(self):
         """Test basic TRF operations."""
         # TRF is initialized differently - check if class exists
-        self.assertTrue(hasattr(TrustRegionReflective, '__init__'))
+        self.assertTrue(hasattr(TrustRegionReflective, "__init__"))
 
     def test_trf_with_linear_loss(self):
         """Test TRF with linear loss function."""
         # Test that TRF class exists and can be imported
         from nlsq.trf import TrustRegionReflective
+
         self.assertIsNotNone(TrustRegionReflective)
 
     def test_trf_verbose_mode(self):
         """Test TRF with verbose output."""
         # Test that TRF has expected attributes
-        self.assertTrue(hasattr(TrustRegionReflective, 'solve') or
-                       hasattr(TrustRegionReflective, '__call__'))
+        self.assertTrue(
+            hasattr(TrustRegionReflective, "solve") or callable(TrustRegionReflective)
+        )
 
     def test_trf_max_iterations(self):
         """Test TRF with max iterations."""
+
         # Test TRF can be used in curve_fit context
         def model(x, a, b):
             return a * x + b
@@ -150,7 +156,8 @@ class TestTRFCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         from nlsq.minpack import curve_fit
-        popt, pcov = curve_fit(model, x, y, method='trf', maxfev=10)
+
+        popt, _pcov = curve_fit(model, x, y, method="trf", maxfev=10)
         self.assertAlmostEqual(popt[0], 2.0, places=2)
 
 
@@ -162,14 +169,14 @@ class TestLossFunctionsCoverage(unittest.TestCase):
         loss_jit = LossFunctionsJIT()
 
         # Test has required methods
-        self.assertTrue(hasattr(loss_jit, 'huber'))
-        self.assertTrue(hasattr(loss_jit, 'soft_l1'))
-        self.assertTrue(hasattr(loss_jit, 'cauchy'))
-        self.assertTrue(hasattr(loss_jit, 'arctan'))
+        self.assertTrue(hasattr(loss_jit, "huber"))
+        self.assertTrue(hasattr(loss_jit, "soft_l1"))
+        self.assertTrue(hasattr(loss_jit, "cauchy"))
+        self.assertTrue(hasattr(loss_jit, "arctan"))
 
         # Test huber loss evaluation
         z = jnp.array([0.5, 1.0, 2.0])
-        if hasattr(loss_jit, 'huber'):
+        if hasattr(loss_jit, "huber"):
             try:
                 rho, drho, d2rho = loss_jit.huber(z, 1.0)
                 self.assertEqual(rho.shape, z.shape)
@@ -183,7 +190,7 @@ class TestLossFunctionsCoverage(unittest.TestCase):
         loss_jit = LossFunctionsJIT()
         z = jnp.array([0.5, 1.0, 2.0])
 
-        if hasattr(loss_jit, 'linear'):
+        if hasattr(loss_jit, "linear"):
             try:
                 rho = loss_jit.linear(z)
                 self.assertEqual(rho.shape, z.shape)
@@ -232,5 +239,5 @@ class TestSVDFallbackCoverage(unittest.TestCase):
             pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

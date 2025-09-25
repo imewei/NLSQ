@@ -7,7 +7,7 @@ and diagnostic reporting for optimization processes.
 import time
 import warnings
 from collections import deque
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
@@ -19,10 +19,13 @@ import jax.numpy as jnp
 
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
-    warnings.warn("psutil not installed, memory monitoring will be limited", UserWarning)
+    warnings.warn(
+        "psutil not installed, memory monitoring will be limited", UserWarning
+    )
 
 
 class ConvergenceMonitor:
@@ -58,8 +61,13 @@ class ConvergenceMonitor:
         self.stagnation_threshold = 1e-10 * sensitivity
         self.divergence_threshold = 1.5 / sensitivity
 
-    def update(self, cost: float, params: np.ndarray, gradient: Optional[np.ndarray] = None,
-               step_size: Optional[float] = None):
+    def update(
+        self,
+        cost: float,
+        params: np.ndarray,
+        gradient: np.ndarray | None = None,
+        step_size: float | None = None,
+    ):
         """Update monitor with new iteration data.
 
         Parameters
@@ -83,8 +91,13 @@ class ConvergenceMonitor:
         if step_size is not None:
             self.step_size_history.append(step_size)
 
-    def add_iteration(self, cost: float, params: np.ndarray, gradient: Optional[np.ndarray] = None,
-                     step_size: Optional[float] = None):
+    def add_iteration(
+        self,
+        cost: float,
+        params: np.ndarray,
+        gradient: np.ndarray | None = None,
+        step_size: float | None = None,
+    ):
         """Alias for update() method for backward compatibility.
 
         Parameters
@@ -100,7 +113,7 @@ class ConvergenceMonitor:
         """
         self.update(cost, params, gradient, step_size)
 
-    def detect_oscillation(self) -> Tuple[bool, float]:
+    def detect_oscillation(self) -> tuple[bool, float]:
         """Detect oscillation in optimization.
 
         Returns
@@ -124,15 +137,18 @@ class ConvergenceMonitor:
         if len(self.param_history) >= 3:
             params = np.array(self.param_history)
             param_diffs = np.diff(params, axis=0)
-            param_sign_changes = np.mean([
-                np.sum(np.diff(np.sign(param_diffs[:, i])) != 0) / max(1, len(param_diffs) - 1)
-                for i in range(params.shape[1])
-            ])
+            param_sign_changes = np.mean(
+                [
+                    np.sum(np.diff(np.sign(param_diffs[:, i])) != 0)
+                    / max(1, len(param_diffs) - 1)
+                    for i in range(params.shape[1])
+                ]
+            )
             oscillation_score = max(oscillation_score, param_sign_changes)
 
         return oscillation_score > self.oscillation_threshold, oscillation_score
 
-    def detect_stagnation(self) -> Tuple[bool, float]:
+    def detect_stagnation(self) -> tuple[bool, float]:
         """Detect stagnation in optimization.
 
         Returns
@@ -166,7 +182,7 @@ class ConvergenceMonitor:
 
         return is_stagnant, stagnation_score
 
-    def detect_divergence(self) -> Tuple[bool, float]:
+    def detect_divergence(self) -> tuple[bool, float]:
         """Detect divergence in optimization.
 
         Returns
@@ -192,7 +208,9 @@ class ConvergenceMonitor:
             if mean_older > 0:
                 divergence_ratio = mean_recent / mean_older
                 is_diverging = divergence_ratio > self.divergence_threshold
-                divergence_score = min(1.0, (divergence_ratio - 1.0) / self.divergence_threshold)
+                divergence_score = min(
+                    1.0, (divergence_ratio - 1.0) / self.divergence_threshold
+                )
             else:
                 is_diverging = mean_recent > mean_older * self.divergence_threshold
                 divergence_score = 0.5 if is_diverging else 0.0
@@ -202,7 +220,7 @@ class ConvergenceMonitor:
 
         return is_diverging, divergence_score
 
-    def get_convergence_rate(self) -> Optional[float]:
+    def get_convergence_rate(self) -> float | None:
         """Estimate convergence rate.
 
         Returns
@@ -219,7 +237,7 @@ class ConvergenceMonitor:
         iterations = np.arange(len(costs))
 
         # Use log-linear regression for stability
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             log_costs = np.log(np.abs(costs) + 1e-10)
             if np.all(np.isfinite(log_costs)):
                 # Simple linear regression
@@ -286,14 +304,16 @@ class OptimizationDiagnostics:
         self.initial_params = x0.copy()
         self.initial_memory = self._get_memory_usage()
 
-    def record_iteration(self,
-                        iteration: int,
-                        x: np.ndarray,
-                        cost: float,
-                        gradient: Optional[np.ndarray] = None,
-                        jacobian: Optional[np.ndarray] = None,
-                        step_size: Optional[float] = None,
-                        method_info: Optional[Dict] = None):
+    def record_iteration(
+        self,
+        iteration: int,
+        x: np.ndarray,
+        cost: float,
+        gradient: np.ndarray | None = None,
+        jacobian: np.ndarray | None = None,
+        step_size: float | None = None,
+        method_info: dict | None = None,
+    ):
         """Record data for current iteration.
 
         Parameters
@@ -318,25 +338,29 @@ class OptimizationDiagnostics:
 
         # Basic data
         data = {
-            'iteration': iteration,
-            'parameters': x.copy(),
-            'cost': cost,
-            'timestamp': current_time,
-            'elapsed_time': elapsed,
-            'memory_usage_mb': self._get_memory_usage(),
+            "iteration": iteration,
+            "parameters": x.copy(),
+            "cost": cost,
+            "timestamp": current_time,
+            "elapsed_time": elapsed,
+            "memory_usage_mb": self._get_memory_usage(),
         }
 
         # Gradient information
         if gradient is not None:
             grad_norm = np.linalg.norm(gradient)
-            data['gradient_norm'] = grad_norm
-            data['gradient_max'] = np.max(np.abs(gradient))
+            data["gradient_norm"] = grad_norm
+            data["gradient_max"] = np.max(np.abs(gradient))
 
             # Check for numerical issues
             if not np.all(np.isfinite(gradient)):
-                self.numerical_issues.append(f"Iteration {iteration}: Non-finite gradient")
+                self.numerical_issues.append(
+                    f"Iteration {iteration}: Non-finite gradient"
+                )
             elif grad_norm > 1e10:
-                self.numerical_issues.append(f"Iteration {iteration}: Extremely large gradient")
+                self.numerical_issues.append(
+                    f"Iteration {iteration}: Extremely large gradient"
+                )
 
         # Jacobian information
         if jacobian is not None:
@@ -344,22 +368,22 @@ class OptimizationDiagnostics:
             try:
                 svd_vals = np.linalg.svdvals(jacobian)
                 condition_number = svd_vals[0] / (svd_vals[-1] + 1e-10)
-                data['jacobian_condition'] = condition_number
+                data["jacobian_condition"] = condition_number
 
                 if condition_number > 1e12:
                     self.numerical_issues.append(
                         f"Iteration {iteration}: Ill-conditioned Jacobian (cond={condition_number:.2e})"
                     )
             except:
-                data['jacobian_condition'] = np.inf
+                data["jacobian_condition"] = np.inf
 
         # Step information
         if step_size is not None:
-            data['step_size'] = step_size
+            data["step_size"] = step_size
 
         # Method-specific info
         if method_info:
-            data['method_info'] = method_info
+            data["method_info"] = method_info
 
         self.iteration_data.append(data)
         self.function_eval_count += 1
@@ -374,7 +398,7 @@ class OptimizationDiagnostics:
         current_memory = self._get_memory_usage()
         self.peak_memory = max(self.peak_memory, current_memory)
 
-    def record_event(self, event_type: str, data: Dict = None):
+    def record_event(self, event_type: str, data: dict = None):
         """Record a special event during optimization.
 
         Parameters
@@ -385,14 +409,14 @@ class OptimizationDiagnostics:
             Additional event data
         """
         event = {
-            'type': event_type,
-            'iteration': len(self.iteration_data),
-            'timestamp': time.time() - self.start_time if self.start_time else 0,
-            'data': data or {}
+            "type": event_type,
+            "iteration": len(self.iteration_data),
+            "timestamp": time.time() - self.start_time if self.start_time else 0,
+            "data": data or {},
         }
 
         # Store in warnings if it's a warning/error event
-        if 'failed' in event_type or 'error' in event_type:
+        if "failed" in event_type or "error" in event_type:
             self.warnings_issued.append(f"{event_type}: {data}")
 
     def _check_convergence_health(self, iteration: int):
@@ -413,7 +437,7 @@ class OptimizationDiagnostics:
             warnings.warn(
                 f"Optimization may be oscillating (score={osc_score:.2f}). "
                 "Consider reducing step size or changing algorithm.",
-                RuntimeWarning
+                RuntimeWarning,
             )
             self.warnings_issued.append("oscillation")
 
@@ -423,7 +447,7 @@ class OptimizationDiagnostics:
             warnings.warn(
                 f"Optimization may be stagnant (score={stag_score:.2f}). "
                 "Consider relaxing tolerances or perturbing parameters.",
-                RuntimeWarning
+                RuntimeWarning,
             )
             self.warnings_issued.append("stagnation")
 
@@ -433,7 +457,7 @@ class OptimizationDiagnostics:
             warnings.warn(
                 f"Optimization may be diverging (score={div_score:.2f}). "
                 "Consider better initial guess or different algorithm.",
-                RuntimeWarning
+                RuntimeWarning,
             )
             self.warnings_issued.append("divergence")
 
@@ -453,7 +477,7 @@ class OptimizationDiagnostics:
                 return 0.0
         return 0.0
 
-    def get_summary_statistics(self) -> Dict:
+    def get_summary_statistics(self) -> dict:
         """Get summary statistics for the optimization.
 
         Returns
@@ -464,52 +488,57 @@ class OptimizationDiagnostics:
         if not self.iteration_data:
             return {}
 
-        costs = [d['cost'] for d in self.iteration_data]
+        costs = [d["cost"] for d in self.iteration_data]
 
         stats = {
-            'total_iterations': len(self.iteration_data),
-            'function_evaluations': self.function_eval_count,
-            'jacobian_evaluations': self.jacobian_eval_count,
-            'initial_cost': costs[0],
-            'final_cost': costs[-1],
-            'cost_reduction': costs[0] - costs[-1],
-            'relative_cost_reduction': (costs[0] - costs[-1]) / (abs(costs[0]) + 1e-10),
-            'min_cost': min(costs),
-            'max_cost': max(costs),
+            "total_iterations": len(self.iteration_data),
+            "function_evaluations": self.function_eval_count,
+            "jacobian_evaluations": self.jacobian_eval_count,
+            "initial_cost": costs[0],
+            "final_cost": costs[-1],
+            "cost_reduction": costs[0] - costs[-1],
+            "relative_cost_reduction": (costs[0] - costs[-1]) / (abs(costs[0]) + 1e-10),
+            "min_cost": min(costs),
+            "max_cost": max(costs),
         }
 
         # Timing
         if self.start_time and self.iteration_data:
-            total_time = self.iteration_data[-1]['elapsed_time']
-            stats['total_time_seconds'] = total_time
-            stats['time_per_iteration'] = total_time / len(self.iteration_data)
+            total_time = self.iteration_data[-1]["elapsed_time"]
+            stats["total_time_seconds"] = total_time
+            stats["time_per_iteration"] = total_time / len(self.iteration_data)
 
         # Memory
-        stats['peak_memory_mb'] = self.peak_memory
-        stats['memory_increase_mb'] = self.peak_memory - self.initial_memory
+        stats["peak_memory_mb"] = self.peak_memory
+        stats["memory_increase_mb"] = self.peak_memory - self.initial_memory
 
         # Convergence rate
         conv_rate = self.convergence_monitor.get_convergence_rate()
         if conv_rate is not None:
-            stats['convergence_rate'] = conv_rate
+            stats["convergence_rate"] = conv_rate
 
         # Gradient info
-        if any('gradient_norm' in d for d in self.iteration_data):
-            grad_norms = [d['gradient_norm'] for d in self.iteration_data if 'gradient_norm' in d]
-            stats['initial_gradient_norm'] = grad_norms[0]
-            stats['final_gradient_norm'] = grad_norms[-1]
-            stats['min_gradient_norm'] = min(grad_norms)
+        if any("gradient_norm" in d for d in self.iteration_data):
+            grad_norms = [
+                d["gradient_norm"] for d in self.iteration_data if "gradient_norm" in d
+            ]
+            stats["initial_gradient_norm"] = grad_norms[0]
+            stats["final_gradient_norm"] = grad_norms[-1]
+            stats["min_gradient_norm"] = min(grad_norms)
 
         # Condition number
-        if any('jacobian_condition' in d for d in self.iteration_data):
-            cond_numbers = [d['jacobian_condition'] for d in self.iteration_data
-                          if 'jacobian_condition' in d]
-            stats['max_condition_number'] = max(cond_numbers)
-            stats['mean_condition_number'] = np.mean(cond_numbers)
+        if any("jacobian_condition" in d for d in self.iteration_data):
+            cond_numbers = [
+                d["jacobian_condition"]
+                for d in self.iteration_data
+                if "jacobian_condition" in d
+            ]
+            stats["max_condition_number"] = max(cond_numbers)
+            stats["mean_condition_number"] = np.mean(cond_numbers)
 
         # Problems detected
-        stats['warnings_issued'] = self.warnings_issued.copy()
-        stats['numerical_issues'] = len(self.numerical_issues)
+        stats["warnings_issued"] = self.warnings_issued.copy()
+        stats["numerical_issues"] = len(self.numerical_issues)
 
         return stats
 
@@ -547,32 +576,36 @@ class OptimizationDiagnostics:
         lines.append(f"Initial cost: {stats.get('initial_cost', 0):.6e}")
         lines.append(f"Final cost: {stats.get('final_cost', 0):.6e}")
         lines.append(f"Absolute reduction: {stats.get('cost_reduction', 0):.6e}")
-        lines.append(f"Relative reduction: {stats.get('relative_cost_reduction', 0)*100:.2f}%")
+        lines.append(
+            f"Relative reduction: {stats.get('relative_cost_reduction', 0)*100:.2f}%"
+        )
 
         # Convergence
         lines.append("\n--- Convergence ---")
-        if 'convergence_rate' in stats:
-            rate = stats['convergence_rate']
+        if "convergence_rate" in stats:
+            rate = stats["convergence_rate"]
             if rate > 0:
                 lines.append(f"Convergence rate: {rate:.4f} (converging)")
             else:
                 lines.append(f"Convergence rate: {rate:.4f} (diverging)")
 
-        if 'final_gradient_norm' in stats:
+        if "final_gradient_norm" in stats:
             lines.append(f"Initial gradient norm: {stats['initial_gradient_norm']:.6e}")
             lines.append(f"Final gradient norm: {stats['final_gradient_norm']:.6e}")
 
         # Numerical stability
-        if 'max_condition_number' in stats:
+        if "max_condition_number" in stats:
             lines.append("\n--- Numerical Stability ---")
             lines.append(f"Max condition number: {stats['max_condition_number']:.2e}")
             lines.append(f"Mean condition number: {stats['mean_condition_number']:.2e}")
 
         # Timing
-        if 'total_time_seconds' in stats:
+        if "total_time_seconds" in stats:
             lines.append("\n--- Timing ---")
             lines.append(f"Total time: {stats['total_time_seconds']:.2f} seconds")
-            lines.append(f"Time per iteration: {stats['time_per_iteration']*1000:.1f} ms")
+            lines.append(
+                f"Time per iteration: {stats['time_per_iteration']*1000:.1f} ms"
+            )
 
         # Memory
         lines.append("\n--- Memory Usage ---")
@@ -581,15 +614,15 @@ class OptimizationDiagnostics:
 
         # Problems
         if verbose:
-            if stats.get('warnings_issued'):
+            if stats.get("warnings_issued"):
                 lines.append("\n--- Warnings ---")
-                for warning in stats['warnings_issued']:
-                    lines.append(f"  • {warning}")
+                lines.extend(f"  • {warning}" for warning in stats["warnings_issued"])
 
             if self.numerical_issues:
                 lines.append("\n--- Numerical Issues ---")
-                for issue in self.numerical_issues[:5]:  # Show first 5
-                    lines.append(f"  • {issue}")
+                lines.extend(
+                    f"  • {issue}" for issue in self.numerical_issues[:5]
+                )  # Show first 5
                 if len(self.numerical_issues) > 5:
                     lines.append(f"  ... and {len(self.numerical_issues)-5} more")
 
@@ -597,7 +630,7 @@ class OptimizationDiagnostics:
 
         return "\n".join(lines)
 
-    def plot_convergence(self, save_path: Optional[str] = None):
+    def plot_convergence(self, save_path: str | None = None):
         """Plot convergence history.
 
         Parameters
@@ -614,44 +647,46 @@ class OptimizationDiagnostics:
         if not self.iteration_data:
             return
 
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-        iterations = [d['iteration'] for d in self.iteration_data]
+        _fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        iterations = [d["iteration"] for d in self.iteration_data]
 
         # Cost history
-        costs = [d['cost'] for d in self.iteration_data]
-        axes[0, 0].semilogy(iterations, costs, 'b-')
-        axes[0, 0].set_xlabel('Iteration')
-        axes[0, 0].set_ylabel('Cost')
-        axes[0, 0].set_title('Cost History')
+        costs = [d["cost"] for d in self.iteration_data]
+        axes[0, 0].semilogy(iterations, costs, "b-")
+        axes[0, 0].set_xlabel("Iteration")
+        axes[0, 0].set_ylabel("Cost")
+        axes[0, 0].set_title("Cost History")
         axes[0, 0].grid(True)
 
         # Gradient norm
-        if any('gradient_norm' in d for d in self.iteration_data):
-            grad_norms = [d.get('gradient_norm', np.nan) for d in self.iteration_data]
-            axes[0, 1].semilogy(iterations, grad_norms, 'r-')
-            axes[0, 1].set_xlabel('Iteration')
-            axes[0, 1].set_ylabel('Gradient Norm')
-            axes[0, 1].set_title('Gradient Norm History')
+        if any("gradient_norm" in d for d in self.iteration_data):
+            grad_norms = [d.get("gradient_norm", np.nan) for d in self.iteration_data]
+            axes[0, 1].semilogy(iterations, grad_norms, "r-")
+            axes[0, 1].set_xlabel("Iteration")
+            axes[0, 1].set_ylabel("Gradient Norm")
+            axes[0, 1].set_title("Gradient Norm History")
             axes[0, 1].grid(True)
 
         # Step size
-        if any('step_size' in d for d in self.iteration_data):
-            step_sizes = [d.get('step_size', np.nan) for d in self.iteration_data]
-            axes[1, 0].plot(iterations, step_sizes, 'g-')
-            axes[1, 0].set_xlabel('Iteration')
-            axes[1, 0].set_ylabel('Step Size')
-            axes[1, 0].set_title('Step Size History')
+        if any("step_size" in d for d in self.iteration_data):
+            step_sizes = [d.get("step_size", np.nan) for d in self.iteration_data]
+            axes[1, 0].plot(iterations, step_sizes, "g-")
+            axes[1, 0].set_xlabel("Iteration")
+            axes[1, 0].set_ylabel("Step Size")
+            axes[1, 0].set_title("Step Size History")
             axes[1, 0].grid(True)
 
         # Memory usage
-        memory = [d['memory_usage_mb'] for d in self.iteration_data]
-        axes[1, 1].plot(iterations, memory, 'm-')
-        axes[1, 1].set_xlabel('Iteration')
-        axes[1, 1].set_ylabel('Memory (MB)')
-        axes[1, 1].set_title('Memory Usage')
+        memory = [d["memory_usage_mb"] for d in self.iteration_data]
+        axes[1, 1].plot(iterations, memory, "m-")
+        axes[1, 1].set_xlabel("Iteration")
+        axes[1, 1].set_ylabel("Memory (MB)")
+        axes[1, 1].set_title("Memory Usage")
         axes[1, 1].grid(True)
 
-        plt.suptitle(f"Optimization Convergence: {getattr(self, 'problem_name', 'Unknown')}")
+        plt.suptitle(
+            f"Optimization Convergence: {getattr(self, 'problem_name', 'Unknown')}"
+        )
         plt.tight_layout()
 
         if save_path:
@@ -661,7 +696,7 @@ class OptimizationDiagnostics:
 
 
 # Global diagnostics instance
-_global_diagnostics: Optional[OptimizationDiagnostics] = None
+_global_diagnostics: OptimizationDiagnostics | None = None
 
 
 def get_diagnostics() -> OptimizationDiagnostics:
@@ -672,7 +707,7 @@ def get_diagnostics() -> OptimizationDiagnostics:
     diagnostics : OptimizationDiagnostics
         Global diagnostics instance
     """
-    global _global_diagnostics
+    global _global_diagnostics  # noqa: PLW0603
     if _global_diagnostics is None:
         _global_diagnostics = OptimizationDiagnostics()
     return _global_diagnostics
@@ -680,5 +715,5 @@ def get_diagnostics() -> OptimizationDiagnostics:
 
 def reset_diagnostics():
     """Reset global diagnostics."""
-    global _global_diagnostics
+    global _global_diagnostics  # noqa: PLW0603
     _global_diagnostics = OptimizationDiagnostics()

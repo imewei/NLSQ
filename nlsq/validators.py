@@ -5,9 +5,10 @@ and provide helpful error messages to users.
 """
 
 import warnings
+from collections.abc import Callable
 from functools import wraps
 from inspect import signature
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
@@ -38,12 +39,12 @@ class InputValidator:
         f: Callable,
         xdata: Any,
         ydata: Any,
-        p0: Optional[Any] = None,
-        bounds: Optional[Tuple] = None,
-        sigma: Optional[Any] = None,
+        p0: Any | None = None,
+        bounds: tuple | None = None,
+        sigma: Any | None = None,
         absolute_sigma: bool = True,
         check_finite: bool = True,
-    ) -> Tuple[List[str], List[str], np.ndarray, np.ndarray]:
+    ) -> tuple[list[str], list[str], np.ndarray, np.ndarray]:
         """Validate inputs for curve_fit function.
 
         Parameters
@@ -88,7 +89,7 @@ class InputValidator:
                 # Check all arrays in tuple have same length
                 for i, x_arr in enumerate(xdata):
                     if len(x_arr) != n_points:
-                        errors.append(f"All arrays in xdata tuple must have same length")
+                        errors.append("All arrays in xdata tuple must have same length")
                         break
                 warnings_list.append(f"xdata is tuple with {len(xdata)} arrays")
             except Exception as e:
@@ -114,7 +115,7 @@ class InputValidator:
                 n_vars = xdata.shape[1]
                 warnings_list.append(f"xdata has {n_vars} independent variables")
             else:
-                n_points = len(xdata) if hasattr(xdata, '__len__') else 1
+                n_points = len(xdata) if hasattr(xdata, "__len__") else 1
 
         try:
             if not isinstance(ydata, (np.ndarray, jnp.ndarray)):
@@ -156,23 +157,29 @@ class InputValidator:
 
         # 5. Check for degenerate cases
         if not isinstance(xdata, tuple):  # Only check for non-tuple xdata
-            if hasattr(xdata, 'ndim') and xdata.ndim == 1 and len(xdata) > 0:
+            if hasattr(xdata, "ndim") and xdata.ndim == 1 and len(xdata) > 0:
                 if np.all(xdata == xdata.flat[0]):
                     errors.append("All x values are identical - cannot fit")
 
                 # Check for very small range
                 x_range = np.ptp(xdata)
                 if x_range < 1e-10 and x_range > 0:
-                    warnings_list.append(f"x data range is very small ({x_range:.2e}) - consider rescaling")
+                    warnings_list.append(
+                        f"x data range is very small ({x_range:.2e}) - consider rescaling"
+                    )
 
                 # Check for very large range
                 if x_range > 1e10:
-                    warnings_list.append(f"x data range is very large ({x_range:.2e}) - consider rescaling")
+                    warnings_list.append(
+                        f"x data range is very large ({x_range:.2e}) - consider rescaling"
+                    )
 
         # Check y data
         # Handle both JAX and NumPy arrays
         try:
-            ydata_first = ydata.flatten()[0] if hasattr(ydata, 'flatten') else ydata.flat[0]
+            ydata_first = (
+                ydata.flatten()[0] if hasattr(ydata, "flatten") else ydata.flat[0]
+            )
             if np.all(ydata == ydata_first):
                 warnings_list.append("All y values are identical - trivial fit")
         except Exception:
@@ -191,10 +198,9 @@ class InputValidator:
                     if not np.all(np.isfinite(x_arr)):
                         n_bad = np.sum(~np.isfinite(x_arr))
                         errors.append(f"xdata[{i}] contains {n_bad} NaN or Inf values")
-            else:
-                if not np.all(np.isfinite(xdata)):
-                    n_bad = np.sum(~np.isfinite(xdata))
-                    errors.append(f"xdata contains {n_bad} NaN or Inf values")
+            elif not np.all(np.isfinite(xdata)):
+                n_bad = np.sum(~np.isfinite(xdata))
+                errors.append(f"xdata contains {n_bad} NaN or Inf values")
 
             if not np.all(np.isfinite(ydata)):
                 n_bad = np.sum(~np.isfinite(ydata))
@@ -211,7 +217,9 @@ class InputValidator:
                     )
 
                 if not np.all(np.isfinite(p0)):
-                    errors.append("Initial parameter guess p0 contains NaN or Inf values")
+                    errors.append(
+                        "Initial parameter guess p0 contains NaN or Inf values"
+                    )
 
             except Exception as e:
                 errors.append(f"Invalid initial parameter guess p0: {e}")
@@ -238,7 +246,9 @@ class InputValidator:
                         # Check if p0 is within bounds
                         if p0 is not None:
                             if np.any(p0 < lb) or np.any(p0 > ub):
-                                warnings_list.append("Initial guess p0 is outside bounds")
+                                warnings_list.append(
+                                    "Initial guess p0 is outside bounds"
+                                )
 
             except Exception as e:
                 errors.append(f"Invalid bounds: {e}")
@@ -267,13 +277,13 @@ class InputValidator:
                 if func_id not in self._function_cache:
                     if isinstance(xdata, tuple):
                         # For tuple xdata, sample from each array
-                        test_x = tuple(arr[:min(10, len(arr))] for arr in xdata)
+                        test_x = tuple(arr[: min(10, len(arr))] for arr in xdata)
                         expected_len = min(10, len(xdata[0]))
                     else:
-                        if hasattr(xdata, 'ndim') and xdata.ndim > 1:
-                            test_x = xdata[:min(10, len(xdata))]
+                        if hasattr(xdata, "ndim") and xdata.ndim > 1:
+                            test_x = xdata[: min(10, len(xdata))]
                         else:
-                            test_x = xdata[:min(10, len(xdata))]
+                            test_x = xdata[: min(10, len(xdata))]
                         expected_len = min(10, len(xdata))
 
                     if p0 is not None:
@@ -287,7 +297,7 @@ class InputValidator:
                     self._function_cache[func_id] = True
 
                     # Check output shape/length
-                    if hasattr(test_result, '__len__'):
+                    if hasattr(test_result, "__len__"):
                         if len(test_result) != expected_len:
                             warnings_list.append(
                                 f"Function output length {len(test_result)} doesn't match "
@@ -299,7 +309,11 @@ class InputValidator:
 
         # 11. Data quality checks (skip in fast mode)
         if not self.fast_mode:
-            if not isinstance(xdata, tuple) and hasattr(xdata, 'ndim') and xdata.ndim == 1:
+            if (
+                not isinstance(xdata, tuple)
+                and hasattr(xdata, "ndim")
+                and xdata.ndim == 1
+            ):
                 # Check for duplicates
                 unique_x = np.unique(xdata)
                 if len(unique_x) < len(xdata):
@@ -330,13 +344,13 @@ class InputValidator:
         self,
         fun: Callable,
         x0: Any,
-        bounds: Optional[Tuple] = None,
-        method: str = 'trf',
+        bounds: tuple | None = None,
+        method: str = "trf",
         ftol: float = 1e-8,
         xtol: float = 1e-8,
         gtol: float = 1e-8,
-        max_nfev: Optional[int] = None,
-    ) -> Tuple[List[str], List[str], np.ndarray]:
+        max_nfev: int | None = None,
+    ) -> tuple[list[str], list[str], np.ndarray]:
         """Validate inputs for least_squares function.
 
         Parameters
@@ -388,7 +402,7 @@ class InputValidator:
             errors.append("x0 contains NaN or Inf values")
 
         # Check method
-        valid_methods = ['trf', 'dogbox', 'lm']
+        valid_methods = ["trf", "dogbox", "lm"]
         if method not in valid_methods:
             errors.append(f"method must be one of {valid_methods}, got {method}")
 
@@ -416,7 +430,7 @@ class InputValidator:
 
         # Check bounds
         if bounds is not None:
-            if method == 'lm':
+            if method == "lm":
                 errors.append("Levenberg-Marquardt method does not support bounds")
             else:
                 try:
@@ -454,7 +468,7 @@ class InputValidator:
         return errors, warnings_list, x0
 
 
-def validate_inputs(validation_type: str = 'curve_fit'):
+def validate_inputs(validation_type: str = "curve_fit"):
     """Decorator for automatic input validation.
 
     Parameters
@@ -467,29 +481,34 @@ def validate_inputs(validation_type: str = 'curve_fit'):
     decorator : function
         Decorator function that validates inputs
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             validator = InputValidator()
 
-            if validation_type == 'curve_fit':
+            if validation_type == "curve_fit":
                 # Extract arguments
                 if len(args) < 3:
-                    raise ValueError("curve_fit requires at least 3 arguments (f, xdata, ydata)")
+                    raise ValueError(
+                        "curve_fit requires at least 3 arguments (f, xdata, ydata)"
+                    )
 
                 f, xdata, ydata = args[:3]
                 remaining_args = args[3:]
 
                 # Get optional arguments
-                p0 = kwargs.get('p0', None)
-                bounds = kwargs.get('bounds', None)
-                sigma = kwargs.get('sigma', None)
-                absolute_sigma = kwargs.get('absolute_sigma', True)
-                check_finite = kwargs.get('check_finite', True)
+                p0 = kwargs.get("p0")
+                bounds = kwargs.get("bounds")
+                sigma = kwargs.get("sigma")
+                absolute_sigma = kwargs.get("absolute_sigma", True)
+                check_finite = kwargs.get("check_finite", True)
 
                 # Validate
-                errors, warnings_list, xdata_clean, ydata_clean = validator.validate_curve_fit_inputs(
-                    f, xdata, ydata, p0, bounds, sigma, absolute_sigma, check_finite
+                errors, warnings_list, xdata_clean, ydata_clean = (
+                    validator.validate_curve_fit_inputs(
+                        f, xdata, ydata, p0, bounds, sigma, absolute_sigma, check_finite
+                    )
                 )
 
                 # Handle errors and warnings
@@ -500,27 +519,31 @@ def validate_inputs(validation_type: str = 'curve_fit'):
                     warnings.warn(warning, UserWarning, stacklevel=2)
 
                 # Replace with cleaned data
-                args = (f, xdata_clean, ydata_clean) + remaining_args
+                args = (f, xdata_clean, ydata_clean, *remaining_args)
 
-            elif validation_type == 'least_squares':
+            elif validation_type == "least_squares":
                 # Extract arguments
                 if len(args) < 2:
-                    raise ValueError("least_squares requires at least 2 arguments (fun, x0)")
+                    raise ValueError(
+                        "least_squares requires at least 2 arguments (fun, x0)"
+                    )
 
                 fun, x0 = args[:2]
                 remaining_args = args[2:]
 
                 # Get optional arguments
-                bounds = kwargs.get('bounds', None)
-                method = kwargs.get('method', 'trf')
-                ftol = kwargs.get('ftol', 1e-8)
-                xtol = kwargs.get('xtol', 1e-8)
-                gtol = kwargs.get('gtol', 1e-8)
-                max_nfev = kwargs.get('max_nfev', None)
+                bounds = kwargs.get("bounds")
+                method = kwargs.get("method", "trf")
+                ftol = kwargs.get("ftol", 1e-8)
+                xtol = kwargs.get("xtol", 1e-8)
+                gtol = kwargs.get("gtol", 1e-8)
+                max_nfev = kwargs.get("max_nfev")
 
                 # Validate
-                errors, warnings_list, x0_clean = validator.validate_least_squares_inputs(
-                    fun, x0, bounds, method, ftol, xtol, gtol, max_nfev
+                errors, warnings_list, x0_clean = (
+                    validator.validate_least_squares_inputs(
+                        fun, x0, bounds, method, ftol, xtol, gtol, max_nfev
+                    )
                 )
 
                 # Handle errors and warnings
@@ -531,7 +554,7 @@ def validate_inputs(validation_type: str = 'curve_fit'):
                     warnings.warn(warning, UserWarning, stacklevel=2)
 
                 # Replace with cleaned data
-                args = (fun, x0_clean) + remaining_args
+                args = (fun, x0_clean, *remaining_args)
 
             else:
                 raise ValueError(f"Unknown validation type: {validation_type}")
@@ -540,4 +563,5 @@ def validate_inputs(validation_type: str = 'curve_fit'):
             return func(*args, **kwargs)
 
         return wrapper
+
     return decorator

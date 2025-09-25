@@ -9,14 +9,18 @@ import os
 import pickle
 import time
 import warnings
+from collections.abc import Callable
 from functools import lru_cache, wraps
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
 from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
+
+import builtins
+import contextlib
 
 import jax.numpy as jnp
 
@@ -46,10 +50,10 @@ class SmartCache:
 
     def __init__(
         self,
-        cache_dir: str = '.nlsq_cache',
+        cache_dir: str = ".nlsq_cache",
         max_memory_items: int = 1000,
         disk_cache_enabled: bool = True,
-        enable_stats: bool = True
+        enable_stats: bool = True,
     ):
         """Initialize smart cache.
 
@@ -65,19 +69,19 @@ class SmartCache:
             Track cache statistics
         """
         self.cache_dir = cache_dir
-        self.memory_cache: Dict[str, Tuple[Any, float]] = {}  # value, timestamp
-        self.access_count: Dict[str, int] = {}  # Track access frequency
+        self.memory_cache: dict[str, tuple[Any, float]] = {}  # value, timestamp
+        self.access_count: dict[str, int] = {}  # Track access frequency
         self.disk_cache_enabled = disk_cache_enabled
         self.max_memory_items = max_memory_items
         self.enable_stats = enable_stats
 
         # Statistics
         self.cache_stats = {
-            'hits': 0,
-            'misses': 0,
-            'memory_hits': 0,
-            'disk_hits': 0,
-            'evictions': 0
+            "hits": 0,
+            "misses": 0,
+            "memory_hits": 0,
+            "disk_hits": 0,
+            "evictions": 0,
         }
 
         # Create cache directory if needed
@@ -111,14 +115,18 @@ class SmartCache:
                 arr_flat = np.asarray(arg).flatten()
                 if len(arr_flat) > 100:
                     # For large arrays, combine sampling with full array hash to prevent collisions
-                    sample_indices = np.linspace(0, len(arr_flat)-1, 100, dtype=int)
+                    sample_indices = np.linspace(0, len(arr_flat) - 1, 100, dtype=int)
                     sample = arr_flat[sample_indices]
                     # Include hash of full array data for uniqueness
                     full_hash = hashlib.sha256(arr_flat.tobytes()).hexdigest()[:16]
-                    key_parts.append(f"array_{arg.shape}_{arg.dtype}_{hash(sample.tobytes())}_{full_hash}")
+                    key_parts.append(
+                        f"array_{arg.shape}_{arg.dtype}_{hash(sample.tobytes())}_{full_hash}"
+                    )
                 else:
                     # For small arrays, use full array
-                    key_parts.append(f"array_{arg.shape}_{arg.dtype}_{hash(arr_flat.tobytes())}")
+                    key_parts.append(
+                        f"array_{arg.shape}_{arg.dtype}_{hash(arr_flat.tobytes())}"
+                    )
             elif callable(arg):
                 # For functions, use their name and module
                 key_parts.append(f"func_{arg.__module__}_{arg.__name__}")
@@ -129,10 +137,10 @@ class SmartCache:
         for k, v in sorted(kwargs.items()):
             key_parts.append(f"{k}={v}")
 
-        key_str = '|'.join(key_parts)
-        return hashlib.md5(key_str.encode()).hexdigest()
+        key_str = "|".join(key_parts)
+        return hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """Get value from cache.
 
         Parameters
@@ -151,8 +159,8 @@ class SmartCache:
             self.access_count[key] = self.access_count.get(key, 0) + 1
 
             if self.enable_stats:
-                self.cache_stats['hits'] += 1
-                self.cache_stats['memory_hits'] += 1
+                self.cache_stats["hits"] += 1
+                self.cache_stats["memory_hits"] += 1
 
             # Move to end (LRU)
             del self.memory_cache[key]
@@ -165,12 +173,12 @@ class SmartCache:
             cache_file = os.path.join(self.cache_dir, f"{key}.pkl")
             if os.path.exists(cache_file):
                 try:
-                    with open(cache_file, 'rb') as f:
-                        value = pickle.load(f)
+                    with open(cache_file, "rb") as f:
+                        value = pickle.load(f)  # nosec B301
 
                     if self.enable_stats:
-                        self.cache_stats['hits'] += 1
-                        self.cache_stats['disk_hits'] += 1
+                        self.cache_stats["hits"] += 1
+                        self.cache_stats["disk_hits"] += 1
 
                     # Add to memory cache
                     self._add_to_memory_cache(key, value)
@@ -179,13 +187,11 @@ class SmartCache:
                 except Exception as e:
                     warnings.warn(f"Could not load from disk cache: {e}")
                     # Remove corrupted cache file
-                    try:
+                    with contextlib.suppress(builtins.BaseException):
                         os.remove(cache_file)
-                    except:
-                        pass
 
         if self.enable_stats:
-            self.cache_stats['misses'] += 1
+            self.cache_stats["misses"] += 1
 
         return None
 
@@ -206,7 +212,7 @@ class SmartCache:
         if self.disk_cache_enabled:
             cache_file = os.path.join(self.cache_dir, f"{key}.pkl")
             try:
-                with open(cache_file, 'wb') as f:
+                with open(cache_file, "wb") as f:
                     pickle.dump(value, f, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception as e:
                 warnings.warn(f"Could not save to disk cache: {e}")
@@ -231,12 +237,12 @@ class SmartCache:
                     del self.access_count[oldest_key]
 
                 if self.enable_stats:
-                    self.cache_stats['evictions'] += 1
+                    self.cache_stats["evictions"] += 1
 
         self.memory_cache[key] = (value, time.time())
         self.access_count[key] = 1
 
-    def invalidate(self, key: Optional[str] = None):
+    def invalidate(self, key: str | None = None):
         """Invalidate cache entries.
 
         Parameters
@@ -252,7 +258,7 @@ class SmartCache:
             if self.disk_cache_enabled:
                 try:
                     for file in os.listdir(self.cache_dir):
-                        if file.endswith('.pkl'):
+                        if file.endswith(".pkl"):
                             os.remove(os.path.join(self.cache_dir, file))
                 except:
                     pass
@@ -266,12 +272,10 @@ class SmartCache:
             if self.disk_cache_enabled:
                 cache_file = os.path.join(self.cache_dir, f"{key}.pkl")
                 if os.path.exists(cache_file):
-                    try:
+                    with contextlib.suppress(builtins.BaseException):
                         os.remove(cache_file)
-                    except:
-                        pass
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """Get cache statistics.
 
         Returns
@@ -279,18 +283,18 @@ class SmartCache:
         stats : dict
             Cache statistics including hit rate
         """
-        total_accesses = self.cache_stats['hits'] + self.cache_stats['misses']
+        total_accesses = self.cache_stats["hits"] + self.cache_stats["misses"]
 
         if total_accesses > 0:
-            hit_rate = self.cache_stats['hits'] / total_accesses
+            hit_rate = self.cache_stats["hits"] / total_accesses
         else:
             hit_rate = 0.0
 
         return {
             **self.cache_stats,
-            'hit_rate': hit_rate,
-            'memory_size': len(self.memory_cache),
-            'total_accesses': total_accesses
+            "hit_rate": hit_rate,
+            "memory_size": len(self.memory_cache),
+            "total_accesses": total_accesses,
         }
 
     def optimize_cache(self):
@@ -303,15 +307,14 @@ class SmartCache:
 
         # Remove items with below-average access
         keys_to_remove = [
-            key for key, count in self.access_count.items()
-            if count < avg_access * 0.5
+            key for key, count in self.access_count.items() if count < avg_access * 0.5
         ]
 
         for key in keys_to_remove:
             self.invalidate(key)
 
 
-def cached_function(cache: Optional[SmartCache] = None, ttl: Optional[float] = None):
+def cached_function(cache: SmartCache | None = None, ttl: float | None = None):
     """Decorator for caching function results.
 
     Parameters
@@ -341,7 +344,7 @@ def cached_function(cache: Optional[SmartCache] = None, ttl: Optional[float] = N
             if cached_result is not None:
                 # Check TTL if specified
                 if ttl is not None:
-                    value, timestamp = cache.memory_cache.get(cache_key, (None, 0))
+                    _value, timestamp = cache.memory_cache.get(cache_key, (None, 0))
                     if time.time() - timestamp > ttl:
                         # Expired, recompute
                         cached_result = None
@@ -360,10 +363,11 @@ def cached_function(cache: Optional[SmartCache] = None, ttl: Optional[float] = N
         wrapper.get_stats = cache.get_stats
 
         return wrapper
+
     return decorator
 
 
-def cached_jacobian(cache: Optional[SmartCache] = None):
+def cached_jacobian(cache: SmartCache | None = None):
     """Decorator specifically for caching Jacobian evaluations.
 
     Parameters
@@ -399,6 +403,7 @@ def cached_jacobian(cache: Optional[SmartCache] = None):
         wrapper.invalidate = cache.invalidate
 
         return wrapper
+
     return decorator
 
 
@@ -414,7 +419,7 @@ class JITCompilationCache:
         self.compiled_functions = {}
         self.compilation_times = {}
 
-    def get_or_compile(self, func: Callable, static_argnums: Tuple = ()) -> Callable:
+    def get_or_compile(self, func: Callable, static_argnums: tuple = ()) -> Callable:
         """Get cached compilation or compile and cache.
 
         Parameters
@@ -452,7 +457,7 @@ class JITCompilationCache:
         self.compiled_functions.clear()
         self.compilation_times.clear()
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """Get compilation statistics.
 
         Returns
@@ -461,9 +466,9 @@ class JITCompilationCache:
             Compilation statistics
         """
         return {
-            'cached_functions': len(self.compiled_functions),
-            'total_compilation_time': sum(self.compilation_times.values()),
-            'functions': list(self.compiled_functions.keys())
+            "cached_functions": len(self.compiled_functions),
+            "total_compilation_time": sum(self.compilation_times.values()),
+            "functions": list(self.compiled_functions.keys()),
         }
 
 

@@ -36,7 +36,7 @@ class TestJAXTracingCompatibility(unittest.TestCase):
         y = 2.5 * x + np.random.normal(0, 0.1, 100)
 
         # Should work without JAX tracing errors
-        popt, pcov = curve_fit(linear, x, y, p0=[1.0])
+        popt, _pcov = curve_fit(linear, x, y, p0=[1.0])
         self.assertAlmostEqual(popt[0], 2.5, places=1)
 
     def test_1d_function_5_params(self):
@@ -49,7 +49,7 @@ class TestJAXTracingCompatibility(unittest.TestCase):
         true_params = [1.0, -0.5, 0.3, -0.1, 0.05]
         y = poly4(x, *true_params) + np.random.normal(0, 0.01, 100)
 
-        popt, pcov = curve_fit(poly4, x, y, p0=[1, 1, 1, 1, 1])
+        popt, _pcov = curve_fit(poly4, x, y, p0=[1, 1, 1, 1, 1])
         # Polynomial fitting can be numerically challenging, especially for higher order terms
         # Check lower order terms more strictly
         np.testing.assert_allclose(popt[:3], true_params[:3], rtol=0.1)
@@ -68,7 +68,7 @@ class TestJAXTracingCompatibility(unittest.TestCase):
         true_params = [1.0, -0.5, 0.3, -0.1, 0.05, -0.02, 0.01, -0.005, 0.002, -0.001]
         y = poly9(x, *true_params) + np.random.normal(0, 0.01, 200)
 
-        popt, pcov = curve_fit(poly9, x, y, p0=[1] * 10)
+        popt, _pcov = curve_fit(poly9, x, y, p0=[1] * 10)
         # High order polynomials are harder to fit, so we allow more tolerance
         # Only check the first 3 coefficients as higher order ones are increasingly unstable
         np.testing.assert_allclose(popt[:3], true_params[:3], rtol=0.3)
@@ -90,7 +90,7 @@ class TestJAXTracingCompatibility(unittest.TestCase):
         # Should handle this with warning but no error
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            popt, pcov = curve_fit(many_params, x, y, p0=np.ones(15))
+            popt, _pcov = curve_fit(many_params, x, y, p0=np.ones(15))
 
         # Check that we got reasonable parameters (not exact due to complexity)
         self.assertEqual(len(popt), 15)
@@ -107,7 +107,7 @@ class TestJAXTracingCompatibility(unittest.TestCase):
         y = 2.5 * np.exp(-1.3 * x) + 0.1 + np.random.normal(0, 0.01, 100)
 
         # Should work with JIT-compiled function
-        popt, pcov = curve_fit(exponential, x, y, p0=[1, 1, 0])
+        popt, _pcov = curve_fit(exponential, x, y, p0=[1, 1, 0])
         np.testing.assert_allclose(popt, [2.5, 1.3, 0.1], rtol=0.1)
 
 
@@ -135,7 +135,7 @@ class TestChunkingAccuracy(unittest.TestCase):
         y = exponential(x, *true_params) + np.random.normal(0, 0.01, 2000)
 
         # Single fit (reference)
-        popt_single, _ = curve_fit(exponential, x, y, p0=[2.0, 1.0, 0.1])
+        _popt_single, _ = curve_fit(exponential, x, y, p0=[2.0, 1.0, 0.1])
 
         # Chunked fit with better initial guess
         fitter = LargeDatasetFitter(config=self.config)
@@ -352,7 +352,7 @@ class TestPerformanceBenchmarks(unittest.TestCase):
 
             # Time regular fit
             start = time.time()
-            popt1, _ = curve_fit(exponential, x, y, p0=[1, 1, 0])
+            _popt1, _ = curve_fit(exponential, x, y, p0=[1, 1, 0])
             time_regular = time.time() - start
 
             # Time chunked fit

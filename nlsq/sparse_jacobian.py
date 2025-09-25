@@ -94,6 +94,7 @@ class SparseJacobianComputer:
         ydata: np.ndarray,
         data_mask: np.ndarray | None = None,
         chunk_size: int = 10000,
+        func: Callable | None = None,  # Add func parameter for finite diff fallback
     ) -> csr_matrix:
         """Compute Jacobian in sparse format with chunking.
 
@@ -111,6 +112,8 @@ class SparseJacobianComputer:
             Mask for valid data points
         chunk_size : int
             Size of chunks for computation
+        func : Callable, optional
+            Original function for finite difference fallback
 
         Returns
         -------
@@ -145,6 +148,10 @@ class SparseJacobianComputer:
                 J_chunk = jac_func(x_jax, x_chunk, y_chunk, mask_chunk, None)
             else:
                 # Fallback to finite differences if no jac_func
+                if func is None:
+                    raise ValueError(
+                        "func parameter required for finite difference fallback"
+                    )
                 J_chunk = self._finite_diff_jacobian(
                     func, x, x_chunk, y_chunk, mask_chunk
                 )
@@ -419,7 +426,7 @@ class SparseOptimizer:
             # Detect sparsity pattern from samples
             sample_size = min(1000, n_data)
             sample_indices = np.random.choice(n_data, sample_size, replace=False)
-            pattern, sparsity = self.sparse_computer.detect_sparsity_pattern(
+            _pattern, sparsity = self.sparse_computer.detect_sparsity_pattern(
                 func, x0, xdata[sample_indices], sample_size
             )
 
@@ -500,7 +507,7 @@ def detect_jacobian_sparsity(
     )
 
     # Analyze pattern
-    n_data, n_params = pattern.shape
+    _n_data, _n_params = pattern.shape
     nnz_per_row = np.sum(pattern, axis=1)
     nnz_per_col = np.sum(pattern, axis=0)
 

@@ -140,8 +140,7 @@ class DataGenerator:
         """
         if self.source_type == "generator":
             # Pass through generator
-            for batch in self.source:
-                yield batch
+            yield from self.source
 
         else:
             # Generate from indexed source

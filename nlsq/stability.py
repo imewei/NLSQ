@@ -6,7 +6,7 @@ ill-conditioned problems or extreme parameter values.
 """
 
 import warnings
-from typing import Dict, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -57,6 +57,7 @@ class NumericalStabilityGuard:
 
     def _create_jit_functions(self):
         """Create JIT-compiled versions of numerical operations."""
+
         @jit
         def _safe_exp_jit(x):
             """JIT-compiled safe exponential."""
@@ -72,7 +73,9 @@ class NumericalStabilityGuard:
         @jit
         def _safe_divide_jit(numerator, denominator):
             """JIT-compiled safe division."""
-            safe_denom = jnp.where(jnp.abs(denominator) < self.eps, self.eps, denominator)
+            safe_denom = jnp.where(
+                jnp.abs(denominator) < self.eps, self.eps, denominator
+            )
             return numerator / safe_denom
 
         @jit
@@ -86,7 +89,7 @@ class NumericalStabilityGuard:
         self._safe_divide_jit = _safe_divide_jit
         self._safe_sqrt_jit = _safe_sqrt_jit
 
-    def check_and_fix_jacobian(self, J: jnp.ndarray) -> Tuple[jnp.ndarray, Dict]:
+    def check_and_fix_jacobian(self, J: jnp.ndarray) -> tuple[jnp.ndarray, dict]:
         """Check Jacobian for numerical issues and fix them.
 
         This method performs several checks and corrections:
@@ -118,7 +121,7 @@ class NumericalStabilityGuard:
             warnings.warn("Jacobian is all zeros, adding small perturbation")
             m, n = J.shape
             J = J + self.eps * jnp.ones((m, n))
-            return J, {'has_nan': False, 'has_inf': False, 'condition_number': np.inf}
+            return J, {"has_nan": False, "has_inf": False, "condition_number": np.inf}
 
         # Compute singular values for condition number
         try:
@@ -126,7 +129,11 @@ class NumericalStabilityGuard:
 
             # Handle empty or invalid SVD
             if len(svd_vals) == 0:
-                return J, {'has_nan': False, 'has_inf': False, 'condition_number': np.inf}
+                return J, {
+                    "has_nan": False,
+                    "has_inf": False,
+                    "condition_number": np.inf,
+                }
 
             max_sv = jnp.max(svd_vals)
             min_sv = jnp.min(svd_vals)
@@ -143,7 +150,9 @@ class NumericalStabilityGuard:
 
         # Apply fixes based on condition number
         if condition_number > self.condition_threshold:
-            warnings.warn(f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})")
+            warnings.warn(
+                f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})"
+            )
 
             # Apply Tikhonov regularization without changing dimensions
             # This adds a small diagonal component to improve conditioning
@@ -162,11 +171,11 @@ class NumericalStabilityGuard:
                 J = J + self.eps * 10 * jnp.eye(m, n)
 
         issues = {
-            'has_nan': bool(has_invalid),
-            'has_inf': bool(has_invalid),
-            'is_ill_conditioned': condition_number > self.condition_threshold,
-            'condition_number': condition_number,
-            'regularized': condition_number > self.condition_threshold
+            "has_nan": bool(has_invalid),
+            "has_inf": bool(has_invalid),
+            "is_ill_conditioned": condition_number > self.condition_threshold,
+            "condition_number": condition_number,
+            "regularized": condition_number > self.condition_threshold,
         }
         return J, issues
 
@@ -229,7 +238,9 @@ class NumericalStabilityGuard:
         """
         return self._safe_log_jit(x)
 
-    def safe_divide(self, numerator: jnp.ndarray, denominator: jnp.ndarray) -> jnp.ndarray:
+    def safe_divide(
+        self, numerator: jnp.ndarray, denominator: jnp.ndarray
+    ) -> jnp.ndarray:
         """Division with zero-protection.
 
         Parameters
@@ -281,7 +292,9 @@ class NumericalStabilityGuard:
             base = jnp.abs(base)
 
         # Prevent overflow
-        max_base = jnp.power(self.max_float, 1.0 / abs(exponent)) if exponent != 0 else np.inf
+        max_base = (
+            jnp.power(self.max_float, 1.0 / abs(exponent)) if exponent != 0 else np.inf
+        )
         base_clipped = jnp.clip(base, -max_base, max_base)
 
         return jnp.power(base_clipped, exponent)
@@ -314,7 +327,9 @@ class NumericalStabilityGuard:
 
         return gradient
 
-    def regularize_hessian(self, H: jnp.ndarray, min_eigenvalue: float = 1e-8) -> jnp.ndarray:
+    def regularize_hessian(
+        self, H: jnp.ndarray, min_eigenvalue: float = 1e-8
+    ) -> jnp.ndarray:
         """Regularize Hessian to ensure positive definiteness.
 
         Parameters
@@ -350,7 +365,7 @@ class NumericalStabilityGuard:
 
         return H
 
-    def check_residuals(self, residuals: jnp.ndarray) -> Tuple[jnp.ndarray, bool]:
+    def check_residuals(self, residuals: jnp.ndarray) -> tuple[jnp.ndarray, bool]:
         """Check residuals for numerical issues and outliers.
 
         Parameters
@@ -418,8 +433,7 @@ class NumericalStabilityGuard:
         else:
             return float(jnp.linalg.norm(x, ord=ord))
 
-
-    def detect_numerical_issues(self, x: jnp.ndarray) -> Dict:
+    def detect_numerical_issues(self, x: jnp.ndarray) -> dict:
         """Detect numerical issues in array.
 
         Parameters
@@ -433,9 +447,9 @@ class NumericalStabilityGuard:
             Dictionary with keys 'has_nan', 'has_inf', 'has_negative'
         """
         return {
-            'has_nan': bool(jnp.any(jnp.isnan(x))),
-            'has_inf': bool(jnp.any(jnp.isinf(x))),
-            'has_negative': bool(jnp.any(x < 0)) if x.size > 0 else False
+            "has_nan": bool(jnp.any(jnp.isnan(x))),
+            "has_inf": bool(jnp.any(jnp.isinf(x))),
+            "has_negative": bool(jnp.any(x < 0)) if x.size > 0 else False,
         }
 
 

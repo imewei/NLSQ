@@ -79,7 +79,7 @@ class TestSparseJacobianComputer(unittest.TestCase):
         x = np.linspace(0, 10, 100)
         params = np.array([2.0, 3.0])
 
-        pattern, sparsity = self.computer.detect_sparsity_pattern(
+        _pattern, sparsity = self.computer.detect_sparsity_pattern(
             block_func, params, x, n_samples=100
         )
 
@@ -98,7 +98,7 @@ class TestSparseJacobianComputer(unittest.TestCase):
         params = np.array([2.0, 1.0])
 
         # Test sparsity pattern detection
-        pattern, sparsity = self.computer.detect_sparsity_pattern(
+        _pattern, sparsity = self.computer.detect_sparsity_pattern(
             linear_func, params, x, n_samples=3
         )
         # Linear function should have no sparsity
@@ -363,7 +363,7 @@ class TestSparseJacobianIntegration(unittest.TestCase):
             full_result = objective(params)
             return full_result[: len(x)] if len(full_result) > len(x) else full_result
 
-        pattern, sparsity = computer.detect_sparsity_pattern(
+        _pattern, sparsity = computer.detect_sparsity_pattern(
             wrapped_func, x0, xdata_sample, n_samples=100
         )
 
@@ -445,7 +445,7 @@ class TestSparseJacobianEdgeCases(unittest.TestCase):
         params = np.array([1.0, 2.0])
 
         computer = SparseJacobianComputer()
-        pattern, sparsity = computer.detect_sparsity_pattern(
+        _pattern, sparsity = computer.detect_sparsity_pattern(
             constant_func, params, x, n_samples=20
         )
 

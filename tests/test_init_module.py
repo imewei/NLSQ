@@ -2,8 +2,9 @@
 """Tests for nlsq __init__ module and public API."""
 
 import unittest
-import numpy as np
+
 import jax.numpy as jnp
+import numpy as np
 
 
 class TestInitModule(unittest.TestCase):
@@ -12,13 +13,19 @@ class TestInitModule(unittest.TestCase):
     def test_version(self):
         """Test version information is available."""
         import nlsq
+
         self.assertIsNotNone(nlsq.__version__)
         self.assertIsInstance(nlsq.__version__, str)
 
     def test_main_api_imports(self):
         """Test main API functions are importable."""
-        from nlsq import curve_fit, CurveFit, LeastSquares
-        from nlsq import OptimizeResult, OptimizeWarning
+        from nlsq import (
+            CurveFit,
+            LeastSquares,
+            OptimizeResult,
+            OptimizeWarning,
+            curve_fit,
+        )
 
         # Check that classes/functions exist
         self.assertTrue(callable(curve_fit))
@@ -83,7 +90,7 @@ class TestInitModule(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = curve_fit(model, x, y)
+        popt, _pcov = curve_fit(model, x, y)
         self.assertAlmostEqual(popt[0], 2.0, places=3)
         self.assertAlmostEqual(popt[1], 0.0, places=3)
 
@@ -97,7 +104,7 @@ class TestInitModule(unittest.TestCase):
             message="Optimization succeeded",
             fun=0.1,
             jac=np.array([0.01, 0.02]),
-            nfev=10
+            nfev=10,
         )
 
         self.assertTrue(result.success)
@@ -126,9 +133,7 @@ class TestInitModule(unittest.TestCase):
 
         # Test creating config
         config = LargeDatasetConfig(
-            enable_sampling=True,
-            max_sampled_size=5000,
-            sampling_threshold=100000
+            enable_sampling=True, max_sampled_size=5000, sampling_threshold=100000
         )
 
         self.assertTrue(config.enable_sampling)
@@ -144,10 +149,7 @@ class TestInitModule(unittest.TestCase):
         from nlsq import MemoryConfig, get_memory_config, set_memory_limits
 
         # Test creating config
-        config = MemoryConfig(
-            memory_limit_gb=4.0,
-            enable_mixed_precision_fallback=True
-        )
+        config = MemoryConfig(memory_limit_gb=4.0, enable_mixed_precision_fallback=True)
 
         self.assertEqual(config.memory_limit_gb, 4.0)
         self.assertTrue(config.enable_mixed_precision_fallback)
@@ -163,7 +165,14 @@ class TestInitModule(unittest.TestCase):
 
     def test_context_managers(self):
         """Test context managers for configuration."""
-        from nlsq import large_dataset_context, memory_context, get_large_dataset_config, get_memory_config, LargeDatasetConfig, MemoryConfig
+        from nlsq import (
+            LargeDatasetConfig,
+            MemoryConfig,
+            get_large_dataset_config,
+            get_memory_config,
+            large_dataset_context,
+            memory_context,
+        )
 
         # Test large_dataset_context
         original_config = get_large_dataset_config()
@@ -174,7 +183,9 @@ class TestInitModule(unittest.TestCase):
 
         # Config should be restored
         restored_config = get_large_dataset_config()
-        self.assertEqual(restored_config.enable_sampling, original_config.enable_sampling)
+        self.assertEqual(
+            restored_config.enable_sampling, original_config.enable_sampling
+        )
 
         # Test memory_context
         original_mem_config = get_memory_config()
@@ -185,7 +196,9 @@ class TestInitModule(unittest.TestCase):
 
         # Config should be restored
         restored_mem_config = get_memory_config()
-        self.assertEqual(restored_mem_config.memory_limit_gb, original_mem_config.memory_limit_gb)
+        self.assertEqual(
+            restored_mem_config.memory_limit_gb, original_mem_config.memory_limit_gb
+        )
 
     def test_algorithm_selector(self):
         """Test AlgorithmSelector through public API."""
@@ -203,8 +216,8 @@ class TestInitModule(unittest.TestCase):
 
         recommendations = auto_select_algorithm(model, x, y)
         self.assertIsInstance(recommendations, dict)
-        self.assertIn('algorithm', recommendations)
-        self.assertIn('ftol', recommendations)
+        self.assertIn("algorithm", recommendations)
+        self.assertIn("ftol", recommendations)
 
     def test_fit_large_dataset_basic(self):
         """Test fit_large_dataset through public API."""
@@ -218,9 +231,7 @@ class TestInitModule(unittest.TestCase):
         y = 2 * x + 1 + 0.1 * np.random.randn(1000)
 
         result = fit_large_dataset(
-            model, x, y,
-            initial_params=[1.0, 0.0],
-            chunk_size=500
+            model, x, y, initial_params=[1.0, 0.0], chunk_size=500
         )
 
         self.assertTrue(result.success)
@@ -237,8 +248,10 @@ class TestInitModule(unittest.TestCase):
         dataset_stats = estimate_memory_requirements(n_points, n_params)
 
         # Should return DatasetStats object
-        self.assertIsInstance(dataset_stats, type(dataset_stats))  # Check it's the right type
-        self.assertTrue(hasattr(dataset_stats, 'total_memory_estimate_gb'))
+        self.assertIsInstance(
+            dataset_stats, type(dataset_stats)
+        )  # Check it's the right type
+        self.assertTrue(hasattr(dataset_stats, "total_memory_estimate_gb"))
         self.assertIsInstance(dataset_stats.total_memory_estimate_gb, float)
         self.assertGreater(dataset_stats.total_memory_estimate_gb, 0)
         # For 10k points and 5 params, should be small
@@ -249,9 +262,7 @@ class TestInitModule(unittest.TestCase):
         from nlsq import configure_for_large_datasets, get_large_dataset_config
 
         configure_for_large_datasets(
-            memory_limit_gb=8.0,
-            enable_sampling=True,
-            enable_chunking=True
+            memory_limit_gb=8.0, enable_sampling=True, enable_chunking=True
         )
 
         config = get_large_dataset_config()
@@ -274,9 +285,7 @@ class TestInitModule(unittest.TestCase):
         def model(x, a, b):
             return a * x + b
 
-        fitter = LargeDatasetFitter(
-            memory_limit_gb=2.0
-        )
+        fitter = LargeDatasetFitter(memory_limit_gb=2.0)
 
         x = np.linspace(0, 10, 500)
         y = 2 * x + 1 + 0.1 * np.random.randn(500)
@@ -292,9 +301,7 @@ class TestInitModule(unittest.TestCase):
         from nlsq import LDMemoryConfig
 
         config = LDMemoryConfig(
-            memory_limit_gb=4.0,
-            min_chunk_size=1000,
-            enable_sampling=True
+            memory_limit_gb=4.0, min_chunk_size=1000, enable_sampling=True
         )
 
         self.assertEqual(config.memory_limit_gb, 4.0)
@@ -328,9 +335,9 @@ class TestInitModule(unittest.TestCase):
         ls = LeastSquares()
 
         # Check it has the expected methods
-        self.assertTrue(hasattr(ls, 'least_squares'))
+        self.assertTrue(hasattr(ls, "least_squares"))
         self.assertTrue(callable(ls.least_squares))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

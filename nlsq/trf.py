@@ -110,9 +110,6 @@ initialize_gpu_safely()
 
 from nlsq._optimize import OptimizeResult
 from nlsq.common_jax import CommonJIT
-from nlsq.diagnostics import OptimizationDiagnostics
-from nlsq.robust_decomposition import robust_decomp
-from nlsq.stability import NumericalStabilityGuard
 from nlsq.common_scipy import (
     CL_scaling_vector,
     check_termination,
@@ -127,10 +124,13 @@ from nlsq.common_scipy import (
     step_size_to_bound,
     update_tr_radius,
 )
+from nlsq.diagnostics import OptimizationDiagnostics
 
 # Logging support
 # Optimizer base class
 from nlsq.optimizer_base import TrustRegionOptimizerBase
+from nlsq.robust_decomposition import robust_decomp
+from nlsq.stability import NumericalStabilityGuard
 
 
 class TrustRegionJITFunctions:
@@ -398,7 +398,7 @@ class TrustRegionJITFunctions:
                 Number of CG iterations
             """
             # Solve (J^T J + alpha I) x = -J^T f using conjugate gradient
-            m, n = J.shape
+            _m, n = J.shape
             if max_iter is None:
                 max_iter = min(n, 100)
 
@@ -453,7 +453,7 @@ class TrustRegionJITFunctions:
             This replaces the SVD-based solve_lsq_trust_region function.
             """
             # First try to solve without regularization (alpha=0)
-            p_gn, residual_norm, n_iter = conjugate_gradient_solve(
+            p_gn, _residual_norm, _n_iter = conjugate_gradient_solve(
                 J, f, d, 0.0, max_iter
             )
 
@@ -493,7 +493,7 @@ class TrustRegionJITFunctions:
             d_augmented = jnp.ones(J_augmented.shape[1])  # Already scaled
 
             # First try to solve without regularization (alpha=0)
-            p_gn, residual_norm, n_iter = conjugate_gradient_solve(
+            p_gn, _residual_norm, _n_iter = conjugate_gradient_solve(
                 J_augmented, f_augmented, d_augmented, 0.0, max_iter
             )
 
@@ -620,7 +620,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         verbose: int,
         timeit: bool = False,
         solver: str = "exact",
-        diagnostics: Optional[OptimizationDiagnostics] = None,
+        diagnostics: OptimizationDiagnostics | None = None,
         **kwargs,
     ) -> dict:
         """Minimize a scalar function of one or more variables using the

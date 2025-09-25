@@ -18,8 +18,10 @@ From Simple curve_fit
    from nlsq import curve_fit
    import jax.numpy as jnp
 
+
    def model(x, a, b):
        return a * jnp.exp(-b * x)
+
 
    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.1])
 
@@ -30,14 +32,19 @@ From Simple curve_fit
    from nlsq import curve_fit_large  # Drop-in replacement with auto-optimization
    import jax.numpy as jnp
 
+
    def model(x, a, b):
        return a * jnp.exp(-b * x)
 
+
    # Automatically handles large datasets and optimizes memory usage
    popt, pcov = curve_fit_large(
-       model, x, y, p0=[1.0, 0.1],
+       model,
+       x,
+       y,
+       p0=[1.0, 0.1],
        show_progress=True,  # Progress bar for large fits
-       memory_limit_gb=8.0  # Automatic memory management
+       memory_limit_gb=8.0,  # Automatic memory management
    )
 
 Migrating from Custom CurveFit Usage
@@ -61,10 +68,7 @@ Migrating from Custom CurveFit Usage
    # Add stability and recovery features
    cache = SmartCache()
 
-   cf = CurveFit(
-       enable_stability=True,
-       enable_recovery=True
-   )
+   cf = CurveFit(enable_stability=True, enable_recovery=True)
 
    popt, pcov = cf.curve_fit(model, x, y, p0=p0)
 
@@ -116,10 +120,13 @@ From Manual Chunking
 
    # Automatic intelligent chunking with <1% error
    popt, pcov = curve_fit_large(
-       model, x, y, p0=p0,
+       model,
+       x,
+       y,
+       p0=p0,
        memory_limit_gb=8.0,
        show_progress=True,
-       auto_size_detection=True  # Automatically decide processing strategy
+       auto_size_detection=True,  # Automatically decide processing strategy
    )
 
    # Get detailed information about the chunking process
@@ -136,12 +143,14 @@ From Memory Management Issues
    import gc
    import psutil
 
+
    # Manual memory monitoring
    def check_memory():
        mem = psutil.virtual_memory()
        if mem.percent > 80:
            gc.collect()
            print("Triggered garbage collection")
+
 
    # Manual memory-safe fitting
    check_memory()
@@ -156,9 +165,7 @@ From Memory Management Issues
 
    # Automatic memory management
    config = MemoryConfig(
-       memory_limit_gb=8.0,
-       enable_garbage_collection=True,
-       enable_memory_monitoring=True
+       memory_limit_gb=8.0, enable_garbage_collection=True, enable_memory_monitoring=True
    )
 
    with memory_context(config):
@@ -197,7 +204,7 @@ From Basic Error Handling
    recovery = RecoveryManager(
        enable_parameter_perturbation=True,
        enable_algorithm_switching=True,
-       max_recovery_attempts=3
+       max_recovery_attempts=3,
    )
 
    cf = CurveFit(recovery_manager=recovery)
@@ -226,14 +233,14 @@ From Manual Algorithm Testing
    from nlsq import curve_fit
 
    # Manual algorithm testing
-   algorithms = ['trf', 'lm', 'dogbox']
+   algorithms = ["trf", "lm", "dogbox"]
    best_result = None
-   best_residual = float('inf')
+   best_residual = float("inf")
 
    for method in algorithms:
        try:
            popt, pcov = curve_fit(model, x, y, p0=p0, method=method)
-           residual = np.sum((y - model(x, *popt))**2)
+           residual = np.sum((y - model(x, *popt)) ** 2)
 
            if residual < best_residual:
                best_residual = residual
@@ -252,17 +259,10 @@ From Manual Algorithm Testing
    from nlsq import curve_fit
 
    # Automatic algorithm selection based on problem characteristics
-   recommendations = auto_select_algorithm(
-       f=model,
-       xdata=x,
-       ydata=y,
-       p0=p0
-   )
+   recommendations = auto_select_algorithm(f=model, xdata=x, ydata=y, p0=p0)
 
-   best_method = recommendations.get('algorithm', 'trf')
-   popt, pcov = curve_fit(
-       model, x, y, p0=p0, method=best_method
-   )
+   best_method = recommendations.get("algorithm", "trf")
+   popt, pcov = curve_fit(model, x, y, p0=p0, method=best_method)
 
    print(f"Auto-selected: {best_method}")
    print(f"Fitted parameters: {popt}")
@@ -295,11 +295,7 @@ From No Validation
 
    try:
        warnings, errors, clean_x, clean_y = validator.validate_curve_fit_inputs(
-           func=model,
-           xdata=x,
-           ydata=y,
-           p0=p0,
-           bounds=bounds
+           func=model, xdata=x, ydata=y, p0=p0, bounds=bounds
        )
 
        # Handle warnings (non-blocking)
@@ -345,9 +341,7 @@ Adding Caching
 
    # Enable caching for repeated similar fits
    cache = SmartCache(
-       enable_function_caching=True,
-       enable_jacobian_caching=True,
-       max_cache_size_gb=2.0
+       enable_function_caching=True, enable_jacobian_caching=True, max_cache_size_gb=2.0
    )
 
    cf = CurveFit(cache=cache)
@@ -375,8 +369,10 @@ Here's a complete example showing migration from basic usage to full advanced fe
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    # Basic fitting
    popt, pcov = curve_fit(model, x, y, p0=[1, 0.1, 0])
@@ -388,15 +384,13 @@ Here's a complete example showing migration from basic usage to full advanced fe
 
    import numpy as np
    import jax.numpy as jnp
-   from nlsq import (
-       CurveFit, curve_fit_large,
-       MemoryConfig, memory_context,
-       InputValidator
-   )
+   from nlsq import CurveFit, curve_fit_large, MemoryConfig, memory_context, InputValidator
    from nlsq.algorithm_selector import auto_select_algorithm
+
 
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    # Configure memory management
    memory_config = MemoryConfig(memory_limit_gb=8.0)
@@ -414,16 +408,19 @@ Here's a complete example showing migration from basic usage to full advanced fe
            with memory_context(memory_config):
                if len(x) > 1_000_000:  # Large dataset
                    popt, pcov = curve_fit_large(
-                       model, clean_x, clean_y, p0=[1, 0.1, 0],
+                       model,
+                       clean_x,
+                       clean_y,
+                       p0=[1, 0.1, 0],
                        show_progress=True,
-                       memory_limit_gb=8.0
+                       memory_limit_gb=8.0,
                    )
                else:  # Regular dataset
                    # Auto-select algorithm
                    recommendations = auto_select_algorithm(
                        f=model, xdata=clean_x, ydata=clean_y, p0=[1, 0.1, 0]
                    )
-                   method = recommendations.get('algorithm', 'trf')
+                   method = recommendations.get("algorithm", "trf")
 
                    cf = CurveFit(enable_stability=True, enable_recovery=True)
                    popt, pcov = cf.curve_fit(

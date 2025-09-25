@@ -6,12 +6,11 @@ strategies for all matrix decompositions used in optimization.
 
 import logging
 import warnings
-from typing import Optional, Tuple
-
-import numpy as np
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.scipy.linalg import cholesky as jax_cholesky
 from jax.scipy.linalg import qr as jax_qr
 from jax.scipy.linalg import svd as jax_svd
@@ -54,18 +53,20 @@ class RobustDecomposition:
 
         # Build fallback chain
         self.fallback_chain = [
-            ('jax_gpu', self._jax_gpu_decomp),
-            ('jax_cpu', self._jax_cpu_decomp),
-            ('scipy', self._scipy_decomp),
-            ('numpy', self._numpy_decomp),
-            ('safe_mode', self._safe_mode_decomp)
+            ("jax_gpu", self._jax_gpu_decomp),
+            ("jax_cpu", self._jax_cpu_decomp),
+            ("scipy", self._scipy_decomp),
+            ("numpy", self._numpy_decomp),
+            ("safe_mode", self._safe_mode_decomp),
         ]
 
         # Regularization parameters
         self.eps = np.finfo(np.float64).eps
         self.regularization_factor = 1e-10
 
-    def svd(self, matrix: jnp.ndarray, full_matrices: bool = False) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def svd(
+        self, matrix: jnp.ndarray, full_matrices: bool = False
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """Compute SVD with automatic fallback.
 
         Parameters
@@ -91,7 +92,7 @@ class RobustDecomposition:
         """
         for name, method in self.fallback_chain:
             try:
-                result = method(matrix, 'svd', full_matrices)
+                result = method(matrix, "svd", full_matrices)
                 if result is not None and self._validate_svd(result):
                     self.logger.debug(f"SVD succeeded with {name}")
                     return result
@@ -101,7 +102,9 @@ class RobustDecomposition:
 
         raise RuntimeError("All SVD methods failed")
 
-    def qr(self, matrix: jnp.ndarray, mode: str = 'reduced') -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def qr(
+        self, matrix: jnp.ndarray, mode: str = "reduced"
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute QR decomposition with fallback.
 
         Parameters
@@ -125,7 +128,7 @@ class RobustDecomposition:
         """
         for name, method in self.fallback_chain:
             try:
-                result = method(matrix, 'qr', mode)
+                result = method(matrix, "qr", mode)
                 if result is not None and self._validate_qr(result):
                     self.logger.debug(f"QR succeeded with {name}")
                     return result
@@ -160,7 +163,7 @@ class RobustDecomposition:
 
         for name, method in self.fallback_chain:
             try:
-                result = method(matrix, 'cholesky', lower)
+                result = method(matrix, "cholesky", lower)
                 if result is not None:
                     self.logger.debug(f"Cholesky succeeded with {name}")
                     return result
@@ -178,15 +181,15 @@ class RobustDecomposition:
 
         gpu_device = jax.devices("gpu")[0]
         with jax.default_device(gpu_device):
-            if decomp_type == 'svd':
+            if decomp_type == "svd":
                 full_matrices = args[0] if args else False
                 U, s, Vt = jax_svd(matrix, full_matrices=full_matrices)
                 return U, s, Vt
-            elif decomp_type == 'qr':
-                mode = args[0] if args else 'reduced'
+            elif decomp_type == "qr":
+                mode = args[0] if args else "reduced"
                 Q, R = jax_qr(matrix, mode=mode)
                 return Q, R
-            elif decomp_type == 'cholesky':
+            elif decomp_type == "cholesky":
                 lower = args[0] if args else True
                 L = jax_cholesky(matrix, lower=lower)
                 return L
@@ -202,15 +205,15 @@ class RobustDecomposition:
             # Move data to CPU
             matrix_cpu = jax.device_put(matrix, cpu_device)
 
-            if decomp_type == 'svd':
+            if decomp_type == "svd":
                 full_matrices = args[0] if args else False
                 U, s, Vt = jax_svd(matrix_cpu, full_matrices=full_matrices)
                 return U, s, Vt
-            elif decomp_type == 'qr':
-                mode = args[0] if args else 'reduced'
+            elif decomp_type == "qr":
+                mode = args[0] if args else "reduced"
                 Q, R = jax_qr(matrix_cpu, mode=mode)
                 return Q, R
-            elif decomp_type == 'cholesky':
+            elif decomp_type == "cholesky":
                 lower = args[0] if args else True
                 L = jax_cholesky(matrix_cpu, lower=lower)
                 return L
@@ -225,15 +228,15 @@ class RobustDecomposition:
         # Convert to numpy
         matrix_np = np.array(matrix)
 
-        if decomp_type == 'svd':
+        if decomp_type == "svd":
             full_matrices = args[0] if args else False
             U, s, Vt = scipy.linalg.svd(matrix_np, full_matrices=full_matrices)
             return jnp.array(U), jnp.array(s), jnp.array(Vt)
-        elif decomp_type == 'qr':
-            mode = args[0] if args else 'reduced'
+        elif decomp_type == "qr":
+            mode = args[0] if args else "reduced"
             Q, R = scipy.linalg.qr(matrix_np, mode=mode)
             return jnp.array(Q), jnp.array(R)
-        elif decomp_type == 'cholesky':
+        elif decomp_type == "cholesky":
             lower = args[0] if args else True
             L = scipy.linalg.cholesky(matrix_np, lower=lower)
             return jnp.array(L)
@@ -243,15 +246,15 @@ class RobustDecomposition:
         # Convert to numpy
         matrix_np = np.array(matrix)
 
-        if decomp_type == 'svd':
+        if decomp_type == "svd":
             full_matrices = args[0] if args else False
             U, s, Vt = np.linalg.svd(matrix_np, full_matrices=full_matrices)
             return jnp.array(U), jnp.array(s), jnp.array(Vt)
-        elif decomp_type == 'qr':
-            mode = args[0] if args else 'reduced'
+        elif decomp_type == "qr":
+            mode = args[0] if args else "reduced"
             Q, R = np.linalg.qr(matrix_np, mode=mode)
             return jnp.array(Q), jnp.array(R)
-        elif decomp_type == 'cholesky':
+        elif decomp_type == "cholesky":
             L = np.linalg.cholesky(matrix_np)
             return jnp.array(L)
 
@@ -259,31 +262,36 @@ class RobustDecomposition:
         """Safe mode decomposition with regularization."""
         m, n = matrix.shape
 
-        if decomp_type == 'svd':
+        if decomp_type == "svd":
             # Add regularization to improve conditioning
             reg_matrix = matrix + self.regularization_factor * jnp.eye(m, n)
-            return self._numpy_decomp(reg_matrix, 'svd', *args)
+            return self._numpy_decomp(reg_matrix, "svd", *args)
 
-        elif decomp_type == 'qr':
+        elif decomp_type == "qr":
             # QR with column pivoting for stability
             matrix_np = np.array(matrix)
             try:
                 import scipy.linalg
-                Q, R, P = scipy.linalg.qr(matrix_np, mode='economic', pivoting=True)
+
+                Q, R, P = scipy.linalg.qr(matrix_np, mode="economic", pivoting=True)
                 # Reorder to undo pivoting
                 R_reordered = R[:, np.argsort(P)]
                 return jnp.array(Q), jnp.array(R_reordered)
             except:
                 # Fall back to basic QR with regularization
                 reg_matrix = matrix + self.eps * jnp.eye(m, n)
-                return self._numpy_decomp(reg_matrix, 'qr', *args)
+                return self._numpy_decomp(reg_matrix, "qr", *args)
 
-        elif decomp_type == 'cholesky':
+        elif decomp_type == "cholesky":
             # Ensure positive definite with stronger regularization
-            matrix = self._ensure_positive_definite(matrix, factor=self.regularization_factor * 100)
-            return self._numpy_decomp(matrix, 'cholesky', *args)
+            matrix = self._ensure_positive_definite(
+                matrix, factor=self.regularization_factor * 100
+            )
+            return self._numpy_decomp(matrix, "cholesky", *args)
 
-    def _ensure_positive_definite(self, matrix: jnp.ndarray, factor: Optional[float] = None) -> jnp.ndarray:
+    def _ensure_positive_definite(
+        self, matrix: jnp.ndarray, factor: float | None = None
+    ) -> jnp.ndarray:
         """Make matrix positive definite.
 
         Parameters
@@ -321,7 +329,9 @@ class RobustDecomposition:
 
         return matrix
 
-    def _cholesky_via_eigen(self, matrix: jnp.ndarray, lower: bool = True) -> jnp.ndarray:
+    def _cholesky_via_eigen(
+        self, matrix: jnp.ndarray, lower: bool = True
+    ) -> jnp.ndarray:
         """Compute Cholesky via eigendecomposition.
 
         Parameters
@@ -352,9 +362,9 @@ class RobustDecomposition:
             else:
                 return L.T
         except Exception as e:
-            raise RuntimeError(f"Cholesky via eigendecomposition failed: {e}")
+            raise RuntimeError(f"Cholesky via eigendecomposition failed: {e}") from e
 
-    def _validate_svd(self, result: Tuple) -> bool:
+    def _validate_svd(self, result: tuple) -> bool:
         """Validate SVD result.
 
         Parameters
@@ -370,15 +380,15 @@ class RobustDecomposition:
         try:
             U, s, Vt = result
             return (
-                jnp.all(jnp.isfinite(U)) and
-                jnp.all(jnp.isfinite(s)) and
-                jnp.all(jnp.isfinite(Vt)) and
-                jnp.all(s >= 0)  # Singular values must be non-negative
+                jnp.all(jnp.isfinite(U))
+                and jnp.all(jnp.isfinite(s))
+                and jnp.all(jnp.isfinite(Vt))
+                and jnp.all(s >= 0)  # Singular values must be non-negative
             )
         except:
             return False
 
-    def _validate_qr(self, result: Tuple) -> bool:
+    def _validate_qr(self, result: tuple) -> bool:
         """Validate QR result.
 
         Parameters
@@ -434,7 +444,9 @@ class RobustDecomposition:
                 return x
 
             except Exception as e2:
-                self.logger.warning(f"QR failed for least squares, using normal equations: {e2}")
+                self.logger.warning(
+                    f"QR failed for least squares, using normal equations: {e2}"
+                )
 
                 # Last resort: normal equations (less stable)
                 AtA = A.T @ A

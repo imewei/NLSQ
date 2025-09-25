@@ -67,17 +67,19 @@ class TestNumericalStability(unittest.TestCase):
     def test_check_and_fix_jacobian(self):
         """Test Jacobian checking and fixing."""
         # Create problematic Jacobian
-        J = jnp.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 1e-15, 0.0],  # Near-zero singular value
-            [0.0, 0.0, jnp.nan]  # NaN value
-        ])
+        J = jnp.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 1e-15, 0.0],  # Near-zero singular value
+                [0.0, 0.0, jnp.nan],  # NaN value
+            ]
+        )
 
         J_fixed, issues = self.guard.check_and_fix_jacobian(J)
 
         # Check that issues were detected
-        self.assertIn('has_nan', issues)
-        self.assertTrue(issues['has_nan'])
+        self.assertIn("has_nan", issues)
+        self.assertTrue(issues["has_nan"])
 
         # Check that Jacobian is now valid
         self.assertTrue(jnp.all(jnp.isfinite(J_fixed)))
@@ -87,14 +89,14 @@ class TestNumericalStability(unittest.TestCase):
         # Test array with NaN
         arr_nan = jnp.array([1.0, jnp.nan, 3.0])
         issues = self.guard.detect_numerical_issues(arr_nan)
-        self.assertTrue(issues['has_nan'])
-        self.assertFalse(issues['has_inf'])
+        self.assertTrue(issues["has_nan"])
+        self.assertFalse(issues["has_inf"])
 
         # Test array with Inf
         arr_inf = jnp.array([1.0, jnp.inf, 3.0])
         issues = self.guard.detect_numerical_issues(arr_inf)
-        self.assertTrue(issues['has_inf'])
-        self.assertFalse(issues['has_nan'])
+        self.assertTrue(issues["has_inf"])
+        self.assertFalse(issues["has_nan"])
 
 
 class TestInputValidator(unittest.TestCase):
@@ -106,6 +108,7 @@ class TestInputValidator(unittest.TestCase):
 
     def test_validate_curve_fit_inputs(self):
         """Test curve fit input validation."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
 
@@ -113,8 +116,8 @@ class TestInputValidator(unittest.TestCase):
         ydata = np.array(model(xdata, 2.5, 1.3))  # Convert to numpy for mutability
 
         # Test valid inputs
-        errors, warnings, xdata_valid, ydata_valid = self.validator.validate_curve_fit_inputs(
-            model, xdata, ydata, p0=[2.0, 1.0]
+        errors, validation_warnings, xdata_valid, ydata_valid = (
+            self.validator.validate_curve_fit_inputs(model, xdata, ydata, p0=[2.0, 1.0])
         )
         self.assertEqual(errors, [])  # No errors for valid inputs
         self.assertTrue(np.all(np.isfinite(xdata_valid)))
@@ -125,8 +128,10 @@ class TestInputValidator(unittest.TestCase):
         ydata_nan[10] = np.nan
 
         # Validator with check_finite=True should detect NaN
-        errors, warnings, xdata_valid, ydata_valid = self.validator.validate_curve_fit_inputs(
-            model, xdata, ydata_nan, check_finite=True
+        errors, _warnings, xdata_valid, ydata_valid = (
+            self.validator.validate_curve_fit_inputs(
+                model, xdata, ydata_nan, check_finite=True
+            )
         )
         self.assertTrue(len(errors) > 0)  # Should have errors for NaN values
 
@@ -141,15 +146,15 @@ class TestInputValidator(unittest.TestCase):
             return x
 
         # Test valid inputs
-        errors, warnings, x0_valid = self.validator.validate_least_squares_inputs(
-            dummy_fun, x0, bounds
+        errors, validation_warnings, x0_valid = (
+            self.validator.validate_least_squares_inputs(dummy_fun, x0, bounds)
         )
         self.assertEqual(errors, [])  # No errors for valid inputs
         self.assertTrue(np.all(np.isfinite(x0_valid)))
 
         # Test invalid bounds (lower > upper)
         invalid_bounds = (np.array([10, 10, 10]), np.array([-10, -10, -10]))
-        errors, warnings, x0_valid = self.validator.validate_least_squares_inputs(
+        errors, _warnings, x0_valid = self.validator.validate_least_squares_inputs(
             dummy_fun, x0, invalid_bounds
         )
         self.assertTrue(len(errors) > 0)  # Should have errors for invalid bounds
@@ -164,6 +169,7 @@ class TestAlgorithmSelector(unittest.TestCase):
 
     def test_analyze_problem(self):
         """Test problem analysis."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
 
@@ -171,52 +177,52 @@ class TestAlgorithmSelector(unittest.TestCase):
         ydata = model(xdata, 2.5, 1.3)
         p0 = np.array([2.0, 1.0])
 
-        analysis = self.selector.analyze_problem(
-            model, xdata, ydata, p0
-        )
+        analysis = self.selector.analyze_problem(model, xdata, ydata, p0)
 
         # Check analysis results
-        self.assertEqual(analysis['n_points'], 100)
-        self.assertEqual(analysis['n_params'], 2)
-        self.assertEqual(analysis['size_class'], 'small')
-        self.assertIn('has_outliers', analysis)
-        self.assertIn('is_noisy', analysis)
+        self.assertEqual(analysis["n_points"], 100)
+        self.assertEqual(analysis["n_params"], 2)
+        self.assertEqual(analysis["size_class"], "small")
+        self.assertIn("has_outliers", analysis)
+        self.assertIn("is_noisy", analysis)
 
     def test_select_algorithm(self):
         """Test algorithm selection based on problem characteristics."""
         # Small problem without bounds
         analysis_small = {
-            'n_points': 50,
-            'n_params': 3,
-            'has_bounds': False,
-            'has_outliers': False,
-            'condition_estimate': 10
+            "n_points": 50,
+            "n_params": 3,
+            "has_bounds": False,
+            "has_outliers": False,
+            "condition_estimate": 10,
         }
         rec = self.selector.select_algorithm(analysis_small)
-        self.assertEqual(rec['algorithm'], 'trf')  # TRF is the only implemented algorithm
+        self.assertEqual(
+            rec["algorithm"], "trf"
+        )  # TRF is the only implemented algorithm
 
         # Large problem with bounds
         analysis_large = {
-            'n_points': 1000000,
-            'n_params': 5,
-            'has_bounds': True,
-            'has_outliers': False,
-            'condition_estimate': 100
+            "n_points": 1000000,
+            "n_params": 5,
+            "has_bounds": True,
+            "has_outliers": False,
+            "condition_estimate": 100,
         }
         rec = self.selector.select_algorithm(analysis_large)
-        self.assertEqual(rec['algorithm'], 'trf')  # TRF for all cases
+        self.assertEqual(rec["algorithm"], "trf")  # TRF for all cases
 
         # Problem with outliers
         analysis_outliers = {
-            'n_points': 1000,
-            'n_params': 4,
-            'has_bounds': False,
-            'has_outliers': True,
-            'outlier_fraction': 0.15,
-            'condition_estimate': 50
+            "n_points": 1000,
+            "n_params": 4,
+            "has_bounds": False,
+            "has_outliers": True,
+            "outlier_fraction": 0.15,
+            "condition_estimate": 50,
         }
         rec = self.selector.select_algorithm(analysis_outliers)
-        self.assertEqual(rec['loss'], 'cauchy')  # Robust loss for outliers
+        self.assertEqual(rec["loss"], "cauchy")  # Robust loss for outliers
 
 
 class TestOptimizationRecovery(unittest.TestCase):
@@ -228,54 +234,33 @@ class TestOptimizationRecovery(unittest.TestCase):
 
     def test_perturb_parameters(self):
         """Test parameter perturbation strategy."""
-        state = {
-            'params': np.array([1.0, 2.0, 3.0]),
-            'method': 'trf'
-        }
+        state = {"params": np.array([1.0, 2.0, 3.0]), "method": "trf"}
 
-        modified = self.recovery._perturb_parameters(
-            'convergence', state, retry=0
-        )
+        modified = self.recovery._perturb_parameters("convergence", state, retry=0)
 
         # Check that parameters were perturbed
-        self.assertFalse(np.allclose(
-            state['params'], modified['params']
-        ))
+        self.assertFalse(np.allclose(state["params"], modified["params"]))
 
     def test_switch_algorithm(self):
         """Test algorithm switching strategy."""
-        state = {
-            'method': 'trf',
-            'params': np.array([1.0, 2.0])
-        }
+        state = {"method": "trf", "params": np.array([1.0, 2.0])}
 
-        modified = self.recovery._switch_algorithm(
-            'convergence', state, retry=0
-        )
+        modified = self.recovery._switch_algorithm("convergence", state, retry=0)
 
         # Check that algorithm was switched
-        self.assertNotEqual(state['method'], modified['method'])
-        self.assertIn(modified['method'], ['lm', 'dogbox'])
+        self.assertNotEqual(state["method"], modified["method"])
+        self.assertIn(modified["method"], ["lm", "dogbox"])
 
     def test_adjust_regularization(self):
         """Test regularization adjustment."""
-        state = {
-            'method': 'trf',
-            'regularization': 1e-10,
-            'has_outliers': True
-        }
+        state = {"method": "trf", "regularization": 1e-10, "has_outliers": True}
 
-        modified = self.recovery._adjust_regularization(
-            'numerical', state, retry=0
-        )
+        modified = self.recovery._adjust_regularization("numerical", state, retry=0)
 
         # Check that regularization was increased
-        self.assertGreater(
-            modified['regularization'],
-            state['regularization']
-        )
+        self.assertGreater(modified["regularization"], state["regularization"])
         # Check that loss function was changed for outliers
-        self.assertIn('loss', modified)
+        self.assertIn("loss", modified)
 
 
 class TestMemoryManager(unittest.TestCase):
@@ -289,14 +274,14 @@ class TestMemoryManager(unittest.TestCase):
         """Test memory requirement prediction."""
         # Small problem
         bytes_needed = self.memory_manager.predict_memory_requirement(
-            n_points=1000, n_params=5, algorithm='trf'
+            n_points=1000, n_params=5, algorithm="trf"
         )
         self.assertGreater(bytes_needed, 0)
         self.assertLess(bytes_needed, 1e9)  # Less than 1 GB
 
         # Large problem
         bytes_needed_large = self.memory_manager.predict_memory_requirement(
-            n_points=1000000, n_params=10, algorithm='trf'
+            n_points=1000000, n_params=10, algorithm="trf"
         )
         self.assertGreater(bytes_needed_large, bytes_needed)
 
@@ -325,9 +310,11 @@ class TestMemoryManager(unittest.TestCase):
             pass
 
         # Test with unreasonable memory (100 TB)
-        with self.assertRaises(MemoryError):
-            with self.memory_manager.memory_guard(100 * 1024**4):
-                pass
+        with (
+            self.assertRaises(MemoryError),
+            self.memory_manager.memory_guard(100 * 1024**4),
+        ):
+            pass
 
 
 class TestSmartCache(unittest.TestCase):
@@ -375,7 +362,7 @@ class TestSmartCache(unittest.TestCase):
         def expensive_func(x):
             nonlocal call_count
             call_count += 1
-            return x ** 2
+            return x**2
 
         # First call - compute
         result1 = expensive_func(5)
@@ -407,7 +394,7 @@ class TestConvergenceMonitor(unittest.TestCase):
             cost = 100 + 10 * (-1) ** i
             self.monitor.add_iteration(cost, np.array([1.0, 2.0]))
 
-        is_oscillating, score = self.monitor.detect_oscillation()
+        is_oscillating, _score = self.monitor.detect_oscillation()
         self.assertTrue(is_oscillating)
 
     def test_detect_stagnation(self):
@@ -417,17 +404,17 @@ class TestConvergenceMonitor(unittest.TestCase):
             cost = 100.0 + 1e-10 * i  # Very small changes
             self.monitor.add_iteration(cost, np.array([1.0, 2.0]))
 
-        is_stagnant, score = self.monitor.detect_stagnation()
+        is_stagnant, _score = self.monitor.detect_stagnation()
         self.assertTrue(is_stagnant)
 
     def test_detect_divergence(self):
         """Test divergence detection."""
         # Add diverging cost values
         for i in range(10):
-            cost = 100 * (1.5 ** i)  # Exponentially increasing
+            cost = 100 * (1.5**i)  # Exponentially increasing
             self.monitor.add_iteration(cost, np.array([1.0, 2.0]))
 
-        is_diverging, score = self.monitor.detect_divergence()
+        is_diverging, _score = self.monitor.detect_divergence()
         self.assertTrue(is_diverging)
 
 
@@ -441,11 +428,7 @@ class TestRobustDecomposition(unittest.TestCase):
     def test_svd_fallback(self):
         """Test SVD with fallback."""
         # Create test matrix
-        A = jnp.array([
-            [1.0, 2.0, 3.0],
-            [4.0, 5.0, 6.0],
-            [7.0, 8.0, 9.0]
-        ])
+        A = jnp.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
 
         U, s, Vt = self.decomp.svd(A)
 
@@ -462,11 +445,7 @@ class TestRobustDecomposition(unittest.TestCase):
     def test_qr_fallback(self):
         """Test QR decomposition with fallback."""
         # Create test matrix
-        A = jnp.array([
-            [1.0, 2.0],
-            [3.0, 4.0],
-            [5.0, 6.0]
-        ])
+        A = jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
 
         Q, R = self.decomp.qr(A)
 
@@ -485,10 +464,7 @@ class TestRobustDecomposition(unittest.TestCase):
     def test_cholesky_fallback(self):
         """Test Cholesky decomposition with fallback."""
         # Create positive definite matrix
-        A = jnp.array([
-            [4.0, 2.0],
-            [2.0, 3.0]
-        ])
+        A = jnp.array([[4.0, 2.0], [2.0, 3.0]])
 
         L = self.decomp.cholesky(A)
 
@@ -525,18 +501,18 @@ class TestIntegration(unittest.TestCase):
 
         # This should succeed despite problematic data
         popt, pcov = curve_fit(
-            model, x, y,
-            p0=[3.0, 0.3, 0.5],
-            bounds=([0, 0, 0], [10, 5, 5])
+            model, x, y, p0=[3.0, 0.3, 0.5], bounds=([0, 0, 0], [10, 5, 5])
         )
 
         # Check that parameters are reasonable
         self.assertTrue(np.all(np.isfinite(popt)))
         self.assertTrue(np.all(np.isfinite(pcov)))
         self.assertAlmostEqual(popt[0], 2.5, delta=0.5)  # Close to true value
-        self.assertAlmostEqual(popt[1], 0.5, delta=0.25)  # Increased tolerance due to outliers
+        self.assertAlmostEqual(
+            popt[1], 0.5, delta=0.25
+        )  # Increased tolerance due to outliers
         self.assertAlmostEqual(popt[2], 1.0, delta=0.5)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

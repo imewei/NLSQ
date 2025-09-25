@@ -4,8 +4,9 @@ This module analyzes problem characteristics and automatically selects
 the best optimization algorithm and parameters.
 """
 
+from collections.abc import Callable
 from inspect import signature
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
@@ -31,39 +32,39 @@ class AlgorithmSelector:
         """Initialize algorithm selector."""
         # Algorithm characteristics
         self.algorithm_properties = {
-            'trf': {
-                'memory_factor': 2.5,  # Relative memory usage
-                'speed': 'fast',
-                'robust': True,
-                'handles_bounds': True,
-                'good_for_large': True,
-                'good_for_ill_conditioned': False
+            "trf": {
+                "memory_factor": 2.5,  # Relative memory usage
+                "speed": "fast",
+                "robust": True,
+                "handles_bounds": True,
+                "good_for_large": True,
+                "good_for_ill_conditioned": False,
             },
-            'lm': {
-                'memory_factor': 1.5,
-                'speed': 'medium',
-                'robust': False,
-                'handles_bounds': False,
-                'good_for_large': False,
-                'good_for_ill_conditioned': True
+            "lm": {
+                "memory_factor": 1.5,
+                "speed": "medium",
+                "robust": False,
+                "handles_bounds": False,
+                "good_for_large": False,
+                "good_for_ill_conditioned": True,
             },
-            'dogbox': {
-                'memory_factor': 2.0,
-                'speed': 'medium',
-                'robust': False,
-                'handles_bounds': True,
-                'good_for_large': False,
-                'good_for_ill_conditioned': False
-            }
+            "dogbox": {
+                "memory_factor": 2.0,
+                "speed": "medium",
+                "robust": False,
+                "handles_bounds": True,
+                "good_for_large": False,
+                "good_for_ill_conditioned": False,
+            },
         }
 
         # Loss function characteristics
         self.loss_properties = {
-            'linear': {'robust': False, 'smooth': True},
-            'huber': {'robust': True, 'smooth': True},
-            'soft_l1': {'robust': True, 'smooth': True},
-            'cauchy': {'robust': True, 'smooth': True},
-            'arctan': {'robust': True, 'smooth': True}
+            "linear": {"robust": False, "smooth": True},
+            "huber": {"robust": True, "smooth": True},
+            "soft_l1": {"robust": True, "smooth": True},
+            "cauchy": {"robust": True, "smooth": True},
+            "arctan": {"robust": True, "smooth": True},
         }
 
     def analyze_problem(
@@ -71,10 +72,10 @@ class AlgorithmSelector:
         f: Callable,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        p0: Optional[np.ndarray] = None,
-        bounds: Optional[Tuple] = None,
-        memory_limit_gb: Optional[float] = None
-    ) -> Dict:
+        p0: np.ndarray | None = None,
+        bounds: tuple | None = None,
+        memory_limit_gb: float | None = None,
+    ) -> dict:
         """Analyze problem characteristics.
 
         Parameters
@@ -108,9 +109,9 @@ class AlgorithmSelector:
 
         # Basic statistics
         analysis = {
-            'n_points': n_points,
-            'n_params': n_params,
-            'overdetermination_ratio': n_points / n_params if n_params > 0 else np.inf,
+            "n_points": n_points,
+            "n_params": n_params,
+            "overdetermination_ratio": n_points / n_params if n_params > 0 else np.inf,
         }
 
         # Data characteristics
@@ -118,37 +119,37 @@ class AlgorithmSelector:
 
         # Problem size classification
         if n_points <= 100:
-            analysis['size_class'] = 'small'
+            analysis["size_class"] = "small"
         elif n_points < 10000:
-            analysis['size_class'] = 'medium'
+            analysis["size_class"] = "medium"
         elif n_points < 1000000:
-            analysis['size_class'] = 'large'
+            analysis["size_class"] = "large"
         else:
-            analysis['size_class'] = 'very_large'
+            analysis["size_class"] = "very_large"
 
         # Conditioning estimate
-        analysis['condition_estimate'] = self._estimate_conditioning(xdata, n_params)
+        analysis["condition_estimate"] = self._estimate_conditioning(xdata, n_params)
 
         # Memory requirements
         if memory_limit_gb is not None:
-            analysis['memory_constrained'] = self._check_memory_constraints(
+            analysis["memory_constrained"] = self._check_memory_constraints(
                 n_points, n_params, memory_limit_gb
             )
         else:
-            analysis['memory_constrained'] = False
+            analysis["memory_constrained"] = False
 
         # Bounds analysis
-        analysis['has_bounds'] = bounds is not None and bounds != (-np.inf, np.inf)
+        analysis["has_bounds"] = bounds is not None and bounds != (-np.inf, np.inf)
 
         # Parameter scale analysis
         if p0 is not None:
-            analysis['param_scale_range'] = np.ptp(np.log10(np.abs(p0) + 1e-10))
+            analysis["param_scale_range"] = np.ptp(np.log10(np.abs(p0) + 1e-10))
         else:
-            analysis['param_scale_range'] = 0
+            analysis["param_scale_range"] = 0
 
         return analysis
 
-    def _estimate_n_params(self, f: Callable, p0: Optional[np.ndarray]) -> int:
+    def _estimate_n_params(self, f: Callable, p0: np.ndarray | None) -> int:
         """Estimate number of parameters.
 
         Parameters
@@ -174,7 +175,7 @@ class AlgorithmSelector:
             # Default guess
             return 3
 
-    def _analyze_data(self, xdata: np.ndarray, ydata: np.ndarray) -> Dict:
+    def _analyze_data(self, xdata: np.ndarray, ydata: np.ndarray) -> dict:
         """Analyze data characteristics.
 
         Parameters
@@ -196,8 +197,8 @@ class AlgorithmSelector:
         iqr = q3 - q1
         outlier_bounds = (q1 - 3 * iqr, q3 + 3 * iqr)
         n_outliers = np.sum((ydata < outlier_bounds[0]) | (ydata > outlier_bounds[1]))
-        results['outlier_fraction'] = n_outliers / len(ydata)
-        results['has_outliers'] = results['outlier_fraction'] > 0.01
+        results["outlier_fraction"] = n_outliers / len(ydata)
+        results["has_outliers"] = results["outlier_fraction"] > 0.01
 
         # Check for noise level (using local variation)
         if len(ydata) > 10:
@@ -205,33 +206,33 @@ class AlgorithmSelector:
             diff = np.diff(ydata)
             noise_estimate = np.median(np.abs(diff))
             signal_range = np.ptp(ydata)
-            results['snr_estimate'] = signal_range / (noise_estimate + 1e-10)
-            results['is_noisy'] = results['snr_estimate'] < 10
+            results["snr_estimate"] = signal_range / (noise_estimate + 1e-10)
+            results["is_noisy"] = results["snr_estimate"] < 10
         else:
-            results['snr_estimate'] = np.inf
-            results['is_noisy'] = False
+            results["snr_estimate"] = np.inf
+            results["is_noisy"] = False
 
         # Data range
         if xdata.ndim == 1:
-            results['x_range'] = np.ptp(xdata)
-            results['x_scale'] = np.log10(results['x_range'] + 1e-10)
+            results["x_range"] = np.ptp(xdata)
+            results["x_scale"] = np.log10(results["x_range"] + 1e-10)
 
             # Check for uniform spacing
             if len(xdata) > 2:
                 spacing = np.diff(xdata)
-                results['x_uniform'] = np.std(spacing) / np.mean(spacing) < 0.01
+                results["x_uniform"] = np.std(spacing) / np.mean(spacing) < 0.01
             else:
-                results['x_uniform'] = True
+                results["x_uniform"] = True
         else:
-            results['x_range'] = 0
-            results['x_scale'] = 0
-            results['x_uniform'] = False
+            results["x_range"] = 0
+            results["x_scale"] = 0
+            results["x_uniform"] = False
 
-        results['y_range'] = np.ptp(ydata)
-        results['y_scale'] = np.log10(results['y_range'] + 1e-10)
+        results["y_range"] = np.ptp(ydata)
+        results["y_scale"] = np.log10(results["y_range"] + 1e-10)
 
         # Check for zeros or near-zeros
-        results['has_zeros'] = np.any(np.abs(ydata) < 1e-10)
+        results["has_zeros"] = np.any(np.abs(ydata) < 1e-10)
 
         return results
 
@@ -262,7 +263,7 @@ class AlgorithmSelector:
             return np.inf
 
         # Sample data
-        indices = np.linspace(0, len(xdata)-1, n_samples, dtype=int)
+        indices = np.linspace(0, len(xdata) - 1, n_samples, dtype=int)
         x_sample = xdata[indices]
 
         # Normalize to [0, 1]
@@ -306,10 +307,8 @@ class AlgorithmSelector:
         return memory_needed_gb > memory_limit_gb
 
     def select_algorithm(
-        self,
-        problem_analysis: Dict,
-        user_preferences: Optional[Dict] = None
-    ) -> Dict:
+        self, problem_analysis: dict, user_preferences: dict | None = None
+    ) -> dict:
         """Select best algorithm based on problem analysis.
 
         Parameters
@@ -325,101 +324,101 @@ class AlgorithmSelector:
             Recommended algorithm and parameters
         """
         recommendations = {
-            'algorithm': 'trf',  # Default
-            'loss': 'linear',
-            'use_bounds': problem_analysis.get('has_bounds', False),
-            'max_nfev': None,
-            'ftol': 1e-8,
-            'xtol': 1e-8,
-            'gtol': 1e-8,
-            'x_scale': 'jac',
-            'tr_solver': None,
-            'verbose': 0
+            "algorithm": "trf",  # Default
+            "loss": "linear",
+            "use_bounds": problem_analysis.get("has_bounds", False),
+            "max_nfev": None,
+            "ftol": 1e-8,
+            "xtol": 1e-8,
+            "gtol": 1e-8,
+            "x_scale": "jac",
+            "tr_solver": None,
+            "verbose": 0,
         }
 
         # Apply user preferences
         if user_preferences:
-            if 'prioritize' in user_preferences:
-                priority = user_preferences['prioritize']
-                if priority == 'speed':
-                    recommendations['ftol'] = 1e-6
-                    recommendations['xtol'] = 1e-6
-                    recommendations['max_nfev'] = 100
-                elif priority == 'accuracy':
-                    recommendations['ftol'] = 1e-10
-                    recommendations['xtol'] = 1e-10
-                    recommendations['gtol'] = 1e-10
+            if "prioritize" in user_preferences:
+                priority = user_preferences["prioritize"]
+                if priority == "speed":
+                    recommendations["ftol"] = 1e-6
+                    recommendations["xtol"] = 1e-6
+                    recommendations["max_nfev"] = 100
+                elif priority == "accuracy":
+                    recommendations["ftol"] = 1e-10
+                    recommendations["xtol"] = 1e-10
+                    recommendations["gtol"] = 1e-10
 
         # Algorithm selection logic
-        n_points = problem_analysis['n_points']
-        n_params = problem_analysis['n_params']
-        has_bounds = problem_analysis.get('has_bounds', False)
+        n_points = problem_analysis["n_points"]
+        n_params = problem_analysis["n_params"]
+        has_bounds = problem_analysis.get("has_bounds", False)
 
         # NOTE: Currently NLSQ only implements TRF algorithm
         # In the future, we can add LM and dogbox support
         # For now, always use TRF but adjust parameters based on problem
-        recommendations['algorithm'] = 'trf'
+        recommendations["algorithm"] = "trf"
 
         # Adjust TRF parameters based on problem characteristics
-        if problem_analysis.get('condition_estimate', 1) > 1e10:
+        if problem_analysis.get("condition_estimate", 1) > 1e10:
             # Ill-conditioned: use more conservative tolerances
-            recommendations['ftol'] = 1e-6
-            recommendations['xtol'] = 1e-6
+            recommendations["ftol"] = 1e-6
+            recommendations["xtol"] = 1e-6
 
         if n_points > 100000:
             # Large problem: use iterative solver
             if n_points > 1000000:
-                recommendations['tr_solver'] = 'lsmr'  # Iterative solver
+                recommendations["tr_solver"] = "lsmr"  # Iterative solver
 
         elif n_params > 100:
             # Many parameters: TRF with iterative solver
-            recommendations['tr_solver'] = 'lsmr'
+            recommendations["tr_solver"] = "lsmr"
 
         # Loss function selection
-        if problem_analysis.get('has_outliers', False):
-            outlier_fraction = problem_analysis.get('outlier_fraction', 0)
+        if problem_analysis.get("has_outliers", False):
+            outlier_fraction = problem_analysis.get("outlier_fraction", 0)
 
             if outlier_fraction > 0.1:
-                recommendations['loss'] = 'cauchy'  # Very robust
+                recommendations["loss"] = "cauchy"  # Very robust
             elif outlier_fraction > 0.05:
-                recommendations['loss'] = 'huber'  # Moderately robust
+                recommendations["loss"] = "huber"  # Moderately robust
             elif outlier_fraction > 0.01:
-                recommendations['loss'] = 'soft_l1'  # Slightly robust
+                recommendations["loss"] = "soft_l1"  # Slightly robust
             else:
-                recommendations['loss'] = 'linear'
+                recommendations["loss"] = "linear"
 
         # Adjust for noisy data
-        if problem_analysis.get('is_noisy', False):
+        if problem_analysis.get("is_noisy", False):
             # Relax tolerances for noisy data
-            recommendations['ftol'] = max(recommendations['ftol'], 1e-6)
-            recommendations['xtol'] = max(recommendations['xtol'], 1e-6)
+            recommendations["ftol"] = max(recommendations["ftol"], 1e-6)
+            recommendations["xtol"] = max(recommendations["xtol"], 1e-6)
 
         # Memory-constrained adjustments
-        if problem_analysis.get('memory_constrained', False):
-            recommendations['algorithm'] = 'trf'
-            recommendations['tr_solver'] = 'lsmr'  # Memory-efficient iterative solver
+        if problem_analysis.get("memory_constrained", False):
+            recommendations["algorithm"] = "trf"
+            recommendations["tr_solver"] = "lsmr"  # Memory-efficient iterative solver
 
         # Adjust max iterations based on problem size
-        if recommendations['max_nfev'] is None:
+        if recommendations["max_nfev"] is None:
             if n_points > 1000000:
-                recommendations['max_nfev'] = 50
+                recommendations["max_nfev"] = 50
             elif n_points > 100000:
-                recommendations['max_nfev'] = 100
+                recommendations["max_nfev"] = 100
             elif n_points > 10000:
-                recommendations['max_nfev'] = 200
+                recommendations["max_nfev"] = 200
             else:
-                recommendations['max_nfev'] = None  # No limit
+                recommendations["max_nfev"] = None  # No limit
 
         # X-scale recommendation
-        if problem_analysis.get('param_scale_range', 0) > 3:
+        if problem_analysis.get("param_scale_range", 0) > 3:
             # Parameters vary over many orders of magnitude
-            recommendations['x_scale'] = 'jac'
+            recommendations["x_scale"] = "jac"
         else:
-            recommendations['x_scale'] = 1.0
+            recommendations["x_scale"] = 1.0
 
         return recommendations
 
-    def get_algorithm_explanation(self, recommendations: Dict) -> str:
+    def get_algorithm_explanation(self, recommendations: dict) -> str:
         """Get human-readable explanation of algorithm choice.
 
         Parameters
@@ -435,9 +434,11 @@ class AlgorithmSelector:
         explanation = []
 
         # Algorithm choice
-        alg = recommendations['algorithm']
-        if alg == 'trf':
-            explanation.append("Trust Region Reflective (TRF) algorithm selected (currently the only supported algorithm in NLSQ)")
+        alg = recommendations["algorithm"]
+        if alg == "trf":
+            explanation.append(
+                "Trust Region Reflective (TRF) algorithm selected (currently the only supported algorithm in NLSQ)"
+            )
         # Future support for other algorithms
         # elif alg == 'lm':
         #     explanation.append("Levenberg-Marquardt (LM) algorithm selected for good convergence properties")
@@ -445,25 +446,25 @@ class AlgorithmSelector:
         #     explanation.append("Dogbox algorithm selected for bounded optimization")
 
         # Loss function
-        loss = recommendations['loss']
-        if loss != 'linear':
+        loss = recommendations["loss"]
+        if loss != "linear":
             explanation.append(f"Using {loss} loss function for outlier robustness")
 
         # Tolerances
-        if recommendations['ftol'] >= 1e-6:
+        if recommendations["ftol"] >= 1e-6:
             explanation.append("Relaxed tolerances for faster convergence")
-        elif recommendations['ftol'] <= 1e-10:
+        elif recommendations["ftol"] <= 1e-10:
             explanation.append("Tight tolerances for high accuracy")
 
         # Solver
-        if recommendations.get('tr_solver') == 'lsmr':
+        if recommendations.get("tr_solver") == "lsmr":
             explanation.append("Using iterative solver for memory efficiency")
 
         # Iterations
-        if recommendations['max_nfev'] is not None:
+        if recommendations["max_nfev"] is not None:
             explanation.append(f"Limited to {recommendations['max_nfev']} iterations")
 
-        return '\n'.join(explanation)
+        return "\n".join(explanation)
 
 
 # Global selector instance
@@ -474,11 +475,11 @@ def auto_select_algorithm(
     f: Callable,
     xdata: np.ndarray,
     ydata: np.ndarray,
-    p0: Optional[np.ndarray] = None,
-    bounds: Optional[Tuple] = None,
-    memory_limit_gb: Optional[float] = None,
-    user_preferences: Optional[Dict] = None
-) -> Dict:
+    p0: np.ndarray | None = None,
+    bounds: tuple | None = None,
+    memory_limit_gb: float | None = None,
+    user_preferences: dict | None = None,
+) -> dict:
     """Automatically select best optimization algorithm.
 
     Parameters
@@ -507,8 +508,6 @@ def auto_select_algorithm(
         f, xdata, ydata, p0, bounds, memory_limit_gb
     )
 
-    recommendations = _algorithm_selector.select_algorithm(
-        analysis, user_preferences
-    )
+    recommendations = _algorithm_selector.select_algorithm(analysis, user_preferences)
 
     return recommendations

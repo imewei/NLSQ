@@ -161,9 +161,14 @@ class CurveFit:
     create_sigma_transform_funcs : Internal method for sigma transformation setup
     """
 
-    def __init__(self, flength: float | None = None, use_dynamic_sizing: bool = False,
-                 enable_stability: bool = False, enable_recovery: bool = False,
-                 enable_overflow_check: bool = False):
+    def __init__(
+        self,
+        flength: float | None = None,
+        use_dynamic_sizing: bool = False,
+        enable_stability: bool = False,
+        enable_recovery: bool = False,
+        enable_overflow_check: bool = False,
+    ):
         """Initialize CurveFit instance.
 
         Parameters
@@ -593,18 +598,16 @@ class CurveFit:
         if method is None:
             if self.enable_stability:
                 # Use intelligent algorithm selection
-                recommendations = auto_select_algorithm(
-                    f, xdata, ydata, p0, bounds
-                )
-                method = recommendations['algorithm']
+                recommendations = auto_select_algorithm(f, xdata, ydata, p0, bounds)
+                method = recommendations["algorithm"]
                 self.logger.info(
                     "Auto-selected algorithm",
                     method=method,
-                    loss=recommendations.get('loss', 'linear')
+                    loss=recommendations.get("loss", "linear"),
                 )
 
                 # Apply recommended parameters to kwargs
-                for key in ['ftol', 'xtol', 'gtol', 'max_nfev', 'x_scale']:
+                for key in ["ftol", "xtol", "gtol", "max_nfev", "x_scale"]:
                     if key in recommendations and key not in kwargs:
                         kwargs[key] = recommendations[key]
             else:
@@ -613,8 +616,8 @@ class CurveFit:
         # Validate and sanitize inputs if stability checks are enabled
         if self.enable_stability:
             try:
-                errors, warnings_list, xdata_clean, ydata_clean = self.validator.validate_curve_fit_inputs(
-                    f, xdata, ydata, p0
+                errors, warnings_list, xdata_clean, ydata_clean = (
+                    self.validator.validate_curve_fit_inputs(f, xdata, ydata, p0)
                 )
 
                 # Handle errors
@@ -815,6 +818,7 @@ class CurveFit:
             # Note: This is separate from stability to avoid performance overhead
             if self.enable_overflow_check:
                 original_f = f
+
                 # Use a more efficient overflow check
                 def stable_f(x, *params):
                     result = original_f(x, *params)
@@ -825,9 +829,10 @@ class CurveFit:
                     result = jnp.where(
                         max_val > 1e8,  # Only check/clip for very large values
                         jnp.clip(result, -1e10, 1e10),
-                        result
+                        result,
                     )
                     return result
+
                 f_to_use = stable_f
             else:
                 f_to_use = f
@@ -848,39 +853,43 @@ class CurveFit:
                 )
             except Exception as e:
                 if self.enable_recovery:
-                    self.logger.warning("Optimization failed, attempting recovery", error=str(e))
+                    self.logger.warning(
+                        "Optimization failed, attempting recovery", error=str(e)
+                    )
                     # Prepare recovery state
                     recovery_state = {
-                        'params': p0,
-                        'xdata': xdata,
-                        'ydata': ydata,
-                        'method': method if method is not None else 'trf',
-                        'bounds': bounds
+                        "params": p0,
+                        "xdata": xdata,
+                        "ydata": ydata,
+                        "method": method if method is not None else "trf",
+                        "bounds": bounds,
                     }
 
                     # Attempt recovery
                     success, result = self.recovery.recover_from_failure(
-                        'optimization_error',
+                        "optimization_error",
                         recovery_state,
                         lambda **state: self.ls.least_squares(
                             f_to_use,
-                            state['params'],
+                            state["params"],
                             jac=jac,
-                            xdata=jnp.asarray(state['xdata']),
-                            ydata=jnp.asarray(state['ydata']),
+                            xdata=jnp.asarray(state["xdata"]),
+                            ydata=jnp.asarray(state["ydata"]),
                             data_mask=jnp_data_mask,
                             transform=transform,
-                            bounds=state['bounds'],
-                            method=state['method'],
+                            bounds=state["bounds"],
+                            method=state["method"],
                             timeit=timeit,
-                            **kwargs
-                        )
+                            **kwargs,
+                        ),
                     )
 
                     if success:
                         res = result
                     else:
-                        raise RuntimeError(f"Optimization failed and recovery unsuccessful: {e}") from e
+                        raise RuntimeError(
+                            f"Optimization failed and recovery unsuccessful: {e}"
+                        ) from e
                 else:
                     raise
 

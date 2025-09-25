@@ -291,7 +291,7 @@ config = MemoryConfig(
     enable_memory_monitoring=True,
     max_cache_size_gb=2.0,
     enable_garbage_collection=True,
-    chunk_size_factor=0.8
+    chunk_size_factor=0.8,
 )
 
 # Use memory context for temporary settings
@@ -315,27 +315,20 @@ from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 from nlsq import curve_fit
 import jax.numpy as jnp
 
+
 # Define your model
 def model_nonlinear(x, a, b, c):
     return a * jnp.exp(-b * x) + c
 
+
 # Auto-select best algorithm
 recommendations = auto_select_algorithm(
-    f=model_nonlinear,
-    xdata=x,
-    ydata=y,
-    p0=[1.0, 0.5, 0.1]
+    f=model_nonlinear, xdata=x, ydata=y, p0=[1.0, 0.5, 0.1]
 )
 
 # Use recommended algorithm
-method = recommendations.get('algorithm', 'trf')
-popt, pcov = curve_fit(
-    model_nonlinear,
-    x,
-    y,
-    p0=[1.0, 0.5, 0.1],
-    method=method
-)
+method = recommendations.get("algorithm", "trf")
+popt, pcov = curve_fit(model_nonlinear, x, y, p0=[1.0, 0.5, 0.1], method=method)
 
 print(f"Selected algorithm: {method}")
 print(f"Fitted parameters: {popt}")
@@ -351,16 +344,10 @@ from nlsq.diagnostics import OptimizationDiagnostics
 import numpy as np
 
 # Create convergence monitor
-monitor = ConvergenceMonitor(
-    window_size=10,
-    sensitivity=1.0
-)
+monitor = ConvergenceMonitor(window_size=10, sensitivity=1.0)
 
 # Use CurveFit with stability features
-cf = CurveFit(
-    enable_stability=True,
-    enable_recovery=True
-)
+cf = CurveFit(enable_stability=True, enable_recovery=True)
 
 # Perform fitting
 popt, pcov = cf.curve_fit(func, x, y, p0=p0)
@@ -380,15 +367,14 @@ from nlsq import SmartCache, cached_function, curve_fit
 import jax.numpy as jnp
 
 # Configure caching
-cache = SmartCache(
-    max_memory_items=1000,
-    disk_cache_enabled=True
-)
+cache = SmartCache(max_memory_items=1000, disk_cache_enabled=True)
+
 
 # Use cached function decorator
 @cached_function
 def exponential(x, a, b):
     return a * jnp.exp(-b * x)
+
 
 # First fit - compiles function
 popt1, pcov1 = curve_fit(exponential, x1, y1, p0=[1.0, 0.1])
@@ -410,10 +396,7 @@ from nlsq import OptimizationRecovery, CurveFit, curve_fit
 import numpy as np
 
 # Create recovery handler
-recovery = OptimizationRecovery(
-    max_attempts=3,
-    perturbation_factor=0.1
-)
+recovery = OptimizationRecovery(max_attempts=3, perturbation_factor=0.1)
 
 # CurveFit with recovery enabled
 cf = CurveFit(enable_recovery=True)
@@ -441,10 +424,7 @@ validator = InputValidator(fast_mode=True)
 
 # Validate inputs before fitting
 warnings, errors, clean_x, clean_y = validator.validate_curve_fit_inputs(
-    f=func,
-    xdata=x,
-    ydata=y,
-    p0=p0
+    f=func, xdata=x, ydata=y, p0=p0
 )
 
 if errors:

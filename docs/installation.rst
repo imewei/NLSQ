@@ -306,14 +306,17 @@ Basic Verification
 
     # Check NLSQ version
     import nlsq
+
     print(f"NLSQ version: {nlsq.__version__}")
 
     # Check JAX devices
     print(f"JAX devices: {jax.devices()}")
 
+
     # Test basic functionality
     def linear(x, m, b):
         return m * x + b
+
 
     x = np.linspace(0, 10, 100)
     y = 2 * x + 1 + 0.1 * np.random.normal(size=len(x))
@@ -336,9 +339,12 @@ If you installed with ``nlsq[all]``, test the advanced features:
 .. code-block:: python
 
     from nlsq import (
-        MemoryConfig, memory_context,
-        AlgorithmSelector, SmartCache,
-        DiagnosticMonitor, InputValidator
+        MemoryConfig,
+        memory_context,
+        AlgorithmSelector,
+        SmartCache,
+        DiagnosticMonitor,
+        InputValidator,
     )
 
     print("Testing advanced features...")
@@ -366,9 +372,7 @@ If you installed with ``nlsq[all]``, test the advanced features:
     # Test advanced curve fitting
     with memory_context(config):
         cf_advanced = CurveFit(
-            algorithm_selector=selector,
-            cache=cache,
-            diagnostic_monitor=monitor
+            algorithm_selector=selector, cache=cache, diagnostic_monitor=monitor
         )
 
         result = cf_advanced.curve_fit(linear, x, y)
@@ -389,7 +393,9 @@ Test memory management with different dataset sizes:
     n_points = 10000
     n_params = 3
     stats = estimate_memory_requirements(n_points, n_params)
-    print(f"Memory estimate for {n_points:,} points: {stats.total_memory_estimate_gb:.2f} GB")
+    print(
+        f"Memory estimate for {n_points:,} points: {stats.total_memory_estimate_gb:.2f} GB"
+    )
 
     # Test automatic dataset size handling
     sizes = [1000, 100000, 1000000]

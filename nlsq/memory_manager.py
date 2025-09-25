@@ -7,16 +7,19 @@ prediction, monitoring, pooling, and automatic garbage collection.
 import gc
 import warnings
 from contextlib import contextmanager
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
-    warnings.warn("psutil not installed, memory monitoring will be limited", UserWarning)
+    warnings.warn(
+        "psutil not installed, memory monitoring will be limited", UserWarning
+    )
 
 
 class MemoryManager:
@@ -50,7 +53,7 @@ class MemoryManager:
         safety_factor : float
             Multiply memory requirements by this factor for safety
         """
-        self.memory_pool: Dict[Tuple, np.ndarray] = {}
+        self.memory_pool: dict[tuple, np.ndarray] = {}
         self.allocation_history: list = []
         self.gc_threshold = gc_threshold
         self.safety_factor = safety_factor
@@ -93,6 +96,7 @@ class MemoryManager:
 
         # Fallback: try to estimate from Python's view
         import sys
+
         return sys.getsizeof(self.memory_pool) + sum(
             arr.nbytes for arr in self.memory_pool.values()
         )
@@ -116,7 +120,7 @@ class MemoryManager:
         return 0.5
 
     def predict_memory_requirement(
-        self, n_points: int, n_params: int, algorithm: str = 'trf'
+        self, n_points: int, n_params: int, algorithm: str = "trf"
     ) -> int:
         """Predict memory requirement for optimization.
 
@@ -144,21 +148,21 @@ class MemoryManager:
         jacobian_memory = float_size * n_points * n_params
 
         # Algorithm-specific memory
-        if algorithm == 'trf':
+        if algorithm == "trf":
             # Trust Region Reflective
             # Needs: SVD decomposition, working arrays
             svd_memory = float_size * min(n_points, n_params) ** 2
             working_memory = float_size * (3 * n_points + 5 * n_params)
             total = base_memory + jacobian_memory + svd_memory + working_memory
 
-        elif algorithm == 'lm':
+        elif algorithm == "lm":
             # Levenberg-Marquardt
             # Needs: Normal equations, working arrays
-            normal_memory = float_size * n_params ** 2
+            normal_memory = float_size * n_params**2
             working_memory = float_size * (2 * n_points + 3 * n_params)
             total = base_memory + jacobian_memory + normal_memory + working_memory
 
-        elif algorithm == 'dogbox':
+        elif algorithm == "dogbox":
             # Dogbox
             # Similar to TRF but with additional bound constraints
             svd_memory = float_size * min(n_points, n_params) ** 2
@@ -172,7 +176,7 @@ class MemoryManager:
         # Apply safety factor
         return int(total * self.safety_factor)
 
-    def check_memory_availability(self, bytes_needed: int) -> Tuple[bool, str]:
+    def check_memory_availability(self, bytes_needed: int) -> tuple[bool, str]:
         """Check if enough memory is available.
 
         Parameters
@@ -190,7 +194,10 @@ class MemoryManager:
         available = self.get_available_memory()
 
         if available >= bytes_needed:
-            return True, f"Memory available: {available/1e9:.2f}GB >= {bytes_needed/1e9:.2f}GB needed"
+            return (
+                True,
+                f"Memory available: {available/1e9:.2f}GB >= {bytes_needed/1e9:.2f}GB needed",
+            )
 
         # Try garbage collection
         gc.collect()
@@ -243,14 +250,16 @@ class MemoryManager:
                 gc.collect()
 
             # Log allocation
-            self.allocation_history.append({
-                'bytes_requested': bytes_needed,
-                'bytes_used': current_memory - initial_memory,
-                'peak_memory': self._peak_memory,
-            })
+            self.allocation_history.append(
+                {
+                    "bytes_requested": bytes_needed,
+                    "bytes_used": current_memory - initial_memory,
+                    "peak_memory": self._peak_memory,
+                }
+            )
 
     def allocate_array(
-        self, shape: Tuple[int, ...], dtype: type = np.float64, zero: bool = True
+        self, shape: tuple[int, ...], dtype: type = np.float64, zero: bool = True
     ) -> np.ndarray:
         """Allocate array with memory pooling.
 
@@ -312,7 +321,7 @@ class MemoryManager:
         self.memory_pool.clear()
         gc.collect()
 
-    def get_memory_stats(self) -> Dict:
+    def get_memory_stats(self) -> dict:
         """Get memory usage statistics.
 
         Returns
@@ -327,21 +336,23 @@ class MemoryManager:
         pool_arrays = len(self.memory_pool)
 
         stats = {
-            'current_usage_gb': current_memory / 1e9,
-            'available_gb': available_memory / 1e9,
-            'peak_usage_gb': self._peak_memory / 1e9,
-            'usage_fraction': self.get_memory_usage_fraction(),
-            'pool_memory_gb': pool_memory / 1e9,
-            'pool_arrays': pool_arrays,
-            'allocations': len(self.allocation_history),
+            "current_usage_gb": current_memory / 1e9,
+            "available_gb": available_memory / 1e9,
+            "peak_usage_gb": self._peak_memory / 1e9,
+            "usage_fraction": self.get_memory_usage_fraction(),
+            "pool_memory_gb": pool_memory / 1e9,
+            "pool_arrays": pool_arrays,
+            "allocations": len(self.allocation_history),
         }
 
         if self.allocation_history:
-            total_requested = sum(a['bytes_requested'] for a in self.allocation_history)
-            total_used = sum(a['bytes_used'] for a in self.allocation_history)
-            stats['total_requested_gb'] = total_requested / 1e9
-            stats['total_used_gb'] = total_used / 1e9
-            stats['efficiency'] = total_used / total_requested if total_requested > 0 else 1.0
+            total_requested = sum(a["bytes_requested"] for a in self.allocation_history)
+            total_used = sum(a["bytes_used"] for a in self.allocation_history)
+            stats["total_requested_gb"] = total_requested / 1e9
+            stats["total_used_gb"] = total_used / 1e9
+            stats["efficiency"] = (
+                total_used / total_requested if total_requested > 0 else 1.0
+            )
 
         return stats
 
@@ -358,9 +369,7 @@ class MemoryManager:
 
         # Sort by size and keep largest arrays (most benefit from pooling)
         sorted_items = sorted(
-            self.memory_pool.items(),
-            key=lambda x: x[1].nbytes,
-            reverse=True
+            self.memory_pool.items(), key=lambda x: x[1].nbytes, reverse=True
         )
 
         # Keep only the largest arrays
@@ -368,7 +377,7 @@ class MemoryManager:
         gc.collect()
 
     @contextmanager
-    def temporary_allocation(self, shape: Tuple[int, ...], dtype: type = np.float64):
+    def temporary_allocation(self, shape: tuple[int, ...], dtype: type = np.float64):
         """Context manager for temporary array allocation.
 
         Parameters
@@ -394,9 +403,9 @@ class MemoryManager:
         self,
         n_points: int,
         n_params: int,
-        algorithm: str = 'trf',
-        memory_limit_gb: Optional[float] = None
-    ) -> Dict:
+        algorithm: str = "trf",
+        memory_limit_gb: float | None = None,
+    ) -> dict:
         """Estimate optimal chunking strategy for large datasets.
 
         Parameters
@@ -429,31 +438,35 @@ class MemoryManager:
         if max_points >= n_points:
             # No chunking needed
             return {
-                'needs_chunking': False,
-                'chunk_size': n_points,
-                'n_chunks': 1,
-                'memory_per_chunk_gb': self.predict_memory_requirement(
+                "needs_chunking": False,
+                "chunk_size": n_points,
+                "n_chunks": 1,
+                "memory_per_chunk_gb": self.predict_memory_requirement(
                     n_points, n_params, algorithm
-                ) / 1e9,
+                )
+                / 1e9,
             }
 
         # Calculate chunking parameters
-        chunk_size = min(max_points, max(100, n_points // 100))  # At least 100 points per chunk
+        chunk_size = min(
+            max_points, max(100, n_points // 100)
+        )  # At least 100 points per chunk
         n_chunks = (n_points + chunk_size - 1) // chunk_size
 
         return {
-            'needs_chunking': True,
-            'chunk_size': chunk_size,
-            'n_chunks': n_chunks,
-            'memory_per_chunk_gb': self.predict_memory_requirement(
+            "needs_chunking": True,
+            "chunk_size": chunk_size,
+            "n_chunks": n_chunks,
+            "memory_per_chunk_gb": self.predict_memory_requirement(
                 chunk_size, n_params, algorithm
-            ) / 1e9,
-            'total_points': n_points,
+            )
+            / 1e9,
+            "total_points": n_points,
         }
 
 
 # Global memory manager instance
-_memory_manager: Optional[MemoryManager] = None
+_memory_manager: MemoryManager | None = None
 
 
 def get_memory_manager() -> MemoryManager:
@@ -464,7 +477,7 @@ def get_memory_manager() -> MemoryManager:
     manager : MemoryManager
         Global memory manager instance
     """
-    global _memory_manager
+    global _memory_manager  # noqa: PLW0603
     if _memory_manager is None:
         _memory_manager = MemoryManager()
     return _memory_manager
@@ -476,7 +489,7 @@ def clear_memory_pool():
     manager.clear_pool()
 
 
-def get_memory_stats() -> Dict:
+def get_memory_stats() -> dict:
     """Get memory usage statistics.
 
     Returns
