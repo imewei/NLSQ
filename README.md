@@ -10,8 +10,6 @@
 [![JAX](https://img.shields.io/badge/JAX-0.4.20--0.7.2-green.svg)](https://github.com/google/jax)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Maintained by Wei Chen (wchen@anl.gov) at Argonne National Laboratory**
-
 [**Quickstart**](#quickstart-colab-in-the-cloud)
 | [**Install guide**](#installation)
 | [**ArXiv Paper**](https://doi.org/10.48550/arXiv.2208.12187)
