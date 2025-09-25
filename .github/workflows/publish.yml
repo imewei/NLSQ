@@ -89,47 +89,97 @@ jobs:
           path: dist/
           retention-days: 30
 
-  # Fast package validation job
+  # Primary Ubuntu package validation
   test-package:
     needs: build
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 8
-    if: ${{ github.event.inputs.skip_tests != 'true' && (matrix.run-condition == 'always' || github.event_name == 'release') }}
-
+    if: github.event.inputs.skip_tests != 'true'
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest]
         python-version: ['3.12']
-        package-type: ['wheel']
-        include:
-          # Ubuntu testing (primary) - always runs
-          - os: ubuntu-latest
-            python-version: '3.12'
-            package-type: 'wheel'
-            run-condition: 'always'
-          # Test sdist on Ubuntu - always runs
-          - os: ubuntu-latest
-            python-version: '3.12'
-            package-type: 'sdist'
-            run-condition: 'always'
-          # Cross-platform testing for releases
-          - os: windows-latest
-            python-version: '3.12'
-            package-type: 'wheel'
-            run-condition: cross-platform
-          - os: macos-latest
-            python-version: '3.12'
-            package-type: 'wheel'
-            run-condition: cross-platform
+        package-type: ['wheel', 'sdist']
 
     steps:
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          # Remove cache to fix pip cache issues
-          # cache: 'pip'
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
+
+      - name: Test wheel installation
+        if: matrix.package-type == 'wheel'
+        run: |
+          python -m pip install --upgrade pip
+          pip install dist/*.whl
+          echo "Wheel installed successfully"
+
+      - name: Test sdist installation
+        if: matrix.package-type == 'sdist'
+        run: |
+          python -m pip install --upgrade pip build
+          pip install dist/*.tar.gz
+          echo "Sdist installed successfully"
+
+      - name: Verify package functionality
+        timeout-minutes: 3
+        run: |
+          # Test basic imports
+          python -c "import nlsq; print(f'NLSQ version: {nlsq.__version__}')"
+          python -c "from nlsq import curve_fit; print('curve_fit imported successfully')"
+
+          # Test basic functionality without heavy dependencies
+          python -c "
+          import nlsq
+          import numpy as np
+          print('Basic numpy import works')
+          try:
+              x = np.array([1, 2, 3, 4])
+              y = np.array([2, 4, 6, 8])
+              # Simple test without JAX to avoid compilation overhead
+              print('Package verification complete')
+          except Exception as e:
+              print(f'Warning: {e}')
+          "
+
+      - name: Package validation summary
+        run: |
+          python -c "
+          import pkg_resources
+          try:
+              dist = pkg_resources.get_distribution('nlsq')
+              print(f'✓ Package installed: {dist.project_name} {dist.version}')
+              print(f'✓ Location: {dist.location}')
+              print('✓ Package validation passed')
+          except Exception as e:
+              print(f'✗ Validation failed: {e}')
+              exit(1)
+          "
+
+  # Cross-platform package validation - conditional
+  test-package-cross-platform:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    if: github.event.inputs.skip_tests != 'true' && github.event_name == 'release'
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, macos-latest]
+        python-version: ['3.12']
+        package-type: ['wheel']
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -138,33 +188,18 @@ jobs:
           path: dist/
 
       - name: Test wheel installation (Linux/macOS)
-        if: matrix.package-type == 'wheel' && runner.os != 'Windows'
+        if: runner.os != 'Windows'
         run: |
           python -m pip install --upgrade pip
           pip install dist/*.whl
           echo "Wheel installed successfully"
 
       - name: Test wheel installation (Windows)
-        if: matrix.package-type == 'wheel' && runner.os == 'Windows'
+        if: runner.os == 'Windows'
         run: |
           python -m pip install --upgrade pip
           for /f %%f in ('dir /b dist\*.whl') do pip install "dist\%%f"
           echo "Wheel installed successfully"
-        shell: cmd
-
-      - name: Test sdist installation (Linux/macOS)
-        if: matrix.package-type == 'sdist' && runner.os != 'Windows'
-        run: |
-          python -m pip install --upgrade pip build
-          pip install dist/*.tar.gz
-          echo "Sdist installed successfully"
-
-      - name: Test sdist installation (Windows)
-        if: matrix.package-type == 'sdist' && runner.os == 'Windows'
-        run: |
-          python -m pip install --upgrade pip build
-          for /f %%f in ('dir /b dist\*.tar.gz') do pip install "dist\%%f"
-          echo "Sdist installed successfully"
         shell: cmd
 
       - name: Verify package functionality
