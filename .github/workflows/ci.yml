@@ -12,98 +12,160 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Performance optimizations for scientific computing
+  OMP_NUM_THREADS: 2
+  MKL_NUM_THREADS: 2
+  OPENBLAS_NUM_THREADS: 2
+  JAX_PLATFORMS: cpu
+  PYTHONHASHSEED: 0
+  PYTHONIOENCODING: utf-8
+  PIP_DISABLE_PIP_VERSION_CHECK: 1
+  PIP_NO_CACHE_DIR: false
+
 jobs:
+  # Fast quality checks job - runs in parallel with tests
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1  # Shallow clone for speed
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+        cache-dependency-path: 'pyproject.toml'
+
+    - name: Cache pre-commit
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+        restore-keys: |
+          pre-commit-${{ runner.os }}-
+
+    - name: Install quality tools
+      run: |
+        python -m pip install --upgrade pip wheel
+        pip install ruff mypy bandit pre-commit
+
+    - name: Run linting (parallel)
+      run: |
+        # Run linting checks in parallel
+        ruff check . --exit-zero &
+        ruff format --check . --diff &
+        wait
+
+    - name: Run type checking
+      run: |
+        mypy nlsq --ignore-missing-imports --no-error-summary || true
+      continue-on-error: true
+
+    - name: Run security scan
+      run: |
+        bandit -r nlsq/ -f json || true
+      continue-on-error: true
+
+  # Main test job - optimized for speed
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.12"]
-        # Simplified matrix for faster CI - only test on Ubuntu with Python 3.12
-        # Add more OS/Python combinations only for release branches if needed
+        python-version: ['3.12']
+        # Add more combinations only for releases
+        include:
+          - os: ubuntu-latest
+            python-version: '3.12'
+            test-suite: 'fast'
+          # Conditional full testing for releases
+          - os: ubuntu-latest
+            python-version: '3.13'
+            test-suite: 'fast'
+            if: github.event_name == 'release' || github.ref == 'refs/heads/main'
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # For setuptools-scm
+        fetch-depth: 0  # Needed for setuptools-scm
+
+    - name: Free disk space
+      run: |
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+        sudo apt-get clean
+        df -h
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
+        cache-dependency-path: |
+          pyproject.toml
+          requirements*.txt
 
-    - name: Install dependencies
+    - name: Cache package installation
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          build/
+        key: pip-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+        restore-keys: |
+          pip-${{ runner.os }}-py${{ matrix.python-version }}-
+          pip-${{ runner.os }}-
+
+    - name: Install dependencies (optimized)
       run: |
         python -m pip install --upgrade pip wheel setuptools
-        pip install -e ".[test,dev]"
+        # Install only test dependencies for speed
+        pip install --only-binary=all -e ".[test]" || pip install -e ".[test]"
 
-    - name: Lint with ruff (allow warnings)
+    - name: Install JAX CPU (optimized)
       run: |
-        ruff check . --exit-zero || true
-        ruff format --check . --diff || true
+        # Use CPU-only JAX for faster installation and testing
+        pip install --upgrade "jax[cpu]"
 
-    - name: Type check with mypy (optional)
+    - name: Test core functionality (parallel)
       run: |
-        mypy nlsq --ignore-missing-imports --no-error-summary || true
-      continue-on-error: true
+        # Run critical tests in parallel with timeout
+        pytest tests/test_minpack.py::TestCurveFit::test_one_argument \
+               tests/test_minpack.py::TestCurveFit::test_two_argument \
+               tests/test_least_squares.py::TestLeastSquares::test_trf_bounds \
+               -v --tb=short --timeout=60 -x
 
-    - name: Test with pytest (fast tests only)
+    - name: Test extended suite
+      if: matrix.test-suite == 'fast' || github.event_name == 'schedule'
       run: |
-        pytest tests/test_minpack.py tests/test_least_squares.py -v --tb=short -x || pytest tests/test_minpack.py -k "test_basic" -v --tb=short
+        # Run more comprehensive tests for scheduled runs
+        pytest tests/test_minpack.py tests/test_least_squares.py \
+               -v --tb=short --maxfail=3 --timeout=120
 
-    - name: Test core features (optional)
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+    - name: Test import and basic usage
       run: |
-        pytest tests/test_minpack.py::TestCurveFit::test_basic_exponential -v --tb=short || true
-      continue-on-error: true
+        python -c "import nlsq; print(f'NLSQ {nlsq.__version__} imported successfully')"
+        python -c "from nlsq import curve_fit; import numpy as np; x = np.array([1,2,3,4]); y = np.array([2,4,6,8]); popt, _ = curve_fit(lambda x, a: a*x, x, y); print(f'Basic curve_fit test: popt={popt}')"
 
-    # Coverage upload disabled for faster CI
-    # - name: Upload coverage to Codecov
-    #   if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-    #   uses: codecov/codecov-action@v4
-    #   with:
-    #     file: ./coverage.xml
-    #     fail_ci_if_error: false
-    #     verbose: true
-    #     token: ${{ secrets.CODECOV_TOKEN }}
-
-  # Benchmark job disabled for faster CI
-  # benchmark:
-  #   runs-on: ubuntu-latest
-  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  #
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #
-  #   - name: Set up Python
-  #     uses: actions/setup-python@v5
-  #     with:
-  #       python-version: '3.12'
-  #       cache: 'pip'
-  #
-  #   - name: Install dependencies
-  #     run: |
-  #       python -m pip install --upgrade pip
-  #       pip install -e ".[all]"
-  #
-  #   - name: Run benchmarks
-  #     run: |
-  #       python benchmark/benchmark.py --quick
-  #
-  #   - name: Upload benchmark results
-  #     uses: actions/upload-artifact@v4
-  #     with:
-  #       name: benchmark-results
-  #       path: benchmark/BENCHMARK_REPORT.md
-
+  # Documentation build - runs in parallel
   docs:
     runs-on: ubuntu-latest
-    continue-on-error: true  # Don't fail CI if docs fail
+    timeout-minutes: 10
+    continue-on-error: true
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -111,41 +173,125 @@ jobs:
         python-version: '3.12'
         cache: 'pip'
 
-    - name: Install dependencies
+    - name: Install docs dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[docs]" || pip install -e "."
-        # Skip graphviz to speed up CI
+        pip install -e ".[docs]" --quiet || pip install -e "." --quiet
 
-    - name: Build documentation (optional)
+    - name: Build documentation
       run: |
-        cd docs || exit 0
-        make clean || true
-        make html || true
+        if [ -d "docs" ]; then
+          cd docs
+          make clean || true
+          timeout 300 make html || echo "Docs build timed out or failed"
+        fi
       continue-on-error: true
 
-  # Examples job disabled for faster CI
-  # examples:
-  #   runs-on: ubuntu-latest
-  #
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #
-  #   - name: Set up Python
-  #     uses: actions/setup-python@v5
-  #     with:
-  #       python-version: '3.12'
-  #       cache: 'pip'
-  #
-  #   - name: Install dependencies
-  #     run: |
-  #       python -m pip install --upgrade pip
-  #       pip install -e ".[all]"
-  #       pip install nbformat nbconvert jupyter
-  #
-  #   - name: Test example notebooks
-  #     run: |
-  #       make examples
-  #     env:
-  #       JAX_PLATFORMS: cpu
-  #       NLSQ_FORCE_CPU: 1
+    - name: Upload docs artifacts
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: docs/_build/html/
+        retention-days: 7
+
+  # Package integrity check - lightweight
+  package-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Build and check package
+      run: |
+        python -m pip install --upgrade pip build twine
+        python -m build --wheel --outdir dist/
+        twine check dist/* --strict
+
+    - name: Test wheel installation
+      run: |
+        pip install dist/*.whl
+        python -c "import nlsq; print(f'Wheel test: NLSQ {nlsq.__version__}')"
+
+    - name: Upload wheel artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-python312
+        path: dist/*.whl
+        retention-days: 7
+
+  # Security and dependency check
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    continue-on-error: true
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit pip-audit
+
+    - name: Check dependencies for vulnerabilities
+      run: |
+        pip-audit --desc --output json || true
+        safety check --json || true
+      continue-on-error: true
+
+    - name: Run security scan
+      run: |
+        bandit -r nlsq/ -f json -o bandit-report.json || true
+      continue-on-error: true
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-reports
+        path: '*-report.json'
+        retention-days: 30
+
+  # Status check job - waits for all critical jobs
+  check-status:
+    runs-on: ubuntu-latest
+    needs: [quality, test, package-check]
+    if: always()
+
+    steps:
+    - name: Check job results
+      run: |
+        echo "Quality job: ${{ needs.quality.result }}"
+        echo "Test job: ${{ needs.test.result }}"
+        echo "Package job: ${{ needs.package-check.result }}"
+
+        # Fail if critical jobs failed
+        if [[ "${{ needs.test.result }}" == "failure" ]]; then
+          echo "Critical test job failed"
+          exit 1
+        fi
+
+        if [[ "${{ needs.package-check.result }}" == "failure" ]]; then
+          echo "Package check failed"
+          exit 1
+        fi
+
+        echo "All critical checks passed!"
