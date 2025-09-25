@@ -6,7 +6,6 @@ the best optimization algorithm and parameters.
 
 from collections.abc import Callable
 from inspect import signature
-from typing import Any, Optional
 
 import numpy as np
 
@@ -14,7 +13,6 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
-import jax.numpy as jnp
 
 
 class AlgorithmSelector:
@@ -171,7 +169,7 @@ class AlgorithmSelector:
             sig = signature(f)
             # Count parameters excluding x
             return len(sig.parameters) - 1
-        except:
+        except Exception:
             # Default guess
             return 3
 
@@ -279,7 +277,7 @@ class AlgorithmSelector:
         try:
             cond = np.linalg.cond(X)
             return cond
-        except:
+        except Exception:
             return np.inf
 
     def _check_memory_constraints(

@@ -7,7 +7,6 @@ and diagnostic reporting for optimization processes.
 import time
 import warnings
 from collections import deque
-from typing import Any, Optional
 
 import numpy as np
 
@@ -15,7 +14,6 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
-import jax.numpy as jnp
 
 try:
     import psutil

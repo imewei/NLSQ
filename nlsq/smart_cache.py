@@ -10,8 +10,8 @@ import pickle
 import time
 import warnings
 from collections.abc import Callable
-from functools import lru_cache, wraps
-from typing import Any, Optional
+from functools import wraps
+from typing import Any
 
 import numpy as np
 

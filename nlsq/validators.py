@@ -8,7 +8,7 @@ import warnings
 from collections.abc import Callable
 from functools import wraps
 from inspect import signature
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 

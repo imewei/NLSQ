@@ -18,7 +18,6 @@ from nlsq.diagnostics import OptimizationDiagnostics
 from nlsq.logging import get_logger
 from nlsq.loss_functions import LossFunctionsJIT
 from nlsq.memory_manager import get_memory_manager
-from nlsq.robust_decomposition import robust_decomp
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.trf import TrustRegionReflective
 

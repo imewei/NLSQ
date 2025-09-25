@@ -6,7 +6,6 @@ ill-conditioned problems or extreme parameter values.
 """
 
 import warnings
-from typing import Any
 
 import numpy as np
 

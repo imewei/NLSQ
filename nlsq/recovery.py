@@ -6,7 +6,6 @@ optimization failures with multiple retry strategies.
 
 import warnings
 from collections.abc import Callable
-from typing import Any, Optional
 
 import numpy as np
 
@@ -14,7 +13,6 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
-import jax
 import jax.numpy as jnp
 
 from nlsq.diagnostics import OptimizationDiagnostics

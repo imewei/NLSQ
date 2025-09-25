@@ -88,7 +88,6 @@ References
 
 import time
 from collections.abc import Callable
-from typing import Optional
 
 import numpy as np
 from numpy.linalg import norm
@@ -99,7 +98,6 @@ from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
 import jax.numpy as jnp
 from jax import jit
-from jax.scipy.linalg import svd as jax_svd
 from jax.tree_util import tree_flatten
 
 # Setup logging
@@ -134,7 +132,6 @@ from nlsq.diagnostics import OptimizationDiagnostics
 # Logging support
 # Optimizer base class
 from nlsq.optimizer_base import TrustRegionOptimizerBase
-from nlsq.robust_decomposition import robust_decomp
 from nlsq.stability import NumericalStabilityGuard
 
 

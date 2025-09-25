@@ -7,7 +7,6 @@ prediction, monitoring, pooling, and automatic garbage collection.
 import gc
 import warnings
 from contextlib import contextmanager
-from typing import Optional
 
 import numpy as np
 
