@@ -60,7 +60,7 @@ class TestCurveFit:
             curve_fit = CurveFit(flength=flength).curve_fit
             popt, _pcov = curve_fit(func, self.x, self.y)
             assert_(len(popt) == 1)
-            assert_(__pcov.shape == (1, 1))
+            assert_(_pcov.shape == (1, 1))
             assert_almost_equal(popt[0], 1.9149, decimal=4)
             assert_almost_equal(_pcov[0, 0], 0.0016, decimal=4)
 

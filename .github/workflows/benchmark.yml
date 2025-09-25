@@ -53,16 +53,16 @@ jobs:
 
     - name: Run standard benchmarks
       run: |
-        python benchmark/benchmark.py --output-format markdown > benchmark_results.md
+        python benchmark/benchmark.py --suite basic --save --output-dir . > benchmark_results.md
 
     - name: Run large dataset benchmarks
       if: github.event.inputs.run_large == 'true' || github.event_name == 'schedule'
       run: |
-        python benchmark/benchmark.py --large-datasets >> benchmark_results.md
+        python benchmark/benchmark.py --suite large --save --output-dir . >> benchmark_results.md
 
     - name: Profile memory usage
       run: |
-        python -m memory_profiler benchmark/benchmark.py --memory-profile >> benchmark_results.md
+        python -m memory_profiler benchmark/benchmark.py --suite basic >> benchmark_results.md
 
     - name: Generate benchmark report
       run: |
