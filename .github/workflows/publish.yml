@@ -22,7 +22,7 @@ concurrency:
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: 1
-  PIP_NO_CACHE_DIR: false
+  PIP_NO_CACHE_DIR: 1
 
 jobs:
   build:
@@ -40,7 +40,8 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-        cache: 'pip'
+        # Remove cache to fix pip cache issues
+        # cache: 'pip'
 
     - name: Cache build dependencies
       uses: actions/cache@v4
@@ -90,21 +91,33 @@ jobs:
   # Fast package validation job
   test-package:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 8
     if: github.event.inputs.skip_tests != 'true'
 
     strategy:
       fail-fast: true
       matrix:
+        os: [ubuntu-latest]
         python-version: ['3.12']
         package-type: ['wheel']
         include:
-          - python-version: '3.12'
+          # Ubuntu testing (primary)
+          - os: ubuntu-latest
+            python-version: '3.12'
             package-type: 'wheel'
-          # Test sdist only for releases
-          - python-version: '3.12'
+          # Test sdist on Ubuntu
+          - os: ubuntu-latest
+            python-version: '3.12'
             package-type: 'sdist'
+          # Cross-platform testing for releases
+          - os: windows-latest
+            python-version: '3.12'
+            package-type: 'wheel'
+            if: github.event_name == 'release'
+          - os: macos-latest
+            python-version: '3.12'
+            package-type: 'wheel'
             if: github.event_name == 'release'
 
     steps:
@@ -112,7 +125,8 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+        # Remove cache to fix pip cache issues
+        # cache: 'pip'
 
     - name: Download build artifacts
       uses: actions/download-artifact@v4
@@ -120,19 +134,35 @@ jobs:
         name: dist-packages
         path: dist/
 
-    - name: Test wheel installation
-      if: matrix.package-type == 'wheel'
+    - name: Test wheel installation (Linux/macOS)
+      if: matrix.package-type == 'wheel' && runner.os != 'Windows'
       run: |
         python -m pip install --upgrade pip
         pip install dist/*.whl
         echo "Wheel installed successfully"
 
-    - name: Test sdist installation
-      if: matrix.package-type == 'sdist'
+    - name: Test wheel installation (Windows)
+      if: matrix.package-type == 'wheel' && runner.os == 'Windows'
+      run: |
+        python -m pip install --upgrade pip
+        for %%f in (dist\*.whl) do pip install "%%f"
+        echo "Wheel installed successfully"
+      shell: cmd
+
+    - name: Test sdist installation (Linux/macOS)
+      if: matrix.package-type == 'sdist' && runner.os != 'Windows'
       run: |
         python -m pip install --upgrade pip build
         pip install dist/*.tar.gz
         echo "Sdist installed successfully"
+
+    - name: Test sdist installation (Windows)
+      if: matrix.package-type == 'sdist' && runner.os == 'Windows'
+      run: |
+        python -m pip install --upgrade pip build
+        for %%f in (dist\*.tar.gz) do pip install "%%f"
+        echo "Sdist installed successfully"
+      shell: cmd
 
     - name: Verify package functionality
       timeout-minutes: 3
