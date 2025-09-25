@@ -10,9 +10,9 @@ readme = "README.md"
 license = {text = "MIT License"}
 authors = [
     {name = "Wei Chen", email = "wchen@anl.gov"},
-    {name = "Lucas Hofer (Original JAXFit)", email = ""},
-    {name = "Milan Krstajić (Original JAXFit)", email = ""},
-    {name = "Robert P. Smith (Original JAXFit)", email = ""},
+    {name = "Lucas Hofer (Original JAXFit)"},
+    {name = "Milan Krstajić (Original JAXFit)"},
+    {name = "Robert P. Smith (Original JAXFit)"},
 ]
 maintainers = [
     {name = "Wei Chen", email = "wchen@anl.gov"},
