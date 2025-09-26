@@ -19,17 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **JAX tracing compatibility**: Support for functions with 15+ parameters without TracerArrayConversionError
 
 ### Changed
+- **Python Requirements**: Now requires Python 3.12+ (removed Python 3.11 support)
 - **Documentation Structure**: Reorganized with Getting Started, User Guide, and API Reference sections
 - **Examples Updated**: All documentation examples now highlight `curve_fit_large` as primary API
+- **Example Notebooks**: Updated all Jupyter notebooks with Python 3.12+ requirement notices
+- **GitHub URLs**: Updated all repository URLs from Dipolar-Quantum-Gases to imewei
 - **Chunking Algorithm**: Improved sequential refinement approach replacing adaptive exponential moving average
 - **Return Type Consistency**: All code paths return consistent (popt, pcov) format
 - **Error Handling**: Enhanced error messages and validation for large dataset functions
 
 ### Fixed
+- **Variable Naming**: Fixed pcov vs _pcov inconsistencies throughout codebase and tests
+- **StreamingOptimizer Tests**: Fixed parameter naming from x0 to p0 in all test files
+- **GitHub Actions**: Fixed workflow failures by downgrading action versions and removing pip caching
 - **JAX Tracing Issues**: Resolved TracerArrayConversionError for functions with many parameters
 - **Chunking Stability**: Fixed instability issues with complex parameter averaging
 - **Integration Tests**: Adjusted tolerances for chunked algorithms and polynomial fitting
 - **Documentation Consistency**: Fixed examples and API references across all documentation files
+- **Package Metadata**: Corrected all project URLs and repository references
 
 ### Technical Details
 - Enhanced Sphinx configuration with modern extensions (doctest, coverage, duration)

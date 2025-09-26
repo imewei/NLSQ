@@ -339,7 +339,7 @@ def curve_fit_large(
             popt = result.x
             # Create identity covariance matrix if not available
             pcov = np.eye(len(popt))
-            return popt, _pcov
+            return popt, pcov
         else:
             raise RuntimeError(
                 f"Unexpected result format from large dataset fitter: {result}"
