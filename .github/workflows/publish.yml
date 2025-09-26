@@ -224,6 +224,8 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
           verbose: true
+          # Use API token if available, otherwise use trusted publishing
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
 
       - name: Verify TestPyPI publication
         run: |
@@ -267,6 +269,8 @@ jobs:
         with:
           skip-existing: true
           verbose: true
+          # Use API token if available, otherwise use trusted publishing
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publication success notification
         run: |
