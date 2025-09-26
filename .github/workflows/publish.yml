@@ -170,12 +170,17 @@ jobs:
       - name: Check installed package metadata
         run: |
           python -c "
-          import pkg_resources
           import nlsq
           try:
-              dist = pkg_resources.get_distribution('nlsq')
-              print(f'✅ Package: {dist.project_name} {dist.version}')
-              print(f'✅ Location: {dist.location}')
+              # Use importlib.metadata for Python 3.8+ (replaces deprecated pkg_resources)
+              try:
+                  from importlib import metadata
+              except ImportError:
+                  import importlib_metadata as metadata
+
+              dist = metadata.distribution('nlsq')
+              print(f'✅ Package: {dist.name} {dist.version}')
+              print(f'✅ Location: {dist._path if hasattr(dist, '_path') else 'installed'}')
               print(f'✅ Python: {nlsq.__version__}')
               print('✅ Package validation passed')
           except Exception as e:
