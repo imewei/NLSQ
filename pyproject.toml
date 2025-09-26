@@ -7,7 +7,7 @@ name = "nlsq"
 dynamic = ["version"]
 description = "GPU/TPU accelerated nonlinear least-squares curve fitting using JAX"
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "Wei Chen", email = "wchen@anl.gov"},
     {name = "Lucas Hofer (Original JAXFit)"},
