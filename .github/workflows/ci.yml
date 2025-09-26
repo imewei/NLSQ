@@ -24,7 +24,7 @@ env:
   PYTHONHASHSEED: 0
   PYTHONIOENCODING: utf-8
   PIP_DISABLE_PIP_VERSION_CHECK: 1
-  PIP_NO_CACHE_DIR: 1  # Disable pip caching to avoid issues
+  # PIP_NO_CACHE_DIR removed to enable pip caching with actions/cache
   PYTHON_VERSION: '3.12'  # Default Python version
 
 jobs:
@@ -83,8 +83,12 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Only depend on auto-format if it ran
     needs: [auto-format]
-    if: always() && !contains(github.event.head_commit.message, '[skip ci]')
+    if: |
+      always() &&
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      (needs.auto-format.result == 'success' || needs.auto-format.result == 'skipped')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -120,7 +124,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ['3.12']
-        test-group: ['unit', 'integration']
+        test-group: ['fast', 'slow']
 
     steps:
       - name: Checkout code
@@ -166,19 +170,19 @@ jobs:
           restore-keys: |
             test-cache-${{ runner.os }}-${{ matrix.test-group }}-
 
-      - name: Run unit tests
-        if: matrix.test-group == 'unit'
+      - name: Run fast tests
+        if: matrix.test-group == 'fast'
         run: |
-          pytest tests/ -m "not slow and not integration" \
+          pytest tests/ -m "not slow" \
             -v --tb=short --maxfail=5 --timeout=60 \
-            --junitxml=test-results-unit.xml
+            --junitxml=test-results-fast.xml
 
-      - name: Run integration tests
-        if: matrix.test-group == 'integration'
+      - name: Run slow tests
+        if: matrix.test-group == 'slow'
         run: |
-          pytest tests/ -m "integration or not slow" \
-            -v --tb=short --maxfail=3 --timeout=180 \
-            --junitxml=test-results-integration.xml
+          pytest tests/ -m "slow" \
+            -v --tb=short --maxfail=3 --timeout=300 \
+            --junitxml=test-results-slow.xml
 
       - name: Run import validation
         run: |
