@@ -128,7 +128,7 @@ jobs:
         run: |
           # Match `make install-local`
           if command -v uv &> /dev/null; then
-            uv pip install dist/*.whl --force-reinstall
+            uv pip install --system dist/*.whl --force-reinstall
           else
             pip install dist/*.whl --force-reinstall
           fi
@@ -138,7 +138,7 @@ jobs:
         if: matrix.package-type == 'sdist'
         run: |
           if command -v uv &> /dev/null; then
-            uv pip install dist/*.tar.gz
+            uv pip install --system dist/*.tar.gz
           else
             pip install dist/*.tar.gz
           fi
