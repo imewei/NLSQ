@@ -114,7 +114,7 @@ class TestStreamingOptimizer(unittest.TestCase):
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit_streaming(
-            self.model, data_generator(), x0=np.array([2.0, 1.0]), verbose=0
+            self.model, data_generator(), p0=np.array([2.0, 1.0]), verbose=0
         )
 
         self.assertIn("x", result)
@@ -148,7 +148,7 @@ class TestStreamingOptimizer(unittest.TestCase):
             optimizer = StreamingOptimizer(config)
 
             result = optimizer.fit_streaming(
-                self.model, h5_file, x0=np.array([2.0, 1.0]), verbose=0
+                self.model, h5_file, p0=np.array([2.0, 1.0]), verbose=0
             )
 
             self.assertIn("x", result)
@@ -176,7 +176,7 @@ class TestStreamingOptimizer(unittest.TestCase):
             yield x, y
 
         result = optimizer.fit_streaming(
-            model, data_gen(), x0=np.array([1.5, 0.5]), verbose=0
+            model, data_gen(), p0=np.array([1.5, 0.5]), verbose=0
         )
 
         # Check that optimization completed
@@ -198,7 +198,7 @@ class TestStreamingOptimizer(unittest.TestCase):
             yield x[250:], y[250:]
 
         result = optimizer.fit_streaming(
-            self.model, data_gen(), x0=np.array([2.0, 1.0]), verbose=0
+            self.model, data_gen(), p0=np.array([2.0, 1.0]), verbose=0
         )
 
         self.assertIn("x", result)
@@ -224,7 +224,7 @@ class TestStreamingOptimizer(unittest.TestCase):
         result = optimizer.fit_streaming(
             model,
             data_gen(),  # Use generator
-            x0=np.array([2.0, 1.0]),  # Start at true values
+            p0=np.array([2.0, 1.0]),  # Start at true values
             verbose=0,
         )
 
@@ -334,7 +334,7 @@ class TestFitUnlimitedData(unittest.TestCase):
         result = fit_unlimited_data(
             self.model,
             data_gen(),
-            x0=[1.5, 0.5],
+            [1.5, 0.5],  # p0 as positional argument
             config=StreamingConfig(batch_size=100, max_epochs=2),
         )
 
@@ -359,7 +359,7 @@ class TestFitUnlimitedData(unittest.TestCase):
         result = fit_unlimited_data(
             self.model,
             data_gen(),
-            x0=[1.5, 0.5],
+            [1.5, 0.5],  # p0 as positional argument
             config=StreamingConfig(batch_size=100),
             bounds=bounds,
         )
@@ -501,7 +501,7 @@ class TestStreamingIntegration(unittest.TestCase):
 
         # Fit the model
         result = optimizer.fit_streaming(
-            model, data_stream(), x0=np.array([1.5, 0.4, 0.8]), verbose=0
+            model, data_stream(), p0=np.array([1.5, 0.4, 0.8]), verbose=0
         )
 
         self.assertIn("x", result)
@@ -530,7 +530,7 @@ class TestStreamingIntegration(unittest.TestCase):
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit_streaming(
-            model, online_data(), x0=np.array([2.0]), verbose=0
+            model, online_data(), p0=np.array([2.0]), verbose=0
         )
 
         self.assertIn("x", result)
