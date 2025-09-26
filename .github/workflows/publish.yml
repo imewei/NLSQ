@@ -47,7 +47,7 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build twine setuptools-scm
+          pip install build "twine>=5.0.0" setuptools-scm
 
       - name: Verify package metadata
         run: |
@@ -62,6 +62,7 @@ jobs:
       - name: Verify build integrity
         run: |
           # Match `make validate`
+          python -m pip install --upgrade "twine>=5.0.0"
           twine check dist/* --strict
           ls -lah dist/
 
@@ -212,7 +213,7 @@ jobs:
       - name: Verify artifacts before publish
         run: |
           ls -la dist/
-          python -m pip install --upgrade twine
+          python -m pip install --upgrade "twine>=5.0.0"
           twine check dist/* --strict
 
       - name: Publish to TestPyPI
@@ -254,7 +255,7 @@ jobs:
       - name: Final verification before production publish
         run: |
           ls -la dist/
-          python -m pip install --upgrade twine
+          python -m pip install --upgrade "twine>=5.0.0"
           twine check dist/* --strict
           echo "✅ Final verification complete - ready for PyPI"
 
