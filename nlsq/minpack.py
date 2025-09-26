@@ -650,7 +650,8 @@ class CurveFit:
         else:
             ydata = np.asarray(ydata, float)
 
-        if isinstance(xdata, (list, tuple, np.ndarray)):
+        # Handle JAX arrays, NumPy arrays, lists, and tuples
+        if hasattr(xdata, '__array__') or isinstance(xdata, (list, tuple, np.ndarray, jnp.ndarray)):
             # should we be able to pass jax arrays
             # `xdata` is passed straight to the user-defined `f`, so allow
             # non-array_like `xdata`.
