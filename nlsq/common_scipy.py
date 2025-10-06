@@ -405,7 +405,10 @@ def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     Each element of the returned vector is at least at a relative distance
     `rstep` from the closest bound. If ``rstep=0`` then `np.nextafter` is used.
     """
-    x_new = x.copy()
+    # Convert to NumPy array to ensure mutability (JAX arrays are immutable)
+    x_new = np.array(x, copy=True)
+    lb = np.asarray(lb)
+    ub = np.asarray(ub)
 
     active = find_active_constraints(x, lb, ub, rstep)
     lower_mask = np.equal(active, -1)
