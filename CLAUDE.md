@@ -54,14 +54,15 @@ None. All changes are backward compatible.
 - `codebase_analysis.md` - Comprehensive codebase analysis
 - `benchmark/profile_trf_hot_paths.py` - Profiling script
 - `benchmark/test_performance_regression.py` - Performance regression tests
-- `benchmark/trf_profiling_summary.md` - Profiling results
-- `benchmark/numpy_jax_optimization_plan.md` - Optimization planning
-- `benchmark/lax_scan_design.md` - lax.scan conversion design (deferred)
+- `benchmark/docs/completed_optimizations/trf_profiling_summary.md` - Profiling results
+- `benchmark/docs/completed_optimizations/numpy_jax_optimization_plan.md` - NumPy↔JAX optimization (8%)
+- `benchmark/docs/future_optimizations/lax_scan_design.md` - lax.scan conversion design (deferred)
 
 **Removed:**
 - `multi-agent-optimization-report.md` - Obsolete (superseded by case study)
 - `optimization_complete_summary.md` - Obsolete (duplicate)
 - `optimization_progress_summary.md` - Obsolete (intermediate state)
+- `benchmark/classes/` - Obsolete subdirectory (4 unused files removed)
 
 ## Development Commands
 
@@ -132,7 +133,10 @@ python benchmark/profile_trf_hot_paths.py
 pytest benchmark/test_performance_regression.py -v
 
 # View profiling summary
-cat benchmark/trf_profiling_summary.md
+cat benchmark/docs/completed_optimizations/trf_profiling_summary.md
+
+# View optimization history
+cat benchmark/docs/README.md
 ```
 
 ## Architecture
@@ -265,7 +269,7 @@ g = g_jnp
 - Code already highly optimized with JAX primitives
 - User-facing features more valuable than micro-optimizations
 
-See `benchmark/lax_scan_design.md` for deferred optimization designs.
+See `benchmark/docs/future_optimizations/lax_scan_design.md` for deferred optimization designs.
 
 ### Performance Tuning Guide
 
@@ -321,12 +325,19 @@ nlsq/                                    # Main package
 │   ├── PYPI_SETUP.md                    # PyPI publishing guide (NEW)
 │   └── [13 other docs]
 │
-├── benchmark/                           # Performance testing (NEW)
+├── benchmark/                           # Performance testing
+│   ├── benchmark.py                     # Main benchmarking tool
+│   ├── benchmark_sprint2.py             # Sprint 2 benchmarks
 │   ├── profile_trf_hot_paths.py         # Profiling script
-│   ├── test_performance_regression.py   # Regression tests
-│   ├── trf_profiling_summary.md         # Profiling results
-│   ├── numpy_jax_optimization_plan.md   # Optimization planning
-│   └── lax_scan_design.md               # Deferred optimization design
+│   ├── test_performance_regression.py   # Regression tests (CI)
+│   ├── README.md                        # Benchmark documentation
+│   └── docs/                            # Optimization documentation
+│       ├── README.md                    # Documentation index
+│       ├── completed_optimizations/     # Historical optimizations
+│       │   ├── numpy_jax_optimization_plan.md  # NumPy↔JAX (8%)
+│       │   └── trf_profiling_summary.md        # Profiling results
+│       └── future_optimizations/        # Deferred work
+│           └── lax_scan_design.md       # lax.scan design
 │
 ├── examples/                            # Jupyter notebooks
 │   ├── NLSQ Quickstart.ipynb
@@ -397,9 +408,12 @@ nlsq/                                    # Main package
 - **Codebase Analysis**: `codebase_analysis.md` (comprehensive architecture review)
 
 ### Benchmarking
+- **Main Documentation**: `benchmark/README.md` (comprehensive benchmarking guide)
+- **Optimization History**: `benchmark/docs/README.md` (completed & future optimizations)
 - **Profiling script**: `benchmark/profile_trf_hot_paths.py`
-- **Regression tests**: `benchmark/test_performance_regression.py`
-- **Profiling results**: `benchmark/trf_profiling_summary.md`
+- **Regression tests**: `benchmark/test_performance_regression.py` (13 tests, CI integrated)
+- **Profiling results**: `benchmark/docs/completed_optimizations/trf_profiling_summary.md`
+- **Optimization plan**: `benchmark/docs/completed_optimizations/numpy_jax_optimization_plan.md`
 
 ### External Resources
 - **JAX Documentation**: https://jax.readthedocs.io

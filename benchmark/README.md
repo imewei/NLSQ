@@ -4,8 +4,33 @@
 
 This directory contains comprehensive benchmarks and performance analysis for NLSQ (Nonlinear Least Squares), a GPU/TPU-accelerated curve fitting library built on JAX. The benchmarks evaluate performance, memory efficiency, numerical stability, and scalability across various problem sizes and configurations.
 
+## Directory Structure
+
+```
+benchmark/
+├── README.md                          # This file - main benchmark documentation
+├── benchmark.py                       # Main benchmarking tool (all suites)
+├── test_performance_regression.py     # CI performance regression tests (13 tests)
+├── benchmark_sprint2.py               # Sprint 2 benchmarks (memory pool, compilation cache)
+├── profile_trf_hot_paths.py           # Profiling tool for TRF algorithm analysis
+└── docs/                              # Historical & future optimization documentation
+    ├── README.md                      # Documentation index
+    ├── completed_optimizations/       # Implemented optimizations (8% NumPy↔JAX, profiling)
+    └── future_optimizations/          # Deferred work (lax.scan design)
+```
+
+**Active Tools:**
+- `benchmark.py` - Run comprehensive benchmarks (various suites: basic, solver, large, advanced)
+- `test_performance_regression.py` - Automated regression tests integrated in CI/CD
+- `profile_trf_hot_paths.py` - Profile TRF algorithm hot paths for optimization analysis
+- `benchmark_sprint2.py` - Benchmark memory pool and compilation cache features
+
+**Documentation:**
+- See `docs/README.md` for historical optimization documentation and future work
+
 ## Table of Contents
 
+- [Directory Structure](#directory-structure)
 - [Performance Summary](#performance-summary)
 - [Key Features & Optimizations](#key-features--optimizations)
 - [Benchmark Results](#benchmark-results)
@@ -13,6 +38,7 @@ This directory contains comprehensive benchmarks and performance analysis for NL
 - [Large Dataset Performance](#large-dataset-performance)
 - [Memory Efficiency](#memory-efficiency)
 - [Usage Recommendations](#usage-recommendations)
+- [Running Benchmarks](#running-benchmarks)
 
 ## Performance Summary
 
@@ -244,7 +270,14 @@ python benchmark.py --suite all --gpu
 
 ## Related Documentation
 
+### Benchmark Documentation
+- [Optimization History](docs/README.md) - Historical and future optimization documentation
+- [Completed Optimizations](docs/completed_optimizations/) - NumPy↔JAX optimization (8%), profiling results
+- [Future Optimizations](docs/future_optimizations/) - Deferred work (lax.scan design)
+
+### NLSQ Documentation
 - [API Documentation](../docs/api.md)
 - [Installation Guide](../README.md#installation)
 - [Examples](../examples/)
 - [Changelog](../CHANGELOG.md)
+- [CLAUDE.md](../CLAUDE.md) - Developer guide and codebase information
