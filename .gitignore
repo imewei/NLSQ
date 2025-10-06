@@ -75,6 +75,7 @@ bandit_re*.json
 bandit-re*.json
 pip_audit_report.json
 checkpoint_iter_100.npz
+.hypothesis/
 
 # Translations
 *.mo
