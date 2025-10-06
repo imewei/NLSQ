@@ -124,7 +124,9 @@ class CompilationCache:
         try:
             func_code = func.__code__.co_code if hasattr(func, "__code__") else b""
             code_hash = hashlib.sha256(func_code).hexdigest()[:8]
-            cache_key = f"{func.__name__}_{code_hash}_s{static_argnums}_d{donate_argnums}"
+            cache_key = (
+                f"{func.__name__}_{code_hash}_s{static_argnums}_d{donate_argnums}"
+            )
         except (AttributeError, TypeError):
             cache_key = f"{id(func)}_s{static_argnums}_d{donate_argnums}"
 

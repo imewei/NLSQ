@@ -434,7 +434,11 @@ class TrustRegionJITFunctions:
 
                 # Step size
                 pAp = jnp.dot(p, Ap)
-                pAp = jnp.where(jnp.abs(pAp) < NUMERICAL_ZERO_THRESHOLD, NUMERICAL_ZERO_THRESHOLD, pAp)
+                pAp = jnp.where(
+                    jnp.abs(pAp) < NUMERICAL_ZERO_THRESHOLD,
+                    NUMERICAL_ZERO_THRESHOLD,
+                    pAp,
+                )
                 alpha_cg = rsold / pAp
 
                 # Update solution and residual
@@ -484,7 +488,11 @@ class TrustRegionJITFunctions:
 
             # Scale to trust region boundary
             p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.where(p_reg_norm < NUMERICAL_ZERO_THRESHOLD, NUMERICAL_ZERO_THRESHOLD, p_reg_norm)
+            p_reg_norm = jnp.where(
+                p_reg_norm < NUMERICAL_ZERO_THRESHOLD,
+                NUMERICAL_ZERO_THRESHOLD,
+                p_reg_norm,
+            )
             scaling = Delta / p_reg_norm
 
             return scaling * p_reg
@@ -526,7 +534,11 @@ class TrustRegionJITFunctions:
 
             # Scale to trust region boundary
             p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.where(p_reg_norm < NUMERICAL_ZERO_THRESHOLD, NUMERICAL_ZERO_THRESHOLD, p_reg_norm)
+            p_reg_norm = jnp.where(
+                p_reg_norm < NUMERICAL_ZERO_THRESHOLD,
+                NUMERICAL_ZERO_THRESHOLD,
+                p_reg_norm,
+            )
             scaling = Delta / p_reg_norm
 
             return scaling * p_reg

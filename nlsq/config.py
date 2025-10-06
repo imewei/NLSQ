@@ -390,7 +390,9 @@ class JAXConfig:
         if instance._memory_config is None:
             instance._initialize_memory_config()
         # Type assertion after initialization
-        assert instance._memory_config is not None, "Memory config initialization failed"
+        assert instance._memory_config is not None, (
+            "Memory config initialization failed"
+        )
         return instance._memory_config
 
     @classmethod
@@ -431,7 +433,9 @@ class JAXConfig:
         if instance._large_dataset_config is None:
             instance._initialize_large_dataset_config()
         # Type assertion after initialization
-        assert instance._large_dataset_config is not None, "Large dataset config initialization failed"
+        assert instance._large_dataset_config is not None, (
+            "Large dataset config initialization failed"
+        )
         return instance._large_dataset_config
 
     @classmethod

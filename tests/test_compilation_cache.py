@@ -35,7 +35,7 @@ class TestCompilationCache(unittest.TestCase):
         """Test compiling a function."""
 
         def simple_func(x):
-            return x ** 2
+            return x**2
 
         compiled = self.cache.compile(simple_func)
         result = compiled(jnp.array([1.0, 2.0, 3.0]))
@@ -47,7 +47,7 @@ class TestCompilationCache(unittest.TestCase):
         """Test cache hit for previously compiled function."""
 
         def simple_func(x):
-            return x ** 2
+            return x**2
 
         # First compilation
         compiled1 = self.cache.compile(simple_func)
@@ -61,9 +61,7 @@ class TestCompilationCache(unittest.TestCase):
 
     def test_function_signature_generation(self):
         """Test generating function signatures."""
-        sig1 = self.cache._get_function_signature(
-            lambda x: x, jnp.array([1.0, 2.0])
-        )
+        sig1 = self.cache._get_function_signature(lambda x: x, jnp.array([1.0, 2.0]))
         sig2 = self.cache._get_function_signature(
             lambda x: x, jnp.array([1.0, 2.0, 3.0])
         )
@@ -93,7 +91,7 @@ class TestCompilationCache(unittest.TestCase):
         """Test compilation with static arguments."""
 
         def power_func(x, n):
-            return x ** n
+            return x**n
 
         compiled = self.cache.compile(power_func, static_argnums=(1,))
         result = compiled(jnp.array([2.0, 3.0]), 3)
@@ -135,8 +133,9 @@ class TestCompilationCache(unittest.TestCase):
     def test_context_manager(self):
         """Test compilation cache as context manager."""
         with CompilationCache() as cache:
+
             def test_func(x):
-                return x ** 2
+                return x**2
 
             compiled = cache.compile(test_func)
             result = compiled(jnp.array([2.0]))
@@ -155,7 +154,7 @@ class TestCachedJITDecorator(unittest.TestCase):
 
         @cached_jit
         def square(x):
-            return x ** 2
+            return x**2
 
         result = square(jnp.array([1.0, 2.0, 3.0]))
         self.assertTrue(jnp.allclose(result, jnp.array([1.0, 4.0, 9.0])))
@@ -165,7 +164,7 @@ class TestCachedJITDecorator(unittest.TestCase):
 
         @cached_jit(static_argnums=(1,))
         def power(x, n):
-            return x ** n
+            return x**n
 
         result = power(jnp.array([2.0, 3.0]), 3)
         self.assertTrue(jnp.allclose(result, jnp.array([8.0, 27.0])))

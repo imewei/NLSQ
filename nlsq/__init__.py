@@ -26,6 +26,14 @@ from nlsq._optimize import OptimizeResult, OptimizeWarning
 # Stability and optimization imports
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
+# Performance optimization modules (Sprint 2)
+from nlsq.compilation_cache import (
+    CompilationCache,
+    cached_jit,
+    clear_compilation_cache,
+    get_global_compilation_cache,
+)
+
 # Configuration support
 from nlsq.config import (
     LargeDatasetConfig,
@@ -40,20 +48,6 @@ from nlsq.config import (
 )
 from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 
-# Performance optimization modules (Sprint 2)
-from nlsq.compilation_cache import (
-    CompilationCache,
-    cached_jit,
-    clear_compilation_cache,
-    get_global_compilation_cache,
-)
-from nlsq.memory_pool import (
-    MemoryPool,
-    TRFMemoryPool,
-    clear_global_pool,
-    get_global_pool,
-)
-
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
@@ -67,6 +61,12 @@ from nlsq.memory_manager import (
     clear_memory_pool,
     get_memory_manager,
     get_memory_stats,
+)
+from nlsq.memory_pool import (
+    MemoryPool,
+    TRFMemoryPool,
+    clear_global_pool,
+    get_global_pool,
 )
 from nlsq.minpack import CurveFit, curve_fit
 from nlsq.recovery import OptimizationRecovery

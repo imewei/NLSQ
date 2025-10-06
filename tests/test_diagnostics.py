@@ -99,11 +99,13 @@ class TestConvergenceMonitor(unittest.TestCase):
 
     @given(
         costs=st.lists(
-            st.floats(min_value=1e-10, max_value=1e10, allow_nan=False, allow_infinity=False),
+            st.floats(
+                min_value=1e-10, max_value=1e10, allow_nan=False, allow_infinity=False
+            ),
             min_size=1,
-            max_size=20
+            max_size=20,
         ),
-        n_params=st.integers(min_value=1, max_value=10)
+        n_params=st.integers(min_value=1, max_value=10),
     )
     @settings(max_examples=50, deadline=1000)
     def test_pattern_detection_robustness_property(self, costs, n_params):
@@ -145,11 +147,15 @@ class TestConvergenceMonitor(unittest.TestCase):
 
     @given(
         window_size=st.integers(min_value=5, max_value=50),
-        sensitivity=st.floats(min_value=0.1, max_value=10.0, allow_nan=False, allow_infinity=False),
-        n_iterations=st.integers(min_value=5, max_value=30)
+        sensitivity=st.floats(
+            min_value=0.1, max_value=10.0, allow_nan=False, allow_infinity=False
+        ),
+        n_iterations=st.integers(min_value=5, max_value=30),
     )
     @settings(max_examples=50, deadline=1000)
-    def test_convergence_monitor_numerical_stability_property(self, window_size, sensitivity, n_iterations):
+    def test_convergence_monitor_numerical_stability_property(
+        self, window_size, sensitivity, n_iterations
+    ):
         """Property-based test: ConvergenceMonitor handles various configurations gracefully."""
         monitor = ConvergenceMonitor(window_size=window_size, sensitivity=sensitivity)
 
@@ -172,7 +178,9 @@ class TestConvergenceMonitor(unittest.TestCase):
         if len(monitor.cost_history) >= 3:
             rate = monitor.get_convergence_rate()
             # For converging scenario, rate should be positive or None
-            assert rate is None or (isinstance(rate, (float, np.floating)) and np.isfinite(rate))
+            assert rate is None or (
+                isinstance(rate, (float, np.floating)) and np.isfinite(rate)
+            )
 
         # Pattern detection should work without errors
         osc_detected, osc_score = monitor.detect_oscillation()

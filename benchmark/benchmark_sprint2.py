@@ -22,7 +22,7 @@ def exponential_model(x, a, b, c):
 
 def gaussian_model(x, amp, mu, sigma):
     """Gaussian model."""
-    return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma ** 2))
+    return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def benchmark_basic_fit(n_points=1000, n_repeats=10):
@@ -86,7 +86,7 @@ def benchmark_compilation_cache(n_different_funcs=5, n_calls_each=3):
         """Create a model with specific power."""
 
         def model(x, a):
-            return a * x ** power
+            return a * x**power
 
         return model
 
@@ -178,30 +178,32 @@ def run_all_benchmarks():
     print("\n1. Basic Curve Fitting (1000 points, 10 repeats)")
     print("-" * 70)
     results = benchmark_basic_fit(n_points=1000, n_repeats=10)
-    print(f"   Mean time: {results['mean']*1000:.2f} ms")
-    print(f"   Std dev:   {results['std']*1000:.2f} ms")
-    print(f"   Min time:  {results['min']*1000:.2f} ms")
-    print(f"   Max time:  {results['max']*1000:.2f} ms")
+    print(f"   Mean time: {results['mean'] * 1000:.2f} ms")
+    print(f"   Std dev:   {results['std'] * 1000:.2f} ms")
+    print(f"   Min time:  {results['min'] * 1000:.2f} ms")
+    print(f"   Max time:  {results['max'] * 1000:.2f} ms")
 
     # Benchmark 2: Compilation cache
     print("\n2. Compilation Cache (5 functions, 3 calls each)")
     print("-" * 70)
     clear_compilation_cache()
     results = benchmark_compilation_cache(n_different_funcs=5, n_calls_each=3)
-    print(f"   Compilation time (mean): {results['compilation_time_mean']*1000:.2f} ms")
-    print(f"   Cache hit time (mean):   {results['cache_hit_time_mean']*1000:.2f} ms")
+    print(
+        f"   Compilation time (mean): {results['compilation_time_mean'] * 1000:.2f} ms"
+    )
+    print(f"   Cache hit time (mean):   {results['cache_hit_time_mean'] * 1000:.2f} ms")
     print(f"   Speedup (cache vs compile): {results['speedup']:.2f}x")
-    print(f"   Cache hit rate: {results['hit_rate']*100:.1f}%")
+    print(f"   Cache hit rate: {results['hit_rate'] * 100:.1f}%")
     print(f"   Total compilations: {results['total_compilations']}")
 
     # Benchmark 3: Memory pool
     print("\n3. Memory Pool (1000 allocations)")
     print("-" * 70)
     results = benchmark_memory_pool(n_allocations=1000)
-    print(f"   Time with pool:    {results['time_with_pool']*1000:.2f} ms")
-    print(f"   Time without pool: {results['time_without_pool']*1000:.2f} ms")
+    print(f"   Time with pool:    {results['time_with_pool'] * 1000:.2f} ms")
+    print(f"   Time without pool: {results['time_without_pool'] * 1000:.2f} ms")
     print(f"   Speedup: {results['speedup']:.2f}x")
-    print(f"   Reuse rate: {results['reuse_rate']*100:.1f}%")
+    print(f"   Reuse rate: {results['reuse_rate'] * 100:.1f}%")
     print(f"   Allocations: {results['allocations']}")
     print(f"   Reuses: {results['reuses']}")
 

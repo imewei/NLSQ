@@ -16,27 +16,27 @@ Coverage Strategy:
 - Integration tests recommended for future coverage improvements
 """
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from nlsq.recovery import OptimizationRecovery
+from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
+from nlsq.smart_cache import SmartCache, cached_function, get_global_cache
 from nlsq.sparse_jacobian import (
     SparseJacobianComputer,
     SparseOptimizer,
     detect_jacobian_sparsity,
 )
+from nlsq.stability import NumericalStabilityGuard
 from nlsq.svd_fallback import (
     compute_svd_with_fallback,
     initialize_gpu_safely,
 )
-from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
-from nlsq.smart_cache import SmartCache, cached_function, get_global_cache
-from nlsq.recovery import OptimizationRecovery
-from nlsq.stability import NumericalStabilityGuard
 
 
 class TestSparseJacobianCoverage(unittest.TestCase):

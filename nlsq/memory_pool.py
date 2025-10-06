@@ -70,7 +70,7 @@ class MemoryPool:
         key = (shape, dtype)
 
         # Try to reuse from pool
-        if key in self.pools and self.pools[key]:
+        if self.pools.get(key):
             arr = self.pools[key].pop()
             arr = jnp.zeros(shape, dtype=dtype)  # Reset values
             self.allocated[id(arr)] = key
@@ -87,12 +87,9 @@ class MemoryPool:
         if self.enable_stats:
             self.stats["allocations"] += 1
             current_mem = sum(
-                np.prod(k[0]) * np.dtype(k[1]).itemsize
-                for k in self.allocated.values()
+                np.prod(k[0]) * np.dtype(k[1]).itemsize for k in self.allocated.values()
             )
-            self.stats["peak_memory"] = max(
-                self.stats["peak_memory"], current_mem
-            )
+            self.stats["peak_memory"] = max(self.stats["peak_memory"], current_mem)
 
         return arr
 
@@ -147,9 +144,7 @@ class MemoryPool:
             return {"enabled": False}
 
         total_ops = self.stats["allocations"] + self.stats["reuses"]
-        reuse_rate = (
-            self.stats["reuses"] / total_ops if total_ops > 0 else 0.0
-        )
+        reuse_rate = self.stats["reuses"] / total_ops if total_ops > 0 else 0.0
 
         return {
             **self.stats,

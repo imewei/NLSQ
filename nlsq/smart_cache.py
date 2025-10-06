@@ -332,14 +332,18 @@ class SmartCache:
             np.savez_compressed(cache_file, data=value)
         elif isinstance(value, (dict, list, str, int, float, bool, type(None))):
             # Use JSON for simple data types
-            json_file = cache_file.replace('.npz', '.json')
-            with open(json_file, 'w') as f:
+            json_file = cache_file.replace(".npz", ".json")
+            with open(json_file, "w") as f:
                 json.dump(value, f)
-        elif isinstance(value, tuple) and all(isinstance(v, (np.ndarray, jnp.ndarray)) for v in value):
+        elif isinstance(value, tuple) and all(
+            isinstance(v, (np.ndarray, jnp.ndarray)) for v in value
+        ):
             # Handle tuple of arrays (common for multi-output functions)
-            arrays_dict: dict[str, Any] = {f'arr_{i}': np.asarray(v) for i, v in enumerate(value)}
-            arrays_dict['_is_tuple'] = np.array([True])
-            arrays_dict['_length'] = np.array([len(value)])
+            arrays_dict: dict[str, Any] = {
+                f"arr_{i}": np.asarray(v) for i, v in enumerate(value)
+            }
+            arrays_dict["_is_tuple"] = np.array([True])
+            arrays_dict["_length"] = np.array([len(value)])
             np.savez_compressed(cache_file, **arrays_dict)
         else:
             # For other types, convert to numpy array if possible
@@ -347,7 +351,9 @@ class SmartCache:
                 arr = np.asarray(value)
                 np.savez_compressed(cache_file, data=arr)
             except (ValueError, TypeError):
-                warnings.warn(f"Cannot safely cache type {type(value).__name__}, skipping disk cache")
+                warnings.warn(
+                    f"Cannot safely cache type {type(value).__name__}, skipping disk cache"
+                )
 
     def _load_from_disk(self, cache_file: str) -> Any:
         """Load value from disk using safe deserialization.
@@ -365,20 +371,20 @@ class SmartCache:
             Loaded value
         """
         # Check if JSON file exists
-        json_file = cache_file.replace('.npz', '.json')
+        json_file = cache_file.replace(".npz", ".json")
         if os.path.exists(json_file):
-            with open(json_file, 'r') as f:
+            with open(json_file) as f:
                 return json.load(f)
 
         # Load from numpy file
         with np.load(cache_file, allow_pickle=False) as data:
             # Check if it's a tuple of arrays
-            if '_is_tuple' in data.files:
-                length = int(data['_length'])
-                return tuple(data[f'arr_{i}'] for i in range(length))
+            if "_is_tuple" in data.files:
+                length = int(data["_length"])
+                return tuple(data[f"arr_{i}"] for i in range(length))
             # Single array
-            elif 'data' in data.files:
-                return data['data']
+            elif "data" in data.files:
+                return data["data"]
             else:
                 # Legacy format or unknown structure
                 raise ValueError(f"Unknown cache file structure: {data.files}")
