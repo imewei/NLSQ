@@ -252,3 +252,9 @@ Thumbs.db
 # Project specific documentation files (not ignored)
 # CLAUDE.md - Claude Code instructions
 # WARP.md - Warp instructions
+
+# Serena MCP server data
+.serena/
+
+# Optimization artifacts
+validators_refactoring.patch
