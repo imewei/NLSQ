@@ -206,13 +206,19 @@ jobs:
       - name: Performance regression check
         if: |
           matrix.benchmark-type == 'performance' &&
-          github.ref == 'refs/heads/main'
+          (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
         continue-on-error: true
         run: |
-          # Simple performance regression detection
+          # Run automated performance regression tests
+          echo "Running performance regression tests..."
+          python -m pytest benchmark/test_performance_regression.py -v \
+            --tb=short \
+            --maxfail=3 \
+            || echo "⚠️  Performance regression tests failed - review benchmark results"
+
+          # Additional simple regression detection from benchmark results
           if [ -f "benchmark_results/performance_results.md" ]; then
-            echo "Checking for performance regressions..."
-            # Extract timing information and compare with baseline
+            echo "Checking benchmark results for regressions..."
             grep -E "Time:|seconds|ms" benchmark_results/performance_results.md || echo "No timing data found"
           fi
 

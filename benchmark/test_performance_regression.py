@@ -122,7 +122,7 @@ def test_small_linear_fit(benchmark, small_linear_data):
 
     result = benchmark(curve_fit, linear, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     # Validate result
     assert len(popt) == 2
     assert np.allclose(popt, [2.0, 1.0], atol=0.1)
@@ -141,7 +141,7 @@ def test_small_exponential_fit(benchmark, small_linear_data):
 
     result = benchmark(curve_fit, exponential, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 3
 
 
@@ -161,7 +161,7 @@ def test_medium_exponential_fit(benchmark, medium_exponential_data):
 
     result = benchmark(curve_fit, exponential, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 3
     assert np.allclose(popt, [2.0, 0.5, 0.3], atol=0.1)
 
@@ -177,7 +177,7 @@ def test_medium_gaussian_fit(benchmark):
 
     result = benchmark(curve_fit, gaussian, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 3
 
 
@@ -197,7 +197,7 @@ def test_large_gaussian_fit(benchmark, large_gaussian_data):
 
     result = benchmark(curve_fit, gaussian, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 3
     assert np.allclose(popt, [5.0, 0.0, 2.0], atol=0.2)
 
@@ -214,7 +214,7 @@ def test_xlarge_polynomial_fit(benchmark, xlarge_polynomial_data):
 
     result = benchmark(curve_fit, polynomial, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 4
 
 
@@ -241,7 +241,7 @@ def test_curvefit_class_reuse(benchmark, small_linear_data):
     # Benchmark subsequent fits (should use cached JIT)
     result = benchmark(cf.curve_fit, linear, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 2
 
 
@@ -263,7 +263,7 @@ def test_curvefit_class_with_stability(benchmark, medium_exponential_data):
     # Benchmark
     result = benchmark(cf.curve_fit, exponential, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 3
 
 
@@ -283,24 +283,13 @@ def test_trf_algorithm(benchmark, medium_exponential_data):
 
     result = benchmark(curve_fit, exponential, x, y, p0=p0, method="trf")
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 3
 
 
-@pytest.mark.benchmark(group="algorithm-comparison")
-def test_lm_algorithm(benchmark, medium_exponential_data):
-    """Benchmark: Levenberg-Marquardt algorithm
-
-    Expected: ~2-5ms
-    Alternative algorithm (unbounded problems)
-    """
-    x, y, p0 = medium_exponential_data
-
-    result = benchmark(curve_fit, exponential, x, y, p0=p0, method="lm")
-
-    popt, pcov = result
-    assert len(popt) == 3
-
+# NOTE: LM (Levenberg-Marquardt) algorithm test removed
+# NLSQ only supports TRF (Trust Region Reflective) algorithm
+# TRF is tested in test_trf_algorithm above
 
 # ============================================================================
 # Benchmark Group 6: Bounded Optimization
@@ -321,7 +310,7 @@ def test_bounded_exponential_fit(benchmark, medium_exponential_data):
 
     result = benchmark(curve_fit, exponential, x, y, p0=p0, bounds=bounds)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 3
     # Verify bounds respected
     assert np.all(popt >= bounds[0])
@@ -354,7 +343,7 @@ def test_first_call_with_jit_compilation(benchmark):
         rounds=10,  # Average over 10 rounds
     )
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 2
 
 
@@ -374,7 +363,7 @@ def test_large_dataset_memory_usage(benchmark, xlarge_polynomial_data):
 
     result = benchmark(curve_fit, polynomial, x, y, p0=p0)
 
-    popt, pcov = result
+    popt, _pcov = result
     assert len(popt) == 4
 
 
@@ -401,7 +390,7 @@ def test_ill_conditioned_problem(benchmark):
 
     try:
         result = benchmark(cf.curve_fit, exponential, x, y, p0=p0)
-        popt, pcov = result
+        popt, _pcov = result
         assert len(popt) == 3
     except Exception:
         # Some ill-conditioned problems may not converge
