@@ -135,6 +135,17 @@ from nlsq.diagnostics import OptimizationDiagnostics
 from nlsq.optimizer_base import TrustRegionOptimizerBase
 from nlsq.stability import NumericalStabilityGuard
 
+# Algorithm constants
+# Trust region parameters
+TR_REDUCTION_FACTOR = 0.25  # Factor to reduce trust region when numerical issues occur
+TR_BOUNDARY_THRESHOLD = 0.95  # Threshold for checking if step is close to boundary
+LOSS_FUNCTION_COEFF = 0.5  # Coefficient for loss function (0.5 * ||f||^2)
+SQRT_EXPONENT = 0.5  # Exponent for square root in scaling (v**0.5)
+
+# Numerical stability thresholds
+NUMERICAL_ZERO_THRESHOLD = 1e-14  # Threshold for values considered numerically zero
+DEFAULT_TOLERANCE = 1e-6  # Default tolerance for iterative solvers
+
 
 class TrustRegionJITFunctions:
     """JIT-compiled functions for Trust Region Reflective optimization algorithm.
@@ -215,8 +226,8 @@ class TrustRegionJITFunctions:
             jnp.ndarray
                 The loss function value.
             """
-            return 0.5 * jnp.dot(f, f)
-            # return 0.5 * jnp.sum(f**2)
+            return LOSS_FUNCTION_COEFF * jnp.dot(f, f)
+            # return LOSS_FUNCTION_COEFF * jnp.sum(f**2)
 
         self.default_loss_func = loss_function
 
@@ -370,7 +381,7 @@ class TrustRegionJITFunctions:
             d: jnp.ndarray,
             alpha: float = 0.0,
             max_iter: int = None,
-            tol: float = 1e-6,
+            tol: float = DEFAULT_TOLERANCE,
         ) -> tuple[jnp.ndarray, jnp.ndarray, int]:
             """Solve the normal equations using conjugate gradient method.
 
@@ -423,7 +434,7 @@ class TrustRegionJITFunctions:
 
                 # Step size
                 pAp = jnp.dot(p, Ap)
-                pAp = jnp.where(jnp.abs(pAp) < 1e-14, 1e-14, pAp)
+                pAp = jnp.where(jnp.abs(pAp) < NUMERICAL_ZERO_THRESHOLD, NUMERICAL_ZERO_THRESHOLD, pAp)
                 alpha_cg = rsold / pAp
 
                 # Update solution and residual
@@ -473,7 +484,7 @@ class TrustRegionJITFunctions:
 
             # Scale to trust region boundary
             p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.where(p_reg_norm < 1e-14, 1e-14, p_reg_norm)
+            p_reg_norm = jnp.where(p_reg_norm < NUMERICAL_ZERO_THRESHOLD, NUMERICAL_ZERO_THRESHOLD, p_reg_norm)
             scaling = Delta / p_reg_norm
 
             return scaling * p_reg
@@ -515,7 +526,7 @@ class TrustRegionJITFunctions:
 
             # Scale to trust region boundary
             p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.where(p_reg_norm < 1e-14, 1e-14, p_reg_norm)
+            p_reg_norm = jnp.where(p_reg_norm < NUMERICAL_ZERO_THRESHOLD, NUMERICAL_ZERO_THRESHOLD, p_reg_norm)
             scaling = Delta / p_reg_norm
 
             return scaling * p_reg
@@ -545,7 +556,7 @@ class TrustRegionJITFunctions:
                 The cost function.
             """
             cost_array = jnp.where(data_mask, rho[0], 0)
-            return 0.5 * jnp.sum(cost_array)
+            return LOSS_FUNCTION_COEFF * jnp.sum(cost_array)
 
         self.calculate_cost = calculate_cost
 
@@ -1009,7 +1020,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                     # Check for numerical issues
                     if not self.check_isfinite(f_new):
-                        Delta = 0.25 * step_h_norm
+                        Delta = TR_REDUCTION_FACTOR * step_h_norm
                         continue
 
                     # Compute actual reduction
@@ -1029,7 +1040,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         actual_reduction,
                         predicted_reduction,
                         step_h_norm,
-                        step_h_norm > 0.95 * Delta,
+                        step_h_norm > TR_BOUNDARY_THRESHOLD * Delta,
                     )
 
                     # Check termination criteria
@@ -1233,7 +1244,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         v, dv = CL_scaling_vector(x, g, lb, ub)
 
         v[dv != 0] *= scale_inv[dv != 0]
-        Delta = norm(x0 * scale_inv / v**0.5)
+        Delta = norm(x0 * scale_inv / v**SQRT_EXPONENT)
         if Delta == 0:
             Delta = 1.0
 
@@ -1281,7 +1292,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             v[dv != 0] *= scale_inv[dv != 0]
 
             # Here, we apply two types of scaling.
-            d = v**0.5 * scale
+            d = v**SQRT_EXPONENT * scale
 
             # C = diag(g * scale) Jv
             diag_h = g * dv * scale
@@ -1290,7 +1301,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             # "hat" gradient.
             g_h = d * g
-            J_diag = jnp.diag(diag_h**0.5)
+            J_diag = jnp.diag(diag_h**SQRT_EXPONENT)
             d_jnp = jnp.array(d)
 
             # Choose solver based on solver parameter
