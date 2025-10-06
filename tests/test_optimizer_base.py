@@ -10,15 +10,15 @@ This test suite covers:
 """
 
 import unittest
-from abc import ABC
 import warnings
+from abc import ABC
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
-from nlsq.optimizer_base import OptimizerBase, TrustRegionOptimizerBase
 from nlsq._optimize import OptimizeResult
+from nlsq.optimizer_base import OptimizerBase, TrustRegionOptimizerBase
 
 
 # Concrete implementation for testing OptimizerBase
@@ -500,7 +500,11 @@ class TestUpdateTrustRadius(unittest.TestCase):
         step_norm = 0.95  # Close to boundary
 
         new_radius, ratio = self.optimizer.update_trust_radius(
-            Delta, actual_reduction, predicted_reduction, step_norm, step_at_boundary=True
+            Delta,
+            actual_reduction,
+            predicted_reduction,
+            step_norm,
+            step_at_boundary=True,
         )
 
         # Good step at boundary should increase radius
@@ -515,7 +519,11 @@ class TestUpdateTrustRadius(unittest.TestCase):
         step_norm = 0.5
 
         new_radius, ratio = self.optimizer.update_trust_radius(
-            Delta, actual_reduction, predicted_reduction, step_norm, step_at_boundary=False
+            Delta,
+            actual_reduction,
+            predicted_reduction,
+            step_norm,
+            step_at_boundary=False,
         )
 
         # Bad step should decrease radius
@@ -529,7 +537,11 @@ class TestUpdateTrustRadius(unittest.TestCase):
         step_norm = 0.5
 
         new_radius, ratio = self.optimizer.update_trust_radius(
-            Delta, actual_reduction, predicted_reduction, step_norm, step_at_boundary=False
+            Delta,
+            actual_reduction,
+            predicted_reduction,
+            step_norm,
+            step_at_boundary=False,
         )
 
         # Acceptable step away from boundary should maintain radius

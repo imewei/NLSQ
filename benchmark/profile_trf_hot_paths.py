@@ -5,13 +5,15 @@ This script profiles the Trust Region Reflective algorithm to identify
 performance bottlenecks and opportunities for lax.scan optimization.
 """
 
-import time
-import numpy as np
-import jax.numpy as jnp
-from nlsq import CurveFit
 import cProfile
 import pstats
+import time
 from io import StringIO
+
+import jax.numpy as jnp
+import numpy as np
+
+from nlsq import CurveFit
 
 
 def exponential(x, a, b, c):
@@ -56,7 +58,9 @@ def profile_trf_algorithm():
             y_true = p0_true[0] * np.exp(-p0_true[1] * x) + p0_true[2]
         elif model == gaussian:
             x = np.linspace(-10, 10, n_points)
-            y_true = p0_true[0] * np.exp(-((x - p0_true[1]) ** 2) / (2 * p0_true[2]**2))
+            y_true = p0_true[0] * np.exp(
+                -((x - p0_true[1]) ** 2) / (2 * p0_true[2] ** 2)
+            )
         else:  # polynomial
             x = np.linspace(-5, 5, n_points)
             y_true = p0_true[0] * x**3 + p0_true[1] * x**2 + p0_true[2] * x + p0_true[3]
@@ -76,10 +80,10 @@ def profile_trf_algorithm():
 
         # Get profiling stats
         s = StringIO()
-        ps = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
+        ps = pstats.Stats(profiler, stream=s).sort_stats("cumulative")
         ps.print_stats(20)  # Top 20 functions
 
-        print(f"Total time: {elapsed*1000:.2f}ms")
+        print(f"Total time: {elapsed * 1000:.2f}ms")
         print(f"Converged: {result[0] is not None}")
         print("\nTop 20 hot functions:")
         print(s.getvalue())

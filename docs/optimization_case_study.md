@@ -175,27 +175,27 @@ Created comprehensive profiling suite:
 **trf_no_bounds** (6 conversions eliminated):
 ```python
 # BEFORE
-cost = np.array(cost_jnp)              # Line 894
-g = np.array(g_jnp)                    # Line 897
-g_norm = norm(g, ord=np.inf)           # Line 925
-predicted_reduction = np.array(...)     # Line 997
-cost_new = np.array(cost_new_jnp)      # Line 1018
-g = np.array(g_jnp)                    # Line 1068
+cost = np.array(cost_jnp)  # Line 894
+g = np.array(g_jnp)  # Line 897
+g_norm = norm(g, ord=np.inf)  # Line 925
+predicted_reduction = np.array(...)  # Line 997
+cost_new = np.array(cost_new_jnp)  # Line 1018
+g = np.array(g_jnp)  # Line 1068
 
 # AFTER
-cost = cost_jnp                         # Keep as JAX
-g = g_jnp                               # Keep as JAX
-g_norm = jnorm(g, ord=jnp.inf)         # Use JAX norm
+cost = cost_jnp  # Keep as JAX
+g = g_jnp  # Keep as JAX
+g_norm = jnorm(g, ord=jnp.inf)  # Use JAX norm
 predicted_reduction = predicted_reduction_jnp  # Keep as JAX
-cost_new = cost_new_jnp                # Keep as JAX
-g = g_jnp                              # Keep as JAX
+cost_new = cost_new_jnp  # Keep as JAX
+g = g_jnp  # Keep as JAX
 
 # Convert only at return:
 return OptimizeResult(
-    cost=float(cost),              # Python scalar
-    grad=np.array(g),              # NumPy array
-    optimality=float(g_norm),      # Python scalar
-    ...
+    cost=float(cost),  # Python scalar
+    grad=np.array(g),  # NumPy array
+    optimality=float(g_norm),  # Python scalar
+    ...,
 )
 ```
 
@@ -287,6 +287,7 @@ while actual_reduction <= 0 and nfev < max_nfev:
         continue  # Early exit
     # ... update logic ...
 
+
 # PROPOSED lax.scan (30+ lines, complex)
 def inner_body(carry, _):
     # Complex masking for early termination
@@ -295,6 +296,7 @@ def inner_body(carry, _):
     # ... conditional logic throughout ...
     # Runs all 100 iterations even if converges in 2
     return new_carry, None
+
 
 # Harder to debug, harder to maintain, 95-99 wasted iterations
 ```

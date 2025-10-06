@@ -476,7 +476,10 @@ class TestErrorHandling(unittest.TestCase):
         # Use deterministic data that requires many iterations to fit
         np.random.seed(42)
         true_params = [5.0, 2.0, 1.0, 3.0]
-        y = true_params[0] * np.sin(true_params[1] * x + true_params[2]) + true_params[3]
+        y = (
+            true_params[0] * np.sin(true_params[1] * x + true_params[2])
+            + true_params[3]
+        )
         y += np.random.normal(0, 0.5, len(x))  # Add noise
 
         # Use very poor initial guess to ensure non-convergence
@@ -499,8 +502,9 @@ class TestErrorHandling(unittest.TestCase):
         if result.success:
             # If it claims success, verify cost is actually low (< 250)
             # If cost is high, the test is checking that we handle the case
-            self.assertLess(result.cost, 250.0,
-                "Optimizer claims success but cost is still high")
+            self.assertLess(
+                result.cost, 250.0, "Optimizer claims success but cost is still high"
+            )
         else:
             # Expected case: optimizer correctly reports non-convergence
             self.assertIsNotNone(result.message)

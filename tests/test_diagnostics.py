@@ -6,9 +6,10 @@ This test suite covers:
 - Global diagnostics functions
 """
 
-import unittest
 import time
+import unittest
 import warnings
+
 import numpy as np
 import pytest
 

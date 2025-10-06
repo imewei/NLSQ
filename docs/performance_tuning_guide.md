@@ -41,6 +41,7 @@ popt2, pcov2 = curve_fit(model, x2, y2, p0=[1, 1])
 **Automatic Backend Selection**:
 ```python
 import jax
+
 print(jax.devices())  # Check which devices are available
 
 # NLSQ automatically uses GPU/TPU if available
@@ -104,6 +105,7 @@ for i in range(n_curves):
 
 # BEST: Use large_dataset module for very large batches
 from nlsq.large_dataset import LargeDatasetFitter
+
 fitter = LargeDatasetFitter()
 results = fitter.fit_multiple(model, x_data, y_data, p0_list)
 ```
@@ -148,17 +150,17 @@ popt, pcov = curve_fit(exponential, x, y, p0=p0, bounds=bounds)
 
 **TRF (default)**: Best for bounded problems
 ```python
-popt, pcov = curve_fit(model, x, y, method='trf', bounds=bounds)
+popt, pcov = curve_fit(model, x, y, method="trf", bounds=bounds)
 ```
 
 **LM (Levenberg-Marquardt)**: Best for unbounded problems
 ```python
-popt, pcov = curve_fit(model, x, y, method='lm')  # Slightly faster for unconstrained
+popt, pcov = curve_fit(model, x, y, method="lm")  # Slightly faster for unconstrained
 ```
 
 **Dogbox**: Alternative for bounded problems
 ```python
-popt, pcov = curve_fit(model, x, y, method='dogbox', bounds=bounds)
+popt, pcov = curve_fit(model, x, y, method="dogbox", bounds=bounds)
 ```
 
 ### 6. Reduce Data When Possible
@@ -171,7 +173,7 @@ popt, pcov = curve_fit(model, x, y, method='dogbox', bounds=bounds)
 # If you have 1M points but only fitting 5 parameters
 if len(x) > 10000:
     # Downsample intelligently
-    indices = np.linspace(0, len(x)-1, 10000, dtype=int)
+    indices = np.linspace(0, len(x) - 1, 10000, dtype=int)
     x_reduced = x[indices]
     y_reduced = y[indices]
     sigma_reduced = sigma[indices] if sigma is not None else None
@@ -225,7 +227,7 @@ profiler.disable()
 
 # Analyze results
 stats = pstats.Stats(profiler)
-stats.sort_stats('cumulative')
+stats.sort_stats("cumulative")
 stats.print_stats(20)  # Top 20 functions
 ```
 
@@ -291,6 +293,7 @@ for data in datasets:
 # Profile your model function
 import jax.numpy as jnp
 
+
 @jit  # JIT compile your model
 def fast_model(x, a, b, c):
     return a * jnp.exp(-b * x) + c  # Use jnp, not np!
@@ -306,8 +309,7 @@ def fast_model(x, a, b, c):
 from nlsq.large_dataset import LargeDatasetFitter
 
 fitter = LargeDatasetFitter(
-    chunk_size=10000,  # Process in chunks
-    enable_streaming=True
+    chunk_size=10000, enable_streaming=True  # Process in chunks
 )
 
 popt, pcov = fitter.fit(model, x, y, p0=p0)
@@ -369,6 +371,7 @@ def jac_analytical(x, a, b, c):
     J[:, 1] = -a * x * exp_term  # d/db
     J[:, 2] = 1.0  # d/dc
     return J
+
 
 popt, pcov = curve_fit(model, x, y, p0=p0, jac=jac_analytical)
 ```
@@ -440,9 +443,11 @@ import numpy as np
 from nlsq import CurveFit
 import time
 
+
 # Your model
 def model(x, a, b):
     return a * x + b
+
 
 # Your data
 x = np.linspace(0, 10, 1000)

@@ -123,9 +123,7 @@ class TestMemoryPrediction(unittest.TestCase):
         n_points = 1000
         n_params = 10
 
-        memory = self.manager.predict_memory_requirement(
-            n_points, n_params, "unknown"
-        )
+        memory = self.manager.predict_memory_requirement(n_points, n_params, "unknown")
 
         # Should still return a conservative estimate
         self.assertGreater(memory, 0)

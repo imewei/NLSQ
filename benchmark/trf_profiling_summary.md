@@ -85,7 +85,7 @@ def inner_loop_body(carry, _):
         actual_reduction <= 0,
         lambda s: solve_subproblem(s),
         lambda s: s,  # No-op if converged
-        (Delta, alpha)
+        (Delta, alpha),
     )
 
     # Evaluate and update
@@ -95,12 +95,13 @@ def inner_loop_body(carry, _):
 
     return (x, Delta_new, alpha, nfev + 1, actual_reduction), None
 
+
 # Run scan
 (x_final, Delta, alpha, nfev, reduction), _ = lax.scan(
     inner_loop_body,
     (x0, Delta0, alpha0, nfev0, -1.0),
     None,
-    length=max_inner_iterations
+    length=max_inner_iterations,
 )
 ```
 

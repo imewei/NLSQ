@@ -267,7 +267,9 @@ class TestEndToEndValidation(unittest.TestCase):
         # Check that parameters are in reasonable ranges (relaxed bounds for chunked fitting)
         self.assertGreater(popt[0], 0.5)  # a should be positive
         self.assertLess(popt[0], 25.0)  # a shouldn't be too large (relaxed from 10.0)
-        self.assertGreater(popt[1], 0.01)  # b should be positive for decay (relaxed from 0.1)
+        self.assertGreater(
+            popt[1], 0.01
+        )  # b should be positive for decay (relaxed from 0.1)
         self.assertLess(popt[1], 5.0)  # b shouldn't be too large (relaxed from 3.0)
         self.assertLess(abs(popt[2]), 2.0)  # offset should be small (relaxed from 1.0)
 

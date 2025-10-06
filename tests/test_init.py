@@ -8,21 +8,21 @@ This test suite covers:
 """
 
 import unittest
-from unittest.mock import patch, MagicMock
 import warnings
+from unittest.mock import MagicMock, patch
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import nlsq
 from nlsq import (
+    LargeDatasetConfig,
+    MemoryConfig,
     curve_fit,
     curve_fit_large,
-    MemoryConfig,
-    LargeDatasetConfig,
-    memory_context,
     large_dataset_context,
+    memory_context,
 )
 
 
@@ -60,6 +60,7 @@ class TestCurveFitLargeBasic(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+
         # Simple linear function
         def linear(x, a, b):
             return a * x + b
@@ -72,7 +73,11 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         ydata = 2.0 * xdata + 1.0
 
         popt, pcov = curve_fit_large(
-            self.linear_func, xdata, ydata, auto_size_detection=True, size_threshold=1000
+            self.linear_func,
+            xdata,
+            ydata,
+            auto_size_detection=True,
+            size_threshold=1000,
         )
 
         self.assertIsInstance(popt, np.ndarray)

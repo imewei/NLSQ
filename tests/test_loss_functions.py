@@ -295,7 +295,9 @@ class TestLossFunctionsJAX(unittest.TestCase):
             loss_func = self.loss_func_jit.get_loss_function(loss_type)
 
             # JIT compile the function
-            jitted_func = jit(lambda r: loss_func(r, self.f_scale, data_mask, cost_only=True))
+            jitted_func = jit(
+                lambda r: loss_func(r, self.f_scale, data_mask, cost_only=True)
+            )
 
             # Should work without errors
             cost = jitted_func(residuals)
@@ -323,7 +325,9 @@ class TestLossFunctionsJAX(unittest.TestCase):
 
     def test_gradient_at_zero(self):
         """Test gradient is zero at zero residual."""
-        residuals = jnp.array([1e-10, 1e-10, 1e-10])  # Use small but non-zero to avoid NaN
+        residuals = jnp.array(
+            [1e-10, 1e-10, 1e-10]
+        )  # Use small but non-zero to avoid NaN
         data_mask = jnp.ones_like(residuals, dtype=bool)
 
         for loss_type in ["huber", "soft_l1", "cauchy", "arctan"]:
@@ -394,8 +398,16 @@ if HYPOTHESIS_AVAILABLE:
             """Set up test fixtures."""
             self.loss_func_jit = LossFunctionsJIT()
 
-        @given(residuals=st.lists(st.floats(min_value=-100, max_value=100), min_size=1, max_size=50))
-        @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+        @given(
+            residuals=st.lists(
+                st.floats(min_value=-100, max_value=100), min_size=1, max_size=50
+            )
+        )
+        @settings(
+            max_examples=50,
+            deadline=None,
+            suppress_health_check=[HealthCheck.function_scoped_fixture],
+        )
         def test_loss_non_negative(self, residuals):
             """Property: All loss functions are non-negative."""
             residuals_arr = jnp.array(residuals)
@@ -408,8 +420,16 @@ if HYPOTHESIS_AVAILABLE:
 
                 self.assertGreaterEqual(float(cost), 0)
 
-        @given(residuals=st.lists(st.floats(min_value=-100, max_value=100), min_size=1, max_size=50))
-        @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+        @given(
+            residuals=st.lists(
+                st.floats(min_value=-100, max_value=100), min_size=1, max_size=50
+            )
+        )
+        @settings(
+            max_examples=50,
+            deadline=None,
+            suppress_health_check=[HealthCheck.function_scoped_fixture],
+        )
         def test_loss_finite(self, residuals):
             """Property: All loss functions produce finite values."""
             residuals_arr = jnp.array(residuals)

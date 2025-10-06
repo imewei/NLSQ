@@ -11,8 +11,8 @@ This test suite covers:
 import unittest
 import warnings
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from nlsq._optimize import OptimizeResult, OptimizeWarning, _check_unknown_options
@@ -33,28 +33,28 @@ class TestOptimizeResultBasic(unittest.TestCase):
         result = OptimizeResult(x=np.array([1.0, 2.0]), success=True, status=1)
 
         self.assertEqual(len(result), 3)
-        np.testing.assert_array_equal(result['x'], np.array([1.0, 2.0]))
-        self.assertTrue(result['success'])
-        self.assertEqual(result['status'], 1)
+        np.testing.assert_array_equal(result["x"], np.array([1.0, 2.0]))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], 1)
 
     def test_dict_style_access(self):
         """Test dictionary-style access."""
         result = OptimizeResult()
-        result['x'] = np.array([1.0, 2.0, 3.0])
-        result['cost'] = 0.5
-        result['success'] = True
+        result["x"] = np.array([1.0, 2.0, 3.0])
+        result["cost"] = 0.5
+        result["success"] = True
 
         self.assertEqual(len(result), 3)
-        np.testing.assert_array_equal(result['x'], np.array([1.0, 2.0, 3.0]))
-        self.assertEqual(result['cost'], 0.5)
-        self.assertTrue(result['success'])
+        np.testing.assert_array_equal(result["x"], np.array([1.0, 2.0, 3.0]))
+        self.assertEqual(result["cost"], 0.5)
+        self.assertTrue(result["success"])
 
     def test_attribute_style_access(self):
         """Test attribute-style access via __getattr__."""
         result = OptimizeResult()
-        result['x'] = np.array([1.0, 2.0, 3.0])
-        result['cost'] = 0.5
-        result['success'] = True
+        result["x"] = np.array([1.0, 2.0, 3.0])
+        result["cost"] = 0.5
+        result["success"] = True
 
         # Access as attributes
         np.testing.assert_array_equal(result.x, np.array([1.0, 2.0, 3.0]))
@@ -71,11 +71,11 @@ class TestOptimizeResultBasic(unittest.TestCase):
         result.message = "Optimization terminated successfully."
 
         # Verify stored as dict items
-        self.assertIn('x', result)
-        self.assertIn('success', result)
-        self.assertIn('message', result)
-        np.testing.assert_array_equal(result['x'], np.array([1.0, 2.0]))
-        self.assertTrue(result['success'])
+        self.assertIn("x", result)
+        self.assertIn("success", result)
+        self.assertIn("message", result)
+        np.testing.assert_array_equal(result["x"], np.array([1.0, 2.0]))
+        self.assertTrue(result["success"])
 
     def test_attribute_deletion(self):
         """Test attribute deletion via __delattr__."""
@@ -86,8 +86,8 @@ class TestOptimizeResultBasic(unittest.TestCase):
         # Delete attribute
         del result.success
 
-        self.assertNotIn('success', result)
-        self.assertIn('x', result)
+        self.assertNotIn("success", result)
+        self.assertIn("x", result)
 
     def test_missing_attribute_error(self):
         """Test AttributeError for missing attributes."""
@@ -101,13 +101,13 @@ class TestOptimizeResultBasic(unittest.TestCase):
         """Test dict methods (keys, values, items)."""
         result = OptimizeResult(x=np.array([1.0]), cost=0.5, success=True)
 
-        self.assertEqual(set(result.keys()), {'x', 'cost', 'success'})
+        self.assertEqual(set(result.keys()), {"x", "cost", "success"})
         self.assertIn(0.5, result.values())
         self.assertIn(True, result.values())
 
         items = dict(result.items())
-        self.assertEqual(items['cost'], 0.5)
-        self.assertTrue(items['success'])
+        self.assertEqual(items["cost"], 0.5)
+        self.assertTrue(items["success"])
 
 
 class TestOptimizeResultRepr(unittest.TestCase):
@@ -128,10 +128,10 @@ class TestOptimizeResultRepr(unittest.TestCase):
         repr_str = repr(result)
 
         # Should contain key-value pairs
-        self.assertIn('x', repr_str)
-        self.assertIn('success', repr_str)
-        self.assertIn('cost', repr_str)
-        self.assertIn(':', repr_str)
+        self.assertIn("x", repr_str)
+        self.assertIn("success", repr_str)
+        self.assertIn("cost", repr_str)
+        self.assertIn(":", repr_str)
 
     def test_repr_sorted_keys(self):
         """Test that __repr__ shows sorted keys."""
@@ -140,9 +140,9 @@ class TestOptimizeResultRepr(unittest.TestCase):
         repr_str = repr(result)
 
         # Keys should be sorted: a, m, z
-        a_idx = repr_str.find('a')
-        m_idx = repr_str.find('m')
-        z_idx = repr_str.find('z')
+        a_idx = repr_str.find("a")
+        m_idx = repr_str.find("m")
+        z_idx = repr_str.find("z")
 
         self.assertLess(a_idx, m_idx)
         self.assertLess(m_idx, z_idx)
@@ -154,7 +154,7 @@ class TestOptimizeResultRepr(unittest.TestCase):
         repr_str = repr(result)
 
         # Should have multiple lines
-        lines = repr_str.split('\n')
+        lines = repr_str.split("\n")
         self.assertGreater(len(lines), 1)
 
 
@@ -175,20 +175,20 @@ class TestOptimizeResultDir(unittest.TestCase):
 
         dir_list = dir(result)
 
-        self.assertEqual(set(dir_list), {'x', 'success', 'cost', 'message'})
+        self.assertEqual(set(dir_list), {"x", "success", "cost", "message"})
 
     def test_dir_after_addition(self):
         """Test __dir__ after adding items."""
         result = OptimizeResult(x=np.array([1.0]))
 
         dir_list_1 = dir(result)
-        self.assertEqual(set(dir_list_1), {'x'})
+        self.assertEqual(set(dir_list_1), {"x"})
 
         result.success = True
         result.cost = 0.5
 
         dir_list_2 = dir(result)
-        self.assertEqual(set(dir_list_2), {'x', 'success', 'cost'})
+        self.assertEqual(set(dir_list_2), {"x", "success", "cost"})
 
     def test_dir_after_deletion(self):
         """Test __dir__ after deleting items."""
@@ -197,7 +197,7 @@ class TestOptimizeResultDir(unittest.TestCase):
         del result.cost
 
         dir_list = dir(result)
-        self.assertEqual(set(dir_list), {'x', 'success'})
+        self.assertEqual(set(dir_list), {"x", "success"})
 
 
 class TestOptimizeResultComplex(unittest.TestCase):
@@ -276,11 +276,11 @@ class TestOptimizeResultComplex(unittest.TestCase):
         # Add optional attributes
         result.pcov = np.eye(2)
         result.active_mask = np.array([False, True])
-        result.all_times = {'total': 1.5, 'jac': 0.8}
+        result.all_times = {"total": 1.5, "jac": 0.8}
 
-        self.assertIn('pcov', result)
-        self.assertIn('active_mask', result)
-        self.assertIn('all_times', result)
+        self.assertIn("pcov", result)
+        self.assertIn("active_mask", result)
+        self.assertIn("all_times", result)
 
 
 class TestCheckUnknownOptions(unittest.TestCase):
@@ -301,41 +301,39 @@ class TestCheckUnknownOptions(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
 
-            _check_unknown_options({'unknown_param': 123})
+            _check_unknown_options({"unknown_param": 123})
 
             # Should issue a warning
             self.assertEqual(len(w), 1)
             self.assertTrue(issubclass(w[0].category, OptimizeWarning))
-            self.assertIn('unknown_param', str(w[0].message))
-            self.assertIn('Unknown solver options', str(w[0].message))
+            self.assertIn("unknown_param", str(w[0].message))
+            self.assertIn("Unknown solver options", str(w[0].message))
 
     def test_multiple_unknown_options(self):
         """Test with multiple unknown options."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
 
-            _check_unknown_options({
-                'bad_option1': 1,
-                'bad_option2': 2,
-                'bad_option3': 3
-            })
+            _check_unknown_options(
+                {"bad_option1": 1, "bad_option2": 2, "bad_option3": 3}
+            )
 
             # Should issue a warning
             self.assertEqual(len(w), 1)
             self.assertTrue(issubclass(w[0].category, OptimizeWarning))
             msg = str(w[0].message)
-            self.assertIn('Unknown solver options', msg)
+            self.assertIn("Unknown solver options", msg)
             # All option names should be in message
-            self.assertIn('bad_option1', msg)
-            self.assertIn('bad_option2', msg)
-            self.assertIn('bad_option3', msg)
+            self.assertIn("bad_option1", msg)
+            self.assertIn("bad_option2", msg)
+            self.assertIn("bad_option3", msg)
 
     def test_warning_stacklevel(self):
         """Test that warning uses correct stacklevel."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
 
-            _check_unknown_options({'unknown': 1})
+            _check_unknown_options({"unknown": 1})
 
             # Should have stacklevel=4
             self.assertEqual(len(w), 1)
@@ -389,7 +387,7 @@ class TestOptimizeResultEdgeCases(unittest.TestCase):
         result = OptimizeResult(x=None, success=None)
 
         self.assertIsNone(result.x)
-        self.assertIsNone(result['success'])
+        self.assertIsNone(result["success"])
 
     def test_empty_arrays(self):
         """Test storing empty arrays."""
@@ -404,7 +402,7 @@ class TestOptimizeResultEdgeCases(unittest.TestCase):
 
         # Add many attributes
         for i in range(50):
-            result[f'param_{i}'] = i
+            result[f"param_{i}"] = i
 
         self.assertEqual(len(result), 50)
         self.assertEqual(result.param_0, 0)
@@ -414,37 +412,37 @@ class TestOptimizeResultEdgeCases(unittest.TestCase):
         """Test keys with special characters."""
         result = OptimizeResult()
 
-        result['param_1'] = 1
-        result['param-2'] = 2
-        result['param.3'] = 3
+        result["param_1"] = 1
+        result["param-2"] = 2
+        result["param.3"] = 3
 
         # Dict access should work
-        self.assertEqual(result['param_1'], 1)
-        self.assertEqual(result['param-2'], 2)
-        self.assertEqual(result['param.3'], 3)
+        self.assertEqual(result["param_1"], 1)
+        self.assertEqual(result["param-2"], 2)
+        self.assertEqual(result["param.3"], 3)
 
     def test_iteration(self):
         """Test iteration over OptimizeResult."""
         result = OptimizeResult(a=1, b=2, c=3)
 
         keys = list(result)
-        self.assertEqual(set(keys), {'a', 'b', 'c'})
+        self.assertEqual(set(keys), {"a", "b", "c"})
 
     def test_in_operator(self):
         """Test 'in' operator."""
         result = OptimizeResult(x=np.array([1.0]), success=True)
 
-        self.assertIn('x', result)
-        self.assertIn('success', result)
-        self.assertNotIn('nonexistent', result)
+        self.assertIn("x", result)
+        self.assertIn("success", result)
+        self.assertNotIn("nonexistent", result)
 
     def test_get_method(self):
         """Test dict.get() method."""
         result = OptimizeResult(x=np.array([1.0]), success=True)
 
-        self.assertTrue(result.get('success'))
-        self.assertIsNone(result.get('nonexistent'))
-        self.assertEqual(result.get('nonexistent', 'default'), 'default')
+        self.assertTrue(result.get("success"))
+        self.assertIsNone(result.get("nonexistent"))
+        self.assertEqual(result.get("nonexistent", "default"), "default")
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 try:
-    from nlsq import curve_fit, CurveFit
+    from nlsq import CurveFit, curve_fit
 except ImportError:
     pytest.skip("NLSQ not installed", allow_module_level=True)
 
@@ -31,6 +31,7 @@ except ImportError:
 # ============================================================================
 # Test Functions (Models to Fit)
 # ============================================================================
+
 
 def linear(x, m, b):
     """Linear model: y = mx + b"""
@@ -40,12 +41,14 @@ def linear(x, m, b):
 def exponential(x, a, b, c):
     """Exponential decay: y = a * exp(-b * x) + c"""
     import jax.numpy as jnp
+
     return a * jnp.exp(-b * x) + c
 
 
 def gaussian(x, amp, mu, sigma):
     """Gaussian function"""
     import jax.numpy as jnp
+
     return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
@@ -57,6 +60,7 @@ def polynomial(x, a, b, c, d):
 # ============================================================================
 # Test Data Generators
 # ============================================================================
+
 
 @pytest.fixture(scope="module")
 def small_linear_data():
@@ -106,6 +110,7 @@ def xlarge_polynomial_data():
 # Benchmark Group 1: Small Problems (Baseline Performance)
 # ============================================================================
 
+
 @pytest.mark.benchmark(group="small-problems")
 def test_small_linear_fit(benchmark, small_linear_data):
     """Benchmark: Small linear fit (100 points, 2 params)
@@ -144,6 +149,7 @@ def test_small_exponential_fit(benchmark, small_linear_data):
 # Benchmark Group 2: Medium Problems (Core Performance)
 # ============================================================================
 
+
 @pytest.mark.benchmark(group="medium-problems")
 def test_medium_exponential_fit(benchmark, medium_exponential_data):
     """Benchmark: Medium exponential fit (1000 points, 3 params)
@@ -178,6 +184,7 @@ def test_medium_gaussian_fit(benchmark):
 # ============================================================================
 # Benchmark Group 3: Large Problems (Scalability)
 # ============================================================================
+
 
 @pytest.mark.benchmark(group="large-problems")
 def test_large_gaussian_fit(benchmark, large_gaussian_data):
@@ -214,6 +221,7 @@ def test_xlarge_polynomial_fit(benchmark, xlarge_polynomial_data):
 # ============================================================================
 # Benchmark Group 4: CurveFit Class (Reuse Performance)
 # ============================================================================
+
 
 @pytest.mark.benchmark(group="curvefit-class")
 def test_curvefit_class_reuse(benchmark, small_linear_data):
@@ -263,6 +271,7 @@ def test_curvefit_class_with_stability(benchmark, medium_exponential_data):
 # Benchmark Group 5: Algorithm Comparison
 # ============================================================================
 
+
 @pytest.mark.benchmark(group="algorithm-comparison")
 def test_trf_algorithm(benchmark, medium_exponential_data):
     """Benchmark: Trust Region Reflective algorithm
@@ -272,7 +281,7 @@ def test_trf_algorithm(benchmark, medium_exponential_data):
     """
     x, y, p0 = medium_exponential_data
 
-    result = benchmark(curve_fit, exponential, x, y, p0=p0, method='trf')
+    result = benchmark(curve_fit, exponential, x, y, p0=p0, method="trf")
 
     popt, pcov = result
     assert len(popt) == 3
@@ -287,7 +296,7 @@ def test_lm_algorithm(benchmark, medium_exponential_data):
     """
     x, y, p0 = medium_exponential_data
 
-    result = benchmark(curve_fit, exponential, x, y, p0=p0, method='lm')
+    result = benchmark(curve_fit, exponential, x, y, p0=p0, method="lm")
 
     popt, pcov = result
     assert len(popt) == 3
@@ -296,6 +305,7 @@ def test_lm_algorithm(benchmark, medium_exponential_data):
 # ============================================================================
 # Benchmark Group 6: Bounded Optimization
 # ============================================================================
+
 
 @pytest.mark.benchmark(group="bounded-optimization")
 def test_bounded_exponential_fit(benchmark, medium_exponential_data):
@@ -322,6 +332,7 @@ def test_bounded_exponential_fit(benchmark, medium_exponential_data):
 # Benchmark Group 7: JIT Compilation Overhead
 # ============================================================================
 
+
 @pytest.mark.benchmark(group="jit-compilation")
 def test_first_call_with_jit_compilation(benchmark):
     """Benchmark: First call including JIT compilation
@@ -338,7 +349,7 @@ def test_first_call_with_jit_compilation(benchmark):
     result = benchmark.pedantic(
         curve_fit,
         args=(linear, x, y),
-        kwargs={'p0': p0},
+        kwargs={"p0": p0},
         iterations=1,  # Only measure first call
         rounds=10,  # Average over 10 rounds
     )
@@ -350,6 +361,7 @@ def test_first_call_with_jit_compilation(benchmark):
 # ============================================================================
 # Benchmark Group 8: Memory Efficiency
 # ============================================================================
+
 
 @pytest.mark.benchmark(group="memory-efficiency")
 @pytest.mark.slow
@@ -369,6 +381,7 @@ def test_large_dataset_memory_usage(benchmark, xlarge_polynomial_data):
 # ============================================================================
 # Benchmark Group 9: Numerical Stability
 # ============================================================================
+
 
 @pytest.mark.benchmark(group="numerical-stability")
 def test_ill_conditioned_problem(benchmark):
@@ -399,10 +412,11 @@ def test_ill_conditioned_problem(benchmark):
 # Utility Functions for CI Integration
 # ============================================================================
 
+
 def pytest_benchmark_scale_unit(config, unit, benchmarks, best, worst, sort):
     """Custom unit scaling for benchmark reports"""
-    if unit == 'seconds':
-        return 'milliseconds', 1000.0
+    if unit == "seconds":
+        return "milliseconds", 1000.0
     return unit, 1.0
 
 
@@ -410,11 +424,11 @@ def pytest_benchmark_scale_unit(config, unit, benchmarks, best, worst, sort):
 # Benchmark Configuration
 # ============================================================================
 
+
 def pytest_configure(config):
     """Configure pytest-benchmark"""
     config.addinivalue_line(
-        "markers",
-        "slow: marks tests as slow (use -m 'not slow' to skip)"
+        "markers", "slow: marks tests as slow (use -m 'not slow' to skip)"
     )
 
 
@@ -432,4 +446,4 @@ if __name__ == "__main__":
 
     pytest test_performance_regression.py --benchmark-only -v
     """
-    pytest.main([__file__, '--benchmark-only', '-v'])
+    pytest.main([__file__, "--benchmark-only", "-v"])

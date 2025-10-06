@@ -43,6 +43,7 @@ class TestAlgorithmSelectorBasic(unittest.TestCase):
 
     def test_estimate_n_params_from_p0(self):
         """Test parameter estimation from p0."""
+
         def dummy_func(x, a, b, c):
             return a * x**2 + b * x + c
 
@@ -52,6 +53,7 @@ class TestAlgorithmSelectorBasic(unittest.TestCase):
 
     def test_estimate_n_params_from_signature(self):
         """Test parameter estimation from function signature."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -269,6 +271,7 @@ class TestProblemAnalysis(unittest.TestCase):
 
     def test_analyze_small_problem(self):
         """Test analysis of small problem."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -286,11 +289,12 @@ class TestProblemAnalysis(unittest.TestCase):
 
     def test_analyze_medium_problem(self):
         """Test analysis of medium problem."""
+
         def quadratic(x, a, b, c):
             return a * x**2 + b * x + c
 
         x = np.linspace(0, 10, 5000)
-        y = x**2 - 2*x + 1
+        y = x**2 - 2 * x + 1
         p0 = np.array([1.0, -2.0, 1.0])
 
         analysis = self.selector.analyze_problem(quadratic, x, y, p0)
@@ -300,6 +304,7 @@ class TestProblemAnalysis(unittest.TestCase):
 
     def test_analyze_large_problem(self):
         """Test analysis of large problem."""
+
         def exponential(x, a, b, c):
             return a * jnp.exp(-b * x) + c
 
@@ -313,6 +318,7 @@ class TestProblemAnalysis(unittest.TestCase):
 
     def test_analyze_very_large_problem(self):
         """Test analysis of very large problem."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -326,6 +332,7 @@ class TestProblemAnalysis(unittest.TestCase):
 
     def test_analyze_with_bounds(self):
         """Test analysis with parameter bounds."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -340,6 +347,7 @@ class TestProblemAnalysis(unittest.TestCase):
 
     def test_analyze_with_memory_limit(self):
         """Test analysis with memory constraint."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -557,6 +565,7 @@ class TestAutoSelectAlgorithm(unittest.TestCase):
 
     def test_auto_select_basic(self):
         """Test basic auto_select_algorithm usage."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -573,6 +582,7 @@ class TestAutoSelectAlgorithm(unittest.TestCase):
 
     def test_auto_select_with_all_options(self):
         """Test auto_select_algorithm with all options."""
+
         def exponential(x, a, b, c):
             return a * jnp.exp(-b * x) + c
 
@@ -655,6 +665,7 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_single_data_point(self):
         """Test with single data point."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -671,6 +682,7 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_no_initial_guess(self):
         """Test without initial parameter guess."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -727,7 +739,9 @@ class TestPropertyBasedAlgorithmSelection(unittest.TestCase):
         self.assertIn(recommendations["algorithm"], ["trf", "lm", "dogbox"])
 
         # Check that loss is valid
-        self.assertIn(recommendations["loss"], ["linear", "huber", "soft_l1", "cauchy", "arctan"])
+        self.assertIn(
+            recommendations["loss"], ["linear", "huber", "soft_l1", "cauchy", "arctan"]
+        )
 
         # Check that tolerances are positive
         self.assertGreater(recommendations["ftol"], 0)

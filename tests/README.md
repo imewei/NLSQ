@@ -224,6 +224,7 @@ pytest -m slow -v
 ```python
 import jax.numpy as jnp
 
+
 def test_jax_compatibility():
     """Test that functions work with JAX arrays."""
     x = jnp.array([1.0, 2.0, 3.0])
@@ -365,6 +366,7 @@ if __name__ == "__main__":
        """Test successful execution."""
        result = function(valid_input)
        assert result.success
+
 
    def test_failure_case(self):
        """Test error handling."""

@@ -140,7 +140,7 @@ return OptimizeResult(
     fun=f_true,
     jac=J,
     grad=np.array(g_jnp),  # Convert array for return
-    ...
+    ...,
 )
 ```
 

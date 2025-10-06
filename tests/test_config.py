@@ -220,7 +220,9 @@ class TestMemoryConfig(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             MemoryConfig(memory_limit_gb=0.05)
 
-        self.assertIn("memory_limit_gb must be between 0.1 and 1024", str(ctx.exception))
+        self.assertIn(
+            "memory_limit_gb must be between 0.1 and 1024", str(ctx.exception)
+        )
 
     def test_memory_limit_too_high(self):
         """Test validation error when memory_limit_gb is too high."""
@@ -229,7 +231,9 @@ class TestMemoryConfig(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             MemoryConfig(memory_limit_gb=2048.0)
 
-        self.assertIn("memory_limit_gb must be between 0.1 and 1024", str(ctx.exception))
+        self.assertIn(
+            "memory_limit_gb must be between 0.1 and 1024", str(ctx.exception)
+        )
 
     def test_memory_limit_boundary_valid(self):
         """Test memory_limit_gb at valid boundaries."""
@@ -250,7 +254,9 @@ class TestMemoryConfig(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             MemoryConfig(gpu_memory_fraction=0.0)
 
-        self.assertIn("gpu_memory_fraction must be between 0.0 and 1.0", str(ctx.exception))
+        self.assertIn(
+            "gpu_memory_fraction must be between 0.0 and 1.0", str(ctx.exception)
+        )
 
     def test_gpu_memory_fraction_too_high(self):
         """Test validation error when gpu_memory_fraction is too high."""
@@ -259,7 +265,9 @@ class TestMemoryConfig(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             MemoryConfig(gpu_memory_fraction=1.5)
 
-        self.assertIn("gpu_memory_fraction must be between 0.0 and 1.0", str(ctx.exception))
+        self.assertIn(
+            "gpu_memory_fraction must be between 0.0 and 1.0", str(ctx.exception)
+        )
 
     def test_gpu_memory_fraction_boundary_valid(self):
         """Test gpu_memory_fraction at valid boundaries."""
@@ -308,7 +316,10 @@ class TestMemoryConfig(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             MemoryConfig(out_of_memory_strategy="invalid")
 
-        self.assertIn("out_of_memory_strategy must be 'fallback', 'reduce', or 'error'", str(ctx.exception))
+        self.assertIn(
+            "out_of_memory_strategy must be 'fallback', 'reduce', or 'error'",
+            str(ctx.exception),
+        )
 
     def test_valid_out_of_memory_strategies(self):
         """Test all valid out_of_memory_strategy values."""
@@ -388,7 +399,10 @@ class TestLargeDatasetConfig(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             LargeDatasetConfig(sampling_strategy="invalid")
 
-        self.assertIn("sampling_strategy must be 'random', 'uniform', or 'stratified'", str(ctx.exception))
+        self.assertIn(
+            "sampling_strategy must be 'random', 'uniform', or 'stratified'",
+            str(ctx.exception),
+        )
 
     def test_valid_sampling_strategies(self):
         """Test all valid sampling_strategy values."""
@@ -400,15 +414,15 @@ class TestLargeDatasetConfig(unittest.TestCase):
 
     def test_max_sampled_size_larger_than_threshold_warning(self):
         """Test warning when max_sampled_size > sampling_threshold."""
-        from nlsq.config import LargeDatasetConfig
         import warnings
+
+        from nlsq.config import LargeDatasetConfig
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
 
             config = LargeDatasetConfig(
-                sampling_threshold=10_000_000,
-                max_sampled_size=20_000_000
+                sampling_threshold=10_000_000, max_sampled_size=20_000_000
             )
 
             # Check that a warning was issued
@@ -436,7 +450,7 @@ class TestMemoryConfigFunctions(unittest.TestCase):
 
     def test_get_memory_config_function(self):
         """Test get_memory_config function."""
-        from nlsq.config import get_memory_config, MemoryConfig
+        from nlsq.config import MemoryConfig, get_memory_config
 
         config = get_memory_config()
 
@@ -445,7 +459,7 @@ class TestMemoryConfigFunctions(unittest.TestCase):
 
     def test_set_memory_limits_basic(self):
         """Test set_memory_limits function with basic parameters."""
-        from nlsq.config import get_memory_config, set_memory_limits, JAXConfig
+        from nlsq.config import JAXConfig, get_memory_config, set_memory_limits
 
         original_config = get_memory_config()
 
@@ -460,15 +474,13 @@ class TestMemoryConfigFunctions(unittest.TestCase):
 
     def test_set_memory_limits_with_gpu_fraction(self):
         """Test set_memory_limits with GPU memory fraction."""
-        from nlsq.config import get_memory_config, set_memory_limits, JAXConfig
+        from nlsq.config import JAXConfig, get_memory_config, set_memory_limits
 
         original_config = get_memory_config()
 
         try:
             set_memory_limits(
-                memory_limit_gb=24.0,
-                gpu_memory_fraction=0.9,
-                safety_factor=0.85
+                memory_limit_gb=24.0, gpu_memory_fraction=0.9, safety_factor=0.85
             )
 
             new_config = get_memory_config()
@@ -480,7 +492,11 @@ class TestMemoryConfigFunctions(unittest.TestCase):
 
     def test_enable_mixed_precision_fallback_function(self):
         """Test enable_mixed_precision_fallback function."""
-        from nlsq.config import get_memory_config, enable_mixed_precision_fallback, JAXConfig
+        from nlsq.config import (
+            JAXConfig,
+            enable_mixed_precision_fallback,
+            get_memory_config,
+        )
 
         original_config = get_memory_config()
 
@@ -499,7 +515,7 @@ class TestMemoryConfigFunctions(unittest.TestCase):
 
     def test_get_large_dataset_config_function(self):
         """Test get_large_dataset_config function."""
-        from nlsq.config import get_large_dataset_config, LargeDatasetConfig
+        from nlsq.config import LargeDatasetConfig, get_large_dataset_config
 
         config = get_large_dataset_config()
 
@@ -508,7 +524,12 @@ class TestMemoryConfigFunctions(unittest.TestCase):
 
     def test_configure_for_large_datasets(self):
         """Test configure_for_large_datasets function."""
-        from nlsq.config import get_large_dataset_config, get_memory_config, configure_for_large_datasets, JAXConfig
+        from nlsq.config import (
+            JAXConfig,
+            configure_for_large_datasets,
+            get_large_dataset_config,
+            get_memory_config,
+        )
 
         original_ld_config = get_large_dataset_config()
         original_mem_config = get_memory_config()
@@ -519,7 +540,7 @@ class TestMemoryConfigFunctions(unittest.TestCase):
                 enable_sampling=True,
                 enable_chunking=False,
                 progress_reporting=True,
-                mixed_precision_fallback=False
+                mixed_precision_fallback=False,
             )
 
             ld_config = get_large_dataset_config()
@@ -543,7 +564,7 @@ class TestMemoryContextManager(unittest.TestCase):
 
     def test_memory_context_manager(self):
         """Test memory_context context manager."""
-        from nlsq.config import get_memory_config, memory_context, MemoryConfig
+        from nlsq.config import MemoryConfig, get_memory_config, memory_context
 
         original_config = get_memory_config()
 
@@ -561,7 +582,7 @@ class TestMemoryContextManager(unittest.TestCase):
 
     def test_memory_context_nested(self):
         """Test nested memory_context managers."""
-        from nlsq.config import get_memory_config, memory_context, MemoryConfig
+        from nlsq.config import MemoryConfig, get_memory_config, memory_context
 
         config1 = MemoryConfig(memory_limit_gb=16.0)
         config2 = MemoryConfig(memory_limit_gb=32.0)
@@ -582,13 +603,16 @@ class TestMemoryContextManager(unittest.TestCase):
 
     def test_large_dataset_context_manager(self):
         """Test large_dataset_context context manager."""
-        from nlsq.config import get_large_dataset_config, large_dataset_context, LargeDatasetConfig
+        from nlsq.config import (
+            LargeDatasetConfig,
+            get_large_dataset_config,
+            large_dataset_context,
+        )
 
         original_config = get_large_dataset_config()
 
         temp_config = LargeDatasetConfig(
-            enable_sampling=False,
-            sampling_threshold=200_000_000
+            enable_sampling=False, sampling_threshold=200_000_000
         )
 
         with large_dataset_context(temp_config):
@@ -599,11 +623,17 @@ class TestMemoryContextManager(unittest.TestCase):
         # Should restore original
         restored = get_large_dataset_config()
         self.assertEqual(restored.enable_sampling, original_config.enable_sampling)
-        self.assertEqual(restored.sampling_threshold, original_config.sampling_threshold)
+        self.assertEqual(
+            restored.sampling_threshold, original_config.sampling_threshold
+        )
 
     def test_large_dataset_context_nested(self):
         """Test nested large_dataset_context managers."""
-        from nlsq.config import get_large_dataset_config, large_dataset_context, LargeDatasetConfig
+        from nlsq.config import (
+            LargeDatasetConfig,
+            get_large_dataset_config,
+            large_dataset_context,
+        )
 
         config1 = LargeDatasetConfig(sampling_threshold=50_000_000)
         config2 = LargeDatasetConfig(sampling_threshold=100_000_000)
@@ -614,13 +644,17 @@ class TestMemoryContextManager(unittest.TestCase):
             self.assertEqual(get_large_dataset_config().sampling_threshold, 50_000_000)
 
             with large_dataset_context(config2):
-                self.assertEqual(get_large_dataset_config().sampling_threshold, 100_000_000)
+                self.assertEqual(
+                    get_large_dataset_config().sampling_threshold, 100_000_000
+                )
 
             # Should restore to config1
             self.assertEqual(get_large_dataset_config().sampling_threshold, 50_000_000)
 
         # Should restore to original
-        self.assertEqual(get_large_dataset_config().sampling_threshold, original.sampling_threshold)
+        self.assertEqual(
+            get_large_dataset_config().sampling_threshold, original.sampling_threshold
+        )
 
 
 class TestConfigEdgeCases(unittest.TestCase):
@@ -630,10 +664,7 @@ class TestConfigEdgeCases(unittest.TestCase):
         """Test MemoryConfig with None for optional fields."""
         from nlsq.config import MemoryConfig
 
-        config = MemoryConfig(
-            gpu_memory_fraction=None,
-            chunk_size_mb=None
-        )
+        config = MemoryConfig(gpu_memory_fraction=None, chunk_size_mb=None)
 
         self.assertIsNone(config.gpu_memory_fraction)
         self.assertIsNone(config.chunk_size_mb)
@@ -647,7 +678,7 @@ class TestConfigEdgeCases(unittest.TestCase):
             gpu_memory_fraction=0.01,
             safety_factor=0.1,
             min_chunk_size=1,
-            max_chunk_size=1_000_000_000
+            max_chunk_size=1_000_000_000,
         )
 
         self.assertEqual(config.memory_limit_gb, 0.1)
@@ -664,7 +695,12 @@ class TestConfigEdgeCases(unittest.TestCase):
 
     def test_set_memory_limits_preserves_other_settings(self):
         """Test that set_memory_limits preserves other configuration settings."""
-        from nlsq.config import get_memory_config, set_memory_limits, MemoryConfig, JAXConfig
+        from nlsq.config import (
+            JAXConfig,
+            MemoryConfig,
+            get_memory_config,
+            set_memory_limits,
+        )
 
         original = get_memory_config()
 
@@ -673,7 +709,7 @@ class TestConfigEdgeCases(unittest.TestCase):
             custom = MemoryConfig(
                 memory_limit_gb=10.0,
                 progress_reporting=False,
-                out_of_memory_strategy="error"
+                out_of_memory_strategy="error",
             )
             JAXConfig.set_memory_config(custom)
 

@@ -12,8 +12,8 @@ import unittest
 import warnings
 from typing import Tuple
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from nlsq.validators import InputValidator, validate_inputs
@@ -61,8 +61,8 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         xdata = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         ydata = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertEqual(len(errors), 0)
@@ -74,8 +74,8 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         xdata = [1.0, 2.0, 3.0, 4.0, 5.0]
         ydata = [2.0, 4.0, 6.0, 8.0, 10.0]
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertEqual(len(errors), 0)
@@ -93,8 +93,10 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         xdata_np = np.array(xdata)
         ydata_np = np.array(ydata)
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata_np, ydata_np
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, xdata_np, ydata_np
+            )
         )
 
         self.assertEqual(len(errors), 0)
@@ -104,8 +106,8 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         xdata = np.array([1.0])
         ydata = np.array([2.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertTrue(any("at least 2 data points" in e for e in errors))
@@ -115,8 +117,8 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         xdata = np.array([1.0, 2.0, 3.0])
         ydata = np.array([2.0, 4.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertTrue(any("same length" in e for e in errors))
@@ -128,8 +130,8 @@ class TestValidateCurveFitBasic(unittest.TestCase):
 
         # Scalars cause TypeError during validation, not a validation error
         with self.assertRaises(TypeError):
-            errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-                self.linear_func, xdata, ydata
+            errors, warnings_list, x_clean, y_clean = (
+                self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
             )
 
     def test_insufficient_points_for_parameters(self):
@@ -138,12 +140,14 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         xdata = np.array([1.0, 2.0])
         ydata = np.array([2.0, 4.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         # Should have error about needing more points than parameters
-        self.assertTrue(any("more data points" in e and "parameters" in e for e in errors))
+        self.assertTrue(
+            any("more data points" in e and "parameters" in e for e in errors)
+        )
 
 
 class TestValidateCurveFitEdgeCases(unittest.TestCase):
@@ -163,8 +167,8 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([2.0, 2.0, 2.0, 2.0, 2.0])
         ydata = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertTrue(any("x values are identical" in e for e in errors))
@@ -174,8 +178,8 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         ydata = np.array([5.0, 5.0, 5.0, 5.0, 5.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertTrue(any("y values are identical" in w for w in warnings_list))
@@ -185,8 +189,8 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([1.0, 1.0 + 1e-12, 1.0 + 2e-12, 1.0 + 3e-12])
         ydata = np.array([1.0, 2.0, 3.0, 4.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertTrue(any("x data range is very small" in w for w in warnings_list))
@@ -196,8 +200,8 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([0.0, 1e11, 2e11, 3e11])
         ydata = np.array([1.0, 2.0, 3.0, 4.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertTrue(any("x data range is very large" in w for w in warnings_list))
@@ -207,8 +211,8 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([1.0, 2.0, 3.0, 4.0])
         ydata = np.array([1.0, 1.0 + 1e-12, 1.0 + 2e-12, 1.0 + 3e-12])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
         self.assertTrue(any("y data range is very small" in w for w in warnings_list))
@@ -218,8 +222,10 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
         ydata = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata, check_finite=True
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, xdata, ydata, check_finite=True
+            )
         )
 
         self.assertTrue(any("NaN or Inf" in e and "xdata" in e for e in errors))
@@ -229,8 +235,10 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         ydata = np.array([2.0, 4.0, np.inf, 8.0, 10.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata, check_finite=True
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, xdata, ydata, check_finite=True
+            )
         )
 
         self.assertTrue(any("NaN or Inf" in e and "ydata" in e for e in errors))
@@ -240,8 +248,10 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
         xdata = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
         ydata = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, xdata, ydata, check_finite=False
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, xdata, ydata, check_finite=False
+            )
         )
 
         # Should not have NaN/Inf error
@@ -266,8 +276,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test validation with valid initial parameters."""
         p0 = np.array([1.0, 1.0])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, p0=p0
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, p0=p0
+            )
         )
 
         self.assertEqual(len(errors), 0)
@@ -276,8 +288,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test error when p0 has wrong number of parameters."""
         p0 = np.array([1.0, 1.0, 1.0])  # 3 params, but function needs 2
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, p0=p0
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, p0=p0
+            )
         )
 
         self.assertTrue(any("p0 has" in e and "parameters" in e for e in errors))
@@ -286,8 +300,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test error when p0 contains NaN."""
         p0 = np.array([1.0, np.nan])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, p0=p0
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, p0=p0
+            )
         )
 
         self.assertTrue(any("p0 contains NaN or Inf" in e for e in errors))
@@ -296,8 +312,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test validation with valid bounds."""
         bounds = (np.array([0.0, 0.0]), np.array([10.0, 10.0]))
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, bounds=bounds
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, bounds=bounds
+            )
         )
 
         self.assertEqual(len(errors), 0)
@@ -306,29 +324,40 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test error when bounds has wrong length."""
         bounds = (np.array([0.0]), np.array([10.0]))  # 1 param, but function needs 2
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, bounds=bounds
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, bounds=bounds
+            )
         )
 
         self.assertTrue(any("bounds must have length" in e for e in errors))
 
     def test_bounds_lower_greater_than_upper_error(self):
         """Test error when lower bounds >= upper bounds."""
-        bounds = (np.array([10.0, 5.0]), np.array([5.0, 10.0]))  # First param has lb >= ub
+        bounds = (
+            np.array([10.0, 5.0]),
+            np.array([5.0, 10.0]),
+        )  # First param has lb >= ub
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, bounds=bounds
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, bounds=bounds
+            )
         )
 
-        self.assertTrue(any("Lower bounds must be less than upper bounds" in e for e in errors))
+        self.assertTrue(
+            any("Lower bounds must be less than upper bounds" in e for e in errors)
+        )
 
     def test_p0_outside_bounds_warning(self):
         """Test warning when p0 is outside bounds."""
         p0 = np.array([15.0, 15.0])  # Outside bounds
         bounds = (np.array([0.0, 0.0]), np.array([10.0, 10.0]))
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, p0=p0, bounds=bounds
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, p0=p0, bounds=bounds
+            )
         )
 
         self.assertTrue(any("p0 is outside bounds" in w for w in warnings_list))
@@ -337,8 +366,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test validation with valid sigma."""
         sigma = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, sigma=sigma
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, sigma=sigma
+            )
         )
 
         self.assertEqual(len(errors), 0)
@@ -347,8 +378,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test error when sigma has wrong shape."""
         sigma = np.array([0.1, 0.1, 0.1])  # 3 elements, but ydata has 5
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, sigma=sigma
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, sigma=sigma
+            )
         )
 
         self.assertTrue(any("sigma must have same shape as ydata" in e for e in errors))
@@ -357,8 +390,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test error when sigma contains negative values."""
         sigma = np.array([0.1, 0.1, -0.1, 0.1, 0.1])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, sigma=sigma
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, sigma=sigma
+            )
         )
 
         self.assertTrue(any("sigma values must be positive" in e for e in errors))
@@ -367,8 +402,10 @@ class TestValidateCurveFitParameters(unittest.TestCase):
         """Test error when sigma contains NaN."""
         sigma = np.array([0.1, 0.1, np.nan, 0.1, 0.1])
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.linear_func, self.xdata, self.ydata, sigma=sigma
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, self.xdata, self.ydata, sigma=sigma
+            )
         )
 
         self.assertTrue(any("sigma contains NaN or Inf" in e for e in errors))
@@ -397,8 +434,8 @@ class TestValidateCurveFitMultidimensional(unittest.TestCase):
         xdata = (x, y)
         zdata = np.random.rand(50)
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.gaussian_2d, xdata, zdata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.gaussian_2d, xdata, zdata)
         )
 
         # Should have warning about tuple
@@ -411,8 +448,8 @@ class TestValidateCurveFitMultidimensional(unittest.TestCase):
         xdata = (x, y)
         zdata = np.random.rand(50)
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            self.gaussian_2d, xdata, zdata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(self.gaussian_2d, xdata, zdata)
         )
 
         self.assertTrue(any("same length" in e for e in errors))
@@ -426,8 +463,8 @@ class TestValidateCurveFitMultidimensional(unittest.TestCase):
         def multi_var_func(x, a, b, c):
             return a * x[:, 0] + b * x[:, 1] + c
 
-        errors, warnings_list, x_clean, y_clean = self.validator.validate_curve_fit_inputs(
-            multi_var_func, xdata, ydata
+        errors, warnings_list, x_clean, y_clean = (
+            self.validator.validate_curve_fit_inputs(multi_var_func, xdata, ydata)
         )
 
         # Should have warning about independent variables
@@ -474,8 +511,8 @@ class TestValidateLeastSquaresInputs(unittest.TestCase):
 
         # Scalars cause TypeError during validation, not a validation error
         with self.assertRaises(TypeError):
-            errors, warnings_list, x0_clean = self.validator.validate_least_squares_inputs(
-                self.residuals_func, x0
+            errors, warnings_list, x0_clean = (
+                self.validator.validate_least_squares_inputs(self.residuals_func, x0)
             )
 
     def test_x0_with_nan_error(self):
@@ -503,8 +540,10 @@ class TestValidateLeastSquaresInputs(unittest.TestCase):
         x0 = np.array([1.0, 2.0, 3.0])
 
         for method in ["trf", "dogbox", "lm"]:
-            errors, warnings_list, x0_clean = self.validator.validate_least_squares_inputs(
-                self.residuals_func, x0, method=method
+            errors, warnings_list, x0_clean = (
+                self.validator.validate_least_squares_inputs(
+                    self.residuals_func, x0, method=method
+                )
             )
 
             self.assertEqual(len(errors), 0)
