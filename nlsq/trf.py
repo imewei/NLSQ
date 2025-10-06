@@ -98,6 +98,7 @@ from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
 import jax.numpy as jnp
 from jax import jit
+from jax.numpy.linalg import norm as jnorm
 from jax.tree_util import tree_flatten
 
 # Setup logging
@@ -891,10 +892,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
         else:
             cost_jnp = self.default_loss_func(f)
-        cost = np.array(cost_jnp)
+        # Keep cost as JAX array for performance (convert only when needed)
+        cost = cost_jnp
 
         g_jnp = self.compute_grad(J, f)
-        g = np.array(g_jnp)
+        # Keep gradient as JAX array for performance
+        g = g_jnp
         jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
             scale, scale_inv = self.cJIT.compute_jac_scale(J)
@@ -922,7 +925,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         with self.logger.timer("optimization", log_result=False):
             while True:
                 # Check gradient convergence
-                g_norm = norm(g, ord=np.inf)
+                g_norm = jnorm(g, ord=jnp.inf)
                 if g_norm < gtol:
                     termination_status = 1
                     self.logger.debug(
@@ -994,7 +997,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
                         J_h, g_h_jnp, step_h
                     )
-                    predicted_reduction = np.array(predicted_reduction_jnp)
+                    # Keep as JAX array for performance
+                    predicted_reduction = predicted_reduction_jnp
 
                     # Transform step and evaluate objective
                     step = d * step_h
@@ -1015,7 +1019,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         )
                     else:
                         cost_new_jnp = self.default_loss_func(f_new)
-                    cost_new = np.array(cost_new_jnp)
+                    # Keep as JAX array for performance
+                    cost_new = cost_new_jnp
                     actual_reduction = cost - cost_new
 
                     # Update trust region radius
@@ -1065,7 +1070,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
 
                     g_jnp = self.compute_grad(J, f)
-                    g = np.array(g_jnp)
+                    # Keep as JAX array for performance
+                    g = g_jnp
                     if jac_scale:
                         scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
                 else:
@@ -1078,13 +1084,14 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             termination_status = 0
 
         active_mask = np.zeros_like(x)
+        # Convert JAX arrays to NumPy for final return
         return OptimizeResult(
             x=x,
-            cost=cost,
+            cost=float(cost),  # Convert JAX scalar to Python float
             fun=f_true,
             jac=J,
-            grad=g,
-            optimality=g_norm,
+            grad=np.array(g),  # Convert JAX array to NumPy
+            optimality=float(g_norm),  # Convert JAX scalar to Python float
             active_mask=active_mask,
             nfev=nfev,
             njev=njev,
@@ -1210,10 +1217,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         else:
             cost_jnp = self.default_loss_func(f)
 
-        cost = np.array(cost_jnp)
+        # Keep cost as JAX array for performance (convert only when needed)
+        cost = cost_jnp
 
         g_jnp = self.compute_grad(J, f)
-        g = np.array(g_jnp)
+        # Keep gradient as JAX array for performance
+        g = g_jnp
 
         jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
@@ -1228,7 +1237,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if Delta == 0:
             Delta = 1.0
 
-        g_norm = norm(g * v, ord=np.inf)
+        # Use JAX norm for gradient norm calculation
+        g_norm = jnorm(g * v, ord=jnp.inf)
 
         if max_nfev is None:
             max_nfev = x0.size * 100
@@ -1247,7 +1257,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         while True:
             v, dv = CL_scaling_vector(x, g, lb, ub)
 
-            g_norm = norm(g * v, ord=np.inf)
+            # Use JAX norm for gradient norm calculation
+            g_norm = jnorm(g * v, ord=jnp.inf)
             if g_norm < gtol:
                 termination_status = 1
 
@@ -1344,7 +1355,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     )
                 else:
                     cost_new_jnp = self.default_loss_func(f_new)
-                cost_new = np.array(cost_new_jnp)
+                # Keep as JAX array for performance
+                cost_new = cost_new_jnp
 
                 actual_reduction = cost - cost_new
                 Delta_new, ratio = update_tr_radius(
@@ -1392,7 +1404,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 g_jnp = self.compute_grad(J, f)
                 if jac_scale:
                     scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
-                g = np.array(g_jnp)
+                # Keep as JAX array for performance
+                g = g_jnp
             else:
                 step_norm = 0
                 actual_reduction = 0
@@ -1403,13 +1416,14 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             termination_status = 0
 
         active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
+        # Convert JAX arrays to NumPy for final return
         return OptimizeResult(
             x=x,
-            cost=cost,
+            cost=float(cost),  # Convert JAX scalar to Python float
             fun=f_true,
             jac=J,
-            grad=g,
-            optimality=g_norm,
+            grad=np.array(g),  # Convert JAX array to NumPy
+            optimality=float(g_norm),  # Convert JAX scalar to Python float
             active_mask=active_mask,
             nfev=nfev,
             njev=njev,
