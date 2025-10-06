@@ -324,7 +324,7 @@ class NLSQLogger:
             try:
                 cond = np.linalg.cond(matrix)
                 info["condition"] = f"{cond:.2e}"
-            except:
+            except (np.linalg.LinAlgError, ValueError):
                 info["condition"] = "failed"
 
         message = " | ".join(f"{k}={v}" for k, v in info.items())
@@ -361,7 +361,7 @@ class NLSQLogger:
                 if isinstance(val, str):
                     try:
                         val = float(val.replace("e", "E"))
-                    except:
+                    except (ValueError, AttributeError):
                         val = np.nan
                 values.append(val)
             data[key] = np.array(values)

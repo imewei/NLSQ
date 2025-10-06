@@ -5,8 +5,8 @@ particularly Jacobian evaluations and function calls.
 """
 
 import hashlib
+import json
 import os
-import pickle
 import time
 import warnings
 from collections.abc import Callable
@@ -170,11 +170,10 @@ class SmartCache:
 
         # Check disk cache
         if self.disk_cache_enabled:
-            cache_file = os.path.join(self.cache_dir, f"{key}.pkl")
+            cache_file = os.path.join(self.cache_dir, f"{key}.npz")
             if os.path.exists(cache_file):
                 try:
-                    with open(cache_file, "rb") as f:
-                        value = pickle.load(f)  # nosec B301
+                    value = self._load_from_disk(cache_file)
 
                     if self.enable_stats:
                         self.cache_stats["hits"] += 1
@@ -210,10 +209,9 @@ class SmartCache:
 
         # Save to disk cache
         if self.disk_cache_enabled:
-            cache_file = os.path.join(self.cache_dir, f"{key}.pkl")
+            cache_file = os.path.join(self.cache_dir, f"{key}.npz")
             try:
-                with open(cache_file, "wb") as f:
-                    pickle.dump(value, f, protocol=pickle.HIGHEST_PROTOCOL)
+                self._save_to_disk(cache_file, value)
             except Exception as e:
                 warnings.warn(f"Could not save to disk cache: {e}")
 
@@ -258,10 +256,10 @@ class SmartCache:
             if self.disk_cache_enabled:
                 try:
                     for file in os.listdir(self.cache_dir):
-                        if file.endswith(".pkl"):
+                        if file.endswith(".npz"):
                             os.remove(os.path.join(self.cache_dir, file))
-                except:
-                    pass
+                except OSError as e:
+                    warnings.warn(f"Could not clear disk cache: {e}")
         else:
             # Clear specific key
             if key in self.memory_cache:
@@ -270,7 +268,7 @@ class SmartCache:
                 del self.access_count[key]
 
             if self.disk_cache_enabled:
-                cache_file = os.path.join(self.cache_dir, f"{key}.pkl")
+                cache_file = os.path.join(self.cache_dir, f"{key}.npz")
                 if os.path.exists(cache_file):
                     with contextlib.suppress(builtins.BaseException):
                         os.remove(cache_file)
@@ -312,6 +310,78 @@ class SmartCache:
 
         for key in keys_to_remove:
             self.invalidate(key)
+
+    def _save_to_disk(self, cache_file: str, value: Any):
+        """Save value to disk using safe serialization.
+
+        Uses numpy.savez for arrays and JSON for other data types.
+        This is much safer than pickle as it doesn't execute arbitrary code.
+
+        Parameters
+        ----------
+        cache_file : str
+            Path to cache file
+        value : Any
+            Value to save
+        """
+        # Check if value is array-like (numpy or JAX array)
+        if isinstance(value, (np.ndarray, jnp.ndarray)):
+            # Convert JAX array to numpy for saving
+            if isinstance(value, jnp.ndarray):
+                value = np.asarray(value)
+            np.savez_compressed(cache_file, data=value)
+        elif isinstance(value, (dict, list, str, int, float, bool, type(None))):
+            # Use JSON for simple data types
+            json_file = cache_file.replace('.npz', '.json')
+            with open(json_file, 'w') as f:
+                json.dump(value, f)
+        elif isinstance(value, tuple) and all(isinstance(v, (np.ndarray, jnp.ndarray)) for v in value):
+            # Handle tuple of arrays (common for multi-output functions)
+            arrays_dict: dict[str, Any] = {f'arr_{i}': np.asarray(v) for i, v in enumerate(value)}
+            arrays_dict['_is_tuple'] = np.array([True])
+            arrays_dict['_length'] = np.array([len(value)])
+            np.savez_compressed(cache_file, **arrays_dict)
+        else:
+            # For other types, convert to numpy array if possible
+            try:
+                arr = np.asarray(value)
+                np.savez_compressed(cache_file, data=arr)
+            except (ValueError, TypeError):
+                warnings.warn(f"Cannot safely cache type {type(value).__name__}, skipping disk cache")
+
+    def _load_from_disk(self, cache_file: str) -> Any:
+        """Load value from disk using safe deserialization.
+
+        Uses numpy.load for arrays and JSON for other data types.
+
+        Parameters
+        ----------
+        cache_file : str
+            Path to cache file
+
+        Returns
+        -------
+        value : Any
+            Loaded value
+        """
+        # Check if JSON file exists
+        json_file = cache_file.replace('.npz', '.json')
+        if os.path.exists(json_file):
+            with open(json_file, 'r') as f:
+                return json.load(f)
+
+        # Load from numpy file
+        with np.load(cache_file, allow_pickle=False) as data:
+            # Check if it's a tuple of arrays
+            if '_is_tuple' in data.files:
+                length = int(data['_length'])
+                return tuple(data[f'arr_{i}'] for i in range(length))
+            # Single array
+            elif 'data' in data.files:
+                return data['data']
+            else:
+                # Legacy format or unknown structure
+                raise ValueError(f"Unknown cache file structure: {data.files}")
 
 
 def cached_function(cache: SmartCache | None = None, ttl: float | None = None):

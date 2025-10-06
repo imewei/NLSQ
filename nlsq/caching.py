@@ -75,7 +75,7 @@ class FunctionCache:
                 else:
                     # Last resort: use object ID (not ideal for persistence)
                     return f"id_{id(func)}"
-            except:
+            except (AttributeError, TypeError, ValueError):
                 return f"id_{id(func)}"
 
     @cache

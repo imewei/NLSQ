@@ -12,6 +12,8 @@ import warnings
 
 import numpy as np
 import pytest
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
 
 from nlsq.diagnostics import (
     ConvergenceMonitor,
@@ -94,6 +96,102 @@ class TestConvergenceMonitor(unittest.TestCase):
         self.assertEqual(len(osc_result), 2)
         self.assertEqual(len(stag_result), 2)
         self.assertEqual(len(div_result), 2)
+
+    @given(
+        costs=st.lists(
+            st.floats(min_value=1e-10, max_value=1e10, allow_nan=False, allow_infinity=False),
+            min_size=1,
+            max_size=20
+        ),
+        n_params=st.integers(min_value=1, max_value=10)
+    )
+    @settings(max_examples=50, deadline=1000)
+    def test_pattern_detection_robustness_property(self, costs, n_params):
+        """Property-based test: Pattern detection always returns valid tuples."""
+        monitor = ConvergenceMonitor()
+
+        # Feed the monitor with generated cost data
+        for cost in costs:
+            params = np.random.randn(n_params)
+            monitor.update(cost, params)
+
+        # Pattern detection methods should always return valid tuples
+        osc_result = monitor.detect_oscillation()
+        stag_result = monitor.detect_stagnation()
+        div_result = monitor.detect_divergence()
+
+        # Check structure
+        assert isinstance(osc_result, tuple) and len(osc_result) == 2
+        assert isinstance(stag_result, tuple) and len(stag_result) == 2
+        assert isinstance(div_result, tuple) and len(div_result) == 2
+
+        # Check first element is bool
+        assert isinstance(osc_result[0], (bool, np.bool_))
+        assert isinstance(stag_result[0], (bool, np.bool_))
+        assert isinstance(div_result[0], (bool, np.bool_))
+
+        # Check second element is numeric
+        assert isinstance(osc_result[1], (float, np.floating))
+        assert isinstance(stag_result[1], (float, np.floating))
+        assert isinstance(div_result[1], (float, np.floating))
+
+        # Check scores are finite (can be negative for divergence)
+        assert np.isfinite(osc_result[1])
+        assert np.isfinite(stag_result[1])
+        assert np.isfinite(div_result[1])
+        # Oscillation and stagnation scores should be non-negative
+        assert osc_result[1] >= 0
+        assert stag_result[1] >= 0
+
+    @given(
+        window_size=st.integers(min_value=5, max_value=50),
+        sensitivity=st.floats(min_value=0.1, max_value=10.0, allow_nan=False, allow_infinity=False),
+        n_iterations=st.integers(min_value=5, max_value=30)
+    )
+    @settings(max_examples=50, deadline=1000)
+    def test_convergence_monitor_numerical_stability_property(self, window_size, sensitivity, n_iterations):
+        """Property-based test: ConvergenceMonitor handles various configurations gracefully."""
+        monitor = ConvergenceMonitor(window_size=window_size, sensitivity=sensitivity)
+
+        # Generate monotonically decreasing costs (converging scenario)
+        initial_cost = 1000.0
+        for i in range(n_iterations):
+            cost = initial_cost / (i + 1)  # Monotonically decreasing
+            params = np.random.randn(3)
+            gradient = np.random.randn(3) * 0.1
+            step_size = 1.0 / (i + 1)
+
+            monitor.update(cost, params, gradient=gradient, step_size=step_size)
+
+        # Should have valid history
+        assert len(monitor.cost_history) > 0
+        assert len(monitor.cost_history) <= window_size
+        assert len(monitor.param_history) == len(monitor.cost_history)
+
+        # Get convergence rate if enough data
+        if len(monitor.cost_history) >= 3:
+            rate = monitor.get_convergence_rate()
+            # For converging scenario, rate should be positive or None
+            assert rate is None or (isinstance(rate, (float, np.floating)) and np.isfinite(rate))
+
+        # Pattern detection should work without errors
+        osc_detected, osc_score = monitor.detect_oscillation()
+        stag_detected, stag_score = monitor.detect_stagnation()
+        div_detected, div_score = monitor.detect_divergence()
+
+        # All detections should return valid boolean values
+        assert isinstance(osc_detected, (bool, np.bool_))
+        assert isinstance(stag_detected, (bool, np.bool_))
+        assert isinstance(div_detected, (bool, np.bool_))
+
+        # All scores should be finite
+        assert np.isfinite(osc_score)
+        assert np.isfinite(stag_score)
+        assert np.isfinite(div_score)
+        # Oscillation and stagnation scores should be non-negative
+        assert osc_score >= 0
+        assert stag_score >= 0
+        # Divergence score is a slope and can be negative (converging)
 
 
 class TestOptimizationDiagnostics(unittest.TestCase):

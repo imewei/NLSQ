@@ -12,7 +12,7 @@ __all__ = [
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from typing import Tuple, Union
+    from typing import Union
 
     VERSION_TUPLE = tuple[Union[int, str], ...]
     COMMIT_ID = Union[str, None]

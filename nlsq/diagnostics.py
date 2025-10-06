@@ -372,7 +372,7 @@ class OptimizationDiagnostics:
                     self.numerical_issues.append(
                         f"Iteration {iteration}: Ill-conditioned Jacobian (cond={condition_number:.2e})"
                     )
-            except:
+            except (np.linalg.LinAlgError, ValueError):
                 data["jacobian_condition"] = np.inf
 
         # Step information
@@ -471,7 +471,7 @@ class OptimizationDiagnostics:
             try:
                 process = psutil.Process()
                 return process.memory_info().rss / 1024 / 1024
-            except:
+            except (OSError, AttributeError):
                 return 0.0
         return 0.0
 

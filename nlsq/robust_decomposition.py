@@ -15,7 +15,6 @@ from jax.scipy.linalg import svd as jax_svd
 from nlsq.logging import get_logger
 
 # Import the existing SVD fallback utilities
-from nlsq.svd_fallback import with_cpu_fallback
 
 
 class RobustDecomposition:
@@ -278,7 +277,7 @@ class RobustDecomposition:
                 # Reorder to undo pivoting
                 R_reordered = R[:, np.argsort(P)]
                 return jnp.array(Q), jnp.array(R_reordered)
-            except:
+            except (np.linalg.LinAlgError, ValueError, ImportError):
                 # Fall back to basic QR with regularization
                 reg_matrix = matrix + self.eps * jnp.eye(m, n)
                 return self._numpy_decomp(reg_matrix, "qr", *args)
@@ -324,7 +323,7 @@ class RobustDecomposition:
                 # Add diagonal to ensure positive definiteness
                 shift = factor - min_eig + self.eps
                 matrix = matrix + shift * jnp.eye(n)
-        except:
+        except (np.linalg.LinAlgError, ValueError):
             # Fallback: add diagonal regularization
             matrix = matrix + factor * jnp.eye(n)
 
@@ -386,7 +385,7 @@ class RobustDecomposition:
                 and jnp.all(jnp.isfinite(Vt))
                 and jnp.all(s >= 0)  # Singular values must be non-negative
             )
-        except:
+        except (ValueError, TypeError, AttributeError):
             return False
 
     def _validate_qr(self, result: tuple) -> bool:
@@ -405,7 +404,7 @@ class RobustDecomposition:
         try:
             Q, R = result
             return jnp.all(jnp.isfinite(Q)) and jnp.all(jnp.isfinite(R))
-        except:
+        except (ValueError, TypeError, AttributeError):
             return False
 
     def solve_least_squares(self, A: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
@@ -462,7 +461,7 @@ class RobustDecomposition:
                     y = jnp.linalg.solve(L, Atb)
                     x = jnp.linalg.solve(L.T, y)
                     return x
-                except:
+                except (np.linalg.LinAlgError, ValueError):
                     # Ultimate fallback: direct solve with regularization
                     x = jnp.linalg.solve(AtA, Atb)
                     return x
