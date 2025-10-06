@@ -40,6 +40,20 @@ from nlsq.config import (
 )
 from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 
+# Performance optimization modules (Sprint 2)
+from nlsq.compilation_cache import (
+    CompilationCache,
+    cached_jit,
+    clear_compilation_cache,
+    get_global_compilation_cache,
+)
+from nlsq.memory_pool import (
+    MemoryPool,
+    TRFMemoryPool,
+    clear_global_pool,
+    get_global_pool,
+)
+
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
@@ -116,6 +130,16 @@ __all__ = [
     # Version
     "__version__",
     "auto_select_algorithm",
+    # Performance optimization (Sprint 2)
+    "CompilationCache",
+    "cached_jit",
+    "clear_compilation_cache",
+    "get_global_compilation_cache",
+    "MemoryPool",
+    "TRFMemoryPool",
+    "clear_global_pool",
+    "get_global_pool",
+    # Caching support
     "cached_function",
     "cached_jacobian",
     "clear_all_caches",
