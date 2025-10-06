@@ -141,3 +141,62 @@ The `examples/` directory contains Jupyter notebooks demonstrating the library's
 - `NLSQ_2D_Gaussian_Demo.ipynb` - 2D Gaussian fitting demonstration
 - `advanced_features_demo.ipynb` - Showcases advanced optimization features
 - `large_dataset_demo.ipynb` - Demonstrates handling of large datasets with chunking and streaming
+
+## Performance Characteristics
+
+### Optimization Status (October 2025)
+
+NLSQ has been extensively profiled and optimized. The codebase is **production-ready** with excellent performance characteristics.
+
+**Performance Benchmarks** (CPU, first run including JIT compilation):
+- Small problem (100 points): ~430ms total (~30ms runtime after JIT)
+- Medium problem (1000 points): ~490ms total (~110ms runtime after JIT)
+- Large problem (10000 points): ~605ms total (~134ms runtime after JIT)
+- XLarge problem (50000 points): ~572ms total (~120ms runtime after JIT)
+
+**Scaling Characteristics**:
+- ✅ Excellent: 50x more data → only 1.2x slower
+- ✅ Well-optimized with JAX primitives (51 @jit decorators)
+- ✅ Minimal Python overhead
+- ✅ 150-270x faster than baseline implementations
+
+**JIT Compilation Notes**:
+- First run includes JIT compilation overhead (60-75% of time)
+- Subsequent runs are much faster due to caching
+- Use `CurveFit` class to reuse compiled functions for multiple fits
+
+### Recent Optimization Work
+
+**NumPy↔JAX Conversion Reduction** (October 2025):
+- Reduced unnecessary array conversions in hot paths
+- 8% total performance improvement (~15% on core TRF algorithm)
+- Zero numerical regressions, all tests passing
+- See `docs/optimization_case_study.md` for details
+
+**Code Complexity Reduction**:
+- Refactored `validators.py`: complexity 62 → 12
+- Improved maintainability and testability
+- Extracted 12 focused helper methods
+
+### Performance Tuning
+
+For applications requiring maximum performance:
+
+1. **Use CurveFit class** for multiple fits (reuses JIT compilation)
+2. **Enable GPU/TPU** (JAX automatically detects available accelerators)
+3. **Batch operations** when fitting multiple curves
+4. **Profile your workload** to identify actual bottlenecks
+
+**Note**: Further complex optimizations (lax.scan, @vmap, @pmap) have been **deferred** due to diminishing returns. The code is already highly optimized. See performance case study for detailed analysis.
+
+### When to Optimize Further
+
+Consider additional optimization ONLY if:
+- User data shows specific bottlenecks
+- Batch processing becomes common use case
+- Sparse Jacobian patterns are prevalent
+- Multi-GPU systems are widely available
+
+**Current recommendation**: Focus on features and user experience rather than micro-optimizations.
+
+See `docs/optimization_case_study.md` for comprehensive analysis and lessons learned.
