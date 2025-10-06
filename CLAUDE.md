@@ -8,6 +8,60 @@ NLSQ is a GPU/TPU-accelerated nonlinear least squares curve fitting library that
 **Repository**: https://github.com/imewei/NLSQ
 **Maintainer**: Wei Chen (Argonne National Laboratory)
 **Origin**: Enhanced fork of JAXFit by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith
+**Status**: Production-ready (Beta), 70% test coverage, 355 tests passing
+
+## Recent Updates (Updated: 2025-10-06)
+
+### Major Changes (October 2025)
+
+#### Performance Optimization Complete ✅
+- **8% overall performance improvement** (~15% on core TRF algorithm)
+- Eliminated 11 NumPy↔JAX conversions in hot paths (`trf.py`)
+- Zero numerical regressions, all tests passing
+- **Decision**: Further complex optimizations deferred (diminishing returns)
+- See `docs/optimization_case_study.md` for detailed analysis
+
+#### Test Suite Health ✅
+- **100% pass rate achieved** (355 tests, 1 skipped)
+- Fixed JAX immutability error in `common_scipy.py` (`make_strictly_feasible()`)
+- Fixed flaky test in `test_integration.py` (added random seed, relaxed bounds)
+- Coverage: 70% (target 80%)
+
+#### Documentation Updates ✅
+- Added comprehensive codebase analysis: `codebase_analysis.md`
+- Added optimization case study: `docs/optimization_case_study.md`
+- Added performance tuning guide: `docs/performance_tuning_guide.md`
+- Cleaned up obsolete reports (removed 3 duplicate files, ~2.8K lines)
+
+#### Infrastructure Improvements ✅
+- Updated `.gitignore` for optimization artifacts
+- Added profiling and benchmark scripts in `benchmark/`
+- Added PyPI setup documentation: `docs/PYPI_SETUP.md`
+
+### Breaking Changes
+None. All changes are backward compatible.
+
+### Files Changed
+**Modified:**
+- `nlsq/trf.py` - Performance optimization (NumPy↔JAX reduction)
+- `nlsq/common_scipy.py` - JAX immutability fix
+- `tests/test_integration.py` - Flaky test fix
+- `.gitignore` - Added optimization artifacts
+
+**Added:**
+- `docs/optimization_case_study.md` - Performance optimization analysis
+- `docs/performance_tuning_guide.md` - User performance guide
+- `codebase_analysis.md` - Comprehensive codebase analysis
+- `benchmark/profile_trf_hot_paths.py` - Profiling script
+- `benchmark/test_performance_regression.py` - Performance regression tests
+- `benchmark/trf_profiling_summary.md` - Profiling results
+- `benchmark/numpy_jax_optimization_plan.md` - Optimization planning
+- `benchmark/lax_scan_design.md` - lax.scan conversion design (deferred)
+
+**Removed:**
+- `multi-agent-optimization-report.md` - Obsolete (superseded by case study)
+- `optimization_complete_summary.md` - Obsolete (duplicate)
+- `optimization_progress_summary.md` - Obsolete (intermediate state)
 
 ## Development Commands
 
@@ -34,6 +88,9 @@ NLSQ_DEBUG=1 pytest -s
 # Run specific test file
 pytest tests/test_least_squares.py -v
 pytest tests/test_minpack.py -v
+
+# Run specific test
+pytest tests/test_minpack.py::test_exponential_fit -v
 ```
 
 ### Building and Installation
@@ -66,6 +123,18 @@ make type-check
 make clean
 ```
 
+### Performance Profiling
+```bash
+# Profile TRF hot paths
+python benchmark/profile_trf_hot_paths.py
+
+# Run performance regression tests
+pytest benchmark/test_performance_regression.py -v
+
+# View profiling summary
+cat benchmark/trf_profiling_summary.md
+```
+
 ## Architecture
 
 ### Core Components
@@ -75,7 +144,7 @@ The library is organized around several key modules in the `nlsq/` directory:
 #### Core Optimization
 1. **minpack.py** - Contains the main `CurveFit` class and `curve_fit` function that provides the high-level API compatible with SciPy
 2. **least_squares.py** - Implements the `LeastSquares` class with the core least squares solver
-3. **trf.py** - Trust Region Reflective algorithm implementation
+3. **trf.py** - Trust Region Reflective algorithm implementation (recently optimized)
 4. **loss_functions.py** - Various loss functions for robust fitting
 5. **_optimize.py** - Optimization result classes and utilities
 
@@ -93,7 +162,7 @@ The library is organized around several key modules in the `nlsq/` directory:
 #### Infrastructure
 15. **config.py** - Configuration management and context managers
 16. **common_jax.py** - JAX-specific utilities and functions
-17. **common_scipy.py** - SciPy compatibility layer and shared utilities
+17. **common_scipy.py** - SciPy compatibility layer and shared utilities (recently fixed for JAX arrays)
 18. **logging.py** - Logging and debugging utilities
 19. **caching.py** - Core caching infrastructure
 20. **optimizer_base.py** - Abstract base classes for optimization algorithms
@@ -123,7 +192,7 @@ Tests use Python's unittest and pytest frameworks, with comprehensive coverage a
 - `test_least_squares.py` - Tests for the least squares solver
 - `test_minpack.py` - Tests for the curve_fit interface
 - `test_trf_simple.py` - Tests for Trust Region Reflective algorithm
-- `test_integration.py` - Integration tests across components
+- `test_integration.py` - Integration tests across components (recently fixed flaky test)
 - `test_large_dataset.py` - Tests for large dataset handling
 - `test_stability.py` - Numerical stability tests
 - `test_streaming_optimizer.py` - Streaming optimization tests
@@ -133,6 +202,8 @@ Tests use Python's unittest and pytest frameworks, with comprehensive coverage a
 - Multiple coverage test files ensure comprehensive testing
 - Tests compare results against SciPy implementations for correctness
 - Performance benchmarking tests for GPU/TPU acceleration
+- **Current coverage**: 70% (target: 80%)
+- **Test status**: 355 tests passing, 1 skipped (100% pass rate)
 
 ## Examples
 
@@ -154,6 +225,9 @@ NLSQ has been extensively profiled and optimized. The codebase is **production-r
 - Large problem (10000 points): ~605ms total (~134ms runtime after JIT)
 - XLarge problem (50000 points): ~572ms total (~120ms runtime after JIT)
 
+**GPU Performance** (NVIDIA Tesla V100):
+- 1M points, 5 parameters: 0.15s (NLSQ) vs 40.5s (SciPy) = **270x speedup**
+
 **Scaling Characteristics**:
 - ✅ Excellent: 50x more data → only 1.2x slower
 - ✅ Well-optimized with JAX primitives (51 @jit decorators)
@@ -165,20 +239,35 @@ NLSQ has been extensively profiled and optimized. The codebase is **production-r
 - Subsequent runs are much faster due to caching
 - Use `CurveFit` class to reuse compiled functions for multiple fits
 
-### Recent Optimization Work
+### Recent Optimization Work (October 2025)
 
-**NumPy↔JAX Conversion Reduction** (October 2025):
-- Reduced unnecessary array conversions in hot paths
-- 8% total performance improvement (~15% on core TRF algorithm)
-- Zero numerical regressions, all tests passing
-- See `docs/optimization_case_study.md` for details
+**NumPy↔JAX Conversion Reduction**:
+- **Result**: 8% total performance improvement (~15% on core TRF algorithm)
+- **Method**: Eliminated 11 unnecessary array conversions in hot paths
+- **Files changed**: `nlsq/trf.py` (lines 895-900, 928, final return)
+- **Testing**: Zero numerical regressions, all tests passing
+- **Profiling tools**: cProfile + line_profiler
+- **Documentation**: See `docs/optimization_case_study.md` for detailed analysis
 
-**Code Complexity Reduction**:
-- Refactored `validators.py`: complexity 62 → 12
-- Improved maintainability and testability
-- Extracted 12 focused helper methods
+**Key Changes**:
+```python
+# Before: Converted to NumPy immediately
+cost = np.array(cost_jnp)
+g = np.array(g_jnp)
 
-### Performance Tuning
+# After: Keep as JAX arrays in hot paths
+cost = cost_jnp  # Convert only at boundaries
+g = g_jnp
+```
+
+**Decision**: Further complex optimizations (lax.scan, @vmap, @pmap) have been **deferred** due to:
+- Diminishing returns (5-10% estimated gain for significant complexity)
+- Code already highly optimized with JAX primitives
+- User-facing features more valuable than micro-optimizations
+
+See `benchmark/lax_scan_design.md` for deferred optimization designs.
+
+### Performance Tuning Guide
 
 For applications requiring maximum performance:
 
@@ -186,8 +275,15 @@ For applications requiring maximum performance:
 2. **Enable GPU/TPU** (JAX automatically detects available accelerators)
 3. **Batch operations** when fitting multiple curves
 4. **Profile your workload** to identify actual bottlenecks
+5. **Use curve_fit_large()** for datasets >20M points
+6. **Set appropriate memory limits** with `memory_limit_gb` parameter
 
-**Note**: Further complex optimizations (lax.scan, @vmap, @pmap) have been **deferred** due to diminishing returns. The code is already highly optimized. See performance case study for detailed analysis.
+**Dataset Size Recommendations**:
+- <1K points: Use SciPy (faster due to JIT overhead)
+- 1K-100K points: NLSQ CPU or GPU
+- >100K points: NLSQ GPU (significant speedup)
+
+**Note**: The code is already highly optimized. Focus on features and user experience rather than micro-optimizations.
 
 ### When to Optimize Further
 
@@ -200,3 +296,119 @@ Consider additional optimization ONLY if:
 **Current recommendation**: Focus on features and user experience rather than micro-optimizations.
 
 See `docs/optimization_case_study.md` for comprehensive analysis and lessons learned.
+See `docs/performance_tuning_guide.md` for user-facing performance optimization guide.
+
+## File Structure
+
+```
+nlsq/                                    # Main package
+├── nlsq/                                # Core library (25 modules)
+│   ├── minpack.py                       # High-level curve_fit API
+│   ├── least_squares.py                 # Core solver
+│   ├── trf.py                           # TRF algorithm (optimized)
+│   ├── large_dataset.py                 # Chunking & streaming
+│   ├── common_scipy.py                  # SciPy compatibility (fixed)
+│   └── [18 other modules]
+│
+├── tests/                               # Test suite (23 files, 8.4K LOC)
+│   ├── test_minpack.py                  # API tests
+│   ├── test_integration.py              # Integration tests (fixed)
+│   └── [21 other test files]
+│
+├── docs/                                # Documentation
+│   ├── optimization_case_study.md       # Performance case study (NEW)
+│   ├── performance_tuning_guide.md      # User tuning guide (NEW)
+│   ├── PYPI_SETUP.md                    # PyPI publishing guide (NEW)
+│   └── [13 other docs]
+│
+├── benchmark/                           # Performance testing (NEW)
+│   ├── profile_trf_hot_paths.py         # Profiling script
+│   ├── test_performance_regression.py   # Regression tests
+│   ├── trf_profiling_summary.md         # Profiling results
+│   ├── numpy_jax_optimization_plan.md   # Optimization planning
+│   └── lax_scan_design.md               # Deferred optimization design
+│
+├── examples/                            # Jupyter notebooks
+│   ├── NLSQ Quickstart.ipynb
+│   ├── NLSQ_2D_Gaussian_Demo.ipynb
+│   └── [2 other notebooks]
+│
+├── codebase_analysis.md                 # Comprehensive analysis (NEW)
+├── pyproject.toml                       # Project configuration
+├── Makefile                             # Development commands
+└── README.md                            # User documentation
+```
+
+## Important Notes for Development
+
+### Code Style & Quality
+- **Testing**: Always run `make test` before committing
+- **Linting**: Pre-commit hooks enforce ruff + black formatting
+- **Type hints**: Partial coverage (~60%), mypy configured for scientific computing
+- **Coverage target**: 80% (currently 70%)
+
+### Performance Considerations
+- **Don't optimize prematurely**: Code is already highly optimized
+- **Profile first**: Use `benchmark/profile_trf_hot_paths.py` to identify bottlenecks
+- **Test thoroughly**: All optimizations must maintain numerical correctness
+- **Document decisions**: Update `docs/optimization_case_study.md` for major optimizations
+
+### JAX Compatibility
+- **Immutability**: JAX arrays are immutable, use `np.array(x, copy=True)` for in-place ops
+- **Precision**: Always use float64 (auto-enabled by NLSQ)
+- **JIT compilation**: Fit functions must be JIT-compilable (no Python control flow)
+- **Array conversions**: Minimize NumPy↔JAX conversions in hot paths
+
+### Testing Best Practices
+- **Random seeds**: Always set `np.random.seed()` in tests with random data
+- **Flaky tests**: Use realistic assertion bounds for chunked/approximated algorithms
+- **GPU tests**: Mark with `@pytest.mark.gpu` for hardware-specific tests
+- **Coverage**: Focus on error paths and edge cases
+
+### Documentation Standards
+- **User-facing**: Clear, concise, with runnable examples
+- **Developer-facing**: Detailed explanations with profiling data
+- **Case studies**: Document "why" decisions were made, not just "what"
+- **Performance**: Include benchmark data and scaling characteristics
+
+## Common Issues & Solutions
+
+### Issue: JAX Array Immutability Error
+**Symptom**: `TypeError: JAX arrays are immutable`
+**Solution**: Use `np.array(x, copy=True)` to convert to mutable NumPy array
+**Fixed in**: `nlsq/common_scipy.py` (commit 07bc9eb)
+
+### Issue: Flaky Test Failures
+**Symptom**: Tests pass/fail non-deterministically
+**Solution**: Set random seed + relax bounds for approximated algorithms
+**Fixed in**: `tests/test_integration.py` (commit 07bc9eb)
+
+### Issue: Performance Regression
+**Detection**: `benchmark/test_performance_regression.py` flags >5% slowdown
+**Action**: Profile with `benchmark/profile_trf_hot_paths.py`, investigate hot paths
+**Prevention**: Run benchmark tests in CI
+
+## Resources
+
+### Documentation
+- **ReadTheDocs**: https://nlsq.readthedocs.io
+- **Case Study**: `docs/optimization_case_study.md` (performance optimization journey)
+- **Tuning Guide**: `docs/performance_tuning_guide.md` (user-facing optimization)
+- **Codebase Analysis**: `codebase_analysis.md` (comprehensive architecture review)
+
+### Benchmarking
+- **Profiling script**: `benchmark/profile_trf_hot_paths.py`
+- **Regression tests**: `benchmark/test_performance_regression.py`
+- **Profiling results**: `benchmark/trf_profiling_summary.md`
+
+### External Resources
+- **JAX Documentation**: https://jax.readthedocs.io
+- **Original JAXFit Paper**: https://doi.org/10.48550/arXiv.2208.12187
+- **SciPy curve_fit**: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html
+
+---
+
+**Last Updated**: 2025-10-06
+**Status**: Production-ready (Beta)
+**Test Status**: 355 passing, 1 skipped (100% pass rate)
+**Coverage**: 70% (target: 80%)
