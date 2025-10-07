@@ -155,54 +155,54 @@ All imports used in the notebooks are verified against the current NLSQ API:
 ### Core Imports ✅
 ```python
 from nlsq import (
-    CurveFit,              # Main fitting class
-    LeastSquares,          # Core solver
-    OptimizeResult,        # Result container
-    curve_fit,             # High-level API
-    __version__,           # Version info
+    CurveFit,  # Main fitting class
+    LeastSquares,  # Core solver
+    OptimizeResult,  # Result container
+    curve_fit,  # High-level API
+    __version__,  # Version info
 )
 ```
 
 ### Memory Management ✅
 ```python
 from nlsq import (
-    MemoryConfig,                    # Memory configuration
-    estimate_memory_requirements,    # Memory estimation
-    get_memory_config,               # Get current config
-    memory_context,                  # Context manager
-    set_memory_limits,               # Set global limits
-    enable_mixed_precision_fallback, # Mixed precision
+    MemoryConfig,  # Memory configuration
+    estimate_memory_requirements,  # Memory estimation
+    get_memory_config,  # Get current config
+    memory_context,  # Context manager
+    set_memory_limits,  # Set global limits
+    enable_mixed_precision_fallback,  # Mixed precision
 )
 ```
 
 ### Algorithm Selection ✅
 ```python
 from nlsq import (
-    AlgorithmSelector,          # Algorithm selector class
-    auto_select_algorithm,      # Automatic selection
+    AlgorithmSelector,  # Algorithm selector class
+    auto_select_algorithm,  # Automatic selection
 )
 ```
 
 ### Large Dataset Handling ✅
 ```python
 from nlsq import (
-    LargeDatasetConfig,         # Large dataset config
-    LargeDatasetFitter,         # Large dataset fitter
-    LDMemoryConfig,             # Memory config for large data
-    configure_for_large_datasets, # Auto-configuration
-    curve_fit_large,            # Convenience function
-    fit_large_dataset,          # Fit function
-    large_dataset_context,      # Context manager
+    LargeDatasetConfig,  # Large dataset config
+    LargeDatasetFitter,  # Large dataset fitter
+    LDMemoryConfig,  # Memory config for large data
+    configure_for_large_datasets,  # Auto-configuration
+    curve_fit_large,  # Convenience function
+    fit_large_dataset,  # Fit function
+    large_dataset_context,  # Context manager
 )
 ```
 
 ### Compilation Cache ✅
 ```python
 from nlsq import (
-    CompilationCache,           # Compilation cache class
-    cached_jit,                 # Decorator
-    get_global_compilation_cache, # Get cache
-    clear_compilation_cache,    # Clear cache
+    CompilationCache,  # Compilation cache class
+    cached_jit,  # Decorator
+    get_global_compilation_cache,  # Get cache
+    clear_compilation_cache,  # Clear cache
 )
 ```
 

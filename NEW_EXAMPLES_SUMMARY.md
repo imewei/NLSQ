@@ -160,13 +160,13 @@ Created comprehensive documentation and examples for NLSQ's advanced performance
 **Configuration Options:**
 ```python
 StreamingConfig(
-    batch_size=10000,       # Points per batch
-    max_epochs=10,          # Training epochs
-    learning_rate=0.01,     # Initial LR
-    use_adam=True,          # Adam vs SGD
-    warmup_steps=100,       # LR warmup
-    convergence_tol=1e-6,   # Convergence threshold
-    checkpoint_interval=1000, # Save frequency
+    batch_size=10000,  # Points per batch
+    max_epochs=10,  # Training epochs
+    learning_rate=0.01,  # Initial LR
+    use_adam=True,  # Adam vs SGD
+    warmup_steps=100,  # LR warmup
+    convergence_tol=1e-6,  # Convergence threshold
+    checkpoint_interval=1000,  # Save frequency
 )
 ```
 
@@ -281,7 +281,7 @@ if sparsity > 0.9:
 ```python
 config = StreamingConfig(batch_size=10000, max_epochs=10)
 optimizer = StreamingOptimizer(config)
-result = optimizer.fit_streaming(model, 'data.hdf5', p0)
+result = optimizer.fit_streaming(model, "data.hdf5", p0)
 
 print(f"Processed {result['total_samples']:,} samples")
 print(f"Final loss: {result['fun']:.6f}")
