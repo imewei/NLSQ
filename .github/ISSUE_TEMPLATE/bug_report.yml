@@ -1,0 +1,157 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior in NLSQ
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees:
+  - imewei
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please fill out the information below to help us investigate.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: When I try to fit a curve with..., I get...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal code to reproduce the bug
+      placeholder: |
+        ```python
+        import nlsq
+        import numpy as np
+
+        # Your code here
+        ```
+      value: |
+        ```python
+        import nlsq
+        import numpy as np
+
+        # Paste your code here
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: I expected the fit to converge with popt=[1.0, 2.0]
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include full error traceback if applicable.
+      placeholder: |
+        Instead, I got:
+        Traceback (most recent call last):
+          ...
+    validations:
+      required: true
+
+  - type: input
+    id: nlsq-version
+    attributes:
+      label: NLSQ Version
+      description: "Output of: `python -c 'import nlsq; print(nlsq.__version__)'`"
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: "Output of: `python --version`"
+      placeholder: "Python 3.12.3"
+    validations:
+      required: true
+
+  - type: input
+    id: jax-version
+    attributes:
+      label: JAX Version
+      description: "Output of: `python -c 'import jax; print(jax.__version__)'`"
+      placeholder: "0.4.20"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: What platform are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      description: What device are you running on?
+      options:
+        - CPU
+        - GPU (CUDA)
+        - GPU (ROCm)
+        - TPU
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Details
+      description: |
+        Additional environment information (optional but helpful):
+        - OS version
+        - CUDA version (if GPU)
+        - GPU model (if GPU)
+        - Memory available
+      placeholder: |
+        OS: Ubuntu 22.04
+        CUDA: 11.8
+        GPU: NVIDIA V100 32GB
+        RAM: 64GB
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem (plots, data characteristics, etc.)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have included a minimal reproducible example
+          required: true
+        - label: I am using the latest version of NLSQ (or have noted the version above)
+          required: true

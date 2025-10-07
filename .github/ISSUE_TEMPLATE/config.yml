@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://nlsq.readthedocs.io
+    about: View the NLSQ documentation for usage guides and API reference
+  - name: 💬 Discussions
+    url: https://github.com/imewei/NLSQ/discussions
+    about: Ask questions, share ideas, and discuss NLSQ with the community
+  - name: 🔒 Security Vulnerability
+    url: https://github.com/imewei/NLSQ/security/advisories/new
+    about: Report security vulnerabilities privately (DO NOT create public issue)
+  - name: 📧 Direct Contact
+    url: mailto:wchen@anl.gov
+    about: Contact the maintainer directly for sensitive issues

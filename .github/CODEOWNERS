@@ -1,0 +1,36 @@
+# CODEOWNERS file for NLSQ
+# Automatically request reviews from code owners when PRs modify specific files
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo
+# This will be requested for review when someone opens a PR
+* @imewei
+
+# Core library code - requires careful review
+/nlsq/ @imewei
+
+# Critical optimization algorithms
+/nlsq/trf.py @imewei
+/nlsq/least_squares.py @imewei
+/nlsq/minpack.py @imewei
+
+# CI/CD and infrastructure
+/.github/ @imewei
+/.github/workflows/ @imewei
+/pyproject.toml @imewei
+/.pre-commit-config.yaml @imewei
+
+# Documentation
+/docs/ @imewei
+/README.md @imewei
+/CLAUDE.md @imewei
+
+# Tests - consider requiring tests for all code changes
+/tests/ @imewei
+
+# Benchmark and performance
+/benchmark/ @imewei
+
+# Security-sensitive files
+/.github/workflows/publish.yml @imewei
+/.github/dependabot.yml @imewei
