@@ -335,6 +335,7 @@ NLSQ automatically detects and uses GPUs when available.
 **Check GPU availability:**
 ```python
 import jax
+
 print(f"JAX devices: {jax.devices()}")
 # Output: [cuda(id=0)] if GPU available
 ```
@@ -342,7 +343,8 @@ print(f"JAX devices: {jax.devices()}")
 **Force CPU (for debugging):**
 ```python
 import os
-os.environ['JAX_PLATFORMS'] = 'cpu'
+
+os.environ["JAX_PLATFORMS"] = "cpu"
 ```
 
 ---
@@ -447,8 +449,8 @@ print(f"Speedup: {time_without / time_with:.2f}x")
 
 ```python
 pool = MemoryPool(
-    max_pool_size=10,      # Max buffers per shape/dtype
-    enable_stats=True,     # Track allocation statistics
+    max_pool_size=10,  # Max buffers per shape/dtype
+    enable_stats=True,  # Track allocation statistics
 )
 
 # Get statistics
@@ -492,7 +494,7 @@ Sparse Jacobians occur in:
    def piecewise_linear(x, a1, b1, a2, b2):
        # params [a1, b1] only affect x < 0.5
        # params [a2, b2] only affect x >= 0.5
-       result = jnp.where(x < 0.5, a1*x + b1, a2*x + b2)
+       result = jnp.where(x < 0.5, a1 * x + b1, a2 * x + b2)
        return result
    ```
 
@@ -503,8 +505,8 @@ Sparse Jacobians occur in:
        n_gaussians = len(params) // 3
        result = 0
        for i in range(n_gaussians):
-           a, mu, sigma = params[i*3:(i+1)*3]
-           result += a * jnp.exp(-((x - mu)**2) / (2*sigma**2))
+           a, mu, sigma = params[i * 3 : (i + 1) * 3]
+           result += a * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
        return result
    ```
 
@@ -554,11 +556,11 @@ print(f"Sparse: {memory_info['sparse_gb']:.3f} GB")
 import matplotlib.pyplot as plt
 
 # Visualize sparsity pattern
-plt.imshow(pattern.T, aspect='auto', cmap='binary')
-plt.xlabel('Data Point')
-plt.ylabel('Parameter')
-plt.title(f'Jacobian Sparsity Pattern ({sparsity:.1%} zeros)')
-plt.colorbar(label='Non-zero')
+plt.imshow(pattern.T, aspect="auto", cmap="binary")
+plt.xlabel("Data Point")
+plt.ylabel("Parameter")
+plt.title(f"Jacobian Sparsity Pattern ({sparsity:.1%} zeros)")
+plt.colorbar(label="Non-zero")
 plt.show()
 ```
 
@@ -588,25 +590,27 @@ from nlsq import StreamingOptimizer, StreamingConfig
 
 # Configure optimizer
 config = StreamingConfig(
-    batch_size=10000,           # Points per batch
-    max_epochs=10,              # Training epochs
-    learning_rate=0.01,         # Learning rate
-    use_adam=True,              # Use Adam optimizer
-    convergence_tol=1e-6,       # Convergence threshold
-    warmup_steps=100,           # Learning rate warmup
-    checkpoint_interval=1000,   # Save every N iterations
+    batch_size=10000,  # Points per batch
+    max_epochs=10,  # Training epochs
+    learning_rate=0.01,  # Learning rate
+    use_adam=True,  # Use Adam optimizer
+    convergence_tol=1e-6,  # Convergence threshold
+    warmup_steps=100,  # Learning rate warmup
+    checkpoint_interval=1000,  # Save every N iterations
 )
 
 optimizer = StreamingOptimizer(config)
+
 
 # Define model
 def model(x, a, b, c):
     return a * np.exp(-b * x) + c
 
+
 # Fit with streaming data
 result = optimizer.fit_streaming(
     func=model,
-    data_source='path/to/data.hdf5',  # Or generator
+    data_source="path/to/data.hdf5",  # Or generator
     p0=[1.0, 1.0, 0.0],
     bounds=None,
     verbose=1,
@@ -625,12 +629,12 @@ print(f"Samples processed: {result['total_samples']:,}")
    import h5py
 
    # Create HDF5 dataset
-   with h5py.File('large_data.h5', 'w') as f:
-       f.create_dataset('x', data=x_data, compression='gzip')
-       f.create_dataset('y', data=y_data, compression='gzip')
+   with h5py.File("large_data.h5", "w") as f:
+       f.create_dataset("x", data=x_data, compression="gzip")
+       f.create_dataset("y", data=y_data, compression="gzip")
 
    # Use with StreamingOptimizer
-   result = optimizer.fit_streaming(model, 'large_data.h5', p0)
+   result = optimizer.fit_streaming(model, "large_data.h5", p0)
    ```
 
 2. **Custom Data Generators**:
@@ -647,6 +651,7 @@ print(f"Samples processed: {result['total_samples']:,}")
            """Cleanup resources."""
            pass
 
+
    generator = CustomDataGenerator()
    result = optimizer.fit_streaming(model, generator, p0)
    ```
@@ -656,25 +661,21 @@ print(f"Samples processed: {result['total_samples']:,}")
 ```python
 config = StreamingConfig(
     # Batch processing
-    batch_size=10000,          # Points per batch
-    max_epochs=10,             # Maximum epochs
-
+    batch_size=10000,  # Points per batch
+    max_epochs=10,  # Maximum epochs
     # Optimization
-    learning_rate=0.01,        # Initial learning rate
-    use_adam=True,             # Adam vs SGD+momentum
-    momentum=0.9,              # SGD momentum (if not Adam)
-
+    learning_rate=0.01,  # Initial learning rate
+    use_adam=True,  # Adam vs SGD+momentum
+    momentum=0.9,  # SGD momentum (if not Adam)
     # Adam parameters
-    adam_beta1=0.9,            # First moment decay
-    adam_beta2=0.999,          # Second moment decay
-    adam_eps=1e-8,             # Numerical stability
-
+    adam_beta1=0.9,  # First moment decay
+    adam_beta2=0.999,  # Second moment decay
+    adam_eps=1e-8,  # Numerical stability
     # Regularization
-    gradient_clip=10.0,        # Gradient clipping
-    warmup_steps=100,          # Learning rate warmup
-
+    gradient_clip=10.0,  # Gradient clipping
+    warmup_steps=100,  # Learning rate warmup
     # Convergence
-    convergence_tol=1e-6,      # Convergence threshold
+    convergence_tol=1e-6,  # Convergence threshold
     checkpoint_interval=1000,  # Checkpoint frequency
 )
 ```
@@ -719,6 +720,7 @@ START
 Small problems (<10K points):
 ```python
 from nlsq import CurveFit
+
 cf = CurveFit()
 popt, pcov = cf.curve_fit(model, x, y, p0)
 ```
@@ -726,6 +728,7 @@ popt, pcov = cf.curve_fit(model, x, y, p0)
 Medium problems (10K-1M points, repeated fits):
 ```python
 from nlsq import CurveFit, MemoryPool
+
 with MemoryPool(enable_stats=True) as pool:
     cf = CurveFit()
     for dataset in datasets:
@@ -735,6 +738,7 @@ with MemoryPool(enable_stats=True) as pool:
 Large sparse problems (>1M points, >90% sparsity):
 ```python
 from nlsq import SparseJacobianComputer, MemoryPool
+
 sparse_comp = SparseJacobianComputer()
 pattern, sparsity = sparse_comp.detect_sparsity_pattern(model, p0, x_sample)
 
@@ -747,9 +751,10 @@ if sparsity > 0.9:
 Very large streaming data (>10GB):
 ```python
 from nlsq import StreamingOptimizer, StreamingConfig
+
 config = StreamingConfig(batch_size=10000)
 optimizer = StreamingOptimizer(config)
-result = optimizer.fit_streaming(model, 'data.hdf5', p0)
+result = optimizer.fit_streaming(model, "data.hdf5", p0)
 ```
 
 ---
@@ -803,7 +808,7 @@ popt, pcov = cf.curve_fit(model, x, y, p0)
 
 profiler.disable()
 stats = pstats.Stats(profiler)
-stats.sort_stats('cumulative')
+stats.sort_stats("cumulative")
 stats.print_stats(20)  # Top 20 functions
 ```
 
@@ -811,6 +816,7 @@ stats.print_stats(20)  # Top 20 functions
 
 ```python
 import time
+
 
 def benchmark(name, func, *args, n_runs=5):
     times = []
@@ -824,6 +830,7 @@ def benchmark(name, func, *args, n_runs=5):
     print(f"{name}: {avg_time:.3f} ± {std_time:.3f}s")
     return result, avg_time
 
+
 # Compare approaches
 result1, time1 = benchmark("Standard", standard_fit, x, y, p0)
 result2, time2 = benchmark("Optimized", optimized_fit, x, y, p0)
@@ -835,6 +842,7 @@ print(f"Speedup: {time1/time2:.2f}x")
 ```python
 # Level 1: Start simple
 from nlsq import CurveFit
+
 cf = CurveFit()
 popt, pcov = cf.curve_fit(model, x, y, p0)
 
@@ -862,10 +870,12 @@ if data_size > available_memory:
 import psutil
 import os
 
+
 def get_memory_usage():
     """Get current memory usage in MB."""
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / 1024**2
+
 
 print(f"Initial memory: {get_memory_usage():.1f} MB")
 popt, pcov = cf.curve_fit(model, x, y, p0)
@@ -877,9 +887,9 @@ print(f"Peak memory: {get_memory_usage():.1f} MB")
 ```python
 # Batch size guidelines for StreamingOptimizer
 batch_size = min(
-    10000,                              # Default max
-    total_dataset_size // 100,          # At least 100 batches
-    available_memory_mb * 1024 // (8 * n_params)  # Fit in memory
+    10000,  # Default max
+    total_dataset_size // 100,  # At least 100 batches
+    available_memory_mb * 1024 // (8 * n_params),  # Fit in memory
 )
 
 config = StreamingConfig(batch_size=batch_size)
@@ -897,8 +907,8 @@ optimizer = StreamingOptimizer(config)
 # Checkpoints saved automatically
 
 # Resume from checkpoint
-checkpoint = np.load('checkpoint_iter_5000.npz')
-p0 = checkpoint['params']
+checkpoint = np.load("checkpoint_iter_5000.npz")
+p0 = checkpoint["params"]
 result = optimizer.fit_streaming(model, data_source, p0)
 ```
 
@@ -974,7 +984,7 @@ UserWarning: JAX is not using 64-bit precision
 **Solution**: Import NLSQ before importing JAX (NLSQ auto-configures precision)
 ```python
 from nlsq import CurveFit  # Import first
-import jax.numpy as jnp    # Import after
+import jax.numpy as jnp  # Import after
 ```
 
 ### Issue: GPU out of memory
@@ -984,7 +994,8 @@ RuntimeError: CUDA out of memory
 **Solution**: Use CPU or reduce dataset size
 ```python
 import os
-os.environ['JAX_PLATFORMS'] = 'cpu'  # Force CPU
+
+os.environ["JAX_PLATFORMS"] = "cpu"  # Force CPU
 ```
 Or use chunking/streaming from Large Dataset or Performance examples.
 
