@@ -10,9 +10,15 @@ NLSQ is a GPU/TPU-accelerated nonlinear least squares curve fitting library that
 **Origin**: Enhanced fork of JAXFit by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith
 **Status**: Production-ready (Beta), 70% test coverage, 355 tests passing
 
-## Recent Updates (Updated: 2025-10-06)
+## Recent Updates (Updated: 2025-10-07)
 
 ### Major Changes (October 2025)
+
+#### Pre-Commit Compliance & CI/CD Health ✅ **NEW**
+- **100% pre-commit compliance** achieved (24/24 hooks passing)
+- Fixed CodeQL workflow schema validation error (`.github/workflows/codeql.yml`)
+- Resolved all code quality issues: Greek characters, try-except-pass, unused variables
+- See `docs/codeql_workflow_fix.md` for complete technical documentation
 
 #### Performance Optimization Complete ✅
 - **8% overall performance improvement** (~15% on core TRF algorithm)
@@ -43,12 +49,20 @@ None. All changes are backward compatible.
 
 ### Files Changed
 **Modified:**
+- `.github/workflows/codeql.yml` - Fixed schema validation error (10/07) ⭐
+- `nlsq/constants.py` - Fixed Greek chars, removed docstrings, sorted __all__ (10/07)
+- `nlsq/validators.py` - Use contextlib.suppress instead of try-except-pass (10/07)
+- `nlsq/minpack.py` - Prefixed unused variables with underscore (10/07)
+- `nlsq/least_squares.py` - Refactored into focused methods (10/07)
+- `COMPREHENSIVE_QUALITY_REPORT.md` - Fixed markdown code blocks (10/07)
+- `REFACTORING_IMPLEMENTATION_PLAN.md` - Fixed markdown code blocks (10/07)
 - `nlsq/trf.py` - Performance optimization (NumPy↔JAX reduction)
 - `nlsq/common_scipy.py` - JAX immutability fix
 - `tests/test_integration.py` - Flaky test fix
 - `.gitignore` - Added optimization artifacts
 
 **Added:**
+- `docs/codeql_workflow_fix.md` - Complete technical documentation for CI fix (10/07) ⭐
 - `docs/optimization_case_study.md` - Performance optimization analysis
 - `docs/performance_tuning_guide.md` - User performance guide
 - `codebase_analysis.md` - Comprehensive codebase analysis
