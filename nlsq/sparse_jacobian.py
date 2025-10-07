@@ -422,7 +422,9 @@ class SparseOptimizer:
         self._use_sparse = self.should_use_sparse(n_data, n_params)
 
         if self._use_sparse:
-            logger.info(f"Using sparse Jacobian methods for {n_data}×{n_params} problem")
+            logger.info(
+                f"Using sparse Jacobian methods for {n_data}×{n_params} problem"
+            )
 
             # Detect sparsity pattern from samples
             sample_size = min(1000, n_data)
