@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0
+benchmark: 5.1.0 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /home/wei/Documents/GitHub/nlsq
+configfile: pyproject.toml
+testpaths: tests
+plugins: hypothesis-6.140.3, anyio-4.11.0, benchmark-5.1.0, cov-7.0.0, xdist-3.8.0, timeout-2.4.0
+collected 743 items
+
+tests/test_additional_coverage.py ......F....                            [  1%]
+tests/test_algorithm_selector.py ....................................... [  6%]
+....                                                                     [  7%]
+tests/test_caching.py ..................                                 [  9%]
+tests/test_common_scipy.py .........                                     [ 10%]
+tests/test_compilation_cache.py ..............                           [ 12%]
+tests/test_comprehensive_coverage.py ..........                          [ 14%]
+tests/test_config.py ..............................................      [ 20%]
+tests/test_config_coverage.py .......                                    [ 21%]
+tests/test_coverage_improvement.py ..............                        [ 23%]
+tests/test_diagnostics.py ............................................   [ 29%]
+tests/test_final_coverage.py ...............                             [ 31%]
+tests/test_init.py .............................                         [ 34%]
+tests/test_init_module.py ....................                           [ 37%]
+tests/test_integration.py ..............s                                [ 39%]
+tests/test_large_dataset.py ..........................                   [ 43%]
+tests/test_least_squares.py .................................            [ 47%]
+tests/test_logging.py .....................                              [ 50%]
+tests/test_loss_functions.py ..............................              [ 54%]
+tests/test_memory_manager.py ........................................... [ 60%]
+..                                                                       [ 60%]
+tests/test_memory_pool.py .............                                  [ 62%]
+tests/test_minpack.py .
