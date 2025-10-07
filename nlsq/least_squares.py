@@ -494,6 +494,344 @@ class LeastSquares:
 
         return rfunc, jac_func
 
+    def _evaluate_initial_residuals_and_jacobian(
+        self,
+        rfunc: Callable,
+        jac_func: Callable,
+        x0: np.ndarray,
+        xdata: jnp.ndarray | None,
+        ydata: jnp.ndarray | None,
+        data_mask: jnp.ndarray | None,
+        transform: jnp.ndarray | None,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Evaluate initial residuals and Jacobian, with stability checks.
+
+        Parameters
+        ----------
+        rfunc : Callable
+            Residual function
+        jac_func : Callable
+            Jacobian function
+        x0 : np.ndarray
+            Initial parameters
+        xdata : jnp.ndarray | None
+            X data
+        ydata : jnp.ndarray | None
+            Y data
+        data_mask : jnp.ndarray | None
+            Data mask
+        transform : jnp.ndarray | None
+            Transform matrix
+
+        Returns
+        -------
+        f0 : jnp.ndarray
+            Initial residuals
+        J0 : jnp.ndarray
+            Initial Jacobian
+
+        Raises
+        ------
+        ValueError
+            If residuals are not 1-D or not finite
+        """
+        f0 = rfunc(x0, xdata, ydata, data_mask, transform)
+        J0 = jac_func(x0, xdata, ydata, data_mask, transform)
+
+        if f0.ndim != 1:
+            raise ValueError(
+                f"`fun` must return at most 1-d array_like. f0.shape: {f0.shape}"
+            )
+
+        if not np.all(np.isfinite(f0)):
+            if self.enable_stability:
+                self.logger.warning("Non-finite residuals detected, attempting to fix")
+                f0 = self.stability_guard.safe_clip(f0, -1e10, 1e10)
+                if not np.all(np.isfinite(f0)):
+                    raise ValueError("Residuals are not finite after stabilization")
+            else:
+                raise ValueError("Residuals are not finite in the initial point.")
+
+        return f0, J0
+
+    def _check_and_fix_initial_jacobian(
+        self, J0: jnp.ndarray, m: int, n: int
+    ) -> jnp.ndarray:
+        """Check and fix initial Jacobian if stability is enabled.
+
+        Parameters
+        ----------
+        J0 : jnp.ndarray
+            Initial Jacobian
+        m : int
+            Number of residuals
+        n : int
+            Number of parameters
+
+        Returns
+        -------
+        J0 : jnp.ndarray
+            Validated/fixed Jacobian
+
+        Raises
+        ------
+        ValueError
+            If Jacobian has wrong shape
+        """
+        # Check and fix Jacobian if stability is enabled
+        if self.enable_stability and J0 is not None:
+            J0_fixed, issues = self.stability_guard.check_and_fix_jacobian(J0)
+            if issues:
+                self.logger.warning("Jacobian issues detected and fixed", issues=issues)
+                J0 = J0_fixed
+
+        if J0 is not None and J0.shape != (m, n):
+            raise ValueError(
+                f"The return value of `jac` has wrong shape: expected {(m, n)}, "
+                f"actual {J0.shape}."
+            )
+
+        return J0
+
+    def _compute_initial_cost(
+        self,
+        f0: jnp.ndarray,
+        loss: str | Callable,
+        loss_function: Callable | None,
+        f_scale: float,
+        data_mask: jnp.ndarray,
+    ) -> float:
+        """Compute initial cost from residuals and loss function.
+
+        Parameters
+        ----------
+        f0 : jnp.ndarray
+            Initial residuals
+        loss : str | Callable
+            Loss function name or callable
+        loss_function : Callable | None
+            Loss function implementation
+        f_scale : float
+            Loss function scale parameter
+        data_mask : jnp.ndarray
+            Data mask
+
+        Returns
+        -------
+        initial_cost : float
+            Initial cost value
+
+        Raises
+        ------
+        ValueError
+            If callable loss returns wrong shape
+        """
+        m = f0.size
+        self.logger.debug("Computing initial cost", loss_type=loss, f_scale=f_scale)
+
+        if callable(loss):
+            rho = loss_function(f0, f_scale, data_mask=data_mask)
+            if rho.shape != (3, m):
+                raise ValueError("The return value of `loss` callable has wrong shape.")
+            initial_cost_jnp = self.trf.calculate_cost(rho, data_mask)
+        elif loss_function is not None:
+            initial_cost_jnp = loss_function(
+                f0, f_scale, data_mask=data_mask, cost_only=True
+            )
+        else:
+            initial_cost_jnp = self.trf.default_loss_func(f0)
+
+        return np.array(initial_cost_jnp)
+
+    def _check_memory_and_adjust_solver(
+        self, m: int, n: int, method: str, tr_solver: str | None
+    ) -> str | None:
+        """Check memory requirements and adjust solver if needed.
+
+        Parameters
+        ----------
+        m : int
+            Number of residuals
+        n : int
+            Number of parameters
+        method : str
+            Optimization method
+        tr_solver : str | None
+            Current trust region solver
+
+        Returns
+        -------
+        tr_solver : str | None
+            Adjusted trust region solver (or original if no adjustment needed)
+        """
+        if self.enable_stability:
+            memory_required = self.memory_manager.predict_memory_requirement(
+                m, n, method
+            )
+            is_available, msg = self.memory_manager.check_memory_availability(
+                memory_required
+            )
+            if not is_available:
+                self.logger.warning("Memory constraint detected", message=msg)
+                # Switch to memory-efficient solver
+                tr_solver = "lsmr"
+
+        return tr_solver
+
+    def _create_stable_wrappers(
+        self, rfunc: Callable, jac_func: Callable
+    ) -> tuple[Callable, Callable]:
+        """Create stability wrapper functions for residuals and Jacobian.
+
+        Parameters
+        ----------
+        rfunc : Callable
+            Original residual function
+        jac_func : Callable
+            Original Jacobian function
+
+        Returns
+        -------
+        rfunc : Callable
+            Wrapped residual function
+        jac_func : Callable
+            Wrapped Jacobian function
+        """
+        if self.enable_stability:
+            original_rfunc = rfunc
+            original_jac_func = jac_func
+
+            def stable_rfunc(x, xd, yd, dm, tf):
+                result = original_rfunc(x, xd, yd, dm, tf)
+                if not jnp.all(jnp.isfinite(result)):
+                    result = self.stability_guard.safe_clip(result, -1e10, 1e10)
+                return result
+
+            def stable_jac_func(x, xd, yd, dm, tf):
+                J = original_jac_func(x, xd, yd, dm, tf)
+                J_fixed, _ = self.stability_guard.check_and_fix_jacobian(J)
+                return J_fixed
+
+            return stable_rfunc, stable_jac_func
+
+        return rfunc, jac_func
+
+    def _run_trf_optimization(
+        self,
+        rfunc: Callable,
+        jac_func: Callable,
+        xdata: jnp.ndarray | None,
+        ydata: jnp.ndarray | None,
+        data_mask: jnp.ndarray,
+        transform: jnp.ndarray | None,
+        x0: np.ndarray,
+        f0: jnp.ndarray,
+        J0: jnp.ndarray,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        ftol: float,
+        xtol: float,
+        gtol: float,
+        max_nfev: float | None,
+        f_scale: float,
+        x_scale: np.ndarray,
+        loss_function: Callable | None,
+        tr_options: dict,
+        verbose: int,
+        timeit: bool,
+        tr_solver: str | None,
+        method: str,
+        loss: str,
+        n: int,
+        m: int,
+        initial_cost: float,
+        timeout_kwargs: dict,
+    ):
+        """Run TRF optimization with diagnostics and logging.
+
+        Returns
+        -------
+        result : OptimizeResult
+            Optimization result
+        """
+        with self.logger.timer("optimization"):
+            self.logger.debug("Calling TRF optimizer", initial_cost=initial_cost)
+
+            # Initialize diagnostics if enabled
+            if self.enable_diagnostics:
+                self.diagnostics.start_optimization(
+                    n_params=n, n_data=m, method=method, loss=loss
+                )
+
+            result = self.trf.trf(
+                rfunc,
+                xdata,
+                ydata,
+                jac_func,
+                data_mask,
+                transform,
+                x0,
+                f0,
+                J0,
+                lb,
+                ub,
+                ftol,
+                xtol,
+                gtol,
+                max_nfev,
+                f_scale,
+                x_scale,
+                loss_function,
+                tr_options.copy(),
+                verbose,
+                timeit,
+                solver=tr_solver if tr_solver else "exact",
+                diagnostics=self.diagnostics if self.enable_diagnostics else None,
+                **timeout_kwargs,
+            )
+
+        return result
+
+    def _process_optimization_result(
+        self, result, initial_cost: float, verbose: int
+    ):
+        """Process optimization result and log convergence.
+
+        Parameters
+        ----------
+        result : OptimizeResult
+            Optimization result
+        initial_cost : float
+            Initial cost value
+        verbose : int
+            Verbosity level
+
+        Returns
+        -------
+        result : OptimizeResult
+            Processed result with message and success flag
+        """
+        result.message = TERMINATION_MESSAGES[result.status]
+        result.success = result.status > 0
+
+        # Log convergence
+        self.logger.convergence(
+            reason=result.message,
+            iterations=getattr(result, "nit", None),
+            final_cost=result.cost,
+            time_elapsed=self.logger.timers.get("optimization", 0),
+            final_gradient_norm=getattr(result, "optimality", None),
+        )
+
+        if verbose >= 1:
+            self.logger.info(result.message)
+            self.logger.info(
+                f"Function evaluations {result.nfev}, initial cost {initial_cost:.4e}, final cost "
+                f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}."
+            )
+
+        return result
+
     def least_squares(
         self,
         fun: Callable,
@@ -523,6 +861,10 @@ class LeastSquares:
         **timeout_kwargs,
     ):
         """Solve nonlinear least squares problem using JAX-accelerated algorithms.
+
+        This method orchestrates the optimization process by calling focused
+        helper methods for each major step: validation, function setup,
+        initial evaluation, stability checks, and optimization execution.
 
         Parameters
         ----------
@@ -567,7 +909,7 @@ class LeastSquares:
         result : OptimizeResult
             Optimization result with solution, convergence info, and statistics.
         """
-        # Check for incorrect usage of 'options' parameter
+        # Step 1: Initialize parameters and validate options
         if kwargs is None:
             kwargs = {}
         if tr_options is None:
@@ -578,14 +920,15 @@ class LeastSquares:
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
 
-        # Validate inputs
+        # Step 2: Validate inputs
         x0, lb, ub, ftol, xtol, gtol, x_scale = self._validate_least_squares_inputs(
             x0, bounds, method, jac, loss, verbose, max_nfev, ftol, xtol, gtol, x_scale
         )
 
         self.n = len(x0)
+        n = x0.size
 
-        # Log optimization setup
+        # Step 3: Log optimization setup
         self.logger.info(
             "Starting least squares optimization",
             method=method,
@@ -596,151 +939,48 @@ class LeastSquares:
             gtol=gtol,
         )
 
-        # Setup residual and Jacobian functions
+        # Step 4: Setup residual and Jacobian functions
         rfunc, jac_func = self._setup_functions(
             fun, jac, xdata, ydata, transform, x0, args, kwargs
         )
 
-        f0 = rfunc(x0, xdata, ydata, data_mask, transform)
-        J0 = jac_func(x0, xdata, ydata, data_mask, transform)
+        # Step 5: Evaluate initial residuals and Jacobian
+        f0, J0 = self._evaluate_initial_residuals_and_jacobian(
+            rfunc, jac_func, x0, xdata, ydata, data_mask, transform
+        )
 
-        if f0.ndim != 1:
-            raise ValueError(
-                f"`fun` must return at most 1-d array_like. f0.shape: {f0.shape}"
-            )
-
-        if not np.all(np.isfinite(f0)):
-            if self.enable_stability:
-                self.logger.warning("Non-finite residuals detected, attempting to fix")
-                f0 = self.stability_guard.safe_clip(f0, -1e10, 1e10)
-                if not np.all(np.isfinite(f0)):
-                    raise ValueError("Residuals are not finite after stabilization")
-            else:
-                raise ValueError("Residuals are not finite in the initial point.")
-
-        # Check and fix Jacobian if stability is enabled
-        if self.enable_stability and J0 is not None:
-            J0_fixed, issues = self.stability_guard.check_and_fix_jacobian(J0)
-            if issues:
-                self.logger.warning("Jacobian issues detected and fixed", issues=issues)
-                J0 = J0_fixed
-
-        n = x0.size
         m = f0.size
 
-        if J0 is not None and J0.shape != (m, n):
-            raise ValueError(
-                f"The return value of `jac` has wrong shape: expected {(m, n)}, "
-                f"actual {J0.shape}."
-            )
+        # Step 6: Check and fix initial Jacobian
+        J0 = self._check_and_fix_initial_jacobian(J0, m, n)
 
+        # Step 7: Setup data mask and loss function
         if data_mask is None:
             data_mask = jnp.ones(m)
 
         loss_function = self.ls.get_loss_function(loss)
 
-        self.logger.debug("Computing initial cost", loss_type=loss, f_scale=f_scale)
-
-        if callable(loss):
-            rho = loss_function(f0, f_scale, data_mask=data_mask)
-            if rho.shape != (3, m):
-                raise ValueError("The return value of `loss` callable has wrong shape.")
-            initial_cost_jnp = self.trf.calculate_cost(rho, data_mask)
-        elif loss_function is not None:
-            initial_cost_jnp = loss_function(
-                f0, f_scale, data_mask=data_mask, cost_only=True
-            )
-        else:
-            initial_cost_jnp = self.trf.default_loss_func(f0)
-        initial_cost = np.array(initial_cost_jnp)
-
-        # Check memory requirements if stability is enabled
-        if self.enable_stability:
-            memory_required = self.memory_manager.predict_memory_requirement(
-                m, n, method
-            )
-            is_available, msg = self.memory_manager.check_memory_availability(
-                memory_required
-            )
-            if not is_available:
-                self.logger.warning("Memory constraint detected", message=msg)
-                # Switch to memory-efficient solver
-                tr_solver = "lsmr"
-
-        # Create wrapper functions with stability checks if enabled
-        if self.enable_stability:
-            original_rfunc = rfunc
-            original_jac_func = jac_func
-
-            def stable_rfunc(x, xd, yd, dm, tf):
-                result = original_rfunc(x, xd, yd, dm, tf)
-                if not jnp.all(jnp.isfinite(result)):
-                    result = self.stability_guard.safe_clip(result, -1e10, 1e10)
-                return result
-
-            def stable_jac_func(x, xd, yd, dm, tf):
-                J = original_jac_func(x, xd, yd, dm, tf)
-                J_fixed, _ = self.stability_guard.check_and_fix_jacobian(J)
-                return J_fixed
-
-            rfunc = stable_rfunc
-            jac_func = stable_jac_func
-
-        # Start optimization timer and call TRF
-        with self.logger.timer("optimization"):
-            self.logger.debug("Calling TRF optimizer", initial_cost=initial_cost)
-
-            # Initialize diagnostics if enabled
-            if self.enable_diagnostics:
-                self.diagnostics.start_optimization(
-                    n_params=n, n_data=m, method=method, loss=loss
-                )
-
-            result = self.trf.trf(
-                rfunc,
-                xdata,
-                ydata,
-                jac_func,
-                data_mask,
-                transform,
-                x0,
-                f0,
-                J0,
-                lb,
-                ub,
-                ftol,
-                xtol,
-                gtol,
-                max_nfev,
-                f_scale,
-                x_scale,
-                loss_function,
-                tr_options.copy(),
-                verbose,
-                timeit,
-                solver=tr_solver if tr_solver else "exact",
-                diagnostics=self.diagnostics if self.enable_diagnostics else None,
-                **timeout_kwargs,
-            )
-
-        result.message = TERMINATION_MESSAGES[result.status]
-        result.success = result.status > 0
-
-        # Log convergence
-        self.logger.convergence(
-            reason=result.message,
-            iterations=getattr(result, "nit", None),
-            final_cost=result.cost,
-            time_elapsed=self.logger.timers.get("optimization", 0),
-            final_gradient_norm=getattr(result, "optimality", None),
+        # Step 8: Compute initial cost
+        initial_cost = self._compute_initial_cost(
+            f0, loss, loss_function, f_scale, data_mask
         )
 
-        if verbose >= 1:
-            self.logger.info(result.message)
-            self.logger.info(
-                f"Function evaluations {result.nfev}, initial cost {initial_cost:.4e}, final cost "
-                f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}."
-            )
+        # Step 9: Check memory and adjust solver if needed
+        tr_solver = self._check_memory_and_adjust_solver(m, n, method, tr_solver)
+
+        # Step 10: Create stable wrappers for residual and Jacobian functions
+        rfunc, jac_func = self._create_stable_wrappers(rfunc, jac_func)
+
+        # Step 11: Run TRF optimization
+        result = self._run_trf_optimization(
+            rfunc, jac_func, xdata, ydata, data_mask, transform,
+            x0, f0, J0, lb, ub, ftol, xtol, gtol, max_nfev,
+            f_scale, x_scale, loss_function, tr_options, verbose,
+            timeit, tr_solver, method, loss, n, m, initial_cost, timeout_kwargs
+        )
+
+        # Step 12: Process optimization result
+        result = self._process_optimization_result(result, initial_cost, verbose)
 
         return result
 
