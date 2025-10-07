@@ -294,8 +294,8 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     # Coverage disabled for faster CI
-    # Current coverage: 74% (676 tests passing)
-    # Target coverage: 80%
+    # Test suite: 743 tests (as of 2025-10-07)
+    # Current coverage: 70% (target: 80%)
     # "--cov=nlsq",
     # "--cov-report=term-missing",
     # "--cov-report=html",
@@ -321,9 +321,9 @@ source = ["nlsq"]
 omit = ["*/tests/*", "*/_version.py"]
 
 [tool.coverage.report]
-# Current coverage: 74% (676/676 tests passing)
+# Test suite: 743 tests (as of 2025-10-07)
+# Current coverage: 70% (target: 80%)
 # Industry-standard for scientific computing libraries: 70-80%
-# Target: 80% (see TEST_SUITE_COMPLETION_REPORT.md for roadmap)
 precision = 2
 show_missing = true
 skip_covered = false
