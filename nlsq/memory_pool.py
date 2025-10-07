@@ -253,7 +253,7 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
     pool : MemoryPool
         Global memory pool instance
     """
-    global _global_pool
+    global _global_pool  # noqa: PLW0603
     if _global_pool is None:
         _global_pool = MemoryPool(enable_stats=enable_stats)
     return _global_pool
@@ -261,6 +261,6 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
 
 def clear_global_pool():
     """Clear the global memory pool."""
-    global _global_pool
+    global _global_pool  # noqa: PLW0602
     if _global_pool is not None:
         _global_pool.clear()

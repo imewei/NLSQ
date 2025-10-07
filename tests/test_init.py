@@ -72,7 +72,7 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         xdata = np.linspace(0, 10, 100)
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -90,7 +90,7 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Larger dataset to avoid chunk size issues
         ydata = 2.0 * xdata + 1.0 + 0.01 * np.random.randn(len(xdata))
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -109,7 +109,7 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func, xdata, ydata, p0=[1.0, 0.0], size_threshold=10
         )
 
@@ -123,7 +123,7 @@ class TestCurveFitLargeBasic(unittest.TestCase):
 
         bounds = ([0.0, -10.0], [10.0, 10.0])
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func, xdata, ydata, bounds=bounds, size_threshold=10
         )
 
@@ -139,7 +139,7 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         ydata = 2.0 * xdata + 1.0
         sigma = np.ones_like(ydata) * 0.1
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func, xdata, ydata, sigma=sigma, size_threshold=10
         )
 
@@ -151,7 +151,7 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func, xdata, ydata, method="trf", size_threshold=10
         )
 
@@ -217,7 +217,7 @@ class TestCurveFitLargeEdgeCases(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -233,7 +233,7 @@ class TestCurveFitLargeEdgeCases(unittest.TestCase):
         ydata = 2.0 * xdata + 1.0
 
         # This may or may not show progress depending on implementation
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -260,7 +260,7 @@ class TestCurveFitLargeMemory(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -278,7 +278,7 @@ class TestCurveFitLargeMemory(unittest.TestCase):
         ydata = 2.0 * xdata + 1.0
 
         # If psutil is available, this will use it; otherwise, fallback to default
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -296,7 +296,7 @@ class TestCurveFitLargeMemory(unittest.TestCase):
 
         # Patch psutil to raise ImportError
         with patch.dict("sys.modules", {"psutil": None}):
-            popt, pcov = curve_fit_large(
+            popt, _pcov = curve_fit_large(
                 self.linear_func,
                 xdata,
                 ydata,
@@ -311,7 +311,7 @@ class TestCurveFitLargeMemory(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -338,7 +338,7 @@ class TestCurveFitLargeSampling(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -355,7 +355,7 @@ class TestCurveFitLargeSampling(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -383,7 +383,7 @@ class TestCurveFitLargeOptionalParameters(unittest.TestCase):
         ydata = 2.0 * xdata + 1.0
         sigma = np.ones_like(ydata)
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -399,7 +399,7 @@ class TestCurveFitLargeOptionalParameters(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -414,7 +414,7 @@ class TestCurveFitLargeOptionalParameters(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -445,7 +445,7 @@ class TestCurveFitLargeAutoSizeDetection(unittest.TestCase):
         xdata_small = np.linspace(0, 10, 100)
         ydata_small = 2.0 * xdata_small + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata_small,
             ydata_small,
@@ -461,7 +461,7 @@ class TestCurveFitLargeAutoSizeDetection(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset to avoid chunk size issues
         ydata = 2.0 * xdata + 1.0
 
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func,
             xdata,
             ydata,
@@ -477,7 +477,7 @@ class TestCurveFitLargeAutoSizeDetection(unittest.TestCase):
         ydata = 2.0 * xdata + 1.0
 
         # With threshold=1000, should use regular curve_fit
-        popt, pcov = curve_fit_large(
+        popt, _pcov = curve_fit_large(
             self.linear_func, xdata, ydata, size_threshold=1000
         )
 

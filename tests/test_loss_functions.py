@@ -296,7 +296,9 @@ class TestLossFunctionsJAX(unittest.TestCase):
 
             # JIT compile the function
             jitted_func = jit(
-                lambda r: loss_func(r, self.f_scale, data_mask, cost_only=True)
+                lambda r, loss=loss_func: loss(
+                    r, self.f_scale, data_mask, cost_only=True
+                )
             )
 
             # Should work without errors
@@ -312,8 +314,8 @@ class TestLossFunctionsJAX(unittest.TestCase):
             loss_func = self.loss_func_jit.get_loss_function(loss_type)
 
             # Define function for gradient
-            def cost_fn(r):
-                return loss_func(r, self.f_scale, data_mask, cost_only=True)
+            def cost_fn(r, loss=loss_func):
+                return loss(r, self.f_scale, data_mask, cost_only=True)
 
             # Compute gradient
             grad_fn = grad(cost_fn)
@@ -333,8 +335,8 @@ class TestLossFunctionsJAX(unittest.TestCase):
         for loss_type in ["huber", "soft_l1", "cauchy", "arctan"]:
             loss_func = self.loss_func_jit.get_loss_function(loss_type)
 
-            def cost_fn(r):
-                return loss_func(r, self.f_scale, data_mask, cost_only=True)
+            def cost_fn(r, loss=loss_func):
+                return loss(r, self.f_scale, data_mask, cost_only=True)
 
             grad_fn = grad(cost_fn)
             gradient = grad_fn(residuals)

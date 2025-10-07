@@ -79,11 +79,11 @@ class TestCompilationCache(unittest.TestCase):
         y = jnp.array([2.0])
 
         # First call - miss
-        func1, sig1 = self.cache.get_or_compile(test_func, x, y)
+        _func1, sig1 = self.cache.get_or_compile(test_func, x, y)
         self.assertEqual(self.cache.stats["misses"], 1)
 
         # Second call with same signature - hit
-        func2, sig2 = self.cache.get_or_compile(test_func, x, y)
+        _func2, sig2 = self.cache.get_or_compile(test_func, x, y)
         self.assertEqual(self.cache.stats["hits"], 1)
         self.assertEqual(sig1, sig2)
 

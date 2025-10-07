@@ -102,6 +102,8 @@ from nlsq.validators import InputValidator
 __all__ = [
     # Stability and optimization modules
     "AlgorithmSelector",
+    # Performance optimization (Sprint 2)
+    "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
     "DataGenerator",
@@ -113,6 +115,7 @@ __all__ = [
     # Configuration classes
     "MemoryConfig",
     "MemoryManager",
+    "MemoryPool",
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
     "OptimizationRecovery",
@@ -127,22 +130,17 @@ __all__ = [
     "StreamingConfig",
     # Streaming optimizer support
     "StreamingOptimizer",
+    "TRFMemoryPool",
     # Version
     "__version__",
     "auto_select_algorithm",
-    # Performance optimization (Sprint 2)
-    "CompilationCache",
-    "cached_jit",
-    "clear_compilation_cache",
-    "get_global_compilation_cache",
-    "MemoryPool",
-    "TRFMemoryPool",
-    "clear_global_pool",
-    "get_global_pool",
     # Caching support
     "cached_function",
     "cached_jacobian",
+    "cached_jit",
     "clear_all_caches",
+    "clear_compilation_cache",
+    "clear_global_pool",
     "clear_memory_pool",
     # Configuration functions
     "configure_for_large_datasets",
@@ -157,6 +155,8 @@ __all__ = [
     "fit_large_dataset",
     "fit_unlimited_data",
     "get_global_cache",
+    "get_global_compilation_cache",
+    "get_global_pool",
     "get_jit_cache",
     "get_large_dataset_config",
     "get_memory_config",

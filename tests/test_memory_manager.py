@@ -328,9 +328,11 @@ class TestMemoryGuard(unittest.TestCase):
         """Test memory guard with insufficient memory."""
         bytes_needed = 1e15  # 1 PB
 
-        with self.assertRaises(MemoryError):
-            with self.manager.memory_guard(bytes_needed):
-                pass
+        with (
+            self.assertRaises(MemoryError),
+            self.manager.memory_guard(bytes_needed),
+        ):
+            pass
 
     def test_memory_guard_tracks_peak(self):
         """Test that memory guard tracks peak memory."""

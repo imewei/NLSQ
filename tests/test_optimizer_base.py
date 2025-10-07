@@ -518,7 +518,7 @@ class TestUpdateTrustRadius(unittest.TestCase):
         predicted_reduction = 0.8
         step_norm = 0.5
 
-        new_radius, ratio = self.optimizer.update_trust_radius(
+        new_radius, _ratio = self.optimizer.update_trust_radius(
             Delta,
             actual_reduction,
             predicted_reduction,
@@ -536,7 +536,7 @@ class TestUpdateTrustRadius(unittest.TestCase):
         predicted_reduction = 0.8
         step_norm = 0.5
 
-        new_radius, ratio = self.optimizer.update_trust_radius(
+        new_radius, _ratio = self.optimizer.update_trust_radius(
             Delta,
             actual_reduction,
             predicted_reduction,

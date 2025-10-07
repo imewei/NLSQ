@@ -244,7 +244,7 @@ def get_global_compilation_cache() -> CompilationCache:
     cache : CompilationCache
         Global compilation cache instance
     """
-    global _global_compilation_cache
+    global _global_compilation_cache  # noqa: PLW0603
     if _global_compilation_cache is None:
         _global_compilation_cache = CompilationCache(enable_stats=True)
     return _global_compilation_cache
@@ -304,6 +304,6 @@ def cached_jit(
 
 def clear_compilation_cache():
     """Clear the global compilation cache."""
-    global _global_compilation_cache
+    global _global_compilation_cache  # noqa: PLW0602
     if _global_compilation_cache is not None:
         _global_compilation_cache.clear()

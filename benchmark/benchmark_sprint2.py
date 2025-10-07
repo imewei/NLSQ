@@ -53,7 +53,7 @@ def benchmark_basic_fit(n_points=1000, n_repeats=10):
     times = []
     for _ in range(n_repeats):
         start = time.perf_counter()
-        popt, pcov = curve_fit(exponential_model, x, y, p0=p0)
+        _popt, _pcov = curve_fit(exponential_model, x, y, p0=p0)
         end = time.perf_counter()
         times.append(end - start)
 

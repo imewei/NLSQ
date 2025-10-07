@@ -67,8 +67,8 @@ class TestAlgorithmSelectorBasic(unittest.TestCase):
         self.assertEqual(n_params, 3)
 
     def test_estimate_n_params_fallback(self):
-        """Test parameter estimation fallback for unparseable functions."""
-        # Function with unparseable signature
+        """Test parameter estimation fallback for unparsable functions."""
+        # Function with unparsable signature
         func = lambda x, *args: sum(args)
         n_params = self.selector._estimate_n_params(func, None)
         # Lambda with *args counts as 1 parameter (args)
