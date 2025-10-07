@@ -538,6 +538,368 @@ class CurveFit:
 
         return pcov, warn_cov
 
+    def _determine_parameter_count(
+        self, f: Callable, p0: np.ndarray | None
+    ) -> tuple[int, np.ndarray | None]:
+        """Determine number of fit parameters from p0 or function signature.
+
+        Parameters
+        ----------
+        f : Callable
+            The fit function
+        p0 : np.ndarray | None
+            Initial parameter guess
+
+        Returns
+        -------
+        n : int
+            Number of parameters
+        p0 : np.ndarray | None
+            Validated p0 array (or None)
+        """
+        if p0 is None:
+            sig = signature(f)
+            args = sig.parameters
+            if len(args) < 2:
+                raise ValueError("Unable to determine number of fit parameters.")
+            n = len(args) - 1
+        else:
+            p0 = np.atleast_1d(p0)
+            n = p0.size
+
+        return n, p0
+
+    def _validate_solver_config(self, solver: str, batch_size: int | None) -> None:
+        """Validate solver and batch_size configuration.
+
+        Parameters
+        ----------
+        solver : str
+            Solver type
+        batch_size : int | None
+            Batch size for minibatch solver
+
+        Raises
+        ------
+        ValueError
+            If solver or batch_size is invalid
+        """
+        valid_solvers = {"auto", "svd", "cg", "lsqr", "minibatch"}
+        if solver not in valid_solvers:
+            raise ValueError(
+                f"Invalid solver '{solver}'. Must be one of {valid_solvers}."
+            )
+
+        if solver == "minibatch" and batch_size is not None and batch_size <= 0:
+            raise ValueError("batch_size must be positive when using minibatch solver.")
+
+    def _prepare_bounds_and_initial_guess(
+        self, bounds: tuple, n: int, p0: np.ndarray | None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Prepare bounds and initialize p0 if needed.
+
+        Parameters
+        ----------
+        bounds : tuple
+            Bounds tuple (lower, upper)
+        n : int
+            Number of parameters
+        p0 : np.ndarray | None
+            Initial parameter guess
+
+        Returns
+        -------
+        lb : np.ndarray
+            Lower bounds
+        ub : np.ndarray
+            Upper bounds
+        p0 : np.ndarray
+            Initial parameter guess
+        """
+        lb, ub = prepare_bounds(bounds, n)
+        if p0 is None:
+            p0 = _initialize_feasible(lb, ub)
+
+        return lb, ub, p0
+
+    def _select_optimization_method(
+        self,
+        method: str | None,
+        f: Callable,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        p0: np.ndarray,
+        bounds: tuple,
+        kwargs: dict,
+    ) -> str:
+        """Select optimization method, auto-selecting if needed.
+
+        Parameters
+        ----------
+        method : str | None
+            Optimization method (None for auto-selection)
+        f : Callable
+            Fit function
+        xdata : np.ndarray
+            X data
+        ydata : np.ndarray
+            Y data
+        p0 : np.ndarray
+            Initial parameter guess
+        bounds : tuple
+            Bounds tuple
+        kwargs : dict
+            Additional optimization parameters
+
+        Returns
+        -------
+        method : str
+            Selected optimization method
+        """
+        if method is None:
+            if self.enable_stability:
+                recommendations = auto_select_algorithm(f, xdata, ydata, p0, bounds)
+                method = recommendations["algorithm"]
+                self.logger.info(
+                    "Auto-selected algorithm",
+                    method=method,
+                    loss=recommendations.get("loss", "linear"),
+                )
+                # Apply recommended parameters to kwargs
+                for key in ["ftol", "xtol", "gtol", "max_nfev", "x_scale"]:
+                    if key in recommendations and key not in kwargs:
+                        kwargs[key] = recommendations[key]
+            else:
+                method = "trf"
+
+        return method
+
+    def _validate_and_sanitize_inputs(
+        self,
+        f: Callable,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        p0: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Validate and sanitize curve fit inputs if stability is enabled.
+
+        Parameters
+        ----------
+        f : Callable
+            Fit function
+        xdata : np.ndarray
+            X data
+        ydata : np.ndarray
+            Y data
+        p0 : np.ndarray
+            Initial parameter guess
+
+        Returns
+        -------
+        xdata : np.ndarray
+            Cleaned X data
+        ydata : np.ndarray
+            Cleaned Y data
+        """
+        if self.enable_stability:
+            try:
+                errors, warnings_list, xdata_clean, ydata_clean = (
+                    self.validator.validate_curve_fit_inputs(f, xdata, ydata, p0)
+                )
+
+                if errors:
+                    error_msg = f"Input validation failed: {'; '.join(errors)}"
+                    self.logger.error("Input validation failed", error=error_msg)
+                    raise ValueError(error_msg)
+
+                for warning in warnings_list:
+                    self.logger.warning("Input validation warning", warning=warning)
+
+                xdata = xdata_clean
+                ydata = ydata_clean
+
+            except ValueError as e:
+                if "too many values to unpack" not in str(e):
+                    self.logger.error("Input validation failed", error=str(e))
+                raise
+
+        return xdata, ydata
+
+    def _convert_and_validate_arrays(
+        self,
+        xdata: np.ndarray | tuple | list,
+        ydata: np.ndarray,
+        check_finite: bool,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Convert inputs to arrays and validate finiteness.
+
+        Parameters
+        ----------
+        xdata : array-like
+            X data
+        ydata : array-like
+            Y data
+        check_finite : bool
+            Whether to check for finite values
+
+        Returns
+        -------
+        xdata : np.ndarray
+            X data as array
+        ydata : np.ndarray
+            Y data as array
+        """
+        # Convert ydata
+        if check_finite:
+            ydata = np.asarray_chkfinite(ydata, float)
+        else:
+            ydata = np.asarray(ydata, float)
+
+        # Convert xdata
+        if hasattr(xdata, "__array__") or isinstance(
+            xdata, (list, tuple, np.ndarray, jnp.ndarray)
+        ):
+            if check_finite:
+                xdata = np.asarray_chkfinite(xdata, float)
+            else:
+                xdata = np.asarray(xdata, float)
+        else:
+            raise ValueError("X needs arrays")
+
+        if ydata.size == 0:
+            raise ValueError("`ydata` must not be empty!")
+
+        return xdata, ydata
+
+    def _validate_data_lengths(
+        self, xdata: np.ndarray, ydata: np.ndarray
+    ) -> tuple[int, int]:
+        """Validate that X and Y data lengths match.
+
+        Parameters
+        ----------
+        xdata : np.ndarray
+            X data
+        ydata : np.ndarray
+            Y data
+
+        Returns
+        -------
+        m : int
+            Data length
+        xdims : int
+            X data dimensionality
+
+        Raises
+        ------
+        ValueError
+            If X and Y lengths don't match
+        """
+        m = len(ydata)
+        xdims = xdata.ndim
+        xlen = len(xdata) if xdims == 1 else len(xdata[0])
+        if xlen != m:
+            raise ValueError("X and Y data lengths dont match")
+
+        return m, xdims
+
+    def _setup_data_mask_and_padding(
+        self, data_mask: np.ndarray | None, m: int
+    ) -> tuple[np.ndarray, bool, int, bool]:
+        """Setup data mask and compute padding parameters.
+
+        Parameters
+        ----------
+        data_mask : np.ndarray | None
+            Optional data mask
+        m : int
+            Data length
+
+        Returns
+        -------
+        data_mask : np.ndarray
+            Data mask array
+        none_mask : bool
+            Whether data_mask was None on input
+        len_diff : int
+            Length difference for padding
+        should_pad : bool
+            Whether padding is needed
+        """
+        none_mask = data_mask is None
+        should_pad = False
+        len_diff = 0
+
+        if self.flength is not None:
+            len_diff = self.flength - m
+            if self.use_dynamic_sizing:
+                should_pad = len_diff > 0
+            else:
+                should_pad = len_diff >= 0
+
+            if data_mask is not None:
+                if len(data_mask) != m:
+                    raise ValueError("Data mask doesn't match data lengths.")
+            else:
+                data_mask = np.ones(m, dtype=bool)
+                if should_pad and len_diff > 0:
+                    data_mask = np.concatenate(
+                        [data_mask, np.zeros(len_diff, dtype=bool)]
+                    )
+        else:
+            data_mask = np.ones(m, dtype=bool)
+
+        return data_mask, none_mask, len_diff, should_pad
+
+    def _apply_padding_if_needed(
+        self,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        xdims: int,
+        m: int,
+        len_diff: int,
+        should_pad: bool,
+    ) -> tuple[np.ndarray, np.ndarray, int]:
+        """Apply padding to data if needed.
+
+        Parameters
+        ----------
+        xdata : np.ndarray
+            X data
+        ydata : np.ndarray
+            Y data
+        xdims : int
+            X data dimensionality
+        m : int
+            Data length
+        len_diff : int
+            Length difference
+        should_pad : bool
+            Whether padding is needed
+
+        Returns
+        -------
+        xdata : np.ndarray
+            Possibly padded X data
+        ydata : np.ndarray
+            Possibly padded Y data
+        len_diff : int
+            Updated length difference
+        """
+        if self.flength is not None and should_pad:
+            if len_diff > 0:
+                xdata, ydata = self.pad_fit_data(xdata, ydata, xdims, len_diff)
+            elif len_diff < 0 and not self.use_dynamic_sizing:
+                self.logger.debug(
+                    "Data size exceeds fixed length, JIT retracing may occur",
+                    data_size=m,
+                    flength=self.flength,
+                )
+        elif self.use_dynamic_sizing and self.flength is not None and len_diff < 0:
+            len_diff = 0
+
+        return xdata, ydata, len_diff
+
     def _prepare_curve_fit_inputs(
         self,
         f: Callable,
@@ -567,6 +929,9 @@ class CurveFit:
     ]:
         """Prepare and validate inputs for curve fitting.
 
+        This method orchestrates the input preparation pipeline by calling
+        focused helper methods for each validation step.
+
         Returns
         -------
         n : int
@@ -594,29 +959,13 @@ class CurveFit:
         none_mask : bool
             Whether data_mask was None on input
         """
-        # Determine number of parameters
-        if p0 is None:
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
-                raise ValueError("Unable to determine number of fit parameters.")
-            n = len(args) - 1
-        else:
-            p0 = np.atleast_1d(p0)
-            n = p0.size
+        # Step 1: Determine parameter count
+        n, p0 = self._determine_parameter_count(f, p0)
 
-        # Validate solver parameter
-        valid_solvers = {"auto", "svd", "cg", "lsqr", "minibatch"}
-        if solver not in valid_solvers:
-            raise ValueError(
-                f"Invalid solver '{solver}'. Must be one of {valid_solvers}."
-            )
+        # Step 2: Validate solver configuration
+        self._validate_solver_config(solver, batch_size)
 
-        # Validate batch_size if minibatch solver is used
-        if solver == "minibatch" and batch_size is not None and batch_size <= 0:
-            raise ValueError("batch_size must be positive when using minibatch solver.")
-
-        # Log curve fit start
+        # Step 3: Log curve fit start
         self.logger.info(
             "Starting curve fit",
             n_params=n,
@@ -628,114 +977,32 @@ class CurveFit:
             dynamic_sizing=self.use_dynamic_sizing,
         )
 
-        # Prepare bounds
-        lb, ub = prepare_bounds(bounds, n)
-        if p0 is None:
-            p0 = _initialize_feasible(lb, ub)
+        # Step 4: Prepare bounds and initial guess
+        lb, ub, p0 = self._prepare_bounds_and_initial_guess(bounds, n, p0)
 
-        # Auto-select algorithm if stability is enabled and method not specified
-        if method is None:
-            if self.enable_stability:
-                recommendations = auto_select_algorithm(f, xdata, ydata, p0, bounds)
-                method = recommendations["algorithm"]
-                self.logger.info(
-                    "Auto-selected algorithm",
-                    method=method,
-                    loss=recommendations.get("loss", "linear"),
-                )
-                # Apply recommended parameters to kwargs
-                for key in ["ftol", "xtol", "gtol", "max_nfev", "x_scale"]:
-                    if key in recommendations and key not in kwargs:
-                        kwargs[key] = recommendations[key]
-            else:
-                method = "trf"
+        # Step 5: Select optimization method
+        method = self._select_optimization_method(
+            method, f, xdata, ydata, p0, bounds, kwargs
+        )
 
-        # Validate and sanitize inputs if stability checks are enabled
-        if self.enable_stability:
-            try:
-                errors, warnings_list, xdata_clean, ydata_clean = (
-                    self.validator.validate_curve_fit_inputs(f, xdata, ydata, p0)
-                )
+        # Step 6: Validate and sanitize inputs (if stability enabled)
+        xdata, ydata = self._validate_and_sanitize_inputs(f, xdata, ydata, p0)
 
-                if errors:
-                    error_msg = f"Input validation failed: {'; '.join(errors)}"
-                    self.logger.error("Input validation failed", error=error_msg)
-                    raise ValueError(error_msg)
+        # Step 7: Convert to arrays and validate finiteness
+        xdata, ydata = self._convert_and_validate_arrays(xdata, ydata, check_finite)
 
-                for warning in warnings_list:
-                    self.logger.warning("Input validation warning", warning=warning)
+        # Step 8: Validate data lengths
+        m, xdims = self._validate_data_lengths(xdata, ydata)
 
-                xdata = xdata_clean
-                ydata = ydata_clean
+        # Step 9: Setup data mask and padding parameters
+        data_mask, none_mask, len_diff, should_pad = self._setup_data_mask_and_padding(
+            data_mask, m
+        )
 
-            except ValueError as e:
-                if "too many values to unpack" not in str(e):
-                    self.logger.error("Input validation failed", error=str(e))
-                raise
-
-        # NaNs cannot be handled
-        if check_finite:
-            ydata = np.asarray_chkfinite(ydata, float)
-        else:
-            ydata = np.asarray(ydata, float)
-
-        # Handle JAX arrays, NumPy arrays, lists, and tuples
-        if hasattr(xdata, "__array__") or isinstance(
-            xdata, (list, tuple, np.ndarray, jnp.ndarray)
-        ):
-            if check_finite:
-                xdata = np.asarray_chkfinite(xdata, float)
-            else:
-                xdata = np.asarray(xdata, float)
-        else:
-            raise ValueError("X needs arrays")
-
-        if ydata.size == 0:
-            raise ValueError("`ydata` must not be empty!")
-
-        # Validate data lengths
-        m = len(ydata)
-        xdims = xdata.ndim
-        xlen = len(xdata) if xdims == 1 else len(xdata[0])
-        if xlen != m:
-            raise ValueError("X and Y data lengths dont match")
-
-        # Setup data mask and padding
-        none_mask = data_mask is None
-        should_pad = False
-        len_diff = 0
-
-        if self.flength is not None:
-            len_diff = self.flength - m
-            if self.use_dynamic_sizing:
-                should_pad = len_diff > 0
-            else:
-                should_pad = len_diff >= 0
-
-            if data_mask is not None:
-                if len(data_mask) != m:
-                    raise ValueError("Data mask doesn't match data lengths.")
-            else:
-                data_mask = np.ones(m, dtype=bool)
-                if should_pad and len_diff > 0:
-                    data_mask = np.concatenate(
-                        [data_mask, np.zeros(len_diff, dtype=bool)]
-                    )
-        else:
-            data_mask = np.ones(m, dtype=bool)
-
-        # Apply padding if needed
-        if self.flength is not None and should_pad:
-            if len_diff > 0:
-                xdata, ydata = self.pad_fit_data(xdata, ydata, xdims, len_diff)
-            elif len_diff < 0 and not self.use_dynamic_sizing:
-                self.logger.debug(
-                    "Data size exceeds fixed length, JIT retracing may occur",
-                    data_size=m,
-                    flength=self.flength,
-                )
-        elif self.use_dynamic_sizing and self.flength is not None and len_diff < 0:
-            len_diff = 0
+        # Step 10: Apply padding if needed
+        xdata, ydata, len_diff = self._apply_padding_if_needed(
+            xdata, ydata, xdims, m, len_diff, should_pad
+        )
 
         return (
             n,
