@@ -259,9 +259,7 @@ class InputValidator:
                 )
 
             if not np.all(np.isfinite(p0)):
-                errors.append(
-                    "Initial parameter guess p0 contains NaN or Inf values"
-                )
+                errors.append("Initial parameter guess p0 contains NaN or Inf values")
 
         except Exception as e:
             errors.append(f"Invalid initial parameter guess p0: {e}")
@@ -316,9 +314,7 @@ class InputValidator:
                     if p0 is not None:
                         p0_array = np.asarray(p0)
                         if np.any(p0_array < lb) or np.any(p0_array > ub):
-                            warnings_list.append(
-                                "Initial guess p0 is outside bounds"
-                            )
+                            warnings_list.append("Initial guess p0 is outside bounds")
 
         except Exception as e:
             errors.append(f"Invalid bounds: {e}")

@@ -458,9 +458,10 @@ class LeastSquares:
 
             # Handle analytical Jacobian
             if jac is not None:
-                if self.jac is None:
-                    self.wrap_jac(jac)
-                elif self.jac.__code__.co_code != jac.__code__.co_code:
+                if (
+                    self.jac is None
+                    or self.jac.__code__.co_code != jac.__code__.co_code
+                ):
                     self.wrap_jac(jac)
             elif self.jac is not None and not func_update:
                 self.autdiff_jac(jac)

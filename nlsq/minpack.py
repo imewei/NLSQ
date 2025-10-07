@@ -737,7 +737,20 @@ class CurveFit:
         elif self.use_dynamic_sizing and self.flength is not None and len_diff < 0:
             len_diff = 0
 
-        return n, p0, xdata, ydata, data_mask, method, lb, ub, m, len_diff, should_pad, none_mask
+        return (
+            n,
+            p0,
+            xdata,
+            ydata,
+            data_mask,
+            method,
+            lb,
+            ub,
+            m,
+            len_diff,
+            should_pad,
+            none_mask,
+        )
 
     def _run_optimization(
         self,
@@ -1090,7 +1103,17 @@ class CurveFit:
             should_pad,
             none_mask,
         ) = self._prepare_curve_fit_inputs(
-            f, xdata, ydata, p0, bounds, solver, batch_size, method, check_finite, data_mask, kwargs
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds,
+            solver,
+            batch_size,
+            method,
+            check_finite,
+            data_mask,
+            kwargs,
         )
 
         # Setup sigma transformation
@@ -1098,8 +1121,22 @@ class CurveFit:
 
         # Run optimization
         res, jnp_xdata, ctime = self._run_optimization(
-            f, p0, xdata, ydata, data_mask, transform, bounds, method,
-            solver, batch_size, jac, m, n, sigma, timeit, kwargs
+            f,
+            p0,
+            xdata,
+            ydata,
+            data_mask,
+            transform,
+            bounds,
+            method,
+            solver,
+            batch_size,
+            jac,
+            m,
+            n,
+            sigma,
+            timeit,
+            kwargs,
         )
 
         popt = res.x

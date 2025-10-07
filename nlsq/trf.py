@@ -114,10 +114,6 @@ initialize_gpu_safely()
 
 from nlsq._optimize import OptimizeResult
 from nlsq.common_jax import CommonJIT
-from nlsq.constants import (
-    DEFAULT_MAX_NFEV_MULTIPLIER,
-    INITIAL_LEVENBERG_MARQUARDT_LAMBDA,
-)
 from nlsq.common_scipy import (
     CL_scaling_vector,
     check_termination,
@@ -131,6 +127,10 @@ from nlsq.common_scipy import (
     solve_lsq_trust_region,
     step_size_to_bound,
     update_tr_radius,
+)
+from nlsq.constants import (
+    DEFAULT_MAX_NFEV_MULTIPLIER,
+    INITIAL_LEVENBERG_MARQUARDT_LAMBDA,
 )
 from nlsq.diagnostics import OptimizationDiagnostics
 
