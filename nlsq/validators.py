@@ -363,6 +363,203 @@ class InputValidator:
 
         return errors, warnings_list
 
+    def _check_degenerate_x_values(
+        self, xdata: Any
+    ) -> tuple[list[str], list[str]]:
+        """Check for degenerate x data (all identical, very small/large range).
+
+        Parameters
+        ----------
+        xdata : array_like
+            Independent variable data
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings = []
+
+        # Only check for non-tuple xdata
+        if isinstance(xdata, tuple):
+            return errors, warnings
+
+        if not (hasattr(xdata, "ndim") and xdata.ndim == 1 and len(xdata) > 0):
+            return errors, warnings
+
+        # Check for all identical values (handle JAX arrays)
+        try:
+            xdata_first = (
+                xdata.flatten()[0] if hasattr(xdata, "flatten") else xdata.flat[0]
+            )
+            if np.all(xdata == xdata_first):
+                errors.append("All x values are identical - cannot fit")
+        except (AttributeError, NotImplementedError):
+            # Skip if array type doesn't support .flat or .flatten()
+            pass
+
+        # Check for very small range
+        x_range = np.ptp(xdata)
+        if x_range < 1e-10 and x_range > 0:
+            warnings.append(
+                f"x data range is very small ({x_range:.2e}) - consider rescaling"
+            )
+
+        # Check for very large range
+        if x_range > 1e10:
+            warnings.append(
+                f"x data range is very large ({x_range:.2e}) - consider rescaling"
+            )
+
+        return errors, warnings
+
+    def _check_degenerate_y_values(self, ydata: np.ndarray) -> list[str]:
+        """Check for degenerate y data (all identical, very small range).
+
+        Parameters
+        ----------
+        ydata : np.ndarray
+            Dependent variable data
+
+        Returns
+        -------
+        warnings : list
+            List of warning messages
+        """
+        warnings = []
+
+        # Check if all y values are identical
+        try:
+            ydata_first = (
+                ydata.flatten()[0] if hasattr(ydata, "flatten") else ydata.flat[0]
+            )
+            if np.all(ydata == ydata_first):
+                warnings.append("All y values are identical - trivial fit")
+        except Exception as e:
+            # Skip this check if it fails - log for debugging
+            logger.debug(f"Y-value uniformity check failed (non-critical): {e}")
+
+        # Check for very small range
+        y_range = np.ptp(ydata)
+        if y_range < 1e-10 and y_range > 0:
+            warnings.append(f"y data range is very small ({y_range:.2e})")
+
+        return warnings
+
+    def _check_function_callable(
+        self, f: Callable, xdata: Any, ydata: np.ndarray, p0: Any, n_params: int
+    ) -> tuple[list[str], list[str]]:
+        """Check if function can be called with test data.
+
+        Parameters
+        ----------
+        f : Callable
+            Model function
+        xdata : array_like
+            Independent variable data
+        ydata : np.ndarray
+            Dependent variable data
+        p0 : array_like
+            Initial parameters
+        n_params : int
+            Number of parameters
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings = []
+
+        try:
+            # Cache function test results to avoid repeated calls
+            func_id = id(f)
+            if func_id not in self._function_cache:
+                if isinstance(xdata, tuple):
+                    # For tuple xdata, sample from each array
+                    test_x = tuple(arr[: min(10, len(arr))] for arr in xdata)
+                    expected_len = min(10, len(xdata[0]))
+                else:
+                    if hasattr(xdata, "ndim") and xdata.ndim > 1:
+                        test_x = xdata[: min(10, len(xdata))]
+                    else:
+                        test_x = xdata[: min(10, len(xdata))]
+                    expected_len = min(10, len(xdata))
+
+                if p0 is not None:
+                    test_result = f(test_x, *p0)
+                else:
+                    # Try with dummy parameters
+                    dummy_params = np.ones(n_params)
+                    test_result = f(test_x, *dummy_params)
+
+                # Cache the result
+                self._function_cache[func_id] = True
+
+                # Check output shape/length
+                if hasattr(test_result, "__len__"):
+                    if len(test_result) != expected_len:
+                        warnings.append(
+                            f"Function output length {len(test_result)} doesn't match "
+                            f"expected length {expected_len}"
+                        )
+
+        except Exception as e:
+            errors.append(f"Cannot evaluate function: {e}")
+
+        return errors, warnings
+
+    def _check_data_quality(
+        self, xdata: Any, ydata: np.ndarray
+    ) -> list[str]:
+        """Check data quality (duplicates, outliers).
+
+        Parameters
+        ----------
+        xdata : array_like
+            Independent variable data
+        ydata : np.ndarray
+            Dependent variable data
+
+        Returns
+        -------
+        warnings : list
+            List of warning messages
+        """
+        warnings = []
+
+        # Check for duplicates in x
+        if (
+            not isinstance(xdata, tuple)
+            and hasattr(xdata, "ndim")
+            and xdata.ndim == 1
+        ):
+            unique_x = np.unique(xdata)
+            if len(unique_x) < len(xdata):
+                n_dup = len(xdata) - len(unique_x)
+                warnings.append(f"xdata contains {n_dup} duplicate values")
+
+        # Check for outliers in y
+        if len(ydata) > 10:
+            q1, q3 = np.percentile(ydata, [25, 75])
+            iqr = q3 - q1
+            lower = q1 - 3 * iqr
+            upper = q3 + 3 * iqr
+            n_outliers = np.sum((ydata < lower) | (ydata > upper))
+            if n_outliers > 0:
+                warnings.append(
+                    f"ydata may contain {n_outliers} outliers - "
+                    "consider using robust loss function"
+                )
+
+        return warnings
+
     def validate_curve_fit_inputs(
         self,
         f: Callable,
@@ -375,6 +572,9 @@ class InputValidator:
         check_finite: bool = True,
     ) -> tuple[list[str], list[str], np.ndarray, np.ndarray]:
         """Validate inputs for curve_fit function.
+
+        This method orchestrates the validation pipeline by calling focused
+        helper methods for each validation step.
 
         Parameters
         ----------
@@ -409,7 +609,7 @@ class InputValidator:
         errors = []
         warnings_list = []
 
-        # 1. Validate and convert arrays
+        # Step 1: Validate and convert arrays
         arr_errors, arr_warnings, xdata, ydata, n_points = (
             self._validate_and_convert_arrays(xdata, ydata)
         )
@@ -418,135 +618,58 @@ class InputValidator:
         if errors:
             return errors, warnings_list, xdata, ydata
 
-        # 2. Estimate number of parameters
+        # Step 2: Estimate number of parameters
         n_params = self._estimate_n_params(f, p0)
 
-        # 3. Validate data shapes
+        # Step 3: Validate data shapes
         shape_errors, shape_warnings = self._validate_data_shapes(
             n_points, ydata, n_params
         )
         errors.extend(shape_errors)
         warnings_list.extend(shape_warnings)
 
-        # 4. Check for degenerate cases
-        if not isinstance(xdata, tuple):  # Only check for non-tuple xdata
-            if hasattr(xdata, "ndim") and xdata.ndim == 1 and len(xdata) > 0:
-                if np.all(xdata == xdata.flat[0]):
-                    errors.append("All x values are identical - cannot fit")
+        # Step 4: Check for degenerate x values
+        deg_x_errors, deg_x_warnings = self._check_degenerate_x_values(xdata)
+        errors.extend(deg_x_errors)
+        warnings_list.extend(deg_x_warnings)
 
-                # Check for very small range
-                x_range = np.ptp(xdata)
-                if x_range < 1e-10 and x_range > 0:
-                    warnings_list.append(
-                        f"x data range is very small ({x_range:.2e}) - consider rescaling"
-                    )
+        # Step 5: Check for degenerate y values
+        deg_y_warnings = self._check_degenerate_y_values(ydata)
+        warnings_list.extend(deg_y_warnings)
 
-                # Check for very large range
-                if x_range > 1e10:
-                    warnings_list.append(
-                        f"x data range is very large ({x_range:.2e}) - consider rescaling"
-                    )
-
-        # Check y data
-        # Handle both JAX and NumPy arrays
-        try:
-            ydata_first = (
-                ydata.flatten()[0] if hasattr(ydata, "flatten") else ydata.flat[0]
-            )
-            if np.all(ydata == ydata_first):
-                warnings_list.append("All y values are identical - trivial fit")
-        except Exception as e:
-            # Skip this check if it fails - log for debugging
-            logger.debug(f"Y-value uniformity check failed (non-critical): {e}")
-
-        y_range = np.ptp(ydata)
-        if y_range < 1e-10 and y_range > 0:
-            warnings_list.append(f"y data range is very small ({y_range:.2e})")
-
-        # 5. Validate finite values if requested
+        # Step 6: Validate finite values if requested
         if check_finite:
             finite_errors, finite_warnings = self._validate_finite_values(xdata, ydata)
             errors.extend(finite_errors)
             warnings_list.extend(finite_warnings)
 
-        # 6. Validate initial parameters
+        # Step 7: Validate initial parameters
         p0_errors, p0_warnings = self._validate_initial_guess(p0, n_params)
         errors.extend(p0_errors)
         warnings_list.extend(p0_warnings)
 
-        # 7. Validate bounds if provided
+        # Step 8: Validate bounds if provided
         bounds_errors, bounds_warnings = self._validate_bounds(bounds, n_params, p0)
         errors.extend(bounds_errors)
         warnings_list.extend(bounds_warnings)
 
-        # 8. Validate sigma if provided
+        # Step 9: Validate sigma if provided
         sigma_errors, sigma_warnings = self._validate_sigma(sigma, ydata)
         errors.extend(sigma_errors)
         warnings_list.extend(sigma_warnings)
 
-        # 9. Check function can be called (skip in fast mode)
+        # Step 10: Check function can be called (skip in fast mode)
         if not self.fast_mode:
-            try:
-                # Cache function test results to avoid repeated calls
-                func_id = id(f)
-                if func_id not in self._function_cache:
-                    if isinstance(xdata, tuple):
-                        # For tuple xdata, sample from each array
-                        test_x = tuple(arr[: min(10, len(arr))] for arr in xdata)
-                        expected_len = min(10, len(xdata[0]))
-                    else:
-                        if hasattr(xdata, "ndim") and xdata.ndim > 1:
-                            test_x = xdata[: min(10, len(xdata))]
-                        else:
-                            test_x = xdata[: min(10, len(xdata))]
-                        expected_len = min(10, len(xdata))
+            func_errors, func_warnings = self._check_function_callable(
+                f, xdata, ydata, p0, n_params
+            )
+            errors.extend(func_errors)
+            warnings_list.extend(func_warnings)
 
-                    if p0 is not None:
-                        test_result = f(test_x, *p0)
-                    else:
-                        # Try with dummy parameters
-                        dummy_params = np.ones(n_params)
-                        test_result = f(test_x, *dummy_params)
-
-                    # Cache the result
-                    self._function_cache[func_id] = True
-
-                    # Check output shape/length
-                    if hasattr(test_result, "__len__"):
-                        if len(test_result) != expected_len:
-                            warnings_list.append(
-                                f"Function output length {len(test_result)} doesn't match "
-                                f"expected length {expected_len}"
-                            )
-
-            except Exception as e:
-                errors.append(f"Cannot evaluate function: {e}")
-
-        # 10. Data quality checks (skip in fast mode)
+        # Step 11: Data quality checks (skip in fast mode)
         if not self.fast_mode:
-            if (
-                not isinstance(xdata, tuple)
-                and hasattr(xdata, "ndim")
-                and xdata.ndim == 1
-            ):
-                # Check for duplicates
-                unique_x = np.unique(xdata)
-                if len(unique_x) < len(xdata):
-                    n_dup = len(xdata) - len(unique_x)
-                    warnings_list.append(f"xdata contains {n_dup} duplicate values")
-
-            # Check for outliers in y (always check, regardless of xdata type)
-            if len(ydata) > 10:
-                q1, q3 = np.percentile(ydata, [25, 75])
-                iqr = q3 - q1
-                lower = q1 - 3 * iqr
-                upper = q3 + 3 * iqr
-                n_outliers = np.sum((ydata < lower) | (ydata > upper))
-                if n_outliers > 0:
-                    warnings_list.append(
-                        f"ydata may contain {n_outliers} outliers - "
-                        "consider using robust loss function"
-                    )
+            quality_warnings = self._check_data_quality(xdata, ydata)
+            warnings_list.extend(quality_warnings)
 
         # Return cleaned data
         # Keep tuples as tuples, convert arrays to numpy
