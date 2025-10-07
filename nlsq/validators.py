@@ -4,6 +4,7 @@ This module provides comprehensive input validation to catch errors early
 and provide helpful error messages to users.
 """
 
+import logging
 import warnings
 from collections.abc import Callable
 from functools import wraps
@@ -17,6 +18,8 @@ from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
 
 import jax.numpy as jnp
+
+logger = logging.getLogger(__name__)
 
 
 class InputValidator:
@@ -182,6 +185,187 @@ class InputValidator:
 
         return errors, warnings_list
 
+    def _validate_finite_values(
+        self, xdata: Any, ydata: np.ndarray
+    ) -> tuple[list[str], list[str]]:
+        """Validate that arrays contain only finite values (no NaN/Inf).
+
+        Parameters
+        ----------
+        xdata : Any
+            Independent variable data (array or tuple)
+        ydata : np.ndarray
+            Dependent variable data
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings_list = []
+
+        # Check xdata for finite values
+        if isinstance(xdata, tuple):
+            # Check each array in the tuple
+            for i, x_arr in enumerate(xdata):
+                if not np.all(np.isfinite(x_arr)):
+                    n_bad = np.sum(~np.isfinite(x_arr))
+                    errors.append(f"xdata[{i}] contains {n_bad} NaN or Inf values")
+        elif not np.all(np.isfinite(xdata)):
+            n_bad = np.sum(~np.isfinite(xdata))
+            errors.append(f"xdata contains {n_bad} NaN or Inf values")
+
+        # Check ydata for finite values
+        if not np.all(np.isfinite(ydata)):
+            n_bad = np.sum(~np.isfinite(ydata))
+            errors.append(f"ydata contains {n_bad} NaN or Inf values")
+
+        return errors, warnings_list
+
+    def _validate_initial_guess(
+        self, p0: Any | None, n_params: int
+    ) -> tuple[list[str], list[str]]:
+        """Validate initial parameter guess.
+
+        Parameters
+        ----------
+        p0 : Any | None
+            Initial parameter guess
+        n_params : int
+            Expected number of parameters
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings_list = []
+
+        if p0 is None:
+            return errors, warnings_list
+
+        try:
+            p0 = np.asarray(p0)
+            if len(p0) != n_params:
+                errors.append(
+                    f"Initial guess p0 has {len(p0)} parameters, "
+                    f"but function expects {n_params}"
+                )
+
+            if not np.all(np.isfinite(p0)):
+                errors.append(
+                    "Initial parameter guess p0 contains NaN or Inf values"
+                )
+
+        except Exception as e:
+            errors.append(f"Invalid initial parameter guess p0: {e}")
+
+        return errors, warnings_list
+
+    def _validate_bounds(
+        self, bounds: tuple | None, n_params: int, p0: Any | None
+    ) -> tuple[list[str], list[str]]:
+        """Validate parameter bounds.
+
+        Parameters
+        ----------
+        bounds : tuple | None
+            Parameter bounds (lower, upper)
+        n_params : int
+            Number of parameters
+        p0 : Any | None
+            Initial parameter guess (to check if within bounds)
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings_list = []
+
+        if bounds is None:
+            return errors, warnings_list
+
+        try:
+            if len(bounds) != 2:
+                errors.append("bounds must be a 2-tuple of (lower, upper)")
+            else:
+                lb, ub = bounds
+                if lb is not None and ub is not None:
+                    lb = np.asarray(lb)
+                    ub = np.asarray(ub)
+
+                    if len(lb) != n_params or len(ub) != n_params:
+                        errors.append(
+                            f"bounds must have length {n_params} to match parameters"
+                        )
+
+                    if np.any(lb >= ub):
+                        errors.append("Lower bounds must be less than upper bounds")
+
+                    # Check if p0 is within bounds
+                    if p0 is not None:
+                        p0_array = np.asarray(p0)
+                        if np.any(p0_array < lb) or np.any(p0_array > ub):
+                            warnings_list.append(
+                                "Initial guess p0 is outside bounds"
+                            )
+
+        except Exception as e:
+            errors.append(f"Invalid bounds: {e}")
+
+        return errors, warnings_list
+
+    def _validate_sigma(
+        self, sigma: Any | None, ydata: np.ndarray
+    ) -> tuple[list[str], list[str]]:
+        """Validate uncertainty (sigma) parameters.
+
+        Parameters
+        ----------
+        sigma : Any | None
+            Uncertainties in ydata
+        ydata : np.ndarray
+            Dependent variable data
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings_list = []
+
+        if sigma is None:
+            return errors, warnings_list
+
+        try:
+            sigma = np.asarray(sigma)
+            if sigma.shape != ydata.shape:
+                errors.append("sigma must have same shape as ydata")
+
+            if np.any(sigma <= 0):
+                errors.append("sigma values must be positive")
+
+            if not np.all(np.isfinite(sigma)):
+                errors.append("sigma contains NaN or Inf values")
+
+        except Exception as e:
+            errors.append(f"Invalid sigma: {e}")
+
+        return errors, warnings_list
+
     def validate_curve_fit_inputs(
         self,
         f: Callable,
@@ -276,94 +460,32 @@ class InputValidator:
                 warnings_list.append("All y values are identical - trivial fit")
         except Exception as e:
             # Skip this check if it fails - log for debugging
-            import logging
-
-            logging.getLogger(__name__).debug(
-                f"Y-value uniformity check failed (non-critical): {e}"
-            )
+            logger.debug(f"Y-value uniformity check failed (non-critical): {e}")
 
         y_range = np.ptp(ydata)
         if y_range < 1e-10 and y_range > 0:
             warnings_list.append(f"y data range is very small ({y_range:.2e})")
 
-        # 5. Check for numerical issues if requested
+        # 5. Validate finite values if requested
         if check_finite:
-            if isinstance(xdata, tuple):
-                # Check each array in the tuple
-                for i, x_arr in enumerate(xdata):
-                    if not np.all(np.isfinite(x_arr)):
-                        n_bad = np.sum(~np.isfinite(x_arr))
-                        errors.append(f"xdata[{i}] contains {n_bad} NaN or Inf values")
-            elif not np.all(np.isfinite(xdata)):
-                n_bad = np.sum(~np.isfinite(xdata))
-                errors.append(f"xdata contains {n_bad} NaN or Inf values")
-
-            if not np.all(np.isfinite(ydata)):
-                n_bad = np.sum(~np.isfinite(ydata))
-                errors.append(f"ydata contains {n_bad} NaN or Inf values")
+            finite_errors, finite_warnings = self._validate_finite_values(xdata, ydata)
+            errors.extend(finite_errors)
+            warnings_list.extend(finite_warnings)
 
         # 6. Validate initial parameters
-        if p0 is not None:
-            try:
-                p0 = np.asarray(p0)
-                if len(p0) != n_params:
-                    errors.append(
-                        f"Initial guess p0 has {len(p0)} parameters, "
-                        f"but function expects {n_params}"
-                    )
-
-                if not np.all(np.isfinite(p0)):
-                    errors.append(
-                        "Initial parameter guess p0 contains NaN or Inf values"
-                    )
-
-            except Exception as e:
-                errors.append(f"Invalid initial parameter guess p0: {e}")
+        p0_errors, p0_warnings = self._validate_initial_guess(p0, n_params)
+        errors.extend(p0_errors)
+        warnings_list.extend(p0_warnings)
 
         # 7. Validate bounds if provided
-        if bounds is not None:
-            try:
-                if len(bounds) != 2:
-                    errors.append("bounds must be a 2-tuple of (lower, upper)")
-                else:
-                    lb, ub = bounds
-                    if lb is not None and ub is not None:
-                        lb = np.asarray(lb)
-                        ub = np.asarray(ub)
-
-                        if len(lb) != n_params or len(ub) != n_params:
-                            errors.append(
-                                f"bounds must have length {n_params} to match parameters"
-                            )
-
-                        if np.any(lb >= ub):
-                            errors.append("Lower bounds must be less than upper bounds")
-
-                        # Check if p0 is within bounds
-                        if p0 is not None:
-                            if np.any(p0 < lb) or np.any(p0 > ub):
-                                warnings_list.append(
-                                    "Initial guess p0 is outside bounds"
-                                )
-
-            except Exception as e:
-                errors.append(f"Invalid bounds: {e}")
+        bounds_errors, bounds_warnings = self._validate_bounds(bounds, n_params, p0)
+        errors.extend(bounds_errors)
+        warnings_list.extend(bounds_warnings)
 
         # 8. Validate sigma if provided
-        if sigma is not None:
-            try:
-                sigma = np.asarray(sigma)
-                if sigma.shape != ydata.shape:
-                    errors.append("sigma must have same shape as ydata")
-
-                if np.any(sigma <= 0):
-                    errors.append("sigma values must be positive")
-
-                if not np.all(np.isfinite(sigma)):
-                    errors.append("sigma contains NaN or Inf values")
-
-            except Exception as e:
-                errors.append(f"Invalid sigma: {e}")
+        sigma_errors, sigma_warnings = self._validate_sigma(sigma, ydata)
+        errors.extend(sigma_errors)
+        warnings_list.extend(sigma_warnings)
 
         # 9. Check function can be called (skip in fast mode)
         if not self.fast_mode:
