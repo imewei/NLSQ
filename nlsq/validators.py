@@ -363,9 +363,7 @@ class InputValidator:
 
         return errors, warnings_list
 
-    def _check_degenerate_x_values(
-        self, xdata: Any
-    ) -> tuple[list[str], list[str]]:
+    def _check_degenerate_x_values(self, xdata: Any) -> tuple[list[str], list[str]]:
         """Check for degenerate x data (all identical, very small/large range).
 
         Parameters
@@ -515,9 +513,7 @@ class InputValidator:
 
         return errors, warnings
 
-    def _check_data_quality(
-        self, xdata: Any, ydata: np.ndarray
-    ) -> list[str]:
+    def _check_data_quality(self, xdata: Any, ydata: np.ndarray) -> list[str]:
         """Check data quality (duplicates, outliers).
 
         Parameters
@@ -535,11 +531,7 @@ class InputValidator:
         warnings = []
 
         # Check for duplicates in x
-        if (
-            not isinstance(xdata, tuple)
-            and hasattr(xdata, "ndim")
-            and xdata.ndim == 1
-        ):
+        if not isinstance(xdata, tuple) and hasattr(xdata, "ndim") and xdata.ndim == 1:
             unique_x = np.unique(xdata)
             if len(unique_x) < len(xdata):
                 n_dup = len(xdata) - len(unique_x)

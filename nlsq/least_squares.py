@@ -792,9 +792,7 @@ class LeastSquares:
 
         return result
 
-    def _process_optimization_result(
-        self, result, initial_cost: float, verbose: int
-    ):
+    def _process_optimization_result(self, result, initial_cost: float, verbose: int):
         """Process optimization result and log convergence.
 
         Parameters
@@ -973,10 +971,34 @@ class LeastSquares:
 
         # Step 11: Run TRF optimization
         result = self._run_trf_optimization(
-            rfunc, jac_func, xdata, ydata, data_mask, transform,
-            x0, f0, J0, lb, ub, ftol, xtol, gtol, max_nfev,
-            f_scale, x_scale, loss_function, tr_options, verbose,
-            timeit, tr_solver, method, loss, n, m, initial_cost, timeout_kwargs
+            rfunc,
+            jac_func,
+            xdata,
+            ydata,
+            data_mask,
+            transform,
+            x0,
+            f0,
+            J0,
+            lb,
+            ub,
+            ftol,
+            xtol,
+            gtol,
+            max_nfev,
+            f_scale,
+            x_scale,
+            loss_function,
+            tr_options,
+            verbose,
+            timeit,
+            tr_solver,
+            method,
+            loss,
+            n,
+            m,
+            initial_cost,
+            timeout_kwargs,
         )
 
         # Step 12: Process optimization result
