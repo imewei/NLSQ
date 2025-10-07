@@ -5,10 +5,14 @@ prediction, monitoring, pooling, and automatic garbage collection.
 """
 
 import gc
+import logging
 import warnings
 from contextlib import contextmanager
 
 import numpy as np
+
+# Module logger for debug output
+logger = logging.getLogger(__name__)
 
 try:
     import psutil
@@ -71,9 +75,9 @@ class MemoryManager:
             try:
                 mem = psutil.virtual_memory()
                 return mem.available
-            except Exception:
-                # Fallback if psutil fails
-                pass
+            except Exception as e:
+                # Fallback if psutil fails - log for debugging
+                logger.debug(f"psutil memory check failed (non-critical): {e}")
 
         # Conservative fallback estimate (4 GB)
         return 4.0 * 1024**3
@@ -90,8 +94,8 @@ class MemoryManager:
             try:
                 process = psutil.Process()
                 return process.memory_info().rss
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"psutil process memory check failed (non-critical): {e}")
 
         # Fallback: try to estimate from Python's view
         import sys
@@ -112,8 +116,8 @@ class MemoryManager:
             try:
                 mem = psutil.virtual_memory()
                 return mem.percent / 100.0
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"psutil memory fraction check failed (non-critical): {e}")
 
         # Conservative estimate
         return 0.5

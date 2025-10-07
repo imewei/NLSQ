@@ -1032,8 +1032,9 @@ class LargeDatasetFitter:
                 self.logger.debug(
                     f"Final memory usage: {final_memory:.2f} GB (Δ{memory_delta:+.2f} GB)"
                 )
-            except Exception:
-                pass  # Memory monitoring is best effort
+            except Exception as e:
+                # Memory monitoring is best effort - log but don't fail
+                self.logger.debug(f"Memory monitoring failed (non-critical): {e}")
 
     def get_memory_recommendations(self, n_points: int, n_params: int) -> dict:
         """Get memory usage recommendations for a dataset.

@@ -114,6 +114,10 @@ initialize_gpu_safely()
 
 from nlsq._optimize import OptimizeResult
 from nlsq.common_jax import CommonJIT
+from nlsq.constants import (
+    DEFAULT_MAX_NFEV_MULTIPLIER,
+    INITIAL_LEVENBERG_MARQUARDT_LAMBDA,
+)
 from nlsq.common_scipy import (
     CL_scaling_vector,
     check_termination,
@@ -932,9 +936,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             Delta = 1.0
 
         if max_nfev is None:
-            max_nfev = x0.size * 100
+            max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
 
-        alpha = 0.0  # "Levenberg-Marquardt" parameter
+        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA  # "Levenberg-Marquardt" parameter
 
         termination_status = None
         iteration = 0
@@ -1264,9 +1268,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         g_norm = jnorm(g * v, ord=jnp.inf)
 
         if max_nfev is None:
-            max_nfev = x0.size * 100
+            max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
 
-        alpha = 0.0  # "Levenberg-Marquardt" parameter
+        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA  # "Levenberg-Marquardt" parameter
 
         termination_status = None
         iteration = 0
@@ -1735,9 +1739,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             Delta = 1.0
 
         if max_nfev is None:
-            max_nfev = x0.size * 100
+            max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
 
-        alpha = 0.0  # "Levenberg-Marquardt" parameter
+        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA  # "Levenberg-Marquardt" parameter
 
         termination_status = None
         iteration = 0

@@ -182,9 +182,12 @@ class InputValidator:
             )
             if np.all(ydata == ydata_first):
                 warnings_list.append("All y values are identical - trivial fit")
-        except Exception:
-            # Skip this check if it fails
-            pass
+        except Exception as e:
+            # Skip this check if it fails - log for debugging
+            import logging
+            logging.getLogger(__name__).debug(
+                f"Y-value uniformity check failed (non-critical): {e}"
+            )
 
         y_range = np.ptp(ydata)
         if y_range < 1e-10 and y_range > 0:

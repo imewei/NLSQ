@@ -748,9 +748,12 @@ class CurveFit:
                                 f"Minimum eigenvalue: {min_eig:.6e}. "
                                 "All eigenvalues must be positive."
                             ) from e
-                    except Exception:
-                        # If eigenvalue check fails, provide generic error
-                        pass
+                    except Exception as eigenvalue_error:
+                        # If eigenvalue check fails, provide generic error (log for debugging)
+                        import logging
+                        logging.getLogger(__name__).debug(
+                            f"Eigenvalue check failed (non-critical): {eigenvalue_error}"
+                        )
                     raise ValueError(
                         "Failed to compute Cholesky decomposition of `sigma`. "
                         "The covariance matrix must be symmetric and positive definite."
