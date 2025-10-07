@@ -670,6 +670,220 @@ class InputValidator:
         ydata = np.asarray(ydata)
         return errors, warnings_list, xdata, ydata
 
+    def _validate_x0_array(self, x0: Any) -> tuple[list[str], np.ndarray]:
+        """Validate and convert x0 to array.
+
+        Parameters
+        ----------
+        x0 : array_like
+            Initial parameter guess
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        x0 : np.ndarray
+            Converted x0 array
+        """
+        errors = []
+
+        # Convert x0
+        try:
+            x0 = np.asarray(x0)
+        except Exception as e:
+            errors.append(f"Cannot convert x0 to array: {e}")
+            return errors, x0
+
+        # Check x0 dimensions and values
+        if x0.ndim != 1:
+            errors.append("x0 must be 1-dimensional")
+
+        if len(x0) == 0:
+            errors.append("x0 cannot be empty")
+
+        if not np.all(np.isfinite(x0)):
+            errors.append("x0 contains NaN or Inf values")
+
+        return errors, x0
+
+    def _validate_method(self, method: str) -> list[str]:
+        """Validate optimization method.
+
+        Parameters
+        ----------
+        method : str
+            Optimization method
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        """
+        errors = []
+        valid_methods = ["trf", "dogbox", "lm"]
+        if method not in valid_methods:
+            errors.append(f"method must be one of {valid_methods}, got {method}")
+        return errors
+
+    def _validate_tolerances(
+        self, ftol: float, xtol: float, gtol: float
+    ) -> tuple[list[str], list[str]]:
+        """Validate convergence tolerances.
+
+        Parameters
+        ----------
+        ftol : float
+            Function tolerance
+        xtol : float
+            Parameter tolerance
+        gtol : float
+            Gradient tolerance
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings = []
+
+        # Check positive
+        if ftol <= 0:
+            errors.append(f"ftol must be positive, got {ftol}")
+        if xtol <= 0:
+            errors.append(f"xtol must be positive, got {xtol}")
+        if gtol <= 0:
+            errors.append(f"gtol must be positive, got {gtol}")
+
+        # Check very small values
+        if ftol < 1e-15:
+            warnings.append(f"ftol={ftol} is very small, may not converge")
+        if xtol < 1e-15:
+            warnings.append(f"xtol={xtol} is very small, may not converge")
+
+        return errors, warnings
+
+    def _validate_max_nfev(
+        self, max_nfev: int | None, n_params: int
+    ) -> tuple[list[str], list[str]]:
+        """Validate maximum function evaluations.
+
+        Parameters
+        ----------
+        max_nfev : int or None
+            Maximum function evaluations
+        n_params : int
+            Number of parameters
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings = []
+
+        if max_nfev is not None:
+            if max_nfev <= 0:
+                errors.append(f"max_nfev must be positive, got {max_nfev}")
+            elif max_nfev < n_params:
+                warnings.append(
+                    f"max_nfev={max_nfev} is less than number of parameters {n_params}"
+                )
+
+        return errors, warnings
+
+    def _validate_bounds_and_x0(
+        self, bounds: tuple | None, x0: np.ndarray, method: str
+    ) -> list[str]:
+        """Validate bounds and check x0 within bounds.
+
+        Parameters
+        ----------
+        bounds : tuple or None
+            Parameter bounds as (lb, ub)
+        x0 : np.ndarray
+            Initial parameter guess
+        method : str
+            Optimization method
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        """
+        errors = []
+
+        if bounds is None:
+            return errors
+
+        # Check method compatibility
+        if method == "lm":
+            errors.append("Levenberg-Marquardt method does not support bounds")
+            return errors
+
+        # Validate bounds structure
+        try:
+            lb, ub = bounds
+            lb = np.asarray(lb)
+            ub = np.asarray(ub)
+
+            if len(lb) != len(x0) or len(ub) != len(x0):
+                errors.append("bounds must have same length as x0")
+
+            if np.any(lb >= ub):
+                errors.append("Lower bounds must be less than upper bounds")
+
+            # Check x0 within bounds
+            if np.any(x0 < lb) or np.any(x0 > ub):
+                errors.append("Initial guess x0 is outside bounds")
+
+        except Exception as e:
+            errors.append(f"Invalid bounds: {e}")
+
+        return errors
+
+    def _validate_function_at_x0(
+        self, fun: Callable, x0: np.ndarray
+    ) -> tuple[list[str], list[str]]:
+        """Validate function can be evaluated at x0.
+
+        Parameters
+        ----------
+        fun : callable
+            Residual function
+        x0 : np.ndarray
+            Initial parameter guess
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings = []
+
+        try:
+            result = fun(x0)
+            result = np.asarray(result)
+
+            if result.ndim != 1:
+                errors.append("Function must return 1-dimensional residuals")
+
+            if not np.all(np.isfinite(result)):
+                warnings.append("Function returns NaN or Inf at initial guess")
+
+        except Exception as e:
+            errors.append(f"Cannot evaluate function at x0: {e}")
+
+        return errors, warnings
+
     def validate_least_squares_inputs(
         self,
         fun: Callable,
@@ -682,6 +896,9 @@ class InputValidator:
         max_nfev: int | None = None,
     ) -> tuple[list[str], list[str], np.ndarray]:
         """Validate inputs for least_squares function.
+
+        This method orchestrates the validation pipeline by calling focused
+        helper methods for each validation step.
 
         Parameters
         ----------
@@ -714,86 +931,34 @@ class InputValidator:
         errors = []
         warnings_list = []
 
-        # Convert x0
-        try:
-            x0 = np.asarray(x0)
-        except Exception as e:
-            errors.append(f"Cannot convert x0 to array: {e}")
+        # Step 1: Validate and convert x0
+        x0_errors, x0 = self._validate_x0_array(x0)
+        errors.extend(x0_errors)
+        if x0_errors:
             return errors, warnings_list, x0
 
-        # Check x0
-        if x0.ndim != 1:
-            errors.append("x0 must be 1-dimensional")
+        # Step 2: Validate method
+        method_errors = self._validate_method(method)
+        errors.extend(method_errors)
 
-        if len(x0) == 0:
-            errors.append("x0 cannot be empty")
+        # Step 3: Validate tolerances
+        tol_errors, tol_warnings = self._validate_tolerances(ftol, xtol, gtol)
+        errors.extend(tol_errors)
+        warnings_list.extend(tol_warnings)
 
-        if not np.all(np.isfinite(x0)):
-            errors.append("x0 contains NaN or Inf values")
+        # Step 4: Validate max_nfev
+        nfev_errors, nfev_warnings = self._validate_max_nfev(max_nfev, len(x0))
+        errors.extend(nfev_errors)
+        warnings_list.extend(nfev_warnings)
 
-        # Check method
-        valid_methods = ["trf", "dogbox", "lm"]
-        if method not in valid_methods:
-            errors.append(f"method must be one of {valid_methods}, got {method}")
+        # Step 5: Validate bounds and check x0 within bounds
+        bounds_errors = self._validate_bounds_and_x0(bounds, x0, method)
+        errors.extend(bounds_errors)
 
-        # Check tolerances
-        if ftol <= 0:
-            errors.append(f"ftol must be positive, got {ftol}")
-        if xtol <= 0:
-            errors.append(f"xtol must be positive, got {xtol}")
-        if gtol <= 0:
-            errors.append(f"gtol must be positive, got {gtol}")
-
-        if ftol < 1e-15:
-            warnings_list.append(f"ftol={ftol} is very small, may not converge")
-        if xtol < 1e-15:
-            warnings_list.append(f"xtol={xtol} is very small, may not converge")
-
-        # Check max_nfev
-        if max_nfev is not None:
-            if max_nfev <= 0:
-                errors.append(f"max_nfev must be positive, got {max_nfev}")
-            elif max_nfev < len(x0):
-                warnings_list.append(
-                    f"max_nfev={max_nfev} is less than number of parameters {len(x0)}"
-                )
-
-        # Check bounds
-        if bounds is not None:
-            if method == "lm":
-                errors.append("Levenberg-Marquardt method does not support bounds")
-            else:
-                try:
-                    lb, ub = bounds
-                    lb = np.asarray(lb)
-                    ub = np.asarray(ub)
-
-                    if len(lb) != len(x0) or len(ub) != len(x0):
-                        errors.append("bounds must have same length as x0")
-
-                    if np.any(lb >= ub):
-                        errors.append("Lower bounds must be less than upper bounds")
-
-                    # Check x0 within bounds
-                    if np.any(x0 < lb) or np.any(x0 > ub):
-                        errors.append("Initial guess x0 is outside bounds")
-
-                except Exception as e:
-                    errors.append(f"Invalid bounds: {e}")
-
-        # Test function
-        try:
-            result = fun(x0)
-            result = np.asarray(result)
-
-            if result.ndim != 1:
-                errors.append("Function must return 1-dimensional residuals")
-
-            if not np.all(np.isfinite(result)):
-                warnings_list.append("Function returns NaN or Inf at initial guess")
-
-        except Exception as e:
-            errors.append(f"Cannot evaluate function at x0: {e}")
+        # Step 6: Validate function can be called at x0
+        func_errors, func_warnings = self._validate_function_at_x0(fun, x0)
+        errors.extend(func_errors)
+        warnings_list.extend(func_warnings)
 
         return errors, warnings_list, x0
 
