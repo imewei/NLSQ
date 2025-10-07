@@ -76,7 +76,12 @@ class TestValidateCurveFitInputs:
 
         # Should return error about shape mismatch
         assert len(errors) > 0
-        assert any("shape" in err.lower() or "length" in err.lower() or "mismatch" in err.lower() for err in errors)
+        assert any(
+            "shape" in err.lower()
+            or "length" in err.lower()
+            or "mismatch" in err.lower()
+            for err in errors
+        )
 
     def test_empty_data_raises(self):
         """Test empty arrays raise ValueError."""
@@ -141,7 +146,11 @@ class TestValidateCurveFitInputs:
 
         # Should return error about negative sigma
         assert len(errors) > 0
-        assert any("sigma" in err.lower() and ("negative" in err.lower() or "positive" in err.lower()) for err in errors)
+        assert any(
+            "sigma" in err.lower()
+            and ("negative" in err.lower() or "positive" in err.lower())
+            for err in errors
+        )
 
     def test_sigma_zero_raises(self):
         """Test zero sigma returns error."""
@@ -164,7 +173,11 @@ class TestValidateCurveFitInputs:
 
         # Should return error about zero sigma
         assert len(errors) > 0
-        assert any("sigma" in err.lower() and ("zero" in err.lower() or "positive" in err.lower()) for err in errors)
+        assert any(
+            "sigma" in err.lower()
+            and ("zero" in err.lower() or "positive" in err.lower())
+            for err in errors
+        )
 
     def test_bounds_lower_ge_upper_raises(self):
         """Test lower >= upper bounds returns error."""
@@ -211,7 +224,9 @@ class TestValidateCurveFitInputs:
 
         # Should return warning about p0 outside bounds
         assert len(warnings) > 0
-        assert any("p0" in warn.lower() and "bound" in warn.lower() for warn in warnings)
+        assert any(
+            "p0" in warn.lower() and "bound" in warn.lower() for warn in warnings
+        )
 
     def test_method_invalid_raises(self):
         """Test invalid method parameter (not supported by validate_curve_fit_inputs)."""

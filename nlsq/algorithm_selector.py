@@ -394,9 +394,7 @@ class AlgorithmSelector:
         else:
             recommendations["loss"] = "linear"
 
-    def _adjust_for_noise(
-        self, recommendations: dict, is_noisy: bool
-    ) -> None:
+    def _adjust_for_noise(self, recommendations: dict, is_noisy: bool) -> None:
         """Adjust tolerances for noisy data.
 
         Parameters
@@ -427,9 +425,7 @@ class AlgorithmSelector:
             recommendations["algorithm"] = "trf"
             recommendations["tr_solver"] = "lsmr"  # Memory-efficient iterative solver
 
-    def _adjust_max_iterations(
-        self, recommendations: dict, n_points: int
-    ) -> None:
+    def _adjust_max_iterations(self, recommendations: dict, n_points: int) -> None:
         """Adjust maximum iterations based on problem size.
 
         Parameters
@@ -448,9 +444,7 @@ class AlgorithmSelector:
                 recommendations["max_nfev"] = 200
             # else: keep None (no limit)
 
-    def _select_x_scale(
-        self, recommendations: dict, param_scale_range: float
-    ) -> None:
+    def _select_x_scale(self, recommendations: dict, param_scale_range: float) -> None:
         """Select parameter scaling strategy.
 
         Parameters
