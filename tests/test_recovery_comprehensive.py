@@ -5,9 +5,10 @@ Target: Cover recovery mechanisms and error handling for Sprint 1 safety net.
 Goal: 10-12 tests covering failure types, recovery strategies, and error paths.
 """
 
-import pytest
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+import pytest
+
 from nlsq.recovery import OptimizationRecovery
 
 
@@ -83,7 +84,9 @@ class TestRecoveryStrategies:
         """Test _perturb_parameters recovery strategy."""
         state = {"x": np.array([1.0, 2.0]), "iteration": 5, "cost": 1.0}
 
-        modified_state = self.recovery._perturb_parameters("convergence", state, retry=0)
+        modified_state = self.recovery._perturb_parameters(
+            "convergence", state, retry=0
+        )
 
         assert "x" in modified_state
         assert isinstance(modified_state, dict)
@@ -104,7 +107,9 @@ class TestRecoveryStrategies:
         """Test _adjust_regularization recovery strategy."""
         state = {"x": np.array([1.0, 2.0]), "cost": 1.0}
 
-        modified_state = self.recovery._adjust_regularization("numerical", state, retry=0)
+        modified_state = self.recovery._adjust_regularization(
+            "numerical", state, retry=0
+        )
 
         assert isinstance(modified_state, dict)
         # Should have regularization-related modifications
@@ -113,7 +118,9 @@ class TestRecoveryStrategies:
         """Test _reformulate_problem recovery strategy."""
         state = {"x": np.array([1.0, 2.0]), "bounds": (-np.inf, np.inf)}
 
-        modified_state = self.recovery._reformulate_problem("convergence", state, retry=0)
+        modified_state = self.recovery._reformulate_problem(
+            "convergence", state, retry=0
+        )
 
         assert isinstance(modified_state, dict)
 

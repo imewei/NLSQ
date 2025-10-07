@@ -5,9 +5,10 @@ These tests provide safety net for Sprint 2 refactoring.
 Goal: Cover all branches in this complex function (complexity 29).
 """
 
-import pytest
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+import pytest
+
 from nlsq import CurveFit, curve_fit
 
 
@@ -16,6 +17,7 @@ class TestPrepareInputsBounds:
 
     def test_bounds_default_infinite(self):
         """Test that default bounds are infinite."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -30,6 +32,7 @@ class TestPrepareInputsBounds:
 
     def test_bounds_scalar_expansion(self):
         """Test scalar bounds expand to arrays."""
+
         def exponential(x, a, b):
             return a * jnp.exp(-x / b)  # Use JAX
 
@@ -46,6 +49,7 @@ class TestPrepareInputsBounds:
 
     def test_bounds_array_asymmetric(self):
         """Test different bounds for different parameters."""
+
         def power_law(x, a, b, c):
             return a * x**b + c
 
@@ -54,8 +58,8 @@ class TestPrepareInputsBounds:
 
         # Different bounds per parameter
         bounds = (
-            [0, 0, -10],    # lower
-            [10, 5, 10]     # upper
+            [0, 0, -10],  # lower
+            [10, 5, 10],  # upper
         )
 
         popt, pcov = curve_fit(power_law, xdata, ydata, p0=[1, 1, 1], bounds=bounds)
@@ -66,6 +70,7 @@ class TestPrepareInputsBounds:
 
     def test_bounds_infinite_mixed(self):
         """Test mix of finite and infinite bounds."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -82,6 +87,7 @@ class TestPrepareInputsBounds:
 
     def test_bounds_at_limit(self):
         """Test parameter at bound."""
+
         def model(x, a):
             return a * x
 
@@ -101,6 +107,7 @@ class TestPrepareInputsSigma:
 
     def test_sigma_none_uniform_weights(self):
         """Test sigma=None creates uniform weights."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -113,6 +120,7 @@ class TestPrepareInputsSigma:
 
     def test_sigma_scalar_expansion(self):
         """Test scalar sigma expands to array."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -128,6 +136,7 @@ class TestPrepareInputsSigma:
 
     def test_sigma_array_weights(self):
         """Test array sigma with different weights per point."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -144,6 +153,7 @@ class TestPrepareInputsSigma:
 
     def test_absolute_sigma_true(self):
         """Test absolute_sigma=True interpretation."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -151,13 +161,16 @@ class TestPrepareInputsSigma:
         ydata = np.array([2, 4, 6])
         sigma = np.array([0.1, 0.1, 0.1])
 
-        popt, pcov_abs = curve_fit(linear, xdata, ydata, sigma=sigma, absolute_sigma=True)
+        popt, pcov_abs = curve_fit(
+            linear, xdata, ydata, sigma=sigma, absolute_sigma=True
+        )
 
         # pcov should reflect actual sigma values
         assert np.all(np.diag(pcov_abs) > 0)
 
     def test_absolute_sigma_false(self):
         """Test absolute_sigma=False (relative) interpretation."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -165,7 +178,9 @@ class TestPrepareInputsSigma:
         ydata = np.array([2, 4, 6])
         sigma = np.array([0.1, 0.1, 0.1])
 
-        popt, pcov_rel = curve_fit(linear, xdata, ydata, sigma=sigma, absolute_sigma=False)
+        popt, pcov_rel = curve_fit(
+            linear, xdata, ydata, sigma=sigma, absolute_sigma=False
+        )
 
         # pcov should be scaled by residuals
         assert np.all(np.diag(pcov_rel) > 0)
@@ -176,6 +191,7 @@ class TestPrepareInputsP0:
 
     def test_p0_none_auto_inference(self):
         """Test p0=None triggers automatic inference."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -189,6 +205,7 @@ class TestPrepareInputsP0:
 
     def test_p0_provided_scalar(self):
         """Test explicit p0 as scalar."""
+
         def exponential(x, a):
             return a * jnp.exp(-x)  # Use JAX
 
@@ -202,6 +219,7 @@ class TestPrepareInputsP0:
 
     def test_p0_provided_array(self):
         """Test explicit p0 as array."""
+
         def model(x, a, b, c):
             return a * x**2 + b * x + c
 
@@ -218,6 +236,7 @@ class TestPrepareInputsMethod:
 
     def test_method_auto_unbounded(self):
         """Test automatic method selection without bounds."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -231,6 +250,7 @@ class TestPrepareInputsMethod:
 
     def test_method_with_bounds(self):
         """Test automatic method selection with bounds."""
+
         def exponential(x, a, b):
             return a * jnp.exp(-x / b)  # Use JAX
 
@@ -245,13 +265,14 @@ class TestPrepareInputsMethod:
 
     def test_method_explicit_trf(self):
         """Test explicit method='trf'."""
+
         def model(x, a, b):
             return a * x + b
 
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        popt, pcov = curve_fit(model, xdata, ydata, method='trf')
+        popt, pcov = curve_fit(model, xdata, ydata, method="trf")
 
         assert popt is not None
 
@@ -261,6 +282,7 @@ class TestPrepareInputsEdgeCases:
 
     def test_dimension_mismatch_raises(self):
         """Test xdata/ydata shape mismatch raises error."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -272,6 +294,7 @@ class TestPrepareInputsEdgeCases:
 
     def test_sigma_shape_mismatch_raises(self):
         """Test sigma shape mismatch raises error."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -288,6 +311,7 @@ class TestPrepareInputsArrayTypes:
 
     def test_numpy_arrays_work(self):
         """Test NumPy arrays are accepted."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -300,6 +324,7 @@ class TestPrepareInputsArrayTypes:
 
     def test_jax_arrays_work(self):
         """Test JAX arrays are accepted."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -312,6 +337,7 @@ class TestPrepareInputsArrayTypes:
 
     def test_mixed_arrays_work(self):
         """Test mixed NumPy/JAX arrays work."""
+
         def linear(x, a, b):
             return a * x + b
 
@@ -324,6 +350,7 @@ class TestPrepareInputsArrayTypes:
 
     def test_python_lists_work(self):
         """Test Python lists are converted."""
+
         def linear(x, a, b):
             return a * x + b
 

@@ -17,7 +17,7 @@
 - ✅ **22 comprehensive tests** covering `_prepare_curve_fit_inputs`:
   - 5 bounds variation tests
   - 5 sigma/weights tests
-  - 3 initial parameter tests  
+  - 3 initial parameter tests
   - 3 method selection tests
   - 2 edge case tests
   - 4 array type tests

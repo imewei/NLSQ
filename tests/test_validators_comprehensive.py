@@ -5,9 +5,10 @@ Target: InputValidator.validate_curve_fit_inputs (complexity 25)
 Goal: Cover all validation branches for Sprint 1 safety net.
 """
 
-import pytest
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+import pytest
+
 from nlsq.validators import InputValidator
 
 
@@ -20,6 +21,7 @@ class TestValidateCurveFitInputs:
 
     def test_valid_inputs_pass(self):
         """Test valid inputs pass validation."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -50,11 +52,11 @@ class TestValidateCurveFitInputs:
                 p0=None,
                 sigma=None,
                 bounds=(-np.inf, np.inf),
-                
             )
 
     def test_xdata_ydata_shape_mismatch_raises(self):
         """Test shape mismatch raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -69,11 +71,11 @@ class TestValidateCurveFitInputs:
                 p0=None,
                 sigma=None,
                 bounds=(-np.inf, np.inf),
-                
             )
 
     def test_empty_data_raises(self):
         """Test empty arrays raise ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -88,11 +90,11 @@ class TestValidateCurveFitInputs:
                 p0=None,
                 sigma=None,
                 bounds=(-np.inf, np.inf),
-                
             )
 
     def test_sigma_shape_mismatch_raises(self):
         """Test sigma shape mismatch raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -108,11 +110,11 @@ class TestValidateCurveFitInputs:
                 p0=None,
                 sigma=sigma,
                 bounds=(-np.inf, np.inf),
-                
             )
 
     def test_sigma_negative_raises(self):
         """Test negative sigma raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -128,11 +130,11 @@ class TestValidateCurveFitInputs:
                 p0=None,
                 sigma=sigma,
                 bounds=(-np.inf, np.inf),
-                
             )
 
     def test_sigma_zero_raises(self):
         """Test zero sigma raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -148,11 +150,11 @@ class TestValidateCurveFitInputs:
                 p0=None,
                 sigma=sigma,
                 bounds=(-np.inf, np.inf),
-                
             )
 
     def test_bounds_lower_ge_upper_raises(self):
         """Test lower >= upper bounds raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -168,11 +170,11 @@ class TestValidateCurveFitInputs:
                 p0=[1, 1],
                 sigma=None,
                 bounds=bounds,
-                
             )
 
     def test_p0_outside_bounds_raises(self):
         """Test p0 outside bounds raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -189,11 +191,11 @@ class TestValidateCurveFitInputs:
                 p0=p0,
                 sigma=None,
                 bounds=bounds,
-                
             )
 
     def test_method_invalid_raises(self):
         """Test invalid method raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -208,11 +210,11 @@ class TestValidateCurveFitInputs:
                 p0=None,
                 sigma=None,
                 bounds=(-np.inf, np.inf),
-                
             )
 
     def test_method_lm_with_bounds_raises(self):
         """Test method='lm' with finite bounds raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -228,11 +230,12 @@ class TestValidateCurveFitInputs:
                 p0=[1, 1],
                 sigma=None,
                 bounds=bounds,
-                method='lm',  # LM doesn't support bounds!
+                method="lm",  # LM doesn't support bounds!
             )
 
     def test_valid_method_trf(self):
         """Test valid method='trf' passes."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -247,11 +250,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_valid_method_dogbox(self):
         """Test valid method='dogbox' passes."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -266,11 +269,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_valid_method_lm_unbounded(self):
         """Test method='lm' without bounds passes."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -285,11 +288,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_numpy_arrays_accepted(self):
         """Test NumPy arrays are accepted."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -304,11 +307,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_jax_arrays_accepted(self):
         """Test JAX arrays are accepted."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -323,11 +326,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_mixed_array_types_accepted(self):
         """Test mixed NumPy/JAX arrays accepted."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -342,11 +345,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_python_lists_accepted(self):
         """Test Python lists are accepted."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -361,11 +364,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_valid_sigma_array(self):
         """Test valid sigma array passes."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -381,11 +384,11 @@ class TestValidateCurveFitInputs:
             p0=None,
             sigma=sigma,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_valid_bounds_array(self):
         """Test valid bounds arrays pass."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -401,11 +404,11 @@ class TestValidateCurveFitInputs:
             p0=[1, 1],
             sigma=None,
             bounds=bounds,
-            
         )
 
     def test_valid_p0_array(self):
         """Test valid p0 array passes."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -421,11 +424,11 @@ class TestValidateCurveFitInputs:
             p0=p0,
             sigma=None,
             bounds=(-np.inf, np.inf),
-            
         )
 
     def test_bounds_shape_mismatch_raises(self):
         """Test bounds shape mismatch raises ValueError."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -441,7 +444,6 @@ class TestValidateCurveFitInputs:
                 p0=[1, 1],
                 sigma=None,
                 bounds=bounds,
-                
             )
 
 

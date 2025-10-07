@@ -5,9 +5,10 @@ Target: Cover diverse parameter combinations for Sprint 1 safety net.
 Goal: 15 tests covering loss functions, tolerances, scaling, bounds, verbose.
 """
 
-import pytest
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+import pytest
+
 from nlsq import LeastSquares
 
 
@@ -20,53 +21,58 @@ class TestLossFunctions:
 
     def test_loss_linear(self):
         """Test linear loss (default)."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
         x0 = np.array([0.5, 1.5])
-        result = self.ls.least_squares(fun, x0, loss='linear')
+        result = self.ls.least_squares(fun, x0, loss="linear")
 
         assert result.success
         np.testing.assert_allclose(result.x, [1.0, 2.0], rtol=1e-5)
 
     def test_loss_huber(self):
         """Test Huber loss for robust fitting."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2, 10])  # Outlier
 
         x0 = np.array([0.5, 1.5])
-        result = self.ls.least_squares(fun, x0, loss='huber', f_scale=1.0)
+        result = self.ls.least_squares(fun, x0, loss="huber", f_scale=1.0)
 
         assert result.success
         # Huber loss downweights the outlier
 
     def test_loss_soft_l1(self):
         """Test soft_l1 loss."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
         x0 = np.array([0.5, 1.5])
-        result = self.ls.least_squares(fun, x0, loss='soft_l1', f_scale=1.0)
+        result = self.ls.least_squares(fun, x0, loss="soft_l1", f_scale=1.0)
 
         assert result.success
 
     def test_loss_cauchy(self):
         """Test Cauchy loss."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
         x0 = np.array([0.5, 1.5])
-        result = self.ls.least_squares(fun, x0, loss='cauchy', f_scale=1.0)
+        result = self.ls.least_squares(fun, x0, loss="cauchy", f_scale=1.0)
 
         assert result.success
 
     def test_loss_arctan(self):
         """Test arctan loss."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
         x0 = np.array([0.5, 1.5])
-        result = self.ls.least_squares(fun, x0, loss='arctan', f_scale=1.0)
+        result = self.ls.least_squares(fun, x0, loss="arctan", f_scale=1.0)
 
         assert result.success
 
@@ -80,6 +86,7 @@ class TestToleranceCombinations:
 
     def test_tight_ftol(self):
         """Test tight function tolerance."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
@@ -91,6 +98,7 @@ class TestToleranceCombinations:
 
     def test_tight_xtol(self):
         """Test tight parameter tolerance."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
@@ -102,6 +110,7 @@ class TestToleranceCombinations:
 
     def test_tight_gtol(self):
         """Test tight gradient tolerance."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
@@ -121,6 +130,7 @@ class TestScalingOptions:
 
     def test_x_scale_scalar(self):
         """Test scalar x_scale."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
@@ -131,11 +141,12 @@ class TestScalingOptions:
 
     def test_x_scale_jac(self):
         """Test automatic x_scale from Jacobian."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
         x0 = np.array([0.5, 1.5])
-        result = self.ls.least_squares(fun, x0, x_scale='jac')
+        result = self.ls.least_squares(fun, x0, x_scale="jac")
 
         assert result.success
 
@@ -149,6 +160,7 @@ class TestVerboseAndMonitoring:
 
     def test_verbose_level_0(self):
         """Test verbose=0 (silent)."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
@@ -159,6 +171,7 @@ class TestVerboseAndMonitoring:
 
     def test_verbose_level_1(self):
         """Test verbose=1 (summary)."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
@@ -169,6 +182,7 @@ class TestVerboseAndMonitoring:
 
     def test_verbose_level_2(self):
         """Test verbose=2 (detailed)."""
+
         def fun(x):
             return jnp.array([x[0] - 1, x[1] - 2])
 
@@ -187,8 +201,9 @@ class TestMaxNfev:
 
     def test_max_nfev_limit(self):
         """Test max_nfev enforces iteration limit."""
+
         def fun(x):
-            return jnp.array([x[0]**2 - 1, x[1]**2 - 4])
+            return jnp.array([x[0] ** 2 - 1, x[1] ** 2 - 4])
 
         x0 = np.array([0.1, 0.1])
         result = self.ls.least_squares(fun, x0, max_nfev=5)
