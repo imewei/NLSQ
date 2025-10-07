@@ -34,6 +34,154 @@ class InputValidator:
         self.fast_mode = fast_mode
         self._function_cache = {}  # Cache function test results
 
+    def _validate_and_convert_arrays(
+        self, xdata: Any, ydata: Any
+    ) -> tuple[list[str], list[str], Any, Any, int]:
+        """Validate and convert xdata/ydata to arrays.
+
+        Parameters
+        ----------
+        xdata : Any
+            Independent variable data
+        ydata : Any
+            Dependent variable data
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        xdata_converted : Any
+            Converted xdata (array or tuple)
+        ydata_converted : np.ndarray
+            Converted ydata array
+        n_points : int
+            Number of data points
+        """
+        errors = []
+        warnings_list = []
+
+        # Handle tuple xdata (for multi-dimensional fitting)
+        if isinstance(xdata, tuple):
+            try:
+                n_points = len(xdata[0]) if len(xdata) > 0 else 0
+                # Check all arrays in tuple have same length
+                for i, x_arr in enumerate(xdata):
+                    if len(x_arr) != n_points:
+                        errors.append("All arrays in xdata tuple must have same length")
+                        break
+                warnings_list.append(f"xdata is tuple with {len(xdata)} arrays")
+            except Exception as e:
+                errors.append(f"Invalid xdata tuple: {e}")
+                return errors, warnings_list, xdata, ydata, 0
+        else:
+            # Convert to numpy arrays and check types
+            try:
+                if not isinstance(xdata, (np.ndarray, jnp.ndarray)):
+                    xdata = np.asarray(xdata)
+                    warnings_list.append("xdata converted to numpy array")
+            except Exception as e:
+                errors.append(f"Cannot convert xdata to array: {e}")
+                return errors, warnings_list, xdata, ydata, 0
+
+            # Check dimensions
+            if xdata.ndim == 0:
+                errors.append("xdata must be at least 1-dimensional")
+
+            # Handle 2D xdata (multiple independent variables)
+            if xdata.ndim == 2:
+                n_points = xdata.shape[0]
+                n_vars = xdata.shape[1]
+                warnings_list.append(f"xdata has {n_vars} independent variables")
+            else:
+                n_points = len(xdata) if hasattr(xdata, "__len__") else 1
+
+        # Convert and validate ydata
+        try:
+            if not isinstance(ydata, (np.ndarray, jnp.ndarray)):
+                ydata = np.asarray(ydata)
+                warnings_list.append("ydata converted to numpy array")
+        except Exception as e:
+            errors.append(f"Cannot convert ydata to array: {e}")
+            return errors, warnings_list, xdata, ydata, n_points
+
+        if ydata.ndim == 0:
+            errors.append("ydata must be at least 1-dimensional")
+
+        return errors, warnings_list, xdata, ydata, n_points
+
+    def _estimate_n_params(self, f: Callable, p0: Any | None) -> int:
+        """Estimate number of parameters from function signature or p0.
+
+        Parameters
+        ----------
+        f : Callable
+            Model function
+        p0 : Any | None
+            Initial parameter guess
+
+        Returns
+        -------
+        n_params : int
+            Estimated number of parameters
+        """
+        n_params = 2  # Default estimate
+        try:
+            sig = signature(f)
+            # Count parameters excluding x
+            params = list(sig.parameters.keys())
+            if params:
+                n_params = len(params) - 1
+        except Exception:
+            if p0 is not None:
+                try:
+                    n_params = len(p0)
+                except Exception:
+                    pass  # Keep default
+        return n_params
+
+    def _validate_data_shapes(
+        self, n_points: int, ydata: np.ndarray, n_params: int
+    ) -> tuple[list[str], list[str]]:
+        """Validate data shapes and minimum requirements.
+
+        Parameters
+        ----------
+        n_points : int
+            Number of data points
+        ydata : np.ndarray
+            Dependent variable data
+        n_params : int
+            Number of parameters
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors = []
+        warnings_list = []
+
+        # Check shapes match
+        if len(ydata) != n_points:
+            errors.append(
+                f"xdata ({n_points} points) and ydata ({len(ydata)} points) must have same length"
+            )
+
+        # Check for minimum data points
+        if n_points < 2:
+            errors.append("Need at least 2 data points for fitting")
+
+        if n_points <= n_params:
+            errors.append(
+                f"Need more data points ({n_points}) than parameters ({n_params}) for fitting"
+            )
+
+        return errors, warnings_list
+
     def validate_curve_fit_inputs(
         self,
         f: Callable,
@@ -80,82 +228,26 @@ class InputValidator:
         errors = []
         warnings_list = []
 
-        # 1. Handle tuple xdata (for multi-dimensional fitting)
-        if isinstance(xdata, tuple):
-            # xdata is a tuple of arrays (e.g., for 2D fitting)
-            # Don't convert to a single array - keep as tuple
-            try:
-                n_points = len(xdata[0]) if len(xdata) > 0 else 0
-                # Check all arrays in tuple have same length
-                for i, x_arr in enumerate(xdata):
-                    if len(x_arr) != n_points:
-                        errors.append("All arrays in xdata tuple must have same length")
-                        break
-                warnings_list.append(f"xdata is tuple with {len(xdata)} arrays")
-            except Exception as e:
-                errors.append(f"Invalid xdata tuple: {e}")
-                return errors, warnings_list, xdata, ydata
-        else:
-            # 1. Convert to numpy arrays and check types
-            try:
-                if not isinstance(xdata, (np.ndarray, jnp.ndarray)):
-                    xdata = np.asarray(xdata)
-                    warnings_list.append("xdata converted to numpy array")
-            except Exception as e:
-                errors.append(f"Cannot convert xdata to array: {e}")
-                return errors, warnings_list, xdata, ydata
-
-            # 2. Check dimensions
-            if xdata.ndim == 0:
-                errors.append("xdata must be at least 1-dimensional")
-
-            # Handle 2D xdata (multiple independent variables)
-            if xdata.ndim == 2:
-                n_points = xdata.shape[0]
-                n_vars = xdata.shape[1]
-                warnings_list.append(f"xdata has {n_vars} independent variables")
-            else:
-                n_points = len(xdata) if hasattr(xdata, "__len__") else 1
-
-        try:
-            if not isinstance(ydata, (np.ndarray, jnp.ndarray)):
-                ydata = np.asarray(ydata)
-                warnings_list.append("ydata converted to numpy array")
-        except Exception as e:
-            errors.append(f"Cannot convert ydata to array: {e}")
+        # 1. Validate and convert arrays
+        arr_errors, arr_warnings, xdata, ydata, n_points = (
+            self._validate_and_convert_arrays(xdata, ydata)
+        )
+        errors.extend(arr_errors)
+        warnings_list.extend(arr_warnings)
+        if errors:
             return errors, warnings_list, xdata, ydata
 
-        if ydata.ndim == 0:
-            errors.append("ydata must be at least 1-dimensional")
+        # 2. Estimate number of parameters
+        n_params = self._estimate_n_params(f, p0)
 
-        # 3. Check shapes match
-        if len(ydata) != n_points:
-            errors.append(
-                f"xdata ({n_points} points) and ydata ({len(ydata)} points) must have same length"
-            )
+        # 3. Validate data shapes
+        shape_errors, shape_warnings = self._validate_data_shapes(
+            n_points, ydata, n_params
+        )
+        errors.extend(shape_errors)
+        warnings_list.extend(shape_warnings)
 
-        # 4. Check for minimum data points
-        if n_points < 2:
-            errors.append("Need at least 2 data points for fitting")
-
-        # Estimate number of parameters
-        n_params = 2  # Default estimate
-        try:
-            sig = signature(f)
-            # Count parameters excluding x
-            params = list(sig.parameters.keys())
-            if params:
-                n_params = len(params) - 1
-        except Exception:
-            if p0 is not None:
-                n_params = len(p0)
-
-        if n_points <= n_params:
-            errors.append(
-                f"Need more data points ({n_points}) than parameters ({n_params}) for fitting"
-            )
-
-        # 5. Check for degenerate cases
+        # 4. Check for degenerate cases
         if not isinstance(xdata, tuple):  # Only check for non-tuple xdata
             if hasattr(xdata, "ndim") and xdata.ndim == 1 and len(xdata) > 0:
                 if np.all(xdata == xdata.flat[0]):
@@ -185,6 +277,7 @@ class InputValidator:
         except Exception as e:
             # Skip this check if it fails - log for debugging
             import logging
+
             logging.getLogger(__name__).debug(
                 f"Y-value uniformity check failed (non-critical): {e}"
             )
@@ -193,7 +286,7 @@ class InputValidator:
         if y_range < 1e-10 and y_range > 0:
             warnings_list.append(f"y data range is very small ({y_range:.2e})")
 
-        # 6. Check for numerical issues if requested
+        # 5. Check for numerical issues if requested
         if check_finite:
             if isinstance(xdata, tuple):
                 # Check each array in the tuple
@@ -209,7 +302,7 @@ class InputValidator:
                 n_bad = np.sum(~np.isfinite(ydata))
                 errors.append(f"ydata contains {n_bad} NaN or Inf values")
 
-        # 7. Validate initial parameters
+        # 6. Validate initial parameters
         if p0 is not None:
             try:
                 p0 = np.asarray(p0)
@@ -227,7 +320,7 @@ class InputValidator:
             except Exception as e:
                 errors.append(f"Invalid initial parameter guess p0: {e}")
 
-        # 8. Validate bounds if provided
+        # 7. Validate bounds if provided
         if bounds is not None:
             try:
                 if len(bounds) != 2:
@@ -256,7 +349,7 @@ class InputValidator:
             except Exception as e:
                 errors.append(f"Invalid bounds: {e}")
 
-        # 9. Validate sigma if provided
+        # 8. Validate sigma if provided
         if sigma is not None:
             try:
                 sigma = np.asarray(sigma)
@@ -272,7 +365,7 @@ class InputValidator:
             except Exception as e:
                 errors.append(f"Invalid sigma: {e}")
 
-        # 10. Check function can be called (skip in fast mode)
+        # 9. Check function can be called (skip in fast mode)
         if not self.fast_mode:
             try:
                 # Cache function test results to avoid repeated calls
@@ -310,7 +403,7 @@ class InputValidator:
             except Exception as e:
                 errors.append(f"Cannot evaluate function: {e}")
 
-        # 11. Data quality checks (skip in fast mode)
+        # 10. Data quality checks (skip in fast mode)
         if not self.fast_mode:
             if (
                 not isinstance(xdata, tuple)
