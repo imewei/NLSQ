@@ -8,7 +8,7 @@ NLSQ is a GPU/TPU-accelerated nonlinear least squares curve fitting library that
 **Repository**: https://github.com/imewei/NLSQ
 **Maintainer**: Wei Chen (Argonne National Laboratory)
 **Origin**: Enhanced fork of JAXFit by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith
-**Status**: Production-ready (Beta), 70% test coverage, 355 tests passing
+**Status**: Production-ready (Beta), 70% test coverage, 817 tests passing (100% pass rate)
 
 ## Recent Updates (Updated: 2025-10-07)
 
@@ -54,6 +54,26 @@ NLSQ is a GPU/TPU-accelerated nonlinear least squares curve fitting library that
   - **Decision**: Keep all complexity ignores (C901, PLR0912, PLR0913, PLR0915) - inherent complexity, not refactoring artifacts
   - **Verified**: 743 tests passing, pre-commit clean, all configurations consistent
 
+#### Sprint 3: API Fixes and Complexity Reduction ✅ **COMPLETE**
+- **100% test pass rate achieved** (817/820 tests passing, 3 skipped)
+- **Fixed 10 API mismatch tests** in `test_validators_comprehensive.py`
+- **Reduced 2 complexity violations** (23→<10, 20→<10)
+- **Created 14 helper methods** following orchestrator pattern
+- **Deferred core algorithm refactoring** (`trf_no_bounds`) to dedicated sprint
+- See `sprint3_completion_summary.md` for comprehensive details
+
+**Functions Refactored**:
+1. `validators.validate_least_squares_inputs` (complexity 23 → <10, 6 helpers)
+2. `algorithm_selector.select_algorithm` (complexity 20 → <10, 8 helpers)
+
+**Key Achievements**:
+- Fixed API mismatches: Validators return (errors, warnings, data) tuples, not exceptions
+- Orchestrator pattern: Main methods now 33-49 lines with clear numbered steps
+- Zero regressions: All 817 applicable tests passing
+- Strategic deferral: Core algorithm (`trf_no_bounds`, complexity 24) deferred for dedicated sprint with benchmarking
+
+**Complexity Status**: 20 → 18 violations (-10% reduction)
+
 ### Breaking Changes
 None. All changes are backward compatible.
 
@@ -62,17 +82,21 @@ None. All changes are backward compatible.
 - `.github/workflows/codeql.yml` - Fixed schema validation error (10/07) ⭐
 - `pyproject.toml` - Updated test counts (743) and coverage (70%) (10/07) ⭐
 - `tox.ini` - Updated test counts (743) and coverage (70%), adjusted --cov-fail-under (10/07) ⭐
-- `CLAUDE.md` - Documented Phase 3 ruff validation findings (10/07)
+- `CLAUDE.md` - Documented Phase 3 ruff validation findings and Sprint 3 completion (10/07)
 - `nlsq/constants.py` - Fixed Greek chars, removed docstrings, sorted __all__ (10/07)
-- `nlsq/validators.py` - Use contextlib.suppress instead of try-except-pass (10/07)
+- `nlsq/validators.py` - Use contextlib.suppress, refactored validate_least_squares_inputs (10/07) ⭐
+- `nlsq/algorithm_selector.py` - Refactored select_algorithm (complexity 20→<10) (10/07) ⭐
 - `nlsq/minpack.py` - Prefixed unused variables with underscore (10/07)
 - `nlsq/least_squares.py` - Refactored into focused methods (10/07)
+- `tests/test_validators_comprehensive.py` - Fixed 10 API mismatch tests (10/07) ⭐
 - `nlsq/trf.py` - Performance optimization (NumPy↔JAX reduction)
 - `nlsq/common_scipy.py` - JAX immutability fix
 - `tests/test_integration.py` - Flaky test fix
 - `.gitignore` - Added optimization artifacts
 
 **Added:**
+- `sprint3_plan.md` - Sprint 3 implementation plan (10/07) ⭐
+- `sprint3_completion_summary.md` - Sprint 3 comprehensive summary (10/07) ⭐
 - `docs/codeql_workflow_fix.md` - Complete technical documentation for CI fix (10/07) ⭐
 - `docs/optimization_case_study.md` - Performance optimization analysis
 - `docs/performance_tuning_guide.md` - User performance guide
