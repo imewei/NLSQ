@@ -45,22 +45,18 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          queries: +security-and-quality
-          # Additional security queries
           config: |
             name: "NLSQ CodeQL Config"
             queries:
               - uses: security-extended
               - uses: security-and-quality
-          # Paths to analyze
-          paths:
-            - 'nlsq'
-          # Paths to ignore
-          paths-ignore:
-            - 'tests'
-            - 'examples'
-            - 'docs'
-            - 'benchmark'
+            paths:
+              - nlsq
+            paths-ignore:
+              - tests
+              - examples
+              - docs
+              - benchmark
 
       - name: Install dependencies
         run: |
