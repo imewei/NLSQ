@@ -320,10 +320,11 @@ No installation needed! Click the **"Open in Colab"** badge in any notebook.
 **Colab setup cell** (run first):
 ```python
 # Install NLSQ in Colab
-!pip install nlsq
+# !pip install nlsq
 
 # Import and verify
 import nlsq
+
 print(f"NLSQ version: {nlsq.__version__}")
 ```
 
