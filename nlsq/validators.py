@@ -20,6 +20,8 @@ _jax_config = JAXConfig()
 
 import jax.numpy as jnp
 
+from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
+
 logger = logging.getLogger(__name__)
 
 
@@ -559,9 +561,9 @@ class InputValidator:
         x0: Any,
         bounds: tuple | None = None,
         method: str = "trf",
-        ftol: float = 1e-8,
-        xtol: float = 1e-8,
-        gtol: float = 1e-8,
+        ftol: float = DEFAULT_FTOL,
+        xtol: float = DEFAULT_XTOL,
+        gtol: float = DEFAULT_GTOL,
         max_nfev: int | None = None,
     ) -> tuple[list[str], list[str], np.ndarray]:
         """Validate inputs for least_squares function.

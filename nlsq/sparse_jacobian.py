@@ -10,6 +10,11 @@ import jax.numpy as jnp
 import numpy as np
 from scipy.sparse import csr_matrix, lil_matrix
 
+from nlsq.constants import FINITE_DIFF_REL_STEP
+from nlsq.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class SparseJacobianComputer:
     """Compute and manage sparse Jacobians for large-scale problems.
@@ -66,7 +71,7 @@ class SparseJacobianComputer:
         pattern = np.zeros((n_data, n_params), dtype=bool)
 
         # Use finite differences to detect sparsity
-        eps = 1e-8
+        eps = FINITE_DIFF_REL_STEP
         f0 = func(xdata_sample[:n_data], *x0)
 
         for i in range(n_params):
@@ -176,7 +181,7 @@ class SparseJacobianComputer:
         xdata: np.ndarray,
         ydata: np.ndarray,
         data_mask: np.ndarray,
-        eps: float = 1e-8,
+        eps: float = FINITE_DIFF_REL_STEP,
     ) -> np.ndarray:
         """Compute Jacobian using finite differences as fallback.
 
@@ -417,7 +422,7 @@ class SparseOptimizer:
         self._use_sparse = self.should_use_sparse(n_data, n_params)
 
         if self._use_sparse:
-            print(f"Using sparse Jacobian methods for {n_data}×{n_params} problem")
+            logger.info(f"Using sparse Jacobian methods for {n_data}×{n_params} problem")
 
             # Detect sparsity pattern from samples
             sample_size = min(1000, n_data)
@@ -427,14 +432,14 @@ class SparseOptimizer:
             )
 
             self._detected_sparsity = sparsity
-            print(f"Detected sparsity: {sparsity:.1%}")
+            logger.info(f"Detected sparsity: {sparsity:.1%}")
 
             # Estimate memory savings
             memory_info = self.sparse_computer.estimate_memory_usage(
                 n_data, n_params, sparsity
             )
-            print(f"Memory savings: {memory_info['savings_percent']:.1f}%")
-            print(
+            logger.info(f"Memory savings: {memory_info['savings_percent']:.1f}%")
+            logger.info(
                 f"Dense: {memory_info['dense_gb']:.2f}GB → Sparse: {memory_info['sparse_gb']:.2f}GB"
             )
 
@@ -443,7 +448,7 @@ class SparseOptimizer:
                 return self._optimize_sparse(func, x0, xdata, ydata, **kwargs)
 
         # Fall back to standard dense optimization
-        print(f"Using standard dense methods for {n_data}×{n_params} problem")
+        logger.info(f"Using standard dense methods for {n_data}×{n_params} problem")
         from nlsq import curve_fit
 
         return curve_fit(func, xdata, ydata, x0, **kwargs)

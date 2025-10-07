@@ -7,6 +7,10 @@ import numpy as np
 from numpy.linalg import norm
 from scipy.linalg import LinAlgError, cho_factor, cho_solve
 
+from nlsq.logging import get_logger
+
+logger = get_logger(__name__)
+
 EPS = np.finfo(float).eps
 # Functions related to a trust-region problem.
 
@@ -508,7 +512,7 @@ def reflective_transformation(y, lb, ub):
 
 
 def print_header_nonlinear():
-    print(
+    logger.info(
         "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
             "Total nfev",
@@ -527,13 +531,13 @@ def print_iteration_nonlinear(
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
-    print(
+    logger.info(
         f"{iteration:^15}{nfev:^15}{nfev:^15.4e}{cost_reduction}{cost}{optimality:^15.2e}"
     )
 
 
 def print_header_linear():
-    print(
+    logger.info(
         "{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
             "Cost",
@@ -548,7 +552,7 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimalit
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
-    print(f"{iteration:^15}{cost:^15.4e}{cost}{step_norm}{cost_reduction:^15.2e}")
+    logger.info(f"{iteration:^15}{cost:^15.4e}{cost}{step_norm}{cost_reduction:^15.2e}")
 
 
 # Simple helper functions.

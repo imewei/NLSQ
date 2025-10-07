@@ -114,9 +114,54 @@ jobs:
           pip install pre-commit
           pre-commit run --all-files --show-diff-on-failure
 
+  # Type checking with mypy
+  type-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [pre-commit]
+    if: |
+      always() &&
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-mypy-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-mypy-${{ runner.os }}-
+
+      - name: Install mypy and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mypy numpy jax types-psutil
+          pip install -e . --no-deps
+
+      - name: Run mypy type checking
+        run: |
+          mypy nlsq/ \
+            --ignore-missing-imports \
+            --follow-imports=skip \
+            --disallow-untyped-defs \
+            --warn-redundant-casts \
+            --warn-unused-ignores \
+            --no-implicit-optional \
+            --show-error-codes \
+            --pretty \
+            || echo "⚠️ Type checking found issues (non-blocking for now)"
+
   # Main test job - optimized for speed
   test:
-    needs: [pre-commit]
+    needs: [pre-commit, type-check]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:

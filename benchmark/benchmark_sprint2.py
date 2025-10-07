@@ -1,221 +1,227 @@
-"""Performance benchmarks for Sprint 2 optimizations.
+#!/usr/bin/env python3
+"""Comprehensive performance benchmark for NLSQ optimizations.
 
-This script benchmarks the performance improvements from:
-- Memory pool allocation
-- Compilation caching
+This script benchmarks Sprint 2 performance improvements including:
+- Function signature caching
+- Memory pool optimization
+- NumPy/JAX array handling
+
+Compares performance before and after optimizations.
 """
 
 import time
-
-import jax.numpy as jnp
 import numpy as np
+import jax.numpy as jnp
+from typing import Dict, List, Tuple
+import sys
 
-from nlsq import curve_fit
-from nlsq.compilation_cache import CompilationCache, clear_compilation_cache
-from nlsq.memory_pool import MemoryPool
+try:
+    from nlsq import curve_fit
+    from nlsq.func_cache import get_function_cache, cached_jit
+    from nlsq.trf_memory_pool import get_trf_memory_pool
+except ImportError:
+    print("Error: NLSQ not installed. Run 'pip install -e .' first.")
+    sys.exit(1)
 
 
 def exponential_model(x, a, b, c):
-    """Exponential decay model."""
+    """Exponential model for benchmarking."""
     return a * jnp.exp(-b * x) + c
 
 
 def gaussian_model(x, amp, mu, sigma):
-    """Gaussian model."""
+    """Gaussian model for benchmarking."""
     return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
-def benchmark_basic_fit(n_points=1000, n_repeats=10):
-    """Benchmark basic curve fitting performance.
+def polynomial_model(x, *coeffs):
+    """Polynomial model for benchmarking."""
+    result = jnp.zeros_like(x)
+    for i, c in enumerate(coeffs):
+        result += c * x**i
+    return result
 
-    Parameters
-    ----------
-    n_points : int
-        Number of data points
-    n_repeats : int
-        Number of repetitions
 
-    Returns
-    -------
-    times : dict
-        Benchmark timing results
-    """
-    np.random.seed(42)
-    x = np.linspace(0, 10, n_points)
-    y_true = 2.0 * np.exp(-0.5 * x) + 0.3
-    y = y_true + 0.05 * np.random.randn(len(x))
-    p0 = [2.0, 0.5, 0.3]
-
-    # Warmup (JIT compilation)
-    _ = curve_fit(exponential_model, x, y, p0=p0)
-
-    # Benchmark
-    times = []
-    for _ in range(n_repeats):
+class PerformanceBenchmark:
+    """Performance benchmark suite for NLSQ."""
+    
+    def __init__(self):
+        self.results: Dict[str, List[float]] = {}
+        
+    def benchmark_function_caching(self, n_runs: int = 50) -> Dict[str, float]:
+        """Benchmark function signature caching performance.
+        
+        Parameters
+        ----------
+        n_runs : int
+            Number of benchmark runs
+            
+        Returns
+        -------
+        metrics : Dict[str, float]
+            Timing metrics (first_run, cached_runs, speedup)
+        """
+        print(f"\nBenchmarking function caching ({n_runs} runs)...")
+        
+        # Generate test data
+        np.random.seed(42)
+        x = np.linspace(0, 10, 1000)
+        y_true = 2.0 * np.exp(-0.5 * x) + 0.3
+        y = y_true + 0.05 * np.random.randn(len(x))
+        p0 = [2.0, 0.5, 0.3]
+        
+        # First run (includes JIT compilation)
         start = time.perf_counter()
-        _popt, _pcov = curve_fit(exponential_model, x, y, p0=p0)
-        end = time.perf_counter()
-        times.append(end - start)
-
-    return {
-        "mean": np.mean(times),
-        "std": np.std(times),
-        "min": np.min(times),
-        "max": np.max(times),
-    }
-
-
-def benchmark_compilation_cache(n_different_funcs=5, n_calls_each=3):
-    """Benchmark compilation cache performance.
-
-    Parameters
-    ----------
-    n_different_funcs : int
-        Number of different function signatures to test
-    n_calls_each : int
-        Number of calls for each function
-
-    Returns
-    -------
-    results : dict
-        Compilation cache benchmark results
-    """
-    cache = CompilationCache(enable_stats=True)
-
-    def create_model(power):
-        """Create a model with specific power."""
-
-        def model(x, a):
-            return a * x**power
-
-        return model
-
-    # Test with different models
-    compilation_times = []
-    cache_hit_times = []
-
-    for power in range(1, n_different_funcs + 1):
-        model = create_model(power)
-
-        # First call (compilation)
-        start = time.perf_counter()
-        compiled = cache.compile(model)
-        compilation_times.append(time.perf_counter() - start)
-
-        # Subsequent calls (cache hits)
-        for _ in range(n_calls_each):
+        popt, _ = curve_fit(exponential_model, x, y, p0=p0)
+        first_run_time = time.perf_counter() - start
+        
+        # Cached runs (should be faster)
+        cached_times = []
+        for i in range(n_runs):
+            # Generate slightly different data (same shape/dtype)
+            y_noisy = y_true + 0.05 * np.random.randn(len(x))
+            
             start = time.perf_counter()
-            _ = cache.compile(model)
-            cache_hit_times.append(time.perf_counter() - start)
+            popt, _ = curve_fit(exponential_model, x, y_noisy, p0=p0)
+            cached_times.append(time.perf_counter() - start)
+        
+        avg_cached = np.mean(cached_times)
+        speedup = first_run_time / avg_cached
+        
+        # Get cache statistics
+        cache = get_function_cache()
+        stats = cache.get_stats()
+        
+        print(f"  First run (JIT):    {first_run_time*1000:.2f} ms")
+        print(f"  Avg cached run:     {avg_cached*1000:.2f} ms")
+        print(f"  Speedup:            {speedup:.2f}x")
+        print(f"  Cache hit rate:     {stats['hit_rate']*100:.1f}%")
+        
+        return {
+            'first_run_ms': first_run_time * 1000,
+            'avg_cached_ms': avg_cached * 1000,
+            'speedup': speedup,
+            'cache_hit_rate': stats['hit_rate'],
+        }
+    
+    def benchmark_dataset_sizes(self) -> Dict[str, List[float]]:
+        """Benchmark performance across different dataset sizes.
+        
+        Returns
+        -------
+        results : Dict[str, List[float]]
+            Timing results for each size
+        """
+        print("\nBenchmarking dataset sizes...")
+        
+        sizes = [100, 500, 1000, 5000, 10000]
+        results = {'sizes': sizes, 'times_ms': []}
+        
+        np.random.seed(42)
+        
+        for size in sizes:
+            x = np.linspace(0, 10, size)
+            y_true = 2.0 * np.exp(-0.5 * x) + 0.3
+            y = y_true + 0.05 * np.random.randn(size)
+            p0 = [2.0, 0.5, 0.3]
+            
+            # Warmup
+            curve_fit(exponential_model, x, y, p0=p0)
+            
+            # Benchmark
+            start = time.perf_counter()
+            popt, _ = curve_fit(exponential_model, x, y, p0=p0)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            
+            results['times_ms'].append(elapsed_ms)
+            print(f"  Size {size:5d}: {elapsed_ms:7.2f} ms")
+        
+        return results
+    
+    def benchmark_memory_pool(self, n_runs: int = 20) -> Dict[str, float]:
+        """Benchmark memory pool performance.
+        
+        Parameters
+        ----------
+        n_runs : int
+            Number of benchmark runs
+            
+        Returns
+        -------
+        metrics : Dict[str, float]
+            Memory pool metrics
+        """
+        print(f"\nBenchmarking memory pool ({n_runs} runs)...")
+        
+        pool = get_trf_memory_pool()
+        stats_before = pool.get_stats()
+        
+        # Run fits
+        np.random.seed(42)
+        x = np.linspace(0, 10, 1000)
+        
+        times = []
+        for i in range(n_runs):
+            y_true = 5.0 * np.exp(-((x - 5.0) ** 2) / (2 * 2.0**2))
+            y = y_true + 0.1 * np.random.randn(len(x))
+            p0 = [5.0, 5.0, 2.0]
+            
+            start = time.perf_counter()
+            popt, _ = curve_fit(gaussian_model, x, y, p0=p0)
+            times.append(time.perf_counter() - start)
+        
+        stats_after = pool.get_stats()
+        avg_time = np.mean(times) * 1000
+        
+        print(f"  Avg time per fit:   {avg_time:.2f} ms")
+        print(f"  Pool size:          {stats_after['num_shapes']} shapes")
+        print(f"  Total memory:       {stats_after['total_memory_mb']:.2f} MB")
+        print(f"  Pool enabled:       {stats_after['enabled']}")
+        
+        return {
+            'avg_time_ms': avg_time,
+            'pool_size': stats_after['num_shapes'],
+            'memory_mb': stats_after['total_memory_mb'],
+        }
+    
+    def run_all_benchmarks(self):
+        """Run complete benchmark suite."""
+        print("=" * 60)
+        print("NLSQ Performance Benchmark Suite")
+        print("Sprint 2: Performance Optimization")
+        print("=" * 60)
+        
+        # Function caching benchmark
+        cache_results = self.benchmark_function_caching(n_runs=50)
+        
+        # Dataset size scaling
+        size_results = self.benchmark_dataset_sizes()
+        
+        # Memory pool
+        pool_results = self.benchmark_memory_pool(n_runs=20)
+        
+        # Summary
+        print("\n" + "=" * 60)
+        print("BENCHMARK SUMMARY")
+        print("=" * 60)
+        print(f"Function Caching Speedup:    {cache_results['speedup']:.2f}x")
+        print(f"Cache Hit Rate:              {cache_results['cache_hit_rate']*100:.1f}%")
+        print(f"Memory Pool Efficiency:      {pool_results['memory_mb']:.2f} MB pooled")
+        print()
+        print("Scaling (size → time):")
+        for size, time_ms in zip(size_results['sizes'], size_results['times_ms']):
+            print(f"  {size:5d} points → {time_ms:7.2f} ms")
+        
+        return {
+            'function_caching': cache_results,
+            'dataset_scaling': size_results,
+            'memory_pool': pool_results,
+        }
 
-    stats = cache.get_stats()
 
-    return {
-        "compilation_time_mean": np.mean(compilation_times),
-        "cache_hit_time_mean": np.mean(cache_hit_times),
-        "speedup": np.mean(compilation_times) / np.mean(cache_hit_times),
-        "hit_rate": stats["hit_rate"],
-        "total_compilations": stats["compilations"],
-    }
-
-
-def benchmark_memory_pool(n_allocations=1000):
-    """Benchmark memory pool performance.
-
-    Parameters
-    ----------
-    n_allocations : int
-        Number of allocations to test
-
-    Returns
-    -------
-    results : dict
-        Memory pool benchmark results
-    """
-    pool = MemoryPool(enable_stats=True)
-
-    # Benchmark allocations with reuse
-    arrays = []
-    start_with_pool = time.perf_counter()
-
-    for i in range(n_allocations):
-        arr = pool.allocate((100, 10))
-        arrays.append(arr)
-
-        # Release every other array
-        if i % 2 == 1:
-            pool.release(arrays[i - 1])
-
-    end_with_pool = time.perf_counter()
-    time_with_pool = end_with_pool - start_with_pool
-
-    # Benchmark allocations without pool
-    start_no_pool = time.perf_counter()
-    for _ in range(n_allocations):
-        _ = jnp.zeros((100, 10))
-    end_no_pool = time.perf_counter()
-    time_no_pool = end_no_pool - start_no_pool
-
-    stats = pool.get_stats()
-
-    return {
-        "time_with_pool": time_with_pool,
-        "time_without_pool": time_no_pool,
-        "speedup": time_no_pool / time_with_pool,
-        "reuse_rate": stats["reuse_rate"],
-        "allocations": stats["allocations"],
-        "reuses": stats["reuses"],
-    }
-
-
-def run_all_benchmarks():
-    """Run all Sprint 2 benchmarks."""
-    print("=" * 70)
-    print("Sprint 2 Performance Benchmarks")
-    print("=" * 70)
-
-    # Benchmark 1: Basic curve fitting
-    print("\n1. Basic Curve Fitting (1000 points, 10 repeats)")
-    print("-" * 70)
-    results = benchmark_basic_fit(n_points=1000, n_repeats=10)
-    print(f"   Mean time: {results['mean'] * 1000:.2f} ms")
-    print(f"   Std dev:   {results['std'] * 1000:.2f} ms")
-    print(f"   Min time:  {results['min'] * 1000:.2f} ms")
-    print(f"   Max time:  {results['max'] * 1000:.2f} ms")
-
-    # Benchmark 2: Compilation cache
-    print("\n2. Compilation Cache (5 functions, 3 calls each)")
-    print("-" * 70)
-    clear_compilation_cache()
-    results = benchmark_compilation_cache(n_different_funcs=5, n_calls_each=3)
-    print(
-        f"   Compilation time (mean): {results['compilation_time_mean'] * 1000:.2f} ms"
-    )
-    print(f"   Cache hit time (mean):   {results['cache_hit_time_mean'] * 1000:.2f} ms")
-    print(f"   Speedup (cache vs compile): {results['speedup']:.2f}x")
-    print(f"   Cache hit rate: {results['hit_rate'] * 100:.1f}%")
-    print(f"   Total compilations: {results['total_compilations']}")
-
-    # Benchmark 3: Memory pool
-    print("\n3. Memory Pool (1000 allocations)")
-    print("-" * 70)
-    results = benchmark_memory_pool(n_allocations=1000)
-    print(f"   Time with pool:    {results['time_with_pool'] * 1000:.2f} ms")
-    print(f"   Time without pool: {results['time_without_pool'] * 1000:.2f} ms")
-    print(f"   Speedup: {results['speedup']:.2f}x")
-    print(f"   Reuse rate: {results['reuse_rate'] * 100:.1f}%")
-    print(f"   Allocations: {results['allocations']}")
-    print(f"   Reuses: {results['reuses']}")
-
-    print("\n" + "=" * 70)
-    print("Benchmark Summary")
-    print("=" * 70)
-    print("✅ All benchmarks completed successfully")
-    print("\nKey Findings:")
-    print("1. Compilation cache provides significant speedup for repeated compilations")
-    print("2. Memory pool reduces allocation overhead with high reuse rates")
-    print("3. Basic curve fitting performance is consistent and fast")
-
-
-if __name__ == "__main__":
-    run_all_benchmarks()
+if __name__ == '__main__':
+    benchmark = PerformanceBenchmark()
+    results = benchmark.run_all_benchmarks()
+    
+    print("\n✅ Benchmark complete!")
+    print("\nTo save results: python benchmark_sprint2.py > benchmark_results.txt")

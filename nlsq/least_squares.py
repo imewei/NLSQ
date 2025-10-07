@@ -14,6 +14,7 @@ from jax import jacfwd, jit
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
 
 from nlsq.common_scipy import EPS, in_bounds, make_strictly_feasible
+from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
 from nlsq.diagnostics import OptimizationDiagnostics
 from nlsq.logging import get_logger
 from nlsq.loss_functions import LossFunctionsJIT
@@ -500,9 +501,9 @@ class LeastSquares:
         jac: Callable | None = None,
         bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
         method: str = "trf",
-        ftol: float = 1e-8,
-        xtol: float = 1e-8,
-        gtol: float = 1e-8,
+        ftol: float = DEFAULT_FTOL,
+        xtol: float = DEFAULT_XTOL,
+        gtol: float = DEFAULT_GTOL,
         x_scale: str | np.ndarray | float = 1.0,
         loss: str = "linear",
         f_scale: float = 1.0,
@@ -735,8 +736,8 @@ class LeastSquares:
         )
 
         if verbose >= 1:
-            print(result.message)
-            print(
+            logger.info(result.message)
+            logger.info(
                 f"Function evaluations {result.nfev}, initial cost {initial_cost:.4e}, final cost "
                 f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}."
             )

@@ -14,6 +14,10 @@ import h5py
 import jax.numpy as jnp
 import numpy as np
 
+from nlsq.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class StreamingConfig:
@@ -261,10 +265,10 @@ class StreamingOptimizer:
         losses = []
 
         if verbose >= 1:
-            print(
+            logger.info(
                 f"Starting streaming optimization with batch_size={self.config.batch_size}"
             )
-            print(
+            logger.info(
                 f"Using {'Adam' if self.config.use_adam else 'SGD with momentum'} optimizer"
             )
 
@@ -275,7 +279,7 @@ class StreamingOptimizer:
                 epoch_samples = 0
 
                 if verbose >= 1:
-                    print(f"\nEpoch {epoch + 1}/{self.config.max_epochs}")
+                    logger.info(f"\nEpoch {epoch + 1}/{self.config.max_epochs}")
 
                 # Process batches
                 for batch_idx, (x_batch, y_batch) in enumerate(
@@ -305,7 +309,7 @@ class StreamingOptimizer:
 
                     # Verbose output
                     if verbose >= 2 and batch_idx % 10 == 0:
-                        print(
+                        logger.debug(
                             f"  Batch {batch_idx}: loss={loss:.6f}, grad_norm={grad_norm:.6f}"
                         )
 
@@ -325,8 +329,8 @@ class StreamingOptimizer:
                 if verbose >= 1:
                     elapsed = time.time() - start_time
                     samples_per_sec = total_samples / elapsed
-                    print(f"  Epoch loss: {avg_epoch_loss:.6f}")
-                    print(f"  Samples/sec: {samples_per_sec:.0f}")
+                    logger.info(f"  Epoch loss: {avg_epoch_loss:.6f}")
+                    logger.info(f"  Samples/sec: {samples_per_sec:.0f}")
 
                 # Check for improvement
                 if avg_epoch_loss < self.best_loss:
@@ -339,7 +343,7 @@ class StreamingOptimizer:
                     old_loss = np.mean(losses[-200:-100])
                     if abs(recent_loss - old_loss) < self.config.convergence_tol:
                         if verbose >= 1:
-                            print(f"Converged after {epoch + 1} epochs")
+                            logger.info(f"Converged after {epoch + 1} epochs")
                         break
 
         finally:
@@ -558,7 +562,7 @@ def create_hdf5_dataset(
         f.attrs["true_params"] = params
         f.attrs["noise_level"] = noise_level
 
-    print(f"Created HDF5 dataset with {n_samples} samples in {filename}")
+    logger.info(f"Created HDF5 dataset with {n_samples} samples in {filename}")
 
 
 def fit_unlimited_data(
