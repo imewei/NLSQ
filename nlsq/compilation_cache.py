@@ -185,13 +185,13 @@ class CompilationCache:
             return self.cache[full_key], sig
 
         # Compile with signature-aware caching
+        # Note: compile() already increments misses and compilations
         compiled_func = self.compile(func, static_argnums=static_argnums)
 
         # Store with full signature
         self.cache[full_key] = compiled_func
 
         if self.enable_stats:
-            self.stats["misses"] += 1
             self.stats["cache_size"] = len(self.cache)
 
         return compiled_func, sig
