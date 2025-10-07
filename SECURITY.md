@@ -88,6 +88,7 @@ import numpy as np
 # data = load_untrusted_data()
 # popt, _ = nlsq.curve_fit(fit_func, data['x'], data['y'])
 
+
 # ✅ SAFE: Validate inputs first
 def safe_curve_fit(fit_func, xdata, ydata, **kwargs):
     # Validate input types
