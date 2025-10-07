@@ -962,8 +962,6 @@ All examples have been tested and validated:
 | 2D Gaussian | ✅ 4 scenarios | All passing | Multi-D |
 | Performance Opt | ✅ 12 scenarios | All passing | Optimization |
 
-**Validation report**: [EXAMPLE_VALIDATION_REPORT.md](../EXAMPLE_VALIDATION_REPORT.md)
-
 ---
 
 ## 🆘 Common Issues and Solutions
