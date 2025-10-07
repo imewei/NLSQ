@@ -736,8 +736,8 @@ class LeastSquares:
         )
 
         if verbose >= 1:
-            logger.info(result.message)
-            logger.info(
+            self.logger.info(result.message)
+            self.logger.info(
                 f"Function evaluations {result.nfev}, initial cost {initial_cost:.4e}, final cost "
                 f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}."
             )
