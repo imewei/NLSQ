@@ -391,6 +391,520 @@ class CurveFit:
         ydata = np.concatenate([ydata, ypad])
         return xdata, ydata
 
+    def _setup_sigma_transform(
+        self,
+        sigma: np.ndarray | None,
+        ydata: np.ndarray,
+        data_mask: np.ndarray,
+        len_diff: int,
+        m: int,
+    ):
+        """Setup sigma transformation for weighted least squares.
+
+        Parameters
+        ----------
+        sigma : np.ndarray | None
+            Uncertainty in ydata (1-D errors or 2-D covariance matrix)
+        ydata : np.ndarray
+            Dependent data array
+        data_mask : np.ndarray
+            Boolean mask for valid data points
+        len_diff : int
+            Difference in length for padding
+        m : int
+            Original number of data points
+
+        Returns
+        -------
+        transform : callable | None
+            Transformation function for sigma
+
+        Raises
+        ------
+        ValueError
+            If sigma has incorrect shape or is not positive definite
+        """
+        if sigma is None:
+            return None
+
+        if not isinstance(sigma, np.ndarray):
+            raise ValueError("Sigma must be numpy array.")
+
+        ysize = ydata.size - len_diff
+
+        # if 1-D, sigma are errors, define transform = 1/sigma
+        if sigma.shape == (ysize,):
+            if len_diff > 0:
+                sigma = np.concatenate([sigma, np.ones([len_diff])])
+            return self.sigma_transform1d(sigma, data_mask)
+
+        # if 2-D, sigma is the covariance matrix,
+        # define transform = L such that L L^T = C
+        elif sigma.shape == (ysize, ysize):
+            try:
+                if len_diff >= 0:
+                    sigma_padded = np.identity(m + len_diff)
+                    sigma_padded[:m, :m] = sigma
+                    sigma = sigma_padded
+                # scipy.linalg.cholesky requires lower=True to return L L^T = A
+                return self.sigma_transform2d(sigma, data_mask)
+            except (np.linalg.LinAlgError, ValueError) as e:
+                # Check eigenvalues to provide more informative error
+                try:
+                    eigenvalues = np.linalg.eigvalsh(sigma[:ysize, :ysize])
+                    min_eig = np.min(eigenvalues)
+                    if min_eig <= 0:
+                        raise ValueError(
+                            f"Covariance matrix `sigma` is not positive definite. "
+                            f"Minimum eigenvalue: {min_eig:.6e}. "
+                            "All eigenvalues must be positive."
+                        ) from e
+                except Exception as eigenvalue_error:
+                    # If eigenvalue check fails, provide generic error (log for debugging)
+                    import logging
+
+                    logging.getLogger(__name__).debug(
+                        f"Eigenvalue check failed (non-critical): {eigenvalue_error}"
+                    )
+                raise ValueError(
+                    "Failed to compute Cholesky decomposition of `sigma`. "
+                    "The covariance matrix must be symmetric and positive definite."
+                ) from e
+        else:
+            raise ValueError("`sigma` has incorrect shape.")
+
+    def _compute_covariance(
+        self,
+        res,
+        ysize: int,
+        p0: np.ndarray,
+        absolute_sigma: bool,
+    ) -> tuple[np.ndarray, bool]:
+        """Compute covariance matrix from optimization result.
+
+        Parameters
+        ----------
+        res : OptimizeResult
+            Result from least_squares optimization
+        ysize : int
+            Number of data points
+        p0 : np.ndarray
+            Initial parameter guess
+        absolute_sigma : bool
+            Whether sigma is absolute or relative
+
+        Returns
+        -------
+        pcov : np.ndarray
+            Covariance matrix
+        warn_cov : bool
+            Whether to warn about covariance estimation
+        """
+        cost = 2 * res.cost  # res.cost is half sum of squares!
+
+        # Do Moore-Penrose inverse discarding zero singular values
+        outputs = self.covariance_svd(res.jac)
+        # Convert JAX arrays to NumPy more efficiently using np.asarray
+        s, VT = (np.asarray(output) for output in outputs)
+        threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
+        s = s[s > threshold]
+        VT = VT[: s.size]
+        pcov = np.dot(VT.T / s**2, VT)
+
+        warn_cov = False
+        if pcov is None:
+            # indeterminate covariance
+            pcov = np.zeros((len(res.x), len(res.x)), dtype=float)
+            pcov.fill(np.inf)
+            warn_cov = True
+        elif not absolute_sigma:
+            if ysize > p0.size:
+                s_sq = cost / (ysize - p0.size)
+                pcov = pcov * s_sq
+            else:
+                pcov.fill(np.inf)
+                warn_cov = True
+
+        if warn_cov:
+            self.logger.warning(
+                "Covariance could not be estimated",
+                reason="insufficient_data" if ysize <= p0.size else "singular_jacobian",
+            )
+            warnings.warn(
+                "Covariance of the parameters could not be estimated",
+                stacklevel=2,
+                category=OptimizeWarning,
+            )
+
+        return pcov, warn_cov
+
+    def _prepare_curve_fit_inputs(
+        self,
+        f: Callable,
+        xdata: np.ndarray | tuple[np.ndarray],
+        ydata: np.ndarray,
+        p0: np.ndarray | None,
+        bounds: tuple[np.ndarray, np.ndarray],
+        solver: str,
+        batch_size: int | None,
+        method: str | None,
+        check_finite: bool,
+        data_mask: np.ndarray | None,
+        kwargs: dict,
+    ) -> tuple[
+        int,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        str,
+        np.ndarray,
+        np.ndarray,
+        int,
+        int,
+        bool,
+        bool,
+    ]:
+        """Prepare and validate inputs for curve fitting.
+
+        Returns
+        -------
+        n : int
+            Number of parameters
+        p0 : np.ndarray
+            Initial parameter guess
+        xdata : np.ndarray
+            Validated x data
+        ydata : np.ndarray
+            Validated y data
+        data_mask : np.ndarray
+            Data mask array
+        method : str
+            Optimization method
+        lb : np.ndarray
+            Lower bounds
+        ub : np.ndarray
+            Upper bounds
+        m : int
+            Data length
+        len_diff : int
+            Length difference for padding
+        should_pad : bool
+            Whether padding is needed
+        none_mask : bool
+            Whether data_mask was None on input
+        """
+        # Determine number of parameters
+        if p0 is None:
+            sig = signature(f)
+            args = sig.parameters
+            if len(args) < 2:
+                raise ValueError("Unable to determine number of fit parameters.")
+            n = len(args) - 1
+        else:
+            p0 = np.atleast_1d(p0)
+            n = p0.size
+
+        # Validate solver parameter
+        valid_solvers = {"auto", "svd", "cg", "lsqr", "minibatch"}
+        if solver not in valid_solvers:
+            raise ValueError(
+                f"Invalid solver '{solver}'. Must be one of {valid_solvers}."
+            )
+
+        # Validate batch_size if minibatch solver is used
+        if solver == "minibatch" and batch_size is not None and batch_size <= 0:
+            raise ValueError("batch_size must be positive when using minibatch solver.")
+
+        # Log curve fit start
+        self.logger.info(
+            "Starting curve fit",
+            n_params=n,
+            n_data_points=len(ydata),
+            method=method if method else "trf",
+            solver=solver,
+            batch_size=batch_size if solver == "minibatch" else None,
+            has_bounds=bounds != (-np.inf, np.inf),
+            dynamic_sizing=self.use_dynamic_sizing,
+        )
+
+        # Prepare bounds
+        lb, ub = prepare_bounds(bounds, n)
+        if p0 is None:
+            p0 = _initialize_feasible(lb, ub)
+
+        # Auto-select algorithm if stability is enabled and method not specified
+        if method is None:
+            if self.enable_stability:
+                recommendations = auto_select_algorithm(f, xdata, ydata, p0, bounds)
+                method = recommendations["algorithm"]
+                self.logger.info(
+                    "Auto-selected algorithm",
+                    method=method,
+                    loss=recommendations.get("loss", "linear"),
+                )
+                # Apply recommended parameters to kwargs
+                for key in ["ftol", "xtol", "gtol", "max_nfev", "x_scale"]:
+                    if key in recommendations and key not in kwargs:
+                        kwargs[key] = recommendations[key]
+            else:
+                method = "trf"
+
+        # Validate and sanitize inputs if stability checks are enabled
+        if self.enable_stability:
+            try:
+                errors, warnings_list, xdata_clean, ydata_clean = (
+                    self.validator.validate_curve_fit_inputs(f, xdata, ydata, p0)
+                )
+
+                if errors:
+                    error_msg = f"Input validation failed: {'; '.join(errors)}"
+                    self.logger.error("Input validation failed", error=error_msg)
+                    raise ValueError(error_msg)
+
+                for warning in warnings_list:
+                    self.logger.warning("Input validation warning", warning=warning)
+
+                xdata = xdata_clean
+                ydata = ydata_clean
+
+            except ValueError as e:
+                if "too many values to unpack" not in str(e):
+                    self.logger.error("Input validation failed", error=str(e))
+                raise
+
+        # NaNs cannot be handled
+        if check_finite:
+            ydata = np.asarray_chkfinite(ydata, float)
+        else:
+            ydata = np.asarray(ydata, float)
+
+        # Handle JAX arrays, NumPy arrays, lists, and tuples
+        if hasattr(xdata, "__array__") or isinstance(
+            xdata, (list, tuple, np.ndarray, jnp.ndarray)
+        ):
+            if check_finite:
+                xdata = np.asarray_chkfinite(xdata, float)
+            else:
+                xdata = np.asarray(xdata, float)
+        else:
+            raise ValueError("X needs arrays")
+
+        if ydata.size == 0:
+            raise ValueError("`ydata` must not be empty!")
+
+        # Validate data lengths
+        m = len(ydata)
+        xdims = xdata.ndim
+        xlen = len(xdata) if xdims == 1 else len(xdata[0])
+        if xlen != m:
+            raise ValueError("X and Y data lengths dont match")
+
+        # Setup data mask and padding
+        none_mask = data_mask is None
+        should_pad = False
+        len_diff = 0
+
+        if self.flength is not None:
+            len_diff = self.flength - m
+            if self.use_dynamic_sizing:
+                should_pad = len_diff > 0
+            else:
+                should_pad = len_diff >= 0
+
+            if data_mask is not None:
+                if len(data_mask) != m:
+                    raise ValueError("Data mask doesn't match data lengths.")
+            else:
+                data_mask = np.ones(m, dtype=bool)
+                if should_pad and len_diff > 0:
+                    data_mask = np.concatenate(
+                        [data_mask, np.zeros(len_diff, dtype=bool)]
+                    )
+        else:
+            data_mask = np.ones(m, dtype=bool)
+
+        # Apply padding if needed
+        if self.flength is not None and should_pad:
+            if len_diff > 0:
+                xdata, ydata = self.pad_fit_data(xdata, ydata, xdims, len_diff)
+            elif len_diff < 0 and not self.use_dynamic_sizing:
+                self.logger.debug(
+                    "Data size exceeds fixed length, JIT retracing may occur",
+                    data_size=m,
+                    flength=self.flength,
+                )
+        elif self.use_dynamic_sizing and self.flength is not None and len_diff < 0:
+            len_diff = 0
+
+        return n, p0, xdata, ydata, data_mask, method, lb, ub, m, len_diff, should_pad, none_mask
+
+    def _run_optimization(
+        self,
+        f: Callable,
+        p0: np.ndarray,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        data_mask: np.ndarray,
+        transform,
+        bounds: tuple[np.ndarray, np.ndarray],
+        method: str,
+        solver: str,
+        batch_size: int | None,
+        jac: Callable | None,
+        m: int,
+        n: int,
+        sigma: np.ndarray | None,
+        timeit: bool,
+        kwargs: dict,
+    ) -> tuple:
+        """Setup and run the optimization.
+
+        Returns
+        -------
+        res : OptimizeResult
+            Optimization result
+        jnp_xdata : jnp.ndarray
+            JAX array of x data
+        ctime : float
+            Conversion time (if timeit=True)
+        """
+        # Validate kwargs
+        if "args" in kwargs:
+            raise ValueError("'args' is not a supported keyword argument.")
+
+        if "max_nfev" not in kwargs:
+            kwargs["max_nfev"] = kwargs.pop("maxfev", None)
+
+        # Determine the appropriate solver and configure tr_solver
+        tr_solver = self._select_tr_solver(solver, m, n, batch_size)
+        if tr_solver is not None:
+            kwargs["tr_solver"] = tr_solver
+
+        # Handle minibatch processing if requested
+        if solver == "minibatch":
+            if batch_size is None:
+                batch_size = min(1000, max(100, m // 10))
+                self.logger.debug(f"Using default batch size: {batch_size}")
+
+            self.logger.info(
+                "Minibatch processing requested",
+                batch_size=batch_size,
+                n_batches=m // batch_size + (1 if m % batch_size > 0 else 0),
+            )
+
+        # Convert to JAX arrays
+        st = time.time()
+        if timeit:
+            jnp_xdata = jnp.asarray(xdata).block_until_ready()
+            jnp_ydata = jnp.asarray(ydata).block_until_ready()
+        else:
+            jnp_xdata = jnp.asarray(xdata)
+            jnp_ydata = jnp.asarray(ydata)
+        ctime = time.time() - st
+
+        jnp_data_mask = jnp.array(data_mask, dtype=bool)
+
+        # Check memory requirements if stability is enabled
+        if self.enable_stability:
+            memory_required = self.memory_manager.predict_memory_requirement(
+                m, n, method
+            )
+            is_available, msg = self.memory_manager.check_memory_availability(
+                memory_required
+            )
+            if not is_available:
+                self.logger.warning("Memory constraint detected", message=msg)
+                kwargs["tr_solver"] = "lsmr"
+
+        # Start curve fit timer and call least squares
+        with self.logger.timer("curve_fit"):
+            self.logger.debug(
+                "Calling least squares solver",
+                has_sigma=sigma is not None,
+                has_jacobian=jac is not None,
+            )
+
+            # Create wrapper for overflow checking if enabled
+            if self.enable_overflow_check:
+                original_f = f
+
+                def stable_f(x, *params):
+                    result = original_f(x, *params)
+                    max_val = jnp.max(jnp.abs(result))
+                    result = jnp.where(
+                        max_val > 1e8,
+                        jnp.clip(result, -1e10, 1e10),
+                        result,
+                    )
+                    return result
+
+                f_to_use = stable_f
+            else:
+                f_to_use = f
+
+            try:
+                res = self.ls.least_squares(
+                    f_to_use,
+                    p0,
+                    jac=jac,
+                    xdata=jnp_xdata,
+                    ydata=jnp_ydata,
+                    data_mask=jnp_data_mask,
+                    transform=transform,
+                    bounds=bounds,
+                    method=method,
+                    timeit=timeit,
+                    **kwargs,
+                )
+            except Exception as e:
+                if self.enable_recovery:
+                    self.logger.warning(
+                        "Optimization failed, attempting recovery", error=str(e)
+                    )
+                    recovery_state = {
+                        "params": p0,
+                        "xdata": xdata,
+                        "ydata": ydata,
+                        "method": method if method is not None else "trf",
+                        "bounds": bounds,
+                    }
+
+                    success, result = self.recovery.recover_from_failure(
+                        "optimization_error",
+                        recovery_state,
+                        lambda **state: self.ls.least_squares(
+                            f_to_use,
+                            state["params"],
+                            jac=jac,
+                            xdata=jnp.asarray(state["xdata"]),
+                            ydata=jnp.asarray(state["ydata"]),
+                            data_mask=jnp_data_mask,
+                            transform=transform,
+                            bounds=state["bounds"],
+                            method=state["method"],
+                            timeit=timeit,
+                            **kwargs,
+                        ),
+                    )
+
+                    if success:
+                        res = result
+                    else:
+                        raise RuntimeError(
+                            f"Optimization failed and recovery unsuccessful: {e}"
+                        ) from e
+                else:
+                    raise
+
+        if not res.success:
+            self.logger.error(
+                "Optimization failed", reason=res.message, status=res.status
+            )
+            raise RuntimeError("Optimal parameters not found: " + res.message)
+
+        return res, jnp_xdata, ctime
+
     def curve_fit(
         self,
         f: Callable,
@@ -561,354 +1075,32 @@ class CurveFit:
         >>> plt.show()
         """
 
-        if p0 is None:
-            # determine number of parameters by inspecting the function
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
-                raise ValueError("Unable to determine number of fit parameters.")
-            n = len(args) - 1
-        else:
-            p0 = np.atleast_1d(p0)
-            n = p0.size
-
-        # Validate solver parameter
-        valid_solvers = {"auto", "svd", "cg", "lsqr", "minibatch"}
-        if solver not in valid_solvers:
-            raise ValueError(
-                f"Invalid solver '{solver}'. Must be one of {valid_solvers}."
-            )
-
-        # Validate batch_size if minibatch solver is used
-        if solver == "minibatch" and batch_size is not None and batch_size <= 0:
-            raise ValueError("batch_size must be positive when using minibatch solver.")
-
-        # Log curve fit start
-        self.logger.info(
-            "Starting curve fit",
-            n_params=n,
-            n_data_points=len(ydata),
-            method=method if method else "trf",
-            solver=solver,
-            batch_size=batch_size if solver == "minibatch" else None,
-            has_bounds=bounds != (-np.inf, np.inf),
-            dynamic_sizing=self.use_dynamic_sizing,
+        # Prepare and validate all inputs
+        (
+            n,
+            p0,
+            xdata,
+            ydata,
+            data_mask,
+            method,
+            lb,
+            ub,
+            m,
+            len_diff,
+            should_pad,
+            none_mask,
+        ) = self._prepare_curve_fit_inputs(
+            f, xdata, ydata, p0, bounds, solver, batch_size, method, check_finite, data_mask, kwargs
         )
 
-        lb, ub = prepare_bounds(bounds, n)
-        if p0 is None:
-            p0 = _initialize_feasible(lb, ub)
+        # Setup sigma transformation
+        transform = self._setup_sigma_transform(sigma, ydata, data_mask, len_diff, m)
 
-        # Auto-select algorithm if stability is enabled and method not specified
-        if method is None:
-            if self.enable_stability:
-                # Use intelligent algorithm selection
-                recommendations = auto_select_algorithm(f, xdata, ydata, p0, bounds)
-                method = recommendations["algorithm"]
-                self.logger.info(
-                    "Auto-selected algorithm",
-                    method=method,
-                    loss=recommendations.get("loss", "linear"),
-                )
-
-                # Apply recommended parameters to kwargs
-                for key in ["ftol", "xtol", "gtol", "max_nfev", "x_scale"]:
-                    if key in recommendations and key not in kwargs:
-                        kwargs[key] = recommendations[key]
-            else:
-                method = "trf"
-
-        # Validate and sanitize inputs if stability checks are enabled
-        if self.enable_stability:
-            try:
-                errors, warnings_list, xdata_clean, ydata_clean = (
-                    self.validator.validate_curve_fit_inputs(f, xdata, ydata, p0)
-                )
-
-                # Handle errors
-                if errors:
-                    error_msg = f"Input validation failed: {'; '.join(errors)}"
-                    self.logger.error("Input validation failed", error=error_msg)
-                    raise ValueError(error_msg)
-
-                # Handle warnings
-                for warning in warnings_list:
-                    self.logger.warning("Input validation warning", warning=warning)
-
-                # Use cleaned data
-                xdata = xdata_clean
-                ydata = ydata_clean
-
-            except ValueError as e:
-                if "too many values to unpack" not in str(e):
-                    self.logger.error("Input validation failed", error=str(e))
-                raise
-
-        # NaNs cannot be handled
-        if check_finite:
-            ydata = np.asarray_chkfinite(ydata, float)
-        else:
-            ydata = np.asarray(ydata, float)
-
-        # Handle JAX arrays, NumPy arrays, lists, and tuples
-        if hasattr(xdata, "__array__") or isinstance(
-            xdata, (list, tuple, np.ndarray, jnp.ndarray)
-        ):
-            # should we be able to pass jax arrays
-            # `xdata` is passed straight to the user-defined `f`, so allow
-            # non-array_like `xdata`.
-            if check_finite:
-                xdata = np.asarray_chkfinite(xdata, float)
-            else:
-                xdata = np.asarray(xdata, float)
-        else:
-            raise ValueError("X needs arrays")
-
-        if ydata.size == 0:
-            raise ValueError("`ydata` must not be empty!")
-
-        m = len(ydata)
-        xdims = xdata.ndim
-        xlen = len(xdata) if xdims == 1 else len(xdata[0])
-        if xlen != m:
-            raise ValueError("X and Y data lengths dont match")
-
-        none_mask = data_mask is None
-
-        # Handle dynamic sizing vs fixed length padding
-        should_pad = False
-        len_diff = 0
-
-        if self.flength is not None:
-            len_diff = self.flength - m
-            if self.use_dynamic_sizing:
-                # With dynamic sizing, only pad if data is smaller than flength
-                # and avoid padding for large datasets to save memory
-                should_pad = len_diff > 0
-            else:
-                # Original behavior: always try to pad to flength
-                should_pad = len_diff >= 0
-
-            if data_mask is not None:
-                if len(data_mask) != m:
-                    raise ValueError("Data mask doesn't match data lengths.")
-            else:
-                data_mask = np.ones(m, dtype=bool)
-                if should_pad and len_diff > 0:
-                    data_mask = np.concatenate(
-                        [data_mask, np.zeros(len_diff, dtype=bool)]
-                    )
-        else:
-            data_mask = np.ones(m, dtype=bool)
-
-        # Apply padding if needed
-        if self.flength is not None and should_pad:
-            if len_diff > 0:
-                xdata, ydata = self.pad_fit_data(xdata, ydata, xdims, len_diff)
-            elif len_diff < 0 and not self.use_dynamic_sizing:
-                # Data length greater than fixed length - retracing will occur
-                # Only warn if not using dynamic sizing
-                self.logger.debug(
-                    "Data size exceeds fixed length, JIT retracing may occur",
-                    data_size=m,
-                    flength=self.flength,
-                )
-        elif self.use_dynamic_sizing and self.flength is not None and len_diff < 0:
-            # With dynamic sizing, reset len_diff to 0 for large datasets
-            len_diff = 0
-
-            # Determine type of sigma
-        if sigma is not None:
-            if not isinstance(sigma, np.ndarray):
-                raise ValueError("Sigma must be numpy array.")
-            # if 1-D, sigma are errors, define transform = 1/sigma
-            ysize = ydata.size - len_diff
-            if sigma.shape == (ysize,):
-                if len_diff > 0:
-                    sigma = np.concatenate([sigma, np.ones([len_diff])])
-                transform = self.sigma_transform1d(sigma, data_mask)
-            # if 2-D, sigma is the covariance matrix,
-            # define transform = L such that L L^T = C
-            elif sigma.shape == (ysize, ysize):
-                try:
-                    if len_diff >= 0:
-                        sigma_padded = np.identity(m + len_diff)
-                        sigma_padded[:m, :m] = sigma
-                        sigma = sigma_padded
-                    # scipy.linalg.cholesky requires lower=True to return L L^T = A
-                    transform = self.sigma_transform2d(sigma, data_mask)
-                except (np.linalg.LinAlgError, ValueError) as e:
-                    # Check eigenvalues to provide more informative error
-                    try:
-                        eigenvalues = np.linalg.eigvalsh(sigma[:ysize, :ysize])
-                        min_eig = np.min(eigenvalues)
-                        if min_eig <= 0:
-                            raise ValueError(
-                                f"Covariance matrix `sigma` is not positive definite. "
-                                f"Minimum eigenvalue: {min_eig:.6e}. "
-                                "All eigenvalues must be positive."
-                            ) from e
-                    except Exception as eigenvalue_error:
-                        # If eigenvalue check fails, provide generic error (log for debugging)
-                        import logging
-                        logging.getLogger(__name__).debug(
-                            f"Eigenvalue check failed (non-critical): {eigenvalue_error}"
-                        )
-                    raise ValueError(
-                        "Failed to compute Cholesky decomposition of `sigma`. "
-                        "The covariance matrix must be symmetric and positive definite."
-                    ) from e
-            else:
-                raise ValueError("`sigma` has incorrect shape.")
-        else:
-            transform = None
-
-        if "args" in kwargs:
-            # The specification for the model function `f` does not support
-            # additional arguments. Refer to the `curve_fit` docstring for
-            # acceptable call signatures of `f`.
-            raise ValueError("'args' is not a supported keyword argument.")
-
-        if "max_nfev" not in kwargs:
-            kwargs["max_nfev"] = kwargs.pop("maxfev", None)
-
-        # Determine the appropriate solver and configure tr_solver
-        tr_solver = self._select_tr_solver(solver, m, n, batch_size)
-        if tr_solver is not None:
-            kwargs["tr_solver"] = tr_solver
-
-        # Handle minibatch processing if requested
-        if solver == "minibatch":
-            # Set reasonable default batch size if not provided
-            if batch_size is None:
-                batch_size = min(1000, max(100, m // 10))  # 10% of data, clamped
-                self.logger.debug(f"Using default batch size: {batch_size}")
-
-            # For now, just log that minibatch would be used
-            # Full implementation would require batching the optimization
-            self.logger.info(
-                "Minibatch processing requested",
-                batch_size=batch_size,
-                n_batches=m // batch_size + (1 if m % batch_size > 0 else 0),
-            )
-
-        st = time.time()
-        if timeit:
-            # Use jnp.asarray for efficient conversion without unnecessary copying
-            jnp_xdata = jnp.asarray(xdata).block_until_ready()
-            jnp_ydata = jnp.asarray(ydata).block_until_ready()
-        else:
-            jnp_xdata = jnp.asarray(xdata)
-            jnp_ydata = jnp.asarray(ydata)
-        ctime = time.time() - st
-
-        jnp_data_mask = jnp.array(data_mask, dtype=bool)
-
-        # Check memory requirements if stability is enabled
-        if self.enable_stability:
-            memory_required = self.memory_manager.predict_memory_requirement(
-                m, n, method
-            )
-            is_available, msg = self.memory_manager.check_memory_availability(
-                memory_required
-            )
-            if not is_available:
-                self.logger.warning("Memory constraint detected", message=msg)
-                # Switch to memory-efficient solver
-                kwargs["tr_solver"] = "lsmr"
-
-        # Start curve fit timer and call least squares
-        with self.logger.timer("curve_fit"):
-            self.logger.debug(
-                "Calling least squares solver",
-                has_sigma=sigma is not None,
-                has_jacobian=jac is not None,
-            )
-
-            # Create wrapper for overflow checking if enabled
-            # Note: This is separate from stability to avoid performance overhead
-            if self.enable_overflow_check:
-                original_f = f
-
-                # Use a more efficient overflow check
-                def stable_f(x, *params):
-                    result = original_f(x, *params)
-                    # Only apply clipping when needed to reduce overhead
-                    # Check max/min values first (faster than checking all elements)
-                    max_val = jnp.max(jnp.abs(result))
-                    # Only clip if we have extreme values
-                    result = jnp.where(
-                        max_val > 1e8,  # Only check/clip for very large values
-                        jnp.clip(result, -1e10, 1e10),
-                        result,
-                    )
-                    return result
-
-                f_to_use = stable_f
-            else:
-                f_to_use = f
-
-            try:
-                res = self.ls.least_squares(
-                    f_to_use,
-                    p0,
-                    jac=jac,
-                    xdata=jnp_xdata,
-                    ydata=jnp_ydata,
-                    data_mask=jnp_data_mask,
-                    transform=transform,
-                    bounds=bounds,
-                    method=method,
-                    timeit=timeit,
-                    **kwargs,
-                )
-            except Exception as e:
-                if self.enable_recovery:
-                    self.logger.warning(
-                        "Optimization failed, attempting recovery", error=str(e)
-                    )
-                    # Prepare recovery state
-                    recovery_state = {
-                        "params": p0,
-                        "xdata": xdata,
-                        "ydata": ydata,
-                        "method": method if method is not None else "trf",
-                        "bounds": bounds,
-                    }
-
-                    # Attempt recovery
-                    success, result = self.recovery.recover_from_failure(
-                        "optimization_error",
-                        recovery_state,
-                        lambda **state: self.ls.least_squares(
-                            f_to_use,
-                            state["params"],
-                            jac=jac,
-                            xdata=jnp.asarray(state["xdata"]),
-                            ydata=jnp.asarray(state["ydata"]),
-                            data_mask=jnp_data_mask,
-                            transform=transform,
-                            bounds=state["bounds"],
-                            method=state["method"],
-                            timeit=timeit,
-                            **kwargs,
-                        ),
-                    )
-
-                    if success:
-                        res = result
-                    else:
-                        raise RuntimeError(
-                            f"Optimization failed and recovery unsuccessful: {e}"
-                        ) from e
-                else:
-                    raise
-
-        if not res.success:
-            self.logger.error(
-                "Optimization failed", reason=res.message, status=res.status
-            )
-            raise RuntimeError("Optimal parameters not found: " + res.message)
+        # Run optimization
+        res, jnp_xdata, ctime = self._run_optimization(
+            f, p0, xdata, ydata, data_mask, transform, bounds, method,
+            solver, batch_size, jac, m, n, sigma, timeit, kwargs
+        )
 
         popt = res.x
         self.logger.debug(
@@ -919,48 +1111,14 @@ class CurveFit:
         )
 
         st = time.time()
-        # ysize = len(res.fun)
         ysize = m
         cost = 2 * res.cost  # res.cost is half sum of squares!
 
-        # Do Moore-Penrose inverse discarding zero singular values.
-        # _, s, VT = svd(res.jac, full_matrices=False)
-        outputs = self.covariance_svd(res.jac)
-        # Convert JAX arrays to NumPy more efficiently using np.asarray
-        s, VT = (np.asarray(output) for output in outputs)
-        threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
-        s = s[s > threshold]
-        VT = VT[: s.size]
-        pcov = np.dot(VT.T / s**2, VT)
-        return_full = False
-
-        warn_cov = False
-        if pcov is None:
-            # indeterminate covariance
-            pcov = np.zeros((len(popt), len(popt)), dtype=float)
-            pcov.fill(np.inf)
-            warn_cov = True
-        elif not absolute_sigma:
-            if ysize > p0.size:
-                s_sq = cost / (ysize - p0.size)
-                pcov = pcov * s_sq
-            else:
-                pcov.fill(np.inf)
-                warn_cov = True
-
-        if warn_cov:
-            self.logger.warning(
-                "Covariance could not be estimated",
-                reason="insufficient_data" if ysize <= p0.size else "singular_jacobian",
-            )
-            warnings.warn(
-                "Covariance of the parameters could not be estimated",
-                stacklevel=2,
-                category=OptimizeWarning,
-            )
-
-        # Assign final covariance matrix
+        # Compute covariance matrix
+        pcov, warn_cov = self._compute_covariance(res, ysize, p0, absolute_sigma)
         _pcov = pcov
+
+        return_full = False
 
         # self.res = res
         post_time = time.time() - st

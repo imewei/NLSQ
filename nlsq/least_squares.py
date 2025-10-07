@@ -330,6 +330,168 @@ class LeastSquares:
         if enable_diagnostics:
             self.diagnostics = OptimizationDiagnostics()
 
+    def _validate_least_squares_inputs(
+        self,
+        x0: np.ndarray,
+        bounds: tuple,
+        method: str,
+        jac,
+        loss: str,
+        verbose: int,
+        max_nfev: float | None,
+        ftol: float,
+        xtol: float,
+        gtol: float,
+        x_scale,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, np.ndarray]:
+        """Validate and prepare least squares inputs.
+
+        Returns
+        -------
+        x0 : np.ndarray
+            Validated initial guess
+        lb : np.ndarray
+            Lower bounds
+        ub : np.ndarray
+            Upper bounds
+        ftol : float
+            Function tolerance
+        xtol : float
+            Parameter tolerance
+        gtol : float
+            Gradient tolerance
+        x_scale : np.ndarray
+            Parameter scaling
+        """
+        # Validate loss function
+        if loss not in self.ls.IMPLEMENTED_LOSSES and not callable(loss):
+            raise ValueError(
+                f"`loss` must be one of {self.ls.IMPLEMENTED_LOSSES.keys()} or a callable."
+            )
+
+        # Validate method
+        if method not in ["trf"]:
+            raise ValueError("`method` must be 'trf'")
+
+        # Validate jac parameter
+        if jac not in [None] and not callable(jac):
+            raise ValueError("`jac` must be None or callable.")
+
+        # Validate verbose level
+        if verbose not in [0, 1, 2]:
+            raise ValueError("`verbose` must be in [0, 1, 2].")
+
+        # Validate bounds
+        if len(bounds) != 2:
+            raise ValueError("`bounds` must contain 2 elements.")
+
+        # Validate max_nfev
+        if max_nfev is not None and max_nfev <= 0:
+            raise ValueError("`max_nfev` must be None or positive integer.")
+
+        # Validate x0
+        if np.iscomplexobj(x0):
+            raise ValueError("`x0` must be real.")
+
+        x0 = np.atleast_1d(x0).astype(float)
+
+        if x0.ndim > 1:
+            raise ValueError("`x0` must have at most 1 dimension.")
+
+        # Prepare bounds
+        lb, ub = prepare_bounds(bounds, x0.shape[0])
+
+        if lb.shape != x0.shape or ub.shape != x0.shape:
+            raise ValueError("Inconsistent shapes between bounds and `x0`.")
+
+        if np.any(lb >= ub):
+            raise ValueError(
+                "Each lower bound must be strictly less than each upper bound."
+            )
+
+        if not in_bounds(x0, lb, ub):
+            raise ValueError("`x0` is infeasible.")
+
+        # Check and prepare scaling/tolerances
+        x_scale = check_x_scale(x_scale, x0)
+        ftol, xtol, gtol = check_tolerance(ftol, xtol, gtol, method)
+        x0 = make_strictly_feasible(x0, lb, ub)
+
+        return x0, lb, ub, ftol, xtol, gtol, x_scale
+
+    def _setup_functions(
+        self,
+        fun: Callable,
+        jac: Callable | None,
+        xdata: jnp.ndarray | None,
+        ydata: jnp.ndarray | None,
+        transform: jnp.ndarray | None,
+        x0: np.ndarray,
+        args: tuple,
+        kwargs: dict,
+    ) -> tuple:
+        """Setup residual and Jacobian functions.
+
+        Returns
+        -------
+        rfunc : callable
+            Residual function
+        jac_func : callable
+            Jacobian function
+        """
+        if xdata is not None and ydata is not None:
+            # Check if fit function needs updating
+            func_update = False
+            try:
+                if hasattr(self.f, "__code__") and hasattr(fun, "__code__"):
+                    func_update = self.f.__code__.co_code != fun.__code__.co_code
+                else:
+                    func_update = self.f != fun
+            except Exception:
+                func_update = True
+
+            # Update function if needed
+            if func_update:
+                self.update_function(fun)
+                if jac is None:
+                    self.autdiff_jac(jac)
+
+            # Handle analytical Jacobian
+            if jac is not None:
+                if self.jac is None:
+                    self.wrap_jac(jac)
+                elif self.jac.__code__.co_code != jac.__code__.co_code:
+                    self.wrap_jac(jac)
+            elif self.jac is not None and not func_update:
+                self.autdiff_jac(jac)
+
+            # Select appropriate residual function and Jacobian
+            if transform is None:
+                rfunc = self.func_none
+                jac_func = self.jac_none
+            elif transform.ndim == 1:
+                rfunc = self.func_1d
+                jac_func = self.jac_1d
+            else:
+                rfunc = self.func_2d
+                jac_func = self.jac_2d
+        else:
+            # SciPy compatibility mode
+            def wrap_func(fargs, xdata, ydata, data_mask, atransform):
+                return jnp.atleast_1d(fun(fargs, *args, **kwargs))
+
+            def wrap_jac(fargs, xdata, ydata, data_mask, atransform):
+                return jnp.atleast_2d(jac(fargs, *args, **kwargs))
+
+            rfunc = wrap_func
+            if jac is None:
+                adj = AutoDiffJacobian()
+                jac_func = adj.create_ad_jacobian(wrap_func, x0.size, masked=False)
+            else:
+                jac_func = wrap_jac
+
+        return rfunc, jac_func
+
     def least_squares(
         self,
         fun: Callable,
@@ -414,33 +576,10 @@ class LeastSquares:
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
 
-        if loss not in self.ls.IMPLEMENTED_LOSSES and not callable(loss):
-            raise ValueError(
-                f"`loss` must be one of {self.ls.IMPLEMENTED_LOSSES.keys()} or a callable."
-            )
-
-        if method not in ["trf"]:
-            raise ValueError("`method` must be 'trf'")
-
-        if jac not in [None] and not callable(jac):
-            raise ValueError("`jac` must be None or callable.")
-
-        if verbose not in [0, 1, 2]:
-            raise ValueError("`verbose` must be in [0, 1, 2].")
-
-        if len(bounds) != 2:
-            raise ValueError("`bounds` must contain 2 elements.")
-
-        if max_nfev is not None and max_nfev <= 0:
-            raise ValueError("`max_nfev` must be None or positive integer.")
-
-        if np.iscomplexobj(x0):
-            raise ValueError("`x0` must be real.")
-
-        x0 = np.atleast_1d(x0).astype(float)
-
-        if x0.ndim > 1:
-            raise ValueError("`x0` must have at most 1 dimension.")
+        # Validate inputs
+        x0, lb, ub, ftol, xtol, gtol, x_scale = self._validate_least_squares_inputs(
+            x0, bounds, method, jac, loss, verbose, max_nfev, ftol, xtol, gtol, x_scale
+        )
 
         self.n = len(x0)
 
@@ -455,87 +594,10 @@ class LeastSquares:
             gtol=gtol,
         )
 
-        lb, ub = prepare_bounds(bounds, x0.shape[0])
-
-        if lb.shape != x0.shape or ub.shape != x0.shape:
-            raise ValueError("Inconsistent shapes between bounds and `x0`.")
-
-        if np.any(lb >= ub):
-            raise ValueError(
-                "Each lower bound must be strictly less than each upper bound."
-            )
-
-        if not in_bounds(x0, lb, ub):
-            raise ValueError("`x0` is infeasible.")
-
-        x_scale = check_x_scale(x_scale, x0)
-        ftol, xtol, gtol = check_tolerance(ftol, xtol, gtol, method)
-        x0 = make_strictly_feasible(x0, lb, ub)
-
-        if xdata is not None and ydata is not None:
-            # checks to see if the fit function is the same. Can't directly
-            # compare the functions so we compare function code directly
-            # Handle both regular functions and JIT-compiled functions
-            func_update = False
-            try:
-                if hasattr(self.f, "__code__") and hasattr(fun, "__code__"):
-                    # Both are regular Python functions
-                    func_update = self.f.__code__.co_code != fun.__code__.co_code
-                else:
-                    # One or both are JIT-compiled or different types
-                    func_update = self.f != fun
-            except Exception:
-                # If comparison fails, update to be safe
-                func_update = True
-            # if we are updating the fit function then we need to update the
-            # jacobian function as well
-            if func_update:
-                self.update_function(fun)
-                # this only updates the the jacobian if using autodiff (jac=None)
-                if jac is None:
-                    self.autdiff_jac(jac)
-
-            # if using an analytical jacobian
-            if jac is not None:
-                # if we are in the first function call
-                if self.jac is None:
-                    self.wrap_jac(jac)
-                elif self.jac.__code__.co_code != jac.__code__.co_code:
-                    # checks to see if the jacobian function is the same (see
-                    # func_update for why no direct comparing of the functions)
-                    # if it's a different Jacobian we need to rewrap it
-                    self.wrap_jac(jac)
-            elif self.jac is not None and not func_update:
-                self.autdiff_jac(jac)
-
-            # determines the correct residual function and jacobian to use
-            # depending on whether data uncertainty transform is None, 1D, or 2D
-            if transform is None:
-                rfunc = self.func_none
-                jac_func = self.jac_none
-            elif transform.ndim == 1:
-                rfunc = self.func_1d
-                jac_func = self.jac_1d
-            else:
-                rfunc = self.func_2d
-                jac_func = self.jac_2d
-        else:
-            # this if/else is to maintain compatibility with the SciPy suite of tests
-            # which assume the residual function contains the fit data which is not
-            # the case for JAXFit due to how we've made the residual function
-            # function to be compatible with JAX JIT compilation
-            def wrap_func(fargs, xdata, ydata, data_mask, atransform):
-                return jnp.atleast_1d(fun(fargs, *args, **kwargs))
-
-            def wrap_jac(fargs, xdata, ydata, data_mask, atransform):
-                return jnp.atleast_2d(jac(fargs, *args, **kwargs))
-
-            rfunc = wrap_func
-            if jac is None:
-                adj = AutoDiffJacobian()
-                jac_func = adj.create_ad_jacobian(wrap_func, x0.size, masked=False)
-            else:
-                jac_func = wrap_jac
+        # Setup residual and Jacobian functions
+        rfunc, jac_func = self._setup_functions(
+            fun, jac, xdata, ydata, transform, x0, args, kwargs
+        )
 
         f0 = rfunc(x0, xdata, ydata, data_mask, transform)
         J0 = jac_func(x0, xdata, ydata, data_mask, transform)
