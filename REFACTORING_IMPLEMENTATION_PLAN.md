@@ -46,6 +46,7 @@ except Exception:
 
 # After:
 from nlsq.logging import get_logger
+
 logger = get_logger(__name__)
 
 try:
@@ -90,28 +91,28 @@ These values are derived from:
 
 # Trust Region Reflective (TRF) Algorithm Constants
 DEFAULT_MAX_NFEV_MULTIPLIER = 100  # Max function evaluations per parameter
-STEP_ACCEPTANCE_THRESHOLD = 0.5    # Trust region step acceptance ratio
-STEP_QUALITY_EXCELLENT = 0.75      # Excellent step quality threshold
-STEP_QUALITY_GOOD = 0.25           # Good step quality threshold
+STEP_ACCEPTANCE_THRESHOLD = 0.5  # Trust region step acceptance ratio
+STEP_QUALITY_EXCELLENT = 0.75  # Excellent step quality threshold
+STEP_QUALITY_GOOD = 0.25  # Good step quality threshold
 
-INITIAL_TRUST_RADIUS = 1.0         # Initial trust region radius
-MAX_TRUST_RADIUS = 1000.0          # Maximum trust region radius
-MIN_TRUST_RADIUS = 1e-10           # Minimum trust region radius
+INITIAL_TRUST_RADIUS = 1.0  # Initial trust region radius
+MAX_TRUST_RADIUS = 1000.0  # Maximum trust region radius
+MIN_TRUST_RADIUS = 1e-10  # Minimum trust region radius
 
 INITIAL_LEVENBERG_MARQUARDT_LAMBDA = 0.0  # Initial LM damping parameter
 
 # Convergence tolerances
-DEFAULT_FTOL = 1e-8                # Function tolerance
-DEFAULT_XTOL = 1e-8                # Parameter tolerance
-DEFAULT_GTOL = 1e-8                # Gradient tolerance
+DEFAULT_FTOL = 1e-8  # Function tolerance
+DEFAULT_XTOL = 1e-8  # Parameter tolerance
+DEFAULT_GTOL = 1e-8  # Gradient tolerance
 
 # Algorithm selection thresholds
-SMALL_DATASET_THRESHOLD = 1000     # Switch to different algorithms
+SMALL_DATASET_THRESHOLD = 1000  # Switch to different algorithms
 LARGE_DATASET_THRESHOLD = 1_000_000  # Use chunking/streaming
 
 # Numerical stability
-MIN_POSITIVE_VALUE = 1e-15         # Minimum positive value for numerical stability
-MAX_CONDITION_NUMBER = 1e12        # Maximum matrix condition number
+MIN_POSITIVE_VALUE = 1e-15  # Minimum positive value for numerical stability
+MAX_CONDITION_NUMBER = 1e12  # Maximum matrix condition number
 ```
 
 **Usage in trf.py**:
@@ -125,7 +126,7 @@ step_threshold = 0.5
 from nlsq.constants import (
     DEFAULT_MAX_NFEV_MULTIPLIER,
     INITIAL_LEVENBERG_MARQUARDT_LAMBDA,
-    STEP_ACCEPTANCE_THRESHOLD
+    STEP_ACCEPTANCE_THRESHOLD,
 )
 
 max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
@@ -153,8 +154,7 @@ step_threshold = STEP_ACCEPTANCE_THRESHOLD
 ```python
 # Step 1: Extract type validation
 def _validate_and_convert_arrays(
-    xdata: Any,
-    ydata: Any
+    xdata: Any, ydata: Any
 ) -> tuple[list[str], list[str], np.ndarray, np.ndarray]:
     """Validate and convert xdata/ydata to numpy arrays.
 
@@ -215,8 +215,7 @@ def _validate_and_convert_arrays(
 
 # Step 2: Extract shape validation
 def _validate_data_shapes(
-    xdata: np.ndarray | tuple,
-    ydata: np.ndarray
+    xdata: np.ndarray | tuple, ydata: np.ndarray
 ) -> tuple[list[str], list[str], int]:
     """Validate that xdata and ydata have compatible shapes.
 
@@ -311,8 +310,7 @@ def validate_curve_fit_inputs(
 ```python
 # Extract bounds validation (complexity ~15)
 def _validate_bounds(
-    bounds: tuple | None,
-    n_params: int
+    bounds: tuple | None, n_params: int
 ) -> tuple[list[str], list[str], tuple | None]:
     """Validate parameter bounds."""
     errors = []
@@ -333,9 +331,7 @@ def _validate_bounds(
 
 # Extract sigma validation (complexity ~10)
 def _validate_sigma(
-    sigma: Any | None,
-    n_points: int,
-    ydata_shape: tuple
+    sigma: Any | None, n_points: int, ydata_shape: tuple
 ) -> tuple[list[str], list[str], np.ndarray | None]:
     """Validate uncertainty (sigma) parameters."""
     # ... sigma validation logic
@@ -343,10 +339,7 @@ def _validate_sigma(
 
 # Extract p0 validation (complexity ~8)
 def _validate_initial_guess(
-    p0: Any | None,
-    f: Callable,
-    xdata: np.ndarray,
-    n_params_expected: int | None = None
+    p0: Any | None, f: Callable, xdata: np.ndarray, n_params_expected: int | None = None
 ) -> tuple[list[str], list[str], np.ndarray | None]:
     """Validate initial parameter guess."""
     # ... p0 validation logic
@@ -354,8 +347,7 @@ def _validate_initial_guess(
 
 # Extract finite value validation (complexity ~5)
 def _validate_finite_values(
-    xdata: np.ndarray,
-    ydata: np.ndarray
+    xdata: np.ndarray, ydata: np.ndarray
 ) -> tuple[list[str], list[str]]:
     """Check for NaN/Inf values in data."""
     errors = []
@@ -384,11 +376,7 @@ def _validate_finite_values(
 ```python
 # Extract validation (complexity ~15)
 def _validate_and_prepare_inputs(
-    f: Callable,
-    xdata: Any,
-    ydata: Any,
-    p0: Any,
-    **kwargs
+    f: Callable, xdata: Any, ydata: Any, p0: Any, **kwargs
 ) -> ValidatedInputs:
     """Validate inputs and prepare for fitting."""
     # Use existing validators.validate_curve_fit_inputs()
@@ -399,10 +387,7 @@ def _validate_and_prepare_inputs(
 
 # Extract algorithm selection (complexity ~12)
 def _select_fitting_algorithm(
-    inputs: ValidatedInputs,
-    method: str,
-    ftol: float,
-    **kwargs
+    inputs: ValidatedInputs, method: str, ftol: float, **kwargs
 ) -> AlgorithmConfig:
     """Select and configure fitting algorithm."""
     # Decide between: TRF, Levenberg-Marquardt, dogbox
@@ -413,9 +398,7 @@ def _select_fitting_algorithm(
 
 # Extract fit execution (complexity ~10)
 def _execute_fit(
-    f: Callable,
-    inputs: ValidatedInputs,
-    config: AlgorithmConfig
+    f: Callable, inputs: ValidatedInputs, config: AlgorithmConfig
 ) -> FitResult:
     """Execute the actual curve fitting."""
     # Call appropriate algorithm
@@ -426,9 +409,7 @@ def _execute_fit(
 
 # Extract result processing (complexity ~8)
 def _process_fit_result(
-    result: FitResult,
-    inputs: ValidatedInputs,
-    full_output: bool
+    result: FitResult, inputs: ValidatedInputs, full_output: bool
 ) -> tuple | FitResult:
     """Process and format fit results."""
     # Compute covariance matrix
@@ -438,13 +419,7 @@ def _process_fit_result(
 
 
 # Main function (much simpler, complexity ~15)
-def curve_fit(
-    f: Callable,
-    xdata: Any,
-    ydata: Any,
-    p0: Any = None,
-    **kwargs
-) -> tuple:
+def curve_fit(f: Callable, xdata: Any, ydata: Any, p0: Any = None, **kwargs) -> tuple:
     """Fit a curve to data using nonlinear least squares."""
 
     # Validate and prepare
@@ -474,10 +449,7 @@ def curve_fit(
 ```python
 # Extract Jacobian setup (complexity ~12)
 def _setup_jacobian(
-    fun: Callable,
-    jac: Any,
-    x0: np.ndarray,
-    **kwargs
+    fun: Callable, jac: Any, x0: np.ndarray, **kwargs
 ) -> JacobianConfig:
     """Set up Jacobian computation strategy."""
     # Decide: analytical, finite-diff, or auto-diff
@@ -487,10 +459,7 @@ def _setup_jacobian(
 
 
 # Extract loss function setup (complexity ~8)
-def _setup_loss_function(
-    loss: str,
-    f_scale: float
-) -> LossFunction:
+def _setup_loss_function(loss: str, f_scale: float) -> LossFunction:
     """Configure robust loss function."""
     # Select loss function (linear, soft_l1, huber, etc.)
     # Set scaling parameters
@@ -498,11 +467,7 @@ def _setup_loss_function(
 
 
 # Extract optimizer selection (complexity ~10)
-def _select_optimizer(
-    method: str,
-    bounds: tuple,
-    problem_size: int
-) -> Optimizer:
+def _select_optimizer(method: str, bounds: tuple, problem_size: int) -> Optimizer:
     """Select appropriate optimization algorithm."""
     # Choose: trf, dogbox, lm
     # Configure for problem characteristics
@@ -510,11 +475,7 @@ def _select_optimizer(
 
 
 # Main function (complexity ~20)
-def least_squares(
-    fun: Callable,
-    x0: np.ndarray,
-    **kwargs
-) -> OptimizeResult:
+def least_squares(fun: Callable, x0: np.ndarray, **kwargs) -> OptimizeResult:
     """Solve nonlinear least squares problem."""
 
     # Validate inputs (use existing validator)
@@ -549,42 +510,44 @@ def least_squares(
 
 ```python
 # Before: Depth 11
-def update_function(...):
+def update_function(*args, **kwargs):
     if condition1:
         if condition2:
             if condition3:
                 # ... 8 more levels of nesting
                 return result
+    return None
+
 
 # After: Depth 3-4 with early returns
-def update_function(...):
+def update_function(*args, **kwargs):
     # Early exit for special cases
     if not condition1:
-        return _handle_case_1(...)
+        return _handle_case_1(*args, **kwargs)
 
     if not condition2:
-        return _handle_case_2(...)
+        return _handle_case_2(*args, **kwargs)
 
     if not condition3:
-        return _handle_case_3(...)
+        return _handle_case_3(*args, **kwargs)
 
     # Main logic at reduced depth
-    return _handle_normal_case(...)
+    return _handle_normal_case(*args, **kwargs)
 
 
 # Extract deeply nested blocks
-def _handle_case_1(...) -> Result:
+def _handle_case_1(*args, **kwargs):
     """Handle special case 1."""
     # Logic that was at depth 5-11
     return result
 
 
-def _handle_case_2(...) -> Result:
+def _handle_case_2(*args, **kwargs):
     """Handle special case 2."""
     return result
 
 
-def _handle_normal_case(...) -> Result:
+def _handle_normal_case(*args, **kwargs):
     """Handle normal optimization path."""
     # Main logic, now at depth 2-3
     return result
@@ -616,13 +579,16 @@ def test_recovery_with_nan_residuals():
     """Test recovery when residuals contain NaN."""
     # ... test implementation
 
+
 def test_recovery_with_singular_jacobian():
     """Test recovery when Jacobian is singular."""
     # ... test implementation
 
+
 def test_recovery_with_memory_exceeded():
     """Test recovery when memory limit is exceeded."""
     # ... test implementation
+
 
 def test_recovery_chain_multiple_failures():
     """Test recovery with multiple sequential failures."""
@@ -639,9 +605,11 @@ def test_memory_limit_exactly_at_boundary():
     """Test behavior when memory usage exactly equals limit."""
     # ... test implementation
 
+
 def test_memory_limit_with_gradual_growth():
     """Test memory tracking with gradual memory growth."""
     # ... test implementation
+
 
 def test_memory_limit_with_spike():
     """Test memory limit with sudden spike."""
@@ -658,9 +626,11 @@ def test_streaming_with_corrupted_chunk():
     """Test streaming when one chunk is corrupted."""
     # ... test implementation
 
+
 def test_streaming_with_unequal_chunks():
     """Test streaming with unequal chunk sizes."""
     # ... test implementation
+
 
 def test_streaming_interruption_and_resume():
     """Test streaming interruption and resume capability."""
@@ -677,9 +647,11 @@ def test_sparse_jacobian_all_zeros():
     """Test sparse Jacobian when all entries are zero."""
     # ... test implementation
 
+
 def test_sparse_jacobian_pattern_mismatch():
     """Test when actual sparsity doesn't match pattern."""
     # ... test implementation
+
 
 def test_sparse_jacobian_memory_efficiency():
     """Verify sparse storage is more memory-efficient."""

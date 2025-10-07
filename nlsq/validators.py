@@ -7,6 +7,7 @@ and provide helpful error messages to users.
 import logging
 import warnings
 from collections.abc import Callable
+from contextlib import suppress
 from functools import wraps
 from inspect import signature
 from typing import Any
@@ -138,10 +139,8 @@ class InputValidator:
                 n_params = len(params) - 1
         except Exception:
             if p0 is not None:
-                try:
+                with suppress(Exception):
                     n_params = len(p0)
-                except Exception:
-                    pass  # Keep default
         return n_params
 
     def _validate_data_shapes(
