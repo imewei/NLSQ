@@ -304,6 +304,6 @@ These improvements enable scientific computing applications that were previously
 
 For detailed implementation, see:
 
-- :doc:`large_dataset_guide` - Implementation guide
-- :doc:`api_large_datasets` - API reference
+- :doc:`../guides/large_datasets` - Implementation guide
+- :doc:`large_datasets_api` - API reference
 - `Benchmark code <https://github.com/imewei/NLSQ/tree/main/benchmark>`_

@@ -35,19 +35,16 @@ Classes
    :template: class.rst
 
    FallbackStrategy
-   AutoRetry
-   AlgorithmSwitcher
-   BoundsRelaxer
-   RegularizationAdjuster
 
 Functions
 ---------
 
-.. autosummary::
-   :toctree: generated/
-
-   create_fallback_chain
-   execute_with_fallback
+.. Comment: No functions currently exist in this module
+   .. autosummary::
+   ..    :toctree: generated/
+   ..
+   ..    create_fallback_chain
+   ..    execute_with_fallback
 
 Usage Examples
 --------------

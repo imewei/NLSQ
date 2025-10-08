@@ -96,7 +96,7 @@ Documentation
 
    developer/index
    developer/optimization_case_study
-   developer/performance_tuning
+   developer/performance_tuning_guide
    developer/pypi_setup
    developer/ci_cd/index
 

@@ -155,6 +155,10 @@ exclude_patterns = [
     "autodoc",  # Old directory, renamed to api/
     "development",  # Old directory, consolidated to history/
     "archive",  # Old directory, moved to history/archived_reports/
+    "FINAL_DOCUMENTATION_REPORT.md",  # Standalone report file
+    "history/archived_reports/TEST_GENERATION_PHASE2_REPORT.md",  # Archived report
+    "history/archived_reports/sprint_1_2_completion_report.md",  # Archived report
+    "history/archived_reports/sprint_3_completion_report.md",  # Archived report
 ]
 autodoc_typehints = "description"
 

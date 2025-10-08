@@ -37,6 +37,8 @@ Tools for fitting very large datasets (10M+ points):
    :maxdepth: 2
 
    nlsq.large_dataset
+   nlsq.streaming_optimizer
+   nlsq.memory_manager
    large_datasets_api
 
 Enhanced Features (v0.1.1)
@@ -50,6 +52,7 @@ New features added in version 0.1.1:
    nlsq.callbacks
    nlsq.stability
    nlsq.fallback
+   nlsq.recovery
    nlsq.bound_inference
 
 Algorithms & Optimization
@@ -73,6 +76,8 @@ Support modules for configuration, caching, and diagnostics:
    :maxdepth: 2
 
    nlsq.config
+   nlsq.validators
+   nlsq.diagnostics
    nlsq.caching
    nlsq.logging
    nlsq.common_jax
@@ -109,14 +114,19 @@ Complete Module Listing
 - :doc:`nlsq.callbacks` - Progress monitoring & early stopping (NEW in v0.1.1)
 - :doc:`nlsq.stability` - Numerical stability analysis (NEW in v0.1.1)
 - :doc:`nlsq.fallback` - Automatic retry strategies (NEW in v0.1.1)
+- :doc:`nlsq.recovery` - Optimization failure recovery (NEW in v0.1.1)
 - :doc:`nlsq.bound_inference` - Smart parameter bounds (NEW in v0.1.1)
 
 **Large Dataset Modules**:
 - :doc:`nlsq.large_dataset` - Chunked fitting for large data
+- :doc:`nlsq.streaming_optimizer` - Streaming optimization for unlimited data (NEW in v0.1.1)
+- :doc:`nlsq.memory_manager` - Intelligent memory management (NEW in v0.1.1)
 - :doc:`large_datasets_api` - Comprehensive large dataset guide
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management
+- :doc:`nlsq.validators` - Input validation (NEW in v0.1.1)
+- :doc:`nlsq.diagnostics` - Optimization diagnostics (NEW in v0.1.1)
 - :doc:`nlsq.caching` - JIT and result caching
 - :doc:`nlsq.logging` - Logging and debugging
 - :doc:`nlsq.loss_functions` - Robust loss functions

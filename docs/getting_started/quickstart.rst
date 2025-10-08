@@ -239,10 +239,10 @@ Next Steps
 
 Now that you've mastered the basics, explore:
 
-1. :doc:`../main` - Learn about different algorithms and options
-2. :doc:`large_datasets` - Handle massive datasets efficiently
-3. :doc:`../api_large_datasets` - Advanced fitting and parameter constraints
-4. :doc:`../performance_benchmarks` - Performance analysis and benchmarks
+1. :doc:`../guides/advanced_features` - Learn about different algorithms and options
+2. :doc:`../guides/large_datasets` - Handle massive datasets efficiently
+3. :doc:`../api/large_datasets_api` - Advanced fitting and parameter constraints
+4. :doc:`../api/performance_benchmarks` - Performance analysis and benchmarks
 
 Interactive Examples
 ---------------------

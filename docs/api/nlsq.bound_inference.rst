@@ -35,7 +35,6 @@ Classes
    :template: class.rst
 
    BoundsInference
-   InferredBounds
 
 Functions
 ---------
@@ -45,7 +44,6 @@ Functions
 
    infer_bounds
    merge_bounds
-   validate_bounds
 
 Usage Examples
 --------------

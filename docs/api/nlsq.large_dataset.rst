@@ -32,10 +32,7 @@ Classes
    :template: class.rst
 
    LargeDatasetFitter
-   StreamingOptimizer
-   SparseJacobianComputer
    LDMemoryConfig
-   StreamingConfig
 
 Functions
 ---------
@@ -44,7 +41,6 @@ Functions
    :toctree: generated/
 
    fit_large_dataset
-   curve_fit_large
    estimate_memory_requirements
 
 Examples

@@ -37,12 +37,8 @@ Available Functions
    exponential_decay
    exponential_growth
    sigmoid
-   logistic
    power_law
-   logarithmic
-   sinusoidal
    polynomial
-   rational
 
 Usage Examples
 --------------
@@ -193,6 +189,6 @@ Each function has well-defined parameters with physical meaning:
 See Also
 --------
 
-- :doc:`../guides/quickstart` : Getting started guide
+- :doc:`../getting_started/quickstart` : Getting started guide
 - :doc:`nlsq.minpack` : Main curve fitting API
 - :doc:`nlsq.bound_inference` : Automatic bounds detection

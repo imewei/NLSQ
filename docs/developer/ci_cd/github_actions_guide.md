@@ -16,6 +16,7 @@
 
 ---
 
+(what-is-schema-validation)=
 ## What is Schema Validation?
 
 ### The Basics
@@ -50,6 +51,7 @@ GitHub maintains an official workflow schema at:
 
 ---
 
+(why-it-matters)=
 ## Why It Matters
 
 ### The Cost of Schema Violations
@@ -76,6 +78,7 @@ GitHub maintains an official workflow schema at:
 
 ---
 
+(common-patterns)=
 ## Common Patterns
 
 ### Pattern 1: Action Input vs. Config Property
@@ -169,6 +172,7 @@ jobs:
 
 ---
 
+(real-world-example-codeql-fix)=
 ## Real-World Example: CodeQL Fix
 
 ### The Problem
@@ -257,6 +261,7 @@ Action Level (with:)          Config Level (config: |)
 
 ---
 
+(prevention-strategies)=
 ## Prevention Strategies
 
 ### 1. Use Pre-Commit Hooks

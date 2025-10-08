@@ -4,18 +4,24 @@ This directory contains historical development artifacts from the NLSQ v0.1.1 fe
 
 ## Structure
 
-- **[phase1/](phase1/)** - Days 1-6: Quick Wins (UX improvements)
-- **[phase2/](phase2/)** - Days 7-14: Documentation & Examples
-- **[phase3/](phase3/)** - Days 15-24: Advanced Features (robustness)
-- **[phase4/](phase4/)** - Days 25-30: Polish & Release
-- **[planning/](planning/)** - Roadmaps, ROI analysis, validation reports
+<!-- Archived sprint directories (not included in repository):
+- **phase1/** - Days 1-6: Quick Wins (UX improvements)
+- **phase2/** - Days 7-14: Documentation & Examples
+- **phase3/** - Days 15-24: Advanced Features (robustness)
+- **phase4/** - Days 25-30: Polish & Release
+- **planning/** - Roadmaps, ROI analysis, validation reports
+-->
+
+This README documents the v0.1.1 development sprint. Detailed phase-by-phase artifacts were not committed to the repository.
 
 ## Key Documents
 
-- [Feature Sprint Roadmap](planning/feature_sprint_roadmap.md) - 30-day development plan
-- [ROI Analysis](planning/roi_analysis.md) - Cost/benefit analysis
-- [Phase 1-3 Validation](phase1/DAYS_1-3_VALIDATION_REPORT.md) - Feature validation
-- [Week 1 Validation](planning/WEEK1_VALIDATION_REPORT.md) - Week 1 comprehensive report
+<!-- Archived sprint documents (not included in repository):
+- Feature Sprint Roadmap (planning/feature_sprint_roadmap.md) - 30-day development plan
+- ROI Analysis (planning/roi_analysis.md) - Cost/benefit analysis
+- Phase 1-3 Validation (phase1/DAYS_1-3_VALIDATION_REPORT.md) - Feature validation
+- Week 1 Validation (planning/WEEK1_VALIDATION_REPORT.md) - Week 1 comprehensive report
+-->
 
 ## Timeline
 
@@ -83,6 +89,8 @@ Final integration testing, documentation polish, and release preparation.
 
 ## References
 
-- [CHANGELOG.md](../../CHANGELOG.md) - Official change history
-- [RELEASE_NOTES_v0.1.1.md](../../RELEASE_NOTES_v0.1.1.md) - User-facing release notes
-- [README.md](../../README.md) - Main project documentation
+<!-- Note: These files may be located at the repository root level:
+- CHANGELOG.md - Official change history
+- RELEASE_NOTES_v0.1.1.md - User-facing release notes
+- README.md - Main project documentation
+-->

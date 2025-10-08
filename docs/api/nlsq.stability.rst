@@ -35,8 +35,6 @@ Classes
    :template: class.rst
 
    NumericalStabilityGuard
-   StabilityConfig
-   StabilityReport
 
 Functions
 ---------
@@ -45,9 +43,6 @@ Functions
    :toctree: generated/
 
    check_problem_stability
-   fix_numerical_issues
-   compute_condition_number
-   detect_scaling_issues
 
 Usage Examples
 --------------

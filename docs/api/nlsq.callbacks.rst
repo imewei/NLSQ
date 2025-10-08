@@ -33,12 +33,9 @@ Classes
    :toctree: generated/
    :template: class.rst
 
-   OptimizationCallback
    ProgressBar
    EarlyStopping
    IterationLogger
-   ResultSaver
-   CallbackComposer
 
 Usage Examples
 --------------

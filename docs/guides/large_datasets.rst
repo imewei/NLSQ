@@ -532,13 +532,13 @@ Next Steps
 
 Congratulations! You now have the tools to handle datasets of any size. Continue with:
 
-1. :doc:`../api_large_datasets` - Advanced fitting APIs and parameter constraints
-2. :doc:`../performance_benchmarks` - Performance analysis and optimization
+1. :doc:`../api/large_datasets_api` - Advanced fitting APIs and parameter constraints
+2. :doc:`../api/performance_benchmarks` - Performance analysis and optimization
 3. Browse the `examples directory <https://github.com/imewei/NLSQ/tree/main/examples>`_ for more complex scenarios
 
 Further Reading
 ---------------
 
-- `Large Dataset Guide <../large_dataset_guide.html>`_ - Comprehensive technical details
-- `API Reference <../api_large_datasets.html>`_ - Complete function documentation
+- :doc:`../api/nlsq.large_dataset` - Comprehensive technical details
+- :doc:`../api/large_datasets_api` - Complete function documentation
 - `JAX Documentation <https://jax.readthedocs.io/>`_ - Understanding JAX transformations

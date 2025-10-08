@@ -19,6 +19,7 @@
 
 ---
 
+(problem-statement)=
 ## Problem Statement
 
 ### Symptoms
@@ -43,6 +44,7 @@ Schema validation errors were encountered.
 
 ---
 
+(root-cause-analysis)=
 ## Root Cause Analysis
 
 ### Schema Violation Details
@@ -99,6 +101,7 @@ GitHub Actions JSON Schema validation enforces:
 
 ---
 
+(technical-solution)=
 ## Technical Solution
 
 ### Implementation
@@ -168,6 +171,7 @@ GitHub Actions JSON Schema validation enforces:
 
 ---
 
+(verification--testing)=
 ## Verification & Testing
 
 ### Pre-Commit Validation
@@ -222,6 +226,7 @@ Queries: security-extended, security-and-quality
 
 ---
 
+(best-practices)=
 ## Best Practices
 
 ### CodeQL Configuration Guidelines
@@ -310,6 +315,7 @@ Queries: security-extended, security-and-quality
 
 ---
 
+(troubleshooting-guide)=
 ## Troubleshooting Guide
 
 ### Common Issues
@@ -416,6 +422,7 @@ $ yamllint -d relaxed .github/workflows/
 
 ---
 
+(future-maintenance)=
 ## Future Maintenance
 
 ### Monitoring Plan

@@ -33,7 +33,7 @@ LargeDatasetFitter
 
 The main class for handling large datasets with automatic memory management.
 
-For complete API documentation, see :class:`nlsq.LargeDatasetFitter` in the :doc:`autodoc/modules` section.
+For complete API documentation, see :class:`nlsq.LargeDatasetFitter` in the :doc:`nlsq.large_dataset` module.
 
 **Key Features:**
 
@@ -68,7 +68,7 @@ Convenience Functions
 
 **Primary large dataset fitting function with automatic dataset size detection.**
 
-For complete API documentation, see :func:`nlsq.curve_fit_large` in the :doc:`autodoc/modules` section.
+For complete API documentation, see :func:`nlsq.curve_fit_large` in the :doc:`nlsq.large_dataset` module.
 
 This function provides a drop-in replacement for ``curve_fit`` with automatic
 detection and handling of large datasets. For small datasets (< 1M points),
@@ -111,7 +111,7 @@ Example::
 
 **Advanced large dataset fitting with OptimizeResult return format.**
 
-For complete API documentation, see :func:`nlsq.fit_large_dataset` in the :doc:`autodoc/modules` section.
+For complete API documentation, see :func:`nlsq.fit_large_dataset` in the :doc:`nlsq.large_dataset` module.
 
 Parameters:
     - ``func``: Model function
@@ -167,7 +167,7 @@ Memory Configuration
 
 Advanced memory configuration options.
 
-For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` in the :doc:`autodoc/modules` section.
+For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` in the :doc:`nlsq.large_dataset` module.
 
 **Parameters:**
 
@@ -200,7 +200,7 @@ Data Chunking
 
 Utility class for chunking large arrays.
 
-For complete API documentation, see :class:`nlsq.large_dataset.DataChunker` in the :doc:`autodoc/modules` section.
+For complete API documentation, see :class:`nlsq.large_dataset.DataChunker` in the :doc:`nlsq.large_dataset` module.
 
 Returns:
     Iterator yielding (x_chunk, y_chunk, indices) tuples
@@ -283,7 +283,7 @@ Best Practices
 See Also
 --------
 
-- :doc:`main` - Main NLSQ documentation
-- :doc:`large_dataset_guide` - Detailed guide for large datasets
-- :doc:`autodoc/modules` - Complete API reference
+- :doc:`../index` - Main NLSQ documentation
+- :doc:`../guides/large_datasets` - Detailed guide for large datasets
+- :doc:`modules` - Complete API reference
 - `Examples notebook <https://github.com/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb>`_

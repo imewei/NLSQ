@@ -7,7 +7,7 @@ Documentation for NLSQ developers and contributors.
    :maxdepth: 2
 
    optimization_case_study
-   performance_tuning
+   performance_tuning_guide
    pypi_setup
    ci_cd/index
 
@@ -39,7 +39,7 @@ Comprehensive analysis of NLSQ's performance optimization journey:
 Performance Tuning Guide
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:doc:`performance_tuning`
+:doc:`performance_tuning_guide`
 
 Deep technical guide for performance optimization:
 
