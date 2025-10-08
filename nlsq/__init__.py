@@ -73,6 +73,10 @@ from nlsq.memory_pool import (
 )
 from nlsq.minpack import CurveFit, curve_fit
 from nlsq.recovery import OptimizationRecovery
+
+# Fallback strategies (Phase 3 - Days 15-16)
+from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
+
 from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
 from nlsq.smart_cache import (
     SmartCache,
@@ -154,6 +158,10 @@ __all__ = [
     "create_hdf5_dataset",
     # Main curve fitting API
     "curve_fit",
+    # Fallback strategies (Phase 3)
+    "FallbackOrchestrator",
+    "FallbackResult",
+    "FallbackStrategy",
     "curve_fit_large",
     "detect_jacobian_sparsity",
     "enable_mixed_precision_fallback",
