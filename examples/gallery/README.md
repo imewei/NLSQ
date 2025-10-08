@@ -301,5 +301,6 @@ Same as NLSQ package (MIT License).
 ---
 
 **Last Updated**: 2025-10-08
+**NLSQ Version**: v0.1.1
 **Total Examples**: 11 across 4 domains
 **Status**: Complete Python scripts (conversion to .ipynb optional)

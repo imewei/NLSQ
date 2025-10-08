@@ -29,7 +29,7 @@ Welcome to the NLSQ examples repository! This collection provides comprehensive,
 pip install nlsq
 
 # 2. Open your first notebook
-jupyter notebook "NLSQ Quickstart.ipynb"
+jupyter notebook nlsq_quickstart.ipynb
 
 # Or run in Google Colab (click badge in notebook)
 ```
@@ -45,9 +45,9 @@ jupyter notebook "NLSQ Quickstart.ipynb"
 
 ### 1. **NLSQ Quickstart**
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%20Quickstart.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/nlsq_quickstart.ipynb)
 
-**File**: `NLSQ Quickstart.ipynb` | **Level**: Beginner | **Time**: 15-20 min
+**File**: `nlsq_quickstart.ipynb` | **Level**: Beginner | **Time**: 15-20 min
 
 **What you'll learn:**
 - Basic `curve_fit()` usage compatible with SciPy
@@ -120,9 +120,9 @@ jupyter notebook "NLSQ Quickstart.ipynb"
 
 ### 4. **2D Gaussian Demo**
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ_2D_Gaussian_Demo.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/nlsq_2d_gaussian_demo.ipynb)
 
-**File**: `NLSQ_2D_Gaussian_Demo.ipynb` | **Level**: Intermediate | **Time**: 20-30 min
+**File**: `nlsq_2d_gaussian_demo.ipynb` | **Level**: Intermediate | **Time**: 20-30 min
 
 **What you'll learn:**
 - 2D Gaussian fitting with rotation
@@ -165,6 +165,43 @@ jupyter notebook "NLSQ Quickstart.ipynb"
 - ✓ Decision trees for optimization selection
 
 **Perfect for**: Performance-critical applications, very large problems, embedded systems
+
+---
+
+## 🎓 Feature Demonstrations (Python Scripts)
+
+**NEW in v0.1.1**: Phase 1-3 feature demonstrations
+
+Located in `demos/` directory, these Python scripts showcase specific NLSQ v0.1.1 features:
+
+### Phase 1 Features (Quick Wins)
+
+1. **Result Enhancements** (`demos/result_enhancements_demo.py`)
+   - Enhanced `.plot()`, `.summary()`, `.confidence_intervals()`
+   - Statistical metrics: R², RMSE, AIC, BIC
+   - Backward compatible tuple unpacking
+
+2. **Callbacks** (`demos/callbacks_demo.py`)
+   - `ProgressBar` - Real-time progress monitoring
+   - `EarlyStopping` - Automatic termination
+   - `IterationLogger` - Optimization logging
+
+3. **Function Library** (`demos/function_library_demo.py`)
+   - Pre-built models: exponential, gaussian, sigmoid
+   - Automatic p0 estimation
+   - Smart parameter bounds
+
+4. **Enhanced Error Messages** (`demos/enhanced_error_messages_demo.py`)
+   - Actionable diagnostics
+   - Clear recommendations
+   - Better debugging
+
+**Usage**:
+```bash
+python examples/demos/callbacks_demo.py
+```
+
+**Full Documentation**: See [demos/README.md](demos/README.md)
 
 ---
 
@@ -1091,10 +1128,10 @@ Original JAXFit paper:
 
 ---
 
-**Ready to get started?** Open [NLSQ Quickstart.ipynb](NLSQ%20Quickstart.ipynb) and begin your journey! 🚀
+**Ready to get started?** Open [nlsq_quickstart.ipynb](nlsq_quickstart.ipynb) and begin your journey! 🚀
 
 ---
 
 <p align="center">
-<i>Last updated: 2025-10-06 | NLSQ v0.1.0.post4</i>
+<i>Last updated: 2025-10-08 | NLSQ v0.1.1</i>
 </p>
