@@ -54,6 +54,9 @@ from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 # Fallback strategies (Phase 3 - Days 15-16)
 from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
 
+# Bounds inference (Phase 3 - Day 17)
+from nlsq.bound_inference import BoundsInference, infer_bounds, merge_bounds
+
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
@@ -161,6 +164,10 @@ __all__ = [
     "FallbackOrchestrator",
     "FallbackResult",
     "FallbackStrategy",
+    # Bounds inference (Phase 3)
+    "BoundsInference",
+    "infer_bounds",
+    "merge_bounds",
     "curve_fit_large",
     "detect_jacobian_sparsity",
     "enable_mixed_precision_fallback",

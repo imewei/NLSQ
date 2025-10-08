@@ -37,6 +37,8 @@ def curve_fit(
     xdata,
     ydata,
     *args,
+    auto_bounds=False,
+    bounds_safety_factor=10.0,
     fallback=False,
     max_fallback_attempts=10,
     fallback_verbose=False,
@@ -60,6 +62,21 @@ def curve_fit(
         The independent variable where the data is measured.
     ydata : array_like
         The dependent data, nominally ``f(xdata, *popt)``.
+    auto_bounds : bool, optional
+        Enable automatic parameter bounds inference from data characteristics.
+        When True, reasonable bounds are inferred based on:
+
+        - Data ranges (x and y)
+        - Initial parameter guess (p0)
+        - Parameter positivity constraints
+        - Safety factors to avoid over-constraining
+
+        The inferred bounds are merged with any user-provided bounds via the
+        ``bounds`` parameter. User bounds take precedence where specified.
+        Default: False.
+    bounds_safety_factor : float, optional
+        Safety multiplier for automatic bounds (larger = more conservative).
+        Only used when auto_bounds=True. Default: 10.0.
     fallback : bool, optional
         Enable automatic fallback strategies for difficult optimization problems.
         When True, the optimizer will automatically try alternative approaches if
@@ -150,7 +167,53 @@ def curve_fit(
     ❌ Failed: RuntimeError: Optimization failed
     Attempt 2/10: Try alternative optimization method
     ✅ Success with alternative_method!
+
+    Using automatic bounds inference:
+
+    >>> # Infer reasonable bounds automatically from data
+    >>> result = curve_fit(exponential, x, y, p0=[2, 1], auto_bounds=True)
+    >>>
+    >>> # Combine with user bounds (user bounds take precedence)
+    >>> result = curve_fit(
+    ...     exponential, x, y, p0=[2, 1],
+    ...     auto_bounds=True,
+    ...     bounds=([0, -np.inf], [np.inf, np.inf])  # Only constrain first parameter
+    ... )
+
+    Combined auto_bounds + fallback for maximum robustness:
+
+    >>> result = curve_fit(
+    ...     exponential, x, y, p0=[2, 1],
+    ...     auto_bounds=True,
+    ...     fallback=True
+    ... )
     """
+    # Handle automatic bounds inference
+    if auto_bounds:
+        from nlsq.bound_inference import infer_bounds, merge_bounds
+
+        # Extract p0 from args or kwargs
+        p0 = None
+        if args and len(args) >= 1:
+            p0 = args[0]
+        elif "p0" in kwargs:
+            p0 = kwargs["p0"]
+
+        if p0 is not None:
+            # Infer bounds from data
+            inferred_bounds = infer_bounds(
+                xdata, ydata, p0, safety_factor=bounds_safety_factor
+            )
+
+            # Get user-provided bounds if any
+            user_bounds = kwargs.get("bounds", (-np.inf, np.inf))
+
+            # Merge inferred with user bounds (user takes precedence)
+            merged_bounds = merge_bounds(inferred_bounds, user_bounds)
+
+            # Update kwargs with merged bounds
+            kwargs["bounds"] = merged_bounds
+
     # Use fallback orchestrator if requested
     if fallback:
         from nlsq.fallback import FallbackOrchestrator
@@ -1090,6 +1153,14 @@ class CurveFit:
         self._validate_solver_config(solver, batch_size)
 
         # Step 3: Log curve fit start
+        # Check if bounds are provided (not infinite)
+        has_bounds = False
+        if isinstance(bounds, tuple) and len(bounds) == 2:
+            lower_b, upper_b = bounds
+            lower_arr = np.atleast_1d(lower_b)
+            upper_arr = np.atleast_1d(upper_b)
+            has_bounds = not (np.all(np.isneginf(lower_arr)) and np.all(np.isposinf(upper_arr)))
+
         self.logger.info(
             "Starting curve fit",
             n_params=n,
@@ -1097,7 +1168,7 @@ class CurveFit:
             method=method if method else "trf",
             solver=solver,
             batch_size=batch_size if solver == "minibatch" else None,
-            has_bounds=bounds != (-np.inf, np.inf),
+            has_bounds=has_bounds,
             dynamic_sizing=self.use_dynamic_sizing,
         )
 
