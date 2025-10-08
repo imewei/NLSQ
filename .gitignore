@@ -263,5 +263,8 @@ Thumbs.db
 # Serena MCP server data
 .serena/
 
+# SpecKit working directory
+.specify/
+
 # Optimization artifacts
 validators_refactoring.patch

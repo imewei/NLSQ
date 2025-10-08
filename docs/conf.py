@@ -59,7 +59,7 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.coverage",
     "sphinx.ext.duration",
-    # "myst_parser",  # Disabled since we're using RST only
+    "myst_parser",  # Enabled for developer documentation in Markdown
 ]
 
 suppress_warnings = [
@@ -125,14 +125,11 @@ myst_enable_extensions = [
     "tasklist",
 ]
 
-# Source file types - RST only for now to avoid myst-parser issues
+# Source file types - RST for main docs, Markdown for developer docs
 source_suffix = {
-    ".rst": None,
+    ".rst": "restructuredtext",
+    ".md": "markdown",
 }
-
-# Alternative configurations:
-# source_suffix = {'.rst': None, '.md': 'myst_parser',}  # With Markdown support
-# source_suffix = ['.rst', '.md']  # Simple list format
 
 # Intersphinx mapping
 intersphinx_mapping = {
@@ -148,7 +145,17 @@ templates_path = ["_templates"]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = [
+    "_build",
+    "_reorganization",
+    "Thumbs.db",
+    ".DS_Store",
+    "user_guides",  # Old directory, content moved to guides/
+    "tutorials",  # Old directory, content moved to getting_started/ and guides/
+    "autodoc",  # Old directory, renamed to api/
+    "development",  # Old directory, consolidated to history/
+    "archive",  # Old directory, moved to history/archived_reports/
+]
 autodoc_typehints = "description"
 
 # -- Options for HTML output -------------------------------------------------

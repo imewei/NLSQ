@@ -1,45 +1,144 @@
-.. atomcloud documentation master file, created by
-   sphinx-quickstart on Sat Dec 10 23:46:45 2022.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. NLSQ documentation master file
 
+.. figure:: images/NLSQ_logo.png
+   :alt: NLSQ Logo
 
-.. include:: main.rst
+NLSQ: GPU/TPU-Accelerated Nonlinear Least Squares
+==================================================
 
+**Fast, production-ready curve fitting for scientific computing**
 
-NLSQ Documentation
-=====================================
+NLSQ is a JAX-powered library that brings GPU/TPU acceleration to nonlinear least squares curve fitting.
+It provides a drop-in replacement for SciPy's ``curve_fit`` with massive speedups on modern hardware.
+
+.. note::
+   **New to NLSQ?** Start with :doc:`getting_started/index` → :doc:`getting_started/quickstart`
+
+   **Migrating from SciPy?** See :doc:`guides/migration_scipy`
+
+Key Features
+------------
+
+- **GPU/TPU Acceleration**: 150-270x faster than SciPy on large datasets
+- **Drop-in Compatibility**: Minimal code changes from ``scipy.optimize.curve_fit``
+- **Automatic Differentiation**: JAX autodiff eliminates manual Jacobian calculations
+- **Production-Ready**: 77% test coverage, 817 tests, 100% pass rate
+- **Large Dataset Support**: Automatic chunking and memory management
+- **Advanced Features**: Automatic fallback, smart bounds, numerical stability
+
+Quick Example
+-------------
+
+.. code-block:: python
+
+   import numpy as np
+   from nlsq import curve_fit
+   import jax.numpy as jnp
+
+   # Define model function
+   def exponential(x, a, b):
+       return a * jnp.exp(-b * x)
+
+   # Generate data
+   x = np.linspace(0, 5, 1000)
+   y = 2.5 * np.exp(-1.3 * x) + 0.01 * np.random.randn(1000)
+
+   # Fit (GPU-accelerated!)
+   popt, pcov = curve_fit(exponential, x, y, p0=[2, 1])
+
+See :doc:`getting_started/quickstart` for a complete tutorial.
+
+Performance
+-----------
+
+**GPU Benchmarks** (NVIDIA Tesla V100):
+
+- 1M points, 5 parameters: **0.15s** (NLSQ) vs 40.5s (SciPy) = **270x speedup**
+- Excellent scaling: 50x more data → only 1.2x slower
+
+See :doc:`developer/optimization_case_study` for detailed performance analysis.
+
+Documentation
+-------------
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
-   main
-   installation
-   tutorials
+   getting_started/index
+   getting_started/installation
+   getting_started/quickstart
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide
+   :caption: User Guides
 
-   large_dataset_guide
-   advanced_features
-   migration_guide
+   guides/index
+   guides/migration_scipy
+   guides/advanced_features
+   guides/performance_guide
+   guides/large_datasets
+   guides/troubleshooting
 
 .. toctree::
    :maxdepth: 2
    :caption: API Reference
 
-   api_large_datasets
-   autodoc/modules
+   api/index
+   api/modules
+   api/large_datasets_api
 
 .. toctree::
    :maxdepth: 1
-   :caption: Additional Resources
+   :caption: Developer Documentation
 
-   performance_benchmarks
+   developer/index
+   developer/optimization_case_study
+   developer/performance_tuning
+   developer/pypi_setup
+   developer/ci_cd/index
 
-Indices and tables
+.. toctree::
+   :maxdepth: 1
+   :caption: Project History
+
+   history/index
+
+Resources
+---------
+
+- **GitHub**: https://github.com/imewei/nlsq
+- **PyPI**: https://pypi.org/project/nlsq/
+- **Issues**: https://github.com/imewei/nlsq/issues
+- **Original Paper**: `JAXFit on ArXiv <https://doi.org/10.48550/arXiv.2208.12187>`_
+
+Project Status
+--------------
+
+**Current Release**: v0.1.1 (Beta)
+
+- Production-ready for scientific computing
+- Active development and maintenance
+- Comprehensive test suite (817 tests, 100% pass rate)
+- 77% code coverage (target: 80%)
+
+Citation
+--------
+
+If you use NLSQ in your research, please cite the original JAXFit paper:
+
+   Hofer, L. R., Krstajić, M., & Smith, R. P. (2022). JAXFit: Fast Nonlinear Least Squares Fitting in JAX.
+   *arXiv preprint arXiv:2208.12187*. https://doi.org/10.48550/arXiv.2208.12187
+
+Acknowledgments
+---------------
+
+NLSQ is an enhanced fork of `JAXFit <https://github.com/Dipolar-Quantum-Gases/JAXFit>`_,
+originally developed by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith.
+
+Current maintainer: **Wei Chen** (Argonne National Laboratory)
+
+Indices and Tables
 ==================
 
 * :ref:`genindex`
