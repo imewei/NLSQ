@@ -4,9 +4,7 @@ nlsq.callbacks module
 .. currentmodule:: nlsq.callbacks
 
 .. automodule:: nlsq.callbacks
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------

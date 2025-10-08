@@ -36,9 +36,9 @@ class OptimizationRecovery:
         Maximum number of recovery attempts
     strategies : list
         List of recovery strategies to try
-    diagnostics : OptimizationDiagnostics
+    diagnostics : nlsq.diagnostics.OptimizationDiagnostics
         Diagnostics collector for monitoring
-    stability_guard : NumericalStabilityGuard
+    stability_guard : nlsq.stability.NumericalStabilityGuard
         Numerical stability checker
     """
 

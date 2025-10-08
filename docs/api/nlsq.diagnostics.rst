@@ -4,9 +4,7 @@ nlsq.diagnostics module
 .. currentmodule:: nlsq.diagnostics
 
 .. automodule:: nlsq.diagnostics
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------

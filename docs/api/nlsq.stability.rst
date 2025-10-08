@@ -4,9 +4,7 @@ nlsq.stability module
 .. currentmodule:: nlsq.stability
 
 .. automodule:: nlsq.stability
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------

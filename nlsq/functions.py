@@ -632,7 +632,7 @@ power_law.bounds = lambda: ([0, -np.inf], [np.inf, np.inf])
 def polynomial(degree: int) -> Callable:
     """Create polynomial function of given degree.
 
-    Returns a function that computes: y = c0*x^n + c1*x^(n-1) + ... + cn
+    Returns a function that computes: y = c0\\*x^n + c1\\*x^(n-1) + ... + cn
     where n is the degree.
 
     Parameters
@@ -643,7 +643,7 @@ def polynomial(degree: int) -> Callable:
     Returns
     -------
     poly_func : callable
-        Polynomial function with signature poly(x, *coeffs)
+        Polynomial function with signature poly(x, \\*coeffs)
 
     Examples
     --------
@@ -686,13 +686,13 @@ def polynomial(degree: int) -> Callable:
     poly.estimate_p0 = estimate_p0_poly
     poly.bounds = bounds_poly
     poly.__name__ = f"polynomial_degree_{degree}"
-    poly.__doc__ = f"""Polynomial of degree {degree}: y = c0*x^{degree} + c1*x^{degree - 1} + ... + c{degree}
+    poly.__doc__ = f"""Polynomial of degree {degree}: y = c0\\*x^{degree} + c1\\*x^{degree - 1} + ... + c{degree}
 
     Parameters
     ----------
     x : array_like
         Independent variable
-    *coeffs : float
+    \\*coeffs : float
         Coefficients from highest to lowest degree ({degree + 1} coefficients)
 
     Returns

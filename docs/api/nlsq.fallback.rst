@@ -4,9 +4,7 @@ nlsq.fallback module
 .. currentmodule:: nlsq.fallback
 
 .. automodule:: nlsq.fallback
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------

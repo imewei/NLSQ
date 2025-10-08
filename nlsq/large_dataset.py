@@ -410,14 +410,14 @@ class LargeDatasetFitter:
         Maximum memory usage in GB. System memory is auto-detected if None.
     config : LDMemoryConfig, optional
         Advanced configuration for fine-tuning memory management behavior.
-    curve_fit_class : CurveFit, optional
+    curve_fit_class : nlsq.minpack.CurveFit, optional
         Custom CurveFit instance for specialized fitting requirements.
 
     Attributes
     ----------
     config : LDMemoryConfig
         Active memory management configuration
-    curve_fitter : CurveFit
+    curve_fitter : nlsq.minpack.CurveFit
         Internal curve fitting engine with JAX acceleration
     logger : Logger
         Internal logging for performance monitoring and debugging
@@ -502,7 +502,7 @@ class LargeDatasetFitter:
             Memory limit in GB (default: 8.0)
         config : LDMemoryConfig, optional
             Custom memory configuration
-        curve_fit_class : CurveFit, optional
+        curve_fit_class : nlsq.minpack.CurveFit, optional
             Custom CurveFit instance to use
         """
         if config is None:

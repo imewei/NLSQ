@@ -4,9 +4,7 @@ nlsq.large\_dataset module
 .. currentmodule:: nlsq.large_dataset
 
 .. automodule:: nlsq.large_dataset
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------
@@ -32,7 +30,10 @@ Classes
    :template: class.rst
 
    LargeDatasetFitter
-   LDMemoryConfig
+
+.. autoclass:: LDMemoryConfig
+   :members:
+   :no-index:
 
 Functions
 ---------

@@ -4,9 +4,7 @@ nlsq.streaming\_optimizer module
 .. currentmodule:: nlsq.streaming_optimizer
 
 .. automodule:: nlsq.streaming_optimizer
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------
@@ -39,7 +37,10 @@ Classes
 
    StreamingOptimizer
    DataGenerator
-   StreamingConfig
+
+.. autoclass:: StreamingConfig
+   :members:
+   :no-index:
 
 Functions
 ---------
@@ -399,14 +400,14 @@ Data Source Support
 
 The ``DataGenerator`` class supports multiple data sources:
 
-**HDF5 Files** (*.h5, *.hdf5):
+**HDF5 Files** (``*.h5``, ``*.hdf5``):
 
 .. code-block:: python
 
     # File must contain 'x' and 'y' datasets
     optimizer.fit_streaming(model, 'data.h5', p0=p0)
 
-**Memory-mapped NumPy** (*.npy, *.npz):
+**Memory-mapped NumPy** (``*.npy``, ``*.npz``):
 
 .. code-block:: python
 

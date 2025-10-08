@@ -211,7 +211,7 @@ with suppress(Exception):
 
 ### Before
 
-```mermaid
+```text
 Developer → Code → Commit → Push → CI Fails ❌
                                     ↓
                          Fix locally → Push again
@@ -225,7 +225,7 @@ Developer → Code → Commit → Push → CI Fails ❌
 
 ### After
 
-```mermaid
+```text
 Developer → Code → Pre-commit → ✅ Pass → Push → CI Success ✅
                     ↓
               ❌ Fail (local, fast)

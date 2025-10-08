@@ -4,9 +4,7 @@ nlsq.functions module
 .. currentmodule:: nlsq.functions
 
 .. automodule:: nlsq.functions
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------

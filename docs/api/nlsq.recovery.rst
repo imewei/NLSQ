@@ -4,9 +4,7 @@ nlsq.recovery module
 .. currentmodule:: nlsq.recovery
 
 .. automodule:: nlsq.recovery
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------

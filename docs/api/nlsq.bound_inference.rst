@@ -4,9 +4,7 @@ nlsq.bound\_inference module
 .. currentmodule:: nlsq.bound_inference
 
 .. automodule:: nlsq.bound_inference
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Overview
 --------
