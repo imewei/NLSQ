@@ -14,9 +14,10 @@ Key Concepts:
 - Parameter correlation analysis
 """
 
-import numpy as np
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import numpy as np
+
 from nlsq import curve_fit
 
 # Set random seed for reproducibility
@@ -121,12 +122,7 @@ p0 = [1200, 0.0001]  # Rough estimate
 
 # Fit with weighted least squares (using measurement uncertainties)
 popt, pcov = curve_fit(
-    radioactive_decay,
-    time,
-    N_measured,
-    p0=p0,
-    sigma=sigma,
-    absolute_sigma=True
+    radioactive_decay, time, N_measured, p0=p0, sigma=sigma, absolute_sigma=True
 )
 
 # Extract fitted parameters
@@ -146,8 +142,10 @@ print(f"  λ  = {lambda_fit:.6e} ± {lambda_err:.6e} yr⁻¹")
 print("\nDerived Half-Life:")
 print(f"  t₁/₂ = {t_half_fit:.0f} ± {t_half_err:.0f} years")
 print(f"  True value: {half_life_true} years")
-print(f"  Error: {abs(t_half_fit - half_life_true):.0f} years " +
-      f"({100*abs(t_half_fit - half_life_true)/half_life_true:.1f}%)")
+print(
+    f"  Error: {abs(t_half_fit - half_life_true):.0f} years "
+    + f"({100 * abs(t_half_fit - half_life_true) / half_life_true:.1f}%)"
+)
 
 # Check if within 1-sigma
 within_1sigma = abs(t_half_fit - half_life_true) < t_half_err
@@ -155,14 +153,14 @@ print(f"\n  ✅ Within 1σ uncertainty: {within_1sigma}")
 
 # Correlation coefficient
 corr = pcov[0, 1] / (perr[0] * perr[1])
-print(f"\nParameter Correlation:")
+print("\nParameter Correlation:")
 print(f"  ρ(N0, λ) = {corr:.4f}")
 
 # Goodness of fit
-chi_squared = np.sum(((N_measured - radioactive_decay(time, *popt)) / sigma)**2)
+chi_squared = np.sum(((N_measured - radioactive_decay(time, *popt)) / sigma) ** 2)
 dof = len(time) - len(popt)  # degrees of freedom
 chi_squared_reduced = chi_squared / dof
-print(f"\nGoodness of Fit:")
+print("\nGoodness of Fit:")
 print(f"  χ² = {chi_squared:.2f}")
 print(f"  χ²/dof = {chi_squared_reduced:.2f} (expect ≈ 1.0 for good fit)")
 
@@ -172,27 +170,30 @@ fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
 # Top left: Data and fit
 ax1 = axes[0, 0]
-ax1.errorbar(time, N_measured, yerr=sigma, fmt='o', alpha=0.5,
-             label='Measured data', capsize=3)
-ax1.plot(time, N_true, 'r--', linewidth=2, label='True decay')
+ax1.errorbar(
+    time, N_measured, yerr=sigma, fmt="o", alpha=0.5, label="Measured data", capsize=3
+)
+ax1.plot(time, N_true, "r--", linewidth=2, label="True decay")
 t_fine = np.linspace(0, 20000, 200)
-ax1.plot(t_fine, radioactive_decay(t_fine, *popt), 'g-',
-         linewidth=2, label='Fitted decay')
-ax1.set_xlabel('Time (years)')
-ax1.set_ylabel('Activity (counts/min)')
-ax1.set_title('Radioactive Decay of Carbon-14')
+ax1.plot(
+    t_fine, radioactive_decay(t_fine, *popt), "g-", linewidth=2, label="Fitted decay"
+)
+ax1.set_xlabel("Time (years)")
+ax1.set_ylabel("Activity (counts/min)")
+ax1.set_title("Radioactive Decay of Carbon-14")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
 # Top right: Semi-log plot (shows exponential as straight line)
 ax2 = axes[0, 1]
-ax2.semilogy(time, N_measured, 'o', alpha=0.5, label='Measured data')
-ax2.semilogy(time, N_true, 'r--', linewidth=2, label='True decay')
-ax2.semilogy(t_fine, radioactive_decay(t_fine, *popt), 'g-',
-             linewidth=2, label='Fitted decay')
-ax2.set_xlabel('Time (years)')
-ax2.set_ylabel('Activity (counts/min, log scale)')
-ax2.set_title('Semi-Log Plot (Linear for Exponential Decay)')
+ax2.semilogy(time, N_measured, "o", alpha=0.5, label="Measured data")
+ax2.semilogy(time, N_true, "r--", linewidth=2, label="True decay")
+ax2.semilogy(
+    t_fine, radioactive_decay(t_fine, *popt), "g-", linewidth=2, label="Fitted decay"
+)
+ax2.set_xlabel("Time (years)")
+ax2.set_ylabel("Activity (counts/min, log scale)")
+ax2.set_title("Semi-Log Plot (Linear for Exponential Decay)")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
 
@@ -200,14 +201,13 @@ ax2.grid(True, alpha=0.3)
 ax3 = axes[1, 0]
 residuals = N_measured - radioactive_decay(time, *popt)
 normalized_residuals = residuals / sigma
-ax3.errorbar(time, normalized_residuals, yerr=1.0, fmt='o',
-             alpha=0.5, capsize=3)
-ax3.axhline(0, color='r', linestyle='--', linewidth=2)
-ax3.axhline(2, color='gray', linestyle=':', alpha=0.5)
-ax3.axhline(-2, color='gray', linestyle=':', alpha=0.5)
-ax3.set_xlabel('Time (years)')
-ax3.set_ylabel('Normalized Residuals (σ)')
-ax3.set_title('Fit Residuals (±2σ bounds shown)')
+ax3.errorbar(time, normalized_residuals, yerr=1.0, fmt="o", alpha=0.5, capsize=3)
+ax3.axhline(0, color="r", linestyle="--", linewidth=2)
+ax3.axhline(2, color="gray", linestyle=":", alpha=0.5)
+ax3.axhline(-2, color="gray", linestyle=":", alpha=0.5)
+ax3.set_xlabel("Time (years)")
+ax3.set_ylabel("Normalized Residuals (σ)")
+ax3.set_title("Fit Residuals (±2σ bounds shown)")
 ax3.grid(True, alpha=0.3)
 
 # Bottom right: Half-life visualization
@@ -215,21 +215,31 @@ ax4 = axes[1, 1]
 # Show decay to half activity
 t_plot = np.linspace(0, 15000, 200)
 N_plot = radioactive_decay(t_plot, N0_fit, lambda_fit)
-ax4.plot(t_plot, N_plot, 'g-', linewidth=2, label='Fitted decay')
-ax4.axhline(N0_fit / 2, color='orange', linestyle='--',
-            linewidth=2, label=f't₁/₂ = {t_half_fit:.0f} yr')
-ax4.axvline(t_half_fit, color='orange', linestyle='--', linewidth=2)
-ax4.fill_between([t_half_fit - t_half_err, t_half_fit + t_half_err],
-                  0, N0_fit, alpha=0.2, color='orange',
-                  label=f'±1σ uncertainty')
-ax4.set_xlabel('Time (years)')
-ax4.set_ylabel('Activity (counts/min)')
-ax4.set_title('Half-Life Determination')
+ax4.plot(t_plot, N_plot, "g-", linewidth=2, label="Fitted decay")
+ax4.axhline(
+    N0_fit / 2,
+    color="orange",
+    linestyle="--",
+    linewidth=2,
+    label=f"t₁/₂ = {t_half_fit:.0f} yr",
+)
+ax4.axvline(t_half_fit, color="orange", linestyle="--", linewidth=2)
+ax4.fill_between(
+    [t_half_fit - t_half_err, t_half_fit + t_half_err],
+    0,
+    N0_fit,
+    alpha=0.2,
+    color="orange",
+    label="±1σ uncertainty",
+)
+ax4.set_xlabel("Time (years)")
+ax4.set_ylabel("Activity (counts/min)")
+ax4.set_title("Half-Life Determination")
 ax4.legend()
 ax4.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('radioactive_decay.png', dpi=150)
+plt.savefig("radioactive_decay.png", dpi=150)
 print("\n✅ Plot saved as 'radioactive_decay.png'")
 plt.show()
 
@@ -240,7 +250,9 @@ print("SUMMARY")
 print("=" * 70)
 print(f"Fitted half-life: {t_half_fit:.0f} ± {t_half_err:.0f} years")
 print(f"Literature value: {half_life_true} years (C-14)")
-print(f"Agreement: {100*(1 - abs(t_half_fit - half_life_true)/half_life_true):.1f}%")
+print(
+    f"Agreement: {100 * (1 - abs(t_half_fit - half_life_true) / half_life_true):.1f}%"
+)
 print("\nThis example demonstrates:")
 print("  ✓ Fitting exponential decay with weighted least squares")
 print("  ✓ Uncertainty propagation from fit parameters to derived quantities")
