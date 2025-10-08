@@ -11,6 +11,11 @@ benchmark/*.prof
 # Test reports (generated)
 test_reports/
 
+# Test artifacts
+coverage_baseline.txt
+curve_fit_result*.png
+radioactive_decay.png
+
 # NLSQ specific
 nlsq_debug_*.log
 nlsq_profile_*.txt
