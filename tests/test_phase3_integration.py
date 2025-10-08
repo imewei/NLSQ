@@ -10,10 +10,10 @@ Comprehensive integration tests for all Phase 3 features working together:
 Tests difficult optimization problems, edge cases, and real-world scenarios.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax.numpy as jnp
 from nlsq import curve_fit
 
 
@@ -58,9 +58,7 @@ class TestAllFeaturesComined:
         """Test all features enabled with Gaussian."""
         np.random.seed(42)
         x = np.linspace(-5, 5, 100)
-        y = 10.0 * np.exp(-((x - 0) ** 2) / (2 * 1.5**2)) + 0.1 * np.random.randn(
-            100
-        )
+        y = 10.0 * np.exp(-((x - 0) ** 2) / (2 * 1.5**2)) + 0.1 * np.random.randn(100)
 
         # All features enabled, poor initial guess
         result = curve_fit(
@@ -285,9 +283,9 @@ class TestEdgeCases:
         x = np.linspace(0, 10, 100)
         # 6th order polynomial
         true_params = [1, -2, 0.5, 0.1, -0.01, 0.001, 5]
-        y = sum(
-            p * x**i for i, p in enumerate(true_params)
-        ) + 0.5 * np.random.randn(100)
+        y = sum(p * x**i for i, p in enumerate(true_params)) + 0.5 * np.random.randn(
+            100
+        )
 
         def poly6(x, a, b, c, d, e, f, g):
             return a + b * x + c * x**2 + d * x**3 + e * x**4 + f * x**5 + g * x**6
