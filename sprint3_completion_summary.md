@@ -279,7 +279,7 @@ def select_algorithm(
 | `algorithm_selector.select_algorithm` | 20 | <10 | 50% | ✅ |
 | `trf.trf_no_bounds` | 24 | 24 | N/A | ⏭️ Deferred |
 
-**Overall Complexity Violations**: 20 → 18 (-2, 10% reduction)
+**Overall Complexity Violations**: 19 → 17 (-2, 10.5% reduction)
 
 ### Code Quality Improvements
 
