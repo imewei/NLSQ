@@ -78,6 +78,14 @@ from nlsq.memory_pool import (
     get_global_pool,
 )
 from nlsq.minpack import CurveFit, curve_fit
+
+# Performance profiling (Days 20-21)
+from nlsq.profiler import (
+    PerformanceProfiler,
+    ProfileMetrics,
+    clear_profiling_data,
+    get_global_profiler,
+)
 from nlsq.recovery import OptimizationRecovery
 from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
 from nlsq.smart_cache import (
@@ -115,14 +123,6 @@ from nlsq.streaming_optimizer import (
     fit_unlimited_data,
 )
 from nlsq.validators import InputValidator
-
-# Performance profiling (Days 20-21)
-from nlsq.profiler import (
-    PerformanceProfiler,
-    ProfileMetrics,
-    clear_profiling_data,
-    get_global_profiler,
-)
 
 # Public API - only expose main user-facing functions
 __all__ = [

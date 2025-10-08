@@ -157,8 +157,8 @@ class PerformanceProfiler:
             # Calculate derived metrics
             if metrics.initial_cost > 0:
                 metrics.cost_reduction = (
-                    (metrics.initial_cost - metrics.final_cost) / metrics.initial_cost
-                )
+                    metrics.initial_cost - metrics.final_cost
+                ) / metrics.initial_cost
 
             # Store profile
             if self._context_stack:
@@ -320,11 +320,13 @@ class PerformanceProfiler:
         ]
 
         if detailed and metrics_list:
-            lines.extend([
-                "",
-                "Per-Run Details:",
-                "-" * 60,
-            ])
+            lines.extend(
+                [
+                    "",
+                    "Per-Run Details:",
+                    "-" * 60,
+                ]
+            )
             for i, m in enumerate(metrics_list, 1):
                 lines.append(
                     f"  Run {i}: {m.total_time:.3f}s, "
@@ -443,8 +445,8 @@ def clear_profiling_data():
 
 
 __all__ = [
-    "ProfileMetrics",
     "PerformanceProfiler",
-    "get_global_profiler",
+    "ProfileMetrics",
     "clear_profiling_data",
+    "get_global_profiler",
 ]
