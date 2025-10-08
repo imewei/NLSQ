@@ -25,6 +25,7 @@ from nlsq.logging import get_logger
 from nlsq.memory_manager import get_memory_manager
 from nlsq.parameter_estimation import estimate_initial_parameters
 from nlsq.recovery import OptimizationRecovery
+from nlsq.result import CurveFitResult
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.validators import InputValidator
 
@@ -90,16 +91,10 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
     # Create CurveFit instance with appropriate parameters
     jcf = CurveFit(flength=flength, use_dynamic_sizing=use_dynamic_sizing)
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
-    # Always return exactly 2 values for SciPy compatibility
-    # Extract only popt and pcov regardless of what internal method returns
-    if isinstance(result, tuple):
-        if len(result) >= 2:
-            popt, _pcov = result[0], result[1]
-        else:
-            raise RuntimeError("Unexpected result format from curve_fit")
-    else:
-        raise RuntimeError("Unexpected result format from curve_fit")
-    return popt, _pcov
+
+    # Return enhanced result object that supports both tuple unpacking
+    # (popt, pcov = curve_fit(...)) and direct use (result = curve_fit(...))
+    return result
 
 
 def _initialize_feasible(lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
@@ -1075,6 +1070,7 @@ class CurveFit:
         n: int,
         sigma: np.ndarray | None,
         timeit: bool,
+        callback: Callable | None,
         kwargs: dict,
     ) -> tuple:
         """Setup and run the optimization.
@@ -1174,6 +1170,7 @@ class CurveFit:
                     bounds=bounds,
                     method=method,
                     timeit=timeit,
+                    callback=callback,
                     **kwargs,
                 )
             except Exception as e:
@@ -1203,6 +1200,7 @@ class CurveFit:
                             bounds=state["bounds"],
                             method=state["method"],
                             timeit=timeit,
+                            callback=callback,
                             **kwargs,
                         ),
                     )
@@ -1248,6 +1246,7 @@ class CurveFit:
         data_mask: np.ndarray | None = None,
         timeit: bool = False,
         return_eval: bool = False,
+        callback: Callable | None = None,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -1329,6 +1328,13 @@ class CurveFit:
             If None (default), the Jacobian will be determined using JAX's automatic
             differentiation (AD) capabilities. We recommend not using an analytical
             Jacobian, as it is usually faster to use AD.
+        callback : callable or None, optional
+            Callback function called after each optimization iteration with signature
+            ``callback(iteration, cost, params, info)``. Useful for monitoring
+            optimization progress, logging, or implementing custom stopping criteria.
+            If None (default), no callback is invoked. See ``nlsq.callbacks`` module
+            for built-in callbacks (ProgressBar, IterationLogger, EarlyStopping).
+            .. versionadded:: 0.2.0
         kwargs
             Keyword arguments passed to `leastsq` for ``method='lm'`` or
             `least_squares` otherwise.
@@ -1449,6 +1455,7 @@ class CurveFit:
             n,
             sigma,
             timeit,
+            callback,
             kwargs,
         )
 
@@ -1490,15 +1497,22 @@ class CurveFit:
                 return popt, _pcov, feval[data_mask]
             else:
                 return popt, _pcov, feval
-        else:
-            # lower GPU memory usage
-            res.pop("jac")
-            res.pop("fun")
 
         if return_full:
             raise RuntimeError("Return full only works for LM")
             # return popt, _pcov, infodict, errmsg, ier
         elif timeit:
+            # lower GPU memory usage before returning raw res
+            res.pop("jac", None)
+            res.pop("fun", None)
             return popt, _pcov, res, post_time, ctime
         else:
-            return popt, _pcov
+            # Create enhanced result object that supports tuple unpacking
+            # for backward compatibility: popt, pcov = curve_fit(...)
+            # Keep 'fun' (residuals) and 'jac' for statistical computations
+            result = CurveFitResult(res)
+            result['model'] = f
+            result['xdata'] = xdata
+            result['ydata'] = ydata
+            result['pcov'] = _pcov
+            return result
