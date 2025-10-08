@@ -20,9 +20,9 @@
 
 NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit), originally developed by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith. We gratefully acknowledge their foundational work on GPU-accelerated curve fitting with JAX. The original JAXFit paper: [arXiv:2208.12187](https://doi.org/10.48550/arXiv.2208.12187).
 
-## ✨ What's New in v1.2.0
+## ✨ What's New in v0.1.1
 
-**Major feature release** (October 2025) with 25+ enhancements focused on usability and robustness:
+**Feature release** (October 2025) with 25+ enhancements focused on usability and robustness:
 
 - **📊 Enhanced Results**: Rich result objects with `.plot()`, `.summary()`, and statistics (R², RMSE, AIC, BIC)
 - **🔄 Auto-Retry**: Automatic fallback strategies improve success rate from 60% → 85%
@@ -32,22 +32,26 @@ NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JA
 - **📚 Complete Docs**: 11 real-world examples + comprehensive SciPy migration guide
 
 ```python
-# New in v1.2.0: Rich results with one-line visualization
+# New in v0.1.1: Rich results with one-line visualization
 from nlsq import curve_fit
 from nlsq.callbacks import ProgressBar
 
-result = curve_fit(model, x, y,
-                   auto_bounds=True,      # Smart bounds
-                   stability='auto',      # Auto-fix issues
-                   fallback=True,         # Retry on failure
-                   callback=ProgressBar()) # Progress bar
+result = curve_fit(
+    model,
+    x,
+    y,
+    auto_bounds=True,  # Smart bounds
+    stability="auto",  # Auto-fix issues
+    fallback=True,  # Retry on failure
+    callback=ProgressBar(),
+)  # Progress bar
 
 result.plot()  # Automatic visualization!
 print(f"R² = {result.r_squared:.4f}")
 result.summary()  # Statistical table
 ```
 
-See [RELEASE_NOTES_v1.2.0.md](RELEASE_NOTES_v1.2.0.md) for complete details.
+See [RELEASE_NOTES_v0.1.1.md](RELEASE_NOTES_v0.1.1.md) for complete details.
 
 ## What is NLSQ?
 

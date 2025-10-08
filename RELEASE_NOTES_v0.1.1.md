@@ -1,13 +1,13 @@
-# NLSQ v1.2.0 Release Notes
+# NLSQ v0.1.1 Release Notes
 
 **Release Date**: October 8, 2025
-**Type**: Major Feature Release
+**Type**: Feature Release
 
 ---
 
 ## 🎉 What's New
 
-NLSQ v1.2.0 is a **major feature release** bringing 25+ enhancements that make curve fitting easier, more robust, and more insightful. This release represents 24 days of development focused on user experience, documentation, and production-grade robustness.
+NLSQ v0.1.1 is a **feature release** bringing 25+ enhancements that make curve fitting easier, more robust, and more insightful. This release represents 24 days of development focused on user experience, documentation, and production-grade robustness.
 
 ### Highlights
 
@@ -72,14 +72,12 @@ callback = EarlyStopping(patience=10, min_delta=1e-6)
 result = curve_fit(model, x, y, callback=callback)
 
 # Combine callbacks
-chain = CallbackChain(
-    ProgressBar(max_nfev=100),
-    EarlyStopping(patience=5)
-)
+chain = CallbackChain(ProgressBar(max_nfev=100), EarlyStopping(patience=5))
 result = curve_fit(model, x, y, callback=chain)
 
 # Log to file
 from nlsq.callbacks import IterationLogger
+
 logger = IterationLogger("optimization.log", log_params=True)
 result = curve_fit(model, x, y, callback=logger)
 ```
@@ -98,14 +96,16 @@ Never fail silently again - automatic retry with smart strategies:
 ```python
 # Enable automatic fallback
 result = curve_fit(
-    model, x, y,
+    model,
+    x,
+    y,
     p0=[1.0, 1.0],  # Even poor guesses work!
     fallback=True,  # Auto-retry on failure
-    fallback_verbose=True  # See what's being tried
+    fallback_verbose=True,  # See what's being tried
 )
 
 # Check what worked
-if hasattr(result, 'fallback_strategy_used'):
+if hasattr(result, "fallback_strategy_used"):
     print(f"Success with: {result.fallback_strategy_used}")
     print(f"Attempts: {result.fallback_attempts}")
 ```
@@ -127,17 +127,21 @@ Let NLSQ suggest reasonable parameter bounds:
 ```python
 # Automatic bound inference
 result = curve_fit(
-    model, x, y,
+    model,
+    x,
+    y,
     p0=[2.0, 1.0, 0.5],
     auto_bounds=True,  # Analyze data to suggest bounds
-    bounds_safety_factor=10.0  # Safety multiplier
+    bounds_safety_factor=10.0,  # Safety multiplier
 )
 
 # Combines with your bounds
 result = curve_fit(
-    model, x, y,
+    model,
+    x,
+    y,
     auto_bounds=True,
-    bounds=([0, 0, -np.inf], [np.inf, 2.0, np.inf])  # User bounds override
+    bounds=([0, 0, -np.inf], [np.inf, 2.0, np.inf]),  # User bounds override
 )
 ```
 
@@ -153,10 +157,7 @@ Automatic detection and fixing of numerical issues:
 
 ```python
 # Auto-fix stability problems
-result = curve_fit(
-    model, x, y,
-    stability='auto'  # Detect and fix automatically
-)
+result = curve_fit(model, x, y, stability="auto")  # Detect and fix automatically
 
 # Options:
 # - 'auto': Detect and fix (recommended)
@@ -182,10 +183,14 @@ result = curve_fit(exponential_decay, x, y)
 
 # Built-in functions:
 from nlsq.functions import (
-    linear, polynomial,             # Basic math
-    exponential_decay, exponential_growth,  # Exponentials
-    gaussian, sigmoid,              # S-curves and peaks
-    power_law, logarithmic         # Power laws
+    linear,
+    polynomial,  # Basic math
+    exponential_decay,
+    exponential_growth,  # Exponentials
+    gaussian,
+    sigmoid,  # S-curves and peaks
+    power_law,
+    logarithmic,  # Power laws
 )
 
 # Each function knows its bounds
@@ -295,7 +300,7 @@ popt, pcov = curve_fit(model, x, y)
 # Limited to parameters and covariance
 ```
 
-**After (v1.2.0)**:
+**After (v0.1.1)**:
 ```python
 result = curve_fit(model, x, y)
 # Access rich features
@@ -311,15 +316,17 @@ popt, pcov = result  # Tuple unpacking works!
 
 ```python
 curve_fit(
-    f, xdata, ydata,
-    # New in v1.2.0:
-    callback=None,              # Progress monitoring
-    auto_bounds=False,          # Smart bound inference
-    fallback=False,             # Automatic fallback
-    stability=False,            # Numerical stability checks
+    f,
+    xdata,
+    ydata,
+    # New in v0.1.1:
+    callback=None,  # Progress monitoring
+    auto_bounds=False,  # Smart bound inference
+    fallback=False,  # Automatic fallback
+    stability=False,  # Numerical stability checks
     bounds_safety_factor=10.0,  # Auto bounds safety
-    max_fallback_attempts=10,   # Fallback retries
-    fallback_verbose=False,     # Print fallback progress
+    max_fallback_attempts=10,  # Fallback retries
+    fallback_verbose=False,  # Print fallback progress
     # All v0.1.0 parameters still work
 )
 ```
@@ -372,7 +379,7 @@ All 13 performance regression tests passing - **zero regressions**:
 **Issue**: 8 tests in `test_callbacks.py` have API mismatches
 **Impact**: Low - core callback functionality works correctly
 **Workaround**: Documented in user guides
-**Fix**: Planned for v1.2.1 (ETA: 2 weeks)
+**Fix**: Planned for v0.1.2 (ETA: 2 weeks)
 
 These test failures do not affect:
 - Production callback usage
@@ -383,7 +390,7 @@ These test failures do not affect:
 
 ## 🔄 Migration Path
 
-### From v0.1.0 → v1.2.0
+### From v0.1.0 → v0.1.1
 
 **100% Backward Compatible** - No breaking changes!
 
@@ -401,23 +408,20 @@ result.plot()  # Automatic visualization!
 
 2. **Enable robustness features**:
 ```python
-result = curve_fit(
-    model, x, y,
-    auto_bounds=True,
-    stability='auto',
-    fallback=True
-)
+result = curve_fit(model, x, y, auto_bounds=True, stability="auto", fallback=True)
 ```
 
 3. **Use function library**:
 ```python
 from nlsq.functions import exponential_decay
+
 result = curve_fit(exponential_decay, x, y)  # No p0 needed!
 ```
 
 4. **Monitor long optimizations**:
 ```python
 from nlsq.callbacks import ProgressBar
+
 result = curve_fit(model, x, y, callback=ProgressBar())
 ```
 
@@ -472,13 +476,13 @@ Special thanks to:
 
 ## 🚀 What's Next?
 
-### v1.2.1 (2 weeks)
+### v0.1.2 (2 weeks)
 - Fix callback API tests
 - Additional examples
 - Performance tuning
 - Bug fixes based on user feedback
 
-### v1.3.0 (Future)
+### v0.2.0 (Future)
 - Additional function library models
 - Enhanced profiler visualization
 - Multi-GPU support
@@ -514,11 +518,12 @@ y = 2.5 * np.exp(-1.3 * x) + 0.5 + np.random.normal(0, 0.05, 100)
 # Fit with all new features
 result = curve_fit(
     exponential_decay,
-    x, y,
+    x,
+    y,
     auto_bounds=True,
-    stability='auto',
+    stability="auto",
     fallback=True,
-    callback=ProgressBar()
+    callback=ProgressBar(),
 )
 
 # Analyze results
@@ -542,6 +547,6 @@ result.summary()
 
 ---
 
-*NLSQ v1.2.0 - GPU-Accelerated Nonlinear Least Squares*
+*NLSQ v0.1.1 - GPU-Accelerated Nonlinear Least Squares*
 *Released: October 8, 2025*
 *License: MIT*

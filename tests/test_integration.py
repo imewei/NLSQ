@@ -308,6 +308,7 @@ class TestEndToEndValidation(unittest.TestCase):
         self.assertEqual(pcov1.shape, (3, 3))
         # Test enhanced features
         from nlsq.result import CurveFitResult
+
         self.assertIsInstance(result1, CurveFitResult)
         self.assertTrue(hasattr(result1, "r_squared"))
         self.assertTrue(hasattr(result1, "plot"))

@@ -146,9 +146,11 @@ Examples demonstrate best practices that you can adapt:
 from nlsq import curve_fit
 import jax.numpy as jnp
 
+
 # 1. Define your model (use jax.numpy)
 def model(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 # 2. Fit with uncertainty quantification
 result = curve_fit(model, xdata, ydata, sigma=uncertainties, absolute_sigma=True)

@@ -804,8 +804,8 @@ result = curve_fit(gaussian, x, y, p0=[2, 5, 1])
 
 # NEW: Automatic statistical analysis
 print(f"R² = {result.r_squared:.4f}")  # Goodness of fit
-print(f"RMSE = {result.rmse:.4f}")     # Error metric
-print(f"AIC = {result.aic:.2f}")       # Model selection
+print(f"RMSE = {result.rmse:.4f}")  # Error metric
+print(f"AIC = {result.aic:.2f}")  # Model selection
 
 # NEW: Confidence intervals
 ci = result.confidence_intervals(alpha=0.95)

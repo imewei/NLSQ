@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] - 2025-10-08
+## [0.1.1] - 2025-10-08
 
 ### Major Features
 
@@ -175,11 +175,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Callback Tests**: 8 tests in `test_callbacks.py` have API mismatches
   - Impact: Low - core callback functionality works correctly
   - Workaround: Available in documentation
-  - Fix: Planned for v1.2.1 (ETA: 2 weeks)
+  - Fix: Planned for v0.1.2 (ETA: 2 weeks)
 
 ### Migration Notes
 
-#### From v0.1.0 to v1.2.0
+#### From v0.1.0 to v0.1.1
 
 **Enhanced Return Type**:
 ```python
@@ -200,11 +200,13 @@ popt, pcov = result
 ```python
 # Automatic features
 result = curve_fit(
-    f, x, y,
-    auto_bounds=True,      # Smart parameter bounds
-    stability='auto',      # Auto-fix stability issues
-    fallback=True,         # Retry on failure
-    callback=ProgressBar() # Monitor progress
+    f,
+    x,
+    y,
+    auto_bounds=True,  # Smart parameter bounds
+    stability="auto",  # Auto-fix stability issues
+    fallback=True,  # Retry on failure
+    callback=ProgressBar(),  # Monitor progress
 )
 ```
 
