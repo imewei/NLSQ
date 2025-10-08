@@ -86,6 +86,12 @@ from nlsq.profiler import (
     clear_profiling_data,
     get_global_profiler,
 )
+
+# Performance profiling visualization (Days 22-23)
+from nlsq.profiler_visualization import (
+    ProfilerVisualization,
+    ProfilingDashboard,
+)
 from nlsq.recovery import OptimizationRecovery
 from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
 from nlsq.smart_cache import (
@@ -123,12 +129,6 @@ from nlsq.streaming_optimizer import (
     fit_unlimited_data,
 )
 from nlsq.validators import InputValidator
-
-# Performance profiling visualization (Days 22-23)
-from nlsq.profiler_visualization import (
-    ProfilerVisualization,
-    ProfilingDashboard,
-)
 
 # Public API - only expose main user-facing functions
 __all__ = [

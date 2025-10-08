@@ -89,7 +89,9 @@ class ProfilerVisualization:
 
         # Optimization time
         opt_times = [m.optimization_time for m in metrics_list]
-        axes[0, 1].plot(runs, opt_times, "o-", color="orange", linewidth=2, markersize=6)
+        axes[0, 1].plot(
+            runs, opt_times, "o-", color="orange", linewidth=2, markersize=6
+        )
         axes[0, 1].set_xlabel("Run Number")
         axes[0, 1].set_ylabel("Optimization Time (s)")
         axes[0, 1].set_title("Optimization Time per Run")
@@ -97,7 +99,9 @@ class ProfilerVisualization:
 
         # Iterations
         iterations = [m.n_iterations for m in metrics_list]
-        axes[1, 0].plot(runs, iterations, "o-", color="green", linewidth=2, markersize=6)
+        axes[1, 0].plot(
+            runs, iterations, "o-", color="green", linewidth=2, markersize=6
+        )
         axes[1, 0].set_xlabel("Run Number")
         axes[1, 0].set_ylabel("Iterations")
         axes[1, 0].set_title("Iterations per Run")
@@ -105,7 +109,9 @@ class ProfilerVisualization:
 
         # Success indicators
         successes = [1 if m.success else 0 for m in metrics_list]
-        axes[1, 1].bar(runs, successes, color=["green" if s else "red" for s in successes])
+        axes[1, 1].bar(
+            runs, successes, color=["green" if s else "red" for s in successes]
+        )
         axes[1, 1].set_xlabel("Run Number")
         axes[1, 1].set_ylabel("Success (1) / Failure (0)")
         axes[1, 1].set_title("Success Rate")
@@ -181,7 +187,7 @@ class ProfilerVisualization:
         axes[2].grid(True, alpha=0.3, axis="y")
 
         # Color bars based on success rate
-        for bar, rate in zip(bars, success_rates):
+        for bar, rate in zip(bars, success_rates, strict=False):
             if rate < 50:
                 bar.set_color("red")
             elif rate < 90:
@@ -222,7 +228,12 @@ class ProfilerVisualization:
 
         # Total time distribution
         total_times = [m.total_time for m in metrics_list]
-        axes[0].hist(total_times, bins=min(20, len(metrics_list) // 2 + 1), alpha=0.7, edgecolor="black")
+        axes[0].hist(
+            total_times,
+            bins=min(20, len(metrics_list) // 2 + 1),
+            alpha=0.7,
+            edgecolor="black",
+        )
         axes[0].axvline(
             np.mean(total_times), color="red", linestyle="--", linewidth=2, label="Mean"
         )
@@ -241,7 +252,13 @@ class ProfilerVisualization:
 
         # Iterations distribution
         iterations = [m.n_iterations for m in metrics_list]
-        axes[1].hist(iterations, bins=min(20, len(metrics_list) // 2 + 1), alpha=0.7, color="green", edgecolor="black")
+        axes[1].hist(
+            iterations,
+            bins=min(20, len(metrics_list) // 2 + 1),
+            alpha=0.7,
+            color="green",
+            edgecolor="black",
+        )
         axes[1].axvline(
             np.mean(iterations), color="red", linestyle="--", linewidth=2, label="Mean"
         )
@@ -307,16 +324,18 @@ class ProfilerVisualization:
         for name, metrics_list in profiles.items():
             summary = self.profiler.get_summary(name)
 
-            html_parts.extend([
-                f"<div class='profile-section'>",
-                f"<h2>Profile: {name}</h2>",
-                "<div class='summary'>",
-                f"<div class='metric'><div class='metric-label'>Total Runs</div><div class='metric-value'>{summary['n_runs']}</div></div>",
-                f"<div class='metric'><div class='metric-label'>Success Rate</div><div class='metric-value'>{summary['success_rate']:.1%}</div></div>",
-                f"<div class='metric'><div class='metric-label'>Mean Time</div><div class='metric-value'>{summary['total_time']['mean']:.3f}s</div></div>",
-                f"<div class='metric'><div class='metric-label'>Mean Iterations</div><div class='metric-value'>{summary['iterations']['mean']:.1f}</div></div>",
-                "</div>",
-            ])
+            html_parts.extend(
+                [
+                    "<div class='profile-section'>",
+                    f"<h2>Profile: {name}</h2>",
+                    "<div class='summary'>",
+                    f"<div class='metric'><div class='metric-label'>Total Runs</div><div class='metric-value'>{summary['n_runs']}</div></div>",
+                    f"<div class='metric'><div class='metric-label'>Success Rate</div><div class='metric-value'>{summary['success_rate']:.1%}</div></div>",
+                    f"<div class='metric'><div class='metric-label'>Mean Time</div><div class='metric-value'>{summary['total_time']['mean']:.3f}s</div></div>",
+                    f"<div class='metric'><div class='metric-label'>Mean Iterations</div><div class='metric-value'>{summary['iterations']['mean']:.1f}</div></div>",
+                    "</div>",
+                ]
+            )
 
             # Detailed table
             html_parts.append("<table>")
@@ -510,17 +529,19 @@ class ProfilingDashboard:
             return "No profiling data available for tracked profiles."
 
         # Overall comparison table
-        lines.extend([
-            "Profile Summary:",
-            "-" * 80,
-            f"{'Profile':<20} {'Runs':<8} {'Success%':<12} {'Mean Time':<15} {'Mean Iter':<12}",
-            "-" * 80,
-        ])
+        lines.extend(
+            [
+                "Profile Summary:",
+                "-" * 80,
+                f"{'Profile':<20} {'Runs':<8} {'Success%':<12} {'Mean Time':<15} {'Mean Iter':<12}",
+                "-" * 80,
+            ]
+        )
 
         for name, summary in summaries.items():
             lines.append(
                 f"{name:<20} {summary['n_runs']:<8} "
-                f"{summary['success_rate']*100:<12.1f} "
+                f"{summary['success_rate'] * 100:<12.1f} "
                 f"{summary['total_time']['mean']:<15.3f} "
                 f"{summary['iterations']['mean']:<12.1f}"
             )
@@ -532,14 +553,18 @@ class ProfilingDashboard:
             lines.extend(["", "Best Performers:", "-" * 80])
 
             fastest = min(summaries.items(), key=lambda x: x[1]["total_time"]["mean"])
-            lines.append(f"  Fastest:         {fastest[0]} ({fastest[1]['total_time']['mean']:.3f}s)")
+            lines.append(
+                f"  Fastest:         {fastest[0]} ({fastest[1]['total_time']['mean']:.3f}s)"
+            )
 
             most_reliable = max(summaries.items(), key=lambda x: x[1]["success_rate"])
             lines.append(
-                f"  Most Reliable:   {most_reliable[0]} ({most_reliable[1]['success_rate']*100:.1f}%)"
+                f"  Most Reliable:   {most_reliable[0]} ({most_reliable[1]['success_rate'] * 100:.1f}%)"
             )
 
-            fewest_iter = min(summaries.items(), key=lambda x: x[1]["iterations"]["mean"])
+            fewest_iter = min(
+                summaries.items(), key=lambda x: x[1]["iterations"]["mean"]
+            )
             lines.append(
                 f"  Fewest Iters:    {fewest_iter[0]} ({fewest_iter[1]['iterations']['mean']:.1f})"
             )
@@ -548,7 +573,9 @@ class ProfilingDashboard:
 
         return "\n".join(lines)
 
-    def plot_all_comparisons(self, figsize: tuple[float, float] = (15, 10)) -> Figure | None:
+    def plot_all_comparisons(
+        self, figsize: tuple[float, float] = (15, 10)
+    ) -> Figure | None:
         """
         Generate comprehensive comparison plots.
 
@@ -596,7 +623,9 @@ class ProfilingDashboard:
             for name in self.tracked_profiles:
                 fig = self.viz.plot_timing_series(name)
                 if fig:
-                    fig.savefig(output_dir / f"{name}_series.png", dpi=150, bbox_inches="tight")
+                    fig.savefig(
+                        output_dir / f"{name}_series.png", dpi=150, bbox_inches="tight"
+                    )
                     plt.close(fig)
 
             fig = self.plot_all_comparisons()

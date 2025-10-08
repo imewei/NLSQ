@@ -15,8 +15,8 @@ import pytest
 from nlsq.profiler import PerformanceProfiler, get_global_profiler
 from nlsq.profiler_visualization import (
     HAS_MATPLOTLIB,
-    ProfilingDashboard,
     ProfilerVisualization,
+    ProfilingDashboard,
 )
 
 
