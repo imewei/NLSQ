@@ -39,6 +39,7 @@ def curve_fit(
     *args,
     auto_bounds=False,
     bounds_safety_factor=10.0,
+    stability=False,
     fallback=False,
     max_fallback_attempts=10,
     fallback_verbose=False,
@@ -77,6 +78,22 @@ def curve_fit(
     bounds_safety_factor : float, optional
         Safety multiplier for automatic bounds (larger = more conservative).
         Only used when auto_bounds=True. Default: 10.0.
+    stability : {'auto', 'check', False}, optional
+        Control numerical stability checks and automatic fixes:
+
+        - 'auto': Check for stability issues and automatically apply fixes
+          (rescale data, normalize parameters, handle NaN/Inf)
+        - 'check': Check for stability issues and warn, but don't apply fixes
+        - False: Skip stability checks entirely (default)
+
+        When 'auto', detected issues are fixed before optimization:
+
+        - Ill-conditioned data (condition number > 1e10) is rescaled to [0, 1]
+        - Large data ranges (> 1e4) are normalized
+        - NaN/Inf values are replaced with mean
+        - Parameter scale mismatches (ratio > 1e6) are normalized
+
+        Default: False.
     fallback : bool, optional
         Enable automatic fallback strategies for difficult optimization problems.
         When True, the optimizer will automatically try alternative approaches if
@@ -180,11 +197,20 @@ def curve_fit(
     ...     bounds=([0, -np.inf], [np.inf, np.inf])  # Only constrain first parameter
     ... )
 
-    Combined auto_bounds + fallback for maximum robustness:
+    Using stability checks to detect and fix numerical issues:
+
+    >>> # Check for stability issues and apply automatic fixes
+    >>> result = curve_fit(exponential, x, y, p0=[2, 1], stability='auto')
+    >>>
+    >>> # Only check and warn about issues (no automatic fixes)
+    >>> result = curve_fit(exponential, x, y, p0=[2, 1], stability='check')
+
+    Combined auto_bounds + stability + fallback for maximum robustness:
 
     >>> result = curve_fit(
     ...     exponential, x, y, p0=[2, 1],
     ...     auto_bounds=True,
+    ...     stability='auto',
     ...     fallback=True
     ... )
     """
@@ -213,6 +239,69 @@ def curve_fit(
 
             # Update kwargs with merged bounds
             kwargs["bounds"] = merged_bounds
+
+    # Handle numerical stability checks and fixes
+    if stability:
+        import logging
+        from nlsq.stability import apply_automatic_fixes, check_problem_stability
+
+        logger = logging.getLogger(__name__)
+
+        # Extract p0 from args or kwargs
+        p0 = None
+        if args and len(args) >= 1:
+            p0 = args[0]
+        elif "p0" in kwargs:
+            p0 = kwargs["p0"]
+
+        # Check stability
+        stability_report = check_problem_stability(xdata, ydata, p0, f)
+
+        # Handle based on stability mode
+        if stability == "check":
+            # Just check and warn
+            if stability_report["severity"] == "critical":
+                logger.warning(
+                    f"Critical stability issues detected ({len(stability_report['issues'])} issues):"
+                )
+                for issue_type, message, severity in stability_report["issues"]:
+                    logger.warning(f"  [{severity.upper()}] {message}")
+                if stability_report["recommendations"]:
+                    logger.info("Recommendations:")
+                    for rec in stability_report["recommendations"]:
+                        logger.info(f"  - {rec}")
+            elif stability_report["severity"] == "warning":
+                logger.warning(
+                    f"Stability warnings detected ({len(stability_report['issues'])} issues)"
+                )
+                for issue_type, message, severity in stability_report["issues"]:
+                    logger.warning(f"  [{severity.upper()}] {message}")
+
+        elif stability == "auto":
+            # Apply automatic fixes if issues detected
+            if stability_report["severity"] in ["warning", "critical"]:
+                logger.info(
+                    f"Applying automatic fixes for {len(stability_report['issues'])} stability issues..."
+                )
+
+                xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
+                    xdata, ydata, p0, stability_report=stability_report
+                )
+
+                # Update data and parameters
+                xdata = xdata_fixed
+                ydata = ydata_fixed
+
+                if p0_fixed is not None:
+                    # Update p0 in kwargs (move from args if needed)
+                    kwargs["p0"] = p0_fixed
+                    # If p0 was in args, we need to remove it from args
+                    if args and len(args) >= 1:
+                        args = args[1:]
+
+                # Log applied fixes
+                for fix in fix_info["applied_fixes"]:
+                    logger.info(f"  ✓ {fix}")
 
     # Use fallback orchestrator if requested
     if fallback:
@@ -718,14 +807,14 @@ class CurveFit:
             Validated p0 array (or None if auto-estimation not requested)
         """
         # If p0 is explicitly provided (not None or 'auto'), use it
-        if p0 is not None and p0 != "auto":
+        if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
             p0 = np.atleast_1d(p0)
             n = p0.size
             return n, p0
 
         # Only auto-estimate if p0='auto' is explicitly requested
         # (not when p0=None, to preserve backward compatibility)
-        if p0 == "auto" and xdata is not None and ydata is not None:
+        if isinstance(p0, str) and p0 == "auto" and xdata is not None and ydata is not None:
             try:
                 p0_estimated = estimate_initial_parameters(f, xdata, ydata, p0)
                 p0 = np.atleast_1d(p0_estimated)

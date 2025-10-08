@@ -57,6 +57,15 @@ from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 # Fallback strategies (Phase 3 - Days 15-16)
 from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
 
+# Stability checks (Phase 3 - Day 18)
+from nlsq.stability import (
+    apply_automatic_fixes,
+    check_problem_stability,
+    detect_collinearity,
+    detect_parameter_scale_mismatch,
+    estimate_condition_number,
+)
+
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
@@ -168,6 +177,12 @@ __all__ = [
     "BoundsInference",
     "infer_bounds",
     "merge_bounds",
+    # Stability checks (Phase 3)
+    "check_problem_stability",
+    "apply_automatic_fixes",
+    "estimate_condition_number",
+    "detect_parameter_scale_mismatch",
+    "detect_collinearity",
     "curve_fit_large",
     "detect_jacobian_sparsity",
     "enable_mixed_precision_fallback",

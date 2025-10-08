@@ -207,7 +207,8 @@ class TestCurveFit:
 
         for flength in [None, self.flength]:
             curve_fit = CurveFit(flength=flength).curve_fit
-            assert_allclose(curve_fit(f_linear, x, y)[0], [2, 1], atol=1e-10)
+            popt, _pcov = curve_fit(f_linear, x, y)
+            assert_allclose(popt, [2, 1], atol=1e-10)
 
     # # def test_indeterminate_covariance(self):
     # #     # Test that a warning is returned when pcov is indeterminate
