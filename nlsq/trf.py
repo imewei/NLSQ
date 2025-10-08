@@ -87,6 +87,7 @@ References
 """
 
 import time
+import warnings
 from collections.abc import Callable
 
 import numpy as np
@@ -113,6 +114,7 @@ logger = get_logger("trf")
 initialize_gpu_safely()
 
 from nlsq._optimize import OptimizeResult
+from nlsq.callbacks import StopOptimization
 from nlsq.common_jax import CommonJIT
 from nlsq.common_scipy import (
     CL_scaling_vector,
@@ -651,6 +653,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         timeit: bool = False,
         solver: str = "exact",
         diagnostics: OptimizationDiagnostics | None = None,
+        callback: Callable | None = None,
         **kwargs,
     ) -> dict:
         """Minimize a scalar function of one or more variables using the
@@ -750,6 +753,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     tr_options,
                     verbose,
                     solver,
+                    callback,
                     **kwargs,
                 )
             else:
@@ -775,6 +779,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     tr_options,
                     verbose,
                     solver,
+                    callback,
                 )
         else:
             return self.trf_bounds(
@@ -799,6 +804,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 tr_options,
                 verbose,
                 solver,
+                callback,
                 **kwargs,
             )
 
@@ -825,6 +831,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         tr_options: dict,
         verbose: int,
         solver: str = "exact",
+        callback: Callable | None = None,
         **kwargs,
     ) -> dict:
         """Unbounded version of the trust-region reflective algorithm.
@@ -1107,6 +1114,30 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 iteration += 1
 
+                # Invoke user callback if provided
+                if callback is not None:
+                    try:
+                        callback(
+                            iteration=iteration,
+                            cost=float(cost),  # JAX scalar → Python float
+                            params=np.array(x),  # JAX array → NumPy array
+                            info={
+                                "gradient_norm": float(g_norm),
+                                "nfev": nfev,
+                                "step_norm": float(step_norm) if step_norm is not None else None,
+                                "actual_reduction": float(actual_reduction) if actual_reduction is not None else None,
+                            }
+                        )
+                    except StopOptimization:
+                        termination_status = 2  # User-requested stop
+                        self.logger.info("Optimization stopped by callback (StopOptimization)")
+                        break
+                    except Exception as e:
+                        warnings.warn(
+                            f"Callback raised exception: {e}. Continuing optimization.",
+                            RuntimeWarning
+                        )
+
         if termination_status is None:
             termination_status = 0
 
@@ -1149,6 +1180,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         tr_options: dict,
         verbose: int,
         solver: str = "exact",
+        callback: Callable | None = None,
         **kwargs,
     ) -> dict:
         """Bounded version of the trust-region reflective algorithm.
@@ -1439,6 +1471,30 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             iteration += 1
 
+            # Invoke user callback if provided
+            if callback is not None:
+                try:
+                    callback(
+                        iteration=iteration,
+                        cost=float(cost),  # JAX scalar → Python float
+                        params=np.array(x),  # JAX array → NumPy array
+                        info={
+                            "gradient_norm": float(g_norm),
+                            "nfev": nfev,
+                            "step_norm": float(step_norm) if step_norm is not None else None,
+                            "actual_reduction": float(actual_reduction) if actual_reduction is not None else None,
+                        }
+                    )
+                except StopOptimization:
+                    termination_status = 2  # User-requested stop
+                    self.logger.info("Optimization stopped by callback (StopOptimization)")
+                    break
+                except Exception as e:
+                    warnings.warn(
+                        f"Callback raised exception: {e}. Continuing optimization.",
+                        RuntimeWarning
+                    )
+
         if termination_status is None:
             termination_status = 0
 
@@ -1598,6 +1654,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         tr_options: dict,
         verbose: int,
         solver: str = "exact",
+        callback: Callable | None = None,
     ) -> dict:
         """Trust Region Reflective algorithm with no bounds and all the
         operations performed on JAX and the GPU are timed. We need a separate
@@ -1924,6 +1981,30 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 actual_reduction = 0
 
             iteration += 1
+
+            # Invoke user callback if provided
+            if callback is not None:
+                try:
+                    callback(
+                        iteration=iteration,
+                        cost=float(cost),  # JAX scalar → Python float
+                        params=np.array(x),  # JAX array → NumPy array
+                        info={
+                            "gradient_norm": float(g_norm),
+                            "nfev": nfev,
+                            "step_norm": float(step_norm) if step_norm is not None else None,
+                            "actual_reduction": float(actual_reduction) if actual_reduction is not None else None,
+                        }
+                    )
+                except StopOptimization:
+                    termination_status = 2  # User-requested stop
+                    self.logger.info("Optimization stopped by callback (StopOptimization)")
+                    break
+                except Exception as e:
+                    warnings.warn(
+                        f"Callback raised exception: {e}. Continuing optimization.",
+                        RuntimeWarning
+                    )
 
         if termination_status is None:
             termination_status = 0

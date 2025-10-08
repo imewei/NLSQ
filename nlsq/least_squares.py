@@ -746,6 +746,7 @@ class LeastSquares:
         m: int,
         initial_cost: float,
         timeout_kwargs: dict,
+        callback: Callable | None,
     ):
         """Run TRF optimization with diagnostics and logging.
 
@@ -787,6 +788,7 @@ class LeastSquares:
                 timeit,
                 solver=tr_solver if tr_solver else "exact",
                 diagnostics=self.diagnostics if self.enable_diagnostics else None,
+                callback=callback,
                 **timeout_kwargs,
             )
 
@@ -854,6 +856,7 @@ class LeastSquares:
         data_mask: jnp.ndarray | None = None,
         transform: jnp.ndarray | None = None,
         timeit: bool = False,
+        callback: Callable | None = None,
         args=(),
         kwargs=None,
         **timeout_kwargs,
@@ -897,6 +900,11 @@ class LeastSquares:
             Transformation matrix for weighted fitting.
         timeit : bool, optional
             Enable detailed timing analysis.
+        callback : callable or None, optional
+            Callback function called after each optimization iteration with signature
+            ``callback(iteration, cost, params, info)``. Useful for monitoring
+            optimization progress, logging, or implementing custom stopping criteria.
+            If None (default), no callback is invoked.
         args : tuple, optional
             Additional arguments for objective function.
         kwargs : dict, optional
@@ -999,6 +1007,7 @@ class LeastSquares:
             m,
             initial_cost,
             timeout_kwargs,
+            callback,
         )
 
         # Step 12: Process optimization result

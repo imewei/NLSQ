@@ -25,6 +25,9 @@ except ImportError:
 from nlsq import functions
 from nlsq._optimize import OptimizeResult, OptimizeWarning
 
+# Progress callbacks (Day 3 - User Experience)
+from nlsq import callbacks
+
 # Stability and optimization imports
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
@@ -104,6 +107,8 @@ from nlsq.validators import InputValidator
 __all__ = [
     # Stability and optimization modules
     "AlgorithmSelector",
+    # Progress callbacks (Day 3)
+    "callbacks",
     # Common functions library
     "functions",
     # Performance optimization (Sprint 2)
