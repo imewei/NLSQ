@@ -122,7 +122,7 @@ class ProgressBar(CallbackBase):
                 "tqdm not installed. Install with 'pip install tqdm' "
                 "to use ProgressBar callback.",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
 
     def __call__(

@@ -100,6 +100,7 @@ def test_progressbar_without_tqdm():
     # The ProgressBar will work but won't issue a warning on subsequent instantiations
     try:
         import tqdm
+
         # tqdm is available, so we can't test the warning behavior reliably
         # But we can verify ProgressBar still works
         callback = ProgressBar(max_nfev=100)
@@ -151,8 +152,8 @@ def test_iteration_logger_stdout():
     assert "Iter" in output and "1" in output
     assert "Iter" in output and "2" in output
     # Values may be in scientific notation (1.000000e+02) or decimal (100.0)
-    assert ("100" in output or "1.000000e+02" in output)
-    assert ("50" in output or "5.000000e+01" in output)
+    assert "100" in output or "1.000000e+02" in output
+    assert "50" in output or "5.000000e+01" in output
 
 
 def test_iteration_logger_file():
