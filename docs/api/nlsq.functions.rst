@@ -142,7 +142,7 @@ Fit a sinusoidal (periodic) function:
     from nlsq.functions import sinusoidal
 
     # Generate periodic data
-    x = np.linspace(0, 4*np.pi, 100)
+    x = np.linspace(0, 4 * np.pi, 100)
     y_true = sinusoidal(x, amplitude=3, frequency=2, phase=0, offset=1)
     y = y_true + np.random.normal(0, 0.2, len(x))
 

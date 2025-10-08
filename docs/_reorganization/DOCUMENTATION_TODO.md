@@ -203,10 +203,10 @@ For each module, identify public API and add:
 
 ```python
 __all__ = [
-    'PublicClass1',
-    'PublicClass2',
-    'public_function1',
-    'public_function2',
+    "PublicClass1",
+    "PublicClass2",
+    "public_function1",
+    "public_function2",
 ]
 ```
 

@@ -639,19 +639,19 @@ These modules exist in the codebase but are not in `docs/api/`:
 
 ### Modules without docstrings (2)
 
-- `loss_functions.py` 
+- `loss_functions.py`
 - `minpack.py` [2 exports]
 
 ### Public classes without docstrings (1)
 
-- `OptimizeWarning` in `_optimize.py` 
+- `OptimizeWarning` in `_optimize.py`
 
 ### Public functions without docstrings (4)
 
-- `print_header_nonlinear()` in `common_scipy.py` 
-- `print_iteration_nonlinear()` in `common_scipy.py` 
-- `print_header_linear()` in `common_scipy.py` 
-- `print_iteration_linear()` in `common_scipy.py` 
+- `print_header_nonlinear()` in `common_scipy.py`
+- `print_iteration_nonlinear()` in `common_scipy.py`
+- `print_header_linear()` in `common_scipy.py`
+- `print_iteration_linear()` in `common_scipy.py`
 
 ### Public methods without docstrings (17)
 

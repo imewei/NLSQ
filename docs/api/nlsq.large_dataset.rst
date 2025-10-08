@@ -69,9 +69,11 @@ Basic Usage with curve_fit_large
     x = np.linspace(0, 10, n_points)
     y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, n_points)
 
+
     # Define fit function
     def exponential(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
 
     # Fit with automatic chunking
     popt, pcov = curve_fit_large(
@@ -119,21 +121,12 @@ For datasets that don't fit in memory or are generated on-the-fly:
     from nlsq import StreamingOptimizer, StreamingConfig
 
     # Configure streaming
-    config = StreamingConfig(
-        batch_size=10000,
-        max_epochs=100,
-        convergence_tol=1e-6
-    )
+    config = StreamingConfig(batch_size=10000, max_epochs=100, convergence_tol=1e-6)
 
     optimizer = StreamingOptimizer(config)
 
     # Stream data from generator
-    result = optimizer.fit_unlimited_data(
-        func,
-        data_generator,
-        x0=p0,
-        n_params=3
-    )
+    result = optimizer.fit_unlimited_data(func, data_generator, x0=p0, n_params=3)
 
 Sparse Jacobian Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -149,7 +142,9 @@ For problems with sparse structure:
     sparsity_pattern = sparse_computer.detect_sparsity(func, x_sample, p0)
 
     if sparse_computer.is_sparse(sparsity_pattern):
-        print(f"Jacobian is {sparse_computer.compute_sparsity_ratio(sparsity_pattern):.1%} sparse")
+        print(
+            f"Jacobian is {sparse_computer.compute_sparsity_ratio(sparsity_pattern):.1%} sparse"
+        )
 
 See Also
 --------

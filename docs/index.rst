@@ -35,9 +35,11 @@ Quick Example
    from nlsq import curve_fit
    import jax.numpy as jnp
 
+
    # Define model function
    def exponential(x, a, b):
        return a * jnp.exp(-b * x)
+
 
    # Generate data
    x = np.linspace(0, 5, 1000)

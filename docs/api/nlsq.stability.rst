@@ -62,16 +62,14 @@ Use the stability guard to automatically detect and fix issues:
     from nlsq import curve_fit
     import jax.numpy as jnp
 
+
     def model(x, a, b):
         return a * jnp.exp(-b * x)
 
+
     # Enable automatic stability checking
     result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        stability="auto"  # Automatic detection and fixes
+        model, x, y, p0=[1.0, 0.5], stability="auto"  # Automatic detection and fixes
     )
 
 Manual Stability Analysis
@@ -98,7 +96,7 @@ Manually check problem stability before fitting:
             y,
             p0=report.rescaled_p0,
             x_scale=report.x_scale,
-            bounds=report.adjusted_bounds
+            bounds=report.adjusted_bounds,
         )
 
 Numerical Issue Fixes
@@ -112,10 +110,7 @@ Apply specific fixes for numerical problems:
 
     # Detect and fix issues automatically
     fixed_x, fixed_y, fixed_p0 = fix_numerical_issues(
-        x, y, p0,
-        fix_overflow=True,
-        fix_scaling=True,
-        fix_singularities=True
+        x, y, p0, fix_overflow=True, fix_scaling=True, fix_singularities=True
     )
 
     # Use fixed inputs
@@ -132,19 +127,11 @@ Monitor matrix condition during optimization:
 
     # Create stability guard
     guard = NumericalStabilityGuard(
-        max_condition_number=1e10,
-        warn_threshold=1e8,
-        auto_fix=True
+        max_condition_number=1e10, warn_threshold=1e8, auto_fix=True
     )
 
     # Use guard during fitting
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        callback=guard
-    )
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=guard)
 
     # Check stability report
     if guard.stability_report:
@@ -195,6 +182,7 @@ Ill-Conditioned Matrices
 
     # Or manually rescale
     from nlsq.stability import check_problem_stability
+
     report = check_problem_stability(model, x, y, p0)
     result = curve_fit(model, x, y, p0=report.rescaled_p0)
 
@@ -215,9 +203,7 @@ Overflow/Underflow
 
     # Automatically fix overflow/underflow
     fixed_x, fixed_y, fixed_p0 = fix_numerical_issues(
-        x, y, p0,
-        fix_overflow=True,
-        log_transform_if_needed=True
+        x, y, p0, fix_overflow=True, log_transform_if_needed=True
     )
 
     result = curve_fit(model, fixed_x, fixed_y, p0=fixed_p0)
@@ -242,7 +228,7 @@ Singular Matrices
         y,
         p0=p0,
         stability="auto",
-        regularization=1e-8  # Add small regularization
+        regularization=1e-8,  # Add small regularization
     )
 
 Configuration
@@ -261,16 +247,10 @@ Configure stability checking behavior:
         fix_overflow=True,
         fix_scaling=True,
         fix_singularities=True,
-        verbose=True
+        verbose=True,
     )
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=p0,
-        stability_config=config
-    )
+    result = curve_fit(model, x, y, p0=p0, stability_config=config)
 
 See Also
 --------

@@ -60,16 +60,14 @@ Let NLSQ infer parameter bounds automatically:
     from nlsq import curve_fit
     import jax.numpy as jnp
 
+
     def exponential(x, a, b):
         return a * jnp.exp(-b * x)
 
+
     # Enable automatic bounds inference
     result = curve_fit(
-        exponential,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        auto_bounds=True  # Infer bounds automatically
+        exponential, x, y, p0=[1.0, 0.5], auto_bounds=True  # Infer bounds automatically
     )
 
     # Access inferred bounds
@@ -93,11 +91,7 @@ Manually infer and inspect bounds before fitting:
 
     # Use inferred bounds
     result = curve_fit(
-        exponential,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        bounds=(bounds.lower, bounds.upper)
+        exponential, x, y, p0=[1.0, 0.5], bounds=(bounds.lower, bounds.upper)
     )
 
 Merging with User Bounds
@@ -118,13 +112,7 @@ Combine automatic inference with user-specified constraints:
     # Merge: use user bounds where specified, auto-inferred elsewhere
     final_bounds = merge_bounds(auto_bounds, user_bounds)
 
-    result = curve_fit(
-        exponential,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        bounds=final_bounds
-    )
+    result = curve_fit(exponential, x, y, p0=[1.0, 0.5], bounds=final_bounds)
 
 Model-Specific Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -140,7 +128,7 @@ For known model types, inference uses domain knowledge:
     # - Amplitude should be ~ max(y)
     # - Mean should be in range of x
     # - Std should be positive and ~ range(x)
-    bounds = infer_bounds(gaussian, x, y, p0=None, model_type='gaussian')
+    bounds = infer_bounds(gaussian, x, y, p0=None, model_type="gaussian")
 
     print(f"Gaussian-specific bounds: {bounds}")
 
@@ -154,11 +142,13 @@ Enforce physical constraints (positivity, ranges):
     from nlsq.bound_inference import BoundsInference
 
     inference = BoundsInference(
-        enforce_positivity=['amplitude', 'rate'],  # These must be > 0
-        enforce_ranges={'temperature': (0, 1000)}  # Physical limits
+        enforce_positivity=["amplitude", "rate"],  # These must be > 0
+        enforce_ranges={"temperature": (0, 1000)},  # Physical limits
     )
 
-    bounds = inference.infer(model, x, y, p0, param_names=['amplitude', 'rate', 'temperature'])
+    bounds = inference.infer(
+        model, x, y, p0, param_names=["amplitude", "rate", "temperature"]
+    )
 
 Data-Driven Estimation
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -176,7 +166,7 @@ Use data statistics for bounds estimation:
         y,
         p0,
         use_data_range=True,  # Use min/max of data
-        margin_factor=1.5  # Add 50% margin
+        margin_factor=1.5,  # Add 50% margin
     )
 
     print(f"Data-driven bounds: {bounds}")
@@ -195,7 +185,7 @@ Validate inferred or user-provided bounds:
         bounds,
         p0,
         check_coverage=True,  # Ensure p0 is within bounds
-        check_feasibility=True  # Ensure bounds make sense
+        check_feasibility=True,  # Ensure bounds make sense
     )
 
     if not validation_result.valid:
@@ -257,7 +247,7 @@ Configure bounds inference behavior:
         enforce_positivity=[],  # Parameter indices for positivity
         use_model_heuristics=True,  # Use model-specific knowledge
         confidence_threshold=0.8,  # Minimum confidence for inference
-        fallback_to_unbounded=True  # Use inf bounds if uncertain
+        fallback_to_unbounded=True,  # Use inf bounds if uncertain
     )
 
 See Also

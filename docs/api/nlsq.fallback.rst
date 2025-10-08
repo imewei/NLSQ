@@ -62,16 +62,14 @@ Automatically retry with fallback strategies:
     from nlsq import curve_fit
     import jax.numpy as jnp
 
+
     def model(x, a, b):
         return a * jnp.exp(-b * x)
 
+
     # Enable automatic fallback
     result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        fallback=True  # Automatic retry on failure
+        model, x, y, p0=[1.0, 0.5], fallback=True  # Automatic retry on failure
     )
 
     # Check if fallback was used
@@ -89,24 +87,20 @@ Create a custom sequence of fallback strategies:
         create_fallback_chain,
         AutoRetry,
         AlgorithmSwitcher,
-        BoundsRelaxer
+        BoundsRelaxer,
     )
 
     # Define fallback chain
-    fallback_chain = create_fallback_chain([
-        AutoRetry(max_attempts=3, perturbation=0.1),
-        AlgorithmSwitcher(algorithms=['trf', 'lm', 'dogbox']),
-        BoundsRelaxer(relaxation_factor=1.5)
-    ])
+    fallback_chain = create_fallback_chain(
+        [
+            AutoRetry(max_attempts=3, perturbation=0.1),
+            AlgorithmSwitcher(algorithms=["trf", "lm", "dogbox"]),
+            BoundsRelaxer(relaxation_factor=1.5),
+        ]
+    )
 
     # Use custom chain
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        fallback_chain=fallback_chain
-    )
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], fallback_chain=fallback_chain)
 
 Parameter Perturbation
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -120,16 +114,10 @@ Retry with perturbed initial parameters:
     retry_strategy = AutoRetry(
         max_attempts=5,
         perturbation=0.2,  # 20% perturbation
-        adaptive=True  # Increase perturbation if still failing
+        adaptive=True,  # Increase perturbation if still failing
     )
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        fallback_strategy=retry_strategy
-    )
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], fallback_strategy=retry_strategy)
 
     print(f"Attempts made: {retry_strategy.attempts_made}")
 
@@ -143,17 +131,10 @@ Try different optimization algorithms:
     from nlsq.fallback import AlgorithmSwitcher
 
     switcher = AlgorithmSwitcher(
-        algorithms=['trf', 'lm', 'dogbox'],
-        ordered=True  # Try in order
+        algorithms=["trf", "lm", "dogbox"], ordered=True  # Try in order
     )
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        fallback_strategy=switcher
-    )
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], fallback_strategy=switcher)
 
     if result.success:
         print(f"Succeeded with algorithm: {result.algorithm_used}")
@@ -168,17 +149,11 @@ Relax parameter bounds if constrained:
     from nlsq.fallback import BoundsRelaxer
 
     relaxer = BoundsRelaxer(
-        relaxation_factor=2.0,  # Double the bounds range
-        max_relaxations=3
+        relaxation_factor=2.0, max_relaxations=3  # Double the bounds range
     )
 
     result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        bounds=([0, 0], [10, 10]),
-        fallback_strategy=relaxer
+        model, x, y, p0=[1.0, 0.5], bounds=([0, 0], [10, 10]), fallback_strategy=relaxer
     )
 
 Multi-Strategy Fallback
@@ -191,12 +166,14 @@ Combine multiple fallback strategies in sequence:
     from nlsq.fallback import create_fallback_chain
 
     # Try perturbation first, then algorithm switch, then bounds relaxation
-    chain = create_fallback_chain([
-        AutoRetry(max_attempts=3, perturbation=0.1),
-        AlgorithmSwitcher(algorithms=['trf', 'lm']),
-        BoundsRelaxer(relaxation_factor=1.5),
-        RegularizationAdjuster(reg_values=[1e-8, 1e-6, 1e-4])
-    ])
+    chain = create_fallback_chain(
+        [
+            AutoRetry(max_attempts=3, perturbation=0.1),
+            AlgorithmSwitcher(algorithms=["trf", "lm"]),
+            BoundsRelaxer(relaxation_factor=1.5),
+            RegularizationAdjuster(reg_values=[1e-8, 1e-6, 1e-4]),
+        ]
+    )
 
     result = curve_fit(
         model,
@@ -204,7 +181,7 @@ Combine multiple fallback strategies in sequence:
         y,
         p0=[1.0, 0.5],
         fallback_chain=chain,
-        verbose=True  # Show fallback progress
+        verbose=True,  # Show fallback progress
     )
 
 Configuration
@@ -220,7 +197,7 @@ Configure fallback behavior globally:
         enabled=True,
         max_total_attempts=10,
         verbose=True,
-        default_strategies=['retry', 'switch', 'relax']
+        default_strategies=["retry", "switch", "relax"],
     )
 
     # Now all curve_fit calls use fallback by default

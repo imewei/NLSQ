@@ -54,16 +54,12 @@ Display a real-time progress bar during optimization:
     from nlsq.callbacks import ProgressBar
     import jax.numpy as jnp
 
+
     def model(x, a, b):
         return a * jnp.exp(-b * x)
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        callback=ProgressBar()
-    )
+
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=ProgressBar())
 
 Early Stopping
 ~~~~~~~~~~~~~~
@@ -74,19 +70,9 @@ Stop optimization when parameters converge:
 
     from nlsq.callbacks import EarlyStopping
 
-    callback = EarlyStopping(
-        patience=10,
-        min_delta=1e-6,
-        monitor='cost'
-    )
+    callback = EarlyStopping(patience=10, min_delta=1e-6, monitor="cost")
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        callback=callback
-    )
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=callback)
 
     print(f"Stopped at iteration {callback.stopped_iteration}")
 
@@ -99,19 +85,9 @@ Log detailed information at each iteration:
 
     from nlsq.callbacks import IterationLogger
 
-    logger = IterationLogger(
-        log_every=5,
-        log_cost=True,
-        log_gradient_norm=True
-    )
+    logger = IterationLogger(log_every=5, log_cost=True, log_gradient_norm=True)
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        callback=logger
-    )
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=logger)
 
     # Access logged history
     print(logger.history)
@@ -125,18 +101,9 @@ Save intermediate results during optimization:
 
     from nlsq.callbacks import ResultSaver
 
-    saver = ResultSaver(
-        save_every=10,
-        save_path='checkpoints/'
-    )
+    saver = ResultSaver(save_every=10, save_path="checkpoints/")
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        callback=saver
-    )
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=saver)
 
 Combining Callbacks
 ~~~~~~~~~~~~~~~~~~~
@@ -147,19 +114,11 @@ Use multiple callbacks simultaneously:
 
     from nlsq.callbacks import CallbackComposer, ProgressBar, EarlyStopping
 
-    callbacks = CallbackComposer([
-        ProgressBar(),
-        EarlyStopping(patience=10),
-        IterationLogger(log_every=5)
-    ])
-
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        callback=callbacks
+    callbacks = CallbackComposer(
+        [ProgressBar(), EarlyStopping(patience=10), IterationLogger(log_every=5)]
     )
+
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=callbacks)
 
 Custom Callbacks
 ~~~~~~~~~~~~~~~~
@@ -170,19 +129,15 @@ Create your own custom callback by subclassing ``OptimizationCallback``:
 
     from nlsq.callbacks import OptimizationCallback
 
+
     class CustomCallback(OptimizationCallback):
         def on_iteration_end(self, iteration, params, cost, gradient_norm):
             if cost < 1e-10:
                 print("Excellent fit achieved!")
                 self.stop_training = True
 
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=[1.0, 0.5],
-        callback=CustomCallback()
-    )
+
+    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=CustomCallback())
 
 Callback Methods
 ----------------
