@@ -5,10 +5,10 @@ Tests for Smart Parameter Bounds Inference
 Tests the automatic bounds inference system for parameter constraints.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax.numpy as jnp
 from nlsq import curve_fit
 from nlsq.bound_inference import (
     BoundsInference,
@@ -156,7 +156,10 @@ class TestMergeBounds:
     def test_merge_with_inf(self):
         """Test merging with infinite bounds."""
         inferred = (np.array([0, 0, 0]), np.array([10, 5, 10]))
-        user = (np.array([-np.inf, -np.inf, -np.inf]), np.array([np.inf, np.inf, np.inf]))
+        user = (
+            np.array([-np.inf, -np.inf, -np.inf]),
+            np.array([np.inf, np.inf, np.inf]),
+        )
         merged = merge_bounds(inferred, user)
 
         # Should use inferred bounds where user has inf

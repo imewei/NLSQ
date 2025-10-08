@@ -1159,7 +1159,9 @@ class CurveFit:
             lower_b, upper_b = bounds
             lower_arr = np.atleast_1d(lower_b)
             upper_arr = np.atleast_1d(upper_b)
-            has_bounds = not (np.all(np.isneginf(lower_arr)) and np.all(np.isposinf(upper_arr)))
+            has_bounds = not (
+                np.all(np.isneginf(lower_arr)) and np.all(np.isposinf(upper_arr))
+            )
 
         self.logger.info(
             "Starting curve fit",

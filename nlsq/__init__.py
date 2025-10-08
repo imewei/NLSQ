@@ -29,6 +29,9 @@ from nlsq._optimize import OptimizeResult, OptimizeWarning
 # Stability and optimization imports
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
+# Bounds inference (Phase 3 - Day 17)
+from nlsq.bound_inference import BoundsInference, infer_bounds, merge_bounds
+
 # Performance optimization modules (Sprint 2)
 from nlsq.compilation_cache import (
     CompilationCache,
@@ -53,9 +56,6 @@ from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 
 # Fallback strategies (Phase 3 - Days 15-16)
 from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
-
-# Bounds inference (Phase 3 - Day 17)
-from nlsq.bound_inference import BoundsInference, infer_bounds, merge_bounds
 
 # Large dataset support
 from nlsq.large_dataset import (

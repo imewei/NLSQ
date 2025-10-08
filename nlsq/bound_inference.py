@@ -250,7 +250,11 @@ def infer_bounds(
     >>> bounds = infer_bounds(x, y, p0, enforce_positivity=False)
     """
     inference = BoundsInference(
-        xdata, ydata, p0, safety_factor=safety_factor, enforce_positivity=enforce_positivity
+        xdata,
+        ydata,
+        p0,
+        safety_factor=safety_factor,
+        enforce_positivity=enforce_positivity,
     )
     return inference.infer()
 
