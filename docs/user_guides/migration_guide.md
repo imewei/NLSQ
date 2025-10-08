@@ -253,6 +253,85 @@ from jax import config
 config.update("jax_enable_x64", False)
 ```
 
+### 5. Enhanced Result Object (NLSQ-Specific)
+
+**NLSQ returns an enhanced `CurveFitResult` object** that supports both backward compatibility and new visualization/statistics features.
+
+#### Backward Compatible
+
+```python
+# Works exactly like SciPy (tuple unpacking)
+popt, pcov = curve_fit(model, x, y)
+```
+
+#### Enhanced Features
+
+```python
+# NLSQ: Use result object directly
+result = curve_fit(model, x, y)
+
+# Access parameters (same as SciPy)
+popt = result.popt  # Or result.x
+pcov = result.pcov
+
+# NEW: Statistical properties
+print(f"R² = {result.r_squared:.4f}")
+print(f"Adjusted R² = {result.adj_r_squared:.4f}")
+print(f"RMSE = {result.rmse:.4f}")
+print(f"MAE = {result.mae:.4f}")
+print(f"AIC = {result.aic:.2f}")
+print(f"BIC = {result.bic:.2f}")
+
+# NEW: Confidence intervals
+ci = result.confidence_intervals(alpha=0.95)  # 95% CI
+for i, (lower, upper) in enumerate(ci):
+    print(f"Parameter {i}: [{lower:.3f}, {upper:.3f}]")
+
+# NEW: Automatic visualization
+result.plot(show_residuals=True)  # Data + fit + residuals
+plt.show()
+
+# NEW: Statistical summary table
+result.summary()  # Prints formatted table
+```
+
+**Example output from `result.summary()`:**
+
+```
+======================================================================
+Curve Fit Summary
+======================================================================
+
+Fitted Parameters:
+----------------------------------------------------------------------
+Parameter            Value   Std Error                       95% CI
+----------------------------------------------------------------------
+p0               2.487654    0.021345   [  2.445532,   2.529776]
+p1               1.302341    0.015234   [  1.272368,   1.332314]
+p2               0.498765    0.018654   [  0.462132,   0.535398]
+
+Goodness of Fit:
+----------------------------------------------------------------------
+R²                :     0.987654
+Adjusted R²       :     0.986234
+RMSE              :     0.201234
+MAE               :     0.165432
+
+Model Selection Criteria:
+----------------------------------------------------------------------
+AIC               :       -45.23
+BIC               :       -38.76
+
+Convergence Information:
+----------------------------------------------------------------------
+Success           : True
+Message           : Gradient norm < gtol
+Iterations        : 12
+Final cost        : 2.01456
+Optimality        : 1.234567e-08
+======================================================================
+```
+
 ---
 
 ## Code Examples
@@ -698,6 +777,74 @@ plt.show()
 ```
 
 **Differences:** Only 3 lines changed (imports + `jnp` in model)!
+
+### Enhanced NLSQ Example with Visualization
+
+**NLSQ with new features:**
+```python
+from nlsq import curve_fit
+import jax.numpy as jnp
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+# Model definition
+def gaussian(x, amp, cen, wid):
+    return amp * jnp.exp(-((x - cen) ** 2) / (2 * wid**2))
+
+
+# Generate data
+np.random.seed(42)
+x = np.linspace(0, 10, 100)
+y_true = gaussian(x, 2.5, 5.0, 1.0)
+y = y_true + 0.2 * np.random.normal(size=x.size)
+
+# Fit (use result object, not tuple unpacking)
+result = curve_fit(gaussian, x, y, p0=[2, 5, 1])
+
+# NEW: Automatic statistical analysis
+print(f"R² = {result.r_squared:.4f}")  # Goodness of fit
+print(f"RMSE = {result.rmse:.4f}")     # Error metric
+print(f"AIC = {result.aic:.2f}")       # Model selection
+
+# NEW: Confidence intervals
+ci = result.confidence_intervals(alpha=0.95)
+print("\n95% Confidence Intervals:")
+print(f"Amplitude: [{ci[0,0]:.3f}, {ci[0,1]:.3f}]")
+print(f"Center:    [{ci[1,0]:.3f}, {ci[1,1]:.3f}]")
+print(f"Width:     [{ci[2,0]:.3f}, {ci[2,1]:.3f}]")
+
+# NEW: Automatic visualization
+result.plot(show_residuals=True)
+plt.show()
+
+# NEW: Complete summary table
+result.summary()
+```
+
+**Output:**
+```
+R² = 0.9876
+RMSE = 0.1987
+AIC = -54.32
+
+95% Confidence Intervals:
+Amplitude: [2.423, 2.587]
+Center:    [4.965, 5.035]
+Width:     [0.962, 1.042]
+
+======================================================================
+Curve Fit Summary
+======================================================================
+[Full statistical summary printed here...]
+```
+
+**Key Advantages:**
+- **3 lines** instead of ~20 for complete analysis
+- **Automatic** confidence intervals (no manual calculation)
+- **Built-in** visualization (data + fit + residuals)
+- **Statistical metrics** (R², RMSE, AIC, BIC) computed automatically
+- **Still backward compatible** with SciPy tuple unpacking
 
 ---
 

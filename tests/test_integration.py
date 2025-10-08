@@ -300,15 +300,24 @@ class TestEndToEndValidation(unittest.TestCase):
         y_small = quadratic(x_small, 1, -2, 1) + np.random.normal(0, 0.01, 100)
 
         # Test different code paths
-        # 1. Regular curve_fit
+        # 1. Regular curve_fit - returns CurveFitResult with tuple unpacking support
         result1 = curve_fit(quadratic, x_small, y_small, p0=[1, 1, 1])
-        self.assertIsInstance(result1, tuple)
-        self.assertEqual(len(result1), 2)
+        # Test backward compatibility: supports tuple unpacking
+        popt1, pcov1 = result1
+        self.assertEqual(len(popt1), 3)
+        self.assertEqual(pcov1.shape, (3, 3))
+        # Test enhanced features
+        from nlsq.result import CurveFitResult
+        self.assertIsInstance(result1, CurveFitResult)
+        self.assertTrue(hasattr(result1, "r_squared"))
+        self.assertTrue(hasattr(result1, "plot"))
 
         # 2. curve_fit_large with small data (uses regular curve_fit internally)
         result2 = curve_fit_large(quadratic, x_small, y_small, p0=[1, 1, 1])
-        self.assertIsInstance(result2, tuple)
-        self.assertEqual(len(result2), 2)
+        # Test backward compatibility: supports tuple unpacking
+        popt2, pcov2 = result2
+        self.assertEqual(len(popt2), 3)
+        self.assertEqual(pcov2.shape, (3, 3))
 
         # 3. LargeDatasetFitter (returns OptimizeResult)
         fitter = LargeDatasetFitter()

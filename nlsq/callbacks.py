@@ -65,6 +65,14 @@ class CallbackBase:
         """
         pass
 
+    def close(self) -> None:
+        """Clean up resources.
+
+        Override this method if your callback uses resources that need
+        explicit cleanup (files, network connections, etc.).
+        """
+        pass
+
 
 class ProgressBar(CallbackBase):
     """Progress bar callback using tqdm.
