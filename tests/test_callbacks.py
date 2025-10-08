@@ -18,7 +18,6 @@ from nlsq.callbacks import (
     StopOptimization,
 )
 
-
 # ============================================================================
 # Test Fixtures
 # ============================================================================
@@ -52,6 +51,7 @@ def simple_model():
 
 def test_callback_base():
     """Test CallbackBase can be subclassed."""
+
     class TestCallback(CallbackBase):
         def __init__(self):
             self.calls = []
@@ -94,9 +94,9 @@ def test_progressbar_without_tqdm(monkeypatch):
     import sys
 
     # Temporarily hide tqdm
-    tqdm_module = sys.modules.get('tqdm')
-    if 'tqdm' in sys.modules:
-        monkeypatch.delitem(sys.modules, 'tqdm')
+    tqdm_module = sys.modules.get("tqdm")
+    if "tqdm" in sys.modules:
+        monkeypatch.delitem(sys.modules, "tqdm")
 
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
@@ -112,13 +112,13 @@ def test_progressbar_without_tqdm(monkeypatch):
 
     # Restore tqdm if it was there
     if tqdm_module is not None:
-        sys.modules['tqdm'] = tqdm_module
+        sys.modules["tqdm"] = tqdm_module
 
 
 def test_progressbar_updates():
     """Test ProgressBar updates with iteration data."""
     try:
-        import tqdm  # noqa
+        import tqdm
 
         callback = ProgressBar(max_nfev=10)
         callback(1, 100.0, np.array([1, 2, 3]), {"nfev": 3, "gradient_norm": 10.0})
@@ -151,16 +151,16 @@ def test_iteration_logger_stdout():
 
 def test_iteration_logger_file():
     """Test IterationLogger logs to file."""
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".log") as f:
         filename = f.name
 
     try:
-        callback = IterationLogger(filename=filename, mode='w', log_params=True)
+        callback = IterationLogger(filename=filename, mode="w", log_params=True)
         callback(1, 100.0, np.array([1.0, 2.0, 3.0]), {"nfev": 3})
         callback(2, 50.0, np.array([1.1, 2.1, 3.1]), {"nfev": 6})
         callback.close()
 
-        with open(filename, 'r') as f:
+        with open(filename) as f:
             content = f.read()
 
         assert "Iter 1" in content
@@ -229,7 +229,7 @@ def test_early_stopping_reset_on_improvement():
 
     callback(1, 100.0, np.array([1, 2, 3]), {"nfev": 3})
     callback(2, 100.0, np.array([1, 2, 3]), {"nfev": 6})  # Stall
-    callback(3, 50.0, np.array([1, 2, 3]), {"nfev": 9})   # Improvement - reset
+    callback(3, 50.0, np.array([1, 2, 3]), {"nfev": 9})  # Improvement - reset
     callback(4, 50.0, np.array([1, 2, 3]), {"nfev": 12})  # Stall again
 
     # Should not raise yet (counter was reset)
@@ -268,6 +268,7 @@ def test_callback_chain():
 
 def test_callback_chain_stops_on_exception():
     """Test CallbackChain stops when callback raises StopOptimization."""
+
     class Callback1(CallbackBase):
         def __call__(self, iteration, cost, params, info):
             if iteration >= 2:
@@ -309,17 +310,13 @@ def test_callback_chain_close():
 def test_curve_fit_with_progress_callback(simple_data, simple_model):
     """Test curve_fit with ProgressBar callback."""
     try:
-        import tqdm  # noqa
+        import tqdm
 
         x, y = simple_data
         callback = ProgressBar(max_nfev=50)
 
         popt, pcov = curve_fit(
-            simple_model,
-            x, y,
-            p0=[80, 0.4, 5],
-            callback=callback,
-            max_nfev=50
+            simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
         )
 
         callback.close()
@@ -327,7 +324,7 @@ def test_curve_fit_with_progress_callback(simple_data, simple_model):
         # Should converge to reasonable values
         assert 90 < popt[0] < 110  # amplitude
         assert 0.3 < popt[1] < 0.7  # rate
-        assert 5 < popt[2] < 15     # offset
+        assert 5 < popt[2] < 15  # offset
     except ImportError:
         pytest.skip("tqdm not installed")
 
@@ -339,11 +336,7 @@ def test_curve_fit_with_logger_callback(simple_data, simple_model):
     callback = IterationLogger(filename=None, file=buffer, log_params=False)
 
     popt, pcov = curve_fit(
-        simple_model,
-        x, y,
-        p0=[80, 0.4, 5],
-        callback=callback,
-        max_nfev=50
+        simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
     )
 
     callback.close()
@@ -361,10 +354,11 @@ def test_curve_fit_with_early_stopping(simple_data, simple_model):
 
     popt, pcov = curve_fit(
         simple_model,
-        x, y,
+        x,
+        y,
         p0=[80, 0.4, 5],
         callback=callback,
-        max_nfev=1000  # Set high, but early stopping should trigger
+        max_nfev=1000,  # Set high, but early stopping should trigger
     )
 
     # Should still converge
@@ -378,15 +372,11 @@ def test_curve_fit_with_callback_chain(simple_data, simple_model):
 
     chain = CallbackChain(
         IterationLogger(filename=None, file=buffer, log_params=False),
-        EarlyStopping(patience=10, verbose=False)
+        EarlyStopping(patience=10, verbose=False),
     )
 
     popt, pcov = curve_fit(
-        simple_model,
-        x, y,
-        p0=[80, 0.4, 5],
-        callback=chain,
-        max_nfev=1000
+        simple_model, x, y, p0=[80, 0.4, 5], callback=chain, max_nfev=1000
     )
 
     chain.close()
@@ -405,22 +395,20 @@ def test_curve_fit_callback_receives_correct_data(simple_data, simple_model):
 
     class DataCapture(CallbackBase):
         def __call__(self, iteration, cost, params, info):
-            received_data.append({
-                'iteration': iteration,
-                'cost': cost,
-                'params': params.copy(),
-                'info': info.copy()
-            })
+            received_data.append(
+                {
+                    "iteration": iteration,
+                    "cost": cost,
+                    "params": params.copy(),
+                    "info": info.copy(),
+                }
+            )
 
     x, y = simple_data
     callback = DataCapture()
 
     popt, pcov = curve_fit(
-        simple_model,
-        x, y,
-        p0=[80, 0.4, 5],
-        callback=callback,
-        max_nfev=50
+        simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
     )
 
     # Should have received data for multiple iterations
@@ -428,14 +416,14 @@ def test_curve_fit_callback_receives_correct_data(simple_data, simple_model):
 
     # Check data structure
     for data in received_data:
-        assert 'iteration' in data
-        assert 'cost' in data
-        assert 'params' in data
-        assert 'info' in data
-        assert isinstance(data['iteration'], int)
-        assert isinstance(data['cost'], (int, float))
-        assert isinstance(data['params'], np.ndarray)
-        assert len(data['params']) == 3  # 3 parameters
+        assert "iteration" in data
+        assert "cost" in data
+        assert "params" in data
+        assert "info" in data
+        assert isinstance(data["iteration"], int)
+        assert isinstance(data["cost"], (int, float))
+        assert isinstance(data["params"], np.ndarray)
+        assert len(data["params"]) == 3  # 3 parameters
 
 
 def test_curve_fit_callback_error_handling(simple_data, simple_model):
@@ -455,11 +443,7 @@ def test_curve_fit_callback_error_handling(simple_data, simple_model):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         popt, pcov = curve_fit(
-            simple_model,
-            x, y,
-            p0=[80, 0.4, 5],
-            callback=callback,
-            max_nfev=50
+            simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
         )
 
         # Should have warned about callback failure
@@ -478,10 +462,11 @@ def test_curve_fit_callback_none(simple_data, simple_model):
 
     popt, pcov = curve_fit(
         simple_model,
-        x, y,
+        x,
+        y,
         p0=[80, 0.4, 5],
         callback=None,  # Explicit None
-        max_nfev=50
+        max_nfev=50,
     )
 
     # Should converge normally
@@ -494,9 +479,10 @@ def test_curve_fit_without_callback_parameter(simple_data, simple_model):
 
     popt, pcov = curve_fit(
         simple_model,
-        x, y,
+        x,
+        y,
         p0=[80, 0.4, 5],
-        max_nfev=50
+        max_nfev=50,
         # No callback parameter
     )
 

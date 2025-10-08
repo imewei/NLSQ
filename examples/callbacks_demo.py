@@ -5,15 +5,16 @@ This example demonstrates how to use NLSQ's callback system to monitor
 optimization progress with progress bars, logging, and early stopping.
 """
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+
 from nlsq import curve_fit
 from nlsq.callbacks import (
-    ProgressBar,
-    IterationLogger,
-    EarlyStopping,
-    CallbackChain,
     CallbackBase,
+    CallbackChain,
+    EarlyStopping,
+    IterationLogger,
+    ProgressBar,
 )
 
 
@@ -36,6 +37,7 @@ def generate_sample_data():
 # Example 1: Simple Progress Bar
 # ============================================================================
 
+
 def example1_progress_bar():
     """Show optimization progress with tqdm progress bar."""
     print("\n" + "=" * 70)
@@ -50,22 +52,21 @@ def example1_progress_bar():
 
     # Fit with progress bar
     popt, pcov = curve_fit(
-        exponential_decay,
-        x, y,
-        p0=[80, 0.4, 5],
-        callback=callback,
-        max_nfev=50
+        exponential_decay, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
     )
 
     callback.close()
 
-    print(f"\n✓ Progress bar completed!")
-    print(f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}")
+    print("\n✓ Progress bar completed!")
+    print(
+        f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}"
+    )
 
 
 # ============================================================================
 # Example 2: Iteration Logging
 # ============================================================================
+
 
 def example2_iteration_logging():
     """Log optimization progress to file."""
@@ -80,31 +81,30 @@ def example2_iteration_logging():
     callback = IterationLogger(
         filename="optimization.log",
         mode="w",
-        log_params=True  # Include parameter values
+        log_params=True,  # Include parameter values
     )
 
     # Fit with logging
     popt, pcov = curve_fit(
-        exponential_decay,
-        x, y,
-        p0=[80, 0.4, 5],
-        callback=callback,
-        max_nfev=50
+        exponential_decay, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
     )
 
     callback.close()
 
     print("✓ Log written to 'optimization.log'")
-    print(f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}")
+    print(
+        f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}"
+    )
     print("\nFirst few lines of log:\n")
-    with open("optimization.log", "r") as f:
+    with open("optimization.log") as f:
         lines = f.readlines()
-        print(''.join(lines[:10]))  # Show first 10 lines
+        print("".join(lines[:10]))  # Show first 10 lines
 
 
 # ============================================================================
 # Example 3: Early Stopping
 # ============================================================================
+
 
 def example3_early_stopping():
     """Stop optimization early if no improvement."""
@@ -119,25 +119,29 @@ def example3_early_stopping():
     callback = EarlyStopping(
         patience=10,  # Stop after 10 iterations without improvement
         min_delta=1e-6,  # Minimum improvement threshold
-        verbose=True
+        verbose=True,
     )
 
     # Fit with early stopping
     popt, pcov = curve_fit(
         exponential_decay,
-        x, y,
+        x,
+        y,
         p0=[80, 0.4, 5],
         callback=callback,
-        max_nfev=1000  # Set high, early stopping will prevent wasted iterations
+        max_nfev=1000,  # Set high, early stopping will prevent wasted iterations
     )
 
-    print(f"\n✓ Early stopping completed!")
-    print(f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}")
+    print("\n✓ Early stopping completed!")
+    print(
+        f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}"
+    )
 
 
 # ============================================================================
 # Example 4: Combining Multiple Callbacks
 # ============================================================================
+
 
 def example4_callback_chain():
     """Combine progress bar, logging, and early stopping."""
@@ -152,28 +156,27 @@ def example4_callback_chain():
     callback = CallbackChain(
         ProgressBar(max_nfev=50, desc="Optimizing"),
         IterationLogger("combined.log", log_params=False),
-        EarlyStopping(patience=10, verbose=False)  # Silent for cleaner demo
+        EarlyStopping(patience=10, verbose=False),  # Silent for cleaner demo
     )
 
     # Fit with callback chain
     popt, pcov = curve_fit(
-        exponential_decay,
-        x, y,
-        p0=[80, 0.4, 5],
-        callback=callback,
-        max_nfev=50
+        exponential_decay, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
     )
 
     callback.close()
 
-    print(f"\n✓ All callbacks completed!")
-    print(f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}")
+    print("\n✓ All callbacks completed!")
+    print(
+        f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}"
+    )
     print("Check 'combined.log' for detailed iteration history.")
 
 
 # ============================================================================
 # Example 5: Custom Callback
 # ============================================================================
+
 
 class BestParameterTracker(CallbackBase):
     """Custom callback to track best parameters seen so far."""
@@ -211,15 +214,13 @@ def example5_custom_callback():
 
     # Fit with custom callback
     popt, pcov = curve_fit(
-        exponential_decay,
-        x, y,
-        p0=[80, 0.4, 5],
-        callback=tracker,
-        max_nfev=50
+        exponential_decay, x, y, p0=[80, 0.4, 5], callback=tracker, max_nfev=50
     )
 
     best_params, best_cost = tracker.get_best()
-    print(f"\n✓ Best parameters: amplitude={best_params[0]:.2f}, rate={best_params[1]:.3f}, offset={best_params[2]:.2f}")
+    print(
+        f"\n✓ Best parameters: amplitude={best_params[0]:.2f}, rate={best_params[1]:.3f}, offset={best_params[2]:.2f}"
+    )
     print(f"✓ Best cost: {best_cost:.6f}")
     print(f"✓ Final fit parameters match best: {np.allclose(popt, best_params)}")
 
@@ -227,6 +228,7 @@ def example5_custom_callback():
 # ============================================================================
 # Main Demo
 # ============================================================================
+
 
 def main():
     """Run all callback examples."""

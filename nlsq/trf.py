@@ -1124,18 +1124,24 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                             info={
                                 "gradient_norm": float(g_norm),
                                 "nfev": nfev,
-                                "step_norm": float(step_norm) if step_norm is not None else None,
-                                "actual_reduction": float(actual_reduction) if actual_reduction is not None else None,
-                            }
+                                "step_norm": float(step_norm)
+                                if step_norm is not None
+                                else None,
+                                "actual_reduction": float(actual_reduction)
+                                if actual_reduction is not None
+                                else None,
+                            },
                         )
                     except StopOptimization:
                         termination_status = 2  # User-requested stop
-                        self.logger.info("Optimization stopped by callback (StopOptimization)")
+                        self.logger.info(
+                            "Optimization stopped by callback (StopOptimization)"
+                        )
                         break
                     except Exception as e:
                         warnings.warn(
                             f"Callback raised exception: {e}. Continuing optimization.",
-                            RuntimeWarning
+                            RuntimeWarning,
                         )
 
         if termination_status is None:
@@ -1481,18 +1487,24 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         info={
                             "gradient_norm": float(g_norm),
                             "nfev": nfev,
-                            "step_norm": float(step_norm) if step_norm is not None else None,
-                            "actual_reduction": float(actual_reduction) if actual_reduction is not None else None,
-                        }
+                            "step_norm": float(step_norm)
+                            if step_norm is not None
+                            else None,
+                            "actual_reduction": float(actual_reduction)
+                            if actual_reduction is not None
+                            else None,
+                        },
                     )
                 except StopOptimization:
                     termination_status = 2  # User-requested stop
-                    self.logger.info("Optimization stopped by callback (StopOptimization)")
+                    self.logger.info(
+                        "Optimization stopped by callback (StopOptimization)"
+                    )
                     break
                 except Exception as e:
                     warnings.warn(
                         f"Callback raised exception: {e}. Continuing optimization.",
-                        RuntimeWarning
+                        RuntimeWarning,
                     )
 
         if termination_status is None:
@@ -1992,18 +2004,24 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         info={
                             "gradient_norm": float(g_norm),
                             "nfev": nfev,
-                            "step_norm": float(step_norm) if step_norm is not None else None,
-                            "actual_reduction": float(actual_reduction) if actual_reduction is not None else None,
-                        }
+                            "step_norm": float(step_norm)
+                            if step_norm is not None
+                            else None,
+                            "actual_reduction": float(actual_reduction)
+                            if actual_reduction is not None
+                            else None,
+                        },
                     )
                 except StopOptimization:
                     termination_status = 2  # User-requested stop
-                    self.logger.info("Optimization stopped by callback (StopOptimization)")
+                    self.logger.info(
+                        "Optimization stopped by callback (StopOptimization)"
+                    )
                     break
                 except Exception as e:
                     warnings.warn(
                         f"Callback raised exception: {e}. Continuing optimization.",
-                        RuntimeWarning
+                        RuntimeWarning,
                     )
 
         if termination_status is None:

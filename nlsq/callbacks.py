@@ -8,17 +8,18 @@ Callbacks are called after each optimization iteration with information about
 the current state: iteration number, cost, parameters, gradient norm, etc.
 """
 
-from typing import Any, Callable, Optional
 import time
-import numpy as np
+from collections.abc import Callable
+from typing import Any, Optional
 
+import numpy as np
 
 __all__ = [
     "CallbackBase",
-    "ProgressBar",
-    "IterationLogger",
-    "EarlyStopping",
     "CallbackChain",
+    "EarlyStopping",
+    "IterationLogger",
+    "ProgressBar",
     "StopOptimization",
 ]
 
@@ -91,7 +92,7 @@ class ProgressBar(CallbackBase):
 
     def __init__(
         self,
-        max_nfev: Optional[int] = None,
+        max_nfev: int | None = None,
         desc: str = "Optimizing",
         **tqdm_kwargs,
     ):
@@ -182,7 +183,7 @@ class IterationLogger(CallbackBase):
 
     def __init__(
         self,
-        filename: Optional[str] = None,
+        filename: str | None = None,
         mode: str = "w",
         log_params: bool = False,
     ):
@@ -235,7 +236,7 @@ class IterationLogger(CallbackBase):
 
     def _write_header(self):
         """Write log header."""
-        header = "="  * 80 + "\n"
+        header = "=" * 80 + "\n"
         header += "NLSQ Optimization Log\n"
         header += f"Started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
         header += "=" * 80 + "\n"

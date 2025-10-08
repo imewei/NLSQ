@@ -22,11 +22,9 @@ except ImportError:
 
 # Main API imports
 # Common functions library (Sprint 4 - User Experience)
-from nlsq import functions
-from nlsq._optimize import OptimizeResult, OptimizeWarning
-
 # Progress callbacks (Day 3 - User Experience)
-from nlsq import callbacks
+from nlsq import callbacks, functions
+from nlsq._optimize import OptimizeResult, OptimizeWarning
 
 # Stability and optimization imports
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm

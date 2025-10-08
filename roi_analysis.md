@@ -76,12 +76,13 @@ Adjusted for Risk: 62.5% × 0.3 (high risk penalty) = 18.75%
 1. Better convergence failure messages
    - Current: Generic "optimization failed"
    - Enhanced: "Try increasing max_nfev, check p0 bounds, review residuals"
-   
+
 2. Progress callbacks for long fits
    ```python
    def callback(iteration, cost, params):
        print(f"Iter {iteration}: cost={cost:.6f}")
-   
+
+
    curve_fit(f, xdata, ydata, callback=callback)
    ```
 
@@ -158,7 +159,7 @@ profiler.report()
 # ║ Iterations:        12                     ║
 # ║ Function evals:    48                     ║
 # ╚═══════════════════════════════════════════╝
-# 
+#
 # Recommendations:
 # ✓ JIT overhead dominates - use CurveFit class for multiple fits
 # ✓ Function evaluation is efficient
@@ -184,15 +185,16 @@ profiler.report()
 1. **Pandas Integration**
    ```python
    import pandas as pd
-   df = pd.DataFrame({'x': xdata, 'y': ydata, 'yerr': sigma})
-   result = curve_fit(f, df['x'], df['y'], sigma=df['yerr'])
+
+   df = pd.DataFrame({"x": xdata, "y": ydata, "yerr": sigma})
+   result = curve_fit(f, df["x"], df["y"], sigma=df["yerr"])
    ```
 
 2. **Automatic p0 Guessing**
    ```python
    # Current: User must provide p0
    curve_fit(exponential, x, y, p0=[1, 0.1])
-   
+
    # Enhanced: Auto-guess from data
    curve_fit(exponential, x, y)  # Estimates p0 automatically
    ```
@@ -209,7 +211,7 @@ profiler.report()
 4. **Common Function Library**
    ```python
    from nlsq.functions import exponential_decay, gaussian_2d, polynomial
-   
+
    # No need to write common functions
    curve_fit(exponential_decay, x, y)
    ```
@@ -261,10 +263,10 @@ profiler.report()
 1. **Automatic Fallback Strategies**
    ```python
    # Current: Fails if TRF doesn't converge
-   curve_fit(f, x, y, method='trf')  # May fail
-   
+   curve_fit(f, x, y, method="trf")  # May fail
+
    # Enhanced: Tries alternative methods
-   curve_fit(f, x, y, method='auto', fallback=True)
+   curve_fit(f, x, y, method="auto", fallback=True)
    # Tries: trf → dogbox → lm → robust_trf → perturbed_p0
    ```
 
@@ -278,7 +280,7 @@ profiler.report()
 3. **Numerical Stability Checks**
    ```python
    # Detect and fix common issues
-   curve_fit(f, x, y, stability='auto')
+   curve_fit(f, x, y, stability="auto")
    # - Rescales poorly conditioned problems
    # - Detects colinear parameters
    # - Suggests reparameterization
@@ -473,4 +475,3 @@ The 30-day feature sprint provides:
 - **Research impact** (30% more citations)
 
 **Invest in features. Skip the refactoring.**
-

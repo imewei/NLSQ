@@ -108,8 +108,10 @@ if callback is not None:
                 "gradient_norm": float(g_norm),
                 "nfev": nfev,
                 "step_norm": float(step_norm) if step_norm is not None else None,
-                "actual_reduction": float(actual_reduction) if actual_reduction is not None else None,
-            }
+                "actual_reduction": (
+                    float(actual_reduction) if actual_reduction is not None else None
+                ),
+            },
         )
     except StopOptimization:
         termination_status = 2  # User-requested stop
@@ -117,8 +119,7 @@ if callback is not None:
         break
     except Exception as e:
         warnings.warn(
-            f"Callback raised exception: {e}. Continuing optimization.",
-            RuntimeWarning
+            f"Callback raised exception: {e}. Continuing optimization.", RuntimeWarning
         )
 ```
 
@@ -177,15 +178,19 @@ import jax.numpy as jnp
 from nlsq import curve_fit
 from nlsq.callbacks import ProgressBar
 
+
 def exponential(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 np.random.seed(42)
 x = np.linspace(0, 10, 100)
 y = 100 * np.exp(-0.5 * x) + 10 + np.random.normal(0, 3, 100)
 
 callback = ProgressBar(max_nfev=50)
-popt, pcov = curve_fit(exponential, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50)
+popt, pcov = curve_fit(
+    exponential, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
+)
 callback.close()
 
 print(f"Fitted: a={popt[0]:.2f}, b={popt[1]:.3f}, c={popt[2]:.2f}")
@@ -224,9 +229,9 @@ print(f"Fitted: a={popt[0]:.2f}, b={popt[1]:.3f}, c={popt[2]:.2f}")
 ```python
 callback(
     iteration=iteration,
-    cost=float(cost),       # JAX → Python float
-    params=np.array(x),     # JAX → NumPy
-    info={...}
+    cost=float(cost),  # JAX → Python float
+    params=np.array(x),  # JAX → NumPy
+    info={...},
 )
 ```
 
@@ -267,10 +272,9 @@ popt, pcov = curve_fit(model, x, y, callback=EarlyStopping(patience=10))
 
 # Combine multiple callbacks
 from nlsq.callbacks import CallbackChain
+
 callback = CallbackChain(
-    ProgressBar(max_nfev=100),
-    IterationLogger("fit.log"),
-    EarlyStopping(patience=20)
+    ProgressBar(max_nfev=100), IterationLogger("fit.log"), EarlyStopping(patience=20)
 )
 popt, pcov = curve_fit(model, x, y, callback=callback)
 ```
