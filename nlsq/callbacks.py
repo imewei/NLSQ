@@ -9,6 +9,7 @@ the current state: iteration number, cost, parameters, gradient norm, etc.
 """
 
 import time
+import warnings
 from collections.abc import Callable
 from typing import Any, Optional
 
@@ -117,9 +118,11 @@ class ProgressBar(CallbackBase):
             self.tqdm = tqdm
         except ImportError:
             self.tqdm = None
-            print(
-                "Warning: tqdm not installed. Install with 'pip install tqdm' "
-                "to use ProgressBar callback."
+            warnings.warn(
+                "tqdm not installed. Install with 'pip install tqdm' "
+                "to use ProgressBar callback.",
+                UserWarning,
+                stacklevel=2
             )
 
     def __call__(
@@ -176,11 +179,13 @@ class IterationLogger(CallbackBase):
     Parameters
     ----------
     filename : str, optional
-        File to log to. If None, logs to stdout.
+        File to log to. If None and file is None, logs to stdout.
     mode : str, optional
         File open mode. Default: 'w' (overwrite)
     log_params : bool, optional
         Whether to log parameter values. Default: False
+    file : file-like object, optional
+        File-like object to write to. If provided, filename is ignored.
 
     Examples
     --------
@@ -194,11 +199,13 @@ class IterationLogger(CallbackBase):
         filename: str | None = None,
         mode: str = "w",
         log_params: bool = False,
+        file: Any | None = None,
     ):
         self.filename = filename
         self.mode = mode
         self.log_params = log_params
-        self._file = None
+        self._file = file  # Use provided file object if given
+        self._file_provided = file is not None  # Track if file was provided externally
         self._start_time = None
 
     def __call__(
@@ -239,7 +246,8 @@ class IterationLogger(CallbackBase):
 
     def _open_file(self):
         """Open log file."""
-        if self.filename is not None:
+        # Only open file if not already provided and filename is given
+        if not self._file_provided and self.filename is not None:
             self._file = open(self.filename, self.mode)
 
     def _write_header(self):
@@ -266,7 +274,9 @@ class IterationLogger(CallbackBase):
             footer += f"Optimization completed in {elapsed:.2f}s\n"
             footer += "=" * 80 + "\n"
             self._write(footer)
-            self._file.close()
+            # Only close file if we opened it (not if it was provided externally)
+            if not self._file_provided:
+                self._file.close()
             self._file = None
 
     def __del__(self):
