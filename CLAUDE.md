@@ -8,7 +8,7 @@ NLSQ is a GPU/TPU-accelerated nonlinear least squares curve fitting library that
 **Repository**: https://github.com/imewei/NLSQ
 **Maintainer**: Wei Chen (Argonne National Laboratory)
 **Origin**: Enhanced fork of JAXFit by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith
-**Status**: Production-ready (Beta), 70% test coverage, 817 tests passing (100% pass rate)
+**Status**: Production-ready (Beta), 77% test coverage, 817 tests passing (100% pass rate)
 
 ## Recent Updates (Updated: 2025-10-07)
 
@@ -31,7 +31,7 @@ NLSQ is a GPU/TPU-accelerated nonlinear least squares curve fitting library that
 - **100% pass rate achieved** (743 tests, 1 skipped)
 - Fixed JAX immutability error in `common_scipy.py` (`make_strictly_feasible()`)
 - Fixed flaky test in `test_integration.py` (added random seed, relaxed bounds)
-- Coverage: 70% (target 80%)
+- Coverage: 77% (target 80%)
 
 #### Documentation Updates ✅
 - Added comprehensive codebase analysis: `codebase_analysis.md`
@@ -255,8 +255,8 @@ Tests use Python's unittest and pytest frameworks, with comprehensive coverage a
 - Multiple coverage test files ensure comprehensive testing
 - Tests compare results against SciPy implementations for correctness
 - Performance benchmarking tests for GPU/TPU acceleration
-- **Current coverage**: 70% (target: 80%)
-- **Test status**: 355 tests passing, 1 skipped (100% pass rate)
+- **Current coverage**: 77% (target: 80%)
+- **Test status**: 817 tests passing, 3 skipped (100% pass rate)
 
 ## Examples
 
@@ -405,7 +405,7 @@ nlsq/                                    # Main package
 - **Testing**: Always run `make test` before committing
 - **Linting**: Pre-commit hooks enforce ruff + black formatting
 - **Type hints**: Partial coverage (~60%), mypy configured for scientific computing
-- **Coverage target**: 80% (currently 70%)
+- **Coverage target**: 80% (currently 77%)
 
 ### Performance Considerations
 - **Don't optimize prematurely**: Code is already highly optimized
@@ -471,7 +471,7 @@ nlsq/                                    # Main package
 
 ---
 
-**Last Updated**: 2025-10-06
+**Last Updated**: 2025-10-07
 **Status**: Production-ready (Beta)
-**Test Status**: 355 passing, 1 skipped (100% pass rate)
-**Coverage**: 70% (target: 80%)
+**Test Status**: 817 passing, 3 skipped (100% pass rate)
+**Coverage**: 77% (target: 80%)

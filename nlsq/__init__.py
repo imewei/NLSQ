@@ -23,6 +23,9 @@ except ImportError:
 # Main API imports
 from nlsq._optimize import OptimizeResult, OptimizeWarning
 
+# Common functions library (Sprint 4 - User Experience)
+from nlsq import functions
+
 # Stability and optimization imports
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
@@ -102,6 +105,8 @@ from nlsq.validators import InputValidator
 __all__ = [
     # Stability and optimization modules
     "AlgorithmSelector",
+    # Common functions library
+    "functions",
     # Performance optimization (Sprint 2)
     "CompilationCache",
     "ConvergenceMonitor",

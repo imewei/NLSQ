@@ -19,9 +19,11 @@ from nlsq._optimize import OptimizeWarning
 from nlsq.algorithm_selector import auto_select_algorithm
 from nlsq.common_scipy import EPS
 from nlsq.diagnostics import OptimizationDiagnostics
+from nlsq.error_messages import OptimizationError
 from nlsq.least_squares import LeastSquares, prepare_bounds
 from nlsq.logging import get_logger
 from nlsq.memory_manager import get_memory_manager
+from nlsq.parameter_estimation import estimate_initial_parameters
 from nlsq.recovery import OptimizationRecovery
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.validators import InputValidator
@@ -539,7 +541,11 @@ class CurveFit:
         return pcov, warn_cov
 
     def _determine_parameter_count(
-        self, f: Callable, p0: np.ndarray | None
+        self,
+        f: Callable,
+        p0: np.ndarray | None | str,
+        xdata: np.ndarray | None = None,
+        ydata: np.ndarray | None = None,
     ) -> tuple[int, np.ndarray | None]:
         """Determine number of fit parameters from p0 or function signature.
 
@@ -547,25 +553,55 @@ class CurveFit:
         ----------
         f : Callable
             The fit function
-        p0 : np.ndarray | None
-            Initial parameter guess
+        p0 : np.ndarray | None | 'auto'
+            Initial parameter guess. If 'auto', will estimate from data
+            if xdata and ydata are provided. If None, uses default behavior
+            (determined by bounds in _prepare_bounds_and_initial_guess).
+        xdata : np.ndarray, optional
+            Independent variable data (for auto p0 estimation)
+        ydata : np.ndarray, optional
+            Dependent variable data (for auto p0 estimation)
 
         Returns
         -------
         n : int
             Number of parameters
         p0 : np.ndarray | None
-            Validated p0 array (or None)
+            Validated p0 array (or None if auto-estimation not requested)
         """
-        if p0 is None:
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
-                raise ValueError("Unable to determine number of fit parameters.")
-            n = len(args) - 1
-        else:
+        # If p0 is explicitly provided (not None or 'auto'), use it
+        if p0 is not None and p0 != 'auto':
             p0 = np.atleast_1d(p0)
             n = p0.size
+            return n, p0
+
+        # Only auto-estimate if p0='auto' is explicitly requested
+        # (not when p0=None, to preserve backward compatibility)
+        if p0 == 'auto' and xdata is not None and ydata is not None:
+            try:
+                p0_estimated = estimate_initial_parameters(f, xdata, ydata, p0)
+                p0 = np.atleast_1d(p0_estimated)
+                n = p0.size
+                self.logger.debug(
+                    "Auto-estimated initial parameters",
+                    p0=p0.tolist(),
+                    n_params=n,
+                )
+                return n, p0
+            except Exception as e:
+                # If auto-estimation fails, fall back to default behavior
+                self.logger.warning(
+                    "Auto p0 estimation failed, using defaults",
+                    error=str(e),
+                )
+
+        # Fall back: determine n from function signature, p0 stays None
+        # (will be initialized to defaults in _prepare_bounds_and_initial_guess)
+        sig = signature(f)
+        args = sig.parameters
+        if len(args) < 2:
+            raise ValueError("Unable to determine number of fit parameters.")
+        n = len(args) - 1
 
         return n, p0
 
@@ -614,11 +650,14 @@ class CurveFit:
         ub : np.ndarray
             Upper bounds
         p0 : np.ndarray
-            Initial parameter guess
+            Initial parameter guess (clipped to bounds if necessary)
         """
         lb, ub = prepare_bounds(bounds, n)
         if p0 is None:
             p0 = _initialize_feasible(lb, ub)
+        else:
+            # Clip auto-estimated p0 to bounds to ensure feasibility
+            p0 = np.clip(p0, lb, ub)
 
         return lb, ub, p0
 
@@ -959,8 +998,8 @@ class CurveFit:
         none_mask : bool
             Whether data_mask was None on input
         """
-        # Step 1: Determine parameter count
-        n, p0 = self._determine_parameter_count(f, p0)
+        # Step 1: Determine parameter count and auto-estimate p0 if needed
+        n, p0 = self._determine_parameter_count(f, p0, xdata, ydata)
 
         # Step 2: Validate solver configuration
         self._validate_solver_config(solver, batch_size)
@@ -1181,7 +1220,14 @@ class CurveFit:
             self.logger.error(
                 "Optimization failed", reason=res.message, status=res.status
             )
-            raise RuntimeError("Optimal parameters not found: " + res.message)
+            # Extract tolerances for enhanced error message
+            gtol = kwargs.get('gtol', 1e-8)
+            ftol = kwargs.get('ftol', 1e-8)
+            xtol = kwargs.get('xtol', 1e-8)
+            max_nfev = kwargs.get('max_nfev', None)
+            if max_nfev is None:
+                max_nfev = len(p0) * 100  # Default estimate
+            raise OptimizationError(res, gtol, ftol, xtol, max_nfev)
 
         return res, jnp_xdata, ctime
 
@@ -1220,11 +1266,11 @@ class CurveFit:
             functions with k predictors, but can actually be any object.
         ydata : array_like
             The dependent data, a length M array - nominally ``f(xdata, ...)``.
-        p0 : array_like, optional
-            Initial guess for the parameters (length N). If None, then the
-            initial values will all be 1 (if the number of parameters for the
-            function can be determined using introspection, otherwise a
-            ValueError is raised).
+        p0 : array_like or 'auto' or None, optional
+            Initial guess for the parameters (length N). If None or 'auto',
+            initial parameters will be estimated automatically from the data
+            characteristics. For best results with auto estimation, use
+            well-scaled data or provide custom estimation via f.estimate_p0().
         sigma : None or M-length sequence or MxM array, optional
             Determines the uncertainty in `ydata`. If we define residuals as
             ``r = ydata - f(xdata, *popt)``, then the interpretation of `sigma`
