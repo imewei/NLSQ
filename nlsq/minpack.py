@@ -32,7 +32,16 @@ from nlsq.validators import InputValidator
 __all__ = ["CurveFit", "curve_fit"]
 
 
-def curve_fit(f, xdata, ydata, *args, **kwargs):
+def curve_fit(
+    f,
+    xdata,
+    ydata,
+    *args,
+    fallback=False,
+    max_fallback_attempts=10,
+    fallback_verbose=False,
+    **kwargs,
+):
     """
     Use nonlinear least squares to fit a function to data with GPU/TPU acceleration.
 
@@ -51,6 +60,26 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
         The independent variable where the data is measured.
     ydata : array_like
         The dependent data, nominally ``f(xdata, *popt)``.
+    fallback : bool, optional
+        Enable automatic fallback strategies for difficult optimization problems.
+        When True, the optimizer will automatically try alternative approaches if
+        the initial optimization fails, including:
+
+        - Alternative optimization methods
+        - Perturbed initial guesses
+        - Relaxed tolerances
+        - Inferred parameter bounds
+        - Robust loss functions
+        - Problem rescaling
+
+        Default: False. Enabling this improves success rate on difficult problems
+        but adds overhead when optimizations fail.
+    max_fallback_attempts : int, optional
+        Maximum number of fallback attempts to try before giving up.
+        Only used when fallback=True. Default: 10.
+    fallback_verbose : bool, optional
+        Print detailed information about fallback attempts.
+        Only used when fallback=True. Default: False.
     *args, **kwargs
         Additional arguments passed to CurveFit.curve_fit method.
 
@@ -61,19 +90,37 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
     pcov : ndarray
         The estimated covariance of popt.
 
+    When fallback=True, the returned object also contains:
+
+    - fallback_strategy_used : str or None
+        Name of the fallback strategy that succeeded, or None if original succeeded
+    - fallback_attempts : int
+        Number of optimization attempts before success
+
     Notes
     -----
     This function creates a CurveFit instance internally and calls its curve_fit method.
     For multiple fits with the same function signature, consider creating a CurveFit
     instance directly to benefit from JAX compilation caching.
 
+    When fallback=True, the optimizer tries increasingly aggressive recovery strategies
+    if the initial optimization fails. This is particularly useful for:
+
+    - Poor initial parameter guesses
+    - Ill-conditioned problems
+    - Problems with outliers
+    - Numerically challenging models
+
     See Also
     --------
     CurveFit.curve_fit : The underlying method with full parameter documentation
     curve_fit_large : For datasets with millions of points requiring special handling
+    FallbackOrchestrator : Direct access to fallback system for custom configurations
 
     Examples
     --------
+    Basic usage without fallback:
+
     >>> import jax.numpy as jnp
     >>> import numpy as np
     >>>
@@ -83,7 +130,50 @@ def curve_fit(f, xdata, ydata, *args, **kwargs):
     >>> x = np.linspace(0, 4, 50)
     >>> y = 2.5 * np.exp(-1.3 * x) + 0.1 * np.random.normal(size=len(x))
     >>> popt, _pcov = curve_fit(exponential, x, y, p0=[2, 1])
+
+    Using fallback for difficult problems:
+
+    >>> # Very poor initial guess - may fail without fallback
+    >>> result = curve_fit(exponential, x, y, p0=[100, 50], fallback=True)
+    >>>
+    >>> # Check which strategy was used
+    >>> if result.fallback_strategy_used:
+    ...     print(f"Recovered using: {result.fallback_strategy_used}")
+
+    Verbose fallback for debugging:
+
+    >>> result = curve_fit(
+    ...     exponential, x, y, p0=[1000, -10],
+    ...     fallback=True, fallback_verbose=True
+    ... )
+    Attempt 1/10: Original parameters
+    ❌ Failed: RuntimeError: Optimization failed
+    Attempt 2/10: Try alternative optimization method
+    ✅ Success with alternative_method!
     """
+    # Use fallback orchestrator if requested
+    if fallback:
+        from nlsq.fallback import FallbackOrchestrator
+
+        orchestrator = FallbackOrchestrator(
+            max_attempts=max_fallback_attempts, verbose=fallback_verbose
+        )
+
+        # Build kwargs for fallback
+        fallback_kwargs = kwargs.copy()
+        if args:
+            # Handle positional arguments (typically p0)
+            if len(args) >= 1:
+                fallback_kwargs.setdefault("p0", args[0])
+            if len(args) >= 2:
+                fallback_kwargs.setdefault("sigma", args[1])
+            if len(args) >= 3:
+                fallback_kwargs.setdefault("absolute_sigma", args[2])
+            # Remaining args would be unusual, pass through kwargs
+
+        return orchestrator.fit_with_fallback(f, xdata, ydata, **fallback_kwargs)
+
+    # Standard path without fallback
     # Extract CurveFit constructor parameters from kwargs
     flength = kwargs.pop("flength", None)
     use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
