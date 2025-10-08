@@ -28,10 +28,12 @@ Phase 3 focused on advanced robustness features to handle difficult optimization
 **Configuration**:
 ```python
 result = curve_fit(
-    model, x, y,
+    model,
+    x,
+    y,
     fallback=True,  # Enable fallback
     max_fallback_attempts=10,  # Max retries
-    fallback_verbose=True  # Print progress
+    fallback_verbose=True,  # Print progress
 )
 ```
 
@@ -51,9 +53,11 @@ result = curve_fit(
 **Configuration**:
 ```python
 result = curve_fit(
-    model, x, y,
+    model,
+    x,
+    y,
     auto_bounds=True,  # Enable auto-inference
-    bounds_safety_factor=10.0  # Safety multiplier
+    bounds_safety_factor=10.0,  # Safety multiplier
 )
 ```
 
@@ -77,10 +81,7 @@ result = curve_fit(
 
 **Configuration**:
 ```python
-result = curve_fit(
-    model, x, y,
-    stability='auto'  # Options: 'auto', 'check', False
-)
+result = curve_fit(model, x, y, stability="auto")  # Options: 'auto', 'check', False
 ```
 
 ### 4. Performance Profiler
@@ -108,7 +109,7 @@ from nlsq.profiler import profile_curve_fit
 
 result, profile = profile_curve_fit(model, x, y, p0=[1.0, 1.0])
 profile.report()  # Text report
-profile.plot()    # Visual charts
+profile.plot()  # Visual charts
 ```
 
 ## Documents in This Phase
