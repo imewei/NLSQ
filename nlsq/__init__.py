@@ -116,6 +116,14 @@ from nlsq.streaming_optimizer import (
 )
 from nlsq.validators import InputValidator
 
+# Performance profiling (Days 20-21)
+from nlsq.profiler import (
+    PerformanceProfiler,
+    ProfileMetrics,
+    clear_profiling_data,
+    get_global_profiler,
+)
+
 # Public API - only expose main user-facing functions
 __all__ = [
     # Stability and optimization modules
@@ -141,6 +149,9 @@ __all__ = [
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
     "OptimizationRecovery",
+    # Performance profiling (Days 20-21)
+    "PerformanceProfiler",
+    "ProfileMetrics",
     # Result types
     "OptimizeResult",
     "OptimizeWarning",
@@ -164,6 +175,7 @@ __all__ = [
     "clear_compilation_cache",
     "clear_global_pool",
     "clear_memory_pool",
+    "clear_profiling_data",
     # Configuration functions
     "configure_for_large_datasets",
     "create_hdf5_dataset",
@@ -193,6 +205,7 @@ __all__ = [
     "get_global_cache",
     "get_global_compilation_cache",
     "get_global_pool",
+    "get_global_profiler",
     "get_jit_cache",
     "get_large_dataset_config",
     "get_memory_config",
