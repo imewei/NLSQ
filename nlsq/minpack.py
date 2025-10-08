@@ -242,11 +242,9 @@ def curve_fit(
 
     # Handle numerical stability checks and fixes
     if stability:
-        import logging
-
         from nlsq.stability import apply_automatic_fixes, check_problem_stability
 
-        logger = logging.getLogger(__name__)
+        logger = get_logger("minpack")
 
         # Extract p0 from args or kwargs
         p0 = None
@@ -701,9 +699,7 @@ class CurveFit:
                         ) from e
                 except Exception as eigenvalue_error:
                     # If eigenvalue check fails, provide generic error (log for debugging)
-                    import logging
-
-                    logging.getLogger(__name__).debug(
+                    self.logger.debug(
                         f"Eigenvalue check failed (non-critical): {eigenvalue_error}"
                     )
                 raise ValueError(
