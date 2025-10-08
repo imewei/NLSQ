@@ -124,6 +124,12 @@ from nlsq.streaming_optimizer import (
 )
 from nlsq.validators import InputValidator
 
+# Performance profiling visualization (Days 22-23)
+from nlsq.profiler_visualization import (
+    ProfilerVisualization,
+    ProfilingDashboard,
+)
+
 # Public API - only expose main user-facing functions
 __all__ = [
     # Stability and optimization modules
@@ -152,6 +158,9 @@ __all__ = [
     # Performance profiling (Days 20-21)
     "PerformanceProfiler",
     "ProfileMetrics",
+    # Performance profiling visualization (Days 22-23)
+    "ProfilerVisualization",
+    "ProfilingDashboard",
     # Result types
     "OptimizeResult",
     "OptimizeWarning",
