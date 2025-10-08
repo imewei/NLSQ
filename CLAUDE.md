@@ -101,11 +101,11 @@ None. All changes are backward compatible.
 - `docs/optimization_case_study.md` - Performance optimization analysis
 - `docs/performance_tuning_guide.md` - User performance guide
 - `codebase_analysis.md` - Comprehensive codebase analysis
-- `benchmark/profile_trf_hot_paths.py` - Profiling script
+- `benchmark/profile_trf.py` - TRF profiling tool (renamed from profile_trf_hot_paths.py)
 - `benchmark/test_performance_regression.py` - Performance regression tests
-- `benchmark/docs/completed_optimizations/trf_profiling_summary.md` - Profiling results
-- `benchmark/docs/completed_optimizations/numpy_jax_optimization_plan.md` - NumPy↔JAX optimization (8%)
-- `benchmark/docs/future_optimizations/lax_scan_design.md` - lax.scan conversion design (deferred)
+- `benchmark/docs/completed/trf_profiling.md` - Profiling results
+- `benchmark/docs/completed/numpy_jax_optimization.md` - NumPy↔JAX optimization (8%)
+- `benchmark/docs/future/lax_scan_design.md` - lax.scan conversion design (deferred)
 
 **Removed:**
 - `multi-agent-optimization-report.md` - Obsolete (superseded by case study)
@@ -182,7 +182,7 @@ python benchmark/profile_trf_hot_paths.py
 pytest benchmark/test_performance_regression.py -v
 
 # View profiling summary
-cat benchmark/docs/completed_optimizations/trf_profiling_summary.md
+cat benchmark/docs/completed/trf_profiling.md
 
 # View optimization history
 cat benchmark/docs/README.md
@@ -318,7 +318,7 @@ g = g_jnp
 - Code already highly optimized with JAX primitives
 - User-facing features more valuable than micro-optimizations
 
-See `benchmark/docs/future_optimizations/lax_scan_design.md` for deferred optimization designs.
+See `benchmark/docs/future/lax_scan_design.md` for deferred optimization designs.
 
 ### Performance Tuning Guide
 
@@ -375,17 +375,22 @@ nlsq/                                    # Main package
 │   └── [13 other docs]
 │
 ├── benchmark/                           # Performance testing
-│   ├── benchmark.py                     # Main benchmarking tool
-│   ├── benchmark_sprint2.py             # Sprint 2 benchmarks
-│   ├── profile_trf_hot_paths.py         # Profiling script
-│   ├── test_performance_regression.py   # Regression tests (CI)
+│   ├── run_benchmarks.py                # Primary CLI (Phase 3) ⭐
+│   ├── benchmark_suite.py               # Comprehensive suite (Phase 3)
+│   ├── profile_trf.py                   # TRF profiling tool (renamed)
+│   ├── test_performance_regression.py   # Regression tests (CI) ✅
 │   ├── README.md                        # Benchmark documentation
+│   ├── legacy/                          # Historical tools 📦
+│   │   ├── benchmark_v1.py              # Original benchmark tool
+│   │   └── benchmark_sprint2.py         # Sprint 2 benchmarks
 │   └── docs/                            # Optimization documentation
 │       ├── README.md                    # Documentation index
-│       ├── completed_optimizations/     # Historical optimizations
-│       │   ├── numpy_jax_optimization_plan.md  # NumPy↔JAX (8%)
-│       │   └── trf_profiling_summary.md        # Profiling results
-│       └── future_optimizations/        # Deferred work
+│       ├── historical_results.md        # Benchmark results 2024-2025
+│       ├── usage_guide.md               # Detailed usage examples
+│       ├── completed/                   # Completed optimizations
+│       │   ├── numpy_jax_optimization.md  # NumPy↔JAX (8%)
+│       │   └── trf_profiling.md         # Profiling baseline
+│       └── future/                      # Deferred work
 │           └── lax_scan_design.md       # lax.scan design
 │
 ├── examples/                            # Jupyter notebooks
@@ -409,7 +414,7 @@ nlsq/                                    # Main package
 
 ### Performance Considerations
 - **Don't optimize prematurely**: Code is already highly optimized
-- **Profile first**: Use `benchmark/profile_trf_hot_paths.py` to identify bottlenecks
+- **Profile first**: Use `benchmark/profile_trf.py` to identify bottlenecks
 - **Test thoroughly**: All optimizations must maintain numerical correctness
 - **Document decisions**: Update `docs/optimization_case_study.md` for major optimizations
 
@@ -458,11 +463,15 @@ nlsq/                                    # Main package
 
 ### Benchmarking
 - **Main Documentation**: `benchmark/README.md` (comprehensive benchmarking guide)
+- **Usage Guide**: `benchmark/docs/usage_guide.md` (detailed usage examples and best practices)
+- **Historical Results**: `benchmark/docs/historical_results.md` (benchmark data 2024-2025)
 - **Optimization History**: `benchmark/docs/README.md` (completed & future optimizations)
-- **Profiling script**: `benchmark/profile_trf_hot_paths.py`
+- **Primary CLI**: `benchmark/run_benchmarks.py` (recommended benchmarking tool)
+- **Profiling script**: `benchmark/profile_trf.py`
 - **Regression tests**: `benchmark/test_performance_regression.py` (13 tests, CI integrated)
-- **Profiling results**: `benchmark/docs/completed_optimizations/trf_profiling_summary.md`
-- **Optimization plan**: `benchmark/docs/completed_optimizations/numpy_jax_optimization_plan.md`
+- **Profiling results**: `benchmark/docs/completed/trf_profiling.md`
+- **Optimization plan**: `benchmark/docs/completed/numpy_jax_optimization.md`
+- **Legacy tools**: `benchmark/legacy/` (historical benchmarking tools)
 
 ### External Resources
 - **JAX Documentation**: https://jax.readthedocs.io
