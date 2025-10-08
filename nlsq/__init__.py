@@ -51,6 +51,9 @@ from nlsq.config import (
 )
 from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 
+# Fallback strategies (Phase 3 - Days 15-16)
+from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
+
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
@@ -73,10 +76,6 @@ from nlsq.memory_pool import (
 )
 from nlsq.minpack import CurveFit, curve_fit
 from nlsq.recovery import OptimizationRecovery
-
-# Fallback strategies (Phase 3 - Days 15-16)
-from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
-
 from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
 from nlsq.smart_cache import (
     SmartCache,

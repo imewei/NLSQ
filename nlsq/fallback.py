@@ -25,7 +25,8 @@ Example:
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -78,7 +79,9 @@ class FallbackStrategy:
         raise NotImplementedError("Subclasses must implement apply()")
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(name='{self.name}', priority={self.priority})"
+        return (
+            f"{self.__class__.__name__}(name='{self.name}', priority={self.priority})"
+        )
 
 
 class AlternativeMethodStrategy(FallbackStrategy):
@@ -108,7 +111,7 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
     def __init__(self, perturbation_scale: float = 0.1, max_perturbations: int = 3):
         super().__init__(
             name="perturb_p0",
-            description=f"Perturb initial guess by {perturbation_scale*100:.0f}%",
+            description=f"Perturb initial guess by {perturbation_scale * 100:.0f}%",
             priority=8,
         )
         self.perturbation_scale = perturbation_scale
@@ -373,9 +376,7 @@ class FallbackOrchestrator:
         self.total_attempts = 0
         self.successful_strategies = {}
 
-    def fit_with_fallback(
-        self, f: Callable, xdata, ydata, **kwargs
-    ) -> FallbackResult:
+    def fit_with_fallback(self, f: Callable, xdata, ydata, **kwargs) -> FallbackResult:
         """
         Attempt curve fit with automatic fallback on failure.
 
@@ -519,7 +520,7 @@ class FallbackOrchestrator:
             if s["attempts"] > 0:
                 print(
                     f"  {s['name']:20s}: {s['successes']:3d}/{s['attempts']:3d} "
-                    f"({s['success_rate']*100:5.1f}%)"
+                    f"({s['success_rate'] * 100:5.1f}%)"
                 )
                 print(f"    └─ {s['description']}")
 

@@ -5,10 +5,10 @@ Tests for Automatic Fallback Strategies
 Tests the fallback orchestrator and individual strategies for robust optimization.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax.numpy as jnp
 from nlsq import curve_fit
 from nlsq.fallback import (
     AddParameterBoundsStrategy,
@@ -229,7 +229,10 @@ class TestFallbackOrchestrator:
 
         orchestrator = FallbackOrchestrator(verbose=False)
         result = orchestrator.fit_with_fallback(
-            exponential_decay, x, y, p0=[2, 0.5, 1]  # Good p0
+            exponential_decay,
+            x,
+            y,
+            p0=[2, 0.5, 1],  # Good p0
         )
 
         assert isinstance(result, FallbackResult)
@@ -245,7 +248,10 @@ class TestFallbackOrchestrator:
 
         orchestrator = FallbackOrchestrator(verbose=False, max_attempts=5)
         result = orchestrator.fit_with_fallback(
-            exponential_decay, x, y, p0=[100, 10, 50]  # Very bad p0
+            exponential_decay,
+            x,
+            y,
+            p0=[100, 10, 50],  # Very bad p0
         )
 
         assert isinstance(result, FallbackResult)
@@ -314,6 +320,7 @@ class TestFallbackResult:
 
     def test_initialization(self):
         """Test FallbackResult initialization."""
+
         # Mock result object
         class MockResult:
             x = np.array([1, 2, 3])
@@ -321,9 +328,7 @@ class TestFallbackResult:
             success = True
 
         mock_result = MockResult()
-        fb_result = FallbackResult(
-            mock_result, strategy_used="perturb_p0", attempts=3
-        )
+        fb_result = FallbackResult(mock_result, strategy_used="perturb_p0", attempts=3)
 
         assert fb_result.result is mock_result
         assert fb_result.fallback_strategy_used == "perturb_p0"
@@ -357,7 +362,10 @@ class TestFallbackIntegration:
 
         orchestrator = FallbackOrchestrator(verbose=False)
         result = orchestrator.fit_with_fallback(
-            linear, x, y, p0=[1000, -500]  # Terrible p0
+            linear,
+            x,
+            y,
+            p0=[1000, -500],  # Terrible p0
         )
 
         # Should still converge reasonably close
@@ -375,9 +383,7 @@ class TestFallbackIntegration:
         y[outlier_indices] += 10.0
 
         orchestrator = FallbackOrchestrator(verbose=False)
-        result = orchestrator.fit_with_fallback(
-            exponential_decay, x, y, p0=[2, 0.5, 1]
-        )
+        result = orchestrator.fit_with_fallback(exponential_decay, x, y, p0=[2, 0.5, 1])
 
         # Should still get reasonable fit despite outliers
         assert result.x[0] > 1.0  # a should be positive
