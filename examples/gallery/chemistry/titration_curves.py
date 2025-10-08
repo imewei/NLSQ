@@ -209,7 +209,7 @@ V_titrant = np.linspace(0.1, 40, 100)  # Volume of NaOH added (mL)
 # Calculate true pH values using more detailed model
 pH_true = np.zeros_like(V_titrant)
 for i, V in enumerate(V_titrant):
-    if V < Ve_true:
+    if Ve_true > V:
         # Before equivalence: buffer region
         f = V / Ve_true
         if f > 0.001 and f < 0.999:
@@ -220,7 +220,7 @@ for i, V in enumerate(V_titrant):
         else:
             # Near equivalence
             pH_true[i] = 8.0
-    elif V == Ve_true:
+    elif Ve_true == V:
         # At equivalence: pH determined by conjugate base
         pH_true[i] = 8.72
     else:
@@ -256,15 +256,17 @@ popt, pcov = curve_fit(
     p0=p0,
     sigma=sigma_fit,
     bounds=(bounds_lower, bounds_upper),
-    absolute_sigma=True
+    absolute_sigma=True,
 )
 
 pKa_fitted, Ve_fitted, pH0_fitted = popt
 pKa_err, Ve_err, pH0_err = np.sqrt(np.diag(pcov))
 
-print(f"\nFitted Parameters:")
+print("\nFitted Parameters:")
 print(f"  pKa = {pKa_fitted:.3f} ± {pKa_err:.3f} (true: {pKa_true:.2f})")
-print(f"  Equivalence point = {Ve_fitted:.2f} ± {Ve_err:.2f} mL (true: {Ve_true:.1f} mL)")
+print(
+    f"  Equivalence point = {Ve_fitted:.2f} ± {Ve_err:.2f} mL (true: {Ve_true:.1f} mL)"
+)
 print(f"  Initial pH = {pH0_fitted:.2f} ± {pH0_err:.2f}")
 
 # Calculate fitted curve
@@ -277,7 +279,7 @@ dof = len(pH_fit) - len(popt)
 reduced_chi_squared = chi_squared / dof
 rmse = np.sqrt(np.mean(residuals**2))
 
-print(f"\nGoodness of Fit:")
+print("\nGoodness of Fit:")
 print(f"  χ² = {chi_squared:.2f}")
 print(f"  χ²/dof = {reduced_chi_squared:.3f} (should be ≈ 1)")
 print(f"  RMSE = {rmse:.4f} pH units")
@@ -289,7 +291,7 @@ inflection_idx = np.argmax(dpH_dV)
 Ve_inflection = V_titrant[inflection_idx]
 pH_inflection = pH_measured[inflection_idx]
 
-print(f"\nInflection Point Analysis:")
+print("\nInflection Point Analysis:")
 print(f"  Volume at inflection = {Ve_inflection:.2f} mL")
 print(f"  pH at inflection = {pH_inflection:.2f}")
 print(f"  Max slope = {dpH_dV[inflection_idx]:.2f} pH/mL")
@@ -312,10 +314,14 @@ max_beta_idx = np.argmax(beta_fitted)
 pH_max_beta = pH_range[max_beta_idx]
 max_beta = beta_fitted[max_beta_idx]
 
-print(f"\nBuffer Capacity Analysis:")
-print(f"  Maximum capacity at pH = {pH_max_beta:.2f} (should equal pKa = {pKa_fitted:.2f})")
+print("\nBuffer Capacity Analysis:")
+print(
+    f"  Maximum capacity at pH = {pH_max_beta:.2f} (should equal pKa = {pKa_fitted:.2f})"
+)
 print(f"  Maximum β = {max_beta:.4f} mol/(L·pH)")
-print(f"  Effective buffer range: {pKa_fitted - 1:.2f} - {pKa_fitted + 1:.2f} (pKa ± 1)")
+print(
+    f"  Effective buffer range: {pKa_fitted - 1:.2f} - {pKa_fitted + 1:.2f} (pKa ± 1)"
+)
 
 # ============================================================================
 # Example 3: Diprotic Acid Titration (Carbonic Acid)
@@ -336,14 +342,14 @@ V_di = np.linspace(0.1, 70, 150)
 pH_di_true = np.zeros_like(V_di)
 
 for i, V in enumerate(V_di):
-    if V < Ve1_true:
+    if Ve1_true > V:
         # First buffer region
         f = V / Ve1_true
         if 0.01 < f < 0.99:
             pH_di_true[i] = pKa1_true_di + np.log10(f / (1 - f))
         else:
             pH_di_true[i] = 4.0
-    elif V < Ve2_true:
+    elif Ve2_true > V:
         # Second buffer region
         f = (V - Ve1_true) / (Ve2_true - Ve1_true)
         if 0.01 < f < 0.99:
@@ -371,13 +377,13 @@ popt_di, pcov_di = curve_fit(
     p0=p0_di,
     sigma=sigma_pH_di,
     bounds=(bounds_lower_di, bounds_upper_di),
-    absolute_sigma=True
+    absolute_sigma=True,
 )
 
 pKa1_fitted_di, pKa2_fitted_di, Ve1_fitted, Ve2_fitted = popt_di
 pKa1_err_di, pKa2_err_di, Ve1_err, Ve2_err = np.sqrt(np.diag(pcov_di))
 
-print(f"\nFitted Parameters:")
+print("\nFitted Parameters:")
 print(f"  pKa1 = {pKa1_fitted_di:.2f} ± {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})")
 print(f"  pKa2 = {pKa2_fitted_di:.2f} ± {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})")
 print(f"  Ve1 = {Ve1_fitted:.2f} ± {Ve1_err:.2f} mL (true: {Ve1_true:.1f} mL)")
@@ -392,7 +398,7 @@ rmse_di = np.sqrt(np.mean(residuals_di**2))
 chi_squared_di = np.sum((residuals_di / sigma_pH_di) ** 2)
 dof_di = len(pH_di_measured) - len(popt_di)
 
-print(f"\nGoodness of Fit:")
+print("\nGoodness of Fit:")
 print(f"  RMSE = {rmse_di:.4f} pH units")
 print(f"  χ²/dof = {chi_squared_di / dof_di:.3f}")
 
@@ -410,9 +416,13 @@ dpH_dV_second = dpH_dV_di[mask_second]
 idx_second = np.argmax(dpH_dV_second)
 Ve2_inflection = V_di[mask_second][idx_second]
 
-print(f"\nInflection Points:")
-print(f"  First equivalence (inflection): {Ve1_inflection:.2f} mL (fitted: {Ve1_fitted:.2f} mL)")
-print(f"  Second equivalence (inflection): {Ve2_inflection:.2f} mL (fitted: {Ve2_fitted:.2f} mL)")
+print("\nInflection Points:")
+print(
+    f"  First equivalence (inflection): {Ve1_inflection:.2f} mL (fitted: {Ve1_fitted:.2f} mL)"
+)
+print(
+    f"  Second equivalence (inflection): {Ve2_inflection:.2f} mL (fitted: {Ve2_fitted:.2f} mL)"
+)
 
 # ============================================================================
 # Visualization
@@ -422,55 +432,82 @@ fig = plt.figure(figsize=(16, 12))
 
 # Plot 1: Monoprotic titration curve
 ax1 = plt.subplot(3, 3, 1)
-ax1.errorbar(V_titrant, pH_measured, yerr=sigma_pH, fmt='o', markersize=4,
-             alpha=0.6, label='Measured pH', capsize=2)
-ax1.plot(V_fit, pH_fitted_curve, 'r-', linewidth=2, label='Fitted curve')
-ax1.axvline(Ve_fitted, color='g', linestyle='--', label=f'Ve = {Ve_fitted:.2f} mL')
-ax1.axhline(pKa_fitted, color='orange', linestyle='--', alpha=0.5, label=f'pKa = {pKa_fitted:.2f}')
-ax1.set_xlabel('Volume of NaOH (mL)', fontsize=11)
-ax1.set_ylabel('pH', fontsize=11)
-ax1.set_title('Monoprotic Weak Acid Titration\n(Acetic Acid + NaOH)', fontsize=12, fontweight='bold')
+ax1.errorbar(
+    V_titrant,
+    pH_measured,
+    yerr=sigma_pH,
+    fmt="o",
+    markersize=4,
+    alpha=0.6,
+    label="Measured pH",
+    capsize=2,
+)
+ax1.plot(V_fit, pH_fitted_curve, "r-", linewidth=2, label="Fitted curve")
+ax1.axvline(Ve_fitted, color="g", linestyle="--", label=f"Ve = {Ve_fitted:.2f} mL")
+ax1.axhline(
+    pKa_fitted,
+    color="orange",
+    linestyle="--",
+    alpha=0.5,
+    label=f"pKa = {pKa_fitted:.2f}",
+)
+ax1.set_xlabel("Volume of NaOH (mL)", fontsize=11)
+ax1.set_ylabel("pH", fontsize=11)
+ax1.set_title(
+    "Monoprotic Weak Acid Titration\n(Acetic Acid + NaOH)",
+    fontsize=12,
+    fontweight="bold",
+)
 ax1.legend(fontsize=9)
 ax1.grid(True, alpha=0.3)
 
 # Plot 2: First derivative (slope)
 ax2 = plt.subplot(3, 3, 2)
-ax2.plot(V_titrant, dpH_dV, 'b-', linewidth=2)
-ax2.axvline(Ve_inflection, color='r', linestyle='--', label=f'Inflection: {Ve_inflection:.2f} mL')
-ax2.set_xlabel('Volume of NaOH (mL)', fontsize=11)
-ax2.set_ylabel('dpH/dV (pH/mL)', fontsize=11)
-ax2.set_title('First Derivative\n(Equivalence Point Detection)', fontsize=12, fontweight='bold')
+ax2.plot(V_titrant, dpH_dV, "b-", linewidth=2)
+ax2.axvline(
+    Ve_inflection,
+    color="r",
+    linestyle="--",
+    label=f"Inflection: {Ve_inflection:.2f} mL",
+)
+ax2.set_xlabel("Volume of NaOH (mL)", fontsize=11)
+ax2.set_ylabel("dpH/dV (pH/mL)", fontsize=11)
+ax2.set_title(
+    "First Derivative\n(Equivalence Point Detection)", fontsize=12, fontweight="bold"
+)
 ax2.legend(fontsize=9)
 ax2.grid(True, alpha=0.3)
 
 # Plot 3: Residuals
 ax3 = plt.subplot(3, 3, 3)
 ax3.scatter(V_fit, residuals, alpha=0.6, s=30)
-ax3.axhline(0, color='r', linestyle='--', linewidth=1)
-ax3.axhline(2 * rmse, color='orange', linestyle=':', label=f'±2σ ({2*rmse:.3f})')
-ax3.axhline(-2 * rmse, color='orange', linestyle=':')
-ax3.set_xlabel('Volume of NaOH (mL)', fontsize=11)
-ax3.set_ylabel('Residuals (pH units)', fontsize=11)
-ax3.set_title(f'Residuals (RMSE = {rmse:.4f})', fontsize=12, fontweight='bold')
+ax3.axhline(0, color="r", linestyle="--", linewidth=1)
+ax3.axhline(2 * rmse, color="orange", linestyle=":", label=f"±2σ ({2 * rmse:.3f})")
+ax3.axhline(-2 * rmse, color="orange", linestyle=":")
+ax3.set_xlabel("Volume of NaOH (mL)", fontsize=11)
+ax3.set_ylabel("Residuals (pH units)", fontsize=11)
+ax3.set_title(f"Residuals (RMSE = {rmse:.4f})", fontsize=12, fontweight="bold")
 ax3.legend(fontsize=9)
 ax3.grid(True, alpha=0.3)
 
 # Plot 4: Buffer capacity
 ax4 = plt.subplot(3, 3, 4)
-ax4.plot(pH_range, beta_fitted, 'b-', linewidth=2, label='Fitted pKa')
-ax4.plot(pH_range, beta_true, 'r--', linewidth=2, alpha=0.5, label='True pKa')
-ax4.axvline(pKa_fitted, color='g', linestyle='--', alpha=0.5, label=f'pKa = {pKa_fitted:.2f}')
-ax4.axvline(pKa_fitted - 1, color='orange', linestyle=':', alpha=0.5)
-ax4.axvline(pKa_fitted + 1, color='orange', linestyle=':', alpha=0.5, label='pKa ± 1')
-ax4.set_xlabel('pH', fontsize=11)
-ax4.set_ylabel('Buffer Capacity β (mol/L·pH)', fontsize=11)
-ax4.set_title('Buffer Capacity vs pH', fontsize=12, fontweight='bold')
+ax4.plot(pH_range, beta_fitted, "b-", linewidth=2, label="Fitted pKa")
+ax4.plot(pH_range, beta_true, "r--", linewidth=2, alpha=0.5, label="True pKa")
+ax4.axvline(
+    pKa_fitted, color="g", linestyle="--", alpha=0.5, label=f"pKa = {pKa_fitted:.2f}"
+)
+ax4.axvline(pKa_fitted - 1, color="orange", linestyle=":", alpha=0.5)
+ax4.axvline(pKa_fitted + 1, color="orange", linestyle=":", alpha=0.5, label="pKa ± 1")
+ax4.set_xlabel("pH", fontsize=11)
+ax4.set_ylabel("Buffer Capacity β (mol/L·pH)", fontsize=11)
+ax4.set_title("Buffer Capacity vs pH", fontsize=12, fontweight="bold")
 ax4.legend(fontsize=9)
 ax4.grid(True, alpha=0.3)
 
 # Plot 5: Parameter comparison
 ax5 = plt.subplot(3, 3, 5)
-params_names = ['pKa', 'Ve (mL)']
+params_names = ["pKa", "Ve (mL)"]
 params_true = [pKa_true, Ve_true]
 params_fitted = [pKa_fitted, Ve_fitted]
 params_err = [pKa_err, Ve_err]
@@ -478,15 +515,23 @@ params_err = [pKa_err, Ve_err]
 x_pos = np.arange(len(params_names))
 width = 0.35
 
-ax5.bar(x_pos - width/2, params_true, width, label='True', alpha=0.7, color='blue')
-ax5.bar(x_pos + width/2, params_fitted, width, yerr=params_err,
-        label='Fitted', alpha=0.7, color='red', capsize=5)
+ax5.bar(x_pos - width / 2, params_true, width, label="True", alpha=0.7, color="blue")
+ax5.bar(
+    x_pos + width / 2,
+    params_fitted,
+    width,
+    yerr=params_err,
+    label="Fitted",
+    alpha=0.7,
+    color="red",
+    capsize=5,
+)
 ax5.set_xticks(x_pos)
 ax5.set_xticklabels(params_names)
-ax5.set_ylabel('Value', fontsize=11)
-ax5.set_title('Parameter Recovery', fontsize=12, fontweight='bold')
+ax5.set_ylabel("Value", fontsize=11)
+ax5.set_title("Parameter Recovery", fontsize=12, fontweight="bold")
 ax5.legend(fontsize=9)
-ax5.grid(True, alpha=0.3, axis='y')
+ax5.grid(True, alpha=0.3, axis="y")
 
 # Plot 6: Henderson-Hasselbalch verification
 ax6 = plt.subplot(3, 3, 6)
@@ -496,57 +541,86 @@ pH_buffer = pH_fitted_curve[(V_fit > 5) & (V_fit < 45)]
 ratio_fitted = np.power(10, pH_buffer - pKa_fitted)
 log_ratio = np.log10(ratio_fitted)
 
-ax6.scatter(log_ratio, pH_buffer, alpha=0.6, s=30, label='Fitted data')
+ax6.scatter(log_ratio, pH_buffer, alpha=0.6, s=30, label="Fitted data")
 # Theoretical line: pH = pKa + log10(ratio)
 log_ratio_theory = np.linspace(-1.5, 1.5, 100)
 pH_theory = pKa_fitted + log_ratio_theory
-ax6.plot(log_ratio_theory, pH_theory, 'r--', linewidth=2, label='Henderson-Hasselbalch')
-ax6.set_xlabel('log₁₀([A⁻]/[HA])', fontsize=11)
-ax6.set_ylabel('pH', fontsize=11)
-ax6.set_title('Henderson-Hasselbalch Verification', fontsize=12, fontweight='bold')
+ax6.plot(log_ratio_theory, pH_theory, "r--", linewidth=2, label="Henderson-Hasselbalch")
+ax6.set_xlabel("log₁₀([A⁻]/[HA])", fontsize=11)
+ax6.set_ylabel("pH", fontsize=11)
+ax6.set_title("Henderson-Hasselbalch Verification", fontsize=12, fontweight="bold")
 ax6.legend(fontsize=9)
 ax6.grid(True, alpha=0.3)
 
 # Plot 7: Diprotic titration curve
 ax7 = plt.subplot(3, 3, 7)
-ax7.errorbar(V_di, pH_di_measured, yerr=sigma_pH_di, fmt='o', markersize=4,
-             alpha=0.6, label='Measured pH', capsize=2)
-ax7.plot(V_di, pH_di_fitted, 'r-', linewidth=2, label='Fitted curve')
-ax7.axvline(Ve1_fitted, color='g', linestyle='--', alpha=0.7, label=f'Ve1 = {Ve1_fitted:.1f} mL')
-ax7.axvline(Ve2_fitted, color='b', linestyle='--', alpha=0.7, label=f'Ve2 = {Ve2_fitted:.1f} mL')
-ax7.axhline(pKa1_fitted_di, color='orange', linestyle=':', alpha=0.5)
-ax7.axhline(pKa2_fitted_di, color='purple', linestyle=':', alpha=0.5)
-ax7.set_xlabel('Volume of NaOH (mL)', fontsize=11)
-ax7.set_ylabel('pH', fontsize=11)
-ax7.set_title('Diprotic Acid Titration\n(Carbonic Acid)', fontsize=12, fontweight='bold')
+ax7.errorbar(
+    V_di,
+    pH_di_measured,
+    yerr=sigma_pH_di,
+    fmt="o",
+    markersize=4,
+    alpha=0.6,
+    label="Measured pH",
+    capsize=2,
+)
+ax7.plot(V_di, pH_di_fitted, "r-", linewidth=2, label="Fitted curve")
+ax7.axvline(
+    Ve1_fitted, color="g", linestyle="--", alpha=0.7, label=f"Ve1 = {Ve1_fitted:.1f} mL"
+)
+ax7.axvline(
+    Ve2_fitted, color="b", linestyle="--", alpha=0.7, label=f"Ve2 = {Ve2_fitted:.1f} mL"
+)
+ax7.axhline(pKa1_fitted_di, color="orange", linestyle=":", alpha=0.5)
+ax7.axhline(pKa2_fitted_di, color="purple", linestyle=":", alpha=0.5)
+ax7.set_xlabel("Volume of NaOH (mL)", fontsize=11)
+ax7.set_ylabel("pH", fontsize=11)
+ax7.set_title(
+    "Diprotic Acid Titration\n(Carbonic Acid)", fontsize=12, fontweight="bold"
+)
 ax7.legend(fontsize=9)
 ax7.grid(True, alpha=0.3)
 
 # Plot 8: Diprotic first derivative
 ax8 = plt.subplot(3, 3, 8)
-ax8.plot(V_di, dpH_dV_di, 'b-', linewidth=2)
-ax8.axvline(Ve1_inflection, color='g', linestyle='--', label=f'1st: {Ve1_inflection:.1f} mL')
-ax8.axvline(Ve2_inflection, color='purple', linestyle='--', label=f'2nd: {Ve2_inflection:.1f} mL')
-ax8.set_xlabel('Volume of NaOH (mL)', fontsize=11)
-ax8.set_ylabel('dpH/dV (pH/mL)', fontsize=11)
-ax8.set_title('Diprotic First Derivative\n(Two Equivalence Points)', fontsize=12, fontweight='bold')
+ax8.plot(V_di, dpH_dV_di, "b-", linewidth=2)
+ax8.axvline(
+    Ve1_inflection, color="g", linestyle="--", label=f"1st: {Ve1_inflection:.1f} mL"
+)
+ax8.axvline(
+    Ve2_inflection,
+    color="purple",
+    linestyle="--",
+    label=f"2nd: {Ve2_inflection:.1f} mL",
+)
+ax8.set_xlabel("Volume of NaOH (mL)", fontsize=11)
+ax8.set_ylabel("dpH/dV (pH/mL)", fontsize=11)
+ax8.set_title(
+    "Diprotic First Derivative\n(Two Equivalence Points)",
+    fontsize=12,
+    fontweight="bold",
+)
 ax8.legend(fontsize=9)
 ax8.grid(True, alpha=0.3)
 
 # Plot 9: Diprotic residuals
 ax9 = plt.subplot(3, 3, 9)
 ax9.scatter(V_di, residuals_di, alpha=0.6, s=30)
-ax9.axhline(0, color='r', linestyle='--', linewidth=1)
-ax9.axhline(2 * rmse_di, color='orange', linestyle=':', label=f'±2σ ({2*rmse_di:.3f})')
-ax9.axhline(-2 * rmse_di, color='orange', linestyle=':')
-ax9.set_xlabel('Volume of NaOH (mL)', fontsize=11)
-ax9.set_ylabel('Residuals (pH units)', fontsize=11)
-ax9.set_title(f'Diprotic Residuals (RMSE = {rmse_di:.4f})', fontsize=12, fontweight='bold')
+ax9.axhline(0, color="r", linestyle="--", linewidth=1)
+ax9.axhline(
+    2 * rmse_di, color="orange", linestyle=":", label=f"±2σ ({2 * rmse_di:.3f})"
+)
+ax9.axhline(-2 * rmse_di, color="orange", linestyle=":")
+ax9.set_xlabel("Volume of NaOH (mL)", fontsize=11)
+ax9.set_ylabel("Residuals (pH units)", fontsize=11)
+ax9.set_title(
+    f"Diprotic Residuals (RMSE = {rmse_di:.4f})", fontsize=12, fontweight="bold"
+)
 ax9.legend(fontsize=9)
 ax9.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('titration_curves_analysis.png', dpi=150, bbox_inches='tight')
+plt.savefig("titration_curves_analysis.png", dpi=150, bbox_inches="tight")
 print("\n✓ Plot saved as 'titration_curves_analysis.png'")
 plt.show()
 
@@ -563,15 +637,23 @@ print(f"   ├─ pKa (fitted) = {pKa_fitted:.3f} ± {pKa_err:.3f}")
 print(f"   ├─ pKa (true) = {pKa_true:.2f}")
 print(f"   ├─ Equivalence point = {Ve_fitted:.2f} ± {Ve_err:.2f} mL")
 print(f"   ├─ Buffer range = {pKa_fitted - 1:.2f} - {pKa_fitted + 1:.2f} (pKa ± 1)")
-print(f"   ├─ Max buffer capacity = {max_beta:.4f} mol/(L·pH) at pH = {pH_max_beta:.2f}")
+print(
+    f"   ├─ Max buffer capacity = {max_beta:.4f} mol/(L·pH) at pH = {pH_max_beta:.2f}"
+)
 print(f"   └─ Fit quality: RMSE = {rmse:.4f}, χ²/dof = {reduced_chi_squared:.3f}")
 
 print("\n2. DIPROTIC TITRATION (Carbonic Acid):")
-print(f"   ├─ pKa1 (fitted) = {pKa1_fitted_di:.2f} ± {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})")
-print(f"   ├─ pKa2 (fitted) = {pKa2_fitted_di:.2f} ± {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})")
+print(
+    f"   ├─ pKa1 (fitted) = {pKa1_fitted_di:.2f} ± {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})"
+)
+print(
+    f"   ├─ pKa2 (fitted) = {pKa2_fitted_di:.2f} ± {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})"
+)
 print(f"   ├─ First equivalence = {Ve1_fitted:.2f} ± {Ve1_err:.2f} mL")
 print(f"   ├─ Second equivalence = {Ve2_fitted:.2f} ± {Ve2_err:.2f} mL")
-print(f"   └─ Fit quality: RMSE = {rmse_di:.4f}, χ²/dof = {chi_squared_di / dof_di:.3f}")
+print(
+    f"   └─ Fit quality: RMSE = {rmse_di:.4f}, χ²/dof = {chi_squared_di / dof_di:.3f}"
+)
 
 print("\n3. KEY INSIGHTS:")
 print("   ├─ Henderson-Hasselbalch equation accurately models buffer region")
