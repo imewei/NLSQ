@@ -22,6 +22,7 @@ nlsq_profile_*.txt
 nlsq_cache/
 *.h5
 *.hdf5
+CLAUDE.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

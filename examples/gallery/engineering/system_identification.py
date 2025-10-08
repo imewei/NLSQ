@@ -367,7 +367,7 @@ autocorr = autocorr[len(autocorr) // 2 :]
 autocorr = autocorr[:max_lag] / autocorr[0]  # Normalize
 
 lags = np.arange(max_lag)
-ax6.stem(lags, autocorr, basefmt=" ", use_line_collection=True)
+ax6.stem(lags, autocorr, basefmt=" ")
 ax6.axhline(0, color="black", linewidth=0.8)
 # 95% confidence interval
 conf_interval = 1.96 / np.sqrt(len(residuals))
