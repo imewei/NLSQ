@@ -12,6 +12,8 @@ benchmark/
 ├── benchmark.py                       # Main benchmarking tool (all suites)
 ├── test_performance_regression.py     # CI performance regression tests (13 tests)
 ├── benchmark_sprint2.py               # Sprint 2 benchmarks (memory pool, compilation cache)
+├── benchmark_suite.py                 # NEW: Comprehensive benchmarking suite (Days 20-24)
+├── run_benchmarks.py                  # NEW: CLI for running benchmarks
 ├── profile_trf_hot_paths.py           # Profiling tool for TRF algorithm analysis
 └── docs/                              # Historical & future optimization documentation
     ├── README.md                      # Documentation index
@@ -21,6 +23,8 @@ benchmark/
 
 **Active Tools:**
 - `benchmark.py` - Run comprehensive benchmarks (various suites: basic, solver, large, advanced)
+- `run_benchmarks.py` - **NEW** Command-line interface for running standardized benchmarks vs SciPy
+- `benchmark_suite.py` - **NEW** Comprehensive benchmarking infrastructure with profiler integration
 - `test_performance_regression.py` - Automated regression tests integrated in CI/CD
 - `profile_trf_hot_paths.py` - Profile TRF algorithm hot paths for optimization analysis
 - `benchmark_sprint2.py` - Benchmark memory pool and compilation cache features
@@ -227,6 +231,40 @@ For a typical 100-point 1D problem:
 | Sparse Jacobian | `lsqr` | Optimized for sparsity |
 
 ## Running Benchmarks
+
+### New Benchmark Suite (Recommended - Days 20-24)
+
+```bash
+# Run standard benchmarks (exponential, gaussian, polynomial, sinusoidal)
+python benchmark/run_benchmarks.py
+
+# Quick benchmarks (smaller sizes, fewer repeats)
+python benchmark/run_benchmarks.py --quick
+
+# Benchmark specific problems
+python benchmark/run_benchmarks.py --problems exponential gaussian
+
+# Custom configuration
+python benchmark/run_benchmarks.py --sizes 100 1000 10000 --repeats 10 --methods trf lm
+
+# Skip SciPy comparison (faster)
+python benchmark/run_benchmarks.py --no-scipy
+
+# Custom output directory
+python benchmark/run_benchmarks.py --output ./my_results
+
+# View help
+python benchmark/run_benchmarks.py --help
+```
+
+**Output:**
+- Text report: `benchmark_results/benchmark_report.txt`
+- CSV data: `benchmark_results/benchmark_results.csv`
+- HTML dashboard: `benchmark_results/dashboard/dashboard.html`
+- Comparison plots: `benchmark_results/dashboard/*.png`
+- JSON export: `benchmark_results/dashboard/profiles.json`
+
+### Legacy Benchmark Tools
 
 ```bash
 # Run all benchmarks
