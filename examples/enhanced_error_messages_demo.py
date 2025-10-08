@@ -7,6 +7,7 @@ when optimization fails, helping users debug issues quickly.
 
 import jax.numpy as jnp
 import numpy as np
+
 from nlsq import curve_fit
 from nlsq.error_messages import OptimizationError
 
@@ -61,14 +62,16 @@ def example_2_auto_recovery():
         print("  ✅ Succeeded (unexpected)")
     except OptimizationError as e:
         print(f"  ❌ Failed: {e.reasons[0] if e.reasons else 'Unknown'}")
-        print(f"  💡 Recommendation: {e.recommendations[0] if e.recommendations else 'Increase max_nfev'}")
+        print(
+            f"  💡 Recommendation: {e.recommendations[0] if e.recommendations else 'Increase max_nfev'}"
+        )
 
     # Second attempt: apply recommendation
     print("\n🟢 Second attempt (max_nfev=100):")
     try:
         popt, pcov = curve_fit(exponential, x, y, p0=[1, 1], max_nfev=100)
         print(f"  ✅ Success! Fitted parameters: a={popt[0]:.3f}, b={popt[1]:.3f}")
-        print(f"  📈 True parameters:           a=3.000, b=0.500")
+        print("  📈 True parameters:           a=3.000, b=0.500")
     except OptimizationError as e:
         print(f"  ❌ Still failed: {e.reasons[0]}")
 
@@ -82,10 +85,10 @@ def example_3_diagnostic_analysis():
     print("=" * 70)
 
     def gaussian(x, amp, mu, sigma):
-        return amp * jnp.exp(-(x - mu) ** 2 / (2 * sigma**2))
+        return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
     x = np.linspace(-5, 5, 100)
-    y = 2 * np.exp(-(x - 1) ** 2 / (2 * 0.5**2))
+    y = 2 * np.exp(-((x - 1) ** 2) / (2 * 0.5**2))
 
     try:
         popt, pcov = curve_fit(gaussian, x, y, p0=[1, 0, 1], max_nfev=2)
@@ -100,8 +103,10 @@ def example_3_diagnostic_analysis():
             try:
                 # Automatically retry with higher max_nfev
                 popt, pcov = curve_fit(gaussian, x, y, p0=[1, 0, 1], max_nfev=200)
-                print(f"  ✅ Auto-retry succeeded!")
-                print(f"     Fitted: amp={popt[0]:.2f}, mu={popt[1]:.2f}, sigma={popt[2]:.2f}")
+                print("  ✅ Auto-retry succeeded!")
+                print(
+                    f"     Fitted: amp={popt[0]:.2f}, mu={popt[1]:.2f}, sigma={popt[2]:.2f}"
+                )
             except OptimizationError:
                 print("  ❌ Auto-retry failed")
 

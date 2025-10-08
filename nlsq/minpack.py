@@ -565,14 +565,14 @@ class CurveFit:
             Validated p0 array (or None if auto-estimation not requested)
         """
         # If p0 is explicitly provided (not None or 'auto'), use it
-        if p0 is not None and p0 != 'auto':
+        if p0 is not None and p0 != "auto":
             p0 = np.atleast_1d(p0)
             n = p0.size
             return n, p0
 
         # Only auto-estimate if p0='auto' is explicitly requested
         # (not when p0=None, to preserve backward compatibility)
-        if p0 == 'auto' and xdata is not None and ydata is not None:
+        if p0 == "auto" and xdata is not None and ydata is not None:
             try:
                 p0_estimated = estimate_initial_parameters(f, xdata, ydata, p0)
                 p0 = np.atleast_1d(p0_estimated)
@@ -1219,10 +1219,10 @@ class CurveFit:
                 "Optimization failed", reason=res.message, status=res.status
             )
             # Extract tolerances for enhanced error message
-            gtol = kwargs.get('gtol', 1e-8)
-            ftol = kwargs.get('ftol', 1e-8)
-            xtol = kwargs.get('xtol', 1e-8)
-            max_nfev = kwargs.get('max_nfev', None)
+            gtol = kwargs.get("gtol", 1e-8)
+            ftol = kwargs.get("ftol", 1e-8)
+            xtol = kwargs.get("xtol", 1e-8)
+            max_nfev = kwargs.get("max_nfev")
             if max_nfev is None:
                 max_nfev = len(p0) * 100  # Default estimate
             raise OptimizationError(res, gtol, ftol, xtol, max_nfev)
@@ -1511,8 +1511,8 @@ class CurveFit:
             # for backward compatibility: popt, pcov = curve_fit(...)
             # Keep 'fun' (residuals) and 'jac' for statistical computations
             result = CurveFitResult(res)
-            result['model'] = f
-            result['xdata'] = xdata
-            result['ydata'] = ydata
-            result['pcov'] = _pcov
+            result["model"] = f
+            result["xdata"] = xdata
+            result["ydata"] = ydata
+            result["pcov"] = _pcov
             return result

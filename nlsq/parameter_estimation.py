@@ -58,15 +58,17 @@ nlsq.error_messages : Enhanced error messages
 """
 
 import inspect
+from collections.abc import Callable
+from typing import Optional, Union
+
 import numpy as np
-from typing import Callable, Optional, Union
 
 
 def estimate_initial_parameters(
     f: Callable,
     xdata: np.ndarray,
     ydata: np.ndarray,
-    p0: Optional[Union[np.ndarray, str]] = None,
+    p0: np.ndarray | str | None = None,
 ) -> np.ndarray:
     """Estimate initial parameters if p0 is None or 'auto'.
 
@@ -144,11 +146,11 @@ def estimate_initial_parameters(
     estimate_p0_for_pattern : Pattern-specific estimation
     """
     # If p0 provided and not 'auto', return as-is
-    if p0 is not None and p0 != 'auto':
+    if p0 is not None and p0 != "auto":
         return np.asarray(p0)
 
     # Check if function has custom estimation method (for library functions)
-    if hasattr(f, 'estimate_p0'):
+    if hasattr(f, "estimate_p0"):
         try:
             return np.asarray(f.estimate_p0(xdata, ydata))
         except Exception:
@@ -269,23 +271,23 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
     estimate_p0_for_pattern : Estimate parameters based on detected pattern
     """
     if len(ydata) < 3:
-        return 'unknown'
+        return "unknown"
 
     # Check for linear pattern (correlation close to 1 or -1)
     try:
         corr = np.corrcoef(xdata, ydata)[0, 1]
         if abs(corr) > 0.95:
-            return 'linear'
+            return "linear"
     except Exception:
         pass
 
     # Check for monotonic decay (exponential decay candidate)
     if np.all(np.diff(ydata) < 0):
-        return 'exponential_decay'
+        return "exponential_decay"
 
     # Check for monotonic growth
     if np.all(np.diff(ydata) > 0):
-        return 'exponential_growth'
+        return "exponential_growth"
 
     # Check for bell-shaped curve (Gaussian candidate)
     peak_idx = np.argmax(ydata)
@@ -294,7 +296,7 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
         left_slope = np.mean(np.diff(ydata[:peak_idx]))
         right_slope = np.mean(np.diff(ydata[peak_idx:]))
         if left_slope > 0 and right_slope < 0:
-            return 'gaussian'
+            return "gaussian"
 
     # Check for sigmoid pattern
     y_range = np.max(ydata) - np.min(ydata)
@@ -302,11 +304,11 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
         normalized = (ydata - np.min(ydata)) / y_range
         # Check if data goes from ~0 to ~1
         if normalized[0] < 0.2 and normalized[-1] > 0.8:
-            return 'sigmoid'
+            return "sigmoid"
         if normalized[0] > 0.8 and normalized[-1] < 0.2:
-            return 'sigmoid_inv'
+            return "sigmoid_inv"
 
-    return 'unknown'
+    return "unknown"
 
 
 def estimate_p0_for_pattern(
@@ -368,7 +370,7 @@ def estimate_p0_for_pattern(
     detect_function_pattern : Detect pattern from data
     estimate_initial_parameters : Main parameter estimation function
     """
-    if pattern == 'linear':
+    if pattern == "linear":
         # Linear: y = a*x + b
         if n_params >= 2:
             # Simple linear regression
@@ -382,7 +384,7 @@ def estimate_p0_for_pattern(
             except np.linalg.LinAlgError:
                 pass
 
-    elif pattern == 'exponential_decay':
+    elif pattern == "exponential_decay":
         # y = a * exp(-b*x) + c
         y_max, y_min = np.max(ydata), np.min(ydata)
         a = y_max - y_min
@@ -394,13 +396,17 @@ def estimate_p0_for_pattern(
             x_half = xdata[half_idx]
             b = np.log(2) / x_half if x_half > 0 else 0.1
         except (IndexError, ValueError):
-            b = 1.0 / (np.max(xdata) - np.min(xdata)) if np.max(xdata) != np.min(xdata) else 0.1
+            b = (
+                1.0 / (np.max(xdata) - np.min(xdata))
+                if np.max(xdata) != np.min(xdata)
+                else 0.1
+            )
 
         p0 = [a, b, c][:n_params]
         p0.extend([1.0] * (n_params - len(p0)))
         return np.array(p0)
 
-    elif pattern == 'gaussian':
+    elif pattern == "gaussian":
         # y = amp * exp(-(x-mu)^2 / (2*sigma^2))
         amp = np.max(ydata) - np.min(ydata)
         mu = xdata[np.argmax(ydata)]
@@ -418,7 +424,7 @@ def estimate_p0_for_pattern(
         p0.extend([1.0] * (n_params - len(p0)))
         return np.array(p0)
 
-    elif pattern == 'sigmoid':
+    elif pattern == "sigmoid":
         # y = L / (1 + exp(-k*(x-x0))) + b
         y_min, y_max = np.min(ydata), np.max(ydata)
         L = y_max - y_min
@@ -432,11 +438,15 @@ def estimate_p0_for_pattern(
             x0 = np.mean(xdata)
 
         # Steepness
-        k = 1.0 / (np.max(xdata) - np.min(xdata)) if np.max(xdata) != np.min(xdata) else 1.0
+        k = (
+            1.0 / (np.max(xdata) - np.min(xdata))
+            if np.max(xdata) != np.min(xdata)
+            else 1.0
+        )
 
         p0 = [L, x0, k, b][:n_params]
         p0.extend([1.0] * (n_params - len(p0)))
         return np.array(p0)
 
     # Default: generic estimation
-    return estimate_initial_parameters(lambda x, *p: x, xdata, ydata, 'auto')
+    return estimate_initial_parameters(lambda x, *p: x, xdata, ydata, "auto")

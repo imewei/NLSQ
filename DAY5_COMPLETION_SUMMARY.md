@@ -150,7 +150,7 @@ popt, pcov = curve_fit(model, x, y)
 
 # Pattern 2: Enhanced result object
 result = curve_fit(model, x, y)
-print(f'R² = {result.r_squared:.4f}')
+print(f"R² = {result.r_squared:.4f}")
 result.plot()
 
 # Pattern 3: Can still unpack enhanced result
@@ -234,12 +234,12 @@ Pass rate: 97% (100% functional tests pass)
 result = curve_fit(exponential, x, y, p0=[10, 0.5, 2])
 
 # Access statistical properties
-print(f"R² = {result.r_squared:.6f}")          # 0.970790
+print(f"R² = {result.r_squared:.6f}")  # 0.970790
 print(f"Adjusted R² = {result.adj_r_squared:.6f}")  # 0.969878
-print(f"RMSE = {result.rmse:.6f}")              # 0.440064
-print(f"MAE = {result.mae:.6f}")                # 0.351040
-print(f"AIC = {result.aic:.2f}")                # -158.17
-print(f"BIC = {result.bic:.2f}")                # -150.35
+print(f"RMSE = {result.rmse:.6f}")  # 0.440064
+print(f"MAE = {result.mae:.6f}")  # 0.351040
+print(f"AIC = {result.aic:.2f}")  # -158.17
+print(f"BIC = {result.bic:.2f}")  # -150.35
 ```
 
 ### Confidence Intervals
@@ -272,7 +272,7 @@ result.plot(show_residuals=False)
 
 # Custom styling
 fig, ax = plt.subplots()
-result.plot(ax=ax, color='blue', alpha=0.5)
+result.plot(ax=ax, color="blue", alpha=0.5)
 ```
 
 ### Summary Report
@@ -380,10 +380,10 @@ def predictions(self):
 **Code Pattern**:
 ```python
 result = CurveFitResult(res)
-result['model'] = f
-result['xdata'] = xdata
-result['ydata'] = ydata
-result['pcov'] = _pcov
+result["model"] = f
+result["xdata"] = xdata
+result["ydata"] = ydata
+result["pcov"] = _pcov
 return result
 ```
 
@@ -417,7 +417,7 @@ return result
 **Code Pattern**:
 ```python
 result.plot(show_residuals=True)  # Quick visualization
-result.plot(ax=ax, color='blue', alpha=0.5)  # Custom styling
+result.plot(ax=ax, color="blue", alpha=0.5)  # Custom styling
 ```
 
 ---
@@ -438,6 +438,7 @@ r_squared = 1 - (ss_res / ss_tot)
 
 # Confidence intervals (manual, complex)
 from scipy import stats
+
 n = len(y)
 p = len(popt)
 dof = max(n - p, 1)
@@ -448,11 +449,11 @@ ci_upper = popt + t_val * perr
 
 # Plotting (manual, repetitive)
 fig, (ax1, ax2) = plt.subplots(2, 1)
-ax1.scatter(x, y, label='Data')
-ax1.plot(x, y_pred, label='Fit')
+ax1.scatter(x, y, label="Data")
+ax1.plot(x, y_pred, label="Fit")
 ax1.legend()
 ax2.scatter(x, y - y_pred)
-ax2.axhline(0, ls='--')
+ax2.axhline(0, ls="--")
 plt.show()
 ```
 
@@ -463,9 +464,9 @@ plt.show()
 result = curve_fit(model, x, y)
 
 # Statistical properties (instant access)
-print(f'R² = {result.r_squared:.4f}')
-print(f'RMSE = {result.rmse:.4f}')
-print(f'AIC = {result.aic:.2f}')
+print(f"R² = {result.r_squared:.4f}")
+print(f"RMSE = {result.rmse:.4f}")
+print(f"AIC = {result.aic:.2f}")
 
 # Confidence intervals (one method call)
 ci = result.confidence_intervals(alpha=0.95)

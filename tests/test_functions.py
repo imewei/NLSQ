@@ -32,11 +32,13 @@ class TestLinearFunction:
         ydata += np.random.normal(0, 0.5, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(linear, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(linear, xdata, ydata, p0="auto")
 
         # Check results
         assert np.abs(popt[0] - a_true) < 0.2, f"Slope mismatch: {popt[0]} vs {a_true}"
-        assert np.abs(popt[1] - b_true) < 1.0, f"Intercept mismatch: {popt[1]} vs {b_true}"
+        assert np.abs(popt[1] - b_true) < 1.0, (
+            f"Intercept mismatch: {popt[1]} vs {b_true}"
+        )
 
     def test_linear_manual_p0(self):
         """Test linear function with manual p0."""
@@ -77,10 +79,12 @@ class TestExponentialDecay:
         ydata += np.random.normal(0, 0.1, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(exponential_decay, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(exponential_decay, xdata, ydata, p0="auto")
 
         # Check results (allow 30% tolerance)
-        assert np.abs(popt[0] - a_true) / a_true < 0.3, f"Amplitude: {popt[0]} vs {a_true}"
+        assert np.abs(popt[0] - a_true) / a_true < 0.3, (
+            f"Amplitude: {popt[0]} vs {a_true}"
+        )
         assert np.abs(popt[1] - b_true) / b_true < 0.3, f"Rate: {popt[1]} vs {b_true}"
         assert np.abs(popt[2] - c_true) < 0.5, f"Offset: {popt[2]} vs {c_true}"
 
@@ -122,10 +126,12 @@ class TestExponentialGrowth:
         ydata += np.random.normal(0, 0.5, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(exponential_growth, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(exponential_growth, xdata, ydata, p0="auto")
 
         # Check results (growth can be sensitive, allow 50% tolerance)
-        assert np.abs(popt[0] - a_true) / a_true < 0.5, f"Amplitude: {popt[0]} vs {a_true}"
+        assert np.abs(popt[0] - a_true) / a_true < 0.5, (
+            f"Amplitude: {popt[0]} vs {a_true}"
+        )
         assert np.abs(popt[1] - b_true) / b_true < 0.5, f"Rate: {popt[1]} vs {b_true}"
 
 
@@ -145,7 +151,7 @@ class TestGaussian:
         ydata += np.random.normal(0, 0.2, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(gaussian, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(gaussian, xdata, ydata, p0="auto")
 
         # Check results
         assert np.abs(popt[0] - amp_true) < 2.0, f"Amplitude: {popt[0]} vs {amp_true}"
@@ -170,7 +176,7 @@ class TestGaussian:
         xdata = np.linspace(0, 20, 200)
         ydata = gaussian(xdata, 5, 12, 2)  # Peak at x=12
 
-        popt, pcov = curve_fit(gaussian, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(gaussian, xdata, ydata, p0="auto")
 
         # Peak position should be close to 12
         assert np.abs(popt[1] - 12) < 1.0
@@ -192,7 +198,7 @@ class TestSigmoid:
         ydata += np.random.normal(0, 0.3, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(sigmoid, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(sigmoid, xdata, ydata, p0="auto")
 
         # Check results
         assert np.abs(popt[0] - L_true) < 3.0, f"L: {popt[0]} vs {L_true}"
@@ -228,7 +234,7 @@ class TestPowerLaw:
         ydata += np.random.normal(0, 1.0, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(power_law, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(power_law, xdata, ydata, p0="auto")
 
         # Check results (power law can be sensitive)
         assert np.abs(popt[0] - a_true) < 2.0, f"Prefactor: {popt[0]} vs {a_true}"
@@ -250,7 +256,7 @@ class TestPowerLaw:
         xdata = np.linspace(1, 10, 20)
         ydata = power_law(xdata, 5, 1)  # Should be 5*x
 
-        popt, pcov = curve_fit(power_law, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(power_law, xdata, ydata, p0="auto")
 
         assert np.abs(popt[0] - 5) < 0.5
         assert np.abs(popt[1] - 1) < 0.2
@@ -272,7 +278,7 @@ class TestPolynomial:
         ydata += np.random.normal(0, 0.5, len(xdata))
 
         # Fit
-        popt, pcov = curve_fit(poly1, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(poly1, xdata, ydata, p0="auto")
 
         # Check
         assert np.abs(popt[0] - 2) < 0.3  # Coefficient of x
@@ -291,12 +297,12 @@ class TestPolynomial:
         ydata += np.random.normal(0, 0.3, len(xdata))
 
         # Fit
-        popt, pcov = curve_fit(poly2, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(poly2, xdata, ydata, p0="auto")
 
         # Check (allow larger tolerance)
-        assert np.abs(popt[0] - 1) < 0.5   # x² coefficient
-        assert np.abs(popt[1] + 2) < 1.0   # x coefficient
-        assert np.abs(popt[2] - 1) < 1.5   # Constant
+        assert np.abs(popt[0] - 1) < 0.5  # x² coefficient
+        assert np.abs(popt[1] + 2) < 1.0  # x coefficient
+        assert np.abs(popt[2] - 1) < 1.5  # Constant
 
     def test_polynomial_estimate_p0(self):
         """Test polynomial.estimate_p0() method."""
@@ -316,47 +322,56 @@ class TestPolynomial:
 
         assert poly2.__name__ == "polynomial_degree_2"
         assert "Polynomial of degree 2" in poly2.__doc__
-        assert hasattr(poly2, 'estimate_p0')
-        assert hasattr(poly2, 'bounds')
+        assert hasattr(poly2, "estimate_p0")
+        assert hasattr(poly2, "bounds")
 
 
 class TestFunctionProperties:
     """Test common properties across all functions."""
 
-    @pytest.mark.parametrize("func", [
-        linear,
-        exponential_decay,
-        exponential_growth,
-        gaussian,
-        sigmoid,
-        power_law,
-    ])
+    @pytest.mark.parametrize(
+        "func",
+        [
+            linear,
+            exponential_decay,
+            exponential_growth,
+            gaussian,
+            sigmoid,
+            power_law,
+        ],
+    )
     def test_has_estimate_p0(self, func):
         """Test that all functions have estimate_p0 method."""
-        assert hasattr(func, 'estimate_p0')
+        assert hasattr(func, "estimate_p0")
         assert callable(func.estimate_p0)
 
-    @pytest.mark.parametrize("func", [
-        linear,
-        exponential_decay,
-        exponential_growth,
-        gaussian,
-        sigmoid,
-        power_law,
-    ])
+    @pytest.mark.parametrize(
+        "func",
+        [
+            linear,
+            exponential_decay,
+            exponential_growth,
+            gaussian,
+            sigmoid,
+            power_law,
+        ],
+    )
     def test_has_bounds(self, func):
         """Test that all functions have bounds method."""
-        assert hasattr(func, 'bounds')
+        assert hasattr(func, "bounds")
         assert callable(func.bounds)
 
-    @pytest.mark.parametrize("func", [
-        linear,
-        exponential_decay,
-        exponential_growth,
-        gaussian,
-        sigmoid,
-        power_law,
-    ])
+    @pytest.mark.parametrize(
+        "func",
+        [
+            linear,
+            exponential_decay,
+            exponential_growth,
+            gaussian,
+            sigmoid,
+            power_law,
+        ],
+    )
     def test_bounds_structure(self, func):
         """Test that bounds return correct structure."""
         lb, ub = func.bounds()
@@ -366,7 +381,7 @@ class TestFunctionProperties:
         assert len(lb) == len(ub)
 
         # Check that lower < upper (or both infinite)
-        for lower, upper in zip(lb, ub):
+        for lower, upper in zip(lb, ub, strict=False):
             if np.isfinite(lower) and np.isfinite(upper):
                 assert lower <= upper
 
@@ -380,9 +395,19 @@ class TestIntegrationWithCurveFit:
 
         # Test each function
         functions_and_data = [
-            (linear, np.linspace(0, 10, 30), lambda x: 2*x + 3, [2, 3]),
-            (exponential_decay, np.linspace(0, 5, 50), lambda x: 3*np.exp(-0.5*x) + 1, [3, 0.5, 1]),
-            (gaussian, np.linspace(-3, 3, 100), lambda x: 2*np.exp(-(x-0)**2/(2*0.5**2)), [2, 0, 0.5]),
+            (linear, np.linspace(0, 10, 30), lambda x: 2 * x + 3, [2, 3]),
+            (
+                exponential_decay,
+                np.linspace(0, 5, 50),
+                lambda x: 3 * np.exp(-0.5 * x) + 1,
+                [3, 0.5, 1],
+            ),
+            (
+                gaussian,
+                np.linspace(-3, 3, 100),
+                lambda x: 2 * np.exp(-((x - 0) ** 2) / (2 * 0.5**2)),
+                [2, 0, 0.5],
+            ),
         ]
 
         for func, xdata, true_func, expected_params in functions_and_data:
@@ -390,7 +415,7 @@ class TestIntegrationWithCurveFit:
             ydata += np.random.normal(0, 0.05 * np.max(np.abs(ydata)), len(xdata))
 
             # Should not raise error
-            popt, pcov = curve_fit(func, xdata, ydata, p0='auto')
+            popt, pcov = curve_fit(func, xdata, ydata, p0="auto")
 
             # Should return reasonable results
             assert popt.shape == (len(expected_params),)
@@ -406,11 +431,7 @@ class TestIntegrationWithCurveFit:
         bounds = exponential_decay.bounds()
 
         popt, pcov = curve_fit(
-            exponential_decay,
-            xdata,
-            ydata,
-            p0='auto',
-            bounds=bounds
+            exponential_decay, xdata, ydata, p0="auto", bounds=bounds
         )
 
         # Should work without errors
@@ -426,7 +447,7 @@ class TestEdgeCases:
         ydata = np.array([5, 5, 5, 5, 5])
 
         # Should still work (horizontal line)
-        popt, pcov = curve_fit(linear, xdata, ydata, p0='auto')
+        popt, pcov = curve_fit(linear, xdata, ydata, p0="auto")
 
         assert np.abs(popt[0]) < 0.1  # Slope near 0
         assert np.abs(popt[1] - 5) < 0.1  # Intercept near 5

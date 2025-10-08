@@ -30,21 +30,21 @@ def demo_linear():
     y = y_true + np.random.normal(0, 1.0, len(x))
 
     # Fit without specifying p0 - automatic estimation!
-    popt, pcov = curve_fit(functions.linear, x, y, p0='auto')
+    popt, pcov = curve_fit(functions.linear, x, y, p0="auto")
 
     print(f"\n✓ Fitted: slope={popt[0]:.2f}, intercept={popt[1]:.2f}")
-    print(f"  True:   slope=2.50, intercept=3.00")
+    print("  True:   slope=2.50, intercept=3.00")
     print(f"  Error:  {np.abs(popt[0] - 2.5):.2f}, {np.abs(popt[1] - 3.0):.2f}")
 
     # Plot
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
-    plt.scatter(x, y, alpha=0.5, label='Data')
-    plt.plot(x, y_true, 'g--', label='True')
-    plt.plot(x, functions.linear(x, *popt), 'r-', label='Fitted')
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.title('Linear: y = ax + b')
+    plt.scatter(x, y, alpha=0.5, label="Data")
+    plt.plot(x, y_true, "g--", label="True")
+    plt.plot(x, functions.linear(x, *popt), "r-", label="Fitted")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("Linear: y = ax + b")
     plt.legend()
     plt.grid(True, alpha=0.3)
     print("\n")
@@ -64,29 +64,31 @@ def demo_exponential_decay():
     y = y_true + np.random.normal(0, 2.0, len(x))
 
     # Fit with automatic p0
-    popt, pcov = curve_fit(functions.exponential_decay, x, y, p0='auto')
+    popt, pcov = curve_fit(functions.exponential_decay, x, y, p0="auto")
 
     # Calculate half-life
     half_life_fitted = np.log(2) / popt[1]
     half_life_true = np.log(2) / b_true
 
-    print(f"\n✓ Fitted: amplitude={popt[0]:.1f}, rate={popt[1]:.3f}, offset={popt[2]:.1f}")
+    print(
+        f"\n✓ Fitted: amplitude={popt[0]:.1f}, rate={popt[1]:.3f}, offset={popt[2]:.1f}"
+    )
     print(f"  True:   amplitude={a_true:.1f}, rate={b_true:.3f}, offset={c_true:.1f}")
     print(f"\n  Half-life (fitted): {half_life_fitted:.2f}")
     print(f"  Half-life (true):   {half_life_true:.2f}")
 
     # Plot
     plt.subplot(1, 2, 2)
-    plt.scatter(x, y, alpha=0.5, label='Data')
-    plt.plot(x, y_true, 'g--', label='True')
-    plt.plot(x, functions.exponential_decay(x, *popt), 'r-', label='Fitted')
-    plt.xlabel('Time')
-    plt.ylabel('Activity')
-    plt.title('Exponential Decay')
+    plt.scatter(x, y, alpha=0.5, label="Data")
+    plt.plot(x, y_true, "g--", label="True")
+    plt.plot(x, functions.exponential_decay(x, *popt), "r-", label="Fitted")
+    plt.xlabel("Time")
+    plt.ylabel("Activity")
+    plt.title("Exponential Decay")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('/tmp/nlsq_demo_1.png', dpi=100)
+    plt.savefig("/tmp/nlsq_demo_1.png", dpi=100)
     plt.close()
 
     print("  Plot saved to /tmp/nlsq_demo_1.png\n")
@@ -102,31 +104,37 @@ def demo_gaussian():
     np.random.seed(42)
     x = np.linspace(0, 20, 300)
     amp_true, mu_true, sigma_true = 50.0, 12.0, 1.5
-    y_true = amp_true * np.exp(-(x - mu_true)**2 / (2 * sigma_true**2))
+    y_true = amp_true * np.exp(-((x - mu_true) ** 2) / (2 * sigma_true**2))
     y = y_true + np.random.normal(0, 1.0, len(x))
 
     # Fit with automatic p0
-    popt, pcov = curve_fit(functions.gaussian, x, y, p0='auto')
+    popt, pcov = curve_fit(functions.gaussian, x, y, p0="auto")
 
     # Calculate FWHM (Full Width at Half Maximum)
     fwhm_fitted = 2.355 * popt[2]
     fwhm_true = 2.355 * sigma_true
 
-    print(f"\n✓ Fitted: amplitude={popt[0]:.1f}, center={popt[1]:.2f}, width={popt[2]:.2f}")
-    print(f"  True:   amplitude={amp_true:.1f}, center={mu_true:.2f}, width={sigma_true:.2f}")
+    print(
+        f"\n✓ Fitted: amplitude={popt[0]:.1f}, center={popt[1]:.2f}, width={popt[2]:.2f}"
+    )
+    print(
+        f"  True:   amplitude={amp_true:.1f}, center={mu_true:.2f}, width={sigma_true:.2f}"
+    )
     print(f"\n  FWHM (fitted): {fwhm_fitted:.2f}")
     print(f"  FWHM (true):   {fwhm_true:.2f}")
 
     # Plot
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
-    plt.scatter(x, y, alpha=0.3, s=10, label='Data')
-    plt.plot(x, y_true, 'g--', linewidth=2, label='True')
-    plt.plot(x, functions.gaussian(x, *popt), 'r-', linewidth=2, label='Fitted')
-    plt.axvline(popt[1], color='r', linestyle=':', alpha=0.5, label=f'Peak at {popt[1]:.1f}')
-    plt.xlabel('Wavelength (nm)')
-    plt.ylabel('Intensity')
-    plt.title('Gaussian Peak')
+    plt.scatter(x, y, alpha=0.3, s=10, label="Data")
+    plt.plot(x, y_true, "g--", linewidth=2, label="True")
+    plt.plot(x, functions.gaussian(x, *popt), "r-", linewidth=2, label="Fitted")
+    plt.axvline(
+        popt[1], color="r", linestyle=":", alpha=0.5, label=f"Peak at {popt[1]:.1f}"
+    )
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Intensity")
+    plt.title("Gaussian Peak")
     plt.legend()
     plt.grid(True, alpha=0.3)
     print("\n")
@@ -146,26 +154,32 @@ def demo_sigmoid():
     y = y_true + np.random.normal(0, 3.0, len(x))
 
     # Fit with automatic p0
-    popt, pcov = curve_fit(functions.sigmoid, x, y, p0='auto')
+    popt, pcov = curve_fit(functions.sigmoid, x, y, p0="auto")
 
-    print(f"\n✓ Fitted: max={popt[0]:.1f}, EC50={popt[1]:.2f}, steepness={popt[2]:.2f}, baseline={popt[3]:.1f}")
-    print(f"  True:   max={L_true:.1f}, EC50={x0_true:.2f}, steepness={k_true:.2f}, baseline={b_true:.1f}")
+    print(
+        f"\n✓ Fitted: max={popt[0]:.1f}, EC50={popt[1]:.2f}, steepness={popt[2]:.2f}, baseline={popt[3]:.1f}"
+    )
+    print(
+        f"  True:   max={L_true:.1f}, EC50={x0_true:.2f}, steepness={k_true:.2f}, baseline={b_true:.1f}"
+    )
     print(f"\n  EC50 (half-maximal effective concentration): {popt[1]:.2f}")
 
     # Plot
     plt.subplot(1, 2, 2)
-    plt.scatter(x, y, alpha=0.5, label='Data')
-    plt.plot(x, y_true, 'g--', label='True')
-    plt.plot(x, functions.sigmoid(x, *popt), 'r-', label='Fitted')
-    plt.axhline(popt[0]/2 + popt[3], color='gray', linestyle=':', alpha=0.5)
-    plt.axvline(popt[1], color='r', linestyle=':', alpha=0.5, label=f'EC50={popt[1]:.1f}')
-    plt.xlabel('Dose (concentration)')
-    plt.ylabel('Response')
-    plt.title('Sigmoid (Dose-Response)')
+    plt.scatter(x, y, alpha=0.5, label="Data")
+    plt.plot(x, y_true, "g--", label="True")
+    plt.plot(x, functions.sigmoid(x, *popt), "r-", label="Fitted")
+    plt.axhline(popt[0] / 2 + popt[3], color="gray", linestyle=":", alpha=0.5)
+    plt.axvline(
+        popt[1], color="r", linestyle=":", alpha=0.5, label=f"EC50={popt[1]:.1f}"
+    )
+    plt.xlabel("Dose (concentration)")
+    plt.ylabel("Response")
+    plt.title("Sigmoid (Dose-Response)")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('/tmp/nlsq_demo_2.png', dpi=100)
+    plt.savefig("/tmp/nlsq_demo_2.png", dpi=100)
     plt.close()
 
     print("  Plot saved to /tmp/nlsq_demo_2.png\n")
@@ -186,7 +200,7 @@ def demo_power_law():
     y = y_true + np.random.normal(0, 0.5 * np.sqrt(y_true), len(x))
 
     # Fit with automatic p0
-    popt, pcov = curve_fit(functions.power_law, x, y, p0='auto')
+    popt, pcov = curve_fit(functions.power_law, x, y, p0="auto")
 
     print(f"\n✓ Fitted: prefactor={popt[0]:.2f}, exponent={popt[1]:.3f}")
     print(f"  True:   prefactor={a_true:.2f}, exponent={b_true:.3f}")
@@ -195,12 +209,12 @@ def demo_power_law():
     # Plot
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
-    plt.scatter(x, y, alpha=0.5, label='Data')
-    plt.plot(x, y_true, 'g--', label='True')
-    plt.plot(x, functions.power_law(x, *popt), 'r-', label='Fitted')
-    plt.xlabel('Body Mass (kg)')
-    plt.ylabel('Metabolic Rate')
-    plt.title('Power Law: y = ax^b')
+    plt.scatter(x, y, alpha=0.5, label="Data")
+    plt.plot(x, y_true, "g--", label="True")
+    plt.plot(x, functions.power_law(x, *popt), "r-", label="Fitted")
+    plt.xlabel("Body Mass (kg)")
+    plt.ylabel("Metabolic Rate")
+    plt.title("Power Law: y = ax^b")
     plt.legend()
     plt.grid(True, alpha=0.3)
     print("\n")
@@ -224,10 +238,10 @@ def demo_polynomial():
     y = y_true + np.random.normal(0, 1.0, len(x))
 
     # Fit with automatic p0
-    popt, pcov = curve_fit(quadratic, x, y, p0='auto')
+    popt, pcov = curve_fit(quadratic, x, y, p0="auto")
 
     print(f"\n✓ Fitted: coeffs = [{popt[0]:.2f}, {popt[1]:.2f}, {popt[2]:.2f}]")
-    print(f"  True:   coeffs = [0.50, -2.00, 3.00]")
+    print("  True:   coeffs = [0.50, -2.00, 3.00]")
     print(f"\n  Polynomial: y = {popt[0]:.2f}x² + {popt[1]:.2f}x + {popt[2]:.2f}")
 
     # Find vertex
@@ -237,17 +251,17 @@ def demo_polynomial():
 
     # Plot
     plt.subplot(1, 2, 2)
-    plt.scatter(x, y, alpha=0.5, label='Data')
-    plt.plot(x, y_true, 'g--', label='True')
-    plt.plot(x, quadratic(x, *popt), 'r-', label='Fitted')
-    plt.plot(vertex_x, vertex_y, 'ro', markersize=8, label=f'Vertex')
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.title('Quadratic: y = ax² + bx + c')
+    plt.scatter(x, y, alpha=0.5, label="Data")
+    plt.plot(x, y_true, "g--", label="True")
+    plt.plot(x, quadratic(x, *popt), "r-", label="Fitted")
+    plt.plot(vertex_x, vertex_y, "ro", markersize=8, label="Vertex")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("Quadratic: y = ax² + bx + c")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('/tmp/nlsq_demo_3.png', dpi=100)
+    plt.savefig("/tmp/nlsq_demo_3.png", dpi=100)
     plt.close()
 
     print("  Plot saved to /tmp/nlsq_demo_3.png\n")
@@ -270,8 +284,9 @@ def demo_comparison():
     start = time.time()
     popt_manual, pcov_manual = curve_fit(
         functions.exponential_decay,
-        x, y,
-        p0=[5, 0.3, 2]  # User has to guess these!
+        x,
+        y,
+        p0=[5, 0.3, 2],  # User has to guess these!
     )
     time_manual = time.time() - start
 
@@ -279,17 +294,18 @@ def demo_comparison():
     start = time.time()
     popt_auto, pcov_auto = curve_fit(
         functions.exponential_decay,
-        x, y,
-        p0='auto'  # Automatic estimation!
+        x,
+        y,
+        p0="auto",  # Automatic estimation!
     )
     time_auto = time.time() - start
 
     print(f"\n  Manual p0:   {popt_manual}")
     print(f"  Auto p0:     {popt_auto}")
     print(f"\n  Difference:  {np.max(np.abs(popt_manual - popt_auto)):.6f}")
-    print(f"\n  Time (manual): {time_manual*1000:.2f}ms")
-    print(f"  Time (auto):   {time_auto*1000:.2f}ms")
-    print(f"\n  ✓ Auto p0 is just as accurate but saves user effort!\n")
+    print(f"\n  Time (manual): {time_manual * 1000:.2f}ms")
+    print(f"  Time (auto):   {time_auto * 1000:.2f}ms")
+    print("\n  ✓ Auto p0 is just as accurate but saves user effort!\n")
 
 
 def main():

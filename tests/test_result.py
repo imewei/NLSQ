@@ -10,7 +10,6 @@ import pytest
 from nlsq import curve_fit
 from nlsq.result import CurveFitResult
 
-
 # ============================================================================
 # Test Fixtures
 # ============================================================================
@@ -212,9 +211,10 @@ def test_confidence_intervals_no_covariance():
     """Test confidence intervals when covariance is not available."""
     # Create result without covariance
     from nlsq._optimize import OptimizeResult
+
     result = CurveFitResult(OptimizeResult())
-    result['popt'] = np.array([1.0, 2.0, 3.0])
-    result['ydata'] = np.random.randn(100)
+    result["popt"] = np.array([1.0, 2.0, 3.0])
+    result["ydata"] = np.random.randn(100)
 
     # Should raise AttributeError or similar
     with pytest.raises((AttributeError, KeyError)):
@@ -284,7 +284,7 @@ def test_plot_with_residuals(simple_result):
 
     # Should create plot with residuals
     simple_result.plot(show_residuals=True)
-    plt.close('all')
+    plt.close("all")
 
 
 def test_plot_no_matplotlib():
@@ -363,7 +363,9 @@ def test_r_squared_constant_data():
         r2 = result.r_squared
 
         # Should warn about undefined R²
-        assert any("Total sum of squares is zero" in str(warning.message) for warning in w)
+        assert any(
+            "Total sum of squares is zero" in str(warning.message) for warning in w
+        )
         # R² should be NaN
         assert np.isnan(r2)
 
@@ -392,9 +394,9 @@ def test_missing_model_in_result():
     from nlsq._optimize import OptimizeResult
 
     result = CurveFitResult(OptimizeResult())
-    result['popt'] = np.array([1.0, 2.0, 3.0])
-    result['xdata'] = np.array([1, 2, 3])
-    result['ydata'] = np.array([2, 4, 6])
+    result["popt"] = np.array([1.0, 2.0, 3.0])
+    result["xdata"] = np.array([1, 2, 3])
+    result["ydata"] = np.array([2, 4, 6])
     # Note: 'model' is not set
 
     # Should raise error when trying to compute predictions
@@ -404,15 +406,16 @@ def test_missing_model_in_result():
 
 def test_missing_data_in_result():
     """Test behavior when data is not stored in result."""
-    from nlsq._optimize import OptimizeResult
     import jax.numpy as jnp
+
+    from nlsq._optimize import OptimizeResult
 
     def model(x, a):
         return a * x
 
     result = CurveFitResult(OptimizeResult())
-    result['popt'] = np.array([2.0])
-    result['model'] = model
+    result["popt"] = np.array([2.0])
+    result["model"] = model
     # Note: 'xdata' and 'ydata' are not set
 
     # Should raise error when trying to compute predictions
@@ -468,7 +471,7 @@ def test_workflow_plotting(simple_data, simple_model):
 
     # Plot
     result.plot(show_residuals=True)
-    plt.close('all')
+    plt.close("all")
 
 
 def test_workflow_model_comparison(simple_data):
@@ -508,7 +511,7 @@ def test_predictions_computed_once(simple_result):
 
     # Clear the model to ensure it's not recomputed
     original_model = simple_result.model
-    simple_result['model'] = None
+    simple_result["model"] = None
 
     # Access again - should still work (cached)
     pred2 = simple_result.predictions
@@ -517,7 +520,7 @@ def test_predictions_computed_once(simple_result):
     assert pred1 is pred2
 
     # Restore model
-    simple_result['model'] = original_model
+    simple_result["model"] = original_model
 
 
 def test_residuals_computed_once(simple_result):
@@ -527,7 +530,7 @@ def test_residuals_computed_once(simple_result):
 
     # Clear ydata to ensure it's not recomputed
     original_ydata = simple_result.ydata
-    simple_result['ydata'] = None
+    simple_result["ydata"] = None
 
     # Access again - should still work (cached)
     res2 = simple_result.residuals
@@ -536,4 +539,4 @@ def test_residuals_computed_once(simple_result):
     assert res1 is res2
 
     # Restore ydata
-    simple_result['ydata'] = original_ydata
+    simple_result["ydata"] = original_ydata

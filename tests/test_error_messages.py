@@ -34,7 +34,10 @@ class TestEnhancedErrorMessages:
 
         # Check recommendations are actionable
         recommendations_str = " ".join(error.recommendations)
-        assert "max_nfev" in recommendations_str or "increase" in recommendations_str.lower()
+        assert (
+            "max_nfev" in recommendations_str
+            or "increase" in recommendations_str.lower()
+        )
 
     def test_error_message_gradient_tolerance(self):
         """Test that gradient information is included in error diagnostics."""
@@ -77,7 +80,9 @@ class TestEnhancedErrorMessages:
         error = exc_info.value
 
         # Check diagnostics are populated
-        assert "Function evaluations" in error.diagnostics or "nfev" in str(error).lower()
+        assert (
+            "Function evaluations" in error.diagnostics or "nfev" in str(error).lower()
+        )
 
     def test_error_message_recommendations(self):
         """Test that recommendations are helpful and actionable."""
@@ -184,7 +189,9 @@ class TestEnhancedErrorMessages:
         error_msg = str(exc_info.value)
 
         # Should include documentation link
-        assert "nlsq.readthedocs.io" in error_msg or "troubleshooting" in error_msg.lower()
+        assert (
+            "nlsq.readthedocs.io" in error_msg or "troubleshooting" in error_msg.lower()
+        )
 
 
 class TestErrorMessageContent:

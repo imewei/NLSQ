@@ -21,10 +21,9 @@ except ImportError:
     __version__ = "0.0.0+unknown"
 
 # Main API imports
-from nlsq._optimize import OptimizeResult, OptimizeWarning
-
 # Common functions library (Sprint 4 - User Experience)
 from nlsq import functions
+from nlsq._optimize import OptimizeResult, OptimizeWarning
 
 # Stability and optimization imports
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm

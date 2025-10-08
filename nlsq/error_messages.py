@@ -38,8 +38,9 @@ nlsq.minpack.curve_fit : Main curve fitting function
 nlsq.parameter_estimation : Automatic parameter estimation
 """
 
-import numpy as np
 from typing import Any, Dict, List, Tuple
+
+import numpy as np
 
 
 class OptimizationDiagnostics:
@@ -64,15 +65,15 @@ class OptimizationDiagnostics:
 
     def __init__(self, result):
         self.result = result
-        self.cost = getattr(result, 'cost', None)
-        self.gradient_norm = getattr(result, 'grad', None)
-        self.nfev = getattr(result, 'nfev', 0)
-        self.nit = getattr(result, 'nit', 0)
+        self.cost = getattr(result, "cost", None)
+        self.gradient_norm = getattr(result, "grad", None)
+        self.nfev = getattr(result, "nfev", 0)
+        self.nit = getattr(result, "nit", 0)
 
 
 def analyze_failure(
     result, gtol: float, ftol: float, xtol: float, max_nfev: int
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """Analyze why optimization failed and generate recommendations.
 
     Parameters
@@ -99,7 +100,7 @@ def analyze_failure(
     recommendations = []
 
     # Check gradient convergence
-    if hasattr(result, 'grad') and result.grad is not None:
+    if hasattr(result, "grad") and result.grad is not None:
         grad = np.asarray(result.grad)
         grad_norm = np.linalg.norm(grad, ord=np.inf)
         if grad_norm > gtol:
@@ -113,14 +114,14 @@ def analyze_failure(
             recommendations.append("✓ Consider parameter scaling with x_scale")
 
     # Check max iterations
-    if hasattr(result, 'nfev') and result.nfev >= max_nfev:
+    if hasattr(result, "nfev") and result.nfev >= max_nfev:
         reasons.append(f"Reached maximum function evaluations ({max_nfev})")
         recommendations.append(f"✓ Increase iteration limit: max_nfev={max_nfev * 2}")
         recommendations.append("✓ Provide better initial guess p0")
         recommendations.append("✓ Try different optimization method (trf/dogbox/lm)")
 
     # Check for numerical issues
-    if hasattr(result, 'x') and result.x is not None:
+    if hasattr(result, "x") and result.x is not None:
         x = np.asarray(result.x)
         if not np.all(np.isfinite(x)):
             reasons.append("NaN or Inf in solution parameters")
@@ -130,7 +131,7 @@ def analyze_failure(
             recommendations.append("✓ Check if model function is well-defined")
 
     # Check cost function value
-    if hasattr(result, 'cost') and result.cost is not None:
+    if hasattr(result, "cost") and result.cost is not None:
         if not np.isfinite(result.cost):
             reasons.append("Cost function is NaN or Inf")
             recommendations.append("⚠ Model evaluation failed")
@@ -150,7 +151,7 @@ def analyze_failure(
 
 
 def format_error_message(
-    reasons: List[str], recommendations: List[str], diagnostics: Dict[str, Any]
+    reasons: list[str], recommendations: list[str], diagnostics: dict[str, Any]
 ) -> str:
     """Format comprehensive error message.
 
@@ -263,23 +264,23 @@ class OptimizationError(RuntimeError):
 
         # Collect diagnostics
         diagnostics = {}
-        if hasattr(result, 'cost') and result.cost is not None:
-            diagnostics['Final cost'] = f"{result.cost:.6e}"
+        if hasattr(result, "cost") and result.cost is not None:
+            diagnostics["Final cost"] = f"{result.cost:.6e}"
 
-        if hasattr(result, 'grad') and result.grad is not None:
+        if hasattr(result, "grad") and result.grad is not None:
             grad = np.asarray(result.grad)
             grad_norm = np.linalg.norm(grad, ord=np.inf)
-            diagnostics['Gradient norm'] = f"{grad_norm:.6e}"
-            diagnostics['Gradient tolerance'] = f"{gtol:.6e}"
+            diagnostics["Gradient norm"] = f"{grad_norm:.6e}"
+            diagnostics["Gradient tolerance"] = f"{gtol:.6e}"
 
-        if hasattr(result, 'nfev'):
-            diagnostics['Function evaluations'] = f"{result.nfev} / {max_nfev}"
+        if hasattr(result, "nfev"):
+            diagnostics["Function evaluations"] = f"{result.nfev} / {max_nfev}"
 
-        if hasattr(result, 'nit'):
-            diagnostics['Iterations'] = result.nit
+        if hasattr(result, "nit"):
+            diagnostics["Iterations"] = result.nit
 
-        if hasattr(result, 'message') and result.message:
-            diagnostics['Status'] = result.message
+        if hasattr(result, "message") and result.message:
+            diagnostics["Status"] = result.message
 
         # Format message
         msg = format_error_message(reasons, recommendations, diagnostics)
@@ -300,7 +301,7 @@ class ConvergenceWarning(UserWarning):
     pass
 
 
-def check_convergence_quality(result, pcov) -> List[str]:
+def check_convergence_quality(result, pcov) -> list[str]:
     """Check quality of converged solution and generate warnings.
 
     Parameters
@@ -329,8 +330,8 @@ def check_convergence_quality(result, pcov) -> List[str]:
         )
 
     # Check for parameters at bounds
-    if hasattr(result, 'x') and hasattr(result, 'active_mask'):
-        active_mask = getattr(result, 'active_mask', None)
+    if hasattr(result, "x") and hasattr(result, "active_mask"):
+        active_mask = getattr(result, "active_mask", None)
         if active_mask is not None:
             at_bounds = np.any(active_mask != 0)
             if at_bounds:
@@ -340,7 +341,7 @@ def check_convergence_quality(result, pcov) -> List[str]:
                 )
 
     # Check residuals if available
-    if hasattr(result, 'fun') and result.fun is not None:
+    if hasattr(result, "fun") and result.fun is not None:
         residuals = np.asarray(result.fun)
         if np.any(np.abs(residuals) > 1e3):
             warnings.append(

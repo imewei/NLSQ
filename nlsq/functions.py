@@ -32,14 +32,16 @@ nlsq.parameter_estimation : Automatic parameter estimation
 nlsq.minpack.curve_fit : Main curve fitting function
 """
 
+from collections.abc import Callable
+from typing import List, Tuple, Union
+
 import jax.numpy as jnp
 import numpy as np
-from typing import Tuple, Callable, List, Union
 
 # Type aliases for clarity
-ArrayLike = Union[np.ndarray, jnp.ndarray, List[float], float]
-ParameterList = List[float]
-BoundsTuple = Tuple[List[float], List[float]]
+ArrayLike = Union[np.ndarray, jnp.ndarray, list[float], float]
+ParameterList = list[float]
+BoundsTuple = tuple[list[float], list[float]]
 
 
 # ============================================================================
@@ -172,7 +174,9 @@ def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     return a * jnp.exp(-b * x) + c
 
 
-def estimate_p0_exponential_decay(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
+def estimate_p0_exponential_decay(
+    xdata: np.ndarray, ydata: np.ndarray
+) -> ParameterList:
     """Estimate initial parameters for exponential decay.
 
     Strategy:
@@ -282,7 +286,9 @@ def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     return a * jnp.exp(b * x) + c
 
 
-def estimate_p0_exponential_growth(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
+def estimate_p0_exponential_growth(
+    xdata: np.ndarray, ydata: np.ndarray
+) -> ParameterList:
     """Estimate initial parameters for exponential growth.
 
     Similar to decay but inverted.
@@ -306,7 +312,7 @@ def estimate_p0_exponential_growth(xdata: np.ndarray, ydata: np.ndarray) -> Para
     y_max = np.max(ydata)
 
     a = y_min  # Initial value
-    c = 0.0    # Offset
+    c = 0.0  # Offset
 
     # Estimate growth rate
     y_range = y_max - y_min
@@ -373,7 +379,7 @@ def gaussian(x: ArrayLike, amp: float, mu: float, sigma: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(gaussian, x, y, p0='auto')
     >>> print(f"Peak at {popt[1]:.2f}, FWHM = {2.355*popt[2]:.2f}")
     """
-    return amp * jnp.exp(-(x - mu)**2 / (2 * sigma**2))
+    return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -652,13 +658,14 @@ def polynomial(degree: int) -> Callable:
     >>> popt, pcov = curve_fit(quadratic, x, y, p0='auto')
     >>> print(f"Coefficients: {popt}")
     """
+
     def poly(x, *coeffs):
         """Polynomial function with coefficients from highest to lowest degree."""
         if len(coeffs) != degree + 1:
             raise ValueError(f"Expected {degree + 1} coefficients, got {len(coeffs)}")
         return jnp.polyval(jnp.array(coeffs), x)
 
-    def estimate_p0_poly(xdata: np.ndarray, ydata: np.ndarray) -> List[float]:
+    def estimate_p0_poly(xdata: np.ndarray, ydata: np.ndarray) -> list[float]:
         """Estimate polynomial coefficients using least squares."""
         xdata = np.asarray(xdata)
         ydata = np.asarray(ydata)
@@ -671,7 +678,7 @@ def polynomial(degree: int) -> Callable:
             p0 = [0.0] * degree + [float(np.mean(ydata))]
             return p0
 
-    def bounds_poly() -> Tuple[List[float], List[float]]:
+    def bounds_poly() -> tuple[list[float], list[float]]:
         """Return unbounded limits for polynomial coefficients."""
         return ([-np.inf] * (degree + 1), [np.inf] * (degree + 1))
 
@@ -679,7 +686,7 @@ def polynomial(degree: int) -> Callable:
     poly.estimate_p0 = estimate_p0_poly
     poly.bounds = bounds_poly
     poly.__name__ = f"polynomial_degree_{degree}"
-    poly.__doc__ = f"""Polynomial of degree {degree}: y = c0*x^{degree} + c1*x^{degree-1} + ... + c{degree}
+    poly.__doc__ = f"""Polynomial of degree {degree}: y = c0*x^{degree} + c1*x^{degree - 1} + ... + c{degree}
 
     Parameters
     ----------
@@ -703,11 +710,11 @@ def polynomial(degree: int) -> Callable:
 
 
 __all__ = [
-    'linear',
-    'exponential_decay',
-    'exponential_growth',
-    'gaussian',
-    'sigmoid',
-    'power_law',
-    'polynomial',
+    "exponential_decay",
+    "exponential_growth",
+    "gaussian",
+    "linear",
+    "polynomial",
+    "power_law",
+    "sigmoid",
 ]

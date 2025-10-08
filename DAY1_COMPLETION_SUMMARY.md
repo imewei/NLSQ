@@ -80,7 +80,7 @@ For more help, see: https://nlsq.readthedocs.io/troubleshooting
 curve_fit(exponential, x, y, p0=[3, 0.5, 1])  # Manual guess
 
 # After: Automatic estimation with p0='auto'!
-curve_fit(exponential, x, y, p0='auto')  # Automatic estimation
+curve_fit(exponential, x, y, p0="auto")  # Automatic estimation
 
 # Backward compatible: p0=None still uses default [1.0, 1.0, ...]
 curve_fit(exponential, x, y)  # Uses default p0 (backward compatible)
@@ -171,8 +171,10 @@ from nlsq import curve_fit
 import jax.numpy as jnp
 import numpy as np
 
+
 def difficult_func(x, a, b):
     return a * jnp.exp(b * x**2)
+
 
 x = np.linspace(0, 1, 10)
 y = difficult_func(x, 1, -5)
@@ -195,9 +197,11 @@ from nlsq import curve_fit
 import jax.numpy as jnp
 import numpy as np
 
+
 # Define model (JAX-compatible)
 def exponential_decay(x, amplitude, rate, offset):
     return amplitude * jnp.exp(-rate * x) + offset
+
 
 # Generate data
 x = np.linspace(0, 5, 50)
@@ -207,7 +211,7 @@ y = 3 * np.exp(-0.5 * x) + 1 + noise
 popt, pcov = curve_fit(exponential_decay, x, y)
 
 # Option 2: Explicit 'auto'
-popt, pcov = curve_fit(exponential_decay, x, y, p0='auto')
+popt, pcov = curve_fit(exponential_decay, x, y, p0="auto")
 
 # Both work! Auto p0 estimates:
 # - amplitude ≈ 3 (from y_range)

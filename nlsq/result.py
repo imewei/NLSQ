@@ -157,17 +157,16 @@ class CurveFitResult(OptimizeResult):
             Model predictions: f(xdata, *popt)
         """
         if self._predictions_cache is None:
-            if hasattr(self, 'model') and hasattr(self, 'xdata'):
+            if hasattr(self, "model") and hasattr(self, "xdata"):
                 self._predictions_cache = np.array(self.model(self.xdata, *self.popt))
+            # Fallback: use fun (residuals) to back-calculate
+            elif hasattr(self, "ydata") and hasattr(self, "fun"):
+                self._predictions_cache = np.array(self.ydata) - np.array(self.fun)
             else:
-                # Fallback: use fun (residuals) to back-calculate
-                if hasattr(self, 'ydata') and hasattr(self, 'fun'):
-                    self._predictions_cache = np.array(self.ydata) - np.array(self.fun)
-                else:
-                    raise AttributeError(
-                        "Cannot compute predictions: model and xdata not available. "
-                        "This may occur if result was created without these attributes."
-                    )
+                raise AttributeError(
+                    "Cannot compute predictions: model and xdata not available. "
+                    "This may occur if result was created without these attributes."
+                )
         return self._predictions_cache
 
     @property
@@ -185,10 +184,10 @@ class CurveFitResult(OptimizeResult):
         with no systematic patterns.
         """
         if self._residuals_cache is None:
-            if hasattr(self, 'fun'):
+            if hasattr(self, "fun"):
                 # fun is the residual vector from optimization
                 self._residuals_cache = np.array(self.fun)
-            elif hasattr(self, 'ydata'):
+            elif hasattr(self, "ydata"):
                 # Calculate from predictions
                 self._residuals_cache = np.array(self.ydata) - self.predictions
             else:
@@ -217,11 +216,11 @@ class CurveFitResult(OptimizeResult):
         - R² = 0: Model no better than mean
         - R² < 0: Model worse than mean (overfitting or poor model)
         """
-        if not hasattr(self, 'ydata'):
+        if not hasattr(self, "ydata"):
             raise AttributeError("Cannot compute R²: ydata not available")
 
         y = np.array(self.ydata)
-        ss_res = np.sum(self.residuals ** 2)
+        ss_res = np.sum(self.residuals**2)
         ss_tot = np.sum((y - np.mean(y)) ** 2)
 
         if ss_tot == 0:
@@ -248,7 +247,7 @@ class CurveFitResult(OptimizeResult):
         Adjusted R² penalizes adding parameters and is better for comparing
         models with different numbers of parameters.
         """
-        if not hasattr(self, 'ydata'):
+        if not hasattr(self, "ydata"):
             raise AttributeError("Cannot compute adjusted R²: ydata not available")
 
         n = len(self.ydata)
@@ -275,7 +274,7 @@ class CurveFitResult(OptimizeResult):
         RMSE has the same units as ydata and provides intuitive error measure.
         Lower values indicate better fit.
         """
-        return np.sqrt(np.mean(self.residuals ** 2))
+        return np.sqrt(np.mean(self.residuals**2))
 
     @property
     def mae(self):
@@ -310,12 +309,12 @@ class CurveFitResult(OptimizeResult):
 
         Used for model selection. Penalizes model complexity.
         """
-        if not hasattr(self, 'ydata'):
+        if not hasattr(self, "ydata"):
             raise AttributeError("Cannot compute AIC: ydata not available")
 
         n = len(self.ydata)
         k = len(self.popt)
-        rss = np.sum(self.residuals ** 2)
+        rss = np.sum(self.residuals**2)
 
         if rss <= 0:
             warnings.warn("RSS ≤ 0, AIC undefined.")
@@ -342,12 +341,12 @@ class CurveFitResult(OptimizeResult):
         BIC penalizes model complexity more heavily than AIC.
         Preferred for larger datasets.
         """
-        if not hasattr(self, 'ydata'):
+        if not hasattr(self, "ydata"):
             raise AttributeError("Cannot compute BIC: ydata not available")
 
         n = len(self.ydata)
         k = len(self.popt)
-        rss = np.sum(self.residuals ** 2)
+        rss = np.sum(self.residuals**2)
 
         if rss <= 0:
             warnings.warn("RSS ≤ 0, BIC undefined.")
@@ -380,7 +379,7 @@ class CurveFitResult(OptimizeResult):
         Confidence intervals are computed using the parameter covariance matrix
         and Student's t-distribution. Assumes residuals are normally distributed.
         """
-        if not hasattr(self, 'pcov'):
+        if not hasattr(self, "pcov"):
             raise AttributeError(
                 "Cannot compute confidence intervals: pcov not available. "
                 "Try setting full_output=True in curve_fit."
@@ -388,7 +387,7 @@ class CurveFitResult(OptimizeResult):
 
         from scipy import stats
 
-        n = len(self.ydata) if hasattr(self, 'ydata') else len(self.residuals)
+        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
         p = len(self.popt)
 
         # Degrees of freedom
@@ -433,11 +432,11 @@ class CurveFitResult(OptimizeResult):
         Prediction intervals account for both parameter uncertainty (from pcov)
         and inherent data variability (residual variance).
         """
-        if not hasattr(self, 'model'):
+        if not hasattr(self, "model"):
             raise AttributeError(
                 "Cannot compute prediction interval: model not available"
             )
-        if not hasattr(self, 'pcov'):
+        if not hasattr(self, "pcov"):
             raise AttributeError(
                 "Cannot compute prediction interval: pcov not available"
             )
@@ -446,7 +445,7 @@ class CurveFitResult(OptimizeResult):
 
         # Use self.xdata if x not provided
         if x is None:
-            if not hasattr(self, 'xdata'):
+            if not hasattr(self, "xdata"):
                 raise AttributeError(
                     "Cannot compute prediction interval: xdata not available. "
                     "Either pass x explicitly or ensure xdata is stored in result."
@@ -457,10 +456,10 @@ class CurveFitResult(OptimizeResult):
         y_pred = np.array(self.model(x, *self.popt))
 
         # Residual variance
-        n = len(self.ydata) if hasattr(self, 'ydata') else len(self.residuals)
+        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
         p = len(self.popt)
         dof = max(n - p, 1)
-        s2 = np.sum(self.residuals ** 2) / dof
+        s2 = np.sum(self.residuals**2) / dof
 
         # t-value
         t_val = stats.t.ppf((1 + alpha) / 2, dof)
@@ -513,16 +512,15 @@ class CurveFitResult(OptimizeResult):
                 "Install with: pip install matplotlib"
             )
 
-        if not hasattr(self, 'xdata') or not hasattr(self, 'ydata'):
-            raise AttributeError(
-                "Cannot plot: xdata and ydata not available"
-            )
+        if not hasattr(self, "xdata") or not hasattr(self, "ydata"):
+            raise AttributeError("Cannot plot: xdata and ydata not available")
 
         # Create figure if needed
         if ax is None:
             if show_residuals:
-                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8),
-                                                gridspec_kw={'height_ratios': [3, 1]})
+                fig, (ax1, ax2) = plt.subplots(
+                    2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [3, 1]}
+                )
             else:
                 fig, ax1 = plt.subplots(figsize=(10, 6))
                 ax2 = None
@@ -541,35 +539,41 @@ class CurveFitResult(OptimizeResult):
         y_pred_sorted = self.predictions[sort_idx]
 
         # Extract plotting parameters from kwargs
-        scatter_alpha = kwargs.pop('alpha', 0.6)
-        scatter_color = kwargs.pop('color', None)
+        scatter_alpha = kwargs.pop("alpha", 0.6)
+        scatter_color = kwargs.pop("color", None)
 
         # Plot data points
-        scatter_kwargs = {'alpha': scatter_alpha, 'label': 'Data'}
+        scatter_kwargs = {"alpha": scatter_alpha, "label": "Data"}
         if scatter_color is not None:
-            scatter_kwargs['color'] = scatter_color
+            scatter_kwargs["color"] = scatter_color
         scatter_kwargs.update(kwargs)
         ax1.scatter(x, y, **scatter_kwargs)
 
         # Plot fitted curve
-        fit_color = 'red' if scatter_color is None else scatter_color
-        ax1.plot(x_sorted, y_pred_sorted, color=fit_color, linewidth=2,
-                label='Fit', zorder=10)
+        fit_color = "red" if scatter_color is None else scatter_color
+        ax1.plot(
+            x_sorted,
+            y_pred_sorted,
+            color=fit_color,
+            linewidth=2,
+            label="Fit",
+            zorder=10,
+        )
 
         # Labels and title
-        ax1.set_xlabel('x')
-        ax1.set_ylabel('y')
-        ax1.set_title(f'Curve Fit (R² = {self.r_squared:.4f}, RMSE = {self.rmse:.4f})')
+        ax1.set_xlabel("x")
+        ax1.set_ylabel("y")
+        ax1.set_title(f"Curve Fit (R² = {self.r_squared:.4f}, RMSE = {self.rmse:.4f})")
         ax1.legend()
         ax1.grid(True, alpha=0.3)
 
         # Residual plot
         if show_residuals and ax2 is not None:
-            ax2.scatter(x, self.residuals, alpha=0.6, color='gray')
-            ax2.axhline(y=0, color='black', linestyle='--', linewidth=1)
-            ax2.set_xlabel('x')
-            ax2.set_ylabel('Residuals')
-            ax2.set_title('Residual Plot')
+            ax2.scatter(x, self.residuals, alpha=0.6, color="gray")
+            ax2.axhline(y=0, color="black", linestyle="--", linewidth=1)
+            ax2.set_xlabel("x")
+            ax2.set_ylabel("Residuals")
+            ax2.set_title("Residual Plot")
             ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
@@ -601,15 +605,19 @@ class CurveFitResult(OptimizeResult):
         print("\nFitted Parameters:")
         print("-" * 70)
 
-        if hasattr(self, 'pcov'):
+        if hasattr(self, "pcov"):
             perr = np.sqrt(np.diag(self.pcov))
             print(f"{'Parameter':<15} {'Value':>12} {'Std Error':>12} {'95% CI':>25}")
             print("-" * 70)
 
             ci = self.confidence_intervals(alpha=0.95)
-            for i, (val, err, (ci_low, ci_high)) in enumerate(zip(self.popt, perr, ci)):
-                print(f"{'p' + str(i):<15} {val:>12.6f} {err:>12.6f} "
-                      f"[{ci_low:>10.6f}, {ci_high:>10.6f}]")
+            for i, (val, err, (ci_low, ci_high)) in enumerate(
+                zip(self.popt, perr, ci, strict=False)
+            ):
+                print(
+                    f"{'p' + str(i):<15} {val:>12.6f} {err:>12.6f} "
+                    f"[{ci_low:>10.6f}, {ci_high:>10.6f}]"
+                )
         else:
             print(f"{'Parameter':<15} {'Value':>12}")
             print("-" * 70)
@@ -637,6 +645,8 @@ class CurveFitResult(OptimizeResult):
         print(f"Message           : {self.message}")
         print(f"Iterations        : {self.nfev if hasattr(self, 'nfev') else 'N/A'}")
         print(f"Final cost        : {self.cost if hasattr(self, 'cost') else 'N/A'}")
-        print(f"Optimality        : {self.optimality if hasattr(self, 'optimality') else 'N/A':.6e}")
+        print(
+            f"Optimality        : {self.optimality if hasattr(self, 'optimality') else 'N/A':.6e}"
+        )
 
         print("=" * 70)
