@@ -6,12 +6,11 @@ Tests the fallback system with 20+ challenging optimization problems that
 commonly fail without fallback strategies.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax.numpy as jnp
 from nlsq import curve_fit
-
 
 # ==============================================================================
 # Test Models (Difficult to fit)
@@ -86,7 +85,12 @@ class TestFallbackIntegration:
 
         # Very bad p0 - likely to fail without fallback
         result = curve_fit(
-            exponential_decay, x, y, p0=[100, 10, 50], fallback=True, fallback_verbose=False
+            exponential_decay,
+            x,
+            y,
+            p0=[100, 10, 50],
+            fallback=True,
+            fallback_verbose=False,
         )
 
         # Should converge to reasonable values
@@ -145,8 +149,13 @@ class TestFallbackIntegration:
         y[outlier_indices] += 5.0 * np.random.randn(n_outliers)
 
         result = curve_fit(
-            exponential_decay, x, y, p0=[2, 0.5, 1], fallback=True, fallback_verbose=False,
-            max_fallback_attempts=15  # More attempts for difficult outlier cases
+            exponential_decay,
+            x,
+            y,
+            p0=[2, 0.5, 1],
+            fallback=True,
+            fallback_verbose=False,
+            max_fallback_attempts=15,  # More attempts for difficult outlier cases
         )
 
         # Outliers make fitting difficult - verify convergence but relax tolerances
@@ -163,8 +172,9 @@ class TestFallbackIntegration:
         y = y_true + 0.2 * np.random.randn(100)
 
         # p0 far from solution
-        result = curve_fit(lorentzian, x, y, p0=[1, 5, 0.1], fallback=True,
-                          max_fallback_attempts=15)
+        result = curve_fit(
+            lorentzian, x, y, p0=[1, 5, 0.1], fallback=True, max_fallback_attempts=15
+        )
 
         # Lorentzians are notoriously difficult - verify convergence and sanity checks
         assert result.x is not None
@@ -206,9 +216,7 @@ class TestFallbackIntegration:
         y_true = (2.0 * x + 3.0) / (x**2 + 1.0 * x + 2.0)
         y = y_true + 0.05 * np.random.randn(100)
 
-        result = curve_fit(
-            rational_function, x, y, p0=[1, 1, 0.1, 0.1], fallback=True
-        )
+        result = curve_fit(rational_function, x, y, p0=[1, 1, 0.1, 0.1], fallback=True)
 
         # Just verify it converges
         assert result.cost < 1.0
@@ -222,7 +230,12 @@ class TestFallbackIntegration:
         y = y_true + 0.1 * np.random.randn(100)
 
         result = curve_fit(
-            damped_oscillation, x, y, p0=[1, 0.1, 1, 0], fallback=True, max_fallback_attempts=15
+            damped_oscillation,
+            x,
+            y,
+            p0=[1, 0.1, 1, 0],
+            fallback=True,
+            max_fallback_attempts=15,
         )
 
         # Damped oscillations are tricky - just verify convergence
@@ -236,9 +249,7 @@ class TestFallbackIntegration:
         y_true = 3.0 * np.exp(-((x / 2.0) ** 0.7))
         y = y_true + 0.1 * np.random.randn(80)
 
-        result = curve_fit(
-            stretched_exponential, x, y, p0=[1, 1, 1], fallback=True
-        )
+        result = curve_fit(stretched_exponential, x, y, p0=[1, 1, 1], fallback=True)
 
         assert abs(result.x[0] - 3.0) < 1.0
         assert abs(result.x[1] - 2.0) < 1.0
@@ -265,9 +276,7 @@ class TestFallbackIntegration:
         y_true = 2.5 * np.exp(-0.5 * x) + 1.0
         y = y_true + 0.5 * np.random.randn(50)  # High noise
 
-        result = curve_fit(
-            exponential_decay, x, y, p0=[2, 0.5, 1], fallback=True
-        )
+        result = curve_fit(exponential_decay, x, y, p0=[2, 0.5, 1], fallback=True)
 
         # Wide tolerance for high noise
         assert abs(result.x[0] - 2.5) < 2.0
@@ -280,9 +289,7 @@ class TestFallbackIntegration:
         y_true = 2.5 * np.exp(-0.5 * x) + 1.0
         y = y_true + 0.1 * np.random.randn(20)
 
-        result = curve_fit(
-            exponential_decay, x, y, p0=[1, 0.1, 0.5], fallback=True
-        )
+        result = curve_fit(exponential_decay, x, y, p0=[1, 0.1, 0.5], fallback=True)
 
         assert result.x is not None
         assert result.cost < 5.0
@@ -296,8 +303,12 @@ class TestFallbackIntegration:
 
         # Better p0 for extreme values (based on data scale)
         result = curve_fit(
-            exponential_decay, x, y, p0=[1000, 0.001, 0.001], fallback=True,
-            max_fallback_attempts=15
+            exponential_decay,
+            x,
+            y,
+            p0=[1000, 0.001, 0.001],
+            fallback=True,
+            max_fallback_attempts=15,
         )
 
         # Parameters span many orders of magnitude - just verify convergence
@@ -312,9 +323,7 @@ class TestFallbackIntegration:
         y_true = 2.5 * np.exp(-0.01 * x) + 1.0  # Very slow decay
         y = y_true + 0.02 * np.random.randn(50)
 
-        result = curve_fit(
-            exponential_decay, x, y, p0=[2, 0.01, 1], fallback=True
-        )
+        result = curve_fit(exponential_decay, x, y, p0=[2, 0.01, 1], fallback=True)
 
         # Should handle near-degeneracy
         assert result.x is not None
@@ -327,7 +336,12 @@ class TestFallbackIntegration:
         y = y_true + 0.05 * np.random.randn(100)
 
         result = curve_fit(
-            damped_oscillation, x, y, p0=[1, 0.1, 2, 0], fallback=True, max_fallback_attempts=15
+            damped_oscillation,
+            x,
+            y,
+            p0=[1, 0.1, 2, 0],
+            fallback=True,
+            max_fallback_attempts=15,
         )
 
         # Zero crossings make this hard
@@ -346,8 +360,7 @@ class TestFallbackIntegration:
         # Without fallback might fail (we don't test that to avoid test failures)
         # With fallback should succeed
         result = curve_fit(
-            exponential_decay, x, y, p0=bad_p0, fallback=True,
-            max_fallback_attempts=15
+            exponential_decay, x, y, p0=bad_p0, fallback=True, max_fallback_attempts=15
         )
 
         # With fallback, should get reasonable fit
@@ -362,17 +375,13 @@ class TestFallbackIntegration:
         y = 2.5 * np.exp(-0.5 * x) + 1.0 + 0.1 * np.random.randn(50)
 
         # Good p0 - should succeed without fallback
-        result = curve_fit(
-            exponential_decay, x, y, p0=[2.5, 0.5, 1.0], fallback=True
-        )
+        result = curve_fit(exponential_decay, x, y, p0=[2.5, 0.5, 1.0], fallback=True)
 
         assert result.fallback_attempts == 1
         assert result.fallback_strategy_used is None
 
         # Bad p0 - might need fallback
-        result2 = curve_fit(
-            exponential_decay, x, y, p0=[100, 10, 50], fallback=True
-        )
+        result2 = curve_fit(exponential_decay, x, y, p0=[100, 10, 50], fallback=True)
 
         assert result2.fallback_attempts >= 1
         # Strategy might be None if TRF is robust enough, or a string
