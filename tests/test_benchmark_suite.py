@@ -387,7 +387,7 @@ class TestIntegration:
         results = suite.run_benchmarks(verbose=False)
 
         # Should have results for all 4 problems
-        problems = set(r.metadata.get("problem") for r in results)
+        problems = {r.metadata.get("problem") for r in results}
         assert "exponential_decay" in problems
         assert "gaussian" in problems
         assert "polynomial" in problems

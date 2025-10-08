@@ -10,14 +10,20 @@ from __future__ import annotations
 
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 from scipy.optimize import curve_fit as scipy_curve_fit
 
-from nlsq import PerformanceProfiler, ProfilerVisualization, ProfilingDashboard, curve_fit
+from nlsq import (
+    PerformanceProfiler,
+    ProfilerVisualization,
+    ProfilingDashboard,
+    curve_fit,
+)
 
 
 @dataclass
@@ -25,9 +31,7 @@ class BenchmarkConfig:
     """Configuration for benchmark runs."""
 
     name: str
-    problem_sizes: list[int] = field(
-        default_factory=lambda: [100, 1000, 10000, 100000]
-    )
+    problem_sizes: list[int] = field(default_factory=lambda: [100, 1000, 10000, 100000])
     n_repeats: int = 5
     warmup_runs: int = 1
     methods: list[str] = field(default_factory=lambda: ["trf", "lm"])
@@ -246,7 +250,9 @@ class BenchmarkSuite:
                     for backend in self.config.backends:
                         # Benchmark NLSQ
                         if verbose:
-                            print(f"  NLSQ ({method}, {backend})...", end=" ", flush=True)
+                            print(
+                                f"  NLSQ ({method}, {backend})...", end=" ", flush=True
+                            )
 
                         nlsq_results = self._benchmark_nlsq(
                             problem, x, y, p0, method, backend
@@ -474,8 +480,8 @@ class BenchmarkSuite:
                     if nlsq_results:
                         nlsq_mean = np.mean([r.total_time for r in nlsq_results])
                         nlsq_std = np.std([r.total_time for r in nlsq_results])
-                        success_rate = (
-                            sum(r.success for r in nlsq_results) / len(nlsq_results)
+                        success_rate = sum(r.success for r in nlsq_results) / len(
+                            nlsq_results
                         )
                         lines.append(
                             f"  NLSQ ({method}):  {nlsq_mean:.4f}s ± {nlsq_std:.4f}s "
@@ -487,8 +493,8 @@ class BenchmarkSuite:
                     if scipy_results:
                         scipy_mean = np.mean([r.total_time for r in scipy_results])
                         scipy_std = np.std([r.total_time for r in scipy_results])
-                        success_rate = (
-                            sum(r.success for r in scipy_results) / len(scipy_results)
+                        success_rate = sum(r.success for r in scipy_results) / len(
+                            scipy_results
                         )
                         lines.append(
                             f"  SciPy ({method}): {scipy_mean:.4f}s ± {scipy_std:.4f}s "
@@ -501,13 +507,15 @@ class BenchmarkSuite:
                         lines.append(f"  Speedup: {speedup:.2f}x")
 
         # Overall statistics
-        lines.extend([
-            "",
-            "",
-            "=" * 80,
-            "OVERALL STATISTICS",
-            "=" * 80,
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                "=" * 80,
+                "OVERALL STATISTICS",
+                "=" * 80,
+            ]
+        )
 
         nlsq_times = [r.total_time for r in self.results if r.library == "nlsq"]
         scipy_times = [r.total_time for r in self.results if r.library == "scipy"]

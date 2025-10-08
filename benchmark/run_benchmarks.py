@@ -164,7 +164,7 @@ Examples:
     # Run benchmarks
     print("\nRunning NLSQ Benchmarks...")
     print("=" * 80)
-    print(f"Configuration:")
+    print("Configuration:")
     print(f"  Problem sizes: {problem_sizes}")
     print(f"  Methods: {args.methods}")
     print(f"  Repeats: {n_repeats}")
@@ -188,7 +188,7 @@ Examples:
 
     # Print quick access info
     output_path = Path(args.output)
-    print(f"\nResults saved:")
+    print("\nResults saved:")
     print(f"  Text report: {output_path / 'benchmark_report.txt'}")
     print(f"  CSV data: {output_path / 'benchmark_results.csv'}")
     print(f"  Dashboard: {output_path / 'dashboard/dashboard.html'}")
