@@ -34,8 +34,10 @@ from scipy.optimize import curve_fit as scipy_curve_fit
 from nlsq import curve_fit as nlsq_curve_fit
 import jax.numpy as jnp
 
+
 def exponential(x, a, b):
     return a * jnp.exp(-b * x)
+
 
 # Generate large dataset
 x = np.linspace(0, 10, 1_000_000)
@@ -43,10 +45,7 @@ y = 2.5 * np.exp(-1.3 * x) + 0.01 * np.random.randn(1_000_000)
 
 # SciPy (CPU-only)
 start = time.time()
-popt_scipy, _ = scipy_curve_fit(
-    lambda x, a, b: a * np.exp(-b * x),
-    x, y, p0=[2, 1]
-)
+popt_scipy, _ = scipy_curve_fit(lambda x, a, b: a * np.exp(-b * x), x, y, p0=[2, 1])
 scipy_time = time.time() - start
 
 # NLSQ (GPU-accelerated)
@@ -112,9 +111,11 @@ In code:
 
 ```python
 import os
-os.environ['JAX_PLATFORM_NAME'] = 'cpu'  # Must be set before importing jax
+
+os.environ["JAX_PLATFORM_NAME"] = "cpu"  # Must be set before importing jax
 
 from nlsq import curve_fit
+
 # Now runs on CPU
 ```
 
@@ -122,16 +123,16 @@ from nlsq import curve_fit
 
 ```python
 # Pre-allocate GPU memory (prevents fragmentation)
-os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'true'
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 
 # Disable memory preallocation for multi-process scenarios
-os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 # Set memory fraction (0.0-1.0)
-os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '0.75'  # Use 75% of GPU memory
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.75"  # Use 75% of GPU memory
 
 # Enable TF32 on Ampere GPUs (faster, slight precision loss)
-os.environ['XLA_FLAGS'] = '--xla_gpu_enable_fast_math=true'
+os.environ["XLA_FLAGS"] = "--xla_gpu_enable_fast_math=true"
 ```
 
 ### When to Use GPU vs CPU
@@ -157,8 +158,10 @@ import time
 from nlsq import curve_fit
 import jax.numpy as jnp
 
+
 def model(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 x = np.linspace(0, 5, 10000)
 y = model(x, 2.5, 1.3, 0.5) + 0.01 * np.random.randn(10000)
@@ -239,7 +242,7 @@ x = np.linspace(0, 5, 1000)
 y_batch = np.zeros((n_datasets, 1000))
 
 for i in range(n_datasets):
-    true_params = [2 + 0.5*i/n_datasets, 1.3, 0.5]
+    true_params = [2 + 0.5 * i / n_datasets, 1.3, 0.5]
     y_batch[i] = model(x, *true_params) + 0.01 * np.random.randn(1000)
 
 # Vectorized batch fitting (uses vmap internally)
@@ -247,7 +250,7 @@ popt_batch, pcov_batch = curve_fit_batch(
     model,
     x,  # Same x for all datasets
     y_batch,  # Shape: (n_datasets, n_points)
-    p0=[2, 1, 0]
+    p0=[2, 1, 0],
 )
 
 print(f"Fitted {n_datasets} datasets")
@@ -268,10 +271,12 @@ import jax.numpy as jnp
 n_gpus = jax.device_count()
 datasets_per_gpu = len(datasets) // n_gpus
 
+
 @pmap
 def fit_batch_on_gpu(x_batch, y_batch):
     """Fit batch of datasets on one GPU"""
     return vmap(lambda x, y: curve_fit(model, x, y, p0=[2, 1, 0]))(x_batch, y_batch)
+
 
 # Reshape data for multi-GPU: (n_gpus, datasets_per_gpu, ...)
 x_reshaped = ...
@@ -299,10 +304,10 @@ popt, pcov, info = fit_large_dataset(
     xdata=x_huge,
     ydata=y_huge,
     p0=[2, 1, 0],
-    memory_limit_gb=4.0,        # Limit to 4 GB
-    chunk_size='auto',          # Automatic chunk sizing
-    solver='cg',                # Memory-efficient solver
-    progress=True
+    memory_limit_gb=4.0,  # Limit to 4 GB
+    chunk_size="auto",  # Automatic chunk sizing
+    solver="cg",  # Memory-efficient solver
+    progress=True,
 )
 
 print(f"Peak memory: {info['peak_memory_gb']:.2f} GB")
@@ -338,6 +343,7 @@ Memory Profile:
 # Use float32 instead of float64 (2x memory reduction)
 # WARNING: May reduce accuracy
 from jax import config
+
 config.update("jax_enable_x64", False)  # Use float32
 
 popt, pcov = curve_fit(model, x, y, p0=[2, 1, 0])
@@ -355,18 +361,14 @@ config.update("jax_enable_x64", True)
 ```python
 import time
 
-solvers = ['svd', 'cg', 'lsqr', 'auto']
+solvers = ["svd", "cg", "lsqr", "auto"]
 results = {}
 
 for solver in solvers:
     start = time.time()
-    popt, pcov = curve_fit(
-        model, x, y,
-        p0=[2, 1, 0],
-        solver=solver
-    )
+    popt, pcov = curve_fit(model, x, y, p0=[2, 1, 0], solver=solver)
     elapsed = time.time() - start
-    results[solver] = {'time': elapsed, 'popt': popt}
+    results[solver] = {"time": elapsed, "popt": popt}
 
 # Print comparison
 for solver, data in results.items():
@@ -387,14 +389,15 @@ auto    : 0.0234s  (selects svd)
 def recommend_solver(n_points, n_params):
     """Recommend optimal solver based on problem size"""
     if n_points < 10_000:
-        return 'svd'
+        return "svd"
     elif n_points < 1_000_000:
-        return 'cg'
+        return "cg"
     else:
-        return 'minibatch'
+        return "minibatch"
+
 
 # Or just use 'auto'
-popt, pcov = curve_fit(model, x, y, solver='auto')
+popt, pcov = curve_fit(model, x, y, solver="auto")
 ```
 
 ---
@@ -406,9 +409,7 @@ popt, pcov = curve_fit(model, x, y, solver='auto')
 ```python
 # Enable timing
 popt, pcov, res, post_time, compile_time = curve_fit(
-    model, x, y,
-    p0=[2, 1, 0],
-    timeit=True
+    model, x, y, p0=[2, 1, 0], timeit=True
 )
 
 print(f"Compilation time: {compile_time:.4f}s")
@@ -434,6 +435,7 @@ print("Open trace at: https://ui.perfetto.dev")
 ```python
 import pandas as pd
 
+
 def benchmark_nlsq(sizes=[100, 1000, 10000, 100000, 1000000]):
     """Benchmark NLSQ across dataset sizes"""
     results = []
@@ -450,13 +452,12 @@ def benchmark_nlsq(sizes=[100, 1000, 10000, 100000, 1000000]):
         popt, pcov = curve_fit(model, x, y, p0=[2, 1, 0])
         elapsed = time.time() - start
 
-        results.append({
-            'n_points': n,
-            'time_s': elapsed,
-            'points_per_sec': n / elapsed
-        })
+        results.append(
+            {"n_points": n, "time_s": elapsed, "points_per_sec": n / elapsed}
+        )
 
     return pd.DataFrame(results)
+
 
 df = benchmark_nlsq()
 print(df)
@@ -504,7 +505,7 @@ for data in datasets:
 ```python
 # For small datasets, force CPU
 if len(x) < 10000:
-    os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+    os.environ["JAX_PLATFORM_NAME"] = "cpu"
 ```
 
 ### Issue 3: Out of Memory (OOM)
@@ -515,23 +516,24 @@ if len(x) < 10000:
 
 1. **Reduce batch size:**
 ```python
-popt, pcov = curve_fit(model, x, y, solver='minibatch', batch_size=10000)
+popt, pcov = curve_fit(model, x, y, solver="minibatch", batch_size=10000)
 ```
 
 2. **Use memory-efficient solver:**
 ```python
-popt, pcov = curve_fit(model, x, y, solver='cg')
+popt, pcov = curve_fit(model, x, y, solver="cg")
 ```
 
 3. **Enable chunking:**
 ```python
 from nlsq.large_dataset import fit_large_dataset
+
 popt, pcov, info = fit_large_dataset(model, x, y, memory_limit_gb=4.0)
 ```
 
 4. **Disable JIT for very large models:**
 ```python
-os.environ['JAX_DISABLE_JIT'] = '1'  # Last resort - very slow
+os.environ["JAX_DISABLE_JIT"] = "1"  # Last resort - very slow
 ```
 
 ### Issue 4: No GPU Detected

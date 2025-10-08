@@ -23,8 +23,10 @@ This guide helps you migrate from `scipy.optimize.curve_fit` to NLSQ for GPU/TPU
 from scipy.optimize import curve_fit
 import numpy as np
 
+
 def exponential(x, a, b):
     return a * np.exp(-b * x)
+
 
 x = np.linspace(0, 5, 1000)
 y = 2.5 * np.exp(-1.3 * x) + 0.01 * np.random.randn(1000)
@@ -36,10 +38,12 @@ popt, pcov = curve_fit(exponential, x, y, p0=[2, 1])
 ```python
 from nlsq import curve_fit
 import jax.numpy as jnp  # Changed from numpy
-import numpy as np        # Keep for data generation
+import numpy as np  # Keep for data generation
+
 
 def exponential(x, a, b):
     return a * jnp.exp(-b * x)  # Changed to jnp
+
 
 x = np.linspace(0, 5, 1000)
 y = 2.5 * np.exp(-1.3 * x) + 0.01 * np.random.randn(1000)
@@ -60,7 +64,9 @@ popt, pcov = curve_fit(exponential, x, y, p0=[2, 1])
 **SciPy:**
 ```python
 scipy.optimize.curve_fit(
-    f, xdata, ydata,
+    f,
+    xdata,
+    ydata,
     p0=None,
     sigma=None,
     absolute_sigma=False,
@@ -75,17 +81,19 @@ scipy.optimize.curve_fit(
 **NLSQ:**
 ```python
 nlsq.curve_fit(
-    f, xdata, ydata,
+    f,
+    xdata,
+    ydata,
     p0=None,
     sigma=None,
     absolute_sigma=False,
     check_finite=True,
     bounds=(-np.inf, np.inf),
-    method='trf',           # Default specified
+    method="trf",  # Default specified
     jac=None,
-    solver='auto',          # NLSQ-specific
-    batch_size=None,        # NLSQ-specific
-    callback=None,          # NLSQ-specific
+    solver="auto",  # NLSQ-specific
+    batch_size=None,  # NLSQ-specific
+    callback=None,  # NLSQ-specific
     **kwargs
 )
 ```
@@ -125,9 +133,9 @@ popt, pcov = curve_fit(...)
 # NLSQ-specific: access optimization details
 result = curve_fit(...)
 popt = result.x
-pcov = result['pcov']
+pcov = result["pcov"]
 nfev = result.nfev  # Number of function evaluations
-cost = result.cost   # Final cost
+cost = result.cost  # Final cost
 ```
 
 ---
@@ -146,11 +154,14 @@ cost = result.cost   # Final cost
 # SciPy version
 import numpy as np
 
+
 def model_scipy(x, a, b, c):
     return a * np.exp(-b * x) + c * np.sin(x)
 
+
 # NLSQ version
 import jax.numpy as jnp
+
 
 def model_nlsq(x, a, b, c):
     return a * jnp.exp(-b * x) + c * jnp.sin(x)
@@ -166,9 +177,11 @@ import jax.numpy as jnp
 x = np.linspace(0, 10, 1000)
 y = np.sin(x) + 0.1 * np.random.randn(1000)
 
+
 # Model function: use jax.numpy
 def model(x, a, omega, phi):
     return a * jnp.sin(omega * x + phi)
+
 
 # Fitting: works with both numpy and jax arrays
 popt, pcov = curve_fit(model, x, y, p0=[1, 1, 0])
@@ -182,12 +195,12 @@ popt, pcov = curve_fit(model, x, y, p0=[1, 1, 0])
 
 ```python
 # SciPy
-popt, pcov = curve_fit(model, x, y, method='lm')    # Levenberg-Marquardt
-popt, pcov = curve_fit(model, x, y, method='trf')   # Trust Region
-popt, pcov = curve_fit(model, x, y, method='dogbox') # Dogbox
+popt, pcov = curve_fit(model, x, y, method="lm")  # Levenberg-Marquardt
+popt, pcov = curve_fit(model, x, y, method="trf")  # Trust Region
+popt, pcov = curve_fit(model, x, y, method="dogbox")  # Dogbox
 
 # NLSQ
-popt, pcov = curve_fit(model, x, y, method='trf')   # Only option (default)
+popt, pcov = curve_fit(model, x, y, method="trf")  # Only option (default)
 ```
 
 **Migration strategy:** If you were using `method='lm'`, simply remove it or change to `'trf'`. TRF is more robust and handles bounds better.
@@ -203,17 +216,21 @@ popt, pcov = curve_fit(model, x, y, method='trf')   # Only option (default)
 def model(x, a, b):
     return a * np.exp(-b * x)
 
+
 def jacobian(x, a, b):
     # Analytical derivatives
     da = np.exp(-b * x)
     db = -a * x * np.exp(-b * x)
     return np.column_stack([da, db])
 
+
 popt, pcov = curve_fit(model, x, y, jac=jacobian)
+
 
 # NLSQ - no Jacobian needed!
 def model(x, a, b):
     return a * jnp.exp(-b * x)
+
 
 popt, pcov = curve_fit(model, x, y)  # Autodiff handles Jacobian
 ```
@@ -227,10 +244,12 @@ popt, pcov = curve_fit(model, x, y)  # Autodiff handles Jacobian
 ```python
 # This happens automatically when you import nlsq
 from nlsq import curve_fit
+
 # JAX is now in float64 mode
 
 # If you need float32 for memory reasons:
 from jax import config
+
 config.update("jax_enable_x64", False)
 ```
 
@@ -246,8 +265,10 @@ from scipy.optimize import curve_fit
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 def exponential(x, a, b, c):
     return a * np.exp(-b * x) + c
+
 
 x = np.linspace(0, 4, 50)
 y = exponential(x, 2.5, 1.3, 0.5)
@@ -256,8 +277,8 @@ y += 0.2 * np.random.normal(size=x.size)
 popt, pcov = curve_fit(exponential, x, y)
 perr = np.sqrt(np.diag(pcov))
 
-plt.plot(x, y, 'o', label='data')
-plt.plot(x, exponential(x, *popt), '-', label='fit')
+plt.plot(x, y, "o", label="data")
+plt.plot(x, exponential(x, *popt), "-", label="fit")
 plt.legend()
 plt.show()
 ```
@@ -269,8 +290,10 @@ import jax.numpy as jnp  # Added
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 def exponential(x, a, b, c):
     return a * jnp.exp(-b * x) + c  # Changed to jnp
+
 
 x = np.linspace(0, 4, 50)
 y = exponential(x, 2.5, 1.3, 0.5)
@@ -279,8 +302,8 @@ y += 0.2 * np.random.normal(size=x.size)
 popt, pcov = curve_fit(exponential, x, y)
 perr = np.sqrt(np.diag(pcov))
 
-plt.plot(x, y, 'o', label='data')
-plt.plot(x, exponential(x, *popt), '-', label='fit')
+plt.plot(x, y, "o", label="data")
+plt.plot(x, exponential(x, *popt), "-", label="fit")
 plt.legend()
 plt.show()
 ```
@@ -289,18 +312,12 @@ plt.show()
 
 **SciPy:**
 ```python
-popt, pcov = curve_fit(
-    exponential, x, y,
-    bounds=([0, 0, -np.inf], [10, 5, np.inf])
-)
+popt, pcov = curve_fit(exponential, x, y, bounds=([0, 0, -np.inf], [10, 5, np.inf]))
 ```
 
 **NLSQ (identical):**
 ```python
-popt, pcov = curve_fit(
-    exponential, x, y,
-    bounds=([0, 0, -np.inf], [10, 5, np.inf])
-)
+popt, pcov = curve_fit(exponential, x, y, bounds=([0, 0, -np.inf], [10, 5, np.inf]))
 ```
 
 ### Example 3: Weighted Fitting
@@ -310,11 +327,7 @@ popt, pcov = curve_fit(
 sigma = np.ones(len(x)) * 0.1
 sigma[10:20] = 0.5  # Higher uncertainty
 
-popt, pcov = curve_fit(
-    exponential, x, y,
-    sigma=sigma,
-    absolute_sigma=True
-)
+popt, pcov = curve_fit(exponential, x, y, sigma=sigma, absolute_sigma=True)
 ```
 
 **NLSQ (identical):**
@@ -322,11 +335,7 @@ popt, pcov = curve_fit(
 sigma = np.ones(len(x)) * 0.1
 sigma[10:20] = 0.5
 
-popt, pcov = curve_fit(
-    exponential, x, y,
-    sigma=sigma,
-    absolute_sigma=True
-)
+popt, pcov = curve_fit(exponential, x, y, sigma=sigma, absolute_sigma=True)
 ```
 
 ### Example 4: Multi-dimensional X Data
@@ -336,6 +345,7 @@ popt, pcov = curve_fit(
 def surface(xdata, a, b, c):
     x, y = xdata
     return a * np.exp(-b * x**2) * np.sin(c * y)
+
 
 x1 = np.linspace(-2, 2, 50)
 x2 = np.linspace(-2, 2, 50)
@@ -351,6 +361,7 @@ popt, pcov = curve_fit(surface, xdata, ydata)
 def surface(xdata, a, b, c):
     x, y = xdata
     return a * jnp.exp(-b * x**2) * jnp.sin(c * y)  # jnp
+
 
 x1 = np.linspace(-2, 2, 50)
 x2 = np.linspace(-2, 2, 50)
@@ -392,11 +403,13 @@ def piecewise(x, a, b, c):
 def model(x, a, b):
     return a * np.exp(-b * x)
 
+
 def jac(x, a, b):
     J = np.zeros((len(x), 2))
     J[:, 0] = np.exp(-b * x)
     J[:, 1] = -a * x * np.exp(-b * x)
     return J
+
 
 popt, pcov = curve_fit(model, x, y, jac=jac)
 ```
@@ -405,6 +418,7 @@ popt, pcov = curve_fit(model, x, y, jac=jac)
 ```python
 def model(x, a, b):
     return a * jnp.exp(-b * x)
+
 
 popt, pcov = curve_fit(model, x, y)  # Autodiff handles it
 ```
@@ -451,9 +465,7 @@ x_large = np.linspace(0, 100, 10_000_000)
 y_large = model(x_large, 2.5, 1.3) + np.random.randn(10_000_000) * 0.01
 
 popt, pcov, info = fit_large_dataset(
-    model, x_large, y_large,
-    memory_limit_gb=4.0,
-    progress=True
+    model, x_large, y_large, memory_limit_gb=4.0, progress=True
 )
 ```
 
@@ -504,6 +516,7 @@ Stay with SciPy when:
 def model(x, a, b):
     return a * np.exp(-b * x)  # np.exp not JIT-compatible
 
+
 # After (fixed)
 def model(x, a, b):
     return a * jnp.exp(-b * x)  # jnp.exp works
@@ -520,6 +533,7 @@ def model(x, a, b):
     if len(x) > 100:
         return a * jnp.exp(-b * x[:100])  # Dynamic slicing
     return a * jnp.exp(-b * x)
+
 
 # After (fixed)
 def model(x, a, b):
@@ -565,10 +579,12 @@ python -c "import jax; print(jax.devices())"
 # For small datasets, use CPU
 if len(x) < 10000:
     import os
-    os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+
+    os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
 # Or use CurveFit class for multiple fits
 from nlsq import CurveFit
+
 fitter = CurveFit()
 # First call: slow (compilation)
 # Subsequent calls: fast
@@ -612,9 +628,11 @@ from scipy.optimize import curve_fit
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 # Model definition
 def gaussian(x, amp, cen, wid):
-    return amp * np.exp(-(x - cen)**2 / (2 * wid**2))
+    return amp * np.exp(-((x - cen) ** 2) / (2 * wid**2))
+
 
 # Generate data
 np.random.seed(42)
@@ -635,8 +653,8 @@ print(f"Center: {popt[1]:.3f} ± {perr[1]:.3f}")
 print(f"Width: {popt[2]:.3f} ± {perr[2]:.3f}")
 
 # Plot
-plt.plot(x, y, 'o', label='Data')
-plt.plot(x, gaussian(x, *popt), '-', label='Fit')
+plt.plot(x, y, "o", label="Data")
+plt.plot(x, gaussian(x, *popt), "-", label="Fit")
 plt.legend()
 plt.show()
 ```
@@ -648,9 +666,11 @@ import jax.numpy as jnp  # Added jnp
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 # Model definition
 def gaussian(x, amp, cen, wid):
-    return amp * jnp.exp(-(x - cen)**2 / (2 * wid**2))  # jnp
+    return amp * jnp.exp(-((x - cen) ** 2) / (2 * wid**2))  # jnp
+
 
 # Generate data
 np.random.seed(42)
@@ -671,8 +691,8 @@ print(f"Center: {popt[1]:.3f} ± {perr[1]:.3f}")
 print(f"Width: {popt[2]:.3f} ± {perr[2]:.3f}")
 
 # Plot
-plt.plot(x, y, 'o', label='Data')
-plt.plot(x, gaussian(x, *popt), '-', label='Fit')
+plt.plot(x, y, "o", label="Data")
+plt.plot(x, gaussian(x, *popt), "-", label="Fit")
 plt.legend()
 plt.show()
 ```
