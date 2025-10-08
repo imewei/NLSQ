@@ -14,9 +14,10 @@ Key Concepts:
 - Ultimate tensile strength identification
 """
 
-import numpy as np
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import numpy as np
+
 from nlsq import curve_fit
 
 # Set random seed
@@ -79,8 +80,7 @@ def ramberg_osgood(strain, E, sigma_y, n):
 
     # Plastic contribution (simplified)
     plastic_stress = sigma_y * jnp.power(
-        jnp.maximum(strain - epsilon_y, 0) / epsilon_y + 1,
-        1/n
+        jnp.maximum(strain - epsilon_y, 0) / epsilon_y + 1, 1 / n
     )
 
     # Combined (smooth transition)
@@ -137,7 +137,7 @@ strain_plastic = strain[mask_plastic] - epsilon_y_true
 # Power law hardening: σ = σ_y + K * ε_p^n
 K_hardening = 450.0  # MPa
 n_hardening = 0.3
-stress_plastic = sigma_y_true + K_hardening * strain_plastic ** n_hardening
+stress_plastic = sigma_y_true + K_hardening * strain_plastic**n_hardening
 
 # 3. Necking region (UTS to fracture) - stress decreases
 mask_necking = strain > 0.08
@@ -179,7 +179,7 @@ popt_elastic, pcov_elastic = curve_fit(
     stress_measured[mask_fit_elastic],
     p0=[70],  # Initial guess for E (GPa)
     sigma=sigma_stress[mask_fit_elastic],
-    absolute_sigma=True
+    absolute_sigma=True,
 )
 
 E_fit = popt_elastic[0]
@@ -187,8 +187,10 @@ E_err = np.sqrt(pcov_elastic[0, 0])
 
 print(f"Young's Modulus (E): {E_fit:.2f} ± {E_err:.2f} GPa")
 print(f"True value:          {E_true:.2f} GPa")
-print(f"Error:               {abs(E_fit - E_true):.2f} GPa " +
-      f"({100*abs(E_fit - E_true)/E_true:.1f}%)")
+print(
+    f"Error:               {abs(E_fit - E_true):.2f} GPa "
+    + f"({100 * abs(E_fit - E_true) / E_true:.1f}%)"
+)
 
 # === Determine Yield Strength (0.2% Offset Method) ===
 
@@ -213,7 +215,7 @@ if len(yield_index) > 0:
     epsilon_y_fit = strain_measured[yield_index]
 
     print(f"Yield Strength (σ_y):     {sigma_y_fit:.1f} MPa")
-    print(f"Yield Strain (ε_y):       {epsilon_y_fit:.4f} ({100*epsilon_y_fit:.2f}%)")
+    print(f"Yield Strain (ε_y):       {epsilon_y_fit:.4f} ({100 * epsilon_y_fit:.2f}%)")
     print(f"True yield strength:      {sigma_y_true:.1f} MPa")
     print(f"Error:                    {abs(sigma_y_fit - sigma_y_true):.1f} MPa")
 else:
@@ -247,7 +249,7 @@ if np.sum(mask_fit_plastic) > 10:
         p0=[450, 0.3],
         sigma=sigma_stress[mask_fit_plastic],
         bounds=([100, 0.01], [1000, 1.0]),
-        absolute_sigma=True
+        absolute_sigma=True,
     )
 
     K_fit, n_fit = popt_plastic
@@ -262,8 +264,10 @@ if np.sum(mask_fit_plastic) > 10:
     # dσ/dε = n*K*ε^(n-1)
     eps_avg = np.mean(strain_plastic_fit)
     hardening_rate = n_fit * K_fit * eps_avg ** (n_fit - 1)
-    print(f"\nStrain hardening rate:    {hardening_rate:.1f} MPa " +
-          f"(at ε_p = {eps_avg:.4f})")
+    print(
+        f"\nStrain hardening rate:    {hardening_rate:.1f} MPa "
+        + f"(at ε_p = {eps_avg:.4f})"
+    )
 
 # === Ultimate Tensile Strength ===
 
@@ -275,7 +279,7 @@ UTS_fit = np.max(stress_measured)
 UTS_strain = strain_measured[np.argmax(stress_measured)]
 
 print(f"Ultimate Tensile Strength: {UTS_fit:.1f} MPa")
-print(f"Strain at UTS:             {UTS_strain:.4f} ({100*UTS_strain:.2f}%)")
+print(f"Strain at UTS:             {UTS_strain:.4f} ({100 * UTS_strain:.2f}%)")
 print(f"True UTS:                  {UTS_true:.1f} MPa")
 print(f"Error:                     {abs(UTS_fit - UTS_true):.1f} MPa")
 
@@ -288,16 +292,16 @@ print("=" * 70)
 # Ductility
 strain_at_fracture = strain_measured[-1]
 elongation = 100 * strain_at_fracture
-print(f"\nElastic Properties:")
+print("\nElastic Properties:")
 print(f"  Young's Modulus (E):      {E_fit:.2f} GPa")
 print(f"  Proportional Limit:       ~{elastic_limit:.0f} MPa")
 
-print(f"\nStrength Properties:")
+print("\nStrength Properties:")
 print(f"  Yield Strength (0.2%):    {sigma_y_fit:.1f} MPa")
 print(f"  Ultimate Tensile Strength: {UTS_fit:.1f} MPa")
-print(f"  Strength Ratio (UTS/σ_y): {UTS_fit/sigma_y_fit:.2f}")
+print(f"  Strength Ratio (UTS/σ_y): {UTS_fit / sigma_y_fit:.2f}")
 
-print(f"\nPlastic Properties:")
+print("\nPlastic Properties:")
 print(f"  Hardening Coefficient (K): {K_fit:.1f} MPa")
 print(f"  Hardening Exponent (n):    {n_fit:.3f}")
 print(f"  Elongation at fracture:    {elongation:.1f}%")
@@ -307,21 +311,21 @@ toughness = np.trapz(stress_measured, strain_measured)
 print(f"  Toughness (area):          {toughness:.2f} MPa")
 
 # Material classification
-print(f"\nMaterial Classification:")
+print("\nMaterial Classification:")
 if E_fit > 150:
-    print(f"  → High stiffness (E > 150 GPa)")
+    print("  → High stiffness (E > 150 GPa)")
 elif E_fit > 45:
-    print(f"  → Medium stiffness (45 < E < 150 GPa)")
-    print(f"  → Likely aluminum alloy")
+    print("  → Medium stiffness (45 < E < 150 GPa)")
+    print("  → Likely aluminum alloy")
 else:
-    print(f"  → Low stiffness (E < 45 GPa)")
+    print("  → Low stiffness (E < 45 GPa)")
 
 if elongation > 20:
-    print(f"  → Ductile material (elongation > 20%)")
+    print("  → Ductile material (elongation > 20%)")
 elif elongation > 5:
-    print(f"  → Moderately ductile (5% < elongation < 20%)")
+    print("  → Moderately ductile (5% < elongation < 20%)")
 else:
-    print(f"  → Brittle material (elongation < 5%)")
+    print("  → Brittle material (elongation < 5%)")
 
 # === Visualization ===
 
@@ -329,126 +333,208 @@ fig = plt.figure(figsize=(16, 12))
 
 # Plot 1: Full stress-strain curve
 ax1 = plt.subplot(3, 2, 1)
-ax1.plot(strain_measured * 100, stress_measured, 'o', alpha=0.4,
-         markersize=3, label='Experimental data')
+ax1.plot(
+    strain_measured * 100,
+    stress_measured,
+    "o",
+    alpha=0.4,
+    markersize=3,
+    label="Experimental data",
+)
 
 # Plot fitted regions
 strain_fine = np.linspace(0, epsilon_y_fit, 100)
-ax1.plot(strain_fine * 100, linear_elastic(strain_fine, E_fit), 'g-',
-         linewidth=2.5, label=f'Elastic fit (E={E_fit:.1f} GPa)')
+ax1.plot(
+    strain_fine * 100,
+    linear_elastic(strain_fine, E_fit),
+    "g-",
+    linewidth=2.5,
+    label=f"Elastic fit (E={E_fit:.1f} GPa)",
+)
 
 if np.sum(mask_fit_plastic) > 10:
     strain_plastic_fine = np.linspace(0, np.max(strain_plastic_fit), 100)
     stress_plastic_fine = hollomon_model(strain_plastic_fine, K_fit, n_fit)
-    ax1.plot((strain_plastic_fine + epsilon_y_fit) * 100, stress_plastic_fine,
-             'b-', linewidth=2.5, label=f'Plastic fit (n={n_fit:.3f})')
+    ax1.plot(
+        (strain_plastic_fine + epsilon_y_fit) * 100,
+        stress_plastic_fine,
+        "b-",
+        linewidth=2.5,
+        label=f"Plastic fit (n={n_fit:.3f})",
+    )
 
 # Mark key points
-ax1.axhline(sigma_y_fit, color='orange', linestyle='--', linewidth=1.5,
-            label=f'Yield ({sigma_y_fit:.0f} MPa)')
-ax1.axhline(UTS_fit, color='red', linestyle='--', linewidth=1.5,
-            label=f'UTS ({UTS_fit:.0f} MPa)')
-ax1.axvline(epsilon_y_fit * 100, color='orange', linestyle=':', alpha=0.5)
+ax1.axhline(
+    sigma_y_fit,
+    color="orange",
+    linestyle="--",
+    linewidth=1.5,
+    label=f"Yield ({sigma_y_fit:.0f} MPa)",
+)
+ax1.axhline(
+    UTS_fit,
+    color="red",
+    linestyle="--",
+    linewidth=1.5,
+    label=f"UTS ({UTS_fit:.0f} MPa)",
+)
+ax1.axvline(epsilon_y_fit * 100, color="orange", linestyle=":", alpha=0.5)
 
-ax1.set_xlabel('Strain (%)', fontsize=12)
-ax1.set_ylabel('Stress (MPa)', fontsize=12)
-ax1.set_title('Engineering Stress-Strain Curve', fontsize=14, fontweight='bold')
-ax1.legend(loc='lower right')
+ax1.set_xlabel("Strain (%)", fontsize=12)
+ax1.set_ylabel("Stress (MPa)", fontsize=12)
+ax1.set_title("Engineering Stress-Strain Curve", fontsize=14, fontweight="bold")
+ax1.legend(loc="lower right")
 ax1.grid(True, alpha=0.3)
 
 # Plot 2: Elastic region with 0.2% offset line
 ax2 = plt.subplot(3, 2, 2)
 mask_zoom = strain_measured * 100 < 1.5
-ax2.plot(strain_measured[mask_zoom] * 100, stress_measured[mask_zoom], 'o',
-         alpha=0.6, markersize=4, label='Data')
+ax2.plot(
+    strain_measured[mask_zoom] * 100,
+    stress_measured[mask_zoom],
+    "o",
+    alpha=0.6,
+    markersize=4,
+    label="Data",
+)
 
 # Elastic line
 strain_elastic_plot = np.linspace(0, 0.015, 100)
-ax2.plot(strain_elastic_plot * 100, linear_elastic(strain_elastic_plot, E_fit),
-         'g-', linewidth=2.5, label=f'Elastic (E={E_fit:.1f} GPa)')
+ax2.plot(
+    strain_elastic_plot * 100,
+    linear_elastic(strain_elastic_plot, E_fit),
+    "g-",
+    linewidth=2.5,
+    label=f"Elastic (E={E_fit:.1f} GPa)",
+)
 
 # 0.2% offset line
-ax2.plot(strain_elastic_plot * 100,
-         E_fit * 1000 * (strain_elastic_plot - offset),
-         'r--', linewidth=2, label='0.2% offset line')
+ax2.plot(
+    strain_elastic_plot * 100,
+    E_fit * 1000 * (strain_elastic_plot - offset),
+    "r--",
+    linewidth=2,
+    label="0.2% offset line",
+)
 
 # Mark yield point
-ax2.plot(epsilon_y_fit * 100, sigma_y_fit, 'o', markersize=10,
-         color='orange', label=f'Yield point ({sigma_y_fit:.0f} MPa)')
+ax2.plot(
+    epsilon_y_fit * 100,
+    sigma_y_fit,
+    "o",
+    markersize=10,
+    color="orange",
+    label=f"Yield point ({sigma_y_fit:.0f} MPa)",
+)
 
-ax2.set_xlabel('Strain (%)')
-ax2.set_ylabel('Stress (MPa)')
-ax2.set_title('Yield Strength Determination (0.2% Offset Method)')
+ax2.set_xlabel("Strain (%)")
+ax2.set_ylabel("Stress (MPa)")
+ax2.set_title("Yield Strength Determination (0.2% Offset Method)")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
 
 # Plot 3: Plastic region (log-log for power law)
 ax3 = plt.subplot(3, 2, 3)
 if np.sum(mask_fit_plastic) > 10:
-    ax3.loglog(strain_plastic_fit, stress_plastic_fit - sigma_y_fit, 'o',
-               alpha=0.5, markersize=4, label='Data')
+    ax3.loglog(
+        strain_plastic_fit,
+        stress_plastic_fit - sigma_y_fit,
+        "o",
+        alpha=0.5,
+        markersize=4,
+        label="Data",
+    )
 
-    strain_log = np.logspace(np.log10(strain_plastic_fit.min()),
-                              np.log10(strain_plastic_fit.max()), 100)
+    strain_log = np.logspace(
+        np.log10(strain_plastic_fit.min()), np.log10(strain_plastic_fit.max()), 100
+    )
     stress_log = hollomon_model(strain_log, K_fit, n_fit) - sigma_y_fit
-    ax3.loglog(strain_log, stress_log, 'b-', linewidth=2.5,
-               label=f'σ = {K_fit:.0f}ε^{n_fit:.3f}')
+    ax3.loglog(
+        strain_log,
+        stress_log,
+        "b-",
+        linewidth=2.5,
+        label=f"σ = {K_fit:.0f}ε^{n_fit:.3f}",
+    )
 
-    ax3.set_xlabel('Plastic Strain (log scale)')
-    ax3.set_ylabel('Stress - σ_y (MPa, log scale)')
-    ax3.set_title('Strain Hardening (Log-Log Plot)')
+    ax3.set_xlabel("Plastic Strain (log scale)")
+    ax3.set_ylabel("Stress - σ_y (MPa, log scale)")
+    ax3.set_title("Strain Hardening (Log-Log Plot)")
     ax3.legend()
-    ax3.grid(True, alpha=0.3, which='both')
+    ax3.grid(True, alpha=0.3, which="both")
 
 # Plot 4: Strain hardening rate
 ax4 = plt.subplot(3, 2, 4)
 if np.sum(mask_fit_plastic) > 10:
     # Compute numerical derivative
-    dstress = np.gradient(stress_measured[mask_fit_plastic],
-                          strain_measured[mask_fit_plastic])
+    dstress = np.gradient(
+        stress_measured[mask_fit_plastic], strain_measured[mask_fit_plastic]
+    )
 
-    ax4.plot(strain_measured[mask_fit_plastic] * 100, dstress, 'o',
-             alpha=0.5, markersize=4, label='Numerical dσ/dε')
+    ax4.plot(
+        strain_measured[mask_fit_plastic] * 100,
+        dstress,
+        "o",
+        alpha=0.5,
+        markersize=4,
+        label="Numerical dσ/dε",
+    )
 
     # Analytical derivative from power law
     eps_range = strain_plastic_fit
     analytical_dstress = n_fit * K_fit * eps_range ** (n_fit - 1)
-    ax4.plot((eps_range + epsilon_y_fit) * 100, analytical_dstress, 'b-',
-             linewidth=2, label='Analytical (power law)')
+    ax4.plot(
+        (eps_range + epsilon_y_fit) * 100,
+        analytical_dstress,
+        "b-",
+        linewidth=2,
+        label="Analytical (power law)",
+    )
 
-    ax4.set_xlabel('Strain (%)')
-    ax4.set_ylabel('Strain Hardening Rate (MPa)')
-    ax4.set_title('Strain Hardening Rate (dσ/dε)')
+    ax4.set_xlabel("Strain (%)")
+    ax4.set_ylabel("Strain Hardening Rate (MPa)")
+    ax4.set_title("Strain Hardening Rate (dσ/dε)")
     ax4.legend()
     ax4.grid(True, alpha=0.3)
 
 # Plot 5: Residuals (elastic region)
 ax5 = plt.subplot(3, 2, 5)
-residuals_elastic = (stress_measured[mask_fit_elastic] -
-                     linear_elastic(strain_measured[mask_fit_elastic], E_fit))
-ax5.plot(strain_measured[mask_fit_elastic] * 100, residuals_elastic, 'o',
-         alpha=0.5, markersize=4)
-ax5.axhline(0, color='r', linestyle='--', linewidth=1.5)
-ax5.axhline(2, color='gray', linestyle=':', alpha=0.5)
-ax5.axhline(-2, color='gray', linestyle=':', alpha=0.5)
-ax5.set_xlabel('Strain (%)')
-ax5.set_ylabel('Residual (MPa)')
-ax5.set_title('Elastic Fit Residuals')
+residuals_elastic = stress_measured[mask_fit_elastic] - linear_elastic(
+    strain_measured[mask_fit_elastic], E_fit
+)
+ax5.plot(
+    strain_measured[mask_fit_elastic] * 100,
+    residuals_elastic,
+    "o",
+    alpha=0.5,
+    markersize=4,
+)
+ax5.axhline(0, color="r", linestyle="--", linewidth=1.5)
+ax5.axhline(2, color="gray", linestyle=":", alpha=0.5)
+ax5.axhline(-2, color="gray", linestyle=":", alpha=0.5)
+ax5.set_xlabel("Strain (%)")
+ax5.set_ylabel("Residual (MPa)")
+ax5.set_title("Elastic Fit Residuals")
 ax5.grid(True, alpha=0.3)
 
 # Plot 6: Toughness visualization (energy absorption)
 ax6 = plt.subplot(3, 2, 6)
-ax6.fill_between(strain_measured * 100, 0, stress_measured, alpha=0.3,
-                 label=f'Toughness = {toughness:.1f} MPa')
-ax6.plot(strain_measured * 100, stress_measured, 'b-', linewidth=2)
-ax6.set_xlabel('Strain (%)')
-ax6.set_ylabel('Stress (MPa)')
-ax6.set_title('Toughness (Energy Absorption)')
-ax6.legend(loc='upper left')
+ax6.fill_between(
+    strain_measured * 100,
+    0,
+    stress_measured,
+    alpha=0.3,
+    label=f"Toughness = {toughness:.1f} MPa",
+)
+ax6.plot(strain_measured * 100, stress_measured, "b-", linewidth=2)
+ax6.set_xlabel("Strain (%)")
+ax6.set_ylabel("Stress (MPa)")
+ax6.set_title("Toughness (Energy Absorption)")
+ax6.legend(loc="upper left")
 ax6.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('materials_characterization.png', dpi=150)
+plt.savefig("materials_characterization.png", dpi=150)
 print("\n✅ Plot saved as 'materials_characterization.png'")
 plt.show()
 
@@ -458,7 +544,7 @@ print("\n" + "=" * 70)
 print("SUMMARY")
 print("=" * 70)
 print("Material properties successfully characterized:")
-print(f"\n  Material type: Aluminum alloy (6061-T6 like)")
+print("\n  Material type: Aluminum alloy (6061-T6 like)")
 print(f"  Young's Modulus:  {E_fit:.2f} GPa")
 print(f"  Yield Strength:   {sigma_y_fit:.0f} MPa (0.2% offset)")
 print(f"  UTS:              {UTS_fit:.0f} MPa")

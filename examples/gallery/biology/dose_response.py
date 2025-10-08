@@ -14,9 +14,10 @@ Key Concepts:
 - Comparison of multiple drugs/compounds
 """
 
-import numpy as np
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import numpy as np
+
 from nlsq import curve_fit
 
 # Set random seed
@@ -89,8 +90,9 @@ EC50_true = 10.0  # μM
 hill_slope_true = 1.2  # Slightly cooperative
 
 # Generate true dose-response
-response_true = four_parameter_logistic(dose, bottom_true, top_true,
-                                         EC50_true, hill_slope_true)
+response_true = four_parameter_logistic(
+    dose, bottom_true, top_true, EC50_true, hill_slope_true
+)
 
 # Add measurement noise (realistic for plate reader assays)
 noise = np.random.normal(0, 3.0, size=len(dose))  # ±3% noise
@@ -111,7 +113,7 @@ p0 = [0, 100, 15, 1.0]  # bottom, top, EC50, hill_slope
 # Parameter bounds
 bounds = (
     [-20, 50, 0.01, 0.3],  # Lower bounds
-    [30, 120, 1000, 5.0]  # Upper bounds
+    [30, 120, 1000, 5.0],  # Upper bounds
 )
 
 # Fit the model
@@ -122,7 +124,7 @@ popt, pcov = curve_fit(
     p0=p0,
     sigma=sigma,
     bounds=bounds,
-    absolute_sigma=True
+    absolute_sigma=True,
 )
 
 bottom_fit, top_fit, EC50_fit, hill_slope_fit = popt
@@ -153,17 +155,21 @@ print(f"  Top:       {top_true:.2f} %")
 print(f"  EC50:      {EC50_true:.3f} μM")
 print(f"  Hill slope: {hill_slope_true:.3f}")
 
-print(f"\nErrors:")
-print(f"  EC50: {abs(EC50_fit - EC50_true):.3f} μM " +
-      f"({100*abs(EC50_fit - EC50_true)/EC50_true:.1f}%)")
+print("\nErrors:")
+print(
+    f"  EC50: {abs(EC50_fit - EC50_true):.3f} μM "
+    + f"({100 * abs(EC50_fit - EC50_true) / EC50_true:.1f}%)"
+)
 print(f"  Hill slope: {abs(hill_slope_fit - hill_slope_true):.3f}")
 
 print("\nDerived Parameters:")
-print(f"  Dynamic range:  {dynamic_range:.2f} % " +
-      f"({bottom_fit:.1f} to {top_fit:.1f}%)")
+print(
+    f"  Dynamic range:  {dynamic_range:.2f} % "
+    + f"({bottom_fit:.1f} to {top_fit:.1f}%)"
+)
 print(f"  EC20:           {EC20:.3f} μM")
 print(f"  EC80:           {EC80:.3f} μM")
-print(f"  EC20/EC80 ratio: {EC20/EC80:.3f} (wider = shallower slope)")
+print(f"  EC20/EC80 ratio: {EC20 / EC80:.3f} (wider = shallower slope)")
 
 # Potency classification
 if EC50_fit < 0.1:
@@ -192,9 +198,9 @@ residuals = response_measured - four_parameter_logistic(dose, *popt)
 chi_squared = np.sum((residuals / sigma) ** 2)
 dof = len(dose) - len(popt)
 chi_squared_reduced = chi_squared / dof
-rmse = np.sqrt(np.mean(residuals ** 2))
+rmse = np.sqrt(np.mean(residuals**2))
 
-print(f"\nGoodness of Fit:")
+print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse:.2f} %")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
 
@@ -210,8 +216,7 @@ top_B = 80.0  # Lower efficacy
 bottom_B = 5.0
 hill_slope_B = 0.9
 
-response_B_true = four_parameter_logistic(dose, bottom_B, top_B,
-                                           EC50_B, hill_slope_B)
+response_B_true = four_parameter_logistic(dose, bottom_B, top_B, EC50_B, hill_slope_B)
 noise_B = np.random.normal(0, 3.0, size=len(dose))
 response_B = response_B_true + noise_B
 
@@ -222,23 +227,23 @@ popt_B, pcov_B = curve_fit(
     response_B,
     p0=[0, 100, 5, 1.0],
     sigma=sigma,
-    bounds=bounds
+    bounds=bounds,
 )
 
 bottom_B_fit, top_B_fit, EC50_B_fit, hill_slope_B_fit = popt_B
 dynamic_range_B = top_B_fit - bottom_B_fit
 
-print(f"Drug A (reference):")
+print("Drug A (reference):")
 print(f"  EC50:     {EC50_fit:.2f} μM")
 print(f"  Efficacy: {dynamic_range:.1f} %")
 print(f"  Hill:     {hill_slope_fit:.2f}")
 
-print(f"\nDrug B (comparison):")
+print("\nDrug B (comparison):")
 print(f"  EC50:     {EC50_B_fit:.2f} μM (more potent)")
 print(f"  Efficacy: {dynamic_range_B:.1f} % (lower efficacy)")
 print(f"  Hill:     {hill_slope_B_fit:.2f}")
 
-print(f"\nPotency ratio (A/B):  {EC50_fit/EC50_B_fit:.1f}x")
+print(f"\nPotency ratio (A/B):  {EC50_fit / EC50_B_fit:.1f}x")
 print(f"Efficacy difference:  {dynamic_range - dynamic_range_B:.1f} %")
 
 # === Visualization ===
@@ -247,62 +252,114 @@ fig = plt.figure(figsize=(16, 12))
 
 # Plot 1: Dose-response curve (log scale)
 ax1 = plt.subplot(3, 2, 1)
-ax1.errorbar(dose, response_measured, yerr=sigma, fmt='o', capsize=4,
-             markersize=8, alpha=0.7, label='Drug A data')
+ax1.errorbar(
+    dose,
+    response_measured,
+    yerr=sigma,
+    fmt="o",
+    capsize=4,
+    markersize=8,
+    alpha=0.7,
+    label="Drug A data",
+)
 
 dose_fine = np.logspace(-2, 3, 200)
-ax1.plot(dose_fine, four_parameter_logistic(dose_fine, bottom_true, top_true,
-                                              EC50_true, hill_slope_true),
-         'r--', linewidth=2, label='True curve', alpha=0.7)
-ax1.plot(dose_fine, four_parameter_logistic(dose_fine, *popt),
-         'g-', linewidth=2.5, label='Fitted curve')
+ax1.plot(
+    dose_fine,
+    four_parameter_logistic(
+        dose_fine, bottom_true, top_true, EC50_true, hill_slope_true
+    ),
+    "r--",
+    linewidth=2,
+    label="True curve",
+    alpha=0.7,
+)
+ax1.plot(
+    dose_fine,
+    four_parameter_logistic(dose_fine, *popt),
+    "g-",
+    linewidth=2.5,
+    label="Fitted curve",
+)
 
 # Mark key points
-ax1.axhline(top_fit, color='blue', linestyle=':', alpha=0.5,
-            label=f'Top = {top_fit:.1f}%')
-ax1.axhline(bottom_fit, color='gray', linestyle=':', alpha=0.5,
-            label=f'Bottom = {bottom_fit:.1f}%')
-ax1.axhline((top_fit + bottom_fit) / 2, color='orange', linestyle=':',
-            alpha=0.5)
-ax1.axvline(EC50_fit, color='orange', linestyle=':', alpha=0.5,
-            label=f'EC50 = {EC50_fit:.2f} μM')
+ax1.axhline(
+    top_fit, color="blue", linestyle=":", alpha=0.5, label=f"Top = {top_fit:.1f}%"
+)
+ax1.axhline(
+    bottom_fit,
+    color="gray",
+    linestyle=":",
+    alpha=0.5,
+    label=f"Bottom = {bottom_fit:.1f}%",
+)
+ax1.axhline((top_fit + bottom_fit) / 2, color="orange", linestyle=":", alpha=0.5)
+ax1.axvline(
+    EC50_fit,
+    color="orange",
+    linestyle=":",
+    alpha=0.5,
+    label=f"EC50 = {EC50_fit:.2f} μM",
+)
 
-ax1.set_xscale('log')
-ax1.set_xlabel('Dose (μM, log scale)', fontsize=12)
-ax1.set_ylabel('Response (%)', fontsize=12)
-ax1.set_title('Dose-Response Curve (4PL Model)', fontsize=14, fontweight='bold')
-ax1.legend(loc='lower right')
-ax1.grid(True, alpha=0.3, which='both')
+ax1.set_xscale("log")
+ax1.set_xlabel("Dose (μM, log scale)", fontsize=12)
+ax1.set_ylabel("Response (%)", fontsize=12)
+ax1.set_title("Dose-Response Curve (4PL Model)", fontsize=14, fontweight="bold")
+ax1.legend(loc="lower right")
+ax1.grid(True, alpha=0.3, which="both")
 
 # Plot 2: Comparison of two drugs
 ax2 = plt.subplot(3, 2, 2)
-ax2.plot(dose, response_measured, 'o', markersize=8, alpha=0.7,
-         label=f'Drug A (EC50={EC50_fit:.2f}μM)')
-ax2.plot(dose, response_B, 's', markersize=8, alpha=0.7,
-         label=f'Drug B (EC50={EC50_B_fit:.2f}μM)')
+ax2.plot(
+    dose,
+    response_measured,
+    "o",
+    markersize=8,
+    alpha=0.7,
+    label=f"Drug A (EC50={EC50_fit:.2f}μM)",
+)
+ax2.plot(
+    dose,
+    response_B,
+    "s",
+    markersize=8,
+    alpha=0.7,
+    label=f"Drug B (EC50={EC50_B_fit:.2f}μM)",
+)
 
-ax2.plot(dose_fine, four_parameter_logistic(dose_fine, *popt),
-         'g-', linewidth=2.5, label='Drug A fit')
-ax2.plot(dose_fine, four_parameter_logistic(dose_fine, *popt_B),
-         'b-', linewidth=2.5, label='Drug B fit')
+ax2.plot(
+    dose_fine,
+    four_parameter_logistic(dose_fine, *popt),
+    "g-",
+    linewidth=2.5,
+    label="Drug A fit",
+)
+ax2.plot(
+    dose_fine,
+    four_parameter_logistic(dose_fine, *popt_B),
+    "b-",
+    linewidth=2.5,
+    label="Drug B fit",
+)
 
-ax2.set_xscale('log')
-ax2.set_xlabel('Dose (μM, log scale)')
-ax2.set_ylabel('Response (%)')
-ax2.set_title('Comparing Drug Potency and Efficacy')
+ax2.set_xscale("log")
+ax2.set_xlabel("Dose (μM, log scale)")
+ax2.set_ylabel("Response (%)")
+ax2.set_title("Comparing Drug Potency and Efficacy")
 ax2.legend()
-ax2.grid(True, alpha=0.3, which='both')
+ax2.grid(True, alpha=0.3, which="both")
 
 # Plot 3: Residuals vs dose
 ax3 = plt.subplot(3, 2, 3)
 normalized_residuals = residuals / sigma
-ax3.semilogx(dose, normalized_residuals, 'o', markersize=6, alpha=0.7)
-ax3.axhline(0, color='r', linestyle='--', linewidth=1.5)
-ax3.axhline(2, color='gray', linestyle=':', alpha=0.5)
-ax3.axhline(-2, color='gray', linestyle=':', alpha=0.5)
-ax3.set_xlabel('Dose (μM, log scale)')
-ax3.set_ylabel('Normalized Residuals (σ)')
-ax3.set_title('Fit Residuals')
+ax3.semilogx(dose, normalized_residuals, "o", markersize=6, alpha=0.7)
+ax3.axhline(0, color="r", linestyle="--", linewidth=1.5)
+ax3.axhline(2, color="gray", linestyle=":", alpha=0.5)
+ax3.axhline(-2, color="gray", linestyle=":", alpha=0.5)
+ax3.set_xlabel("Dose (μM, log scale)")
+ax3.set_ylabel("Normalized Residuals (σ)")
+ax3.set_title("Fit Residuals")
 ax3.grid(True, alpha=0.3)
 
 # Plot 4: Hill slope visualization
@@ -311,16 +368,15 @@ ax4 = plt.subplot(3, 2, 4)
 hill_slopes = [0.5, 1.0, 2.0, 4.0]
 for h in hill_slopes:
     resp = four_parameter_logistic(dose_fine, bottom_fit, top_fit, EC50_fit, h)
-    ax4.plot(dose_fine, resp, linewidth=2,
-             label=f'h = {h:.1f}')
+    ax4.plot(dose_fine, resp, linewidth=2, label=f"h = {h:.1f}")
 
-ax4.axvline(EC50_fit, color='orange', linestyle='--', alpha=0.5)
-ax4.set_xscale('log')
-ax4.set_xlabel('Dose (μM, log scale)')
-ax4.set_ylabel('Response (%)')
-ax4.set_title('Effect of Hill Slope on Curve Shape')
+ax4.axvline(EC50_fit, color="orange", linestyle="--", alpha=0.5)
+ax4.set_xscale("log")
+ax4.set_xlabel("Dose (μM, log scale)")
+ax4.set_ylabel("Response (%)")
+ax4.set_title("Effect of Hill Slope on Curve Shape")
 ax4.legend()
-ax4.grid(True, alpha=0.3, which='both')
+ax4.grid(True, alpha=0.3, which="both")
 
 # Plot 5: Normalized dose-response (universal curve)
 ax5 = plt.subplot(3, 2, 5)
@@ -328,57 +384,73 @@ ax5 = plt.subplot(3, 2, 5)
 dose_normalized = dose / EC50_fit
 response_normalized = (response_measured - bottom_fit) / (top_fit - bottom_fit)
 
-ax5.semilogx(dose_normalized, response_normalized, 'o', markersize=8,
-             alpha=0.7, label='Normalized data')
+ax5.semilogx(
+    dose_normalized,
+    response_normalized,
+    "o",
+    markersize=8,
+    alpha=0.7,
+    label="Normalized data",
+)
 
 dose_norm_fine = np.logspace(-3, 3, 200)
 # Normalized 4PL: Response = 1 / (1 + (1/x)^h)
 response_norm_fine = 1 / (1 + (1 / dose_norm_fine) ** hill_slope_fit)
-ax5.semilogx(dose_norm_fine, response_norm_fine, 'g-',
-             linewidth=2.5, label=f'Universal curve (h={hill_slope_fit:.2f})')
+ax5.semilogx(
+    dose_norm_fine,
+    response_norm_fine,
+    "g-",
+    linewidth=2.5,
+    label=f"Universal curve (h={hill_slope_fit:.2f})",
+)
 
-ax5.axvline(1, color='orange', linestyle='--', linewidth=2,
-            label='Dose = EC50')
-ax5.axhline(0.5, color='blue', linestyle=':', alpha=0.5,
-            label='50% response')
+ax5.axvline(1, color="orange", linestyle="--", linewidth=2, label="Dose = EC50")
+ax5.axhline(0.5, color="blue", linestyle=":", alpha=0.5, label="50% response")
 
-ax5.set_xlabel('Normalized Dose (Dose/EC50)')
-ax5.set_ylabel('Normalized Response')
-ax5.set_title('Normalized Dose-Response Curve')
+ax5.set_xlabel("Normalized Dose (Dose/EC50)")
+ax5.set_ylabel("Normalized Response")
+ax5.set_title("Normalized Dose-Response Curve")
 ax5.legend()
 ax5.grid(True, alpha=0.3)
 
 # Plot 6: Concentration-effect table visualization
 ax6 = plt.subplot(3, 2, 6)
-ax6.axis('off')
+ax6.axis("off")
 
 # Create table of key concentrations and effects
 conc_table = [
-    ['Concentration', 'Response', 'Description'],
-    ['─' * 15, '─' * 10, '─' * 25],
-    [f'{EC20:.2f} μM', '20%', 'EC20 (low effect)'],
-    [f'{EC50_fit:.2f} μM', '50%', 'EC50 (half-maximal)'],
-    [f'{EC80:.2f} μM', '80%', 'EC80 (high effect)'],
-    ['', '', ''],
-    ['Parameter', 'Value', 'Interpretation'],
-    ['─' * 15, '─' * 10, '─' * 25],
-    ['Dynamic range', f'{dynamic_range:.1f}%', f'{bottom_fit:.1f} → {top_fit:.1f}%'],
-    ['Hill slope', f'{hill_slope_fit:.2f}', cooperativity.split('(')[0].strip()],
-    ['Potency', f'{EC50_fit:.2f} μM', potency.split('(')[0].strip()],
-    ['', '', ''],
-    ['Quality', 'Metric', ''],
-    ['─' * 15, '─' * 10, '─' * 25],
-    ['RMSE', f'{rmse:.2f}%', ''],
-    ['χ²/dof', f'{chi_squared_reduced:.2f}', ''],
+    ["Concentration", "Response", "Description"],
+    ["─" * 15, "─" * 10, "─" * 25],
+    [f"{EC20:.2f} μM", "20%", "EC20 (low effect)"],
+    [f"{EC50_fit:.2f} μM", "50%", "EC50 (half-maximal)"],
+    [f"{EC80:.2f} μM", "80%", "EC80 (high effect)"],
+    ["", "", ""],
+    ["Parameter", "Value", "Interpretation"],
+    ["─" * 15, "─" * 10, "─" * 25],
+    ["Dynamic range", f"{dynamic_range:.1f}%", f"{bottom_fit:.1f} → {top_fit:.1f}%"],
+    ["Hill slope", f"{hill_slope_fit:.2f}", cooperativity.split("(")[0].strip()],
+    ["Potency", f"{EC50_fit:.2f} μM", potency.split("(")[0].strip()],
+    ["", "", ""],
+    ["Quality", "Metric", ""],
+    ["─" * 15, "─" * 10, "─" * 25],
+    ["RMSE", f"{rmse:.2f}%", ""],
+    ["χ²/dof", f"{chi_squared_reduced:.2f}", ""],
 ]
 
-table_text = '\n'.join(['  '.join(row) for row in conc_table])
-ax6.text(0.1, 0.9, table_text, fontsize=10, verticalalignment='top',
-         fontfamily='monospace', transform=ax6.transAxes)
-ax6.set_title('Summary Table', fontsize=12, fontweight='bold')
+table_text = "\n".join(["  ".join(row) for row in conc_table])
+ax6.text(
+    0.1,
+    0.9,
+    table_text,
+    fontsize=10,
+    verticalalignment="top",
+    fontfamily="monospace",
+    transform=ax6.transAxes,
+)
+ax6.set_title("Summary Table", fontsize=12, fontweight="bold")
 
 plt.tight_layout()
-plt.savefig('dose_response.png', dpi=150)
+plt.savefig("dose_response.png", dpi=150)
 print("\n✅ Plot saved as 'dose_response.png'")
 plt.show()
 
@@ -388,15 +460,17 @@ print("\n" + "=" * 70)
 print("SUMMARY")
 print("=" * 70)
 print("Dose-response analysis complete:")
-print(f"\n  Drug A:")
+print("\n  Drug A:")
 print(f"    EC50:      {EC50_fit:.3f} ± {EC50_err:.3f} μM")
 print(f"    Efficacy:  {dynamic_range:.1f}% ({bottom_fit:.1f} to {top_fit:.1f}%)")
 print(f"    Hill slope: {hill_slope_fit:.2f} ({cooperativity.split('(')[0].strip()})")
 print(f"    Potency:   {potency.split('(')[0].strip()}")
-print(f"\n  Drug B (comparison):")
-print(f"    EC50:      {EC50_B_fit:.2f} μM ({EC50_fit/EC50_B_fit:.1f}x less potent)")
-print(f"    Efficacy:  {dynamic_range_B:.1f}% ({dynamic_range - dynamic_range_B:+.1f}%)")
-print(f"\n  Key concentrations:")
+print("\n  Drug B (comparison):")
+print(f"    EC50:      {EC50_B_fit:.2f} μM ({EC50_fit / EC50_B_fit:.1f}x less potent)")
+print(
+    f"    Efficacy:  {dynamic_range_B:.1f}% ({dynamic_range - dynamic_range_B:+.1f}%)"
+)
+print("\n  Key concentrations:")
 print(f"    EC20: {EC20:.2f} μM")
 print(f"    EC50: {EC50_fit:.2f} μM")
 print(f"    EC80: {EC80:.2f} μM")

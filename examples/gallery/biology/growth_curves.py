@@ -14,9 +14,10 @@ Key Concepts:
 - Modified Gompertz model for lag phase
 """
 
-import numpy as np
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import numpy as np
+
 from nlsq import curve_fit
 
 # Set random seed
@@ -135,7 +136,7 @@ p0 = [0.015, 1.0, 0.7]  # N0, K, r
 # Parameter bounds
 bounds = (
     [0, 0, 0],  # All positive
-    [0.1, 3.0, 2.0]  # Reasonable upper limits
+    [0.1, 3.0, 2.0],  # Reasonable upper limits
 )
 
 # Fit the model
@@ -146,7 +147,7 @@ popt, pcov = curve_fit(
     p0=p0,
     sigma=sigma,
     bounds=bounds,
-    absolute_sigma=True
+    absolute_sigma=True,
 )
 
 N0_fit, K_fit, r_fit = popt
@@ -180,16 +181,16 @@ print("\nDerived Growth Characteristics:")
 print(f"  Doubling time (t_d):      {doubling_time:.2f} hours")
 print(f"  Time to mid-exp (K/2):    {t_mid:.2f} hours")
 print(f"  Max growth rate:          {max_growth_rate:.4f} OD/hr")
-print(f"  Generation time:          {60*doubling_time:.1f} minutes")
+print(f"  Generation time:          {60 * doubling_time:.1f} minutes")
 
 # Goodness of fit
 residuals = OD_measured - logistic_growth(time, *popt)
 chi_squared = np.sum((residuals / sigma) ** 2)
 dof = len(time) - len(popt)
 chi_squared_reduced = chi_squared / dof
-rmse = np.sqrt(np.mean(residuals ** 2))
+rmse = np.sqrt(np.mean(residuals**2))
 
-print(f"\nGoodness of Fit:")
+print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse:.4f} OD")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
 
@@ -211,12 +212,7 @@ if np.sum(mask_exp) > 5:
     ln_OD = np.log(OD_measured[mask_exp])
     t_exp = time[mask_exp]
 
-    popt_exp, pcov_exp = curve_fit(
-        linear_log,
-        t_exp,
-        ln_OD,
-        p0=[np.log(0.1), 0.8]
-    )
+    popt_exp, pcov_exp = curve_fit(linear_log, t_exp, ln_OD, p0=[np.log(0.1), 0.8])
 
     ln_N0_exp, mu_exp = popt_exp
     N0_exp = np.exp(ln_N0_exp)
@@ -224,12 +220,12 @@ if np.sum(mask_exp) > 5:
 
     doubling_time_exp = np.log(2) / mu_exp
 
-    print(f"Exponential phase parameters (from log fit):")
+    print("Exponential phase parameters (from log fit):")
     print(f"  μ (specific growth rate): {mu_exp:.3f} ± {mu_err:.3f} hr⁻¹")
     print(f"  Doubling time:            {doubling_time_exp:.2f} hours")
     print(f"  N0 (extrapolated):        {N0_exp:.4f}")
     print(f"\nCompare with logistic r:    {r_fit:.3f} hr⁻¹")
-    print(f"(Should be similar in exponential phase)")
+    print("(Should be similar in exponential phase)")
 
 # === Growth Phase Classification ===
 
@@ -239,22 +235,22 @@ print("-" * 70)
 
 # Classify each time point
 phases = []
-for t, od in zip(time, OD_measured):
+for t, od in zip(time, OD_measured, strict=False):
     if od < 0.05:
-        phases.append('Lag')
+        phases.append("Lag")
     elif od < 0.9 * K_fit:
-        phases.append('Exponential')
+        phases.append("Exponential")
     else:
-        phases.append('Stationary')
+        phases.append("Stationary")
 
 # Find phase transitions
-lag_end = np.where(np.array(phases) != 'Lag')[0]
+lag_end = np.where(np.array(phases) != "Lag")[0]
 if len(lag_end) > 0:
     lag_duration = time[lag_end[0]]
 else:
     lag_duration = 0
 
-exp_end = np.where(np.array(phases) == 'Stationary')[0]
+exp_end = np.where(np.array(phases) == "Stationary")[0]
 if len(exp_end) > 0:
     exp_duration = time[exp_end[0]] - lag_duration
     t_stationary = time[exp_end[0]]
@@ -262,7 +258,7 @@ else:
     exp_duration = time[-1] - lag_duration
     t_stationary = time[-1]
 
-print(f"Phase durations:")
+print("Phase durations:")
 print(f"  Lag phase:         ~{lag_duration:.1f} hours")
 print(f"  Exponential phase: ~{exp_duration:.1f} hours")
 print(f"  Stationary phase:  starts at ~{t_stationary:.1f} hours")
@@ -273,50 +269,76 @@ fig = plt.figure(figsize=(16, 12))
 
 # Plot 1: Growth curve (linear scale)
 ax1 = plt.subplot(3, 2, 1)
-ax1.errorbar(time, OD_measured, yerr=sigma, fmt='o', capsize=3,
-             markersize=6, alpha=0.6, label='Measured OD')
+ax1.errorbar(
+    time,
+    OD_measured,
+    yerr=sigma,
+    fmt="o",
+    capsize=3,
+    markersize=6,
+    alpha=0.6,
+    label="Measured OD",
+)
 
 t_fine = np.linspace(0, 24, 200)
-ax1.plot(t_fine, logistic_growth(t_fine, N0_true, K_true, r_true),
-         'r--', linewidth=2, label='True curve', alpha=0.7)
-ax1.plot(t_fine, logistic_growth(t_fine, *popt),
-         'g-', linewidth=2.5, label='Fitted logistic')
+ax1.plot(
+    t_fine,
+    logistic_growth(t_fine, N0_true, K_true, r_true),
+    "r--",
+    linewidth=2,
+    label="True curve",
+    alpha=0.7,
+)
+ax1.plot(
+    t_fine, logistic_growth(t_fine, *popt), "g-", linewidth=2.5, label="Fitted logistic"
+)
 
 # Mark key points
-ax1.axhline(K_fit, color='blue', linestyle=':', alpha=0.5,
-            label=f'Carrying capacity K = {K_fit:.2f}')
-ax1.axhline(K_fit/2, color='orange', linestyle=':', alpha=0.5)
-ax1.axvline(t_mid, color='orange', linestyle=':', alpha=0.5,
-            label=f'Mid-exp (t = {t_mid:.1f}h)')
+ax1.axhline(
+    K_fit,
+    color="blue",
+    linestyle=":",
+    alpha=0.5,
+    label=f"Carrying capacity K = {K_fit:.2f}",
+)
+ax1.axhline(K_fit / 2, color="orange", linestyle=":", alpha=0.5)
+ax1.axvline(
+    t_mid, color="orange", linestyle=":", alpha=0.5, label=f"Mid-exp (t = {t_mid:.1f}h)"
+)
 
-ax1.set_xlabel('Time (hours)', fontsize=12)
-ax1.set_ylabel('OD600', fontsize=12)
-ax1.set_title('Bacterial Growth Curve', fontsize=14, fontweight='bold')
-ax1.legend(loc='lower right')
+ax1.set_xlabel("Time (hours)", fontsize=12)
+ax1.set_ylabel("OD600", fontsize=12)
+ax1.set_title("Bacterial Growth Curve", fontsize=14, fontweight="bold")
+ax1.legend(loc="lower right")
 ax1.grid(True, alpha=0.3)
 
 # Plot 2: Semi-log plot
 ax2 = plt.subplot(3, 2, 2)
-ax2.semilogy(time, OD_measured, 'o', markersize=6, alpha=0.6,
-             label='Measured OD')
-ax2.semilogy(t_fine, logistic_growth(t_fine, *popt), 'g-',
-             linewidth=2.5, label='Fitted logistic')
+ax2.semilogy(time, OD_measured, "o", markersize=6, alpha=0.6, label="Measured OD")
+ax2.semilogy(
+    t_fine, logistic_growth(t_fine, *popt), "g-", linewidth=2.5, label="Fitted logistic"
+)
 
 # Show exponential fit
 if np.sum(mask_exp) > 5:
-    ax2.semilogy(t_fine, exponential_phase(t_fine, N0_exp, mu_exp),
-                 'b--', linewidth=2, label=f'Exponential (μ={mu_exp:.2f})')
+    ax2.semilogy(
+        t_fine,
+        exponential_phase(t_fine, N0_exp, mu_exp),
+        "b--",
+        linewidth=2,
+        label=f"Exponential (μ={mu_exp:.2f})",
+    )
 
 # Shade growth phases
-ax2.axvspan(0, lag_duration, alpha=0.1, color='red', label='Lag phase')
-ax2.axvspan(lag_duration, t_stationary, alpha=0.1, color='green')
-ax2.axvspan(t_stationary, 24, alpha=0.1, color='blue')
+ax2.axvspan(0, lag_duration, alpha=0.1, color="red", label="Lag phase")
+ax2.axvspan(lag_duration, t_stationary, alpha=0.1, color="green")
+ax2.axvspan(t_stationary, 24, alpha=0.1, color="blue")
 
-ax2.set_xlabel('Time (hours)')
-ax2.set_ylabel('OD600 (log scale)')
-ax2.set_title('Semi-Log Plot (Shows Exponential as Linear)')
+ax2.set_xlabel("Time (hours)")
+ax2.set_ylabel("OD600 (log scale)")
+ax2.set_title("Semi-Log Plot (Shows Exponential as Linear)")
 ax2.legend()
-ax2.grid(True, alpha=0.3, which='both')
+ax2.grid(True, alpha=0.3, which="both")
 
 # Plot 3: Growth rate (dN/dt)
 ax3 = plt.subplot(3, 2, 3)
@@ -325,19 +347,24 @@ ax3 = plt.subplot(3, 2, 3)
 N_vals = logistic_growth(t_fine, *popt)
 growth_rate_analytical = r_fit * N_vals * (1 - N_vals / K_fit)
 
-ax3.plot(t_fine, growth_rate_analytical, 'g-', linewidth=2.5,
-         label='Growth rate (dN/dt)')
+ax3.plot(
+    t_fine, growth_rate_analytical, "g-", linewidth=2.5, label="Growth rate (dN/dt)"
+)
 
 # Mark maximum
 max_gr_idx = np.argmax(growth_rate_analytical)
-ax3.plot(t_fine[max_gr_idx], growth_rate_analytical[max_gr_idx],
-         'ro', markersize=10,
-         label=f'Max at t={t_fine[max_gr_idx]:.1f}h, N={N_vals[max_gr_idx]:.2f}')
+ax3.plot(
+    t_fine[max_gr_idx],
+    growth_rate_analytical[max_gr_idx],
+    "ro",
+    markersize=10,
+    label=f"Max at t={t_fine[max_gr_idx]:.1f}h, N={N_vals[max_gr_idx]:.2f}",
+)
 
-ax3.axvline(t_mid, color='orange', linestyle='--', alpha=0.5)
-ax3.set_xlabel('Time (hours)')
-ax3.set_ylabel('Growth Rate dN/dt (OD/hr)')
-ax3.set_title('Instantaneous Growth Rate')
+ax3.axvline(t_mid, color="orange", linestyle="--", alpha=0.5)
+ax3.set_xlabel("Time (hours)")
+ax3.set_ylabel("Growth Rate dN/dt (OD/hr)")
+ax3.set_title("Instantaneous Growth Rate")
 ax3.legend()
 ax3.grid(True, alpha=0.3)
 
@@ -346,55 +373,67 @@ ax4 = plt.subplot(3, 2, 4)
 # μ(t) = (1/N) * dN/dt = r*(1 - N/K)
 specific_growth_rate = growth_rate_analytical / N_vals
 
-ax4.plot(t_fine, specific_growth_rate, 'g-', linewidth=2.5)
-ax4.axhline(r_fit, color='blue', linestyle='--', linewidth=2,
-            label=f'Intrinsic rate r = {r_fit:.3f} hr⁻¹')
-ax4.axhline(r_fit/2, color='orange', linestyle=':', alpha=0.5)
+ax4.plot(t_fine, specific_growth_rate, "g-", linewidth=2.5)
+ax4.axhline(
+    r_fit,
+    color="blue",
+    linestyle="--",
+    linewidth=2,
+    label=f"Intrinsic rate r = {r_fit:.3f} hr⁻¹",
+)
+ax4.axhline(r_fit / 2, color="orange", linestyle=":", alpha=0.5)
 
-ax4.set_xlabel('Time (hours)')
-ax4.set_ylabel('Specific Growth Rate μ (hr⁻¹)')
-ax4.set_title('Specific Growth Rate (1/N × dN/dt)')
+ax4.set_xlabel("Time (hours)")
+ax4.set_ylabel("Specific Growth Rate μ (hr⁻¹)")
+ax4.set_title("Specific Growth Rate (1/N × dN/dt)")
 ax4.legend()
 ax4.grid(True, alpha=0.3)
 
 # Plot 5: Residuals
 ax5 = plt.subplot(3, 2, 5)
 normalized_residuals = residuals / sigma
-ax5.plot(time, normalized_residuals, 'o', markersize=6, alpha=0.7)
-ax5.axhline(0, color='r', linestyle='--', linewidth=1.5)
-ax5.axhline(2, color='gray', linestyle=':', alpha=0.5)
-ax5.axhline(-2, color='gray', linestyle=':', alpha=0.5)
-ax5.set_xlabel('Time (hours)')
-ax5.set_ylabel('Normalized Residuals (σ)')
-ax5.set_title('Fit Residuals')
+ax5.plot(time, normalized_residuals, "o", markersize=6, alpha=0.7)
+ax5.axhline(0, color="r", linestyle="--", linewidth=1.5)
+ax5.axhline(2, color="gray", linestyle=":", alpha=0.5)
+ax5.axhline(-2, color="gray", linestyle=":", alpha=0.5)
+ax5.set_xlabel("Time (hours)")
+ax5.set_ylabel("Normalized Residuals (σ)")
+ax5.set_title("Fit Residuals")
 ax5.grid(True, alpha=0.3)
 
 # Plot 6: Phase diagram (N vs dN/dt)
 ax6 = plt.subplot(3, 2, 6)
-ax6.plot(N_vals, growth_rate_analytical, 'g-', linewidth=2.5,
-         label='Logistic trajectory')
+ax6.plot(
+    N_vals, growth_rate_analytical, "g-", linewidth=2.5, label="Logistic trajectory"
+)
 
 # Theoretical maximum (parabola)
 N_theory = np.linspace(0, K_fit, 100)
 dNdt_theory = r_fit * N_theory * (1 - N_theory / K_fit)
-ax6.plot(N_theory, dNdt_theory, 'b--', linewidth=2,
-         label='Theoretical (r*N*(1-N/K))')
+ax6.plot(N_theory, dNdt_theory, "b--", linewidth=2, label="Theoretical (r*N*(1-N/K))")
 
 # Mark current measurements
 OD_measured_sorted_idx = np.argsort(OD_measured)
-dNdt_measured = np.gradient(OD_measured[OD_measured_sorted_idx],
-                            time[OD_measured_sorted_idx])
-ax6.plot(OD_measured[OD_measured_sorted_idx], dNdt_measured,
-         'o', alpha=0.3, markersize=4, label='Measured (numerical)')
+dNdt_measured = np.gradient(
+    OD_measured[OD_measured_sorted_idx], time[OD_measured_sorted_idx]
+)
+ax6.plot(
+    OD_measured[OD_measured_sorted_idx],
+    dNdt_measured,
+    "o",
+    alpha=0.3,
+    markersize=4,
+    label="Measured (numerical)",
+)
 
-ax6.set_xlabel('Population N (OD600)')
-ax6.set_ylabel('Growth Rate dN/dt (OD/hr)')
-ax6.set_title('Phase Diagram')
+ax6.set_xlabel("Population N (OD600)")
+ax6.set_ylabel("Growth Rate dN/dt (OD/hr)")
+ax6.set_title("Phase Diagram")
 ax6.legend()
 ax6.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('growth_curves.png', dpi=150)
+plt.savefig("growth_curves.png", dpi=150)
 print("\n✅ Plot saved as 'growth_curves.png'")
 plt.show()
 
@@ -404,12 +443,14 @@ print("\n" + "=" * 70)
 print("SUMMARY")
 print("=" * 70)
 print("Bacterial growth successfully characterized:")
-print(f"\n  Growth model: Logistic (Verhulst equation)")
+print("\n  Growth model: Logistic (Verhulst equation)")
 print(f"  Intrinsic growth rate (r): {r_fit:.3f} ± {r_err:.3f} hr⁻¹")
-print(f"  Doubling time:             {doubling_time:.2f} hours ({60*doubling_time:.0f} min)")
+print(
+    f"  Doubling time:             {doubling_time:.2f} hours ({60 * doubling_time:.0f} min)"
+)
 print(f"  Carrying capacity (K):     {K_fit:.3f} ± {K_err:.3f} OD600")
 print(f"  Initial density (N0):      {N0_fit:.4f} ± {N0_err:.4f} OD600")
-print(f"\nGrowth phases:")
+print("\nGrowth phases:")
 print(f"  Lag phase:         {lag_duration:.1f} hours")
 print(f"  Exponential phase: {exp_duration:.1f} hours")
 print(f"  Stationary phase:  after {t_stationary:.1f} hours")
