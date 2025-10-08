@@ -20,12 +20,12 @@ from jax import jit
 
 __all__ = [
     "NumericalStabilityGuard",
-    "stability_guard",
-    "estimate_condition_number",
-    "detect_parameter_scale_mismatch",
-    "detect_collinearity",
-    "check_problem_stability",
     "apply_automatic_fixes",
+    "check_problem_stability",
+    "detect_collinearity",
+    "detect_parameter_scale_mismatch",
+    "estimate_condition_number",
+    "stability_guard",
 ]
 
 
@@ -514,7 +514,9 @@ def estimate_condition_number(xdata: np.ndarray) -> float:
         return np.inf
 
 
-def detect_parameter_scale_mismatch(p0: np.ndarray, threshold: float = 1e6) -> tuple[bool, float]:
+def detect_parameter_scale_mismatch(
+    p0: np.ndarray, threshold: float = 1e6
+) -> tuple[bool, float]:
     """
     Detect if parameter scales differ by too many orders of magnitude.
 
@@ -560,7 +562,9 @@ def detect_parameter_scale_mismatch(p0: np.ndarray, threshold: float = 1e6) -> t
     return bool(has_mismatch), float(scale_ratio)
 
 
-def detect_collinearity(xdata: np.ndarray, threshold: float = 0.95) -> tuple[bool, list]:
+def detect_collinearity(
+    xdata: np.ndarray, threshold: float = 0.95
+) -> tuple[bool, list]:
     """
     Detect collinearity in multidimensional input data.
 
@@ -687,10 +691,16 @@ def check_problem_stability(
                 "critical",
             )
         )
-        recommendations.append("Rescale xdata to a smaller range (e.g., [0, 1] or [-1, 1])")
+        recommendations.append(
+            "Rescale xdata to a smaller range (e.g., [0, 1] or [-1, 1])"
+        )
     elif cond > 1e10:
         issues.append(
-            ("poor_conditioning", f"xdata has poor conditioning (cond={cond:.2e})", "warning")
+            (
+                "poor_conditioning",
+                f"xdata has poor conditioning (cond={cond:.2e})",
+                "warning",
+            )
         )
         recommendations.append("Consider rescaling xdata")
 
@@ -708,11 +718,15 @@ def check_problem_stability(
 
     # Extreme ranges
     if x_range > 1e6:
-        issues.append(("large_x_range", f"xdata spans large range ({x_range:.2e})", "warning"))
+        issues.append(
+            ("large_x_range", f"xdata spans large range ({x_range:.2e})", "warning")
+        )
         recommendations.append("Consider normalizing xdata")
 
     if y_range > 1e6:
-        issues.append(("large_y_range", f"ydata spans large range ({y_range:.2e})", "warning"))
+        issues.append(
+            ("large_y_range", f"ydata spans large range ({y_range:.2e})", "warning")
+        )
         recommendations.append("Consider normalizing ydata")
 
     # Check 4: Parameter scale mismatch
@@ -845,7 +859,9 @@ def apply_automatic_fixes(
             xdata = (xdata - x_min) / x_range
             fix_info["x_scale"] = x_range
             fix_info["x_offset"] = x_min
-            applied_fixes.append(f"Rescaled xdata from [{x_min:.2e}, {x_max:.2e}] to [0, 1]")
+            applied_fixes.append(
+                f"Rescaled xdata from [{x_min:.2e}, {x_max:.2e}] to [0, 1]"
+            )
 
     # Fix 2: Rescale ydata if large range
     y_range = np.ptp(ydata)
@@ -857,7 +873,9 @@ def apply_automatic_fixes(
             ydata = (ydata - y_min) / y_range
             fix_info["y_scale"] = y_range
             fix_info["y_offset"] = y_min
-            applied_fixes.append(f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]")
+            applied_fixes.append(
+                f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]"
+            )
 
     # Fix 3: Replace NaN/Inf in data
     if np.any(~np.isfinite(xdata)):
@@ -870,7 +888,11 @@ def apply_automatic_fixes(
 
     # Fix 4: Adjust p0 scales if needed
     p0_fixed = p0
-    if p0 is not None and stability_report["parameter_scale_ratio"] and stability_report["parameter_scale_ratio"] > 1e6:
+    if (
+        p0 is not None
+        and stability_report["parameter_scale_ratio"]
+        and stability_report["parameter_scale_ratio"] > 1e6
+    ):
         # Normalize each parameter independently to order of magnitude 1
         p0_fixed = np.copy(p0)
         for i in range(len(p0_fixed)):

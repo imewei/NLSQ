@@ -243,6 +243,7 @@ def curve_fit(
     # Handle numerical stability checks and fixes
     if stability:
         import logging
+
         from nlsq.stability import apply_automatic_fixes, check_problem_stability
 
         logger = logging.getLogger(__name__)
@@ -814,7 +815,12 @@ class CurveFit:
 
         # Only auto-estimate if p0='auto' is explicitly requested
         # (not when p0=None, to preserve backward compatibility)
-        if isinstance(p0, str) and p0 == "auto" and xdata is not None and ydata is not None:
+        if (
+            isinstance(p0, str)
+            and p0 == "auto"
+            and xdata is not None
+            and ydata is not None
+        ):
             try:
                 p0_estimated = estimate_initial_parameters(f, xdata, ydata, p0)
                 p0 = np.atleast_1d(p0_estimated)

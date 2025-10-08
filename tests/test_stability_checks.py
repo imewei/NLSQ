@@ -293,7 +293,9 @@ class TestApplyAutomaticFixes:
 
         # Parameters should be rescaled to similar magnitude
         if p0_fixed is not None:
-            scale_ratio = np.max(np.abs(p0_fixed)) / np.min(np.abs(p0_fixed[p0_fixed != 0]))
+            scale_ratio = np.max(np.abs(p0_fixed)) / np.min(
+                np.abs(p0_fixed[p0_fixed != 0])
+            )
             # After fix, ratio should be much smaller
             assert scale_ratio < 1e6
 

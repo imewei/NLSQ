@@ -57,15 +57,6 @@ from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 # Fallback strategies (Phase 3 - Days 15-16)
 from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
 
-# Stability checks (Phase 3 - Day 18)
-from nlsq.stability import (
-    apply_automatic_fixes,
-    check_problem_stability,
-    detect_collinearity,
-    detect_parameter_scale_mismatch,
-    estimate_condition_number,
-)
-
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
@@ -104,7 +95,16 @@ from nlsq.sparse_jacobian import (
     SparseOptimizer,
     detect_jacobian_sparsity,
 )
-from nlsq.stability import NumericalStabilityGuard
+
+# Stability checks (Phase 3 - Day 18)
+from nlsq.stability import (
+    NumericalStabilityGuard,
+    apply_automatic_fixes,
+    check_problem_stability,
+    detect_collinearity,
+    detect_parameter_scale_mismatch,
+    estimate_condition_number,
+)
 
 # Streaming optimizer support
 from nlsq.streaming_optimizer import (

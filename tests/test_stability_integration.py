@@ -7,10 +7,10 @@ Tests the integration of stability checks into the curve_fit API.
 
 import logging
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax.numpy as jnp
 from nlsq import curve_fit
 
 
@@ -67,14 +67,10 @@ class TestStabilityAutoMode:
         p0 = [2.0, 1.0]
 
         with caplog.at_level(logging.INFO):
-            result = curve_fit(
-                lambda x, a, b: a * x + b, x, y, p0=p0, stability="auto"
-            )
+            result = curve_fit(lambda x, a, b: a * x + b, x, y, p0=p0, stability="auto")
 
         # Should have info logs about applied fixes
-        info_messages = [
-            r.message for r in caplog.records if r.levelno == logging.INFO
-        ]
+        info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
         assert any("fix" in msg.lower() for msg in info_messages)
 
         # Should converge successfully
@@ -115,9 +111,7 @@ class TestStabilityAutoMode:
         p0 = [1e-6, 1e6]  # Huge scale mismatch
 
         # Should succeed with auto fix
-        result = curve_fit(
-            lambda x, a, b: a * x + b, x, y, p0=p0, stability="auto"
-        )
+        result = curve_fit(lambda x, a, b: a * x + b, x, y, p0=p0, stability="auto")
 
         assert result.x is not None
 
