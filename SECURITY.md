@@ -119,14 +119,21 @@ def safe_curve_fit(fit_func, xdata, ydata, **kwargs):
 
 NLSQ relies on JAX, NumPy, and SciPy. Keep these dependencies updated:
 
+⚠️ **Important**: NLSQ requires **NumPy 2.0+** (breaking change from NumPy 1.x)
+
 ```bash
 # Check for known vulnerabilities
 pip install pip-audit
 pip-audit
 
-# Update dependencies
-pip install --upgrade nlsq jax jaxlib numpy scipy
+# Update dependencies (ensure NumPy 2.0+, JAX 0.6.0+)
+pip install --upgrade nlsq "jax>=0.6.0" "jaxlib>=0.6.0" "numpy>=2.0.0" "scipy>=1.14.0"
+
+# Verify versions
+python -c "import numpy; import jax; print(f'NumPy: {numpy.__version__}, JAX: {jax.__version__}')"
 ```
+
+For detailed dependency requirements and version management, see [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ---
 
@@ -202,4 +209,4 @@ We appreciate security researchers who help keep NLSQ secure:
 
 ---
 
-**Last Updated**: 2025-10-07
+**Last Updated**: 2025-10-08

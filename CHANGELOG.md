@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Configuration Alignment** (2025-10-08): Updated all configuration files to match tested local environment
+  - Updated NumPy requirement to 2.0+ (breaking change from 1.x, tested on 2.3.3)
+  - Updated JAX minimum to 0.6.0 (tested on 0.7.2)
+  - Updated Ruff to 0.14.0, pytest to 8.4.2
+  - Created comprehensive dependency management documentation (REQUIREMENTS.md)
+  - Created requirements.txt, requirements-dev.txt, requirements-full.txt for reproducibility
+  - Aligned .pre-commit-config.yaml, .readthedocs.yaml with dependency versions
+  - Updated CLAUDE.md with expanded dependency documentation (174→409 lines)
+
 ## [0.1.1] - 2025-10-08
 
 ### Major Features

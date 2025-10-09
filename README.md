@@ -7,7 +7,7 @@
 [![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
 [![Documentation Status](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/en/latest/?badge=latest)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![JAX](https://img.shields.io/badge/JAX-0.4.20--0.7.2-green.svg)](https://github.com/google/jax)
+[![JAX](https://img.shields.io/badge/JAX-0.6.0+-green.svg)](https://github.com/google/jax)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 [**Quickstart**](#quickstart-colab-in-the-cloud)
@@ -475,9 +475,11 @@ Some standouts:
 ### Requirements
 
 - **Python 3.12 or higher** (3.13 also supported)
-- **JAX 0.4.20 - 0.7.2** (tested with latest versions)
-- **NumPy 1.26.0+**
-- **SciPy 1.11.0+**
+- **JAX 0.6.0+** (tested with 0.7.2)
+- **NumPy 2.0+** ⚠️ **Breaking change from NumPy 1.x** (tested with 2.3.3)
+- **SciPy 1.14.0+** (tested with 1.16.2)
+
+For detailed dependency information and version management, see [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ### Quick Install
 
@@ -485,10 +487,10 @@ Some standouts:
 
 ```bash
 # For CPU-only
-pip install --upgrade "jax[cpu]>=0.4.20" nlsq
+pip install --upgrade "jax[cpu]>=0.6.0" nlsq
 
 # For GPU with CUDA 12
-pip install --upgrade "jax[cuda12]>=0.4.20" nlsq
+pip install --upgrade "jax[cuda12]>=0.6.0" nlsq
 ```
 
 #### Development Installation
@@ -519,7 +521,7 @@ conda create -n nlsq python=3.12
 conda activate nlsq
 
 # Install JAX CPU version (latest compatible)
-pip install "jax[cpu]>=0.4.20"
+pip install "jax[cpu]>=0.6.0"
 pip install nlsq
 ```
 
@@ -535,7 +537,7 @@ conda activate nlsq
 conda install -c conda-forge cuda-toolkit=12.1
 
 # Install JAX with CUDA support (latest compatible)
-pip install "jax[cuda12_local]>=0.4.20"
+pip install "jax[cuda12_local]>=0.6.0"
 pip install nlsq
 ```
 

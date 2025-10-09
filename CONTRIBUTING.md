@@ -41,7 +41,7 @@ Before contributing:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/Dipolar-Quantum-Gases/nlsq.git
+   git clone https://github.com/imewei/NLSQ.git
    cd nlsq
    ```
 
@@ -73,11 +73,15 @@ For GPU development:
 
 ```bash
 # CUDA 12.x
-pip install --upgrade "jax[cuda12]>=0.4.20"
+pip install --upgrade "jax[cuda12]>=0.6.0"
 
 # Or for CPU-only development
-pip install --upgrade "jax[cpu]>=0.4.20"
+pip install --upgrade "jax[cpu]>=0.6.0"
 ```
+
+### Dependency Management
+
+For detailed information about dependencies, version requirements, and the project's dependency management strategy, see [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ## Contributing Guidelines
 
@@ -345,7 +349,7 @@ Releases are managed by maintainers and follow semantic versioning:
 ## Getting Help
 
 - **Documentation**: https://nlsq.readthedocs.io/
-- **Issues**: https://github.com/Dipolar-Quantum-Gases/nlsq/issues
+- **Issues**: https://github.com/imewei/NLSQ/issues
 - **Discussions**: Use GitHub Discussions for questions
 - **Email**: Contact maintainers for sensitive issues
 

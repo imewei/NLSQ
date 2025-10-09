@@ -8,6 +8,8 @@ include tox.ini
 include .editorconfig
 include requirements.txt
 include requirements-dev.txt
+include requirements-full.txt
+include REQUIREMENTS.md
 recursive-include nlsq *.py *.pyi py.typed *.json *.yaml *.yml
 recursive-include examples *.ipynb *.py *.json *.yaml *.md
 recursive-include docs *.py *.rst *.md *.txt *.yml *.yaml *.json
