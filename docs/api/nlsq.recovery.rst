@@ -64,14 +64,13 @@ Use recovery to automatically retry failed optimizations:
     # Create recovery system
     recovery = OptimizationRecovery(max_retries=3, enable_diagnostics=True)
 
+
     # Define optimization function
     def optimize(params, regularization=0):
         return least_squares(
-            residual_func,
-            params,
-            method='trf',
-            regularization=regularization
+            residual_func, params, method="trf", regularization=regularization
         )
+
 
     # Initial optimization attempt
     try:
@@ -79,9 +78,9 @@ Use recovery to automatically retry failed optimizations:
         if not result.success:
             # Attempt recovery
             success, recovered_result = recovery.recover_from_failure(
-                failure_type='convergence',
-                optimization_state={'params': initial_params, 'method': 'trf'},
-                optimization_func=optimize
+                failure_type="convergence",
+                optimization_state={"params": initial_params, "method": "trf"},
+                optimization_func=optimize,
             )
             if success:
                 print("Recovery succeeded!")
@@ -101,24 +100,24 @@ Provide detailed optimization state for better recovery:
     recovery = OptimizationRecovery(max_retries=5)
 
     optimization_state = {
-        'params': current_params,
-        'p0': initial_guess,
-        'method': 'trf',
-        'xdata': x_data,
-        'ydata': y_data,
-        'bounds': (lower_bounds, upper_bounds),
-        'iteration': 150,
-        'cost': 1.5e-3,
-        'has_outliers': True,
-        'regularization': 1e-8
+        "params": current_params,
+        "p0": initial_guess,
+        "method": "trf",
+        "xdata": x_data,
+        "ydata": y_data,
+        "bounds": (lower_bounds, upper_bounds),
+        "iteration": 150,
+        "cost": 1.5e-3,
+        "has_outliers": True,
+        "regularization": 1e-8,
     }
 
     success, result = recovery.recover_from_failure(
-        failure_type='numerical',
+        failure_type="numerical",
         optimization_state=optimization_state,
         optimization_func=my_optimization_function,
         additional_kwarg1=value1,
-        additional_kwarg2=value2
+        additional_kwarg2=value2,
     )
 
     if success:
@@ -133,25 +132,17 @@ Handle specific failure modes:
 .. code-block:: python
 
     # Convergence failure - try parameter perturbation
-    success, result = recovery.recover_from_failure(
-        'convergence', state, opt_func
-    )
+    success, result = recovery.recover_from_failure("convergence", state, opt_func)
 
     # Numerical issues - increase regularization
-    success, result = recovery.recover_from_failure(
-        'numerical', state, opt_func
-    )
+    success, result = recovery.recover_from_failure("numerical", state, opt_func)
 
     # Ill-conditioned system
-    success, result = recovery.recover_from_failure(
-        'ill_conditioned', state, opt_func
-    )
+    success, result = recovery.recover_from_failure("ill_conditioned", state, opt_func)
 
     # Outlier-contaminated data - switch to robust loss
-    state['has_outliers'] = True
-    success, result = recovery.recover_from_failure(
-        'outliers', state, opt_func
-    )
+    state["has_outliers"] = True
+    success, result = recovery.recover_from_failure("outliers", state, opt_func)
 
 Diagnostics and Monitoring
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -165,9 +156,7 @@ Track recovery attempts and performance:
     recovery = OptimizationRecovery(max_retries=3, enable_diagnostics=True)
 
     # After multiple recovery attempts
-    success, result = recovery.recover_from_failure(
-        'convergence', state, opt_func
-    )
+    success, result = recovery.recover_from_failure("convergence", state, opt_func)
 
     # Check recovery history
     for attempt in recovery.recovery_history:
@@ -179,7 +168,7 @@ Track recovery attempts and performance:
     if recovery.enable_diagnostics:
         events = recovery.diagnostics.get_events()
         for event in events:
-            if event['type'] == 'recovery_success':
+            if event["type"] == "recovery_success":
                 print(f"Successful strategy: {event['data']['strategy']}")
                 print(f"Retry number: {event['data']['retry']}")
 
@@ -194,6 +183,7 @@ Recovery can be integrated into curve fitting workflows:
     from nlsq.recovery import OptimizationRecovery
     import jax.numpy as jnp
 
+
     def fit_with_recovery(f, xdata, ydata, p0, **kwargs):
         """Curve fit with automatic recovery."""
         recovery = OptimizationRecovery(max_retries=3)
@@ -205,31 +195,29 @@ Recovery can be integrated into curve fitting workflows:
         except Exception as e:
             # Attempt recovery
             state = {
-                'params': p0,
-                'p0': p0,
-                'xdata': xdata,
-                'ydata': ydata,
-                'method': kwargs.get('method', 'trf'),
-                'bounds': kwargs.get('bounds'),
+                "params": p0,
+                "p0": p0,
+                "xdata": xdata,
+                "ydata": ydata,
+                "method": kwargs.get("method", "trf"),
+                "bounds": kwargs.get("bounds"),
             }
 
             def opt_func(**state_args):
                 merged_kwargs = {**kwargs, **state_args}
                 return curve_fit(f, xdata, ydata, **merged_kwargs)
 
-            success, result = recovery.recover_from_failure(
-                'convergence', state, opt_func
-            )
+            success, result = recovery.recover_from_failure("convergence", state, opt_func)
 
             if success:
                 return result
             else:
                 raise RuntimeError("Recovery failed") from e
 
+
     # Use it
     popt, pcov = fit_with_recovery(
-        lambda x, a, b: a * jnp.exp(-b * x),
-        x_data, y_data, p0=[1.0, 0.5]
+        lambda x, a, b: a * jnp.exp(-b * x), x_data, y_data, p0=[1.0, 0.5]
     )
 
 Performance Considerations

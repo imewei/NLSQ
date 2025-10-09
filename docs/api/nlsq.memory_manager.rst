@@ -66,7 +66,7 @@ Monitor and manage memory during optimization:
     # Predict memory requirements
     n_points = 1_000_000
     n_params = 10
-    bytes_needed = mm.predict_memory_requirement(n_points, n_params, algorithm='trf')
+    bytes_needed = mm.predict_memory_requirement(n_points, n_params, algorithm="trf")
     print(f"Memory needed: {bytes_needed / 1e9:.2f} GB")
 
     # Check if enough memory is available
@@ -91,7 +91,7 @@ Use context managers to ensure memory availability:
     # Estimate memory needed
     n_points = 5_000_000
     n_params = 5
-    bytes_needed = mm.predict_memory_requirement(n_points, n_params, 'trf')
+    bytes_needed = mm.predict_memory_requirement(n_points, n_params, "trf")
 
     # Use memory guard to ensure availability
     try:
@@ -170,10 +170,10 @@ Estimate optimal chunk sizes for large datasets:
     memory_limit_gb = 4.0
 
     strategy = mm.estimate_chunking_strategy(
-        n_points, n_params, algorithm='trf', memory_limit_gb=memory_limit_gb
+        n_points, n_params, algorithm="trf", memory_limit_gb=memory_limit_gb
     )
 
-    if strategy['needs_chunking']:
+    if strategy["needs_chunking"]:
         print(f"Chunking required:")
         print(f"  Chunk size: {strategy['chunk_size']:,} points")
         print(f"  Number of chunks: {strategy['n_chunks']}")
@@ -224,7 +224,7 @@ Memory manager integrates with large dataset tools:
     # Check memory requirements
     n_points = 50_000_000
     n_params = 3
-    bytes_needed = mm.predict_memory_requirement(n_points, n_params, 'trf')
+    bytes_needed = mm.predict_memory_requirement(n_points, n_params, "trf")
 
     is_available, message = mm.check_memory_availability(bytes_needed)
 
@@ -233,9 +233,11 @@ Memory manager integrates with large dataset tools:
         strategy = mm.estimate_chunking_strategy(n_points, n_params, memory_limit_gb=4.0)
         print(f"Using {strategy['n_chunks']} chunks")
 
+
     # Fit with automatic memory management
     def exponential(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
 
     x = np.linspace(0, 10, n_points)
     y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, n_points)
@@ -274,7 +276,7 @@ Track memory usage over time:
     print(f"  Pool arrays: {stats['pool_arrays']}")
     print(f"  Total allocations: {stats['allocations']}")
 
-    if 'efficiency' in stats:
+    if "efficiency" in stats:
         print(f"  Allocation efficiency: {stats['efficiency']:.1%}")
         print(f"  Total requested: {stats['total_requested_gb']:.2f} GB")
         print(f"  Total used: {stats['total_used_gb']:.2f} GB")
@@ -296,7 +298,7 @@ Compare memory requirements across algorithms:
     n_points = 10_000
     n_params = 20
 
-    algorithms = ['trf', 'lm', 'dogbox']
+    algorithms = ["trf", "lm", "dogbox"]
     for algo in algorithms:
         bytes_needed = mm.predict_memory_requirement(n_points, n_params, algo)
         print(f"{algo:8s}: {bytes_needed / 1e6:.2f} MB")
@@ -324,7 +326,7 @@ Memory manager can be configured at initialization:
     # Custom settings for specific use case
     custom_mm = MemoryManager(
         gc_threshold=0.8,  # Trigger GC at 80% memory usage
-        safety_factor=1.3  # Add 30% safety margin to predictions
+        safety_factor=1.3,  # Add 30% safety margin to predictions
     )
 
 Performance Considerations

@@ -64,25 +64,24 @@ Fit a model to data stored in HDF5 file:
     from nlsq.streaming_optimizer import fit_unlimited_data, StreamingConfig
     import numpy as np
 
+
     # Define model function
     def exponential(x, a, b, c):
         return a * np.exp(-b * x) + c
 
+
     # Configure streaming
     config = StreamingConfig(
-        batch_size=10000,
-        max_epochs=10,
-        use_adam=True,
-        learning_rate=0.01
+        batch_size=10000, max_epochs=10, use_adam=True, learning_rate=0.01
     )
 
     # Fit to HDF5 dataset (100M points)
     result = fit_unlimited_data(
         exponential,
-        'huge_dataset.h5',  # HDF5 file with 'x' and 'y' datasets
+        "huge_dataset.h5",  # HDF5 file with 'x' and 'y' datasets
         p0=[2.0, 0.5, 0.3],
         config=config,
-        verbose=1
+        verbose=1,
     )
 
     print(f"Converged after {result['n_epochs']} epochs")
@@ -100,12 +99,10 @@ Process data generated on-the-fly:
 
     # Create streaming optimizer
     config = StreamingConfig(
-        batch_size=5000,
-        max_epochs=20,
-        use_adam=True,
-        convergence_tol=1e-7
+        batch_size=5000, max_epochs=20, use_adam=True, convergence_tol=1e-7
     )
     optimizer = StreamingOptimizer(config)
+
 
     # Define data generator
     def data_generator():
@@ -117,17 +114,14 @@ Process data generated on-the-fly:
             y = 2.0 * x + 1.0 + np.random.randn(batch_size) * 0.5
             yield x, y
 
+
     # Define model
     def linear(x, a, b):
         return a * x + b
 
+
     # Fit streaming data
-    result = optimizer.fit_streaming(
-        linear,
-        data_generator(),
-        p0=[1.0, 0.0],
-        verbose=2
-    )
+    result = optimizer.fit_streaming(linear, data_generator(), p0=[1.0, 0.0], verbose=2)
 
     print(f"Estimated parameters: a={result['x'][0]:.3f}, b={result['x'][1]:.3f}")
     print(f"True parameters: a=2.000, b=1.000")
@@ -144,7 +138,7 @@ Process large NumPy arrays without loading into memory:
 
     # Create memory-mapped file
     n_samples = 50_000_000  # 50M samples
-    data = np.memmap('large_data.npy', dtype='float64', mode='w+', shape=(n_samples, 2))
+    data = np.memmap("large_data.npy", dtype="float64", mode="w+", shape=(n_samples, 2))
 
     # Generate data in chunks
     chunk_size = 1_000_000
@@ -156,15 +150,17 @@ Process large NumPy arrays without loading into memory:
         data[i:end, 1] = y_chunk
     data.flush()
 
+
     # Fit using streaming
     def quadratic(x, a, b, c):
         return a * x**2 + b * x + c
 
+
     result = fit_unlimited_data(
         quadratic,
-        'large_data.npy',
+        "large_data.npy",
         p0=[1.0, -1.0, 1.0],
-        config=StreamingConfig(batch_size=50000, max_epochs=5)
+        config=StreamingConfig(batch_size=50000, max_epochs=5),
     )
 
 Advanced Configuration
@@ -178,18 +174,18 @@ Fine-tune optimizer settings:
 
     # Custom configuration
     config = StreamingConfig(
-        batch_size=20000,              # Larger batches for stability
-        learning_rate=0.005,           # Conservative learning rate
-        momentum=0.95,                 # High momentum for SGD
-        max_epochs=50,                 # More epochs for convergence
-        convergence_tol=1e-8,          # Tight convergence criterion
-        checkpoint_interval=50,        # Checkpoint every 50 batches
-        use_adam=True,                 # Use Adam optimizer
-        adam_beta1=0.9,                # Adam momentum
-        adam_beta2=0.999,              # Adam RMSprop
-        adam_eps=1e-8,                 # Numerical stability
-        gradient_clip=5.0,             # Clip gradients at 5.0
-        warmup_steps=1000              # 1000 warmup steps
+        batch_size=20000,  # Larger batches for stability
+        learning_rate=0.005,  # Conservative learning rate
+        momentum=0.95,  # High momentum for SGD
+        max_epochs=50,  # More epochs for convergence
+        convergence_tol=1e-8,  # Tight convergence criterion
+        checkpoint_interval=50,  # Checkpoint every 50 batches
+        use_adam=True,  # Use Adam optimizer
+        adam_beta1=0.9,  # Adam momentum
+        adam_beta2=0.999,  # Adam RMSprop
+        adam_eps=1e-8,  # Numerical stability
+        gradient_clip=5.0,  # Clip gradients at 5.0
+        warmup_steps=1000,  # 1000 warmup steps
     )
 
     optimizer = StreamingOptimizer(config)
@@ -199,7 +195,7 @@ Fine-tune optimizer settings:
         data_source,
         p0=initial_params,
         bounds=(lower_bounds, upper_bounds),  # Optional parameter bounds
-        verbose=2
+        verbose=2,
     )
 
 Creating HDF5 Datasets
@@ -212,28 +208,30 @@ Generate test datasets in HDF5 format:
     from nlsq.streaming_optimizer import create_hdf5_dataset
     import numpy as np
 
+
     # Define true model
     def true_model(x, a, b):
         return a * np.exp(-b * x)
+
 
     true_params = [2.5, 0.5]
 
     # Create HDF5 dataset with 10M samples
     create_hdf5_dataset(
-        filename='test_dataset.h5',
+        filename="test_dataset.h5",
         func=true_model,
         params=true_params,
         n_samples=10_000_000,
         chunk_size=10000,
-        noise_level=0.1
+        noise_level=0.1,
     )
 
     # Now fit to the dataset
     result = fit_unlimited_data(
         lambda x, a, b: a * np.exp(-b * x),
-        'test_dataset.h5',
+        "test_dataset.h5",
         p0=[2.0, 0.4],
-        config=StreamingConfig(batch_size=10000, max_epochs=10)
+        config=StreamingConfig(batch_size=10000, max_epochs=10),
     )
 
     print(f"Recovered: a={result['x'][0]:.3f}, b={result['x'][1]:.3f}")
@@ -251,29 +249,28 @@ Monitor optimization progress:
     # Track progress
     loss_history = []
 
+
     def progress_callback(iteration, params, loss):
         """Called after each batch."""
         loss_history.append(loss)
         if iteration % 100 == 0:
             print(f"Iteration {iteration}: loss={loss:.6f}")
 
+
     config = StreamingConfig(batch_size=5000, max_epochs=10)
     optimizer = StreamingOptimizer(config)
 
     result = optimizer.fit_streaming(
-        model_func,
-        data_source,
-        p0=initial_guess,
-        callback=progress_callback,
-        verbose=1
+        model_func, data_source, p0=initial_guess, callback=progress_callback, verbose=1
     )
 
     # Plot loss history
     import matplotlib.pyplot as plt
+
     plt.plot(loss_history)
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.title('Streaming Optimization Progress')
+    plt.xlabel("Iteration")
+    plt.ylabel("Loss")
+    plt.title("Streaming Optimization Progress")
     plt.show()
 
 Bounded Optimization
@@ -286,9 +283,11 @@ Apply parameter bounds during streaming:
     from nlsq.streaming_optimizer import fit_unlimited_data, StreamingConfig
     import numpy as np
 
+
     # Constrained exponential decay
     def exponential(x, a, tau):
         return a * np.exp(-x / tau)
+
 
     # Bounds: a in [0, 10], tau in [0.1, 100]
     lower_bounds = np.array([0.0, 0.1])
@@ -296,10 +295,10 @@ Apply parameter bounds during streaming:
 
     result = fit_unlimited_data(
         exponential,
-        'data.h5',
+        "data.h5",
         p0=[5.0, 10.0],
         bounds=(lower_bounds, upper_bounds),
-        config=StreamingConfig(batch_size=10000)
+        config=StreamingConfig(batch_size=10000),
     )
 
 Optimizer State Management
@@ -334,21 +333,14 @@ Compare optimization algorithms:
 
     # SGD with momentum
     sgd_config = StreamingConfig(
-        use_adam=False,
-        learning_rate=0.01,
-        momentum=0.9,
-        batch_size=5000
+        use_adam=False, learning_rate=0.01, momentum=0.9, batch_size=5000
     )
     sgd_optimizer = StreamingOptimizer(sgd_config)
     sgd_result = sgd_optimizer.fit_streaming(model, data, p0=p0)
 
     # Adam optimizer
     adam_config = StreamingConfig(
-        use_adam=True,
-        learning_rate=0.01,
-        adam_beta1=0.9,
-        adam_beta2=0.999,
-        batch_size=5000
+        use_adam=True, learning_rate=0.01, adam_beta1=0.9, adam_beta2=0.999, batch_size=5000
     )
     adam_optimizer = StreamingOptimizer(adam_config)
     adam_result = adam_optimizer.fit_streaming(model, data, p0=p0)
@@ -405,14 +397,14 @@ The ``DataGenerator`` class supports multiple data sources:
 .. code-block:: python
 
     # File must contain 'x' and 'y' datasets
-    optimizer.fit_streaming(model, 'data.h5', p0=p0)
+    optimizer.fit_streaming(model, "data.h5", p0=p0)
 
 **Memory-mapped NumPy** (``*.npy``, ``*.npz``):
 
 .. code-block:: python
 
     # Single .npy file or .npz with 'x' and 'y' keys
-    optimizer.fit_streaming(model, 'data.npz', p0=p0)
+    optimizer.fit_streaming(model, "data.npz", p0=p0)
 
 **Python Generators**:
 
@@ -421,6 +413,7 @@ The ``DataGenerator`` class supports multiple data sources:
     def data_gen():
         while True:
             yield x_batch, y_batch
+
 
     optimizer.fit_streaming(model, data_gen(), p0=p0)
 

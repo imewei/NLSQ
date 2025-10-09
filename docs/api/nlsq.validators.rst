@@ -60,9 +60,11 @@ Validate inputs before curve fitting:
     # Create validator
     validator = InputValidator(fast_mode=False)
 
+
     # Define model and data
     def model(x, a, b):
         return a * np.exp(-b * x)
+
 
     x = np.linspace(0, 10, 100)
     y = 2.5 * np.exp(-0.5 * x) + np.random.normal(0, 0.1, 100)
@@ -113,7 +115,8 @@ Automatically validate function inputs:
     from nlsq.validators import validate_inputs
     import numpy as np
 
-    @validate_inputs(validation_type='curve_fit')
+
+    @validate_inputs(validation_type="curve_fit")
     def my_curve_fit(f, xdata, ydata, p0=None, **kwargs):
         """Custom curve fit with automatic validation."""
         # Inputs are automatically validated before this code runs
@@ -122,6 +125,7 @@ Automatically validate function inputs:
 
         # Your fitting logic here
         return optimize(f, xdata, ydata, p0, **kwargs)
+
 
     # Use it - validation happens automatically
     try:
@@ -140,10 +144,12 @@ Validate least squares inputs:
 
     validator = InputValidator()
 
+
     # Define residual function
     def residual(params):
         a, b = params
         return y_data - (a * np.exp(-b * x_data))
+
 
     x0 = np.array([2.0, 0.5])
     bounds = ([0, 0], [10, 10])
@@ -153,11 +159,11 @@ Validate least squares inputs:
         residual,
         x0,
         bounds=bounds,
-        method='trf',
+        method="trf",
         ftol=1e-8,
         xtol=1e-8,
         gtol=1e-8,
-        max_nfev=1000
+        max_nfev=1000,
     )
 
     if errors:
@@ -177,15 +183,15 @@ See what validation detects:
 
     # Problematic data
     x = np.array([1.0, 2.0, np.nan, 4.0])  # Contains NaN
-    y = np.array([1.0, 2.0, 3.0])          # Wrong length
-    p0 = [1.0, 2.0, 3.0]                   # Wrong number of params
+    y = np.array([1.0, 2.0, 3.0])  # Wrong length
+    p0 = [1.0, 2.0, 3.0]  # Wrong number of params
+
 
     def model(x, a, b):
         return a * x + b
 
-    errors, warnings, _, _ = validator.validate_curve_fit_inputs(
-        model, x, y, p0=p0
-    )
+
+    errors, warnings, _, _ = validator.validate_curve_fit_inputs(model, x, y, p0=p0)
 
     # Errors will include:
     # - "xdata contains 1 NaN or Inf values"
@@ -208,8 +214,10 @@ Detect potential data quality issues:
     x = np.array([1, 2, 3, 3, 3, 4, 5, 100])  # Duplicates and outlier
     y = np.array([1, 2, 3, 3.1, 2.9, 4, 5, 200])  # Outlier
 
+
     def linear(x, a, b):
         return a * x + b
+
 
     errors, warnings, _, _ = validator.validate_curve_fit_inputs(
         linear, x, y, p0=[1.0, 0.0]
@@ -234,8 +242,10 @@ Check parameter bounds:
     x = np.linspace(0, 10, 50)
     y = 2 * x + 1 + np.random.randn(50) * 0.5
 
+
     def linear(x, a, b):
         return a * x + b
+
 
     # Invalid bounds
     bad_bounds = ([0, 0], [0, 10])  # Lower >= Upper for first param
@@ -276,9 +286,7 @@ Validate uncertainty parameters:
     sigma_bad = np.ones(40)  # Wrong length
 
     errors, warnings, _, _ = validator.validate_curve_fit_inputs(
-        lambda x, a, b: a * x + b,
-        x, y, p0=[1, 0],
-        sigma=sigma_bad
+        lambda x, a, b: a * x + b, x, y, p0=[1, 0], sigma=sigma_bad
     )
 
     # Error: "sigma must have same shape as ydata"
@@ -288,9 +296,7 @@ Validate uncertainty parameters:
     sigma_neg[10] = -0.5
 
     errors, warnings, _, _ = validator.validate_curve_fit_inputs(
-        lambda x, a, b: a * x + b,
-        x, y, p0=[1, 0],
-        sigma=sigma_neg
+        lambda x, a, b: a * x + b, x, y, p0=[1, 0], sigma=sigma_neg
     )
 
     # Error: "sigma values must be positive"
@@ -312,8 +318,7 @@ Detect problematic data patterns:
     y = np.random.randn(100)
 
     errors, warnings, _, _ = validator.validate_curve_fit_inputs(
-        lambda x, a, b: a * x + b,
-        x_const, y, p0=[1, 0]
+        lambda x, a, b: a * x + b, x_const, y, p0=[1, 0]
     )
 
     # Error: "All x values are identical - cannot fit"
@@ -322,8 +327,7 @@ Detect problematic data patterns:
     x_small_range = np.linspace(1.0, 1.0000000001, 100)  # Range ~ 1e-9
 
     errors, warnings, _, _ = validator.validate_curve_fit_inputs(
-        lambda x, a, b: a * x + b,
-        x_small_range, y, p0=[1, 0]
+        lambda x, a, b: a * x + b, x_small_range, y, p0=[1, 0]
     )
 
     # Warning: "x data range is very small (1.00e-09) - consider rescaling"
@@ -339,16 +343,14 @@ Validate convergence tolerances:
 
     validator = InputValidator()
 
+
     def residual(x):
         return x**2
 
+
     # Very small tolerances
     errors, warnings, x0_clean = validator.validate_least_squares_inputs(
-        residual,
-        x0=[1.0],
-        ftol=1e-16,  # Too small
-        xtol=1e-17,  # Too small
-        gtol=1e-8
+        residual, x0=[1.0], ftol=1e-16, xtol=1e-17, gtol=1e-8  # Too small  # Too small
     )
 
     # Warnings:
@@ -365,6 +367,7 @@ Build custom validation logic:
     from nlsq.validators import InputValidator
     import numpy as np
 
+
     class CustomValidator(InputValidator):
         """Extended validator with custom checks."""
 
@@ -372,19 +375,20 @@ Build custom validation logic:
             """Custom validation pipeline."""
             # Use parent class methods
             errors, warnings, x, y = self.validate_curve_fit_inputs(
-                kwargs['f'], x, y,
-                p0=kwargs.get('p0'),
-                bounds=kwargs.get('bounds')
+                kwargs["f"], x, y, p0=kwargs.get("p0"), bounds=kwargs.get("bounds")
             )
 
             # Add custom checks
             if np.std(y) < 0.01:
-                warnings.append("y data has very low variance - may indicate measurement issue")
+                warnings.append(
+                    "y data has very low variance - may indicate measurement issue"
+                )
 
             if len(x) < 10:
                 errors.append("Need at least 10 data points for reliable fit")
 
             return errors, warnings, x, y
+
 
     # Use it
     custom_validator = CustomValidator()
@@ -490,15 +494,18 @@ With curve_fit
     from nlsq import curve_fit
     from nlsq.validators import InputValidator
 
+
     def safe_curve_fit(f, xdata, ydata, **kwargs):
         """curve_fit with validation."""
-        validator = InputValidator(fast_mode=kwargs.pop('fast_validation', False))
+        validator = InputValidator(fast_mode=kwargs.pop("fast_validation", False))
 
         errors, warnings, x, y = validator.validate_curve_fit_inputs(
-            f, xdata, ydata,
-            p0=kwargs.get('p0'),
-            bounds=kwargs.get('bounds'),
-            sigma=kwargs.get('sigma')
+            f,
+            xdata,
+            ydata,
+            p0=kwargs.get("p0"),
+            bounds=kwargs.get("bounds"),
+            sigma=kwargs.get("sigma"),
         )
 
         if errors:
@@ -507,6 +514,7 @@ With curve_fit
         # Show warnings
         for warning in warnings:
             import warnings
+
             warnings.warn(warning)
 
         return curve_fit(f, x, y, **kwargs)
@@ -519,18 +527,20 @@ With least_squares
     from nlsq import least_squares
     from nlsq.validators import InputValidator
 
+
     def safe_least_squares(fun, x0, **kwargs):
         """least_squares with validation."""
         validator = InputValidator()
 
         errors, warnings, x0 = validator.validate_least_squares_inputs(
-            fun, x0,
-            bounds=kwargs.get('bounds'),
-            method=kwargs.get('method', 'trf'),
-            ftol=kwargs.get('ftol', 1e-8),
-            xtol=kwargs.get('xtol', 1e-8),
-            gtol=kwargs.get('gtol', 1e-8),
-            max_nfev=kwargs.get('max_nfev')
+            fun,
+            x0,
+            bounds=kwargs.get("bounds"),
+            method=kwargs.get("method", "trf"),
+            ftol=kwargs.get("ftol", 1e-8),
+            xtol=kwargs.get("xtol", 1e-8),
+            gtol=kwargs.get("gtol", 1e-8),
+            max_nfev=kwargs.get("max_nfev"),
         )
 
         if errors:
@@ -538,6 +548,7 @@ With least_squares
 
         for warning in warnings:
             import warnings
+
             warnings.warn(warning)
 
         return least_squares(fun, x0, **kwargs)
