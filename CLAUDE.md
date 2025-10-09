@@ -180,6 +180,9 @@ make test-fast
 # With coverage
 make test-cov
 pytest --cov=nlsq --cov-report=html
+
+# README examples validation (CI job)
+pytest tests/test_readme_examples.py -v
 ```
 
 **Best Practices:**
@@ -187,6 +190,28 @@ pytest --cov=nlsq --cov-report=html
 - ✅ Use realistic tolerances for approximated algorithms
 - ✅ Focus on error paths and edge cases
 - ✅ Run `make test` before committing
+
+### CI/CD Integration
+
+**GitHub Actions Workflows** (`.github/workflows/`):
+
+1. **Documentation Examples** (`readme-examples.yml`) - ✅ ENABLED
+   - **Purpose**: Validate all README.md code examples
+   - **Triggers**: Push to main, PRs, weekly schedule, manual
+   - **Tests**: 12 examples via `tests/test_readme_examples.py`
+   - **Duration**: ~1-2 minutes
+   - **Status**: [![Examples Validated](https://img.shields.io/badge/examples-validated%202025--10--09-brightgreen?style=flat)](https://github.com/imewei/NLSQ/actions/workflows/readme-examples.yml)
+
+2. **Main CI Workflow** (`ci.yml`) - ⏸️ DISABLED
+   - **Status**: Moved to `.github/workflows.disabled/` (resource optimization)
+   - **Re-enable**: Move back to `.github/workflows/` when ready
+   - **Includes**: pre-commit, tests, coverage, docs build, package validation
+
+**Documentation Validation**:
+- Examples badge shows last validation date
+- CI automatically tests all code examples in README
+- Failures trigger PR comments with detailed results
+- Manual timestamp update: Edit README badge after validation
 
 ### Code Quality
 

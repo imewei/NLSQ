@@ -63,11 +63,12 @@ Fit a model to data stored in HDF5 file:
 
     from nlsq.streaming_optimizer import fit_unlimited_data, StreamingConfig
     import numpy as np
+    import jax.numpy as jnp
 
 
     # Define model function
     def exponential(x, a, b, c):
-        return a * np.exp(-b * x) + c
+        return a * jnp.exp(-b * x) + c
 
 
     # Configure streaming
@@ -96,6 +97,8 @@ Process data generated on-the-fly:
 .. code-block:: python
 
     from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+    import numpy as np
+    import jax.numpy as jnp
 
     # Create streaming optimizer
     config = StreamingConfig(
@@ -207,11 +210,12 @@ Generate test datasets in HDF5 format:
 
     from nlsq.streaming_optimizer import create_hdf5_dataset
     import numpy as np
+    import jax.numpy as jnp
 
 
     # Define true model
     def true_model(x, a, b):
-        return a * np.exp(-b * x)
+        return a * jnp.exp(-b * x)
 
 
     true_params = [2.5, 0.5]
@@ -228,7 +232,7 @@ Generate test datasets in HDF5 format:
 
     # Now fit to the dataset
     result = fit_unlimited_data(
-        lambda x, a, b: a * np.exp(-b * x),
+        lambda x, a, b: a * jnp.exp(-b * x),
         "test_dataset.h5",
         p0=[2.0, 0.4],
         config=StreamingConfig(batch_size=10000, max_epochs=10),
@@ -282,11 +286,12 @@ Apply parameter bounds during streaming:
 
     from nlsq.streaming_optimizer import fit_unlimited_data, StreamingConfig
     import numpy as np
+    import jax.numpy as jnp
 
 
     # Constrained exponential decay
     def exponential(x, a, tau):
-        return a * np.exp(-x / tau)
+        return a * jnp.exp(-x / tau)
 
 
     # Bounds: a in [0, 10], tau in [0.1, 100]

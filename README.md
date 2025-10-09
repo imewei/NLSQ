@@ -9,6 +9,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![JAX](https://img.shields.io/badge/JAX-0.6.0+-green.svg)](https://github.com/google/jax)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Examples Validated](https://img.shields.io/badge/examples-validated%202025--10--09-brightgreen?style=flat)](https://github.com/imewei/NLSQ/actions/workflows/readme-examples.yml)
 
 [**Quickstart**](#quickstart-colab-in-the-cloud)
 | [**Install guide**](#installation)
@@ -148,6 +149,7 @@ Tutorial notebooks:
 ## Large Dataset Support
 
 > **Note**: The examples below are tested with NLSQ v0.1.1+ (NumPy 2.0+, JAX 0.6.0+, Python 3.12+)
+> **Last validated**: 2025-10-09 | [Test suite](tests/test_readme_examples.py) | [CI Status](https://github.com/imewei/NLSQ/actions/workflows/readme-examples.yml)
 
 NLSQ includes advanced features for handling very large datasets (20M+ points) that may not fit in memory:
 

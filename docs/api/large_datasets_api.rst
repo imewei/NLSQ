@@ -137,30 +137,51 @@ Example::
     )
     print(f"Success: {result.success}")
     print(f"Parameters: {result.popt}")
-    print(f"Chunks used: {result.n_chunks}")
+    # Note: n_chunks only available for multi-chunk fits
+    if hasattr(result, 'n_chunks'):
+        print(f"Chunks used: {result.n_chunks}")
 
-Advanced Features (Future Development)
----------------------------------------
+Advanced Features
+-----------------
 
-The following features are planned for future releases and may not be fully available in the current version:
+**Sparse Jacobian Support**
 
-**Sparse Jacobian Support (Planned)**
+For problems with sparse Jacobian structures, NLSQ provides:
 
-For problems with sparse Jacobian structures, NLSQ will include:
-
-- Automatic sparsity detection
+- Automatic sparsity detection via :class:`nlsq.SparseJacobianComputer`
 - Sparse matrix optimizations
 - Memory-efficient sparse solvers
 
-**Streaming Optimization (Experimental)**
+See :doc:`nlsq.large_dataset` for usage examples.
 
-For unlimited-size datasets:
+Example::
+
+    from nlsq import SparseJacobianComputer
+
+    # Detect sparsity automatically
+    sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
+    pattern, sparsity = sparse_computer.detect_sparsity_pattern(func, p0, x_sample)
+
+    if sparsity > 0.1:  # If more than 10% sparse
+        print(f"Jacobian is {sparsity:.1%} sparse")
+        # NLSQ will automatically use sparse optimization
+
+**Streaming Optimization**
+
+For unlimited-size datasets, use the :doc:`nlsq.streaming_optimizer` module:
 
 - Batch processing from disk or generators
-- Incremental parameter updates
+- SGD and Adam optimizers for online learning
 - HDF5 file integration
+- Real-time data stream processing
 
-These features are under active development. Check the `GitHub repository <https://github.com/imewei/NLSQ>`_ for the latest updates.
+Example::
+
+    from nlsq import fit_unlimited_data, StreamingConfig
+
+    # Fit to HDF5 dataset or generator
+    config = StreamingConfig(batch_size=10000, max_epochs=10)
+    result = fit_unlimited_data(func, "huge_dataset.h5", p0=p0, config=config)
 
 Memory Configuration
 --------------------
@@ -172,12 +193,11 @@ For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` i
 **Parameters:**
 
 - ``memory_limit_gb``: Maximum memory in GB
-- ``chunk_size_factor``: Chunk size multiplier (default: 0.8)
+- ``safety_factor``: Safety factor for memory calculations (default: 0.8)
 - ``min_chunk_size``: Minimum chunk size (default: 1000)
-- ``max_chunk_size``: Maximum chunk size (default: 10_000_000)
+- ``max_chunk_size``: Maximum chunk size (default: 1000000)
 - ``enable_sampling``: Allow sampling for very large datasets
-- ``sampling_threshold_gb``: Memory threshold for sampling (default: 16.0)
-- ``sample_rate``: Sampling rate when enabled (default: 0.1)
+- ``sampling_threshold``: Number of points threshold for sampling (default: 100_000_000)
 
 Example::
 
@@ -187,10 +207,11 @@ Example::
     # Custom configuration
     config = LDMemoryConfig(
         memory_limit_gb=8.0,
-        chunk_size_factor=0.9,
+        safety_factor=0.9,
+        min_chunk_size=10000,
+        max_chunk_size=1000000,
         enable_sampling=True,
-        sampling_threshold_gb=10.0,
-        sample_rate=0.2
+        sampling_threshold=100_000_000,
     )
 
     fitter = LargeDatasetFitter(config=config)

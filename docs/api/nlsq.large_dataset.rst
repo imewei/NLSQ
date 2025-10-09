@@ -105,8 +105,8 @@ Advanced Usage with LargeDatasetFitter
     # Fit with progress tracking
     result = fitter.fit_with_progress(exponential, x, y, p0=[2.5, 0.6, 0.2])
 
-    print(f"Success rate: {result.success_rate:.1%}")
-    print(f"Number of chunks: {result.n_chunks}")
+    print(f"Fitted parameters: {result.popt}")
+    # Note: success_rate and n_chunks only available for multi-chunk fits
 
 Streaming Optimization
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -123,7 +123,7 @@ For datasets that don't fit in memory or are generated on-the-fly:
     optimizer = StreamingOptimizer(config)
 
     # Stream data from generator
-    result = optimizer.fit_unlimited_data(func, data_generator, x0=p0, n_params=3)
+    result = optimizer.fit_streaming(func, data_generator, p0=p0)
 
 Sparse Jacobian Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -136,12 +136,10 @@ For problems with sparse structure:
 
     # Detect and exploit sparsity
     sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
-    sparsity_pattern = sparse_computer.detect_sparsity(func, x_sample, p0)
+    pattern, sparsity = sparse_computer.detect_sparsity_pattern(func, p0, x_sample)
 
-    if sparse_computer.is_sparse(sparsity_pattern):
-        print(
-            f"Jacobian is {sparse_computer.compute_sparsity_ratio(sparsity_pattern):.1%} sparse"
-        )
+    if sparsity > 0.1:  # If more than 10% sparse
+        print(f"Jacobian is {sparsity:.1%} sparse")
 
 See Also
 --------

@@ -157,8 +157,8 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
     print(f"\nDetailed Results:")
     print(f"  Success: {result.success}")
     print(f"  Message: {result.message}")
-    print(f"  Chunks processed: {result.n_chunks}")
-    print(f"  Points per chunk: {result.chunk_size:,}")
+    # Note: n_chunks only available for multi-chunk fits
+    print(f"  Fitted parameters: {result.popt}")
     print(f"  Total function evaluations: {result.nfev}")
 
 Extremely Large Datasets with Sampling
@@ -254,19 +254,17 @@ Many large-scale problems have sparse Jacobian structures. NLSQ can detect and e
 
     p0_sparse = [1.8 + 0.4 * i for i in range(n_components * 3)]  # Initial guess
 
-    sparsity_pattern = sparse_computer.detect_sparsity(
-        multi_exponential, x_sample, p0_sparse
+    # Detect sparsity pattern
+    pattern, sparsity = sparse_computer.detect_sparsity_pattern(
+        multi_exponential, p0_sparse, x_sample
     )
 
-    sparsity_ratio = sparse_computer.compute_sparsity_ratio(sparsity_pattern)
-    is_sparse = sparse_computer.is_sparse(sparsity_pattern)
-
     print(f"Jacobian Analysis:")
-    print(f"  Matrix size: {sparsity_pattern.shape}")
-    print(f"  Sparsity ratio: {sparsity_ratio:.1%}")
-    print(f"  Is sparse: {is_sparse}")
+    print(f"  Matrix size: {pattern.shape}")
+    print(f"  Sparsity ratio: {sparsity:.1%}")
+    print(f"  Is sparse: {sparsity > 0.1}")
 
-    if is_sparse:
+    if sparsity > 0.1:  # If more than 10% sparse
         print("  -> Using sparse optimization algorithms")
     else:
         print("  -> Using dense optimization algorithms")
@@ -279,7 +277,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
 .. code-block:: python
 
     from nlsq import StreamingOptimizer, StreamingConfig
-    from nlsq import create_hdf5_dataset, stream_from_hdf5
+    from nlsq.streaming_optimizer import create_hdf5_dataset
 
 
     # First, create a large HDF5 dataset on disk
@@ -311,17 +309,17 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
     # Create streaming optimizer
     stream_optimizer = StreamingOptimizer(streaming_config)
 
-    # Fit directly from HDF5 file
+    # Fit directly from HDF5 file (file path passed as data source)
     print("Starting streaming optimization...")
-    stream_result = stream_optimizer.fit_from_hdf5(
-        "large_dataset.h5", exponential_model, p0=[2.5, 0.4, 0.3]
+    stream_result = stream_optimizer.fit_streaming(
+        exponential_model, "large_dataset.h5", p0=np.array([2.5, 0.4, 0.3])
     )
 
     print("Streaming Results:")
-    print(f"  Converged: {stream_result.success}")
-    print(f"  Final parameters: {stream_result.x}")
-    print(f"  Epochs used: {stream_result.nit}")
-    print(f"  Final cost: {stream_result.cost:.6f}")
+    print(f"  Converged: {stream_result['success']}")
+    print(f"  Final parameters: {stream_result['x']}")
+    print(f"  Epochs used: {stream_result['nit']}")
+    print(f"  Final loss: {stream_result['fun']:.6f}")
 
 
     # Alternative: Stream from custom generator
@@ -335,19 +333,17 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
             yield x_batch, y_batch
 
 
-    # Fit using generator (infinite data stream)
+    # Fit using generator (data stream)
     print("Fitting from data generator...")
-    gen_result = stream_optimizer.fit_unlimited_data(
+    gen_result = stream_optimizer.fit_streaming(
         exponential_model,
         data_generator(batch_size=20000),
-        x0=[2.5, 0.4, 0.3],
-        n_params=3,
-        max_samples=1_000_000,  # Stop after 1M total points
+        p0=np.array([2.5, 0.4, 0.3])
     )
 
     print("Generator Results:")
-    print(f"  Parameters: {gen_result.x}")
-    print(f"  Samples processed: {gen_result.nfev * streaming_config.batch_size:,}")
+    print(f"  Parameters: {gen_result['x']}")
+    print(f"  Samples processed: {gen_result['total_samples']:,}")
 
 Performance Comparison
 ----------------------
