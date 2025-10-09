@@ -321,12 +321,16 @@ class TestProfilingDashboard:
         assert "NLSQ Performance Profile Report" in html_content
 
         # Check JSON content
-        json_data = json.loads((output_dir / "profiles.json").read_text(encoding="utf-8"))
+        json_data = json.loads(
+            (output_dir / "profiles.json").read_text(encoding="utf-8")
+        )
         assert "fast" in json_data
         assert "slow" in json_data
 
         # Check report content
-        report_content = (output_dir / "comparison_report.txt").read_text(encoding="utf-8")
+        report_content = (output_dir / "comparison_report.txt").read_text(
+            encoding="utf-8"
+        )
         assert "Profiling Dashboard" in report_content
 
     @pytest.mark.skipif(not HAS_MATPLOTLIB, reason="matplotlib not available")
