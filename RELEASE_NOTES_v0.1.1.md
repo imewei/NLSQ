@@ -74,10 +74,12 @@ result = curve_fit(f, x, y, callback=ProgressBar())
 result = curve_fit(f, x, y, callback=EarlyStopping(patience=10))
 
 # Combine multiple callbacks
-callbacks = CallbackChain([
-    ProgressBar(),
-    EarlyStopping(patience=5),
-])
+callbacks = CallbackChain(
+    [
+        ProgressBar(),
+        EarlyStopping(patience=5),
+    ]
+)
 result = curve_fit(f, x, y, callback=callbacks)
 ```
 
@@ -95,7 +97,9 @@ Never fail on difficult problems:
 ```python
 # Enable automatic fallback
 result = curve_fit(
-    f, x, y,
+    f,
+    x,
+    y,
     fallback=True,  # Try alternatives if initial attempt fails
     max_fallback_attempts=10,
     fallback_verbose=True,  # See what's being tried
@@ -118,14 +122,18 @@ Automatic bound inference from data characteristics:
 ```python
 # Automatic bound detection
 result = curve_fit(
-    f, x, y,
+    f,
+    x,
+    y,
     auto_bounds=True,  # Infer sensible bounds from data
     bounds_safety_factor=10.0,  # Safety margin (default: 10x)
 )
 
 # Merges with user bounds
 result = curve_fit(
-    f, x, y,
+    f,
+    x,
+    y,
     auto_bounds=True,
     bounds=([0, -np.inf], [np.inf, np.inf]),  # User bounds take priority
 )
@@ -144,8 +152,10 @@ Automatic detection and fixing of numerical issues:
 ```python
 # Automatic stability checks
 result = curve_fit(
-    f, x, y,
-    stability='auto',  # Detect and fix issues automatically
+    f,
+    x,
+    y,
+    stability="auto",  # Detect and fix issues automatically
 )
 
 # Available modes:
@@ -455,6 +465,7 @@ pip install --upgrade "jax[cuda11_local]" -f https://storage.googleapis.com/jax-
 ```python
 # Old code still works
 from nlsq import curve_fit
+
 popt, pcov = curve_fit(f, x, y)  # ✅ Works!
 ```
 
@@ -471,9 +482,11 @@ result = curve_fit(f, x, y, callback=ProgressBar())
 
 # Automatic features
 result = curve_fit(
-    f, x, y,
+    f,
+    x,
+    y,
     auto_bounds=True,
-    stability='auto',
+    stability="auto",
     fallback=True,
 )
 ```
