@@ -26,7 +26,7 @@ Example:
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -344,7 +344,7 @@ class FallbackOrchestrator:
     ...     print(f"Recovered using: {result.fallback_strategy_used}")
     """
 
-    DEFAULT_STRATEGIES = [
+    DEFAULT_STRATEGIES: ClassVar[list[type[FallbackStrategy]]] = [
         AlternativeMethodStrategy,
         PerturbInitialGuessStrategy,
         AdjustTolerancesStrategy,
@@ -365,7 +365,7 @@ class FallbackOrchestrator:
 
         # Initialize strategies
         if strategies is None:
-            self.strategies = [strategy() for strategy in self.DEFAULT_STRATEGIES]
+            self.strategies = [strategy() for strategy in self.DEFAULT_STRATEGIES]  # type: ignore[call-arg]
         else:
             self.strategies = strategies
 
@@ -374,7 +374,7 @@ class FallbackOrchestrator:
 
         self.max_attempts = max_attempts
         self.total_attempts = 0
-        self.successful_strategies = {}
+        self.successful_strategies: dict[str, int] = {}
 
     def fit_with_fallback(self, f: Callable, xdata, ydata, **kwargs) -> FallbackResult:
         """
@@ -484,7 +484,7 @@ class FallbackOrchestrator:
         stats : dict
             Dictionary with success rates and attempt counts
         """
-        stats = {
+        stats: dict[str, Any] = {
             "total_attempts": self.total_attempts,
             "strategies": [],
         }

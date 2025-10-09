@@ -8,6 +8,7 @@ measuring performance characteristics across different problem types and sizes.
 
 from __future__ import annotations
 
+import contextlib
 import time
 import warnings
 from collections.abc import Callable
@@ -308,10 +309,8 @@ class BenchmarkSuite:
 
         # Warmup runs
         for _ in range(self.config.warmup_runs):
-            try:
+            with contextlib.suppress(Exception):
                 curve_fit(problem.model, x, y, p0=p0, method=method)
-            except Exception:
-                pass
 
         # Actual benchmark runs
         for _ in range(self.config.n_repeats):
@@ -322,7 +321,7 @@ class BenchmarkSuite:
             with self.profiler.profile(profile_name) as metrics:
                 try:
                     jit_start = time.perf_counter()
-                    popt, pcov = curve_fit(problem.model, x, y, p0=p0, method=method)
+                    popt, _pcov = curve_fit(problem.model, x, y, p0=p0, method=method)
                     jit_time = time.perf_counter() - jit_start
 
                     success = True
@@ -392,7 +391,7 @@ class BenchmarkSuite:
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    popt, pcov, infodict, mesg, ier = scipy_curve_fit(
+                    _popt, _pcov, infodict, _mesg, ier = scipy_curve_fit(
                         numpy_model,
                         x,
                         y,
@@ -560,7 +559,7 @@ class BenchmarkSuite:
 
         # Create dashboard
         dashboard = ProfilingDashboard(self.profiler)
-        for profile_name in self.profiler.profiles.keys():
+        for profile_name in self.profiler.profiles:
             dashboard.add_profile(profile_name)
 
         # Save dashboard

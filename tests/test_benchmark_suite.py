@@ -144,7 +144,7 @@ class TestBenchmarkProblems:
     def test_initial_guess(self):
         """Test initial parameter guess generation."""
         problem = ExponentialDecayProblem()
-        x, y, p_true = problem.generate_data(100)
+        _x, _y, p_true = problem.generate_data(100)
 
         p0 = problem.get_initial_guess(p_true)
 

@@ -32,7 +32,7 @@ class TestLinearFunction:
         ydata += np.random.normal(0, 0.5, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(linear, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(linear, xdata, ydata, p0="auto")
 
         # Check results
         assert np.abs(popt[0] - a_true) < 0.2, f"Slope mismatch: {popt[0]} vs {a_true}"
@@ -45,7 +45,7 @@ class TestLinearFunction:
         xdata = np.array([1, 2, 3, 4, 5])
         ydata = np.array([2, 4, 6, 8, 10])
 
-        popt, pcov = curve_fit(linear, xdata, ydata, p0=[1.5, 0.5])
+        popt, _pcov = curve_fit(linear, xdata, ydata, p0=[1.5, 0.5])
 
         assert np.abs(popt[0] - 2.0) < 0.1
         assert np.abs(popt[1] - 0.0) < 0.1
@@ -79,7 +79,7 @@ class TestExponentialDecay:
         ydata += np.random.normal(0, 0.1, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(exponential_decay, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(exponential_decay, xdata, ydata, p0="auto")
 
         # Check results (allow 30% tolerance)
         assert np.abs(popt[0] - a_true) / a_true < 0.3, (
@@ -126,7 +126,7 @@ class TestExponentialGrowth:
         ydata += np.random.normal(0, 0.5, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(exponential_growth, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(exponential_growth, xdata, ydata, p0="auto")
 
         # Check results (growth can be sensitive, allow 50% tolerance)
         assert np.abs(popt[0] - a_true) / a_true < 0.5, (
@@ -151,7 +151,7 @@ class TestGaussian:
         ydata += np.random.normal(0, 0.2, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(gaussian, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(gaussian, xdata, ydata, p0="auto")
 
         # Check results
         assert np.abs(popt[0] - amp_true) < 2.0, f"Amplitude: {popt[0]} vs {amp_true}"
@@ -176,7 +176,7 @@ class TestGaussian:
         xdata = np.linspace(0, 20, 200)
         ydata = gaussian(xdata, 5, 12, 2)  # Peak at x=12
 
-        popt, pcov = curve_fit(gaussian, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(gaussian, xdata, ydata, p0="auto")
 
         # Peak position should be close to 12
         assert np.abs(popt[1] - 12) < 1.0
@@ -198,7 +198,7 @@ class TestSigmoid:
         ydata += np.random.normal(0, 0.3, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(sigmoid, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(sigmoid, xdata, ydata, p0="auto")
 
         # Check results
         assert np.abs(popt[0] - L_true) < 3.0, f"L: {popt[0]} vs {L_true}"
@@ -234,7 +234,7 @@ class TestPowerLaw:
         ydata += np.random.normal(0, 1.0, len(xdata))
 
         # Fit with auto p0
-        popt, pcov = curve_fit(power_law, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(power_law, xdata, ydata, p0="auto")
 
         # Check results (power law can be sensitive)
         assert np.abs(popt[0] - a_true) < 2.0, f"Prefactor: {popt[0]} vs {a_true}"
@@ -256,7 +256,7 @@ class TestPowerLaw:
         xdata = np.linspace(1, 10, 20)
         ydata = power_law(xdata, 5, 1)  # Should be 5*x
 
-        popt, pcov = curve_fit(power_law, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(power_law, xdata, ydata, p0="auto")
 
         assert np.abs(popt[0] - 5) < 0.5
         assert np.abs(popt[1] - 1) < 0.2
@@ -278,7 +278,7 @@ class TestPolynomial:
         ydata += np.random.normal(0, 0.5, len(xdata))
 
         # Fit
-        popt, pcov = curve_fit(poly1, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(poly1, xdata, ydata, p0="auto")
 
         # Check
         assert np.abs(popt[0] - 2) < 0.3  # Coefficient of x
@@ -297,7 +297,7 @@ class TestPolynomial:
         ydata += np.random.normal(0, 0.3, len(xdata))
 
         # Fit
-        popt, pcov = curve_fit(poly2, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(poly2, xdata, ydata, p0="auto")
 
         # Check (allow larger tolerance)
         assert np.abs(popt[0] - 1) < 0.5  # x² coefficient
@@ -430,7 +430,7 @@ class TestIntegrationWithCurveFit:
         # Use function's default bounds
         bounds = exponential_decay.bounds()
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             exponential_decay, xdata, ydata, p0="auto", bounds=bounds
         )
 
@@ -447,7 +447,7 @@ class TestEdgeCases:
         ydata = np.array([5, 5, 5, 5, 5])
 
         # Should still work (horizontal line)
-        popt, pcov = curve_fit(linear, xdata, ydata, p0="auto")
+        popt, _pcov = curve_fit(linear, xdata, ydata, p0="auto")
 
         assert np.abs(popt[0]) < 0.1  # Slope near 0
         assert np.abs(popt[1] - 5) < 0.1  # Intercept near 5

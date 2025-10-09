@@ -171,7 +171,7 @@ def estimate_initial_parameters(
         raise ValueError(
             "Cannot automatically determine number of parameters. "
             "Please provide p0 explicitly."
-        )
+        ) from None
 
     if n_params <= 0:
         raise ValueError(

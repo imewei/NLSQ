@@ -134,15 +134,17 @@ from nlsq.validators import InputValidator
 __all__ = [
     # Stability and optimization modules
     "AlgorithmSelector",
-    # Progress callbacks (Day 3)
-    "callbacks",
-    # Common functions library
-    "functions",
+    # Bounds inference (Phase 3)
+    "BoundsInference",
     # Performance optimization (Sprint 2)
     "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
     "DataGenerator",
+    # Fallback strategies (Phase 3)
+    "FallbackOrchestrator",
+    "FallbackResult",
+    "FallbackStrategy",
     "InputValidator",
     "LargeDatasetConfig",
     "LargeDatasetFitter",
@@ -155,15 +157,15 @@ __all__ = [
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
     "OptimizationRecovery",
+    # Result types
+    "OptimizeResult",
+    "OptimizeWarning",
     # Performance profiling (Days 20-21)
     "PerformanceProfiler",
     "ProfileMetrics",
     # Performance profiling visualization (Days 22-23)
     "ProfilerVisualization",
     "ProfilingDashboard",
-    # Result types
-    "OptimizeResult",
-    "OptimizeWarning",
     "RobustDecomposition",
     "SmartCache",
     # Sparse Jacobian support
@@ -175,11 +177,16 @@ __all__ = [
     "TRFMemoryPool",
     # Version
     "__version__",
+    "apply_automatic_fixes",
     "auto_select_algorithm",
     # Caching support
     "cached_function",
     "cached_jacobian",
     "cached_jit",
+    # Progress callbacks (Day 3)
+    "callbacks",
+    # Stability checks (Phase 3)
+    "check_problem_stability",
     "clear_all_caches",
     "clear_compilation_cache",
     "clear_global_pool",
@@ -190,27 +197,18 @@ __all__ = [
     "create_hdf5_dataset",
     # Main curve fitting API
     "curve_fit",
-    # Fallback strategies (Phase 3)
-    "FallbackOrchestrator",
-    "FallbackResult",
-    "FallbackStrategy",
-    # Bounds inference (Phase 3)
-    "BoundsInference",
-    "infer_bounds",
-    "merge_bounds",
-    # Stability checks (Phase 3)
-    "check_problem_stability",
-    "apply_automatic_fixes",
-    "estimate_condition_number",
-    "detect_parameter_scale_mismatch",
-    "detect_collinearity",
     "curve_fit_large",
+    "detect_collinearity",
     "detect_jacobian_sparsity",
+    "detect_parameter_scale_mismatch",
     "enable_mixed_precision_fallback",
+    "estimate_condition_number",
     "estimate_memory_requirements",
     # Large dataset utilities
     "fit_large_dataset",
     "fit_unlimited_data",
+    # Common functions library
+    "functions",
     "get_global_cache",
     "get_global_compilation_cache",
     "get_global_pool",
@@ -220,8 +218,10 @@ __all__ = [
     "get_memory_config",
     "get_memory_manager",
     "get_memory_stats",
+    "infer_bounds",
     "large_dataset_context",
     "memory_context",
+    "merge_bounds",
     "robust_decomp",
     "set_memory_limits",
 ]

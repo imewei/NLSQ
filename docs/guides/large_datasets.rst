@@ -336,9 +336,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
     # Fit using generator (data stream)
     print("Fitting from data generator...")
     gen_result = stream_optimizer.fit_streaming(
-        exponential_model,
-        data_generator(batch_size=20000),
-        p0=np.array([2.5, 0.4, 0.3])
+        exponential_model, data_generator(batch_size=20000), p0=np.array([2.5, 0.4, 0.3])
     )
 
     print("Generator Results:")

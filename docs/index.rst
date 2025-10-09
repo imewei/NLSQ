@@ -100,12 +100,6 @@ Documentation
    developer/pypi_setup
    developer/ci_cd/index
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Project History
-
-   history/index
-
 Resources
 ---------
 

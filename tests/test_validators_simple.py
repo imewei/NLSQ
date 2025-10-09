@@ -24,7 +24,7 @@ class TestValidatorIntegration:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        popt, pcov = curve_fit(model, xdata, ydata)
+        popt, _pcov = curve_fit(model, xdata, ydata)
         assert popt is not None
 
     def test_numpy_arrays(self):
@@ -33,7 +33,7 @@ class TestValidatorIntegration:
         def model(x, a):
             return a * x
 
-        popt, pcov = curve_fit(model, np.array([1, 2, 3]), np.array([2, 4, 6]))
+        popt, _pcov = curve_fit(model, np.array([1, 2, 3]), np.array([2, 4, 6]))
         assert popt is not None
 
     def test_with_bounds(self):
@@ -42,7 +42,7 @@ class TestValidatorIntegration:
         def model(x, a, b):
             return a * x + b
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             model, np.array([1, 2, 3]), np.array([2, 4, 6]), bounds=([0, -10], [10, 10])
         )
         assert popt is not None
@@ -53,7 +53,7 @@ class TestValidatorIntegration:
         def model(x, a, b):
             return a * x + b
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             model,
             np.array([1, 2, 3]),
             np.array([2, 4, 6]),
@@ -67,7 +67,7 @@ class TestValidatorIntegration:
         def model(x, a, b):
             return a * x + b
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             model, np.array([1, 2, 3]), np.array([2, 4, 6]), p0=[1.0, 0.0]
         )
         assert popt is not None
@@ -78,7 +78,7 @@ class TestValidatorIntegration:
         def model(x, a):
             return a * x
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             model, np.array([1, 2, 3]), np.array([2, 4, 6]), method="trf"
         )
         assert popt is not None
@@ -89,7 +89,7 @@ class TestValidatorIntegration:
         def model(x, a):
             return a * x
 
-        popt, pcov = curve_fit(model, [1, 2, 3], [2, 4, 6])
+        popt, _pcov = curve_fit(model, [1, 2, 3], [2, 4, 6])
         assert popt is not None
 
     def test_mixed_types(self):
@@ -98,7 +98,7 @@ class TestValidatorIntegration:
         def model(x, a):
             return a * x
 
-        popt, pcov = curve_fit(model, np.array([1, 2, 3]), jnp.array([2, 4, 6]))
+        popt, _pcov = curve_fit(model, np.array([1, 2, 3]), jnp.array([2, 4, 6]))
         assert popt is not None
 
 

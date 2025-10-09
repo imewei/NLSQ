@@ -38,7 +38,7 @@ nlsq.minpack.curve_fit : Main curve fitting function
 nlsq.parameter_estimation : Automatic parameter estimation
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 

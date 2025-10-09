@@ -63,7 +63,7 @@ class TestBoundsInference:
         p0 = np.array([2.5, 0.5, 1.0])
 
         inference = BoundsInference(x, y, p0, enforce_positivity=True)
-        lower, upper = inference.infer()
+        lower, _upper = inference.infer()
 
         # All lower bounds should be non-negative
         assert np.all(lower >= 0)
@@ -75,7 +75,7 @@ class TestBoundsInference:
         p0 = np.array([-2.0, 1.0])
 
         inference = BoundsInference(x, y, p0, enforce_positivity=False)
-        lower, upper = inference.infer()
+        lower, _upper = inference.infer()
 
         # First parameter should allow negative values
         assert lower[0] < 0
@@ -378,7 +378,7 @@ class TestEdgeCases:
         y = -2.5 * np.exp(-0.5 * x) - 1.0
         p0 = [-2.5, 0.5, -1.0]
 
-        lower, upper = infer_bounds(x, y, p0, enforce_positivity=False)
+        lower, _upper = infer_bounds(x, y, p0, enforce_positivity=False)
 
         # Should handle negative values
         assert lower[0] < 0
@@ -391,13 +391,13 @@ class TestEdgeCases:
         p0 = [2.0, -5.0]
 
         # With enforce_positivity=False, negative bounds are allowed
-        lower, upper = infer_bounds(x, y, p0, enforce_positivity=False)
+        lower, _upper = infer_bounds(x, y, p0, enforce_positivity=False)
 
         # Second param can be negative
         assert lower[1] < 0
 
         # With enforce_positivity=True, positive p0 enforces positivity
-        lower2, upper2 = infer_bounds(x, y, p0, enforce_positivity=True)
+        lower2, _upper2 = infer_bounds(x, y, p0, enforce_positivity=True)
         assert lower2[0] >= 0  # First param should be non-negative
 
 

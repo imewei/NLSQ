@@ -25,7 +25,7 @@ def test_basic_usage():
 
     # Perform the fit
     cf = CurveFit()
-    popt, pcov = cf.curve_fit(linear, x, y)
+    popt, _pcov = cf.curve_fit(linear, x, y)
     print(f"Fitted parameters: m={popt[0]:.2f}, b={popt[1]:.2f}")
     assert np.allclose(popt[0], 2.0, atol=0.01)
     print("✅ Basic Usage example passed")
@@ -155,7 +155,7 @@ def test_sparse_jacobian():
 
     # Automatically detect and exploit sparsity
     sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
-    pattern, sparsity = sparse_computer.detect_sparsity_pattern(func, p0, x_sample)
+    _pattern, sparsity = sparse_computer.detect_sparsity_pattern(func, p0, x_sample)
 
     if sparsity > 0.1:  # If more than 10% sparse
         print(f"Jacobian is {sparsity:.1%} sparse")
@@ -221,7 +221,7 @@ def test_memory_management():
     with memory_context(config):
         # Memory-optimized fitting
         cf = CurveFit()
-        popt, pcov = cf.curve_fit(func, x, y, p0=p0)
+        _popt, _pcov = cf.curve_fit(func, x, y, p0=p0)
 
     # Check current memory configuration
     current_config = get_memory_config()
@@ -252,7 +252,7 @@ def test_algorithm_selection():
 
     # Use recommended algorithm
     method = recommendations.get("algorithm", "trf")
-    popt, pcov = curve_fit(model_nonlinear, x, y, p0=[1.0, 0.5, 0.1], method=method)
+    popt, _pcov = curve_fit(model_nonlinear, x, y, p0=[1.0, 0.5, 0.1], method=method)
 
     print(f"Selected algorithm: {method}")
     print(f"Fitted parameters: {popt}")
@@ -281,7 +281,7 @@ def test_diagnostics_monitoring():
     cf = CurveFit(enable_stability=True, enable_recovery=True)
 
     # Perform fitting
-    popt, pcov = cf.curve_fit(func, x, y, p0=p0)
+    popt, _pcov = cf.curve_fit(func, x, y, p0=p0)
     print(f"Fitted parameters: {popt}")
 
     # For detailed diagnostics, create separate diagnostics object
@@ -309,10 +309,10 @@ def test_caching_system():
         return a * jnp.exp(-b * x)
 
     # First fit - compiles function
-    popt1, pcov1 = curve_fit(exponential, x1, y1, p0=[1.0, 0.1])
+    _popt1, _pcov1 = curve_fit(exponential, x1, y1, p0=[1.0, 0.1])
 
     # Second fit - reuses JIT compilation from first fit
-    popt2, pcov2 = curve_fit(exponential, x2, y2, p0=[1.2, 0.15])
+    _popt2, _pcov2 = curve_fit(exponential, x2, y2, p0=[1.2, 0.15])
 
     # Check cache statistics
     stats = cache.get_stats()
@@ -338,14 +338,14 @@ def test_optimization_recovery():
     cf = CurveFit(enable_recovery=True)
 
     try:
-        popt, pcov = cf.curve_fit(func, x, y, p0=p0_initial)
+        popt, _pcov = cf.curve_fit(func, x, y, p0=p0_initial)
         print(f"Fitted parameters: {popt}")
     except Exception as e:
         print(f"Optimization failed: {e}")
         # Manual recovery with OptimizationRecovery
         recovery = OptimizationRecovery(max_retries=3, enable_diagnostics=True)
         # Recovery provides automatic fallback strategies
-        popt, pcov = curve_fit(func, x, y, p0=p0_initial)
+        popt, _pcov = curve_fit(func, x, y, p0=p0_initial)
     print("✅ Optimization Recovery example passed")
 
 
@@ -366,7 +366,7 @@ def test_input_validation():
     validator = InputValidator(fast_mode=True)
 
     # Validate inputs before fitting
-    warnings, errors, clean_x, clean_y = validator.validate_curve_fit_inputs(
+    _warnings, errors, clean_x, clean_y = validator.validate_curve_fit_inputs(
         f=func, xdata=x, ydata=y, p0=p0
     )
 
@@ -374,7 +374,7 @@ def test_input_validation():
         print(f"Validation errors: {errors}")
     else:
         # Use validated data
-        popt, pcov = curve_fit(func, clean_x, clean_y, p0=p0)
+        popt, _pcov = curve_fit(func, clean_x, clean_y, p0=p0)
         print(f"Fitted parameters: {popt}")
     print("✅ Input Validation example passed")
 

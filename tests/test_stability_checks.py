@@ -84,7 +84,7 @@ class TestDetectParameterScaleMismatch:
     def test_mixed_zero_nonzero(self):
         """Test with mixed zero and non-zero parameters."""
         p0 = np.array([0.0, 1.0, 1000.0])
-        has_mismatch, ratio = detect_parameter_scale_mismatch(p0)
+        _has_mismatch, ratio = detect_parameter_scale_mismatch(p0)
 
         # Zeros are ignored, ratio is between nonzero values
         assert ratio == 1000.0
@@ -92,7 +92,7 @@ class TestDetectParameterScaleMismatch:
     def test_custom_threshold(self):
         """Test with custom threshold."""
         p0 = np.array([1.0, 100.0])
-        has_mismatch, ratio = detect_parameter_scale_mismatch(p0, threshold=50.0)
+        has_mismatch, _ratio = detect_parameter_scale_mismatch(p0, threshold=50.0)
 
         assert has_mismatch is True
 
@@ -131,7 +131,7 @@ class TestDetectCollinearity:
         x2 = 2.0 * x1 + 0.1 * np.random.randn(100)  # Nearly collinear
         xdata = np.column_stack([x1, x2])
 
-        has_coll, pairs = detect_collinearity(xdata)
+        has_coll, _pairs = detect_collinearity(xdata)
 
         assert has_coll is True
 
@@ -241,7 +241,7 @@ class TestApplyAutomaticFixes:
         x = np.linspace(0, 1e6, 100)
         y = 2.0 * x + 1.0
 
-        x_fixed, y_fixed, _, info = apply_automatic_fixes(x, y)
+        x_fixed, _y_fixed, _, info = apply_automatic_fixes(x, y)
 
         # xdata should be rescaled
         assert np.ptp(x_fixed) == pytest.approx(1.0, abs=1e-10)
@@ -253,7 +253,7 @@ class TestApplyAutomaticFixes:
         x = np.linspace(0, 1e5, 100)
         y = np.linspace(0, 1e5, 100)
 
-        x_fixed, y_fixed, _, info = apply_automatic_fixes(x, y)
+        x_fixed, y_fixed, _, _info = apply_automatic_fixes(x, y)
 
         # Both should be rescaled
         assert np.ptp(x_fixed) <= 1.0
@@ -265,7 +265,7 @@ class TestApplyAutomaticFixes:
         y = 2.0 * x + 1.0
         y[50] = np.nan
 
-        x_fixed, y_fixed, _, info = apply_automatic_fixes(x, y)
+        _x_fixed, y_fixed, _, info = apply_automatic_fixes(x, y)
 
         # NaN should be fixed
         assert not np.any(np.isnan(y_fixed))
@@ -277,7 +277,7 @@ class TestApplyAutomaticFixes:
         x[10] = np.inf
         y = 2.0 * x + 1.0
 
-        x_fixed, y_fixed, _, info = apply_automatic_fixes(x, y)
+        x_fixed, _y_fixed, _, info = apply_automatic_fixes(x, y)
 
         # Inf should be fixed
         assert not np.any(np.isinf(x_fixed))
@@ -289,7 +289,7 @@ class TestApplyAutomaticFixes:
         y = 2.0 * x + 1.0
         p0 = np.array([1e-6, 1e6])
 
-        x_fixed, y_fixed, p0_fixed, info = apply_automatic_fixes(x, y, p0)
+        _x_fixed, _y_fixed, p0_fixed, _info = apply_automatic_fixes(x, y, p0)
 
         # Parameters should be rescaled to similar magnitude
         if p0_fixed is not None:
@@ -305,7 +305,7 @@ class TestApplyAutomaticFixes:
         y = 2.0 * x + 1.0
         p0 = np.array([2.0, 1.0])
 
-        x_fixed, y_fixed, p0_fixed, info = apply_automatic_fixes(x, y, p0)
+        _x_fixed, _y_fixed, _p0_fixed, info = apply_automatic_fixes(x, y, p0)
 
         # Should not apply fixes to already good data
         # (though minor rescaling might still occur)
@@ -317,7 +317,9 @@ class TestApplyAutomaticFixes:
         y = 2.0 * x + 1.0
 
         report = check_problem_stability(x, y)
-        x_fixed, y_fixed, _, info = apply_automatic_fixes(x, y, stability_report=report)
+        _x_fixed, _y_fixed, _, info = apply_automatic_fixes(
+            x, y, stability_report=report
+        )
 
         # Should use the provided report
         assert len(info["applied_fixes"]) > 0
@@ -327,7 +329,7 @@ class TestApplyAutomaticFixes:
         x = np.linspace(0, 1e6, 100)
         y = 2.0 * x + 1.0
 
-        x_fixed, y_fixed, _, info = apply_automatic_fixes(x, y)
+        _x_fixed, _y_fixed, _, info = apply_automatic_fixes(x, y)
 
         # Should return scaling factors
         assert "x_scale" in info
@@ -353,7 +355,7 @@ class TestIntegration:
         assert report["severity"] == "critical"
 
         # Step 2: Fix
-        x_fixed, y_fixed, p0_fixed, info = apply_automatic_fixes(
+        x_fixed, y_fixed, p0_fixed, _info = apply_automatic_fixes(
             x, y, p0, stability_report=report
         )
 

@@ -510,7 +510,7 @@ class CurveFitResult(OptimizeResult):
             raise ImportError(
                 "matplotlib is required for plotting. "
                 "Install with: pip install matplotlib"
-            )
+            ) from None
 
         if not hasattr(self, "xdata") or not hasattr(self, "ydata"):
             raise AttributeError("Cannot plot: xdata and ydata not available")

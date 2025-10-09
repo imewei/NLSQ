@@ -465,7 +465,7 @@ class TestRealWorldScenarios:
     def test_damped_oscillation(self):
         """Test damped oscillation (decaying sine wave)."""
         np.random.seed(42)
-        # y = A * exp(-γt) * sin(ωt + φ)
+        # y = A * exp(-γt) * sin(ωt + φ)  # noqa: RUF003
         t = np.linspace(0, 20, 200)
         A = 5.0
         gamma = 0.2

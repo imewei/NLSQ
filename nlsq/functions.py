@@ -33,7 +33,7 @@ nlsq.minpack.curve_fit : Main curve fitting function
 """
 
 from collections.abc import Callable
-from typing import List, Tuple, Union
+from typing import Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -77,7 +77,7 @@ def linear(x: ArrayLike, a: float, b: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(linear, x, y, p0='auto')
     >>> print(f"Slope: {popt[0]:.2f}, Intercept: {popt[1]:.2f}")
     """
-    return a * x + b
+    return a * x + b  # type: ignore[operator]
 
 
 def estimate_p0_linear(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -122,8 +122,8 @@ def bounds_linear() -> BoundsTuple:
 
 
 # Attach methods to function
-linear.estimate_p0 = estimate_p0_linear
-linear.bounds = bounds_linear
+linear.estimate_p0 = estimate_p0_linear  # type: ignore[attr-defined]
+linear.bounds = bounds_linear  # type: ignore[attr-defined]
 
 
 # ============================================================================
@@ -171,7 +171,7 @@ def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(exponential_decay, x, y, p0='auto')
     >>> print(f"Half-life: {np.log(2)/popt[1]:.2f}")
     """
-    return a * jnp.exp(-b * x) + c
+    return a * jnp.exp(-b * x) + c  # type: ignore[operator]
 
 
 def estimate_p0_exponential_decay(
@@ -240,8 +240,8 @@ def bounds_exponential_decay() -> BoundsTuple:
     return ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
 
 
-exponential_decay.estimate_p0 = estimate_p0_exponential_decay
-exponential_decay.bounds = bounds_exponential_decay
+exponential_decay.estimate_p0 = estimate_p0_exponential_decay  # type: ignore[attr-defined]
+exponential_decay.bounds = bounds_exponential_decay  # type: ignore[attr-defined]
 
 
 def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
@@ -283,7 +283,7 @@ def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(exponential_growth, x, y, p0='auto')
     >>> print(f"Doubling time: {np.log(2)/popt[1]:.2f}")
     """
-    return a * jnp.exp(b * x) + c
+    return a * jnp.exp(b * x) + c  # type: ignore[operator]
 
 
 def estimate_p0_exponential_growth(
@@ -330,8 +330,8 @@ def estimate_p0_exponential_growth(
     return [float(a), float(b), float(c)]
 
 
-exponential_growth.estimate_p0 = estimate_p0_exponential_growth
-exponential_growth.bounds = lambda: ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
+exponential_growth.estimate_p0 = estimate_p0_exponential_growth  # type: ignore[attr-defined]
+exponential_growth.bounds = lambda: ([0, 0, -np.inf], [np.inf, np.inf, np.inf])  # type: ignore[attr-defined]
 
 
 # ============================================================================
@@ -379,7 +379,7 @@ def gaussian(x: ArrayLike, amp: float, mu: float, sigma: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(gaussian, x, y, p0='auto')
     >>> print(f"Peak at {popt[1]:.2f}, FWHM = {2.355*popt[2]:.2f}")
     """
-    return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
+    return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))  # type: ignore[operator]
 
 
 def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -429,8 +429,8 @@ def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     return [float(amp), float(mu), float(sigma)]
 
 
-gaussian.estimate_p0 = estimate_p0_gaussian
-gaussian.bounds = lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf])
+gaussian.estimate_p0 = estimate_p0_gaussian  # type: ignore[attr-defined]
+gaussian.bounds = lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf])  # type: ignore[attr-defined]
 
 
 # ============================================================================
@@ -480,7 +480,7 @@ def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(sigmoid, x, y, p0='auto')
     >>> print(f"EC50 (midpoint): {popt[1]:.2f}")
     """
-    return L / (1 + jnp.exp(-k * (x - x0))) + b
+    return L / (1 + jnp.exp(-k * (x - x0))) + b  # type: ignore[operator]
 
 
 def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -528,8 +528,8 @@ def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     return [float(L), float(x0), float(k), float(b)]
 
 
-sigmoid.estimate_p0 = estimate_p0_sigmoid
-sigmoid.bounds = lambda: ([0, -np.inf, 0, -np.inf], [np.inf, np.inf, np.inf, np.inf])
+sigmoid.estimate_p0 = estimate_p0_sigmoid  # type: ignore[attr-defined]
+sigmoid.bounds = lambda: ([0, -np.inf, 0, -np.inf], [np.inf, np.inf, np.inf, np.inf])  # type: ignore[attr-defined]
 
 
 # ============================================================================
@@ -575,7 +575,7 @@ def power_law(x: ArrayLike, a: float, b: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(power_law, x, y, p0='auto')
     >>> print(f"Scaling exponent: {popt[1]:.2f}")
     """
-    return a * jnp.power(x, b)
+    return a * jnp.power(x, b)  # type: ignore[arg-type]
 
 
 def estimate_p0_power_law(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -620,8 +620,8 @@ def estimate_p0_power_law(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList
         return [1.0, 1.0]
 
 
-power_law.estimate_p0 = estimate_p0_power_law
-power_law.bounds = lambda: ([0, -np.inf], [np.inf, np.inf])
+power_law.estimate_p0 = estimate_p0_power_law  # type: ignore[attr-defined]
+power_law.bounds = lambda: ([0, -np.inf], [np.inf, np.inf])  # type: ignore[attr-defined]
 
 
 # ============================================================================
@@ -683,8 +683,8 @@ def polynomial(degree: int) -> Callable:
         return ([-np.inf] * (degree + 1), [np.inf] * (degree + 1))
 
     # Attach methods and metadata
-    poly.estimate_p0 = estimate_p0_poly
-    poly.bounds = bounds_poly
+    poly.estimate_p0 = estimate_p0_poly  # type: ignore[attr-defined]
+    poly.bounds = bounds_poly  # type: ignore[attr-defined]
     poly.__name__ = f"polynomial_degree_{degree}"
     poly.__doc__ = f"""Polynomial of degree {degree}: y = c0\\*x^{degree} + c1\\*x^{degree - 1} + ... + c{degree}
 

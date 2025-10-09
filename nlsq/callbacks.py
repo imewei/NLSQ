@@ -151,7 +151,7 @@ class ProgressBar(CallbackBase):
 
         # Update postfix with current status
         g_norm = info.get("gradient_norm", np.nan)
-        self._pbar.set_postfix(
+        self._pbar.set_postfix(  # type: ignore[attr-defined]
             {
                 "cost": f"{cost:.6e}",
                 "grad": f"{g_norm:.3e}",
@@ -160,7 +160,7 @@ class ProgressBar(CallbackBase):
         )
 
         # Update progress bar
-        self._pbar.update(delta_nfev if self.max_nfev else 1)
+        self._pbar.update(delta_nfev if self.max_nfev else 1)  # type: ignore[attr-defined]
 
     def close(self):
         """Close progress bar."""
@@ -248,7 +248,7 @@ class IterationLogger(CallbackBase):
         """Open log file."""
         # Only open file if not already provided and filename is given
         if not self._file_provided and self.filename is not None:
-            self._file = open(self.filename, self.mode)
+            self._file = open(self.filename, self.mode)  # noqa: SIM115
 
     def _write_header(self):
         """Write log header."""

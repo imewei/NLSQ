@@ -5,6 +5,8 @@ Tests for Automatic Fallback Strategies
 Tests the fallback orchestrator and individual strategies for robust optimization.
 """
 
+import contextlib
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -268,7 +270,7 @@ class TestFallbackOrchestrator:
 
         orchestrator = FallbackOrchestrator(verbose=False, max_attempts=3)
 
-        with pytest.raises(RuntimeError, match="All .* fallback attempts failed"):
+        with pytest.raises(RuntimeError, match=r"All .* fallback attempts failed"):
             orchestrator.fit_with_fallback(exponential_decay, x, y, p0=[1, 0.5, 1])
 
     def test_get_statistics(self):
@@ -307,10 +309,8 @@ class TestFallbackOrchestrator:
 
         orchestrator = FallbackOrchestrator(verbose=False, max_attempts=3)
 
-        try:
+        with contextlib.suppress(RuntimeError):
             _ = orchestrator.fit_with_fallback(exponential_decay, x, y, p0=[1, 0.5, 1])
-        except RuntimeError:
-            pass  # Expected to fail
 
         assert orchestrator.total_attempts <= 3
 
@@ -405,10 +405,8 @@ class TestFallbackIntegration:
             p0_scale = 1 + i * 0.5
             p0 = [2 * p0_scale, 0.5 / p0_scale, 1 * p0_scale]
 
-            try:
+            with contextlib.suppress(RuntimeError):
                 _ = orchestrator.fit_with_fallback(exponential_decay, x, y, p0=p0)
-            except RuntimeError:
-                pass
 
         stats = orchestrator.get_statistics()
         assert stats["total_attempts"] >= 5  # At least one per fit

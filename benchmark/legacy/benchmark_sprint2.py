@@ -11,7 +11,6 @@ Compares performance before and after optimizations.
 
 import sys
 import time
-from typing import Dict, List, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -59,7 +58,7 @@ class PerformanceBenchmark:
 
         Returns
         -------
-        metrics : Dict[str, float]
+        metrics : dict[str, float]
             Timing metrics (first_run, cached_runs, speedup)
         """
         print(f"\nBenchmarking function caching ({n_runs} runs)...")
@@ -73,7 +72,7 @@ class PerformanceBenchmark:
 
         # First run (includes JIT compilation)
         start = time.perf_counter()
-        popt, _ = curve_fit(exponential_model, x, y, p0=p0)
+        _popt, _ = curve_fit(exponential_model, x, y, p0=p0)
         first_run_time = time.perf_counter() - start
 
         # Cached runs (should be faster)
@@ -83,7 +82,7 @@ class PerformanceBenchmark:
             y_noisy = y_true + 0.05 * np.random.randn(len(x))
 
             start = time.perf_counter()
-            popt, _ = curve_fit(exponential_model, x, y_noisy, p0=p0)
+            _popt, _ = curve_fit(exponential_model, x, y_noisy, p0=p0)
             cached_times.append(time.perf_counter() - start)
 
         avg_cached = np.mean(cached_times)
@@ -110,7 +109,7 @@ class PerformanceBenchmark:
 
         Returns
         -------
-        results : Dict[str, List[float]]
+        results : dict[str, list[float]]
             Timing results for each size
         """
         print("\nBenchmarking dataset sizes...")
@@ -131,7 +130,7 @@ class PerformanceBenchmark:
 
             # Benchmark
             start = time.perf_counter()
-            popt, _ = curve_fit(exponential_model, x, y, p0=p0)
+            _popt, _ = curve_fit(exponential_model, x, y, p0=p0)
             elapsed_ms = (time.perf_counter() - start) * 1000
 
             results["times_ms"].append(elapsed_ms)
@@ -149,7 +148,7 @@ class PerformanceBenchmark:
 
         Returns
         -------
-        metrics : Dict[str, float]
+        metrics : dict[str, float]
             Memory pool metrics
         """
         print(f"\nBenchmarking memory pool ({n_runs} runs)...")
@@ -168,7 +167,7 @@ class PerformanceBenchmark:
             p0 = [5.0, 5.0, 2.0]
 
             start = time.perf_counter()
-            popt, _ = curve_fit(gaussian_model, x, y, p0=p0)
+            _popt, _ = curve_fit(gaussian_model, x, y, p0=p0)
             times.append(time.perf_counter() - start)
 
         stats_after = pool.get_stats()

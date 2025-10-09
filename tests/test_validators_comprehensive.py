@@ -44,7 +44,7 @@ class TestValidateCurveFitInputs:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f="not_a_function",  # Invalid!
             xdata=xdata,
             ydata=ydata,
@@ -65,7 +65,7 @@ class TestValidateCurveFitInputs:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4])  # Wrong shape!
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,
@@ -112,7 +112,7 @@ class TestValidateCurveFitInputs:
         ydata = np.array([2, 4, 6])
         sigma = np.array([0.1, 0.2])  # Wrong shape!
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,
@@ -135,7 +135,7 @@ class TestValidateCurveFitInputs:
         ydata = np.array([2, 4, 6])
         sigma = np.array([0.1, -0.2, 0.3])  # Negative!
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,
@@ -162,7 +162,7 @@ class TestValidateCurveFitInputs:
         ydata = np.array([2, 4, 6])
         sigma = np.array([0.1, 0.0, 0.3])  # Zero!
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,
@@ -189,7 +189,7 @@ class TestValidateCurveFitInputs:
         ydata = np.array([2, 4, 6])
         bounds = ([10, 10], [0, 0])  # Lower >= upper!
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,
@@ -213,7 +213,7 @@ class TestValidateCurveFitInputs:
         p0 = [5, 5]
         bounds = ([0, 0], [3, 3])  # p0 outside!
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        _errors, warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,
@@ -445,7 +445,7 @@ class TestValidateCurveFitInputs:
         ydata = np.array([2, 4, 6])
         bounds = ([0], [10, 10])  # Shape mismatch!
 
-        errors, warnings, xd, yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,

@@ -25,7 +25,7 @@ class TestPrepareInputsBounds:
         ydata = np.array([2, 4, 6, 8, 10])
 
         # Don't pass bounds - defaults to (-inf, inf)
-        popt, pcov = curve_fit(linear, xdata, ydata)
+        popt, _pcov = curve_fit(linear, xdata, ydata)
 
         assert popt is not None
         np.testing.assert_allclose(popt, [2.0, 0.0], rtol=1e-3, atol=1e-10)
@@ -41,7 +41,7 @@ class TestPrepareInputsBounds:
         ydata = 2.5 * np.exp(-xdata / 1.3) + np.random.normal(0, 0.05, 50)
 
         # Scalar bounds should expand to [0, 0] and [10, 10]
-        popt, pcov = curve_fit(exponential, xdata, ydata, bounds=(0, 10), p0=[2, 1])
+        popt, _pcov = curve_fit(exponential, xdata, ydata, bounds=(0, 10), p0=[2, 1])
 
         assert len(popt) == 2
         assert np.all(popt >= 0)
@@ -62,7 +62,7 @@ class TestPrepareInputsBounds:
             [10, 5, 10],  # upper
         )
 
-        popt, pcov = curve_fit(power_law, xdata, ydata, p0=[1, 1, 1], bounds=bounds)
+        popt, _pcov = curve_fit(power_law, xdata, ydata, p0=[1, 1, 1], bounds=bounds)
 
         assert 0 <= popt[0] <= 10
         assert 0 <= popt[1] <= 5
@@ -80,7 +80,7 @@ class TestPrepareInputsBounds:
         # Only constrain 'a' to be positive
         bounds = ([0, -np.inf], [np.inf, np.inf])
 
-        popt, pcov = curve_fit(model, xdata, ydata, bounds=bounds)
+        popt, _pcov = curve_fit(model, xdata, ydata, bounds=bounds)
 
         assert popt[0] >= 0  # 'a' constrained
         # 'b' unconstrained
@@ -96,7 +96,7 @@ class TestPrepareInputsBounds:
 
         bounds = ([0], [10])  # Lower bound near solution
 
-        popt, pcov = curve_fit(model, xdata, ydata, p0=[0.5], bounds=bounds)
+        popt, _pcov = curve_fit(model, xdata, ydata, p0=[0.5], bounds=bounds)
 
         assert popt[0] >= 0  # At or above lower bound
         np.testing.assert_allclose(popt[0], 0.1, atol=1e-2)
@@ -114,7 +114,7 @@ class TestPrepareInputsSigma:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        popt, pcov = curve_fit(linear, xdata, ydata, sigma=None)
+        popt, _pcov = curve_fit(linear, xdata, ydata, sigma=None)
 
         assert popt is not None
 
@@ -130,7 +130,7 @@ class TestPrepareInputsSigma:
         # Constant uncertainty - use array to avoid scalar issue
         sigma_scalar = 0.2
         sigma = np.full(len(xdata), sigma_scalar)
-        popt, pcov = curve_fit(linear, xdata, ydata, sigma=sigma)
+        popt, _pcov = curve_fit(linear, xdata, ydata, sigma=sigma)
 
         assert popt is not None
 
@@ -146,7 +146,7 @@ class TestPrepareInputsSigma:
         # First point has high uncertainty, last has low
         sigma = np.array([1.0, 0.5, 0.3, 0.2, 0.1])
 
-        popt, pcov = curve_fit(linear, xdata, ydata, sigma=sigma)
+        popt, _pcov = curve_fit(linear, xdata, ydata, sigma=sigma)
 
         assert popt is not None
         # Last point should be weighted heavily
@@ -161,7 +161,7 @@ class TestPrepareInputsSigma:
         ydata = np.array([2, 4, 6])
         sigma = np.array([0.1, 0.1, 0.1])
 
-        popt, pcov_abs = curve_fit(
+        _popt, pcov_abs = curve_fit(
             linear, xdata, ydata, sigma=sigma, absolute_sigma=True
         )
 
@@ -178,7 +178,7 @@ class TestPrepareInputsSigma:
         ydata = np.array([2, 4, 6])
         sigma = np.array([0.1, 0.1, 0.1])
 
-        popt, pcov_rel = curve_fit(
+        _popt, pcov_rel = curve_fit(
             linear, xdata, ydata, sigma=sigma, absolute_sigma=False
         )
 
@@ -199,7 +199,7 @@ class TestPrepareInputsP0:
         ydata = np.array([2, 4, 6])
 
         # Should infer p0 automatically
-        popt, pcov = curve_fit(linear, xdata, ydata, p0=None)
+        popt, _pcov = curve_fit(linear, xdata, ydata, p0=None)
 
         assert len(popt) == 2
 
@@ -213,7 +213,7 @@ class TestPrepareInputsP0:
         ydata = 2.5 * np.exp(-xdata)
 
         # Use array format for p0
-        popt, pcov = curve_fit(exponential, xdata, ydata, p0=[1.0])
+        popt, _pcov = curve_fit(exponential, xdata, ydata, p0=[1.0])
 
         np.testing.assert_allclose(popt[0], 2.5, rtol=1e-2)
 
@@ -226,7 +226,7 @@ class TestPrepareInputsP0:
         xdata = np.linspace(0, 5, 30)
         ydata = 2 * xdata**2 + 3 * xdata + 1
 
-        popt, pcov = curve_fit(model, xdata, ydata, p0=[1, 1, 1])
+        popt, _pcov = curve_fit(model, xdata, ydata, p0=[1, 1, 1])
 
         np.testing.assert_allclose(popt, [2, 3, 1], rtol=1e-3)
 
@@ -244,7 +244,7 @@ class TestPrepareInputsMethod:
         ydata = np.array([2, 4, 6])
 
         # No method specified, no bounds
-        popt, pcov = curve_fit(linear, xdata, ydata)
+        popt, _pcov = curve_fit(linear, xdata, ydata)
 
         assert popt is not None
 
@@ -259,7 +259,7 @@ class TestPrepareInputsMethod:
         ydata = 2.5 * np.exp(-xdata / 1.3) + np.random.normal(0, 0.05, 50)
 
         # With bounds, method will auto-select appropriately
-        popt, pcov = curve_fit(exponential, xdata, ydata, bounds=(0, 10), p0=[2, 1])
+        popt, _pcov = curve_fit(exponential, xdata, ydata, bounds=(0, 10), p0=[2, 1])
 
         assert popt is not None
 
@@ -272,7 +272,7 @@ class TestPrepareInputsMethod:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        popt, pcov = curve_fit(model, xdata, ydata, method="trf")
+        popt, _pcov = curve_fit(model, xdata, ydata, method="trf")
 
         assert popt is not None
 
@@ -318,7 +318,7 @@ class TestPrepareInputsArrayTypes:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        popt, pcov = curve_fit(linear, xdata, ydata)
+        popt, _pcov = curve_fit(linear, xdata, ydata)
 
         assert popt is not None
 
@@ -331,7 +331,7 @@ class TestPrepareInputsArrayTypes:
         xdata = jnp.array([1, 2, 3])
         ydata = jnp.array([2, 4, 6])
 
-        popt, pcov = curve_fit(linear, xdata, ydata)
+        popt, _pcov = curve_fit(linear, xdata, ydata)
 
         assert popt is not None
 
@@ -344,7 +344,7 @@ class TestPrepareInputsArrayTypes:
         xdata = np.array([1, 2, 3])
         ydata = jnp.array([2, 4, 6])  # Mixed!
 
-        popt, pcov = curve_fit(linear, xdata, ydata)
+        popt, _pcov = curve_fit(linear, xdata, ydata)
 
         assert popt is not None
 
@@ -357,7 +357,7 @@ class TestPrepareInputsArrayTypes:
         xdata = [1, 2, 3]  # List
         ydata = [2, 4, 6]  # List
 
-        popt, pcov = curve_fit(linear, xdata, ydata)
+        popt, _pcov = curve_fit(linear, xdata, ydata)
 
         assert popt is not None
 

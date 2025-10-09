@@ -318,7 +318,7 @@ def test_curve_fit_with_progress_callback(simple_data, simple_model):
         x, y = simple_data
         callback = ProgressBar(max_nfev=50)
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
         )
 
@@ -338,7 +338,7 @@ def test_curve_fit_with_logger_callback(simple_data, simple_model):
     buffer = io.StringIO()
     callback = IterationLogger(filename=None, file=buffer, log_params=False)
 
-    popt, pcov = curve_fit(
+    _popt, _pcov = curve_fit(
         simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
     )
 
@@ -355,7 +355,7 @@ def test_curve_fit_with_early_stopping(simple_data, simple_model):
     x, y = simple_data
     callback = EarlyStopping(patience=10, min_delta=1e-6, verbose=False)
 
-    popt, pcov = curve_fit(
+    popt, _pcov = curve_fit(
         simple_model,
         x,
         y,
@@ -378,7 +378,7 @@ def test_curve_fit_with_callback_chain(simple_data, simple_model):
         EarlyStopping(patience=10, verbose=False),
     )
 
-    popt, pcov = curve_fit(
+    popt, _pcov = curve_fit(
         simple_model, x, y, p0=[80, 0.4, 5], callback=chain, max_nfev=1000
     )
 
@@ -410,7 +410,7 @@ def test_curve_fit_callback_receives_correct_data(simple_data, simple_model):
     x, y = simple_data
     callback = DataCapture()
 
-    popt, pcov = curve_fit(
+    _popt, _pcov = curve_fit(
         simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
     )
 
@@ -445,7 +445,7 @@ def test_curve_fit_callback_error_handling(simple_data, simple_model):
     # Should continue optimization despite callback error
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             simple_model, x, y, p0=[80, 0.4, 5], callback=callback, max_nfev=50
         )
 
@@ -463,7 +463,7 @@ def test_curve_fit_callback_none(simple_data, simple_model):
     """Test curve_fit works with callback=None."""
     x, y = simple_data
 
-    popt, pcov = curve_fit(
+    popt, _pcov = curve_fit(
         simple_model,
         x,
         y,
@@ -480,7 +480,7 @@ def test_curve_fit_without_callback_parameter(simple_data, simple_model):
     """Test curve_fit works without callback parameter (backward compatibility)."""
     x, y = simple_data
 
-    popt, pcov = curve_fit(
+    popt, _pcov = curve_fit(
         simple_model,
         x,
         y,
