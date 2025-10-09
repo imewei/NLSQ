@@ -328,7 +328,7 @@ class StreamingOptimizer:
 
                 if verbose >= 1:
                     elapsed = time.time() - start_time
-                    samples_per_sec = total_samples / elapsed
+                    samples_per_sec = total_samples / elapsed if elapsed > 0 else 0.0
                     logger.info(f"  Epoch loss: {avg_epoch_loss:.6f}")
                     logger.info(f"  Samples/sec: {samples_per_sec:.0f}")
 
@@ -360,7 +360,7 @@ class StreamingOptimizer:
             "n_epochs": self.epoch + 1,
             "total_samples": total_samples,
             "time": elapsed_time,
-            "samples_per_sec": total_samples / elapsed_time,
+            "samples_per_sec": total_samples / elapsed_time if elapsed_time > 0 else 0.0,
             "final_loss": losses[-1] if losses else float("inf"),
             "loss_history": np.array(losses),
         }

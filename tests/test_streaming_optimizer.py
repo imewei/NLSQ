@@ -269,6 +269,9 @@ class TestDataGenerator(unittest.TestCase):
             # Test that generator is created
             self.assertIsNotNone(generator)
 
+            # Close generator to release file handle
+            generator.close()
+
         finally:
             if os.path.exists(h5_file):
                 os.remove(h5_file)
