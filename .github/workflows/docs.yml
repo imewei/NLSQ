@@ -6,7 +6,7 @@ on:
     paths:
       - 'docs/**'
       - 'nlsq/**/*.py'
-      - 'pyproject.toml'
+      - 'requirements-dev.txt'
       - '.github/workflows/docs.yml'
     branches: [main, develop]
   pull_request:
@@ -32,12 +32,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[docs]"
+          pip install -r requirements-dev.txt
+          pip install -e . --no-deps
 
       - name: Build documentation
         run: |
