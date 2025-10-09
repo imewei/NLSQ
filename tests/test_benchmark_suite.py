@@ -264,11 +264,11 @@ class TestBenchmarkSuite:
             assert (output_dir / "dashboard").exists()
 
             # Check report content
-            report_content = (output_dir / "benchmark_report.txt").read_text()
+            report_content = (output_dir / "benchmark_report.txt").read_text(encoding="utf-8")
             assert "NLSQ Performance Benchmark Report" in report_content
 
             # Check CSV content
-            csv_content = (output_dir / "benchmark_results.csv").read_text()
+            csv_content = (output_dir / "benchmark_results.csv").read_text(encoding="utf-8")
             lines = csv_content.strip().split("\n")
             assert len(lines) > 1  # Header + data rows
             assert "library,method,backend" in lines[0]

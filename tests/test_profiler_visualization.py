@@ -128,7 +128,7 @@ class TestProfilerVisualization:
         html = self.viz.generate_html_report(output_path)
 
         assert output_path.exists()
-        content = output_path.read_text()
+        content = output_path.read_text(encoding="utf-8")
         assert content == html
         assert "NLSQ Performance Profile Report" in content
 
@@ -140,7 +140,7 @@ class TestProfilerVisualization:
 
         assert output_path.exists()
 
-        data = json.loads(output_path.read_text())
+        data = json.loads(output_path.read_text(encoding="utf-8"))
         assert "test1" in data
         assert "test2" in data
         assert len(data["test1"]) == 5
@@ -154,7 +154,7 @@ class TestProfilerVisualization:
 
         assert output_path.exists()
 
-        lines = output_path.read_text().strip().split("\n")
+        lines = output_path.read_text(encoding="utf-8").strip().split("\n")
         assert len(lines) == 6  # Header + 5 data rows
 
         # Check header
@@ -317,16 +317,16 @@ class TestProfilingDashboard:
         assert (output_dir / "comparison_report.txt").exists()
 
         # Check HTML content
-        html_content = (output_dir / "dashboard.html").read_text()
+        html_content = (output_dir / "dashboard.html").read_text(encoding="utf-8")
         assert "NLSQ Performance Profile Report" in html_content
 
         # Check JSON content
-        json_data = json.loads((output_dir / "profiles.json").read_text())
+        json_data = json.loads((output_dir / "profiles.json").read_text(encoding="utf-8"))
         assert "fast" in json_data
         assert "slow" in json_data
 
         # Check report content
-        report_content = (output_dir / "comparison_report.txt").read_text()
+        report_content = (output_dir / "comparison_report.txt").read_text(encoding="utf-8")
         assert "Profiling Dashboard" in report_content
 
     @pytest.mark.skipif(not HAS_MATPLOTLIB, reason="matplotlib not available")
@@ -490,7 +490,7 @@ class TestEdgeCases:
         json_path = tmp_path / "profiles.json"
         viz.export_json(json_path)
 
-        data = json.loads(json_path.read_text())
+        data = json.loads(json_path.read_text(encoding="utf-8"))
         assert "test-profile_2024" in data
 
     def test_large_number_of_runs(self):
