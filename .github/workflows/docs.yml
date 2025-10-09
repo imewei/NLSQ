@@ -46,13 +46,6 @@ jobs:
           make clean
           make html SPHINXOPTS="-W --keep-going"
 
-      - name: Check for warnings
-        run: |
-          if grep -r "WARNING" docs/_build/html/ 2>/dev/null; then
-            echo "⚠️  Documentation build produced warnings"
-            exit 1
-          fi
-
       - name: Upload documentation
         uses: actions/upload-artifact@v4
         with:
