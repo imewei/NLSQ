@@ -34,6 +34,7 @@ def test_basic_usage():
 def test_exponential_with_jax():
     """Test exponential example with JAX numpy."""
     print("\nTesting exponential with JAX numpy example...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import CurveFit
 
     # Define exponential fit function using JAX numpy
@@ -59,6 +60,7 @@ def test_exponential_with_jax():
 def test_curve_fit_large():
     """Test curve_fit_large example."""
     print("\nTesting curve_fit_large example...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import curve_fit_large, estimate_memory_requirements
 
     # Check memory requirements for your dataset
@@ -94,6 +96,7 @@ def test_curve_fit_large():
 def test_advanced_large_dataset():
     """Test advanced large dataset fitting options."""
     print("\nTesting advanced large dataset fitting...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import LargeDatasetFitter, LDMemoryConfig, fit_large_dataset
 
     n_points = 50_000
@@ -164,6 +167,7 @@ def test_sparse_jacobian():
 def test_streaming_optimizer():
     """Test Streaming Optimizer example."""
     print("\nTesting Streaming Optimizer example...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import StreamingConfig, StreamingOptimizer
 
     def func(x, a, b):
@@ -194,6 +198,7 @@ def test_streaming_optimizer():
 def test_memory_management():
     """Test Memory Management example."""
     print("\nTesting Memory Management example...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import CurveFit, MemoryConfig, get_memory_config, memory_context
 
     # Sample data
@@ -228,6 +233,7 @@ def test_memory_management():
 def test_algorithm_selection():
     """Test Algorithm Selection example."""
     print("\nTesting Algorithm Selection example...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import curve_fit
     from nlsq.algorithm_selector import auto_select_algorithm
 
@@ -256,6 +262,7 @@ def test_algorithm_selection():
 def test_diagnostics_monitoring():
     """Test Diagnostics & Monitoring example."""
     print("\nTesting Diagnostics & Monitoring example...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import ConvergenceMonitor, CurveFit
     from nlsq.diagnostics import OptimizationDiagnostics
 
@@ -285,7 +292,8 @@ def test_diagnostics_monitoring():
 def test_caching_system():
     """Test Caching System example."""
     print("\nTesting Caching System example...")
-    from nlsq import SmartCache, cached_function, curve_fit
+    np.random.seed(42)  # Ensure deterministic test results
+    from nlsq import SmartCache, curve_fit
 
     # Sample data
     x1 = np.linspace(0, 10, 50)
@@ -315,6 +323,7 @@ def test_caching_system():
 def test_optimization_recovery():
     """Test Optimization Recovery example."""
     print("\nTesting Optimization Recovery example...")
+    np.random.seed(42)  # Ensure deterministic test results
     from nlsq import CurveFit, OptimizationRecovery, curve_fit
 
     # Sample data with some noise
