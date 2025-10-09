@@ -65,6 +65,7 @@ clean:  ## Clean build artifacts and cache files
 	find . -type f -name "*.pyo" -delete
 	find . -type f -name "*~" -delete
 	find . -type f -name "nlsq_debug_*.log" -delete
+	find . -type f -name "build*.log" -delete
 	rm -rf coverage.xml coverage.json .benchmarks checkpoint_iter_100.npz .nlsq_cache .hypothesis
 
 clean-cache:  ## Clean only cache directories

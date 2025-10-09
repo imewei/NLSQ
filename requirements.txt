@@ -1,0 +1,25 @@
+# NLSQ Runtime Dependencies (Exact Versions)
+# Generated: 2025-10-08
+# Python: 3.12.3
+#
+# These are the exact versions tested and validated with NLSQ v0.1.1
+# For development dependencies, see requirements-dev.txt
+# For complete environment, see requirements-full.txt
+
+# Core dependencies
+numpy==2.3.3
+scipy==1.16.2
+jax==0.7.2
+jaxlib==0.7.2
+
+# Visualization and utilities
+matplotlib==3.10.7
+psutil==7.1.0
+tqdm==4.67.1
+
+# Data handling
+h5py==3.14.0
+
+# Required sub-dependencies (auto-installed with core packages)
+ml-dtypes==0.5.3
+opt-einsum==3.4.0
