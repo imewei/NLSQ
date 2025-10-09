@@ -552,7 +552,7 @@ class BenchmarkSuite:
 
         # Save text report
         report = self.generate_report(detailed=True)
-        (output_dir / "benchmark_report.txt").write_text(report)
+        (output_dir / "benchmark_report.txt").write_text(report, encoding='utf-8')
 
         # Save CSV results
         self._save_csv(output_dir / "benchmark_results.csv")
@@ -596,7 +596,7 @@ class BenchmarkSuite:
             ]
             lines.append(",".join(row))
 
-        Path(filepath).write_text("\n".join(lines))
+        Path(filepath).write_text("\n".join(lines), encoding='utf-8')
 
 
 def run_standard_benchmarks(output_dir: str = "./benchmark_results") -> BenchmarkSuite:

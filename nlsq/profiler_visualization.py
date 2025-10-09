@@ -366,7 +366,7 @@ class ProfilerVisualization:
 
         if output_path:
             output_path = Path(output_path)
-            output_path.write_text(html_content)
+            output_path.write_text(html_content, encoding='utf-8')
 
         return html_content
 
@@ -381,7 +381,7 @@ class ProfilerVisualization:
         """
         data = self.profiler.export_to_dict()
         output_path = Path(output_path)
-        output_path.write_text(json.dumps(data, indent=2))
+        output_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
 
     def export_csv(self, name: str, output_path: str | Path) -> None:
         """
@@ -445,7 +445,7 @@ class ProfilerVisualization:
             ]
             lines.append(",".join(row))
 
-        output_path.write_text("\n".join(lines))
+        output_path.write_text("\n".join(lines), encoding='utf-8')
 
 
 class ProfilingDashboard:
@@ -616,7 +616,7 @@ class ProfilingDashboard:
 
         # Save comparison report
         report_path = output_dir / "comparison_report.txt"
-        report_path.write_text(self.generate_comparison_report())
+        report_path.write_text(self.generate_comparison_report(), encoding='utf-8')
 
         # Save plots if matplotlib available
         if HAS_MATPLOTLIB:
