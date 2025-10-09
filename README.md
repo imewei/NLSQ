@@ -1,5 +1,5 @@
 <div align="center">
-<img src="docs/images/NLSQ_logo.png" alt="NLSQ logo"></img>
+<img src="docs/images/NLSQ_logo.png" alt="NLSQ logo">
 </div>
 
 # NLSQ: Nonlinear Least Squares Curve Fitting
