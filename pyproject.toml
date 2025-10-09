@@ -68,7 +68,7 @@ dev = [
 docs = [
     "sphinx>=8.0",                      # Tested on 8.2.3
     "sphinx-rtd-theme>=3.0",           # Tested on 3.0.2
-    "sphinx-autodoc-typehints>=3.0",   # Tested on 3.4.0
+    "sphinx-autodoc-typehints>=3.0",   # Tested on 3.5.1
     "ipython>=9.0",                    # Tested on 9.6.0
     "myst-parser>=4.0",                # Tested on 4.0.1
 ]
