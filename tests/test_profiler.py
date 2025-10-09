@@ -246,15 +246,15 @@ class TestPerformanceProfiler:
         """Test comparing two profiles."""
         profiler = PerformanceProfiler()
 
-        # Faster profile
+        # Faster profile - increased from 0.01s to reduce timing variance
         for _ in range(3):
             with profiler.profile("fast"):
-                time.sleep(0.01)
+                time.sleep(0.1)
 
-        # Slower profile
+        # Slower profile - increased from 0.02s to reduce timing variance
         for _ in range(3):
             with profiler.profile("slow"):
-                time.sleep(0.02)
+                time.sleep(0.2)
 
         comparison = profiler.compare_profiles("slow", "fast")
 
