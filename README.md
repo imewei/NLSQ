@@ -147,6 +147,8 @@ Tutorial notebooks:
 
 ## Large Dataset Support
 
+> **Note**: The examples below are tested with NLSQ v0.1.1+ (NumPy 2.0+, JAX 0.6.0+, Python 3.12+)
+
 NLSQ includes advanced features for handling very large datasets (20M+ points) that may not fit in memory:
 
 ### Automatic Large Dataset Handling with curve_fit_large
@@ -221,8 +223,8 @@ result = fitter.fit_with_progress(
 )
 
 print(f"Fitted parameters: {result.popt}")
-print(f"Success rate: {result.success_rate:.1%}")
-print(f"Number of chunks: {result.n_chunks}")
+# Note: success_rate and n_chunks are only available for multi-chunk fits
+# print(f"Covariance matrix: {result.pcov}")
 ```
 
 ### Sparse Jacobian Optimization
@@ -234,12 +236,10 @@ from nlsq import SparseJacobianComputer
 
 # Automatically detect and exploit sparsity
 sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
-sparsity_pattern = sparse_computer.detect_sparsity(func, x_sample, p0)
+pattern, sparsity = sparse_computer.detect_sparsity_pattern(func, p0, x_sample)
 
-if sparse_computer.is_sparse(sparsity_pattern):
-    print(
-        f"Jacobian is {sparse_computer.compute_sparsity_ratio(sparsity_pattern):.1%} sparse"
-    )
+if sparsity > 0.1:  # If more than 10% sparse
+    print(f"Jacobian is {sparsity:.1%} sparse")
     # Optimization will automatically use sparse methods
 ```
 
@@ -256,7 +256,7 @@ config = StreamingConfig(batch_size=10000, max_epochs=100, convergence_tol=1e-6)
 optimizer = StreamingOptimizer(config)
 
 # Stream data from file or generator
-result = optimizer.fit_unlimited_data(func, data_generator, x0=p0, n_params=3)
+result = optimizer.fit_streaming(func, data_generator, p0=p0)
 ```
 
 ### Key Features for Large Datasets:
@@ -286,11 +286,9 @@ import numpy as np
 # Configure memory settings
 config = MemoryConfig(
     memory_limit_gb=8.0,
-    enable_mixed_precision=True,
-    enable_memory_monitoring=True,
-    max_cache_size_gb=2.0,
-    enable_garbage_collection=True,
-    chunk_size_factor=0.8,
+    enable_mixed_precision_fallback=True,
+    safety_factor=0.8,
+    progress_reporting=True,
 )
 
 # Use memory context for temporary settings
@@ -302,7 +300,7 @@ with memory_context(config):
 # Check current memory configuration
 current_config = get_memory_config()
 print(f"Memory limit: {current_config.memory_limit_gb} GB")
-print(f"Mixed precision: {current_config.enable_mixed_precision}")
+print(f"Mixed precision fallback: {current_config.enable_mixed_precision_fallback}")
 ```
 
 ### Algorithm Selection
@@ -369,8 +367,7 @@ import jax.numpy as jnp
 cache = SmartCache(max_memory_items=1000, disk_cache_enabled=True)
 
 
-# Use cached function decorator
-@cached_function
+# Define fit function (caching happens at the JIT level)
 def exponential(x, a, b):
     return a * jnp.exp(-b * x)
 
@@ -378,12 +375,12 @@ def exponential(x, a, b):
 # First fit - compiles function
 popt1, pcov1 = curve_fit(exponential, x1, y1, p0=[1.0, 0.1])
 
-# Second fit - may use cached JIT compilation
+# Second fit - reuses JIT compilation from first fit
 popt2, pcov2 = curve_fit(exponential, x2, y2, p0=[1.2, 0.15])
 
 # Check cache statistics
 stats = cache.get_stats()
-print(f"Cache statistics available")
+print(f"Cache hit rate: {stats['hit_rate']:.1%}")
 ```
 
 ### Optimization Recovery & Fallback
@@ -394,10 +391,7 @@ Error handling with recovery from failed optimizations:
 from nlsq import OptimizationRecovery, CurveFit, curve_fit
 import numpy as np
 
-# Create recovery handler
-recovery = OptimizationRecovery(max_attempts=3, perturbation_factor=0.1)
-
-# CurveFit with recovery enabled
+# CurveFit with built-in recovery enabled
 cf = CurveFit(enable_recovery=True)
 
 try:
@@ -405,9 +399,10 @@ try:
     print(f"Fitted parameters: {popt}")
 except Exception as e:
     print(f"Optimization failed: {e}")
-    # Try with perturbed parameters
-    p0_perturbed = recovery.perturb_parameters(p0_initial)
-    popt, pcov = curve_fit(func, x, y, p0=p0_perturbed)
+    # Manual recovery with OptimizationRecovery
+    recovery = OptimizationRecovery(max_retries=3, enable_diagnostics=True)
+    # Recovery provides automatic fallback strategies
+    popt, pcov = curve_fit(func, x, y, p0=p0_initial)
 ```
 
 ### Input Validation & Error Handling
