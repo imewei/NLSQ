@@ -188,6 +188,11 @@ class TestNLSQLogger(unittest.TestCase):
                 self.assertIn("Test debug message", content)
                 self.assertIn("Test info message", content)
 
+            # Close logger handlers to release file handles (needed on Windows)
+            for handler in logger.logger.handlers[:]:
+                handler.close()
+                logger.logger.removeHandler(handler)
+
     def test_verbose_mode(self):
         """Test verbose mode logging."""
         os.environ["NLSQ_VERBOSE"] = "1"
@@ -217,11 +222,11 @@ class TestNLSQLogger(unittest.TestCase):
             self.assertEqual(len(npz_files), 1)
 
             # Load and verify content
-            data = np.load(Path(tmpdir) / npz_files[0])
-            self.assertIn("iter", data)
-            self.assertIn("timestamp", data)
-            self.assertEqual(len(data["iter"]), 3)
-            np.testing.assert_array_equal(data["iter"], [0, 1, 2])
+            with np.load(Path(tmpdir) / npz_files[0]) as data:
+                self.assertIn("iter", data)
+                self.assertIn("timestamp", data)
+                self.assertEqual(len(data["iter"]), 3)
+                np.testing.assert_array_equal(data["iter"], [0, 1, 2])
 
     def test_save_iteration_data_with_env_var(self):
         """Test saving with environment variable."""
