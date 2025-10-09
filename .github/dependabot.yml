@@ -85,17 +85,3 @@ updates:
       # Major updates require manual review
     # Version constraints
     versioning-strategy: increase
-
-  # Documentation dependencies
-  - package-ecosystem: "pip"
-    directory: "/docs"
-    schedule:
-      interval: "monthly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "documentation"
-      - "automated"
-    commit-message:
-      prefix: "docs"
