@@ -177,6 +177,11 @@ class TestNLSQLogger(unittest.TestCase):
             logger.debug("Test debug message")
             logger.info("Test info message")
 
+            # Close logger handlers to release file handles BEFORE reading (needed on Windows)
+            for handler in logger.logger.handlers[:]:
+                handler.close()
+                logger.logger.removeHandler(handler)
+
             # Check that log file was created
             log_files = [f for f in os.listdir(tmpdir) if f.startswith("nlsq_debug_")]
             self.assertEqual(len(log_files), 1)
@@ -187,11 +192,6 @@ class TestNLSQLogger(unittest.TestCase):
                 content = f.read()
                 self.assertIn("Test debug message", content)
                 self.assertIn("Test info message", content)
-
-            # Close logger handlers to release file handles (needed on Windows)
-            for handler in logger.logger.handlers[:]:
-                handler.close()
-                logger.logger.removeHandler(handler)
 
     def test_verbose_mode(self):
         """Test verbose mode logging."""
