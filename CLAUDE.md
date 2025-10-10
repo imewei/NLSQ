@@ -453,6 +453,6 @@ nlsq/
 ---
 
 **Last Updated**: 2025-10-09
-**Version**: v0.1.1 (Production Release)
+**Version**: v0.1.2 (Production Release)
 **Python**: 3.12.3
 **Tested Configuration**: See [`REQUIREMENTS.md`](REQUIREMENTS.md)
