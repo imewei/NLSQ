@@ -242,7 +242,7 @@ __marimo__/
 
 # Claude Code IDE files
 .claude/
-.agent-os/
+agent-os/
 
 # OS files
 .DS_Store
