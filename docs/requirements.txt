@@ -1,3 +1,12 @@
-# Documentation dependencies are now managed in pyproject.toml
-# Install the package with docs extras
+# Documentation dependencies for local development
+#
+# NOTE: ReadtheDocs uses pyproject.toml[project.optional-dependencies.docs] directly
+# This file is for local development only
+#
+# For local documentation builds, install with:
+#   pip install -e .[docs]
+#
+# Or use this requirements file:
+#   pip install -r docs/requirements.txt
+
 -e .[docs]

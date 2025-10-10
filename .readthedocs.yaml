@@ -14,7 +14,7 @@ build:
   jobs:
     pre_build:
       - echo "Building NLSQ documentation..."
-      - echo "Note: This build requires NumPy 2.0+ (breaking change from 1.x)"
+      - echo "This build requires NumPy 2.0+ (breaking change from 1.x)"
       - echo "See REQUIREMENTS.md for dependency details"
     post_build:
       - echo "Documentation build complete"
@@ -33,4 +33,3 @@ python:
       path: .
       extra_requirements:
         - docs  # Installs from pyproject.toml[project.optional-dependencies.docs]
-    - requirements: docs/requirements.txt  # References pyproject.toml for version info
