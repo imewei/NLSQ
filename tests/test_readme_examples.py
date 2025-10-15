@@ -13,6 +13,7 @@ import pytest
 # Check if h5py is available for streaming tests
 try:
     import h5py
+
     HAS_H5PY = True
 except ImportError:
     HAS_H5PY = False
