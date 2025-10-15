@@ -967,12 +967,12 @@ class LargeDatasetFitter:
                     f"Too many chunks failed ({success_rate:.1%} success rate)"
                 )
                 result = OptimizeResult(
-                    x=current_params or np.ones(2),
+                    x=current_params if current_params is not None else np.ones(2),
                     success=False,
                     message=f"Chunked fit failed: {success_rate:.1%} success rate",
                 )
                 # Add empty popt and pcov for consistency
-                result["popt"] = current_params or np.ones(2)
+                result["popt"] = current_params if current_params is not None else np.ones(2)
                 result["pcov"] = np.eye(len(result["popt"]))
                 return result
 
@@ -1007,12 +1007,12 @@ class LargeDatasetFitter:
         except Exception as e:
             self.logger.error(f"Chunked fitting failed: {e}")
             result = OptimizeResult(
-                x=current_params or np.ones(2),
+                x=current_params if current_params is not None else np.ones(2),
                 success=False,
                 message=f"Chunked fit failed: {e}",
             )
             # Add empty popt and pcov for consistency
-            result["popt"] = current_params or np.ones(2)
+            result["popt"] = current_params if current_params is not None else np.ones(2)
             result["pcov"] = np.eye(len(result["popt"]))
             return result
 
