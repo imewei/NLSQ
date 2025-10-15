@@ -175,7 +175,7 @@ def test_sparse_jacobian():
 
 @pytest.mark.skipif(
     not HAS_H5PY,
-    reason="Streaming optimizer requires h5py (install with: pip install nlsq[streaming])"
+    reason="Streaming optimizer requires h5py (install with: pip install nlsq[streaming])",
 )
 def test_streaming_optimizer():
     """Test Streaming Optimizer example."""
