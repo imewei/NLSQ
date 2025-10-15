@@ -9,9 +9,12 @@ import os
 import tempfile
 import unittest
 
-import h5py
 import jax.numpy as jnp
 import numpy as np
+import pytest
+
+# Skip all tests in this module if h5py is not available
+h5py = pytest.importorskip("h5py")
 
 from nlsq.streaming_optimizer import (
     DataGenerator,
