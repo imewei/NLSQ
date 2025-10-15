@@ -8,6 +8,14 @@ import traceback
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
+
+# Check if h5py is available for streaming tests
+try:
+    import h5py
+    HAS_H5PY = True
+except ImportError:
+    HAS_H5PY = False
 
 
 def test_basic_usage():
@@ -164,6 +172,10 @@ def test_sparse_jacobian():
     print("✅ Sparse Jacobian example passed")
 
 
+@pytest.mark.skipif(
+    not HAS_H5PY,
+    reason="Streaming optimizer requires h5py (install with: pip install nlsq[streaming])"
+)
 def test_streaming_optimizer():
     """Test Streaming Optimizer example."""
     print("\nTesting Streaming Optimizer example...")
