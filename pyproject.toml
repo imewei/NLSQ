@@ -49,10 +49,12 @@ dependencies = [
     "matplotlib>=3.9.0", # Tested on 3.10.7
     "psutil>=6.0.0",     # For memory monitoring (tested on 7.1.0)
     "tqdm>=4.66.0",      # For progress bars (tested on 4.67.1)
-    "h5py>=3.10.0",      # For HDF5 file handling (tested on 3.14.0)
 ]
 
 [project.optional-dependencies]
+streaming = [
+    "h5py>=3.10.0",  # For HDF5 file handling in StreamingOptimizer (tested on 3.14.0)
+]
 dev = [
     "pytest>=8.0",           # Tested on 8.4.2
     "pytest-cov>=4.1",       # Tested on 7.0.0
@@ -90,7 +92,16 @@ jupyter = [
     "ipykernel>=6.20",         # Tested on 6.30.1
     "notebook>=7.0",           # For notebook compatibility
 ]
+build = [
+    "build>=1.3",              # Build frontend (tested on 1.3.0)
+    "twine>=6.0",              # PyPI upload tool (tested on 6.2.0)
+    "setuptools>=80.0",        # Build backend (tested on 80.9.0)
+    "setuptools-scm>=9.0",     # Version management (tested on 9.2.0)
+    "wheel>=0.45",             # Wheel builder (tested on 0.45.1)
+]
 all = [
+    # Streaming dependencies
+    "h5py>=3.10.0",
     # Development dependencies
     "pytest>=8.0",
     "pytest-cov>=4.1",
@@ -119,6 +130,12 @@ all = [
     "jupyterlab>=4.0",
     "ipykernel>=6.20",
     "notebook>=7.0",
+    # Build dependencies
+    "build>=1.3",
+    "twine>=6.0",
+    "setuptools>=80.0",
+    "setuptools-scm>=9.0",
+    "wheel>=0.45",
 ]
 
 [project.urls]

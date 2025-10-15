@@ -120,14 +120,20 @@ from nlsq.stability import (
     estimate_condition_number,
 )
 
-# Streaming optimizer support
-from nlsq.streaming_optimizer import (
-    DataGenerator,
-    StreamingConfig,
-    StreamingOptimizer,
-    create_hdf5_dataset,
-    fit_unlimited_data,
-)
+# Streaming optimizer support (requires h5py - optional dependency)
+try:
+    from nlsq.streaming_optimizer import (
+        DataGenerator,
+        StreamingConfig,
+        StreamingOptimizer,
+        create_hdf5_dataset,
+        fit_unlimited_data,
+    )
+    _HAS_STREAMING = True
+except ImportError:
+    # h5py not available - streaming features disabled
+    _HAS_STREAMING = False
+
 from nlsq.validators import InputValidator
 
 # Public API - only expose main user-facing functions
@@ -140,7 +146,6 @@ __all__ = [
     "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
-    "DataGenerator",
     # Fallback strategies (Phase 3)
     "FallbackOrchestrator",
     "FallbackResult",
@@ -171,9 +176,6 @@ __all__ = [
     # Sparse Jacobian support
     "SparseJacobianComputer",
     "SparseOptimizer",
-    "StreamingConfig",
-    # Streaming optimizer support
-    "StreamingOptimizer",
     "TRFMemoryPool",
     # Version
     "__version__",
@@ -194,7 +196,6 @@ __all__ = [
     "clear_profiling_data",
     # Configuration functions
     "configure_for_large_datasets",
-    "create_hdf5_dataset",
     # Main curve fitting API
     "curve_fit",
     "curve_fit_large",
@@ -206,7 +207,6 @@ __all__ = [
     "estimate_memory_requirements",
     # Large dataset utilities
     "fit_large_dataset",
-    "fit_unlimited_data",
     # Common functions library
     "functions",
     "get_global_cache",
@@ -225,6 +225,16 @@ __all__ = [
     "robust_decomp",
     "set_memory_limits",
 ]
+
+# Add streaming features to public API if h5py is available
+if _HAS_STREAMING:
+    __all__.extend([
+        "DataGenerator",
+        "StreamingConfig",
+        "StreamingOptimizer",
+        "create_hdf5_dataset",
+        "fit_unlimited_data",
+    ])
 
 
 # Convenience function for large dataset curve fitting

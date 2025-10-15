@@ -10,7 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import h5py
+try:
+    import h5py
+    HAS_H5PY = True
+except ImportError:
+    h5py = None  # type: ignore[assignment]
+    HAS_H5PY = False
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -195,7 +201,18 @@ class StreamingOptimizer:
         ----------
         config : StreamingConfig, optional
             Configuration for streaming optimization
+
+        Raises
+        ------
+        ImportError
+            If h5py is not installed. Install with: pip install nlsq[streaming]
         """
+        if not HAS_H5PY:
+            raise ImportError(
+                "StreamingOptimizer requires h5py for HDF5 file handling.\n"
+                "Install with: pip install nlsq[streaming]\n"
+                "Or: pip install h5py"
+            )
         self.config = config or StreamingConfig()
         self.reset_state()
 
