@@ -129,6 +129,7 @@ try:
         create_hdf5_dataset,
         fit_unlimited_data,
     )
+
     _HAS_STREAMING = True
 except ImportError:
     # h5py not available - streaming features disabled
@@ -228,13 +229,15 @@ __all__ = [
 
 # Add streaming features to public API if h5py is available
 if _HAS_STREAMING:
-    __all__.extend([
-        "DataGenerator",
-        "StreamingConfig",
-        "StreamingOptimizer",
-        "create_hdf5_dataset",
-        "fit_unlimited_data",
-    ])
+    __all__.extend(
+        [
+            "DataGenerator",
+            "StreamingConfig",
+            "StreamingOptimizer",
+            "create_hdf5_dataset",
+            "fit_unlimited_data",
+        ]
+    )
 
 
 # Convenience function for large dataset curve fitting

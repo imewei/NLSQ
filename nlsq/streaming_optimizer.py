@@ -12,6 +12,7 @@ from typing import Any
 
 try:
     import h5py
+
     HAS_H5PY = True
 except ImportError:
     h5py = None  # type: ignore[assignment]

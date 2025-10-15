@@ -972,7 +972,9 @@ class LargeDatasetFitter:
                     message=f"Chunked fit failed: {success_rate:.1%} success rate",
                 )
                 # Add empty popt and pcov for consistency
-                result["popt"] = current_params if current_params is not None else np.ones(2)
+                result["popt"] = (
+                    current_params if current_params is not None else np.ones(2)
+                )
                 result["pcov"] = np.eye(len(result["popt"]))
                 return result
 
@@ -1012,7 +1014,9 @@ class LargeDatasetFitter:
                 message=f"Chunked fit failed: {e}",
             )
             # Add empty popt and pcov for consistency
-            result["popt"] = current_params if current_params is not None else np.ones(2)
+            result["popt"] = (
+                current_params if current_params is not None else np.ones(2)
+            )
             result["pcov"] = np.eye(len(result["popt"]))
             return result
 
