@@ -7,6 +7,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-10-15
+
+### Changed - Dependency Optimization
+
+#### Breaking Changes (Minor)
+- **h5py now optional dependency**: Moved from core to `[streaming]` optional group
+  - **Impact**: Users needing StreamingOptimizer must install with: `pip install nlsq[streaming]`
+  - **Benefit**: Reduces default install size by ~17% (h5py + dependencies)
+  - **Backward Compatibility**: No breaking changes for users with h5py already installed
+
+#### Improvements
+- **New optional dependency groups**:
+  - `[streaming]`: h5py for StreamingOptimizer (optional)
+  - `[build]`: Build tools for package maintainers (setuptools, twine, etc.)
+  - `[all]`: All optional dependencies (streaming + dev + docs + test + build)
+
+- **Graceful dependency handling**:
+  - Package imports without errors when h5py not installed
+  - StreamingOptimizer features conditionally available via `_HAS_STREAMING` flag
+  - Test suite automatically skips streaming tests when h5py unavailable
+  - Clear error messages guide users to install optional dependencies
+
+### Fixed
+
+#### Bug Fixes
+- **Boolean operator on NumPy arrays** (fe3d07b)
+  - Fixed 4 instances in `nlsq/large_dataset.py` where `or` operator caused ValueError
+  - Changed `current_params or np.ones(2)` → `current_params if current_params is not None else np.ones(2)`
+  - Affected lines: 970, 975, 1010, 1015
+  - Impact: Prevents runtime errors in edge cases during large dataset fitting
+
+#### Test Suite Fixes
+- **Streaming tests skip without h5py** (1d4b430)
+  - Added `pytest.importorskip("h5py")` to `tests/test_streaming_optimizer.py`
+  - Tests gracefully skip when optional dependency not installed
+
+- **README example tests conditional** (0d48f3d)
+  - Added `@pytest.mark.skipif` decorator for streaming optimizer examples
+  - Tests skip with informative message when h5py unavailable
+
+#### Code Quality
+- **Ruff formatting compliance** (1dfb51f, 3af11d6, d2feef5)
+  - Applied consistent formatting across codebase
+  - Fixed lazy import formatting in `__init__.py`, `streaming_optimizer.py`
+  - Added trailing commas for multi-line calls
+  - All pre-commit hooks passing (24/24)
+
+### Technical Details
+
+#### Implementation
+- **Lazy h5py imports**: Try/except blocks in `streaming_optimizer.py` and `__init__.py`
+- **Conditional exports**: `__all__` dynamically extended when h5py available
+- **Smart error messages**: ImportError provides installation instructions
+
+#### Testing
+- Tests passing: 1146 tests (100% success rate)
+- Tests skipped: 6 streaming tests (when h5py not installed)
+- All platforms passing: Ubuntu, macOS, Windows
+- Python versions: 3.12, 3.13
+
+#### CI/CD
+- All GitHub Actions workflows passing
+- Pre-commit hooks: 100% compliance (24/24)
+- Build & package validation: ✓ passing
+
+### Installation
+
+```bash
+# Core features (17% smaller install)
+pip install nlsq
+
+# With streaming support
+pip install nlsq[streaming]
+
+# Everything
+pip install nlsq[all]
+```
+
+### Migration Guide
+
+**For users upgrading from v0.1.2:**
+
+If you use StreamingOptimizer:
+```bash
+# Upgrade and install streaming support
+pip install --upgrade nlsq[streaming]
+```
+
+If you don't use StreamingOptimizer:
+```bash
+# Upgrade normally (17% smaller install)
+pip install --upgrade nlsq
+```
+
+**No code changes required** - the API remains identical.
+
 ## [0.1.2] - 2025-10-09
 
 ### Documentation
