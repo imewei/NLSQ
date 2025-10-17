@@ -315,6 +315,29 @@ def curve_fit_large(
     pcov : ndarray
         Parameter covariance matrix.
 
+    Important: Model Function Requirements for Chunking
+    ----------------------------------------------------
+    When auto_size_detection triggers chunked processing (>1M points), your model
+    function MUST respect the size of xdata. Model output shape must match ydata shape.
+
+    INCORRECT - Fixed-size output (causes shape errors):
+
+    >>> def bad_model(xdata, a, b):
+    ...     # WRONG: Returns fixed-size array regardless of xdata
+    ...     t_full = jnp.arange(10_000_000)
+    ...     return a * jnp.exp(-b * t_full)  # Shape mismatch!
+
+    CORRECT - Output matches xdata size:
+
+    >>> def good_model(xdata, a, b):
+    ...     # CORRECT: Uses xdata as indices
+    ...     indices = xdata.astype(jnp.int32)
+    ...     return a * jnp.exp(-b * indices)
+
+    >>> def direct_model(xdata, a, b):
+    ...     # CORRECT: Operates on xdata directly
+    ...     return a * jnp.exp(-b * xdata)
+
     Examples
     --------
     Basic usage:
@@ -325,6 +348,14 @@ def curve_fit_large(
 
     >>> popt, _pcov = curve_fit_large(model_func, big_xdata, big_ydata,
     ...                             show_progress=True, memory_limit_gb=8)
+
+    Using external logger for diagnostics:
+
+    >>> import logging
+    >>> my_logger = logging.getLogger("myapp")
+    >>> fitter = LargeDatasetFitter(memory_limit_gb=8, logger=my_logger)
+    >>> result = fitter.fit(model_func, xdata, ydata, p0=[1, 2])
+    >>> # Chunk failures now appear in myapp's logs
     """
     import numpy as np
 

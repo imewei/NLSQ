@@ -302,6 +302,115 @@ See [`REQUIREMENTS.md`](REQUIREMENTS.md) for migration guide.
 - Use `CurveFit` class to cache compilation
 - Consider `curve_fit_large()` for very large problems
 
+### 6. Chunking Shape Mismatch (curve_fit_large)
+**Error**: Model function shape mismatch during chunked processing
+**Cause**: Model function returns fixed-size array instead of respecting xdata size
+**Fix**: Make model function respect xdata size (see Large Dataset Features below)
+
+---
+
+## Large Dataset Features (v0.1.3+)
+
+### Chunking-Compatible Model Functions
+
+When using `curve_fit_large()` with datasets >1M points, the model function **must** respect the size of xdata:
+
+**❌ INCORRECT - Returns fixed size:**
+```python
+def bad_model(xdata, a, b):
+    # Always returns full array, ignoring xdata size
+    t_full = jnp.arange(10_000_000)  # Fixed size!
+    return a * jnp.exp(-b * t_full)  # Shape mismatch during chunking
+```
+
+**✅ CORRECT - Uses xdata as indices:**
+```python
+def good_model(xdata, a, b):
+    # Uses xdata as indices to return only requested subset
+    indices = xdata.astype(jnp.int32)
+    y_full = a * jnp.exp(-b * jnp.arange(10_000_000))
+    return y_full[indices]  # Shape matches xdata
+```
+
+**✅ CORRECT - Operates directly on xdata:**
+```python
+def direct_model(xdata, a, b):
+    # Operates directly on xdata
+    return a * jnp.exp(-b * xdata)  # Shape automatically matches
+```
+
+### Shape Validation
+
+NLSQ automatically validates model functions before chunked processing:
+- Tests with first 100 points to catch shape mismatches early
+- Provides clear error messages with fix examples
+- Prevents silent failures and invalid results
+- Negligible overhead (~0.1s for multi-hour fits)
+
+### Logger Integration
+
+Connect NLSQ's internal logger to your application's logger for better diagnostics:
+
+```python
+import logging
+from nlsq import LargeDatasetFitter
+
+# Create application logger
+app_logger = logging.getLogger("myapp")
+
+# Use with NLSQ - chunk failures now appear in myapp's logs
+fitter = LargeDatasetFitter(memory_limit_gb=8, logger=app_logger)
+result = fitter.fit(model_func, xdata, ydata, p0=[1, 2])
+```
+
+### Failure Diagnostics
+
+Enhanced failure tracking for post-mortem analysis:
+
+```python
+result = fitter.fit(model_func, xdata, ydata, p0=[1, 2])
+
+# Check failure diagnostics
+if result.failure_summary['total_failures'] > 0:
+    print(f"Failed chunks: {result.failure_summary['failed_chunk_indices']}")
+    print(f"Common errors: {result.failure_summary['common_errors']}")
+
+    # Access detailed per-chunk diagnostics
+    for chunk in result.chunk_results:
+        if not chunk['success']:
+            print(f"Chunk {chunk['chunk_idx']}: {chunk['error_type']}")
+            print(f"  Data stats: {chunk['data_stats']}")
+            print(f"  Timestamp: {chunk['timestamp']}")
+```
+
+### Configurable Success Rate
+
+Tune the minimum success rate threshold for chunked fitting:
+
+```python
+from nlsq import LDMemoryConfig, LargeDatasetFitter
+
+# Default: require 50% of chunks to succeed
+config = LDMemoryConfig(
+    memory_limit_gb=8,
+    min_success_rate=0.5  # Default
+)
+
+# Stricter: require 80% success (good for clean data)
+config_strict = LDMemoryConfig(
+    memory_limit_gb=8,
+    min_success_rate=0.8
+)
+
+# More permissive: allow 30% failures (for very noisy data)
+config_permissive = LDMemoryConfig(
+    memory_limit_gb=8,
+    min_success_rate=0.3
+)
+
+fitter = LargeDatasetFitter(config=config_strict)
+```
+
 ---
 
 ## Testing Strategy
@@ -405,7 +514,34 @@ nlsq/
 
 ---
 
-## Recent Updates (2025-10-09)
+## Recent Updates (2025-10-17)
+
+### Large Dataset Enhancements (v0.1.3+)
+- ✅ **Shape Validation**: Automatic validation of model functions for chunking compatibility
+  - Tests with first 100 points before processing all chunks
+  - Clear error messages with fix examples for shape mismatches
+  - Prevents silent failures and invalid covariance matrices
+  - Negligible overhead (~0.1s for multi-hour fits)
+- ✅ **Logger Integration**: External logger support for application integration
+  - Pass custom logger to `LargeDatasetFitter` for chunk failure visibility
+  - Warnings and errors now appear in application logs
+  - Better diagnostics for production deployments
+- ✅ **Enhanced Failure Diagnostics**: Detailed per-chunk failure tracking
+  - New `failure_summary` in `OptimizeResult` with error categorization
+  - Per-chunk statistics (timestamps, data stats, error types)
+  - Top-3 most common error types identified automatically
+  - Easier post-mortem debugging when chunks fail
+- ✅ **Configurable Success Rate**: Tunable success rate threshold
+  - New `min_success_rate` parameter in `LDMemoryConfig` (default: 0.5)
+  - Stricter thresholds (0.8) for clean data
+  - More permissive thresholds (0.3) for noisy data
+  - Better control over chunked fitting validation
+- ✅ **Documentation**: Comprehensive chunking examples in docstrings
+  - INCORRECT vs CORRECT model function examples
+  - Clear guidance on using xdata as indices
+  - Prevents common user mistakes
+
+### Previous Updates (2025-10-09)
 
 ### Platform Stability & Bug Fixes
 - ✅ **Windows Compatibility**: All Windows tests passing (100%)
@@ -452,7 +588,7 @@ nlsq/
 
 ---
 
-**Last Updated**: 2025-10-09
-**Version**: v0.1.2 (Production Release)
+**Last Updated**: 2025-10-17
+**Version**: v0.1.3+ (Development - Large Dataset Enhancements)
 **Python**: 3.12.3
 **Tested Configuration**: See [`REQUIREMENTS.md`](REQUIREMENTS.md)

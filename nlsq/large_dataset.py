@@ -44,6 +44,9 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         Data size threshold above which sampling is considered (default: 100_000_000)
     max_sampled_size : int
         Maximum size when sampling (default: 10_000_000)
+    min_success_rate : float
+        Minimum success rate for chunked fitting (default: 0.5)
+        If success rate falls below this threshold, fitting is considered failed
     """
 
     memory_limit_gb: float = 8.0
@@ -53,6 +56,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     enable_sampling: bool = True
     sampling_threshold: int = 100_000_000
     max_sampled_size: int = 10_000_000
+    min_success_rate: float = 0.5
 
 
 @dataclass
@@ -428,6 +432,32 @@ class LargeDatasetFitter:
     fit_with_progress : Fitting with real-time progress reporting and ETA
     get_memory_recommendations : Pre-fitting memory analysis and strategy recommendations
 
+    Important: Chunking-Compatible Model Functions
+    -----------------------------------------------
+    When using chunked processing (for datasets > memory limit), your model function
+    MUST respect the size of xdata. During chunking, xdata will be a subset of the
+    full dataset, and your model must return output matching that subset size.
+
+    **INCORRECT - Model ignores xdata size (will cause shape mismatch errors):**
+
+    >>> def bad_model(xdata, a, b):
+    ...     # WRONG: Always returns full array, ignoring xdata size
+    ...     t_full = jnp.arange(10_000_000)  # Fixed size!
+    ...     return a * jnp.exp(-b * t_full)  # Shape mismatch during chunking
+
+    **CORRECT - Model respects xdata size:**
+
+    >>> def good_model(xdata, a, b):
+    ...     # CORRECT: Uses xdata as indices to return only requested subset
+    ...     indices = xdata.astype(jnp.int32)
+    ...     return a * jnp.exp(-b * indices)  # Shape matches xdata
+
+    **Alternative - Direct computation on xdata:**
+
+    >>> def direct_model(xdata, a, b):
+    ...     # CORRECT: Operates directly on xdata
+    ...     return a * jnp.exp(-b * xdata)  # Shape automatically matches
+
     Examples
     --------
     Basic usage with automatic configuration:
@@ -493,6 +523,7 @@ class LargeDatasetFitter:
         memory_limit_gb: float = 8.0,
         config: LDMemoryConfig | None = None,
         curve_fit_class: CurveFit | None = None,
+        logger=None,
     ):
         """Initialize LargeDatasetFitter.
 
@@ -504,12 +535,16 @@ class LargeDatasetFitter:
             Custom memory configuration
         curve_fit_class : nlsq.minpack.CurveFit, optional
             Custom CurveFit instance to use
+        logger : logging.Logger, optional
+            External logger instance for integration with application logging.
+            If None, uses NLSQ's internal logger. This allows chunk failure
+            warnings to appear in your application's logs.
         """
         if config is None:
             config = LDMemoryConfig(memory_limit_gb=memory_limit_gb)
 
         self.config = config
-        self.logger = get_logger(__name__)
+        self.logger = logger or get_logger(__name__)
 
         # Initialize curve fitting backend
         if curve_fit_class is None:
@@ -836,6 +871,112 @@ class LargeDatasetFitter:
 
         self.logger.info(f"Fitting dataset using {stats.n_chunks} chunks")
 
+        # ========== SHAPE VALIDATION ==========
+        # Validate that model function respects input size before processing all chunks.
+        # This catches shape mismatches early with clear error messages.
+        self.logger.debug("Validating model function shape compatibility...")
+
+        try:
+            # Test with first 100 points to avoid expensive computation
+            test_size = min(100, len(xdata))
+            x_test = xdata[:test_size]
+            y_test = ydata[:test_size]
+
+            # Get initial parameters for testing
+            if p0 is None:
+                # Try to infer from function signature
+                try:
+                    from inspect import signature
+
+                    sig = signature(f)
+                    n_params = len(sig.parameters) - 1  # Subtract x parameter
+                    p0_test = np.ones(n_params)
+                except Exception:
+                    # Fallback to 2 parameters
+                    p0_test = np.ones(2)
+                    self.logger.warning(
+                        "Could not infer parameter count, using 2 parameters for validation"
+                    )
+            else:
+                p0_test = np.array(p0)
+
+            # Call model function with test data
+            try:
+                output_test = f(x_test, *p0_test)
+            except Exception as e:
+                raise ValueError(
+                    f"Model function failed on test data: {type(e).__name__}: {e}\n"
+                    f"\n"
+                    f"Model function must be callable as f(xdata, *params) and return array.\n"
+                    f"Ensure your model:\n"
+                    f"  1. Uses JAX operations (jax.numpy, not numpy)\n"
+                    f"  2. Doesn't use Python control flow that breaks JIT\n"
+                    f"  3. Returns numeric array, not scalar or other type\n"
+                ) from e
+
+            # Validate return type - check if it's array-like (numpy or JAX)
+            is_array = isinstance(output_test, np.ndarray) or (
+                hasattr(output_test, "shape") and hasattr(output_test, "dtype")
+            )
+            if not is_array:
+                raise TypeError(
+                    f"Model function must return array, got {type(output_test)}\n"
+                    f"\n"
+                    f"Your model returned: {type(output_test).__name__}\n"
+                    f"Expected: numpy.ndarray or jax.Array\n"
+                )
+
+            # Validate shapes match
+            if output_test.shape != y_test.shape:
+                raise ValueError(
+                    f"Model function SHAPE MISMATCH detected!\n"
+                    f"\n"
+                    f"  Input xdata shape:  {x_test.shape}\n"
+                    f"  Input ydata shape:  {y_test.shape}\n"
+                    f"  Model output shape: {output_test.shape}\n"
+                    f"  Expected shape:     {y_test.shape}\n"
+                    f"\n"
+                    f"ERROR: Model output must match ydata size.\n"
+                    f"\n"
+                    f"When using curve_fit_large with chunking, your model function\n"
+                    f"MUST respect the size of xdata. During chunked processing, xdata\n"
+                    f"will be a subset (e.g., 1M points) of the full dataset.\n"
+                    f"\n"
+                    f"Common cause:\n"
+                    f"  Your model ignores xdata size and always returns the full array.\n"
+                    f"\n"
+                    f"Fix: Use xdata as indices to return only the requested subset:\n"
+                    f"\n"
+                    f"  def model(xdata, *params):\n"
+                    f"      # Compute full output if needed\n"
+                    f"      y_full = compute_full_model(*params)  # e.g., shape (N,)\n"
+                    f"      \n"
+                    f"      # Return only requested indices for chunking compatibility\n"
+                    f"      indices = xdata.astype(jnp.int32)  # Use JAX operations\n"
+                    f"      return y_full[indices]  # Shape matches xdata\n"
+                    f"\n"
+                    f"See NLSQ documentation for more details on chunking-compatible models.\n"
+                )
+
+            self.logger.debug(
+                f"✓ Model validation passed: "
+                f"f({x_test.shape}, {len(p0_test)} params) -> {output_test.shape}"
+            )
+
+        except (ValueError, TypeError) as e:
+            # Re-raise validation errors with context
+            self.logger.error(f"Model function validation failed: {e}")
+            raise
+
+        except Exception as e:
+            # Unexpected error during validation
+            self.logger.warning(
+                f"Model validation encountered unexpected error: {type(e).__name__}: {e}\n"
+                f"Proceeding with chunked fitting, but errors may occur."
+            )
+            # Don't fail here - let chunking proceed and catch real errors
+        # ========== END SHAPE VALIDATION ==========
+
         # Initialize progress reporter
         progress = (
             ProgressReporter(stats.n_chunks, self.logger) if show_progress else None
@@ -899,6 +1040,13 @@ class LargeDatasetFitter:
                         "n_points": len(x_chunk),
                         "parameters": popt_chunk,
                         "success": True,
+                        "timestamp": time.time(),
+                        "data_stats": {
+                            "x_mean": float(np.mean(x_chunk)),
+                            "x_std": float(np.std(x_chunk)),
+                            "y_mean": float(np.mean(y_chunk)),
+                            "y_std": float(np.std(y_chunk)),
+                        },
                     }
 
                 except Exception as e:
@@ -936,6 +1084,13 @@ class LargeDatasetFitter:
                                 "parameters": popt_chunk,
                                 "success": True,
                                 "retry": True,
+                                "timestamp": time.time(),
+                                "data_stats": {
+                                    "x_mean": float(np.mean(x_chunk)),
+                                    "x_std": float(np.std(x_chunk)),
+                                    "y_mean": float(np.mean(y_chunk)),
+                                    "y_std": float(np.std(y_chunk)),
+                                },
                             }
                         except Exception as retry_e:
                             self.logger.warning(
@@ -948,6 +1103,17 @@ class LargeDatasetFitter:
                             "n_points": len(x_chunk),
                             "success": False,
                             "error": str(e),
+                            "error_type": type(e).__name__,
+                            "timestamp": time.time(),
+                            "data_stats": {
+                                "x_mean": float(np.mean(x_chunk)),
+                                "x_std": float(np.std(x_chunk)),
+                                "x_range": (float(np.min(x_chunk)), float(np.max(x_chunk))),
+                                "y_mean": float(np.mean(y_chunk)),
+                                "y_std": float(np.std(y_chunk)),
+                                "y_range": (float(np.min(y_chunk)), float(np.max(y_chunk))),
+                            },
+                            "initial_params": current_params.tolist() if current_params is not None else None,
                         }
 
                 chunk_results.append(chunk_result)
@@ -962,9 +1128,10 @@ class LargeDatasetFitter:
             successful_chunks = [r for r in chunk_results if r.get("success", False)]
             success_rate = len(successful_chunks) / len(chunk_results)
 
-            if success_rate < 0.5:
+            if success_rate < self.config.min_success_rate:
                 self.logger.error(
-                    f"Too many chunks failed ({success_rate:.1%} success rate)"
+                    f"Too many chunks failed ({success_rate:.1%} success rate, "
+                    f"minimum required: {self.config.min_success_rate:.1%})"
                 )
                 result = OptimizeResult(
                     x=current_params if current_params is not None else np.ones(2),
@@ -982,6 +1149,35 @@ class LargeDatasetFitter:
             self.logger.info(
                 f"Chunked fit completed with {success_rate:.1%} success rate"
             )
+
+            # Create failure summary for diagnostics
+            failed_chunks = [r for r in chunk_results if not r.get("success", False)]
+            failure_summary = {
+                "total_failures": len(failed_chunks),
+                "failure_rate": len(failed_chunks) / len(chunk_results),
+                "failed_chunk_indices": [r["chunk_idx"] for r in failed_chunks],
+                "error_types": {},
+                "common_errors": [],
+            }
+
+            # Aggregate error types
+            for failed_chunk in failed_chunks:
+                error_type = failed_chunk.get("error_type", "Unknown")
+                failure_summary["error_types"][error_type] = (
+                    failure_summary["error_types"].get(error_type, 0) + 1
+                )
+
+            # Identify most common errors
+            if failure_summary["error_types"]:
+                sorted_errors = sorted(
+                    failure_summary["error_types"].items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )
+                failure_summary["common_errors"] = [
+                    {"type": err_type, "count": count}
+                    for err_type, count in sorted_errors[:3]
+                ]
 
             result = OptimizeResult(
                 x=current_params,
@@ -1003,6 +1199,7 @@ class LargeDatasetFitter:
             result["chunk_results"] = chunk_results
             result["n_chunks"] = stats.n_chunks
             result["success_rate"] = success_rate
+            result["failure_summary"] = failure_summary
 
             return result
 
@@ -1063,9 +1260,7 @@ class LargeDatasetFitter:
             "processing_strategy": (
                 "sampling"
                 if stats.requires_sampling
-                else "single_chunk"
-                if stats.n_chunks == 1
-                else "chunked"
+                else "single_chunk" if stats.n_chunks == 1 else "chunked"
             ),
             "recommendations": {
                 "chunk_size": stats.recommended_chunk_size,
@@ -1084,6 +1279,7 @@ def fit_large_dataset(
     p0: np.ndarray | list | None = None,
     memory_limit_gb: float = 8.0,
     show_progress: bool = False,
+    logger=None,
     **kwargs,
 ) -> OptimizeResult:
     """Convenience function for fitting large datasets.
@@ -1102,6 +1298,8 @@ def fit_large_dataset(
         Memory limit in GB (default: 8.0)
     show_progress : bool, optional
         Whether to show progress (default: False)
+    logger : logging.Logger, optional
+        External logger for application integration (default: None)
     **kwargs
         Additional arguments passed to curve_fit
 
@@ -1114,6 +1312,7 @@ def fit_large_dataset(
     --------
     >>> from nlsq.large_dataset import fit_large_dataset
     >>> import numpy as np
+    >>> import jax.numpy as jnp
     >>>
     >>> # Generate large dataset
     >>> x_large = np.linspace(0, 10, 5_000_000)
@@ -1121,15 +1320,21 @@ def fit_large_dataset(
     >>>
     >>> # Fit with automatic memory management
     >>> result = fit_large_dataset(
-    ...     lambda x, a, b: a * np.exp(-b * x),
+    ...     lambda x, a, b: a * jnp.exp(-b * x),
     ...     x_large, y_large,
     ...     p0=[2.0, 1.0],
     ...     memory_limit_gb=4.0,
     ...     show_progress=True
     ... )
     >>> print(f"Fitted parameters: {result.popt}")
+    >>> print(f"Success rate: {result.success_rate:.1%}")
+    >>>
+    >>> # Check failure diagnostics if some chunks failed
+    >>> if result.failure_summary['total_failures'] > 0:
+    ...     print(f"Failed chunks: {result.failure_summary['failed_chunk_indices']}")
+    ...     print(f"Common errors: {result.failure_summary['common_errors']}")
     """
-    fitter = LargeDatasetFitter(memory_limit_gb=memory_limit_gb)
+    fitter = LargeDatasetFitter(memory_limit_gb=memory_limit_gb, logger=logger)
 
     if show_progress:
         return fitter.fit_with_progress(f, xdata, ydata, p0=p0, **kwargs)
