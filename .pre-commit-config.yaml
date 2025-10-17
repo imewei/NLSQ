@@ -1,5 +1,5 @@
 # Pre-commit configuration
-# Versions aligned with local environment and pyproject.toml (2025-10-08)
+# Versions aligned with local environment and pyproject.toml (2025-10-17)
 # See REQUIREMENTS.md for dependency management strategy
 
 repos:
@@ -27,7 +27,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0  # Aligned with local ruff 0.14.0 and pyproject.toml >=0.10.0
+    rev: v0.14.1  # Aligned with local ruff 0.14.1 and pyproject.toml >=0.10.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -69,7 +69,7 @@ repos:
         exclude: ^(tests/|examples/|benchmark/)
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0  # Updated to latest version (Python 3.12+ syntax)
+    rev: v3.21.0  # Updated to latest version (Python 3.12+ syntax)
     hooks:
       - id: pyupgrade
         args: [--py312-plus]
