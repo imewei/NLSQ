@@ -58,15 +58,21 @@ type-check:  ## Run type checking with mypy
 	mypy nlsq
 
 clean:  ## Clean build artifacts and cache files
-	rm -rf build dist *.egg-info .coverage htmlcov .mypy_cache .ruff_cache .pytest_cache
+	rm -rf build dist *.egg-info .coverage htmlcov
 	find . -type d -name .nlsq_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .benchmarks -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .nlsq_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .coverage -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name "*.pyo" -delete
 	find . -type f -name "*~" -delete
 	find . -type f -name "nlsq_debug_*.log" -delete
 	find . -type f -name "build*.log" -delete
-	rm -rf coverage.xml coverage.json .benchmarks checkpoint_iter_100.npz .nlsq_cache .hypothesis
+	rm -rf coverage.xml coverage.json checkpoint_iter_100.npz
 
 clean-cache:  ## Clean only cache directories
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
