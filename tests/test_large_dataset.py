@@ -509,6 +509,55 @@ class TestErrorHandling(unittest.TestCase):
             # Expected case: optimizer correctly reports non-convergence
             self.assertIsNotNone(result.message)
 
+    def test_shape_validation_catches_mismatch(self):
+        """Test that shape validation detects model-chunking incompatibility."""
+        # Model that ignores xdata size (always returns fixed size)
+        def bad_model(xdata, a, b):
+            return jnp.ones(10000)  # Always returns 10000, regardless of xdata size
+
+        # Use larger dataset to ensure chunking occurs
+        xdata = jnp.arange(10000)
+        ydata = jnp.ones(10000)
+
+        # Force chunking with small chunk size
+        config = LDMemoryConfig(memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=5000)
+        fitter = LargeDatasetFitter(config=config)
+
+        # Should raise ValueError with shape mismatch message
+        with self.assertRaises(ValueError) as context:
+            fitter.fit(bad_model, xdata, ydata, p0=[1, 1])
+
+        # Verify error message mentions shape mismatch
+        error_message = str(context.exception)
+        self.assertIn("SHAPE MISMATCH", error_message)
+        self.assertIn("expected shape", error_message.lower())
+
+    def test_shape_validation_passes_correct_model(self):
+        """Test that correct chunking-compatible models pass validation."""
+        # Correct model that respects xdata size
+        def good_model(xdata, a, b):
+            return a * jnp.exp(-b * xdata)
+
+        np.random.seed(42)
+        # Use smaller dataset for faster test
+        xdata = jnp.linspace(0, 1, 1000)
+        ydata = 2.0 * jnp.exp(-1.0 * xdata) + 0.01 * np.random.randn(1000)
+
+        # Force chunking with small chunk size
+        config = LDMemoryConfig(memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500)
+        fitter = LargeDatasetFitter(config=config)
+
+        # Should work without errors
+        result = fitter.fit(good_model, xdata, ydata, p0=[2.0, 1.0])
+
+        # Should succeed
+        self.assertTrue(result.success)
+        self.assertIsNotNone(result.popt)
+
+        # Verify parameters are close to truth
+        self.assertAlmostEqual(result.popt[0], 2.0, delta=0.5)
+        self.assertAlmostEqual(result.popt[1], 1.0, delta=0.5)
+
 
 if __name__ == "__main__":
     unittest.main()
