@@ -808,6 +808,450 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 **kwargs,
             )
 
+    def _initialize_trf_state(
+        self,
+        x0: np.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        loss_function: Callable | None,
+        x_scale: np.ndarray | str,
+        f_scale: float,
+        data_mask: jnp.ndarray,
+    ) -> dict:
+        """Initialize optimization state for TRF algorithm.
+
+        This helper extracts the initialization logic from trf_no_bounds,
+        reducing complexity and improving testability.
+
+        Parameters
+        ----------
+        x0 : np.ndarray
+            Initial parameter guess
+        f : jnp.ndarray
+            Initial residuals
+        J : jnp.ndarray
+            Initial Jacobian matrix
+        loss_function : Callable or None
+            Loss function (None for standard least squares)
+        x_scale : np.ndarray or str
+            Parameter scaling factors or 'jac' for Jacobian-based scaling
+        f_scale : float
+            Residual scaling factor
+        data_mask : jnp.ndarray
+            Data masking array
+
+        Returns
+        -------
+        dict
+            Initial state containing x, f, J, cost, g, scale, Delta, etc.
+        """
+        m, n = J.shape
+        state = {
+            'x': x0.copy(),
+            'f': f,
+            'J': J,
+            'nfev': 1,
+            'njev': 1,
+            'm': m,
+            'n': n,
+        }
+
+        # Apply loss function if provided
+        if loss_function is not None:
+            rho = loss_function(f, f_scale)
+            state['cost'] = self.calculate_cost(rho, data_mask)
+            state['J'], state['f'] = self.cJIT.scale_for_robust_loss_function(
+                J, f, rho
+            )
+        else:
+            state['cost'] = self.default_loss_func(f)
+
+        # Compute gradient
+        state['g'] = self.compute_grad(state['J'], state['f'])
+
+        # Compute scaling factors
+        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
+        if jac_scale:
+            state['scale'], state['scale_inv'] = self.cJIT.compute_jac_scale(J)
+            state['jac_scale'] = True
+        else:
+            state['scale'], state['scale_inv'] = x_scale, 1 / x_scale
+            state['jac_scale'] = False
+
+        # Initialize trust region radius
+        Delta = norm(x0 * state['scale_inv'])
+        state['Delta'] = Delta if Delta > 0 else 1.0
+
+        return state
+
+    def _check_convergence_criteria(
+        self,
+        g: jnp.ndarray,
+        gtol: float,
+    ) -> int | None:
+        """Check if gradient convergence criterion is met.
+
+        This helper extracts convergence checking logic from trf_no_bounds,
+        reducing complexity and improving readability.
+
+        Parameters
+        ----------
+        g : jnp.ndarray
+            Current gradient vector
+        gtol : float
+            Gradient tolerance for convergence
+
+        Returns
+        -------
+        int or None
+            Termination status: 1 if gradient tolerance satisfied, None otherwise
+        """
+        g_norm = jnorm(g, ord=jnp.inf)
+
+        if g_norm < gtol:
+            self.logger.debug(
+                "Convergence: gradient tolerance satisfied",
+                g_norm=float(g_norm),
+                gtol=gtol,
+            )
+            return 1
+
+        return None
+
+    def _solve_trust_region_subproblem(
+        self,
+        J: jnp.ndarray,
+        f: jnp.ndarray,
+        g: jnp.ndarray,
+        scale: np.ndarray,
+        Delta: float,
+        alpha: float,
+        solver: str,
+    ) -> dict:
+        """Solve the trust region subproblem.
+
+        This helper extracts the subproblem setup and solving logic,
+        reducing complexity and improving readability.
+
+        Parameters
+        ----------
+        J : jnp.ndarray
+            Current Jacobian matrix
+        f : jnp.ndarray
+            Current residuals
+        g : jnp.ndarray
+            Current gradient
+        scale : np.ndarray
+            Parameter scaling factors
+        Delta : float
+            Current trust region radius
+        alpha : float
+            Levenberg-Marquardt parameter
+        solver : str
+            Solver type ('cg' or 'exact')
+
+        Returns
+        -------
+        dict
+            Subproblem solution containing:
+            - J_h: Scaled Jacobian
+            - g_h: Scaled gradient
+            - d: Scaling vector
+            - d_jnp: JAX scaling vector
+            - step_h: Step in scaled space (for CG solver)
+            - s, V, uf: SVD components (for exact solver)
+        """
+        # Setup scaled variables
+        d = scale
+        d_jnp = jnp.array(scale)
+        g_h_jnp = self.compute_grad_hat(g, d_jnp)
+
+        result = {
+            'd': d,
+            'd_jnp': d_jnp,
+            'g_h': g_h_jnp,
+        }
+
+        # Solve trust region subproblem
+        if solver == "cg":
+            # Conjugate gradient solver
+            J_h = J * d_jnp
+            step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
+            result.update({
+                'J_h': J_h,
+                'step_h': step_h,
+                's': None,
+                'V': None,
+                'uf': None,
+            })
+        else:
+            # SVD-based exact solver
+            svd_output = self.svd_no_bounds(J, d_jnp, f)
+            J_h = svd_output[0]
+            s, V, uf = (np.array(val) for val in svd_output[2:])
+            result.update({
+                'J_h': J_h,
+                'step_h': None,  # Computed later in inner loop
+                's': s,
+                'V': V,
+                'uf': uf,
+            })
+
+        return result
+
+    def _evaluate_step_acceptance(
+        self,
+        fun: Callable,
+        jac: Callable,
+        x: np.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        J_h: jnp.ndarray,
+        g_h_jnp: jnp.ndarray,
+        cost: float,
+        d: np.ndarray,
+        d_jnp: jnp.ndarray,
+        Delta: float,
+        alpha: float,
+        step_h: jnp.ndarray | None,
+        s: np.ndarray | None,
+        V: np.ndarray | None,
+        uf: np.ndarray | None,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        data_mask: jnp.ndarray,
+        transform: Callable | None,
+        loss_function: Callable | None,
+        f_scale: float,
+        scale_inv: np.ndarray,
+        jac_scale: bool,
+        solver: str,
+        ftol: float,
+        xtol: float,
+        max_nfev: int,
+        nfev: int,
+    ) -> dict:
+        """Evaluate step acceptance through inner trust region loop.
+
+        This method implements the inner loop of the TRF algorithm, which
+        repeatedly solves the trust region subproblem and evaluates candidate
+        steps until an acceptable step is found.
+
+        Parameters
+        ----------
+        fun : Callable
+            Function to evaluate residuals
+        jac : Callable
+            Function to evaluate Jacobian
+        x : np.ndarray
+            Current parameter values
+        f : jnp.ndarray
+            Current residuals (possibly scaled by loss function)
+        J : jnp.ndarray
+            Current Jacobian (possibly scaled by loss function)
+        J_h : jnp.ndarray
+            Scaled Jacobian for subproblem
+        g_h_jnp : jnp.ndarray
+            Scaled gradient for subproblem
+        cost : float
+            Current cost value
+        d : np.ndarray
+            Parameter scaling factors
+        d_jnp : jnp.ndarray
+            Parameter scaling factors (JAX array)
+        Delta : float
+            Trust region radius
+        alpha : float
+            Levenberg-Marquardt parameter
+        step_h : jnp.ndarray | None
+            Pre-computed step (for CG solver), None for exact solver
+        s : np.ndarray | None
+            SVD singular values (for exact solver), None for CG
+        V : np.ndarray | None
+            SVD V matrix (for exact solver), None for CG
+        uf : np.ndarray | None
+            SVD U^T @ f (for exact solver), None for CG
+        xdata : np.ndarray
+            Independent variable data
+        ydata : np.ndarray
+            Dependent variable data
+        data_mask : jnp.ndarray
+            Mask for valid data points
+        transform : Callable | None
+            Parameter transformation function
+        loss_function : Callable | None
+            Robust loss function
+        f_scale : float
+            Residual scale factor
+        scale_inv : np.ndarray
+            Inverse parameter scaling
+        jac_scale : bool
+            Whether using Jacobian-based scaling
+        solver : str
+            Trust region solver ('cg' or 'exact')
+        ftol : float
+            Cost function tolerance
+        xtol : float
+            Parameter tolerance
+        max_nfev : int
+            Maximum function evaluations
+        nfev : int
+            Current function evaluation count
+
+        Returns
+        -------
+        dict
+            Dictionary containing:
+            - accepted : bool - Whether a step was accepted
+            - x_new : np.ndarray - New parameter values (if accepted)
+            - f_new : jnp.ndarray - New residuals (if accepted)
+            - J_new : jnp.ndarray - New Jacobian (if accepted)
+            - cost_new : float - New cost value (if accepted)
+            - g_new : jnp.ndarray - New gradient (if accepted)
+            - scale : np.ndarray - Updated parameter scaling (if accepted)
+            - scale_inv : np.ndarray - Updated inverse scaling (if accepted)
+            - actual_reduction : float - Actual cost reduction
+            - step_norm : float - Step norm
+            - Delta : float - Updated trust region radius
+            - alpha : float - Updated Levenberg-Marquardt parameter
+            - termination_status : int | None - Termination status code
+            - nfev : int - Updated function evaluation count
+            - njev : int - Jacobian evaluation count (1 if accepted, 0 otherwise)
+        """
+        n, m = len(x), len(f)
+        actual_reduction = -1
+        inner_loop_count = 0
+        max_inner_iterations = 100
+        termination_status = None
+        step_norm = 0
+
+        while (
+            actual_reduction <= 0
+            and nfev < max_nfev
+            and inner_loop_count < max_inner_iterations
+        ):
+            inner_loop_count += 1
+
+            # Solve subproblem (reuse step or compute new one)
+            if solver == "cg":
+                if inner_loop_count > 1:
+                    step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
+                _n_iter = 1  # Dummy value for compatibility
+            else:
+                step_h, alpha, _n_iter = solve_lsq_trust_region(
+                    n, m, uf, s, V, Delta, initial_alpha=alpha
+                )
+
+            # Compute predicted reduction
+            predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
+                J_h, g_h_jnp, step_h
+            )
+            predicted_reduction = predicted_reduction_jnp
+
+            # Transform step and evaluate objective
+            step = d * step_h
+            x_new = x + step
+            f_new = fun(x_new, xdata, ydata, data_mask, transform)
+            nfev += 1
+            step_h_norm = norm(step_h)
+
+            # Check for numerical issues
+            if not self.check_isfinite(f_new):
+                Delta = TR_REDUCTION_FACTOR * step_h_norm
+                continue
+
+            # Compute actual reduction
+            if loss_function is not None:
+                cost_new_jnp = loss_function(f_new, f_scale, data_mask, cost_only=True)
+            else:
+                cost_new_jnp = self.default_loss_func(f_new)
+            cost_new = cost_new_jnp
+            actual_reduction = cost - cost_new
+
+            # Update trust region radius
+            Delta_new, ratio = update_tr_radius(
+                Delta,
+                actual_reduction,
+                predicted_reduction,
+                step_h_norm,
+                step_h_norm > TR_BOUNDARY_THRESHOLD * Delta,
+            )
+
+            # Check termination criteria
+            step_norm = norm(step)
+            termination_status = check_termination(
+                actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
+            )
+
+            if termination_status is not None:
+                break
+
+            alpha *= Delta / Delta_new
+            Delta = Delta_new
+
+            # Exit inner loop if we have a successful step
+            if actual_reduction > 0:
+                break
+
+        # Check if inner loop hit iteration limit
+        if inner_loop_count >= max_inner_iterations:
+            self.logger.warning(
+                "Inner optimization loop hit iteration limit",
+                inner_iterations=inner_loop_count,
+                actual_reduction=actual_reduction,
+            )
+            termination_status = -3  # Inner loop limit exceeded
+
+        # Prepare result
+        result = {
+            'accepted': actual_reduction > 0,
+            'actual_reduction': actual_reduction if actual_reduction > 0 else 0,
+            'step_norm': step_norm if actual_reduction > 0 else 0,
+            'Delta': Delta,
+            'alpha': alpha,
+            'termination_status': termination_status,
+            'nfev': nfev,
+            'njev': 0,  # Will be set to 1 if step is accepted
+        }
+
+        # If step was accepted, compute new state
+        if actual_reduction > 0:
+            result.update({
+                'x_new': x_new,
+                'f_new': f_new,
+                'cost_new': cost_new,
+                'njev': 1,
+            })
+
+            # Compute new Jacobian
+            J_new = jac(x_new, xdata, ydata, data_mask, transform)
+
+            # Apply loss function if provided
+            if loss_function is not None:
+                rho = loss_function(f_new, f_scale)
+                J_new, f_new_scaled = self.cJIT.scale_for_robust_loss_function(
+                    J_new, f_new, rho
+                )
+                result['f_new'] = f_new_scaled
+            else:
+                result['f_new'] = f_new
+
+            result['J_new'] = J_new
+
+            # Compute new gradient
+            g_new = self.compute_grad(J_new, result['f_new'])
+            result['g_new'] = g_new
+
+            # Update scaling if using Jacobian-based scaling
+            if jac_scale:
+                scale_new, scale_inv_new = self.cJIT.compute_jac_scale(
+                    J_new, scale_inv
+                )
+                result['scale'] = scale_new
+                result['scale_inv'] = scale_inv_new
+
+        return result
+
     def trf_no_bounds(
         self,
         fun: Callable,
