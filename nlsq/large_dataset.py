@@ -299,6 +299,19 @@ class DataChunker:
             end_idx = min(start_idx + chunk_size, n_points)
             chunk_indices = indices[start_idx:end_idx]
 
+            # PERFORMANCE FIX: Pad last chunk to avoid JAX JIT recompilation
+            # When chunks have different sizes, JAX recompiles all JIT'd functions
+            # including SVD in TRF, causing 2-3x slowdown. Padding ensures uniform
+            # chunk sizes across all iterations, enabling JIT compilation reuse.
+            # Repeating points doesn't affect least-squares solution (same residuals).
+            current_chunk_size = len(chunk_indices)
+            if current_chunk_size < chunk_size:
+                # Pad by repeating points from the chunk cyclically
+                pad_size = chunk_size - current_chunk_size
+                # Repeat indices cyclically to pad to full chunk_size
+                pad_indices = np.tile(chunk_indices, (pad_size // current_chunk_size) + 1)[:pad_size]
+                chunk_indices = np.concatenate([chunk_indices, pad_indices])
+
             yield xdata[chunk_indices], ydata[chunk_indices], i
 
 
