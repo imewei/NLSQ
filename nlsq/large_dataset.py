@@ -1046,11 +1046,12 @@ class LargeDatasetFitter:
     ) -> OptimizeResult:
         """Fit very large dataset using sampling."""
 
-        target_size = min(self.config.max_sampled_size, len(xdata) // 10)
+        # Conservative 2x reduction (50% of data retained)
+        target_size = min(self.config.max_sampled_size, len(xdata) // 2)
 
         self.logger.warning(
             f"Dataset is very large ({len(xdata):,} points). "
-            f"Sampling {target_size:,} points for initial fit."
+            f"Sampling {target_size:,} points for initial fit (50% retention)."
         )
 
         # Sample data
