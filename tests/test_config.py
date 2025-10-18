@@ -351,23 +351,26 @@ class TestLargeDatasetConfig(unittest.TestCase):
     """Tests for LargeDatasetConfig dataclass."""
 
     def test_default_initialization(self):
-        """Test LargeDatasetConfig with default values."""
+        """Test LargeDatasetConfig with default values (v0.2.0: sampling params removed)."""
         from nlsq.config import LargeDatasetConfig
 
         config = LargeDatasetConfig()
 
-        self.assertTrue(config.enable_sampling)
-        self.assertEqual(config.sampling_threshold, 100_000_000)
-        self.assertEqual(config.max_sampled_size, 10_000_000)
-        self.assertEqual(config.sampling_strategy, "stratified")
+        # v0.2.0: Only test remaining attributes
         self.assertTrue(config.enable_automatic_solver_selection)
         self.assertIsInstance(config.solver_selection_thresholds, dict)
         self.assertIn("direct", config.solver_selection_thresholds)
         self.assertIn("iterative", config.solver_selection_thresholds)
         self.assertIn("chunked", config.solver_selection_thresholds)
 
+        # v0.2.0: Verify sampling params are removed
+        self.assertFalse(hasattr(config, "enable_sampling"))
+        self.assertFalse(hasattr(config, "sampling_threshold"))
+        self.assertFalse(hasattr(config, "max_sampled_size"))
+        self.assertFalse(hasattr(config, "sampling_strategy"))
+
     def test_custom_initialization(self):
-        """Test LargeDatasetConfig with custom values."""
+        """Test LargeDatasetConfig with custom values (v0.2.0: sampling params removed)."""
         from nlsq.config import LargeDatasetConfig
 
         custom_thresholds = {
@@ -377,62 +380,42 @@ class TestLargeDatasetConfig(unittest.TestCase):
         }
 
         config = LargeDatasetConfig(
-            enable_sampling=False,
-            sampling_threshold=50_000_000,
-            max_sampled_size=5_000_000,
-            sampling_strategy="random",
             enable_automatic_solver_selection=False,
             solver_selection_thresholds=custom_thresholds,
         )
 
-        self.assertFalse(config.enable_sampling)
-        self.assertEqual(config.sampling_threshold, 50_000_000)
-        self.assertEqual(config.max_sampled_size, 5_000_000)
-        self.assertEqual(config.sampling_strategy, "random")
         self.assertFalse(config.enable_automatic_solver_selection)
         self.assertEqual(config.solver_selection_thresholds, custom_thresholds)
 
     def test_invalid_sampling_strategy(self):
-        """Test validation error for invalid sampling_strategy."""
+        """Test that sampling_strategy parameter is no longer accepted (v0.2.0)."""
         from nlsq.config import LargeDatasetConfig
 
-        with self.assertRaises(ValueError) as ctx:
+        # v0.2.0: Should raise TypeError for removed parameter
+        with self.assertRaises(TypeError) as ctx:
             LargeDatasetConfig(sampling_strategy="invalid")
 
-        self.assertIn(
-            "sampling_strategy must be 'random', 'uniform', or 'stratified'",
-            str(ctx.exception),
-        )
+        self.assertIn("unexpected keyword argument", str(ctx.exception))
+        self.assertIn("sampling_strategy", str(ctx.exception))
 
     def test_valid_sampling_strategies(self):
-        """Test all valid sampling_strategy values."""
+        """Test that sampling strategies are no longer accepted (v0.2.0)."""
         from nlsq.config import LargeDatasetConfig
 
+        # v0.2.0: All sampling strategies should raise TypeError
         for strategy in ["random", "uniform", "stratified"]:
-            config = LargeDatasetConfig(sampling_strategy=strategy)
-            self.assertEqual(config.sampling_strategy, strategy)
+            with self.assertRaises(TypeError):
+                LargeDatasetConfig(sampling_strategy=strategy)
 
     def test_max_sampled_size_larger_than_threshold_warning(self):
-        """Test warning when max_sampled_size > sampling_threshold."""
-        import warnings
-
+        """Test that sampling parameters are no longer accepted (v0.2.0)."""
         from nlsq.config import LargeDatasetConfig
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-
-            config = LargeDatasetConfig(
+        # v0.2.0: Should raise TypeError for removed parameters
+        with self.assertRaises(TypeError):
+            LargeDatasetConfig(
                 sampling_threshold=10_000_000, max_sampled_size=20_000_000
             )
-
-            # Check that a warning was issued
-            self.assertTrue(len(w) >= 1)
-            self.assertIn("max_sampled_size", str(w[-1].message))
-            self.assertIn("sampling_threshold", str(w[-1].message))
-
-            # Config should still be created
-            self.assertEqual(config.max_sampled_size, 20_000_000)
-            self.assertEqual(config.sampling_threshold, 10_000_000)
 
     def test_solver_selection_thresholds_default(self):
         """Test default solver_selection_thresholds values."""
@@ -514,16 +497,20 @@ class TestMemoryConfigFunctions(unittest.TestCase):
             JAXConfig.set_memory_config(original_config)
 
     def test_get_large_dataset_config_function(self):
-        """Test get_large_dataset_config function."""
+        """Test get_large_dataset_config function (v0.2.0: sampling params removed)."""
         from nlsq.config import LargeDatasetConfig, get_large_dataset_config
 
         config = get_large_dataset_config()
 
         self.assertIsInstance(config, LargeDatasetConfig)
-        self.assertIsInstance(config.enable_sampling, bool)
+        self.assertIsInstance(config.enable_automatic_solver_selection, bool)
+        # v0.2.0: Verify sampling param is removed
+        self.assertFalse(hasattr(config, "enable_sampling"))
 
     def test_configure_for_large_datasets(self):
-        """Test configure_for_large_datasets function."""
+        """Test configure_for_large_datasets function (v0.2.0: sampling params emit warnings)."""
+        import warnings
+
         from nlsq.config import (
             JAXConfig,
             configure_for_large_datasets,
@@ -535,20 +522,28 @@ class TestMemoryConfigFunctions(unittest.TestCase):
         original_mem_config = get_memory_config()
 
         try:
-            configure_for_large_datasets(
-                memory_limit_gb=16.0,
-                enable_sampling=True,
-                enable_chunking=False,
-                progress_reporting=True,
-                mixed_precision_fallback=False,
-            )
+            # v0.2.0: enable_sampling should emit deprecation warning
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always", DeprecationWarning)
+
+                configure_for_large_datasets(
+                    memory_limit_gb=16.0,
+                    enable_sampling=True,  # Should emit warning
+                    enable_chunking=False,
+                    progress_reporting=True,
+                    mixed_precision_fallback=False,
+                )
+
+                # Check that deprecation warning was issued
+                self.assertTrue(len(w) >= 1)
+                self.assertTrue(any(issubclass(warning.category, DeprecationWarning) for warning in w))
 
             ld_config = get_large_dataset_config()
             mem_config = get_memory_config()
 
-            # Check large dataset config
-            self.assertTrue(ld_config.enable_sampling)
+            # Check large dataset config (v0.2.0: no more enable_sampling)
             self.assertTrue(ld_config.enable_automatic_solver_selection)
+            self.assertFalse(hasattr(ld_config, "enable_sampling"))
 
             # Check memory config
             self.assertEqual(mem_config.memory_limit_gb, 16.0)
@@ -602,7 +597,7 @@ class TestMemoryContextManager(unittest.TestCase):
         self.assertEqual(get_memory_config().memory_limit_gb, original.memory_limit_gb)
 
     def test_large_dataset_context_manager(self):
-        """Test large_dataset_context context manager."""
+        """Test large_dataset_context context manager (v0.2.0: sampling params removed)."""
         from nlsq.config import (
             LargeDatasetConfig,
             get_large_dataset_config,
@@ -612,48 +607,52 @@ class TestMemoryContextManager(unittest.TestCase):
         original_config = get_large_dataset_config()
 
         temp_config = LargeDatasetConfig(
-            enable_sampling=False, sampling_threshold=200_000_000
+            enable_automatic_solver_selection=False
         )
 
         with large_dataset_context(temp_config):
             current = get_large_dataset_config()
-            self.assertFalse(current.enable_sampling)
-            self.assertEqual(current.sampling_threshold, 200_000_000)
+            self.assertFalse(current.enable_automatic_solver_selection)
 
         # Should restore original
         restored = get_large_dataset_config()
-        self.assertEqual(restored.enable_sampling, original_config.enable_sampling)
         self.assertEqual(
-            restored.sampling_threshold, original_config.sampling_threshold
+            restored.enable_automatic_solver_selection,
+            original_config.enable_automatic_solver_selection
         )
 
     def test_large_dataset_context_nested(self):
-        """Test nested large_dataset_context managers."""
+        """Test nested large_dataset_context managers (v0.2.0: use solver thresholds)."""
         from nlsq.config import (
             LargeDatasetConfig,
             get_large_dataset_config,
             large_dataset_context,
         )
 
-        config1 = LargeDatasetConfig(sampling_threshold=50_000_000)
-        config2 = LargeDatasetConfig(sampling_threshold=100_000_000)
+        config1 = LargeDatasetConfig(
+            solver_selection_thresholds={"direct": 50_000, "iterative": 5_000_000, "chunked": 50_000_000}
+        )
+        config2 = LargeDatasetConfig(
+            solver_selection_thresholds={"direct": 100_000, "iterative": 10_000_000, "chunked": 100_000_000}
+        )
 
         original = get_large_dataset_config()
 
         with large_dataset_context(config1):
-            self.assertEqual(get_large_dataset_config().sampling_threshold, 50_000_000)
+            self.assertEqual(get_large_dataset_config().solver_selection_thresholds["chunked"], 50_000_000)
 
             with large_dataset_context(config2):
                 self.assertEqual(
-                    get_large_dataset_config().sampling_threshold, 100_000_000
+                    get_large_dataset_config().solver_selection_thresholds["chunked"], 100_000_000
                 )
 
             # Should restore to config1
-            self.assertEqual(get_large_dataset_config().sampling_threshold, 50_000_000)
+            self.assertEqual(get_large_dataset_config().solver_selection_thresholds["chunked"], 50_000_000)
 
         # Should restore to original
         self.assertEqual(
-            get_large_dataset_config().sampling_threshold, original.sampling_threshold
+            get_large_dataset_config().solver_selection_thresholds,
+            original.solver_selection_thresholds
         )
 
 

@@ -1,7 +1,7 @@
 """
 Comprehensive test suite for large dataset handling in NLSQ.
 
-Tests cover memory estimation, chunking strategies, sampling,
+Tests cover memory estimation, chunking strategies, streaming optimization,
 and optimized fitting for datasets >20M points.
 """
 
@@ -38,7 +38,6 @@ class TestMemoryEstimation(unittest.TestCase):
         self.assertGreater(stats.total_memory_estimate_gb, 0)
         self.assertLess(stats.total_memory_estimate_gb, 1.0)  # Should be <1GB
         self.assertEqual(stats.n_chunks, 1)  # Should fit in single chunk
-        self.assertFalse(stats.requires_sampling)
 
     def test_medium_dataset_estimation(self):
         """Test memory estimation for medium datasets (1M-10M points)."""
@@ -49,7 +48,6 @@ class TestMemoryEstimation(unittest.TestCase):
         self.assertGreater(stats.total_memory_estimate_gb, 0.5)
         self.assertLess(stats.total_memory_estimate_gb, 10.0)
         self.assertGreaterEqual(stats.n_chunks, 1)
-        self.assertFalse(stats.requires_sampling)  # Should not need sampling yet
 
     def test_large_dataset_estimation_20M(self):
         """Test memory estimation for 20M point dataset."""
@@ -69,7 +67,6 @@ class TestMemoryEstimation(unittest.TestCase):
         self.assertEqual(stats.n_params, 6)
         self.assertGreater(stats.total_memory_estimate_gb, 5.0)
         self.assertEqual(stats.n_chunks, 50)  # 50M / 1M chunk size
-        self.assertFalse(stats.requires_sampling)  # Still manageable with chunking
 
     def test_extremely_large_dataset_estimation_100M(self):
         """Test memory estimation for 100M point dataset."""
@@ -79,8 +76,7 @@ class TestMemoryEstimation(unittest.TestCase):
         self.assertEqual(stats.n_params, 10)
         self.assertGreater(stats.total_memory_estimate_gb, 10.0)
         self.assertEqual(stats.n_chunks, 100)  # 100M / 1M chunk size
-        # Should consider sampling for very large datasets
-        # but current implementation may not enforce it
+        # Streaming optimization can handle unlimited data
 
     def test_billion_point_dataset_estimation(self):
         """Test memory estimation for 1B point dataset (extreme case)."""
@@ -90,7 +86,7 @@ class TestMemoryEstimation(unittest.TestCase):
         self.assertEqual(stats.n_params, 5)
         self.assertGreater(stats.total_memory_estimate_gb, 100.0)
         self.assertEqual(stats.n_chunks, 1000)  # 1B / 1M chunk size
-        # Should definitely require sampling strategy
+        # Streaming optimization handles unlimited data without subsampling
 
 
 class TestLargeDatasetFitter(unittest.TestCase):
@@ -134,9 +130,9 @@ class TestLargeDatasetFitter(unittest.TestCase):
         self.assertEqual(recs["processing_strategy"], "chunked")
         self.assertGreater(recs["recommendations"]["n_chunks"], 1)
 
-        # Very large dataset - may recommend sampling
+        # Very large dataset - will use chunked or streaming
         recs = fitter.get_memory_recommendations(100_000_000, 5)
-        self.assertIn(recs["processing_strategy"], ["chunked", "sampling_recommended"])
+        self.assertEqual(recs["processing_strategy"], "chunked")
 
     def test_fit_small_dataset(self):
         """Test fitting a small dataset that fits in memory."""
@@ -232,9 +228,9 @@ class TestCurveFitLarge(unittest.TestCase):
         np.testing.assert_allclose(popt, self.true_params, rtol=0.1)
 
     def test_curve_fit_large_20M_simulation(self):
-        """Simulate fitting a 20M point dataset using sampling."""
-        # For testing, we'll use a smaller sample to represent the large dataset
-        n_sample = 100_000  # Use 100K sample to simulate 20M dataset
+        """Simulate fitting a 20M point dataset using chunking."""
+        # For testing, we'll use a smaller dataset to represent the large dataset
+        n_sample = 100_000  # Use 100K to simulate 20M dataset behavior
         x = np.linspace(0, 10, n_sample)
         y = self.model(x, *self.true_params)
         y = np.array(y) + np.random.normal(0, 0.05, n_sample)
@@ -291,31 +287,6 @@ class TestDataChunker(unittest.TestCase):
         # Check last chunk is smaller
         x_chunk, _y_chunk, _idx = chunks[-1]  # Returns 3 values
         self.assertEqual(len(x_chunk), 500)  # Remainder
-
-
-class TestSamplingFunctionality(unittest.TestCase):
-    """Test sampling functionality for extremely large datasets."""
-
-    def test_sampling_recommendation(self):
-        """Test when sampling should be recommended."""
-        # Small dataset - no sampling
-        stats = estimate_memory_requirements(1_000_000, 3)
-        self.assertFalse(stats.requires_sampling)
-
-        # Test with config that enables sampling
-        config = LDMemoryConfig(
-            enable_sampling=True,
-            sampling_threshold=50_000_000,
-            max_sampled_size=10_000_000,
-        )
-
-        # Check if the config affects recommendations
-        fitter = LargeDatasetFitter(config=config)
-        recs = fitter.get_memory_recommendations(100_000_000, 5)
-        # Very large datasets may recommend sampling or chunking
-        self.assertIn(
-            recs["processing_strategy"], ["chunked", "sampling", "sampling_recommended"]
-        )
 
 
 class TestMemoryEstimator(unittest.TestCase):
@@ -426,7 +397,7 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
             np.testing.assert_allclose(popt, self.true_params, rtol=0.1)
 
     def test_progressive_fitting_strategy(self):
-        """Test progressive fitting with increasing sample sizes."""
+        """Test progressive fitting with chunked processing."""
         n_points = 100_000
         x = np.linspace(0, 10, n_points)
         y = self.model(x, *self.true_params)
