@@ -1403,15 +1403,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Trust region optimization loop
         with self.logger.timer("optimization", log_result=False):
             while True:
-                # Check gradient convergence
-                g_norm = jnorm(g, ord=jnp.inf)
-                if g_norm < gtol:
-                    termination_status = 1
-                    self.logger.debug(
-                        "Convergence: gradient tolerance satisfied",
-                        g_norm=g_norm,
-                        gtol=gtol,
-                    )
+                # Check gradient convergence using helper (only if not already terminated)
+                if termination_status is None:
+                    termination_status = self._check_convergence_criteria(g, gtol)
+                g_norm = jnorm(g, ord=jnp.inf)  # For logging/printing
 
                 if verbose == 2:
                     print_iteration_nonlinear(
