@@ -1058,6 +1058,320 @@ class LargeDatasetFitter:
             result["pcov"] = np.eye(len(result.x))
             return result
 
+    def _update_parameters_convergence(
+        self,
+        current_params: np.ndarray | None,
+        popt_chunk: np.ndarray,
+        param_history: list,
+        convergence_metric: float,
+        chunk_idx: int,
+        n_chunks: int,
+    ) -> tuple[np.ndarray, list, float, bool]:
+        """Update parameters with sequential refinement and convergence checking.
+
+        Args:
+            current_params: Current parameter estimates (None on first chunk)
+            popt_chunk: Newly fitted parameters from current chunk
+            param_history: List of parameter estimates from previous chunks
+            convergence_metric: Current convergence metric value
+            chunk_idx: Index of current chunk (0-based)
+            n_chunks: Total number of chunks
+
+        Returns:
+            tuple: (updated_params, updated_history, new_convergence_metric, should_stop)
+                - updated_params: New current parameter estimates
+                - updated_history: Updated parameter history
+                - new_convergence_metric: Updated convergence metric
+                - should_stop: True if early stopping criteria met
+        """
+        # Initialize on first chunk
+        if current_params is None:
+            return (
+                popt_chunk.copy(),
+                [popt_chunk.copy()],
+                np.inf,
+                False,
+            )
+
+        # Update parameters with sequential refinement
+        previous_params = current_params.copy()
+        updated_params = popt_chunk.copy()
+
+        # Update parameter history
+        updated_history = param_history + [updated_params.copy()]
+
+        # Calculate convergence metric
+        new_convergence_metric = convergence_metric
+        if len(updated_history) > 2:
+            param_change = np.linalg.norm(updated_params - previous_params)
+            relative_change = param_change / (np.linalg.norm(updated_params) + 1e-10)
+            new_convergence_metric = relative_change
+
+            # Check early stopping criteria
+            # Stop if parameters stabilized and we've processed enough chunks
+            if new_convergence_metric < 0.001 and chunk_idx >= min(n_chunks - 1, 3):
+                self.logger.info(
+                    f"Parameters converged after {chunk_idx + 1} chunks"
+                )
+                return (updated_params, updated_history, new_convergence_metric, True)
+
+        return (updated_params, updated_history, new_convergence_metric, False)
+
+    def _create_chunk_result(
+        self,
+        chunk_idx: int,
+        x_chunk: np.ndarray,
+        y_chunk: np.ndarray,
+        chunk_duration: float,
+        success: bool = True,
+        popt_chunk: np.ndarray | None = None,
+        is_retry: bool = False,
+        error: Exception | None = None,
+        current_params: np.ndarray | None = None,
+    ) -> dict:
+        """Create a standardized chunk result dictionary.
+
+        Args:
+            chunk_idx: Index of the chunk
+            x_chunk: Input data for this chunk
+            y_chunk: Output data for this chunk
+            chunk_duration: Time taken to process this chunk
+            success: Whether the chunk fitting succeeded
+            popt_chunk: Fitted parameters (if successful)
+            is_retry: Whether this was a retry attempt
+            error: Exception that occurred (if failed)
+            current_params: Current parameter estimates (for failure diagnostics)
+
+        Returns:
+            dict: Standardized chunk result with metadata
+        """
+        # Base result structure
+        result = {
+            "chunk_idx": chunk_idx,
+            "n_points": len(x_chunk),
+            "success": success,
+            "timestamp": time.time(),
+            "duration": chunk_duration,
+        }
+
+        if success:
+            # Success case
+            result["parameters"] = popt_chunk
+            if is_retry:
+                result["retry"] = True
+
+            # Add diagnostics if enabled (5-10% performance gain when disabled)
+            if self.config.save_diagnostics:
+                result["data_stats"] = self._compute_chunk_stats(x_chunk, y_chunk)
+        else:
+            # Failure case
+            result["error"] = str(error)
+            result["error_type"] = type(error).__name__
+            result["initial_params"] = (
+                current_params.tolist() if current_params is not None else None
+            )
+            # Always compute detailed stats for failed chunks (debugging critical)
+            result["data_stats"] = self._compute_failed_chunk_stats(x_chunk, y_chunk)
+
+        return result
+
+    def _retry_failed_chunk(
+        self,
+        f: Callable,
+        x_chunk: np.ndarray,
+        y_chunk: np.ndarray,
+        chunk_idx: int,
+        chunk_start_time: float,
+        chunk_times: list,
+        current_params: np.ndarray | None,
+        initial_error: Exception,
+        bounds: tuple,
+        method: str,
+        solver: str,
+        **kwargs,
+    ) -> tuple[dict, np.ndarray | None]:
+        """Retry a failed chunk with perturbed parameters.
+
+        Args:
+            f: Model function
+            x_chunk: Input data for this chunk
+            y_chunk: Output data for this chunk
+            chunk_idx: Index of the chunk
+            chunk_start_time: Start time of chunk processing
+            chunk_times: List to append chunk duration to
+            current_params: Current parameter estimates
+            initial_error: The exception that caused the initial failure
+            bounds: Parameter bounds
+            method: Optimization method
+            solver: Solver type
+            **kwargs: Additional curve_fit arguments
+
+        Returns:
+            tuple: (chunk_result dict, updated_params or None)
+        """
+        # Only retry if we have current parameter estimates
+        if current_params is None:
+            chunk_duration = time.time() - chunk_start_time
+            chunk_times.append(chunk_duration)
+            chunk_result = self._create_chunk_result(
+                chunk_idx=chunk_idx,
+                x_chunk=x_chunk,
+                y_chunk=y_chunk,
+                chunk_duration=chunk_duration,
+                success=False,
+                error=initial_error,
+                current_params=current_params,
+            )
+            return chunk_result, None
+
+        # Attempt retry with perturbed parameters
+        try:
+            self.logger.info(
+                f"Retrying chunk {chunk_idx} with current parameters"
+            )
+            # Add small perturbation to avoid local minima
+            perturbed_params = current_params * (
+                1 + 0.01 * np.random.randn(len(current_params))
+            )
+            popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
+                f,
+                x_chunk,
+                y_chunk,
+                p0=perturbed_params,
+                bounds=bounds,
+                method=method,
+                solver=solver,
+                **kwargs,
+            )
+
+            # Retry succeeded - use result with lower weight
+            adaptive_lr = 0.1  # Lower weight for retry results
+            updated_params = (
+                1 - adaptive_lr
+            ) * current_params + adaptive_lr * popt_chunk
+
+            chunk_duration = time.time() - chunk_start_time
+            chunk_times.append(chunk_duration)
+
+            chunk_result = self._create_chunk_result(
+                chunk_idx=chunk_idx,
+                x_chunk=x_chunk,
+                y_chunk=y_chunk,
+                chunk_duration=chunk_duration,
+                success=True,
+                popt_chunk=popt_chunk,
+                is_retry=True,
+            )
+
+            return chunk_result, updated_params
+
+        except Exception as retry_e:
+            # Retry also failed
+            self.logger.warning(
+                f"Retry for chunk {chunk_idx} also failed: {retry_e}"
+            )
+            chunk_duration = time.time() - chunk_start_time
+            chunk_times.append(chunk_duration)
+
+            chunk_result = self._create_chunk_result(
+                chunk_idx=chunk_idx,
+                x_chunk=x_chunk,
+                y_chunk=y_chunk,
+                chunk_duration=chunk_duration,
+                success=False,
+                error=initial_error,
+                current_params=current_params,
+            )
+
+            return chunk_result, current_params  # Keep current params unchanged
+
+    def _create_failure_summary(
+        self,
+        chunk_results: list,
+        chunk_times: list,
+    ) -> dict:
+        """Create comprehensive failure summary for diagnostics.
+
+        Args:
+            chunk_results: List of all chunk result dictionaries
+            chunk_times: List of chunk processing durations
+
+        Returns:
+            dict: Failure summary with error types, timing stats, and common errors
+        """
+        failed_chunks = [r for r in chunk_results if not r.get("success", False)]
+
+        failure_summary = {
+            "total_failures": len(failed_chunks),
+            "failure_rate": len(failed_chunks) / len(chunk_results) if chunk_results else 0.0,
+            "failed_chunk_indices": [r["chunk_idx"] for r in failed_chunks],
+            "error_types": {},
+            "common_errors": [],
+            "timing_stats": {
+                "mean_chunk_time": float(np.mean(chunk_times)) if chunk_times else 0.0,
+                "median_chunk_time": float(np.median(chunk_times)) if chunk_times else 0.0,
+                "failed_chunk_times": [
+                    r.get("duration", 0.0) for r in failed_chunks
+                ],
+                "mean_failed_chunk_time": float(
+                    np.mean([r.get("duration", 0.0) for r in failed_chunks])
+                )
+                if failed_chunks
+                else 0.0,
+            },
+        }
+
+        # Aggregate error types
+        for failed_chunk in failed_chunks:
+            error_type = failed_chunk.get("error_type", "Unknown")
+            failure_summary["error_types"][error_type] = (
+                failure_summary["error_types"].get(error_type, 0) + 1
+            )
+
+        # Identify most common errors (top 3)
+        if failure_summary["error_types"]:
+            sorted_errors = sorted(
+                failure_summary["error_types"].items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            failure_summary["common_errors"] = [
+                {"type": err_type, "count": count}
+                for err_type, count in sorted_errors[:3]
+            ]
+
+        return failure_summary
+
+    def _compute_covariance_from_history(
+        self,
+        param_history: list,
+        current_params: np.ndarray,
+    ) -> np.ndarray:
+        """Compute approximate covariance matrix from parameter history.
+
+        In chunked fitting, we estimate covariance from parameter variations
+        across chunks rather than from the Jacobian.
+
+        Args:
+            param_history: List of parameter estimates from previous chunks
+            current_params: Final parameter estimates
+
+        Returns:
+            np.ndarray: Approximate covariance matrix
+        """
+        if len(param_history) > 1:
+            # Use last 10 parameter estimates for covariance estimation
+            param_variations = np.array(
+                param_history[-min(10, len(param_history)) :]
+            )
+            pcov = np.cov(param_variations.T)
+        else:
+            # Fallback: identity matrix scaled by parameter magnitudes
+            # This provides a reasonable uncertainty estimate when we have no history
+            pcov = np.diag(np.abs(current_params) * 0.01 + 0.001)
+
+        return pcov
+
     def _fit_chunked(
         self,
         f: Callable,
@@ -1109,126 +1423,58 @@ class LargeDatasetFitter:
                         **kwargs,
                     )
 
-                    # Update parameters with sequential refinement
-                    if current_params is None:
-                        current_params = popt_chunk.copy()
-                        param_history = [popt_chunk.copy()]
-                        convergence_metric = np.inf
-                    else:
-                        previous_params = current_params.copy()
-                        current_params = popt_chunk.copy()
+                    # Update parameters with sequential refinement and check convergence
+                    (
+                        current_params,
+                        param_history,
+                        convergence_metric,
+                        should_stop,
+                    ) = self._update_parameters_convergence(
+                        current_params,
+                        popt_chunk,
+                        param_history,
+                        convergence_metric,
+                        chunk_idx,
+                        stats.n_chunks,
+                    )
 
-                        # Check parameter convergence
-                        param_history.append(current_params.copy())
-                        if len(param_history) > 2:
-                            param_change = np.linalg.norm(
-                                current_params - previous_params
-                            )
-                            relative_change = param_change / (
-                                np.linalg.norm(current_params) + 1e-10
-                            )
-                            convergence_metric = relative_change
-
-                            # Early stopping if parameters stabilized
-                            if convergence_metric < 0.001 and chunk_idx >= min(
-                                stats.n_chunks - 1, 3
-                            ):
-                                self.logger.info(
-                                    f"Parameters converged after {chunk_idx + 1} chunks"
-                                )
-                                break
+                    # Early stopping if parameters converged
+                    if should_stop:
+                        break
 
                     chunk_duration = time.time() - chunk_start_time
                     chunk_times.append(chunk_duration)
 
-                    chunk_result = {
-                        "chunk_idx": chunk_idx,
-                        "n_points": len(x_chunk),
-                        "parameters": popt_chunk,
-                        "success": True,
-                        "timestamp": time.time(),
-                        "duration": chunk_duration,
-                    }
-
-                    # Only compute stats if diagnostics are enabled (5-10% performance gain)
-                    if self.config.save_diagnostics:
-                        chunk_result["data_stats"] = self._compute_chunk_stats(
-                            x_chunk, y_chunk
-                        )
+                    # Create successful chunk result
+                    chunk_result = self._create_chunk_result(
+                        chunk_idx=chunk_idx,
+                        x_chunk=x_chunk,
+                        y_chunk=y_chunk,
+                        chunk_duration=chunk_duration,
+                        success=True,
+                        popt_chunk=popt_chunk,
+                    )
 
                 except Exception as e:
                     self.logger.warning(f"Chunk {chunk_idx} failed: {e}")
-                    # Retry once with adjusted initial parameters if we have a current estimate
-                    retry_success = False
-                    if current_params is not None:
-                        try:
-                            self.logger.info(
-                                f"Retrying chunk {chunk_idx} with current parameters"
-                            )
-                            # Add small perturbation to avoid local minima
-                            perturbed_params = current_params * (
-                                1 + 0.01 * np.random.randn(len(current_params))
-                            )
-                            popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
-                                f,
-                                x_chunk,
-                                y_chunk,
-                                p0=perturbed_params,
-                                bounds=bounds,
-                                method=method,
-                                solver=solver,
-                                **kwargs,
-                            )
-                            retry_success = True
-                            # Use the retry result with lower weight
-                            adaptive_lr = 0.1  # Lower weight for retry results
-                            current_params = (
-                                1 - adaptive_lr
-                            ) * current_params + adaptive_lr * popt_chunk
-                            chunk_duration = time.time() - chunk_start_time
-                            chunk_times.append(chunk_duration)
-
-                            chunk_result = {
-                                "chunk_idx": chunk_idx,
-                                "n_points": len(x_chunk),
-                                "parameters": popt_chunk,
-                                "success": True,
-                                "retry": True,
-                                "timestamp": time.time(),
-                                "duration": chunk_duration,
-                            }
-
-                            # Only compute stats if diagnostics are enabled
-                            if self.config.save_diagnostics:
-                                chunk_result["data_stats"] = self._compute_chunk_stats(
-                                    x_chunk, y_chunk
-                                )
-                        except Exception as retry_e:
-                            self.logger.warning(
-                                f"Retry for chunk {chunk_idx} also failed: {retry_e}"
-                            )
-
-                    if not retry_success:
-                        chunk_duration = time.time() - chunk_start_time
-                        chunk_times.append(chunk_duration)
-
-                        chunk_result = {
-                            "chunk_idx": chunk_idx,
-                            "n_points": len(x_chunk),
-                            "success": False,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "timestamp": time.time(),
-                            "duration": chunk_duration,
-                            "initial_params": current_params.tolist()
-                            if current_params is not None
-                            else None,
-                        }
-
-                        # Always compute detailed stats for failed chunks (debugging critical)
-                        chunk_result["data_stats"] = self._compute_failed_chunk_stats(
-                            x_chunk, y_chunk
-                        )
+                    # Retry chunk with helper method
+                    chunk_result, retry_params = self._retry_failed_chunk(
+                        f=f,
+                        x_chunk=x_chunk,
+                        y_chunk=y_chunk,
+                        chunk_idx=chunk_idx,
+                        chunk_start_time=chunk_start_time,
+                        chunk_times=chunk_times,
+                        current_params=current_params,
+                        initial_error=e,
+                        bounds=bounds,
+                        method=method,
+                        solver=solver,
+                        **kwargs,
+                    )
+                    # Update params if retry succeeded
+                    if retry_params is not None:
+                        current_params = retry_params
 
                 chunk_results.append(chunk_result)
 
@@ -1265,45 +1511,7 @@ class LargeDatasetFitter:
             )
 
             # Create failure summary for diagnostics
-            failed_chunks = [r for r in chunk_results if not r.get("success", False)]
-            failure_summary = {
-                "total_failures": len(failed_chunks),
-                "failure_rate": len(failed_chunks) / len(chunk_results),
-                "failed_chunk_indices": [r["chunk_idx"] for r in failed_chunks],
-                "error_types": {},
-                "common_errors": [],
-                "timing_stats": {
-                    "mean_chunk_time": float(np.mean(chunk_times)) if chunk_times else 0.0,
-                    "median_chunk_time": float(np.median(chunk_times)) if chunk_times else 0.0,
-                    "failed_chunk_times": [
-                        r.get("duration", 0.0) for r in failed_chunks
-                    ],
-                    "mean_failed_chunk_time": float(
-                        np.mean([r.get("duration", 0.0) for r in failed_chunks])
-                    )
-                    if failed_chunks
-                    else 0.0,
-                },
-            }
-
-            # Aggregate error types
-            for failed_chunk in failed_chunks:
-                error_type = failed_chunk.get("error_type", "Unknown")
-                failure_summary["error_types"][error_type] = (
-                    failure_summary["error_types"].get(error_type, 0) + 1
-                )
-
-            # Identify most common errors
-            if failure_summary["error_types"]:
-                sorted_errors = sorted(
-                    failure_summary["error_types"].items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )
-                failure_summary["common_errors"] = [
-                    {"type": err_type, "count": count}
-                    for err_type, count in sorted_errors[:3]
-                ]
+            failure_summary = self._create_failure_summary(chunk_results, chunk_times)
 
             result = OptimizeResult(
                 x=current_params,
@@ -1311,17 +1519,10 @@ class LargeDatasetFitter:
                 message=f"Chunked fit completed ({stats.n_chunks} chunks, {success_rate:.1%} success)",
             )
             result["popt"] = current_params
-            # Create approximate covariance matrix
-            # In chunked fitting, we can estimate it from parameter variations
-            if len(param_history) > 1:
-                param_variations = np.array(
-                    param_history[-min(10, len(param_history)) :]
-                )  # Last few iterations
-                pcov = np.cov(param_variations.T)
-            else:
-                # Fallback: identity matrix scaled by parameter magnitudes
-                pcov = np.diag(np.abs(current_params) * 0.01 + 0.001)
-            result["pcov"] = pcov
+            # Create approximate covariance matrix from parameter history
+            result["pcov"] = self._compute_covariance_from_history(
+                param_history, current_params
+            )
             result["chunk_results"] = chunk_results
             result["n_chunks"] = stats.n_chunks
             result["success_rate"] = success_rate
