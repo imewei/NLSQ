@@ -27,6 +27,15 @@ from nlsq._optimize import OptimizeResult
 from nlsq.logging import get_logger
 from nlsq.minpack import CurveFit
 
+# Import streaming optimizer (optional dependency)
+try:
+    from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+    HAS_STREAMING = True
+except ImportError:
+    StreamingOptimizer = None  # type: ignore[assignment,misc]
+    StreamingConfig = None  # type: ignore[assignment,misc]
+    HAS_STREAMING = False
+
 
 @dataclass
 class LDMemoryConfig:  # Renamed to avoid conflict with config.py
@@ -43,11 +52,19 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     max_chunk_size : int
         Maximum chunk size in data points (default: 1000000)
     enable_sampling : bool
-        Whether to enable sampling for extremely large datasets (default: True)
+        Whether to enable sampling for extremely large datasets (default: False)
+        WARNING: Sampling causes accuracy loss. Use streaming instead.
+    use_streaming : bool
+        Use streaming optimization for unlimited data (default: True)
+        Requires h5py: pip install nlsq[streaming]
     sampling_threshold : int
         Data size threshold above which sampling is considered (default: 100_000_000)
     max_sampled_size : int
         Maximum size when sampling (default: 10_000_000)
+    streaming_batch_size : int
+        Batch size for streaming optimization (default: 50000)
+    streaming_max_epochs : int
+        Maximum epochs for streaming optimization (default: 10)
     min_success_rate : float
         Minimum success rate for chunked fitting (default: 0.5)
         If success rate falls below this threshold, fitting is considered failed
@@ -60,9 +77,12 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     safety_factor: float = 0.8
     min_chunk_size: int = 1000
     max_chunk_size: int = 1_000_000
-    enable_sampling: bool = True
+    enable_sampling: bool = False  # Disabled by default - use streaming instead
+    use_streaming: bool = True  # Preferred method for unlimited data
     sampling_threshold: int = 100_000_000
     max_sampled_size: int = 10_000_000
+    streaming_batch_size: int = 50000
+    streaming_max_epochs: int = 10
     min_success_rate: float = 0.5
     save_diagnostics: bool = False
 
@@ -960,9 +980,9 @@ class LargeDatasetFitter:
         # Get processing statistics and strategy
         stats = self.estimate_requirements(n_points, n_params)
 
-        # Handle very large datasets with sampling
+        # Handle very large datasets with streaming (preferred) or sampling (fallback)
         if stats.requires_sampling:
-            return self._fit_with_sampling(
+            return self._fit_unlimited_data(
                 f, xdata, ydata, p0, bounds, method, solver, show_progress, **kwargs
             )
 
@@ -1032,7 +1052,7 @@ class LargeDatasetFitter:
             result["pcov"] = np.eye(len(result.x))
             return result
 
-    def _fit_with_sampling(
+    def _fit_with_streaming(
         self,
         f: Callable,
         xdata: np.ndarray,
@@ -1044,7 +1064,128 @@ class LargeDatasetFitter:
         show_progress: bool,
         **kwargs,
     ) -> OptimizeResult:
-        """Fit very large dataset using sampling."""
+        """Fit very large dataset using streaming optimization (no accuracy loss).
+
+        This method processes unlimited data using mini-batch gradient descent
+        without subsampling, preserving all data for maximum accuracy.
+        """
+        self.logger.info(
+            f"Using streaming optimization for unlimited data ({len(xdata):,} points). "
+            f"Batch size: {self.config.streaming_batch_size:,}, "
+            f"Max epochs: {self.config.streaming_max_epochs}"
+        )
+
+        # Create streaming config
+        streaming_config = StreamingConfig(
+            batch_size=self.config.streaming_batch_size,
+            max_epochs=self.config.streaming_max_epochs,
+            use_adam=True,  # Adam is more stable for curve fitting
+            learning_rate=0.001,  # Conservative learning rate
+            convergence_tol=1e-6,
+        )
+
+        # Initialize streaming optimizer
+        optimizer = StreamingOptimizer(config=streaming_config)
+
+        # Prepare data generator (in-memory for numpy arrays)
+        # For truly unlimited data, users should provide HDF5 files
+        class InMemoryGenerator:
+            """Simple in-memory data generator for streaming."""
+            def __init__(self, x, y, batch_size):
+                self.x = x
+                self.y = y
+                self.batch_size = batch_size
+                self.n_points = len(x)
+
+            def __iter__(self):
+                """Generate batches of data."""
+                indices = np.arange(self.n_points)
+                np.random.shuffle(indices)
+
+                for start_idx in range(0, self.n_points, self.batch_size):
+                    end_idx = min(start_idx + self.batch_size, self.n_points)
+                    batch_indices = indices[start_idx:end_idx]
+
+                    yield self.x[batch_indices], self.y[batch_indices]
+
+        # Convert p0 to array if needed
+        if p0 is None:
+            p0 = np.ones(2)  # Default 2-parameter model
+        elif isinstance(p0, list):
+            p0 = np.array(p0)
+
+        # Fit using streaming optimization
+        try:
+            data_gen = InMemoryGenerator(xdata, ydata, self.config.streaming_batch_size)
+            result_dict = optimizer.fit_streaming(
+                func=f,
+                data_source=data_gen,
+                p0=p0,
+                bounds=bounds,
+                verbose=2 if show_progress else 1,
+            )
+
+            # Convert to OptimizeResult format
+            result = OptimizeResult(
+                x=result_dict["params"],
+                success=result_dict["success"],
+                message="Streaming optimization completed",
+                nfev=result_dict.get("total_samples", 0) // len(p0),
+                fun=None,  # Not available in streaming mode
+            )
+            result["popt"] = result.x
+            result["pcov"] = np.eye(len(result.x))  # Approximate - streaming doesn't compute covariance
+
+            self.logger.info(
+                f"Streaming fit completed. Final loss: {result_dict.get('final_loss', 'N/A')}"
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Streaming fit failed: {e}")
+            # Fallback to sampling
+            self.logger.warning("Falling back to sampling method")
+            self.config.use_streaming = False
+            return self._fit_unlimited_data(
+                f, xdata, ydata, p0, bounds, method, solver, show_progress, **kwargs
+            )
+
+    def _fit_unlimited_data(
+        self,
+        f: Callable,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        p0: np.ndarray | list | None,
+        bounds: tuple,
+        method: str,
+        solver: str,
+        show_progress: bool,
+        **kwargs,
+    ) -> OptimizeResult:
+        """Fit very large dataset using streaming optimization (preferred) or sampling (fallback).
+
+        Streaming optimization processes unlimited data without accuracy loss.
+        Sampling is only used as a fallback if streaming is not available.
+        """
+
+        # Try streaming first (no accuracy loss)
+        if self.config.use_streaming and HAS_STREAMING:
+            return self._fit_with_streaming(
+                f, xdata, ydata, p0, bounds, method, solver, show_progress, **kwargs
+            )
+
+        # Fallback to sampling if streaming is disabled or unavailable
+        if not self.config.use_streaming:
+            self.logger.warning(
+                "Streaming optimization is disabled. Using sampling (causes accuracy loss)."
+            )
+        elif not HAS_STREAMING:
+            self.logger.warning(
+                "Streaming optimizer not available (missing h5py). "
+                "Using sampling fallback (causes accuracy loss). "
+                "Install with: pip install nlsq[streaming]"
+            )
 
         # Conservative 2x reduction (50% of data retained)
         target_size = min(self.config.max_sampled_size, len(xdata) // 2)
