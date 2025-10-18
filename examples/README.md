@@ -2,7 +2,9 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
-[![NLSQ Version](https://img.shields.io/badge/nlsq-0.1.0+-orange.svg)](https://github.com/imewei/NLSQ)
+[![NLSQ Version](https://img.shields.io/badge/nlsq-0.2.0+-orange.svg)](https://github.com/imewei/NLSQ)
+
+> **⚠️ v0.2.0 Update**: Notebooks updated for NLSQ v0.2.0 with streaming optimization replacing subsampling for zero accuracy loss. See [MIGRATION_V0.2.0.md](../MIGRATION_V0.2.0.md) for details.
 
 Welcome to the NLSQ examples repository! This collection provides comprehensive, interactive tutorials for learning and mastering GPU-accelerated nonlinear least squares curve fitting with JAX.
 

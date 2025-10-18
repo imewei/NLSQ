@@ -212,8 +212,10 @@ config = LDMemoryConfig(
     memory_limit_gb=4.0,
     min_chunk_size=10000,
     max_chunk_size=1000000,
-    enable_sampling=True,  # For datasets > 100M points
-    sampling_threshold=100_000_000,
+    # v0.2.0: Streaming optimization is automatic for very large datasets
+    # No manual configuration needed - handles unlimited data with zero accuracy loss
+    use_streaming=True,  # Enable streaming for datasets > memory limit
+    streaming_batch_size=50000,  # Mini-batch size for streaming optimizer
 )
 
 fitter = LargeDatasetFitter(config=config)

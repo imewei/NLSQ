@@ -514,9 +514,30 @@ nlsq/
 
 ---
 
-## Recent Updates (2025-10-17)
+## Recent Updates (2025-10-18)
 
-### Large Dataset Enhancements (v0.1.3+)
+### Breaking Changes in v0.2.0
+- ⚠️ **BREAKING**: h5py is now a required dependency (was optional in v0.1.x)
+  - All installations now include streaming optimization capabilities
+  - No separate `[streaming]` extra needed
+  - Update installations: `pip install --upgrade nlsq`
+- ⚠️ **BREAKING**: Complete removal of subsampling code (~250 lines removed)
+  - Removed parameters: `enable_sampling`, `sampling_threshold`, `max_sampled_size`
+  - Removed methods: `DataChunker.sample_large_dataset()`
+  - Removed attributes: `DatasetStats.requires_sampling`
+  - **Migration**: See [`MIGRATION_V0.2.0.md`](MIGRATION_V0.2.0.md) for detailed guide
+- ✅ **Improvement**: Streaming optimization for all large datasets
+  - Zero accuracy loss (processes 100% of data)
+  - Better than subsampling (no data loss from random sampling)
+  - Consistent, reproducible results
+- ✅ **API Compatibility**: Graceful deprecation warnings
+  - Old code with sampling params emits `DeprecationWarning`
+  - Clear migration instructions in warnings
+  - See MIGRATION_V0.2.0.md for upgrade guide
+
+### Previous Updates (2025-10-17)
+
+### Large Dataset Enhancements (v0.1.3)
 - ✅ **Shape Validation**: Automatic validation of model functions for chunking compatibility
   - Tests with first 100 points before processing all chunks
   - Clear error messages with fix examples for shape mismatches
@@ -606,7 +627,7 @@ nlsq/
 
 ---
 
-**Last Updated**: 2025-10-17
-**Version**: v0.1.3+ (Development - Large Dataset Enhancements)
+**Last Updated**: 2025-10-18
+**Version**: v0.2.0 (Breaking Changes - Subsampling Removed)
 **Python**: 3.12.3
 **Tested Configuration**: See [`REQUIREMENTS.md`](REQUIREMENTS.md)

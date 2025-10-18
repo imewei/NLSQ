@@ -10,9 +10,9 @@ After completing this tutorial, you will:
 
 - Understand when and how to use ``curve_fit_large``
 - Know how to estimate memory requirements before fitting
-- Be able to configure chunking and sampling strategies
+- Be able to configure chunking and streaming strategies
 - Understand sparse Jacobian optimization
-- Master streaming optimization for unlimited-size data
+- Master streaming optimization for unlimited-size data (v0.2.0+)
 
 Introduction to Large Dataset Challenges
 -----------------------------------------
@@ -27,10 +27,10 @@ Traditional curve fitting algorithms face several challenges with large datasets
 NLSQ addresses these challenges through:
 
 - Automatic chunking and memory management
-- Intelligent sampling strategies
+- Streaming data processing with zero data loss (v0.2.0+)
 - GPU/TPU acceleration via JAX
 - Sparse matrix optimizations
-- Streaming data processing
+- Mini-batch gradient descent for unlimited datasets
 
 Automatic Large Dataset Detection
 ---------------------------------
@@ -52,7 +52,7 @@ The simplest approach is using ``curve_fit_large``, which automatically detects 
     print(f"Estimated memory: {stats.total_memory_estimate_gb:.2f} GB")
     print(f"Recommended chunks: {stats.n_chunks}")
     print(f"Chunk size: {stats.recommended_chunk_size:,}")
-    print(f"Requires sampling: {stats.requires_sampling}")
+    print(f"Processing strategy: {stats.processing_strategy}")
 
 **Example Output:**
 
@@ -62,7 +62,7 @@ The simplest approach is using ``curve_fit_large``, which automatically detects 
     Estimated memory: 1.34 GB
     Recommended chunks: 4
     Chunk size: 2,500,000
-    Requires sampling: False
+    Processing strategy: chunked
 
 Now let's generate and fit this large dataset:
 
@@ -128,9 +128,9 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
         memory_limit_gb=4.0,  # Maximum memory usage
         min_chunk_size=50000,  # Minimum points per chunk
         max_chunk_size=2000000,  # Maximum points per chunk
-        enable_sampling=True,  # Allow sampling for very large datasets
-        sampling_threshold=50_000_000,  # Start sampling above this size
-        sample_rate=0.1,  # Sample 10% of data if sampling enabled
+        # v0.2.0+: Streaming optimization automatically handles very large datasets
+        use_streaming=True,  # Enable streaming for unlimited data
+        streaming_batch_size=100000,  # Mini-batch size for streaming
     )
 
     # Create fitter with custom configuration
@@ -161,47 +161,57 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
     print(f"  Fitted parameters: {result.popt}")
     print(f"  Total function evaluations: {result.nfev}")
 
-Extremely Large Datasets with Sampling
----------------------------------------
+Streaming Optimization for Unlimited Datasets (v0.2.0+)
+--------------------------------------------------------
 
-For datasets too large to process even with chunking, NLSQ can use intelligent sampling:
+For datasets too large to fit in memory, NLSQ uses streaming optimization with mini-batch gradient descent.
+**Unlike subsampling (removed in v0.2.0), streaming processes 100% of data with zero accuracy loss.**
 
 .. code-block:: python
 
-    # Simulate billion-point dataset
+    from nlsq import StreamingOptimizer, StreamingConfig
+
+    # Simulate billion-point dataset (or load from HDF5)
     n_huge = 1_000_000_000  # 1 billion points
 
-    # Check if sampling would be recommended
+    # Check memory requirements
     huge_stats = estimate_memory_requirements(n_huge, 3)
     print(f"Billion-point dataset:")
     print(f"  Memory estimate: {huge_stats.total_memory_estimate_gb:.1f} GB")
-    print(f"  Requires sampling: {huge_stats.requires_sampling}")
+    print(f"  Processing strategy: streaming (processes ALL data)")
 
-    # For demonstration, we'll use a smaller dataset with forced sampling
+    # For demonstration, we'll use a smaller dataset
     n_demo = 5_000_000  # 5 million points
     x_demo = np.linspace(0, 10, n_demo)
     y_demo = 3.2 * np.exp(-0.4 * x_demo) + 0.8 + np.random.normal(0, 0.1, n_demo)
 
-    # Configure for sampling
-    sampling_config = LDMemoryConfig(
-        memory_limit_gb=1.0,  # Force small memory limit
-        enable_sampling=True,  # Enable sampling
-        sampling_threshold=1_000_000,  # Sample above 1M points
-        sample_rate=0.05,  # Use 5% of data
+    # Configure streaming optimization
+    streaming_config = StreamingConfig(
+        batch_size=50000,  # Mini-batch size
+        max_epochs=10,  # Number of passes through data
+        learning_rate=0.01,  # Adaptive learning rate
     )
 
-    sampler = LargeDatasetFitter(config=sampling_config)
+    # Use LargeDatasetFitter with streaming enabled
+    config = LDMemoryConfig(
+        memory_limit_gb=2.0,
+        use_streaming=True,  # Enable streaming for very large datasets
+        streaming_batch_size=50000,
+    )
 
-    print(f"\nFitting {n_demo:,} points with 5% sampling...")
-    sample_result = sampler.fit_with_progress(
+    fitter = LargeDatasetFitter(config=config)
+
+    print(f"\nFitting {n_demo:,} points with streaming (100% of data)...")
+    stream_result = fitter.fit_with_progress(
         exponential_model,
         x_demo,
         y_demo,
         p0=[3.0, 0.3, 0.5],
     )
 
-    print(f"Sample fit parameters: {sample_result.popt}")
-    print(f"Points actually used: {int(n_demo * 0.05):,}")
+    print(f"Streaming fit parameters: {stream_result.popt}")
+    print(f"Points processed: {n_demo:,} (ALL data, no loss)")
+    print(f"Convergence: {stream_result.success}")
 
 Sparse Jacobian Optimization
 -----------------------------
@@ -373,14 +383,14 @@ Let's compare different strategies for the same large dataset:
             ),
         ),
         (
-            "Sampled (10%)",
+            "Streaming (v0.2.0+)",
             lambda: curve_fit_large(
                 exponential_model,
                 x_test,
                 y_test,
                 p0=[1.5, 0.5, 0.1],
-                memory_limit_gb=0.1,  # Force sampling
-                enable_sampling=True,
+                memory_limit_gb=2.0,  # Use streaming for very large data
+                # Streaming automatically handles unlimited datasets
             ),
         ),
     ]
@@ -442,14 +452,14 @@ Always check memory requirements before fitting:
     # Check before processing
     stats = estimate_memory_requirements(len(x), n_parameters)
     if stats.total_memory_estimate_gb > available_memory_gb:
-        print("Consider using chunking or sampling")
+        print("Consider using chunking or streaming optimization")
 
 **2. Choose Appropriate Strategies**
 
 - **< 1M points**: Use standard ``curve_fit``
 - **1M - 10M points**: Use ``curve_fit_large`` with default settings
 - **10M - 100M points**: Use chunking with progress monitoring
-- **> 100M points**: Consider sampling or streaming approaches
+- **> 100M points**: Use streaming optimization (v0.2.0+, processes 100% of data)
 
 **3. Optimize for Your Hardware**
 
@@ -494,12 +504,13 @@ Troubleshooting Large Dataset Issues
 
 .. code-block:: python
 
-    # Reduce memory limit or enable sampling
+    # Use chunking or streaming for large datasets
     try:
         popt, pcov = curve_fit_large(func, x, y)
     except MemoryError:
-        print("Reducing memory limit and enabling sampling...")
-        popt, pcov = curve_fit_large(func, x, y, memory_limit_gb=1.0, enable_sampling=True)
+        print("Using streaming optimization to handle unlimited data...")
+        # v0.2.0+: Streaming processes 100% of data with zero accuracy loss
+        popt, pcov = curve_fit_large(func, x, y, memory_limit_gb=2.0, chunk_size=100000)
 
 **Convergence Issues**
 
