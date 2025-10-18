@@ -27,6 +27,8 @@ from nlsq import callbacks, functions
 from nlsq._optimize import OptimizeResult, OptimizeWarning
 
 # Stability and optimization imports
+import warnings  # For deprecation warnings (v0.2.0)
+
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
 # Bounds inference (Phase 3 - Day 17)
@@ -256,10 +258,11 @@ def curve_fit_large(
     auto_size_detection=True,
     size_threshold=1_000_000,  # 1M points
     show_progress=False,
-    enable_sampling=True,
-    sampling_threshold=100_000_000,
-    max_sampled_size=10_000_000,
     chunk_size=None,
+    # Deprecated parameters (v0.2.0)
+    enable_sampling=None,
+    sampling_threshold=None,
+    max_sampled_size=None,
     **kwargs,
 ):
     """Curve fitting with automatic memory management for large datasets.
@@ -267,7 +270,7 @@ def curve_fit_large(
     Automatically selects processing strategy based on dataset size:
     - Small (< 1M points): Standard curve_fit
     - Medium (1M - 100M points): Chunked processing
-    - Large (> 100M points): Sampling with chunking
+    - Large (> 100M points): Streaming optimization
 
     Parameters
     ----------
@@ -297,14 +300,15 @@ def curve_fit_large(
         Point threshold for large dataset processing (default: 1M).
     show_progress : bool, optional
         Display progress bar for long operations.
-    enable_sampling : bool, optional
-        Enable sampling for extremely large datasets.
-    sampling_threshold : int, optional
-        Point threshold for sampling (default: 100M).
-    max_sampled_size : int, optional
-        Maximum sample size when sampling (default: 10M).
     chunk_size : int, optional
         Override automatic chunk size calculation.
+    enable_sampling : bool, optional
+        **Deprecated in v0.2.0**. This parameter is ignored. Use streaming
+        optimization instead. See MIGRATION_V0.2.0.md for details.
+    sampling_threshold : int, optional
+        **Deprecated in v0.2.0**. This parameter is ignored.
+    max_sampled_size : int, optional
+        **Deprecated in v0.2.0**. This parameter is ignored.
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
 
@@ -314,6 +318,12 @@ def curve_fit_large(
         Fitted parameters.
     pcov : ndarray
         Parameter covariance matrix.
+
+    Notes
+    -----
+    As of v0.2.0, subsampling has been completely removed. All large datasets
+    now use streaming optimization for zero accuracy loss. The enable_sampling,
+    sampling_threshold, and max_sampled_size parameters are deprecated and ignored.
 
     Important: Model Function Requirements for Chunking
     ----------------------------------------------------
@@ -407,6 +417,32 @@ def curve_fit_large(
         except ImportError:
             memory_limit_gb = 8.0  # Conservative default
 
+    # Emit deprecation warnings for removed sampling parameters (v0.2.0)
+    if enable_sampling is not None:
+        warnings.warn(
+            "The 'enable_sampling' parameter was removed in NLSQ v0.2.0. "
+            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
+            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    if sampling_threshold is not None:
+        warnings.warn(
+            "The 'sampling_threshold' parameter was removed in NLSQ v0.2.0. "
+            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
+            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    if max_sampled_size is not None:
+        warnings.warn(
+            "The 'max_sampled_size' parameter was removed in NLSQ v0.2.0. "
+            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
+            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     # Create memory configuration
     memory_config = MemoryConfig(
         memory_limit_gb=memory_limit_gb,
@@ -417,11 +453,9 @@ def curve_fit_large(
         else chunk_size,
     )
 
-    # Create large dataset configuration
+    # Create large dataset configuration (v0.2.0: no more sampling params)
     large_dataset_config = LargeDatasetConfig(
-        enable_sampling=enable_sampling,
-        sampling_threshold=sampling_threshold,
-        max_sampled_size=max_sampled_size,
+        enable_automatic_solver_selection=True,
     )
 
     # Use context managers to temporarily set configuration
@@ -431,9 +465,6 @@ def curve_fit_large(
             memory_limit_gb=memory_limit_gb,
             config=LDMemoryConfig(
                 memory_limit_gb=memory_limit_gb,
-                enable_sampling=enable_sampling,
-                sampling_threshold=sampling_threshold,
-                max_sampled_size=max_sampled_size,
                 min_chunk_size=memory_config.min_chunk_size,
                 max_chunk_size=memory_config.max_chunk_size,
             ),

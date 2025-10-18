@@ -1,9 +1,14 @@
 # NLSQ Development Dependencies (Exact Versions)
-# Generated: 2025-10-17
+# Generated: 2025-10-18 (Updated for v0.2.0)
 # Python: 3.12.3
 #
 # Install with: pip install -r requirements-dev.txt
 # This includes runtime dependencies + development tools
+#
+# BREAKING CHANGE (v0.2.0): h5py moved from optional to required dependency
+# - h5py is now in requirements.txt (automatically included via -r below)
+# - No separate [streaming] extra needed
+# - See MIGRATION_V0.2.0.md for upgrade guide
 
 # Runtime dependencies (from requirements.txt)
 -r requirements.txt

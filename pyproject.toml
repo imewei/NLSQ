@@ -49,12 +49,10 @@ dependencies = [
     "matplotlib>=3.9.0", # Tested on 3.10.7
     "psutil>=6.0.0",     # For memory monitoring (tested on 7.1.0)
     "tqdm>=4.66.0",      # For progress bars (tested on 4.67.1)
+    "h5py>=3.10.0",      # Required for streaming large datasets (tested on 3.15.1)
 ]
 
 [project.optional-dependencies]
-streaming = [
-    "h5py>=3.10.0",  # For HDF5 file handling in StreamingOptimizer (tested on 3.15.1)
-]
 dev = [
     "pytest>=8.0",           # Tested on 8.4.2
     "pytest-cov>=4.1",       # Tested on 7.0.0
@@ -100,8 +98,6 @@ build = [
     "wheel>=0.45",             # Wheel builder (tested on 0.45.1)
 ]
 all = [
-    # Streaming dependencies
-    "h5py>=3.10.0",
     # Development dependencies
     "pytest>=8.0",
     "pytest-cov>=4.1",

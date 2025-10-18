@@ -82,24 +82,18 @@ class LargeDatasetConfig:
 
     Attributes
     ----------
-    enable_sampling : bool
-        Enable data sampling for extremely large datasets
-    sampling_threshold : int
-        Data size threshold above which sampling is considered
-    max_sampled_size : int
-        Maximum size when sampling is enabled
-    sampling_strategy : str
-        Sampling strategy: 'random', 'uniform', 'stratified'
     enable_automatic_solver_selection : bool
         Automatically select optimal solver based on dataset size
     solver_selection_thresholds : Dict[str, int]
         Thresholds for automatic solver selection
+
+    Notes
+    -----
+    As of v0.2.0, all subsampling parameters have been removed. Use streaming
+    optimization instead for unlimited datasets. See MIGRATION_V0.2.0.md for
+    migration instructions.
     """
 
-    enable_sampling: bool = True
-    sampling_threshold: int = 100_000_000
-    max_sampled_size: int = 10_000_000
-    sampling_strategy: str = "stratified"
     enable_automatic_solver_selection: bool = True
     solver_selection_thresholds: dict[str, int] = field(
         default_factory=lambda: {
@@ -108,19 +102,6 @@ class LargeDatasetConfig:
             "chunked": 100_000_000,  # Use chunked processing above this size
         }
     )
-
-    def __post_init__(self):
-        """Validate configuration values."""
-        if self.sampling_strategy not in ["random", "uniform", "stratified"]:
-            raise ValueError(
-                f"sampling_strategy must be 'random', 'uniform', or 'stratified', got {self.sampling_strategy}"
-            )
-
-        if self.max_sampled_size > self.sampling_threshold:
-            warnings.warn(
-                f"max_sampled_size ({self.max_sampled_size}) is larger than sampling_threshold "
-                f"({self.sampling_threshold}). This may lead to unexpected behavior."
-            )
 
 
 class JAXConfig:
@@ -278,39 +259,23 @@ class JAXConfig:
         # Load defaults
         large_dataset_config = LargeDatasetConfig()
 
+        # Emit deprecation warnings for removed sampling environment variables (v0.2.0)
+        deprecated_env_vars = {
+            "NLSQ_DISABLE_SAMPLING": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
+            "NLSQ_SAMPLING_THRESHOLD": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
+            "NLSQ_MAX_SAMPLED_SIZE": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
+            "NLSQ_SAMPLING_STRATEGY": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
+        }
+        for env_var, message in deprecated_env_vars.items():
+            if os.getenv(env_var):
+                warnings.warn(
+                    f"{env_var} environment variable is no longer used. {message} "
+                    "See MIGRATION_V0.2.0.md for details.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
         # Override from environment variables
-        if os.getenv("NLSQ_DISABLE_SAMPLING") == "1":
-            large_dataset_config.enable_sampling = False
-
-        if os.getenv("NLSQ_SAMPLING_THRESHOLD"):
-            try:
-                large_dataset_config.sampling_threshold = int(
-                    os.getenv("NLSQ_SAMPLING_THRESHOLD")
-                )
-            except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_SAMPLING_THRESHOLD: {os.getenv('NLSQ_SAMPLING_THRESHOLD')}"
-                )
-
-        if os.getenv("NLSQ_MAX_SAMPLED_SIZE"):
-            try:
-                large_dataset_config.max_sampled_size = int(
-                    os.getenv("NLSQ_MAX_SAMPLED_SIZE")
-                )
-            except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_MAX_SAMPLED_SIZE: {os.getenv('NLSQ_MAX_SAMPLED_SIZE')}"
-                )
-
-        if os.getenv("NLSQ_SAMPLING_STRATEGY"):
-            strategy = os.getenv("NLSQ_SAMPLING_STRATEGY")
-            if strategy in ["random", "uniform", "stratified"]:
-                large_dataset_config.sampling_strategy = strategy
-            else:
-                warnings.warn(
-                    f"Invalid NLSQ_SAMPLING_STRATEGY: {strategy}. Must be 'random', 'uniform', or 'stratified'."
-                )
-
         if os.getenv("NLSQ_DISABLE_AUTO_SOLVER_SELECTION") == "1":
             large_dataset_config.enable_automatic_solver_selection = False
 
@@ -637,28 +602,34 @@ def enable_mixed_precision_fallback(enable: bool = True):
 
 def configure_for_large_datasets(
     memory_limit_gb: float = 8.0,
-    enable_sampling: bool = True,
     enable_chunking: bool = True,
     progress_reporting: bool = True,
     mixed_precision_fallback: bool = True,
+    enable_sampling: bool = None,  # Deprecated in v0.2.0
 ):
     """Configure NLSQ for optimal large dataset performance.
 
-    This function sets up memory management, sampling, chunking, and other
+    This function sets up memory management, chunking, streaming, and other
     settings for handling large datasets efficiently.
 
     Parameters
     ----------
     memory_limit_gb : float, optional
         Maximum memory to use in GB (default: 8.0)
-    enable_sampling : bool, optional
-        Enable data sampling for extremely large datasets (default: True)
     enable_chunking : bool, optional
         Enable automatic data chunking (default: True)
     progress_reporting : bool, optional
         Enable progress reporting for long operations (default: True)
     mixed_precision_fallback : bool, optional
         Enable mixed precision fallback (default: True)
+    enable_sampling : bool, optional
+        **Deprecated in v0.2.0**. This parameter is ignored. Use streaming
+        optimization instead. See MIGRATION_V0.2.0.md for details.
+
+    Notes
+    -----
+    As of v0.2.0, subsampling has been removed. All large datasets now use
+    streaming optimization for zero accuracy loss.
 
     Examples
     --------
@@ -666,10 +637,19 @@ def configure_for_large_datasets(
     >>> # Configure for large datasets with 16GB memory limit
     >>> configure_for_large_datasets(
     ...     memory_limit_gb=16.0,
-    ...     enable_sampling=True,
     ...     progress_reporting=True
     ... )
     """
+    # Emit deprecation warning if enable_sampling is used
+    if enable_sampling is not None:
+        warnings.warn(
+            "The 'enable_sampling' parameter was removed in NLSQ v0.2.0. "
+            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
+            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     # Configure memory settings
     memory_config = MemoryConfig(
         memory_limit_gb=memory_limit_gb,
@@ -683,14 +663,13 @@ def configure_for_large_datasets(
 
     # Configure large dataset settings
     large_dataset_config = LargeDatasetConfig(
-        enable_sampling=enable_sampling,
         enable_automatic_solver_selection=True,
     )
     JAXConfig.set_large_dataset_config(large_dataset_config)
 
     logging.info("Configured NLSQ for large datasets:")
     logging.info(f"  Memory limit: {memory_limit_gb} GB")
-    logging.info(f"  Sampling: {'enabled' if enable_sampling else 'disabled'}")
+    logging.info(f"  Streaming: enabled (always available in v0.2.0+)")
     logging.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
     logging.info(
         f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}"

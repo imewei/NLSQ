@@ -27,14 +27,8 @@ from nlsq._optimize import OptimizeResult
 from nlsq.logging import get_logger
 from nlsq.minpack import CurveFit
 
-# Import streaming optimizer (optional dependency)
-try:
-    from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
-    HAS_STREAMING = True
-except ImportError:
-    StreamingOptimizer = None  # type: ignore[assignment,misc]
-    StreamingConfig = None  # type: ignore[assignment,misc]
-    HAS_STREAMING = False
+# Import streaming optimizer (required dependency as of v0.2.0)
+from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
 
 
 @dataclass
@@ -51,16 +45,9 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         Minimum chunk size in data points (default: 1000)
     max_chunk_size : int
         Maximum chunk size in data points (default: 1000000)
-    enable_sampling : bool
-        Whether to enable sampling for extremely large datasets (default: False)
-        WARNING: Sampling causes accuracy loss. Use streaming instead.
     use_streaming : bool
         Use streaming optimization for unlimited data (default: True)
-        Requires h5py: pip install nlsq[streaming]
-    sampling_threshold : int
-        Data size threshold above which sampling is considered (default: 100_000_000)
-    max_sampled_size : int
-        Maximum size when sampling (default: 10_000_000)
+        Streaming is now always available (h5py is a required dependency as of v0.2.0)
     streaming_batch_size : int
         Batch size for streaming optimization (default: 50000)
     streaming_max_epochs : int
@@ -77,10 +64,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     safety_factor: float = 0.8
     min_chunk_size: int = 1000
     max_chunk_size: int = 1_000_000
-    enable_sampling: bool = False  # Disabled by default - use streaming instead
-    use_streaming: bool = True  # Preferred method for unlimited data
-    sampling_threshold: int = 100_000_000
-    max_sampled_size: int = 10_000_000
+    use_streaming: bool = True  # Always available (h5py required as of v0.2.0)
     streaming_batch_size: int = 50000
     streaming_max_epochs: int = 10
     min_success_rate: float = 0.5
@@ -105,8 +89,6 @@ class DatasetStats:
         Recommended chunk size for processing
     n_chunks : int
         Number of chunks needed
-    requires_sampling : bool
-        Whether sampling is recommended
     """
 
     n_points: int
@@ -115,7 +97,6 @@ class DatasetStats:
     total_memory_estimate_gb: float
     recommended_chunk_size: int
     n_chunks: int
-    requires_sampling: bool
 
 
 class MemoryEstimator:
@@ -209,13 +190,8 @@ class MemoryEstimator:
         else:
             n_chunks = (n_points + chunk_size - 1) // chunk_size
 
-        # Check if sampling is needed
+        # Calculate total memory estimate
         total_memory_gb = (n_points * memory_per_point) / (1024**3)
-        requires_sampling = (
-            memory_config.enable_sampling
-            and n_points > memory_config.sampling_threshold
-            and total_memory_gb > memory_config.memory_limit_gb * 2
-        )
 
         stats = DatasetStats(
             n_points=n_points,
@@ -224,7 +200,6 @@ class MemoryEstimator:
             total_memory_estimate_gb=total_memory_gb,
             recommended_chunk_size=chunk_size,
             n_chunks=n_chunks,
-            requires_sampling=requires_sampling,
         )
 
         return chunk_size, stats
@@ -326,92 +301,22 @@ class DataChunker:
 
             yield xdata[chunk_indices], ydata[chunk_indices], i
 
-    @staticmethod
-    def sample_large_dataset(
-        xdata: np.ndarray,
-        ydata: np.ndarray,
-        target_size: int,
-        strategy: str = "random",
-        random_seed: int | None = None,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Sample from very large datasets.
-
-        Parameters
-        ----------
-        xdata : np.ndarray
-            Independent variable data
-        ydata : np.ndarray
-            Dependent variable data
-        target_size : int
-            Target size for sampling
-        strategy : str, optional
-            Sampling strategy: 'random', 'uniform', 'stratified' (default: 'random')
-        random_seed : int, optional
-            Random seed for sampling
-
-        Returns
-        -------
-        tuple[np.ndarray, np.ndarray]
-            Sampled (x_data, y_data)
-        """
-        n_points = len(xdata)
-
-        if target_size >= n_points:
-            return xdata.copy(), ydata.copy()
-
-        rng = np.random.default_rng(random_seed)
-
-        if strategy == "random":
-            indices = rng.choice(n_points, size=target_size, replace=False)
-        elif strategy == "uniform":
-            # Uniform sampling across the range
-            indices = np.linspace(0, n_points - 1, target_size, dtype=int)
-        elif strategy == "stratified":
-            # Simple stratified sampling (can be enhanced)
-            n_strata = min(10, target_size // 10)  # Create up to 10 strata
-            points_per_stratum = target_size // n_strata
-
-            indices = []
-            for i in range(n_strata):
-                start = i * n_points // n_strata
-                end = (i + 1) * n_points // n_strata
-                stratum_indices = rng.choice(
-                    range(start, end),
-                    size=min(points_per_stratum, end - start),
-                    replace=False,
-                )
-                indices.extend(stratum_indices)
-
-            # Fill remaining points randomly if needed
-            remaining = target_size - len(indices)
-            if remaining > 0:
-                all_indices = set(range(n_points))
-                used_indices = set(indices)
-                available = list(all_indices - used_indices)
-                extra_indices = rng.choice(available, size=remaining, replace=False)
-                indices.extend(extra_indices)
-
-            indices = np.array(indices)
-        else:
-            raise ValueError(f"Unknown sampling strategy: {strategy}")
-
-        return xdata[indices], ydata[indices]
 
 
 class LargeDatasetFitter:
     """Large dataset curve fitting with automatic memory management and chunking.
 
     This class handles datasets with millions to billions of points that exceed available
-    memory through automatic chunking, progressive parameter refinement, and intelligent
-    sampling strategies. It maintains fitting accuracy while preventing memory overflow
-    through dynamic memory monitoring and chunk size optimization.
+    memory through automatic chunking, progressive parameter refinement, and streaming
+    optimization. It maintains fitting accuracy while preventing memory overflow through
+    dynamic memory monitoring and chunk size optimization.
 
     Core Capabilities
     -----------------
     - Automatic memory estimation based on data size and parameter count
     - Dynamic chunk size calculation considering available system memory
     - Sequential parameter refinement across data chunks with convergence tracking
-    - Intelligent sampling strategies for datasets exceeding memory limits
+    - Streaming optimization for unlimited datasets (no accuracy loss)
     - Real-time progress monitoring with ETA for long-running fits
     - Full integration with NLSQ optimization algorithms and GPU acceleration
 
@@ -420,20 +325,19 @@ class LargeDatasetFitter:
     1. Estimates total memory requirements from dataset size and parameter count
     2. Calculates optimal chunk sizes considering available memory and safety margins
     3. Monitors actual memory usage during processing to prevent overflow
-    4. Automatically switches to sampling if chunking cannot fit within memory limits
+    4. Uses streaming optimization for extremely large datasets (processes all data)
 
     Processing Strategies
     ---------------------
     - **Single Pass**: For datasets fitting within memory limits
     - **Sequential Chunking**: Processes data in optimal-sized chunks with parameter propagation
-    - **Stratified Sampling**: Maintains statistical representativeness for extremely large datasets
-    - **Hybrid Approach**: Combines chunking and sampling based on memory constraints
+    - **Streaming Optimization**: Mini-batch gradient descent for unlimited datasets (no subsampling)
 
     Performance Characteristics
     ---------------------------
     - Maintains <1% parameter error for well-conditioned problems using chunking
     - Achieves 5-50x speedup over naive approaches through memory optimization
-    - Scales to datasets with billions of points using intelligent sampling
+    - Scales to datasets of unlimited size using streaming (processes all data)
     - Provides linear time complexity with respect to chunk count
 
     Parameters
@@ -511,8 +415,8 @@ class LargeDatasetFitter:
     ...     memory_limit_gb=8.0,
     ...     min_chunk_size=10000,
     ...     max_chunk_size=1000000,
-    ...     enable_sampling=True,
-    ...     sampling_threshold=50_000_000
+    ...     use_streaming=True,
+    ...     streaming_batch_size=50000
     ... )
     >>> fitter = LargeDatasetFitter(config=config)
     >>>
@@ -541,9 +445,9 @@ class LargeDatasetFitter:
     maintains fitting accuracy within 0.1% of single-pass results for well-conditioned
     problems while enabling processing of arbitrarily large datasets.
 
-    For extremely large datasets where chunking still exceeds memory limits,
-    the class automatically switches to stratified sampling to maintain statistical
-    representativeness while dramatically reducing computational requirements.
+    For extremely large datasets, streaming optimization processes all data using
+    mini-batch gradient descent with no subsampling, ensuring zero accuracy loss
+    compared to subsampling approaches (removed in v0.2.0).
     """
 
     def __init__(
@@ -857,12 +761,6 @@ class LargeDatasetFitter:
         self.logger.info(f"  Recommended chunk size: {stats.recommended_chunk_size:,}")
         self.logger.info(f"  Number of chunks: {stats.n_chunks}")
 
-        if stats.requires_sampling:
-            self.logger.warning(
-                f"Dataset is very large ({stats.total_memory_estimate_gb:.2f} GB). "
-                "Consider enabling sampling for better performance."
-            )
-
         return stats
 
     def fit(
@@ -980,19 +878,13 @@ class LargeDatasetFitter:
         # Get processing statistics and strategy
         stats = self.estimate_requirements(n_points, n_params)
 
-        # Handle very large datasets with streaming (preferred) or sampling (fallback)
-        if stats.requires_sampling:
-            return self._fit_unlimited_data(
-                f, xdata, ydata, p0, bounds, method, solver, show_progress, **kwargs
-            )
-
         # Handle datasets that fit in memory
         if stats.n_chunks == 1:
             return self._fit_single_chunk(
                 f, xdata, ydata, p0, bounds, method, solver, **kwargs
             )
 
-        # Handle chunked processing
+        # Handle chunked processing (will use streaming if enabled for very large datasets)
         return self._fit_chunked(
             f, xdata, ydata, p0, bounds, method, solver, show_progress, stats, **kwargs
         )
@@ -1144,101 +1036,11 @@ class LargeDatasetFitter:
 
         except Exception as e:
             self.logger.error(f"Streaming fit failed: {e}")
-            # Fallback to sampling
-            self.logger.warning("Falling back to sampling method")
-            self.config.use_streaming = False
-            return self._fit_unlimited_data(
-                f, xdata, ydata, p0, bounds, method, solver, show_progress, **kwargs
-            )
-
-    def _fit_unlimited_data(
-        self,
-        f: Callable,
-        xdata: np.ndarray,
-        ydata: np.ndarray,
-        p0: np.ndarray | list | None,
-        bounds: tuple,
-        method: str,
-        solver: str,
-        show_progress: bool,
-        **kwargs,
-    ) -> OptimizeResult:
-        """Fit very large dataset using streaming optimization (preferred) or sampling (fallback).
-
-        Streaming optimization processes unlimited data without accuracy loss.
-        Sampling is only used as a fallback if streaming is not available.
-        """
-
-        # Try streaming first (no accuracy loss)
-        if self.config.use_streaming and HAS_STREAMING:
-            return self._fit_with_streaming(
-                f, xdata, ydata, p0, bounds, method, solver, show_progress, **kwargs
-            )
-
-        # Fallback to sampling if streaming is disabled or unavailable
-        if not self.config.use_streaming:
-            self.logger.warning(
-                "Streaming optimization is disabled. Using sampling (causes accuracy loss)."
-            )
-        elif not HAS_STREAMING:
-            self.logger.warning(
-                "Streaming optimizer not available (missing h5py). "
-                "Using sampling fallback (causes accuracy loss). "
-                "Install with: pip install nlsq[streaming]"
-            )
-
-        # Conservative 2x reduction (50% of data retained)
-        target_size = min(self.config.max_sampled_size, len(xdata) // 2)
-
-        self.logger.warning(
-            f"Dataset is very large ({len(xdata):,} points). "
-            f"Sampling {target_size:,} points for initial fit (50% retention)."
-        )
-
-        # Sample data
-        x_sample, y_sample = DataChunker.sample_large_dataset(
-            xdata, ydata, target_size, strategy="stratified"
-        )
-
-        # Fit on sample
-        try:
-            popt, _pcov = self.curve_fit.curve_fit(
-                f,
-                x_sample,
-                y_sample,
-                p0=p0,
-                bounds=bounds,
-                method=method,
-                solver=solver,
-                **kwargs,
-            )
-
-            self.logger.info(f"Sampling fit completed with parameters: {popt}")
-
-            # Optionally refine on larger sample or chunks
-            # This could be enhanced to do progressive refinement
-
-            result = OptimizeResult(
-                x=popt,
-                success=True,
-                message=f"Fit completed using {len(x_sample):,} sampled points",
-            )
-            result["pcov"] = _pcov
-            result["popt"] = popt
-            result["was_sampled"] = True
-            result["sample_size"] = len(x_sample)
-            result["original_size"] = len(xdata)
-
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Sampling fit failed: {e}")
             result = OptimizeResult(
                 x=p0 if p0 is not None else np.ones(2),
                 success=False,
-                message=f"Sampling fit failed: {e}",
+                message=f"Streaming fit failed: {e}",
             )
-            # Add empty popt and pcov for consistency
             result["popt"] = result.x
             result["pcov"] = np.eye(len(result.x))
             return result
@@ -1568,11 +1370,7 @@ class LargeDatasetFitter:
         return {
             "dataset_stats": stats,
             "memory_limit_gb": self.config.memory_limit_gb,
-            "processing_strategy": (
-                "sampling"
-                if stats.requires_sampling
-                else "single_chunk" if stats.n_chunks == 1 else "chunked"
-            ),
+            "processing_strategy": "single_chunk" if stats.n_chunks == 1 else "chunked",
             "recommendations": {
                 "chunk_size": stats.recommended_chunk_size,
                 "n_chunks": stats.n_chunks,
