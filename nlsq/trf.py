@@ -1450,113 +1450,62 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 V = subproblem_result['V']
                 uf = subproblem_result['uf']
 
-                # Step acceptance loop
-                actual_reduction = -1
-                inner_loop_count = 0
-                max_inner_iterations = 100
-                while (
-                    actual_reduction <= 0
-                    and nfev < max_nfev
-                    and inner_loop_count < max_inner_iterations
-                ):
-                    inner_loop_count += 1
+                # Evaluate and potentially accept step using helper
+                acceptance_result = self._evaluate_step_acceptance(
+                    fun=fun,
+                    jac=jac,
+                    x=x,
+                    f=f,
+                    J=J,
+                    J_h=J_h,
+                    g_h_jnp=g_h_jnp,
+                    cost=cost,
+                    d=d,
+                    d_jnp=d_jnp,
+                    Delta=Delta,
+                    alpha=alpha,
+                    step_h=step_h,
+                    s=s,
+                    V=V,
+                    uf=uf,
+                    xdata=xdata,
+                    ydata=ydata,
+                    data_mask=data_mask,
+                    transform=transform,
+                    loss_function=loss_function,
+                    f_scale=f_scale,
+                    scale_inv=scale_inv,
+                    jac_scale=jac_scale,
+                    solver=solver,
+                    ftol=ftol,
+                    xtol=xtol,
+                    max_nfev=max_nfev,
+                    nfev=nfev,
+                )
 
-                    # Solve subproblem
-                    if solver == "cg":
-                        if inner_loop_count > 1:
-                            step_h = self.solve_tr_subproblem_cg(
-                                J, f, d_jnp, Delta, alpha
-                            )
-                        _n_iter = 1  # Dummy value for compatibility
-                    else:
-                        step_h, alpha, _n_iter = solve_lsq_trust_region(
-                            n, m, uf, s, V, Delta, initial_alpha=alpha
-                        )
-
-                    # Compute predicted reduction
-                    predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
-                        J_h, g_h_jnp, step_h
-                    )
-                    # Keep as JAX array for performance
-                    predicted_reduction = predicted_reduction_jnp
-
-                    # Transform step and evaluate objective
-                    step = d * step_h
-                    x_new = x + step
-                    f_new = fun(x_new, xdata, ydata, data_mask, transform)
-                    nfev += 1
-                    step_h_norm = norm(step_h)
-
-                    # Check for numerical issues
-                    if not self.check_isfinite(f_new):
-                        Delta = TR_REDUCTION_FACTOR * step_h_norm
-                        continue
-
-                    # Compute actual reduction
-                    if loss_function is not None:
-                        cost_new_jnp = loss_function(
-                            f_new, f_scale, data_mask, cost_only=True
-                        )
-                    else:
-                        cost_new_jnp = self.default_loss_func(f_new)
-                    # Keep as JAX array for performance
-                    cost_new = cost_new_jnp
-                    actual_reduction = cost - cost_new
-
-                    # Update trust region radius
-                    Delta_new, ratio = update_tr_radius(
-                        Delta,
-                        actual_reduction,
-                        predicted_reduction,
-                        step_h_norm,
-                        step_h_norm > TR_BOUNDARY_THRESHOLD * Delta,
-                    )
-
-                    # Check termination criteria
-                    step_norm = norm(step)
-                    termination_status = check_termination(
-                        actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
-                    )
-
-                    if termination_status is not None:
-                        break
-
-                    alpha *= Delta / Delta_new
-                    Delta = Delta_new
-
-                    # Exit inner loop if we have a successful step
-                    if actual_reduction > 0:
-                        break
-
-                # Check if inner loop hit iteration limit
-                if inner_loop_count >= max_inner_iterations:
-                    self.logger.warning(
-                        "Inner optimization loop hit iteration limit",
-                        inner_iterations=inner_loop_count,
-                        actual_reduction=actual_reduction,
-                    )
-                    termination_status = -3  # Inner loop limit exceeded
-
-                if actual_reduction > 0:
-                    x = x_new
-                    f = f_new
+                # Update state from acceptance result
+                if acceptance_result['accepted']:
+                    x = acceptance_result['x_new']
+                    f = acceptance_result['f_new']
                     f_true = f
-                    cost = cost_new
-                    J = jac(x, xdata, ydata, data_mask, transform)
-                    njev += 1
+                    J = acceptance_result['J_new']
+                    cost = acceptance_result['cost_new']
+                    g = acceptance_result['g_new']
+                    g_jnp = g
+                    njev += acceptance_result['njev']
 
-                    if loss_function is not None:
-                        rho = loss_function(f, f_scale)
-                        J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
+                    if jac_scale and 'scale' in acceptance_result:
+                        scale = acceptance_result['scale']
+                        scale_inv = acceptance_result['scale_inv']
 
-                    g_jnp = self.compute_grad(J, f)
-                    # Keep as JAX array for performance
-                    g = g_jnp
-                    if jac_scale:
-                        scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
-                else:
-                    step_norm = 0
-                    actual_reduction = 0
+                actual_reduction = acceptance_result['actual_reduction']
+                step_norm = acceptance_result['step_norm']
+                Delta = acceptance_result['Delta']
+                alpha = acceptance_result['alpha']
+                nfev = acceptance_result['nfev']
+
+                if acceptance_result['termination_status'] is not None:
+                    termination_status = acceptance_result['termination_status']
 
                 iteration += 1
 
