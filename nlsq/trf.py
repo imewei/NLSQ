@@ -1429,20 +1429,26 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     nfev=nfev,
                 )
 
-                # Setup scaled variables
-                d = scale
-                d_jnp = jnp.array(scale)
-                g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
+                # Solve trust region subproblem using helper
+                subproblem_result = self._solve_trust_region_subproblem(
+                    J=J,
+                    f=f,
+                    g=g,
+                    scale=scale,
+                    Delta=Delta,
+                    alpha=alpha,
+                    solver=solver,
+                )
 
-                # Solve trust region subproblem
-                if solver == "cg":
-                    J_h = J * d_jnp
-                    step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
-                    s, V, uf = None, None, None
-                else:
-                    svd_output = self.svd_no_bounds(J, d_jnp, f)
-                    J_h = svd_output[0]
-                    s, V, uf = (np.array(val) for val in svd_output[2:])
+                # Extract subproblem solution
+                d = subproblem_result['d']
+                d_jnp = subproblem_result['d_jnp']
+                g_h_jnp = subproblem_result['g_h']
+                J_h = subproblem_result['J_h']
+                step_h = subproblem_result['step_h']
+                s = subproblem_result['s']
+                V = subproblem_result['V']
+                uf = subproblem_result['uf']
 
                 # Step acceptance loop
                 actual_reduction = -1
