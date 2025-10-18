@@ -1350,11 +1350,33 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         """
 
-        x = x0.copy()
-        f_true = f
-        nfev = 1
-        njev = 1
-        m, n = J.shape
+        # Initialize optimization state using helper
+        state = self._initialize_trf_state(
+            x0=x0,
+            f=f,
+            J=J,
+            loss_function=loss_function,
+            x_scale=x_scale,
+            f_scale=f_scale,
+            data_mask=data_mask,
+        )
+
+        # Extract state variables
+        x = state['x']
+        f = state['f']
+        J = state['J']
+        cost = state['cost']
+        g = state['g']
+        g_jnp = g  # Keep as JAX array for performance
+        scale = state['scale']
+        scale_inv = state['scale_inv']
+        Delta = state['Delta']
+        nfev = state['nfev']
+        njev = state['njev']
+        m = state['m']
+        n = state['n']
+        jac_scale = state['jac_scale']
+        f_true = f  # Keep original residuals
 
         # Log optimization start
         self.logger.info(
@@ -1364,28 +1386,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             max_nfev=max_nfev,
         )
 
-        if loss_function is not None:
-            rho = loss_function(f, f_scale)
-            cost_jnp = self.calculate_cost(rho, data_mask)
-            J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
-        else:
-            cost_jnp = self.default_loss_func(f)
-        # Keep cost as JAX array for performance (convert only when needed)
-        cost = cost_jnp
-
-        g_jnp = self.compute_grad(J, f)
-        # Keep gradient as JAX array for performance
-        g = g_jnp
-        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
-        if jac_scale:
-            scale, scale_inv = self.cJIT.compute_jac_scale(J)
-        else:
-            scale, scale_inv = x_scale, 1 / x_scale
-
-        Delta = norm(x0 * scale_inv)
-        if Delta == 0:
-            Delta = 1.0
-
+        # Set max_nfev if not provided
         if max_nfev is None:
             max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
 
