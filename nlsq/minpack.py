@@ -2,6 +2,7 @@ import time
 import warnings
 from collections.abc import Callable
 from inspect import signature
+from typing import Any, Literal
 
 import numpy as np
 
@@ -27,24 +28,25 @@ from nlsq.parameter_estimation import estimate_initial_parameters
 from nlsq.recovery import OptimizationRecovery
 from nlsq.result import CurveFitResult
 from nlsq.stability import NumericalStabilityGuard
+from nlsq.types import ArrayLike, ModelFunction
 from nlsq.validators import InputValidator
 
 __all__ = ["CurveFit", "curve_fit"]
 
 
 def curve_fit(
-    f,
-    xdata,
-    ydata,
-    *args,
-    auto_bounds=False,
-    bounds_safety_factor=10.0,
-    stability=False,
-    fallback=False,
-    max_fallback_attempts=10,
-    fallback_verbose=False,
-    **kwargs,
-):
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    *args: Any,
+    auto_bounds: bool = False,
+    bounds_safety_factor: float = 10.0,
+    stability: Literal['auto', 'check', False] = False,
+    fallback: bool = False,
+    max_fallback_attempts: int = 10,
+    fallback_verbose: bool = False,
+    **kwargs: Any,
+) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
     """
     Use nonlinear least squares to fit a function to data with GPU/TPU acceleration.
 

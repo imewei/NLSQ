@@ -1,6 +1,7 @@
 """Generic interface for least-squares minimization."""
 
 from collections.abc import Callable, Sequence
+from typing import Any, Literal
 from warnings import warn
 
 import numpy as np
@@ -21,6 +22,7 @@ from nlsq.loss_functions import LossFunctionsJIT
 from nlsq.memory_manager import get_memory_manager
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.trf import TrustRegionReflective
+from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction, MethodLiteral
 
 TERMINATION_MESSAGES = {
     -3: "Inner optimization loop exceeded maximum iterations.",
@@ -835,32 +837,32 @@ class LeastSquares:
     def least_squares(
         self,
         fun: Callable,
-        x0: np.ndarray,
+        x0: ArrayLike,
         jac: Callable | None = None,
-        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
-        method: str = "trf",
+        bounds: BoundsTuple | tuple[float, float] = (-np.inf, np.inf),
+        method: MethodLiteral = "trf",
         ftol: float = DEFAULT_FTOL,
         xtol: float = DEFAULT_XTOL,
         gtol: float = DEFAULT_GTOL,
-        x_scale: str | np.ndarray | float = 1.0,
+        x_scale: Literal['jac'] | ArrayLike | float = 1.0,
         loss: str = "linear",
         f_scale: float = 1.0,
-        diff_step=None,
-        tr_solver=None,
-        tr_options=None,
-        jac_sparsity=None,
+        diff_step: ArrayLike | None = None,
+        tr_solver: Literal['exact', 'lsmr'] | None = None,
+        tr_options: dict[str, Any] | None = None,
+        jac_sparsity: ArrayLike | None = None,
         max_nfev: float | None = None,
         verbose: int = 0,
-        xdata: jnp.ndarray | None = None,
-        ydata: jnp.ndarray | None = None,
-        data_mask: jnp.ndarray | None = None,
-        transform: jnp.ndarray | None = None,
+        xdata: ArrayLike | None = None,
+        ydata: ArrayLike | None = None,
+        data_mask: ArrayLike | None = None,
+        transform: ArrayLike | None = None,
         timeit: bool = False,
-        callback: Callable | None = None,
-        args=(),
-        kwargs=None,
-        **timeout_kwargs,
-    ):
+        callback: CallbackFunction | None = None,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+        **timeout_kwargs: Any,
+    ) -> dict[str, Any]:
         """Solve nonlinear least squares problem using JAX-accelerated algorithms.
 
         This method orchestrates the optimization process by calling focused

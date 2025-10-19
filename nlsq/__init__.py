@@ -20,6 +20,11 @@ try:
 except ImportError:
     __version__ = "0.0.0+unknown"
 
+# Type hints
+from typing import Any, Literal
+
+import numpy as np
+
 # Main API imports
 # Common functions library (Sprint 4 - User Experience)
 # Progress callbacks (Day 3 - User Experience)
@@ -73,6 +78,7 @@ from nlsq.memory_manager import (
     get_memory_manager,
     get_memory_stats,
 )
+from nlsq.types import ArrayLike, BoundsTuple, ModelFunction, MethodLiteral
 from nlsq.memory_pool import (
     MemoryPool,
     TRFMemoryPool,
@@ -244,27 +250,27 @@ if _HAS_STREAMING:
 
 # Convenience function for large dataset curve fitting
 def curve_fit_large(
-    f,
-    xdata,
-    ydata,
-    p0=None,
-    sigma=None,
-    absolute_sigma=False,
-    check_finite=True,
-    bounds=(-float("inf"), float("inf")),
-    method=None,
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: ArrayLike | None = None,
+    sigma: ArrayLike | None = None,
+    absolute_sigma: bool = False,
+    check_finite: bool = True,
+    bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
+    method: MethodLiteral | None = None,
     # Large dataset specific parameters
-    memory_limit_gb=None,
-    auto_size_detection=True,
-    size_threshold=1_000_000,  # 1M points
-    show_progress=False,
-    chunk_size=None,
+    memory_limit_gb: float | None = None,
+    auto_size_detection: bool = True,
+    size_threshold: int = 1_000_000,  # 1M points
+    show_progress: bool = False,
+    chunk_size: int | None = None,
     # Deprecated parameters (v0.2.0)
-    enable_sampling=None,
-    sampling_threshold=None,
-    max_sampled_size=None,
-    **kwargs,
-):
+    enable_sampling: bool | None = None,
+    sampling_threshold: int | None = None,
+    max_sampled_size: int | None = None,
+    **kwargs: Any,
+) -> tuple[np.ndarray, np.ndarray] | OptimizeResult:
     """Curve fitting with automatic memory management for large datasets.
 
     Automatically selects processing strategy based on dataset size:
@@ -481,11 +487,11 @@ def curve_fit_large(
         # Perform the fit
         if show_progress:
             result = fitter.fit_with_progress(
-                f, xdata, ydata, p0=p0, bounds=bounds, method=method, **kwargs
+                f, xdata, ydata, p0=p0, bounds=bounds, method=method, **kwargs  # type: ignore
             )
         else:
             result = fitter.fit(
-                f, xdata, ydata, p0=p0, bounds=bounds, method=method, **kwargs
+                f, xdata, ydata, p0=p0, bounds=bounds, method=method, **kwargs  # type: ignore
             )
 
         # Extract popt and pcov from result
