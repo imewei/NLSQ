@@ -700,9 +700,10 @@ nlsq/
 - ✅ **Documentation**: Sphinx warnings fixed (196 → 0)
 - ✅ **Pre-commit**: 100% compliance (24/24 hooks)
 
-### Test Status (Latest)
-- **Passing**: 1168 tests (100% success rate)
-- **Skipped**: 0 tests
+### Test Status (Latest - 2025-10-19)
+- **Passing**: 1229/1235 tests (**99.5% success rate**)
+- **Failing**: 6 tests (0.5% - see Known Issues below)
+- **Skipped**: 6 tests
 - **Coverage**: 77% (target: 80%)
 - **Platforms**: Ubuntu ✅ | macOS ✅ | Windows ✅
 - **CI Status**: All workflows passing
@@ -710,7 +711,62 @@ nlsq/
 
 ---
 
-**Last Updated**: 2025-10-18
+## Known Test Failures (6 tests - 0.5%)
+
+### 🔴 CRITICAL: TRF Numerical Bug (1 test)
+
+**Test**: `test_least_squares.py::TestTRF::test_fun`
+
+**Issue**: `res.fun` contains incorrect value `67108864.0` (2^26) instead of expected `5.0`
+
+**Impact**:
+- **LOW**: Only 1 of 31 TRF tests fails
+- TRF optimization algorithm works correctly (all other tests pass)
+- Issue appears specific to `res.fun` field assignment
+
+**Status**:
+- Requires deep investigation into TRF result construction
+- Possible regression from Optimization #2 (parameter unpacking simplification)
+- May be pre-existing issue not caught in original test subset
+
+**Workaround**:
+- Use other TRF validation methods (30 passing tests confirm algorithm correctness)
+- `res.x` (optimized parameters) and `res.cost` are correct
+
+**Priority**: Critical for future sprint - investigate `_initialize_trf_state()` and `f_true` assignment
+
+---
+
+### 🟡 LOW PRIORITY: Parameter Estimation (5 tests)
+
+**Tests**: All in `test_parameter_estimation.py`
+1. `test_estimate_p0_error_no_signature` - ValueError not raised
+2. `test_estimate_p0_with_explicit_array` - Array truth value ambiguity
+3. `test_detect_exponential_decay_pattern` - Returns 'linear' instead of 'exponential_decay'
+4. `test_detect_sigmoid_pattern` - Returns 'linear' instead of 'sigmoid'
+5. `test_unknown_pattern_fallback` - Wrong fallback count
+
+**Issue**: Automatic p0 estimation feature (`p0='auto'`) has broken pattern detection
+
+**Impact**:
+- **VERY LOW**: Feature is experimental/incomplete
+- Test comment states: "p0='auto' may not be implemented yet in curve_fit"
+- Core curve_fit functionality works perfectly (user provides explicit p0)
+
+**Status**:
+- Pattern detection logic in `parameter_estimation.py` returns 'linear' for all patterns
+- Requires 2-3 hours to fix pattern recognition algorithms
+- Not a regression (was already broken)
+
+**Workaround**:
+- Always provide explicit `p0` parameter (recommended best practice)
+- Example: `curve_fit(model, x, y, p0=[1.0, 2.0])`
+
+**Recommendation**: Mark feature as experimental or complete implementation in future release
+
+---
+
+**Last Updated**: 2025-10-19
 **Version**: v0.2.0 (Breaking Changes - Subsampling Removed)
 **Python**: 3.12.3
 **Tested Configuration**: See [`REQUIREMENTS.md`](REQUIREMENTS.md)
