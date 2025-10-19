@@ -470,7 +470,7 @@ class CurveFit:
             self.recovery = OptimizationRecovery()
             self.diagnostics = OptimizationDiagnostics()
 
-    def update_flength(self, flength: float):
+    def update_flength(self, flength: float) -> None:
         """Set the fixed input data length.
 
         Parameters
@@ -480,7 +480,7 @@ class CurveFit:
         """
         self.flength = flength
 
-    def create_sigma_transform_funcs(self):
+    def create_sigma_transform_funcs(self) -> None:
         """Create JIT-compiled sigma transform functions.
 
         This function creates two JIT-compiled functions: `sigma_transform1d` and
@@ -537,7 +537,7 @@ class CurveFit:
         """For fixed input arrays we need to pad the actual data to match the
         fixed input array size"""
 
-    def create_covariance_svd(self):
+    def create_covariance_svd(self) -> None:
         """Create JIT-compiled SVD function for covariance computation."""
 
         @jit
