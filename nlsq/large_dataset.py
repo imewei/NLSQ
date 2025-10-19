@@ -1489,6 +1489,57 @@ class LargeDatasetFitter:
 
         return result
 
+    def _check_success_rate_and_create_result(
+        self,
+        chunk_results: list,
+        current_params: np.ndarray | None,
+        param_history: list,
+        stats: DatasetStats,
+        chunk_times: list,
+    ) -> OptimizeResult:
+        """Check success rate and create appropriate result (success or failure).
+
+        Args:
+            chunk_results: List of chunk processing results
+            current_params: Final parameter estimates
+            param_history: History of parameter updates
+            stats: Dataset statistics
+            chunk_times: Processing time for each chunk
+
+        Returns:
+            OptimizeResult with success or failure status based on success rate
+        """
+        # Compute final statistics
+        successful_chunks = [r for r in chunk_results if r.get("success", False)]
+        success_rate = len(successful_chunks) / len(chunk_results)
+
+        if success_rate < self.config.min_success_rate:
+            self.logger.error(
+                f"Too many chunks failed ({success_rate:.1%} success rate, "
+                f"minimum required: {self.config.min_success_rate:.1%})"
+            )
+            result = OptimizeResult(
+                x=current_params if current_params is not None else np.ones(2),
+                success=False,
+                message=f"Chunked fit failed: {success_rate:.1%} success rate",
+            )
+            # Add empty popt and pcov for consistency
+            result["popt"] = (
+                current_params if current_params is not None else np.ones(2)
+            )
+            result["pcov"] = np.eye(len(result["popt"]))
+            return result
+
+        # Success - assemble final result
+        return self._finalize_chunked_results(
+            current_params=current_params,
+            chunk_results=chunk_results,
+            param_history=param_history,
+            success_rate=success_rate,
+            stats=stats,
+            chunk_times=chunk_times,
+        )
+
     def _fit_chunked(
         self,
         f: Callable,
@@ -1599,33 +1650,11 @@ class LargeDatasetFitter:
                 # Memory cleanup
                 gc.collect()
 
-            # Compute final statistics
-            successful_chunks = [r for r in chunk_results if r.get("success", False)]
-            success_rate = len(successful_chunks) / len(chunk_results)
-
-            if success_rate < self.config.min_success_rate:
-                self.logger.error(
-                    f"Too many chunks failed ({success_rate:.1%} success rate, "
-                    f"minimum required: {self.config.min_success_rate:.1%})"
-                )
-                result = OptimizeResult(
-                    x=current_params if current_params is not None else np.ones(2),
-                    success=False,
-                    message=f"Chunked fit failed: {success_rate:.1%} success rate",
-                )
-                # Add empty popt and pcov for consistency
-                result["popt"] = (
-                    current_params if current_params is not None else np.ones(2)
-                )
-                result["pcov"] = np.eye(len(result["popt"]))
-                return result
-
-            # Assemble final result
-            return self._finalize_chunked_results(
-                current_params=current_params,
+            # Check success rate and create final result
+            return self._check_success_rate_and_create_result(
                 chunk_results=chunk_results,
+                current_params=current_params,
                 param_history=param_history,
-                success_rate=success_rate,
                 stats=stats,
                 chunk_times=chunk_times,
             )
