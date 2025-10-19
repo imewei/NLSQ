@@ -16,17 +16,14 @@ The ``estimate_memory_requirements`` function returns a ``DatasetStats`` object 
 - ``total_memory_estimate_gb``: Estimated memory requirement in GB
 - ``recommended_chunk_size``: Recommended chunk size for processing
 - ``n_chunks``: Number of chunks needed
-- ``requires_sampling``: Whether sampling is recommended for this dataset size
 
 Example::
 
     from nlsq import estimate_memory_requirements
 
     stats = estimate_memory_requirements(100_000_000, 4)
-    if stats.requires_sampling:
-        print(f"Dataset too large, sampling recommended")
-    else:
-        print(f"Process in {stats.n_chunks} chunks")
+    print(f"Total memory: {stats.total_memory_estimate_gb:.2f} GB")
+    print(f"Process in {stats.n_chunks} chunks of {stats.recommended_chunk_size} points")
 
 LargeDatasetFitter
 ------------------
@@ -84,7 +81,6 @@ Parameters:
     - ``auto_size_detection``: Automatically detect dataset size (default: True)
     - ``size_threshold``: Threshold for switching to large dataset processing (default: 1M)
     - ``show_progress``: Show progress bar for large datasets (default: False)
-    - ``enable_sampling``: Enable sampling for extremely large datasets (default: True)
     - ``**kwargs``: Additional fitting options
 
 Returns:
@@ -196,8 +192,7 @@ For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` i
 - ``safety_factor``: Safety factor for memory calculations (default: 0.8)
 - ``min_chunk_size``: Minimum chunk size (default: 1000)
 - ``max_chunk_size``: Maximum chunk size (default: 1000000)
-- ``enable_sampling``: Allow sampling for very large datasets
-- ``sampling_threshold``: Number of points threshold for sampling (default: 100_000_000)
+- ``min_success_rate``: Minimum success rate for chunked fitting (default: 0.5)
 
 Example::
 
@@ -210,8 +205,7 @@ Example::
         safety_factor=0.9,
         min_chunk_size=10000,
         max_chunk_size=1000000,
-        enable_sampling=True,
-        sampling_threshold=100_000_000,
+        min_success_rate=0.8,  # Require 80% of chunks to succeed
     )
 
     fitter = LargeDatasetFitter(config=config)
@@ -295,11 +289,14 @@ Best Practices
     if expected_sparsity > 0.9:
         use_sparse_optimizer()
 
-4. **Consider data precision**::
+4. **Use streaming for very large datasets**::
 
-    # If data has limited precision, sampling may not affect accuracy
-    if data_precision < 1e-3 and n_points > 100_000_000:
-        enable_sampling()
+    # For datasets >100M points, streaming optimization processes
+    # all data in chunks with zero accuracy loss
+    if n_points > 100_000_000:
+        # Streaming is automatic in curve_fit_large
+        popt, pcov = curve_fit_large(func, xdata, ydata, p0=p0,
+                                      memory_limit_gb=8.0, show_progress=True)
 
 See Also
 --------

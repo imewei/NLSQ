@@ -95,8 +95,7 @@ Advanced Usage with LargeDatasetFitter
         memory_limit_gb=4.0,
         min_chunk_size=10000,
         max_chunk_size=1000000,
-        enable_sampling=True,
-        sampling_threshold=100_000_000,
+        min_success_rate=0.8,  # Require 80% of chunks to succeed
     )
 
     # Create fitter

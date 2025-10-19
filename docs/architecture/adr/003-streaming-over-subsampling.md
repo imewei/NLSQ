@@ -22,19 +22,21 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 
 ## Decision
 
-**Remove subsampling entirely in favor of streaming optimization (v0.2.0).**
+**Remove subsampling entirely in favor of streaming optimization.**
 
 ### Key Changes
 1. Removed ~250 lines of subsampling code from `large_dataset.py`
-2. Removed parameters: `enable_sampling`, `sampling_threshold`, `max_sampled_size`
+2. Deprecated parameters: `enable_sampling`, `sampling_threshold`, `max_sampled_size`
+   - Parameters still accepted but emit DeprecationWarning
+   - Will be removed in a future major version
 3. Integrated streaming optimizer for datasets that don't fit in memory
 4. Maintained backward compatibility with deprecation warnings
 5. Updated `LargeDatasetFitter` to use streaming by default
 
 ### Migration Path
 - Deprecation warnings guide users to remove old parameters
-- `MIGRATION_V0.2.0.md` provides detailed upgrade guide
 - Old code still works (with warnings) to ease transition
+- Simply remove the deprecated parameters from your code
 
 ## Consequences
 
@@ -47,7 +49,8 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 ✅ **Clear API**: Fewer confusing parameters
 
 ### Negative
-❌ **Breaking Change**: Requires users to update code (with deprecation warnings)
+⚠️ **Deprecation**: Old parameters emit warnings (backward compatible)
+  - **Mitigation**: Clear warning messages guide migration
 ❌ **Slightly Slower**: Processing 100% of data takes longer than sampling 85%
   - **Mitigation**: Minimal impact due to efficient streaming implementation
 ❌ **Requires h5py**: Now a required dependency instead of optional
@@ -60,13 +63,13 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 
 ## References
 
-- [v0.2.0 Breaking Changes Discussion](../../MIGRATION_V0.2.0.md)
 - [Multi-Agent Optimization Summary](../../../MULTI_AGENT_OPTIMIZATION_SUMMARY.md)
 - [Large Dataset Implementation](../../../nlsq/large_dataset.py)
 - [Streaming Optimizer](../../../nlsq/streaming_optimizer.py)
-- [GitHub Issue #XX: Subsampling Accuracy Concerns](https://github.com/imewei/NLSQ/issues/XX) *(if exists)*
+- [Large Dataset Guide](../../guides/large_datasets.rst)
 
 ## Status Updates
 
-- **2025-10-17**: Accepted and implemented in v0.2.0
+- **2025-10-17**: Accepted and parameters deprecated
 - **2025-10-18**: Verified with 1241 tests passing, 100% success rate
+- **Note**: Full removal deferred to future major version (backward compatibility maintained)

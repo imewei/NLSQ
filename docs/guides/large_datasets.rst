@@ -12,7 +12,7 @@ After completing this tutorial, you will:
 - Know how to estimate memory requirements before fitting
 - Be able to configure chunking and streaming strategies
 - Understand sparse Jacobian optimization
-- Master streaming optimization for unlimited-size data (v0.2.0+)
+- Master streaming optimization for unlimited-size data ()
 
 Introduction to Large Dataset Challenges
 -----------------------------------------
@@ -27,7 +27,7 @@ Traditional curve fitting algorithms face several challenges with large datasets
 NLSQ addresses these challenges through:
 
 - Automatic chunking and memory management
-- Streaming data processing with zero data loss (v0.2.0+)
+- Streaming data processing with zero data loss ()
 - GPU/TPU acceleration via JAX
 - Sparse matrix optimizations
 - Mini-batch gradient descent for unlimited datasets
@@ -128,7 +128,7 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
         memory_limit_gb=4.0,  # Maximum memory usage
         min_chunk_size=50000,  # Minimum points per chunk
         max_chunk_size=2000000,  # Maximum points per chunk
-        # v0.2.0+: Streaming optimization automatically handles very large datasets
+        # : Streaming optimization automatically handles very large datasets
         use_streaming=True,  # Enable streaming for unlimited data
         streaming_batch_size=100000,  # Mini-batch size for streaming
     )
@@ -161,11 +161,11 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
     print(f"  Fitted parameters: {result.popt}")
     print(f"  Total function evaluations: {result.nfev}")
 
-Streaming Optimization for Unlimited Datasets (v0.2.0+)
+Streaming Optimization for Unlimited Datasets
 --------------------------------------------------------
 
 For datasets too large to fit in memory, NLSQ uses streaming optimization with mini-batch gradient descent.
-**Unlike subsampling (removed in v0.2.0), streaming processes 100% of data with zero accuracy loss.**
+**Unlike subsampling (deprecated), streaming processes 100% of data with zero accuracy loss.**
 
 .. code-block:: python
 
@@ -383,7 +383,7 @@ Let's compare different strategies for the same large dataset:
             ),
         ),
         (
-            "Streaming (v0.2.0+)",
+            "Streaming ()",
             lambda: curve_fit_large(
                 exponential_model,
                 x_test,
@@ -459,7 +459,7 @@ Always check memory requirements before fitting:
 - **< 1M points**: Use standard ``curve_fit``
 - **1M - 10M points**: Use ``curve_fit_large`` with default settings
 - **10M - 100M points**: Use chunking with progress monitoring
-- **> 100M points**: Use streaming optimization (v0.2.0+, processes 100% of data)
+- **> 100M points**: Use streaming optimization (, processes 100% of data)
 
 **3. Optimize for Your Hardware**
 
@@ -509,7 +509,7 @@ Troubleshooting Large Dataset Issues
         popt, pcov = curve_fit_large(func, x, y)
     except MemoryError:
         print("Using streaming optimization to handle unlimited data...")
-        # v0.2.0+: Streaming processes 100% of data with zero accuracy loss
+        # : Streaming processes 100% of data with zero accuracy loss
         popt, pcov = curve_fit_large(func, x, y, memory_limit_gb=2.0, chunk_size=100000)
 
 **Convergence Issues**
