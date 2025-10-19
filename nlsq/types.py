@@ -8,7 +8,7 @@ means functions will work with any compatible objects at runtime.
 """
 
 from collections.abc import Callable
-from typing import Any, Protocol, TypeAlias
+from typing import Any, Protocol
 
 import jax.numpy as jnp
 import numpy as np

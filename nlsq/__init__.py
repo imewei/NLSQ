@@ -421,28 +421,28 @@ def curve_fit_large(
         except ImportError:
             memory_limit_gb = 8.0  # Conservative default
 
-    # Emit deprecation warnings for removed sampling parameters (v0.2.0)
+    # Emit deprecation warnings for removed sampling parameters
     if enable_sampling is not None:
         warnings.warn(
-            "The 'enable_sampling' parameter was removed in NLSQ v0.2.0. "
+            "The 'enable_sampling' parameter is deprecated and will be removed in a future version. "
             "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            "This parameter is now ignored.",
             DeprecationWarning,
             stacklevel=2,
         )
     if sampling_threshold is not None:
         warnings.warn(
-            "The 'sampling_threshold' parameter was removed in NLSQ v0.2.0. "
+            "The 'sampling_threshold' parameter is deprecated and will be removed in a future version. "
             "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            "This parameter is now ignored.",
             DeprecationWarning,
             stacklevel=2,
         )
     if max_sampled_size is not None:
         warnings.warn(
-            "The 'max_sampled_size' parameter was removed in NLSQ v0.2.0. "
+            "The 'max_sampled_size' parameter is deprecated and will be removed in a future version. "
             "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            "This parameter is now ignored.",
             DeprecationWarning,
             stacklevel=2,
         )

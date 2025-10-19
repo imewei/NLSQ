@@ -505,25 +505,26 @@ nlsq/
 
 ---
 
-## Recent Updates (2025-10-18)
+## Recent Updates (2025-10-19)
 
-### Breaking Changes in v0.2.0
-- ⚠️ **BREAKING**: h5py is now a required dependency (was optional in v0.1.x)
-  - All installations now include streaming optimization capabilities
+### Deprecations and Changes
+- ⚠️ **DEPRECATED**: Subsampling parameters in v0.1.3+
+  - Parameters `enable_sampling`, `sampling_threshold`, `max_sampled_size` are deprecated
+  - Deprecated parameters emit `DeprecationWarning` and are ignored
+  - Subsampling implementation removed (~250 lines)
+  - Replaced with streaming optimization for zero accuracy loss
+  - **Migration**: Remove these parameters from your code (they have no effect)
+- ✅ **Required Dependency**: h5py is now required (was optional)
+  - All installations include streaming optimization capabilities
   - No separate `[streaming]` extra needed
   - Update installations: `pip install --upgrade nlsq`
-- ⚠️ **BREAKING**: Complete removal of subsampling code (~250 lines removed)
-  - Removed parameters: `enable_sampling`, `sampling_threshold`, `max_sampled_size`
-  - Removed methods: `DataChunker.sample_large_dataset()`
-  - Removed attributes: `DatasetStats.requires_sampling`
-  - **Migration**: Deprecated parameters emit DeprecationWarning with clear instructions
 - ✅ **Improvement**: Streaming optimization for all large datasets
   - Zero accuracy loss (processes 100% of data)
   - Better than subsampling (no data loss from random sampling)
   - Consistent, reproducible results
-- ✅ **API Compatibility**: Graceful deprecation warnings
-  - Old code with sampling params emits `DeprecationWarning`
-  - Clear migration instructions in warnings
+- ✅ **API Compatibility**: Graceful backward compatibility
+  - Old code with deprecated params continues to work
+  - Clear deprecation warnings guide migration
 
 ### Performance Optimizations (Phase 2)
 - ✅ **Optimization #2: Parameter Unpacking Simplification** (Commit `574acea`)
@@ -547,7 +548,7 @@ nlsq/
 - ✅ **Architecture Decision Records (ADRs)** (Commit `7ea5c34`)
   - Created `docs/architecture/adr/` directory with ADR template
   - Documented 3 key architectural decisions:
-    - ADR-003: Streaming optimization over subsampling (v0.2.0)
+    - ADR-003: Streaming optimization over subsampling
     - ADR-004: Parameter unpacking simplification (Phase 2.2)
     - ADR-005: JAX autodiff for gradient computation (Phase 2.4)
   - Each ADR documents context, decision, consequences, and references
@@ -785,6 +786,6 @@ nlsq/
 ---
 
 **Last Updated**: 2025-10-19
-**Version**: v0.2.0 (Breaking Changes - Subsampling Removed)
+**Version**: v0.1.3.post3 (Subsampling Deprecated)
 **Python**: 3.12.3
 **Tested Configuration**: See [`REQUIREMENTS.md`](REQUIREMENTS.md)

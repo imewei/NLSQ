@@ -56,9 +56,8 @@ class TestDeprecationWarnings(unittest.TestCase):
             # Check message content
             message = str(w[0].message)
             self.assertIn("enable_sampling", message)
-            self.assertIn("v0.2.0", message)
+            self.assertIn("deprecated", message.lower())
             self.assertIn("streaming", message.lower())
-            self.assertIn("MIGRATION_V0.2.0.md", message)
 
             # Verify fit still works (chunked fit may not converge perfectly)
             self.assertEqual(len(popt), 3)
@@ -90,7 +89,7 @@ class TestDeprecationWarnings(unittest.TestCase):
             # Check message content
             message = str(w[0].message)
             self.assertIn("sampling_threshold", message)
-            self.assertIn("v0.2.0", message)
+            self.assertIn("deprecated", message.lower())
             self.assertIn("streaming", message.lower())
 
             # Verify fit still works
@@ -118,7 +117,7 @@ class TestDeprecationWarnings(unittest.TestCase):
             # Check message content
             message = str(w[0].message)
             self.assertIn("max_sampled_size", message)
-            self.assertIn("v0.2.0", message)
+            self.assertIn("deprecated", message.lower())
 
             # Verify fit still works
             self.assertEqual(len(popt), 3)
@@ -260,16 +259,12 @@ class TestDeprecationWarnings(unittest.TestCase):
             # Check for key information in the message
             required_content = [
                 "enable_sampling",  # Parameter name
-                "removed",  # Clear statement it was removed
-                "v0.2.0",  # Version information
+                "deprecated",  # Clear statement it's deprecated
                 "streaming",  # Replacement feature
-                "MIGRATION_V0.2.0.md",  # Migration guide reference
                 "zero accuracy loss",  # Benefit explanation
             ]
 
-            for content in required_content[
-                :5
-            ]:  # Check first 5 (last one is OR condition)
+            for content in required_content:
                 self.assertIn(
                     content.lower(),
                     message.lower(),

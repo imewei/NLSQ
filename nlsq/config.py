@@ -637,9 +637,9 @@ def configure_for_large_datasets(
     # Emit deprecation warning if enable_sampling is used
     if enable_sampling is not None:
         warnings.warn(
-            "The 'enable_sampling' parameter was removed in NLSQ v0.2.0. "
+            "The 'enable_sampling' parameter is deprecated and will be removed in a future version. "
             "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored. See MIGRATION_V0.2.0.md for migration instructions.",
+            "This parameter is now ignored.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -663,7 +663,7 @@ def configure_for_large_datasets(
 
     logging.info("Configured NLSQ for large datasets:")
     logging.info(f"  Memory limit: {memory_limit_gb} GB")
-    logging.info("  Streaming: enabled (always available in v0.2.0+)")
+    logging.info("  Streaming: enabled (always available)")
     logging.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
     logging.info(
         f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}"
