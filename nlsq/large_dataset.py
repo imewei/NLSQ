@@ -469,7 +469,7 @@ class LargeDatasetFitter:
         config: LDMemoryConfig | None = None,
         curve_fit_class: CurveFit | None = None,
         logger: Optional[Logger] = None,
-    ):
+    ) -> None:
         """Initialize LargeDatasetFitter.
 
         Parameters
