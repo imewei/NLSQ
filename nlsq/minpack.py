@@ -413,7 +413,7 @@ class CurveFit:
         enable_stability: bool = False,
         enable_recovery: bool = False,
         enable_overflow_check: bool = False,
-    ):
+    ) -> None:
         """Initialize CurveFit instance.
 
         Parameters
