@@ -47,9 +47,9 @@ pip install nlsq  # h5py always included (required)
 ```python
 # ❌ This will raise AttributeError in v0.2.0
 config = LDMemoryConfig(
-    enable_sampling=True,          # REMOVED
-    sampling_threshold=100_000_000, # REMOVED
-    max_sampled_size=10_000_000,   # REMOVED
+    enable_sampling=True,  # REMOVED
+    sampling_threshold=100_000_000,  # REMOVED
+    max_sampled_size=10_000_000,  # REMOVED
 )
 ```
 
@@ -58,7 +58,7 @@ config = LDMemoryConfig(
 # ✅ Use streaming instead (default behavior)
 config = LDMemoryConfig(
     memory_limit_gb=8.0,
-    use_streaming=True,        # Default, can omit
+    use_streaming=True,  # Default, can omit
     streaming_batch_size=50000,
     streaming_max_epochs=10,
 )
@@ -136,15 +136,15 @@ See `MIGRATION_V0.2.0.md` for complete migration instructions.
    ```python
    # ❌ Remove these
    config = LDMemoryConfig(
-       enable_sampling=True,       # DELETE
-       sampling_threshold=...,     # DELETE
-       max_sampled_size=...,       # DELETE
+       enable_sampling=True,  # DELETE
+       sampling_threshold=...,  # DELETE
+       max_sampled_size=...,  # DELETE
    )
 
    # ✅ Use defaults or configure streaming
    config = LDMemoryConfig(
        memory_limit_gb=8.0,
-       use_streaming=True,         # Default
+       use_streaming=True,  # Default
    )
    ```
 

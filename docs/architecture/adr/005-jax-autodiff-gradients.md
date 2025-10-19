@@ -57,6 +57,7 @@ def _compute_loss_and_gradient(self, func, params, x_batch, y_batch):
 ```python
 from jax import jit, value_and_grad
 
+
 class StreamingOptimizer:
     def __init__(self, config):
         self.config = config
@@ -65,6 +66,7 @@ class StreamingOptimizer:
     def _get_loss_and_grad_fn(self, func):
         """Create JIT-compiled loss+gradient function (cached)."""
         if self._loss_and_grad_fn is None:
+
             @jit
             def loss_fn(params, x_batch, y_batch):
                 y_pred = func(x_batch, *params)

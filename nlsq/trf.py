@@ -652,19 +652,19 @@ class TRFProfiler:
         elapsed = time.time() - st
 
         # Record timing
-        if operation == 'fun':
+        if operation == "fun":
             self.ftimes.append(elapsed)
-        elif operation == 'jac':
+        elif operation == "jac":
             self.jtimes.append(elapsed)
-        elif operation == 'svd':
+        elif operation == "svd":
             self.svd_times.append(elapsed)
-        elif operation == 'cost':
+        elif operation == "cost":
             self.ctimes.append(elapsed)
-        elif operation == 'grad':
+        elif operation == "grad":
             self.gtimes.append(elapsed)
-        elif operation == 'grad_norm':
+        elif operation == "grad_norm":
             self.gtimes2.append(elapsed)
-        elif operation == 'param_update':
+        elif operation == "param_update":
             self.ptimes.append(elapsed)
 
         return result
@@ -683,13 +683,13 @@ class TRFProfiler:
 
         elapsed = time.time() - start_time
 
-        if operation == 'svd_convert':
+        if operation == "svd_convert":
             self.svd_ctimes.append(elapsed)
-        elif operation == 'grad_convert':
+        elif operation == "grad_convert":
             self.g_ctimes.append(elapsed)
-        elif operation == 'cost_convert':
+        elif operation == "cost_convert":
             self.c_ctimes.append(elapsed)
-        elif operation == 'param_convert':
+        elif operation == "param_convert":
             self.p_ctimes.append(elapsed)
 
     def get_timing_data(self) -> dict:
@@ -701,17 +701,17 @@ class TRFProfiler:
             Dictionary containing all timing arrays
         """
         return {
-            'ftimes': self.ftimes,
-            'jtimes': self.jtimes,
-            'svd_times': self.svd_times,
-            'ctimes': self.ctimes,
-            'gtimes': self.gtimes,
-            'gtimes2': self.gtimes2,
-            'ptimes': self.ptimes,
-            'svd_ctimes': self.svd_ctimes,
-            'g_ctimes': self.g_ctimes,
-            'c_ctimes': self.c_ctimes,
-            'p_ctimes': self.p_ctimes,
+            "ftimes": self.ftimes,
+            "jtimes": self.jtimes,
+            "svd_times": self.svd_times,
+            "ctimes": self.ctimes,
+            "gtimes": self.gtimes,
+            "gtimes2": self.gtimes2,
+            "ptimes": self.ptimes,
+            "svd_ctimes": self.svd_ctimes,
+            "g_ctimes": self.g_ctimes,
+            "c_ctimes": self.c_ctimes,
+            "p_ctimes": self.p_ctimes,
         }
 
 
@@ -733,17 +733,17 @@ class NullProfiler:
     def get_timing_data(self) -> dict:
         """Returns empty timing data."""
         return {
-            'ftimes': [],
-            'jtimes': [],
-            'svd_times': [],
-            'ctimes': [],
-            'gtimes': [],
-            'gtimes2': [],
-            'ptimes': [],
-            'svd_ctimes': [],
-            'g_ctimes': [],
-            'c_ctimes': [],
-            'p_ctimes': [],
+            "ftimes": [],
+            "jtimes": [],
+            "svd_times": [],
+            "ctimes": [],
+            "gtimes": [],
+            "gtimes2": [],
+            "ptimes": [],
+            "svd_ctimes": [],
+            "g_ctimes": [],
+            "c_ctimes": [],
+            "p_ctimes": [],
         }
 
 
@@ -994,44 +994,42 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         """
         m, n = J.shape
         state = {
-            'x': x0.copy(),
-            'f': f,
-            'J': J,
-            'nfev': 1,
-            'njev': 1,
-            'm': m,
-            'n': n,
+            "x": x0.copy(),
+            "f": f,
+            "J": J,
+            "nfev": 1,
+            "njev": 1,
+            "m": m,
+            "n": n,
         }
 
         # Apply loss function if provided
         if loss_function is not None:
             rho = loss_function(f, f_scale)
-            state['cost'] = self.calculate_cost(rho, data_mask)
+            state["cost"] = self.calculate_cost(rho, data_mask)
             # Save original residuals before scaling (for res.fun)
-            state['f_true'] = f
-            state['J'], state['f'] = self.cJIT.scale_for_robust_loss_function(
-                J, f, rho
-            )
+            state["f_true"] = f
+            state["J"], state["f"] = self.cJIT.scale_for_robust_loss_function(J, f, rho)
         else:
-            state['cost'] = self.default_loss_func(f)
+            state["cost"] = self.default_loss_func(f)
             # No scaling applied, so f is already the true residuals
-            state['f_true'] = f
+            state["f_true"] = f
 
         # Compute gradient
-        state['g'] = self.compute_grad(state['J'], state['f'])
+        state["g"] = self.compute_grad(state["J"], state["f"])
 
         # Compute scaling factors
         jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
-            state['scale'], state['scale_inv'] = self.cJIT.compute_jac_scale(J)
-            state['jac_scale'] = True
+            state["scale"], state["scale_inv"] = self.cJIT.compute_jac_scale(J)
+            state["jac_scale"] = True
         else:
-            state['scale'], state['scale_inv'] = x_scale, 1 / x_scale
-            state['jac_scale'] = False
+            state["scale"], state["scale_inv"] = x_scale, 1 / x_scale
+            state["jac_scale"] = False
 
         # Initialize trust region radius
-        Delta = norm(x0 * state['scale_inv'])
-        state['Delta'] = Delta if Delta > 0 else 1.0
+        Delta = norm(x0 * state["scale_inv"])
+        state["Delta"] = Delta if Delta > 0 else 1.0
 
         return state
 
@@ -1118,9 +1116,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         g_h_jnp = self.compute_grad_hat(g, d_jnp)
 
         result = {
-            'd': d,
-            'd_jnp': d_jnp,
-            'g_h': g_h_jnp,
+            "d": d,
+            "d_jnp": d_jnp,
+            "g_h": g_h_jnp,
         }
 
         # Solve trust region subproblem
@@ -1128,13 +1126,15 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             # Conjugate gradient solver
             J_h = J * d_jnp
             step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
-            result.update({
-                'J_h': J_h,
-                'step_h': step_h,
-                's': None,
-                'V': None,
-                'uf': None,
-            })
+            result.update(
+                {
+                    "J_h": J_h,
+                    "step_h": step_h,
+                    "s": None,
+                    "V": None,
+                    "uf": None,
+                }
+            )
         else:
             # SVD-based exact solver
             svd_output = self.svd_no_bounds(J, d_jnp, f)
@@ -1143,13 +1143,15 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             # JAX arrays work with NumPy operations through duck typing, eliminating
             # explicit array conversion reduces memory allocations and copies
             s, V, uf = svd_output[2:]  # Keep as JAX arrays instead of converting
-            result.update({
-                'J_h': J_h,
-                'step_h': None,  # Computed later in inner loop
-                's': s,
-                'V': V,
-                'uf': uf,
-            })
+            result.update(
+                {
+                    "J_h": J_h,
+                    "step_h": None,  # Computed later in inner loop
+                    "s": s,
+                    "V": V,
+                    "uf": uf,
+                }
+            )
 
         return result
 
@@ -1358,24 +1360,26 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         # Prepare result
         result = {
-            'accepted': actual_reduction > 0,
-            'actual_reduction': actual_reduction if actual_reduction > 0 else 0,
-            'step_norm': step_norm if actual_reduction > 0 else 0,
-            'Delta': Delta,
-            'alpha': alpha,
-            'termination_status': termination_status,
-            'nfev': nfev,
-            'njev': 0,  # Will be set to 1 if step is accepted
+            "accepted": actual_reduction > 0,
+            "actual_reduction": max(0, actual_reduction),
+            "step_norm": step_norm if actual_reduction > 0 else 0,
+            "Delta": Delta,
+            "alpha": alpha,
+            "termination_status": termination_status,
+            "nfev": nfev,
+            "njev": 0,  # Will be set to 1 if step is accepted
         }
 
         # If step was accepted, compute new state
         if actual_reduction > 0:
-            result.update({
-                'x_new': x_new,
-                'f_new': f_new,
-                'cost_new': cost_new,
-                'njev': 1,
-            })
+            result.update(
+                {
+                    "x_new": x_new,
+                    "f_new": f_new,
+                    "cost_new": cost_new,
+                    "njev": 1,
+                }
+            )
 
             # Compute new Jacobian
             J_new = jac(x_new, xdata, ydata, data_mask, transform)
@@ -1386,25 +1390,23 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 J_new, f_new_scaled = self.cJIT.scale_for_robust_loss_function(
                     J_new, f_new, rho
                 )
-                result['f_new'] = f_new_scaled  # Scaled residuals for optimization
-                result['f_true_new'] = f_new  # Unscaled residuals for res.fun
+                result["f_new"] = f_new_scaled  # Scaled residuals for optimization
+                result["f_true_new"] = f_new  # Unscaled residuals for res.fun
             else:
-                result['f_new'] = f_new
-                result['f_true_new'] = f_new  # No scaling, so both are the same
+                result["f_new"] = f_new
+                result["f_true_new"] = f_new  # No scaling, so both are the same
 
-            result['J_new'] = J_new
+            result["J_new"] = J_new
 
             # Compute new gradient
-            g_new = self.compute_grad(J_new, result['f_new'])
-            result['g_new'] = g_new
+            g_new = self.compute_grad(J_new, result["f_new"])
+            result["g_new"] = g_new
 
             # Update scaling if using Jacobian-based scaling
             if jac_scale:
-                scale_new, scale_inv_new = self.cJIT.compute_jac_scale(
-                    J_new, scale_inv
-                )
-                result['scale'] = scale_new
-                result['scale_inv'] = scale_inv_new
+                scale_new, scale_inv_new = self.cJIT.compute_jac_scale(J_new, scale_inv)
+                result["scale"] = scale_new
+                result["scale_inv"] = scale_inv_new
 
         return result
 
@@ -1533,21 +1535,21 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         )
 
         # Extract state variables
-        x = state['x']
-        f = state['f']
-        J = state['J']
-        cost = state['cost']
-        g = state['g']
+        x = state["x"]
+        f = state["f"]
+        J = state["J"]
+        cost = state["cost"]
+        g = state["g"]
         g_jnp = g  # Keep as JAX array for performance
-        scale = state['scale']
-        scale_inv = state['scale_inv']
-        Delta = state['Delta']
-        nfev = state['nfev']
-        njev = state['njev']
-        m = state['m']
-        n = state['n']
-        jac_scale = state['jac_scale']
-        f_true = state['f_true']  # Original unscaled residuals (for res.fun)
+        scale = state["scale"]
+        scale_inv = state["scale_inv"]
+        Delta = state["Delta"]
+        nfev = state["nfev"]
+        njev = state["njev"]
+        m = state["m"]
+        n = state["n"]
+        jac_scale = state["jac_scale"]
+        f_true = state["f_true"]  # Original unscaled residuals (for res.fun)
 
         # Log optimization start
         self.logger.info(
@@ -1612,14 +1614,14 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 )
 
                 # Extract subproblem solution
-                d = subproblem_result['d']
-                d_jnp = subproblem_result['d_jnp']
-                g_h_jnp = subproblem_result['g_h']
-                J_h = subproblem_result['J_h']
-                step_h = subproblem_result['step_h']
-                s = subproblem_result['s']
-                V = subproblem_result['V']
-                uf = subproblem_result['uf']
+                d = subproblem_result["d"]
+                d_jnp = subproblem_result["d_jnp"]
+                g_h_jnp = subproblem_result["g_h"]
+                J_h = subproblem_result["J_h"]
+                step_h = subproblem_result["step_h"]
+                s = subproblem_result["s"]
+                V = subproblem_result["V"]
+                uf = subproblem_result["uf"]
 
                 # Evaluate and potentially accept step using helper
                 acceptance_result = self._evaluate_step_acceptance(
@@ -1655,28 +1657,30 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 )
 
                 # Update state from acceptance result
-                if acceptance_result['accepted']:
-                    x = acceptance_result['x_new']
-                    f = acceptance_result['f_new']  # Scaled residuals for optimization
-                    f_true = acceptance_result['f_true_new']  # Unscaled residuals for res.fun
-                    J = acceptance_result['J_new']
-                    cost = acceptance_result['cost_new']
-                    g = acceptance_result['g_new']
+                if acceptance_result["accepted"]:
+                    x = acceptance_result["x_new"]
+                    f = acceptance_result["f_new"]  # Scaled residuals for optimization
+                    f_true = acceptance_result[
+                        "f_true_new"
+                    ]  # Unscaled residuals for res.fun
+                    J = acceptance_result["J_new"]
+                    cost = acceptance_result["cost_new"]
+                    g = acceptance_result["g_new"]
                     g_jnp = g
-                    njev += acceptance_result['njev']
+                    njev += acceptance_result["njev"]
 
-                    if jac_scale and 'scale' in acceptance_result:
-                        scale = acceptance_result['scale']
-                        scale_inv = acceptance_result['scale_inv']
+                    if jac_scale and "scale" in acceptance_result:
+                        scale = acceptance_result["scale"]
+                        scale_inv = acceptance_result["scale_inv"]
 
-                actual_reduction = acceptance_result['actual_reduction']
-                step_norm = acceptance_result['step_norm']
-                Delta = acceptance_result['Delta']
-                alpha = acceptance_result['alpha']
-                nfev = acceptance_result['nfev']
+                actual_reduction = acceptance_result["actual_reduction"]
+                step_norm = acceptance_result["step_norm"]
+                Delta = acceptance_result["Delta"]
+                alpha = acceptance_result["alpha"]
+                nfev = acceptance_result["nfev"]
 
-                if acceptance_result['termination_status'] is not None:
-                    termination_status = acceptance_result['termination_status']
+                if acceptance_result["termination_status"] is not None:
+                    termination_status = acceptance_result["termination_status"]
 
                 iteration += 1
 

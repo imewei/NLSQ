@@ -167,9 +167,10 @@ def estimate_initial_parameters(
         sig = inspect.signature(f)
         # Filter out VAR_POSITIONAL (*args) and VAR_KEYWORD (**kwargs)
         regular_params = [
-            name for name, param in sig.parameters.items()
-            if param.kind not in (inspect.Parameter.VAR_POSITIONAL,
-                                 inspect.Parameter.VAR_KEYWORD)
+            name
+            for name, param in sig.parameters.items()
+            if param.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
         ]
         # First parameter is typically x, so n_params = total - 1
         n_params = len(regular_params) - 1
@@ -183,9 +184,11 @@ def estimate_initial_parameters(
     # If we have VAR_POSITIONAL or VAR_KEYWORD, we can't determine n_params
     # Check this AFTER try/except to avoid catching our own ValueError
     try:
-        if any(param.kind in (inspect.Parameter.VAR_POSITIONAL,
-                             inspect.Parameter.VAR_KEYWORD)
-               for param in sig.parameters.values()):
+        if any(
+            param.kind
+            in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            for param in sig.parameters.values()
+        ):
             raise ValueError(
                 "Cannot automatically determine number of parameters "
                 "for functions with *args or **kwargs. "

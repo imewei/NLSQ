@@ -5,12 +5,13 @@ Tests that deprecated sampling parameters emit proper DeprecationWarnings
 with migration guidance, and that the code continues to work gracefully.
 """
 
-import warnings
 import unittest
-import numpy as np
-import jax.numpy as jnp
+import warnings
 
-from nlsq import curve_fit_large, LargeDatasetConfig, LDMemoryConfig
+import jax.numpy as jnp
+import numpy as np
+
+from nlsq import LargeDatasetConfig, LDMemoryConfig, curve_fit_large
 
 
 class TestDeprecationWarnings(unittest.TestCase):
@@ -21,7 +22,9 @@ class TestDeprecationWarnings(unittest.TestCase):
         np.random.seed(42)
         # Use 10000 points and override size_threshold to trigger large dataset path
         self.x = np.linspace(0, 5, 10000)
-        self.y = 2.0 * np.exp(-0.5 * self.x) + 0.3 + np.random.normal(0, 0.05, len(self.x))
+        self.y = (
+            2.0 * np.exp(-0.5 * self.x) + 0.3 + np.random.normal(0, 0.05, len(self.x))
+        )
         # Set size_threshold below our data size to force large dataset processing
         self.size_threshold = 5000
 
@@ -37,7 +40,7 @@ class TestDeprecationWarnings(unittest.TestCase):
             warnings.simplefilter("always")
 
             # Call with deprecated enable_sampling parameter
-            popt, pcov = curve_fit_large(
+            popt, _pcov = curve_fit_large(
                 self.model,
                 self.x,
                 self.y,
@@ -71,7 +74,7 @@ class TestDeprecationWarnings(unittest.TestCase):
             warnings.simplefilter("always")
 
             # Call with deprecated sampling_threshold parameter
-            popt, pcov = curve_fit_large(
+            popt, _pcov = curve_fit_large(
                 self.model,
                 self.x,
                 self.y,
@@ -99,7 +102,7 @@ class TestDeprecationWarnings(unittest.TestCase):
             warnings.simplefilter("always")
 
             # Call with deprecated max_sampled_size parameter
-            popt, pcov = curve_fit_large(
+            popt, _pcov = curve_fit_large(
                 self.model,
                 self.x,
                 self.y,
@@ -126,7 +129,7 @@ class TestDeprecationWarnings(unittest.TestCase):
             warnings.simplefilter("always")
 
             # Call with multiple deprecated parameters
-            popt, pcov = curve_fit_large(
+            popt, _pcov = curve_fit_large(
                 self.model,
                 self.x,
                 self.y,
@@ -158,7 +161,7 @@ class TestDeprecationWarnings(unittest.TestCase):
             warnings.simplefilter("always")
 
             # Call without any deprecated parameters
-            popt, pcov = curve_fit_large(
+            popt, _pcov = curve_fit_large(
                 self.model,
                 self.x,
                 self.y,
@@ -168,7 +171,9 @@ class TestDeprecationWarnings(unittest.TestCase):
 
             # Check that no DeprecationWarning was raised
             deprecation_warnings = [
-                warning for warning in w if issubclass(warning.category, DeprecationWarning)
+                warning
+                for warning in w
+                if issubclass(warning.category, DeprecationWarning)
             ]
             self.assertEqual(len(deprecation_warnings), 0)
 
@@ -259,10 +264,12 @@ class TestDeprecationWarnings(unittest.TestCase):
                 "v0.2.0",  # Version information
                 "streaming",  # Replacement feature
                 "MIGRATION_V0.2.0.md",  # Migration guide reference
-                "zero accuracy loss" or "100% of data",  # Benefit explanation
+                "zero accuracy loss",  # Benefit explanation
             ]
 
-            for content in required_content[:5]:  # Check first 5 (last one is OR condition)
+            for content in required_content[
+                :5
+            ]:  # Check first 5 (last one is OR condition)
                 self.assertIn(
                     content.lower(),
                     message.lower(),
@@ -271,7 +278,8 @@ class TestDeprecationWarnings(unittest.TestCase):
 
             # Check for benefit explanation (either phrase)
             self.assertTrue(
-                "zero accuracy loss" in message.lower() or "100% of data" in message.lower(),
+                "zero accuracy loss" in message.lower()
+                or "100% of data" in message.lower(),
                 "Warning should explain streaming processes all data",
             )
 

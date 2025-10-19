@@ -28,7 +28,7 @@ from nlsq.logging import get_logger
 from nlsq.minpack import CurveFit
 
 # Import streaming optimizer (required dependency as of v0.2.0)
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 @dataclass
@@ -309,11 +309,12 @@ class DataChunker:
                 # Pad by repeating points from the chunk cyclically
                 pad_size = chunk_size - current_chunk_size
                 # Repeat indices cyclically to pad to full chunk_size
-                pad_indices = np.tile(chunk_indices, (pad_size // current_chunk_size) + 1)[:pad_size]
+                pad_indices = np.tile(
+                    chunk_indices, (pad_size // current_chunk_size) + 1
+                )[:pad_size]
                 chunk_indices = np.concatenate([chunk_indices, pad_indices])
 
             yield xdata[chunk_indices], ydata[chunk_indices], i
-
 
 
 class LargeDatasetFitter:
@@ -468,7 +469,7 @@ class LargeDatasetFitter:
         memory_limit_gb: float = 8.0,
         config: LDMemoryConfig | None = None,
         curve_fit_class: CurveFit | None = None,
-        logger: Optional[Logger] = None,
+        logger: Logger | None = None,
     ) -> None:
         """Initialize LargeDatasetFitter.
 
@@ -996,6 +997,7 @@ class LargeDatasetFitter:
         # For truly unlimited data, users should provide HDF5 files
         class InMemoryGenerator:
             """Simple in-memory data generator for streaming."""
+
             def __init__(self, x, y, batch_size):
                 self.x = x
                 self.y = y
@@ -1039,7 +1041,9 @@ class LargeDatasetFitter:
                 fun=None,  # Not available in streaming mode
             )
             result["popt"] = result.x
-            result["pcov"] = np.eye(len(result.x))  # Approximate - streaming doesn't compute covariance
+            result["pcov"] = np.eye(
+                len(result.x)
+            )  # Approximate - streaming doesn't compute covariance
 
             self.logger.info(
                 f"Streaming fit completed. Final loss: {result_dict.get('final_loss', 'N/A')}"
@@ -1098,7 +1102,7 @@ class LargeDatasetFitter:
         updated_params = popt_chunk.copy()
 
         # Update parameter history
-        updated_history = param_history + [updated_params.copy()]
+        updated_history = [*param_history, updated_params.copy()]
 
         # Calculate convergence metric
         new_convergence_metric = convergence_metric
@@ -1110,9 +1114,7 @@ class LargeDatasetFitter:
             # Check early stopping criteria
             # Stop if parameters stabilized and we've processed enough chunks
             if new_convergence_metric < 0.001 and chunk_idx >= min(n_chunks - 1, 3):
-                self.logger.info(
-                    f"Parameters converged after {chunk_idx + 1} chunks"
-                )
+                self.logger.info(f"Parameters converged after {chunk_idx + 1} chunks")
                 return (updated_params, updated_history, new_convergence_metric, True)
 
         return (updated_params, updated_history, new_convergence_metric, False)
@@ -1283,9 +1285,7 @@ class LargeDatasetFitter:
 
         # Attempt retry with perturbed parameters
         try:
-            self.logger.info(
-                f"Retrying chunk {chunk_idx} with current parameters"
-            )
+            self.logger.info(f"Retrying chunk {chunk_idx} with current parameters")
             # Add small perturbation to avoid local minima
             perturbed_params = current_params * (
                 1 + 0.01 * np.random.randn(len(current_params))
@@ -1324,9 +1324,7 @@ class LargeDatasetFitter:
 
         except Exception as retry_e:
             # Retry also failed
-            self.logger.warning(
-                f"Retry for chunk {chunk_idx} also failed: {retry_e}"
-            )
+            self.logger.warning(f"Retry for chunk {chunk_idx} also failed: {retry_e}")
             chunk_duration = time.time() - chunk_start_time
             chunk_times.append(chunk_duration)
 
@@ -1360,16 +1358,18 @@ class LargeDatasetFitter:
 
         failure_summary = {
             "total_failures": len(failed_chunks),
-            "failure_rate": len(failed_chunks) / len(chunk_results) if chunk_results else 0.0,
+            "failure_rate": len(failed_chunks) / len(chunk_results)
+            if chunk_results
+            else 0.0,
             "failed_chunk_indices": [r["chunk_idx"] for r in failed_chunks],
             "error_types": {},
             "common_errors": [],
             "timing_stats": {
                 "mean_chunk_time": float(np.mean(chunk_times)) if chunk_times else 0.0,
-                "median_chunk_time": float(np.median(chunk_times)) if chunk_times else 0.0,
-                "failed_chunk_times": [
-                    r.get("duration", 0.0) for r in failed_chunks
-                ],
+                "median_chunk_time": float(np.median(chunk_times))
+                if chunk_times
+                else 0.0,
+                "failed_chunk_times": [r.get("duration", 0.0) for r in failed_chunks],
                 "mean_failed_chunk_time": float(
                     np.mean([r.get("duration", 0.0) for r in failed_chunks])
                 )
@@ -1388,9 +1388,7 @@ class LargeDatasetFitter:
         # Identify most common errors (top 3)
         if failure_summary["error_types"]:
             sorted_errors = sorted(
-                failure_summary["error_types"].items(),
-                key=lambda x: x[1],
-                reverse=True
+                failure_summary["error_types"].items(), key=lambda x: x[1], reverse=True
             )
             failure_summary["common_errors"] = [
                 {"type": err_type, "count": count}
@@ -1418,9 +1416,7 @@ class LargeDatasetFitter:
         """
         if len(param_history) > 1:
             # Use last 10 parameter estimates for covariance estimation
-            param_variations = np.array(
-                param_history[-min(10, len(param_history)) :]
-            )
+            param_variations = np.array(param_history[-min(10, len(param_history)) :])
             pcov = np.cov(param_variations.T)
         else:
             # Fallback: identity matrix scaled by parameter magnitudes
@@ -1461,9 +1457,7 @@ class LargeDatasetFitter:
             Final optimization result with parameters, covariance, and diagnostics
         """
         # Log completion
-        self.logger.info(
-            f"Chunked fit completed with {success_rate:.1%} success rate"
-        )
+        self.logger.info(f"Chunked fit completed with {success_rate:.1%} success rate")
 
         # Create failure summary for diagnostics
         failure_summary = self._create_failure_summary(chunk_results, chunk_times)
@@ -1731,7 +1725,7 @@ def fit_large_dataset(
     p0: np.ndarray | list | None = None,
     memory_limit_gb: float = 8.0,
     show_progress: bool = False,
-    logger: Optional[Logger] = None,
+    logger: Logger | None = None,
     **kwargs,
 ) -> OptimizeResult:
     """Convenience function for fitting large datasets.

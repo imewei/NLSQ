@@ -4,11 +4,10 @@ This module tests the individual helper methods that were extracted from
 trf_no_bounds to reduce complexity from 31 to <15.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal
-
-import jax.numpy as jnp
 
 from nlsq.trf import TrustRegionReflective
 
@@ -42,31 +41,31 @@ class TestInitializeTRFState:
 
         # Verify state structure
         assert isinstance(state, dict)
-        assert 'x' in state
-        assert 'f' in state
-        assert 'J' in state
-        assert 'cost' in state
-        assert 'g' in state
-        assert 'scale' in state
-        assert 'scale_inv' in state
-        assert 'Delta' in state
-        assert 'nfev' in state
-        assert 'njev' in state
-        assert 'm' in state
-        assert 'n' in state
+        assert "x" in state
+        assert "f" in state
+        assert "J" in state
+        assert "cost" in state
+        assert "g" in state
+        assert "scale" in state
+        assert "scale_inv" in state
+        assert "Delta" in state
+        assert "nfev" in state
+        assert "njev" in state
+        assert "m" in state
+        assert "n" in state
 
         # Verify dimensions
-        assert state['m'] == n_residuals
-        assert state['n'] == n_params
-        assert state['nfev'] == 1
-        assert state['njev'] == 1
+        assert state["m"] == n_residuals
+        assert state["n"] == n_params
+        assert state["nfev"] == 1
+        assert state["njev"] == 1
 
         # Verify x is a copy
-        assert state['x'] is not x0
-        assert_array_almost_equal(state['x'], x0)
+        assert state["x"] is not x0
+        assert_array_almost_equal(state["x"], x0)
 
         # Verify Delta is positive
-        assert state['Delta'] > 0
+        assert state["Delta"] > 0
 
     def test_initialization_with_jac_scaling(self):
         """Test state initialization with Jacobian-based scaling."""
@@ -82,15 +81,15 @@ class TestInitializeTRFState:
             f=f,
             J=J,
             loss_function=None,
-            x_scale='jac',  # Use Jacobian scaling
+            x_scale="jac",  # Use Jacobian scaling
             f_scale=1.0,
             data_mask=data_mask,
         )
 
         # Verify jac_scale flag is set
-        assert state['jac_scale'] is True
-        assert 'scale' in state
-        assert 'scale_inv' in state
+        assert state["jac_scale"] is True
+        assert "scale" in state
+        assert "scale_inv" in state
 
     def test_initialization_with_zero_initial_guess(self):
         """Test that Delta is set to 1.0 when initial guess is zero."""
@@ -103,12 +102,17 @@ class TestInitializeTRFState:
         data_mask = jnp.ones(5)
 
         state = trf._initialize_trf_state(
-            x0=x0, f=f, J=J, loss_function=None,
-            x_scale=x_scale, f_scale=1.0, data_mask=data_mask
+            x0=x0,
+            f=f,
+            J=J,
+            loss_function=None,
+            x_scale=x_scale,
+            f_scale=1.0,
+            data_mask=data_mask,
         )
 
         # When x0 is zero, Delta should default to 1.0
-        assert state['Delta'] == 1.0
+        assert state["Delta"] == 1.0
 
     def test_gradient_computation(self):
         """Test that gradient is computed correctly."""
@@ -121,13 +125,18 @@ class TestInitializeTRFState:
         data_mask = jnp.ones(2)
 
         state = trf._initialize_trf_state(
-            x0=x0, f=f, J=J, loss_function=None,
-            x_scale=x_scale, f_scale=1.0, data_mask=data_mask
+            x0=x0,
+            f=f,
+            J=J,
+            loss_function=None,
+            x_scale=x_scale,
+            f_scale=1.0,
+            data_mask=data_mask,
         )
 
         # Gradient should be J^T @ f
         expected_g = J.T @ f
-        assert_array_almost_equal(state['g'], expected_g)
+        assert_array_almost_equal(state["g"], expected_g)
 
     def test_cost_function_computation(self):
         """Test that cost function is computed correctly."""
@@ -140,13 +149,18 @@ class TestInitializeTRFState:
         data_mask = jnp.ones(2)
 
         state = trf._initialize_trf_state(
-            x0=x0, f=f, J=J, loss_function=None,
-            x_scale=x_scale, f_scale=1.0, data_mask=data_mask
+            x0=x0,
+            f=f,
+            J=J,
+            loss_function=None,
+            x_scale=x_scale,
+            f_scale=1.0,
+            data_mask=data_mask,
         )
 
         # Cost should be 0.5 * ||f||^2 = 0.5 * (4 + 9) = 6.5
         expected_cost = 0.5 * (2.0**2 + 3.0**2)
-        assert abs(float(state['cost']) - expected_cost) < 1e-10
+        assert abs(float(state["cost"]) - expected_cost) < 1e-10
 
 
 class TestCheckConvergenceCriteria:
@@ -220,18 +234,18 @@ class TestSolveTrustRegionSubproblem:
         alpha = 0.01
 
         result = trf._solve_trust_region_subproblem(
-            J, f, g, scale, Delta, alpha, solver='exact'
+            J, f, g, scale, Delta, alpha, solver="exact"
         )
 
         # Verify result structure
-        assert 'J_h' in result
-        assert 'g_h' in result
-        assert 'd' in result
-        assert 'd_jnp' in result
-        assert result['step_h'] is None  # Exact solver computes step later
-        assert result['s'] is not None  # Should have SVD components
-        assert result['V'] is not None
-        assert result['uf'] is not None
+        assert "J_h" in result
+        assert "g_h" in result
+        assert "d" in result
+        assert "d_jnp" in result
+        assert result["step_h"] is None  # Exact solver computes step later
+        assert result["s"] is not None  # Should have SVD components
+        assert result["V"] is not None
+        assert result["uf"] is not None
 
     def test_subproblem_scaling(self):
         """Test that scaling is applied correctly."""
@@ -245,12 +259,18 @@ class TestSolveTrustRegionSubproblem:
         alpha = 0.01
 
         result = trf._solve_trust_region_subproblem(
-            J, f, g, scale, Delta, alpha, solver='exact'  # Use exact solver
+            J,
+            f,
+            g,
+            scale,
+            Delta,
+            alpha,
+            solver="exact",  # Use exact solver
         )
 
         # Verify scaling factors are stored
-        assert_array_almost_equal(result['d'], scale)
-        assert_array_almost_equal(result['d_jnp'], scale)
+        assert_array_almost_equal(result["d"], scale)
+        assert_array_almost_equal(result["d_jnp"], scale)
 
 
 class TestEvaluateStepAcceptance:
@@ -312,7 +332,7 @@ class TestEvaluateStepAcceptance:
             f_scale=1.0,
             scale_inv=np.ones(2),
             jac_scale=False,
-            solver='cg',
+            solver="cg",
             ftol=1e-8,
             xtol=1e-8,
             max_nfev=100,
@@ -320,13 +340,13 @@ class TestEvaluateStepAcceptance:
         )
 
         # Step should be accepted (moves toward optimum)
-        assert result['accepted'] == True  # noqa: E712
-        assert result['actual_reduction'] > 0
-        assert result['nfev'] == 2  # One function evaluation
-        assert 'x_new' in result
-        assert 'f_new' in result
-        assert 'J_new' in result
-        assert 'g_new' in result
+        assert result["accepted"] == True  # noqa: E712
+        assert result["actual_reduction"] > 0
+        assert result["nfev"] == 2  # One function evaluation
+        assert "x_new" in result
+        assert "f_new" in result
+        assert "J_new" in result
+        assert "g_new" in result
 
     def test_step_acceptance_result_structure(self):
         """Test that result dictionary contains expected keys."""
@@ -380,7 +400,7 @@ class TestEvaluateStepAcceptance:
             f_scale=1.0,
             scale_inv=np.ones(2),
             jac_scale=False,
-            solver='cg',
+            solver="cg",
             ftol=1e-8,
             xtol=1e-8,
             max_nfev=100,
@@ -388,14 +408,14 @@ class TestEvaluateStepAcceptance:
         )
 
         # Verify result structure
-        assert 'accepted' in result
-        assert 'actual_reduction' in result
-        assert 'step_norm' in result
-        assert 'Delta' in result
-        assert 'alpha' in result
-        assert 'termination_status' in result
-        assert 'nfev' in result
-        assert 'njev' in result
+        assert "accepted" in result
+        assert "actual_reduction" in result
+        assert "step_norm" in result
+        assert "Delta" in result
+        assert "alpha" in result
+        assert "termination_status" in result
+        assert "nfev" in result
+        assert "njev" in result
 
     def test_max_nfev_termination(self):
         """Test that evaluation stops when max_nfev is reached."""
@@ -448,7 +468,7 @@ class TestEvaluateStepAcceptance:
             f_scale=1.0,
             scale_inv=np.ones(2),
             jac_scale=False,
-            solver='cg',
+            solver="cg",
             ftol=1e-8,
             xtol=1e-8,
             max_nfev=5,  # Already at limit
@@ -456,8 +476,8 @@ class TestEvaluateStepAcceptance:
         )
 
         # Should exit immediately
-        assert result['accepted'] == False  # noqa: E712
-        assert result['nfev'] == 5  # No additional evaluations
+        assert result["accepted"] == False  # noqa: E712
+        assert result["nfev"] == 5  # No additional evaluations
 
 
 class TestHelperMethodsIntegration:
@@ -480,17 +500,22 @@ class TestHelperMethodsIntegration:
         data_mask = jnp.ones(len(t))
 
         state = trf._initialize_trf_state(
-            x0=x0, f=f, J=J, loss_function=None,
-            x_scale=x_scale, f_scale=1.0, data_mask=data_mask
+            x0=x0,
+            f=f,
+            J=J,
+            loss_function=None,
+            x_scale=x_scale,
+            f_scale=1.0,
+            data_mask=data_mask,
         )
 
         # Verify state is ready for optimization
-        assert state['m'] == len(t)
-        assert state['n'] == 2
-        assert state['Delta'] > 0
-        assert len(state['g']) == 2
-        assert state['cost'] > 0
+        assert state["m"] == len(t)
+        assert state["n"] == 2
+        assert state["Delta"] > 0
+        assert len(state["g"]) == 2
+        assert state["cost"] > 0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

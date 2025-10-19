@@ -371,13 +371,13 @@ Enhanced failure tracking for post-mortem analysis:
 result = fitter.fit(model_func, xdata, ydata, p0=[1, 2])
 
 # Check failure diagnostics
-if result.failure_summary['total_failures'] > 0:
+if result.failure_summary["total_failures"] > 0:
     print(f"Failed chunks: {result.failure_summary['failed_chunk_indices']}")
     print(f"Common errors: {result.failure_summary['common_errors']}")
 
     # Access detailed per-chunk diagnostics
     for chunk in result.chunk_results:
-        if not chunk['success']:
+        if not chunk["success"]:
             print(f"Chunk {chunk['chunk_idx']}: {chunk['error_type']}")
             print(f"  Data stats: {chunk['data_stats']}")
             print(f"  Timestamp: {chunk['timestamp']}")
@@ -391,22 +391,13 @@ Tune the minimum success rate threshold for chunked fitting:
 from nlsq import LDMemoryConfig, LargeDatasetFitter
 
 # Default: require 50% of chunks to succeed
-config = LDMemoryConfig(
-    memory_limit_gb=8,
-    min_success_rate=0.5  # Default
-)
+config = LDMemoryConfig(memory_limit_gb=8, min_success_rate=0.5)  # Default
 
 # Stricter: require 80% success (good for clean data)
-config_strict = LDMemoryConfig(
-    memory_limit_gb=8,
-    min_success_rate=0.8
-)
+config_strict = LDMemoryConfig(memory_limit_gb=8, min_success_rate=0.8)
 
 # More permissive: allow 30% failures (for very noisy data)
-config_permissive = LDMemoryConfig(
-    memory_limit_gb=8,
-    min_success_rate=0.3
-)
+config_permissive = LDMemoryConfig(memory_limit_gb=8, min_success_rate=0.3)
 
 fitter = LargeDatasetFitter(config=config_strict)
 ```

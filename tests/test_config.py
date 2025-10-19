@@ -536,7 +536,12 @@ class TestMemoryConfigFunctions(unittest.TestCase):
 
                 # Check that deprecation warning was issued
                 self.assertTrue(len(w) >= 1)
-                self.assertTrue(any(issubclass(warning.category, DeprecationWarning) for warning in w))
+                self.assertTrue(
+                    any(
+                        issubclass(warning.category, DeprecationWarning)
+                        for warning in w
+                    )
+                )
 
             ld_config = get_large_dataset_config()
             mem_config = get_memory_config()
@@ -606,9 +611,7 @@ class TestMemoryContextManager(unittest.TestCase):
 
         original_config = get_large_dataset_config()
 
-        temp_config = LargeDatasetConfig(
-            enable_automatic_solver_selection=False
-        )
+        temp_config = LargeDatasetConfig(enable_automatic_solver_selection=False)
 
         with large_dataset_context(temp_config):
             current = get_large_dataset_config()
@@ -618,7 +621,7 @@ class TestMemoryContextManager(unittest.TestCase):
         restored = get_large_dataset_config()
         self.assertEqual(
             restored.enable_automatic_solver_selection,
-            original_config.enable_automatic_solver_selection
+            original_config.enable_automatic_solver_selection,
         )
 
     def test_large_dataset_context_nested(self):
@@ -630,29 +633,44 @@ class TestMemoryContextManager(unittest.TestCase):
         )
 
         config1 = LargeDatasetConfig(
-            solver_selection_thresholds={"direct": 50_000, "iterative": 5_000_000, "chunked": 50_000_000}
+            solver_selection_thresholds={
+                "direct": 50_000,
+                "iterative": 5_000_000,
+                "chunked": 50_000_000,
+            }
         )
         config2 = LargeDatasetConfig(
-            solver_selection_thresholds={"direct": 100_000, "iterative": 10_000_000, "chunked": 100_000_000}
+            solver_selection_thresholds={
+                "direct": 100_000,
+                "iterative": 10_000_000,
+                "chunked": 100_000_000,
+            }
         )
 
         original = get_large_dataset_config()
 
         with large_dataset_context(config1):
-            self.assertEqual(get_large_dataset_config().solver_selection_thresholds["chunked"], 50_000_000)
+            self.assertEqual(
+                get_large_dataset_config().solver_selection_thresholds["chunked"],
+                50_000_000,
+            )
 
             with large_dataset_context(config2):
                 self.assertEqual(
-                    get_large_dataset_config().solver_selection_thresholds["chunked"], 100_000_000
+                    get_large_dataset_config().solver_selection_thresholds["chunked"],
+                    100_000_000,
                 )
 
             # Should restore to config1
-            self.assertEqual(get_large_dataset_config().solver_selection_thresholds["chunked"], 50_000_000)
+            self.assertEqual(
+                get_large_dataset_config().solver_selection_thresholds["chunked"],
+                50_000_000,
+            )
 
         # Should restore to original
         self.assertEqual(
             get_large_dataset_config().solver_selection_thresholds,
-            original.solver_selection_thresholds
+            original.solver_selection_thresholds,
         )
 
 

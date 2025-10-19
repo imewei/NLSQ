@@ -663,7 +663,7 @@ def configure_for_large_datasets(
 
     logging.info("Configured NLSQ for large datasets:")
     logging.info(f"  Memory limit: {memory_limit_gb} GB")
-    logging.info(f"  Streaming: enabled (always available in v0.2.0+)")
+    logging.info("  Streaming: enabled (always available in v0.2.0+)")
     logging.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
     logging.info(
         f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}"

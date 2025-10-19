@@ -32,7 +32,6 @@ pyupgrade==3.21.0
 # Development tools
 ipython==9.6.0
 ipykernel==7.0.1
-h5py==3.15.1
 
 # Type stubs
 types-python-dateutil==2.9.0.20251008

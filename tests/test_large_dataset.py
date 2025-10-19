@@ -498,6 +498,7 @@ class TestErrorHandling(unittest.TestCase):
 
     def test_shape_validation_catches_mismatch(self):
         """Test that shape validation detects model-chunking incompatibility."""
+
         # Model that ignores xdata size (always returns fixed size)
         def bad_model(xdata, a, b):
             return jnp.ones(10000)  # Always returns 10000, regardless of xdata size
@@ -507,7 +508,9 @@ class TestErrorHandling(unittest.TestCase):
         ydata = jnp.ones(10000)
 
         # Force chunking with small chunk size
-        config = LDMemoryConfig(memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=5000)
+        config = LDMemoryConfig(
+            memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=5000
+        )
         fitter = LargeDatasetFitter(config=config)
 
         # Should raise ValueError with shape mismatch message
@@ -521,6 +524,7 @@ class TestErrorHandling(unittest.TestCase):
 
     def test_shape_validation_passes_correct_model(self):
         """Test that correct chunking-compatible models pass validation."""
+
         # Correct model that respects xdata size
         def good_model(xdata, a, b):
             return a * jnp.exp(-b * xdata)
@@ -531,7 +535,9 @@ class TestErrorHandling(unittest.TestCase):
         ydata = 2.0 * jnp.exp(-1.0 * xdata) + 0.01 * np.random.randn(1000)
 
         # Force chunking with small chunk size
-        config = LDMemoryConfig(memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500)
+        config = LDMemoryConfig(
+            memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500
+        )
         fitter = LargeDatasetFitter(config=config)
 
         # Should work without errors

@@ -33,6 +33,7 @@ class TestEstimateInitialParameters(unittest.TestCase):
 
     def test_estimate_p0_with_explicit_array(self):
         """Test that explicit p0 is returned unchanged."""
+
         # COVERS: Line 149-150
         def model(x, a, b):
             return a * x + b
@@ -47,6 +48,7 @@ class TestEstimateInitialParameters(unittest.TestCase):
 
     def test_estimate_p0_with_auto_keyword(self):
         """Test p0='auto' triggers automatic estimation."""
+
         # COVERS: Lines 149-150, 159-217
         def model(x, a, b):
             return a * x + b
@@ -128,7 +130,7 @@ class TestEstimateInitialParameters(unittest.TestCase):
         # COVERS: Lines 164-174
 
         # Lambda with no signature
-        model = lambda x, *args: x  # noqa: E731
+        model = lambda x, *args: x
 
         x = np.linspace(0, 10, 50)
         y = x
@@ -411,7 +413,7 @@ class TestIntegrationWithCurveFit(unittest.TestCase):
         y = y_true + 0.1 * np.random.randn(len(x))
 
         # Should work with p0='auto'
-        popt, pcov = curve_fit(exponential, x, y, p0="auto")
+        popt, _pcov = curve_fit(exponential, x, y, p0="auto")
 
         # Should converge to reasonable values
         self.assertAlmostEqual(popt[0], 3.0, delta=0.5)

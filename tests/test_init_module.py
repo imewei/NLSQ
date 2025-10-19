@@ -293,9 +293,7 @@ class TestInitModule(unittest.TestCase):
         """Test LDMemoryConfig (v0.2.0: enable_sampling removed)."""
         from nlsq import LDMemoryConfig
 
-        config = LDMemoryConfig(
-            memory_limit_gb=4.0, min_chunk_size=1000
-        )
+        config = LDMemoryConfig(memory_limit_gb=4.0, min_chunk_size=1000)
 
         self.assertEqual(config.memory_limit_gb, 4.0)
         self.assertEqual(config.min_chunk_size, 1000)

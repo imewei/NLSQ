@@ -163,7 +163,7 @@ class CurveFitResult(OptimizeResult):
             Covariance matrix as NumPy array for SciPy compatibility.
         """
         # Access from dict, convert JAX arrays to NumPy
-        _pcov = self.get('pcov')
+        _pcov = self.get("pcov")
         if _pcov is not None:
             return np.asarray(_pcov)
         return _pcov

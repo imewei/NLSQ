@@ -41,7 +41,7 @@ def curve_fit(
     *args: Any,
     auto_bounds: bool = False,
     bounds_safety_factor: float = 10.0,
-    stability: Literal['auto', 'check', False] = False,
+    stability: Literal["auto", "check", False] = False,
     fallback: bool = False,
     max_fallback_attempts: int = 10,
     fallback_verbose: bool = False,

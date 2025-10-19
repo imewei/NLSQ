@@ -19,6 +19,7 @@ Test Strategy:
 5. Test logger integration
 """
 
+import contextlib
 import logging
 import time
 import unittest
@@ -59,14 +60,13 @@ class TestFailureDiagnostics(unittest.TestCase):
         )
         fitter = LargeDatasetFitter(config=config)
 
-        try:
-            result = fitter.fit(problematic_model, xdata, ydata, p0=[2.0, 0.001])
-        except Exception:
+        result = None
+        with contextlib.suppress(Exception):
             # If fitting fails completely, that's ok for this test
-            pass
+            result = fitter.fit(problematic_model, xdata, ydata, p0=[2.0, 0.001])
 
         # Check if result has failure_summary (if fit completed)
-        if hasattr(result, "failure_summary"):
+        if result is not None and hasattr(result, "failure_summary"):
             summary = result.failure_summary
 
             # Validate structure
@@ -143,14 +143,13 @@ class TestFailureDiagnostics(unittest.TestCase):
         )
         fitter = LargeDatasetFitter(config=config)
 
-        try:
+        result = None
+        with contextlib.suppress(Exception):
             result = fitter.fit(multi_error_model, xdata, ydata, p0=[1.0, 1.0])
-        except Exception:
-            pass
 
         # If result exists, check common_errors
         try:
-            if hasattr(result, "failure_summary"):
+            if result is not None and hasattr(result, "failure_summary"):
                 common_errors = result.failure_summary["common_errors"]
 
                 # Should identify top error types
@@ -219,7 +218,8 @@ class TestSaveDiagnosticsFlag(unittest.TestCase):
 
         # Without diagnostics
         config_no_diag = LDMemoryConfig(
-            memory_limit_gb=0.01, save_diagnostics=False  # Force chunking
+            memory_limit_gb=0.01,
+            save_diagnostics=False,  # Force chunking
         )
         fitter_no_diag = LargeDatasetFitter(config=config_no_diag)
 
@@ -249,7 +249,8 @@ class TestSaveDiagnosticsFlag(unittest.TestCase):
 
         # With full diagnostics
         config_with_diag = LDMemoryConfig(
-            memory_limit_gb=0.01, save_diagnostics=True  # Force chunking
+            memory_limit_gb=0.01,
+            save_diagnostics=True,  # Force chunking
         )
         fitter_with_diag = LargeDatasetFitter(config=config_with_diag)
 
@@ -279,7 +280,8 @@ class TestSaveDiagnosticsFlag(unittest.TestCase):
 
         # Benchmark without diagnostics
         config_no_diag = LDMemoryConfig(
-            memory_limit_gb=0.1, save_diagnostics=False  # Force chunking
+            memory_limit_gb=0.1,
+            save_diagnostics=False,  # Force chunking
         )
         fitter_no_diag = LargeDatasetFitter(config=config_no_diag)
 
@@ -289,7 +291,8 @@ class TestSaveDiagnosticsFlag(unittest.TestCase):
 
         # Benchmark with diagnostics
         config_with_diag = LDMemoryConfig(
-            memory_limit_gb=0.1, save_diagnostics=True  # Force chunking
+            memory_limit_gb=0.1,
+            save_diagnostics=True,  # Force chunking
         )
         fitter_with_diag = LargeDatasetFitter(config=config_with_diag)
 
@@ -374,7 +377,7 @@ class TestMinSuccessRateThreshold(unittest.TestCase):
         error_msg = str(ctx.exception).lower()
         self.assertTrue(
             "model function" in error_msg or "success rate" in error_msg,
-            f"Expected model validation or success rate error, got: {ctx.exception}"
+            f"Expected model validation or success rate error, got: {ctx.exception}",
         )
 
     def test_min_success_rate_permissive_30_percent(self):
@@ -441,10 +444,8 @@ class TestLoggerIntegration(unittest.TestCase):
         )
         fitter = LargeDatasetFitter(config=config, logger=custom_logger)
 
-        try:
+        with contextlib.suppress(Exception):
             fitter.fit(failing_model, xdata, ydata, p0=[1.0, 1.0])
-        except Exception:
-            pass
 
         # Check log output
         log_output = log_stream.getvalue()

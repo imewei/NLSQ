@@ -21,6 +21,8 @@ except ImportError:
     __version__ = "0.0.0+unknown"
 
 # Type hints
+# Stability and optimization imports
+import warnings  # For deprecation warnings (v0.2.0)
 from typing import Any, Literal
 
 import numpy as np
@@ -30,10 +32,6 @@ import numpy as np
 # Progress callbacks (Day 3 - User Experience)
 from nlsq import callbacks, functions
 from nlsq._optimize import OptimizeResult, OptimizeWarning
-
-# Stability and optimization imports
-import warnings  # For deprecation warnings (v0.2.0)
-
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
 # Bounds inference (Phase 3 - Day 17)
@@ -78,7 +76,6 @@ from nlsq.memory_manager import (
     get_memory_manager,
     get_memory_stats,
 )
-from nlsq.types import ArrayLike, BoundsTuple, ModelFunction, MethodLiteral
 from nlsq.memory_pool import (
     MemoryPool,
     TRFMemoryPool,
@@ -127,6 +124,7 @@ from nlsq.stability import (
     detect_parameter_scale_mismatch,
     estimate_condition_number,
 )
+from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
 
 # Streaming optimizer support (requires h5py - optional dependency)
 try:
@@ -484,14 +482,40 @@ def curve_fit_large(
         if not check_finite:
             kwargs["check_finite"] = check_finite
 
+        # Convert p0 to appropriate type for LargeDatasetFitter
+        # LargeDatasetFitter expects np.ndarray | list | None (no tuple or jnp.ndarray)
+        converted_p0: np.ndarray | list | None
+        if p0 is None:
+            converted_p0 = None
+        elif isinstance(p0, list):
+            converted_p0 = p0
+        else:
+            # Convert tuple, jnp.ndarray, or np.ndarray to np.ndarray
+            converted_p0 = np.asarray(p0)
+
+        # Provide default method if None
+        final_method = method if method is not None else "trf"
+
         # Perform the fit
         if show_progress:
             result = fitter.fit_with_progress(
-                f, xdata, ydata, p0=p0, bounds=bounds, method=method, **kwargs  # type: ignore
+                f,
+                xdata,
+                ydata,
+                p0=converted_p0,
+                bounds=bounds,
+                method=final_method,
+                **kwargs,  # type: ignore
             )
         else:
             result = fitter.fit(
-                f, xdata, ydata, p0=p0, bounds=bounds, method=method, **kwargs  # type: ignore
+                f,
+                xdata,
+                ydata,
+                p0=converted_p0,
+                bounds=bounds,
+                method=final_method,
+                **kwargs,  # type: ignore
             )
 
         # Extract popt and pcov from result
