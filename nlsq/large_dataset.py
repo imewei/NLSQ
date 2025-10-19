@@ -1117,6 +1117,63 @@ class LargeDatasetFitter:
 
         return (updated_params, updated_history, new_convergence_metric, False)
 
+    def _initialize_chunked_fit_state(
+        self,
+        p0: np.ndarray | list | None,
+        show_progress: bool,
+        stats: DatasetStats,
+    ) -> tuple[
+        ProgressReporter | None,
+        np.ndarray | None,
+        list,
+        list,
+        float,
+    ]:
+        """Initialize state variables for chunked fitting.
+
+        Parameters
+        ----------
+        p0 : np.ndarray | list | None
+            Initial parameter guess
+        show_progress : bool
+            Whether to show progress updates
+        stats : DatasetStats
+            Dataset statistics including chunk count
+
+        Returns
+        -------
+        progress : ProgressReporter | None
+            Progress reporter instance or None
+        current_params : np.ndarray | None
+            Initial parameters
+        chunk_results : list
+            Empty list for accumulating chunk results
+        param_history : list
+            Empty list for tracking parameter evolution
+        convergence_metric : float
+            Initial convergence metric (infinity)
+        """
+        # Initialize progress reporter
+        progress = (
+            ProgressReporter(stats.n_chunks, self.logger) if show_progress else None
+        )
+
+        # Initialize parameters
+        current_params = np.array(p0) if p0 is not None else None
+
+        # Initialize tracking lists
+        chunk_results = []
+        param_history = []
+        convergence_metric = np.inf
+
+        return (
+            progress,
+            current_params,
+            chunk_results,
+            param_history,
+            convergence_metric,
+        )
+
     def _create_chunk_result(
         self,
         chunk_idx: int,
@@ -1372,6 +1429,66 @@ class LargeDatasetFitter:
 
         return pcov
 
+    def _finalize_chunked_results(
+        self,
+        current_params: np.ndarray,
+        chunk_results: list,
+        param_history: list,
+        success_rate: float,
+        stats: DatasetStats,
+        chunk_times: list,
+    ) -> OptimizeResult:
+        """Assemble final optimization result from chunked fitting.
+
+        Parameters
+        ----------
+        current_params : np.ndarray
+            Final optimized parameters
+        chunk_results : list
+            List of all chunk result dictionaries
+        param_history : list
+            History of parameter estimates across chunks
+        success_rate : float
+            Fraction of successful chunks
+        stats : DatasetStats
+            Dataset statistics including chunk count
+        chunk_times : list
+            Processing durations for each chunk
+
+        Returns
+        -------
+        OptimizeResult
+            Final optimization result with parameters, covariance, and diagnostics
+        """
+        # Log completion
+        self.logger.info(
+            f"Chunked fit completed with {success_rate:.1%} success rate"
+        )
+
+        # Create failure summary for diagnostics
+        failure_summary = self._create_failure_summary(chunk_results, chunk_times)
+
+        # Assemble result
+        result = OptimizeResult(
+            x=current_params,
+            success=True,
+            message=f"Chunked fit completed ({stats.n_chunks} chunks, {success_rate:.1%} success)",
+        )
+        result["popt"] = current_params
+
+        # Create approximate covariance matrix from parameter history
+        result["pcov"] = self._compute_covariance_from_history(
+            param_history, current_params
+        )
+
+        # Add diagnostic information
+        result["chunk_results"] = chunk_results
+        result["n_chunks"] = stats.n_chunks
+        result["success_rate"] = success_rate
+        result["failure_summary"] = failure_summary
+
+        return result
+
     def _fit_chunked(
         self,
         f: Callable,
@@ -1392,16 +1509,14 @@ class LargeDatasetFitter:
         # Validate model function shape compatibility
         self._validate_model_function(f, xdata, ydata, p0)
 
-        # Initialize progress reporter
-        progress = (
-            ProgressReporter(stats.n_chunks, self.logger) if show_progress else None
-        )
-
-        # Initialize parameters and tracking variables
-        current_params = np.array(p0) if p0 is not None else None
-        chunk_results = []
-        param_history = []  # Track parameter evolution
-        convergence_metric = np.inf  # Track convergence
+        # Initialize state variables
+        (
+            progress,
+            current_params,
+            chunk_results,
+            param_history,
+            convergence_metric,
+        ) = self._initialize_chunked_fit_state(p0, show_progress, stats)
         chunk_times = []  # Track processing time per chunk
 
         try:
@@ -1505,30 +1620,15 @@ class LargeDatasetFitter:
                 result["pcov"] = np.eye(len(result["popt"]))
                 return result
 
-            # Final result
-            self.logger.info(
-                f"Chunked fit completed with {success_rate:.1%} success rate"
+            # Assemble final result
+            return self._finalize_chunked_results(
+                current_params=current_params,
+                chunk_results=chunk_results,
+                param_history=param_history,
+                success_rate=success_rate,
+                stats=stats,
+                chunk_times=chunk_times,
             )
-
-            # Create failure summary for diagnostics
-            failure_summary = self._create_failure_summary(chunk_results, chunk_times)
-
-            result = OptimizeResult(
-                x=current_params,
-                success=True,
-                message=f"Chunked fit completed ({stats.n_chunks} chunks, {success_rate:.1%} success)",
-            )
-            result["popt"] = current_params
-            # Create approximate covariance matrix from parameter history
-            result["pcov"] = self._compute_covariance_from_history(
-                param_history, current_params
-            )
-            result["chunk_results"] = chunk_results
-            result["n_chunks"] = stats.n_chunks
-            result["success_rate"] = success_rate
-            result["failure_summary"] = failure_summary
-
-            return result
 
         except Exception as e:
             self.logger.error(f"Chunked fitting failed: {e}")
