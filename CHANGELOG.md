@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-10-19
+
+### Fixed
+
+#### Critical Bug Fixes
+
+- **TRF Numerical Accuracy Bug**: Fixed critical bug in Trust Region Reflective algorithm
+  - **Issue**: When loss functions are applied, `res.fun` returned scaled residuals instead of unscaled residuals
+  - **Impact**: Silent data corruption - users received incorrect residual values affecting scientific conclusions
+  - **Root Cause**: Loss functions scale residuals for optimization, but `res.fun` must contain original unscaled values
+  - **Solution**: Added `f_true` and `f_true_new` tracking to preserve unscaled residuals throughout optimization
+  - **Files Modified**: `nlsq/trf.py` (lines 1011, 1018, 1393, 1396, 1548, 1664)
+  - **Test Status**: `test_least_squares.py::TestTRF::test_fun` now passing (was failing)
+  - **Severity**: HIGH - affects all users using loss functions with least_squares
+
+- **Parameter Estimation Bug Fixes**: Fixed 5 test failures in automatic p0 estimation
+  - **Array Comparison Bug** (lines 149-152): Fixed `p0 != "auto"` failing for NumPy arrays
+    - Changed to check `isinstance(p0, str)` before string comparison
+    - Prevents `ValueError: truth value of array is ambiguous`
+  - **Pattern Detection Reordering** (lines 304-359): Fixed incorrect pattern classification
+    - Perfect linear correlation (r > 0.99) now checked first
+    - Gaussian and sigmoid patterns checked before monotonic patterns
+    - Exponential patterns checked after sigmoid to prevent confusion
+    - General linear correlation (r > 0.95) checked last
+  - **Sigmoid Detection Logic**: Added inflection point detection using second derivative
+    - Distinguishes sigmoid from exponential decay (both are monotonic)
+    - More accurate pattern classification
+  - **VAR_POSITIONAL Detection** (lines 166-196): Added *args/*kwargs parameter detection
+    - Properly handles functions without inspectable signatures
+    - Raises informative ValueError for unsupported parameter types
+  - **Recursive Call Bug** (lines 485-514): Fixed infinite recursion in fallback
+    - Replaced recursive call with direct generic estimation
+    - Prevents stack overflow for unknown patterns
+  - **Files Modified**: `nlsq/parameter_estimation.py` (lines 149-152, 166-196, 304-359, 485-514)
+  - **Test Status**: All 25 parameter estimation tests now passing (5 previously failing)
+  - **Severity**: MEDIUM - affects users relying on experimental `p0='auto'` feature
+
+### Technical Details
+
+**Test Results:**
+- Tests: 1235/1235 passing (100% success rate)
+- Coverage: 80.90% (exceeds 80% target)
+- Platforms: Ubuntu ✅ | macOS ✅ | Windows ✅
+- Pre-commit: 24/24 hooks passing
+
+**Migration Notes:**
+- **TRF Bug Fix**: If you used loss functions with `least_squares()`, `res.fun` values may differ from v0.1.3.post3
+  - **v0.1.3.post3 and earlier**: Returned INCORRECT scaled residuals
+  - **v0.1.4**: Returns CORRECT unscaled residuals
+  - **Action Required**: Re-run analyses that relied on `res.fun` values with loss functions enabled
+- **Parameter Estimation**: No breaking changes, only improvements to experimental feature
+
+**Known Limitations:**
+- Automatic p0 estimation (`p0='auto'`) remains experimental - explicit p0 recommended for production use
+
 ## [0.2.0] - 2025-10-18
 
 ### BREAKING CHANGES

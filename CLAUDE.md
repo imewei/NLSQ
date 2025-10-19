@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 **Repository**: https://github.com/imewei/NLSQ
 **Maintainer**: Wei Chen (Argonne National Laboratory)
-**Status**: Production-ready (Beta) | **Python**: 3.12+ | **Tests**: 1168/1168 passing | **Coverage**: 77%
+**Status**: Production-ready (Beta) | **Python**: 3.12+ | **Tests**: 1235/1235 passing | **Coverage**: 80.90%
 
 ### Essential Commands
 ```bash
@@ -41,7 +41,7 @@ NLSQ is a **GPU/TPU-accelerated nonlinear least squares curve fitting library** 
 ### Key Metrics (2025-10-19)
 - **Performance**: 1.7-2.0ms (cached), 450-650ms (first run with JIT)
 - **Test Suite**: 1235/1235 passing (100% success rate) ✅
-- **Coverage**: 77% (target: 80%)
+- **Coverage**: 80.90% (**exceeds 80% target**) ✅
 - **Platform Support**: Full Windows/macOS/Linux compatibility
 - **CI/CD**: All platforms passing, 0 flaky tests
 
@@ -507,7 +507,26 @@ nlsq/
 
 ## Recent Updates (2025-10-19)
 
-### Deprecations and Changes
+### v0.1.4 Release - Critical Bug Fixes
+
+#### TRF Numerical Accuracy Fix
+- **Fixed**: Critical bug where `res.fun` returned scaled instead of unscaled residuals when using loss functions
+- **Impact**: HIGH - Silent data corruption affecting scientific results
+- **Files**: `nlsq/trf.py` (6 lines modified)
+- **Tests**: `test_least_squares.py::TestTRF::test_fun` now passing
+
+#### Parameter Estimation Improvements
+- **Fixed**: 5 test failures in automatic p0 estimation feature
+- **Changes**: Array comparison bug, pattern detection reordering, sigmoid detection, VAR_POSITIONAL handling
+- **Files**: `nlsq/parameter_estimation.py` (4 sections modified)
+- **Tests**: All 25 parameter estimation tests now passing
+
+#### Test & Coverage Improvements
+- **Tests**: 1235/1235 passing (100% success rate)
+- **Coverage**: 80.90% (exceeds 80% target for first time!)
+- **Quality**: 24/24 pre-commit hooks passing
+
+### Deprecations and Changes (v0.1.3+)
 - ⚠️ **DEPRECATED**: Subsampling parameters in v0.1.3+
   - Parameters `enable_sampling`, `sampling_threshold`, `max_sampled_size` are deprecated
   - Deprecated parameters emit `DeprecationWarning` and are ignored
@@ -695,7 +714,7 @@ nlsq/
 - **Passing**: 1235/1235 tests (**100% success rate**) ✅
 - **Failing**: 0 tests
 - **Skipped**: 6 tests
-- **Coverage**: 77% (target: 80%)
+- **Coverage**: 80.90% (**exceeds 80% target**) ✅
 - **Platforms**: Ubuntu ✅ | macOS ✅ | Windows ✅
 - **CI Status**: All workflows passing
 - **Regression**: 0 performance regressions detected
@@ -786,6 +805,6 @@ nlsq/
 ---
 
 **Last Updated**: 2025-10-19
-**Version**: v0.1.3.post3 (Subsampling Deprecated)
+**Version**: v0.1.4 (Bug Fix Release)
 **Python**: 3.12.3
 **Tested Configuration**: See [`REQUIREMENTS.md`](REQUIREMENTS.md)
