@@ -161,11 +161,11 @@ def trf_no_bounds_timed(self, ...):
 
 ---
 
-### Task 6: Add Type Hints to Public API ⚡ **IN PROGRESS** (60% complete)
+### Task 6: Add Type Hints to Public API ⚡ **IN PROGRESS** (75% complete)
 **Files**: All public API functions
-**Current Coverage**: 63% → ~70%
+**Current Coverage**: 63% → ~75%
 **Target Coverage**: 80%+
-**Effort**: 10-12 hours (4-5 hours remaining)
+**Effort**: 10-12 hours (2-3 hours remaining)
 
 **Completed Work**:
 **Session 1** (2025-10-18, commit bb417b6):
@@ -191,19 +191,30 @@ def trf_no_bounds_timed(self, ...):
 - ✅ All 18 minpack tests passing
 - ✅ Zero runtime regressions
 
+**Session 3** (2025-10-18, commits d3b1b7f, bf18ec3, cc7bacb, 6929862):
+- ✅ Add `-> None` return type to `CurveFit.__init__()` (commit d3b1b7f)
+- ✅ Add `-> None` return type to `LargeDatasetFitter.__init__()` (commit bf18ec3)
+- ✅ Add `-> None` return type to `LeastSquares.__init__()` (commit cc7bacb)
+- ✅ Run mypy on entire codebase: 11 errors identified
+- ✅ Fix all 11 mypy errors (commit 6929862):
+  - `callbacks.py`: tqdm import + None handling (2 fixes)
+  - `config.py`: os.getenv str|None handling (4 fixes)
+  - `smart_cache.py`: decorator attribute assignment (5 fixes)
+- ✅ Mypy validation: **0 errors** across 38 source files
+- ✅ Zero new test failures from type hint changes
+
 **Remaining Subtasks**:
-- [ ] Add type hints to class `__init__()` methods (1-2 hours)
 - [ ] Add type hints to public class methods (2-3 hours)
-- [ ] Run mypy on entire codebase and fix errors (1-2 hours)
-- [ ] Update documentation (30 min)
+- [ ] Update documentation (30 min) ⬅️ **Next step**
 
 **Success Criteria**:
 - ✅ Comprehensive type alias library created
 - ✅ Mypy passes on 3 core public API functions
-- ⏸️ Type coverage > 80% (currently ~70%)
+- ✅ Mypy passes on entire codebase (0 errors)
+- ⏸️ Type coverage > 80% (currently ~75%)
 - ✅ No runtime performance impact
 
-**Type Coverage Progress**: 63% → ~70% (+7%)
+**Type Coverage Progress**: 63% → ~75% (+12%)
 
 ---
 
