@@ -294,7 +294,7 @@ class LeastSquares:
 
     def __init__(
         self, enable_stability: bool = False, enable_diagnostics: bool = False
-    ):
+    ) -> None:
         """Initialize LeastSquares with optimization algorithms and autodiff instances.
 
         Sets up the Trust Region Reflective solver, loss functions, and separate
