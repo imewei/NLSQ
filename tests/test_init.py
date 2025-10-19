@@ -322,8 +322,13 @@ class TestCurveFitLargeMemory(unittest.TestCase):
         self.assertIsInstance(popt, np.ndarray)
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestCurveFitLargeSampling(unittest.TestCase):
-    """Tests for sampling configuration in curve_fit_large."""
+    """Tests for sampling configuration in curve_fit_large.
+
+    Note: Uses deprecated sampling parameters to verify backward compatibility.
+    Warnings are suppressed since test_deprecation_warnings.py properly tests them.
+    """
 
     def setUp(self):
         """Set up test fixtures."""
