@@ -40,7 +40,7 @@ NLSQ is a **GPU/TPU-accelerated nonlinear least squares curve fitting library** 
 
 ### Key Metrics (2025-10-19)
 - **Performance**: 1.7-2.0ms (cached), 450-650ms (first run with JIT)
-- **Test Suite**: 1230/1235 passing (99.6% success rate)
+- **Test Suite**: 1235/1235 passing (100% success rate) ✅
 - **Coverage**: 77% (target: 80%)
 - **Platform Support**: Full Windows/macOS/Linux compatibility
 - **CI/CD**: All platforms passing, 0 flaky tests
@@ -701,8 +701,8 @@ nlsq/
 - ✅ **Pre-commit**: 100% compliance (24/24 hooks)
 
 ### Test Status (Latest - 2025-10-19)
-- **Passing**: 1230/1235 tests (**99.6% success rate**)
-- **Failing**: 5 tests (0.4% - see Known Issues below)
+- **Passing**: 1235/1235 tests (**100% success rate**) ✅
+- **Failing**: 0 tests
 - **Skipped**: 6 tests
 - **Coverage**: 77% (target: 80%)
 - **Platforms**: Ubuntu ✅ | macOS ✅ | Windows ✅
@@ -711,7 +711,7 @@ nlsq/
 
 ---
 
-## Known Test Failures (5 tests - 0.4%)
+## Recent Bug Fixes (2025-10-19)
 
 ### ✅ FIXED: TRF Numerical Bug (2025-10-19)
 
@@ -731,7 +731,41 @@ nlsq/
 
 ---
 
-### 🟡 LOW PRIORITY: Parameter Estimation (5 tests)
+### ✅ FIXED: Parameter Estimation (5 tests - 2025-10-19)
+
+**Tests**: All in `test_parameter_estimation.py` - **NOW PASSING** ✅
+1. `test_estimate_p0_error_no_signature` - ValueError not raised for *args functions
+2. `test_estimate_p0_with_explicit_array` - Array truth value ambiguity
+3. `test_detect_exponential_decay_pattern` - Returns 'linear' instead of 'exponential_decay'
+4. `test_detect_sigmoid_pattern` - Returns 'linear' instead of 'sigmoid'
+5. `test_unknown_pattern_fallback` - Wrong fallback behavior
+
+**Root Causes**:
+1. **Array comparison bug**: Line 149 used `p0 != "auto"` which fails for numpy arrays
+2. **Pattern detection order**: Linear correlation check before exponential/sigmoid patterns
+3. **Sigmoid vs exponential confusion**: Both are monotonic, needed inflection point detection
+4. **Missing exception handling**: No check for VAR_POSITIONAL (*args) parameters
+5. **Recursive call bug**: Unknown pattern fallback called itself with *args lambda
+
+**Fixes Applied**:
+1. **Line 149-152**: Check `isinstance(p0, str)` before comparing to "auto"
+2. **Lines 304-359**: Reordered pattern detection:
+   - Perfect linear (r > 0.99) checked first
+   - Gaussian and sigmoid checked before monotonic patterns
+   - Sigmoid detection uses second derivative to identify inflection points
+   - Exponential patterns checked after sigmoid
+   - General linear (r > 0.95) checked last
+3. **Lines 166-196**: Added VAR_POSITIONAL/VAR_KEYWORD parameter detection
+4. **Lines 485-514**: Replaced recursive call with direct generic estimation
+
+**Files Modified**:
+- `nlsq/parameter_estimation.py`: Lines 149-152, 166-196, 304-359, 485-514
+
+**Test Results**: All 25 parameter estimation tests now passing (100% success rate)
+
+---
+
+### Historical Issues (Now Resolved)
 
 **Tests**: All in `test_parameter_estimation.py`
 1. `test_estimate_p0_error_no_signature` - ValueError not raised

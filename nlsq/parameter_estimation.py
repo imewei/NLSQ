@@ -146,8 +146,10 @@ def estimate_initial_parameters(
     estimate_p0_for_pattern : Pattern-specific estimation
     """
     # If p0 provided and not 'auto', return as-is
-    if p0 is not None and p0 != "auto":
-        return np.asarray(p0)
+    if p0 is not None:
+        # Check if p0 is the string "auto" (not an array)
+        if not (isinstance(p0, str) and p0 == "auto"):
+            return np.asarray(p0)
 
     # Check if function has custom estimation method (for library functions)
     if hasattr(f, "estimate_p0"):
@@ -163,15 +165,35 @@ def estimate_initial_parameters(
     # Get number of parameters from function signature
     try:
         sig = inspect.signature(f)
-        params = list(sig.parameters.keys())
+        # Filter out VAR_POSITIONAL (*args) and VAR_KEYWORD (**kwargs)
+        regular_params = [
+            name for name, param in sig.parameters.items()
+            if param.kind not in (inspect.Parameter.VAR_POSITIONAL,
+                                 inspect.Parameter.VAR_KEYWORD)
+        ]
         # First parameter is typically x, so n_params = total - 1
-        n_params = len(params) - 1
-    except (ValueError, TypeError):
+        n_params = len(regular_params) - 1
+    except (TypeError, AttributeError):
         # If signature inspection fails, raise error
         raise ValueError(
             "Cannot automatically determine number of parameters. "
             "Please provide p0 explicitly."
         ) from None
+
+    # If we have VAR_POSITIONAL or VAR_KEYWORD, we can't determine n_params
+    # Check this AFTER try/except to avoid catching our own ValueError
+    try:
+        if any(param.kind in (inspect.Parameter.VAR_POSITIONAL,
+                             inspect.Parameter.VAR_KEYWORD)
+               for param in sig.parameters.values()):
+            raise ValueError(
+                "Cannot automatically determine number of parameters "
+                "for functions with *args or **kwargs. "
+                "Please provide p0 explicitly."
+            )
+    except NameError:
+        # sig doesn't exist (caught above already)
+        pass
 
     if n_params <= 0:
         raise ValueError(
@@ -273,23 +295,19 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
     if len(ydata) < 3:
         return "unknown"
 
-    # Check for linear pattern (correlation close to 1 or -1)
+    # Calculate linear correlation first
     try:
         corr = np.corrcoef(xdata, ydata)[0, 1]
-        if abs(corr) > 0.95:
-            return "linear"
     except Exception:
-        pass
+        corr = 0.0
 
-    # Check for monotonic decay (exponential decay candidate)
-    if np.all(np.diff(ydata) < 0):
-        return "exponential_decay"
-
-    # Check for monotonic growth
-    if np.all(np.diff(ydata) > 0):
-        return "exponential_growth"
+    # Check for PERFECT linear pattern (correlation > 0.99)
+    # This should be detected before monotonic patterns
+    if abs(corr) > 0.99:
+        return "linear"
 
     # Check for bell-shaped curve (Gaussian candidate)
+    # Check this before monotonic patterns
     peak_idx = np.argmax(ydata)
     if 0.2 * len(ydata) < peak_idx < 0.8 * len(ydata):
         # Peak is in the middle
@@ -298,15 +316,46 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
         if left_slope > 0 and right_slope < 0:
             return "gaussian"
 
-    # Check for sigmoid pattern
+    # Check for sigmoid pattern (S-curve with inflection point)
+    # Sigmoid has an inflection point where second derivative changes sign
+    # Check this before simple monotonic patterns
     y_range = np.max(ydata) - np.min(ydata)
     if y_range > 0:
         normalized = (ydata - np.min(ydata)) / y_range
-        # Check if data goes from ~0 to ~1
+
+        # Check for sigmoid: starts low, ends high
         if normalized[0] < 0.2 and normalized[-1] > 0.8:
-            return "sigmoid"
+            # Check for inflection point (second derivative changes sign)
+            if len(ydata) > 5:
+                second_diff = np.diff(np.diff(ydata))
+                # If second derivative changes sign significantly, it's sigmoid
+                if np.max(second_diff) > 0 and np.min(second_diff) < 0:
+                    return "sigmoid"
+            # No clear inflection - likely monotonic growth
+            return "exponential_growth"
+
+        # Check for inverse sigmoid: starts high, ends low
         if normalized[0] > 0.8 and normalized[-1] < 0.2:
-            return "sigmoid_inv"
+            # Check for inflection point
+            if len(ydata) > 5:
+                second_diff = np.diff(np.diff(ydata))
+                # If second derivative changes sign significantly, it's sigmoid
+                if np.max(second_diff) > 0 and np.min(second_diff) < 0:
+                    return "sigmoid_inv"
+            # No clear inflection - likely monotonic decay
+            return "exponential_decay"
+
+    # Check for monotonic decay (exponential decay candidate)
+    if np.all(np.diff(ydata) <= 0):
+        return "exponential_decay"
+
+    # Check for monotonic growth
+    if np.all(np.diff(ydata) >= 0):
+        return "exponential_growth"
+
+    # Check for good linear pattern (correlation > 0.95 but < 0.99)
+    if abs(corr) > 0.95:
+        return "linear"
 
     return "unknown"
 
@@ -448,5 +497,33 @@ def estimate_p0_for_pattern(
         p0.extend([1.0] * (n_params - len(p0)))
         return np.array(p0)
 
-    # Default: generic estimation
-    return estimate_initial_parameters(lambda x, *p: x, xdata, ydata, "auto")
+    # Default: generic estimation for unknown patterns
+    # Use same heuristics as estimate_initial_parameters
+    y_min, y_max = np.min(ydata), np.max(ydata)
+    y_range = y_max - y_min
+    y_mean = np.mean(ydata)
+
+    x_min, x_max = np.min(xdata), np.max(xdata)
+    x_range = x_max - x_min if x_max != x_min else 1.0
+    x_mean = np.mean(xdata)
+
+    p0_guess = []
+    for i in range(n_params):
+        if i == 0:
+            # First parameter: often amplitude/scale
+            param = y_range if y_range > 0 else 1.0
+        elif i == 1:
+            # Second parameter: often rate/frequency/slope
+            param = 1.0 / x_range if x_range > 0 else 0.1
+        elif i == 2:
+            # Third parameter: often offset/baseline
+            param = y_mean
+        elif i == 3:
+            # Fourth parameter: center/midpoint
+            param = x_mean
+        else:
+            # Additional parameters: use 1.0 as safe default
+            param = 1.0
+        p0_guess.append(param)
+
+    return np.array(p0_guess)
