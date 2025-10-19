@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class InputValidator:
     """Comprehensive input validation for curve fitting functions."""
 
-    def __init__(self, fast_mode: bool = True):
+    def __init__(self, fast_mode: bool = True) -> None:
         """Initialize the input validator.
 
         Parameters
@@ -963,7 +963,7 @@ class InputValidator:
         return errors, warnings_list, x0
 
 
-def validate_inputs(validation_type: str = "curve_fit"):
+def validate_inputs(validation_type: str = "curve_fit") -> Callable:
     """Decorator for automatic input validation.
 
     Parameters
@@ -977,9 +977,9 @@ def validate_inputs(validation_type: str = "curve_fit"):
         Decorator function that validates inputs
     """
 
-    def decorator(func):
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             validator = InputValidator()
 
             if validation_type == "curve_fit":
