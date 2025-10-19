@@ -37,8 +37,8 @@ repos:
     rev: v1.18.2  # Aligned with local mypy 1.18.2 and pyproject.toml >=1.10
     hooks:
       - id: mypy
-        additional_dependencies: [numpy, jax, types-setuptools, scipy, psutil]
-        args: [--python-version=3.12, --ignore-missing-imports, --no-strict-optional]
+        additional_dependencies: [numpy, jax, types-setuptools, scipy, psutil, types-tqdm]
+        args: [--python-version=3.12, --check-untyped-defs]
         files: ^nlsq/
         exclude: ^(tests/|examples/|benchmark/)
 
