@@ -84,7 +84,7 @@ def profile_trf_algorithm():
         ps.print_stats(20)  # Top 20 functions
 
         print(f"Total time: {elapsed * 1000:.2f}ms")
-        print(f"Converged: {result[0] is not None}")
+        print(f"Converged: {result.success if hasattr(result, 'success') else result[0] is not None}")
         print("\nTop 20 hot functions:")
         print(s.getvalue())
 

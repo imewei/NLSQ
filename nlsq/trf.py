@@ -600,6 +600,153 @@ class TrustRegionJITFunctions:
         self.check_isfinite = isfinite
 
 
+# ============================================================================
+# TRF Profiling Abstraction
+# ============================================================================
+
+
+class TRFProfiler:
+    """Profiler for timing TRF algorithm operations.
+
+    Records detailed timing information for each operation in the TRF algorithm,
+    including GPU synchronization via block_until_ready() for accurate timings.
+
+    This enables performance analysis without duplicating the entire algorithm.
+    """
+
+    def __init__(self):
+        """Initialize profiler with empty timing arrays."""
+        self.ftimes = []  # Function evaluations
+        self.jtimes = []  # Jacobian evaluations
+        self.svd_times = []  # SVD computations
+        self.ctimes = []  # Cost computations (JAX)
+        self.gtimes = []  # Gradient computations (JAX)
+        self.gtimes2 = []  # Gradient norm computations
+        self.ptimes = []  # Parameter updates
+
+        # Conversion times (JAX → NumPy)
+        self.svd_ctimes = []  # SVD conversion
+        self.g_ctimes = []  # Gradient conversion
+        self.c_ctimes = []  # Cost conversion
+        self.p_ctimes = []  # Parameter conversion
+
+    def time_operation(self, operation: str, jax_result):
+        """Time a JAX operation with GPU synchronization.
+
+        Parameters
+        ----------
+        operation : str
+            Operation name ('fun', 'jac', 'svd', 'cost', 'grad', etc.)
+        jax_result :
+            JAX array result to synchronize
+
+        Returns
+        -------
+        result
+            The synchronized result (same as input)
+        """
+        import time
+
+        st = time.time()
+        result = jax_result.block_until_ready()
+        elapsed = time.time() - st
+
+        # Record timing
+        if operation == 'fun':
+            self.ftimes.append(elapsed)
+        elif operation == 'jac':
+            self.jtimes.append(elapsed)
+        elif operation == 'svd':
+            self.svd_times.append(elapsed)
+        elif operation == 'cost':
+            self.ctimes.append(elapsed)
+        elif operation == 'grad':
+            self.gtimes.append(elapsed)
+        elif operation == 'grad_norm':
+            self.gtimes2.append(elapsed)
+        elif operation == 'param_update':
+            self.ptimes.append(elapsed)
+
+        return result
+
+    def time_conversion(self, operation: str, start_time: float):
+        """Record timing for JAX → NumPy conversion.
+
+        Parameters
+        ----------
+        operation : str
+            Conversion operation ('svd_convert', 'grad_convert', 'cost_convert', 'param_convert')
+        start_time : float
+            Start time from time.time()
+        """
+        import time
+
+        elapsed = time.time() - start_time
+
+        if operation == 'svd_convert':
+            self.svd_ctimes.append(elapsed)
+        elif operation == 'grad_convert':
+            self.g_ctimes.append(elapsed)
+        elif operation == 'cost_convert':
+            self.c_ctimes.append(elapsed)
+        elif operation == 'param_convert':
+            self.p_ctimes.append(elapsed)
+
+    def get_timing_data(self) -> dict:
+        """Get all recorded timing data.
+
+        Returns
+        -------
+        dict
+            Dictionary containing all timing arrays
+        """
+        return {
+            'ftimes': self.ftimes,
+            'jtimes': self.jtimes,
+            'svd_times': self.svd_times,
+            'ctimes': self.ctimes,
+            'gtimes': self.gtimes,
+            'gtimes2': self.gtimes2,
+            'ptimes': self.ptimes,
+            'svd_ctimes': self.svd_ctimes,
+            'g_ctimes': self.g_ctimes,
+            'c_ctimes': self.c_ctimes,
+            'p_ctimes': self.p_ctimes,
+        }
+
+
+class NullProfiler:
+    """Null object profiler with zero overhead.
+
+    Provides same interface as TRFProfiler but does nothing,
+    enabling profiling to be toggled with no performance impact.
+    """
+
+    def time_operation(self, operation: str, jax_result):
+        """No-op timing - returns result unchanged."""
+        return jax_result
+
+    def time_conversion(self, operation: str, start_time: float):
+        """No-op conversion timing."""
+        pass
+
+    def get_timing_data(self) -> dict:
+        """Returns empty timing data."""
+        return {
+            'ftimes': [],
+            'jtimes': [],
+            'svd_times': [],
+            'ctimes': [],
+            'gtimes': [],
+            'gtimes2': [],
+            'ptimes': [],
+            'svd_ctimes': [],
+            'g_ctimes': [],
+            'c_ctimes': [],
+            'p_ctimes': [],
+        }
+
+
 class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
     """Trust Region Reflective algorithm for bounded least squares optimization.
 
@@ -1279,6 +1426,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         verbose: int,
         solver: str = "exact",
         callback: Callable | None = None,
+        profiler: TRFProfiler | NullProfiler | None = None,
         **kwargs,
     ) -> dict:
         """Unbounded version of the trust-region reflective algorithm.
@@ -1347,11 +1495,25 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
 
+        profiler : TRFProfiler, NullProfiler, or None, optional
+            Profiler for timing algorithm operations. If None, uses NullProfiler
+            (zero overhead). Use TRFProfiler() for detailed performance analysis.
+            Default is None.
+
         Notes
         -----
         The algorithm is described in [13]_.
 
+        MAINTENANCE NOTE: There is a profiling-instrumented version of this function
+        called `trf_no_bounds_timed()` used for performance analysis. If you modify
+        this function, please apply equivalent changes there. See TRFProfiler classes
+        above for future consolidation approach.
+
         """
+
+        # Initialize profiler (NullProfiler if not provided for zero overhead)
+        if profiler is None:
+            profiler = NullProfiler()
 
         # Initialize optimization state using helper
         state = self._initialize_trf_state(
@@ -2066,14 +2228,25 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         solver: str = "exact",
         callback: Callable | None = None,
     ) -> dict:
-        """Trust Region Reflective algorithm with no bounds and all the
-        operations performed on JAX and the GPU are timed. We need a separate
-        function for this because to time each operation we need a
-        block_until_ready() function which makes the main Python thread wait
-        until the GPU has finished the operation. However, for the main
-        algorithm we don't want to wait for the GPU to finish each operation
-        because it would slow down the algorithm. Thus, this is just used for
-        analysis of the algorithm.
+        """Trust Region Reflective algorithm with detailed profiling.
+
+        MAINTENANCE NOTE
+        ----------------
+        This function is a profiling-instrumented version of `trf_no_bounds()`.
+        It includes .block_until_ready() calls after every JAX operation to get
+        accurate GPU timing, which adds overhead unsuitable for production use.
+
+        **If you modify trf_no_bounds(), please apply equivalent changes here.**
+
+        The two functions implement the same algorithm but differ in:
+        - This version: Adds timing instrumentation via block_until_ready()
+        - trf_no_bounds(): Uses helper methods (_initialize_trf_state, etc.)
+
+        Future work: Consolidate using TRFProfiler abstraction (see classes above).
+
+        This function records timing for each operation and returns them in the
+        `all_times` field of the result. Used exclusively for performance analysis
+        in benchmark/profile_trf.py.
 
         Parameters
         ----------
