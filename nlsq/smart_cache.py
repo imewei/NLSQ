@@ -434,9 +434,9 @@ def cached_function(cache: SmartCache | None = None, ttl: float | None = None):
             return cached_result
 
         # Add cache management methods
-        wrapper.cache = cache
-        wrapper.invalidate = cache.invalidate
-        wrapper.get_stats = cache.get_stats
+        wrapper.cache = cache  # type: ignore[attr-defined]
+        wrapper.invalidate = cache.invalidate  # type: ignore[attr-defined]
+        wrapper.get_stats = cache.get_stats  # type: ignore[attr-defined]
 
         return wrapper
 
@@ -475,8 +475,8 @@ def cached_jacobian(cache: SmartCache | None = None):
             cache.set(cache_key, result)
             return result
 
-        wrapper.cache = cache
-        wrapper.invalidate = cache.invalidate
+        wrapper.cache = cache  # type: ignore[attr-defined]
+        wrapper.invalidate = cache.invalidate  # type: ignore[attr-defined]
 
         return wrapper
 

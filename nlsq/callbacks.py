@@ -113,7 +113,7 @@ class ProgressBar(CallbackBase):
 
         # Try to import tqdm
         try:
-            from tqdm.auto import tqdm
+            from tqdm.auto import tqdm  # type: ignore[import-untyped]
 
             self.tqdm = tqdm
         except ImportError:
@@ -222,7 +222,7 @@ class IterationLogger(CallbackBase):
             self._write_header()
 
         # Compute elapsed time
-        elapsed = time.time() - self._start_time
+        elapsed = time.time() - self._start_time if self._start_time else 0
 
         # Build log message
         g_norm = info.get("gradient_norm", np.nan)

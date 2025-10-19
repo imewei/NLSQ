@@ -200,34 +200,29 @@ class JAXConfig:
         memory_config = MemoryConfig()
 
         # Override from environment variables
-        if os.getenv("NLSQ_MEMORY_LIMIT_GB"):
+        limit = os.getenv("NLSQ_MEMORY_LIMIT_GB")
+        if limit:
             try:
-                memory_config.memory_limit_gb = float(os.getenv("NLSQ_MEMORY_LIMIT_GB"))
+                memory_config.memory_limit_gb = float(limit)
             except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_MEMORY_LIMIT_GB: {os.getenv('NLSQ_MEMORY_LIMIT_GB')}"
-                )
+                warnings.warn(f"Invalid NLSQ_MEMORY_LIMIT_GB: {limit}")
 
-        if os.getenv("NLSQ_GPU_MEMORY_FRACTION"):
+        fraction = os.getenv("NLSQ_GPU_MEMORY_FRACTION")
+        if fraction:
             try:
-                memory_config.gpu_memory_fraction = float(
-                    os.getenv("NLSQ_GPU_MEMORY_FRACTION")
-                )
+                memory_config.gpu_memory_fraction = float(fraction)
             except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_GPU_MEMORY_FRACTION: {os.getenv('NLSQ_GPU_MEMORY_FRACTION')}"
-                )
+                warnings.warn(f"Invalid NLSQ_GPU_MEMORY_FRACTION: {fraction}")
 
         if os.getenv("NLSQ_DISABLE_MIXED_PRECISION_FALLBACK") == "1":
             memory_config.enable_mixed_precision_fallback = False
 
-        if os.getenv("NLSQ_CHUNK_SIZE_MB"):
+        chunk_size = os.getenv("NLSQ_CHUNK_SIZE_MB")
+        if chunk_size:
             try:
-                memory_config.chunk_size_mb = int(os.getenv("NLSQ_CHUNK_SIZE_MB"))
+                memory_config.chunk_size_mb = int(chunk_size)
             except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_CHUNK_SIZE_MB: {os.getenv('NLSQ_CHUNK_SIZE_MB')}"
-                )
+                warnings.warn(f"Invalid NLSQ_CHUNK_SIZE_MB: {chunk_size}")
 
         if os.getenv("NLSQ_OOM_STRATEGY"):
             strategy = os.getenv("NLSQ_OOM_STRATEGY")
@@ -238,13 +233,12 @@ class JAXConfig:
                     f"Invalid NLSQ_OOM_STRATEGY: {strategy}. Must be 'fallback', 'reduce', or 'error'."
                 )
 
-        if os.getenv("NLSQ_SAFETY_FACTOR"):
+        safety_factor = os.getenv("NLSQ_SAFETY_FACTOR")
+        if safety_factor:
             try:
-                memory_config.safety_factor = float(os.getenv("NLSQ_SAFETY_FACTOR"))
+                memory_config.safety_factor = float(safety_factor)
             except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_SAFETY_FACTOR: {os.getenv('NLSQ_SAFETY_FACTOR')}"
-                )
+                warnings.warn(f"Invalid NLSQ_SAFETY_FACTOR: {safety_factor}")
 
         if os.getenv("NLSQ_DISABLE_PROGRESS_REPORTING") == "1":
             memory_config.progress_reporting = False
