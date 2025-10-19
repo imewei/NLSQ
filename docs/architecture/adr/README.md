@@ -43,8 +43,6 @@ What decision did we make?
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| [001](001-jax-computation-backend.md) | JAX as Computation Backend | Accepted | 2024-01-15 |
-| [002](002-scipy-api-compatibility.md) | SciPy API Compatibility | Accepted | 2024-01-15 |
 | [003](003-streaming-over-subsampling.md) | Streaming Optimization Over Subsampling | Accepted | 2025-10-17 |
 | [004](004-parameter-unpacking-simplification.md) | Parameter Unpacking Simplification | Accepted | 2025-10-18 |
 | [005](005-jax-autodiff-gradients.md) | JAX Autodiff for Gradient Computation | Accepted | 2025-10-18 |

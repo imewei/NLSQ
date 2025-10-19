@@ -63,7 +63,6 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 
 ## References
 
-- [Multi-Agent Optimization Summary](../../../MULTI_AGENT_OPTIMIZATION_SUMMARY.md)
 - [Large Dataset Implementation](../../../nlsq/large_dataset.py)
 - [Streaming Optimizer](../../../nlsq/streaming_optimizer.py)
 - [Large Dataset Guide](../../guides/large_datasets.rst)

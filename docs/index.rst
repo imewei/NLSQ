@@ -99,6 +99,7 @@ Documentation
    developer/performance_tuning_guide
    developer/pypi_setup
    developer/ci_cd/index
+   architecture/index
 
 Resources
 ---------
