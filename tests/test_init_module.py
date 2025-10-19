@@ -128,17 +128,12 @@ class TestInitModule(unittest.TestCase):
         self.assertIsInstance(warning, Warning)
 
     def test_large_dataset_config(self):
-        """Test LargeDatasetConfig."""
+        """Test LargeDatasetConfig (v0.2.0: sampling params removed)."""
         from nlsq import LargeDatasetConfig, get_large_dataset_config
 
         # Test creating config
-        config = LargeDatasetConfig(
-            enable_sampling=True, max_sampled_size=5000, sampling_threshold=100000
-        )
-
-        self.assertTrue(config.enable_sampling)
-        self.assertEqual(config.max_sampled_size, 5000)
-        self.assertEqual(config.sampling_threshold, 100000)
+        config = LargeDatasetConfig()
+        self.assertIsNotNone(config)
 
         # Test getting global config
         global_config = get_large_dataset_config()
@@ -164,7 +159,7 @@ class TestInitModule(unittest.TestCase):
         self.assertEqual(new_config.memory_limit_gb, 2.0)
 
     def test_context_managers(self):
-        """Test context managers for configuration."""
+        """Test context managers for configuration (v0.2.0: sampling removed)."""
         from nlsq import (
             LargeDatasetConfig,
             MemoryConfig,
@@ -176,16 +171,14 @@ class TestInitModule(unittest.TestCase):
 
         # Test large_dataset_context
         original_config = get_large_dataset_config()
-        temp_ld_config = LargeDatasetConfig(enable_sampling=False)
+        temp_ld_config = LargeDatasetConfig()
         with large_dataset_context(temp_ld_config):
             temp_config = get_large_dataset_config()
-            self.assertEqual(temp_config.enable_sampling, False)
+            self.assertIsNotNone(temp_config)
 
         # Config should be restored
         restored_config = get_large_dataset_config()
-        self.assertEqual(
-            restored_config.enable_sampling, original_config.enable_sampling
-        )
+        self.assertEqual(type(restored_config), type(original_config))
 
         # Test memory_context
         original_mem_config = get_memory_config()
@@ -297,16 +290,15 @@ class TestInitModule(unittest.TestCase):
         self.assertAlmostEqual(result.popt[0], 2.0, places=0)
 
     def test_ldmemory_config(self):
-        """Test LDMemoryConfig (renamed from MemoryConfig in large_dataset module)."""
+        """Test LDMemoryConfig (v0.2.0: enable_sampling removed)."""
         from nlsq import LDMemoryConfig
 
         config = LDMemoryConfig(
-            memory_limit_gb=4.0, min_chunk_size=1000, enable_sampling=True
+            memory_limit_gb=4.0, min_chunk_size=1000
         )
 
         self.assertEqual(config.memory_limit_gb, 4.0)
         self.assertEqual(config.min_chunk_size, 1000)
-        self.assertTrue(config.enable_sampling)
 
     def test_curve_fit_class(self):
         """Test CurveFit class through public API."""

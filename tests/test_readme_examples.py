@@ -125,13 +125,11 @@ def test_advanced_large_dataset():
         show_progress=False,  # Disabled for testing
     )
 
-    # Option 2: Use LargeDatasetFitter for more control
+    # Option 2: Use LargeDatasetFitter for more control (v0.2.0: sampling removed)
     config = LDMemoryConfig(
         memory_limit_gb=4.0,
         min_chunk_size=10000,
         max_chunk_size=1000000,
-        enable_sampling=True,  # For datasets > 100M points
-        sampling_threshold=100_000_000,
     )
 
     fitter = LargeDatasetFitter(config=config)

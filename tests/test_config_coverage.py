@@ -33,9 +33,9 @@ class TestConfigCoverage(unittest.TestCase):
         config = LargeDatasetConfig()
         self.assertIsNotNone(config)
 
-        # Test with parameters
-        config = LargeDatasetConfig(enable_sampling=False)
-        self.assertEqual(config.enable_sampling, False)
+        # Test with parameters (v0.2.0: enable_sampling removed)
+        config = LargeDatasetConfig()
+        self.assertIsNotNone(config)
 
     def test_get_configs(self):
         """Test getting global configs."""
@@ -64,11 +64,11 @@ class TestConfigCoverage(unittest.TestCase):
         self.assertTrue(True)
 
     def test_context_managers_simple(self):
-        """Test context managers."""
-        temp_config = LargeDatasetConfig(enable_sampling=False)
+        """Test context managers (v0.2.0: enable_sampling removed)."""
+        temp_config = LargeDatasetConfig()
         with large_dataset_context(temp_config):
             config = get_large_dataset_config()
-            self.assertEqual(config.enable_sampling, False)
+            self.assertIsNotNone(config)
 
         temp_config = MemoryConfig(memory_limit_gb=1.0)
         with memory_context(temp_config):

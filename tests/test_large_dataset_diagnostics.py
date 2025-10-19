@@ -196,8 +196,11 @@ class TestFailureDiagnostics(unittest.TestCase):
 
                 # If diagnostics enabled, should have more fields
                 if "timestamp" in chunk:
-                    self.assertIn("data_stats", chunk)
-                    if not chunk["success"]:
+                    self.assertIn("duration", chunk)
+                    self.assertIn("n_points", chunk)
+                    if chunk["success"]:
+                        self.assertIn("parameters", chunk)
+                    else:
                         self.assertIn("error_type", chunk)
 
 
@@ -363,17 +366,16 @@ class TestMinSuccessRateThreshold(unittest.TestCase):
         fitter = LargeDatasetFitter(config=config)
 
         # 70% success rate should FAIL with 80% threshold
-        try:
+        # Note: Model validation may catch failures before chunking starts
+        with self.assertRaises((ValueError, RuntimeError)) as ctx:
             result = fitter.fit(mostly_working_model, xdata, ydata, p0=[2.0, 1.0])
-            # Should fail due to insufficient success rate
-            if hasattr(result, "success"):
-                self.assertFalse(
-                    result.success,
-                    "Should fail with 70% success when min_success_rate=0.8",
-                )
-        except Exception as e:
-            # Expected failure
-            self.assertIn("success rate", str(e).lower())
+
+        # Check that failure is detected (either validation or success rate)
+        error_msg = str(ctx.exception).lower()
+        self.assertTrue(
+            "model function" in error_msg or "success rate" in error_msg,
+            f"Expected model validation or success rate error, got: {ctx.exception}"
+        )
 
     def test_min_success_rate_permissive_30_percent(self):
         """Test permissive min_success_rate=0.3 (30%)."""
