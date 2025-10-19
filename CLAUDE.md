@@ -525,7 +525,7 @@ nlsq/
   - Removed parameters: `enable_sampling`, `sampling_threshold`, `max_sampled_size`
   - Removed methods: `DataChunker.sample_large_dataset()`
   - Removed attributes: `DatasetStats.requires_sampling`
-  - **Migration**: See [`MIGRATION_V0.2.0.md`](MIGRATION_V0.2.0.md) for detailed guide
+  - **Migration**: Deprecated parameters emit DeprecationWarning with clear instructions
 - ✅ **Improvement**: Streaming optimization for all large datasets
   - Zero accuracy loss (processes 100% of data)
   - Better than subsampling (no data loss from random sampling)
@@ -533,7 +533,6 @@ nlsq/
 - ✅ **API Compatibility**: Graceful deprecation warnings
   - Old code with sampling params emits `DeprecationWarning`
   - Clear migration instructions in warnings
-  - See MIGRATION_V0.2.0.md for upgrade guide
 
 ### Performance Optimizations (Phase 2)
 - ✅ **Optimization #2: Parameter Unpacking Simplification** (Commit `574acea`)
