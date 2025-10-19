@@ -400,7 +400,7 @@ class CurveFitResult(OptimizeResult):
         Confidence intervals are computed using the parameter covariance matrix
         and Student's t-distribution. Assumes residuals are normally distributed.
         """
-        if not hasattr(self, "pcov"):
+        if self.pcov is None:
             raise AttributeError(
                 "Cannot compute confidence intervals: pcov not available. "
                 "Try setting full_output=True in curve_fit."
