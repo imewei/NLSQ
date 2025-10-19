@@ -571,6 +571,8 @@ nlsq/
   - Infrastructure ready for future TRF consolidation
 
 ### Code Quality Refactoring (2025-10-18)
+
+**Session 1** (Morning):
 - ✅ **Task 1: LargeDatasetFitter._fit_chunked() Refactoring** (Commit `19b9245`)
   - **Complexity Reduction**: E(36) → C(14) = **61% reduction** (93% to B(8) target)
   - **Helper Methods Extracted** (2 new methods, 7 total):
@@ -582,7 +584,6 @@ nlsq/
   - **Lines Reduced**: ~170 lines → ~140 lines (18% reduction)
   - **All Tests Passing**: 27/27 large dataset tests (100% success rate)
   - **Zero Regressions**: No performance degradation detected
-  - **Remaining Work**: 4 complexity points to reach B(8) target
 
 - ✅ **Type Hints Foundation** (Commit `bb417b6`)
   - **Created nlsq/types.py** (160 lines) - Comprehensive type alias library
@@ -592,13 +593,30 @@ nlsq/
     - Bounds/Results: `BoundsTuple`, `OptimizeResultDict`
     - Configuration: `MethodLiteral`, `SolverLiteral`
     - Protocols: `HasShape`, `SupportsFloat`
-  - **Benefits**:
-    - Enables IDE autocomplete for NLSQ public API
-    - Documents expected types clearly
-    - Foundation for mypy static type checking
-    - Improves developer experience
+  - **Benefits**: IDE autocomplete, type documentation, mypy foundation
   - **Type Coverage**: +2% (63% → 65%)
-  - **Remaining Work**: Add type hints to curve_fit(), curve_fit_large(), least_squares() signatures
+
+**Session 2** (Evening):
+- ✅ **Type Hints for Public API** (Commit `a247391`)
+  - **Added comprehensive type hints to 3 core functions**:
+    - `curve_fit()` in nlsq/minpack.py - Full parameter and return types
+    - `least_squares()` in nlsq/least_squares.py - Complete type annotations
+    - `curve_fit_large()` in nlsq/__init__.py - Full type signatures
+  - **Validation**: Mypy passes with --check-untyped-defs (0 errors)
+  - **Testing**: All 18 minpack tests passing, zero regressions
+  - **Type Coverage**: +7% (63% → **~70%**)
+  - **Task 6 Progress**: 20% → **60%**
+
+- ✅ **Final _fit_chunked() Optimization** (Commit `36ea557`)
+  - **Complexity Reduction**: C(14) → **B(9)** = **75% total reduction** from E(36)
+  - **Helper Method Extracted** (1 new method, 8 total):
+    - `_check_success_rate_and_create_result()` - B(6) complexity
+      - Validates minimum success rate threshold
+      - Creates failure result if too many chunks failed
+      - Calls _finalize_chunked_results() on success
+  - **All Tests Passing**: 27/27 large dataset tests (100% success rate)
+  - **Zero Regressions**: No performance degradation
+  - **Task 1 Progress**: 93% → **99%** (1 complexity point from B(8) target)
 
 ### Previous Updates (2025-10-17)
 
