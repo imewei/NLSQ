@@ -1007,11 +1007,15 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if loss_function is not None:
             rho = loss_function(f, f_scale)
             state['cost'] = self.calculate_cost(rho, data_mask)
+            # Save original residuals before scaling (for res.fun)
+            state['f_true'] = f
             state['J'], state['f'] = self.cJIT.scale_for_robust_loss_function(
                 J, f, rho
             )
         else:
             state['cost'] = self.default_loss_func(f)
+            # No scaling applied, so f is already the true residuals
+            state['f_true'] = f
 
         # Compute gradient
         state['g'] = self.compute_grad(state['J'], state['f'])
@@ -1382,9 +1386,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 J_new, f_new_scaled = self.cJIT.scale_for_robust_loss_function(
                     J_new, f_new, rho
                 )
-                result['f_new'] = f_new_scaled
+                result['f_new'] = f_new_scaled  # Scaled residuals for optimization
+                result['f_true_new'] = f_new  # Unscaled residuals for res.fun
             else:
                 result['f_new'] = f_new
+                result['f_true_new'] = f_new  # No scaling, so both are the same
 
             result['J_new'] = J_new
 
@@ -1541,7 +1547,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         m = state['m']
         n = state['n']
         jac_scale = state['jac_scale']
-        f_true = f  # Keep original residuals
+        f_true = state['f_true']  # Original unscaled residuals (for res.fun)
 
         # Log optimization start
         self.logger.info(
@@ -1651,8 +1657,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 # Update state from acceptance result
                 if acceptance_result['accepted']:
                     x = acceptance_result['x_new']
-                    f = acceptance_result['f_new']
-                    f_true = f
+                    f = acceptance_result['f_new']  # Scaled residuals for optimization
+                    f_true = acceptance_result['f_true_new']  # Unscaled residuals for res.fun
                     J = acceptance_result['J_new']
                     cost = acceptance_result['cost_new']
                     g = acceptance_result['g_new']
@@ -1708,6 +1714,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             termination_status = 0
 
         active_mask = np.zeros_like(x)
+
         # Convert JAX arrays to NumPy for final return
         return OptimizeResult(
             x=x,

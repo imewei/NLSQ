@@ -38,9 +38,9 @@ NLSQ is a **GPU/TPU-accelerated nonlinear least squares curve fitting library** 
 - 📊 **Large dataset support** (>1M points)
 - 🎯 **NumPy 2.0+ compatible**
 
-### Key Metrics (2025-10-09)
+### Key Metrics (2025-10-19)
 - **Performance**: 1.7-2.0ms (cached), 450-650ms (first run with JIT)
-- **Test Suite**: 1168 passing, 100% success rate
+- **Test Suite**: 1230/1235 passing (99.6% success rate)
 - **Coverage**: 77% (target: 80%)
 - **Platform Support**: Full Windows/macOS/Linux compatibility
 - **CI/CD**: All platforms passing, 0 flaky tests
@@ -701,8 +701,8 @@ nlsq/
 - ✅ **Pre-commit**: 100% compliance (24/24 hooks)
 
 ### Test Status (Latest - 2025-10-19)
-- **Passing**: 1229/1235 tests (**99.5% success rate**)
-- **Failing**: 6 tests (0.5% - see Known Issues below)
+- **Passing**: 1230/1235 tests (**99.6% success rate**)
+- **Failing**: 5 tests (0.4% - see Known Issues below)
 - **Skipped**: 6 tests
 - **Coverage**: 77% (target: 80%)
 - **Platforms**: Ubuntu ✅ | macOS ✅ | Windows ✅
@@ -711,29 +711,23 @@ nlsq/
 
 ---
 
-## Known Test Failures (6 tests - 0.5%)
+## Known Test Failures (5 tests - 0.4%)
 
-### 🔴 CRITICAL: TRF Numerical Bug (1 test)
+### ✅ FIXED: TRF Numerical Bug (2025-10-19)
 
-**Test**: `test_least_squares.py::TestTRF::test_fun`
+**Test**: `test_least_squares.py::TestTRF::test_fun` - **NOW PASSING** ✅
 
-**Issue**: `res.fun` contains incorrect value `67108864.0` (2^26) instead of expected `5.0`
+**Root Cause**: When loss functions are applied, residuals are scaled for optimization but `res.fun` must contain **unscaled** residuals.
 
-**Impact**:
-- **LOW**: Only 1 of 31 TRF tests fails
-- TRF optimization algorithm works correctly (all other tests pass)
-- Issue appears specific to `res.fun` field assignment
+**Fix Applied**:
+1. Added `f_true` tracking in `_initialize_trf_state()` to preserve original residuals
+2. Added `f_true_new` in `_evaluate_step_acceptance()` to preserve unscaled residuals after each iteration
+3. Updated `trf_no_bounds()` to return `f_true` (unscaled) instead of `f` (scaled)
 
-**Status**:
-- Requires deep investigation into TRF result construction
-- Possible regression from Optimization #2 (parameter unpacking simplification)
-- May be pre-existing issue not caught in original test subset
+**Files Modified**:
+- `nlsq/trf.py`: Lines 1011, 1018, 1393, 1396, 1548, 1664
 
-**Workaround**:
-- Use other TRF validation methods (30 passing tests confirm algorithm correctness)
-- `res.x` (optimized parameters) and `res.cost` are correct
-
-**Priority**: Critical for future sprint - investigate `_initialize_trf_state()` and `f_true` assignment
+**Test Results**: All 31 TRF tests now passing (100% success rate)
 
 ---
 
