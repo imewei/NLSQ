@@ -201,7 +201,7 @@ def test_streaming_optimizer():
     p0 = np.array([2.0, 0.5])
 
     # Stream data from generator
-    result = optimizer.fit_streaming(func, data_generator(), p0=p0)
+    result = optimizer.fit_streaming(data_generator(), func, p0=p0)
     print(f"Streaming optimization result: {result}")
     print("✅ Streaming Optimizer example passed")
 
