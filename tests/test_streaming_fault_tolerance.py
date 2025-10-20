@@ -4,14 +4,15 @@ This module provides end-to-end integration tests that verify all fault toleranc
 features work together cohesively during streaming optimization.
 """
 
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
-import tempfile
-import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestFaultToleranceIntegration:
@@ -74,18 +75,18 @@ class TestFaultToleranceIntegration:
 
         # Verify optimization completed
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Parameters should have improved from initial
-        assert not np.array_equal(result['x'], p0)
+        assert not np.array_equal(result["x"], p0)
 
         # Should have diagnostics
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
             # Should have recorded multiple error types
-            assert 'error_types' in diags
+            assert "error_types" in diags
             # Should have retry counts
-            assert 'retry_counts' in diags
+            assert "retry_counts" in diags
 
     def test_checkpoint_saves_during_fault_tolerance(self):
         """Test that checkpoints are saved even with batch failures."""
@@ -133,11 +134,12 @@ class TestFaultToleranceIntegration:
             # May or may not have checkpoints depending on implementation
             # Just verify optimization completed
             assert result is not None
-            assert 'x' in result
+            assert "x" in result
 
         finally:
             # Cleanup
             import shutil
+
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
@@ -173,7 +175,7 @@ class TestFaultToleranceIntegration:
             # Fail batches 3, 6, 9 (first attempt only)
             if call_count[0] in [3, 6, 9]:
                 batch_attempt_key = f"batch_{call_count[0]}"
-                if not hasattr(mock_compute_track_best, 'attempts'):
+                if not hasattr(mock_compute_track_best, "attempts"):
                     mock_compute_track_best.attempts = {}
 
                 attempts = mock_compute_track_best.attempts.get(batch_attempt_key, 0)
@@ -186,7 +188,7 @@ class TestFaultToleranceIntegration:
             result = original_compute(func, params, x_batch, y_batch)
 
             # Track best loss
-            if hasattr(optimizer, 'best_loss'):
+            if hasattr(optimizer, "best_loss"):
                 best_losses.append(optimizer.best_loss)
 
             return result
@@ -199,7 +201,7 @@ class TestFaultToleranceIntegration:
 
         # Verify optimization worked
         assert result is not None
-        assert not np.array_equal(result['x'], p0)
+        assert not np.array_equal(result["x"], p0)
 
         # Verify best loss was tracked (if losses were recorded)
         if best_losses:
@@ -244,13 +246,13 @@ class TestFaultToleranceIntegration:
             # Only fail on first attempt
             if batch_attempts[batch_num] == 1:
                 if batch_num == 1:
-                    strategies_used.append('nan_error')
+                    strategies_used.append("nan_error")
                     return 0.5, np.array([np.inf, 1.0])
                 elif batch_num == 2:
-                    strategies_used.append('singular_matrix')
+                    strategies_used.append("singular_matrix")
                     raise np.linalg.LinAlgError("Singular matrix")
                 elif batch_num == 3:
-                    strategies_used.append('value_error')
+                    strategies_used.append("value_error")
                     raise ValueError("Invalid value")
 
             return original_compute(func, params, x_batch, y_batch)
@@ -266,7 +268,7 @@ class TestFaultToleranceIntegration:
 
         # Verify optimization completed
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_success_rate_enforcement(self):
         """Test that optimization fails when success rate is too low."""
@@ -307,13 +309,13 @@ class TestFaultToleranceIntegration:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Check success rate
-        if 'batch_success_rate' in result:
+        if "batch_success_rate" in result:
             # Success rate should be around 60% (below 80% threshold)
-            assert result['batch_success_rate'] < 0.8
+            assert result["batch_success_rate"] < 0.8
 
         # Optimization should still return a result (best params found)
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_diagnostics_accuracy_under_stress(self):
         """Test diagnostic accuracy with many simultaneous failures."""
@@ -356,11 +358,11 @@ class TestFaultToleranceIntegration:
             if batch_attempts[batch_num] == 1:
                 if batch_num % 3 == 0:
                     expected_failures.append(batch_num)
-                    actual_error_types[batch_num] = 'NumericalError'
+                    actual_error_types[batch_num] = "NumericalError"
                     return 0.5, np.array([np.nan, 1.0])
                 elif batch_num % 5 == 0:
                     expected_failures.append(batch_num)
-                    actual_error_types[batch_num] = 'SingularMatrix'
+                    actual_error_types[batch_num] = "SingularMatrix"
                     raise np.linalg.LinAlgError("Singular")
 
             return original_compute(func, params, x_batch, y_batch)
@@ -372,18 +374,20 @@ class TestFaultToleranceIntegration:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Verify diagnostics if present
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
 
             # Check that error types were recorded
-            if 'error_types' in diags:
+            if "error_types" in diags:
                 # Should have recorded some errors
-                assert len(diags['error_types']) > 0
+                assert len(diags["error_types"]) > 0
 
             # Check that failed batches were tracked
-            if 'failed_batches' in diags or 'failed_batch_indices' in result:
+            if "failed_batches" in diags or "failed_batch_indices" in result:
                 # Some failures should be recorded
-                failed_indices = diags.get('failed_batches', result.get('failed_batch_indices', []))
+                failed_indices = diags.get(
+                    "failed_batches", result.get("failed_batch_indices", [])
+                )
                 # At least some of the expected failures should be recorded
                 # (may not be all if retries succeeded)
                 assert len(failed_indices) >= 0  # Just verify structure exists
@@ -408,7 +412,9 @@ class TestFaultToleranceIntegration:
             enable_fault_tolerance=True,
         )
         optimizer_full = StreamingOptimizer(config_full)
-        result_full = optimizer_full.fit_streaming((x_data, y_data), model, p0, verbose=0)
+        result_full = optimizer_full.fit_streaming(
+            (x_data, y_data), model, p0, verbose=0
+        )
 
         # Run with fast mode
         config_fast = StreamingConfig(
@@ -419,21 +425,23 @@ class TestFaultToleranceIntegration:
             enable_fault_tolerance=False,
         )
         optimizer_fast = StreamingOptimizer(config_fast)
-        result_fast = optimizer_fast.fit_streaming((x_data, y_data), model, p0, verbose=0)
+        result_fast = optimizer_fast.fit_streaming(
+            (x_data, y_data), model, p0, verbose=0
+        )
 
         # Both should produce results
         assert result_full is not None
         assert result_fast is not None
 
         # Both should have improved from initial parameters
-        assert not np.array_equal(result_full['x'], p0)
-        assert not np.array_equal(result_fast['x'], p0)
+        assert not np.array_equal(result_full["x"], p0)
+        assert not np.array_equal(result_fast["x"], p0)
 
         # Results should be similar (within reasonable tolerance)
         # Note: May differ slightly due to different failure handling
-        if result_full['success'] and result_fast['success']:
+        if result_full["success"] and result_fast["success"]:
             # Only compare if both succeeded
-            assert np.allclose(result_full['x'], result_fast['x'], rtol=0.2)
+            assert np.allclose(result_full["x"], result_fast["x"], rtol=0.2)
 
 
 class TestFaultToleranceEdgeCases:
@@ -464,9 +472,9 @@ class TestFaultToleranceEdgeCases:
 
         # Should succeed with 100% success rate
         assert result is not None
-        assert result['success'] is True
-        if 'batch_success_rate' in result:
-            assert result['batch_success_rate'] == 1.0
+        assert result["success"] is True
+        if "batch_success_rate" in result:
+            assert result["batch_success_rate"] == 1.0
 
     def test_single_batch_dataset(self):
         """Test with dataset that fits in single batch."""
@@ -493,7 +501,7 @@ class TestFaultToleranceEdgeCases:
 
         # Should work with single batch
         assert result is not None
-        assert not np.array_equal(result['x'], p0)
+        assert not np.array_equal(result["x"], p0)
 
     def test_max_retries_exhausted(self):
         """Test behavior when max retries are exhausted for a batch."""
@@ -538,11 +546,11 @@ class TestFaultToleranceEdgeCases:
 
         # Should complete despite persistent failure
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Should have recorded the failed batch
-        if 'failed_batch_indices' in result:
-            assert len(result['failed_batch_indices']) > 0
+        if "failed_batch_indices" in result:
+            assert len(result["failed_batch_indices"]) > 0
 
 
 class TestFaultToleranceRobustness:
@@ -596,7 +604,7 @@ class TestFaultToleranceRobustness:
 
         # Should succeed with retries
         assert result is not None
-        assert result['success']
+        assert result["success"]
 
     def test_parameter_bounds_respected_during_retry(self):
         """Test that parameter bounds are respected during retry perturbation."""
@@ -635,13 +643,15 @@ class TestFaultToleranceRobustness:
 
         # Run optimization
         p0 = np.array([2.0, 1.0])
-        result = optimizer.fit_streaming((x_data, y_data), model, p0, bounds=bounds, verbose=0)
+        result = optimizer.fit_streaming(
+            (x_data, y_data), model, p0, bounds=bounds, verbose=0
+        )
 
         # Check that final parameters respect bounds
-        if result['success']:
-            assert np.all(result['x'] >= bounds[0])
-            assert np.all(result['x'] <= bounds[1])
+        if result["success"]:
+            assert np.all(result["x"] >= bounds[0])
+            assert np.all(result["x"] <= bounds[1])
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

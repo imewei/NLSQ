@@ -264,7 +264,7 @@ class StreamingConfig:
     checkpoint_frequency: int = 100
     checkpoint_interval: int = 100  # Alias for backward compatibility
     enable_checkpoints: bool = True
-    resume_from_checkpoint: Union[bool, str, None] = None
+    resume_from_checkpoint: bool | str | None = None
 
     # Fault tolerance
     enable_fault_tolerance: bool = True
@@ -279,7 +279,10 @@ class StreamingConfig:
         """Validate configuration after initialization."""
         # Ensure checkpoint_frequency matches checkpoint_interval (backward compatibility)
         # checkpoint_interval is the legacy parameter, but we use checkpoint_frequency internally
-        if hasattr(self, 'checkpoint_interval') and self.checkpoint_interval != self.checkpoint_frequency:
+        if (
+            hasattr(self, "checkpoint_interval")
+            and self.checkpoint_interval != self.checkpoint_frequency
+        ):
             # If user explicitly set checkpoint_interval, use it for checkpoint_frequency
             self.checkpoint_frequency = self.checkpoint_interval
 
@@ -296,5 +299,9 @@ class StreamingConfig:
         assert self.convergence_tol > 0, "convergence_tol must be positive"
         assert self.checkpoint_frequency > 0, "checkpoint_frequency must be positive"
         assert 0 <= self.min_success_rate <= 1, "min_success_rate must be in [0, 1]"
-        assert self.max_retries_per_batch >= 0, "max_retries_per_batch must be non-negative"
-        assert self.batch_stats_buffer_size > 0, "batch_stats_buffer_size must be positive"
+        assert self.max_retries_per_batch >= 0, (
+            "max_retries_per_batch must be non-negative"
+        )
+        assert self.batch_stats_buffer_size > 0, (
+            "batch_stats_buffer_size must be positive"
+        )

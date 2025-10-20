@@ -15,7 +15,8 @@ Run this example:
 """
 
 import numpy as np
-from nlsq import StreamingOptimizer, StreamingConfig
+
+from nlsq import StreamingConfig, StreamingOptimizer
 
 
 def exponential_decay(x, a, b):
@@ -100,7 +101,7 @@ def main():
     print(f"Success: {success}")
     print(f"Message: {message}")
     print()
-    print(f"Best parameters found:")
+    print("Best parameters found:")
     print(f"  a = {best_params[0]:.6f} (true: {true_a})")
     print(f"  b = {best_params[1]:.6f} (true: {true_b})")
     print(f"  Best loss = {best_loss:.6e}")
@@ -130,7 +131,7 @@ def main():
     print(f"  Mean loss: {agg['mean_loss']:.6e}")
     print(f"  Std loss: {agg['std_loss']:.6e}")
     print(f"  Mean gradient norm: {agg['mean_grad_norm']:.6f}")
-    print(f"  Mean batch time: {agg['mean_batch_time']*1000:.2f}ms")
+    print(f"  Mean batch time: {agg['mean_batch_time'] * 1000:.2f}ms")
     print()
 
     # Recent batch statistics
@@ -140,8 +141,14 @@ def main():
         # Show last 5 batches
         for i, stats in enumerate(recent_stats[-5:], 1):
             status = "SUCCESS" if stats["success"] else "FAILED"
-            retry_info = f" (retries: {stats['retry_count']})" if stats["retry_count"] > 0 else ""
-            print(f"  Batch {stats['batch_idx']}: {status}, loss={stats['loss']:.6e}{retry_info}")
+            retry_info = (
+                f" (retries: {stats['retry_count']})"
+                if stats["retry_count"] > 0
+                else ""
+            )
+            print(
+                f"  Batch {stats['batch_idx']}: {status}, loss={stats['loss']:.6e}{retry_info}"
+            )
         print()
 
     # Checkpoint information

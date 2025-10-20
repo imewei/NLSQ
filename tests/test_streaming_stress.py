@@ -16,14 +16,15 @@ Usage:
     pytest tests/test_streaming_stress.py -v -s
 """
 
+import gc
+import os
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import pytest
-import tempfile
-import os
-from pathlib import Path
-import gc
 
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestHighFailureRateStress:
@@ -70,15 +71,15 @@ class TestHighFailureRateStress:
 
         # Should complete despite high failure rate
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Parameters should have improved from initial
-        assert not np.array_equal(result['x'], p0)
+        assert not np.array_equal(result["x"], p0)
 
         # Should track success rate
-        if 'batch_success_rate' in result:
+        if "batch_success_rate" in result:
             # Success rate should be around 50%
-            assert 0.4 <= result['batch_success_rate'] <= 0.6
+            assert 0.4 <= result["batch_success_rate"] <= 0.6
 
     def test_90_percent_failure_rate(self):
         """Test optimization with 90% batch failure rate.
@@ -121,11 +122,11 @@ class TestHighFailureRateStress:
 
         # Should complete (though may not converge well)
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Success rate should be very low
-        if 'batch_success_rate' in result:
-            assert result['batch_success_rate'] < 0.15
+        if "batch_success_rate" in result:
+            assert result["batch_success_rate"] < 0.15
 
     def test_consecutive_failures_stress(self):
         """Test with many consecutive batch failures.
@@ -171,11 +172,11 @@ class TestHighFailureRateStress:
 
         # Should complete despite consecutive failures
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Should have failed batch records
-        if 'failed_batch_indices' in result:
-            assert len(result['failed_batch_indices']) >= 5
+        if "failed_batch_indices" in result:
+            assert len(result["failed_batch_indices"]) >= 5
 
 
 class TestLargeDatasetStress:
@@ -210,16 +211,16 @@ class TestLargeDatasetStress:
 
         # Should complete
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Parameters should be close to true values
-        assert np.allclose(result['x'], [2.0, 1.0], rtol=0.1)
+        assert np.allclose(result["x"], [2.0, 1.0], rtol=0.1)
 
         # Verify buffer didn't grow unbounded
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
-            if 'recent_batch_stats' in diags:
-                assert len(diags['recent_batch_stats']) <= 100
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
+            if "recent_batch_stats" in diags:
+                assert len(diags["recent_batch_stats"]) <= 100
 
     @pytest.mark.slow
     def test_many_small_batches(self):
@@ -250,7 +251,7 @@ class TestLargeDatasetStress:
 
         # Should complete
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_high_dimensional_parameters(self):
         """Test with many parameters (stress parameter tracking).
@@ -261,7 +262,9 @@ class TestLargeDatasetStress:
         x_data = np.random.randn(5000)
 
         # 10-parameter polynomial
-        true_params = np.array([0.1, -0.2, 0.3, -0.15, 0.05, 0.08, -0.12, 0.06, -0.03, 1.0])
+        true_params = np.array(
+            [0.1, -0.2, 0.3, -0.15, 0.05, 0.08, -0.12, 0.06, -0.03, 1.0]
+        )
         y_data = sum(true_params[i] * x_data**i for i in range(10))
         y_data += 0.1 * np.random.randn(5000)
 
@@ -275,7 +278,18 @@ class TestLargeDatasetStress:
         optimizer = StreamingOptimizer(config)
 
         def model(x, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9):
-            return p0 + p1*x + p2*x**2 + p3*x**3 + p4*x**4 + p5*x**5 + p6*x**6 + p7*x**7 + p8*x**8 + p9*x**9
+            return (
+                p0
+                + p1 * x
+                + p2 * x**2
+                + p3 * x**3
+                + p4 * x**4
+                + p5 * x**5
+                + p6 * x**6
+                + p7 * x**7
+                + p8 * x**8
+                + p9 * x**9
+            )
 
         # Run optimization
         p0 = np.ones(10) * 0.5
@@ -283,8 +297,8 @@ class TestLargeDatasetStress:
 
         # Should complete
         assert result is not None
-        assert 'x' in result
-        assert len(result['x']) == 10
+        assert "x" in result
+        assert len(result["x"]) == 10
 
 
 class TestMemoryStress:
@@ -366,6 +380,7 @@ class TestMemoryStress:
         finally:
             # Cleanup
             import shutil
+
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
@@ -396,11 +411,11 @@ class TestMemoryStress:
         assert result is not None
 
         # Verify buffer size is bounded
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
-            if 'recent_batch_stats' in diags:
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
+            if "recent_batch_stats" in diags:
                 # Should never exceed 100
-                assert len(diags['recent_batch_stats']) <= 100
+                assert len(diags["recent_batch_stats"]) <= 100
 
 
 class TestConcurrentErrorStress:
@@ -464,14 +479,14 @@ class TestConcurrentErrorStress:
 
         # Should complete with retry recovery
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Should have categorized different error types
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
-            if 'error_types' in diags:
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
+            if "error_types" in diags:
                 # Should have recorded multiple error types
-                assert len(diags['error_types']) >= 2
+                assert len(diags["error_types"]) >= 2
 
     def test_alternating_validation_failures(self):
         """Test with validation failures at all three checkpoints.
@@ -527,7 +542,7 @@ class TestConcurrentErrorStress:
 
         # Should complete with validation working
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
 
 class TestCheckpointStress:
@@ -577,12 +592,14 @@ class TestCheckpointStress:
                 optimizer_loaded = StreamingOptimizer(config_resume)
 
                 # Continue optimization
-                result_continued = optimizer_loaded.fit_streaming((x_data, y_data), model, result['x'], verbose=0
+                result_continued = optimizer_loaded.fit_streaming(
+                    (x_data, y_data), model, result["x"], verbose=0
                 )
                 assert result_continued is not None
 
         finally:
             import shutil
+
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
@@ -609,24 +626,27 @@ class TestCheckpointStress:
             for cycle in range(3):
                 config = StreamingConfig(
                     batch_size=100,
-                    max_epochs=(cycle + 1) * 3,  # More epochs for better convergence (3, 6, 9 total)
+                    max_epochs=(cycle + 1)
+                    * 3,  # More epochs for better convergence (3, 6, 9 total)
                     checkpoint_interval=10,
                     checkpoint_dir=temp_dir,
-                    resume_from_checkpoint=True if cycle > 0 else False,  # Resume after first cycle
+                    resume_from_checkpoint=cycle > 0,  # Resume after first cycle
                 )
                 optimizer = StreamingOptimizer(config)
 
-                result = optimizer.fit_streaming((x_data, y_data), model, current_params, verbose=0
+                result = optimizer.fit_streaming(
+                    (x_data, y_data), model, current_params, verbose=0
                 )
 
                 assert result is not None
-                current_params = result['x']
+                current_params = result["x"]
 
             # Final parameters should be close to true values
             assert np.allclose(current_params, [2.0, 1.0], rtol=0.2)
 
         finally:
             import shutil
+
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
@@ -681,12 +701,12 @@ class TestDiagnosticStress:
         assert result is not None
 
         # Verify diagnostics are present and accurate
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
 
             # Should have recorded failures
-            if 'error_types' in diags:
-                total_errors = sum(diags['error_types'].values())
+            if "error_types" in diags:
+                total_errors = sum(diags["error_types"].values())
                 # Should have recorded many errors
                 assert total_errors > 10
 
@@ -741,12 +761,12 @@ class TestDiagnosticStress:
         assert result is not None
 
         # Verify retry counts were tracked
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
-            if 'retry_counts' in diags:
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
+            if "retry_counts" in diags:
                 # Should have recorded some retries
-                assert len(diags['retry_counts']) > 0
+                assert len(diags["retry_counts"]) > 0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

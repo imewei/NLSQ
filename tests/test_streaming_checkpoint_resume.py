@@ -3,12 +3,13 @@
 import os
 import tempfile
 from pathlib import Path
-import numpy as np
-import h5py
-import pytest
 from unittest import TestCase
 
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig, DataGenerator
+import h5py
+import numpy as np
+import pytest
+
+from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
 
 
 class TestCheckpointSaveResume(TestCase):
@@ -27,7 +28,9 @@ class TestCheckpointSaveResume(TestCase):
         self.n_samples = 1000
         self.x_data = np.random.randn(self.n_samples)
         self.true_params = [2.0, -1.5, 0.8]
-        self.y_data = self.model_func(self.x_data, *self.true_params) + 0.1 * np.random.randn(self.n_samples)
+        self.y_data = self.model_func(
+            self.x_data, *self.true_params
+        ) + 0.1 * np.random.randn(self.n_samples)
 
         # Initial parameters
         self.p0 = np.array([1.0, 1.0, 1.0])
@@ -35,6 +38,7 @@ class TestCheckpointSaveResume(TestCase):
     def tearDown(self):
         """Clean up test files."""
         import shutil
+
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
 
@@ -44,16 +48,14 @@ class TestCheckpointSaveResume(TestCase):
             batch_size=100,
             max_epochs=1,
             checkpoint_interval=2,
-            checkpoint_dir=self.temp_dir
+            checkpoint_dir=self.temp_dir,
         )
 
         optimizer = StreamingOptimizer(config)
 
         # Run for a few batches to trigger checkpoint
         result = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Check checkpoint files were created
@@ -61,25 +63,25 @@ class TestCheckpointSaveResume(TestCase):
         self.assertGreater(len(checkpoint_files), 0, "No checkpoint files created")
 
         # Check checkpoint structure
-        with h5py.File(checkpoint_files[0], 'r') as f:
+        with h5py.File(checkpoint_files[0], "r") as f:
             # Check version
-            self.assertIn('version', f.attrs)
-            self.assertEqual(f.attrs['version'], '2.0')
+            self.assertIn("version", f.attrs)
+            self.assertEqual(f.attrs["version"], "2.0")
 
             # Check main groups exist
-            self.assertIn('parameters', f)
-            self.assertIn('optimizer_state', f)
-            self.assertIn('progress', f)
-            self.assertIn('diagnostics', f)
+            self.assertIn("parameters", f)
+            self.assertIn("optimizer_state", f)
+            self.assertIn("progress", f)
+            self.assertIn("diagnostics", f)
 
             # Check parameters subgroups
-            self.assertIn('current', f['parameters'])
-            self.assertIn('best', f['parameters'])
+            self.assertIn("current", f["parameters"])
+            self.assertIn("best", f["parameters"])
 
             # Check progress fields
-            self.assertIn('batch_idx', f['progress'])
-            self.assertIn('epoch', f['progress'])
-            self.assertIn('iteration', f['progress'])
+            self.assertIn("batch_idx", f["progress"])
+            self.assertIn("epoch", f["progress"])
+            self.assertIn("iteration", f["progress"])
 
     def test_optimizer_state_serialization(self):
         """Test that optimizer state is correctly serialized."""
@@ -89,27 +91,25 @@ class TestCheckpointSaveResume(TestCase):
             max_epochs=1,
             checkpoint_interval=2,
             checkpoint_dir=self.temp_dir,
-            use_adam=True
+            use_adam=True,
         )
 
         optimizer = StreamingOptimizer(config)
 
         # Run for a few batches
         result = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Load checkpoint and verify Adam state
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
-        with h5py.File(checkpoint_files[0], 'r') as f:
-            self.assertIn('m', f['optimizer_state'])
-            self.assertIn('v', f['optimizer_state'])
+        with h5py.File(checkpoint_files[0], "r") as f:
+            self.assertIn("m", f["optimizer_state"])
+            self.assertIn("v", f["optimizer_state"])
 
             # Check shapes match parameter count
-            m = f['optimizer_state']['m'][:]
-            v = f['optimizer_state']['v'][:]
+            m = f["optimizer_state"]["m"][:]
+            v = f["optimizer_state"]["v"][:]
             self.assertEqual(len(m), len(self.p0))
             self.assertEqual(len(v), len(self.p0))
 
@@ -122,16 +122,14 @@ class TestCheckpointSaveResume(TestCase):
             f.unlink()
 
         result = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Load checkpoint and verify SGD state
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
-        with h5py.File(checkpoint_files[0], 'r') as f:
-            self.assertIn('velocity', f['optimizer_state'])
-            velocity = f['optimizer_state']['velocity'][:]
+        with h5py.File(checkpoint_files[0], "r") as f:
+            self.assertIn("velocity", f["optimizer_state"])
+            velocity = f["optimizer_state"]["velocity"][:]
             self.assertEqual(len(velocity), len(self.p0))
 
     def test_resume_from_checkpoint(self):
@@ -140,16 +138,14 @@ class TestCheckpointSaveResume(TestCase):
             batch_size=100,
             max_epochs=3,
             checkpoint_interval=5,
-            checkpoint_dir=self.temp_dir
+            checkpoint_dir=self.temp_dir,
         )
 
         optimizer = StreamingOptimizer(config)
 
         # Run first part of optimization
         result1 = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Get the latest checkpoint
@@ -162,25 +158,26 @@ class TestCheckpointSaveResume(TestCase):
             max_epochs=5,  # Run more epochs to verify continuation
             checkpoint_interval=5,
             checkpoint_dir=self.temp_dir,
-            resume_from_checkpoint=str(latest_checkpoint)
+            resume_from_checkpoint=str(latest_checkpoint),
         )
 
         optimizer2 = StreamingOptimizer(config_resume)
 
         # Continue optimization
         result2 = optimizer2.fit(
-            (self.x_data, self.y_data), self.model_func,
+            (self.x_data, self.y_data),
+            self.model_func,
             self.p0,  # Initial params will be overridden by checkpoint
-            verbose=0
+            verbose=0,
         )
 
         # Check that optimization continued from checkpoint
         # The iteration count should be higher than original
-        self.assertGreater(result2['total_iterations'], result1['total_iterations'])
+        self.assertGreater(result2["total_iterations"], result1["total_iterations"])
 
         # Parameters should have improved
-        final_loss1 = result1['fun']
-        final_loss2 = result2['fun']
+        final_loss1 = result1["fun"]
+        final_loss2 = result2["fun"]
         self.assertLessEqual(final_loss2, final_loss1)
 
     def test_resume_from_various_batch_indices(self):
@@ -189,28 +186,28 @@ class TestCheckpointSaveResume(TestCase):
             batch_size=100,
             max_epochs=2,
             checkpoint_interval=1,  # Save after every batch
-            checkpoint_dir=self.temp_dir
+            checkpoint_dir=self.temp_dir,
         )
 
         optimizer = StreamingOptimizer(config)
 
         # Run optimization with frequent checkpoints
         result = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Get all checkpoints
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
-        self.assertGreater(len(checkpoint_files), 3, "Need multiple checkpoints for test")
+        self.assertGreater(
+            len(checkpoint_files), 3, "Need multiple checkpoints for test"
+        )
 
         # Test resuming from different checkpoints
         for checkpoint in checkpoint_files[1:4]:  # Test a few checkpoints
-            with h5py.File(checkpoint, 'r') as f:
-                saved_batch_idx = f['progress']['batch_idx'][()]
-                saved_epoch = f['progress']['epoch'][()]
-                saved_params = f['parameters']['current'][:]
+            with h5py.File(checkpoint, "r") as f:
+                saved_batch_idx = f["progress"]["batch_idx"][()]
+                saved_epoch = f["progress"]["epoch"][()]
+                saved_params = f["parameters"]["current"][:]
 
             # Resume from this checkpoint
             config_resume = StreamingConfig(
@@ -218,7 +215,7 @@ class TestCheckpointSaveResume(TestCase):
                 max_epochs=saved_epoch + 1,  # Run one more epoch
                 checkpoint_interval=10,
                 checkpoint_dir=self.temp_dir,
-                resume_from_checkpoint=str(checkpoint)
+                resume_from_checkpoint=str(checkpoint),
             )
 
             optimizer_resume = StreamingOptimizer(config_resume)
@@ -226,9 +223,10 @@ class TestCheckpointSaveResume(TestCase):
             # Run a dummy fit to trigger loading
             # This loads the checkpoint state
             result_resume = optimizer_resume.fit(
-                (self.x_data[:100], self.y_data[:100]), self.model_func,  # Small dataset
+                (self.x_data[:100], self.y_data[:100]),
+                self.model_func,  # Small dataset
                 self.p0,
-                verbose=0
+                verbose=0,
             )
 
             # Check that parameters from checkpoint were used
@@ -238,16 +236,14 @@ class TestCheckpointSaveResume(TestCase):
     def test_checkpoint_version_compatibility(self):
         """Test handling of different checkpoint versions."""
         # Create a version 1.0 checkpoint (simulated old format)
-        with h5py.File(self.checkpoint_path, 'w') as f:
-            f.attrs['version'] = '1.0'
+        with h5py.File(self.checkpoint_path, "w") as f:
+            f.attrs["version"] = "1.0"
             # Old format might have different structure
-            f.create_dataset('params', data=self.p0)
-            f.create_dataset('iteration', data=100)
-            f.create_dataset('epoch', data=2)
+            f.create_dataset("params", data=self.p0)
+            f.create_dataset("iteration", data=100)
+            f.create_dataset("epoch", data=2)
 
-        config = StreamingConfig(
-            resume_from_checkpoint=str(self.checkpoint_path)
-        )
+        config = StreamingConfig(resume_from_checkpoint=str(self.checkpoint_path))
 
         optimizer = StreamingOptimizer(config)
 
@@ -255,9 +251,10 @@ class TestCheckpointSaveResume(TestCase):
         # This depends on implementation - adjust test based on actual behavior
         try:
             result = optimizer.fit(
-                (self.x_data[:100], self.y_data[:100]), self.model_func,  # Small dataset
+                (self.x_data[:100], self.y_data[:100]),
+                self.model_func,  # Small dataset
                 self.p0,
-                verbose=0
+                verbose=0,
             )
             # Should either work with compatibility layer or start fresh
             self.assertIsNotNone(result)
@@ -271,16 +268,14 @@ class TestCheckpointSaveResume(TestCase):
             batch_size=100,
             max_epochs=1,
             checkpoint_interval=2,
-            checkpoint_dir=self.temp_dir
+            checkpoint_dir=self.temp_dir,
         )
 
         optimizer = StreamingOptimizer(config)
 
         # Run first optimization
         result1 = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Create config with auto-detection
@@ -289,47 +284,48 @@ class TestCheckpointSaveResume(TestCase):
             max_epochs=2,
             checkpoint_interval=5,
             checkpoint_dir=self.temp_dir,
-            resume_from_checkpoint=True  # Auto-detect latest
+            resume_from_checkpoint=True,  # Auto-detect latest
         )
 
         optimizer2 = StreamingOptimizer(config_auto)
 
         # Should automatically find and load latest checkpoint
         result2 = optimizer2.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Should have continued from checkpoint
-        self.assertGreater(result2['final_epoch'], result1['final_epoch'])
+        self.assertGreater(result2["final_epoch"], result1["final_epoch"])
 
     def test_checkpoint_integrity_validation(self):
         """Test checkpoint integrity validation before loading."""
         # Create a corrupt checkpoint
-        with open(self.checkpoint_path, 'wb') as f:
-            f.write(b'corrupted data that is not HDF5')
+        with open(self.checkpoint_path, "wb") as f:
+            f.write(b"corrupted data that is not HDF5")
 
-        config = StreamingConfig(
-            resume_from_checkpoint=str(self.checkpoint_path)
-        )
+        config = StreamingConfig(resume_from_checkpoint=str(self.checkpoint_path))
 
         optimizer = StreamingOptimizer(config)
 
         # Should handle corrupt checkpoint gracefully
-        with self.assertLogs(level='WARNING') as log:
+        with self.assertLogs(level="WARNING") as log:
             result = optimizer.fit(
-                (self.x_data[:100], self.y_data[:100]), self.model_func,
+                (self.x_data[:100], self.y_data[:100]),
+                self.model_func,
                 self.p0,
-                verbose=0
+                verbose=0,
             )
 
         # Should log warning about corrupt checkpoint
         # Check for either "Failed to load" or "corrupt" or "invalid" in warning messages
-        self.assertTrue(any('failed to load' in msg.lower() or
-                           'corrupt' in msg.lower() or
-                           'invalid' in msg.lower()
-                           for msg in log.output))
+        self.assertTrue(
+            any(
+                "failed to load" in msg.lower()
+                or "corrupt" in msg.lower()
+                or "invalid" in msg.lower()
+                for msg in log.output
+            )
+        )
 
         # Should still complete optimization (starting fresh)
         self.assertIsNotNone(result)
@@ -345,15 +341,13 @@ class TestCheckpointSaveResume(TestCase):
             batch_size=100,
             max_epochs=2,  # More epochs to ensure we get checkpoints
             checkpoint_interval=2,  # Save more frequently
-            checkpoint_dir=self.temp_dir
+            checkpoint_dir=self.temp_dir,
         )
 
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit(
-            (x_data_with_nans, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (x_data_with_nans, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Load checkpoint and check failed batch tracking
@@ -361,10 +355,10 @@ class TestCheckpointSaveResume(TestCase):
 
         # If we have checkpoints, check for failed batch tracking
         if checkpoint_files:
-            with h5py.File(checkpoint_files[0], 'r') as f:
+            with h5py.File(checkpoint_files[0], "r") as f:
                 # Check if failed batches were saved (may or may not exist)
-                if 'failed_batch_indices' in f['diagnostics']:
-                    failed_batches = f['diagnostics']['failed_batch_indices'][:]
+                if "failed_batch_indices" in f["diagnostics"]:
+                    failed_batches = f["diagnostics"]["failed_batch_indices"][:]
                     # Should have recorded the batch with NaN values
                     self.assertGreater(len(failed_batches), 0)
                 else:
@@ -381,22 +375,20 @@ class TestCheckpointSaveResume(TestCase):
             batch_size=100,
             max_epochs=2,
             checkpoint_interval=5,
-            checkpoint_dir=self.temp_dir
+            checkpoint_dir=self.temp_dir,
         )
 
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Load checkpoint and verify best params are saved
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
-        with h5py.File(checkpoint_files[0], 'r') as f:
-            best_params = f['parameters']['best'][:]
-            best_loss = f['progress']['best_loss'][()]
+        with h5py.File(checkpoint_files[0], "r") as f:
+            best_params = f["parameters"]["best"][:]
+            best_loss = f["progress"]["best_loss"][()]
 
             # Best params should be different from initial
             self.assertFalse(np.array_equal(best_params, self.p0))
@@ -410,23 +402,21 @@ class TestCheckpointSaveResume(TestCase):
             batch_size=100,
             max_epochs=2,  # Start with 2 epochs
             checkpoint_interval=3,
-            checkpoint_dir=self.temp_dir
+            checkpoint_dir=self.temp_dir,
         )
 
         optimizer = StreamingOptimizer(config)
 
         # Run partial optimization
         result1 = optimizer.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Get checkpoint info
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
-        with h5py.File(checkpoint_files[-1], 'r') as f:
-            saved_iteration = f['progress']['iteration'][()]
-            saved_epoch = f['progress']['epoch'][()]
+        with h5py.File(checkpoint_files[-1], "r") as f:
+            saved_iteration = f["progress"]["iteration"][()]
+            saved_epoch = f["progress"]["epoch"][()]
 
         # Resume and continue with more epochs
         config_resume = StreamingConfig(
@@ -434,25 +424,23 @@ class TestCheckpointSaveResume(TestCase):
             max_epochs=4,  # Run 2 more epochs (total 4)
             checkpoint_interval=3,
             checkpoint_dir=self.temp_dir,
-            resume_from_checkpoint=True
+            resume_from_checkpoint=True,
         )
 
         optimizer2 = StreamingOptimizer(config_resume)
         result2 = optimizer2.fit(
-            (self.x_data, self.y_data), self.model_func,
-            self.p0,
-            verbose=0
+            (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
         # Should have more iterations than saved (2 more epochs worth)
-        self.assertGreater(result2['total_iterations'], saved_iteration)
+        self.assertGreater(result2["total_iterations"], saved_iteration)
 
         # Should have ran more epochs total
-        self.assertEqual(result2['n_epochs'], 4)
+        self.assertEqual(result2["n_epochs"], 4)
 
         # Final loss should be as good or better
-        self.assertLessEqual(result2['fun'], result1['fun'])
+        self.assertLessEqual(result2["fun"], result1["fun"])
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

@@ -1,10 +1,11 @@
 """Tests for success rate validation in streaming optimizer (Task Group 5)."""
 
-import numpy as np
-import pytest
 from unittest.mock import MagicMock, patch
 
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+import numpy as np
+import pytest
+
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestSuccessRateValidation:
@@ -46,7 +47,10 @@ class TestSuccessRateValidation:
                 yield x_batch, y_batch
 
         # Fit the model
-        result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0, 0.5]),
+        result = optimizer.fit_streaming(
+            data_generator(),
+            model,
+            p0=np.array([1.0, 0.5]),
             verbose=0,
         )
 
@@ -54,7 +58,9 @@ class TestSuccessRateValidation:
         # 10 batches total, 2 should fail = 8/10 = 0.8
         assert "streaming_diagnostics" in result
         assert "batch_success_rate" in result["streaming_diagnostics"]
-        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(0.8, abs=0.01)
+        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(
+            0.8, abs=0.01
+        )
 
     def test_threshold_enforcement(self):
         """Test 5.2: Test threshold enforcement."""
@@ -84,18 +90,26 @@ class TestSuccessRateValidation:
                 yield x_batch, y_batch
 
         # Fit the model
-        with patch('nlsq.streaming_optimizer.logger') as mock_logger:
-            result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0]),
+        with patch("nlsq.streaming_optimizer.logger") as mock_logger:
+            result = optimizer.fit_streaming(
+                data_generator(),
+                model,
+                p0=np.array([1.0]),
                 verbose=0,
             )
 
             # Check that warning was logged for low success rate
-            warning_calls = [call for call in mock_logger.warning.call_args_list
-                           if "below minimum" in str(call)]
+            warning_calls = [
+                call
+                for call in mock_logger.warning.call_args_list
+                if "below minimum" in str(call)
+            ]
             assert len(warning_calls) > 0
 
         # Success rate should be 6/10 = 0.6, below the 0.7 threshold
-        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(0.6, abs=0.01)
+        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(
+            0.6, abs=0.01
+        )
 
     def test_result_flagging_on_failure(self):
         """Test 5.3: Test result flagging on failure."""
@@ -123,7 +137,10 @@ class TestSuccessRateValidation:
 
                 yield x_batch, y_batch
 
-        result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0]),
+        result = optimizer.fit_streaming(
+            data_generator(),
+            model,
+            p0=np.array([1.0]),
             verbose=0,
         )
 
@@ -133,16 +150,18 @@ class TestSuccessRateValidation:
         # The actual success flag depends on whether ANY batches succeeded
         assert "streaming_diagnostics" in result
         assert "batch_success_rate" in result["streaming_diagnostics"]
-        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(0.5, abs=0.01)
+        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(
+            0.5, abs=0.01
+        )
 
     def test_various_failure_percentages(self):
         """Test 5.4: Test with various failure percentages."""
         test_cases = [
-            (0.0, 1.0),   # 0% failure = 100% success
-            (0.2, 0.8),   # 20% failure = 80% success
-            (0.5, 0.5),   # 50% failure = 50% success
-            (0.8, 0.2),   # 80% failure = 20% success
-            (1.0, 0.0),   # 100% failure = 0% success
+            (0.0, 1.0),  # 0% failure = 100% success
+            (0.2, 0.8),  # 20% failure = 80% success
+            (0.5, 0.5),  # 50% failure = 50% success
+            (0.8, 0.2),  # 80% failure = 20% success
+            (1.0, 0.0),  # 100% failure = 0% success
         ]
 
         for failure_rate, expected_success_rate in test_cases:
@@ -158,7 +177,7 @@ class TestSuccessRateValidation:
             def model(x, a):
                 return a * x
 
-            def data_generator():
+            def data_generator(failure_rate=failure_rate):
                 n_batches = 10
                 n_failures = int(n_batches * failure_rate)
 
@@ -172,14 +191,22 @@ class TestSuccessRateValidation:
 
                     yield x_batch, y_batch
 
-            result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0]),
+            result = optimizer.fit_streaming(
+                data_generator(),
+                model,
+                p0=np.array([1.0]),
                 verbose=0,
             )
 
             # Check success rate matches expected
-            actual_success_rate = result.get("streaming_diagnostics", {}).get("batch_success_rate", 0.0)
-            assert actual_success_rate == pytest.approx(expected_success_rate, abs=0.01), \
+            actual_success_rate = result.get("streaming_diagnostics", {}).get(
+                "batch_success_rate", 0.0
+            )
+            assert actual_success_rate == pytest.approx(
+                expected_success_rate, abs=0.01
+            ), (
                 f"Failed for failure_rate={failure_rate}: expected {expected_success_rate}, got {actual_success_rate}"
+            )
 
     def test_success_rate_in_streaming_diagnostics(self):
         """Test 5.5: Ensure success rate is included in streaming diagnostics."""
@@ -206,7 +233,10 @@ class TestSuccessRateValidation:
 
                 yield x_batch, y_batch
 
-        result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0]),
+        result = optimizer.fit_streaming(
+            data_generator(),
+            model,
+            p0=np.array([1.0]),
             verbose=0,
         )
 
@@ -236,7 +266,10 @@ class TestSuccessRateValidation:
                 y_batch = 2.0 * x_batch + np.random.randn(10) * 0.01
                 yield x_batch, y_batch
 
-        result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0]),
+        result = optimizer.fit_streaming(
+            data_generator(),
+            model,
+            p0=np.array([1.0]),
             verbose=0,
         )
 
@@ -265,7 +298,10 @@ class TestSuccessRateValidation:
                 y_batch = np.random.randn(10)
                 yield x_batch, y_batch
 
-        result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0]),
+        result = optimizer.fit_streaming(
+            data_generator(),
+            model,
+            p0=np.array([1.0]),
             verbose=0,
         )
 
@@ -299,10 +335,15 @@ class TestSuccessRateValidation:
 
                 yield x_batch, y_batch
 
-        result = optimizer.fit_streaming(data_generator(), model, p0=np.array([1.0]),
+        result = optimizer.fit_streaming(
+            data_generator(),
+            model,
+            p0=np.array([1.0]),
             verbose=0,
         )
 
         # Check overall success rate
         # We expect 7/10 = 0.7 success rate
-        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(0.7, abs=0.01)
+        assert result["streaming_diagnostics"]["batch_success_rate"] == pytest.approx(
+            0.7, abs=0.01
+        )

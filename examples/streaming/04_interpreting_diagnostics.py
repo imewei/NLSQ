@@ -14,9 +14,11 @@ Run this example:
     python examples/streaming/04_interpreting_diagnostics.py
 """
 
-import numpy as np
 import json
-from nlsq import StreamingOptimizer, StreamingConfig
+
+import numpy as np
+
+from nlsq import StreamingConfig, StreamingOptimizer
 
 
 def polynomial_model(x, a, b, c):
@@ -101,8 +103,8 @@ def analyze_aggregate_statistics(diagnostics):
     print(f"Std loss:           {agg['std_loss']:.6e}")
     print(f"Mean gradient norm: {agg['mean_grad_norm']:.6f}")
     print(f"Std gradient norm:  {agg['std_grad_norm']:.6f}")
-    print(f"Mean batch time:    {agg['mean_batch_time']*1000:.2f}ms")
-    print(f"Std batch time:     {agg['std_batch_time']*1000:.2f}ms")
+    print(f"Mean batch time:    {agg['mean_batch_time'] * 1000:.2f}ms")
+    print(f"Std batch time:     {agg['std_batch_time'] * 1000:.2f}ms")
     print()
 
     # Interpretation
@@ -135,7 +137,9 @@ def analyze_recent_batches(diagnostics, n_recent=10):
     print()
 
     # Header
-    print(f"{'Batch':>8s} {'Status':>10s} {'Loss':>12s} {'GradNorm':>10s} {'Time':>8s} {'Retries':>8s}")
+    print(
+        f"{'Batch':>8s} {'Status':>10s} {'Loss':>12s} {'GradNorm':>10s} {'Time':>8s} {'Retries':>8s}"
+    )
     print("-" * 70)
 
     # Show each batch
@@ -148,15 +152,17 @@ def analyze_recent_batches(diagnostics, n_recent=10):
         retry_count = stats["retry_count"]
 
         loss_str = f"{loss:.4e}" if np.isfinite(loss) else "inf"
-        print(f"{batch_idx:8d} {status:>10s} {loss_str:>12s} {grad_norm:10.4f} {batch_time:7.1f}ms {retry_count:8d}")
+        print(
+            f"{batch_idx:8d} {status:>10s} {loss_str:>12s} {grad_norm:10.4f} {batch_time:7.1f}ms {retry_count:8d}"
+        )
     print()
 
     # Statistics on recent batches
     successful_recent = [s for s in last_n if s["success"]]
     if successful_recent:
         recent_losses = [s["loss"] for s in successful_recent]
-        print(f"Recent batch statistics:")
-        print(f"  Success rate: {len(successful_recent)/len(last_n):.1%}")
+        print("Recent batch statistics:")
+        print(f"  Success rate: {len(successful_recent) / len(last_n):.1%}")
         print(f"  Mean loss: {np.mean(recent_losses):.6e}")
         print(f"  Min loss: {min(recent_losses):.6e}")
         print(f"  Max loss: {max(recent_losses):.6e}")
@@ -175,7 +181,7 @@ def analyze_checkpoint_info(diagnostics):
         print()
         return
 
-    print(f"Latest checkpoint:")
+    print("Latest checkpoint:")
     print(f"  Path: {cp_info['path']}")
     print(f"  Saved at: {cp_info['saved_at']}")
     print(f"  Batch index: {cp_info['batch_idx']}")
@@ -187,7 +193,7 @@ def analyze_checkpoint_info(diagnostics):
 
 def export_diagnostics_json(diagnostics, filename="diagnostics.json"):
     """Export diagnostics to JSON for further analysis"""
-    print(f"EXPORT DIAGNOSTICS")
+    print("EXPORT DIAGNOSTICS")
     print("=" * 70)
 
     # Create serializable copy (handle non-serializable types)
@@ -266,7 +272,7 @@ def main():
     print("FINAL RESULTS")
     print("=" * 70)
     best_params = result["x"]
-    print(f"Best parameters:")
+    print("Best parameters:")
     print(f"  a = {best_params[0]:.6f} (true: {true_a})")
     print(f"  b = {best_params[1]:.6f} (true: {true_b})")
     print(f"  c = {best_params[2]:.6f} (true: {true_c})")

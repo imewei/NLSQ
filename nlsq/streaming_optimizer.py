@@ -198,23 +198,22 @@ LargeDatasetFitter : Alternative for datasets that fit in memory but need chunki
 """
 
 import logging
+import os
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Union
-import os
 
 import h5py
 import jax.numpy as jnp
-import jax.random as random
 import numpy as np
-from jax import jit, value_and_grad
-
-from .streaming_config import StreamingConfig
 
 # Configure JAX to use float64 by default (critical for numerical accuracy)
 from jax import config as jax_config
+from jax import jit, random, value_and_grad
+
+from .streaming_config import StreamingConfig
 
 jax_config.update("jax_enable_x64", True)
 
@@ -296,7 +295,7 @@ class GeneratorWrapper:
 
     def close(self):
         """Clean up resources."""
-        if hasattr(self.generator, 'close'):
+        if hasattr(self.generator, "close"):
             self.generator.close()
 
 
@@ -309,29 +308,6 @@ class StreamingDataGenerator:
     - Generator functions
     - Iterators
     """
-
-    def __init__(self, x_data, y_data=None):
-        """Initialize generator.
-
-        Parameters
-        ----------
-        x_data : array-like, str, callable, or iterator
-            Source of x data
-        y_data : array-like or None
-            Source of y data (if separate from x_data)
-        """
-        self.x_source = x_data
-        self.y_source = y_data
-        self.setup_source()
-
-    def setup_source(self):
-        """Set up the data source."""
-        # Simplified setup for basic array sources
-        if isinstance(self.x_source, (np.ndarray, list)):
-            self.source_type = "array"
-            self.x_data = np.asarray(self.x_source)
-            self.y_data = np.asarray(self.y_source) if self.y_source is not None else None
-            self.n_samples = len(self.x_data)
 
     def __init__(self, source, source_type: str = "auto"):
         """Initialize streaming data generator.
@@ -742,21 +718,21 @@ class StreamingOptimizer:
         error_type_name = type(error).__name__
 
         # Check for NaN/Inf errors
-        if "nan" in error_str.lower() or "inf" in error_str.lower():
-            return "NumericalError"
-        elif isinstance(error, (FloatingPointError, ArithmeticError)):
+        if (
+            "nan" in error_str.lower()
+            or "inf" in error_str.lower()
+            or isinstance(error, (FloatingPointError, ArithmeticError))
+        ):
             return "NumericalError"
 
         # Check for singular matrix errors
-        elif isinstance(error, np.linalg.LinAlgError):
-            return "SingularMatrix"
-        elif "singular" in error_str.lower():
+        elif (
+            isinstance(error, np.linalg.LinAlgError) or "singular" in error_str.lower()
+        ):
             return "SingularMatrix"
 
         # Check for memory errors
-        elif isinstance(error, MemoryError):
-            return "MemoryError"
-        elif "memory" in error_str.lower():
+        elif isinstance(error, MemoryError) or "memory" in error_str.lower():
             return "MemoryError"
 
         # Check for value errors
@@ -798,7 +774,7 @@ class StreamingOptimizer:
         # Error-specific strategies
         if error_type == "NumericalError":
             # Reduce learning rate progressively
-            strategy["learning_rate_factor"] = 0.5 ** retry_attempt
+            strategy["learning_rate_factor"] = 0.5**retry_attempt
             if retry_attempt > 1:
                 # Also add small perturbation on second retry
                 strategy["perturbation_scale"] = 0.001 * retry_attempt
@@ -1005,7 +981,7 @@ class StreamingOptimizer:
                     )
                 else:
                     logger.warning(
-                        f"Batch {batch_idx} failed after {retry_attempt-1} retries. "
+                        f"Batch {batch_idx} failed after {retry_attempt - 1} retries. "
                         f"Final error: {error_type}: {str(e)[:100]}"
                     )
 
@@ -1022,7 +998,9 @@ class StreamingOptimizer:
                 batch_time=batch_time,
                 success=False,
                 retry_count=retry_attempt - 1,
-                error_type=self._categorize_error(last_error) if last_error else "Unknown",
+                error_type=self._categorize_error(last_error)
+                if last_error
+                else "Unknown",
             )
 
         # Track retry count for this batch
@@ -1077,7 +1055,7 @@ class StreamingOptimizer:
         if len(self.batch_stats_buffer) > self.config.batch_stats_buffer_size:
             self.batch_stats_buffer.pop(0)
 
-    def _load_checkpoint(self, checkpoint_path: Union[str, Path]) -> bool:
+    def _load_checkpoint(self, checkpoint_path: str | Path) -> bool:
         """Load optimizer state from checkpoint.
 
         Parameters
@@ -1133,7 +1111,14 @@ class StreamingOptimizer:
                     if "retry_counts" in f["diagnostics"]:
                         retry_data = f["diagnostics/retry_counts"][()]
                         self.retry_counts = defaultdict(
-                            int, dict(zip(retry_data["batch_idx"], retry_data["count"]))
+                            int,
+                            dict(
+                                zip(
+                                    retry_data["batch_idx"],
+                                    retry_data["count"],
+                                    strict=False,
+                                )
+                            ),
                         )
 
                     # Load error types
@@ -1145,6 +1130,7 @@ class StreamingOptimizer:
                                 zip(
                                     error_data["error_type"].astype(str),
                                     error_data["count"],
+                                    strict=False,
                                 )
                             ),
                         )
@@ -1159,7 +1145,7 @@ class StreamingOptimizer:
             logger.error(f"Failed to load checkpoint: {e}")
             return False
 
-    def _find_latest_checkpoint(self) -> Union[Path, None]:
+    def _find_latest_checkpoint(self) -> Path | None:
         """Find the latest checkpoint file in the checkpoint directory.
 
         Returns
@@ -1309,27 +1295,27 @@ class StreamingOptimizer:
 
             ```python
             {
-                'failed_batches': [3, 17, 42],  # Indices of failed batches
-                'retry_counts': {3: 2, 17: 1},  # Retry attempts per batch
-                'error_types': {                 # Error categorization
-                    'NumericalError': 15,
-                    'SingularMatrix': 2,
-                    'ValueError': 8
+                "failed_batches": [3, 17, 42],  # Indices of failed batches
+                "retry_counts": {3: 2, 17: 1},  # Retry attempts per batch
+                "error_types": {  # Error categorization
+                    "NumericalError": 15,
+                    "SingularMatrix": 2,
+                    "ValueError": 8,
                 },
-                'batch_success_rate': 0.92,      # Overall success rate
-                'total_batches_attempted': 100,  # Total batches processed
-                'total_retries': 25,             # Total retry attempts
-                'checkpoint_info': {              # Last checkpoint (if any)
-                    'path': 'checkpoints/checkpoint_iter_500.h5',
-                    'saved_at': '2025-10-20T15:30:00',
-                    'batch_idx': 500
+                "batch_success_rate": 0.92,  # Overall success rate
+                "total_batches_attempted": 100,  # Total batches processed
+                "total_retries": 25,  # Total retry attempts
+                "checkpoint_info": {  # Last checkpoint (if any)
+                    "path": "checkpoints/checkpoint_iter_500.h5",
+                    "saved_at": "2025-10-20T15:30:00",
+                    "batch_idx": 500,
                 },
-                'recent_batch_stats': [...],     # Circular buffer (last 100)
-                'aggregate_stats': {              # Aggregate metrics
-                    'mean_loss': 0.0234,
-                    'std_loss': 0.0012,
-                    'mean_grad_norm': 0.456
-                }
+                "recent_batch_stats": [...],  # Circular buffer (last 100)
+                "aggregate_stats": {  # Aggregate metrics
+                    "mean_loss": 0.0234,
+                    "std_loss": 0.0012,
+                    "mean_grad_norm": 0.456,
+                },
             }
             ```
 
@@ -1452,18 +1438,17 @@ class StreamingOptimizer:
                 self.m = np.zeros(n_params)
             if self.v is None:
                 self.v = np.zeros(n_params)
-        else:
-            if self.velocity is None:
-                self.velocity = np.zeros(n_params)
+        elif self.velocity is None:
+            self.velocity = np.zeros(n_params)
 
         # Set up data generator
         if isinstance(data_source, tuple) and len(data_source) == 2:
             # Tuple of (x_data, y_data) arrays
             generator = DataGenerator(data_source[0], data_source[1])
-        elif hasattr(data_source, 'generate_batches'):
+        elif hasattr(data_source, "generate_batches"):
             # Already has the required interface (DataGenerator, custom generator, etc.)
             generator = data_source
-        elif hasattr(data_source, '__iter__') or hasattr(data_source, '__next__'):
+        elif hasattr(data_source, "__iter__") or hasattr(data_source, "__next__"):
             # Raw generator or iterator - wrap it
             generator = GeneratorWrapper(data_source)
         else:
@@ -1597,7 +1582,10 @@ class StreamingOptimizer:
                 # Check convergence
                 if len(losses) >= 2:
                     recent_losses = losses[-min(10, len(losses)) :]
-                    if max(recent_losses) - min(recent_losses) < self.config.convergence_tol:
+                    if (
+                        max(recent_losses) - min(recent_losses)
+                        < self.config.convergence_tol
+                    ):
                         logger.info(
                             f"Converged after {epoch + 1} epochs "
                             f"(loss change < {self.config.convergence_tol})"
@@ -1660,7 +1648,9 @@ class StreamingOptimizer:
 
         return result
 
-    def _create_streaming_diagnostics(self, success_rate: float, elapsed_time: float, losses: list) -> dict:
+    def _create_streaming_diagnostics(
+        self, success_rate: float, elapsed_time: float, losses: list
+    ) -> dict:
         """Create detailed streaming diagnostics.
 
         Parameters
@@ -1871,9 +1861,7 @@ class StreamingOptimizer:
             params_new = params - effective_lr * m_hat / (np.sqrt(v_hat) + eps)
         else:
             # SGD with momentum
-            self.velocity = (
-                self.config.momentum * self.velocity - effective_lr * grad
-            )
+            self.velocity = self.config.momentum * self.velocity - effective_lr * grad
             params_new = params + self.velocity
 
         # Apply bounds if specified
@@ -1981,7 +1969,9 @@ def create_hdf5_dataset(
         f.create_dataset(
             "x",
             data=x_data,
-            chunks=(chunk_size, *x_data.shape[1:]) if x_data.ndim > 1 else (chunk_size,),
+            chunks=(chunk_size, *x_data.shape[1:])
+            if x_data.ndim > 1
+            else (chunk_size,),
             compression="gzip",
             compression_opts=4,
         )
@@ -1989,7 +1979,9 @@ def create_hdf5_dataset(
         f.create_dataset(
             "y",
             data=y_data,
-            chunks=(chunk_size, *y_data.shape[1:]) if y_data.ndim > 1 else (chunk_size,),
+            chunks=(chunk_size, *y_data.shape[1:])
+            if y_data.ndim > 1
+            else (chunk_size,),
             compression="gzip",
             compression_opts=4,
         )

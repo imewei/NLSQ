@@ -5,11 +5,12 @@ the best parameters achieved during optimization and handles
 batch failures gracefully.
 """
 
+from unittest.mock import Mock, patch
+
 import numpy as np
 import pytest
-from unittest.mock import Mock, patch
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
-from nlsq.streaming_optimizer import DataGenerator
+
+from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
 
 
 class TestBestParameterTracking:
@@ -17,6 +18,7 @@ class TestBestParameterTracking:
 
     def test_best_params_updated_on_improvement(self):
         """Test that best_params is updated when loss improves."""
+
         # Create simple quadratic function
         def model(x, a, b):
             return a * x**2 + b
@@ -28,11 +30,7 @@ class TestBestParameterTracking:
         y_noisy = y_true + np.random.normal(0, 0.1, len(y_true))
 
         # Create optimizer
-        config = StreamingConfig(
-            batch_size=100,
-            max_epochs=2,
-            learning_rate=0.01
-        )
+        config = StreamingConfig(batch_size=100, max_epochs=2, learning_rate=0.01)
         optimizer = StreamingOptimizer(config)
 
         # Initial parameters far from true values
@@ -45,14 +43,15 @@ class TestBestParameterTracking:
         # Check that best parameters were tracked
         assert optimizer.best_params is not None
         assert not np.array_equal(optimizer.best_params, p0)
-        assert optimizer.best_loss < float('inf')
+        assert optimizer.best_loss < float("inf")
 
         # Result should contain best parameters
-        assert 'x' in result
-        assert np.array_equal(result['x'], optimizer.best_params)
+        assert "x" in result
+        assert np.array_equal(result["x"], optimizer.best_params)
 
     def test_best_params_preserved_on_loss_increase(self):
         """Test that best_params is preserved when loss increases."""
+
         # Create function that will have increasing loss
         def model(x, a, b):
             return a * x + b
@@ -62,11 +61,7 @@ class TestBestParameterTracking:
         x_data = np.random.randn(500)
         y_data = 2.0 * x_data + 1.0 + np.random.randn(500) * 0.1
 
-        config = StreamingConfig(
-            batch_size=50,
-            max_epochs=3,
-            learning_rate=0.1
-        )
+        config = StreamingConfig(batch_size=50, max_epochs=3, learning_rate=0.1)
         optimizer = StreamingOptimizer(config)
 
         # Track losses during optimization
@@ -78,20 +73,21 @@ class TestBestParameterTracking:
         # Run optimization with callback
         data_source = (x_data.reshape(-1, 1), y_data)
         p0 = np.array([0.0, 0.0])
-        result = optimizer.fit(data_source, model, p0,
-            callback=callback, verbose=0
-        )
+        result = optimizer.fit(data_source, model, p0, callback=callback, verbose=0)
 
         # Find when best loss occurred
         best_loss_idx = np.argmin(losses_recorded)
 
         # Best params should correspond to minimum loss
-        assert optimizer.best_loss <= losses_recorded[best_loss_idx] * 1.01  # Small tolerance
-        assert result['x'] is not None
-        assert result['fun'] == optimizer.best_loss
+        assert (
+            optimizer.best_loss <= losses_recorded[best_loss_idx] * 1.01
+        )  # Small tolerance
+        assert result["x"] is not None
+        assert result["fun"] == optimizer.best_loss
 
     def test_initial_p0_never_returned_on_failure(self):
         """Test that initial p0 is never returned on total failure."""
+
         # Create a function that will fail during optimization
         def failing_model(x, a, b):
             # Will cause NaN after a few iterations
@@ -103,11 +99,7 @@ class TestBestParameterTracking:
         x_data = np.random.randn(100)
         y_data = 2.0 * x_data + 1.0
 
-        config = StreamingConfig(
-            batch_size=10,
-            max_epochs=1,
-            learning_rate=0.01
-        )
+        config = StreamingConfig(batch_size=10, max_epochs=1, learning_rate=0.01)
         optimizer = StreamingOptimizer(config)
 
         # Initial parameters
@@ -131,14 +123,15 @@ class TestBestParameterTracking:
 
         # If any successful updates happened, result should not be p0
         if update_called_successfully:
-            assert not np.array_equal(result['x'], p0)
+            assert not np.array_equal(result["x"], p0)
 
         # Result should always be the best achieved parameters
         if optimizer.best_params is not None:
-            assert np.array_equal(result['x'], optimizer.best_params)
+            assert np.array_equal(result["x"], optimizer.best_params)
 
     def test_parameter_tracking_through_multiple_batches(self):
         """Test parameter tracking through multiple batch iterations."""
+
         # Simple linear model
         def model(x, a, b):
             return a * x + b
@@ -152,7 +145,7 @@ class TestBestParameterTracking:
         config = StreamingConfig(
             batch_size=50,  # 10 batches per epoch
             max_epochs=2,
-            learning_rate=0.01
+            learning_rate=0.01,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -169,8 +162,8 @@ class TestBestParameterTracking:
 
         # Run optimization
         data_source = (x_data.reshape(-1, 1), y_data)
-        result = optimizer.fit(data_source, model, p0,
-            callback=tracking_callback, verbose=0
+        result = optimizer.fit(
+            data_source, model, p0, callback=tracking_callback, verbose=0
         )
 
         # Verify tracking worked
@@ -183,7 +176,7 @@ class TestBestParameterTracking:
 
         # Allow small numerical differences
         assert np.allclose(optimizer.best_params, expected_best, rtol=1e-5)
-        assert np.allclose(result['x'], optimizer.best_params, rtol=1e-5)
+        assert np.allclose(result["x"], optimizer.best_params, rtol=1e-5)
 
         # Parameters should have improved from initial
         initial_loss = loss_history[0]
@@ -215,7 +208,7 @@ class TestBatchErrorIsolation:
         config = StreamingConfig(
             batch_size=30,  # 10 batches total
             max_epochs=1,
-            learning_rate=0.1  # Increased learning rate to ensure progress
+            learning_rate=0.1,  # Increased learning rate to ensure progress
         )
         optimizer = StreamingOptimizer(config)
 
@@ -244,18 +237,19 @@ class TestBatchErrorIsolation:
 
         # Optimization should complete despite failures
         assert result is not None
-        assert 'x' in result
-        assert result['x'] is not None
+        assert "x" in result
+        assert result["x"] is not None
 
         # Some batches should have succeeded
         assert len(successful_batches) > 0
 
         # We should have made some progress (parameters should have changed)
         # With the small gradient updates even on failures, params should change
-        assert not np.array_equal(result['x'], p0) or len(successful_batches) > 5
+        assert not np.array_equal(result["x"], p0) or len(successful_batches) > 5
 
     def test_error_logging_continues_optimization(self):
         """Test that errors are logged but optimization continues."""
+
         # Model that occasionally fails
         def failing_model(x, a, b):
             if np.random.random() > 0.8:
@@ -267,11 +261,7 @@ class TestBatchErrorIsolation:
         x_data = np.random.randn(200)
         y_data = 2.0 * x_data + 1.0
 
-        config = StreamingConfig(
-            batch_size=20,
-            max_epochs=1,
-            learning_rate=0.01
-        )
+        config = StreamingConfig(batch_size=20, max_epochs=1, learning_rate=0.01)
         optimizer = StreamingOptimizer(config)
 
         # Add error handling wrapper
@@ -302,8 +292,8 @@ class TestBatchErrorIsolation:
         # Check that optimization completed
         assert result is not None
         # Success may be False if too many batches failed, but result should exist
-        assert 'x' in result
-        assert result['x'] is not None
+        assert "x" in result
+        assert result["x"] is not None
 
         # Some errors may have been caught (or none if random didn't trigger)
         # Just verify the mechanism works
@@ -333,7 +323,7 @@ class TestBatchErrorIsolation:
             max_epochs=1,
             learning_rate=0.01,
             enable_fault_tolerance=True,
-            max_retries_per_batch=0  # No retries so failures are tracked
+            max_retries_per_batch=0,  # No retries so failures are tracked
         )
         optimizer = StreamingOptimizer(config)
 
@@ -361,16 +351,19 @@ class TestBatchErrorIsolation:
         # Run optimization
         p0 = np.array([1.0, 0.0])
         data_source = (x_data.reshape(-1, 1), y_data)
-        result = optimizer.fit_streaming(data_source, model_with_tracked_failures, p0, verbose=0
+        result = optimizer.fit_streaming(
+            data_source, model_with_tracked_failures, p0, verbose=0
         )
 
         # Optimization should still complete
         assert result is not None
-        assert result['x'] is not None
+        assert result["x"] is not None
 
         # Check that failed indices are tracked in streaming_diagnostics
-        assert 'streaming_diagnostics' in result
-        assert 'failed_batches' in result['streaming_diagnostics']
+        assert "streaming_diagnostics" in result
+        assert "failed_batches" in result["streaming_diagnostics"]
         # We specified batches 2, 5, 7 should fail
         # The optimizer should have caught at least some of these
-        assert len(result['streaming_diagnostics']['failed_batches']) >= 2  # At least 2 of the 3 should be caught
+        assert (
+            len(result["streaming_diagnostics"]["failed_batches"]) >= 2
+        )  # At least 2 of the 3 should be caught

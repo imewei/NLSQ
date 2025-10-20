@@ -69,8 +69,8 @@ optimizer = StreamingOptimizer(StreamingConfig(batch_size=100))
 result = optimizer.fit((x_data, y_data), model, p0=[1.0, 0.1])
 
 # New: Access diagnostics if desired
-if not result['success']:
-    diag = result['streaming_diagnostics']
+if not result["success"]:
+    diag = result["streaming_diagnostics"]
     print(f"Success rate: {diag['batch_success_rate']:.1%}")
     print(f"Failed batches: {len(diag['failed_batches'])}")
 ```
@@ -90,7 +90,7 @@ config = StreamingConfig(
     max_epochs=10,
     checkpoint_dir="checkpoints",
     checkpoint_frequency=100,
-    enable_checkpoints=True
+    enable_checkpoints=True,
 )
 
 # After (v0.2.0+) - add resume capability
@@ -100,14 +100,14 @@ config = StreamingConfig(
     checkpoint_dir="checkpoints",
     checkpoint_frequency=100,
     enable_checkpoints=True,
-    resume_from_checkpoint=True  # NEW: Auto-detect latest checkpoint
+    resume_from_checkpoint=True,  # NEW: Auto-detect latest checkpoint
 )
 
 optimizer = StreamingOptimizer(config)
 result = optimizer.fit(data_source, model, p0=[1.0, 0.1])
 
 # Check if resumed
-if result['streaming_diagnostics']['checkpoint_info']:
+if result["streaming_diagnostics"]["checkpoint_info"]:
     print("Resumed from checkpoint")
 ```
 
@@ -133,16 +133,16 @@ config = StreamingConfig(
     batch_size=100,
     max_epochs=10,
     # NEW: Allow more failures
-    min_success_rate=0.3,          # Allow 70% failures (default: 0.5)
-    max_retries_per_batch=2,       # Standard retry limit
-    validate_numerics=True         # Keep validation (default: True)
+    min_success_rate=0.3,  # Allow 70% failures (default: 0.5)
+    max_retries_per_batch=2,  # Standard retry limit
+    validate_numerics=True,  # Keep validation (default: True)
 )
 
 optimizer = StreamingOptimizer(config)
 result = optimizer.fit(data_source, model, p0=[1.0, 0.1])
 
 # Analyze failures
-diag = result['streaming_diagnostics']
+diag = result["streaming_diagnostics"]
 print(f"Error types: {diag['error_types']}")
 print(f"Retry counts: {diag['retry_counts']}")
 ```
@@ -170,7 +170,7 @@ config = StreamingConfig(
     max_epochs=10,
     # NEW: Fast mode for production
     enable_fault_tolerance=False,  # <1% overhead (default: True)
-    enable_checkpoints=True         # Still save checkpoints
+    enable_checkpoints=True,  # Still save checkpoints
 )
 
 optimizer = StreamingOptimizer(config)
@@ -193,11 +193,11 @@ result = optimizer.fit(data_source, model, p0=[1.0, 0.1])
 ```python
 # Before (v0.1.x) - limited diagnostics
 result = optimizer.fit(data_source, model, p0=[1.0, 0.1])
-print(result['message'])
+print(result["message"])
 
 # After (v0.2.0+) - comprehensive diagnostics
 result = optimizer.fit(data_source, model, p0=[1.0, 0.1])
-diag = result['streaming_diagnostics']
+diag = result["streaming_diagnostics"]
 
 # Overall success metrics
 print(f"Success rate: {diag['batch_success_rate']:.1%}")
@@ -206,19 +206,19 @@ print(f"Total retries: {diag['total_retries']}")
 print(f"Elapsed time: {diag['elapsed_time']:.2f}s")
 
 # Failure analysis
-if diag['failed_batches']:
+if diag["failed_batches"]:
     print(f"Failed batch indices: {diag['failed_batches']}")
     print(f"Error distribution: {diag['error_types']}")
     print(f"Retry patterns: {diag['retry_counts']}")
 
 # Recent performance
-recent_stats = diag['recent_batch_stats'][-10:]  # Last 10 batches
+recent_stats = diag["recent_batch_stats"][-10:]  # Last 10 batches
 for stats in recent_stats:
-    status = "SUCCESS" if stats['success'] else "FAILED"
+    status = "SUCCESS" if stats["success"] else "FAILED"
     print(f"Batch {stats['batch_idx']}: {status}, loss={stats['loss']:.4e}")
 
 # Aggregate statistics
-agg = diag['aggregate_stats']
+agg = diag["aggregate_stats"]
 print(f"Mean loss: {agg['mean_loss']:.6e}")
 print(f"Mean gradient norm: {agg['mean_grad_norm']:.6f}")
 ```
@@ -249,26 +249,26 @@ print(f"Mean gradient norm: {agg['mean_grad_norm']:.6f}")
 
 ```python
 result = {
-    'x': np.ndarray,              # Best parameters (now guaranteed never p0)
-    'success': bool,              # Whether optimization succeeded
-    'message': str,               # Human-readable status message
-    'fun': float,                 # Function value at best parameters
-    'best_loss': float,           # Best loss encountered (NEW)
-    'final_epoch': int,           # Final epoch number (NEW)
-    'streaming_diagnostics': {    # NEW: Comprehensive diagnostics
-        'failed_batches': list,
-        'retry_counts': dict,
-        'error_types': dict,
-        'batch_success_rate': float,
-        'total_batches_attempted': int,
-        'total_retries': int,
-        'convergence_achieved': bool,
-        'final_epoch': int,
-        'elapsed_time': float,
-        'checkpoint_info': dict or None,
-        'recent_batch_stats': list,
-        'aggregate_stats': dict,
-    }
+    "x": np.ndarray,  # Best parameters (now guaranteed never p0)
+    "success": bool,  # Whether optimization succeeded
+    "message": str,  # Human-readable status message
+    "fun": float,  # Function value at best parameters
+    "best_loss": float,  # Best loss encountered (NEW)
+    "final_epoch": int,  # Final epoch number (NEW)
+    "streaming_diagnostics": {  # NEW: Comprehensive diagnostics
+        "failed_batches": list,
+        "retry_counts": dict,
+        "error_types": dict,
+        "batch_success_rate": float,
+        "total_batches_attempted": int,
+        "total_retries": int,
+        "convergence_achieved": bool,
+        "final_epoch": int,
+        "elapsed_time": float,
+        "checkpoint_info": dict or None,
+        "recent_batch_stats": list,
+        "aggregate_stats": dict,
+    },
 }
 ```
 
@@ -298,18 +298,18 @@ result = optimizer.fit(data_source, model, p0=[1.0, 0.1])
 **Before (v0.1.x):**
 ```python
 # Success if no exceptions raised
-result['success']  # True/False based on completion
+result["success"]  # True/False based on completion
 ```
 
 **After (v0.2.0+):**
 ```python
 # Success if batch success rate >= min_success_rate (default 50%)
-result['success']  # True if >= 50% of batches succeeded
-result['message']  # Explains why optimization failed/succeeded
+result["success"]  # True if >= 50% of batches succeeded
+result["message"]  # Explains why optimization failed/succeeded
 
 # Access detailed success metrics
-diag = result['streaming_diagnostics']
-actual_rate = diag['batch_success_rate']
+diag = result["streaming_diagnostics"]
+actual_rate = diag["batch_success_rate"]
 threshold = config.min_success_rate
 ```
 
@@ -352,13 +352,13 @@ checkpoint_v2.h5  (backward compatible with v1)
 config = StreamingConfig(
     batch_size=100,
     max_epochs=10,
-    enable_fault_tolerance=True,    # Full diagnostics
-    validate_numerics=True,          # Detect numerical issues
-    min_success_rate=0.5,            # Standard threshold
-    max_retries_per_batch=2,         # Standard retry limit
+    enable_fault_tolerance=True,  # Full diagnostics
+    validate_numerics=True,  # Detect numerical issues
+    min_success_rate=0.5,  # Standard threshold
+    max_retries_per_batch=2,  # Standard retry limit
     enable_checkpoints=True,
     checkpoint_frequency=100,
-    batch_stats_buffer_size=100,     # Track last 100 batches
+    batch_stats_buffer_size=100,  # Track last 100 batches
 )
 ```
 
@@ -368,9 +368,9 @@ config = StreamingConfig(
 config = StreamingConfig(
     batch_size=100,
     max_epochs=10,
-    enable_fault_tolerance=False,    # Fast mode (<1% overhead)
-    enable_checkpoints=True,          # Still save checkpoints
-    checkpoint_frequency=1000,        # Less frequent for performance
+    enable_fault_tolerance=False,  # Fast mode (<1% overhead)
+    enable_checkpoints=True,  # Still save checkpoints
+    checkpoint_frequency=1000,  # Less frequent for performance
 )
 ```
 
@@ -385,7 +385,7 @@ config = StreamingConfig(
     min_success_rate=0.5,
     enable_checkpoints=True,
     checkpoint_frequency=100,
-    resume_from_checkpoint=True,      # Auto-resume on restart
+    resume_from_checkpoint=True,  # Auto-resume on restart
 )
 ```
 
@@ -397,8 +397,8 @@ config = StreamingConfig(
     max_epochs=10,
     enable_fault_tolerance=True,
     validate_numerics=True,
-    min_success_rate=0.3,            # Allow 70% failures
-    max_retries_per_batch=2,         # Standard retry limit
+    min_success_rate=0.3,  # Allow 70% failures
+    max_retries_per_batch=2,  # Standard retry limit
     enable_checkpoints=True,
 )
 ```
@@ -407,11 +407,11 @@ config = StreamingConfig(
 
 ```python
 config = StreamingConfig(
-    batch_size=200,                  # Larger batches
+    batch_size=200,  # Larger batches
     max_epochs=10,
-    enable_fault_tolerance=False,    # Fast mode
-    validate_numerics=False,         # Skip validation (use with caution)
-    enable_checkpoints=False,        # Disable checkpoints for max speed
+    enable_fault_tolerance=False,  # Fast mode
+    validate_numerics=False,  # Skip validation (use with caution)
+    enable_checkpoints=False,  # Disable checkpoints for max speed
 )
 ```
 
@@ -438,13 +438,13 @@ def test_streaming_diagnostics():
     result = optimizer.fit(data_source, model, p0=[1.0, 0.1])
 
     # Check new diagnostic fields exist
-    diag = result['streaming_diagnostics']
-    assert 'batch_success_rate' in diag
-    assert 'failed_batches' in diag
-    assert 'error_types' in diag
-    assert 'retry_counts' in diag
-    assert 'aggregate_stats' in diag
-    assert 'recent_batch_stats' in diag
+    diag = result["streaming_diagnostics"]
+    assert "batch_success_rate" in diag
+    assert "failed_batches" in diag
+    assert "error_types" in diag
+    assert "retry_counts" in diag
+    assert "aggregate_stats" in diag
+    assert "recent_batch_stats" in diag
 ```
 
 ### Step 3: Test Checkpoint Resume
@@ -471,8 +471,8 @@ def test_checkpoint_resume():
 
     # Verify resume worked
     assert optimizer2.iteration > 0
-    diag = result2['streaming_diagnostics']
-    assert diag['checkpoint_info'] is not None
+    diag = result2["streaming_diagnostics"]
+    assert diag["checkpoint_info"] is not None
 ```
 
 ---
@@ -515,7 +515,7 @@ def test_checkpoint_resume():
 # Lower success rate threshold for noisy data
 config = StreamingConfig(
     min_success_rate=0.3,  # Allow 70% failures
-    validate_numerics=True  # Keep validation
+    validate_numerics=True,  # Keep validation
 )
 ```
 
@@ -528,7 +528,7 @@ config = StreamingConfig(
 # Enable fast mode for production
 config = StreamingConfig(
     enable_fault_tolerance=False,  # <1% overhead
-    enable_checkpoints=True         # Still save checkpoints
+    enable_checkpoints=True,  # Still save checkpoints
 )
 ```
 
@@ -541,8 +541,7 @@ config = StreamingConfig(
 # Old v1 checkpoints should load automatically
 # If issues persist, start fresh:
 config = StreamingConfig(
-    checkpoint_dir="checkpoints_new",
-    resume_from_checkpoint=None  # Start fresh
+    checkpoint_dir="checkpoints_new", resume_from_checkpoint=None  # Start fresh
 )
 ```
 
@@ -558,9 +557,7 @@ config = StreamingConfig(
 )
 
 # Or disable diagnostics completely (fast mode)
-config = StreamingConfig(
-    enable_fault_tolerance=False
-)
+config = StreamingConfig(enable_fault_tolerance=False)
 ```
 
 ---

@@ -23,14 +23,15 @@ Usage:
     pytest tests/test_streaming_performance_regression.py --benchmark-json=streaming_perf.json
 """
 
-import numpy as np
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 
+import numpy as np
+import pytest
+
 try:
-    from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+    from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 except ImportError:
     pytest.skip("Streaming optimizer not available", allow_module_level=True)
 
@@ -81,6 +82,7 @@ def linear_model(x, m, b):
 def exponential_model(x, a, b, c):
     """Exponential decay: y = a * exp(-b * x) + c"""
     import jax.numpy as jnp
+
     return a * jnp.exp(-b * x) + c
 
 
@@ -119,8 +121,8 @@ def test_baseline_no_fault_tolerance(benchmark, small_streaming_data):
 
     # Validate result
     assert result is not None
-    assert 'x' in result
-    assert not np.array_equal(result['x'], p0)
+    assert "x" in result
+    assert not np.array_equal(result["x"], p0)
 
 
 @pytest.mark.benchmark(group="streaming-baseline")
@@ -147,7 +149,7 @@ def test_baseline_medium_dataset(benchmark, medium_streaming_data):
     result = benchmark(run_fit)
 
     assert result is not None
-    assert 'x' in result
+    assert "x" in result
 
 
 # ============================================================================
@@ -182,7 +184,7 @@ def test_overhead_full_fault_tolerance(benchmark, small_streaming_data):
     result = benchmark(run_fit)
 
     assert result is not None
-    assert 'x' in result
+    assert "x" in result
 
 
 @pytest.mark.benchmark(group="fault-tolerance-overhead")
@@ -366,6 +368,7 @@ def test_checkpoint_save_overhead(benchmark, small_streaming_data):
     finally:
         # Cleanup
         import shutil
+
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
 
@@ -417,6 +420,7 @@ def test_checkpoint_load_time(benchmark):
 
     finally:
         import shutil
+
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
 
@@ -453,7 +457,7 @@ def test_performance_with_10_percent_failures(benchmark, small_streaming_data):
         call_count[0] += 1
         # Fail every 10th batch (first attempt only)
         if call_count[0] % 10 == 0:
-            if not hasattr(mock_compute_with_failures, 'failed_batches'):
+            if not hasattr(mock_compute_with_failures, "failed_batches"):
                 mock_compute_with_failures.failed_batches = set()
 
             batch_key = call_count[0]
@@ -546,11 +550,11 @@ def test_memory_usage_large_dataset(benchmark, large_streaming_data):
     assert result is not None
 
     # Verify memory-efficient statistics
-    if 'streaming_diagnostics' in result:
-        diags = result['streaming_diagnostics']
-        if 'recent_batch_stats' in diags:
+    if "streaming_diagnostics" in result:
+        diags = result["streaming_diagnostics"]
+        if "recent_batch_stats" in diags:
             # Should not exceed buffer size
-            assert len(diags['recent_batch_stats']) <= 100
+            assert len(diags["recent_batch_stats"]) <= 100
 
 
 @pytest.mark.benchmark(group="memory-efficiency")

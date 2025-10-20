@@ -4,8 +4,8 @@ This module tests the circular buffer implementation, statistics calculation,
 memory usage limits, and aggregate statistics computation (Task Group 7).
 """
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from nlsq.streaming_config import StreamingConfig
@@ -40,12 +40,7 @@ class TestCircularBufferOverflow:
 
         # Fit model
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Check buffer size never exceeds limit
         assert len(optimizer.batch_stats_buffer) <= config.batch_stats_buffer_size
@@ -71,18 +66,13 @@ class TestCircularBufferOverflow:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Buffer should contain last 5 batches
         assert len(optimizer.batch_stats_buffer) == 5
 
         # Check that batch indices are the last 5 (5, 6, 7, 8, 9)
-        batch_indices = [stat['batch_idx'] for stat in optimizer.batch_stats_buffer]
+        batch_indices = [stat["batch_idx"] for stat in optimizer.batch_stats_buffer]
         # Should be last 5 batches (indices may vary, but should be sequential and recent)
         assert batch_indices == sorted(batch_indices)  # Sequential
         assert max(batch_indices) >= 5  # Contains recent batches
@@ -104,16 +94,11 @@ class TestCircularBufferOverflow:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Buffer should contain exactly 1 entry
         assert len(optimizer.batch_stats_buffer) == 1
-        assert optimizer.batch_stats_buffer[0]['batch_idx'] == 0
+        assert optimizer.batch_stats_buffer[0]["batch_idx"] == 0
 
 
 class TestStatisticsCalculation:
@@ -135,31 +120,26 @@ class TestStatisticsCalculation:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Check that each batch statistic has required fields
         assert len(optimizer.batch_stats_buffer) > 0
 
         for batch_stat in optimizer.batch_stats_buffer:
-            assert 'batch_idx' in batch_stat
-            assert 'loss' in batch_stat
-            assert 'grad_norm' in batch_stat
-            assert 'batch_time' in batch_stat
-            assert 'success' in batch_stat
-            assert 'retry_count' in batch_stat
+            assert "batch_idx" in batch_stat
+            assert "loss" in batch_stat
+            assert "grad_norm" in batch_stat
+            assert "batch_time" in batch_stat
+            assert "success" in batch_stat
+            assert "retry_count" in batch_stat
 
             # Verify types
-            assert isinstance(batch_stat['batch_idx'], int)
-            assert isinstance(batch_stat['loss'], float)
-            assert isinstance(batch_stat['grad_norm'], float)
-            assert isinstance(batch_stat['batch_time'], float)
-            assert isinstance(batch_stat['success'], bool)
-            assert isinstance(batch_stat['retry_count'], int)
+            assert isinstance(batch_stat["batch_idx"], int)
+            assert isinstance(batch_stat["loss"], float)
+            assert isinstance(batch_stat["grad_norm"], float)
+            assert isinstance(batch_stat["batch_time"], float)
+            assert isinstance(batch_stat["success"], bool)
+            assert isinstance(batch_stat["retry_count"], int)
 
     def test_aggregate_statistics_calculated_correctly(self):
         """Test that aggregate statistics are computed correctly."""
@@ -178,32 +158,27 @@ class TestStatisticsCalculation:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Should have succeeded
-        assert result['success']
+        assert result["success"]
 
         # Extract aggregate statistics
-        diagnostics = result['streaming_diagnostics']
-        aggregate = diagnostics['aggregate_stats']
+        diagnostics = result["streaming_diagnostics"]
+        aggregate = diagnostics["aggregate_stats"]
 
         # Verify aggregate statistics are present
-        assert 'mean_loss' in aggregate
-        assert 'std_loss' in aggregate
-        assert 'min_loss' in aggregate
-        assert 'max_loss' in aggregate
-        assert 'mean_grad_norm' in aggregate
+        assert "mean_loss" in aggregate
+        assert "std_loss" in aggregate
+        assert "min_loss" in aggregate
+        assert "max_loss" in aggregate
+        assert "mean_grad_norm" in aggregate
 
         # Verify values are reasonable
-        assert aggregate['mean_loss'] > 0
-        assert aggregate['std_loss'] >= 0
-        assert aggregate['min_loss'] <= aggregate['mean_loss'] <= aggregate['max_loss']
-        assert aggregate['mean_grad_norm'] > 0
+        assert aggregate["mean_loss"] > 0
+        assert aggregate["std_loss"] >= 0
+        assert aggregate["min_loss"] <= aggregate["mean_loss"] <= aggregate["max_loss"]
+        assert aggregate["mean_grad_norm"] > 0
 
     def test_aggregate_statistics_match_manual_calculation(self):
         """Test that aggregate statistics match manual calculation."""
@@ -222,33 +197,28 @@ class TestStatisticsCalculation:
         y_data = np.array(y_true) + 0.05 * np.random.randn(len(x_data))
 
         p0 = np.array([1.5, 0.4])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Should have succeeded
-        assert result['success']
+        assert result["success"]
 
         # Get aggregate statistics
-        diagnostics = result['streaming_diagnostics']
-        aggregate = diagnostics['aggregate_stats']
+        diagnostics = result["streaming_diagnostics"]
+        aggregate = diagnostics["aggregate_stats"]
 
         # Manual calculation from batch statistics
-        batch_stats = diagnostics['recent_batch_stats']
-        losses = [stat['loss'] for stat in batch_stats if stat['success']]
+        batch_stats = diagnostics["recent_batch_stats"]
+        losses = [stat["loss"] for stat in batch_stats if stat["success"]]
         expected_mean = float(np.mean(losses))
         expected_std = float(np.std(losses))
         expected_min = float(np.min(losses))
         expected_max = float(np.max(losses))
 
         # Compare with tolerance for floating point
-        assert np.isclose(aggregate['mean_loss'], expected_mean, rtol=1e-5)
-        assert np.isclose(aggregate['std_loss'], expected_std, rtol=1e-5)
-        assert np.isclose(aggregate['min_loss'], expected_min, rtol=1e-5)
-        assert np.isclose(aggregate['max_loss'], expected_max, rtol=1e-5)
+        assert np.isclose(aggregate["mean_loss"], expected_mean, rtol=1e-5)
+        assert np.isclose(aggregate["std_loss"], expected_std, rtol=1e-5)
+        assert np.isclose(aggregate["min_loss"], expected_min, rtol=1e-5)
+        assert np.isclose(aggregate["max_loss"], expected_max, rtol=1e-5)
 
 
 class TestMemoryUsageLimits:
@@ -275,12 +245,7 @@ class TestMemoryUsageLimits:
             )
 
             optimizer = StreamingOptimizer(config)
-            result = optimizer.fit(
-                (x_data, y_data),
-                exponential_model,
-                p0,
-                verbose=0
-            )
+            result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
             # Verify buffer size is exactly at the limit
             assert len(optimizer.batch_stats_buffer) <= buffer_size
@@ -294,7 +259,9 @@ class TestMemoryUsageLimits:
         """Test that buffer_size must be at least 1 (as per config validation)."""
         # Config validation requires batch_stats_buffer_size > 0
         # This test verifies the validation works
-        with pytest.raises(AssertionError, match="batch_stats_buffer_size must be positive"):
+        with pytest.raises(
+            AssertionError, match="batch_stats_buffer_size must be positive"
+        ):
             config = StreamingConfig(
                 batch_size=32,
                 max_epochs=1,
@@ -321,20 +288,16 @@ class TestMemoryUsageLimits:
         p0 = np.array([1.0, 1.0])
 
         import time
+
         start = time.time()
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
         elapsed = time.time() - start
 
         # Should complete in reasonable time (< 10 seconds for first JIT compilation)
         assert elapsed < 10.0
 
         # Optimization should succeed
-        assert result['success']
+        assert result["success"]
 
 
 class TestAggregateStatisticsComputation:
@@ -357,22 +320,17 @@ class TestAggregateStatisticsComputation:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Check diagnostics structure
-        assert 'streaming_diagnostics' in result
-        diagnostics = result['streaming_diagnostics']
+        assert "streaming_diagnostics" in result
+        diagnostics = result["streaming_diagnostics"]
 
-        assert 'recent_batch_stats' in diagnostics
-        assert 'aggregate_stats' in diagnostics
+        assert "recent_batch_stats" in diagnostics
+        assert "aggregate_stats" in diagnostics
 
         # Recent batch stats should match internal buffer
-        recent_stats = diagnostics['recent_batch_stats']
+        recent_stats = diagnostics["recent_batch_stats"]
         assert len(recent_stats) == len(optimizer.batch_stats_buffer)
         assert recent_stats == optimizer.batch_stats_buffer[-100:]
 
@@ -393,25 +351,20 @@ class TestAggregateStatisticsComputation:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Should have succeeded
-        assert result['success']
+        assert result["success"]
 
-        diagnostics = result['streaming_diagnostics']
+        diagnostics = result["streaming_diagnostics"]
 
         # Should have 100% success rate
-        assert diagnostics['batch_success_rate'] == 1.0
+        assert diagnostics["batch_success_rate"] == 1.0
 
         # All batch stats should have finite losses
-        for batch_stat in diagnostics['recent_batch_stats']:
-            assert np.isfinite(batch_stat['loss'])
-            assert batch_stat['loss'] > 0
+        for batch_stat in diagnostics["recent_batch_stats"]:
+            assert np.isfinite(batch_stat["loss"])
+            assert batch_stat["loss"] > 0
 
     def test_aggregate_stats_structure_complete(self):
         """Test that aggregate stats structure is complete."""
@@ -430,25 +383,20 @@ class TestAggregateStatisticsComputation:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Should have succeeded
-        assert result['success']
+        assert result["success"]
 
-        aggregate = result['streaming_diagnostics']['aggregate_stats']
+        aggregate = result["streaming_diagnostics"]["aggregate_stats"]
 
         # Required fields
         required_fields = [
-            'mean_loss',
-            'std_loss',
-            'min_loss',
-            'max_loss',
-            'mean_grad_norm',
+            "mean_loss",
+            "std_loss",
+            "min_loss",
+            "max_loss",
+            "mean_grad_norm",
         ]
 
         for field in required_fields:
@@ -478,18 +426,13 @@ class TestBatchStatisticsWithFailures:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Check that batch stats include retry_count field
         for batch_stat in optimizer.batch_stats_buffer:
-            assert 'retry_count' in batch_stat
-            assert isinstance(batch_stat['retry_count'], int)
-            assert batch_stat['retry_count'] >= 0
+            assert "retry_count" in batch_stat
+            assert isinstance(batch_stat["retry_count"], int)
+            assert batch_stat["retry_count"] >= 0
 
     def test_batch_stats_track_timing_correctly(self):
         """Test that batch timing is tracked correctly."""
@@ -507,15 +450,12 @@ class TestBatchStatisticsWithFailures:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Check timing information from batch stats buffer
-        batch_times = [s['batch_time'] for s in optimizer.batch_stats_buffer if s['success']]
+        batch_times = [
+            s["batch_time"] for s in optimizer.batch_stats_buffer if s["success"]
+        ]
         assert len(batch_times) > 0
 
         for batch_time in batch_times:
@@ -524,9 +464,9 @@ class TestBatchStatisticsWithFailures:
 
         # Check that batch stats contain timing
         for batch_stat in optimizer.batch_stats_buffer:
-            assert 'batch_time' in batch_stat
-            assert batch_stat['batch_time'] > 0
-            assert batch_stat['batch_time'] < 5.0
+            assert "batch_time" in batch_stat
+            assert batch_stat["batch_time"] > 0
+            assert batch_stat["batch_time"] < 5.0
 
     def test_gradient_norms_tracked_correctly(self):
         """Test that gradient norms are tracked correctly."""
@@ -544,18 +484,15 @@ class TestBatchStatisticsWithFailures:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Should have succeeded
-        assert result['success']
+        assert result["success"]
 
         # Check gradient norms from batch stats buffer
-        gradient_norms = [s['grad_norm'] for s in optimizer.batch_stats_buffer if s['success']]
+        gradient_norms = [
+            s["grad_norm"] for s in optimizer.batch_stats_buffer if s["success"]
+        ]
         assert len(gradient_norms) > 0
 
         for grad_norm in gradient_norms:
@@ -564,9 +501,9 @@ class TestBatchStatisticsWithFailures:
 
         # Check that batch stats contain gradient norms
         for batch_stat in optimizer.batch_stats_buffer:
-            assert 'grad_norm' in batch_stat
-            assert batch_stat['grad_norm'] >= 0
-            assert np.isfinite(batch_stat['grad_norm'])
+            assert "grad_norm" in batch_stat
+            assert batch_stat["grad_norm"] >= 0
+            assert np.isfinite(batch_stat["grad_norm"])
 
 
 class TestBatchStatisticsIntegration:
@@ -589,12 +526,7 @@ class TestBatchStatisticsIntegration:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # With 100 points, batch_size=32, and 3 epochs:
         # 4 batches per epoch * 3 epochs = 12 batches total
@@ -618,23 +550,18 @@ class TestBatchStatisticsIntegration:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # In fast mode (no fault tolerance), batch statistics might not be tracked
         # to minimize overhead. Streaming_diagnostics should still be present
         # but may have minimal information
-        assert 'streaming_diagnostics' in result
+        assert "streaming_diagnostics" in result
 
         # If batch stats are tracked, they should be valid
         if len(optimizer.batch_stats_buffer) > 0:
             for batch_stat in optimizer.batch_stats_buffer:
-                assert 'loss' in batch_stat
-                assert 'grad_norm' in batch_stat
+                assert "loss" in batch_stat
+                assert "grad_norm" in batch_stat
 
     def test_batch_stats_consistent_with_loss_history(self):
         """Test that batch statistics are consistent with loss history."""
@@ -653,22 +580,18 @@ class TestBatchStatisticsIntegration:
         y_data = np.array(y_true) + 0.1 * np.random.randn(len(x_data))
 
         p0 = np.array([1.0, 1.0])
-        result = optimizer.fit(
-            (x_data, y_data),
-            exponential_model,
-            p0,
-            verbose=0
-        )
+        result = optimizer.fit((x_data, y_data), exponential_model, p0, verbose=0)
 
         # Extract losses from batch stats
         batch_losses = [
-            stat['loss'] for stat in optimizer.batch_stats_buffer
-            if np.isfinite(stat['loss'])
+            stat["loss"]
+            for stat in optimizer.batch_stats_buffer
+            if np.isfinite(stat["loss"])
         ]
 
         # Compare with aggregate stats
-        diagnostics = result['streaming_diagnostics']
-        aggregate = diagnostics['aggregate_stats']
+        diagnostics = result["streaming_diagnostics"]
+        aggregate = diagnostics["aggregate_stats"]
 
         # Aggregate stats should match batch stats
         expected_mean = float(np.mean(batch_losses))
@@ -676,7 +599,7 @@ class TestBatchStatisticsIntegration:
         expected_min = float(np.min(batch_losses))
         expected_max = float(np.max(batch_losses))
 
-        assert np.isclose(aggregate['mean_loss'], expected_mean, rtol=1e-5)
-        assert np.isclose(aggregate['std_loss'], expected_std, rtol=1e-5)
-        assert np.isclose(aggregate['min_loss'], expected_min, rtol=1e-5)
-        assert np.isclose(aggregate['max_loss'], expected_max, rtol=1e-5)
+        assert np.isclose(aggregate["mean_loss"], expected_mean, rtol=1e-5)
+        assert np.isclose(aggregate["std_loss"], expected_std, rtol=1e-5)
+        assert np.isclose(aggregate["min_loss"], expected_min, rtol=1e-5)
+        assert np.isclose(aggregate["max_loss"], expected_max, rtol=1e-5)

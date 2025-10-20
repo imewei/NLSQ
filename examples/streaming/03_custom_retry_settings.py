@@ -14,7 +14,8 @@ Run this example:
 """
 
 import numpy as np
-from nlsq import StreamingOptimizer, StreamingConfig
+
+from nlsq import StreamingConfig, StreamingOptimizer
 
 
 def noisy_exponential(x, a, b):
@@ -53,7 +54,7 @@ def main():
     n_corrupted = np.sum(np.isnan(y_corrupted))
 
     print(f"Dataset: {n_samples} samples")
-    print(f"Corrupted samples: {n_corrupted} ({n_corrupted/n_samples:.1%})")
+    print(f"Corrupted samples: {n_corrupted} ({n_corrupted / n_samples:.1%})")
     print(f"True parameters: a={true_a}, b={true_b}")
     print()
 
@@ -91,7 +92,9 @@ def main():
     print(f"Result: {'SUCCESS' if result1['success'] else 'FAILED'}")
     print(f"Message: {result1['message']}")
     print(f"Batch success rate: {diag1['batch_success_rate']:.1%}")
-    print(f"Failed batches: {len(diag1['failed_batches'])}/{diag1['total_batches_attempted']}")
+    print(
+        f"Failed batches: {len(diag1['failed_batches'])}/{diag1['total_batches_attempted']}"
+    )
     print(f"Total retries: {diag1['total_retries']}")
     print()
 
@@ -129,7 +132,9 @@ def main():
     print(f"Result: {'SUCCESS' if result2['success'] else 'FAILED'}")
     print(f"Message: {result2['message']}")
     print(f"Batch success rate: {diag2['batch_success_rate']:.1%}")
-    print(f"Failed batches: {len(diag2['failed_batches'])}/{diag2['total_batches_attempted']}")
+    print(
+        f"Failed batches: {len(diag2['failed_batches'])}/{diag2['total_batches_attempted']}"
+    )
     print(f"Total retries: {diag2['total_retries']}")
     print()
 
@@ -158,7 +163,7 @@ def main():
     print("=" * 70)
     if result2["success"]:
         best_params = result2["x"]
-        print(f"Best parameters:")
+        print("Best parameters:")
         print(f"  a = {best_params[0]:.6f} (true: {true_a})")
         print(f"  b = {best_params[1]:.6f} (true: {true_b})")
         print(f"  Best loss = {result2['best_loss']:.6e}")
@@ -167,7 +172,7 @@ def main():
         # Parameter errors
         param_errors = np.abs(best_params - np.array([true_a, true_b]))
         rel_errors = param_errors / np.array([true_a, true_b]) * 100
-        print(f"Parameter errors:")
+        print("Parameter errors:")
         print(f"  a error: {param_errors[0]:.6f} ({rel_errors[0]:.2f}%)")
         print(f"  b error: {param_errors[1]:.6f} ({rel_errors[1]:.2f}%)")
     else:

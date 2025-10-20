@@ -4,11 +4,12 @@ This module tests the three-point NaN/Inf validation system that protects
 against numerical instabilities during streaming optimization.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import numpy as np
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
-from nlsq.streaming_optimizer import DataGenerator
+
+from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
 
 
 class TestNaNInfValidation:
@@ -16,6 +17,7 @@ class TestNaNInfValidation:
 
     def test_gradient_validation_with_nan(self):
         """Test that NaN gradients are detected and batch is skipped."""
+
         # Simple linear model
         def model(x, a, b):
             return a * x + b
@@ -31,7 +33,7 @@ class TestNaNInfValidation:
             learning_rate=0.1,
             validate_numerics=True,  # Enable validation
             enable_fault_tolerance=True,  # Enable fault tolerance for batch tracking
-            max_retries_per_batch=0  # No retries so failures are immediately tracked
+            max_retries_per_batch=0,  # No retries so failures are immediately tracked
         )
         optimizer = StreamingOptimizer(config)
 
@@ -61,15 +63,16 @@ class TestNaNInfValidation:
         result = optimizer.fit_streaming(data_source, model, p0, verbose=0)
 
         # Check that the batch with NaN was skipped
-        assert 'streaming_diagnostics' in result
-        assert len(result['streaming_diagnostics']['failed_batches']) > 0
-        assert result['streaming_diagnostics']['batch_success_rate'] < 1.0
+        assert "streaming_diagnostics" in result
+        assert len(result["streaming_diagnostics"]["failed_batches"]) > 0
+        assert result["streaming_diagnostics"]["batch_success_rate"] < 1.0
         # Should still produce valid results from non-NaN batches
-        assert np.all(np.isfinite(result['x']))
-        assert np.isfinite(result['fun'])
+        assert np.all(np.isfinite(result["x"]))
+        assert np.isfinite(result["fun"])
 
     def test_gradient_validation_with_inf(self):
         """Test that Inf gradients are detected and batch is skipped."""
+
         # Simple linear model
         def model(x, a, b):
             return a * x + b
@@ -84,7 +87,7 @@ class TestNaNInfValidation:
             max_epochs=1,
             validate_numerics=True,
             max_retries_per_batch=0,  # No retries so failures are tracked
-            enable_fault_tolerance=True
+            enable_fault_tolerance=True,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -112,13 +115,14 @@ class TestNaNInfValidation:
         result = optimizer.fit_streaming(data_source, model, p0, verbose=0)
 
         # Check that the batch with Inf was skipped
-        assert 'streaming_diagnostics' in result
-        assert len(result['streaming_diagnostics']['failed_batches']) > 0
-        assert np.all(np.isfinite(result['x']))
-        assert np.isfinite(result['fun'])
+        assert "streaming_diagnostics" in result
+        assert len(result["streaming_diagnostics"]["failed_batches"]) > 0
+        assert np.all(np.isfinite(result["x"]))
+        assert np.isfinite(result["fun"])
 
     def test_parameter_update_validation(self):
         """Test that NaN/Inf in parameter updates are caught and reverted."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -133,7 +137,7 @@ class TestNaNInfValidation:
             max_epochs=1,
             validate_numerics=True,
             max_retries_per_batch=0,  # No retries so failures are tracked
-            enable_fault_tolerance=True
+            enable_fault_tolerance=True,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -161,12 +165,13 @@ class TestNaNInfValidation:
         result = optimizer.fit_streaming(data_source, model, p0, verbose=0)
 
         # Parameters should not contain NaN (reverted or skipped)
-        assert np.all(np.isfinite(result['x']))
-        assert 'streaming_diagnostics' in result
-        assert len(result['streaming_diagnostics']['failed_batches']) > 0
+        assert np.all(np.isfinite(result["x"]))
+        assert "streaming_diagnostics" in result
+        assert len(result["streaming_diagnostics"]["failed_batches"]) > 0
 
     def test_loss_value_validation(self):
         """Test that NaN/Inf loss values are detected and batch is skipped."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -181,7 +186,7 @@ class TestNaNInfValidation:
             max_epochs=1,
             validate_numerics=True,
             max_retries_per_batch=0,  # No retries so failures are tracked
-            enable_fault_tolerance=True
+            enable_fault_tolerance=True,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -209,13 +214,14 @@ class TestNaNInfValidation:
         result = optimizer.fit_streaming(data_source, model, p0, verbose=0)
 
         # Check that NaN loss batch was skipped
-        assert 'streaming_diagnostics' in result
-        assert len(result['streaming_diagnostics']['failed_batches']) > 0
-        assert np.isfinite(result['fun'])
-        assert np.all(np.isfinite(result['x']))
+        assert "streaming_diagnostics" in result
+        assert len(result["streaming_diagnostics"]["failed_batches"]) > 0
+        assert np.isfinite(result["fun"])
+        assert np.all(np.isfinite(result["x"]))
 
     def test_validation_disabled(self):
         """Test that validation can be disabled for performance."""
+
         # Model that would normally trigger validation
         def model(x, a, b):
             return a * x + b
@@ -228,7 +234,7 @@ class TestNaNInfValidation:
         config = StreamingConfig(
             batch_size=50,
             max_epochs=1,
-            validate_numerics=False  # Disable validation
+            validate_numerics=False,  # Disable validation
         )
         optimizer = StreamingOptimizer(config)
 
@@ -253,17 +259,18 @@ class TestNaNInfValidation:
         result = optimizer.fit(data_source, model, p0, verbose=0)
 
         # When validation is disabled, the flag should be False
-        assert config.validate_numerics == False
-        assert result['success']  # Should still complete successfully
+        assert not config.validate_numerics
+        assert result["success"]  # Should still complete successfully
         assert nan_encountered[0]  # We tried to inject NaN
 
     def test_validation_enabled_by_default(self):
         """Test that validation is enabled by default."""
         config = StreamingConfig()
-        assert config.validate_numerics == True
+        assert config.validate_numerics
 
     def test_mixed_nan_inf_validation(self):
         """Test handling of mixed NaN and Inf values."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -278,7 +285,7 @@ class TestNaNInfValidation:
             max_epochs=1,
             validate_numerics=True,
             max_retries_per_batch=0,  # No retries so failures are tracked
-            enable_fault_tolerance=True
+            enable_fault_tolerance=True,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -313,15 +320,16 @@ class TestNaNInfValidation:
         result = optimizer.fit_streaming(data_source, model, p0, verbose=0)
 
         # Should handle all invalid batches
-        assert 'streaming_diagnostics' in result
-        assert len(result['streaming_diagnostics']['failed_batches']) >= 3
-        assert np.all(np.isfinite(result['x']))
-        assert np.isfinite(result['fun'])
+        assert "streaming_diagnostics" in result
+        assert len(result["streaming_diagnostics"]["failed_batches"]) >= 3
+        assert np.all(np.isfinite(result["x"]))
+        assert np.isfinite(result["fun"])
         # At least one batch should succeed (the 4th batch)
-        assert result['streaming_diagnostics']['batch_success_rate'] > 0
+        assert result["streaming_diagnostics"]["batch_success_rate"] > 0
 
     def test_validation_with_bounds(self):
         """Test NaN/Inf validation when bounds are applied."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -336,7 +344,7 @@ class TestNaNInfValidation:
             max_epochs=1,
             validate_numerics=True,
             max_retries_per_batch=0,  # No retries so failures are tracked
-            enable_fault_tolerance=True
+            enable_fault_tolerance=True,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -365,15 +373,17 @@ class TestNaNInfValidation:
         # Run optimization
         data_source = (x_data.reshape(-1, 1), y_data)
         p0 = np.array([1.0, 0.0])
-        result = optimizer.fit_streaming(data_source, model, p0, bounds=bounds, verbose=0)
+        result = optimizer.fit_streaming(
+            data_source, model, p0, bounds=bounds, verbose=0
+        )
 
         # Should detect NaN even with bounds
-        assert 'streaming_diagnostics' in result
-        assert len(result['streaming_diagnostics']['failed_batches']) > 0
-        assert np.all(np.isfinite(result['x']))
+        assert "streaming_diagnostics" in result
+        assert len(result["streaming_diagnostics"]["failed_batches"]) > 0
+        assert np.all(np.isfinite(result["x"]))
         # Results should respect bounds
-        assert np.all(result['x'] >= bounds[0])
-        assert np.all(result['x'] <= bounds[1])
+        assert np.all(result["x"] >= bounds[0])
+        assert np.all(result["x"] <= bounds[1])
 
     def test_validation_performance_impact(self):
         """Test that validation has minimal performance impact."""
@@ -393,9 +403,7 @@ class TestNaNInfValidation:
 
         # Time with validation enabled
         config_with_validation = StreamingConfig(
-            batch_size=100,
-            max_epochs=1,
-            validate_numerics=True
+            batch_size=100, max_epochs=1, validate_numerics=True
         )
         optimizer_with = StreamingOptimizer(config_with_validation)
 
@@ -405,9 +413,7 @@ class TestNaNInfValidation:
 
         # Time with validation disabled
         config_without_validation = StreamingConfig(
-            batch_size=100,
-            max_epochs=1,
-            validate_numerics=False
+            batch_size=100, max_epochs=1, validate_numerics=False
         )
         optimizer_without = StreamingOptimizer(config_without_validation)
 
@@ -417,20 +423,23 @@ class TestNaNInfValidation:
         time_without = time.time() - start_without
 
         # Validation overhead should be minimal (< 10%)
-        overhead_percent = (time_with - time_without) / time_without * 100 if time_without > 0 else 0
+        overhead_percent = (
+            (time_with - time_without) / time_without * 100 if time_without > 0 else 0
+        )
 
         # Both should produce similar results
-        assert np.allclose(result_with['x'], result_without['x'], rtol=0.1)
+        assert np.allclose(result_with["x"], result_without["x"], rtol=0.1)
 
         # Performance assertion is relaxed as timing can vary
         # Main goal is to ensure both modes work correctly
-        assert result_with['success'] and result_without['success']
+        assert result_with["success"] and result_without["success"]
 
         # Log the overhead for information
         print(f"Validation overhead: {overhead_percent:.1f}%")
 
     def test_all_batches_fail_scenario(self):
         """Test behavior when all batches fail validation."""
+
         # Model that always produces NaN
         def bad_model(x, a, b):
             return np.full_like(x, np.nan)
@@ -440,11 +449,7 @@ class TestNaNInfValidation:
         x_data = np.random.randn(100)
         y_data = 2.0 * x_data + 1.0
 
-        config = StreamingConfig(
-            batch_size=50,
-            max_epochs=1,
-            validate_numerics=True
-        )
+        config = StreamingConfig(batch_size=50, max_epochs=1, validate_numerics=True)
         optimizer = StreamingOptimizer(config)
 
         # Run optimization
@@ -453,9 +458,11 @@ class TestNaNInfValidation:
         result = optimizer.fit(data_source, bad_model, p0, verbose=0)
 
         # When all batches fail, should return initial params but indicate failure
-        assert result['success'] == False
-        assert 'streaming_diagnostics' in result
-        assert result['streaming_diagnostics']['batch_success_rate'] == 0.0
-        assert len(result['streaming_diagnostics']['failed_batches']) == 2  # All batches failed
+        assert not result["success"]
+        assert "streaming_diagnostics" in result
+        assert result["streaming_diagnostics"]["batch_success_rate"] == 0.0
+        assert (
+            len(result["streaming_diagnostics"]["failed_batches"]) == 2
+        )  # All batches failed
         # Result should contain initial parameters (no better ones found)
-        assert np.array_equal(result['x'], p0)
+        assert np.array_equal(result["x"], p0)

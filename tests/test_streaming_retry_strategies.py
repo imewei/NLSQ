@@ -4,11 +4,12 @@ This module tests error-specific retry strategies that attempt to recover from
 transient failures during streaming optimization.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import numpy as np
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
-from nlsq.streaming_optimizer import DataGenerator
+
+from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
 
 
 class TestAdaptiveRetryStrategies:
@@ -16,6 +17,7 @@ class TestAdaptiveRetryStrategies:
 
     def test_retry_with_reduced_learning_rate(self):
         """Test retry with 50% reduced learning rate on NaN/Inf errors."""
+
         # Simple linear model
         def model(x, a, b):
             return a * x + b
@@ -31,12 +33,12 @@ class TestAdaptiveRetryStrategies:
             learning_rate=0.1,
             validate_numerics=True,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2
+            max_retries_per_batch=2,
         )
         optimizer = StreamingOptimizer(config)
 
         # Track retry attempts
-        retry_info = {'attempts': [], 'learning_rates': []}
+        retry_info = {"attempts": [], "learning_rates": []}
 
         # Patch gradient computation to fail first time with NaN
         original_compute = optimizer._compute_loss_and_gradient
@@ -58,8 +60,8 @@ class TestAdaptiveRetryStrategies:
 
         def mock_update(params, grad, bounds):
             # Check learning rate during retry
-            if hasattr(optimizer, '_retry_learning_rate_factor'):
-                retry_info['learning_rates'].append(
+            if hasattr(optimizer, "_retry_learning_rate_factor"):
+                retry_info["learning_rates"].append(
                     config.learning_rate * optimizer._retry_learning_rate_factor
                 )
             return original_update(params, grad, bounds)
@@ -71,13 +73,14 @@ class TestAdaptiveRetryStrategies:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Verify retry was attempted
-        assert result['success']
-        assert 'retry_counts' in result.get('streaming_diagnostics', {})
+        assert result["success"]
+        assert "retry_counts" in result.get("streaming_diagnostics", {})
         # Check that parameters improved from initial guess
-        assert not np.array_equal(result['x'], p0)
+        assert not np.array_equal(result["x"], p0)
 
     def test_retry_with_parameter_perturbation(self):
         """Test retry with parameter perturbation for singular matrix errors."""
+
         # Simple linear model (exponential can be problematic with JAX)
         def model(x, a, b):
             return a * x + b
@@ -93,7 +96,7 @@ class TestAdaptiveRetryStrategies:
             learning_rate=0.01,
             validate_numerics=True,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2
+            max_retries_per_batch=2,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -119,22 +122,25 @@ class TestAdaptiveRetryStrategies:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Verify retry was attempted
-        assert result['success']
-        assert not np.array_equal(result['x'], p0)
+        assert result["success"]
+        assert not np.array_equal(result["x"], p0)
 
         # Verify that batch 2 failed at least once
         assert batch_2_failed[0], "Batch 2 should have failed initially"
 
         # Verify diagnostics recorded the error
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
             # Check retry was recorded
-            assert len(diags.get('retry_counts', {})) > 0, "Should have retry counts"
+            assert len(diags.get("retry_counts", {})) > 0, "Should have retry counts"
             # Check error type was recorded
-            assert 'SingularMatrix' in diags.get('error_types', {}), "Should have recorded SingularMatrix error"
+            assert "SingularMatrix" in diags.get("error_types", {}), (
+                "Should have recorded SingularMatrix error"
+            )
 
     def test_retry_with_reduced_batch_size(self):
         """Test retry with reduced batch size for memory errors."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -150,12 +156,12 @@ class TestAdaptiveRetryStrategies:
             learning_rate=0.1,
             validate_numerics=True,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2
+            max_retries_per_batch=2,
         )
         optimizer = StreamingOptimizer(config)
 
         # Track batch size changes
-        batch_size_info = {'sizes': []}
+        batch_size_info = {"sizes": []}
 
         # Mock memory error on batch 3
         original_compute = optimizer._compute_loss_and_gradient
@@ -165,7 +171,7 @@ class TestAdaptiveRetryStrategies:
         def mock_compute(func, params, x_batch, y_batch):
             call_count[0] += 1
             # Record batch size
-            batch_size_info['sizes'].append(len(x_batch))
+            batch_size_info["sizes"].append(len(x_batch))
 
             if 7 <= call_count[0] <= 9:  # Batch 3
                 batch_3_attempts[0] += 1
@@ -180,11 +186,12 @@ class TestAdaptiveRetryStrategies:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Verify optimization completed
-        assert result['success']
-        assert not np.array_equal(result['x'], p0)
+        assert result["success"]
+        assert not np.array_equal(result["x"], p0)
 
     def test_maximum_retry_limit_enforcement(self):
         """Test that retry attempts are limited to max_retries_per_batch."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -200,12 +207,12 @@ class TestAdaptiveRetryStrategies:
             learning_rate=0.1,
             validate_numerics=True,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2  # Maximum 2 retries
+            max_retries_per_batch=2,  # Maximum 2 retries
         )
         optimizer = StreamingOptimizer(config)
 
         # Track all retry attempts
-        retry_attempts = {'batch_2': 0}
+        retry_attempts = {"batch_2": 0}
 
         # Mock persistent failure on batch 2
         original_compute = optimizer._compute_loss_and_gradient
@@ -214,7 +221,7 @@ class TestAdaptiveRetryStrategies:
         def mock_compute(func, params, x_batch, y_batch):
             call_count[0] += 1
             if 4 <= call_count[0] <= 10:  # Batch 2 and potential retries
-                retry_attempts['batch_2'] += 1
+                retry_attempts["batch_2"] += 1
                 # Always fail for this batch
                 return 0.5, np.array([np.nan, np.nan])
             return original_compute(func, params, x_batch, y_batch)
@@ -226,14 +233,17 @@ class TestAdaptiveRetryStrategies:
 
         # Verify maximum retry limit was enforced
         # Should be 1 initial attempt + max 2 retries = 3 total
-        assert retry_attempts['batch_2'] <= 3
+        assert retry_attempts["batch_2"] <= 3
 
         # Optimization should still complete (other batches succeed)
-        assert 'x' in result
-        assert result['streaming_diagnostics']['batch_success_rate'] < 1.0  # Some batches failed
+        assert "x" in result
+        assert (
+            result["streaming_diagnostics"]["batch_success_rate"] < 1.0
+        )  # Some batches failed
 
     def test_different_error_type_handling(self):
         """Test that different error types trigger appropriate retry strategies."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -249,13 +259,17 @@ class TestAdaptiveRetryStrategies:
             learning_rate=0.1,
             validate_numerics=True,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2
+            max_retries_per_batch=2,
         )
         optimizer = StreamingOptimizer(config)
 
         # Track which retry strategies were used and actual failures
-        retry_strategies = {'nan_inf': False, 'singular': False,
-                          'memory': False, 'generic': False}
+        retry_strategies = {
+            "nan_inf": False,
+            "singular": False,
+            "memory": False,
+            "generic": False,
+        }
         permanent_failures = []
 
         # Mock different errors for different batches
@@ -275,19 +289,19 @@ class TestAdaptiveRetryStrategies:
             if batch_attempts[batch_num] == 1:
                 if batch_num == 1:
                     # Batch 1: NaN/Inf error (recoverable on retry)
-                    retry_strategies['nan_inf'] = True
+                    retry_strategies["nan_inf"] = True
                     return 0.5, np.array([np.inf, 1.0])
                 elif batch_num == 2:
                     # Batch 2: Singular matrix (recoverable with perturbation)
-                    retry_strategies['singular'] = True
+                    retry_strategies["singular"] = True
                     raise np.linalg.LinAlgError("Singular matrix")
                 elif batch_num == 3:
                     # Batch 3: Memory error (recoverable with smaller batch)
-                    retry_strategies['memory'] = True
+                    retry_strategies["memory"] = True
                     raise MemoryError("Out of memory")
                 elif batch_num == 4:
                     # Batch 4: Generic error (may recover with perturbation)
-                    retry_strategies['generic'] = True
+                    retry_strategies["generic"] = True
                     raise ValueError("Generic error")
             elif batch_attempts[batch_num] > config.max_retries_per_batch + 1:
                 # This batch has permanently failed
@@ -302,23 +316,30 @@ class TestAdaptiveRetryStrategies:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Check diagnostics for error categorization
-        if 'streaming_diagnostics' in result:
-            diags = result['streaming_diagnostics']
-            if 'error_types' in diags:
+        if "streaming_diagnostics" in result:
+            diags = result["streaming_diagnostics"]
+            if "error_types" in diags:
                 # Should have multiple error types recorded
-                assert len(diags['error_types']) >= 1
+                assert len(diags["error_types"]) >= 1
                 # At least one of the error types should be recorded
-                recorded_types = set(diags['error_types'].keys())
-                expected_types = {'NumericalError', 'SingularMatrix', 'MemoryError', 'ValueError'}
-                assert len(recorded_types.intersection(expected_types)) > 0, \
+                recorded_types = set(diags["error_types"].keys())
+                expected_types = {
+                    "NumericalError",
+                    "SingularMatrix",
+                    "MemoryError",
+                    "ValueError",
+                }
+                assert len(recorded_types.intersection(expected_types)) > 0, (
                     f"Expected some of {expected_types}, got {recorded_types}"
+                )
 
         # Verify some retries were attempted
-        assert 'streaming_diagnostics' in result
-        assert len(result['streaming_diagnostics'].get('retry_counts', {})) > 0
+        assert "streaming_diagnostics" in result
+        assert len(result["streaming_diagnostics"].get("retry_counts", {})) > 0
 
     def test_retry_success_updates_best_params(self):
         """Test that successful retries can update best parameters."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -334,7 +355,7 @@ class TestAdaptiveRetryStrategies:
             learning_rate=0.1,
             validate_numerics=True,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2
+            max_retries_per_batch=2,
         )
         optimizer = StreamingOptimizer(config)
 
@@ -360,15 +381,16 @@ class TestAdaptiveRetryStrategies:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Verify optimization succeeded
-        assert result['success']
+        assert result["success"]
         # Parameters should have improved from initial
-        assert not np.array_equal(result['x'], p0)
+        assert not np.array_equal(result["x"], p0)
         # Should be closer to true values [2.0, 1.0]
-        assert abs(result['x'][0] - 2.0) < 1.0
-        assert abs(result['x'][1] - 1.0) < 1.0
+        assert abs(result["x"][0] - 2.0) < 1.0
+        assert abs(result["x"][1] - 1.0) < 1.0
 
     def test_retry_with_perturbation_uses_jax_random(self):
         """Test that parameter perturbation uses JAX random for reproducibility."""
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -384,7 +406,7 @@ class TestAdaptiveRetryStrategies:
             learning_rate=0.1,
             validate_numerics=True,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2
+            max_retries_per_batch=2,
         )
 
         # Create two optimizers with same config
@@ -425,10 +447,10 @@ class TestAdaptiveRetryStrategies:
         result2 = optimizer2.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # Both should succeed
-        assert result1['success']
-        assert result2['success']
+        assert result1["success"]
+        assert result2["success"]
 
         # Results should be similar (not necessarily identical due to async operations)
         # But should both have improved from initial parameters
-        assert not np.array_equal(result1['x'], p0)
-        assert not np.array_equal(result2['x'], p0)
+        assert not np.array_equal(result1["x"], p0)
+        assert not np.array_equal(result2["x"], p0)

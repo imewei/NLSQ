@@ -114,6 +114,7 @@ type SolverLiteral = str  # "exact" | "lsmr"
 # Streaming diagnostic types (Task 6.2)
 class CheckpointInfo(TypedDict, total=False):
     """Checkpoint information in streaming diagnostics."""
+
     path: str | None  # Path to checkpoint file
     saved_at: str  # Timestamp when checkpoint was saved
     batch_idx: int  # Batch index at checkpoint
@@ -123,12 +124,14 @@ class CheckpointInfo(TypedDict, total=False):
 
 class CommonError(TypedDict):
     """Common error entry in diagnostics."""
+
     type: str  # Error type name
     count: int  # Number of occurrences
 
 
 class AggregateStats(TypedDict, total=False):
     """Aggregate statistics across batches."""
+
     mean_loss: float  # Mean batch loss
     std_loss: float  # Standard deviation of batch losses
     mean_grad_norm: float  # Mean gradient norm
@@ -141,6 +144,7 @@ class StreamingDiagnostics(TypedDict, total=False):
 
     This structure matches the format from chunked processing for consistency.
     """
+
     failed_batches: list[int]  # List of failed batch indices
     retry_counts: dict[int, int]  # Retry attempts per batch index
     error_types: dict[str, int]  # Count of each error type
@@ -182,11 +186,14 @@ class SupportsFloat(Protocol):
 
 # Re-export commonly used types from dependencies
 __all__ = [
+    "AggregateStats",
     # Array types
     "ArrayLike",
     # Bounds and results
     "BoundsTuple",
     "CallbackFunction",
+    "CheckpointInfo",
+    "CommonError",
     "FloatArray",
     # Protocols
     "HasShape",
@@ -199,10 +206,7 @@ __all__ = [
     "ModelFunction",
     "OptimizeResultDict",
     "SolverLiteral",
-    "SupportsFloat",
     # Streaming diagnostics
     "StreamingDiagnostics",
-    "CheckpointInfo",
-    "CommonError",
-    "AggregateStats",
+    "SupportsFloat",
 ]

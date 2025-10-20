@@ -12,13 +12,14 @@ Usage:
     pytest tests/test_streaming_compatibility.py -k "backward" -v
 """
 
-import numpy as np
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+import numpy as np
+import pytest
+
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestBackwardCompatibility:
@@ -33,11 +34,11 @@ class TestBackwardCompatibility:
         config = StreamingConfig()
 
         # Verify new parameters have appropriate defaults
-        assert hasattr(config, 'validate_numerics')
-        assert hasattr(config, 'enable_fault_tolerance')
-        assert hasattr(config, 'max_retries_per_batch')
-        assert hasattr(config, 'min_success_rate')
-        assert hasattr(config, 'batch_stats_buffer_size')
+        assert hasattr(config, "validate_numerics")
+        assert hasattr(config, "enable_fault_tolerance")
+        assert hasattr(config, "max_retries_per_batch")
+        assert hasattr(config, "min_success_rate")
+        assert hasattr(config, "batch_stats_buffer_size")
 
         # Default fault tolerance should be enabled (safe defaults)
         # or disabled (backward compatible) - either is acceptable
@@ -69,8 +70,8 @@ class TestBackwardCompatibility:
 
         # Should work as before
         assert result is not None
-        assert 'x' in result
-        assert not np.array_equal(result['x'], p0)
+        assert "x" in result
+        assert not np.array_equal(result["x"], p0)
 
     def test_minimal_config_works(self):
         """Test with minimal configuration (only required parameters).
@@ -92,7 +93,7 @@ class TestBackwardCompatibility:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_result_format_compatibility(self):
         """Test that result format maintains backward compatibility.
@@ -117,12 +118,12 @@ class TestBackwardCompatibility:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         # All standard fields should be present
-        assert 'x' in result
-        assert 'success' in result
+        assert "x" in result
+        assert "success" in result
 
         # New diagnostic fields should not interfere with standard fields
-        assert result['x'] is not None
-        assert isinstance(result['success'], (bool, np.bool_))
+        assert result["x"] is not None
+        assert isinstance(result["success"], (bool, np.bool_))
 
 
 class TestAPICompatibility:
@@ -173,19 +174,21 @@ class TestAPICompatibility:
         p0 = np.array([1.0, 0.0])
         bounds = (np.array([0.0, -10.0]), np.array([10.0, 10.0]))
 
-        result = optimizer.fit_streaming((x_data, y_data), model,
+        result = optimizer.fit_streaming(
+            (x_data, y_data),
+            model,
             p0,
             bounds=bounds,
             verbose=0,
         )
 
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
         # Verify bounds were respected
-        if result['success']:
-            assert np.all(result['x'] >= bounds[0])
-            assert np.all(result['x'] <= bounds[1])
+        if result["success"]:
+            assert np.all(result["x"] >= bounds[0])
+            assert np.all(result["x"] <= bounds[1])
 
     def test_verbose_levels_work(self):
         """Test that verbose parameter works at all levels.
@@ -254,7 +257,7 @@ class TestJAXCompatibility:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_jax_arrays_as_input(self):
         """Test that JAX arrays work as input data.
@@ -285,7 +288,7 @@ class TestJAXCompatibility:
         result = optimizer.fit_streaming((x_jax, y_jax), model, p0, verbose=0)
 
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_jax_transformations_compatible(self):
         """Test compatibility with JAX transformations (grad, vmap).
@@ -354,15 +357,16 @@ class TestFeatureInteraction:
 
         optimizer._compute_loss_and_gradient = mock_compute
 
-        result = optimizer.fit_streaming((x_data, y_data), model, p0, bounds=bounds, verbose=0
+        result = optimizer.fit_streaming(
+            (x_data, y_data), model, p0, bounds=bounds, verbose=0
         )
 
         assert result is not None
 
         # Verify bounds respected
-        if result['success']:
-            assert np.all(result['x'] >= bounds[0])
-            assert np.all(result['x'] <= bounds[1])
+        if result["success"]:
+            assert np.all(result["x"] >= bounds[0])
+            assert np.all(result["x"] <= bounds[1])
 
     def test_fault_tolerance_with_checkpoints(self):
         """Test fault tolerance works with checkpoint save/resume.
@@ -409,6 +413,7 @@ class TestFeatureInteraction:
 
         finally:
             import shutil
+
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
@@ -432,22 +437,23 @@ class TestFeatureInteraction:
             return a * x + b
 
         # Track callback invocations
-        callback_data = {'calls': 0}
+        callback_data = {"calls": 0}
 
         def callback(iteration, params, loss):
-            callback_data['calls'] += 1
+            callback_data["calls"] += 1
             # Callback should receive valid data
             assert iteration >= 0
             assert params is not None
             assert loss is not None or np.isfinite(loss)
 
         p0 = np.array([1.0, 0.0])
-        result = optimizer.fit_streaming((x_data, y_data), model, p0, callback=callback, verbose=0
+        result = optimizer.fit_streaming(
+            (x_data, y_data), model, p0, callback=callback, verbose=0
         )
 
         assert result is not None
         # Callback should have been called
-        assert callback_data['calls'] > 0
+        assert callback_data["calls"] > 0
 
 
 class TestDataFormatCompatibility:
@@ -495,7 +501,8 @@ class TestDataFormatCompatibility:
             return a * x + b
 
         p0 = [1.0, 0.0]
-        result = optimizer.fit_streaming((np.array(x_data), np.array(y_data)), model, np.array(p0), verbose=0
+        result = optimizer.fit_streaming(
+            (np.array(x_data), np.array(y_data)), model, np.array(p0), verbose=0
         )
 
         assert result is not None
@@ -551,7 +558,7 @@ class TestConfigurationMigration:
         result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_gradual_feature_adoption(self):
         """Test adding fault tolerance features one at a time.
@@ -600,5 +607,5 @@ class TestConfigurationMigration:
         assert result3 is not None
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

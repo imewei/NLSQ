@@ -8,15 +8,20 @@ This module tests the comprehensive diagnostic collection system including:
 - Diagnostic structure format
 """
 
+import shutil
+import tempfile
+import time
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
-import time
-import tempfile
-import shutil
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingDataGenerator, StreamingConfig
+from nlsq.streaming_optimizer import (
+    StreamingConfig,
+    StreamingDataGenerator,
+    StreamingOptimizer,
+)
 
 
 class TestDiagnosticCollection:
@@ -29,7 +34,7 @@ class TestDiagnosticCollection:
         def failing_model(x, a, b):
             """Model that fails on certain batches."""
             # Fail on batch 2 and 4
-            if hasattr(x, '__len__') and len(x) > 0:
+            if hasattr(x, "__len__") and len(x) > 0:
                 # Check if this looks like batch 2 or 4 based on x values
                 mean_x = np.mean(x)
                 if 150 < mean_x < 250 or 350 < mean_x < 450:  # Batches 2 and 4
@@ -46,29 +51,25 @@ class TestDiagnosticCollection:
             batch_size=100,
             max_epochs=1,
             enable_fault_tolerance=True,
-            max_retries_per_batch=0  # No retries to ensure failures
+            max_retries_per_batch=0,  # No retries to ensure failures
         )
 
         optimizer = StreamingOptimizer(config)
         data_gen = StreamingDataGenerator((x_data, y_data))
 
         # Fit with expected failures
-        result = optimizer.fit(
-            (x_data, y_data),
-            failing_model,
-            p0=np.array([1.0, 1.0])
-        )
+        result = optimizer.fit((x_data, y_data), failing_model, p0=np.array([1.0, 1.0]))
 
         # Check diagnostic structure exists
-        assert 'streaming_diagnostics' in result
-        diagnostics = result['streaming_diagnostics']
+        assert "streaming_diagnostics" in result
+        diagnostics = result["streaming_diagnostics"]
 
         # Verify failed batches are tracked
-        assert 'failed_batches' in diagnostics
-        assert len(diagnostics['failed_batches']) > 0
+        assert "failed_batches" in diagnostics
+        assert len(diagnostics["failed_batches"]) > 0
 
         # Check that failed batch indices are integers
-        for idx in diagnostics['failed_batches']:
+        for idx in diagnostics["failed_batches"]:
             assert isinstance(idx, int)
             assert idx >= 0
 
@@ -78,6 +79,7 @@ class TestDiagnosticCollection:
 
         class RetryTrackingModel:
             """Model that tracks and fails on first attempts."""
+
             def __init__(self):
                 self.call_counts = {}
 
@@ -102,22 +104,18 @@ class TestDiagnosticCollection:
             batch_size=100,
             max_epochs=1,
             enable_fault_tolerance=True,
-            max_retries_per_batch=2
+            max_retries_per_batch=2,
         )
 
         optimizer = StreamingOptimizer(config)
         model = RetryTrackingModel()
 
-        result = optimizer.fit(
-            (x_data, y_data),
-            model,
-            p0=np.array([1.0, 1.0])
-        )
+        result = optimizer.fit((x_data, y_data), model, p0=np.array([1.0, 1.0]))
 
         # Check retry counts in diagnostics
-        diagnostics = result['streaming_diagnostics']
-        assert 'retry_counts' in diagnostics
-        retry_counts = diagnostics['retry_counts']
+        diagnostics = result["streaming_diagnostics"]
+        assert "retry_counts" in diagnostics
+        retry_counts = diagnostics["retry_counts"]
 
         # Should have at least one batch with retry count > 0
         assert any(count > 0 for count in retry_counts.values())
@@ -155,29 +153,32 @@ class TestDiagnosticCollection:
             batch_size=100,
             max_epochs=1,
             enable_fault_tolerance=True,
-            max_retries_per_batch=0  # No retries to see all errors
+            max_retries_per_batch=0,  # No retries to see all errors
         )
 
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit(
-            (x_data, y_data),
-            multi_error_model,
-            p0=np.array([1.0, 1.0])
+            (x_data, y_data), multi_error_model, p0=np.array([1.0, 1.0])
         )
 
         # Check error categorization
-        diagnostics = result['streaming_diagnostics']
-        assert 'error_types' in diagnostics
-        error_types = diagnostics['error_types']
+        diagnostics = result["streaming_diagnostics"]
+        assert "error_types" in diagnostics
+        error_types = diagnostics["error_types"]
 
         # Should have multiple error categories
         assert len(error_types) > 0
 
         # Check for expected error types
         # Note: JAX JIT compilation causes TracerBoolConversionError for Python control flow
-        expected_types = {'NumericalError', 'SingularMatrix', 'MemoryError', 'TracerBoolConversionError'}
-        assert any(err_type in expected_types for err_type in error_types.keys())
+        expected_types = {
+            "NumericalError",
+            "SingularMatrix",
+            "MemoryError",
+            "TracerBoolConversionError",
+        }
+        assert any(err_type in expected_types for err_type in error_types)
 
         # All counts should be positive integers
         for error_type, count in error_types.items():
@@ -201,7 +202,7 @@ class TestDiagnosticCollection:
                 enable_fault_tolerance=True,
                 enable_checkpoints=True,
                 checkpoint_dir=tmpdir,
-                checkpoint_frequency=1
+                checkpoint_frequency=1,
             )
 
             optimizer = StreamingOptimizer(config)
@@ -209,40 +210,40 @@ class TestDiagnosticCollection:
             result = optimizer.fit(
                 (x_data, y_data),
                 lambda x, a, b: a * np.exp(-b * x),
-                p0=np.array([1.0, 1.0])
+                p0=np.array([1.0, 1.0]),
             )
 
             # Verify diagnostic structure
-            assert 'streaming_diagnostics' in result
-            diagnostics = result['streaming_diagnostics']
+            assert "streaming_diagnostics" in result
+            diagnostics = result["streaming_diagnostics"]
 
             # Check required fields exist
             required_fields = [
-                'failed_batches',
-                'retry_counts',
-                'error_types',
-                'batch_success_rate',
-                'checkpoint_info'
+                "failed_batches",
+                "retry_counts",
+                "error_types",
+                "batch_success_rate",
+                "checkpoint_info",
             ]
 
             for field in required_fields:
                 assert field in diagnostics, f"Missing required field: {field}"
 
             # Verify field types
-            assert isinstance(diagnostics['failed_batches'], list)
-            assert isinstance(diagnostics['retry_counts'], dict)
-            assert isinstance(diagnostics['error_types'], dict)
-            assert isinstance(diagnostics['batch_success_rate'], float)
-            assert isinstance(diagnostics['checkpoint_info'], dict)
+            assert isinstance(diagnostics["failed_batches"], list)
+            assert isinstance(diagnostics["retry_counts"], dict)
+            assert isinstance(diagnostics["error_types"], dict)
+            assert isinstance(diagnostics["batch_success_rate"], float)
+            assert isinstance(diagnostics["checkpoint_info"], dict)
 
             # Verify checkpoint_info structure
-            checkpoint_info = diagnostics['checkpoint_info']
-            assert 'saved_at' in checkpoint_info
-            assert 'batch_idx' in checkpoint_info
+            checkpoint_info = diagnostics["checkpoint_info"]
+            assert "saved_at" in checkpoint_info
+            assert "batch_idx" in checkpoint_info
 
             # Optional: check for aggregate stats if implemented
-            if 'aggregate_stats' in diagnostics:
-                stats = diagnostics['aggregate_stats']
+            if "aggregate_stats" in diagnostics:
+                stats = diagnostics["aggregate_stats"]
                 assert isinstance(stats, dict)
                 # Could have mean_loss, std_loss, mean_grad_norm etc.
 
@@ -261,7 +262,7 @@ class TestDiagnosticCollection:
                 enable_fault_tolerance=True,
                 enable_checkpoints=True,
                 checkpoint_dir=tmpdir,
-                checkpoint_frequency=2  # Save every 2 iterations
+                checkpoint_frequency=2,  # Save every 2 iterations
             )
 
             optimizer = StreamingOptimizer(config)
@@ -269,36 +270,36 @@ class TestDiagnosticCollection:
             result = optimizer.fit(
                 (x_data, y_data),
                 lambda x, a, b: a * np.exp(-b * x),
-                p0=np.array([1.0, 1.0])
+                p0=np.array([1.0, 1.0]),
             )
 
             # Check checkpoint info
-            diagnostics = result['streaming_diagnostics']
-            checkpoint_info = diagnostics['checkpoint_info']
+            diagnostics = result["streaming_diagnostics"]
+            checkpoint_info = diagnostics["checkpoint_info"]
 
             # Verify checkpoint path exists if checkpoints were saved
             if config.enable_checkpoints:
                 # Check checkpoint directory was used
                 checkpoint_files = list(Path(tmpdir).glob("checkpoint_*.h5"))
                 if checkpoint_files:
-                    assert 'path' in checkpoint_info
-                    assert checkpoint_info['path'] is not None
+                    assert "path" in checkpoint_info
+                    assert checkpoint_info["path"] is not None
 
                 # Check save time format
-                assert 'saved_at' in checkpoint_info
-                saved_at = checkpoint_info['saved_at']
+                assert "saved_at" in checkpoint_info
+                saved_at = checkpoint_info["saved_at"]
                 # Should be a timestamp string
                 assert isinstance(saved_at, str)
 
                 # Check batch index
-                assert 'batch_idx' in checkpoint_info
-                assert isinstance(checkpoint_info['batch_idx'], int)
-                assert checkpoint_info['batch_idx'] >= 0
+                assert "batch_idx" in checkpoint_info
+                assert isinstance(checkpoint_info["batch_idx"], int)
+                assert checkpoint_info["batch_idx"] >= 0
 
                 # Check file size if implemented
-                if 'file_size' in checkpoint_info:
-                    assert isinstance(checkpoint_info['file_size'], (int, float))
-                    assert checkpoint_info['file_size'] > 0
+                if "file_size" in checkpoint_info:
+                    assert isinstance(checkpoint_info["file_size"], (int, float))
+                    assert checkpoint_info["file_size"] > 0
 
     def test_top_common_errors_identification(self):
         """Test that the top 3 most common errors are correctly identified."""
@@ -306,6 +307,7 @@ class TestDiagnosticCollection:
 
         class ErrorCounter:
             """Helper to generate specific error counts."""
+
             def __init__(self):
                 self.batch_count = 0
 
@@ -338,44 +340,40 @@ class TestDiagnosticCollection:
             batch_size=100,
             max_epochs=1,
             enable_fault_tolerance=True,
-            max_retries_per_batch=0
+            max_retries_per_batch=0,
         )
 
         optimizer = StreamingOptimizer(config)
         model = ErrorCounter()
 
-        result = optimizer.fit(
-            (x_data, y_data),
-            model,
-            p0=np.array([1.0, 1.0])
-        )
+        result = optimizer.fit((x_data, y_data), model, p0=np.array([1.0, 1.0]))
 
-        diagnostics = result['streaming_diagnostics']
+        diagnostics = result["streaming_diagnostics"]
 
         # Check if common_errors field exists (optional but recommended)
-        if 'common_errors' in diagnostics:
-            common_errors = diagnostics['common_errors']
+        if "common_errors" in diagnostics:
+            common_errors = diagnostics["common_errors"]
 
             # Should identify top 3 or fewer
             assert len(common_errors) <= 3
 
             # Each entry should have error type and count
             for error_entry in common_errors:
-                assert 'type' in error_entry
-                assert 'count' in error_entry
-                assert isinstance(error_entry['type'], str)
-                assert isinstance(error_entry['count'], int)
-                assert error_entry['count'] > 0
+                assert "type" in error_entry
+                assert "count" in error_entry
+                assert isinstance(error_entry["type"], str)
+                assert isinstance(error_entry["count"], int)
+                assert error_entry["count"] > 0
 
             # Verify ordering (most common first)
             if len(common_errors) > 1:
                 for i in range(len(common_errors) - 1):
-                    assert common_errors[i]['count'] >= common_errors[i+1]['count']
+                    assert common_errors[i]["count"] >= common_errors[i + 1]["count"]
 
         # At minimum, error_types should be populated
-        error_types = diagnostics['error_types']
-        assert 'NumericalError' in error_types
-        assert error_types['NumericalError'] >= 5
+        error_types = diagnostics["error_types"]
+        assert "NumericalError" in error_types
+        assert error_types["NumericalError"] >= 5
 
 
 class TestDiagnosticAccuracy:
@@ -401,7 +399,7 @@ class TestDiagnosticAccuracy:
             batch_size=batch_size,
             max_epochs=1,
             enable_fault_tolerance=True,
-            max_retries_per_batch=0  # No retries for accurate count
+            max_retries_per_batch=0,  # No retries for accurate count
         )
 
         optimizer = StreamingOptimizer(config)
@@ -429,14 +427,11 @@ class TestDiagnosticAccuracy:
         optimizer._compute_loss_and_gradient = mock_compute
 
         result = optimizer.fit_streaming(
-            (x_data, y_data),
-            model,
-            p0=np.array([1.0, 1.0]),
-            verbose=0
+            (x_data, y_data), model, p0=np.array([1.0, 1.0]), verbose=0
         )
 
-        diagnostics = result['streaming_diagnostics']
-        actual_success_rate = diagnostics['batch_success_rate']
+        diagnostics = result["streaming_diagnostics"]
+        actual_success_rate = diagnostics["batch_success_rate"]
 
         # Expected: 7 successes out of 10 batches = 70%
         expected_success_rate = 0.7
@@ -444,7 +439,7 @@ class TestDiagnosticAccuracy:
 
         # Verify consistency with failed_batches count
         n_batches = n_samples // config.batch_size
-        n_failed = len(diagnostics['failed_batches'])
+        n_failed = len(diagnostics["failed_batches"])
         calculated_rate = 1 - (n_failed / n_batches)
 
         # These should match exactly
@@ -468,24 +463,22 @@ class TestDiagnosticAccuracy:
             batch_size=50,
             max_epochs=1,
             enable_fault_tolerance=True,
-            max_retries_per_batch=1
+            max_retries_per_batch=1,
         )
 
         np.random.seed(42)
         optimizer = StreamingOptimizer(config)
 
         result = optimizer.fit(
-            (x_data, y_data),
-            intermittent_failure_model,
-            p0=np.array([1.0, 1.0])
+            (x_data, y_data), intermittent_failure_model, p0=np.array([1.0, 1.0])
         )
 
-        diagnostics = result['streaming_diagnostics']
+        diagnostics = result["streaming_diagnostics"]
 
         # Check consistency between different counts
-        failed_batches = diagnostics['failed_batches']
-        retry_counts = diagnostics['retry_counts']
-        error_types = diagnostics['error_types']
+        failed_batches = diagnostics["failed_batches"]
+        retry_counts = diagnostics["retry_counts"]
+        error_types = diagnostics["error_types"]
 
         # Total errors should match sum of error_types
         total_errors_from_types = sum(error_types.values())

@@ -5,9 +5,11 @@ and prevent accidental API breakage.
 """
 
 import inspect
+
 import numpy as np
 import pytest
-from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestStreamingOptimizerAPI:
@@ -19,13 +21,13 @@ class TestStreamingOptimizerAPI:
         params = list(sig.parameters.keys())
 
         expected = [
-            'self',
-            'data_source',
-            'func',
-            'p0',
-            'bounds',
-            'callback',
-            'verbose'
+            "self",
+            "data_source",
+            "func",
+            "p0",
+            "bounds",
+            "callback",
+            "verbose",
         ]
 
         assert params == expected, (
@@ -48,26 +50,26 @@ class TestStreamingOptimizerAPI:
 
         # Required keys
         required_keys = [
-            'x',
-            'success',
-            'message',
-            'fun',
-            'best_loss',
-            'final_epoch',
-            'streaming_diagnostics'
+            "x",
+            "success",
+            "message",
+            "fun",
+            "best_loss",
+            "final_epoch",
+            "streaming_diagnostics",
         ]
 
         for key in required_keys:
             assert key in result, f"Missing required key: '{key}'"
 
         # Validate types
-        assert isinstance(result['x'], np.ndarray)
-        assert isinstance(result['success'], bool)
-        assert isinstance(result['message'], str)
-        assert isinstance(result['fun'], float)
-        assert isinstance(result['best_loss'], float)
-        assert isinstance(result['final_epoch'], int)
-        assert isinstance(result['streaming_diagnostics'], dict)
+        assert isinstance(result["x"], np.ndarray)
+        assert isinstance(result["success"], bool)
+        assert isinstance(result["message"], str)
+        assert isinstance(result["fun"], float)
+        assert isinstance(result["best_loss"], float)
+        assert isinstance(result["final_epoch"], int)
+        assert isinstance(result["streaming_diagnostics"], dict)
 
     def test_streaming_diagnostics_structure(self):
         """Validate streaming_diagnostics has expected structure."""
@@ -81,20 +83,20 @@ class TestStreamingOptimizerAPI:
         result = optimizer.fit((x, y), model, p0=[1.0, 0.0], verbose=0)
 
         # Validate diagnostics structure
-        diag = result['streaming_diagnostics']
+        diag = result["streaming_diagnostics"]
         diag_required = [
-            'failed_batches',
-            'retry_counts',
-            'error_types',
-            'batch_success_rate',
-            'total_batches_attempted',
-            'total_retries',
-            'convergence_achieved',
-            'final_epoch',
-            'elapsed_time',
-            'checkpoint_info',
-            'recent_batch_stats',
-            'aggregate_stats'
+            "failed_batches",
+            "retry_counts",
+            "error_types",
+            "batch_success_rate",
+            "total_batches_attempted",
+            "total_retries",
+            "convergence_achieved",
+            "final_epoch",
+            "elapsed_time",
+            "checkpoint_info",
+            "recent_batch_stats",
+            "aggregate_stats",
         ]
 
         for key in diag_required:
@@ -111,17 +113,17 @@ class TestStreamingOptimizerAPI:
 
         result = optimizer.fit((x, y), model, p0=[1.0, 0.0], verbose=0)
 
-        aggregate = result['streaming_diagnostics']['aggregate_stats']
+        aggregate = result["streaming_diagnostics"]["aggregate_stats"]
 
         required_fields = [
-            'mean_loss',
-            'std_loss',
-            'min_loss',
-            'max_loss',
-            'mean_grad_norm',
-            'std_grad_norm',
-            'mean_batch_time',
-            'std_batch_time'
+            "mean_loss",
+            "std_loss",
+            "min_loss",
+            "max_loss",
+            "mean_grad_norm",
+            "std_grad_norm",
+            "mean_batch_time",
+            "std_batch_time",
         ]
 
         for field in required_fields:
@@ -142,18 +144,18 @@ class TestStreamingOptimizerAPI:
         result = optimizer.fit((x, y), model, p0=[1.0, 0.0], verbose=0)
 
         # Get batch stats from recent_batch_stats
-        batch_stats = result['streaming_diagnostics']['recent_batch_stats']
+        batch_stats = result["streaming_diagnostics"]["recent_batch_stats"]
 
         if len(batch_stats) > 0:
             batch_stat = batch_stats[0]
 
             required_fields = [
-                'batch_idx',
-                'loss',
-                'grad_norm',
-                'batch_time',
-                'success',
-                'retry_count'
+                "batch_idx",
+                "loss",
+                "grad_norm",
+                "batch_time",
+                "success",
+                "retry_count",
             ]
 
             for field in required_fields:
@@ -164,13 +166,13 @@ class TestStreamingOptimizerAPI:
         config = StreamingConfig()
 
         # Critical fields
-        assert hasattr(config, 'batch_size')
-        assert hasattr(config, 'max_epochs')
-        assert hasattr(config, 'learning_rate')
-        assert hasattr(config, 'enable_fault_tolerance')
-        assert hasattr(config, 'validate_numerics')
-        assert hasattr(config, 'min_success_rate')
-        assert hasattr(config, 'max_retries_per_batch')
+        assert hasattr(config, "batch_size")
+        assert hasattr(config, "max_epochs")
+        assert hasattr(config, "learning_rate")
+        assert hasattr(config, "enable_fault_tolerance")
+        assert hasattr(config, "validate_numerics")
+        assert hasattr(config, "min_success_rate")
+        assert hasattr(config, "max_retries_per_batch")
 
         # Validate defaults match documentation
         assert config.batch_size == 32
@@ -191,14 +193,14 @@ class TestStreamingOptimizerAPI:
 
         # Test 1: Tuple of arrays (should work)
         result = optimizer.fit((x, y), model, p0=p0, verbose=0)
-        assert result['success']
+        assert result["success"]
 
         # Test 2: Generator (should work)
         def data_generator():
             for i in range(0, len(x), 10):
-                yield x[i:i+10], y[i:i+10]
+                yield x[i : i + 10], y[i : i + 10]
 
         # Reset optimizer
         optimizer = StreamingOptimizer(config)
         result = optimizer.fit(data_generator(), model, p0=p0, verbose=0)
-        assert result['success']
+        assert result["success"]

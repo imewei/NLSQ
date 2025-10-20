@@ -106,24 +106,26 @@ config = StreamingConfig(
     batch_size=100,
     max_epochs=10,
     enable_fault_tolerance=True,  # Default
-    validate_numerics=True,        # Check for NaN/Inf
-    min_success_rate=0.5,          # Require 50% success
-    max_retries_per_batch=2        # Max 2 retry attempts
+    validate_numerics=True,  # Check for NaN/Inf
+    min_success_rate=0.5,  # Require 50% success
+    max_retries_per_batch=2,  # Max 2 retry attempts
 )
 
 # Create optimizer
 optimizer = StreamingOptimizer(config)
 
+
 # Define model
 def model(x, a, b):
     return a * np.exp(-b * x)
 
+
 # Fit with automatic error handling
 result = optimizer.fit(
     (x_data, y_data),  # Data as tuple
-    model,              # Model function
-    p0=[1.0, 0.1],     # Initial parameters
-    verbose=1
+    model,  # Model function
+    p0=[1.0, 0.1],  # Initial parameters
+    verbose=1,
 )
 
 # Access results
@@ -138,14 +140,12 @@ print(f"Success rate: {result['streaming_diagnostics']['batch_success_rate']:.1%
 # Enable checkpoint resume (auto-detect latest)
 config = StreamingConfig(
     checkpoint_dir="checkpoints",
-    checkpoint_frequency=100,      # Save every 100 iterations
-    resume_from_checkpoint=True    # Auto-detect latest
+    checkpoint_frequency=100,  # Save every 100 iterations
+    resume_from_checkpoint=True,  # Auto-detect latest
 )
 
 # Or load from specific checkpoint
-config = StreamingConfig(
-    resume_from_checkpoint="checkpoints/checkpoint_iter_500.h5"
-)
+config = StreamingConfig(resume_from_checkpoint="checkpoints/checkpoint_iter_500.h5")
 
 optimizer = StreamingOptimizer(config)
 result = optimizer.fit((x_data, y_data), model, p0=[1.0, 0.1])
@@ -156,16 +156,16 @@ result = optimizer.fit((x_data, y_data), model, p0=[1.0, 0.1])
 ```python
 # More permissive for noisy data
 config = StreamingConfig(
-    min_success_rate=0.3,          # Allow 70% failures
-    max_retries_per_batch=2,       # Standard retry limit
-    validate_numerics=True         # Keep validation
+    min_success_rate=0.3,  # Allow 70% failures
+    max_retries_per_batch=2,  # Standard retry limit
+    validate_numerics=True,  # Keep validation
 )
 
 # Stricter for clean data
 config = StreamingConfig(
-    min_success_rate=0.8,          # Require 80% success
-    max_retries_per_batch=1,       # Fewer retries
-    validate_numerics=True
+    min_success_rate=0.8,  # Require 80% success
+    max_retries_per_batch=1,  # Fewer retries
+    validate_numerics=True,
 )
 
 optimizer = StreamingOptimizer(config)
@@ -178,7 +178,7 @@ result = optimizer.fit((x_data, y_data), model, p0=[1.0, 0.1])
 # Disable validation overhead for trusted data
 config = StreamingConfig(
     enable_fault_tolerance=False,  # <1% overhead
-    enable_checkpoints=True         # Still save checkpoints
+    enable_checkpoints=True,  # Still save checkpoints
 )
 
 optimizer = StreamingOptimizer(config)
@@ -189,7 +189,7 @@ result = optimizer.fit((x_data, y_data), model, p0=[1.0, 0.1])
 
 ```python
 result = optimizer.fit((x_data, y_data), model, p0=[1.0, 0.1])
-diag = result['streaming_diagnostics']
+diag = result["streaming_diagnostics"]
 
 # Overall success
 print(f"Success rate: {diag['batch_success_rate']:.1%}")
@@ -201,12 +201,14 @@ print(f"Error types: {diag['error_types']}")
 print(f"Retry counts: {diag['retry_counts']}")
 
 # Recent performance
-recent_stats = diag['recent_batch_stats'][-10:]  # Last 10 batches
+recent_stats = diag["recent_batch_stats"][-10:]  # Last 10 batches
 for stats in recent_stats:
-    print(f"Batch {stats['batch_idx']}: loss={stats['loss']:.4e}, retries={stats['retry_count']}")
+    print(
+        f"Batch {stats['batch_idx']}: loss={stats['loss']:.4e}, retries={stats['retry_count']}"
+    )
 
 # Aggregate statistics
-agg = diag['aggregate_stats']
+agg = diag["aggregate_stats"]
 print(f"Mean loss: {agg['mean_loss']:.4e}")
 print(f"Mean gradient norm: {agg['mean_grad_norm']:.4f}")
 ```
@@ -264,33 +266,33 @@ print(f"Mean gradient norm: {agg['mean_grad_norm']:.4f}")
 
 ```python
 streaming_diagnostics = {
-    'failed_batches': [3, 17, 42],       # Indices of failed batches
-    'retry_counts': {3: 2, 17: 1},       # Retry attempts per batch
-    'error_types': {                      # Error categorization
-        'NumericalError': 15,
-        'SingularMatrix': 2,
-        'ValueError': 8
+    "failed_batches": [3, 17, 42],  # Indices of failed batches
+    "retry_counts": {3: 2, 17: 1},  # Retry attempts per batch
+    "error_types": {  # Error categorization
+        "NumericalError": 15,
+        "SingularMatrix": 2,
+        "ValueError": 8,
     },
-    'batch_success_rate': 0.92,           # Overall success rate
-    'total_batches_attempted': 100,       # Total batches processed
-    'total_retries': 25,                  # Total retry attempts
-    'convergence_achieved': True,         # Whether converged
-    'final_epoch': 8,                     # Final epoch number
-    'elapsed_time': 45.3,                 # Total time (seconds)
-    'checkpoint_info': {                  # Last checkpoint (if any)
-        'path': 'checkpoints/checkpoint_iter_500.h5',
-        'saved_at': '2025-10-20T15:30:00',
-        'batch_idx': 500
+    "batch_success_rate": 0.92,  # Overall success rate
+    "total_batches_attempted": 100,  # Total batches processed
+    "total_retries": 25,  # Total retry attempts
+    "convergence_achieved": True,  # Whether converged
+    "final_epoch": 8,  # Final epoch number
+    "elapsed_time": 45.3,  # Total time (seconds)
+    "checkpoint_info": {  # Last checkpoint (if any)
+        "path": "checkpoints/checkpoint_iter_500.h5",
+        "saved_at": "2025-10-20T15:30:00",
+        "batch_idx": 500,
     },
-    'recent_batch_stats': [...],          # Circular buffer (last 100)
-    'aggregate_stats': {                  # Aggregate metrics
-        'mean_loss': 0.0234,
-        'std_loss': 0.0012,
-        'mean_grad_norm': 0.456,
-        'std_grad_norm': 0.023,
-        'mean_batch_time': 0.015,
-        'std_batch_time': 0.002
-    }
+    "recent_batch_stats": [...],  # Circular buffer (last 100)
+    "aggregate_stats": {  # Aggregate metrics
+        "mean_loss": 0.0234,
+        "std_loss": 0.0012,
+        "mean_grad_norm": 0.456,
+        "std_grad_norm": 0.023,
+        "mean_batch_time": 0.015,
+        "std_batch_time": 0.002,
+    },
 }
 ```
 

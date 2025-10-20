@@ -13,10 +13,12 @@ Run this example:
     python examples/streaming/02_checkpoint_resume.py
 """
 
-import numpy as np
 import time
 from pathlib import Path
-from nlsq import StreamingOptimizer, StreamingConfig
+
+import numpy as np
+
+from nlsq import StreamingConfig, StreamingOptimizer
 
 
 def gaussian_model(x, amp, center, width):
@@ -162,14 +164,16 @@ def main():
         )
 
         print()
-        print(f"Resumed from iteration 4, completed at iteration {optimizer3.iteration}")
+        print(
+            f"Resumed from iteration 4, completed at iteration {optimizer3.iteration}"
+        )
         print()
 
     # Display final results
     print("FINAL RESULTS")
     print("=" * 70)
     best_params = result2["x"]
-    print(f"Best parameters:")
+    print("Best parameters:")
     print(f"  amp    = {best_params[0]:.6f} (true: {true_amp})")
     print(f"  center = {best_params[1]:.6f} (true: {true_center})")
     print(f"  width  = {best_params[2]:.6f} (true: {true_width})")
