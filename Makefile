@@ -68,6 +68,7 @@ clean:  ## Clean build artifacts and cache files
 	find . -type d -name .coverage -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .hypothesis -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name checkpoints -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name "*.pyo" -delete
 	find . -type f -name "*~" -delete
