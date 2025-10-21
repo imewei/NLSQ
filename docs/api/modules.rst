@@ -38,6 +38,7 @@ Tools for fitting very large datasets (10M+ points):
 
    nlsq.large_dataset
    nlsq.streaming_optimizer
+   nlsq.streaming_config
    nlsq.memory_manager
    large_datasets_api
 
@@ -120,6 +121,7 @@ Complete Module Listing
 **Large Dataset Modules**:
 - :doc:`nlsq.large_dataset` - Chunked fitting for large data
 - :doc:`nlsq.streaming_optimizer` - Streaming optimization for unlimited data (NEW in v0.1.1)
+- :doc:`nlsq.streaming_config` - Configuration for streaming optimizer (v0.2.0+)
 - :doc:`nlsq.memory_manager` - Intelligent memory management (NEW in v0.1.1)
 - :doc:`large_datasets_api` - Comprehensive large dataset guide
 
