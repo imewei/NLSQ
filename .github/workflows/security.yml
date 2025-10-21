@@ -32,10 +32,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pip-audit safety
 
-      - name: Run pip-audit
+      - name: Run pip-audit on lock file
         run: |
-          pip-audit --require-hashes --disable-pip \
-            -r requirements.txt -r requirements-dev.txt || true
+          # Audit the lock file which has pinned versions
+          pip-audit -r requirements-lock.txt || true
 
       - name: Run Safety check
         run: |
@@ -43,7 +43,7 @@ jobs:
 
       - name: Check for known vulnerabilities in installed packages
         run: |
-          pip install -r requirements-dev.txt
+          pip install -e .[dev]
           pip-audit || echo "::warning::Vulnerabilities found but not blocking"
 
   # SAST (Static Application Security Testing)
@@ -114,7 +114,8 @@ jobs:
 
       - name: Check licenses
         run: |
-          pip install -r requirements.txt
+          # Install only runtime dependencies for license check
+          pip install -e .
           pip-licenses --format=markdown --output-file=licenses.md
           cat licenses.md
 
