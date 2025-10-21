@@ -584,9 +584,7 @@ Best Practices Summary
 Related Documentation
 ---------------------
 
--  `Performance Optimization Guide <performance_optimization.md>`__ -
-   GPU acceleration, JIT compilation
--  `Migration Guide <migration_guide.md>`__ - Migrating from SciPy
--  `Troubleshooting Guide <troubleshooting.md>`__ - Common issues and
-   solutions
--  `API Reference <../api_reference.md>`__ - Complete API documentation
+-  :doc:`performance_guide` - GPU acceleration, JIT compilation
+-  :doc:`migration_scipy` - Migrating from SciPy
+-  :doc:`troubleshooting` - Common issues and solutions
+-  :doc:`../api/index` - Complete API documentation

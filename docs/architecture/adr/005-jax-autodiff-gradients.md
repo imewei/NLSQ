@@ -128,7 +128,7 @@ Comprehensive testing validates the change:
 ## References
 
 - [streaming_optimizer.py Implementation](../../../nlsq/streaming_optimizer.py#L374-L443)
-- [JAX Autodiff Documentation](https://jax.readthedocs.io/en/latest/jax-101/04-autodifferentiation.html)
+- [JAX Autodiff Documentation](https://docs.jax.dev/en/latest/automatic-differentiation.html)
 - [Commit 2ed084f](https://github.com/imewei/NLSQ/commit/2ed084f)
 
 ## Alternatives Considered

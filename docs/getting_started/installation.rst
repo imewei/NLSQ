@@ -494,9 +494,9 @@ Getting Help
 
 If you encounter issues:
 
-1. Check the `GitHub Issues <https://github.com/imewei/NLSQ/issues>`_
-2. Review the `JAX installation guide <https://jax.readthedocs.io/en/latest/installation.html>`_
-3. Ask questions in `GitHub Discussions <https://github.com/imewei/NLSQ/discussions>`_
+1. Check the `GitHub Issues <https://github.com/imewei/NLSQ/issues>`_ for known issues and solutions
+2. Review the `JAX installation guide <https://docs.jax.dev/en/latest/installation.html>`_ for JAX-specific setup
+3. Search existing issues or create a new one for help
 
 Version Compatibility
 ----------------------

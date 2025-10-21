@@ -651,12 +651,10 @@ Performance Optimization Flowchart
 Related Documentation
 ---------------------
 
--  `Advanced Features Guide <advanced_features.md>`__ - Callbacks,
-   robust fitting, diagnostics
--  `Migration Guide <migration_guide.md>`__ - Migrating from SciPy
--  `Troubleshooting Guide <troubleshooting.md>`__ - Common issues and
-   solutions
--  `API Reference <../api_reference.md>`__ - Complete API documentation
+-  :doc:`advanced_features` - Callbacks, robust fitting, diagnostics
+-  :doc:`migration_scipy` - Migrating from SciPy
+-  :doc:`troubleshooting` - Common issues and solutions
+-  :doc:`../api/index` - Complete API documentation
 
 --------------
 

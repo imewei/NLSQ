@@ -470,7 +470,7 @@ If ``< 1000`` points: NLSQ overhead may not be worth it. Use SciPy.
 
 -  Use GPU for datasets > 10K points
 -  Use ``CurveFit`` class for multiple fits
--  See `Performance Optimization Guide <performance_optimization.md>`__
+-  See :doc:`performance_guide`
 
 Issue: Memory usage keeps growing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -812,9 +812,9 @@ If this guide doesn’t resolve your issue:
 
 1. **Check documentation:**
 
-   -  `API Reference <../api_reference.md>`__
-   -  `Advanced Features <advanced_features.md>`__
-   -  `Performance Guide <performance_optimization.md>`__
+   -  :doc:`../api/index`
+   -  :doc:`advanced_features`
+   -  :doc:`performance_guide`
 
 2. **Search GitHub issues:**
 

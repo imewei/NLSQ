@@ -960,7 +960,7 @@ Additional Resources
 --------------------
 
 -  `NLSQ Documentation <https://nlsq.readthedocs.io>`__
--  `JAX Documentation <https://jax.readthedocs.io>`__
--  `Performance Optimization Guide <performance_optimization.md>`__
--  `Advanced Features Guide <advanced_features.md>`__
--  `Troubleshooting Guide <troubleshooting.md>`__
+-  `JAX Documentation <https://docs.jax.dev/en/latest/>`__
+-  :doc:`Performance Optimization Guide <performance_guide>`
+-  :doc:`Advanced Features Guide <advanced_features>`
+-  :doc:`Troubleshooting Guide <troubleshooting>`

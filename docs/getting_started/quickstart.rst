@@ -261,4 +261,4 @@ Troubleshooting
 2. **Convergence failures**: Try different initial guesses or check data quality
 3. **Performance issues**: Use ``curve_fit_large`` for datasets > 100k points
 
-Need help? Check the `GitHub Issues <https://github.com/imewei/NLSQ/issues>`_ or `Discussions <https://github.com/imewei/NLSQ/discussions>`_.
+Need help? Check the `GitHub Issues <https://github.com/imewei/NLSQ/issues>`_ for support and bug reports.

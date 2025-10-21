@@ -546,4 +546,4 @@ Further Reading
 
 - :doc:`../api/nlsq.large_dataset` - Comprehensive technical details
 - :doc:`../api/large_datasets_api` - Complete function documentation
-- `JAX Documentation <https://jax.readthedocs.io/>`_ - Understanding JAX transformations
+- `JAX Documentation <https://docs.jax.dev/en/latest/>`_ - Understanding JAX transformations
