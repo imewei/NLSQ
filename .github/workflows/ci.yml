@@ -49,6 +49,31 @@ jobs:
             echo "For reproducible builds, generate with: pip freeze > requirements-lock.txt"
           fi
 
+      - name: Verify JAX platform-specific installation docs
+        run: |
+          echo "✓ Checking that documentation mentions jax[cuda12-local] for Linux GPU..."
+
+          # Check README.md mentions cuda12-local
+          if ! grep -q 'jax\[cuda12-local\]' README.md; then
+            echo "❌ README.md must document jax[cuda12-local] for Linux GPU installation!"
+            exit 1
+          fi
+
+          # Check requirements-lock.txt has platform notes
+          if ! grep -q 'cuda12-local' requirements-lock.txt; then
+            echo "❌ requirements-lock.txt must include jax[cuda12-local] installation notes!"
+            exit 1
+          fi
+
+          # Verify pyproject.toml uses base jax (not cuda12-local as mandatory)
+          if grep -q 'jax\[cuda12-local\]' pyproject.toml; then
+            echo "❌ pyproject.toml must NOT use jax[cuda12-local] (it's Linux-only)!"
+            echo "Use base 'jax>=X.Y.Z' and document platform extras separately."
+            exit 1
+          fi
+
+          echo "✅ JAX platform-specific installation is properly documented"
+
   # Stage 2: Code Quality
   code-quality:
     name: Code Quality
