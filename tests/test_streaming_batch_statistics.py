@@ -459,13 +459,17 @@ class TestBatchStatisticsWithFailures:
         assert len(batch_times) > 0
 
         for batch_time in batch_times:
-            assert batch_time > 0  # Should take some time
+            assert (
+                batch_time >= 0
+            )  # Should be non-negative (may be 0.0 on Windows with fast ops)
             assert batch_time < 5.0  # Should be reasonably fast
 
         # Check that batch stats contain timing
         for batch_stat in optimizer.batch_stats_buffer:
             assert "batch_time" in batch_stat
-            assert batch_stat["batch_time"] > 0
+            assert (
+                batch_stat["batch_time"] >= 0
+            )  # Allow 0.0 for timing precision on Windows
             assert batch_stat["batch_time"] < 5.0
 
     def test_gradient_norms_tracked_correctly(self):
