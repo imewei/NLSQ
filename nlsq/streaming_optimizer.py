@@ -1225,12 +1225,12 @@ class StreamingOptimizer:
         ----------
         data_source : various
             Source of data. Can be:
-            - Tuple of (x_data, y_data) arrays
+            - Tuple of ``(x_data, y_data)`` arrays
             - HDF5 file path (string ending in .h5)
-            - Generator function yielding (x_batch, y_batch)
+            - Generator function yielding ``(x_batch, y_batch)``
             - Iterator producing (x, y) samples
         func : Callable
-            Model function with signature f(x, *params). Must be JIT-compilable.
+            Model function with signature ``f(x, *params)``. Must be JIT-compilable.
         p0 : np.ndarray
             Initial parameters. Required even when resuming from checkpoint
             (used if checkpoint load fails).
@@ -2011,9 +2011,9 @@ def fit_unlimited_data(
     Parameters
     ----------
     data_generator : Callable
-        Generator function yielding (x_batch, y_batch) tuples
+        Generator function yielding ``(x_batch, y_batch)`` tuples
     func : Callable
-        Model function f(x, *params)
+        Model function ``f(x, *params)``
     p0 : np.ndarray
         Initial parameters
     config : StreamingConfig, optional

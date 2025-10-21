@@ -81,6 +81,7 @@ Documentation
    guides/performance_guide
    guides/large_datasets
    guides/troubleshooting
+   migration/streaming_fault_tolerance
 
 .. toctree::
    :maxdepth: 2

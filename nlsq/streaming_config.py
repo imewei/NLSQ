@@ -234,7 +234,7 @@ class StreamingConfig:
 
     References
     ----------
-    .. [1] Specification: Streaming Optimizer Fault Tolerance
+    .. [StreamingFaultTolerance] Specification: Streaming Optimizer Fault Tolerance
            agent-os/specs/2025-10-19-streaming-optimizer-fault-tolerance/spec.md
     """
 

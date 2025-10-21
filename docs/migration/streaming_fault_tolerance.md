@@ -1,4 +1,4 @@
-**# Migration Guide: Streaming Optimizer Fault Tolerance
+# Migration Guide: Streaming Optimizer Fault Tolerance
 
 **Version:** v0.2.0+
 **Date:** 2025-10-20
