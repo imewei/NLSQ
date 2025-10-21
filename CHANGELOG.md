@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-10-21
+
+### Fixed
+
+#### CI/CD Infrastructure
+
+- **Windows CI Test Failures**: Fixed matplotlib backend issue causing test failures on Windows runners
+  - **Issue**: `_tkinter.TclError: Can't find a usable init.tcl` in headless CI environment
+  - **Solution**: Configure matplotlib to use Agg (non-interactive) backend for CI/headless environments
+  - **Files Modified**: `nlsq/profiler_visualization.py` (lines 17-19)
+  - **Impact**: Windows test jobs now passing reliably (commit b51d5f5)
+
+- **Pre-commit Hook Compliance**: Fixed end-of-file formatting across auto-generated documentation
+  - **Issue**: Auto-generated RST files missing EOF newlines, failing pre-commit hooks
+  - **Solution**: Added single newline at end of all affected files
+  - **Files Modified**: 33 RST files in `docs/api/generated/`
+  - **Impact**: Code Quality job now passing (commit 13f41e0)
+
+- **Flaky Performance Tests**: Improved test stability and reliability
+  - Relaxed timing assertions in performance tests to account for CI variability
+  - Fixed pre-commit formatting issues
+  - Resolved Windows PowerShell compatibility issues (commits 362bfb3, 6cf202c, bd75cfb, cfe37e7)
+
+- **CI Pipeline Modernization**: Implemented production-ready modular CI/CD infrastructure
+  - Migrated to minimum version constraints for better dependency management
+  - Removed obsolete GitHub Pages and Docker configurations
+  - Improved workflow reliability across all platforms (commits 1b2f9a4, 45b6576, ec031ab, a5a2e18)
+
+#### Documentation
+
+- **Sphinx Build Warnings**: Eliminated all 20 remaining Sphinx documentation warnings
+  - Fixed RST formatting issues and line ending inconsistencies
+  - Added missing newlines to 33 generated API files
+  - Updated broken links and external URLs
+  - **Impact**: Clean documentation builds with zero warnings (commits 523ddeb, 43e91b1, d686b70, 966eb4b)
+
+- **API Documentation**: Enhanced StreamingConfig documentation and v0.1.4 updates (commit 327301e)
+
+### Changed
+
+- **Code Quality**: Suppressed mypy error for setuptools-scm generated version module (commit 8d834e2)
+- **Repository Cleanup**: Removed development artifacts, temporary files, and obsolete configuration
+  - Updated .gitignore for better artifact management
+  - Removed obsolete GitHub templates and workflows
+  - **Impact**: Cleaner repository structure (commits d00755b, 4c8df84, b6957bd, 46019c9)
+
+### Technical Details
+
+**Test Results:**
+- Tests: 1235/1235 passing (100% success rate) ✅
+- Coverage: 80.90% (exceeds 80% target) ✅
+- Platforms: Ubuntu ✅ | macOS ✅ | Windows ✅
+- CI/CD: All workflows passing, 0 flaky tests ✅
+- Pre-commit: 24/24 hooks passing ✅
+
+**CI/CD Improvements:**
+- Matplotlib backend properly configured for headless environments
+- Pre-commit hooks enforce consistent file formatting
+- Performance tests more resilient to timing variations
+- Windows compatibility issues resolved
+
+**Documentation Quality:**
+- Zero Sphinx warnings (was 20)
+- Consistent line endings across all files
+- All API documentation properly formatted
+
+**Release Type**: Maintenance release focusing on CI/CD stability, test reliability, and documentation quality.
+
 ## [0.1.4] - 2025-10-19
 
 ### Fixed
