@@ -262,7 +262,9 @@ class TestPerformanceProfiler:
         assert comparison["profile_2"] == "fast"
         # Relaxed threshold to account for CI timing variance (was > 1.0)
         assert comparison["speedup"] > 0.9  # slow / fast should be ~2.0, allow variance
-        assert comparison["time_difference"] > -0.05  # Allow small negative due to timing jitter
+        assert (
+            comparison["time_difference"] > -0.05
+        )  # Allow small negative due to timing jitter
 
     def test_compare_profiles_empty(self):
         """Test comparison with missing profile."""

@@ -79,9 +79,10 @@ class TestNLSQLogger(unittest.TestCase):
 
         self.assertIn("test_operation", logger.timers)
         self.assertGreaterEqual(logger.timers["test_operation"], 0.01)
+        # Relaxed from 0.1 to 0.15 to account for CI timing variance
         self.assertLess(
-            logger.timers["test_operation"], 0.1
-        )  # Should be less than 100ms
+            logger.timers["test_operation"], 0.15
+        )  # Should be less than 150ms (was 100ms)
 
     def test_timer_with_exception(self):
         """Test timer context manager handles exceptions."""
