@@ -16,6 +16,14 @@ coverage_baseline.txt
 curve_fit_result*.png
 radioactive_decay.png
 
+# Example/Demo output files
+*.png
+*.log
+checkpoints*/
+streaming_diagnostics_example.json
+optimization.log
+combined.log
+
 # NLSQ specific
 nlsq_debug_*.log
 nlsq_profile_*.txt
