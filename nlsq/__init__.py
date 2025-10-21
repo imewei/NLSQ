@@ -16,7 +16,7 @@ Examples
 
 # Version information
 try:
-    from nlsq._version import __version__
+    from nlsq._version import __version__  # type: ignore[import-not-found]
 except ImportError:
     __version__ = "0.0.0+unknown"
 
