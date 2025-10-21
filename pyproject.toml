@@ -44,7 +44,7 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0.0",           # Requires NumPy 2.x (tested on 2.3.4)
     "scipy>=1.14.0",          # Tested on 1.16.2
-    "jax[cuda12-local]>=0.6.0",  # JAX with system CUDA 12 support (tested on 0.8.0)
+    "jax>=0.6.0",             # JAX base (tested on 0.8.0) - users install platform-specific extras
     "matplotlib>=3.9.0",      # Tested on 3.10.7
     "psutil>=6.0.0",          # For memory monitoring (tested on 7.1.0)
     "tqdm>=4.66.0",           # For progress bars (tested on 4.67.1)

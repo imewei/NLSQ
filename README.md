@@ -474,22 +474,32 @@ Some standouts:
 ### Requirements
 
 - **Python 3.12 or higher** (3.13 also supported)
-- **JAX 0.6.0+** with **CUDA 12 system support** (tested with 0.8.0)
+- **JAX 0.6.0+** (tested with 0.8.0)
 - **NumPy 2.0+** ⚠️ **Breaking change from NumPy 1.x** (tested with 2.3.4)
 - **SciPy 1.14.0+** (tested with 1.16.2)
 
-**⚠️ Important:** NLSQ requires system CUDA 12 for GPU support. Install `jax[cuda12-local]` to use your system's CUDA installation.
+**GPU Support**: JAX extras are platform-specific. Choose the appropriate version for your system (see installation instructions below).
 
 ### Quick Install
 
-#### Linux/Mac (Recommended)
+#### Linux
 
 ```bash
-# For CPU-only
-pip install --upgrade "jax[cpu]>=0.6.0" nlsq
+# CPU only
+pip install nlsq "jax[cpu]>=0.6.0"
 
-# For GPU with system CUDA 12 (recommended for best performance)
-pip install --upgrade "jax[cuda12-local]>=0.6.0" nlsq
+# GPU with system CUDA 12 (best performance, requires CUDA installed)
+pip install nlsq "jax[cuda12-local]>=0.6.0"
+
+# GPU with bundled CUDA 12 (larger download, no CUDA installation needed)
+pip install nlsq "jax[cuda12]>=0.6.0"
+```
+
+#### macOS
+
+```bash
+# macOS only supports CPU
+pip install nlsq "jax[cpu]>=0.6.0"
 ```
 
 #### Development Installation
@@ -535,8 +545,8 @@ conda activate nlsq
 # Install CUDA toolkit
 conda install -c conda-forge cuda-toolkit=12.1
 
-# Install JAX with CUDA support (latest compatible)
-pip install "jax[cuda12-local]>=0.6.0"
+# Install JAX with CUDA support (use cuda12_pip for Windows)
+pip install "jax[cuda12_pip]>=0.6.0"
 pip install nlsq
 ```
 

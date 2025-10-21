@@ -10,10 +10,10 @@
 #
 # BREAKING CHANGE (v0.2.0): h5py is now a required dependency
 
-# Core dependencies (tested versions: numpy 2.3.4, scipy 1.16.2, jax 0.8.0 with CUDA 12)
+# Core dependencies (tested versions: numpy 2.3.4, scipy 1.16.2, jax 0.8.0)
 numpy>=2.0.0       # NumPy 2.x required
 scipy>=1.14.0
-jax[cuda12-local]>=0.6.0  # JAX with system CUDA 12 support
+jax>=0.6.0  # Install platform-specific JAX extras separately (see README.md)
 
 # Visualization and utilities
 matplotlib>=3.9.0
