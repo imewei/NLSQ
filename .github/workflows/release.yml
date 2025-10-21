@@ -173,8 +173,8 @@ jobs:
           print(f'✅ curve_fit test passed: a={popt[0]:.2f}, b={popt[1]:.2f}')
 
           # Test reusable fitter
-          fitter = nlsq.CurveFit(exponential)
-          popt2, pcov2 = fitter.fit(x, y)
+          fitter = nlsq.CurveFit()
+          popt2, pcov2 = fitter.curve_fit(exponential, x, y)
           print(f'✅ CurveFit test passed: a={popt2[0]:.2f}, b={popt2[1]:.2f}')
           "
 
