@@ -16,6 +16,7 @@ Run this example:
 import time
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
 
 from nlsq import StreamingConfig, StreamingOptimizer
@@ -23,7 +24,7 @@ from nlsq import StreamingConfig, StreamingOptimizer
 
 def gaussian_model(x, amp, center, width):
     """Gaussian model: y = amp * exp(-0.5 * ((x - center) / width)^2)"""
-    return amp * np.exp(-0.5 * ((x - center) / width) ** 2)
+    return amp * jnp.exp(-0.5 * ((x - center) / width) ** 2)
 
 
 def simulate_interruption(iteration, params, loss):

@@ -14,6 +14,7 @@ Run this example:
     python examples/streaming/01_basic_fault_tolerance.py
 """
 
+import jax.numpy as jnp
 import numpy as np
 
 from nlsq import StreamingConfig, StreamingOptimizer
@@ -21,7 +22,7 @@ from nlsq import StreamingConfig, StreamingOptimizer
 
 def exponential_decay(x, a, b):
     """Exponential decay model: y = a * exp(-b * x)"""
-    return a * np.exp(-b * x)
+    return a * jnp.exp(-b * x)
 
 
 def main():

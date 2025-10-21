@@ -13,6 +13,7 @@ Run this example:
     python examples/streaming/03_custom_retry_settings.py
 """
 
+import jax.numpy as jnp
 import numpy as np
 
 from nlsq import StreamingConfig, StreamingOptimizer
@@ -21,7 +22,7 @@ from nlsq import StreamingConfig, StreamingOptimizer
 def noisy_exponential(x, a, b):
     """Exponential model with potential numerical issues"""
     # This model can produce NaN/Inf for certain parameter combinations
-    return a * np.exp(-b * x)
+    return a * jnp.exp(-b * x)
 
 
 def inject_noise_into_data(x_data, y_data, noise_rate=0.1):
@@ -29,7 +30,8 @@ def inject_noise_into_data(x_data, y_data, noise_rate=0.1):
     n_samples = len(y_data)
     n_corrupted = int(n_samples * noise_rate)
     corrupt_indices = np.random.choice(n_samples, n_corrupted, replace=False)
-    y_corrupted = y_data.copy()
+    # Convert to numpy array to allow in-place modification
+    y_corrupted = np.array(y_data, copy=True)
     y_corrupted[corrupt_indices] = np.nan
     return y_corrupted
 
