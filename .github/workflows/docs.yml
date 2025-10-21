@@ -122,33 +122,6 @@ jobs:
               echo "::warning::Notebook $notebook failed (not blocking)"
           done
 
-  # Deploy to GitHub Pages (main branch only)
-  deploy-docs:
-    name: Deploy to GitHub Pages
-    runs-on: ubuntu-latest
-    needs: [build-docs, validate-docstrings, test-examples]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download documentation artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: sphinx-docs
-          path: docs/_build/html/
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/_build/html/
-          force_orphan: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'docs: deploy documentation for ${{ github.sha }}'
-
   # Documentation Coverage Report
   doc-coverage:
     name: Documentation Coverage
