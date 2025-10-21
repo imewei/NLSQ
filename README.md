@@ -474,11 +474,11 @@ Some standouts:
 ### Requirements
 
 - **Python 3.12 or higher** (3.13 also supported)
-- **JAX 0.6.0+** (tested with 0.7.2)
-- **NumPy 2.0+** ⚠️ **Breaking change from NumPy 1.x** (tested with 2.3.3)
+- **JAX 0.6.0+** with **CUDA 12 system support** (tested with 0.8.0)
+- **NumPy 2.0+** ⚠️ **Breaking change from NumPy 1.x** (tested with 2.3.4)
 - **SciPy 1.14.0+** (tested with 1.16.2)
 
-For detailed dependency information and version management, see [REQUIREMENTS.md](REQUIREMENTS.md).
+**⚠️ Important:** NLSQ requires system CUDA 12 for GPU support. Install `jax[cuda12-local]` to use your system's CUDA installation.
 
 ### Quick Install
 
@@ -488,8 +488,8 @@ For detailed dependency information and version management, see [REQUIREMENTS.md
 # For CPU-only
 pip install --upgrade "jax[cpu]>=0.6.0" nlsq
 
-# For GPU with CUDA 12
-pip install --upgrade "jax[cuda12]>=0.6.0" nlsq
+# For GPU with system CUDA 12 (recommended for best performance)
+pip install --upgrade "jax[cuda12-local]>=0.6.0" nlsq
 ```
 
 #### Development Installation
@@ -536,7 +536,7 @@ conda activate nlsq
 conda install -c conda-forge cuda-toolkit=12.1
 
 # Install JAX with CUDA support (latest compatible)
-pip install "jax[cuda12_local]>=0.6.0"
+pip install "jax[cuda12-local]>=0.6.0"
 pip install nlsq
 ```
 
