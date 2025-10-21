@@ -257,10 +257,6 @@ Thumbs.db
 *.bak
 *.orig
 
-# Project specific documentation files (not ignored)
-# CLAUDE.md - Claude Code instructions
-# WARP.md - Warp instructions
-
 # Serena MCP server data
 .serena/
 
