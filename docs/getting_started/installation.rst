@@ -6,26 +6,31 @@ This guide provides comprehensive installation instructions for NLSQ across diff
 Quick Start
 -----------
 
+**Important**: GPU acceleration is only supported on Linux. Windows and macOS are CPU-only.
+
 For most users, the simplest installation method is:
 
-**Linux/macOS**::
+**Linux**::
 
     # For CPU-only (basic features)
-    pip install --upgrade "jax[cpu]>=0.4.20" nlsq
+    pip install nlsq "jax[cpu]>=0.6.0"
 
-    # For GPU with CUDA 12 (basic features)
-    pip install --upgrade "jax[cuda12]>=0.4.20" nlsq
+    # For GPU with system CUDA 12 (best performance, requires CUDA installed)
+    pip install nlsq "jax[cuda12-local]>=0.6.0"
 
-    # With all advanced features (recommended)
-    pip install --upgrade "jax[cpu]>=0.4.20" nlsq[all]
-
-**Windows**::
-
-    # CPU-only (works on all Windows versions)
-    pip install "jax[cpu]>=0.4.20" nlsq
+    # For GPU with bundled CUDA 12 (larger download, no system CUDA needed)
+    pip install nlsq "jax[cuda12]>=0.6.0"
 
     # With all advanced features (recommended)
-    pip install "jax[cpu]>=0.4.20" nlsq[all]
+    pip install nlsq[all] "jax[cpu]>=0.6.0"
+
+**macOS/Windows**::
+
+    # CPU-only (GPU not supported)
+    pip install nlsq "jax[cpu]>=0.6.0"
+
+    # With all advanced features (recommended)
+    pip install nlsq[all] "jax[cpu]>=0.6.0"
 
 Installation Options
 --------------------
@@ -90,7 +95,7 @@ System Requirements
 
 Core dependencies:
 
-- JAX 0.4.20 - 0.7.2 (JIT compilation and automatic differentiation)
+- JAX 0.6.0 - 0.7.2 (JIT compilation and automatic differentiation)
 - NumPy 1.26.0+ (numerical arrays)
 - SciPy 1.11.0+ (optimization algorithms)
 
@@ -123,24 +128,28 @@ NLSQ works best on Linux systems with full JAX support.
     source nlsq-env/bin/activate
 
     # Install NLSQ with CPU support
-    pip install --upgrade "jax[cpu]>=0.4.20" nlsq
+    pip install nlsq "jax[cpu]>=0.6.0"
 
     # Verify installation
     python -c "import nlsq; print(f'NLSQ {nlsq.__version__} installed successfully')"
 
-**GPU installation (CUDA 12):**
+**GPU installation (CUDA 12) - Linux Only:**
 
 .. code-block:: bash
 
-    # Ensure NVIDIA drivers are installed and up to date
+    # Ensure NVIDIA drivers and CUDA 12 are installed
     nvidia-smi
+    nvcc --version  # Should show CUDA 12.x
 
     # Create virtual environment
     python -m venv nlsq-env
     source nlsq-env/bin/activate
 
-    # Install NLSQ with CUDA 12 support
-    pip install --upgrade "jax[cuda12]>=0.4.20" nlsq
+    # Option 1: System CUDA 12 (best performance)
+    pip install nlsq "jax[cuda12-local]>=0.6.0"
+
+    # Option 2: Bundled CUDA 12 (no system CUDA needed)
+    pip install nlsq "jax[cuda12]>=0.6.0"
 
     # Verify GPU access
     python -c "import jax; print(f'JAX devices: {jax.devices()}')"
@@ -148,7 +157,7 @@ NLSQ works best on Linux systems with full JAX support.
 macOS
 ~~~~~
 
-macOS users can install NLSQ with CPU acceleration. GPU support is limited to Apple Silicon Macs.
+**Important**: macOS does not support GPU acceleration with CUDA. Only CPU mode is available.
 
 **Intel Macs:**
 
@@ -161,8 +170,8 @@ macOS users can install NLSQ with CPU acceleration. GPU support is limited to Ap
     python3.12 -m venv nlsq-env
     source nlsq-env/bin/activate
 
-    # Install NLSQ
-    pip install --upgrade "jax[cpu]>=0.4.20" nlsq
+    # Install NLSQ (CPU-only)
+    pip install nlsq "jax[cpu]>=0.6.0"
 
 **Apple Silicon Macs (M1/M2/M3):**
 
@@ -172,28 +181,35 @@ macOS users can install NLSQ with CPU acceleration. GPU support is limited to Ap
     python -m venv nlsq-env
     source nlsq-env/bin/activate
 
-    # Install with Metal support (experimental)
+    # Install with Metal support (experimental, CPU-only)
     pip install --upgrade jax-metal>=0.0.5
-    pip install --upgrade "jax[cpu]>=0.4.20" nlsq
+    pip install nlsq "jax[cpu]>=0.6.0"
 
 Windows
 ~~~~~~~
 
-Windows users have several installation options.
+**Important**: Windows does not support GPU acceleration with CUDA natively. Use WSL2 for GPU support.
 
-**Option 1: WSL2 (Recommended)**
+Windows users have two installation options:
 
-Windows Subsystem for Linux 2 provides the best compatibility:
+**Option 1: WSL2 (Recommended for GPU support)**
+
+Windows Subsystem for Linux 2 provides full Linux compatibility including GPU support:
 
 .. code-block:: bash
 
     # Install WSL2 and Ubuntu
     wsl --install -d Ubuntu
 
-    # Inside WSL2, follow Linux installation instructions
+    # Inside WSL2, follow Linux installation instructions above
     python -m venv nlsq-env
     source nlsq-env/bin/activate
-    pip install --upgrade "jax[cpu]>=0.4.20" nlsq
+
+    # For CPU-only
+    pip install nlsq "jax[cpu]>=0.6.0"
+
+    # For GPU (requires CUDA 12 installed in WSL2)
+    pip install nlsq "jax[cuda12-local]>=0.6.0"
 
 **Option 2: Native Windows (CPU-only)**
 
@@ -203,32 +219,8 @@ Windows Subsystem for Linux 2 provides the best compatibility:
     python -m venv nlsq-env
     nlsq-env\Scripts\activate
 
-    # Install NLSQ
-    pip install "jax[cpu]>=0.4.20" nlsq
-
-**Option 3: Native Windows with GPU (Advanced)**
-
-For CUDA support on Windows:
-
-.. code-block:: bash
-
-    # Prerequisites:
-    # 1. Install CUDA Toolkit 12.x from NVIDIA
-    # 2. Install Visual Studio Build Tools
-    # 3. Install Anaconda/Miniconda (recommended)
-
-    # Create Conda environment
-    conda create -n nlsq python=3.12
-    conda activate nlsq
-
-    # Install CUDA toolkit
-    conda install -c conda-forge cuda-toolkit=12.1
-
-    # Install JAX with CUDA support
-    pip install "jax[cuda12_local]>=0.4.20"
-
-    # Install NLSQ
-    pip install nlsq
+    # Install NLSQ (CPU-only)
+    pip install nlsq "jax[cpu]>=0.6.0"
 
 Development Installation
 ------------------------
@@ -269,7 +261,7 @@ For containerized environments:
         && rm -rf /var/lib/apt/lists/*
 
     # Install NLSQ
-    RUN pip install --upgrade "jax[cpu]>=0.4.20" nlsq
+    RUN pip install --upgrade "jax[cpu]>=0.6.0" nlsq
 
     # Verify installation
     RUN python -c "import nlsq; print(f'NLSQ {nlsq.__version__} ready')"
@@ -288,7 +280,7 @@ For containerized environments:
         && rm -rf /var/lib/apt/lists/*
 
     # Install NLSQ with CUDA support
-    RUN pip3.12 install --upgrade "jax[cuda12]>=0.4.20" nlsq
+    RUN pip3.12 install --upgrade "jax[cuda12]>=0.6.0" nlsq
 
 Verification and Testing
 ------------------------
@@ -452,7 +444,7 @@ Common Issues and Solutions
 .. code-block:: bash
 
     # Install JAX explicitly
-    pip install --upgrade "jax>=0.4.20"
+    pip install --upgrade "jax>=0.6.0"
 
 **CUDA Not Found Error**
 
@@ -463,7 +455,7 @@ Common Issues and Solutions
     nvidia-smi
 
     # Reinstall JAX with CUDA support
-    pip install --upgrade --force-reinstall "jax[cuda12]>=0.4.20"
+    pip install --upgrade --force-reinstall "jax[cuda12]>=0.6.0"
 
 **Memory Error with Large Datasets**
 
@@ -487,7 +479,7 @@ Common Issues and Solutions
 .. code-block:: bash
 
     # Use --user flag if needed
-    pip install --user "jax[cpu]>=0.4.20" nlsq
+    pip install --user "jax[cpu]>=0.6.0" nlsq
 
 Getting Help
 ~~~~~~~~~~~~
@@ -510,7 +502,7 @@ NLSQ is tested with the following version combinations:
 
 **JAX Versions:**
 
-- JAX 0.4.20 - 0.4.35 (stable)
+- JAX 0.6.0 - 0.4.35 (stable)
 - JAX 0.5.0 - 0.6.0 (stable)
 - JAX 0.7.0 - 0.7.2 (latest)
 

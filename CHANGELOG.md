@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### JAX Platform-Specific Installation
+- **CI Validation Test**: Added automated testing to ensure JAX platform-specific installation is properly documented
+  - **Purpose**: Prevent accidentally making Linux-only CUDA packages mandatory across all platforms
+  - **Checks**:
+    - README.md documents `jax[cuda12-local]` for Linux GPU installations
+    - requirements-lock.txt includes platform-specific installation notes
+    - pyproject.toml uses base jax (not cuda12-local as mandatory dependency)
+  - **Files Modified**: `.github/workflows/ci.yml` (new validation step)
+  - **Impact**: Catches platform dependency errors in CI before they reach users (commit 699a666)
+
+### Changed
+
+#### CUDA 12 Migration
+- **JAX CUDA 12 Support**: Migrated to JAX with system CUDA 12 support for improved GPU performance
+  - **Migration**: Updated from CUDA 11.x to CUDA 12.x for Linux GPU users
+  - **Installation**: Platform-specific JAX extras now documented separately
+    - Linux GPU (system CUDA 12): `pip install nlsq "jax[cuda12-local]>=0.6.0"`
+    - Linux GPU (bundled CUDA 12): `pip install nlsq "jax[cuda12]>=0.6.0"`
+    - CPU-only (all platforms): `pip install nlsq "jax[cpu]>=0.6.0"`
+  - **Files Modified**:
+    - `pyproject.toml` (base jax dependency)
+    - `requirements.txt` (minimum version constraints)
+    - `requirements-lock.txt` (platform-specific notes)
+    - `README.md` (installation instructions)
+  - **Impact**: Better GPU performance on modern systems, clearer cross-platform installation (commits 438e580, a312bc7)
+
+### Fixed
+
+#### Documentation
+- **Platform Support Clarity**: Clarified that GPU acceleration is Linux-only
+  - **Issue**: Documentation implied Windows/macOS might support GPU
+  - **Solution**: Explicit statement that GPU support requires Linux
+  - **Windows Users**: Added WSL2 recommendation for GPU acceleration
+  - **Files Modified**: `README.md` (platform support section)
+  - **Impact**: Users have accurate expectations about GPU availability (commit c820a1e)
+
+- **Cross-Platform JAX Installation**: Fixed accidentally making Linux-only CUDA package mandatory
+  - **Issue**: `pyproject.toml` briefly specified `jax[cuda12-local]>=0.6.0` as mandatory dependency
+  - **Problem**: cuda12-local is Linux-only and would break Windows/macOS installations
+  - **Solution**: Reverted to base `jax>=0.6.0` with platform-specific extras documented separately
+  - **Files Modified**: `pyproject.toml`, `requirements.txt`
+  - **Impact**: Restored cross-platform compatibility (commit f2f2653)
+
 ## [0.1.5] - 2025-10-21
 
 ### Fixed
