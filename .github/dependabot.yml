@@ -1,87 +1,111 @@
----
-# Dependabot configuration for automated dependency updates
-# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+# Dependabot Configuration for NLSQ
+# Automatically creates PRs to update dependencies
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
 
 version: 2
 updates:
-  # GitHub Actions workflow dependencies
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "02:00"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "github-actions"
-      - "automated"
-    commit-message:
-      prefix: "ci"
-      include: "scope"
-    reviewers:
-      - "imewei"
-    assignees:
-      - "imewei"
-
-  # Python package dependencies (pip)
+  # Python dependencies (pip)
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "02:00"
+      time: "09:00"
+      timezone: "America/Chicago"
     open-pull-requests-limit: 10
+    reviewers:
+      - "imewei"
     labels:
       - "dependencies"
       - "python"
-      - "automated"
     commit-message:
-      prefix: "deps"
+      prefix: "chore(deps)"
       include: "scope"
-    reviewers:
-      - "imewei"
-    assignees:
-      - "imewei"
-    # Group updates for related packages
+    # Group updates by category
     groups:
-      jax-stack:
-        patterns:
-          - "jax*"
-        update-types:
-          - "minor"
-          - "patch"
-      numpy-scipy:
+      # Core runtime dependencies
+      core-dependencies:
         patterns:
           - "numpy"
           - "scipy"
+          - "jax*"
+          - "matplotlib"
         update-types:
           - "minor"
           - "patch"
-      testing:
+
+      # Testing dependencies
+      testing-dependencies:
         patterns:
           - "pytest*"
           - "hypothesis"
         update-types:
           - "minor"
           - "patch"
-      linting:
+
+      # Code quality tools
+      code-quality-dependencies:
         patterns:
-          - "ruff"
           - "black"
+          - "ruff"
           - "mypy"
+          - "pre-commit"
+          - "bandit"
+          - "pyupgrade"
         update-types:
           - "minor"
           - "patch"
-    # Allow only specific updates for critical dependencies
-    allow:
-      - dependency-type: "direct"
-      - dependency-type: "indirect"
-        update-types: ["security"]
-    # Ignore alpha/beta/rc releases for stability
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-      # Major updates require manual review
-    # Version constraints
-    versioning-strategy: increase
+
+      # Documentation dependencies
+      docs-dependencies:
+        patterns:
+          - "sphinx*"
+          - "myst-parser"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Chicago"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "imewei"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Docker (if Dockerfile exists)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Chicago"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "imewei"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker)"
+
+# Security updates are handled separately with higher priority
+# Dependabot security updates are enabled by default for all repositories

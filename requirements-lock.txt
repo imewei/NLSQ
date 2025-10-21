@@ -1,12 +1,16 @@
-# NLSQ Complete Environment (Exact Versions)
-# Generated: 2025-10-18
+# NLSQ Locked Dependencies (Exact Versions for Reproducibility)
+# Auto-generated: pip freeze > requirements-lock.txt
+# Last updated: 2025-10-18
 # Python: 3.12.3
 #
-# Complete pip freeze snapshot including all transitive dependencies
-# For runtime-only dependencies, see requirements.txt
-# For development dependencies, see requirements-dev.txt
+# PURPOSE: Complete pip freeze snapshot for 100% reproducible builds
+# - Includes ALL transitive dependencies with exact versions
+# - Use ONLY if you need exact reproducibility (e.g., production deployment)
+# - For development, use: pip install -r requirements-dev.txt
+# - For runtime only, use: pip install -r requirements.txt
 #
-# Install with: pip install -r requirements-full.txt
+# WARNING: This file becomes outdated quickly. Regenerate periodically with:
+#   pip install -r requirements-dev.txt && pip freeze > requirements-lock.txt
 
 alabaster==1.0.0
 anyio==4.11.0
