@@ -2,6 +2,35 @@
 
 ## Successful Fixes
 
+### Pattern: powershell-line-continuation-001
+**Error Pattern**: `ParserError.*Missing expression after unary operator '--'`
+
+**Root Cause**: PowerShell does not support backslash (`\`) for line continuation. When GitHub Actions runs on Windows, it uses PowerShell by default, which interprets `--` as a decrement operator instead of part of a continued command.
+
+**Solution Applied**: Add `shell: bash` to force bash shell on all platforms
+**Confidence**: 98%
+**Success Rate**: 1/1 (100%)
+**Applicable To**: GitHub Actions workflows with multi-line commands on Windows runners
+
+**Example Fix**:
+```yaml
+- name: Run tests with coverage
+  shell: bash  # Add this line
+  run: |
+    pytest tests/ -v --cov=nlsq --cov-report=xml --cov-report=term \
+      --cov-fail-under=${{ env.COVERAGE_THRESHOLD }}
+```
+
+**Related Patterns**: Windows compatibility, GitHub Actions shell configuration, cross-platform CI
+**Platform Impact**: Windows only (Linux/macOS use bash by default)
+
+**Last Applied**: 2025-10-21
+**Workflow Runs Fixed**: #18672673791, #18672479983, #18672349820
+**Time to Resolution**: ~5 minutes
+**Commit**: cfe37e7
+
+---
+
 ### Pattern: mypy-import-not-found-setuptools-scm
 **Error Pattern**: `Cannot find implementation or library stub for module named "nlsq._version"`
 
