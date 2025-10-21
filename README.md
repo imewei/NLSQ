@@ -478,7 +478,7 @@ Some standouts:
 - **NumPy 2.0+** ⚠️ **Breaking change from NumPy 1.x** (tested with 2.3.4)
 - **SciPy 1.14.0+** (tested with 1.16.2)
 
-**GPU Support**: JAX extras are platform-specific. Choose the appropriate version for your system (see installation instructions below).
+**GPU Support**: Only Linux supports GPU acceleration. Windows and macOS are CPU-only.
 
 ### Quick Install
 
@@ -491,14 +491,14 @@ pip install nlsq "jax[cpu]>=0.6.0"
 # GPU with system CUDA 12 (best performance, requires CUDA installed)
 pip install nlsq "jax[cuda12-local]>=0.6.0"
 
-# GPU with bundled CUDA 12 (larger download, no CUDA installation needed)
+# GPU with bundled CUDA 12 (larger download, no system CUDA needed)
 pip install nlsq "jax[cuda12]>=0.6.0"
 ```
 
-#### macOS
+#### Windows & macOS
 
 ```bash
-# macOS only supports CPU
+# CPU only (GPU not supported)
 pip install nlsq "jax[cpu]>=0.6.0"
 ```
 
@@ -518,37 +518,23 @@ For detailed installation instructions including Windows support and CUDA config
 
 Windows users have several options for installing JAX:
 
-#### Option 1: WSL2 (Recommended)
+#### Option 1: WSL2 (Recommended for GPU)
 
-Use Windows Subsystem for Linux 2 (WSL2) and follow the Linux installation instructions above.
+Use Windows Subsystem for Linux 2 (WSL2) and follow the Linux installation instructions above for GPU support.
 
-#### Option 2: Native Windows with CPU
+#### Option 2: Native Windows (CPU only)
 
 ```bash
 # Create a Python 3.12+ environment
 conda create -n nlsq python=3.12
 conda activate nlsq
 
-# Install JAX CPU version (latest compatible)
+# Install JAX CPU version
 pip install "jax[cpu]>=0.6.0"
 pip install nlsq
 ```
 
-#### Option 3: Native Windows with GPU (CUDA 12)
-
-```bash
-# Ensure you have CUDA 12.x installed
-# Create environment
-conda create -n nlsq python=3.12
-conda activate nlsq
-
-# Install CUDA toolkit
-conda install -c conda-forge cuda-toolkit=12.1
-
-# Install JAX with CUDA support (use cuda12_pip for Windows)
-pip install "jax[cuda12_pip]>=0.6.0"
-pip install nlsq
-```
+**Note**: Windows does not support native GPU acceleration for JAX. Use WSL2 for GPU support.
 
 For the latest JAX installation instructions, see the [official JAX documentation](https://jax.readthedocs.io/en/latest/installation.html).
 

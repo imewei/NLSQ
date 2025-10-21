@@ -68,9 +68,9 @@ jaraco.classes==3.4.0
 jaraco.context==6.0.1
 jaraco.functools==4.3.0
 # NOTE: JAX extras are platform-specific
-# For Linux GPU: pip install jax[cuda12-local]==0.8.0
-# For Windows GPU: pip install jax[cuda12_pip]==0.8.0
-# For CPU only: pip install jax[cpu]==0.8.0
+# For Linux GPU (system CUDA): pip install jax[cuda12-local]==0.8.0
+# For Linux GPU (bundled CUDA): pip install jax[cuda12]==0.8.0
+# For CPU only (Windows/macOS/Linux): pip install jax[cpu]==0.8.0
 jax==0.8.0
 jaxlib==0.8.0
 jedi==0.19.2
