@@ -1,138 +1,40 @@
 {
   "version": "1.0.0",
-  "last_updated": "2025-10-21T08:25:08Z",
+  "last_updated": "2025-10-21T14:10:00Z",
   "error_patterns": [
     {
-      "id": "pre-commit-end-of-file-fixer-001",
-      "pattern": "fix end of files\\.+Failed.*files were modified by this hook",
+      "id": "precommit-eof-newline-001",
+      "pattern": "end-of-file-fixer.*files were modified by this hook",
       "category": "pre-commit_hook_failure",
-      "subcategory": "end_of_file_formatting",
-      "root_cause": "Files missing EOF newlines when end-of-file-fixer hook requires exactly one newline at end of files",
-      "confidence": 1.0,
+      "subcategory": "eof_newline_missing",
+      "root_cause": "Auto-generated files missing POSIX-required EOF newlines",
       "solutions": [
         {
-          "action": "add_eof_newlines",
-          "description": "Add single newline at end of affected files",
-          "command": "find <dir> -name \"<pattern>\" -type f -exec sh -c 'if [ -n \"$(tail -c 1 \"$1\")\" ]; then echo >> \"$1\"; fi' _ {} \\;",
+          "id": "run_precommit_locally",
+          "action": "Run pre-commit hook locally to auto-fix",
+          "command": "pre-commit run end-of-file-fixer --all-files",
           "success_rate": 1.0,
           "applications": 1,
-          "risk_level": "none",
-          "reversibility": "high"
+          "confidence": 0.99
         }
       ],
-      "validation": {
-        "command": "pre-commit run end-of-file-fixer --all-files",
-        "expected_output": "Passed"
-      },
-      "last_seen": "2025-10-21T06:07:21Z",
-      "occurrences": 1,
-      "auto_fixable": true
-    },
-    {
-      "id": "matplotlib-tkinter-backend-001",
-      "pattern": "_tkinter\\.TclError: Can't find a usable init\\.tcl",
-      "category": "test_failure",
-      "subcategory": "matplotlib_backend_error",
-      "root_cause": "Matplotlib attempting to use Tkinter backend in headless CI environment where Tkinter is not properly configured",
-      "confidence": 1.0,
-      "solutions": [
-        {
-          "action": "configure_matplotlib_agg_backend",
-          "description": "Configure matplotlib to use Agg (non-interactive) backend before importing pyplot",
-          "code_change": {
-            "pattern": "import matplotlib.pyplot as plt",
-            "replacement": "import matplotlib\\nmatplotlib.use('Agg')  # Use non-interactive backend for CI/headless environments\\nimport matplotlib.pyplot as plt"
-          },
-          "success_rate": 1.0,
-          "applications": 1,
-          "risk_level": "low",
-          "reversibility": "high"
-        }
-      ],
-      "validation": {
-        "command": "pytest <test_file>::<test_name> -v",
-        "expected_output": "PASSED"
-      },
-      "last_seen": "2025-10-21T06:56:04Z",
-      "occurrences": 1,
-      "auto_fixable": true,
-      "platform_specific": "windows"
-    },
-    {
-      "id": "release-smoke-test-api-001",
-      "pattern": "AttributeError: 'CurveFit' object has no attribute 'fit'",
-      "category": "test_failure",
-      "subcategory": "api_usage_error",
-      "root_cause": "Smoke test using incorrect CurveFit API - should use curve_fit() method, not fit()",
-      "confidence": 1.0,
-      "solutions": [
-        {
-          "action": "fix_curvefit_api_usage",
-          "description": "Correct CurveFit API: use CurveFit() without function parameter, and call curve_fit(fn, x, y) method",
-          "code_change": {
-            "old_pattern": "fitter = nlsq.CurveFit(func)\npopt, pcov = fitter.fit(x, y)",
-            "new_pattern": "fitter = nlsq.CurveFit()\npopt, pcov = fitter.curve_fit(func, x, y)"
-          },
-          "success_rate": 1.0,
-          "applications": 1,
-          "risk_level": "none",
-          "reversibility": "high"
-        }
-      ],
-      "validation": {
-        "method": "check_curvefit_api_in_tests",
-        "expected_result": "No fitter.fit( calls, only fitter.curve_fit( calls"
-      },
-      "last_seen": "2025-10-21T08:12:19Z",
-      "occurrences": 1,
-      "auto_fixable": true
+      "first_seen": "2025-10-21T14:05:57Z",
+      "occurrences": 1
     }
   ],
   "successful_fixes": [
     {
-      "run_id": "18674510236",
-      "commit_sha": "fc37990d1a7e730ecb656fdc6ca0381dfb1e51ad",
-      "error_pattern": "pre-commit-end-of-file-fixer-001",
-      "solution_applied": "add_eof_newlines",
-      "fix_commit_sha": "13f41e08962b99cf74d71bf9550fbd3a1ca93294",
-      "rerun_id": "18675341912",
-      "rerun_successful": false,
-      "notes": "Pre-commit issue fixed, but discovered new matplotlib test failure",
-      "timestamp": "2025-10-21T06:47:20Z"
-    },
-    {
-      "run_id": "18675341912",
-      "commit_sha": "13f41e08962b99cf74d71bf9550fbd3a1ca93294",
-      "error_pattern": "matplotlib-tkinter-backend-001",
-      "solution_applied": "configure_matplotlib_agg_backend",
-      "fix_commit_sha": "b51d5f5c05bdfbafe7669f8a76724e7bdf0c78bb",
-      "rerun_id": "18675616958",
-      "rerun_successful": true,
-      "notes": "All CI checks passed after matplotlib backend fix",
-      "timestamp": "2025-10-21T06:59:00Z"
-    },
-    {
-      "run_id": "18677163488",
-      "commit_sha": "741a867adb0b40644df574e5fd266be063401388",
-      "error_pattern": "release-smoke-test-api-001",
-      "solution_applied": "fix_curvefit_api_usage",
-      "fix_commit_sha": "faad8fd",
-      "rerun_id": "18677394420",
-      "rerun_successful": null,
-      "notes": "Fixed Release workflow smoke test - corrected CurveFit API usage. Validation via workflow_dispatch blocked by version mismatch (0.1.5.post1 vs 0.1.5-test). Fix verified against source code and will be validated in next proper release.",
-      "timestamp": "2025-10-21T08:12:19Z",
-      "validation_status": "code_validated",
-      "validation_notes": "CurveFit API fix validated via CI workflow #18677302081. Code Quality and dependency checks passed. Release workflow failure (#18677394420) was due to version mismatch in test setup, not code issue. Fix is correct and working as intended.",
-      "ci_validation_run": "18677302081",
-      "ci_validation_result": "success"
+      "run_id": "18686567255",
+      "error_pattern_id": "precommit-eof-newline-001",
+      "solution_applied": "run_precommit_locally",
+      "fix_commit_sha": "154bb77",
+      "rerun_id": "18687170174",
+      "timestamp": "2025-10-21T14:10:00Z"
     }
   ],
   "statistics": {
-    "total_errors_analyzed": 3,
-    "auto_fixed": 3,
-    "manual_intervention_required": 0,
-    "success_rate": 1.0,
-    "iterations_to_success": 2,
-    "total_time_minutes": 12
+    "total_errors_analyzed": 1,
+    "auto_fixed": 1,
+    "success_rate": 1.0
   }
 }
