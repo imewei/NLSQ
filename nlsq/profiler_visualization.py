@@ -14,6 +14,9 @@ from typing import Any
 import numpy as np
 
 try:
+    import matplotlib
+
+    matplotlib.use("Agg")  # Use non-interactive backend for CI/headless environments
     import matplotlib.pyplot as plt
     from matplotlib.figure import Figure
 
