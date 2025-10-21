@@ -90,22 +90,5 @@ updates:
           - "minor"
           - "patch"
 
-  # Docker (if Dockerfile exists)
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/Chicago"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "imewei"
-    labels:
-      - "dependencies"
-      - "docker"
-    commit-message:
-      prefix: "chore(docker)"
-
 # Security updates are handled separately with higher priority
 # Dependabot security updates are enabled by default for all repositories
