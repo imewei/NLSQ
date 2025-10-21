@@ -1,0 +1,207 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'docs/**'
+      - 'nlsq/**/*.py'
+      - '**.md'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'docs/**'
+      - 'nlsq/**/*.py'
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Build Sphinx Documentation
+  build-docs:
+    name: Build Sphinx Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for setuptools-scm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'requirements-dev.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Build documentation
+        working-directory: docs
+        run: |
+          make clean
+          make html SPHINXOPTS="-W --keep-going -n"
+
+      - name: Check for broken links
+        working-directory: docs
+        run: |
+          make linkcheck || echo "::warning::Broken links found (not blocking)"
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sphinx-docs
+          path: docs/_build/html/
+          retention-days: 7
+
+  # Validate Docstrings
+  validate-docstrings:
+    name: Validate Docstrings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pydocstyle darglint
+
+      - name: Check docstring style
+        run: |
+          pydocstyle nlsq/ --convention=numpy || \
+            echo "::warning::Docstring style issues found (not blocking)"
+
+      - name: Validate docstring arguments
+        run: |
+          darglint -v 2 nlsq/ || \
+            echo "::warning::Docstring argument mismatches found (not blocking)"
+
+  # Test Documentation Examples
+  test-examples:
+    name: Test Documentation Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run doctest
+        run: |
+          pytest --doctest-modules nlsq/ -v || \
+            echo "::warning::Doctest failures found (not blocking)"
+
+      - name: Test example notebooks
+        if: hashFiles('examples/*.ipynb') != ''
+        run: |
+          pip install nbconvert jupyter
+          for notebook in examples/*.ipynb; do
+            echo "Testing: $notebook"
+            jupyter nbconvert --to script --execute "$notebook" || \
+              echo "::warning::Notebook $notebook failed (not blocking)"
+          done
+
+  # Deploy to GitHub Pages (main branch only)
+  deploy-docs:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: [build-docs, validate-docstrings, test-examples]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download documentation artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sphinx-docs
+          path: docs/_build/html/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_build/html/
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'docs: deploy documentation for ${{ github.sha }}'
+
+  # Documentation Coverage Report
+  doc-coverage:
+    name: Documentation Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install interrogate
+
+      - name: Check documentation coverage
+        run: |
+          interrogate nlsq/ --verbose --fail-under=0 \
+            --exclude='__init__.py' \
+            --ignore-init-method \
+            --ignore-magic \
+            --ignore-private \
+            --ignore-semiprivate || true
+
+      - name: Generate coverage badge
+        run: |
+          interrogate nlsq/ --generate-badge docs/_badges/ \
+            --exclude='__init__.py' \
+            --ignore-init-method \
+            --ignore-magic \
+            --ignore-private \
+            --ignore-semiprivate || true
+
+  # Documentation Summary
+  docs-summary:
+    name: Documentation Checks Summary
+    runs-on: ubuntu-latest
+    needs: [build-docs, validate-docstrings, test-examples, doc-coverage]
+    if: always()
+    steps:
+      - name: Check documentation job statuses
+        run: |
+          echo "📊 Documentation Build Results:"
+          echo "  Build Docs: ${{ needs.build-docs.result }}"
+          echo "  Validate Docstrings: ${{ needs.validate-docstrings.result }}"
+          echo "  Test Examples: ${{ needs.test-examples.result }}"
+          echo "  Doc Coverage: ${{ needs.doc-coverage.result }}"
+
+          if [[ "${{ needs.build-docs.result }}" != "success" ]]; then
+            echo "❌ Documentation build failed!"
+            exit 1
+          fi
+
+          echo "✅ Documentation checks completed"
