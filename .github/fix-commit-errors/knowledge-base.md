@@ -60,9 +60,10 @@ assert comparison["time_difference"] > -0.05  # Allow small negative due to sche
 - Mark test with `@pytest.mark.flaky` decorator
 
 **Last Applied**: 2025-10-21
-**Workflow Run Fixed**: #18673139504 (macOS Python 3.13)
+**Workflow Runs Fixed**: #18673139504 (macOS Python 3.13 test_profiler.py)
 **Time to Resolution**: ~2 minutes
-**Commit**: (pending)
+**Commit**: 6cf202c
+**Status**: VALIDATED - Profiler test fix successful, discovered separate logging test issue
 
 ---
 
@@ -86,3 +87,36 @@ from nlsq._version import __version__  # type: ignore[import-not-found]
 **Last Applied**: 2025-10-21
 **Workflow Run**: #18671630356
 **Time to Resolution**: ~3 minutes
+
+---
+
+### Pattern: flaky-performance-test-002
+**Error Pattern**: `AssertionError.*not less than 0\.1` (strict timing assertion failure)
+
+**Root Cause**: Timer tests with strict upper bounds fail in CI due to scheduling variance. Tests using `time.sleep(0.01)` and expecting completion in exactly `< 0.1s` fail when timing jitter adds microseconds.
+
+**Solution Applied**: Relax strict timing upper bounds by 50%
+**Confidence**: 95%
+**Success Rate**: 1/1 (100%)
+**Applicable To**: Unit tests with strict timing assertions in CI environments
+
+**Example Fix**:
+```python
+# Before (strict, flaky):
+self.assertLess(logger.timers["test_operation"], 0.1)  # < 100ms
+
+# After (tolerant, stable):
+self.assertLess(logger.timers["test_operation"], 0.15)  # < 150ms (50% margin)
+```
+
+**Related Patterns**: Flaky tests, timing-dependent tests, CI environment variance
+**Difference from flaky-performance-test-001**:
+- 001: Performance comparison tests (speedup ratios)
+- 002: Absolute timing assertions (upper bounds)
+
+**Last Applied**: 2025-10-21
+**Workflow Run Fixed**: #18673344917 (macOS Python 3.13 test_logging.py)
+**Time to Resolution**: ~3 minutes
+**Commit**: 362bfb3
+**Test**: tests/test_logging.py::TestNLSQLogger::test_timer_context_manager
+**Failure**: Expected < 0.1s, got 0.100094s (94μs over)
