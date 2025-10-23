@@ -57,7 +57,7 @@ requires-python = ">=3.12"
 #
 #   Manual install:
 #     pip uninstall -y jax jaxlib
-#     pip install "jax[cuda12-local]>=0.6.0"
+#     pip install 'jax[cuda12]>=0.6.0'  # Use cuda12-local for system CUDA
 #
 #   Verify GPU detection:
 #     python -c "import jax; print(jax.devices())"
