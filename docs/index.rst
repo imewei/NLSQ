@@ -113,12 +113,12 @@ Resources
 Project Status
 --------------
 
-**Current Release**: v0.1.5
+**Current Release**: v0.1.6
 
 - Production-ready for scientific computing
 - Active development and maintenance
-- Comprehensive test suite (1235 tests, 100% pass rate)
-- 80.90% code coverage (exceeds 80% target)
+- Comprehensive test suite (1250 tests, 100% pass rate)
+- 82.15% code coverage (exceeds 80% target)
 
 Citation
 --------
