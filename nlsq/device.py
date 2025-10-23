@@ -4,6 +4,7 @@ This module provides runtime GPU availability checks to help users
 realize when GPU acceleration is available but not being used.
 """
 
+import os
 import subprocess
 
 
@@ -22,6 +23,16 @@ def check_gpu_availability() -> None:
     - nvidia-smi is not installed
     - JAX is not installed yet
     - Other unexpected errors occur
+
+    Environment Variables
+    ---------------------
+    NLSQ_SKIP_GPU_CHECK : str, optional
+        Set to "1", "true", or "yes" (case-insensitive) to suppress GPU warnings.
+        Useful for CI/CD pipelines or users who intentionally use CPU-only JAX.
+
+        Examples:
+            export NLSQ_SKIP_GPU_CHECK=1
+            NLSQ_SKIP_GPU_CHECK=true python script.py
 
     Example
     -------
@@ -42,6 +53,9 @@ def check_gpu_availability() -> None:
 
     See README.md GPU Installation section for details.
 
+    To suppress this warning:
+      export NLSQ_SKIP_GPU_CHECK=1
+
     Notes
     -----
     This check runs automatically on import but has minimal overhead:
@@ -49,7 +63,12 @@ def check_gpu_availability() -> None:
     - JAX device query (~1ms)
     - Only prints warning when mismatch detected
     - Silent failures prevent disruption
+    - Can be suppressed with NLSQ_SKIP_GPU_CHECK environment variable
     """
+    # Early exit if user wants to skip GPU check
+    if os.environ.get("NLSQ_SKIP_GPU_CHECK", "").lower() in ("1", "true", "yes"):
+        return
+
     try:
         # Check if nvidia-smi detects GPU hardware
         result = subprocess.run(
@@ -71,9 +90,13 @@ def check_gpu_availability() -> None:
             )
 
             if not using_gpu:
+                # Sanitize GPU name to prevent display issues
+                # Limit to 100 chars and convert to ASCII
+                gpu_name_safe = gpu_name[:100].encode('ascii', 'replace').decode('ascii')
+
                 print("\n⚠️  GPU ACCELERATION AVAILABLE")
                 print("═══════════════════════════════")
-                print(f"NVIDIA GPU detected: {gpu_name}")
+                print(f"NVIDIA GPU detected: {gpu_name_safe}")
                 print("JAX is currently using: CPU-only")
                 print("\nEnable 150-270x speedup with GPU acceleration:")
                 print("  make install-jax-gpu")
@@ -85,6 +108,6 @@ def check_gpu_availability() -> None:
     except (subprocess.TimeoutExpired, FileNotFoundError, ImportError):
         # nvidia-smi not found or JAX not installed - silently skip
         pass
-    except Exception:
-        # Unexpected error - silently skip to avoid disrupting workflow
+    except RuntimeError:
+        # Unexpected runtime error - silently skip to avoid disrupting workflow
         pass

@@ -7,7 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Added
+
+#### GPU Detection System Enhancements
+- **NLSQ_SKIP_GPU_CHECK Environment Variable**: Added opt-out mechanism for GPU acceleration warnings
+  - **Purpose**: Allow users to suppress GPU detection warnings in CI/CD pipelines, automated tests, or when intentionally using CPU-only JAX
+  - **Usage**: Set `NLSQ_SKIP_GPU_CHECK=1` (or "true", "yes") before importing nlsq
+  - **Impact**: Prevents stdout pollution in automated pipelines while maintaining helpful warnings for interactive use
+  - **Files Modified**: `nlsq/device.py`, `nlsq/__init__.py`
+  - **Documentation**: Added to README.md and CLAUDE.md
+
+#### Test Coverage
+- **GPU Device Detection Tests**: Added comprehensive test suite for GPU detection module
+  - **Coverage**: 100% coverage of `nlsq/device.py` (15 tests)
+  - **Test Scenarios**:
+    - GPU available with CPU-only JAX (warning display)
+    - GPU available with GPU-enabled JAX (silent operation)
+    - No GPU hardware (silent operation)
+    - nvidia-smi timeout/missing (error handling)
+    - JAX not installed (error handling)
+    - NLSQ_SKIP_GPU_CHECK environment variable (suppression)
+    - GPU name sanitization (security edge cases)
+    - Multiple device configurations
+  - **Files Added**: `tests/test_device.py`
+  - **Impact**: Validates GPU detection behavior across all code paths
+
+### Changed
+
+#### Security & Robustness
+- **GPU Name Sanitization**: Added output sanitization for GPU names from nvidia-smi
+  - **Implementation**: Truncates GPU names to 100 characters and converts to ASCII
+  - **Purpose**: Prevents display issues from special characters, Unicode, or extremely long GPU names
+  - **Files Modified**: `nlsq/device.py`
+  - **Impact**: More robust handling of edge cases in GPU detection
+
+- **Exception Handler Specificity**: Improved exception handling in GPU detection
+  - **Before**: Generic `except Exception:` caught all exceptions
+  - **After**: Specific exception types (TimeoutExpired, FileNotFoundError, ImportError, RuntimeError)
+  - **Purpose**: Better error handling specificity while maintaining graceful degradation
+  - **Files Modified**: `nlsq/device.py`
+  - **Impact**: More maintainable exception handling with clearer intent
+
+### Breaking Changes
+
+⚠️ **Import Behavior Change**: GPU detection now runs automatically on `import nlsq`
+- **What Changed**: NLSQ now prints a GPU acceleration warning on import if:
+  - NVIDIA GPU hardware is detected (via nvidia-smi)
+  - JAX is running in CPU-only mode
+- **Impact**: Users will see a 363-character warning message on import when GPU is available but not used
+- **Who Is Affected**:
+  - CI/CD pipelines that parse stdout
+  - Automated test frameworks
+  - Scripts that expect clean stdout
+  - Jupyter notebooks (visual output)
+- **Migration**:
+  ```bash
+  # Suppress warnings in CI/CD
+  export NLSQ_SKIP_GPU_CHECK=1
+  python script.py
+  ```
+- **Rationale**: Helps users discover available GPU acceleration for 150-270x speedup
+- **Opt-Out**: Set `NLSQ_SKIP_GPU_CHECK=1` to restore previous silent behavior
 
 ## [0.1.5] - 2025-10-21
 

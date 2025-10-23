@@ -647,6 +647,46 @@ popt1, pcov1 = fitter.fit(xdata1, ydata1)  # First run: JIT compiles
 popt2, pcov2 = fitter.fit(xdata2, ydata2)  # Second run: reuses compilation
 ```
 
+**Issue 5: Suppressing GPU Acceleration Warnings**
+
+**Symptoms:** You see this warning on import even though you intentionally use CPU-only JAX:
+```
+⚠️  GPU ACCELERATION AVAILABLE
+═══════════════════════════════
+NVIDIA GPU detected: Tesla V100-SXM2-16GB
+JAX is currently using: CPU-only
+```
+
+**When you might want to suppress this:**
+- Running tests in CI/CD pipelines
+- Using CPU-only JAX intentionally (testing, debugging, etc.)
+- Parsing stdout programmatically
+- Reducing output clutter in Jupyter notebooks
+
+**Solution:** Set the `NLSQ_SKIP_GPU_CHECK` environment variable:
+```bash
+# Option 1: Set before running Python
+export NLSQ_SKIP_GPU_CHECK=1
+python your_script.py
+
+# Option 2: Inline with command
+NLSQ_SKIP_GPU_CHECK=1 python your_script.py
+
+# Option 3: Add to CI/CD environment variables
+# GitHub Actions example:
+env:
+  NLSQ_SKIP_GPU_CHECK: "1"
+
+# Option 4: Set in Python before importing nlsq
+import os
+os.environ['NLSQ_SKIP_GPU_CHECK'] = '1'
+import nlsq  # No warning printed
+```
+
+**Accepted values:** `"1"`, `"true"`, `"yes"` (case-insensitive)
+
+**Note:** This suppresses the warning but does not affect actual GPU usage. If you have GPU-enabled JAX installed, it will still use the GPU for computations.
+
 #### Conda/Mamba Users
 
 NLSQ works seamlessly in conda environments using pip:
