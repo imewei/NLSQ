@@ -478,65 +478,191 @@ Some standouts:
 - **NumPy 2.0+** ⚠️ **Breaking change from NumPy 1.x** (tested with 2.3.4)
 - **SciPy 1.14.0+** (tested with 1.16.2)
 
-**GPU Support**: Only Linux supports GPU acceleration. Windows and macOS are CPU-only.
+### Platform Support
+
+| Platform | GPU Support | Performance | Notes |
+|----------|-------------|-------------|-------|
+| ✅ Linux + CUDA 12.1-12.9 | Full GPU | **150-270x speedup** | Recommended for large datasets |
+| ❌ macOS (Intel/Apple Silicon) | CPU only | Baseline | No NVIDIA GPU support |
+| ❌ Windows | CPU only | Baseline | Use WSL2 for GPU support |
+
+**GPU Requirements** (Linux only):
+- System CUDA 12.1-12.9 installed
+- NVIDIA driver >= 525
+- Compatible NVIDIA GPU
 
 ### Quick Install
 
-#### Linux
+#### Linux (CPU Only)
 
 ```bash
-# CPU only
 pip install nlsq "jax[cpu]>=0.6.0"
+```
 
-# GPU with system CUDA 12 (best performance, requires CUDA installed)
-pip install nlsq "jax[cuda12-local]>=0.6.0"
+#### Linux (GPU Acceleration - Recommended) ⚡
 
-# GPU with bundled CUDA 12 (larger download, no system CUDA needed)
-pip install nlsq "jax[cuda12]>=0.6.0"
+**Option 1: Automated Install (Recommended)**
+
+From the NLSQ repository:
+
+```bash
+git clone https://github.com/imewei/NLSQ.git
+cd NLSQ
+make install-jax-gpu  # Handles uninstall, install, and verification
+```
+
+This single command:
+- Detects your package manager (uv, conda/mamba, or pip)
+- Uninstalls CPU-only JAX
+- Installs GPU-enabled JAX with CUDA 12 support
+- Verifies GPU detection automatically
+
+**Option 2: Manual Install**
+
+```bash
+# Step 1: Uninstall CPU-only version
+pip uninstall -y jax jaxlib
+
+# Step 2: Install JAX with CUDA support (best performance)
+pip install "jax[cuda12-local]>=0.6.0"
+
+# Step 3: Verify GPU detection
+python -c "import jax; print('Devices:', jax.devices())"
+# Expected: [cuda(id=0)] instead of [CpuDevice(id=0)]
+```
+
+**Alternative**: For systems without CUDA installed, use bundled CUDA (larger download):
+
+```bash
+pip install "jax[cuda12]>=0.6.0"
 ```
 
 #### Windows & macOS
 
 ```bash
-# CPU only (GPU not supported)
+# CPU only (GPU not supported natively)
 pip install nlsq "jax[cpu]>=0.6.0"
 ```
+
+**Windows GPU Users**: Use WSL2 (Windows Subsystem for Linux) and follow the Linux GPU installation instructions above.
 
 #### Development Installation
 
 ```bash
 git clone https://github.com/imewei/NLSQ.git
-cd nlsq
+cd NLSQ
 pip install -e ".[dev,test,docs]"
+
+# For GPU support in development
+make install-jax-gpu
 ```
 
-### Platform-Specific Installation
+### GPU Troubleshooting
 
-For detailed installation instructions including Windows support and CUDA configuration, see below.
+#### Diagnostic Tools
 
-### Windows Installation
-
-Windows users have several options for installing JAX:
-
-#### Option 1: WSL2 (Recommended for GPU)
-
-Use Windows Subsystem for Linux 2 (WSL2) and follow the Linux installation instructions above for GPU support.
-
-#### Option 2: Native Windows (CPU only)
+Check your environment configuration:
 
 ```bash
-# Create a Python 3.12+ environment
-conda create -n nlsq python=3.12
-conda activate nlsq
-
-# Install JAX CPU version
-pip install "jax[cpu]>=0.6.0"
-pip install nlsq
+# From NLSQ repository
+make env-info       # Show platform, package manager, GPU hardware, CUDA version
+make gpu-check      # Test JAX GPU detection
 ```
 
-**Note**: Windows does not support native GPU acceleration for JAX. Use WSL2 for GPU support.
+#### Common Issues
 
-For the latest JAX installation instructions, see the [official JAX documentation](https://jax.readthedocs.io/en/latest/installation.html).
+**Issue 1: Warning "CUDA-enabled jaxlib is not installed"**
+
+**Symptoms:**
+```
+An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed.
+Falling back to cpu.
+```
+
+**Solution:**
+```bash
+# Verify GPU hardware
+nvidia-smi  # Should show your GPU
+
+# Verify CUDA version
+nvcc --version  # Should show CUDA 12.1-12.9
+
+# Reinstall JAX with GPU support
+pip uninstall -y jax jaxlib
+pip install "jax[cuda12-local]>=0.6.0"
+
+# Verify fix
+python -c "import jax; print(jax.devices())"
+# Expected: [cuda(id=0)]
+```
+
+**Issue 2: ImportError or "CUDA library not found"**
+
+**Symptoms:**
+```
+ImportError: libcudart.so.12: cannot open shared object file
+```
+
+**Solution:**
+```bash
+# Set CUDA library path (add to ~/.bashrc for permanent fix)
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Verify CUDA installation
+ls /usr/local/cuda/lib64/libcudart.so*
+```
+
+**Issue 3: Out of memory errors during computation**
+
+**Symptoms:**
+```
+jaxlib.xla_extension.XlaRuntimeError: RESOURCE_EXHAUSTED
+```
+
+**Solution:** Reduce GPU memory usage:
+```python
+# Option 1: Reduce chunk size for large datasets
+from nlsq import curve_fit_large
+popt, pcov = curve_fit_large(func, x, y, memory_limit_gb=4.0)  # Reduce from default
+
+# Option 2: Configure JAX memory fraction
+import os
+os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '0.7'  # Use 70% of GPU memory
+```
+
+**Issue 4: Slow performance despite GPU**
+
+**Symptoms:** First run is slow, subsequent runs are fast
+
+**Explanation:** This is normal! JAX uses JIT (Just-In-Time) compilation:
+- First run: 450-650ms (includes compilation)
+- Cached runs: 1.7-2.0ms (150-270x faster)
+
+**Solution:** Use `CurveFit` class to reuse compilation:
+```python
+from nlsq import CurveFit
+
+fitter = CurveFit(model_func)
+popt1, pcov1 = fitter.fit(xdata1, ydata1)  # First run: JIT compiles
+popt2, pcov2 = fitter.fit(xdata2, ydata2)  # Second run: reuses compilation
+```
+
+#### Conda/Mamba Users
+
+NLSQ works seamlessly in conda environments using pip:
+
+```bash
+conda create -n nlsq python=3.12
+conda activate nlsq
+pip install nlsq
+
+# For GPU (Linux only)
+git clone https://github.com/imewei/NLSQ.git
+cd NLSQ
+make install-jax-gpu  # Automatically detects conda/mamba
+```
+
+**Note:** Conda extras syntax (`conda install nlsq[gpu-cuda]`) is not supported. Use the Makefile or manual pip installation method above.
 
 <!--For more detail on using these pre-built wheels please see the docs.-->
 

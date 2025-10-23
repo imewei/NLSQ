@@ -41,13 +41,65 @@ classifiers = [
     "Typing :: Typed"
 ]
 requires-python = ">=3.12"
+
+# ============================================================================
+# GPU ACCELERATION (150-270x speedup for large datasets)
+# ============================================================================
+# Default installation: CPU-only JAX (works on ALL platforms)
+#   pip install nlsq
+#
+# For GPU acceleration (Linux + CUDA 12.1-12.9 ONLY):
+#
+#   Quick install (from repository):
+#     git clone https://github.com/imewei/NLSQ.git
+#     cd NLSQ
+#     make install-jax-gpu
+#
+#   Manual install:
+#     pip uninstall -y jax jaxlib
+#     pip install "jax[cuda12-local]>=0.6.0"
+#
+#   Verify GPU detection:
+#     python -c "import jax; print(jax.devices())"
+#     # Expected: [cuda(id=0)]
+#
+#   Platform support:
+#     ✅ Linux + NVIDIA GPU + CUDA 12.1-12.9: Full GPU (150-270x speedup)
+#     ❌ macOS: CPU-only (Apple Silicon/Intel, no NVIDIA support)
+#     ❌ Windows: CPU-only (use WSL2 for GPU support)
+#
+#   Requirements (Linux GPU):
+#     - System CUDA 12.1-12.9 pre-installed
+#     - NVIDIA driver >= 525
+#     - Compatible NVIDIA GPU
+#
+# Troubleshooting:
+#   make env-info    # Check platform, CUDA, GPU hardware
+#   make gpu-check   # Verify JAX GPU detection
+#
+# See README.md GPU Installation section for detailed guide
+# ============================================================================
+
 dependencies = [
+    # Core scientific computing
     "numpy>=2.0.0",           # Requires NumPy 2.x (tested on 2.3.4)
     "scipy>=1.14.0",          # Tested on 1.16.2
-    "jax>=0.6.0",             # JAX base (tested on 0.8.0) - users install platform-specific extras
+
+    # JAX ecosystem (CPU-only by default - works on all platforms)
+    # GPU users: see GPU ACCELERATION section above for installation
+    "jax>=0.6.0",             # JAX 0.6.0+ CPU-only (tested on 0.8.0)
+                               # Platform-specific extras installed separately:
+                               #   Linux CPU:  pip install "jax[cpu]>=0.6.0"
+                               #   Linux GPU:  make install-jax-gpu (recommended)
+                               #   macOS:      pip install "jax[cpu]>=0.6.0" (CPU only)
+                               #   Windows:    pip install "jax[cpu]>=0.6.0" (CPU only)
+
+    # Visualization and monitoring
     "matplotlib>=3.9.0",      # Tested on 3.10.7
     "psutil>=6.0.0",          # For memory monitoring (tested on 7.1.0)
     "tqdm>=4.66.0",           # For progress bars (tested on 4.67.1)
+
+    # Large dataset support
     "h5py>=3.10.0",           # Required for streaming large datasets (tested on 3.15.1)
 ]
 

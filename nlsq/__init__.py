@@ -538,3 +538,9 @@ def curve_fit_large(
 # from nlsq.loss_functions import LossFunctionsJIT
 # from nlsq.trf import TrustRegionReflective
 # etc.
+
+# Check GPU availability on import (non-intrusive warning)
+# This helps users realize when GPU acceleration is available but not being used
+from nlsq.device import check_gpu_availability
+
+check_gpu_availability()
