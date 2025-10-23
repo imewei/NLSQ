@@ -623,11 +623,13 @@ jaxlib.xla_extension.XlaRuntimeError: RESOURCE_EXHAUSTED
 ```python
 # Option 1: Reduce chunk size for large datasets
 from nlsq import curve_fit_large
+
 popt, pcov = curve_fit_large(func, x, y, memory_limit_gb=4.0)  # Reduce from default
 
 # Option 2: Configure JAX memory fraction
 import os
-os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '0.7'  # Use 70% of GPU memory
+
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.7"  # Use 70% of GPU memory
 ```
 
 **Issue 4: Slow performance despite GPU**

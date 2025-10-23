@@ -48,12 +48,14 @@ class TestCheckGPUAvailability:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device]
 
-        with patch("subprocess.run", return_value=mock_result) as mock_subprocess:
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result) as mock_subprocess,
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
                 # Verify warning was printed with exact format
                 output_str = output.getvalue()
@@ -64,7 +66,9 @@ class TestCheckGPUAvailability:
                 assert "Enable 150-270x speedup with GPU acceleration:" in output_str
                 assert "make install-jax-gpu" in output_str
                 assert 'pip install "jax[cuda12-local]>=0.6.0"' in output_str
-                assert "See README.md GPU Installation section for details." in output_str
+                assert (
+                    "See README.md GPU Installation section for details." in output_str
+                )
 
         # Verify subprocess was called correctly
         mock_subprocess.assert_called_once()
@@ -98,16 +102,18 @@ class TestCheckGPUAvailability:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify no output (silent)
-                output_str = output.getvalue()
-                assert output_str == "", f"Expected no output, got: {output_str}"
+            # Verify no output (silent)
+            output_str = output.getvalue()
+            assert output_str == "", f"Expected no output, got: {output_str}"
 
     def test_no_gpu_hardware(self):
         """Test nvidia-smi returns empty or error.
@@ -186,18 +192,21 @@ class TestGPUDetectionErrorHandling:
                 raise ImportError("No module named 'jax'")
             # For other imports, use the original __import__
             import builtins
+
             return builtins.__import__(name, *args, **kwargs)
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch("builtins.__import__", side_effect=mock_import):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch("builtins.__import__", side_effect=mock_import),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify no output and no exception raised
-                output_str = output.getvalue()
-                assert output_str == "", f"Expected no output, got: {output_str}"
+            # Verify no output and no exception raised
+            output_str = output.getvalue()
+            assert output_str == "", f"Expected no output, got: {output_str}"
 
     def test_unexpected_exception(self):
         """Test generic exception handling (catch-all).
@@ -238,20 +247,22 @@ class TestGPUNameSanitization:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify warning printed with the GPU name as-is
-                output_str = output.getvalue()
-                assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
-                assert (
-                    "NVIDIA GPU detected: Tesla V100 <script>alert('xss')</script>"
-                    in output_str
-                )
+            # Verify warning printed with the GPU name as-is
+            output_str = output.getvalue()
+            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
+            assert (
+                "NVIDIA GPU detected: Tesla V100 <script>alert('xss')</script>"
+                in output_str
+            )
 
     def test_gpu_name_very_long(self):
         """Test extremely long GPU name (>1000 chars).
@@ -274,21 +285,23 @@ class TestGPUNameSanitization:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify warning printed with truncated GPU name (100 chars max)
-                output_str = output.getvalue()
-                assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
-                # Verify name is truncated to 100 characters for safety
-                truncated_name = long_name[:100]
-                assert f"NVIDIA GPU detected: {truncated_name}" in output_str
-                # Verify full name is NOT present
-                assert long_name not in output_str
+            # Verify warning printed with truncated GPU name (100 chars max)
+            output_str = output.getvalue()
+            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
+            # Verify name is truncated to 100 characters for safety
+            truncated_name = long_name[:100]
+            assert f"NVIDIA GPU detected: {truncated_name}" in output_str
+            # Verify full name is NOT present
+            assert long_name not in output_str
 
 
 class TestImportIntegration:
@@ -317,17 +330,19 @@ class TestImportIntegration:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    # Call the function (simulating import behavior)
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                # Call the function (simulating import behavior)
+                check_gpu_availability()
 
-                # Verify warning was printed (proving function is callable)
-                output_str = output.getvalue()
-                assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
+            # Verify warning was printed (proving function is callable)
+            output_str = output.getvalue()
+            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
 
         # Note: The actual import-time call is in nlsq/__init__.py
         # and is tested by the fact that importing nlsq doesn't crash
@@ -355,16 +370,18 @@ class TestImportIntegration:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify NO output (silent operation)
-                output_str = output.getvalue()
-                assert output_str == "", f"Expected no output, got: {output_str}"
+            # Verify NO output (silent operation)
+            output_str = output.getvalue()
+            assert output_str == "", f"Expected no output, got: {output_str}"
 
     def test_skip_gpu_check_true(self, monkeypatch):
         """NLSQ_SKIP_GPU_CHECK=true also suppresses GPU warning.
@@ -385,16 +402,19 @@ class TestImportIntegration:
             mock_jax = MagicMock()
             mock_jax.devices.return_value = [mock_device]
 
-            with patch("subprocess.run", return_value=mock_result):
-                with patch.dict("sys.modules", {"jax": mock_jax}):
-                    output = StringIO()
-                    with redirect_stdout(output):
-                        check_gpu_availability()
+            with (
+                patch("subprocess.run", return_value=mock_result),
+                patch.dict("sys.modules", {"jax": mock_jax}),
+            ):
+                output = StringIO()
+                with redirect_stdout(output):
+                    check_gpu_availability()
 
-                    # Verify silent operation for all values
-                    output_str = output.getvalue()
-                    assert output_str == "", \
-                        f"Expected no output for NLSQ_SKIP_GPU_CHECK={value}, got: {output_str}"
+                # Verify silent operation for all values
+                output_str = output.getvalue()
+                assert output_str == "", (
+                    f"Expected no output for NLSQ_SKIP_GPU_CHECK={value}, got: {output_str}"
+                )
 
 
 class TestGPUDetectionWithMultipleDevices:
@@ -420,16 +440,18 @@ class TestGPUDetectionWithMultipleDevices:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device1, mock_device2]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify warning printed (no GPU in device list)
-                output_str = output.getvalue()
-                assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
+            # Verify warning printed (no GPU in device list)
+            output_str = output.getvalue()
+            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
 
     def test_mixed_cpu_and_gpu_devices(self):
         """Test mixed CPU and GPU devices.
@@ -451,16 +473,18 @@ class TestGPUDetectionWithMultipleDevices:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device_cpu, mock_device_gpu]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify no output (GPU device found)
-                output_str = output.getvalue()
-                assert output_str == "", f"Expected no output, got: {output_str}"
+            # Verify no output (GPU device found)
+            output_str = output.getvalue()
+            assert output_str == "", f"Expected no output, got: {output_str}"
 
     def test_gpu_device_lowercase(self):
         """Test GPU device detection with lowercase 'gpu' string.
@@ -480,13 +504,15 @@ class TestGPUDetectionWithMultipleDevices:
         mock_jax = MagicMock()
         mock_jax.devices.return_value = [mock_device]
 
-        with patch("subprocess.run", return_value=mock_result):
-            with patch.dict("sys.modules", {"jax": mock_jax}):
-                # Capture stdout
-                output = StringIO()
-                with redirect_stdout(output):
-                    check_gpu_availability()
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch.dict("sys.modules", {"jax": mock_jax}),
+        ):
+            # Capture stdout
+            output = StringIO()
+            with redirect_stdout(output):
+                check_gpu_availability()
 
-                # Verify no output (GPU device found)
-                output_str = output.getvalue()
-                assert output_str == "", f"Expected no output, got: {output_str}"
+            # Verify no output (GPU device found)
+            output_str = output.getvalue()
+            assert output_str == "", f"Expected no output, got: {output_str}"

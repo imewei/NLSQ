@@ -73,7 +73,8 @@ def check_gpu_availability() -> None:
         # Check if nvidia-smi detects GPU hardware
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-            check=False, capture_output=True,
+            check=False,
+            capture_output=True,
             text=True,
             timeout=5,
         )
@@ -92,7 +93,9 @@ def check_gpu_availability() -> None:
             if not using_gpu:
                 # Sanitize GPU name to prevent display issues
                 # Limit to 100 chars and convert to ASCII
-                gpu_name_safe = gpu_name[:100].encode('ascii', 'replace').decode('ascii')
+                gpu_name_safe = (
+                    gpu_name[:100].encode("ascii", "replace").decode("ascii")
+                )
 
                 print("\n⚠️  GPU ACCELERATION AVAILABLE")
                 print("═══════════════════════════════")
