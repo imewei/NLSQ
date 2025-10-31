@@ -1,5 +1,5 @@
 # NLSQ Development Dependencies (Minimum Versions)
-# Updated: 2025-10-21
+# Updated: 2025-10-31
 # Python: >=3.12
 #
 # Install with: pip install -r requirements-dev.txt
@@ -10,8 +10,10 @@
 # - CI tests both minimum and latest versions
 # - For reproducible builds, use: pip freeze > requirements-lock.txt
 #
-# BREAKING CHANGE (v0.2.0): h5py moved from optional to required dependency
-# - h5py is now in requirements.txt (automatically included via -r below)
+# RECENT CHANGES:
+# - v0.1.6 (2025-10-31): Documentation quality enforcement (pre-commit hook added)
+# - v0.1.6: Mixed precision fallback feature and comprehensive documentation
+# - v0.2.0: h5py moved from optional to required dependency
 
 # Runtime dependencies (from requirements.txt)
 -r requirements.txt

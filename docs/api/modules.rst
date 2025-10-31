@@ -40,6 +40,7 @@ Tools for fitting very large datasets (10M+ points):
    nlsq.streaming_optimizer
    nlsq.streaming_config
    nlsq.memory_manager
+   nlsq.mixed_precision
    large_datasets_api
 
 Enhanced Features (v0.1.1)
@@ -77,6 +78,7 @@ Support modules for configuration, caching, and diagnostics:
    :maxdepth: 2
 
    nlsq.config
+   nlsq.device
    nlsq.validators
    nlsq.diagnostics
    nlsq.caching
@@ -123,10 +125,12 @@ Complete Module Listing
 - :doc:`nlsq.streaming_optimizer` - Streaming optimization for unlimited data (NEW in v0.1.1)
 - :doc:`nlsq.streaming_config` - Configuration for streaming optimizer (v0.2.0+)
 - :doc:`nlsq.memory_manager` - Intelligent memory management (NEW in v0.1.1)
+- :doc:`nlsq.mixed_precision` - Automatic mixed precision management (NEW in v0.1.6)
 - :doc:`large_datasets_api` - Comprehensive large dataset guide
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management
+- :doc:`nlsq.device` - GPU detection and warnings (NEW in v0.1.6)
 - :doc:`nlsq.validators` - Input validation (NEW in v0.1.1)
 - :doc:`nlsq.diagnostics` - Optimization diagnostics (NEW in v0.1.1)
 - :doc:`nlsq.caching` - JIT and result caching

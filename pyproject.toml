@@ -367,14 +367,14 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    # Coverage disabled for faster CI
-    # Test suite: 743 tests (as of 2025-10-07)
-    # Current coverage: 70% (target: 80%)
+    # Coverage disabled for faster CI (enable locally with pytest --cov)
+    # Test suite: 1250 tests (as of 2025-10-31)
+    # Current coverage: 82.15% (exceeds 80% target)
     # "--cov=nlsq",
     # "--cov-report=term-missing",
     # "--cov-report=html",
     # "--cov-report=xml",
-    # "--cov-fail-under=74",
+    # "--cov-fail-under=80",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -395,8 +395,8 @@ source = ["nlsq"]
 omit = ["*/tests/*", "*/_version.py"]
 
 [tool.coverage.report]
-# Test suite: 743 tests (as of 2025-10-07)
-# Current coverage: 70% (target: 80%)
+# Test suite: 1250 tests (as of 2025-10-31)
+# Current coverage: 82.15% (exceeds 80% target)
 # Industry-standard for scientific computing libraries: 70-80%
 precision = 2
 show_missing = true

@@ -307,6 +307,56 @@ print(f"Memory limit: {current_config.memory_limit_gb} GB")
 print(f"Mixed precision fallback: {current_config.enable_mixed_precision_fallback}")
 ```
 
+### Mixed Precision Fallback
+
+NLSQ includes automatic mixed precision management that provides 50% memory savings while maintaining numerical accuracy:
+
+```python
+from nlsq import curve_fit
+from nlsq.config import configure_mixed_precision
+import jax.numpy as jnp
+
+# Enable mixed precision with custom settings
+configure_mixed_precision(
+    enable=True,
+    max_degradation_iterations=5,  # Grace period before upgrading
+    gradient_explosion_threshold=1e10,
+    verbose=True,  # Show precision upgrades in logs
+)
+
+# Define model function
+def exponential(x, a, b):
+    return a * jnp.exp(-b * x)
+
+# Fit - starts in float32, automatically upgrades to float64 if needed
+popt, pcov = curve_fit(exponential, x, y, p0=[2.0, 0.5])
+```
+
+**Key Features:**
+- **Automatic float32 → float64 upgrade** when precision issues detected
+- **50% memory savings** when using float32
+- **Zero-iteration loss** during precision upgrades (state fully preserved)
+- **Intelligent fallback** to relaxed float32 if float64 fails
+- **Environment variable configuration** for production deployment
+
+**Configuration Options:**
+```python
+# Programmatic configuration
+configure_mixed_precision(
+    enable=True,
+    max_degradation_iterations=5,
+    gradient_explosion_threshold=1e10,
+    precision_limit_threshold=1e-7,
+    tolerance_relaxation_factor=10.0,
+    verbose=False,
+)
+
+# Or use environment variables
+# export NLSQ_MIXED_PRECISION_VERBOSE=1
+# export NLSQ_GRADIENT_EXPLOSION_THRESHOLD=1e8
+# export NLSQ_MAX_DEGRADATION_ITERATIONS=3
+```
+
 ### Algorithm Selection
 
 NLSQ can select the best algorithm based on problem characteristics:

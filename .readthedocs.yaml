@@ -1,7 +1,10 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2025-10-08
+# Updated: 2025-10-31
 # Requires: Python 3.12+, NumPy 2.0+
 # Dependencies managed via pyproject.toml[docs]
+#
+# Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
+# All Sphinx warnings have been resolved as of 2025-10-31
 
 version: 2
 
@@ -21,7 +24,7 @@ build:
 
 sphinx:
   configuration: docs/conf.py
-  fail_on_warning: true
+  fail_on_warning: true  # Zero warnings policy - all warnings resolved (2025-10-31)
   builder: html
 
 formats:

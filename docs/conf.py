@@ -86,6 +86,19 @@ keep_warnings = False
 # Nitpick configuration to ignore specific warnings
 nitpicky = False
 
+# When nitpicky mode is enabled via -n flag, ignore common type description patterns
+# These are informal type descriptions in docstrings, not actual class references
+nitpick_ignore = [
+    ("py:class", "callable"),
+    ("py:class", "optional"),
+    ("py:class", "array_like"),
+    ("py:class", "arrays"),
+    ("py:class", "function"),
+    ("py:class", "default True"),
+    ("py:class", "default False"),
+    ("py:class", "np.ndarray"),
+]
+
 # Custom event handler removed - caused TypeError
 
 # Autodoc configuration

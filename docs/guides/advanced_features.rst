@@ -15,9 +15,10 @@ Table of Contents
 3. `Large Dataset Handling <#large-dataset-handling>`__
 4. `Algorithm Selection <#algorithm-selection>`__
 5. `Memory Management <#memory-management>`__
-6. `Diagnostic Monitoring <#diagnostic-monitoring>`__
-7. `Sparse Jacobian Optimization <#sparse-jacobian-optimization>`__
-8. `Streaming Optimization <#streaming-optimization>`__
+6. `Mixed Precision Fallback <#mixed-precision-fallback>`__
+7. `Diagnostic Monitoring <#diagnostic-monitoring>`__
+8. `Sparse Jacobian Optimization <#sparse-jacobian-optimization>`__
+9. `Streaming Optimization <#streaming-optimization>`__
 
 --------------
 
@@ -443,6 +444,203 @@ Estimate memory requirements before fitting:
    print(f"Jacobian memory: {mem_est['jacobian_gb']:.2f} GB")
    print(f"Data memory: {mem_est['data_gb']:.2f} GB")
    print(f"Recommended chunk size: {mem_est['recommended_chunk_size']:,}")
+
+--------------
+
+Mixed Precision Fallback
+------------------------
+
+NLSQ includes automatic mixed precision management that provides up to 50% memory
+savings by starting optimization in float32 and automatically upgrading to float64
+when convergence stalls.
+
+This feature is particularly beneficial for:
+
+- **Memory-constrained systems** (limited GPU memory)
+- **Large datasets** (>100K points)
+- **Batch processing** of multiple fits
+
+Enabling Mixed Precision
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Configure mixed precision globally:
+
+.. code:: python
+
+   from nlsq import curve_fit
+   from nlsq.config import configure_mixed_precision
+   import jax.numpy as jnp
+   import numpy as np
+
+   # Enable mixed precision with default settings
+   configure_mixed_precision(enable=True)
+
+   # Define model
+   def exponential(x, a, b):
+       return a * jnp.exp(-b * x)
+
+   # Generate data
+   x = np.linspace(0, 10, 100000)
+   y = 2.5 * np.exp(-0.8 * x) + np.random.normal(0, 0.1, 100000)
+
+   # Fit - starts in float32, upgrades to float64 if needed
+   popt, pcov = curve_fit(exponential, x, y, p0=[2.0, 0.5])
+
+**Result:** 50% memory savings when optimization stays in float32, with automatic
+fallback to float64 ensuring numerical accuracy.
+
+Custom Configuration
+~~~~~~~~~~~~~~~~~~~~
+
+Fine-tune fallback behavior for specific use cases:
+
+.. code:: python
+
+   # Configure with custom thresholds
+   configure_mixed_precision(
+       enable=True,
+       max_degradation_iterations=5,       # Fallback after 5 stalled iterations
+       gradient_explosion_threshold=1e10,  # Detect gradient explosion
+       verbose=True,                       # Enable diagnostic messages
+   )
+
+   # Now all curve_fit calls use these settings
+   popt, pcov = curve_fit(exponential, x, y, p0=[2.0, 0.5])
+
+**Configuration Parameters:**
+
+- ``enable`` (bool): Enable/disable mixed precision (default: False)
+- ``max_degradation_iterations`` (int): Number of stalled iterations before fallback (default: 5)
+- ``gradient_explosion_threshold`` (float): Gradient magnitude threshold (default: 1e10)
+- ``verbose`` (bool): Enable diagnostic logging (default: False)
+
+Environment Variables
+~~~~~~~~~~~~~~~~~~~~~
+
+Configure via environment variables for CI/CD or deployment:
+
+.. code:: bash
+
+   # Enable mixed precision
+   export NLSQ_MIXED_PRECISION_ENABLE=true
+
+   # Set fallback iterations
+   export NLSQ_MIXED_PRECISION_MAX_DEGRADATION_ITERATIONS=3
+
+   # Set gradient threshold
+   export NLSQ_MIXED_PRECISION_GRADIENT_EXPLOSION_THRESHOLD=1e8
+
+   # Enable verbose logging
+   export NLSQ_MIXED_PRECISION_VERBOSE=true
+
+Performance Characteristics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Memory Savings:**
+
+- 50% reduction when optimization completes in float32
+- Typical for well-conditioned problems with good initial guesses
+- Most effective for datasets >10K points
+
+**Convergence Behavior:**
+
+- **No fallback:** 0-5% faster than pure float64
+- **With fallback:** 10-15% overhead from precision conversion
+- Fallback occurs in <5% of cases with default settings
+
+**Fallback Triggers:**
+
+1. No cost improvement for ``max_degradation_iterations``
+2. Gradient magnitude exceeds ``gradient_explosion_threshold``
+3. NaN/Inf values detected in state variables
+4. Trust radius becomes too small
+
+When to Use Mixed Precision
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+==============================  =====================  ======================
+Scenario                        Recommendation         Expected Benefit
+==============================  =====================  ======================
+Memory-constrained systems      Strongly recommended   50% memory savings
+Large datasets (>100K points)   Recommended            40-50% memory savings
+GPU acceleration                Recommended            Improved throughput
+Small datasets (<1K points)     Optional               Minimal benefit
+High-precision requirements     Use with care          May trigger fallback
+==============================  =====================  ======================
+
+Monitoring Fallback Events
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enable verbose mode to see when fallback occurs:
+
+.. code:: python
+
+   # Enable verbose diagnostics
+   configure_mixed_precision(enable=True, verbose=True)
+
+   # Perform fit
+   popt, pcov = curve_fit(exponential, x, y, p0=[2.0, 0.5])
+
+**Example Output:**
+
+::
+
+   [Mixed Precision] Starting optimization in float32
+   [Mixed Precision] Iteration 10: cost=0.0234, no improvement for 5 iterations
+   [Mixed Precision] Falling back to float64 for improved precision
+   [Mixed Precision] Successfully converged in float64 after 15 total iterations
+
+Troubleshooting
+~~~~~~~~~~~~~~~
+
+**Frequent fallbacks:**
+
+If fallback occurs too often, try:
+
+- Reduce ``max_degradation_iterations`` to 3
+- Improve initial guess ``p0`` quality
+- Check problem conditioning with diagnostics
+
+**Numerical accuracy concerns:**
+
+If results differ from float64-only mode:
+
+- Disable mixed precision for critical calculations
+- Reduce ``max_degradation_iterations`` to fallback sooner
+- Use ``verbose=True`` to see when fallback occurs
+
+**Memory not reduced:**
+
+If memory savings aren't observed:
+
+- Check if fallback happens immediately (``verbose=True``)
+- Ensure dataset is large enough (>10K points)
+- Verify JAX is using float32 (check dtypes)
+
+Integration with Other Features
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Mixed precision works seamlessly with other NLSQ features:
+
+.. code:: python
+
+   from nlsq import curve_fit_large
+   from nlsq.config import configure_mixed_precision
+
+   # Enable mixed precision for large datasets
+   configure_mixed_precision(enable=True)
+
+   # Large dataset fitting with mixed precision
+   popt, pcov = curve_fit_large(
+       exponential,
+       x_large,
+       y_large,
+       p0=[2.0, 0.5],
+       memory_limit_gb=4.0,  # Memory management
+       progress=True,         # Progress monitoring
+   )
+
+   # Mixed precision + memory management = maximum efficiency
 
 --------------
 

@@ -1,5 +1,5 @@
 # NLSQ Runtime Dependencies (Minimum Versions)
-# Updated: 2025-10-21
+# Updated: 2025-10-31
 # Python: >=3.12
 #
 # Philosophy: Use minimum version constraints (>=) for flexibility
@@ -8,7 +8,9 @@
 # - CI tests both minimum and latest versions
 # - For reproducible builds, use: pip freeze > requirements-lock.txt
 #
-# BREAKING CHANGE (v0.2.0): h5py is now a required dependency
+# RECENT CHANGES:
+# - v0.1.6 (2025-10-31): Mixed precision fallback support added
+# - v0.2.0: h5py is now a required dependency (was optional before)
 
 # Core dependencies (tested versions: numpy 2.3.4, scipy 1.16.2, jax 0.8.0)
 numpy>=2.0.0       # NumPy 2.x required

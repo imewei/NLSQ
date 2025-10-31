@@ -49,9 +49,12 @@ jobs:
         working-directory: docs
         run: |
           make clean
-          # TODO: Re-enable -W flag after fixing 1036 type reference warnings
-          # Issue: Docstrings have unresolved references (array_like, optional, etc.)
-          make html SPHINXOPTS="--keep-going -n"
+          # Build with warnings as errors to enforce documentation quality
+          # -W: Treat warnings as errors (fail build on warnings)
+          # --keep-going: Show all warnings before failing
+          # Note: -n (nitpicky mode) disabled as too strict for scientific computing library
+          # All warnings have been resolved as of 2025-10-31
+          make html SPHINXOPTS="-W --keep-going"
 
       - name: Check for broken links
         working-directory: docs

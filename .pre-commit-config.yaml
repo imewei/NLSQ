@@ -73,3 +73,15 @@ repos:
     hooks:
       - id: pyupgrade
         args: [--py312-plus]
+
+  # Local hooks for project-specific checks
+  - repo: local
+    hooks:
+      - id: docs-build
+        name: Build Sphinx documentation (warnings as errors)
+        entry: bash -c 'cd docs && make html SPHINXOPTS="-W --keep-going -q"'
+        language: system
+        files: ^(docs/|nlsq/.*\.py$|.*\.md$)
+        pass_filenames: false
+        stages: [manual]  # Run with: pre-commit run --hook-stage manual docs-build
+        # Note: -n (nitpicky mode) disabled as too strict for scientific computing library

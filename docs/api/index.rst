@@ -49,6 +49,7 @@ Advanced Features
 
 - ``nlsq.large_dataset`` - Large dataset handling
 - ``nlsq.memory_manager`` - Memory management
+- ``nlsq.mixed_precision`` - Automatic mixed precision management
 - ``nlsq.smart_cache`` - Intelligent caching
 - ``nlsq.diagnostics`` - Performance monitoring
 
