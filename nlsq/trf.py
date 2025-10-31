@@ -133,8 +133,19 @@ from nlsq.common_scipy import (
 from nlsq.constants import (
     DEFAULT_MAX_NFEV_MULTIPLIER,
     INITIAL_LEVENBERG_MARQUARDT_LAMBDA,
+    MAX_TRUST_RADIUS,
+    MIN_TRUST_RADIUS,
 )
 from nlsq.diagnostics import OptimizationDiagnostics
+
+# Mixed precision support
+from nlsq.mixed_precision import (
+    ConvergenceMetrics,
+    MixedPrecisionConfig,
+    MixedPrecisionManager,
+    OptimizationState,
+    PrecisionState,
+)
 
 # Logging support
 # Optimizer base class
@@ -493,13 +504,11 @@ class TrustRegionJITFunctions:
             p_reg, _, _ = conjugate_gradient_solve(J, f, d, alpha, max_iter)
 
             # Scale to trust region boundary
+            # Clamp scaling factor to prevent numerical instability
+            # when trust region collapses or parameter norm is near zero
             p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.where(
-                p_reg_norm < NUMERICAL_ZERO_THRESHOLD,
-                NUMERICAL_ZERO_THRESHOLD,
-                p_reg_norm,
-            )
-            scaling = Delta / p_reg_norm
+            p_reg_norm = jnp.maximum(p_reg_norm, 1e-10)
+            scaling = jnp.clip(Delta / p_reg_norm, 0.1, 10.0)
 
             return scaling * p_reg
 
@@ -539,13 +548,11 @@ class TrustRegionJITFunctions:
             )
 
             # Scale to trust region boundary
+            # Clamp scaling factor to prevent numerical instability
+            # when trust region collapses or parameter norm is near zero
             p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.where(
-                p_reg_norm < NUMERICAL_ZERO_THRESHOLD,
-                NUMERICAL_ZERO_THRESHOLD,
-                p_reg_norm,
-            )
-            scaling = Delta / p_reg_norm
+            p_reg_norm = jnp.maximum(p_reg_norm, 1e-10)
+            scaling = jnp.clip(Delta / p_reg_norm, 0.1, 10.0)
 
             return scaling * p_reg
 
@@ -1435,6 +1442,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         solver: str = "exact",
         callback: Callable | None = None,
         profiler: TRFProfiler | NullProfiler | None = None,
+        mixed_precision_manager: MixedPrecisionManager | None = None,
+        mixed_precision_config: MixedPrecisionConfig | None = None,
         **kwargs,
     ) -> dict:
         """Unbounded version of the trust-region reflective algorithm.
@@ -1494,6 +1503,14 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 * 0 (default) : work silently.
                 * 1 : display a termination report.
 
+        mixed_precision_manager : MixedPrecisionManager, optional
+            Pre-initialized mixed precision manager. If provided, mixed_precision_config
+            is ignored. Use when sharing manager across multiple optimizations.
+        mixed_precision_config : MixedPrecisionConfig, optional
+            Configuration for automatic mixed precision fallback. If provided and
+            mixed_precision_manager is None, a new manager is created with this config.
+            Default is None (mixed precision disabled).
+
         Returns
         -------
         result : OptimizeResult
@@ -1522,6 +1539,15 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Initialize profiler (NullProfiler if not provided for zero overhead)
         if profiler is None:
             profiler = NullProfiler()
+
+        # Initialize mixed precision manager if configured
+        if mixed_precision_manager is None and mixed_precision_config is not None:
+            mixed_precision_manager = MixedPrecisionManager(
+                mixed_precision_config, verbose=(verbose > 0)
+            )
+
+        # Store original tolerances for potential fallback
+        original_tolerances = {"ftol": ftol, "xtol": xtol, "gtol": gtol}
 
         # Initialize optimization state using helper
         state = self._initialize_trf_state(
@@ -1684,6 +1710,74 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 iteration += 1
 
+                # Mixed precision monitoring and upgrade
+                if mixed_precision_manager is not None and acceptance_result["accepted"]:
+                    # Compute parameter change for precision monitoring
+                    param_change = jnorm(d_jnp) if step_norm is not None else 0.0
+
+                    # Check for NaN/Inf in current state
+                    has_nan_inf = bool(
+                        jnp.isnan(f).any()
+                        or jnp.isinf(f).any()
+                        or jnp.isnan(J).any()
+                        or jnp.isinf(J).any()
+                        or jnp.isnan(g_jnp).any()
+                        or jnp.isinf(g_jnp).any()
+                    )
+
+                    # Report metrics to manager
+                    metrics = ConvergenceMetrics(
+                        iteration=iteration,
+                        residual_norm=float(jnorm(f)),
+                        gradient_norm=float(g_norm),
+                        parameter_change=float(param_change),
+                        cost=float(cost),
+                        trust_radius=float(Delta),
+                        has_nan_inf=has_nan_inf,
+                    )
+                    mixed_precision_manager.report_metrics(metrics)
+
+                    # Update best parameters
+                    mixed_precision_manager.update_best(x, float(cost), iteration)
+
+                    # Check if precision upgrade needed
+                    if mixed_precision_manager.should_upgrade():
+                        # Create optimization state for upgrade
+                        opt_state = OptimizationState(
+                            x=x,
+                            f=f,
+                            J=J,
+                            g=g_jnp,
+                            cost=float(cost),
+                            trust_radius=float(Delta),
+                            iteration=iteration,
+                            dtype=x.dtype,
+                            algorithm_specific={"alpha": alpha},
+                        )
+
+                        # Perform upgrade
+                        upgraded_state = mixed_precision_manager.upgrade_precision(
+                            opt_state
+                        )
+
+                        # Update optimization variables with upgraded state
+                        x = upgraded_state.x
+                        f = upgraded_state.f
+                        J = upgraded_state.J
+                        g = upgraded_state.g
+                        g_jnp = g
+                        cost = upgraded_state.cost
+                        Delta = upgraded_state.trust_radius
+                        iteration = upgraded_state.iteration
+                        alpha = upgraded_state.algorithm_specific["alpha"]
+
+                        # Continue optimization in float64
+                        self.logger.info(
+                            "Continuing optimization in float64",
+                            iteration=iteration,
+                            cost=float(cost),
+                        )
+
                 # Invoke user callback if provided
                 if callback is not None:
                     try:
@@ -1716,6 +1810,157 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         if termination_status is None:
             termination_status = 0
+
+        # Float64 failure fallback: If float64 optimization failed to converge,
+        # fall back to relaxed float32 with best parameters from history
+        if (
+            mixed_precision_manager is not None
+            and mixed_precision_manager.state == PrecisionState.FLOAT64_ACTIVE
+            and termination_status == 0  # Max iterations reached without convergence
+        ):
+            self.logger.info(
+                "Float64 optimization failed to converge, applying relaxed float32 fallback"
+            )
+
+            # Get best state from entire optimization history
+            best_params = mixed_precision_manager.get_best_parameters()
+            best_cost = mixed_precision_manager.tracker.get_best_cost()
+            best_iteration = mixed_precision_manager.tracker.best_iteration
+
+            # Create state with best parameters
+            fallback_state = OptimizationState(
+                x=best_params,
+                f=f,  # Will be recomputed
+                J=J,  # Will be recomputed
+                g=g,  # Will be recomputed
+                cost=best_cost,
+                trust_radius=float(Delta),
+                iteration=best_iteration,
+                dtype=jnp.float64,
+                algorithm_specific={"alpha": alpha},
+            )
+
+            # Apply relaxed fallback (converts to float32, relaxes tolerances)
+            fallback_state, relaxed_tol = mixed_precision_manager.apply_relaxed_fallback(
+                fallback_state, original_tolerances
+            )
+
+            self.logger.info(
+                f"Retrying with relaxed tolerances: "
+                f"gtol={relaxed_tol['gtol']:.2e}, "
+                f"ftol={relaxed_tol['ftol']:.2e}, "
+                f"xtol={relaxed_tol['xtol']:.2e}"
+            )
+
+            # Retry optimization with relaxed criteria and half iteration budget
+            retry_max_nfev = max(max_nfev // 2, 50)
+            x = fallback_state.x
+            Delta = fallback_state.trust_radius
+            iteration = 0  # Reset iteration counter for retry
+
+            # Recompute initial state for retry
+            f, J, cost, g, g_norm, _ = self._compute_initial_state(
+                fun, xdata, ydata, jac, x, loss_function, f_scale, data_mask
+            )
+            g_jnp = g
+
+            # Retry loop with relaxed tolerances
+            for retry_iter in range(retry_max_nfev):
+                # Check relaxed convergence criteria
+                if g_norm < relaxed_tol["gtol"]:
+                    termination_status = 1  # Gradient tolerance satisfied
+                    self.logger.info(
+                        f"Fallback converged via gradient tolerance at iteration {retry_iter}"
+                    )
+                    break
+
+                # Compute trust region step
+                try:
+                    step_result = self.compute_trust_region_step(
+                        J=J,
+                        g=g_jnp,
+                        Delta=Delta,
+                        lb_scaled=None,
+                        ub_scaled=None,
+                        theta=0.0,
+                        solver=solver,
+                        tr_options=tr_options,
+                    )
+                    d_jnp = step_result["step"]
+                    step_norm = step_result.get("step_norm")
+                except Exception as e:
+                    self.logger.warning(f"Fallback step computation failed: {e}")
+                    break
+
+                # Evaluate step
+                acceptance_result = self._evaluate_step(
+                    fun=fun,
+                    xdata=xdata,
+                    ydata=ydata,
+                    jac=jac,
+                    x=x,
+                    f=f,
+                    cost=cost,
+                    J=J,
+                    g=g_jnp,
+                    d=d_jnp,
+                    Delta=Delta,
+                    loss_function=loss_function,
+                    f_scale=f_scale,
+                    data_mask=data_mask,
+                )
+
+                if acceptance_result["accepted"]:
+                    # Update state
+                    x = acceptance_result["x_new"]
+                    f = acceptance_result["f_new"]
+                    cost = acceptance_result["cost_new"]
+                    J = acceptance_result["J_new"]
+                    g = acceptance_result["g_new"]
+                    g_jnp = g
+                    g_norm = acceptance_result["g_norm_new"]
+
+                    # Update trust radius
+                    if acceptance_result["ratio"] > 0.75:
+                        Delta = min(Delta * 2.0, MAX_TRUST_RADIUS)
+                    elif acceptance_result["ratio"] < 0.25:
+                        Delta *= 0.5
+
+                    # Check relaxed convergence
+                    if (
+                        acceptance_result.get("cost_reduction", 0)
+                        < relaxed_tol["ftol"] * cost
+                    ):
+                        termination_status = 2  # Cost tolerance satisfied
+                        self.logger.info(
+                            f"Fallback converged via cost tolerance at iteration {retry_iter}"
+                        )
+                        break
+
+                    if step_norm is not None and step_norm < relaxed_tol["xtol"]:
+                        termination_status = 3  # Step tolerance satisfied
+                        self.logger.info(
+                            f"Fallback converged via step tolerance at iteration {retry_iter}"
+                        )
+                        break
+                else:
+                    # Reduce trust radius
+                    Delta *= 0.5
+                    if Delta < MIN_TRUST_RADIUS:
+                        self.logger.info("Fallback trust radius too small, stopping")
+                        break
+
+            # Log final fallback result
+            final_best_params = mixed_precision_manager.get_best_parameters()
+            final_best_cost = mixed_precision_manager.tracker.get_best_cost()
+            self.logger.info(
+                f"Fallback complete. Best cost: {final_best_cost:.6e} "
+                f"(status: {termination_status})"
+            )
+
+            # Use best parameters from entire history for final result
+            x = final_best_params
+            cost = final_best_cost
 
         active_mask = np.zeros_like(x)
 
