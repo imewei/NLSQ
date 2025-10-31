@@ -926,19 +926,37 @@ class LargeDatasetFitter:
                 mp_config = MixedPrecisionConfig()
 
             mixed_precision_manager = MixedPrecisionManager(mp_config)
-            self.logger.info("Mixed precision optimization enabled (float32 → float64 fallback)")
+            self.logger.info(
+                "Mixed precision optimization enabled (float32 → float64 fallback)"
+            )
 
         # Handle datasets that fit in memory
         if stats.n_chunks == 1:
             return self._fit_single_chunk(
-                f, xdata, ydata, p0, bounds, method, solver,
-                mixed_precision_manager=mixed_precision_manager, **kwargs
+                f,
+                xdata,
+                ydata,
+                p0,
+                bounds,
+                method,
+                solver,
+                mixed_precision_manager=mixed_precision_manager,
+                **kwargs,
             )
 
         # Handle chunked processing (will use streaming if enabled for very large datasets)
         return self._fit_chunked(
-            f, xdata, ydata, p0, bounds, method, solver, show_progress, stats,
-            mixed_precision_manager=mixed_precision_manager, **kwargs
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds,
+            method,
+            solver,
+            show_progress,
+            stats,
+            mixed_precision_manager=mixed_precision_manager,
+            **kwargs,
         )
 
     def _fit_single_chunk(

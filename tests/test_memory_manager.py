@@ -774,7 +774,9 @@ class TestMixedPrecisionIntegration(unittest.TestCase):
         n_params = 10
 
         # Call without dtype parameter
-        memory_default = self.manager.predict_memory_requirement(n_points, n_params, "trf")
+        memory_default = self.manager.predict_memory_requirement(
+            n_points, n_params, "trf"
+        )
 
         # Call with explicit float64
         memory_float64 = self.manager.predict_memory_requirement(

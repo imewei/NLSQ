@@ -885,9 +885,7 @@ class TestMixedPrecisionManager:
         assert state_float64.dtype == jnp.float64
         assert state_float64.iteration == 15  # Preserved
 
-    def test_apply_relaxed_fallback_flow(
-        self, default_config, sample_arrays_float64
-    ):
+    def test_apply_relaxed_fallback_flow(self, default_config, sample_arrays_float64):
         """Test apply_relaxed_fallback() full flow."""
         manager = MixedPrecisionManager(default_config)
 
@@ -1434,7 +1432,10 @@ class TestEdgeCaseHandling:
         )
 
         assert suggestion is not None
-        assert "step size" in suggestion.lower() or "initial parameters" in suggestion.lower()
+        assert (
+            "step size" in suggestion.lower()
+            or "initial parameters" in suggestion.lower()
+        )
 
     def test_handle_validation_failure_nan_jacobian(self):
         """Test recovery suggestion for NaN Jacobian."""
@@ -1446,7 +1447,10 @@ class TestEdgeCaseHandling:
         )
 
         assert suggestion is not None
-        assert "model function" in suggestion.lower() or "finite differences" in suggestion.lower()
+        assert (
+            "model function" in suggestion.lower()
+            or "finite differences" in suggestion.lower()
+        )
 
     def test_handle_validation_failure_collapsed_trust_radius(self):
         """Test recovery suggestion for collapsed trust radius."""
@@ -1458,7 +1462,10 @@ class TestEdgeCaseHandling:
         )
 
         assert suggestion is not None
-        assert "cannot continue" in suggestion.lower() or "initial parameters" in suggestion.lower()
+        assert (
+            "cannot continue" in suggestion.lower()
+            or "initial parameters" in suggestion.lower()
+        )
 
     def test_validate_state_warns_on_extremely_small_parameters(self, caplog):
         """Test that validation warns about extremely small parameters."""
@@ -1483,4 +1490,6 @@ class TestEdgeCaseHandling:
         # Should still be valid but warn
         assert is_valid
         assert error is None
-        assert any("extremely small" in record.message.lower() for record in caplog.records)
+        assert any(
+            "extremely small" in record.message.lower() for record in caplog.records
+        )

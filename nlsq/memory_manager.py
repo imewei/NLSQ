@@ -149,7 +149,11 @@ class MemoryManager:
         return 0.5
 
     def predict_memory_requirement(
-        self, n_points: int, n_params: int, algorithm: str = "trf", dtype: jnp.dtype = jnp.float64
+        self,
+        n_points: int,
+        n_params: int,
+        algorithm: str = "trf",
+        dtype: jnp.dtype = jnp.float64,
     ) -> int:
         """Predict memory requirement for optimization.
 

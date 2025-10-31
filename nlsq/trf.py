@@ -1711,7 +1711,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 iteration += 1
 
                 # Mixed precision monitoring and upgrade
-                if mixed_precision_manager is not None and acceptance_result["accepted"]:
+                if (
+                    mixed_precision_manager is not None
+                    and acceptance_result["accepted"]
+                ):
                     # Compute parameter change for precision monitoring
                     param_change = jnorm(d_jnp) if step_norm is not None else 0.0
 
@@ -1841,8 +1844,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             )
 
             # Apply relaxed fallback (converts to float32, relaxes tolerances)
-            fallback_state, relaxed_tol = mixed_precision_manager.apply_relaxed_fallback(
-                fallback_state, original_tolerances
+            fallback_state, relaxed_tol = (
+                mixed_precision_manager.apply_relaxed_fallback(
+                    fallback_state, original_tolerances
+                )
             )
 
             self.logger.info(
