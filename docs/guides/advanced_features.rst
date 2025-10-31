@@ -475,9 +475,11 @@ Configure mixed precision globally:
    # Enable mixed precision with default settings
    configure_mixed_precision(enable=True)
 
+
    # Define model
    def exponential(x, a, b):
        return a * jnp.exp(-b * x)
+
 
    # Generate data
    x = np.linspace(0, 10, 100000)
@@ -499,9 +501,9 @@ Fine-tune fallback behavior for specific use cases:
    # Configure with custom thresholds
    configure_mixed_precision(
        enable=True,
-       max_degradation_iterations=5,       # Fallback after 5 stalled iterations
+       max_degradation_iterations=5,  # Fallback after 5 stalled iterations
        gradient_explosion_threshold=1e10,  # Detect gradient explosion
-       verbose=True,                       # Enable diagnostic messages
+       verbose=True,  # Enable diagnostic messages
    )
 
    # Now all curve_fit calls use these settings
@@ -637,7 +639,7 @@ Mixed precision works seamlessly with other NLSQ features:
        y_large,
        p0=[2.0, 0.5],
        memory_limit_gb=4.0,  # Memory management
-       progress=True,         # Progress monitoring
+       progress=True,  # Progress monitoring
    )
 
    # Mixed precision + memory management = maximum efficiency

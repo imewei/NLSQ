@@ -743,6 +743,7 @@ class TestMixedPrecisionIntegration(unittest.TestCase):
     def test_get_current_precision_memory_multiplier_with_manager_float32(self):
         """Test memory multiplier with mixed precision manager in float32."""
         import jax.numpy as jnp
+
         from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
 
         # Create manager starting in float32
@@ -755,6 +756,7 @@ class TestMixedPrecisionIntegration(unittest.TestCase):
     def test_get_current_precision_memory_multiplier_with_manager_float64(self):
         """Test memory multiplier with mixed precision manager in float64."""
         import jax.numpy as jnp
+
         from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
 
         # Create manager and manually set it to float64

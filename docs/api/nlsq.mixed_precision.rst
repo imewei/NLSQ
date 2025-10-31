@@ -53,9 +53,11 @@ Enable automatic precision management for memory-constrained environments:
     # Enable mixed precision with default settings
     configure_mixed_precision(enable=True)
 
+
     # Define model function
     def exponential(x, a, b):
         return a * jnp.exp(-b * x)
+
 
     # Generate data
     x = np.linspace(0, 10, 10000)
@@ -80,13 +82,15 @@ Customize fallback behavior for specific use cases:
     # Configure with custom thresholds
     configure_mixed_precision(
         enable=True,
-        max_degradation_iterations=5,      # Fallback after 5 stalled iterations
+        max_degradation_iterations=5,  # Fallback after 5 stalled iterations
         gradient_explosion_threshold=1e10,  # Detect gradient explosion
-        verbose=True,                       # Enable diagnostic messages
+        verbose=True,  # Enable diagnostic messages
     )
+
 
     def gaussian(x, amplitude, mean, std):
         return amplitude * jnp.exp(-((x - mean) ** 2) / (2 * std**2))
+
 
     # Fit with custom configuration
     popt, pcov = curve_fit(
@@ -207,7 +211,7 @@ Detect and recover from gradient explosion:
         residual_norm=1e5,
         gradient_norm=1e12,  # Exploded gradients
         parameter_change=0.001,
-        cost=float('inf'),
+        cost=float("inf"),
         trust_radius=0.1,
         has_nan_inf=True,
     )
@@ -223,7 +227,7 @@ Detect and recover from gradient explosion:
             f=jnp.array([1e5, 1e5]),
             J=jnp.array([[1.0, 2.0], [3.0, 4.0]]),
             g=jnp.array([1e12, 1e13]),
-            cost=float('inf'),
+            cost=float("inf"),
             trust_radius=0.1,
             iteration=2,
             dtype=jnp.float32,
@@ -279,9 +283,11 @@ Mixed precision integrates automatically with the Trust Region Reflective solver
     # Enable mixed precision
     configure_mixed_precision(enable=True, verbose=True)
 
+
     # Complex model that may benefit from mixed precision
     def complex_model(x, a, b, c, d):
-        return (a * jnp.exp(-b * x) + c * jnp.sin(d * x))
+        return a * jnp.exp(-b * x) + c * jnp.sin(d * x)
+
 
     x = np.linspace(0, 20, 50000)
     y_true = 2.0 * np.exp(-0.5 * x) + 0.3 * np.sin(1.5 * x)
@@ -311,9 +317,11 @@ Efficient batch processing with shared JIT compilation:
     # Enable mixed precision for all fits
     configure_mixed_precision(enable=True)
 
+
     # Define model
     def exponential(x, a, b):
         return a * jnp.exp(-b * x)
+
 
     # Create reusable fitter
     fitter = CurveFit(exponential)
@@ -368,10 +376,10 @@ Mixed precision is configured globally via ``nlsq.config.configure_mixed_precisi
     from nlsq.config import configure_mixed_precision
 
     configure_mixed_precision(
-        enable=True,                        # Enable/disable mixed precision
-        max_degradation_iterations=5,       # Fallback after N stalled iterations
+        enable=True,  # Enable/disable mixed precision
+        max_degradation_iterations=5,  # Fallback after N stalled iterations
         gradient_explosion_threshold=1e10,  # Gradient magnitude threshold
-        verbose=False,                      # Enable diagnostic logging
+        verbose=False,  # Enable diagnostic logging
     )
 
 Environment Variables

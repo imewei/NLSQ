@@ -76,7 +76,7 @@ For CI/CD pipelines or intentional CPU-only usage:
     import os
 
     # Option 1: Set before importing NLSQ
-    os.environ['NLSQ_SKIP_GPU_CHECK'] = '1'
+    os.environ["NLSQ_SKIP_GPU_CHECK"] = "1"
     import nlsq  # No GPU warning
 
 Or via shell:
@@ -128,8 +128,7 @@ Check which devices JAX is actually using:
     # Expected CPU-only: [CpuDevice(id=0)]
 
     # Check if using GPU
-    using_gpu = any("cuda" in str(d).lower() or "gpu" in str(d).lower()
-                    for d in devices)
+    using_gpu = any("cuda" in str(d).lower() or "gpu" in str(d).lower() for d in devices)
     print(f"Using GPU: {using_gpu}")
 
 Configuration
@@ -221,7 +220,8 @@ Reduce output clutter in notebooks:
 
     # At top of notebook
     import os
-    os.environ['NLSQ_SKIP_GPU_CHECK'] = '1'
+
+    os.environ["NLSQ_SKIP_GPU_CHECK"] = "1"
     import nlsq  # No warning printed
 
 Programmatic Output Parsing
@@ -236,10 +236,10 @@ When parsing stdout programmatically:
 
     # Suppress GPU warnings in subprocess
     env = os.environ.copy()
-    env['NLSQ_SKIP_GPU_CHECK'] = '1'
+    env["NLSQ_SKIP_GPU_CHECK"] = "1"
 
     result = subprocess.run(
-        ['python', 'my_nlsq_script.py'],
+        ["python", "my_nlsq_script.py"],
         env=env,
         capture_output=True,
         text=True,
@@ -259,7 +259,7 @@ Manually check GPU availability:
 
     # Check if nvidia-smi works
     result = subprocess.run(
-        ['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
         capture_output=True,
         text=True,
     )
@@ -271,6 +271,7 @@ Manually check GPU availability:
 
     # Check JAX backend
     import jax
+
     print(f"JAX devices: {jax.devices()}")
 
 Implementation Details

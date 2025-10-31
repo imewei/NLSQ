@@ -89,8 +89,10 @@ Large datasets (>100K points)   # Now fits
 # nlsq/diagnostics.py
 class ConvergenceMonitor: ...
 
+
 # nlsq/mixed_precision.py
 class ConvergenceMonitor: ...  # Same name!
+
 
 # In docstring (ambiguous)
 """Uses :class:`ConvergenceMonitor` to track progress."""

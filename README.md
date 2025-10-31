@@ -326,9 +326,11 @@ configure_mixed_precision(
     verbose=True,  # Show precision upgrades in logs
 )
 
+
 # Define model function
 def exponential(x, a, b):
     return a * jnp.exp(-b * x)
+
 
 # Fit - starts in float32, automatically upgrades to float64 if needed
 popt, pcov = curve_fit(exponential, x, y, p0=[2.0, 0.5])
