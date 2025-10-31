@@ -2,6 +2,18 @@
 
 This module provides intelligent memory management capabilities including
 prediction, monitoring, pooling, and automatic garbage collection.
+
+Mixed Precision Coordination
+-----------------------------
+The memory manager coordinates with the mixed precision system to provide
+accurate memory estimates based on the current data type (float32 or float64).
+This enables:
+
+- 50% memory savings when using float32 precision
+- Accurate memory predictions for chunking strategies
+- Dynamic memory estimation during precision upgrades
+
+See :class:`MixedPrecisionManager` for more details on mixed precision optimization.
 """
 
 import gc
@@ -9,6 +21,7 @@ import logging
 import warnings
 from contextlib import contextmanager
 
+import jax.numpy as jnp
 import numpy as np
 
 # Module logger for debug output
@@ -33,6 +46,19 @@ class MemoryManager:
     - Array pooling to reduce allocations
     - Automatic garbage collection triggers
     - Context managers for memory-safe operations
+    - Mixed precision coordination for accurate memory estimates
+
+    Mixed Precision Integration
+    ----------------------------
+    The memory manager integrates with :class:`MixedPrecisionManager` to provide
+    accurate memory estimates based on the current precision:
+
+    - float32: 4 bytes per element (50% memory savings)
+    - float64: 8 bytes per element (default precision)
+
+    Use :meth:`get_current_precision_memory_multiplier` to query the current
+    memory multiplier, and pass ``dtype`` to :meth:`predict_memory_requirement`
+    for precision-aware memory estimates.
 
     Attributes
     ----------
@@ -123,7 +149,7 @@ class MemoryManager:
         return 0.5
 
     def predict_memory_requirement(
-        self, n_points: int, n_params: int, algorithm: str = "trf"
+        self, n_points: int, n_params: int, algorithm: str = "trf", dtype: jnp.dtype = jnp.float64
     ) -> int:
         """Predict memory requirement for optimization.
 
@@ -135,14 +161,23 @@ class MemoryManager:
             Number of parameters
         algorithm : str
             Algorithm name ('trf', 'lm', 'dogbox')
+        dtype : jnp.dtype, optional
+            Data type for computations (default: jnp.float64).
+            Affects memory calculations: float32 uses 4 bytes, float64 uses 8 bytes.
 
         Returns
         -------
         bytes_needed : int
             Estimated memory requirement in bytes
+
+        Notes
+        -----
+        Memory requirements scale linearly with precision:
+        - float32: 4 bytes per element (50% memory savings)
+        - float64: 8 bytes per element (default, higher precision)
         """
-        # Size of double precision float
-        float_size = 8
+        # Size of float depends on dtype (4 bytes for float32, 8 bytes for float64)
+        float_size = 4 if dtype == jnp.float32 else 8
 
         # Base arrays: x, y, params
         base_memory = float_size * (2 * n_points + n_params)
@@ -466,6 +501,56 @@ class MemoryManager:
             / 1e9,
             "total_points": n_points,
         }
+
+    def get_current_precision_memory_multiplier(
+        self, mixed_precision_manager=None
+    ) -> float:
+        """Get memory multiplier based on current precision.
+
+        This method returns the memory usage multiplier relative to float64,
+        which helps coordinate memory management with mixed precision optimization.
+
+        Parameters
+        ----------
+        mixed_precision_manager : MixedPrecisionManager, optional
+            Mixed precision manager to query for current dtype.
+            If None, assumes float64 (multiplier = 1.0).
+
+        Returns
+        -------
+        multiplier : float
+            Memory multiplier relative to float64:
+            - 1.0 if using float64 (default, no manager)
+            - 0.5 if using float32 (50% memory savings)
+
+        Examples
+        --------
+        >>> from nlsq.memory_manager import MemoryManager
+        >>> from nlsq.mixed_precision import MixedPrecisionManager, MixedPrecisionConfig
+        >>> manager = MemoryManager()
+        >>> # Without mixed precision (defaults to float64)
+        >>> manager.get_current_precision_memory_multiplier()
+        1.0
+        >>> # With mixed precision in float32 mode
+        >>> mp_manager = MixedPrecisionManager(MixedPrecisionConfig())
+        >>> manager.get_current_precision_memory_multiplier(mp_manager)
+        0.5
+
+        Notes
+        -----
+        This multiplier can be used to adjust memory estimates when mixed precision
+        is active, providing more accurate memory predictions and enabling better
+        resource allocation.
+        """
+        if mixed_precision_manager is None:
+            # No mixed precision manager: assume float64
+            return 1.0
+
+        # Query current dtype from manager
+        current_dtype = mixed_precision_manager.get_current_dtype()
+
+        # Return multiplier: 0.5 for float32, 1.0 for float64
+        return 0.5 if current_dtype == jnp.float32 else 1.0
 
 
 # Global memory manager instance

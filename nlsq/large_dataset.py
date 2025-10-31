@@ -12,7 +12,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from logging import Logger
-from typing import Optional
 
 import numpy as np
 import psutil
@@ -470,6 +469,8 @@ class LargeDatasetFitter:
         config: LDMemoryConfig | None = None,
         curve_fit_class: CurveFit | None = None,
         logger: Logger | None = None,
+        enable_mixed_precision: bool | None = None,
+        mixed_precision_config=None,
     ) -> None:
         """Initialize LargeDatasetFitter.
 
@@ -485,12 +486,23 @@ class LargeDatasetFitter:
             External logger instance for integration with application logging.
             If None, uses NLSQ's internal logger. This allows chunk failure
             warnings to appear in your application's logs.
+        enable_mixed_precision : bool, optional
+            Enable mixed precision optimization (float32 → float64 fallback).
+            If None (default), automatically enables for chunked datasets
+            (provides 50% additional memory savings). Set to False to disable.
+        mixed_precision_config : MixedPrecisionConfig, optional
+            Custom configuration for mixed precision behavior. If None and
+            mixed precision is enabled, uses default configuration.
         """
         if config is None:
             config = LDMemoryConfig(memory_limit_gb=memory_limit_gb)
 
         self.config = config
         self.logger = logger or get_logger(__name__)
+
+        # Mixed precision settings
+        self.enable_mixed_precision = enable_mixed_precision
+        self.mixed_precision_config = mixed_precision_config
 
         # Initialize curve fitting backend
         if curve_fit_class is None:
@@ -892,15 +904,41 @@ class LargeDatasetFitter:
         # Get processing statistics and strategy
         stats = self.estimate_requirements(n_points, n_params)
 
+        # Determine if chunking is needed
+        needs_chunking = stats.n_chunks > 1
+
+        # Auto-enable mixed precision for chunked datasets (50% additional memory savings)
+        enable_mp = self.enable_mixed_precision
+        if enable_mp is None and needs_chunking:
+            enable_mp = True
+            self.logger.info(
+                "Auto-enabled mixed precision for chunked processing "
+                "(50% additional memory savings)"
+            )
+
+        # Create mixed precision manager if enabled
+        mixed_precision_manager = None
+        if enable_mp:
+            from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
+
+            mp_config = self.mixed_precision_config
+            if mp_config is None:
+                mp_config = MixedPrecisionConfig()
+
+            mixed_precision_manager = MixedPrecisionManager(mp_config)
+            self.logger.info("Mixed precision optimization enabled (float32 → float64 fallback)")
+
         # Handle datasets that fit in memory
         if stats.n_chunks == 1:
             return self._fit_single_chunk(
-                f, xdata, ydata, p0, bounds, method, solver, **kwargs
+                f, xdata, ydata, p0, bounds, method, solver,
+                mixed_precision_manager=mixed_precision_manager, **kwargs
             )
 
         # Handle chunked processing (will use streaming if enabled for very large datasets)
         return self._fit_chunked(
-            f, xdata, ydata, p0, bounds, method, solver, show_progress, stats, **kwargs
+            f, xdata, ydata, p0, bounds, method, solver, show_progress, stats,
+            mixed_precision_manager=mixed_precision_manager, **kwargs
         )
 
     def _fit_single_chunk(
@@ -912,13 +950,14 @@ class LargeDatasetFitter:
         bounds: tuple,
         method: str,
         solver: str,
+        mixed_precision_manager=None,
         **kwargs,
     ) -> OptimizeResult:
         """Fit data that can be processed in a single chunk."""
 
         self.logger.info("Fitting dataset in single chunk")
 
-        # Use standard curve_fit
+        # Use standard curve_fit with mixed precision if enabled
         try:
             popt, _pcov = self.curve_fit.curve_fit(
                 f,
@@ -928,6 +967,7 @@ class LargeDatasetFitter:
                 bounds=bounds,
                 method=method,
                 solver=solver,
+                mixed_precision_manager=mixed_precision_manager,
                 **kwargs,
             )
 
@@ -1247,6 +1287,7 @@ class LargeDatasetFitter:
         bounds: tuple,
         method: str,
         solver: str,
+        mixed_precision_manager=None,
         **kwargs,
     ) -> tuple[dict, np.ndarray | None]:
         """Retry a failed chunk with perturbed parameters.
@@ -1298,6 +1339,7 @@ class LargeDatasetFitter:
                 bounds=bounds,
                 method=method,
                 solver=solver,
+                mixed_precision_manager=mixed_precision_manager,
                 **kwargs,
             )
 
@@ -1545,6 +1587,7 @@ class LargeDatasetFitter:
         solver: str,
         show_progress: bool,
         stats: DatasetStats,
+        mixed_precision_manager=None,
         **kwargs,
     ) -> OptimizeResult:
         """Fit dataset using chunked processing with parameter refinement."""
@@ -1571,7 +1614,7 @@ class LargeDatasetFitter:
             ):
                 chunk_start_time = time.time()
                 try:
-                    # Fit current chunk
+                    # Fit current chunk with mixed precision if enabled
                     popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
                         f,
                         x_chunk,
@@ -1580,6 +1623,7 @@ class LargeDatasetFitter:
                         bounds=bounds,
                         method=method,
                         solver=solver,
+                        mixed_precision_manager=mixed_precision_manager,
                         **kwargs,
                     )
 
@@ -1630,6 +1674,7 @@ class LargeDatasetFitter:
                         bounds=bounds,
                         method=method,
                         solver=solver,
+                        mixed_precision_manager=mixed_precision_manager,
                         **kwargs,
                     )
                     # Update params if retry succeeded
@@ -1726,6 +1771,8 @@ def fit_large_dataset(
     memory_limit_gb: float = 8.0,
     show_progress: bool = False,
     logger: Logger | None = None,
+    enable_mixed_precision: bool | None = None,
+    mixed_precision_config=None,
     **kwargs,
 ) -> OptimizeResult:
     """Convenience function for fitting large datasets.
@@ -1746,6 +1793,13 @@ def fit_large_dataset(
         Whether to show progress (default: False)
     logger : logging.Logger, optional
         External logger for application integration (default: None)
+    enable_mixed_precision : bool, optional
+        Enable mixed precision optimization (float32 → float64 fallback).
+        If None (default), automatically enables for chunked datasets
+        (provides 50% additional memory savings). Set to False to disable.
+    mixed_precision_config : MixedPrecisionConfig, optional
+        Custom configuration for mixed precision behavior. If None and
+        mixed precision is enabled, uses default configuration.
     **kwargs
         Additional arguments passed to curve_fit
 
@@ -1780,7 +1834,12 @@ def fit_large_dataset(
     ...     print(f"Failed chunks: {result.failure_summary['failed_chunk_indices']}")
     ...     print(f"Common errors: {result.failure_summary['common_errors']}")
     """
-    fitter = LargeDatasetFitter(memory_limit_gb=memory_limit_gb, logger=logger)
+    fitter = LargeDatasetFitter(
+        memory_limit_gb=memory_limit_gb,
+        logger=logger,
+        enable_mixed_precision=enable_mixed_precision,
+        mixed_precision_config=mixed_precision_config,
+    )
 
     if show_progress:
         return fitter.fit_with_progress(f, xdata, ydata, p0=p0, **kwargs)

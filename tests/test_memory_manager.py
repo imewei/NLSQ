@@ -668,5 +668,122 @@ class TestPropertyBasedMemoryManager(unittest.TestCase):
         self.assertGreaterEqual(chunk_size * n_chunks, n_points)
 
 
+class TestMixedPrecisionIntegration(unittest.TestCase):
+    """Tests for mixed precision integration with memory manager."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.manager = MemoryManager()
+
+    def tearDown(self):
+        """Clean up after each test."""
+        self.manager.clear_pool()
+
+    def test_predict_memory_float32(self):
+        """Test memory prediction with float32 dtype."""
+        import jax.numpy as jnp
+
+        n_points = 1000
+        n_params = 10
+
+        memory_float32 = self.manager.predict_memory_requirement(
+            n_points, n_params, "trf", dtype=jnp.float32
+        )
+
+        # Should return positive memory requirement
+        self.assertGreater(memory_float32, 0)
+
+        # Should scale with float32 size (4 bytes)
+        expected_min = 4 * n_points * n_params  # At least Jacobian
+        self.assertGreater(memory_float32, expected_min)
+
+    def test_predict_memory_float64(self):
+        """Test memory prediction with float64 dtype (default)."""
+        import jax.numpy as jnp
+
+        n_points = 1000
+        n_params = 10
+
+        memory_float64 = self.manager.predict_memory_requirement(
+            n_points, n_params, "trf", dtype=jnp.float64
+        )
+
+        # Should return positive memory requirement
+        self.assertGreater(memory_float64, 0)
+
+        # Should scale with float64 size (8 bytes)
+        expected_min = 8 * n_points * n_params  # At least Jacobian
+        self.assertGreater(memory_float64, expected_min)
+
+    def test_memory_difference_float32_vs_float64(self):
+        """Test that float32 uses ~50% memory compared to float64."""
+        import jax.numpy as jnp
+
+        n_points = 10000
+        n_params = 50
+
+        memory_float32 = self.manager.predict_memory_requirement(
+            n_points, n_params, "trf", dtype=jnp.float32
+        )
+        memory_float64 = self.manager.predict_memory_requirement(
+            n_points, n_params, "trf", dtype=jnp.float64
+        )
+
+        # float32 should use approximately 50% of float64 memory
+        ratio = memory_float32 / memory_float64
+        self.assertAlmostEqual(ratio, 0.5, delta=0.01)
+
+    def test_get_current_precision_memory_multiplier_no_manager(self):
+        """Test memory multiplier without mixed precision manager."""
+        multiplier = self.manager.get_current_precision_memory_multiplier(None)
+
+        # Should default to 1.0 (float64)
+        self.assertEqual(multiplier, 1.0)
+
+    def test_get_current_precision_memory_multiplier_with_manager_float32(self):
+        """Test memory multiplier with mixed precision manager in float32."""
+        import jax.numpy as jnp
+        from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
+
+        # Create manager starting in float32
+        mp_manager = MixedPrecisionManager(MixedPrecisionConfig())
+
+        # Initial state should be FLOAT32_ACTIVE, multiplier should be 0.5
+        multiplier = self.manager.get_current_precision_memory_multiplier(mp_manager)
+        self.assertEqual(multiplier, 0.5)
+
+    def test_get_current_precision_memory_multiplier_with_manager_float64(self):
+        """Test memory multiplier with mixed precision manager in float64."""
+        import jax.numpy as jnp
+        from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
+
+        # Create manager and manually set it to float64
+        # (simulating after upgrade)
+        mp_manager = MixedPrecisionManager(MixedPrecisionConfig())
+        mp_manager.current_dtype = jnp.float64
+
+        # Should return 1.0 for float64
+        multiplier = self.manager.get_current_precision_memory_multiplier(mp_manager)
+        self.assertEqual(multiplier, 1.0)
+
+    def test_predict_memory_default_dtype(self):
+        """Test that default dtype is float64."""
+        import jax.numpy as jnp
+
+        n_points = 1000
+        n_params = 10
+
+        # Call without dtype parameter
+        memory_default = self.manager.predict_memory_requirement(n_points, n_params, "trf")
+
+        # Call with explicit float64
+        memory_float64 = self.manager.predict_memory_requirement(
+            n_points, n_params, "trf", dtype=jnp.float64
+        )
+
+        # Should be identical
+        self.assertEqual(memory_default, memory_float64)
+
+
 if __name__ == "__main__":
     unittest.main()

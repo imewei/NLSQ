@@ -115,15 +115,39 @@ MIN_PARAMETERS = 1  # Minimum number of parameters
 MAX_REASONABLE_PARAMETERS = 1000  # Warning threshold for parameter count
 
 # =============================================================================
+# Mixed Precision Fallback Constants
+# =============================================================================
+
+# Gradient explosion threshold for detecting numerical instability
+DEFAULT_GRADIENT_EXPLOSION_THRESHOLD = 1e10
+
+# Precision limit threshold - minimum meaningful parameter change in float32
+DEFAULT_PRECISION_LIMIT_THRESHOLD = 1e-7
+
+# Number of iterations to track for convergence stall detection
+DEFAULT_STALL_WINDOW = 10
+
+# Number of degradation iterations before upgrading from float32 to float64
+DEFAULT_MAX_DEGRADATION_ITERATIONS = 5
+
+# Factor to relax tolerances when float64 fails (fallback to float32)
+DEFAULT_TOLERANCE_RELAXATION_FACTOR = 10.0
+
+# =============================================================================
 # Exported Constants (for backwards compatibility)
 # =============================================================================
 
 __all__ = [
     "DEFAULT_FTOL",
     "DEFAULT_F_SCALE",
+    "DEFAULT_GRADIENT_EXPLOSION_THRESHOLD",
     "DEFAULT_GTOL",
+    "DEFAULT_MAX_DEGRADATION_ITERATIONS",
     "DEFAULT_MAX_NFEV_MULTIPLIER",
     "DEFAULT_MEMORY_LIMIT_GB",
+    "DEFAULT_PRECISION_LIMIT_THRESHOLD",
+    "DEFAULT_STALL_WINDOW",
+    "DEFAULT_TOLERANCE_RELAXATION_FACTOR",
     "DEFAULT_XTOL",
     "FINITE_DIFF_ABS_STEP_MIN",
     "FINITE_DIFF_REL_STEP",

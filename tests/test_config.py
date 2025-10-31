@@ -756,5 +756,362 @@ class TestConfigEdgeCases(unittest.TestCase):
         self.assertIn("memory_limit_gb", str(ctx.exception))
 
 
+class TestMixedPrecisionConfig(unittest.TestCase):
+    """Tests for mixed precision configuration and environment variables."""
+
+    def setUp(self):
+        """Reset environment before each test."""
+        # Clean up any existing environment variables
+        env_vars = [
+            "NLSQ_MIXED_PRECISION_VERBOSE",
+            "NLSQ_GRADIENT_EXPLOSION_THRESHOLD",
+            "NLSQ_PRECISION_LIMIT_THRESHOLD",
+            "NLSQ_STALL_WINDOW",
+            "NLSQ_MAX_DEGRADATION_ITERATIONS",
+            "NLSQ_TOLERANCE_RELAXATION_FACTOR",
+            "NLSQ_DISABLE_MIXED_PRECISION",
+        ]
+        for var in env_vars:
+            os.environ.pop(var, None)
+
+        # Reset config to ensure clean state for each test
+        JAXConfig._mixed_precision_config = None
+
+    def tearDown(self):
+        """Clean up after each test."""
+        env_vars = [
+            "NLSQ_MIXED_PRECISION_VERBOSE",
+            "NLSQ_GRADIENT_EXPLOSION_THRESHOLD",
+            "NLSQ_PRECISION_LIMIT_THRESHOLD",
+            "NLSQ_STALL_WINDOW",
+            "NLSQ_MAX_DEGRADATION_ITERATIONS",
+            "NLSQ_TOLERANCE_RELAXATION_FACTOR",
+            "NLSQ_DISABLE_MIXED_PRECISION",
+        ]
+        for var in env_vars:
+            os.environ.pop(var, None)
+
+        # Reset singleton to clean state
+        JAXConfig._mixed_precision_config = None
+
+    def _force_reinit_from_env(self):
+        """Helper to force re-initialization from environment variables."""
+        # Reset the singleton state to force complete re-initialization
+        JAXConfig._mixed_precision_config = None
+        # Don't reset _initialized as it would reinitialize JAX config too
+        # Just directly call the initialization method
+        instance = JAXConfig()
+        # Call private method directly to force reinitialization from env vars
+        instance._mixed_precision_config = None  # Make sure it's None on instance too
+        instance._initialize_mixed_precision_config()
+
+    def test_get_mixed_precision_config(self):
+        """Test get_mixed_precision_config function with default values."""
+        from nlsq.config import get_mixed_precision_config
+        from nlsq.mixed_precision import MixedPrecisionConfig
+
+        # Force fresh initialization from clean environment to get default values
+        self._force_reinit_from_env()
+
+        config = get_mixed_precision_config()
+
+        self.assertIsInstance(config, MixedPrecisionConfig)
+        self.assertTrue(config.enable_mixed_precision_fallback)
+        self.assertEqual(config.max_degradation_iterations, 5)
+        self.assertEqual(config.stall_window, 10)
+        self.assertEqual(config.gradient_explosion_threshold, 1e10)
+        self.assertEqual(config.precision_limit_threshold, 1e-7)
+        self.assertEqual(config.tolerance_relaxation_factor, 10.0)
+        self.assertFalse(config.verbose)
+
+    def test_env_var_verbose(self):
+        """Test NLSQ_MIXED_PRECISION_VERBOSE environment variable."""
+        os.environ["NLSQ_MIXED_PRECISION_VERBOSE"] = "1"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertTrue(config.verbose)
+
+    def test_env_var_gradient_explosion_threshold(self):
+        """Test NLSQ_GRADIENT_EXPLOSION_THRESHOLD environment variable."""
+        os.environ["NLSQ_GRADIENT_EXPLOSION_THRESHOLD"] = "1e8"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.gradient_explosion_threshold, 1e8)
+
+    def test_env_var_precision_limit_threshold(self):
+        """Test NLSQ_PRECISION_LIMIT_THRESHOLD environment variable."""
+        os.environ["NLSQ_PRECISION_LIMIT_THRESHOLD"] = "1e-8"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.precision_limit_threshold, 1e-8)
+
+    def test_env_var_stall_window(self):
+        """Test NLSQ_STALL_WINDOW environment variable."""
+        os.environ["NLSQ_STALL_WINDOW"] = "15"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.stall_window, 15)
+
+    def test_env_var_max_degradation_iterations(self):
+        """Test NLSQ_MAX_DEGRADATION_ITERATIONS environment variable."""
+        os.environ["NLSQ_MAX_DEGRADATION_ITERATIONS"] = "3"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.max_degradation_iterations, 3)
+
+    def test_env_var_tolerance_relaxation_factor(self):
+        """Test NLSQ_TOLERANCE_RELAXATION_FACTOR environment variable."""
+        os.environ["NLSQ_TOLERANCE_RELAXATION_FACTOR"] = "5.0"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.tolerance_relaxation_factor, 5.0)
+
+    def test_env_var_disable_mixed_precision(self):
+        """Test NLSQ_DISABLE_MIXED_PRECISION environment variable."""
+        os.environ["NLSQ_DISABLE_MIXED_PRECISION"] = "1"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertFalse(config.enable_mixed_precision_fallback)
+
+    def test_multiple_env_vars(self):
+        """Test multiple environment variables set at once."""
+        os.environ["NLSQ_MIXED_PRECISION_VERBOSE"] = "1"
+        os.environ["NLSQ_GRADIENT_EXPLOSION_THRESHOLD"] = "1e9"
+        os.environ["NLSQ_MAX_DEGRADATION_ITERATIONS"] = "7"
+        self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertTrue(config.verbose)
+        self.assertEqual(config.gradient_explosion_threshold, 1e9)
+        self.assertEqual(config.max_degradation_iterations, 7)
+
+    def test_invalid_env_var_gradient_threshold(self):
+        """Test invalid NLSQ_GRADIENT_EXPLOSION_THRESHOLD value."""
+        os.environ["NLSQ_GRADIENT_EXPLOSION_THRESHOLD"] = "invalid"
+
+        # Should fall back to default and issue warning
+        with self.assertWarns(UserWarning):
+            self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.gradient_explosion_threshold, 1e10)  # Default
+
+    def test_invalid_env_var_precision_threshold(self):
+        """Test invalid NLSQ_PRECISION_LIMIT_THRESHOLD value."""
+        os.environ["NLSQ_PRECISION_LIMIT_THRESHOLD"] = "not_a_number"
+
+        with self.assertWarns(UserWarning):
+            self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.precision_limit_threshold, 1e-7)  # Default
+
+    def test_invalid_env_var_stall_window(self):
+        """Test invalid NLSQ_STALL_WINDOW value."""
+        os.environ["NLSQ_STALL_WINDOW"] = "not_an_int"
+
+        with self.assertWarns(UserWarning):
+            self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.stall_window, 10)  # Default
+
+    def test_invalid_env_var_max_degradation(self):
+        """Test invalid NLSQ_MAX_DEGRADATION_ITERATIONS value."""
+        os.environ["NLSQ_MAX_DEGRADATION_ITERATIONS"] = "bad_value"
+
+        with self.assertWarns(UserWarning):
+            self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.max_degradation_iterations, 5)  # Default
+
+    def test_invalid_env_var_relaxation_factor(self):
+        """Test invalid NLSQ_TOLERANCE_RELAXATION_FACTOR value."""
+        os.environ["NLSQ_TOLERANCE_RELAXATION_FACTOR"] = "xyz"
+
+        with self.assertWarns(UserWarning):
+            self._force_reinit_from_env()
+
+        from nlsq.config import get_mixed_precision_config
+
+        config = get_mixed_precision_config()
+        self.assertEqual(config.tolerance_relaxation_factor, 10.0)  # Default
+
+    def test_set_mixed_precision_config(self):
+        """Test set_mixed_precision_config function."""
+        from nlsq.config import get_mixed_precision_config, set_mixed_precision_config
+        from nlsq.mixed_precision import MixedPrecisionConfig
+
+        original = get_mixed_precision_config()
+
+        try:
+            custom_config = MixedPrecisionConfig(
+                verbose=True,
+                max_degradation_iterations=10,
+                gradient_explosion_threshold=1e8,
+            )
+            set_mixed_precision_config(custom_config)
+
+            config = get_mixed_precision_config()
+            self.assertTrue(config.verbose)
+            self.assertEqual(config.max_degradation_iterations, 10)
+            self.assertEqual(config.gradient_explosion_threshold, 1e8)
+        finally:
+            set_mixed_precision_config(original)
+
+    def test_configure_mixed_precision(self):
+        """Test configure_mixed_precision convenience function."""
+        from nlsq.config import configure_mixed_precision, get_mixed_precision_config
+
+        original = get_mixed_precision_config()
+
+        try:
+            configure_mixed_precision(
+                enable=True,
+                max_degradation_iterations=8,
+                gradient_explosion_threshold=1e12,
+                precision_limit_threshold=1e-8,
+                stall_window=12,
+                tolerance_relaxation_factor=15.0,
+                verbose=True,
+            )
+
+            config = get_mixed_precision_config()
+            self.assertTrue(config.enable_mixed_precision_fallback)
+            self.assertEqual(config.max_degradation_iterations, 8)
+            self.assertEqual(config.gradient_explosion_threshold, 1e12)
+            self.assertEqual(config.precision_limit_threshold, 1e-8)
+            self.assertEqual(config.stall_window, 12)
+            self.assertEqual(config.tolerance_relaxation_factor, 15.0)
+            self.assertTrue(config.verbose)
+        finally:
+            JAXConfig.set_mixed_precision_config(original)
+
+    def test_configure_mixed_precision_disable(self):
+        """Test disabling mixed precision via configure_mixed_precision."""
+        from nlsq.config import configure_mixed_precision, get_mixed_precision_config
+
+        original = get_mixed_precision_config()
+
+        try:
+            configure_mixed_precision(enable=False)
+
+            config = get_mixed_precision_config()
+            self.assertFalse(config.enable_mixed_precision_fallback)
+        finally:
+            JAXConfig.set_mixed_precision_config(original)
+
+    def test_mixed_precision_context_manager(self):
+        """Test mixed_precision_context context manager."""
+        from nlsq.config import get_mixed_precision_config, mixed_precision_context
+        from nlsq.mixed_precision import MixedPrecisionConfig
+
+        original = get_mixed_precision_config()
+
+        temp_config = MixedPrecisionConfig(
+            verbose=True, max_degradation_iterations=2, gradient_explosion_threshold=1e8
+        )
+
+        with mixed_precision_context(temp_config):
+            current = get_mixed_precision_config()
+            self.assertTrue(current.verbose)
+            self.assertEqual(current.max_degradation_iterations, 2)
+            self.assertEqual(current.gradient_explosion_threshold, 1e8)
+
+        # Should restore original
+        restored = get_mixed_precision_config()
+        self.assertEqual(restored.verbose, original.verbose)
+        self.assertEqual(
+            restored.max_degradation_iterations, original.max_degradation_iterations
+        )
+        self.assertEqual(
+            restored.gradient_explosion_threshold,
+            original.gradient_explosion_threshold,
+        )
+
+    def test_mixed_precision_context_nested(self):
+        """Test nested mixed_precision_context managers."""
+        from nlsq.config import get_mixed_precision_config, mixed_precision_context
+        from nlsq.mixed_precision import MixedPrecisionConfig
+
+        original = get_mixed_precision_config()
+
+        config1 = MixedPrecisionConfig(max_degradation_iterations=3)
+        config2 = MixedPrecisionConfig(max_degradation_iterations=7)
+
+        with mixed_precision_context(config1):
+            self.assertEqual(get_mixed_precision_config().max_degradation_iterations, 3)
+
+            with mixed_precision_context(config2):
+                self.assertEqual(
+                    get_mixed_precision_config().max_degradation_iterations, 7
+                )
+
+            # Should restore to config1
+            self.assertEqual(get_mixed_precision_config().max_degradation_iterations, 3)
+
+        # Should restore to original
+        self.assertEqual(
+            get_mixed_precision_config().max_degradation_iterations,
+            original.max_degradation_iterations,
+        )
+
+    def test_mixed_precision_context_with_exception(self):
+        """Test that context manager restores config even with exception."""
+        from nlsq.config import get_mixed_precision_config, mixed_precision_context
+        from nlsq.mixed_precision import MixedPrecisionConfig
+
+        original = get_mixed_precision_config()
+
+        temp_config = MixedPrecisionConfig(max_degradation_iterations=99)
+
+        try:
+            with mixed_precision_context(temp_config):
+                self.assertEqual(
+                    get_mixed_precision_config().max_degradation_iterations, 99
+                )
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
+
+        # Should still restore original config
+        self.assertEqual(
+            get_mixed_precision_config().max_degradation_iterations,
+            original.max_degradation_iterations,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
