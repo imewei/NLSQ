@@ -615,7 +615,7 @@ Before deploying NLSQ in production, verify:
 -  ☐ JIT compilation cached (warm-up run completed)
 -  ☐ Batch processing used when fitting multiple datasets
 -  ☐ Appropriate bounds set (improves convergence speed)
--  ☐ Float64 precision enabled (default, for accuracy)
+-  ☐ Mixed precision enabled (default: float32 → float64 upgrade)
 -  ☐ Profiling confirms GPU kernels are executing
 -  ☐ No memory warnings or OOM errors
 

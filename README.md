@@ -495,12 +495,12 @@ JAX's idiosyncrasies and so the "gotchas" are mostly the same.
 ### Automatic Precision Management (v0.2.0+)
 NLSQ **automatically manages numerical precision** for optimal performance and memory usage:
 
-- **Default**: Float64 (double precision) for maximum accuracy
-- **Automatic fallback**: Float32 (single precision) when memory constrained
-- **Memory savings**: Up to 50% with automatic float32 fallback
+- **Default**: Float32 (single precision) for memory efficiency
+- **Automatic upgrade**: Float32 → Float64 when precision issues detected
+- **Memory savings**: Up to 50% by starting in float32
 - **No manual configuration needed** for most use cases
 
-NLSQ automatically enables double precision when imported. The mixed precision system will automatically fall back to float32 if you encounter out-of-memory errors, then upgrade back to float64 if convergence stalls.
+NLSQ starts with single precision (float32) for memory efficiency. The mixed precision system will automatically upgrade to float64 if convergence stalls or precision issues are detected.
 
 **Advanced users** can manually control precision or disable automatic fallback:
 
