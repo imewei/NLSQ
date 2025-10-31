@@ -5,7 +5,10 @@ import os
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from nlsq.mixed_precision import MixedPrecisionConfig
 
 
 @dataclass

@@ -238,6 +238,8 @@ For problems with sparse Jacobian structure (e.g., fitting multiple independent 
 ```python
 from nlsq import SparseJacobianComputer
 
+# ... (assumes func, p0, x_sample defined from previous example)
+
 # Automatically detect and exploit sparsity
 sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
 pattern, sparsity = sparse_computer.detect_sparsity_pattern(func, p0, x_sample)
@@ -693,6 +695,8 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.7"  # Use 70% of GPU memory
 **Solution:** Use `CurveFit` class to reuse compilation:
 ```python
 from nlsq import CurveFit
+
+# ... (assumes model_func, xdata1, ydata1, xdata2, ydata2 defined)
 
 fitter = CurveFit(model_func)
 popt1, pcov1 = fitter.fit(xdata1, ydata1)  # First run: JIT compiles

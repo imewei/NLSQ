@@ -364,7 +364,7 @@ class ConvergenceMonitor:
         """
         self.config = config
         self.logger = logger
-        self.cost_history = deque(maxlen=config.stall_window)
+        self.cost_history: deque[float] = deque(maxlen=config.stall_window)
         self.degradation_counter = 0
 
     def check_convergence(self, metrics: ConvergenceMetrics) -> str | None:
@@ -936,9 +936,7 @@ class MixedPrecisionManager:
         """
         return self.current_dtype
 
-    def _validate_parameters(
-        self, x: jnp.ndarray | None
-    ) -> tuple[bool, str | None]:
+    def _validate_parameters(self, x: jnp.ndarray | None) -> tuple[bool, str | None]:
         """Validate parameter vector for NaN/Inf and extreme values.
 
         Parameters
@@ -1107,9 +1105,7 @@ class MixedPrecisionManager:
 
         return True, None
 
-    def validate_metrics(
-        self, metrics: ConvergenceMetrics
-    ) -> tuple[bool, str | None]:
+    def validate_metrics(self, metrics: ConvergenceMetrics) -> tuple[bool, str | None]:
         """Validate convergence metrics for NaN/Inf and other issues.
 
         Parameters

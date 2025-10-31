@@ -19,6 +19,7 @@ radioactive_decay.png
 # Example/Demo output files
 *.png
 *.log
+*.npy
 checkpoints*/
 streaming_diagnostics_example.json
 optimization.log

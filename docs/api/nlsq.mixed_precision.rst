@@ -129,34 +129,55 @@ Use the manager directly for fine-grained control:
 
 .. code-block:: python
 
-    from nlsq.mixed_precision import MixedPrecisionManager, create_mixed_precision_manager
+    from nlsq.mixed_precision import (
+        MixedPrecisionManager,
+        MixedPrecisionConfig,
+        ConvergenceMetrics,
+        OptimizationState,
+    )
     import jax.numpy as jnp
 
-    # Create manager with custom settings
-    manager = create_mixed_precision_manager(
+    # Create configuration
+    config = MixedPrecisionConfig(
         max_degradation_iterations=3,
         gradient_explosion_threshold=1e8,
-        enable_fallback=True,
+        enable_mixed_precision_fallback=True,
     )
 
-    # Check if fallback is needed
-    state = {
-        "x": jnp.array([1.0, 2.0]),
-        "f": jnp.array([0.1, 0.2]),
-        "J": jnp.array([[1.0, 2.0], [3.0, 4.0]]),
-        "g": jnp.array([0.5, 0.6]),
-        "cost": 0.15,
-        "trust_radius": 1.0,
-    }
+    # Create manager
+    manager = MixedPrecisionManager(config, verbose=False)
 
-    should_fallback, reason = manager.should_fallback_to_float64(
-        state, iteration=6, cost_improved=False
+    # In optimization loop, report convergence metrics
+    metrics = ConvergenceMetrics(
+        iteration=6,
+        residual_norm=0.5,
+        gradient_norm=1e12,  # Large gradient
+        parameter_change=0.01,
+        cost=0.15,
+        trust_radius=1.0,
+        has_nan_inf=False,
     )
+    manager.report_metrics(metrics)
 
-    if should_fallback:
-        print(f"Fallback triggered: {reason}")
-        # Apply float64 conversion
-        state_float64 = manager.apply_fallback(state)
+    # Check if precision upgrade needed
+    if manager.should_upgrade():
+        print("Precision upgrade recommended")
+
+        # Create optimization state for upgrade
+        state = OptimizationState(
+            x=jnp.array([1.0, 2.0]),
+            f=jnp.array([0.1, 0.2]),
+            J=jnp.array([[1.0, 2.0], [3.0, 4.0]]),
+            g=jnp.array([0.5, 0.6]),
+            cost=0.15,
+            trust_radius=1.0,
+            iteration=6,
+            dtype=jnp.float32,
+        )
+
+        # Upgrade to float64
+        upgraded_state = manager.upgrade_precision(state)
+        print(f"Upgraded to dtype: {upgraded_state.dtype}")
 
 Handling Gradient Explosion
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -165,29 +186,52 @@ Detect and recover from gradient explosion:
 
 .. code-block:: python
 
-    from nlsq.mixed_precision import MixedPrecisionManager
+    from nlsq.mixed_precision import (
+        MixedPrecisionManager,
+        MixedPrecisionConfig,
+        ConvergenceMetrics,
+        OptimizationState,
+    )
     import jax.numpy as jnp
 
-    manager = MixedPrecisionManager(
+    # Configure with lower explosion threshold
+    config = MixedPrecisionConfig(
         gradient_explosion_threshold=1e10,
-        enable_fallback=True,
+        enable_mixed_precision_fallback=True,
     )
+    manager = MixedPrecisionManager(config, verbose=True)
 
-    # State with exploded gradients
-    state = {
-        "x": jnp.array([1.0, 2.0]),
-        "g": jnp.array([1e12, 1e13]),  # Exploded gradients
-        "cost": jnp.inf,
-        "trust_radius": 0.1,
-    }
-
-    should_fallback, reason = manager.should_fallback_to_float64(
-        state, iteration=2, cost_improved=False
+    # Report metrics with exploded gradients
+    metrics = ConvergenceMetrics(
+        iteration=2,
+        residual_norm=1e5,
+        gradient_norm=1e12,  # Exploded gradients
+        parameter_change=0.001,
+        cost=float('inf'),
+        trust_radius=0.1,
+        has_nan_inf=True,
     )
+    manager.report_metrics(metrics)
 
-    if "gradient explosion" in reason.lower():
-        print("Gradient explosion detected, applying fallback")
-        state_float64 = manager.apply_fallback(state)
+    # Check if upgrade needed (will detect gradient explosion)
+    if manager.should_upgrade():
+        print("Gradient explosion detected, upgrading to float64")
+
+        # Create state for upgrade
+        state = OptimizationState(
+            x=jnp.array([1.0, 2.0]),
+            f=jnp.array([1e5, 1e5]),
+            J=jnp.array([[1.0, 2.0], [3.0, 4.0]]),
+            g=jnp.array([1e12, 1e13]),
+            cost=float('inf'),
+            trust_radius=0.1,
+            iteration=2,
+            dtype=jnp.float32,
+        )
+
+        # Upgrade precision
+        upgraded_state = manager.upgrade_precision(state)
+        print(f"State upgraded to {upgraded_state.dtype}")
 
 State Validation
 ~~~~~~~~~~~~~~~~
@@ -435,9 +479,9 @@ Validation and Debugging
     from nlsq.config import get_mixed_precision_config
 
     config = get_mixed_precision_config()
-    print(f"Enabled: {config['enable']}")
-    print(f"Max iterations: {config['max_degradation_iterations']}")
-    print(f"Gradient threshold: {config['gradient_explosion_threshold']}")
+    print(f"Enabled: {config.enable_mixed_precision_fallback}")
+    print(f"Max iterations: {config.max_degradation_iterations}")
+    print(f"Gradient threshold: {config.gradient_explosion_threshold}")
 
 **Enable verbose logging**:
 
@@ -457,22 +501,39 @@ Validation and Debugging
 
 .. code-block:: python
 
-    from nlsq.mixed_precision import MixedPrecisionManager
+    from nlsq.mixed_precision import (
+        MixedPrecisionManager,
+        MixedPrecisionConfig,
+        OptimizationState,
+    )
     import jax.numpy as jnp
 
-    manager = MixedPrecisionManager()
+    # Create manager with default config
+    config = MixedPrecisionConfig()
+    manager = MixedPrecisionManager(config)
 
-    # Inspect state validity
-    state = {...}  # Your optimization state
+    # Create example optimization state
+    state = OptimizationState(
+        x=jnp.array([1.0, 2.0]),
+        f=jnp.array([0.1, 0.2]),
+        J=jnp.array([[1.0, 2.0], [3.0, 4.0]]),
+        g=jnp.array([0.5, 0.6]),
+        cost=0.15,
+        trust_radius=1.0,
+        iteration=5,
+        dtype=jnp.float32,
+    )
+
+    # Validate state
     is_valid, error = manager.validate_state(state)
 
     if not is_valid:
         print(f"State validation failed: {error}")
 
         # Check individual components
-        print(f"Parameters valid: {not jnp.any(jnp.isnan(state['x']))}")
-        print(f"Gradient valid: {not jnp.any(jnp.isnan(state['g']))}")
-        print(f"Cost valid: {not jnp.isnan(state['cost'])}")
+        print(f"Parameters valid: {not jnp.any(jnp.isnan(state.x))}")
+        print(f"Gradient valid: {not jnp.any(jnp.isnan(state.g))}")
+        print(f"Cost valid: {not jnp.isnan(state.cost)}")
 
 Algorithm Details
 -----------------

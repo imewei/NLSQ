@@ -16,6 +16,7 @@ Metrics:
 
 from __future__ import annotations
 
+import contextlib
 import time
 import tracemalloc
 from dataclasses import dataclass, field
@@ -140,9 +141,7 @@ def create_ill_conditioned_problem(n_points: int):
 
     # Generate data
     xdata = np.linspace(0, 1, n_points)
-    ydata_clean = (true_params[0] * xdata**2 +
-                   true_params[1] * xdata +
-                   true_params[2])
+    ydata_clean = true_params[0] * xdata**2 + true_params[1] * xdata + true_params[2]
     noise = np.random.normal(0, 1e-8, n_points)
     ydata = ydata_clean + noise
 
@@ -209,25 +208,25 @@ def benchmark_single_run(
 
     try:
         result = curve_fit(model, xdata, ydata, p0=p0)
-        popt = result.x if hasattr(result, 'x') else result[0]
-        converged = result.success if hasattr(result, 'success') else True
-        iterations = result.nfev if hasattr(result, 'nfev') else 0
-        cost = result.cost if hasattr(result, 'cost') else 0.0
+        popt = result.x if hasattr(result, "x") else result[0]
+        converged = result.success if hasattr(result, "success") else True
+        iterations = result.nfev if hasattr(result, "nfev") else 0
+        cost = result.cost if hasattr(result, "cost") else 0.0
 
         # Check if precision was upgraded (for mixed mode)
         precision_upgraded = False
         upgrade_iteration = 0
-        if precision_mode == "mixed" and hasattr(result, 'mixed_precision_diagnostics'):
+        if precision_mode == "mixed" and hasattr(result, "mixed_precision_diagnostics"):
             diag = result.mixed_precision_diagnostics
-            precision_upgraded = diag.get('precision_upgraded', False)
-            upgrade_iteration = diag.get('upgrade_iteration', 0)
+            precision_upgraded = diag.get("precision_upgraded", False)
+            upgrade_iteration = diag.get("upgrade_iteration", 0)
 
     except Exception as e:
         print(f"Fit failed for {precision_mode} on {problem_name}: {e}")
         popt = p0
         converged = False
         iterations = 0
-        cost = float('inf')
+        cost = float("inf")
         precision_upgraded = False
         upgrade_iteration = 0
 
@@ -237,10 +236,8 @@ def benchmark_single_run(
 
     # Cached run (no JIT compilation)
     start_time = time.perf_counter()
-    try:
+    with contextlib.suppress(Exception):
         _ = curve_fit(model, xdata, ydata, p0=p0)
-    except Exception:
-        pass
     cached_run_time = time.perf_counter() - start_time
 
     # Calculate errors
@@ -265,7 +262,9 @@ def benchmark_single_run(
     )
 
 
-def run_benchmark_suite(config: BenchmarkConfig | None = None) -> list[MixedPrecisionBenchmarkResult]:
+def run_benchmark_suite(
+    config: BenchmarkConfig | None = None,
+) -> list[MixedPrecisionBenchmarkResult]:
     """Run complete mixed precision benchmark suite.
 
     Parameters
@@ -310,12 +309,10 @@ def run_benchmark_suite(config: BenchmarkConfig | None = None) -> list[MixedPrec
             for mode in modes:
                 # Run warmup
                 for _ in range(config.warmup_runs):
-                    try:
+                    with contextlib.suppress(Exception):
                         benchmark_single_run(
                             xdata, ydata, model, p0, mode, problem_name, true_params
                         )
-                    except Exception:
-                        pass
 
                 # Run actual benchmark (take best of n_repeats)
                 run_results = []
@@ -325,13 +322,17 @@ def run_benchmark_suite(config: BenchmarkConfig | None = None) -> list[MixedPrec
                             xdata, ydata, model, p0, mode, problem_name, true_params
                         )
                         run_results.append(result)
-                        print(f"  {mode:8s} repeat {repeat+1}/{config.n_repeats}: "
-                              f"{result.cached_run_time*1000:.2f}ms "
-                              f"(first: {result.first_run_time*1000:.2f}ms, "
-                              f"mem: {result.peak_memory_mb:.1f}MB, "
-                              f"error: {result.relative_error:.2e})")
+                        print(
+                            f"  {mode:8s} repeat {repeat + 1}/{config.n_repeats}: "
+                            f"{result.cached_run_time * 1000:.2f}ms "
+                            f"(first: {result.first_run_time * 1000:.2f}ms, "
+                            f"mem: {result.peak_memory_mb:.1f}MB, "
+                            f"error: {result.relative_error:.2e})"
+                        )
                     except Exception as e:
-                        print(f"  {mode:8s} repeat {repeat+1}/{config.n_repeats}: FAILED - {e}")
+                        print(
+                            f"  {mode:8s} repeat {repeat + 1}/{config.n_repeats}: FAILED - {e}"
+                        )
 
                 # Take result with best (lowest) cached run time
                 if run_results:
@@ -355,6 +356,7 @@ def print_summary(results: list[MixedPrecisionBenchmarkResult]):
 
     # Group by problem and size
     from collections import defaultdict
+
     grouped = defaultdict(list)
     for r in results:
         key = (r.problem_name, r.problem_size)
@@ -363,30 +365,38 @@ def print_summary(results: list[MixedPrecisionBenchmarkResult]):
     for (problem, size), group in sorted(grouped.items()):
         print(f"\n{problem} (n={size}):")
         print("-" * 80)
-        print(f"{'Mode':<12} {'Time (ms)':<12} {'Memory (MB)':<12} {'Error':<12} {'Upgraded'}")
+        print(
+            f"{'Mode':<12} {'Time (ms)':<12} {'Memory (MB)':<12} {'Error':<12} {'Upgraded'}"
+        )
         print("-" * 80)
 
         for r in sorted(group, key=lambda x: x.precision_mode):
-            upgraded_str = f"Yes@{r.upgrade_iteration}" if r.precision_upgraded else "No"
-            print(f"{r.precision_mode:<12} "
-                  f"{r.cached_run_time*1000:<12.2f} "
-                  f"{r.peak_memory_mb:<12.1f} "
-                  f"{r.relative_error:<12.2e} "
-                  f"{upgraded_str}")
+            upgraded_str = (
+                f"Yes@{r.upgrade_iteration}" if r.precision_upgraded else "No"
+            )
+            print(
+                f"{r.precision_mode:<12} "
+                f"{r.cached_run_time * 1000:<12.2f} "
+                f"{r.peak_memory_mb:<12.1f} "
+                f"{r.relative_error:<12.2e} "
+                f"{upgraded_str}"
+            )
 
     # Overall statistics
     print("\n" + "=" * 80)
     print("OVERALL STATISTICS")
     print("=" * 80)
 
-    modes = set(r.precision_mode for r in results)
+    modes = {r.precision_mode for r in results}
     for mode in sorted(modes):
         mode_results = [r for r in results if r.precision_mode == mode]
 
         avg_time = np.mean([r.cached_run_time for r in mode_results]) * 1000
         avg_memory = np.mean([r.peak_memory_mb for r in mode_results])
         avg_error = np.mean([r.relative_error for r in mode_results])
-        convergence_rate = sum(r.converged for r in mode_results) / len(mode_results) * 100
+        convergence_rate = (
+            sum(r.converged for r in mode_results) / len(mode_results) * 100
+        )
 
         print(f"\n{mode}:")
         print(f"  Average time:        {avg_time:.2f} ms")

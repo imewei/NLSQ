@@ -129,6 +129,128 @@ jobs:
               echo "::warning::Notebook $notebook failed (not blocking)"
           done
 
+      - name: Validate documentation code examples
+        run: |
+          # Create validation script
+          cat > validate_docs_examples.py << 'EOF'
+          #!/usr/bin/env python3
+          """Validate all Python code examples in README and docs/"""
+          import re
+          import sys
+          from pathlib import Path
+
+          def extract_md_code_blocks(filepath):
+              """Extract Python code blocks from Markdown."""
+              with open(filepath, 'r') as f:
+                  content = f.read()
+              pattern = r'```python\n(.*?)```'
+              return re.findall(pattern, content, re.DOTALL)
+
+          def extract_rst_code_blocks(filepath):
+              """Extract Python code blocks from RST."""
+              with open(filepath, 'r') as f:
+                  lines = f.readlines()
+              code_blocks = []
+              in_code_block = False
+              current_block = []
+              block_indent = 0
+              for line in lines:
+                  if '.. code-block:: python' in line:
+                      in_code_block = True
+                      current_block = []
+                      continue
+                  if in_code_block:
+                      if line.strip() == '':
+                          current_block.append('')
+                          continue
+                      if not current_block or block_indent == 0:
+                          block_indent = len(line) - len(line.lstrip())
+                      if len(line) > block_indent and line[:block_indent].strip() == '':
+                          current_block.append(line[block_indent:].rstrip())
+                      else:
+                          if current_block:
+                              while current_block and current_block[-1] == '':
+                                  current_block.pop()
+                              if current_block:
+                                  code_blocks.append('\n'.join(current_block))
+                          current_block = []
+                          in_code_block = False
+                          block_indent = 0
+              if current_block:
+                  while current_block and current_block[-1] == '':
+                      current_block.pop()
+                  if current_block:
+                      code_blocks.append('\n'.join(current_block))
+              return code_blocks
+
+          def validate_syntax(code, filepath, index):
+              """Validate code syntax."""
+              try:
+                  compile(code, f'<{filepath}:{index}>', 'exec')
+                  return True, None
+              except SyntaxError as e:
+                  return False, str(e)
+
+          def main():
+              # Test README
+              readme = Path('README.md')
+              readme_blocks = extract_md_code_blocks(readme)
+              print(f"README.md: {len(readme_blocks)} examples")
+
+              readme_errors = []
+              for i, code in enumerate(readme_blocks, 1):
+                  valid, error = validate_syntax(code, 'README.md', i)
+                  if not valid:
+                      readme_errors.append(f"Example {i}: {error}")
+
+              # Test docs
+              docs_path = Path('docs')
+              rst_files = list(docs_path.rglob('*.rst'))
+
+              total_docs_examples = 0
+              docs_errors = []
+
+              for rst_file in rst_files:
+                  code_blocks = extract_rst_code_blocks(rst_file)
+                  if not code_blocks:
+                      continue
+
+                  rel_path = rst_file.relative_to(docs_path)
+                  total_docs_examples += len(code_blocks)
+
+                  for i, code in enumerate(code_blocks, 1):
+                      valid, error = validate_syntax(code, str(rel_path), i)
+                      if not valid:
+                          docs_errors.append(f"{rel_path} Example {i}: {error}")
+
+              print(f"Documentation: {total_docs_examples} examples")
+              print(f"\nResults:")
+              print(f"  README errors: {len(readme_errors)}")
+              print(f"  Documentation errors: {len(docs_errors)}")
+
+              if readme_errors:
+                  print("\n❌ README.md syntax errors:")
+                  for err in readme_errors:
+                      print(f"  - {err}")
+
+              if docs_errors:
+                  print("\n❌ Documentation syntax errors:")
+                  for err in docs_errors:
+                      print(f"  - {err}")
+
+              if readme_errors or docs_errors:
+                  print("\n❌ Code example validation FAILED")
+                  return 1
+
+              print("\n✅ All code examples are syntactically valid!")
+              return 0
+
+          if __name__ == '__main__':
+              sys.exit(main())
+          EOF
+
+          python validate_docs_examples.py
+
   # Documentation Coverage Report
   doc-coverage:
     name: Documentation Coverage
