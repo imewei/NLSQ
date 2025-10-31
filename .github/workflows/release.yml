@@ -196,11 +196,39 @@ jobs:
           name: distributions
           path: dist/
 
+      - name: Check if version exists on PyPI
+        id: check-pypi
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          echo "Checking if nlsq==$VERSION exists on PyPI..."
+
+          # Query PyPI API for this version
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/nlsq/$VERSION/json")
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "version_exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Version $VERSION already exists on PyPI"
+            echo "Skipping publication to prevent duplicate upload error"
+          else
+            echo "version_exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Version $VERSION does not exist on PyPI"
+            echo "Proceeding with publication"
+          fi
+
       - name: Publish to PyPI
+        if: steps.check-pypi.outputs.version_exists == 'false'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           print-hash: true
           verbose: true
+
+      - name: Skip publication (version exists)
+        if: steps.check-pypi.outputs.version_exists == 'true'
+        run: |
+          echo "⚠️  Skipping PyPI publication"
+          echo "Version ${{ needs.validate-release.outputs.version }} already exists on PyPI"
+          echo "This is expected if the tag was moved or the workflow re-ran"
+          echo "View existing version: https://pypi.org/project/nlsq/${{ needs.validate-release.outputs.version }}/"
 
   # Create GitHub Release
   create-github-release:
@@ -219,7 +247,26 @@ jobs:
           name: distributions
           path: dist/
 
+      - name: Check if GitHub release exists
+        id: check-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          echo "Checking if GitHub release v$VERSION already exists..."
+
+          if gh release view "v$VERSION" &>/dev/null; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  GitHub release v$VERSION already exists"
+            echo "Skipping release creation to prevent duplicate"
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+            echo "✅ GitHub release v$VERSION does not exist"
+            echo "Proceeding with release creation"
+          fi
+
       - name: Generate release notes
+        if: steps.check-release.outputs.release_exists == 'false'
         id: release-notes
         run: |
           VERSION="${{ needs.validate-release.outputs.version }}"
@@ -238,6 +285,7 @@ jobs:
           echo "$NOTES" > release-notes.md
 
       - name: Create GitHub Release
+        if: steps.check-release.outputs.release_exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -249,6 +297,14 @@ jobs:
             --title "Release v$VERSION" \
             --notes-file release-notes.md \
             $([ "$PRERELEASE" = "true" ] && echo "--prerelease" || echo "")
+
+      - name: Skip release creation (already exists)
+        if: steps.check-release.outputs.release_exists == 'true'
+        run: |
+          echo "⚠️  Skipping GitHub release creation"
+          echo "Release v${{ needs.validate-release.outputs.version }} already exists"
+          echo "This is expected if the tag was moved or the workflow re-ran"
+          echo "View existing release: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.validate-release.outputs.version }}"
 
   # Release Summary
   release-summary:
