@@ -492,24 +492,33 @@ else:
 Full disclosure we've copied most of this from the [JAX repo](https://github.com/google/jax#current-gotchas), but NLSQ inherits
 JAX's idiosyncrasies and so the "gotchas" are mostly the same.
 
-### Double precision required
-NLSQ requires double precision (64-bit, `float64`) for numerical stability. By default, JAX uses single precision (32-bit, `float32`).
+### Automatic Precision Management (v0.2.0+)
+NLSQ **automatically manages numerical precision** for optimal performance and memory usage:
 
-NLSQ **automatically enables double precision** when imported. However, if you import JAX before NLSQ, you must enable it manually:
+- **Default**: Float64 (double precision) for maximum accuracy
+- **Automatic fallback**: Float32 (single precision) when memory constrained
+- **Memory savings**: Up to 50% with automatic float32 fallback
+- **No manual configuration needed** for most use cases
+
+NLSQ automatically enables double precision when imported. The mixed precision system will automatically fall back to float32 if you encounter out-of-memory errors, then upgrade back to float64 if convergence stalls.
+
+**Advanced users** can manually control precision or disable automatic fallback:
 
 ```python
-# If importing JAX first (not recommended)
+from nlsq import curve_fit
+from nlsq.mixed_precision import MixedPrecisionConfig
+
+# Disable automatic fallback (strict float64)
+config = MixedPrecisionConfig(enable_fallback=False)
+popt, pcov = curve_fit(f, xdata, ydata, mixed_precision_config=config)
+
+# Or manually enable x64 before importing NLSQ
 from jax import config
 
 config.update("jax_enable_x64", True)
-
-import jax.numpy as jnp
-from nlsq import CurveFit
-
-# Recommended: Import NLSQ first (auto-enables double precision)
-from nlsq import CurveFit
-import jax.numpy as jnp
 ```
+
+See the [Mixed Precision guide](https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html#mixed-precision-fallback) for advanced configuration options.
 
 ### Other caveats
 Below are some more things to be careful of, but a full list can be found in [JAX's Gotchas
