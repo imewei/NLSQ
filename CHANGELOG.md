@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Mixed Precision Documentation Corrections**: Corrected precision default behavior
+  - **Issue**: Documentation incorrectly stated NLSQ defaults to Float64
+  - **Correction**: NLSQ correctly defaults to Float32 with automatic upgrade to Float64
+  - **Files Modified**: `README.md`, `docs/guides/performance_guide.rst`
+  - **Commits**: 072b85c (corrects 4d9ab82)
+  - **Impact**: Accurate documentation of mixed precision system behavior
+
 - **API Reference Updates**: Updated documentation for v0.1.6 release
   - Synchronized API documentation with codebase changes
   - Updated test metrics and coverage statistics
