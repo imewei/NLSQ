@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-10-31
+
+### Changed
+
+#### Documentation Build System
+- **Exclude Auto-Generated API Docs from Version Control**: Improved documentation build workflow
+  - **Change**: Removed 35 auto-generated Sphinx API documentation files from git tracking
+  - **Configuration**: Added `docs/api/generated/` to `.gitignore`
+  - **Build System**: Enhanced Makefile with comprehensive clean target that removes:
+    - Build directory (`_build/`)
+    - Auto-generated API docs (`api/generated/`)
+    - Python cache files (`__pycache__/`, `*.pyc`)
+  - **Rationale**: Auto-generated documentation should be rebuilt during CI/CD and local builds, not committed to repository
+  - **Files Modified**: `.gitignore`, `docs/Makefile`
+  - **Files Removed**: 35 `.rst` files in `docs/api/generated/`
+  - **Impact**: Cleaner repository, reduced merge conflicts, faster git operations
+  - **Commit**: 0de4338
+
+### Technical Details
+
+**Build System:**
+- Documentation now auto-generates on build (as intended by Sphinx)
+- Clean target properly removes all build artifacts
+- Gitignore prevents accidental commits of generated files
+
+**Benefits:**
+- Reduced repository size
+- Eliminated merge conflicts in generated files
+- Improved CI/CD efficiency
+- Standard Sphinx best practices
+
+**Release Type**: Patch release for documentation build system improvements.
+
 ## [0.2.0] - 2025-10-31
 
 ### Changed
