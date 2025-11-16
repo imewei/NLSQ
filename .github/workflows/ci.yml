@@ -137,7 +137,7 @@ jobs:
       - name: Run tests with coverage
         shell: bash
         run: |
-          pytest tests/ -v --cov=nlsq --cov-report=xml --cov-report=term \
+          pytest tests/ -v -n auto --cov=nlsq --cov-report=xml --cov-report=term \
             --cov-fail-under=${{ env.COVERAGE_THRESHOLD }}
 
       - name: Upload coverage to Codecov
