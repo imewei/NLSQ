@@ -235,7 +235,9 @@ class TestFaultToleranceIntegration:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute_with_strategy_tracking(func, params, x_batch, y_batch, mask=None):
+        def mock_compute_with_strategy_tracking(
+            func, params, x_batch, y_batch, mask=None
+        ):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3
 

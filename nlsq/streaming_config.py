@@ -304,7 +304,7 @@ class StreamingConfig:
     batch_stats_buffer_size: int = 100
 
     # Batch shape padding (Task Group 7: Streaming Overhead Reduction)
-    batch_shape_padding: str = 'auto'
+    batch_shape_padding: str = "auto"
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -336,6 +336,6 @@ class StreamingConfig:
         assert self.batch_stats_buffer_size > 0, (
             "batch_stats_buffer_size must be positive"
         )
-        assert self.batch_shape_padding in ('auto', 'static', 'dynamic'), (
+        assert self.batch_shape_padding in ("auto", "static", "dynamic"), (
             "batch_shape_padding must be one of: 'auto', 'static', 'dynamic'"
         )

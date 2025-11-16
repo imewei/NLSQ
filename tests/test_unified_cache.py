@@ -59,7 +59,9 @@ class TestUnifiedCacheKeyGeneration:
         key_f32 = cache._generate_cache_key(test_func, (x_float32,), {}, ())
         key_f64 = cache._generate_cache_key(test_func, (x_float64,), {}, ())
 
-        assert key_f32 != key_f64, "Different dtypes should produce different cache keys"
+        assert key_f32 != key_f64, (
+            "Different dtypes should produce different cache keys"
+        )
 
     def test_cache_key_differs_for_different_ranks(self):
         """Cache keys should differ when array ranks change."""
@@ -298,7 +300,9 @@ class TestUnifiedCacheIntegration:
         # Verify expected keys for curve_fit integration
         required_keys = ["hits", "misses", "hit_rate", "compile_time_ms"]
         for key in required_keys:
-            assert key in stats, f"Stats should include '{key}' for curve_fit integration"
+            assert key in stats, (
+                f"Stats should include '{key}' for curve_fit integration"
+            )
 
 
 # Benchmark helpers for Task 1.12

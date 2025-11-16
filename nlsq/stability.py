@@ -882,13 +882,17 @@ def apply_automatic_fixes(
     # Fix 3: Replace NaN/Inf in data
     if np.any(~np.isfinite(xdata)):
         # Use mean of finite values only (nanmean doesn't ignore inf)
-        finite_mean = np.mean(xdata[np.isfinite(xdata)]) if np.any(np.isfinite(xdata)) else 0.0
+        finite_mean = (
+            np.mean(xdata[np.isfinite(xdata)]) if np.any(np.isfinite(xdata)) else 0.0
+        )
         xdata = np.where(np.isfinite(xdata), xdata, finite_mean)
         applied_fixes.append("Replaced NaN/Inf in xdata with mean")
 
     if np.any(~np.isfinite(ydata)):
         # Use mean of finite values only (nanmean doesn't ignore inf)
-        finite_mean = np.mean(ydata[np.isfinite(ydata)]) if np.any(np.isfinite(ydata)) else 0.0
+        finite_mean = (
+            np.mean(ydata[np.isfinite(ydata)]) if np.any(np.isfinite(ydata)) else 0.0
+        )
         ydata = np.where(np.isfinite(ydata), ydata, finite_mean)
         applied_fixes.append("Replaced NaN/Inf in ydata with mean")
 

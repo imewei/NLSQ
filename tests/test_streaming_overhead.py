@@ -10,12 +10,12 @@ Focus: Task Group 7 - Streaming Overhead Reduction
 Target: 30-50% throughput improvement, zero recompiles after warmup
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-import jax.numpy as jnp
 
-from nlsq.streaming_optimizer import StreamingOptimizer
 from nlsq.streaming_config import StreamingConfig
+from nlsq.streaming_optimizer import StreamingOptimizer
 
 
 class TestBatchShapePadding:
@@ -33,7 +33,7 @@ class TestBatchShapePadding:
         config = StreamingConfig(
             batch_size=100,
             max_epochs=20,  # More epochs for streaming gradient descent convergence
-            batch_shape_padding='auto',  # Auto-detect and pad
+            batch_shape_padding="auto",  # Auto-detect and pad
             enable_fault_tolerance=True,
             learning_rate=0.05,  # Higher learning rate for faster convergence
         )
@@ -52,25 +52,25 @@ class TestBatchShapePadding:
         )
 
         # Verify optimization succeeded
-        assert result['success'], f"Optimization failed: {result['message']}"
+        assert result["success"], f"Optimization failed: {result['message']}"
 
         # Main test goal: verify padding functionality works, not precision of fit
         # Just check that parameters changed from initial and are reasonable
-        assert result['x'][0] != 2.0, "Parameter a didn't change from initial"
-        assert result['x'][1] != 0.2, "Parameter b didn't change from initial"
-        assert 0.5 < result['x'][0] < 5.0, f"Parameter a={result['x'][0]} unreasonable"
-        assert 0.01 < result['x'][1] < 1.0, f"Parameter b={result['x'][1]} unreasonable"
+        assert result["x"][0] != 2.0, "Parameter a didn't change from initial"
+        assert result["x"][1] != 0.2, "Parameter b didn't change from initial"
+        assert 0.5 < result["x"][0] < 5.0, f"Parameter a={result['x'][0]} unreasonable"
+        assert 0.01 < result["x"][1] < 1.0, f"Parameter b={result['x'][1]} unreasonable"
 
         # Verify padding diagnostics
-        assert 'streaming_diagnostics' in result
-        diag = result['streaming_diagnostics']
-        assert 'batch_padding' in diag
-        batch_padding = diag['batch_padding']
+        assert "streaming_diagnostics" in result
+        diag = result["streaming_diagnostics"]
+        assert "batch_padding" in diag
+        batch_padding = diag["batch_padding"]
 
         # Verify padding was configured correctly
-        assert batch_padding['padding_mode'] == 'auto'
-        assert batch_padding['max_batch_shape'] is not None
-        assert batch_padding['warmup_completed'] is True
+        assert batch_padding["padding_mode"] == "auto"
+        assert batch_padding["max_batch_shape"] is not None
+        assert batch_padding["warmup_completed"] is True
 
     def test_batch_padding_preserves_numerical_correctness(self):
         """Test that batch padding doesn't affect numerical accuracy."""
@@ -89,7 +89,7 @@ class TestBatchShapePadding:
         config_padded = StreamingConfig(
             batch_size=100,
             max_epochs=5,
-            batch_shape_padding='auto',
+            batch_shape_padding="auto",
             learning_rate=0.01,
         )
         optimizer_padded = StreamingOptimizer(config_padded)
@@ -104,7 +104,7 @@ class TestBatchShapePadding:
         config_dynamic = StreamingConfig(
             batch_size=100,
             max_epochs=5,
-            batch_shape_padding='dynamic',
+            batch_shape_padding="dynamic",
             learning_rate=0.01,
         )
         optimizer_dynamic = StreamingOptimizer(config_dynamic)
@@ -116,14 +116,16 @@ class TestBatchShapePadding:
         )
 
         # Both should succeed
-        assert result_padded['success']
-        assert result_dynamic['success']
+        assert result_padded["success"]
+        assert result_dynamic["success"]
 
         # Parameters should be very close (within 5% relative error)
-        params_padded = result_padded['x']
-        params_dynamic = result_dynamic['x']
+        params_padded = result_padded["x"]
+        params_dynamic = result_dynamic["x"]
 
-        for i, (p_pad, p_dyn) in enumerate(zip(params_padded, params_dynamic)):
+        for i, (p_pad, p_dyn) in enumerate(
+            zip(params_padded, params_dynamic, strict=False)
+        ):
             rel_error = abs(p_pad - p_dyn) / (abs(p_dyn) + 1e-10)
             assert rel_error < 0.05, (
                 f"Parameter {i} differs too much: "
@@ -145,7 +147,7 @@ class TestRecompileElimination:
         config = StreamingConfig(
             batch_size=100,
             max_epochs=3,  # Multiple epochs to verify recompile elimination
-            batch_shape_padding='auto',
+            batch_shape_padding="auto",
             warmup_steps=50,  # Explicit warmup phase
         )
 
@@ -161,11 +163,11 @@ class TestRecompileElimination:
             verbose=0,
         )
 
-        assert result['success']
+        assert result["success"]
 
         # After implementation, verify recompile count
-        if 'streaming_diagnostics' in result:
-            diag = result['streaming_diagnostics']
+        if "streaming_diagnostics" in result:
+            diag = result["streaming_diagnostics"]
             # Should have recompile tracking after implementation
             # Warmup phase may have recompiles, but post-warmup should be zero
             # assert 'recompile_count' in diag
@@ -183,7 +185,7 @@ class TestRecompileElimination:
         config = StreamingConfig(
             batch_size=100,
             max_epochs=2,
-            batch_shape_padding='auto',  # Should handle partial batch with padding
+            batch_shape_padding="auto",  # Should handle partial batch with padding
         )
 
         optimizer = StreamingOptimizer(config)
@@ -198,7 +200,7 @@ class TestRecompileElimination:
             verbose=0,
         )
 
-        assert result['success']
+        assert result["success"]
         # With auto padding, even partial batches should not trigger recompiles
         # after warmup
 
@@ -214,7 +216,7 @@ class TestBatchShapePaddingConfiguration:
 
         config = StreamingConfig(
             batch_size=100,
-            batch_shape_padding='auto',
+            batch_shape_padding="auto",
             max_epochs=1,
         )
 
@@ -230,7 +232,7 @@ class TestBatchShapePaddingConfiguration:
             verbose=0,
         )
 
-        assert result['success']
+        assert result["success"]
 
     def test_static_padding_mode(self):
         """Test 'static' padding mode - user provides fixed batch shape."""
@@ -242,7 +244,7 @@ class TestBatchShapePaddingConfiguration:
         # Implementation will add static_batch_shape parameter
         config = StreamingConfig(
             batch_size=100,
-            batch_shape_padding='static',
+            batch_shape_padding="static",
             max_epochs=1,
         )
 
@@ -258,7 +260,7 @@ class TestBatchShapePaddingConfiguration:
             verbose=0,
         )
 
-        assert result['success']
+        assert result["success"]
 
     def test_dynamic_padding_mode(self):
         """Test 'dynamic' padding mode - no padding (allows recompiles)."""
@@ -268,7 +270,7 @@ class TestBatchShapePaddingConfiguration:
 
         config = StreamingConfig(
             batch_size=100,
-            batch_shape_padding='dynamic',  # Current behavior
+            batch_shape_padding="dynamic",  # Current behavior
             max_epochs=1,
         )
 
@@ -284,7 +286,7 @@ class TestBatchShapePaddingConfiguration:
             verbose=0,
         )
 
-        assert result['success']
+        assert result["success"]
         # Dynamic mode may have more recompiles but should still work
 
     def test_invalid_padding_mode_raises_error(self):
@@ -292,7 +294,7 @@ class TestBatchShapePaddingConfiguration:
         with pytest.raises(AssertionError, match="batch_shape_padding must be one of"):
             StreamingConfig(
                 batch_size=100,
-                batch_shape_padding='invalid_mode',
+                batch_shape_padding="invalid_mode",
             )
 
 
@@ -304,12 +306,14 @@ class TestPaddingPerformance:
         # This test validates the performance impact
         # Skip if no GPU available or if JAX_PLATFORMS is set to cpu
         import os
+
         if os.environ.get("JAX_PLATFORMS", "").lower() == "cpu":
             pytest.skip("CPU-only environment, skipping GPU performance test")
 
         try:
             import jax
-            if jax.devices()[0].platform == 'cpu':
+
+            if jax.devices()[0].platform == "cpu":
                 pytest.skip("GPU not available, skipping performance test")
         except Exception:
             pytest.skip("JAX not properly configured")
@@ -323,10 +327,11 @@ class TestPaddingPerformance:
 
         # Measure with padding
         import time
+
         config_padded = StreamingConfig(
             batch_size=1000,
             max_epochs=3,
-            batch_shape_padding='auto',
+            batch_shape_padding="auto",
         )
         optimizer_padded = StreamingOptimizer(config_padded)
 
@@ -343,7 +348,7 @@ class TestPaddingPerformance:
         config_dynamic = StreamingConfig(
             batch_size=1000,
             max_epochs=3,
-            batch_shape_padding='dynamic',
+            batch_shape_padding="dynamic",
         )
         optimizer_dynamic = StreamingOptimizer(config_dynamic)
 
@@ -357,14 +362,16 @@ class TestPaddingPerformance:
         time_dynamic = time.time() - start_dynamic
 
         # Both should succeed
-        assert result_padded['success']
-        assert result_dynamic['success']
+        assert result_padded["success"]
+        assert result_dynamic["success"]
 
         # Padded version should be faster (or at least not significantly slower)
         # Allow for measurement noise - padded should be within 133% of dynamic time
         # (Target is 30-50% improvement, but conservative check for test stability)
         speedup = time_dynamic / time_padded if time_padded > 0 else 1.0
-        print(f"\nPadding speedup: {speedup:.2f}x (padded={time_padded:.3f}s, dynamic={time_dynamic:.3f}s)")
+        print(
+            f"\nPadding speedup: {speedup:.2f}x (padded={time_padded:.3f}s, dynamic={time_dynamic:.3f}s)"
+        )
 
         # Relaxed assertion - just verify no major regression (allow up to 25% slowdown)
         assert speedup > 0.75, f"Padding caused significant slowdown: {speedup:.2f}x"

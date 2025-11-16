@@ -675,7 +675,7 @@ By default, NLSQ automatically selects the optimal mode based on problem dimensi
 
    # Automatic selection (recommended)
    # For 1000 params, 100 residuals → automatically uses jacrev
-   popt, pcov = curve_fit(model, xdata, ydata, p0=initial_guess, jacobian_mode='auto')
+   popt, pcov = curve_fit(model, xdata, ydata, p0=initial_guess, jacobian_mode="auto")
 
 Manual Override
 ~~~~~~~~~~~~~~~
@@ -685,10 +685,10 @@ You can manually override the automatic selection:
 .. code:: python
 
    # Force forward-mode AD
-   popt, pcov = curve_fit(model, xdata, ydata, p0=p0, jacobian_mode='fwd')
+   popt, pcov = curve_fit(model, xdata, ydata, p0=p0, jacobian_mode="fwd")
 
    # Force reverse-mode AD
-   popt, pcov = curve_fit(model, xdata, ydata, p0=p0, jacobian_mode='rev')
+   popt, pcov = curve_fit(model, xdata, ydata, p0=p0, jacobian_mode="rev")
 
 Configuration Precedence
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -728,7 +728,7 @@ Example: Programmatic Configuration
    from nlsq.config import set_jacobian_mode
 
    # Set mode for current Python session
-   set_jacobian_mode('rev')
+   set_jacobian_mode("rev")
 
    # All subsequent fits will use reverse-mode
    popt1, _ = curve_fit(model1, x1, y1, p0=p0_1)
@@ -763,7 +763,7 @@ Performance Guidelines
 .. code:: python
 
    # Automatic selection (uses jacrev)
-   popt, pcov = curve_fit(high_param_model, xdata, ydata, p0=p0, jacobian_mode='auto')
+   popt, pcov = curve_fit(high_param_model, xdata, ydata, p0=p0, jacobian_mode="auto")
 
    # Expected: 10-100x faster Jacobian computation vs jacfwd on GPU
 
@@ -772,7 +772,7 @@ Performance Guidelines
 .. code:: python
 
    # Automatic selection (uses jacfwd)
-   popt, pcov = curve_fit(exponential, xdata, ydata, p0=[1, 1, 1], jacobian_mode='auto')
+   popt, pcov = curve_fit(exponential, xdata, ydata, p0=[1, 1, 1], jacobian_mode="auto")
 
    # Expected: Comparable or faster vs jacrev
 
@@ -784,11 +784,12 @@ Enable debug logging to see Jacobian mode selection:
 .. code:: python
 
    import logging
+
    logging.basicConfig(level=logging.DEBUG)
 
    from nlsq import curve_fit
 
-   popt, pcov = curve_fit(model, xdata, ydata, p0=p0, jacobian_mode='auto')
+   popt, pcov = curve_fit(model, xdata, ydata, p0=p0, jacobian_mode="auto")
 
    # Output: Jacobian mode: 'rev' (from auto-default). Rationale: jacrev (1000 params > 100 residuals)
 
@@ -807,7 +808,7 @@ Fitting a model with many parameters to limited data (e.g., neural network param
        xdata,
        ydata,
        p0=np.random.randn(500),
-       jacobian_mode='rev'  # Explicitly use reverse-mode for efficiency
+       jacobian_mode="rev",  # Explicitly use reverse-mode for efficiency
    )
 
 **Case 2: Batch Processing with Varying Dimensions**
@@ -822,7 +823,7 @@ Processing multiple datasets with different parameter counts:
 
    for xdata, ydata, p0 in datasets:
        # Auto mode adapts to each dataset's dimensions
-       popt, pcov = fitter.fit(xdata, ydata, p0=p0, jacobian_mode='auto')
+       popt, pcov = fitter.fit(xdata, ydata, p0=p0, jacobian_mode="auto")
 
 **Case 3: Performance-Critical Pipeline**
 
@@ -833,7 +834,7 @@ For production pipelines, benchmark and set the mode explicitly:
    # Benchmark both modes once
    import time
 
-   modes = ['fwd', 'rev']
+   modes = ["fwd", "rev"]
    times = {}
 
    for mode in modes:
@@ -846,6 +847,7 @@ For production pipelines, benchmark and set the mode explicitly:
 
    # Use best mode in production
    from nlsq.config import set_jacobian_mode
+
    set_jacobian_mode(best_mode)
 
 Troubleshooting
@@ -858,10 +860,10 @@ Troubleshooting
 .. code:: python
 
    # ✗ Wrong
-   curve_fit(model, x, y, jacobian_mode='reverse')  # ValueError
+   curve_fit(model, x, y, jacobian_mode="reverse")  # ValueError
 
    # ✓ Correct
-   curve_fit(model, x, y, jacobian_mode='rev')
+   curve_fit(model, x, y, jacobian_mode="rev")
 
 **Issue**: Performance doesn't match expectations
 
@@ -870,10 +872,11 @@ Troubleshooting
 .. code:: python
 
    import logging
+
    logging.basicConfig(level=logging.DEBUG)
 
    # Enable verbose output to see actual mode used
-   popt, _ = curve_fit(model, x, y, p0=p0, jacobian_mode='auto', verbose=2)
+   popt, _ = curve_fit(model, x, y, p0=p0, jacobian_mode="auto", verbose=2)
 
 --------------
 

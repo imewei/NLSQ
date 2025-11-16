@@ -331,14 +331,14 @@ class MemoryManager:
             # Track telemetry for adaptive safety factor (Task 5.2)
             self._record_safety_telemetry(bytes_needed, current_memory - initial_memory)
 
-    def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: int):
+    def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: int | float):
         """Record telemetry for adaptive safety factor calculation.
 
         Parameters
         ----------
         bytes_predicted : int
             Predicted memory requirement (with current safety factor)
-        bytes_actual : int
+        bytes_actual : int | float
             Actual memory used
 
         Notes
@@ -380,7 +380,10 @@ class MemoryManager:
         Calculates p95(safety_factor_needed) from telemetry and uses it to
         gradually reduce safety factor from initial value (1.2) to target minimum (1.05).
         """
-        if not self.enable_adaptive_safety or len(self._safety_telemetry) < self._warmup_runs:
+        if (
+            not self.enable_adaptive_safety
+            or len(self._safety_telemetry) < self._warmup_runs
+        ):
             return
 
         # Extract safety factors needed from telemetry
@@ -431,7 +434,9 @@ class MemoryManager:
             safety_factors_needed = [
                 entry["safety_factor_needed"] for entry in self._safety_telemetry
             ]
-            telemetry["p95_safety_needed"] = float(np.percentile(safety_factors_needed, 95))
+            telemetry["p95_safety_needed"] = float(
+                np.percentile(safety_factors_needed, 95)
+            )
             telemetry["mean_safety_needed"] = float(np.mean(safety_factors_needed))
             telemetry["max_safety_needed"] = float(np.max(safety_factors_needed))
             telemetry["safety_factor_history"] = [

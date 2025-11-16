@@ -150,7 +150,9 @@ class TestTRFBasic(unittest.TestCase):
         self.assertAlmostEqual(popt[1], 1.0, places=5)
         self.assertAlmostEqual(popt[2], 0.5, places=5)
 
-    @pytest.mark.filterwarnings("ignore:Covariance of the parameters could not be estimated")
+    @pytest.mark.filterwarnings(
+        "ignore:Covariance of the parameters could not be estimated"
+    )
     def test_edge_cases(self):
         """Test TRF with edge cases."""
 

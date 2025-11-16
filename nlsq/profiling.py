@@ -105,7 +105,7 @@ class TransferProfiler:
         self.iteration_count = 0
 
         # Per-iteration history (for analysis)
-        self._iteration_history = []
+        self._iteration_history: list[dict[str, Any]] = []
 
     @contextlib.contextmanager
     def profile_iteration(self, iteration: int):
@@ -266,7 +266,7 @@ class TransferProfiler:
         print("=" * 50)
         print(
             f"Total bytes transferred: {diag['transfer_bytes']:,} bytes "
-            f"({diag['transfer_bytes']/1024:.1f} KB)"
+            f"({diag['transfer_bytes'] / 1024:.1f} KB)"
         )
         print(f"Total transfer operations: {diag['transfer_count']}")
         print(f"Iterations profiled: {diag['iterations_profiled']}")
@@ -274,11 +274,9 @@ class TransferProfiler:
         if diag["iterations_profiled"] > 0:
             print(
                 f"Avg bytes/iteration: {diag['avg_bytes_per_iteration']:.1f} bytes "
-                f"({diag['avg_bytes_per_iteration']/1024:.1f} KB)"
+                f"({diag['avg_bytes_per_iteration'] / 1024:.1f} KB)"
             )
-            print(
-                f"Avg transfers/iteration: {diag['avg_transfers_per_iteration']:.1f}"
-            )
+            print(f"Avg transfers/iteration: {diag['avg_transfers_per_iteration']:.1f}")
 
     def __repr__(self) -> str:
         """Return string representation of profiler state."""
@@ -322,7 +320,7 @@ def profile_transfers(enable: bool = True):
 
 # Export public API
 __all__ = [
+    "HAS_JAX_PROFILER",
     "TransferProfiler",
     "profile_transfers",
-    "HAS_JAX_PROFILER",
 ]

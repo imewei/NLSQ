@@ -1799,7 +1799,8 @@ class CurveFit:
                 if cache_stats.get("enabled", True):
                     # Extract relevant cache metrics
                     result["cache_stats"] = {
-                        "hit": cache_stats.get("hits", 0) > cache_stats.get("misses", 0),
+                        "hit": cache_stats.get("hits", 0)
+                        > cache_stats.get("misses", 0),
                         "compile_time_ms": cache_stats.get("compile_time_ms", 0.0),
                         "hit_rate": cache_stats.get("hit_rate", 0.0),
                         "total_hits": cache_stats.get("hits", 0),

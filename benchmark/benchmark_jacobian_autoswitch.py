@@ -91,12 +91,12 @@ def benchmark_jacobian_modes(n_params: int, n_data: int, n_trials: int = 3):
     model, xdata, ydata, p0 = create_high_param_problem(n_params, n_data)
 
     # Test 1: jacfwd (expected to be slow for n_params > n_data)
-    print(f"\n1. Testing jacfwd (forward-mode AD)...")
+    print("\n1. Testing jacfwd (forward-mode AD)...")
     times_fwd = []
     for trial in range(n_trials):
         start = time.perf_counter()
         try:
-            popt_fwd, _ = curve_fit(
+            _popt_fwd, _ = curve_fit(
                 model,
                 xdata,
                 ydata,
@@ -112,12 +112,12 @@ def benchmark_jacobian_modes(n_params: int, n_data: int, n_trials: int = 3):
             times_fwd.append(float("inf"))
 
     # Test 2: jacrev (expected to be fast for n_params > n_data)
-    print(f"\n2. Testing jacrev (reverse-mode AD)...")
+    print("\n2. Testing jacrev (reverse-mode AD)...")
     times_rev = []
     for trial in range(n_trials):
         start = time.perf_counter()
         try:
-            popt_rev, _ = curve_fit(
+            _popt_rev, _ = curve_fit(
                 model,
                 xdata,
                 ydata,
@@ -133,12 +133,12 @@ def benchmark_jacobian_modes(n_params: int, n_data: int, n_trials: int = 3):
             times_rev.append(float("inf"))
 
     # Test 3: auto mode (should select jacrev)
-    print(f"\n3. Testing auto mode (should select jacrev)...")
+    print("\n3. Testing auto mode (should select jacrev)...")
     times_auto = []
     for trial in range(n_trials):
         start = time.perf_counter()
         try:
-            popt_auto, _ = curve_fit(
+            _popt_auto, _ = curve_fit(
                 model,
                 xdata,
                 ydata,
@@ -216,7 +216,9 @@ def run_benchmark_suite():
         "platform": "linux",
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "summary": {
-            "best_speedup": max(r["speedup"] for r in all_results if np.isfinite(r["speedup"])),
+            "best_speedup": max(
+                r["speedup"] for r in all_results if np.isfinite(r["speedup"])
+            ),
             "target_achieved": any(
                 r["speedup"] >= 10 for r in all_results if np.isfinite(r["speedup"])
             ),

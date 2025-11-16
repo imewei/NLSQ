@@ -80,7 +80,9 @@ def benchmark_baseline():
 
     print(f"\nMemory delta: {mem_delta:.2f} MB")
     print(f"Pool reuse rate: {pool_stats['reuse_rate']:.2%}")
-    print(f"Pool stats: {pool_stats['allocations']} allocations, {pool_stats['reuses']} reuses")
+    print(
+        f"Pool stats: {pool_stats['allocations']} allocations, {pool_stats['reuses']} reuses"
+    )
 
     return results
 
@@ -173,7 +175,9 @@ def benchmark_bucketing():
         "config": "bucketing",
         "reuse_rate_no_bucketing": round(reuse_rate_no_bucket, 4),
         "reuse_rate_with_bucketing": round(reuse_rate_with_bucket, 4),
-        "improvement_factor": round(improvement_factor, 2) if improvement_factor != float("inf") else "inf",
+        "improvement_factor": round(improvement_factor, 2)
+        if improvement_factor != float("inf")
+        else "inf",
         "pool_sizes_no_bucketing": len(stats_no_bucket.get("pool_sizes", {})),
         "pool_sizes_with_bucketing": len(stats_with_bucket.get("pool_sizes", {})),
     }
@@ -184,7 +188,9 @@ def benchmark_bucketing():
         print(f"Improvement factor: {improvement_factor:.1f}x")
     else:
         print(f"Improvement factor: ∞ (no reuse → {reuse_rate_with_bucket:.1%} reuse)")
-    print(f"Pool sizes: {len(stats_no_bucket.get('pool_sizes', {}))} → {len(stats_with_bucket.get('pool_sizes', {}))}")
+    print(
+        f"Pool sizes: {len(stats_no_bucket.get('pool_sizes', {}))} → {len(stats_with_bucket.get('pool_sizes', {}))}"
+    )
 
     return results
 
@@ -246,14 +252,18 @@ def benchmark_round_to_bucket():
     bucketing_results = []
     for nbytes, category in test_cases:
         bucketed = round_to_bucket(nbytes)
-        bucketing_results.append({
-            "input_bytes": nbytes,
-            "input_kb": round(nbytes / 1024, 2),
-            "bucketed_bytes": bucketed,
-            "bucketed_kb": round(bucketed / 1024, 2),
-            "category": category,
-        })
-        print(f"{nbytes:8d} bytes ({nbytes/1024:6.1f} KB) → {bucketed:8d} bytes ({bucketed/1024:6.1f} KB) [{category}]")
+        bucketing_results.append(
+            {
+                "input_bytes": nbytes,
+                "input_kb": round(nbytes / 1024, 2),
+                "bucketed_bytes": bucketed,
+                "bucketed_kb": round(bucketed / 1024, 2),
+                "category": category,
+            }
+        )
+        print(
+            f"{nbytes:8d} bytes ({nbytes / 1024:6.1f} KB) → {bucketed:8d} bytes ({bucketed / 1024:6.1f} KB) [{category}]"
+        )
 
     return {"config": "bucketing_algorithm", "test_cases": bucketing_results}
 
@@ -269,10 +279,7 @@ def main():
     print("  3. disable_padding flag (exact shapes)")
     print("=" * 80)
 
-    results = {
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "benchmarks": {}
-    }
+    results = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "benchmarks": {}}
 
     # Run benchmarks
     results["benchmarks"]["baseline"] = benchmark_baseline()
@@ -301,33 +308,49 @@ def main():
     bucketing = results["benchmarks"]["bucketing"]
     strict = results["benchmarks"]["disable_padding"]
 
-    print(f"\n1. Adaptive Safety Factor:")
+    print("\n1. Adaptive Safety Factor:")
     print(f"   • Reduced from 1.2 → {adaptive['final_safety_factor']}")
     print(f"   • Memory reduction: {adaptive['predicted_memory_reduction_pct']:.1f}%")
-    print(f"   • Target: 10-20% reduction ✓" if 10 <= adaptive['predicted_memory_reduction_pct'] <= 20 else f"   • Target: 10-20% reduction (actual: {adaptive['predicted_memory_reduction_pct']:.1f}%)")
+    print(
+        "   • Target: 10-20% reduction ✓"
+        if 10 <= adaptive["predicted_memory_reduction_pct"] <= 20
+        else f"   • Target: 10-20% reduction (actual: {adaptive['predicted_memory_reduction_pct']:.1f}%)"
+    )
 
-    print(f"\n2. Size-Class Bucketing:")
-    print(f"   • Reuse improvement: {bucketing['reuse_rate_no_bucketing']:.1%} → {bucketing['reuse_rate_with_bucketing']:.1%}")
-    if bucketing['improvement_factor'] != "inf":
+    print("\n2. Size-Class Bucketing:")
+    print(
+        f"   • Reuse improvement: {bucketing['reuse_rate_no_bucketing']:.1%} → {bucketing['reuse_rate_with_bucketing']:.1%}"
+    )
+    if bucketing["improvement_factor"] != "inf":
         print(f"   • Improvement factor: {bucketing['improvement_factor']}x")
-        print(f"   • Target: 5x improvement ✓" if float(bucketing['improvement_factor']) >= 5 else f"   • Target: 5x improvement (actual: {bucketing['improvement_factor']}x)")
+        print(
+            "   • Target: 5x improvement ✓"
+            if float(bucketing["improvement_factor"]) >= 5
+            else f"   • Target: 5x improvement (actual: {bucketing['improvement_factor']}x)"
+        )
     else:
-        print(f"   • Improvement factor: ∞ (perfect bucketing)")
+        print("   • Improvement factor: ∞ (perfect bucketing)")
 
-    print(f"\n3. Disable Padding (Strict Mode):")
+    print("\n3. Disable Padding (Strict Mode):")
     print(f"   • Memory savings: {strict['memory_savings_pct']:.1f}%")
-    print(f"   • Safety factor: 1.2 → 1.0")
+    print("   • Safety factor: 1.2 → 1.0")
 
     print("\n" + "=" * 80)
     print("ACCEPTANCE CRITERIA:")
     print("=" * 80)
-    print(f"✓ 10-20% peak memory reduction: {adaptive['predicted_memory_reduction_pct']:.1f}%")
-    if bucketing['improvement_factor'] != "inf":
-        print(f"{'✓' if float(bucketing['improvement_factor']) >= 5 else '✗'} 5x pool reuse rate increase: {bucketing['improvement_factor']}x")
+    print(
+        f"✓ 10-20% peak memory reduction: {adaptive['predicted_memory_reduction_pct']:.1f}%"
+    )
+    if bucketing["improvement_factor"] != "inf":
+        print(
+            f"{'✓' if float(bucketing['improvement_factor']) >= 5 else '✗'} 5x pool reuse rate increase: {bucketing['improvement_factor']}x"
+        )
     else:
-        print(f"✓ Pool reuse rate: Perfect (∞)")
+        print("✓ Pool reuse rate: Perfect (∞)")
     print(f"✓ Adaptive safety factor at ~1.05: {adaptive['final_safety_factor']}")
-    print(f"✓ disable_padding works correctly: {strict['memory_savings_pct']:.1f}% savings")
+    print(
+        f"✓ disable_padding works correctly: {strict['memory_savings_pct']:.1f}% savings"
+    )
     print("=" * 80)
 
 

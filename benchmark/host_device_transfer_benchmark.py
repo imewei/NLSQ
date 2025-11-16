@@ -193,7 +193,12 @@ def estimate_transfer_bytes(n_points, n_params):
     misc_bytes = 200  # miscellaneous small arrays
 
     total_bytes = (
-        gradient_bytes + svd_bytes + cost_bytes + norm_bytes + logging_bytes + misc_bytes
+        gradient_bytes
+        + svd_bytes
+        + cost_bytes
+        + norm_bytes
+        + logging_bytes
+        + misc_bytes
     )
 
     return {
@@ -261,39 +266,37 @@ def print_benchmark_results(metrics, problem_info):
     print("HOST-DEVICE TRANSFER BENCHMARK RESULTS")
     print("=" * 70)
 
-    print(f"\nProblem Size:")
+    print("\nProblem Size:")
     print(f"  Data points: {problem_info['n_points']:,}")
     print(f"  Parameters: {problem_info['n_params']}")
 
-    print(f"\nOptimization Results:")
+    print("\nOptimization Results:")
     print(f"  Success: {metrics['success']}")
     print(f"  Iterations: {metrics['iterations']}")
     print(f"  Final cost: {metrics['final_cost']:.6e}")
     print(f"  Function evaluations: {metrics['function_evals']}")
     print(f"  Jacobian evaluations: {metrics['jacobian_evals']}")
 
-    print(f"\nPerformance Metrics:")
+    print("\nPerformance Metrics:")
     print(f"  Total time: {metrics['total_time_s']:.3f} s")
     print(f"  Iteration time: {metrics['iteration_time_ms']:.2f} ms")
 
     if metrics["profiling_enabled"]:
-        print(f"\nTransfer Metrics (Profiler):")
+        print("\nTransfer Metrics (Profiler):")
         print(
             f"  Bytes/iteration: {metrics['transfer_bytes_per_iteration']:.1f} bytes "
-            f"({metrics['transfer_bytes_per_iteration']/1024:.1f} KB)"
+            f"({metrics['transfer_bytes_per_iteration'] / 1024:.1f} KB)"
         )
-        print(
-            f"  Transfers/iteration: {metrics['transfer_count_per_iteration']:.1f}"
-        )
+        print(f"  Transfers/iteration: {metrics['transfer_count_per_iteration']:.1f}")
     else:
         # Show estimates
         estimates = estimate_transfer_bytes(
             problem_info["n_points"], problem_info["n_params"]
         )
-        print(f"\nTransfer Estimates (Profiler not available):")
+        print("\nTransfer Estimates (Profiler not available):")
         print(
             f"  Estimated bytes/iteration: {estimates['total_estimate_bytes']:,} bytes "
-            f"({estimates['total_estimate_bytes']/1024:.1f} KB)"
+            f"({estimates['total_estimate_bytes'] / 1024:.1f} KB)"
         )
         print(f"  - Gradient: {estimates['gradient_bytes']} bytes")
         print(f"  - SVD results: {estimates['svd_bytes']:,} bytes")

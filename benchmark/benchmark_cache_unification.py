@@ -60,7 +60,7 @@ def benchmark_cold_jit_time(data_sizes=(100, 1000, 10000)):
         # Time cold JIT compilation
         start = time.time()
         result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
-        popt, pcov = result
+        _popt, _pcov = result
         cold_time_ms = (time.time() - start) * 1000
 
         times.append(cold_time_ms)
@@ -103,7 +103,7 @@ def benchmark_warm_jit_time(n_iterations=100):
 
         start = time.time()
         result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
-        popt, pcov = result
+        _popt, _pcov = result
         warm_time_ms = (time.time() - start) * 1000
         times.append(warm_time_ms)
 
@@ -143,11 +143,13 @@ def benchmark_cache_hit_rate(n_fits=1000, data_sizes=(100, 200, 500, 1000)):
         y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, size)
 
         result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
-        popt, pcov = result
+        _popt, _pcov = result
 
         if (i + 1) % 100 == 0:
             stats = get_cache_stats()
-            print(f"  Processed {i+1}/{n_fits} fits, hit_rate={stats['hit_rate']:.2%}")
+            print(
+                f"  Processed {i + 1}/{n_fits} fits, hit_rate={stats['hit_rate']:.2%}"
+            )
 
     # Get final stats
     final_stats = get_cache_stats()
@@ -242,15 +244,21 @@ def main():
 
     target_hit_rate = 0.80
     hit_rate_pass = cache_stats["hit_rate"] >= target_hit_rate
-    print(f"  Cache Hit Rate: {cache_stats['hit_rate']:.2%} (target: >80%) {'✓' if hit_rate_pass else '✗'}")
+    print(
+        f"  Cache Hit Rate: {cache_stats['hit_rate']:.2%} (target: >80%) {'✓' if hit_rate_pass else '✗'}"
+    )
 
     target_speedup = 2.0
     speedup_pass = speedup >= target_speedup
-    print(f"  Speedup Factor: {speedup:.1f}x (target: 2-5x) {'✓' if speedup_pass else '✗'}")
+    print(
+        f"  Speedup Factor: {speedup:.1f}x (target: 2-5x) {'✓' if speedup_pass else '✗'}"
+    )
 
     target_warm_time = 2.0  # ms
     warm_time_pass = warm_time["p50"] <= target_warm_time
-    print(f"  Warm JIT Time: {warm_time['p50']:.2f} ms (target: <2ms) {'✓' if warm_time_pass else '✗'}")
+    print(
+        f"  Warm JIT Time: {warm_time['p50']:.2f} ms (target: <2ms) {'✓' if warm_time_pass else '✗'}"
+    )
     print()
 
     # Store results

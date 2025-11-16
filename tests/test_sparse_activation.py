@@ -8,9 +8,9 @@ Target Impact:
 - 5-50x memory reduction on sparse problems
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-import jax.numpy as jnp
 
 from nlsq import curve_fit
 from nlsq.sparse_jacobian import detect_jacobian_sparsity
@@ -85,14 +85,14 @@ class TestSparseDetection:
             sparse_parameter_selection_model,
             p0,
             x_data[:50],  # Sample for detection
-            threshold=0.01
+            threshold=0.01,
         )
 
         # Verify high sparsity detected
         assert sparsity_ratio > 0.5, f"Expected >50% sparsity, got {sparsity_ratio:.1%}"
-        assert info['sparsity'] == sparsity_ratio
-        assert 'nnz' in info
-        assert 'memory_reduction' in info
+        assert info["sparsity"] == sparsity_ratio
+        assert "nnz" in info
+        assert "memory_reduction" in info
 
     def test_detect_dense_problem(self):
         """Test detection correctly identifies dense problems (<50% sparsity)."""
@@ -108,15 +108,14 @@ class TestSparseDetection:
         p0 = np.array([1.0, 1.0, 1.0])
 
         # Detect sparsity
-        sparsity_ratio, info = detect_jacobian_sparsity(
-            dense_exponential_model,
-            p0,
-            x_data[:50],
-            threshold=0.01
+        sparsity_ratio, _info = detect_jacobian_sparsity(
+            dense_exponential_model, p0, x_data[:50], threshold=0.01
         )
 
         # Dense problem should have low sparsity
-        assert sparsity_ratio < 0.5, f"Expected <50% sparsity for dense problem, got {sparsity_ratio:.1%}"
+        assert sparsity_ratio < 0.5, (
+            f"Expected <50% sparsity for dense problem, got {sparsity_ratio:.1%}"
+        )
 
 
 class TestSparseAutoSelection:
@@ -143,19 +142,19 @@ class TestSparseAutoSelection:
             y_data,
             p0=p0,
             full_output=True,
-            maxfev=100
+            maxfev=100,
         )
-        popt = result['x']
-        pcov = result.get('cov_x', None)
+        popt = result["x"]
+        pcov = result.get("cov_x", None)
         info = result
 
         # Check for sparsity diagnostics in result
-        if 'sparsity_detected' in info:
-            sparsity_info = info['sparsity_detected']
-            assert sparsity_info['detected'] == True  # Use == for NumPy boolean
-            assert sparsity_info['ratio'] > 0.5
+        if "sparsity_detected" in info:
+            sparsity_info = info["sparsity_detected"]
+            assert sparsity_info["detected"]  # Check truthiness
+            assert sparsity_info["ratio"] > 0.5
             # May use sparse or dense depending on implementation state
-            assert sparsity_info['solver'] in ['sparse', 'dense']
+            assert sparsity_info["solver"] in ["sparse", "dense"]
 
     def test_dense_solver_for_small_problems(self):
         """Test dense solver used for small problems (<10K residuals)."""
@@ -178,19 +177,19 @@ class TestSparseAutoSelection:
             y_data,
             p0=p0,
             full_output=True,
-            maxfev=100
+            maxfev=100,
         )
-        popt = result['x']
-        pcov = result.get('cov_x', None)
+        popt = result["x"]
+        pcov = result.get("cov_x", None)
         info = result
 
         # Should use dense solver for small problems
-        if 'sparsity_detected' in info:
-            sparsity_info = info['sparsity_detected']
+        if "sparsity_detected" in info:
+            sparsity_info = info["sparsity_detected"]
             # Either not detected or uses dense solver
-            if sparsity_info['detected']:
+            if sparsity_info["detected"]:
                 # If detected, should still use dense for small problems
-                assert sparsity_info['solver'] == 'dense'
+                assert sparsity_info["solver"] == "dense"
 
     def test_dense_solver_for_dense_problems(self):
         """Test dense solver used for dense problems (sparsity <50%)."""
@@ -206,22 +205,17 @@ class TestSparseAutoSelection:
 
         # Fit with full_output
         result = curve_fit(
-            dense_exponential_model,
-            x_data,
-            y_data,
-            p0=p0,
-            full_output=True,
-            maxfev=50
+            dense_exponential_model, x_data, y_data, p0=p0, full_output=True, maxfev=50
         )
-        popt = result['x']
-        pcov = result.get('cov_x', None)
+        popt = result["x"]
+        pcov = result.get("cov_x", None)
         info = result
 
         # Dense problem should use dense solver
-        if 'sparsity_detected' in info:
-            sparsity_info = info['sparsity_detected']
+        if "sparsity_detected" in info:
+            sparsity_info = info["sparsity_detected"]
             # Should not activate sparse solver for dense problems
-            assert sparsity_info['solver'] == 'dense'
+            assert sparsity_info["solver"] == "dense"
 
 
 class TestSparseDiagnostics:
@@ -247,10 +241,10 @@ class TestSparseDiagnostics:
             y_data,
             p0=p0,
             full_output=True,
-            maxfev=50
+            maxfev=50,
         )
-        popt = result['x']
-        pcov = result.get('cov_x', None)
+        popt = result["x"]
+        pcov = result.get("cov_x", None)
         info = result
 
         # Note: sparsity_detected will be added in Task 6.5
@@ -285,11 +279,7 @@ class TestSparseConvergence:
 
         # Fit
         popt, pcov = curve_fit(
-            sparse_parameter_selection_model,
-            x_data,
-            y_data,
-            p0=p0,
-            maxfev=200
+            sparse_parameter_selection_model, x_data, y_data, p0=p0, maxfev=200
         )
 
         # Check convergence (should be close to true params)
@@ -304,7 +294,9 @@ class TestSparseConvergence:
         for i in [0, 10, 20, 30, 40]:
             if i < len(popt):
                 # Should be within reasonable range of true value
-                assert 1.0 < popt[i] < 3.5, f"Parameter {i} out of reasonable range: {popt[i]}"
+                assert 1.0 < popt[i] < 3.5, (
+                    f"Parameter {i} out of reasonable range: {popt[i]}"
+                )
 
 
 class TestSparsePerformance:
@@ -325,17 +317,16 @@ class TestSparsePerformance:
         # Detect sparsity to estimate memory savings
         p0 = np.ones(n_params)
         sparsity_ratio, info = detect_jacobian_sparsity(
-            sparse_parameter_selection_model,
-            p0,
-            x_data[:100],
-            threshold=0.01
+            sparse_parameter_selection_model, p0, x_data[:100], threshold=0.01
         )
 
         # Check memory reduction potential
-        assert 'memory_reduction' in info
+        assert "memory_reduction" in info
         # For 90% sparsity, should see ~10x memory reduction
         if sparsity_ratio > 0.8:
-            assert info['memory_reduction'] > 50, "Expected >50% memory reduction for high sparsity"
+            assert info["memory_reduction"] > 50, (
+                "Expected >50% memory reduction for high sparsity"
+            )
 
     @pytest.mark.slow
     def test_sparse_speed_improvement(self):
@@ -355,12 +346,8 @@ class TestSparsePerformance:
         p0 = np.ones(n_params) * 1.5
 
         # Just verify it solves (timing comparison in benchmark)
-        popt, pcov = curve_fit(
-            sparse_parameter_selection_model,
-            x_data,
-            y_data,
-            p0=p0,
-            maxfev=100
+        popt, _pcov = curve_fit(
+            sparse_parameter_selection_model, x_data, y_data, p0=p0, maxfev=100
         )
 
         assert popt is not None

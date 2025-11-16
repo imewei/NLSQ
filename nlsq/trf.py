@@ -91,8 +91,8 @@ import warnings
 from collections.abc import Callable
 
 import numpy as np
-# REMOVED: from numpy.linalg import norm  # Use JAX norm (jnorm) instead
 
+# REMOVED: from numpy.linalg import norm  # Use JAX norm (jnorm) instead
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
 
@@ -787,7 +787,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             self.stability_guard = NumericalStabilityGuard()
 
     @staticmethod
-    def _log_iteration_callback(iteration, nfev, cost, actual_reduction, step_norm, g_norm):
+    def _log_iteration_callback(
+        iteration, nfev, cost, actual_reduction, step_norm, g_norm
+    ):
         """Wrapper for logging callback that converts JAX arrays to Python scalars.
 
         This function is called by jax.debug.callback and ensures all arguments
@@ -817,12 +819,16 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Handle optional values
         if actual_reduction is not None:
             actual_reduction = (
-                float(actual_reduction) if hasattr(actual_reduction, "item") else actual_reduction
+                float(actual_reduction)
+                if hasattr(actual_reduction, "item")
+                else actual_reduction
             )
         if step_norm is not None:
             step_norm = float(step_norm) if hasattr(step_norm, "item") else step_norm
 
-        print_iteration_nonlinear(iteration, nfev, cost, actual_reduction, step_norm, g_norm)
+        print_iteration_nonlinear(
+            iteration, nfev, cost, actual_reduction, step_norm, g_norm
+        )
 
     def trf(
         self,

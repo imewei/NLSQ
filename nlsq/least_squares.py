@@ -26,7 +26,9 @@ from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction, MethodLiteral
 from nlsq.unified_cache import get_global_cache
 
 
-def jacobian_mode_selector(n_params: int, n_residuals: int, mode: str = "auto") -> tuple[str, str]:
+def jacobian_mode_selector(
+    n_params: int, n_residuals: int, mode: str = "auto"
+) -> tuple[str, str]:
     """Select Jacobian automatic differentiation mode based on problem dimensions.
 
     Automatically chooses between forward-mode (jacfwd) and reverse-mode (jacrev)
@@ -97,7 +99,9 @@ def jacobian_mode_selector(n_params: int, n_residuals: int, mode: str = "auto") 
     elif mode in ("fwd", "rev"):
         return mode, f"explicit override: {mode}"
     else:
-        raise ValueError(f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'")
+        raise ValueError(
+            f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'"
+        )
 
 
 TERMINATION_MESSAGES = {
@@ -1065,7 +1069,9 @@ class LeastSquares:
             @jit
             def temp_residual(args_temp):
                 func_eval = fun(xdata, *args_temp) - ydata
-                return jnp.where(data_mask if data_mask is not None else True, func_eval, 0)
+                return jnp.where(
+                    data_mask if data_mask is not None else True, func_eval, 0
+                )
 
             f0_temp = temp_residual(x0)
             m_temp = f0_temp.size
@@ -1131,7 +1137,7 @@ class LeastSquares:
                     xdata=xdata,
                     n_residuals=m,
                     threshold=0.01,
-                    sample_size=min(100, m)
+                    sample_size=min(100, m),
                 )
 
                 # Auto-selection logic:
@@ -1215,11 +1221,11 @@ class LeastSquares:
         # Step 13: Add sparsity diagnostics to result (Task 6.5)
         # This provides transparency about whether sparse solver was used
         result.sparsity_detected = {
-            'detected': is_sparse_problem,
-            'ratio': float(sparsity_ratio),
-            'solver': 'sparse' if sparse_solver_selected else 'dense',
-            'n_residuals': m,
-            'n_params': n,
+            "detected": is_sparse_problem,
+            "ratio": float(sparsity_ratio),
+            "solver": "sparse" if sparse_solver_selected else "dense",
+            "n_residuals": m,
+            "n_params": n,
         }
 
         # Log sparsity info in debug mode

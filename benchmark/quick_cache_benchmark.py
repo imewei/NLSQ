@@ -47,11 +47,11 @@ def main():
 
     warm_p50 = np.percentile(warm_times, 50)
     print(f"Warm JIT time (P50): {warm_p50:.2f} ms")
-    print(f"Speedup: {cold_time/warm_p50:.1f}x")
+    print(f"Speedup: {cold_time / warm_p50:.1f}x")
 
     # Test 3: Cache statistics
     stats = get_cache_stats()
-    print(f"\nCache Statistics:")
+    print("\nCache Statistics:")
     print(f"  Hit rate: {stats['hit_rate']:.2%}")
     print(f"  Hits: {stats['hits']}")
     print(f"  Misses: {stats['misses']}")

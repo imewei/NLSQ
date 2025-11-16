@@ -1101,7 +1101,7 @@ def get_jacobian_mode() -> tuple[str, str]:
                             f"Invalid jacobian_mode in config file: {mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
                             stacklevel=2,
                         )
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             warnings.warn(
                 f"Failed to read Jacobian mode from config file: {e}. Using auto-default.",
                 stacklevel=2,
@@ -1133,7 +1133,9 @@ def set_jacobian_mode(mode: str):
     >>> set_jacobian_mode('rev')  # Force reverse-mode AD for all fits
     """
     if mode not in ("auto", "fwd", "rev"):
-        raise ValueError(f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'.")
+        raise ValueError(
+            f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'."
+        )
 
     os.environ["NLSQ_JACOBIAN_MODE"] = mode
     logging.info(f"Set Jacobian mode to '{mode}' via environment variable")

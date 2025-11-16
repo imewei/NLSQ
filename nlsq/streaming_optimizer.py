@@ -1513,15 +1513,18 @@ class StreamingOptimizer:
 
                     # Task Group 7: Batch shape padding for JIT stability
                     # Update max batch shape during warmup
-                    if self._warmup_phase and self.iteration <= self.config.warmup_steps:
+                    if (
+                        self._warmup_phase
+                        and self.iteration <= self.config.warmup_steps
+                    ):
                         self._update_max_batch_shape(len(x_batch))
 
                     # Transition from warmup to production phase
                     if self._warmup_phase and self.iteration > self.config.warmup_steps:
                         self._warmup_phase = False
-                        if self.config.batch_shape_padding in ('auto', 'static'):
+                        if self.config.batch_shape_padding in ("auto", "static"):
                             # Use batch_size as max shape in static mode
-                            if self.config.batch_shape_padding == 'static':
+                            if self.config.batch_shape_padding == "static":
                                 self._max_batch_shape = self.config.batch_size
                             logger.info(
                                 f"Warmup complete. Batch padding enabled "
@@ -1530,24 +1533,41 @@ class StreamingOptimizer:
 
                     # Apply batch padding if configured
                     batch_mask = None
-                    if self._should_apply_padding() and self._max_batch_shape is not None:
+                    x_batch_processed = x_batch
+                    y_batch_processed = y_batch
+                    if (
+                        self._should_apply_padding()
+                        and self._max_batch_shape is not None
+                    ):
                         if len(x_batch) < self._max_batch_shape:
-                            x_batch, y_batch, batch_mask = self._pad_batch_to_static(
-                                x_batch, y_batch, self._max_batch_shape
+                            x_batch_processed, y_batch_processed, batch_mask = (
+                                self._pad_batch_to_static(
+                                    x_batch, y_batch, self._max_batch_shape
+                                )
                             )
 
                     # Process batch with retry logic if fault tolerance enabled
                     # Task 8.2-8.3: Fast mode skips validation and retry
                     if self.config.enable_fault_tolerance:
                         success, params, loss, grad = self._process_batch_with_retry(
-                            func, params, x_batch, y_batch, batch_idx, bounds, batch_mask
+                            func,
+                            params,
+                            x_batch_processed,
+                            y_batch_processed,
+                            batch_idx,
+                            bounds,
+                            batch_mask,
                         )
                     else:
                         # Fast mode: Minimal overhead, basic error handling only
                         try:
                             # Compute loss and gradient (no validation overhead)
                             loss, grad = self._compute_loss_and_gradient(
-                                func, params, x_batch, y_batch, batch_mask
+                                func,
+                                params,
+                                x_batch_processed,
+                                y_batch_processed,
+                                batch_mask,
                             )
 
                             # Gradient clipping (always needed for stability)
@@ -1830,15 +1850,19 @@ class StreamingOptimizer:
 
         if actual_size >= max_shape:
             # No padding needed
-            return x_batch[:max_shape], y_batch[:max_shape], jnp.ones(max_shape, dtype=bool)
+            return (
+                x_batch[:max_shape],
+                y_batch[:max_shape],
+                jnp.ones(max_shape, dtype=bool),
+            )
 
         # Padding needed
         padding_size = max_shape - actual_size
 
         # Pad by repeating last point (avoids numerical issues with zeros)
         # Using np arrays for efficiency, will convert to jnp inside JIT
-        x_padded = np.pad(x_batch, (0, padding_size), mode='edge')
-        y_padded = np.pad(y_batch, (0, padding_size), mode='edge')
+        x_padded = np.pad(x_batch, (0, padding_size), mode="edge")
+        y_padded = np.pad(y_batch, (0, padding_size), mode="edge")
 
         # Create mask: True for valid data, False for padding
         mask = jnp.arange(max_shape) < actual_size
@@ -1867,13 +1891,13 @@ class StreamingOptimizer:
         """
         mode = self.config.batch_shape_padding
 
-        if mode == 'dynamic':
+        if mode == "dynamic":
             # No padding in dynamic mode
             return False
-        elif mode == 'static':
+        elif mode == "static":
             # Always pad in static mode
             return True
-        elif mode == 'auto':
+        elif mode == "auto":
             # Pad after warmup phase completes
             return not self._warmup_phase
         else:
@@ -1903,7 +1927,7 @@ class StreamingOptimizer:
         # Cache key includes mask flag to avoid mixing masked/unmasked versions
         cache_key = f"loss_grad_masked_{use_mask}"
 
-        if not hasattr(self, '_loss_and_grad_cache'):
+        if not hasattr(self, "_loss_and_grad_cache"):
             self._loss_and_grad_cache = {}
 
         if cache_key not in self._loss_and_grad_cache:
@@ -1922,7 +1946,9 @@ class StreamingOptimizer:
                     loss = jnp.sum(masked_residuals**2) / jnp.maximum(n_valid, 1.0)
                     return loss
 
-                self._loss_and_grad_cache[cache_key] = jit(value_and_grad(loss_fn_masked))
+                self._loss_and_grad_cache[cache_key] = jit(
+                    value_and_grad(loss_fn_masked)
+                )
             else:
                 # Standard version without masking
                 @jit
@@ -1983,7 +2009,9 @@ class StreamingOptimizer:
         # Compute loss and gradient
         if use_mask:
             mask_jax = jnp.array(mask)
-            loss, grad = loss_and_grad_fn(params_jax, x_batch_jax, y_batch_jax, mask_jax)
+            loss, grad = loss_and_grad_fn(
+                params_jax, x_batch_jax, y_batch_jax, mask_jax
+            )
         else:
             loss, grad = loss_and_grad_fn(params_jax, x_batch_jax, y_batch_jax)
 

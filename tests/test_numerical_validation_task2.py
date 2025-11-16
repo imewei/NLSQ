@@ -10,15 +10,13 @@ Tests:
 4. Float64 precision: Full precision throughout
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-
-import jax.numpy as jnp
 from jax import config
 
 from nlsq import curve_fit
 from nlsq.least_squares import LeastSquares
-
 
 # Ensure float64 precision
 config.update("jax_enable_x64", True)
@@ -66,9 +64,9 @@ class TestNumericalEquivalence:
         # Validate residuals
         residuals = y_noisy - exponential_model(x, *popt)
         residual_std = np.std(residuals)
-        assert (
-            0.08 < residual_std < 0.12
-        ), f"Residual std {residual_std:.3f} should be ~0.1"
+        assert 0.08 < residual_std < 0.12, (
+            f"Residual std {residual_std:.3f} should be ~0.1"
+        )
 
     def test_medium_problem_accuracy(self):
         """Test numerical accuracy on medium problem (10K points).
@@ -171,9 +169,9 @@ class TestConvergenceGuarantees:
             results.append(result)
 
         # Validate all results match
-        popt_ref, pcov_ref = results[0]  # Tuple unpacking
+        popt_ref, _pcov_ref = results[0]  # Tuple unpacking
         for i in range(1, len(results)):
-            popt, pcov = results[i]  # Tuple unpacking
+            popt, _pcov = results[i]  # Tuple unpacking
             np.testing.assert_allclose(
                 popt,
                 popt_ref,
@@ -246,9 +244,9 @@ class TestConvergenceGuarantees:
 
         # Validate optimality (gradient norm should be small)
         # Use reasonable tolerance for approximated algorithms
-        assert (
-            result.optimality < 1e-5
-        ), f"Gradient norm {result.optimality:.2e} should be small"
+        assert result.optimality < 1e-5, (
+            f"Gradient norm {result.optimality:.2e} should be small"
+        )
 
     def test_bounded_optimization_preserved(self):
         """Test that bounded optimization behavior is preserved.

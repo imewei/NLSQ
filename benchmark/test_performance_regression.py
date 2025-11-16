@@ -54,7 +54,7 @@ def load_baseline():
     try:
         with open(BASELINE_FILE) as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         pytest.skip(f"Failed to load baseline: {e}")
 
 
@@ -78,11 +78,15 @@ def check_performance_regression(metric_name, current_value, metric_type="cold_j
     if metric_type == "cold_jit":
         threshold_pct = config.get("cold_jit_slowdown_threshold_percent", 10)
         action = config.get("cold_jit_slowdown_action", "FAIL")
-        baseline_val = BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_cold_jit_ms")
+        baseline_val = (
+            BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_cold_jit_ms")
+        )
     elif metric_type == "hot_path":
         threshold_pct = config.get("hot_path_slowdown_threshold_percent", 5)
         action = config.get("hot_path_slowdown_action", "FAIL")
-        baseline_val = BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_hot_path_ms")
+        baseline_val = (
+            BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_hot_path_ms")
+        )
     elif metric_type == "memory":
         threshold_pct = config.get("memory_regression_threshold_percent", 10)
         action = config.get("memory_regression_action", "WARN_ONLY")
@@ -251,10 +255,14 @@ def test_regression_cold_jit_exponential_100(benchmark, small_linear_data):
     )
 
     # Extract measured time (ms)
-    current_time_ms = timer[1] * 1000 if isinstance(timer, tuple) else benchmark.stats.mean * 1000
+    current_time_ms = (
+        timer[1] * 1000 if isinstance(timer, tuple) else benchmark.stats.mean * 1000
+    )
 
     # Check against baseline
-    passed, message = check_performance_regression("exponential_decay", current_time_ms, "cold_jit")
+    passed, message = check_performance_regression(
+        "exponential_decay", current_time_ms, "cold_jit"
+    )
 
     if not passed:
         pytest.fail(f"Cold JIT regression: {message}")

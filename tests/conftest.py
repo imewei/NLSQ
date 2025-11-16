@@ -115,19 +115,17 @@ def compiled_models():
     }
 
     # Warm up compilation cache with dummy data
+    import contextlib
+
     x_dummy = jnp.linspace(0, 10, 100)
     for name, func in models.items():
         if name == "polynomial":
             # Polynomial needs specific coefficients
-            try:
+            with contextlib.suppress(Exception):
                 func(x_dummy, 1.0, 1.0, 1.0)
-            except:
-                pass  # Compilation happens on first valid call
         elif name == "sinusoidal":
             func(x_dummy, 1.0, 1.0, 1.0, 1.0)
-        elif name == "gaussian" or name == "exponential":
-            func(x_dummy, 1.0, 1.0, 1.0)
-        elif name == "quadratic":
+        elif name in {"gaussian", "exponential", "quadratic"}:
             func(x_dummy, 1.0, 1.0, 1.0)
         else:  # linear
             func(x_dummy, 1.0, 1.0)

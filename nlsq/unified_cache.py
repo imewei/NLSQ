@@ -454,7 +454,11 @@ def cached_jit(
         @wraps(f)
         def wrapper(*args, **kwargs):
             compiled_func = cache.get_or_compile(
-                f, args, kwargs, static_argnums=static_argnums, donate_argnums=donate_argnums
+                f,
+                args,
+                kwargs,
+                static_argnums=static_argnums,
+                donate_argnums=donate_argnums,
             )
             return compiled_func(*args, **kwargs)
 
@@ -484,6 +488,7 @@ def get_cache_stats() -> dict[str, Any]:
 # Backward compatibility wrappers for gradual migration
 # These preserve the existing cache APIs from compilation_cache.py, caching.py, smart_cache.py
 
+
 class CompilationCacheCompat:
     """Backward compatibility wrapper for compilation_cache.py API.
 
@@ -504,7 +509,11 @@ class CompilationCacheCompat:
         """Compile function with JIT and cache result (compatibility wrapper)."""
         # Use empty args for key generation (will be refined on actual call)
         return self._cache.get_or_compile(
-            func, args=(), kwargs={}, static_argnums=static_argnums, donate_argnums=donate_argnums
+            func,
+            args=(),
+            kwargs={},
+            static_argnums=static_argnums,
+            donate_argnums=donate_argnums,
         )
 
     def get_stats(self) -> dict:

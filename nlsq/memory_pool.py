@@ -144,9 +144,7 @@ class MemoryPool:
         else:
             # Scale all dimensions proportionally
             scale_factor = (bucketed_elements / np.prod(shape)) ** (1 / len(shape))
-            bucketed_shape = tuple(
-                max(1, int(dim * scale_factor)) for dim in shape
-            )
+            bucketed_shape = tuple(max(1, int(dim * scale_factor)) for dim in shape)
 
         return (bucketed_shape, dtype)
 
@@ -393,7 +391,7 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
         # Update enable_stats on existing pool to handle parallel test execution
         if enable_stats:
             # Ensure stats dict exists when enabling stats
-            if not hasattr(_global_pool, 'stats'):
+            if not hasattr(_global_pool, "stats"):
                 _global_pool.stats = {
                     "allocations": 0,
                     "reuses": 0,

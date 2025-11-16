@@ -50,7 +50,9 @@ class TestJacobianModeSelector:
 
         mode, rationale = jacobian_mode_selector(n_params, n_residuals, mode="auto")
 
-        assert mode == "rev", f"Expected 'rev' for {n_params} params > {n_residuals} residuals"
+        assert mode == "rev", (
+            f"Expected 'rev' for {n_params} params > {n_residuals} residuals"
+        )
         assert "jacrev" in rationale
         assert str(n_params) in rationale
         assert str(n_residuals) in rationale
@@ -64,7 +66,9 @@ class TestJacobianModeSelector:
 
         mode, rationale = jacobian_mode_selector(n_params, n_residuals, mode="auto")
 
-        assert mode == "fwd", f"Expected 'fwd' for {n_params} params <= {n_residuals} residuals"
+        assert mode == "fwd", (
+            f"Expected 'fwd' for {n_params} params <= {n_residuals} residuals"
+        )
         assert "jacfwd" in rationale
         assert str(n_params) in rationale
         assert str(n_residuals) in rationale
@@ -213,5 +217,9 @@ class TestNumericalAccuracy:
 
         # Should be identical (or very close due to floating point)
         np.testing.assert_allclose(
-            J_fwd, J_rev, rtol=1e-12, atol=1e-14, err_msg="jacfwd and jacrev should produce identical Jacobians"
+            J_fwd,
+            J_rev,
+            rtol=1e-12,
+            atol=1e-14,
+            err_msg="jacfwd and jacrev should produce identical Jacobians",
         )

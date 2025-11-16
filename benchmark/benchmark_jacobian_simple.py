@@ -88,7 +88,7 @@ def benchmark_jacobian_direct(n_params: int, n_data: int, n_trials: int = 5):
         J_fwd = jac_fwd(params).block_until_ready()
         elapsed = time.perf_counter() - start
         times_fwd.append(elapsed * 1000)  # Convert to ms
-        print(f"  Trial {i+1}: {elapsed*1000:.4f} ms")
+        print(f"  Trial {i + 1}: {elapsed * 1000:.4f} ms")
 
     # Benchmark jacrev
     print(f"\nBenchmarking jacrev ({n_trials} trials)...")
@@ -98,7 +98,7 @@ def benchmark_jacobian_direct(n_params: int, n_data: int, n_trials: int = 5):
         J_rev = jac_rev(params).block_until_ready()
         elapsed = time.perf_counter() - start
         times_rev.append(elapsed * 1000)  # Convert to ms
-        print(f"  Trial {i+1}: {elapsed*1000:.4f} ms")
+        print(f"  Trial {i + 1}: {elapsed * 1000:.4f} ms")
 
     # Verify numerical equivalence
     J_fwd_final = jac_fwd(params)
@@ -188,16 +188,20 @@ def run_simple_benchmark():
     print("Benchmark Complete")
     print(f"{'=' * 70}")
     print(f"Baseline saved to: {baseline_file}")
-    print(f"\nSummary:")
+    print("\nSummary:")
     print("-" * 70)
     for result in all_results:
-        status = "✓" if result["speedup"] >= 10 else ("○" if result["speedup"] >= 5 else "✗")
+        status = (
+            "✓" if result["speedup"] >= 10 else ("○" if result["speedup"] >= 5 else "✗")
+        )
         print(
             f"{status} {result['n_params']:4d} params / {result['n_data']:3d} data: "
             f"{result['speedup']:5.1f}x speedup ({result['avg_fwd_ms']:.2f}ms → {result['avg_rev_ms']:.2f}ms)"
         )
 
-    print(f"\nOverall: Target (10x) {'✓ ACHIEVED' if baseline_data['summary']['target_achieved'] else '✗ MISSED'}")
+    print(
+        f"\nOverall: Target (10x) {'✓ ACHIEVED' if baseline_data['summary']['target_achieved'] else '✗ MISSED'}"
+    )
 
     return baseline_data
 

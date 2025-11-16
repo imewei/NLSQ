@@ -170,9 +170,9 @@ class TestTransferReduction:
         assert result.cost < 100, "Final cost should be reasonable"
 
         # Verify reasonable iteration count (no performance degradation)
-        assert (
-            result.nit < 100
-        ), "Should converge in reasonable iterations (<100 for this problem)"
+        assert result.nit < 100, (
+            "Should converge in reasonable iterations (<100 for this problem)"
+        )
 
     @pytest.mark.skipif(not HAS_JAX_PROFILER, reason="JAX profiler not available")
     def test_transfer_profiler_integration(self, exponential_problem):
@@ -248,14 +248,14 @@ class TestTransferReduction:
             )
 
             # Cost should match within tolerance
-            assert (
-                abs(results[i].cost - results[0].cost) < 1e-12
-            ), "Cost should be consistent across runs"
+            assert abs(results[i].cost - results[0].cost) < 1e-12, (
+                "Cost should be consistent across runs"
+            )
 
             # Iteration count should be identical (deterministic algorithm)
-            assert (
-                results[i].nit == results[0].nit
-            ), "Iteration count should be deterministic"
+            assert results[i].nit == results[0].nit, (
+                "Iteration count should be deterministic"
+            )
 
     def test_norm_operations_use_jax(self, exponential_problem):
         """Test that norm operations use JAX instead of NumPy.
@@ -317,9 +317,15 @@ class TestTransferReduction:
 
         # Test enhanced result mode (NLSQ provides CurveFitResult, not SciPy's full_output)
         # Access diagnostic information directly from result
-        assert hasattr(result, "nfev") or "nfev" in result, "Function evaluations should be tracked"
-        assert hasattr(result, "success") or "success" in result, "Success status should be available"
-        assert hasattr(result, "status") or "status" in result, "Termination status should be available"
+        assert hasattr(result, "nfev") or "nfev" in result, (
+            "Function evaluations should be tracked"
+        )
+        assert hasattr(result, "success") or "success" in result, (
+            "Success status should be available"
+        )
+        assert hasattr(result, "status") or "status" in result, (
+            "Termination status should be available"
+        )
 
         # Verify status is valid
         status = result.status if hasattr(result, "status") else result["status"]

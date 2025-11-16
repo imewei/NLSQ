@@ -59,7 +59,7 @@ def benchmark_sparse_detection():
                 sparse_parameter_selection_model,
                 p0,
                 x_data[:100],  # Sample size
-                threshold=0.01
+                threshold=0.01,
             )
         detection_time = (time.time() - start) / 10
 
@@ -68,12 +68,12 @@ def benchmark_sparse_detection():
             "n_data": n_data,
             "sparsity_ratio": float(sparsity_ratio),
             "detection_time_ms": detection_time * 1000,
-            "memory_reduction_pct": info['memory_reduction']
+            "memory_reduction_pct": info["memory_reduction"],
         }
 
         print(f"\nn_params={n_params}, n_data={n_data}")
         print(f"  Sparsity: {sparsity_ratio:.1%}")
-        print(f"  Detection time: {detection_time*1000:.2f} ms")
+        print(f"  Detection time: {detection_time * 1000:.2f} ms")
         print(f"  Memory reduction: {info['memory_reduction']:.1f}%")
 
     return results
@@ -101,9 +101,9 @@ def benchmark_sparse_vs_dense():
         n_data = case["n_data"]
         name = case["name"]
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Test case: {name} (n_params={n_params}, n_data={n_data})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Generate data
         np.random.seed(42)
@@ -116,10 +116,7 @@ def benchmark_sparse_vs_dense():
 
         # Detect sparsity first
         sparsity_ratio, info = detect_jacobian_sparsity(
-            sparse_parameter_selection_model,
-            p0,
-            x_data[:100],
-            threshold=0.01
+            sparse_parameter_selection_model, p0, x_data[:100], threshold=0.01
         )
 
         print(f"\nSparsity: {sparsity_ratio:.1%}")
@@ -134,9 +131,9 @@ def benchmark_sparse_vs_dense():
             x_data,
             y_data,
             p0=p0,
-            tr_solver='exact',  # Force dense solver
+            tr_solver="exact",  # Force dense solver
             full_output=True,
-            maxfev=100
+            maxfev=100,
         )
         time_dense = time.time() - start
 
@@ -154,7 +151,7 @@ def benchmark_sparse_vs_dense():
             p0=p0,
             tr_solver=None,  # Let auto-selection decide
             full_output=True,
-            maxfev=100
+            maxfev=100,
         )
         time_auto = time.time() - start
 
@@ -163,8 +160,8 @@ def benchmark_sparse_vs_dense():
         print(f"  Final cost: {result_auto.get('cost', 'N/A'):.2e}")
 
         # Check sparsity diagnostics
-        if 'sparsity_detected' in result_auto:
-            sd = result_auto['sparsity_detected']
+        if "sparsity_detected" in result_auto:
+            sd = result_auto["sparsity_detected"]
             print(f"  Sparsity detected: {sd['detected']}")
             print(f"  Sparsity ratio: {sd['ratio']:.1%}")
             print(f"  Solver used: {sd['solver']}")
@@ -177,16 +174,18 @@ def benchmark_sparse_vs_dense():
             "time_dense_s": time_dense,
             "time_auto_s": time_auto,
             "speedup": time_dense / time_auto if time_auto > 0 else 1.0,
-            "solver_used": result_auto.get('sparsity_detected', {}).get('solver', 'unknown'),
-            "memory_reduction_pct": info['memory_reduction'],
+            "solver_used": result_auto.get("sparsity_detected", {}).get(
+                "solver", "unknown"
+            ),
+            "memory_reduction_pct": info["memory_reduction"],
         }
 
         # Summary
         speedup = time_dense / time_auto if time_auto > 0 else 1.0
-        print(f"\nSummary:")
+        print("\nSummary:")
         print(f"  Speedup: {speedup:.2f}x")
         print(f"  Memory reduction potential: {info['memory_reduction']:.1f}%")
-        print(f"  Note: Sparse SVD not yet implemented (both paths use dense)")
+        print("  Note: Sparse SVD not yet implemented (both paths use dense)")
 
     return results
 
@@ -236,13 +235,17 @@ def run_benchmarks():
     print("-" * 80)
     print("\nSparsity Detection Performance:")
     for key, val in detection_results.items():
-        print(f"  {key}: {val['detection_time_ms']:.2f} ms (sparsity: {val['sparsity_ratio']:.1%})")
+        print(
+            f"  {key}: {val['detection_time_ms']:.2f} ms (sparsity: {val['sparsity_ratio']:.1%})"
+        )
 
     print("\nSolver Performance:")
     for key, val in solver_results.items():
         print(f"  {key}:")
         print(f"    Speedup: {val['speedup']:.2f}x (target: 3-10x)")
-        print(f"    Memory reduction: {val['memory_reduction_pct']:.1f}% (target: >80%)")
+        print(
+            f"    Memory reduction: {val['memory_reduction_pct']:.1f}% (target: >80%)"
+        )
         print(f"    Solver used: {val['solver_used']}")
 
     print("\nNEXT STEPS:")
