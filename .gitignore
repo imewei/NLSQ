@@ -252,6 +252,7 @@ __marimo__/
 
 # Claude Code IDE files
 .claude/
+.code/
 agent-os/
 CLAUDE.md
 
