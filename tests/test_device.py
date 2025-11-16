@@ -51,6 +51,7 @@ class TestCheckGPUAvailability:
         with (
             patch("subprocess.run", return_value=mock_result) as mock_subprocess,
             patch.dict("sys.modules", {"jax": mock_jax}),
+            patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
             # Capture stdout
             output = StringIO()
@@ -250,6 +251,7 @@ class TestGPUNameSanitization:
         with (
             patch("subprocess.run", return_value=mock_result),
             patch.dict("sys.modules", {"jax": mock_jax}),
+            patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
             # Capture stdout
             output = StringIO()
@@ -288,6 +290,7 @@ class TestGPUNameSanitization:
         with (
             patch("subprocess.run", return_value=mock_result),
             patch.dict("sys.modules", {"jax": mock_jax}),
+            patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
             # Capture stdout
             output = StringIO()
@@ -333,6 +336,7 @@ class TestImportIntegration:
         with (
             patch("subprocess.run", return_value=mock_result),
             patch.dict("sys.modules", {"jax": mock_jax}),
+            patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
             # Capture stdout
             output = StringIO()
@@ -443,6 +447,7 @@ class TestGPUDetectionWithMultipleDevices:
         with (
             patch("subprocess.run", return_value=mock_result),
             patch.dict("sys.modules", {"jax": mock_jax}),
+            patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
             # Capture stdout
             output = StringIO()
