@@ -9,6 +9,7 @@ import unittest
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from nlsq.sparse_jacobian import (
     SparseJacobianComputer,
@@ -467,6 +468,8 @@ class TestSparseJacobianEdgeCases(unittest.TestCase):
         self.assertEqual(sparsity, 0.0)
         self.assertEqual(info["nnz"], 3)  # 3 data points, 1 param
 
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice:RuntimeWarning")
+    @pytest.mark.filterwarnings("ignore:invalid value encountered in scalar divide:RuntimeWarning")
     def test_empty_data(self):
         """Test handling of empty data."""
 

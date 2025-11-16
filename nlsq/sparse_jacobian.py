@@ -85,8 +85,11 @@ class SparseJacobianComputer:
             # Mark non-zero elements
             pattern[:, i] = np.abs(jac_col) > self.sparsity_threshold
 
-        # Calculate sparsity
-        sparsity = 1.0 - np.sum(pattern) / pattern.size
+        # Calculate sparsity (handle empty pattern)
+        if pattern.size > 0:
+            sparsity = 1.0 - np.sum(pattern) / pattern.size
+        else:
+            sparsity = 0.0  # No data means no sparsity information
 
         self._sparsity_pattern = pattern
         return pattern, sparsity

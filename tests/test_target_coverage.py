@@ -6,6 +6,7 @@ import unittest
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from nlsq.config import JAXConfig
 from nlsq.minpack import CurveFit, curve_fit
@@ -87,6 +88,7 @@ class TestTargetCoverage(unittest.TestCase):
             popt, _pcov = curve_fit(bad_model, x, y, p0=[1, 0], bounds=([2, 1], [1, 2]))
             # Should handle invalid bounds
 
+    @pytest.mark.filterwarnings("ignore:Covariance of the parameters could not be estimated")
     def test_minpack_special_cases(self):
         """Test special cases in minpack module."""
 

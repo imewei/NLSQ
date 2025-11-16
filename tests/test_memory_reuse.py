@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from nlsq.memory_manager import MemoryManager, get_memory_manager
-from nlsq.memory_pool import MemoryPool, get_global_pool
+from nlsq.memory_pool import MemoryPool, clear_global_pool, get_global_pool
 
 
 class TestAdaptiveSafetyFactor(unittest.TestCase):
@@ -257,6 +257,10 @@ class TestMemoryUsageReduction(unittest.TestCase):
 
 class TestMemoryReuseIntegration(unittest.TestCase):
     """Integration tests for memory reuse across components."""
+
+    def setUp(self):
+        """Clear global pool before each test."""
+        clear_global_pool()
 
     def test_global_memory_manager_integration(self):
         """Test global memory manager can be used across optimization runs."""

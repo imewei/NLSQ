@@ -5,6 +5,7 @@ import unittest
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from nlsq.least_squares import LeastSquares
 from nlsq.minpack import curve_fit
@@ -149,6 +150,7 @@ class TestTRFBasic(unittest.TestCase):
         self.assertAlmostEqual(popt[1], 1.0, places=5)
         self.assertAlmostEqual(popt[2], 0.5, places=5)
 
+    @pytest.mark.filterwarnings("ignore:Covariance of the parameters could not be estimated")
     def test_edge_cases(self):
         """Test TRF with edge cases."""
 

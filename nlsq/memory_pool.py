@@ -389,11 +389,31 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
     global _global_pool  # noqa: PLW0603
     if _global_pool is None:
         _global_pool = MemoryPool(enable_stats=enable_stats)
+    else:
+        # Update enable_stats on existing pool to handle parallel test execution
+        if enable_stats:
+            # Ensure stats dict exists when enabling stats
+            if not hasattr(_global_pool, 'stats'):
+                _global_pool.stats = {
+                    "allocations": 0,
+                    "reuses": 0,
+                    "releases": 0,
+                    "peak_memory": 0,
+                    "total_operations": 0,
+                }
+        _global_pool.enable_stats = enable_stats
     return _global_pool
 
 
 def clear_global_pool():
-    """Clear the global memory pool."""
-    global _global_pool  # noqa: PLW0602
+    """Clear the global memory pool.
+
+    Notes
+    -----
+    For test isolation, this resets the global pool to None,
+    forcing fresh initialization on next access.
+    """
+    global _global_pool  # noqa: PLW0603
     if _global_pool is not None:
         _global_pool.clear()
+        _global_pool = None

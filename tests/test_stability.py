@@ -13,6 +13,8 @@ This module tests all stability enhancements including:
 
 import unittest
 import warnings
+
+import pytest
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -64,6 +66,8 @@ class TestNumericalStability(unittest.TestCase):
         result = self.guard.safe_log(x_problematic)
         self.assertTrue(jnp.all(jnp.isfinite(result)))
 
+    @pytest.mark.filterwarnings("ignore:Jacobian contains NaN or Inf values:UserWarning")
+    @pytest.mark.filterwarnings("ignore:Ill-conditioned Jacobian:UserWarning")
     def test_check_and_fix_jacobian(self):
         """Test Jacobian checking and fixing."""
         # Create problematic Jacobian

@@ -855,7 +855,8 @@ def apply_automatic_fixes(
         # Normalize to [0, 1]
         x_min = np.min(xdata)
         x_max = np.max(xdata)
-        if x_range > 0:
+        # Check for finite range to avoid division warnings with inf data
+        if x_range > 0 and np.isfinite(x_range):
             xdata = (xdata - x_min) / x_range
             fix_info["x_scale"] = x_range
             fix_info["x_offset"] = x_min
@@ -869,7 +870,8 @@ def apply_automatic_fixes(
         # Normalize to similar scale as x
         y_min = np.min(ydata)
         y_max = np.max(ydata)
-        if y_range > 0:
+        # Check for finite range to avoid division warnings with inf data
+        if y_range > 0 and np.isfinite(y_range):
             ydata = (ydata - y_min) / y_range
             fix_info["y_scale"] = y_range
             fix_info["y_offset"] = y_min
@@ -879,11 +881,15 @@ def apply_automatic_fixes(
 
     # Fix 3: Replace NaN/Inf in data
     if np.any(~np.isfinite(xdata)):
-        xdata = np.where(np.isfinite(xdata), xdata, np.nanmean(xdata))
+        # Use mean of finite values only (nanmean doesn't ignore inf)
+        finite_mean = np.mean(xdata[np.isfinite(xdata)]) if np.any(np.isfinite(xdata)) else 0.0
+        xdata = np.where(np.isfinite(xdata), xdata, finite_mean)
         applied_fixes.append("Replaced NaN/Inf in xdata with mean")
 
     if np.any(~np.isfinite(ydata)):
-        ydata = np.where(np.isfinite(ydata), ydata, np.nanmean(ydata))
+        # Use mean of finite values only (nanmean doesn't ignore inf)
+        finite_mean = np.mean(ydata[np.isfinite(ydata)]) if np.any(np.isfinite(ydata)) else 0.0
+        ydata = np.where(np.isfinite(ydata), ydata, finite_mean)
         applied_fixes.append("Replaced NaN/Inf in ydata with mean")
 
     # Fix 4: Adjust p0 scales if needed

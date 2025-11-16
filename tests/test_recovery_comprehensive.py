@@ -141,6 +141,7 @@ class TestRecoveryErrorPaths:
         """Setup recovery instance."""
         self.recovery = OptimizationRecovery(max_retries=2)
 
+    @pytest.mark.filterwarnings("ignore:Recovery strategy.*failed:UserWarning")
     def test_recovery_with_exception_in_strategy(self):
         """Test recovery handles exceptions in strategies gracefully."""
         state = {"x": np.array([1.0, 2.0]), "iteration": 5}
