@@ -1,0 +1,48 @@
+================================================================================
+NLSQ Profiling Dashboard - Comparison Report
+================================================================================
+
+Profile Summary:
+--------------------------------------------------------------------------------
+Profile              Runs     Success%     Mean Time       Mean Iter   
+--------------------------------------------------------------------------------
+exponential_decay_trf_cpu_100 5        100.0        0.589           0.0         
+exponential_decay_lm_cpu_100 5        0.0          0.002           0.0         
+exponential_decay_trf_cpu_1000 5        100.0        0.623           0.0         
+exponential_decay_lm_cpu_1000 5        0.0          0.002           0.0         
+exponential_decay_trf_cpu_10000 5        100.0        0.664           0.0         
+exponential_decay_lm_cpu_10000 5        0.0          0.002           0.0         
+exponential_decay_trf_cpu_100000 5        100.0        0.707           0.0         
+exponential_decay_lm_cpu_100000 5        0.0          0.006           0.0         
+gaussian_trf_cpu_100 5        100.0        0.584           0.0         
+gaussian_lm_cpu_100  5        0.0          0.002           0.0         
+gaussian_trf_cpu_1000 5        100.0        0.630           0.0         
+gaussian_lm_cpu_1000 5        0.0          0.002           0.0         
+gaussian_trf_cpu_10000 5        100.0        0.663           0.0         
+gaussian_lm_cpu_10000 5        0.0          0.002           0.0         
+gaussian_trf_cpu_100000 5        100.0        0.704           0.0         
+gaussian_lm_cpu_100000 5        0.0          0.007           0.0         
+polynomial_trf_cpu_100 5        100.0        0.532           0.0         
+polynomial_lm_cpu_100 5        0.0          0.002           0.0         
+polynomial_trf_cpu_1000 5        100.0        0.574           0.0         
+polynomial_lm_cpu_1000 5        0.0          0.002           0.0         
+polynomial_trf_cpu_10000 5        100.0        0.633           0.0         
+polynomial_lm_cpu_10000 5        0.0          0.003           0.0         
+polynomial_trf_cpu_100000 5        100.0        0.675           0.0         
+polynomial_lm_cpu_100000 5        0.0          0.005           0.0         
+sinusoidal_trf_cpu_100 5        100.0        0.862           0.0         
+sinusoidal_lm_cpu_100 5        0.0          0.002           0.0         
+sinusoidal_trf_cpu_1000 5        100.0        0.679           0.0         
+sinusoidal_lm_cpu_1000 5        0.0          0.002           0.0         
+sinusoidal_trf_cpu_10000 5        100.0        1.088           0.0         
+sinusoidal_lm_cpu_10000 5        0.0          0.002           0.0         
+sinusoidal_trf_cpu_100000 5        100.0        0.897           0.0         
+sinusoidal_lm_cpu_100000 5        0.0          0.006           0.0         
+--------------------------------------------------------------------------------
+
+Best Performers:
+--------------------------------------------------------------------------------
+  Fastest:         gaussian_lm_cpu_100 (0.002s)
+  Most Reliable:   exponential_decay_trf_cpu_100 (100.0%)
+  Fewest Iters:    exponential_decay_trf_cpu_100 (0.0)
+================================================================================

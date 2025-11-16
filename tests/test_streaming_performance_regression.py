@@ -465,7 +465,7 @@ def test_performance_with_10_percent_failures(benchmark, small_streaming_data):
                 mock_compute_with_failures.failed_batches.add(batch_key)
                 return 0.5, np.array([np.nan, 1.0])
 
-        return original_compute(func, params, x_batch, y_batch)
+        return original_compute(func, params, x_batch, y_batch, mask)
 
     optimizer._compute_loss_and_gradient = mock_compute_with_failures
 
@@ -506,7 +506,7 @@ def test_performance_with_50_percent_failures(benchmark, small_streaming_data):
         # Fail every other batch
         if call_count[0] % 2 == 0:
             return 0.5, np.array([np.nan, 1.0])
-        return original_compute(func, params, x_batch, y_batch)
+        return original_compute(func, params, x_batch, y_batch, mask)
 
     optimizer._compute_loss_and_gradient = mock_compute_high_failures
 
@@ -624,7 +624,7 @@ def test_retry_strategy_nan_recovery(benchmark, small_streaming_data):
         if batch_attempts[batch_num] == 1 and batch_num % 5 == 0:
             return 0.5, np.array([np.nan, 1.0])
 
-        return original_compute(func, params, x_batch, y_batch)
+        return original_compute(func, params, x_batch, y_batch, mask)
 
     optimizer._compute_loss_and_gradient = mock_compute_nan_retry
 
@@ -673,7 +673,7 @@ def test_retry_strategy_mixed_errors(benchmark, small_streaming_data):
             elif batch_num % 5 == 0:
                 raise np.linalg.LinAlgError("Singular")
 
-        return original_compute(func, params, x_batch, y_batch)
+        return original_compute(func, params, x_batch, y_batch, mask)
 
     optimizer._compute_loss_and_gradient = mock_compute_mixed_errors
 

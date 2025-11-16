@@ -1,0 +1,101 @@
+{
+  "timestamp": "2025-11-16 00:40:38",
+  "benchmarks": {
+    "baseline": {
+      "config": "baseline",
+      "safety_factor": 1.2,
+      "bucketing_enabled": false,
+      "memory_delta_mb": 50.94,
+      "pool_reuse_rate": 0.95,
+      "pool_allocations": 1,
+      "pool_reuses": 19
+    },
+    "adaptive_safety": {
+      "config": "adaptive_safety",
+      "initial_safety_factor": 1.2,
+      "final_safety_factor": 1.05,
+      "min_safety_factor": 1.05,
+      "telemetry_entries": 15,
+      "p95_safety_needed": 0.0,
+      "memory_delta_mb": 0.47,
+      "predicted_memory_reduction_pct": 12.5
+    },
+    "bucketing": {
+      "config": "bucketing",
+      "reuse_rate_no_bucketing": 0.0,
+      "reuse_rate_with_bucketing": 0.9,
+      "improvement_factor": "inf",
+      "pool_sizes_no_bucketing": 10,
+      "pool_sizes_with_bucketing": 1
+    },
+    "disable_padding": {
+      "config": "disable_padding",
+      "memory_standard_mb": 1.37,
+      "memory_strict_mb": 1.15,
+      "memory_savings_pct": 16.67,
+      "safety_factor_standard": 1.2,
+      "safety_factor_strict": 1.0
+    },
+    "bucketing_algorithm": {
+      "config": "bucketing_algorithm",
+      "test_cases": [
+        {
+          "input_bytes": 800,
+          "input_kb": 0.78,
+          "bucketed_bytes": 1024,
+          "bucketed_kb": 1.0,
+          "category": "Small (<10KB)"
+        },
+        {
+          "input_bytes": 5000,
+          "input_kb": 4.88,
+          "bucketed_bytes": 5120,
+          "bucketed_kb": 5.0,
+          "category": "Small (<10KB)"
+        },
+        {
+          "input_bytes": 9500,
+          "input_kb": 9.28,
+          "bucketed_bytes": 10240,
+          "bucketed_kb": 10.0,
+          "category": "Small (<10KB)"
+        },
+        {
+          "input_bytes": 15000,
+          "input_kb": 14.65,
+          "bucketed_bytes": 20480,
+          "bucketed_kb": 20.0,
+          "category": "Medium (10-100KB)"
+        },
+        {
+          "input_bytes": 50000,
+          "input_kb": 48.83,
+          "bucketed_bytes": 51200,
+          "bucketed_kb": 50.0,
+          "category": "Medium (10-100KB)"
+        },
+        {
+          "input_bytes": 95000,
+          "input_kb": 92.77,
+          "bucketed_bytes": 102400,
+          "bucketed_kb": 100.0,
+          "category": "Medium (10-100KB)"
+        },
+        {
+          "input_bytes": 150000,
+          "input_kb": 146.48,
+          "bucketed_bytes": 204800,
+          "bucketed_kb": 200.0,
+          "category": "Large (>100KB)"
+        },
+        {
+          "input_bytes": 500000,
+          "input_kb": 488.28,
+          "bucketed_bytes": 512000,
+          "bucketed_kb": 500.0,
+          "category": "Large (>100KB)"
+        }
+      ]
+    }
+  }
+}

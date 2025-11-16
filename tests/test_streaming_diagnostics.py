@@ -410,7 +410,7 @@ class TestDiagnosticAccuracy:
         batch_calls = []  # Track which batches are called
         fail_batches = {2, 5, 8}  # 3 out of 10 batches = 30% failure
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Each batch is processed once per epoch
             # Track batch index by call order
@@ -422,7 +422,7 @@ class TestDiagnosticAccuracy:
                 # Simulate failure for this batch
                 raise ValueError(f"Controlled failure for batch {batch_idx}")
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 

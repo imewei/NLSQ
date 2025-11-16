@@ -41,7 +41,7 @@ class TestFastModeConfiguration:
         original_compute = optimizer._compute_loss_and_gradient
         validation_checks = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             loss, grad = original_compute(func, params, x_batch, y_batch)
             # This would normally trigger validation in full mode
             # but should be skipped in fast mode
@@ -86,7 +86,7 @@ class TestFastModeConfiguration:
         batch_calls = []
         retry_attempts = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch index by call order
             batch_idx = len(batch_calls)
@@ -95,7 +95,7 @@ class TestFastModeConfiguration:
 
             if batch_idx == 1:  # Fail second batch
                 raise ValueError("Simulated batch failure")
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -306,7 +306,7 @@ class TestFastModeConfiguration:
         call_count = [0]
         batch_calls = []
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch index by call order
             batch_idx = len(batch_calls)
@@ -315,7 +315,7 @@ class TestFastModeConfiguration:
 
             if batch_idx == 1:  # Fail second batch
                 raise ValueError("Simulated error for fast mode")
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -357,7 +357,7 @@ class TestFastModeConfiguration:
         batch_calls = []
         fail_batches = {1, 3, 5}
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch index by call order
             batch_idx = len(batch_calls)
@@ -366,7 +366,7 @@ class TestFastModeConfiguration:
 
             if batch_idx in fail_batches:
                 raise ValueError(f"Batch {batch_idx} failed")
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -416,13 +416,13 @@ class TestFastModeConfiguration:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if call_count[0] == 2:
                 # Return NaN - would be caught by validation in full mode
                 # In fast mode, should just fail the batch and continue
                 return np.nan, np.array([1.0, 1.0])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 

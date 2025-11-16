@@ -29,6 +29,7 @@ from nlsq.recovery import OptimizationRecovery
 from nlsq.result import CurveFitResult
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.types import ArrayLike, ModelFunction
+from nlsq.unified_cache import UnifiedCache, get_global_cache
 from nlsq.validators import InputValidator
 
 __all__ = ["CurveFit", "curve_fit"]
@@ -330,9 +331,14 @@ def curve_fit(
     # Extract CurveFit constructor parameters from kwargs
     flength = kwargs.pop("flength", None)
     use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
+    cache_config = kwargs.pop("cache_config", None)
 
     # Create CurveFit instance with appropriate parameters
-    jcf = CurveFit(flength=flength, use_dynamic_sizing=use_dynamic_sizing)
+    jcf = CurveFit(
+        flength=flength,
+        use_dynamic_sizing=use_dynamic_sizing,
+        cache_config=cache_config,
+    )
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
     # Return enhanced result object that supports both tuple unpacking
@@ -413,6 +419,7 @@ class CurveFit:
         enable_stability: bool = False,
         enable_recovery: bool = False,
         enable_overflow_check: bool = False,
+        cache_config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize CurveFit instance.
 
@@ -441,6 +448,18 @@ class CurveFit:
             Enable overflow/underflow checking in function evaluations. This adds
             ~30% overhead so it's separate from other stability features.
 
+        cache_config : dict, optional
+            Configuration for the unified JIT compilation cache. Supported keys:
+
+            - 'maxsize' : int, default=128
+                Maximum number of compiled functions to cache
+            - 'enable_stats' : bool, default=True
+                Track cache statistics (hits, misses, compile_time_ms)
+            - 'disk_cache_enabled' : bool, default=False
+                Enable disk caching tier (Phase 2 feature)
+
+            If None, uses global cache with default settings.
+
         Notes
         -----
         Fixed length compilation trades memory usage for compilation speed:
@@ -454,6 +473,12 @@ class CurveFit:
         self.create_sigma_transform_funcs()
         self.create_covariance_svd()
         self.ls = LeastSquares()
+
+        # Initialize unified cache
+        if cache_config is not None:
+            self.cache = UnifiedCache(**cache_config)
+        else:
+            self.cache = get_global_cache()
 
         # Initialize stability and recovery systems
         self.enable_stability = enable_stability
@@ -1364,14 +1389,10 @@ class CurveFit:
                 n_batches=m // batch_size + (1 if m % batch_size > 0 else 0),
             )
 
-        # Convert to JAX arrays
+        # Convert to JAX arrays (no .block_until_ready() - one-time setup)
         st = time.time()
-        if timeit:
-            jnp_xdata = jnp.asarray(xdata).block_until_ready()
-            jnp_ydata = jnp.asarray(ydata).block_until_ready()
-        else:
-            jnp_xdata = jnp.asarray(xdata)
-            jnp_ydata = jnp.asarray(ydata)
+        jnp_xdata = jnp.asarray(xdata)
+        jnp_ydata = jnp.asarray(ydata)
         ctime = time.time() - st
 
         jnp_data_mask = jnp.array(data_mask, dtype=bool)
@@ -1771,4 +1792,23 @@ class CurveFit:
             result["xdata"] = xdata
             result["ydata"] = ydata
             result["pcov"] = _pcov
+
+            # Add cache statistics if available
+            try:
+                cache_stats = self.cache.get_stats()
+                if cache_stats.get("enabled", True):
+                    # Extract relevant cache metrics
+                    result["cache_stats"] = {
+                        "hit": cache_stats.get("hits", 0) > cache_stats.get("misses", 0),
+                        "compile_time_ms": cache_stats.get("compile_time_ms", 0.0),
+                        "hit_rate": cache_stats.get("hit_rate", 0.0),
+                        "total_hits": cache_stats.get("hits", 0),
+                        "total_misses": cache_stats.get("misses", 0),
+                        "total_compilations": cache_stats.get("compilations", 0),
+                        "cache_size": cache_stats.get("cache_size", 0),
+                    }
+            except (AttributeError, KeyError) as e:
+                # Cache not available or statistics disabled - log and continue
+                self.logger.debug(f"Cache statistics not available: {e}")
+
             return result

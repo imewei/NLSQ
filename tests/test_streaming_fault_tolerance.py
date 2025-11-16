@@ -44,7 +44,7 @@ class TestFaultToleranceIntegration:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute_with_errors(func, params, x_batch, y_batch):
+        def mock_compute_with_errors(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3
 
@@ -65,7 +65,7 @@ class TestFaultToleranceIntegration:
                     raise MemoryError("Out of memory")
 
             # Retry or other batches: succeed
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute_with_errors
 
@@ -115,12 +115,12 @@ class TestFaultToleranceIntegration:
             original_compute = optimizer._compute_loss_and_gradient
             call_count = [0]
 
-            def mock_compute(func, params, x_batch, y_batch):
+            def mock_compute(func, params, x_batch, y_batch, mask=None):
                 call_count[0] += 1
                 # Fail every 5th batch
                 if call_count[0] % 5 == 0:
                     return 0.5, np.array([np.nan, 1.0])
-                return original_compute(func, params, x_batch, y_batch)
+                return original_compute(func, params, x_batch, y_batch, mask)
 
             optimizer._compute_loss_and_gradient = mock_compute
 
@@ -169,7 +169,7 @@ class TestFaultToleranceIntegration:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute_track_best(func, params, x_batch, y_batch):
+        def mock_compute_track_best(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
 
             # Fail batches 3, 6, 9 (first attempt only)
@@ -235,7 +235,7 @@ class TestFaultToleranceIntegration:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute_with_strategy_tracking(func, params, x_batch, y_batch):
+        def mock_compute_with_strategy_tracking(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3
 
@@ -255,7 +255,7 @@ class TestFaultToleranceIntegration:
                     strategies_used.append("value_error")
                     raise ValueError("Invalid value")
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute_with_strategy_tracking
 
@@ -295,12 +295,12 @@ class TestFaultToleranceIntegration:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute_with_high_failure(func, params, x_batch, y_batch):
+        def mock_compute_with_high_failure(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Fail 4 out of every 10 batches
             if call_count[0] % 10 in [1, 3, 5, 7]:
                 return 100.0, np.array([np.nan, np.nan])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute_with_high_failure
 
@@ -346,7 +346,7 @@ class TestFaultToleranceIntegration:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute_with_tracking(func, params, x_batch, y_batch):
+        def mock_compute_with_tracking(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3
 
@@ -365,7 +365,7 @@ class TestFaultToleranceIntegration:
                     actual_error_types[batch_num] = "SingularMatrix"
                     raise np.linalg.LinAlgError("Singular")
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute_with_tracking
 
@@ -528,7 +528,7 @@ class TestFaultToleranceEdgeCases:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute_persistent_failure(func, params, x_batch, y_batch):
+        def mock_compute_persistent_failure(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 5
 
@@ -536,7 +536,7 @@ class TestFaultToleranceEdgeCases:
             if batch_num == 2:
                 return 100.0, np.array([np.nan, np.nan])
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute_persistent_failure
 
@@ -581,7 +581,7 @@ class TestFaultToleranceRobustness:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute_validation_retry(func, params, x_batch, y_batch):
+        def mock_compute_validation_retry(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3
 
@@ -594,7 +594,7 @@ class TestFaultToleranceRobustness:
                 return 0.5, np.array([np.nan, 1.0])
 
             # Second attempt should succeed
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute_validation_retry
 
@@ -633,11 +633,11 @@ class TestFaultToleranceRobustness:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute_for_bounds(func, params, x_batch, y_batch):
+        def mock_compute_for_bounds(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if call_count[0] == 2:  # Fail second batch
                 raise np.linalg.LinAlgError("Singular")
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute_for_bounds
 

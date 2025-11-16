@@ -57,11 +57,11 @@ class TestHighFailureRateStress:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if call_count[0] % 2 == 0:  # Every other batch fails
                 return 100.0, np.array([np.nan, np.nan])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -108,11 +108,11 @@ class TestHighFailureRateStress:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if call_count[0] % 10 != 0:  # 9 out of 10 batches fail
                 return 100.0, np.array([np.nan, np.nan])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -155,14 +155,14 @@ class TestHighFailureRateStress:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3  # Account for retries
 
             # Fail batches 5-14 (10 consecutive failures)
             if 5 <= batch_num <= 14:
                 return 100.0, np.array([np.nan, np.nan])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -449,7 +449,7 @@ class TestConcurrentErrorStress:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 4
 
@@ -469,7 +469,7 @@ class TestConcurrentErrorStress:
                 elif error_type == 3:
                     raise ValueError("Invalid value")
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -515,7 +515,7 @@ class TestConcurrentErrorStress:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 2
 
@@ -532,7 +532,7 @@ class TestConcurrentErrorStress:
                     # Loss validation failure
                     return np.nan, np.array([1.0, 1.0])
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -682,7 +682,7 @@ class TestDiagnosticStress:
         call_count = [0]
         expected_failure_count = 0
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             nonlocal expected_failure_count
             call_count[0] += 1
 
@@ -690,7 +690,7 @@ class TestDiagnosticStress:
                 expected_failure_count += 1
                 return 100.0, np.array([np.nan, np.nan])
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -738,7 +738,7 @@ class TestDiagnosticStress:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3
 
@@ -750,7 +750,7 @@ class TestDiagnosticStress:
             if batch_attempts[batch_num] == 1 and batch_num % 3 == 0:
                 return 100.0, np.array([np.nan, 1.0])
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 

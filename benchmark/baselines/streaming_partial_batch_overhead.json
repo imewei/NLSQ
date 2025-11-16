@@ -1,0 +1,116 @@
+{
+  "benchmark_name": "partial_batch_overhead",
+  "task_group": 7,
+  "timestamp": "2025-11-16 00:59:10",
+  "description": "Measures JIT recompilation overhead from partial batches",
+  "results": [
+    {
+      "mode": "dynamic",
+      "n_points": 10250,
+      "batch_size": 1000,
+      "n_full_batches": 10,
+      "partial_batch_size": 250,
+      "max_epochs": 10,
+      "elapsed_time": 0.2905592918395996,
+      "throughput": 352767.9302597699,
+      "success": true,
+      "batch_padding": {
+        "padding_mode": "dynamic",
+        "max_batch_shape": 1000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      }
+    },
+    {
+      "mode": "auto",
+      "n_points": 10250,
+      "batch_size": 1000,
+      "n_full_batches": 10,
+      "partial_batch_size": 250,
+      "max_epochs": 10,
+      "elapsed_time": 0.5609610080718994,
+      "throughput": 182722.14739542536,
+      "success": true,
+      "batch_padding": {
+        "padding_mode": "auto",
+        "max_batch_shape": 1000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      }
+    },
+    {
+      "mode": "dynamic",
+      "n_points": 50500,
+      "batch_size": 5000,
+      "n_full_batches": 10,
+      "partial_batch_size": 500,
+      "max_epochs": 5,
+      "elapsed_time": 0.2843916416168213,
+      "throughput": 887860.1303627942,
+      "success": true,
+      "batch_padding": {
+        "padding_mode": "dynamic",
+        "max_batch_shape": 5000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      }
+    },
+    {
+      "mode": "auto",
+      "n_points": 50500,
+      "batch_size": 5000,
+      "n_full_batches": 10,
+      "partial_batch_size": 500,
+      "max_epochs": 5,
+      "elapsed_time": 0.5189132690429688,
+      "throughput": 486593.8395942072,
+      "success": true,
+      "batch_padding": {
+        "padding_mode": "auto",
+        "max_batch_shape": 5000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      }
+    },
+    {
+      "mode": "dynamic",
+      "n_points": 105000,
+      "batch_size": 10000,
+      "n_full_batches": 10,
+      "partial_batch_size": 5000,
+      "max_epochs": 3,
+      "elapsed_time": 0.25557732582092285,
+      "throughput": 1232503.7011331485,
+      "success": true,
+      "batch_padding": {
+        "padding_mode": "dynamic",
+        "max_batch_shape": 10000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      }
+    },
+    {
+      "mode": "auto",
+      "n_points": 105000,
+      "batch_size": 10000,
+      "n_full_batches": 10,
+      "partial_batch_size": 5000,
+      "max_epochs": 3,
+      "elapsed_time": 0.46376538276672363,
+      "throughput": 679222.7529376565,
+      "success": true,
+      "batch_padding": {
+        "padding_mode": "auto",
+        "max_batch_shape": 10000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      }
+    }
+  ]
+}

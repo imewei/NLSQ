@@ -17,7 +17,18 @@ Usage:
 
     # Generate JSON report for CI
     pytest benchmark/test_performance_regression.py --benchmark-json=report.json
+
+CI/CD Regression Gates:
+    - Cold JIT: >10% slowdown → FAIL
+    - Hot path: >5-10% slowdown → FAIL
+    - Memory: >10% increase → WARN only
 """
+
+import json
+import os
+import sys
+import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -26,6 +37,80 @@ try:
     from nlsq import CurveFit, curve_fit
 except ImportError:
     pytest.skip("NLSQ not installed", allow_module_level=True)
+
+
+# ============================================================================
+# Baseline Loading and Regression Gates
+# ============================================================================
+
+BASELINE_FILE = Path(__file__).parent / "baselines" / "linux-py312-beta1.json"
+
+
+def load_baseline():
+    """Load v0.3.0-beta.1 baseline for regression testing"""
+    if not BASELINE_FILE.exists():
+        pytest.skip(f"Baseline file not found: {BASELINE_FILE}")
+
+    try:
+        with open(BASELINE_FILE) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        pytest.skip(f"Failed to load baseline: {e}")
+
+
+BASELINE = load_baseline()
+
+
+def check_performance_regression(metric_name, current_value, metric_type="cold_jit"):
+    """
+    Check if current value exceeds regression threshold
+
+    Parameters:
+    - metric_name: Name of the metric (e.g., "exponential_100")
+    - current_value: Current measured value (ms)
+    - metric_type: "cold_jit", "hot_path", or "memory"
+
+    Returns:
+    - (passed, message) tuple
+    """
+    config = BASELINE.get("regression_gates", {})
+
+    if metric_type == "cold_jit":
+        threshold_pct = config.get("cold_jit_slowdown_threshold_percent", 10)
+        action = config.get("cold_jit_slowdown_action", "FAIL")
+        baseline_val = BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_cold_jit_ms")
+    elif metric_type == "hot_path":
+        threshold_pct = config.get("hot_path_slowdown_threshold_percent", 5)
+        action = config.get("hot_path_slowdown_action", "FAIL")
+        baseline_val = BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_hot_path_ms")
+    elif metric_type == "memory":
+        threshold_pct = config.get("memory_regression_threshold_percent", 10)
+        action = config.get("memory_regression_action", "WARN_ONLY")
+        baseline_val = BASELINE.get("memory_baseline_mb")
+    else:
+        return True, f"Unknown metric type: {metric_type}"
+
+    if baseline_val is None:
+        return True, f"No baseline found for {metric_name}"
+
+    regression_pct = ((current_value - baseline_val) / baseline_val) * 100
+    threshold_exceeded = regression_pct > threshold_pct
+
+    message = (
+        f"{metric_name} ({metric_type}): {current_value:.1f}ms "
+        f"(baseline: {baseline_val:.1f}ms, "
+        f"regression: {regression_pct:+.1f}%, "
+        f"threshold: {threshold_pct}%)"
+    )
+
+    if threshold_exceeded:
+        if action == "FAIL":
+            return False, message
+        elif action == "WARN_ONLY":
+            warnings.warn(message, category=UserWarning)
+            return True, message
+
+    return True, message
 
 
 # ============================================================================
@@ -143,6 +228,38 @@ def test_small_exponential_fit(benchmark, small_linear_data):
 
     popt, _pcov = result
     assert len(popt) == 3
+
+
+@pytest.mark.benchmark(group="regression-gates")
+def test_regression_cold_jit_exponential_100(benchmark, small_linear_data):
+    """Regression gate: Cold JIT compilation time for exponential_100
+
+    Fails if >10% slowdown from v0.3.0-beta.1 baseline
+    """
+    x = small_linear_data[0]
+    y_true = 2.0 * np.exp(-0.5 * x) + 0.3
+    y = y_true + 0.05 * np.random.randn(len(x))
+    p0 = [2.0, 0.5, 0.3]
+
+    # Measure time including JIT compilation
+    timer = benchmark.pedantic(
+        curve_fit,
+        args=(exponential, x, y),
+        kwargs={"p0": p0},
+        iterations=1,
+        rounds=3,
+    )
+
+    # Extract measured time (ms)
+    current_time_ms = timer[1] * 1000 if isinstance(timer, tuple) else benchmark.stats.mean * 1000
+
+    # Check against baseline
+    passed, message = check_performance_regression("exponential_decay", current_time_ms, "cold_jit")
+
+    if not passed:
+        pytest.fail(f"Cold JIT regression: {message}")
+    else:
+        print(f"Cold JIT gate passed: {message}")
 
 
 # ============================================================================

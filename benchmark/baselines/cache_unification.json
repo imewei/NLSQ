@@ -1,0 +1,14 @@
+{
+  "platform": "linux",
+  "python_version": "3.13.7",
+  "jax_version": "0.8.0",
+  "cold_jit_time_ms": {
+    "p50": 1334.022045135498
+  },
+  "warm_jit_time_ms": {
+    "p50": 571.5199708938599
+  },
+  "speedup_factor": 2.3341652314425363,
+  "cache_hit_rate": 0.0,
+  "timestamp": "2025-11-15 22:43:51"
+}

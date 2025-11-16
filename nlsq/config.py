@@ -1,5 +1,6 @@
 """Central configuration management for NLSQ package."""
 
+import json
 import logging
 import os
 import warnings
@@ -1042,3 +1043,97 @@ def mixed_precision_context(mixed_precision_config):
     >>> # Back to previous mixed precision settings
     """
     return JAXConfig.mixed_precision_context(mixed_precision_config)
+
+
+# Jacobian mode configuration functions
+def get_jacobian_mode() -> tuple[str, str]:
+    """Get Jacobian mode from configuration sources.
+
+    Configuration precedence (highest to lowest):
+    1. Environment variable (NLSQ_JACOBIAN_MODE)
+    2. Config file (~/.nlsq/config.json)
+    3. Auto-default
+
+    Returns
+    -------
+    mode : str
+        Jacobian mode ('auto', 'fwd', or 'rev')
+    source : str
+        Source of the configuration ('environment variable', 'config file', 'auto-default')
+
+    Examples
+    --------
+    >>> from nlsq.config import get_jacobian_mode
+    >>> mode, source = get_jacobian_mode()
+    >>> print(f"Using {mode} mode from {source}")
+    Using auto mode from auto-default
+
+    Notes
+    -----
+    Valid jacobian_mode values:
+    - 'auto': Automatically select based on problem dimensions
+    - 'fwd': Force forward-mode automatic differentiation (jacfwd)
+    - 'rev': Force reverse-mode automatic differentiation (jacrev)
+    """
+    # Check environment variable (highest priority)
+    env_mode = os.environ.get("NLSQ_JACOBIAN_MODE")
+    if env_mode:
+        if env_mode in ("auto", "fwd", "rev"):
+            return env_mode, "environment variable"
+        else:
+            warnings.warn(
+                f"Invalid NLSQ_JACOBIAN_MODE: {env_mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
+                stacklevel=2,
+            )
+
+    # Check config file
+    config_path = os.path.expanduser("~/.nlsq/config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+                if "jacobian_mode" in config:
+                    mode = config["jacobian_mode"]
+                    if mode in ("auto", "fwd", "rev"):
+                        return mode, "config file"
+                    else:
+                        warnings.warn(
+                            f"Invalid jacobian_mode in config file: {mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
+                            stacklevel=2,
+                        )
+        except (json.JSONDecodeError, IOError) as e:
+            warnings.warn(
+                f"Failed to read Jacobian mode from config file: {e}. Using auto-default.",
+                stacklevel=2,
+            )
+
+    # Default to auto
+    return "auto", "auto-default"
+
+
+def set_jacobian_mode(mode: str):
+    """Set Jacobian mode via environment variable.
+
+    This sets the NLSQ_JACOBIAN_MODE environment variable for the current process.
+    To persist the setting, use a config file at ~/.nlsq/config.json.
+
+    Parameters
+    ----------
+    mode : str
+        Jacobian mode ('auto', 'fwd', or 'rev')
+
+    Raises
+    ------
+    ValueError
+        If mode is not one of 'auto', 'fwd', 'rev'
+
+    Examples
+    --------
+    >>> from nlsq.config import set_jacobian_mode
+    >>> set_jacobian_mode('rev')  # Force reverse-mode AD for all fits
+    """
+    if mode not in ("auto", "fwd", "rev"):
+        raise ValueError(f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'.")
+
+    os.environ["NLSQ_JACOBIAN_MODE"] = mode
+    logging.info(f"Set Jacobian mode to '{mode}' via environment variable")

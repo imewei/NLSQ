@@ -280,3 +280,5 @@ validators_refactoring.patch
 
 # Auto-generated version file (created by setuptools-scm)
 nlsq/_version.py
+/benchmark_results
+benchmark/benchmark_results

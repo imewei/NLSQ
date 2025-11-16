@@ -91,14 +91,14 @@ import warnings
 from collections.abc import Callable
 
 import numpy as np
-from numpy.linalg import norm
+# REMOVED: from numpy.linalg import norm  # Use JAX norm (jnorm) instead
 
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 import jax.numpy as jnp
-from jax import jit
+from jax import debug, jit
 from jax.numpy.linalg import norm as jnorm
 from jax.tree_util import tree_flatten
 
@@ -151,6 +151,7 @@ from nlsq.mixed_precision import (
 # Optimizer base class
 from nlsq.optimizer_base import TrustRegionOptimizerBase
 from nlsq.stability import NumericalStabilityGuard
+from nlsq.unified_cache import get_global_cache
 
 # Algorithm constants
 # Trust region parameters
@@ -777,10 +778,51 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         TrustRegionOptimizerBase.__init__(self, name="trf")
         self.cJIT = CommonJIT()
 
+        # Initialize unified cache for JIT compilation tracking
+        self.cache = get_global_cache()
+
         # Initialize stability system
         self.enable_stability = enable_stability
         if enable_stability:
             self.stability_guard = NumericalStabilityGuard()
+
+    @staticmethod
+    def _log_iteration_callback(iteration, nfev, cost, actual_reduction, step_norm, g_norm):
+        """Wrapper for logging callback that converts JAX arrays to Python scalars.
+
+        This function is called by jax.debug.callback and ensures all arguments
+        are converted from JAX arrays to Python scalars before logging.
+
+        Parameters
+        ----------
+        iteration : int or jax.Array
+            Iteration number
+        nfev : int or jax.Array
+            Number of function evaluations
+        cost : float or jax.Array
+            Current cost
+        actual_reduction : float or jax.Array or None
+            Actual cost reduction
+        step_norm : float or jax.Array or None
+            Step norm
+        g_norm : float or jax.Array
+            Gradient norm
+        """
+        # Convert JAX arrays to Python scalars
+        iteration = int(iteration) if hasattr(iteration, "item") else iteration
+        nfev = int(nfev) if hasattr(nfev, "item") else nfev
+        cost = float(cost) if hasattr(cost, "item") else cost
+        g_norm = float(g_norm) if hasattr(g_norm, "item") else g_norm
+
+        # Handle optional values
+        if actual_reduction is not None:
+            actual_reduction = (
+                float(actual_reduction) if hasattr(actual_reduction, "item") else actual_reduction
+            )
+        if step_norm is not None:
+            step_norm = float(step_norm) if hasattr(step_norm, "item") else step_norm
+
+        print_iteration_nonlinear(iteration, nfev, cost, actual_reduction, step_norm, g_norm)
 
     def trf(
         self,
@@ -1035,7 +1077,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             state["jac_scale"] = False
 
         # Initialize trust region radius
-        Delta = norm(x0 * state["scale_inv"])
+        Delta = jnorm(x0 * state["scale_inv"])  # Use JAX norm
         state["Delta"] = Delta if Delta > 0 else 1.0
 
         return state
@@ -1142,8 +1184,29 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     "uf": None,
                 }
             )
+        elif solver == "sparse":
+            # Sparse solver path (Task 6.4: Sparse Activation)
+            # TODO: Implement sparse SVD using JAX sparse operations
+            # For now, fall back to dense exact solver to maintain correctness
+            # Full sparse implementation would use:
+            # - JAX sparse matrix operations for Jacobian
+            # - Sparse QR or sparse SVD decomposition
+            # - Iterative sparse linear solvers
+            # Target: 3-10x speed, 5-50x memory reduction on sparse problems
+            svd_output = self.svd_no_bounds(J, d_jnp, f)
+            J_h = svd_output[0]
+            s, V, uf = svd_output[2:]
+            result.update(
+                {
+                    "J_h": J_h,
+                    "step_h": None,
+                    "s": s,
+                    "V": V,
+                    "uf": uf,
+                }
+            )
         else:
-            # SVD-based exact solver
+            # SVD-based exact solver (default dense)
             svd_output = self.svd_no_bounds(J, d_jnp, f)
             J_h = svd_output[0]
             # PERFORMANCE FIX: Keep arrays as JAX to avoid conversion overhead (8-12% gain)
@@ -1316,7 +1379,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             x_new = x + step
             f_new = fun(x_new, xdata, ydata, data_mask, transform)
             nfev += 1
-            step_h_norm = norm(step_h)
+            step_h_norm = jnorm(step_h)
 
             # Check for numerical issues
             if not self.check_isfinite(f_new):
@@ -1341,9 +1404,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             )
 
             # Check termination criteria
-            step_norm = norm(step)
+            step_norm = jnorm(step)
             termination_status = check_termination(
-                actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
+                actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
             )
 
             if termination_status is not None:
@@ -1608,8 +1671,16 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 g_norm = jnorm(g, ord=jnp.inf)  # For logging/printing
 
                 if verbose == 2:
-                    print_iteration_nonlinear(
-                        iteration, nfev, cost, actual_reduction, step_norm, g_norm
+                    # Use jax.debug.callback to avoid blocking host-device transfers
+                    # Callback runs asynchronously and doesn't block JAX execution
+                    debug.callback(
+                        self._log_iteration_callback,
+                        iteration,
+                        nfev,
+                        cost,
+                        actual_reduction,
+                        step_norm,
+                        g_norm,
                     )
 
                 if termination_status is not None or nfev == max_nfev:
@@ -1967,7 +2038,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             x = final_best_params
             cost = final_best_cost
 
-        active_mask = np.zeros_like(x)
+        active_mask = jnp.zeros_like(x)  # JAX zeros instead of NumPy
 
         # Convert JAX arrays to NumPy for final return
         return OptimizeResult(
@@ -1980,6 +2051,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             active_mask=active_mask,
             nfev=nfev,
             njev=njev,
+            nit=iteration,  # Number of iterations performed
             status=termination_status,
             all_times={},
         )
@@ -2118,8 +2190,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         v, dv = CL_scaling_vector(x, g, lb, ub)
 
-        v[dv != 0] *= scale_inv[dv != 0]
-        Delta = norm(x0 * scale_inv / v**SQRT_EXPONENT)
+        # Convert to JAX arrays and use .at[] syntax for immutable array updates
+        v = jnp.array(v)
+        dv = jnp.array(dv)
+        mask = dv != 0
+        v = v.at[mask].set(v[mask] * scale_inv[mask])
+        Delta = jnorm(x0 * scale_inv / v**SQRT_EXPONENT)
         if Delta == 0:
             Delta = 1.0
 
@@ -2142,15 +2218,26 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         f_zeros = jnp.zeros([n])
         while True:
             v, dv = CL_scaling_vector(x, g, lb, ub)
+            # Convert to JAX arrays for later .at[] operations
+            v = jnp.array(v)
+            dv = jnp.array(dv)
 
             # Use JAX norm for gradient norm calculation
             g_norm = jnorm(g * v, ord=jnp.inf)
             if g_norm < gtol:
                 termination_status = 1
 
-            # if verbose == 2:
-            #     print_iteration_nonlinear(iteration, nfev, cost, actual_reduction,
-            #                               step_norm, g_norm)
+            if verbose == 2:
+                # Use jax.debug.callback to avoid blocking host-device transfers
+                debug.callback(
+                    self._log_iteration_callback,
+                    iteration,
+                    nfev,
+                    cost,
+                    actual_reduction,
+                    step_norm,
+                    g_norm,
+                )
 
             if termination_status is not None or nfev == max_nfev:
                 break
@@ -2164,7 +2251,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             # v is recomputed in the variables after applying `x_scale`, note that
             # components which were identically 1 not affected.
-            v[dv != 0] *= scale_inv[dv != 0]
+            # Use JAX .at[] syntax for immutable array updates
+            mask = dv != 0
+            v = v.at[mask].set(v[mask] * scale_inv[mask])
 
             # Here, we apply two types of scaling.
             d = v**SQRT_EXPONENT * scale
@@ -2187,11 +2276,18 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     J, f, d_jnp, J_diag, f_zeros, Delta, alpha
                 )
                 s, V, uf = None, None, None  # Not needed for CG path
+            elif solver == "sparse":
+                # Sparse solver path (Task 6.4: Sparse Activation)
+                # TODO: Implement sparse SVD with bounds
+                # For now, fall back to dense exact solver to maintain correctness
+                output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
+                J_h = output[0]
+                s, V, uf = output[2:]
             else:
                 # Use exact SVD solver (default)
                 output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
                 J_h = output[0]
-                s, V, uf = (np.array(val) for val in output[2:])
+                s, V, uf = output[2:]  # Keep as JAX arrays - no NumPy conversion
 
             # theta controls step back step ratio from the bounds.
             theta = max(0.995, 1 - g_norm)
@@ -2230,7 +2326,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 nfev += 1
 
-                step_h_norm = norm(step_h)
+                step_h_norm = jnorm(step_h)
                 if not self.check_isfinite(f_new):
                     Delta = 0.25 * step_h_norm
                     continue
@@ -2253,9 +2349,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     step_h_norm > 0.95 * Delta,
                 )
 
-                step_norm = norm(step)
+                step_norm = jnorm(step)
                 termination_status = check_termination(
-                    actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
+                    actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
                 )
                 if termination_status is not None:
                     break
@@ -2343,6 +2439,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             active_mask=active_mask,
             nfev=nfev,
             njev=njev,
+            nit=iteration,  # Number of iterations performed
             status=termination_status,
         )
 
@@ -2403,8 +2500,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         p_stride, hits = step_size_to_bound(x, p, lb, ub)
 
         # Compute the reflected direction.
-        r_h = np.copy(p_h)
-        r_h[hits.astype(bool)] *= -1
+        r_h = jnp.array(p_h)  # JAX copy instead of NumPy
+        # Use JAX .at[] syntax for immutable array updates
+        hits_mask = hits.astype(bool)
+        r_h = r_h.at[hits_mask].set(r_h[hits_mask] * -1)
         r = d * r_h
 
         # Restrict trust-region step, such that it hits the bound.
@@ -2438,7 +2537,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             r_h += p_h
             r = r_h * d
         else:
-            r_value = np.inf
+            r_value = jnp.inf  # JAX infinity instead of NumPy
 
         # Now correct p_h to make it strictly interior.
         p *= theta
@@ -2448,7 +2547,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         ag_h = -g_h
         ag = d * ag_h
 
-        to_tr = Delta / norm(ag_h)
+        to_tr = Delta / jnorm(ag_h)
         to_bound, _ = step_size_to_bound(x, ag, lb, ub)
         ag_stride = theta * to_bound if to_bound < to_tr else to_tr
 
@@ -2614,7 +2713,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             st1 = time.time()
             cost_jnp = self.default_loss_func(f).block_until_ready()
             st2 = time.time()
-        cost = np.array(cost_jnp)
+        cost = cost_jnp  # Keep as JAX array - no NumPy conversion
         st3 = time.time()
 
         ctimes.append(st2 - st1)
@@ -2623,7 +2722,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         st1 = time.time()
         g_jnp = self.compute_grad(J, f).block_until_ready()
         st2 = time.time()
-        g = np.array(g_jnp)
+        g = g_jnp  # Keep as JAX array - no NumPy conversion
         st3 = time.time()
 
         gtimes.append(st2 - st1)
@@ -2635,7 +2734,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         else:
             scale, scale_inv = x_scale, 1 / x_scale
 
-        Delta = norm(x0 * scale_inv)
+        Delta = jnorm(x0 * scale_inv)
         if Delta == 0:
             Delta = 1.0
 
@@ -2653,13 +2752,21 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             print_header_nonlinear()
 
         while True:
-            g_norm = norm(g, ord=np.inf)
+            g_norm = jnorm(g, ord=jnp.inf)  # Use JAX norm with JAX infinity
             if g_norm < gtol:
                 termination_status = 1
 
-            # if verbose == 2:
-            #     print_iteration_nonlinear(iteration, nfev, cost, actual_reduction,
-            #                               step_norm, g_norm)
+            if verbose == 2:
+                # Use jax.debug.callback to avoid blocking host-device transfers
+                debug.callback(
+                    self._log_iteration_callback,
+                    iteration,
+                    nfev,
+                    cost,
+                    actual_reduction,
+                    step_norm,
+                    g_norm,
+                )
 
             if termination_status is not None or nfev == max_nfev:
                 break
@@ -2683,6 +2790,19 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 st = time.time()
                 s, V, uf = None, None, None  # Not needed for CG path
                 svd_ctimes.append(time.time() - st)
+            elif solver == "sparse":
+                # Sparse solver path (Task 6.4: Sparse Activation)
+                # TODO: Implement sparse SVD
+                # For now, fall back to dense exact solver to maintain correctness
+                st = time.time()
+                svd_output = self.svd_no_bounds(J, d_jnp, f)
+                tree_flatten(svd_output)[0][0].block_until_ready()
+                svd_times.append(time.time() - st)
+                J_h = svd_output[0]
+
+                st = time.time()
+                s, V, uf = svd_output[2:]
+                svd_ctimes.append(time.time() - st)
             else:
                 # Use exact SVD solver (default)
                 st = time.time()
@@ -2692,7 +2812,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 J_h = svd_output[0]
 
                 st = time.time()
-                s, V, uf = (np.array(val) for val in svd_output[2:])
+                s, V, uf = svd_output[2:]  # Keep as JAX arrays - no NumPy conversion
                 svd_ctimes.append(time.time() - st)
 
             actual_reduction = -1
@@ -2724,7 +2844,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     J_h, g_h_jnp, step_h
                 ).block_until_ready()
                 st2 = time.time()
-                predicted_reduction = np.array(predicted_reduction_jnp)
+                predicted_reduction = predicted_reduction_jnp  # Keep as JAX array
                 st3 = time.time()
                 ptimes.append(st2 - st1)
                 p_ctimes.append(st3 - st2)
@@ -2740,7 +2860,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 nfev += 1
 
-                step_h_norm = norm(step_h)
+                step_h_norm = jnorm(step_h)
 
                 if not self.check_isfinite(f_new):
                     Delta = 0.25 * step_h_norm
@@ -2754,7 +2874,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     st1 = time.time()
                     cost_new_jnp = self.default_loss_func(f_new).block_until_ready()
                     st2 = time.time()
-                    cost_new = np.array(cost_new_jnp)
+                    cost_new = cost_new_jnp  # Keep as JAX array - no NumPy conversion
                     st3 = time.time()
 
                     ctimes.append(st2 - st1)
@@ -2770,9 +2890,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     step_h_norm > 0.95 * Delta,
                 )
 
-                step_norm = norm(step)
+                step_norm = jnorm(step)
                 termination_status = check_termination(
-                    actual_reduction, cost, step_norm, norm(x), ratio, ftol, xtol
+                    actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
                 )
 
                 if termination_status is not None:
@@ -2811,7 +2931,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 st1 = time.time()
                 g_jnp = self.compute_grad(J, f).block_until_ready()
                 st2 = time.time()
-                g = np.array(g_jnp)
+                g = g_jnp  # Keep as JAX array - no NumPy conversion
                 st3 = time.time()
 
                 gtimes.append(st2 - st1)
@@ -2859,7 +2979,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if termination_status is None:
             termination_status = 0
 
-        active_mask = np.zeros_like(x)
+        active_mask = jnp.zeros_like(x)  # JAX zeros instead of NumPy
 
         tlabels = [
             "ftimes",
@@ -2899,6 +3019,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             active_mask=active_mask,
             nfev=nfev,
             njev=njev,
+            nit=iteration,  # Number of iterations performed
             status=termination_status,
             all_times=tdicts,
         )

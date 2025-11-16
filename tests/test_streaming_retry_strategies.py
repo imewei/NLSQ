@@ -45,7 +45,7 @@ class TestAdaptiveRetryStrategies:
         call_count = [0]
         batch_2_attempts = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch 2 attempts
             if 4 <= call_count[0] <= 6:  # Batch 2 (50-100)
@@ -53,7 +53,7 @@ class TestAdaptiveRetryStrategies:
                 if batch_2_attempts[0] == 1:
                     # First attempt: return NaN gradient
                     return 0.5, np.array([np.nan, 1.0])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         # Patch update_parameters to track learning rate changes
         original_update = optimizer._update_parameters
@@ -106,7 +106,7 @@ class TestAdaptiveRetryStrategies:
         batch_2_attempts = [0]
         batch_2_failed = [False]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if 4 <= call_count[0] <= 6:  # Batch 2
                 batch_2_attempts[0] += 1
@@ -114,7 +114,7 @@ class TestAdaptiveRetryStrategies:
                     # First attempt: raise linalg error
                     batch_2_failed[0] = True
                     raise np.linalg.LinAlgError("Singular matrix")
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -168,7 +168,7 @@ class TestAdaptiveRetryStrategies:
         call_count = [0]
         batch_3_attempts = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Record batch size
             batch_size_info["sizes"].append(len(x_batch))
@@ -178,7 +178,7 @@ class TestAdaptiveRetryStrategies:
                 if batch_3_attempts[0] == 1:
                     # First attempt: raise memory error
                     raise MemoryError("Out of memory")
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -218,13 +218,13 @@ class TestAdaptiveRetryStrategies:
         original_compute = optimizer._compute_loss_and_gradient
         call_count = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if 4 <= call_count[0] <= 10:  # Batch 2 and potential retries
                 retry_attempts["batch_2"] += 1
                 # Always fail for this batch
                 return 0.5, np.array([np.nan, np.nan])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -277,7 +277,7 @@ class TestAdaptiveRetryStrategies:
         call_count = [0]
         batch_attempts = {}
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             batch_num = (call_count[0] - 1) // 3  # Approximate batch number
 
@@ -308,7 +308,7 @@ class TestAdaptiveRetryStrategies:
                 if batch_num not in permanent_failures:
                     permanent_failures.append(batch_num)
 
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -364,7 +364,7 @@ class TestAdaptiveRetryStrategies:
         call_count = [0]
         batch_2_attempts = [0]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if 4 <= call_count[0] <= 6:  # Batch 2
                 batch_2_attempts[0] += 1
@@ -373,7 +373,7 @@ class TestAdaptiveRetryStrategies:
                     return 0.5, np.array([np.nan, np.nan])
                 # Retry succeeds with good gradient
                 return 0.1, np.array([-0.5, -0.2])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -418,14 +418,14 @@ class TestAdaptiveRetryStrategies:
             call_count = [0]
             batch_2_attempts = [0]
 
-            def mock_compute(func, params, x_batch, y_batch):
+            def mock_compute(func, params, x_batch, y_batch, mask=None):
                 call_count[0] += 1
                 if 4 <= call_count[0] <= 6:  # Batch 2
                     batch_2_attempts[0] += 1
                     if batch_2_attempts[0] == 1:
                         # First attempt: raise error requiring perturbation
                         raise np.linalg.LinAlgError("Singular matrix")
-                return original_compute(func, params, x_batch, y_batch)
+                return original_compute(func, params, x_batch, y_batch, mask)
 
             return mock_compute
 

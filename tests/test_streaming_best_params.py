@@ -216,12 +216,12 @@ class TestBatchErrorIsolation:
         original_compute = optimizer._compute_loss_and_gradient
         successful_batches = []
 
-        def safe_compute(func, params, x_batch, y_batch):
+        def safe_compute(func, params, x_batch, y_batch, mask=None):
             try:
                 # Try to evaluate the model first
                 _ = func(x_batch, params[0], params[1])
                 successful_batches.append(len(successful_batches))
-                return original_compute(func, params, x_batch, y_batch)
+                return original_compute(func, params, x_batch, y_batch, mask)
             except ValueError as e:
                 # Return large loss and small gradient for failed batches
                 # Use small gradient to allow some parameter update
@@ -331,7 +331,7 @@ class TestBatchErrorIsolation:
         original_compute = optimizer._compute_loss_and_gradient
         batch_compute_counter = [0]
 
-        def compute_with_failures(func, params, x_batch, y_batch):
+        def compute_with_failures(func, params, x_batch, y_batch, mask=None):
             # Call the model which may raise an exception
             try:
                 # The model itself will raise on certain batches
@@ -341,7 +341,7 @@ class TestBatchErrorIsolation:
                 raise
 
             batch_compute_counter[0] += 1
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = compute_with_failures
 

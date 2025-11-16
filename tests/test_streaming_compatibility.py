@@ -353,7 +353,7 @@ class TestFeatureInteraction:
             call_count[0] += 1
             if call_count[0] == 2:  # Trigger retry on second batch
                 return 100.0, np.array([np.nan, np.nan])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -402,7 +402,7 @@ class TestFeatureInteraction:
                 call_count[0] += 1
                 if call_count[0] % 5 == 0:
                     return 100.0, np.array([np.nan, np.nan])
-                return original_compute(func, params, x_batch, y_batch)
+                return original_compute(func, params, x_batch, y_batch, mask)
 
             optimizer._compute_loss_and_gradient = mock_compute
 

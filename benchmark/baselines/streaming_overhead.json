@@ -1,0 +1,140 @@
+{
+  "benchmark_name": "streaming_overhead_reduction",
+  "task_group": 7,
+  "timestamp": "2025-11-16 00:58:24",
+  "target_improvement": "30-50%",
+  "results": [
+    {
+      "mode": "dynamic",
+      "n_points": 10000,
+      "batch_size": 1000,
+      "max_epochs": 5,
+      "elapsed_time": 0.13985013961791992,
+      "throughput": 357525.56369699305,
+      "success": true,
+      "batch_success_rate": 1.0,
+      "convergence_achieved": false,
+      "batch_padding": {
+        "padding_mode": "dynamic",
+        "max_batch_shape": 1000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      },
+      "parameters": [
+        2.031495130562024,
+        0.2493530034029141
+      ]
+    },
+    {
+      "mode": "auto",
+      "n_points": 10000,
+      "batch_size": 1000,
+      "max_epochs": 5,
+      "elapsed_time": 0.12195277214050293,
+      "throughput": 409994.7801300862,
+      "success": true,
+      "batch_success_rate": 1.0,
+      "convergence_achieved": false,
+      "batch_padding": {
+        "padding_mode": "auto",
+        "max_batch_shape": 1000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      },
+      "parameters": [
+        2.031495130562024,
+        0.2493530034029141
+      ]
+    },
+    {
+      "mode": "dynamic",
+      "n_points": 100000,
+      "batch_size": 5000,
+      "max_epochs": 3,
+      "elapsed_time": 0.14372515678405762,
+      "throughput": 2087317.2568581037,
+      "success": true,
+      "batch_success_rate": 1.0,
+      "convergence_achieved": false,
+      "batch_padding": {
+        "padding_mode": "dynamic",
+        "max_batch_shape": 5000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      },
+      "parameters": [
+        2.0695030657723454,
+        0.2470226685652105
+      ]
+    },
+    {
+      "mode": "auto",
+      "n_points": 100000,
+      "batch_size": 5000,
+      "max_epochs": 3,
+      "elapsed_time": 0.13976836204528809,
+      "throughput": 2146408.4976741252,
+      "success": true,
+      "batch_success_rate": 1.0,
+      "convergence_achieved": false,
+      "batch_padding": {
+        "padding_mode": "auto",
+        "max_batch_shape": 5000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      },
+      "parameters": [
+        2.0695030657723454,
+        0.2470226685652105
+      ]
+    },
+    {
+      "mode": "dynamic",
+      "n_points": 1000000,
+      "batch_size": 10000,
+      "max_epochs": 2,
+      "elapsed_time": 0.2239823341369629,
+      "throughput": 8929275.64000213,
+      "success": true,
+      "batch_success_rate": 1.0,
+      "convergence_achieved": false,
+      "batch_padding": {
+        "padding_mode": "dynamic",
+        "max_batch_shape": 10000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      },
+      "parameters": [
+        2.1926152736226325,
+        0.28394814405258534
+      ]
+    },
+    {
+      "mode": "auto",
+      "n_points": 1000000,
+      "batch_size": 10000,
+      "max_epochs": 2,
+      "elapsed_time": 0.22994017601013184,
+      "throughput": 8697914.53891848,
+      "success": true,
+      "batch_success_rate": 1.0,
+      "convergence_achieved": false,
+      "batch_padding": {
+        "padding_mode": "auto",
+        "max_batch_shape": 10000,
+        "recompile_count": 0,
+        "post_warmup_recompiles": 0,
+        "warmup_completed": true
+      },
+      "parameters": [
+        2.1926152736226325,
+        0.28394814405258534
+      ]
+    }
+  ]
+}

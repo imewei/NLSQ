@@ -45,7 +45,7 @@ class TestNaNInfValidation:
         call_count = [0]
         batch_calls = []
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch index by call order
             batch_idx = len(batch_calls)
@@ -54,7 +54,7 @@ class TestNaNInfValidation:
 
             if batch_idx == 1:  # Second batch returns NaN gradient
                 return 0.5, np.array([np.nan, 1.0])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -96,7 +96,7 @@ class TestNaNInfValidation:
         call_count = [0]
         batch_calls = []
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch index by call order
             batch_idx = len(batch_calls)
@@ -105,7 +105,7 @@ class TestNaNInfValidation:
 
             if batch_idx == 0:  # First batch returns Inf gradient
                 return 0.5, np.array([np.inf, -np.inf])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -195,7 +195,7 @@ class TestNaNInfValidation:
         call_count = [0]
         batch_calls = []
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch index by call order
             batch_idx = len(batch_calls)
@@ -204,7 +204,7 @@ class TestNaNInfValidation:
 
             if batch_idx == 1:  # Second batch returns NaN loss
                 return np.nan, np.array([1.0, 1.0])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -243,14 +243,14 @@ class TestNaNInfValidation:
         call_count = [0]
         nan_encountered = [False]
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             if call_count[0] == 1:  # First batch would return NaN
                 nan_encountered[0] = True
                 # When validation is disabled, NaN should cause an exception
                 # but we'll return valid values to test the flag works
                 return 0.5, np.array([1.0, 1.0])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 
@@ -294,7 +294,7 @@ class TestNaNInfValidation:
         call_count = [0]
         batch_calls = []
 
-        def mock_compute(func, params, x_batch, y_batch):
+        def mock_compute(func, params, x_batch, y_batch, mask=None):
             call_count[0] += 1
             # Track batch index by call order
             batch_idx = len(batch_calls)
@@ -310,7 +310,7 @@ class TestNaNInfValidation:
             elif batch_idx == 2:
                 # Third batch: NaN loss
                 return np.nan, np.array([1.0, 1.0])
-            return original_compute(func, params, x_batch, y_batch)
+            return original_compute(func, params, x_batch, y_batch, mask)
 
         optimizer._compute_loss_and_gradient = mock_compute
 

@@ -322,7 +322,7 @@ class BaseMixin:
         assert_allclose(res.jac, 0, atol=1e-4)
         assert_allclose(res.grad, 0, atol=1e-2)
         assert_allclose(res.optimality, 0, atol=1e-2)
-        assert_equal(res.active_mask, 0)
+        assert_equal(res.active_mask, np.array([0.]))
         if self.method == "lm":
             assert_(res.nfev < 30)
             assert_(res.njev is None)

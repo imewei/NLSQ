@@ -72,7 +72,13 @@ class MemoryManager:
         Safety factor for memory predictions
     """
 
-    def __init__(self, gc_threshold: float = 0.8, safety_factor: float = 1.2):
+    def __init__(
+        self,
+        gc_threshold: float = 0.8,
+        safety_factor: float = 1.2,
+        enable_adaptive_safety: bool = False,
+        disable_padding: bool = False,
+    ):
         """Initialize memory manager.
 
         Parameters
@@ -81,13 +87,35 @@ class MemoryManager:
             Trigger GC when memory usage exceeds this fraction (0-1)
         safety_factor : float
             Multiply memory requirements by this factor for safety
+        enable_adaptive_safety : bool
+            Enable adaptive safety factor reduction (1.2 → 1.05 after warmup)
+        disable_padding : bool
+            Disable padding/bucketing for strict memory environments (Task 5.6).
+            When True: uses exact shapes, sets safety_factor=1.0.
+            Use case: cloud quotas, strict memory limits.
         """
         self.memory_pool: dict[tuple, np.ndarray] = {}
         self.allocation_history: list = []
         self.gc_threshold = gc_threshold
-        self.safety_factor = safety_factor
+        self.disable_padding = disable_padding
+
+        # If disable_padding is True, force safety_factor to 1.0
+        if disable_padding:
+            self.safety_factor = 1.0
+            self._initial_safety_factor = 1.0
+            self.enable_adaptive_safety = False  # No adaptation when padding disabled
+        else:
+            self.safety_factor = safety_factor
+            self._initial_safety_factor = safety_factor
+            self.enable_adaptive_safety = enable_adaptive_safety
+
         self._peak_memory = 0
         self._initial_memory = self.get_memory_usage_bytes()
+
+        # Telemetry for adaptive safety factor (Task 5.2)
+        self._safety_telemetry: list[dict] = []
+        self._warmup_runs = 10  # Number of runs before adapting
+        self._min_safety_factor = 1.05  # Target minimum safety factor
 
     def get_available_memory(self) -> float:
         """Get available memory in bytes.
@@ -300,6 +328,118 @@ class MemoryManager:
                 }
             )
 
+            # Track telemetry for adaptive safety factor (Task 5.2)
+            self._record_safety_telemetry(bytes_needed, current_memory - initial_memory)
+
+    def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: int):
+        """Record telemetry for adaptive safety factor calculation.
+
+        Parameters
+        ----------
+        bytes_predicted : int
+            Predicted memory requirement (with current safety factor)
+        bytes_actual : int
+            Actual memory used
+
+        Notes
+        -----
+        This method collects safety_factor_needed = actual / (predicted / safety_factor)
+        which represents the minimum safety factor needed for this allocation.
+        After warmup, we calculate p95(safety_factor_needed) to adaptively reduce
+        the default safety factor.
+        """
+        if not self.enable_adaptive_safety:
+            return
+
+        # Calculate base prediction (without safety factor)
+        bytes_predicted_base = bytes_predicted / self.safety_factor
+
+        # Calculate minimum safety factor needed for this allocation
+        if bytes_predicted_base > 0:
+            safety_factor_needed = bytes_actual / bytes_predicted_base
+        else:
+            safety_factor_needed = 1.0
+
+        # Record telemetry
+        self._safety_telemetry.append(
+            {
+                "bytes_predicted": bytes_predicted,
+                "bytes_actual": bytes_actual,
+                "safety_factor_needed": safety_factor_needed,
+                "current_safety_factor": self.safety_factor,
+            }
+        )
+
+        # Update adaptive safety factor after warmup
+        if len(self._safety_telemetry) >= self._warmup_runs:
+            self._update_adaptive_safety_factor()
+
+    def _update_adaptive_safety_factor(self):
+        """Update safety factor based on telemetry (after warmup).
+
+        Calculates p95(safety_factor_needed) from telemetry and uses it to
+        gradually reduce safety factor from initial value (1.2) to target minimum (1.05).
+        """
+        if not self.enable_adaptive_safety or len(self._safety_telemetry) < self._warmup_runs:
+            return
+
+        # Extract safety factors needed from telemetry
+        safety_factors_needed = [
+            entry["safety_factor_needed"] for entry in self._safety_telemetry
+        ]
+
+        # Calculate p95 (95th percentile) - conservative estimate
+        p95_safety = np.percentile(safety_factors_needed, 95)
+
+        # Adaptive safety factor: max(min_safety_factor, p95_safety)
+        # This ensures we never go below 1.05, but use higher if needed
+        adaptive_safety = max(self._min_safety_factor, p95_safety)
+
+        # Gradually reduce safety factor (don't jump abruptly)
+        if adaptive_safety < self.safety_factor:
+            # Reduce by at most 0.05 per update to avoid sudden changes
+            self.safety_factor = max(adaptive_safety, self.safety_factor - 0.05)
+
+        logger.debug(
+            f"Adaptive safety factor: {self.safety_factor:.3f} "
+            f"(p95_needed={p95_safety:.3f}, runs={len(self._safety_telemetry)})"
+        )
+
+    def get_safety_telemetry(self) -> dict:
+        """Get safety factor telemetry statistics.
+
+        Returns
+        -------
+        telemetry : dict
+            Safety factor telemetry with:
+            - current_safety_factor: Current safety factor
+            - initial_safety_factor: Initial safety factor (1.2)
+            - min_safety_factor: Target minimum (1.05)
+            - telemetry_entries: Number of telemetry entries collected
+            - p95_safety_needed: 95th percentile of safety factors needed (if data available)
+            - safety_factor_history: List of safety factors over time
+        """
+        telemetry = {
+            "current_safety_factor": self.safety_factor,
+            "initial_safety_factor": self._initial_safety_factor,
+            "min_safety_factor": self._min_safety_factor,
+            "telemetry_entries": len(self._safety_telemetry),
+            "adaptive_enabled": self.enable_adaptive_safety,
+        }
+
+        if self._safety_telemetry:
+            safety_factors_needed = [
+                entry["safety_factor_needed"] for entry in self._safety_telemetry
+            ]
+            telemetry["p95_safety_needed"] = float(np.percentile(safety_factors_needed, 95))
+            telemetry["mean_safety_needed"] = float(np.mean(safety_factors_needed))
+            telemetry["max_safety_needed"] = float(np.max(safety_factors_needed))
+            telemetry["safety_factor_history"] = [
+                entry["current_safety_factor"] for entry in self._safety_telemetry
+            ]
+
+        return telemetry
+
     def allocate_array(
         self, shape: tuple[int, ...], dtype: type = np.float64, zero: bool = True
     ) -> np.ndarray:
@@ -395,6 +535,13 @@ class MemoryManager:
             stats["efficiency"] = (
                 total_used / total_requested if total_requested > 0 else 1.0
             )
+
+        # Include safety factor telemetry (Task 5.2)
+        if self.enable_adaptive_safety:
+            stats["safety_telemetry"] = self.get_safety_telemetry()
+
+        # Include padding configuration (Task 5.6)
+        stats["disable_padding"] = self.disable_padding
 
         return stats
 

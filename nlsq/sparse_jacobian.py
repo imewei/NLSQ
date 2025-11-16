@@ -526,3 +526,90 @@ def detect_jacobian_sparsity(
     }
 
     return sparsity, info
+
+
+def detect_sparsity_at_p0(
+    func: Callable,
+    p0: np.ndarray,
+    xdata: np.ndarray,
+    n_residuals: int,
+    threshold: float = 0.01,
+    sample_size: int = 100,
+) -> tuple[float, bool]:
+    """Detect sparsity at p0 initialization for automatic sparse solver selection.
+
+    This function computes the Jacobian at the initial parameter guess p0 and
+    calculates the sparsity ratio. The result is cached to avoid recomputation.
+
+    Parameters
+    ----------
+    func : Callable
+        Model function f(x, *params) -> residuals
+    p0 : np.ndarray
+        Initial parameter guess
+    xdata : np.ndarray
+        Independent variable data
+    n_residuals : int
+        Number of residuals (data points)
+    threshold : float, optional
+        Threshold for considering elements as zero (default: 0.01)
+    sample_size : int, optional
+        Number of data points to sample for detection (default: 100)
+        Using a sample speeds up detection for large datasets
+
+    Returns
+    -------
+    sparsity_ratio : float
+        Fraction of zero elements in Jacobian (0.0 = dense, 1.0 = completely sparse)
+        Example: 0.9 means 90% of Jacobian elements are zero
+    is_sparse : bool
+        Whether the problem is considered sparse (sparsity_ratio > 0.5)
+
+    Notes
+    -----
+    Detection strategy:
+    - Samples up to `sample_size` data points for efficiency
+    - Uses finite differences to compute Jacobian at p0
+    - Considers elements with |J[i,j]| < threshold as zero
+    - Caches result to avoid repeated computation
+
+    For auto-selection to activate sparse solver, both conditions must be met:
+    - sparsity_ratio > 0.5 (more than 50% zeros)
+    - n_residuals > 10000 (problem size threshold)
+
+    Examples
+    --------
+    >>> def model(x, a, b):
+    ...     # Each parameter affects different data regions (sparse)
+    ...     return jnp.where(x < 0.5, a, b)
+    >>> p0 = np.array([1.0, 2.0])
+    >>> xdata = np.linspace(0, 1, 1000)
+    >>> sparsity_ratio, is_sparse = detect_sparsity_at_p0(
+    ...     model, p0, xdata, n_residuals=1000
+    ... )
+    >>> print(f"Sparsity: {sparsity_ratio:.1%}, Is sparse: {is_sparse}")
+    Sparsity: 50.0%, Is sparse: True
+    """
+    # Sample data for efficient detection
+    actual_sample_size = min(sample_size, n_residuals, len(xdata))
+    if actual_sample_size < len(xdata):
+        # Sample uniformly across data range
+        sample_indices = np.linspace(0, len(xdata) - 1, actual_sample_size, dtype=int)
+        xdata_sample = xdata[sample_indices]
+    else:
+        xdata_sample = xdata
+
+    # Use existing detection function
+    sparsity_ratio, _info = detect_jacobian_sparsity(
+        func, p0, xdata_sample, threshold=threshold
+    )
+
+    # Determine if sparse based on sparsity threshold
+    is_sparse = sparsity_ratio > 0.5
+
+    logger.debug(
+        f"Sparsity detection at p0: {sparsity_ratio:.1%} "
+        f"({'sparse' if is_sparse else 'dense'})"
+    )
+
+    return sparsity_ratio, is_sparse

@@ -1,4 +1,4 @@
-.PHONY: install dev test lint format type-check clean docs help install-jax-gpu gpu-check env-info
+.PHONY: install dev test test-all-parallel lint format type-check clean docs help install-jax-gpu gpu-check env-info
 
 # ============================================================================
 # Platform and Package Manager Detection
@@ -222,6 +222,7 @@ clean:  ## Clean build artifacts and cache files
 	find . -type d -name .hypothesis -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name checkpoints -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name benchmark_results -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name "*.pyo" -delete
 	find . -type f -name "*~" -delete
@@ -280,6 +281,9 @@ test-large:  ## Run tests for large dataset features
 
 test-all:  ## Run all tests including large dataset tests
 	pytest tests/ -v
+
+test-all-parallel:  ## Run all tests in parallel using all available CPU cores
+	pytest tests/ -v -n auto
 
 test-modules:  ## Test specific new modules (stability, recovery, cache, etc)
 	pytest tests/test_stability.py tests/test_stability_extended.py tests/test_init_module.py -v

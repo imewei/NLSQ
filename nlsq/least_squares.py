@@ -11,7 +11,7 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 import jax.numpy as jnp
-from jax import jacfwd, jit
+from jax import jacfwd, jacrev, jit
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
 
 from nlsq.common_scipy import EPS, in_bounds, make_strictly_feasible
@@ -23,6 +23,82 @@ from nlsq.memory_manager import get_memory_manager
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.trf import TrustRegionReflective
 from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction, MethodLiteral
+from nlsq.unified_cache import get_global_cache
+
+
+def jacobian_mode_selector(n_params: int, n_residuals: int, mode: str = "auto") -> tuple[str, str]:
+    """Select Jacobian automatic differentiation mode based on problem dimensions.
+
+    Automatically chooses between forward-mode (jacfwd) and reverse-mode (jacrev)
+    automatic differentiation based on the Jacobian shape to minimize computational cost.
+
+    Parameters
+    ----------
+    n_params : int
+        Number of parameters (columns in Jacobian)
+    n_residuals : int
+        Number of residuals (rows in Jacobian)
+    mode : {'auto', 'fwd', 'rev'}, optional
+        Jacobian mode selection. Default is 'auto'.
+        - 'auto': Automatically select based on problem dimensions
+        - 'fwd': Force forward-mode AD (jacfwd)
+        - 'rev': Force reverse-mode AD (jacrev)
+
+    Returns
+    -------
+    selected_mode : str
+        Selected mode ('fwd' or 'rev')
+    rationale : str
+        Human-readable explanation of the selection
+
+    Raises
+    ------
+    ValueError
+        If mode is not one of 'auto', 'fwd', 'rev'
+
+    Notes
+    -----
+    Selection heuristic for 'auto' mode:
+    - Use jacrev when n_params > n_residuals (tall Jacobian, more params than residuals)
+      - Reverse-mode is O(n_residuals) operations
+      - Forward-mode would be O(n_params) operations
+    - Use jacfwd when n_params <= n_residuals (wide Jacobian, more residuals than params)
+      - Forward-mode is O(n_params) operations
+      - Reverse-mode would be O(n_residuals) operations
+
+    For high-parameter problems (e.g., 1000 params, 100 residuals), jacrev can be
+    10-100x faster than jacfwd.
+
+    Examples
+    --------
+    >>> from nlsq.least_squares import jacobian_mode_selector
+    >>> # Tall Jacobian (many parameters, few residuals)
+    >>> mode, rationale = jacobian_mode_selector(1000, 100, mode='auto')
+    >>> print(mode, rationale)
+    rev jacrev (1000 params > 100 residuals)
+
+    >>> # Wide Jacobian (few parameters, many residuals)
+    >>> mode, rationale = jacobian_mode_selector(100, 1000, mode='auto')
+    >>> print(mode, rationale)
+    fwd jacfwd (100 params <= 1000 residuals)
+
+    >>> # Manual override
+    >>> mode, rationale = jacobian_mode_selector(1000, 100, mode='fwd')
+    >>> print(mode, rationale)
+    fwd explicit override: fwd
+    """
+    if mode == "auto":
+        # Heuristic: use jacrev for tall Jacobians (n_params > n_residuals)
+        # because reverse-mode is O(n_residuals) vs forward-mode O(n_params)
+        if n_params > n_residuals:
+            return "rev", f"jacrev ({n_params} params > {n_residuals} residuals)"
+        else:
+            return "fwd", f"jacfwd ({n_params} params <= {n_residuals} residuals)"
+    elif mode in ("fwd", "rev"):
+        return mode, f"explicit override: {mode}"
+    else:
+        raise ValueError(f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'")
+
 
 TERMINATION_MESSAGES = {
     -3: "Inner optimization loop exceeded maximum iterations.",
@@ -161,13 +237,15 @@ def check_x_scale(
 
 
 class AutoDiffJacobian:
-    """Wraps the residual fit function such that a masked jacfwd is performed
-    on it. thereby giving the autodiff Jacobian. This needs to be a class since
-    we need to maintain in memory three different versions of the Jacobian.
+    """Wraps the residual fit function such that automatic differentiation is performed.
+
+    Supports both forward-mode (jacfwd) and reverse-mode (jacrev) automatic differentiation.
+    This needs to be a class since we need to maintain in memory three different versions
+    of the Jacobian for different sigma/covariance cases.
     """
 
     def create_ad_jacobian(
-        self, func: Callable, num_args: int, masked: bool = True
+        self, func: Callable, num_args: int, masked: bool = True, mode: str = "fwd"
     ) -> Callable:
         """Creates a function that returns the autodiff jacobian of the
         residual fit function. The Jacobian of the residual fit function is
@@ -181,6 +259,8 @@ class AutoDiffJacobian:
             The number of arguments the function takes.
         masked : bool, optional
             Whether to use a masked jacobian, by default True
+        mode : str, optional
+            Jacobian mode ('fwd' or 'rev'), by default 'fwd'
 
         Returns
         -------
@@ -191,13 +271,16 @@ class AutoDiffJacobian:
 
         # create a list of argument indices for the wrapped function which
         # will correspond to the arguments of the residual fit function and
-        # will be past to JAX's jacfwd function.
+        # will be passed to JAX's jacfwd/jacrev function.
         arg_list = [4 + i for i in range(num_args)]
+
+        # Select the appropriate JAX differentiation function
+        jac_func_ad = jacfwd if mode == "fwd" else jacrev
 
         @jit
         def wrap_func(*all_args) -> jnp.ndarray:
             """Wraps the residual fit function such that it can be passed to the
-            jacfwd function. Jacfwd requires the function to a single list
+            jacfwd/jacrev function. Both require the function to have a single list
             of arguments.
             """
             xdata, ydata, data_mask, atransform = all_args[:4]
@@ -214,15 +297,15 @@ class AutoDiffJacobian:
         ) -> jnp.ndarray:
             """Returns the jacobian. Places all the residual fit function
             arguments into a single list for the wrapped residual fit function.
-            Then calls the jacfwd function on the wrapped function with the
+            Then calls the jacfwd or jacrev function on the wrapped function with
             the arglist of the arguments to differentiate with respect to which
             is only the arguments of the original fit function.
             """
 
             fixed_args = [xdata, ydata, data_mask, atransform]
             all_args = [*fixed_args, *args]
-            jac_fwd = jacfwd(wrap_func, argnums=arg_list)(*all_args)
-            return jnp.array(jac_fwd)
+            jac_result = jac_func_ad(wrap_func, argnums=arg_list)(*all_args)
+            return jnp.array(jac_result)
 
         @jit
         def masked_jac(
@@ -321,6 +404,9 @@ class LeastSquares:
         self.adjn = AutoDiffJacobian()
         self.adj1d = AutoDiffJacobian()
         self.adj2d = AutoDiffJacobian()
+
+        # Initialize unified cache for JIT compilation tracking
+        self.cache = get_global_cache()
 
         # Stability and diagnostics systems
         self.enable_stability = enable_stability
@@ -432,6 +518,7 @@ class LeastSquares:
         x0: np.ndarray,
         args: tuple,
         kwargs: dict,
+        jacobian_mode_selected: str = "fwd",
     ) -> tuple:
         """Setup residual and Jacobian functions.
 
@@ -457,7 +544,7 @@ class LeastSquares:
             if func_update:
                 self.update_function(fun)
                 if jac is None:
-                    self.autdiff_jac(jac)
+                    self.autdiff_jac(jac, mode=jacobian_mode_selected)
 
             # Handle analytical Jacobian
             if jac is not None:
@@ -467,7 +554,7 @@ class LeastSquares:
                 ):
                     self.wrap_jac(jac)
             elif self.jac is not None and not func_update:
-                self.autdiff_jac(jac)
+                self.autdiff_jac(jac, mode=jacobian_mode_selected)
 
             # Select appropriate residual function and Jacobian
             if transform is None:
@@ -490,7 +577,9 @@ class LeastSquares:
             rfunc = wrap_func
             if jac is None:
                 adj = AutoDiffJacobian()
-                jac_func = adj.create_ad_jacobian(wrap_func, x0.size, masked=False)
+                jac_func = adj.create_ad_jacobian(
+                    wrap_func, x0.size, masked=False, mode=jacobian_mode_selected
+                )
             else:
                 jac_func = wrap_jac
 
@@ -853,6 +942,7 @@ class LeastSquares:
         jac_sparsity: ArrayLike | None = None,
         max_nfev: float | None = None,
         verbose: int = 0,
+        jacobian_mode: Literal["auto", "fwd", "rev"] | None = None,
         xdata: ArrayLike | None = None,
         ydata: ArrayLike | None = None,
         data_mask: ArrayLike | None = None,
@@ -894,6 +984,12 @@ class LeastSquares:
             Maximum function evaluations.
         verbose : int, optional
             Verbosity level (0, 1, or 2).
+        jacobian_mode : {'auto', 'fwd', 'rev'}, optional
+            Jacobian automatic differentiation mode. If None, uses configuration
+            from environment variable, config file, or auto-default. Default is None.
+            - 'auto': Automatically select based on problem dimensions
+            - 'fwd': Force forward-mode AD (jacfwd)
+            - 'rev': Force reverse-mode AD (jacrev)
         xdata, ydata : array_like, optional
             Data for curve fitting applications.
         data_mask : array_like, optional
@@ -936,6 +1032,18 @@ class LeastSquares:
         self.n = len(x0)
         n = x0.size
 
+        # Step 2.5: Determine Jacobian mode with configuration precedence
+        # Precedence: function parameter > env var > config file > auto-default
+        if jacobian_mode is not None:
+            # Function parameter has highest priority
+            jacobian_mode_config = jacobian_mode
+            jacobian_mode_source = "function parameter"
+        else:
+            # Get from environment/config/default
+            from nlsq.config import get_jacobian_mode
+
+            jacobian_mode_config, jacobian_mode_source = get_jacobian_mode()
+
         # Step 3: Log optimization setup
         self.logger.info(
             "Starting least squares optimization",
@@ -948,8 +1056,39 @@ class LeastSquares:
         )
 
         # Step 4: Setup residual and Jacobian functions
+        # First, do a preliminary evaluation to determine problem dimensions
+        # for Jacobian mode selection (if using autodiff)
+        if jac is None and xdata is not None and ydata is not None:
+            # Quick dimension check for auto mode selection
+            # We need to know m (number of residuals) for mode selection
+            # Create a temporary residual function for dimension check
+            @jit
+            def temp_residual(args_temp):
+                func_eval = fun(xdata, *args_temp) - ydata
+                return jnp.where(data_mask if data_mask is not None else True, func_eval, 0)
+
+            f0_temp = temp_residual(x0)
+            m_temp = f0_temp.size
+
+            # Select Jacobian mode based on problem dimensions
+            jacobian_mode_selected, jacobian_rationale = jacobian_mode_selector(
+                n, m_temp, mode=jacobian_mode_config
+            )
+
+            # Log Jacobian mode selection in debug mode
+            self.logger.debug(
+                f"Jacobian mode: '{jacobian_mode_selected}' (from {jacobian_mode_source}). Rationale: {jacobian_rationale}"
+            )
+        else:
+            # Analytical Jacobian or SciPy mode - use default forward mode
+            jacobian_mode_selected = "fwd"
+            jacobian_rationale = "analytical Jacobian or SciPy compatibility mode"
+            self.logger.debug(
+                f"Jacobian mode: '{jacobian_mode_selected}'. Rationale: {jacobian_rationale}"
+            )
+
         rfunc, jac_func = self._setup_functions(
-            fun, jac, xdata, ydata, transform, x0, args, kwargs
+            fun, jac, xdata, ydata, transform, x0, args, kwargs, jacobian_mode_selected
         )
 
         # Step 5: Evaluate initial residuals and Jacobian
@@ -972,6 +1111,64 @@ class LeastSquares:
         initial_cost = self._compute_initial_cost(
             f0, loss, loss_function, f_scale, data_mask
         )
+
+        # Step 8.5: Detect sparsity and auto-select sparse solver if beneficial
+        # This happens AFTER initial Jacobian computation (so we have J0 available)
+        # Auto-selection triggers when: sparsity >50% AND n_residuals >10K
+        sparsity_ratio = 0.0
+        is_sparse_problem = False
+        sparse_solver_selected = False
+
+        if xdata is not None and ydata is not None and fun is not None:
+            # Import sparsity detection function
+            from nlsq.sparse_jacobian import detect_sparsity_at_p0
+
+            # Detect sparsity at p0 (uses sampling for efficiency)
+            try:
+                sparsity_ratio, is_sparse_problem = detect_sparsity_at_p0(
+                    func=fun,
+                    p0=x0,
+                    xdata=xdata,
+                    n_residuals=m,
+                    threshold=0.01,
+                    sample_size=min(100, m)
+                )
+
+                # Auto-selection logic:
+                # 1. Must have high sparsity (>50%)
+                # 2. Must have large problem size (>10K residuals)
+                # 3. User has not explicitly set tr_solver (tr_solver is None)
+                if is_sparse_problem and m > 10000 and tr_solver is None:
+                    # Activate sparse solver
+                    tr_solver = "sparse"
+                    sparse_solver_selected = True
+                    self.logger.info(
+                        f"Sparse solver activated: sparsity={sparsity_ratio:.1%}, "
+                        f"n_residuals={m}, n_params={n}"
+                    )
+                else:
+                    # Use dense solver (default)
+                    if tr_solver is None:
+                        tr_solver = "exact"  # Default dense solver
+                    reason = []
+                    if not is_sparse_problem:
+                        reason.append(f"low sparsity ({sparsity_ratio:.1%})")
+                    if m <= 10000:
+                        reason.append(f"small problem (n_residuals={m})")
+                    if tr_solver is not None:
+                        reason.append("user-specified tr_solver")
+
+                    self.logger.debug(
+                        f"Dense solver selected: {', '.join(reason) if reason else 'default'}"
+                    )
+
+            except Exception as e:
+                # If sparsity detection fails, fall back to dense solver
+                self.logger.warning(
+                    f"Sparsity detection failed: {e}. Using dense solver."
+                )
+                if tr_solver is None:
+                    tr_solver = "exact"
 
         # Step 9: Check memory and adjust solver if needed
         tr_solver = self._check_memory_and_adjust_solver(m, n, method, tr_solver)
@@ -1015,9 +1212,25 @@ class LeastSquares:
         # Step 12: Process optimization result
         result = self._process_optimization_result(result, initial_cost, verbose)
 
+        # Step 13: Add sparsity diagnostics to result (Task 6.5)
+        # This provides transparency about whether sparse solver was used
+        result.sparsity_detected = {
+            'detected': is_sparse_problem,
+            'ratio': float(sparsity_ratio),
+            'solver': 'sparse' if sparse_solver_selected else 'dense',
+            'n_residuals': m,
+            'n_params': n,
+        }
+
+        # Log sparsity info in debug mode
+        self.logger.debug(
+            f"Sparsity diagnostics: detected={is_sparse_problem}, "
+            f"ratio={sparsity_ratio:.1%}, solver={'sparse' if sparse_solver_selected else 'dense'}"
+        )
+
         return result
 
-    def autdiff_jac(self, jac: None) -> None:
+    def autdiff_jac(self, jac: None, mode: str = "fwd") -> None:
         """We do this for all three sigma transformed functions such
         that if sigma is changed from none to 1D to covariance sigma then no
         retracing is needed.
@@ -1027,10 +1240,12 @@ class LeastSquares:
         jac : None
             Passed in to maintain compatibility with the user defined Jacobian
             function.
+        mode : str, optional
+            Jacobian mode ('fwd' or 'rev'), by default 'fwd'
         """
-        self.jac_none = self.adjn.create_ad_jacobian(self.func_none, self.n)
-        self.jac_1d = self.adj1d.create_ad_jacobian(self.func_1d, self.n)
-        self.jac_2d = self.adj2d.create_ad_jacobian(self.func_2d, self.n)
+        self.jac_none = self.adjn.create_ad_jacobian(self.func_none, self.n, mode=mode)
+        self.jac_1d = self.adj1d.create_ad_jacobian(self.func_1d, self.n, mode=mode)
+        self.jac_2d = self.adj2d.create_ad_jacobian(self.func_2d, self.n, mode=mode)
         # jac is
         self.jac = jac
 
