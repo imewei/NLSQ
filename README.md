@@ -567,6 +567,52 @@ print(f"Recompiles after warmup: {result['recompiles_after_warmup']}")  # 0
 - Device-aware auto-selection (GPU default, dynamic on CPU)
 - Expected 5-15% GPU throughput improvement
 
+### Host-Device Transfer Profiling (v0.3.0-beta.3)
+
+**Comprehensive profiling and validation infrastructure** for monitoring GPU-CPU transfers:
+
+```python
+from nlsq.profiling import profile_optimization, analyze_source_transfers
+from nlsq import curve_fit
+import jax.numpy as jnp
+
+# Profile optimization performance
+with profile_optimization() as metrics:
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5])
+
+print(f"Total time: {metrics.total_time_sec:.3f}s")
+print(f"Average iteration: {metrics.avg_iteration_time_ms:.2f}ms")
+
+# Static analysis of transfer patterns
+with open('mymodule.py') as f:
+    code = f.read()
+
+analysis = analyze_source_transfers(code)
+print(f"Potential transfers: {analysis['total_potential_transfers']}")
+```
+
+**Key Features:**
+- **Async Logging**: JAX-aware logging eliminates GPU-CPU blocking (<5% overhead)
+- **JAX Profiler Integration**: Runtime transfer measurement with `jax.profiler.trace()`
+- **Static Analysis**: Detect `np.array()`, `np.asarray()`, `.block_until_ready()` patterns
+- **Performance Baselines**: Automated baseline generation and CI/CD regression gates
+- **Input Validation**: Type checking for all profiling functions
+
+**Performance Regression Protection:**
+```python
+from nlsq import curve_fit
+
+# Automatic regression detection in CI
+# Tests fail if performance degrades >10% vs baseline
+# See tests/test_performance_regression.py
+```
+
+**Async Logging Benefits:**
+- Zero host-device blocking during optimization
+- Verbosity control (0=off, 1=every 10th, 2=all iterations)
+- Automatic JAX array detection
+- Non-blocking callbacks via `jax.debug.callback`
+
 For detailed performance analysis, see the [Performance Guide](https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html).
 
 ## Current gotchas

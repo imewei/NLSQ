@@ -102,11 +102,12 @@ Support modules for configuration, caching, and diagnostics:
 Performance & Profiling
 -----------------------
 
-Performance analysis, profiling, and benchmarking tools (NEW in v0.3.0-beta.2):
+Performance analysis, profiling, and benchmarking tools (NEW in v0.3.0-beta.2+):
 
 .. toctree::
    :maxdepth: 2
 
+   nlsq.async_logger
    nlsq.profiling
    nlsq.profiler
    nlsq.profiler_visualization
@@ -170,7 +171,8 @@ Complete Module Listing
 - :doc:`nlsq.common_scipy` - SciPy compatibility layer
 
 **Performance & Profiling**:
-- :doc:`nlsq.profiling` - JAX profiler integration (NEW in v0.3.0-beta.2)
+- :doc:`nlsq.async_logger` - Async logging infrastructure (NEW in v0.3.0-beta.3)
+- :doc:`nlsq.profiling` - JAX profiler integration and static analysis (v0.3.0-beta.2+)
 - :doc:`nlsq.profiler` - Performance profiler (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.profiler_visualization` - Profiling visualization (NEW in v0.3.0-beta.2)
 - :doc:`performance_benchmarks` - Performance analysis tools
