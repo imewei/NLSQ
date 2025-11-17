@@ -1,17 +1,22 @@
-"""Example 2: Checkpoint Save and Resume
+#!/usr/bin/env python
 
-This example demonstrates checkpoint save/resume functionality for recovering
-from interruptions during long-running optimizations.
+# # Example 2: Checkpoint Save and Resume
+#
+# This example demonstrates checkpoint save/resume functionality for recovering
+# from interruptions during long-running optimizations.
+#
+# Features demonstrated:
+# - Automatic checkpoint saving at intervals
+# - Auto-detection of latest checkpoint
+# - Resume from specific checkpoint path
+# - Full optimizer state preservation
+#
+# Run this example:
+#     python examples/streaming/02_checkpoint_resume.py
+#
 
-Features demonstrated:
-- Automatic checkpoint saving at intervals
-- Auto-detection of latest checkpoint
-- Resume from specific checkpoint path
-- Full optimizer state preservation
+# In[1]:
 
-Run this example:
-    python examples/streaming/02_checkpoint_resume.py
-"""
 
 import time
 from pathlib import Path

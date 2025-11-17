@@ -1,18 +1,22 @@
-"""
-Damped Oscillation: Pendulum Damping Analysis
-==============================================
+#!/usr/bin/env python
 
-This example demonstrates fitting damped harmonic oscillator data to extract
-the damping coefficient and natural frequency. We use realistic pendulum data
-and compare fitted values with theoretical predictions.
+# # Damped Oscillation: Pendulum Damping Analysis
+#
+#
+# This example demonstrates fitting damped harmonic oscillator data to extract
+# the damping coefficient and natural frequency. We use realistic pendulum data
+# and compare fitted values with theoretical predictions.
+#
+# Key Concepts:
+# - Damped harmonic oscillator model
+# - Exponential envelope extraction
+# - Quality factor (Q) calculation
+# - Frequency and damping time constants
+# - Comparison with theoretical models
+#
 
-Key Concepts:
-- Damped harmonic oscillator model
-- Exponential envelope extraction
-- Quality factor (Q) calculation
-- Frequency and damping time constants
-- Comparison with theoretical models
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -93,7 +97,8 @@ def damping_time(gamma):
     return 1 / gamma
 
 
-# === Generate Realistic Pendulum Data ===
+# In[2]:
+
 
 # True parameters for a lightly damped pendulum
 # (e.g., 1m length pendulum with small air resistance)
@@ -115,7 +120,9 @@ displacement_measured = displacement_true + noise
 # Measurement uncertainties
 sigma = 0.2 * np.ones_like(time)  # Constant uncertainty
 
-# === Fit the Damped Oscillator Model ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("DAMPED OSCILLATION: PENDULUM DAMPING ANALYSIS")
@@ -156,7 +163,9 @@ Q_err = Q_fit * np.sqrt((gamma_err / gamma_fit) ** 2 + (omega_err / omega_fit) *
 tau_err = tau_fit * (gamma_err / gamma_fit)
 period_err = period_fit * (omega_err / omega_fit)
 
-# === Print Results ===
+
+# In[4]:
+
 
 print("\nFitted Parameters:")
 print(f"  A0 (initial amplitude): {A0_fit:.3f} ± {A0_err:.3f} degrees")
@@ -199,7 +208,9 @@ chi_squared_reduced = chi_squared / dof
 print("\nGoodness of Fit:")
 print(f"  χ²/dof = {chi_squared_reduced:.2f} (expect ≈ 1.0)")
 
-# === Physical Interpretation ===
+
+# In[5]:
+
 
 print("\n" + "=" * 70)
 print("PHYSICAL INTERPRETATION")
@@ -236,7 +247,9 @@ elif damping_ratio == 1:
 else:
     print("  → Overdamped (ζ > 1)")
 
-# === Visualization ===
+
+# In[6]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -382,7 +395,9 @@ plt.savefig("damped_oscillation.png", dpi=150)
 print("\n✅ Plot saved as 'damped_oscillation.png'")
 plt.show()
 
-# === Summary ===
+
+# In[7]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

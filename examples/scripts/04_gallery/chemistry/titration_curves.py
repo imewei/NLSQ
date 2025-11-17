@@ -1,26 +1,30 @@
-"""
-Acid-Base Titration Curve Analysis
-===================================
+#!/usr/bin/env python
 
-This example demonstrates acid-base titration curve analysis using NLSQ.
-We analyze titration data to determine pKa values, equivalence points,
-and buffer capacity using the Henderson-Hasselbalch equation and related models.
+# # Acid-Base Titration Curve Analysis
+#
+#
+# This example demonstrates acid-base titration curve analysis using NLSQ.
+# We analyze titration data to determine pKa values, equivalence points,
+# and buffer capacity using the Henderson-Hasselbalch equation and related models.
+#
+# Key Applications:
+# - pKa determination from titration curves
+# - Equivalence point identification
+# - Buffer capacity analysis
+# - Polyprotic acid characterization
+# - Weak acid/base property quantification
+#
+# Physical Context:
+# The Henderson-Hasselbalch equation relates pH to the acid dissociation constant (pKa)
+# and the ratio of conjugate base to acid concentrations:
+#     pH = pKa + log10([A⁻]/[HA])
+#
+# For a titration curve, the relationship between pH and volume of titrant can be
+# modeled using the equilibrium expressions for acid-base reactions.
+#
 
-Key Applications:
-- pKa determination from titration curves
-- Equivalence point identification
-- Buffer capacity analysis
-- Polyprotic acid characterization
-- Weak acid/base property quantification
+# In[1]:
 
-Physical Context:
-The Henderson-Hasselbalch equation relates pH to the acid dissociation constant (pKa)
-and the ratio of conjugate base to acid concentrations:
-    pH = pKa + log10([A⁻]/[HA])
-
-For a titration curve, the relationship between pH and volume of titrant can be
-modeled using the equilibrium expressions for acid-base reactions.
-"""
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -187,9 +191,11 @@ def buffer_capacity(pH, pKa, C_total):
     return beta
 
 
-# ============================================================================
-# Example 1: Monoprotic Weak Acid Titration (Acetic Acid)
-# ============================================================================
+# ## Example 1: Monoprotic Weak Acid Titration (Acetic Acid)
+#
+
+# In[2]:
+
 
 print("=" * 70)
 print("Example 1: Monoprotic Weak Acid Titration (Acetic Acid with NaOH)")
@@ -296,9 +302,12 @@ print(f"  Volume at inflection = {Ve_inflection:.2f} mL")
 print(f"  pH at inflection = {pH_inflection:.2f}")
 print(f"  Max slope = {dpH_dV[inflection_idx]:.2f} pH/mL")
 
-# ============================================================================
-# Example 2: Buffer Capacity Analysis
-# ============================================================================
+
+# ## Example 2: Buffer Capacity Analysis
+#
+
+# In[3]:
+
 
 print("\n" + "=" * 70)
 print("Example 2: Buffer Capacity Analysis")
@@ -323,9 +332,12 @@ print(
     f"  Effective buffer range: {pKa_fitted - 1:.2f} - {pKa_fitted + 1:.2f} (pKa ± 1)"
 )
 
-# ============================================================================
-# Example 3: Diprotic Acid Titration (Carbonic Acid)
-# ============================================================================
+
+# ## Example 3: Diprotic Acid Titration (Carbonic Acid)
+#
+
+# In[4]:
+
 
 print("\n" + "=" * 70)
 print("Example 3: Diprotic Acid Titration (Carbonic Acid)")
@@ -424,9 +436,12 @@ print(
     f"  Second equivalence (inflection): {Ve2_inflection:.2f} mL (fitted: {Ve2_fitted:.2f} mL)"
 )
 
-# ============================================================================
-# Visualization
-# ============================================================================
+
+# ## Visualization
+#
+
+# In[5]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -624,9 +639,12 @@ plt.savefig("titration_curves_analysis.png", dpi=150, bbox_inches="tight")
 print("\n✓ Plot saved as 'titration_curves_analysis.png'")
 plt.show()
 
-# ============================================================================
-# Summary
-# ============================================================================
+
+# ## Summary
+#
+
+# In[6]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY: Acid-Base Titration Analysis")

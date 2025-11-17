@@ -1,18 +1,22 @@
-"""
-Dose-Response Curves: EC50 and IC50 Determination
-==================================================
+#!/usr/bin/env python
 
-This example demonstrates fitting dose-response curves using the Hill equation
-(4-parameter logistic model) to determine EC50/IC50 values. Common in pharmacology,
-toxicology, and drug discovery.
+# # Dose-Response Curves: EC50 and IC50 Determination
+#
+#
+# This example demonstrates fitting dose-response curves using the Hill equation
+# (4-parameter logistic model) to determine EC50/IC50 values. Common in pharmacology,
+# toxicology, and drug discovery.
+#
+# Key Concepts:
+# - 4-parameter logistic (4PL) model
+# - EC50/IC50 determination (half-maximal effective/inhibitory concentration)
+# - Hill slope (cooperativity)
+# - Dynamic range and efficacy
+# - Comparison of multiple drugs/compounds
+#
 
-Key Concepts:
-- 4-parameter logistic (4PL) model
-- EC50/IC50 determination (half-maximal effective/inhibitory concentration)
-- Hill slope (cooperativity)
-- Dynamic range and efficacy
-- Comparison of multiple drugs/compounds
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -78,7 +82,8 @@ def inhibition_model(dose, top, IC50, hill_slope):
     return top / (1 + jnp.power(dose / IC50, hill_slope))
 
 
-# === Generate Synthetic Dose-Response Data ===
+# In[2]:
+
 
 # Drug concentrations (log-spaced: 0.01 to 1000 μM)
 dose = np.logspace(-2, 3, 15)  # 15 concentration points
@@ -101,7 +106,9 @@ response_measured = response_true + noise
 # Measurement uncertainties (constant CV)
 sigma = 3.0 * np.ones_like(response_measured)
 
-# === Fit 4-Parameter Logistic Model ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("DOSE-RESPONSE CURVES: EC50/IC50 DETERMINATION")
@@ -131,7 +138,9 @@ bottom_fit, top_fit, EC50_fit, hill_slope_fit = popt
 perr = np.sqrt(np.diag(pcov))
 bottom_err, top_err, EC50_err, hill_slope_err = perr
 
-# === Calculate Derived Parameters ===
+
+# In[4]:
+
 
 # Dynamic range
 dynamic_range = top_fit - bottom_fit
@@ -141,7 +150,9 @@ dynamic_range = top_fit - bottom_fit
 EC20 = EC50_fit * np.power((top_fit - 20) / (20 - bottom_fit), 1 / hill_slope_fit)
 EC80 = EC50_fit * np.power((top_fit - 80) / (80 - bottom_fit), 1 / hill_slope_fit)
 
-# === Print Results ===
+
+# In[5]:
+
 
 print("\nFitted Parameters:")
 print(f"  Bottom (baseline):  {bottom_fit:.2f} ± {bottom_err:.2f} %")
@@ -204,7 +215,9 @@ print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse:.2f} %")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
 
-# === Simulate Second Drug for Comparison ===
+
+# In[6]:
+
 
 print("\n" + "-" * 70)
 print("COMPARING MULTIPLE COMPOUNDS")
@@ -246,7 +259,9 @@ print(f"  Hill:     {hill_slope_B_fit:.2f}")
 print(f"\nPotency ratio (A/B):  {EC50_fit / EC50_B_fit:.1f}x")
 print(f"Efficacy difference:  {dynamic_range - dynamic_range_B:.1f} %")
 
-# === Visualization ===
+
+# In[7]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -454,7 +469,9 @@ plt.savefig("dose_response.png", dpi=150)
 print("\n✅ Plot saved as 'dose_response.png'")
 plt.show()
 
-# === Summary ===
+
+# In[8]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

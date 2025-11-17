@@ -1,22 +1,16 @@
-"""
-Converted from time_series_analysis.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# Time Series Analysis with NLSQ
+# # Time Series Analysis with NLSQ
 #
-# **Level**: Intermediate to Advanced  
-# **Time**: 35-45 minutes  
+# **Level**: Intermediate to Advanced
+# **Time**: 35-45 minutes
 # **Prerequisites**: NLSQ Quickstart
 #
-# Overview
+# ## Overview
 #
 # Time series analysis involves fitting models to sequential data with temporal dependencies. While traditional approaches use ARIMA or state-space models, **NLSQ excels at fitting parametric trend and seasonal components** with physical interpretations.
 #
-# What You'll Learn
+# ### What You'll Learn
 #
 # 1. **Trend Fitting**: Polynomial, exponential, and logistic growth models
 # 2. **Seasonal Decomposition**: Fourier series for periodic components
@@ -24,7 +18,7 @@ This script was automatically generated from a Jupyter notebook.
 # 4. **Forecasting**: Extrapolation with uncertainty quantification
 # 5. **Autocorrelation**: Checking residual independence
 #
-# When to Use NLSQ for Time Series
+# ### When to Use NLSQ for Time Series
 #
 # **NLSQ is ideal when:**
 # - You have a **physical or mechanistic model** for the process (e.g., exponential growth, damped oscillations)
@@ -37,13 +31,14 @@ This script was automatically generated from a Jupyter notebook.
 # - You need **complex autoregressive structures**
 # - **Missing data** or **irregular sampling** is common
 #
-# Applications
+# ### Applications
 #
 # - **Scientific**: Radioactive decay, population dynamics, chemical kinetics
 # - **Engineering**: Sensor drift, system response, degradation models
 # - **Environmental**: Temperature cycles, tidal patterns, climate trends
 # - **Business**: Product lifecycle, seasonal sales (with physical constraints)
-# ======================================================================
+
+# In[1]:
 
 
 """Time series analysis imports."""
@@ -65,14 +60,14 @@ warnings.filterwarnings("ignore")
 print("✓ Imports successful")
 
 
-# ======================================================================
-# Part 1: Trend Fitting
+# ## Part 1: Trend Fitting
 #
 # We'll explore different growth models commonly found in time series data.
-# ======================================================================
+
+# In[2]:
 
 
-"""Generate synthetic growth data (logistic curve)."""
+# Generate synthetic growth data (logistic curve).
 
 # Time points (days)
 t_data = np.linspace(0, 100, 150)
@@ -115,12 +110,15 @@ np.random.seed(42)
 noise = np.random.normal(0, 30, len(t_data))
 y_observed = y_true + noise
 
-print(f"✓ Generated logistic growth data")
+print("✓ Generated logistic growth data")
 print(f"  Time range: {t_data.min():.0f} - {t_data.max():.0f} days")
 print(f"  True parameters: L={L_true}, k={k_true}, t0={t0_true}")
 
 
-"""Fit logistic growth model."""
+# In[3]:
+
+
+# Fit logistic growth model.
 
 cf = CurveFit()
 
@@ -145,12 +143,15 @@ print(f"  Inflection point (t0): {t0_fit:.1f} ± {t0_err:.1f} days (true: {t0_tr
 
 # Calculate derived quantities
 max_growth_rate = k_fit * L_fit / 4  # dN/dt at t0
-print(f"\nDerived:")
+print("\nDerived:")
 print(f"  Maximum growth rate: {max_growth_rate:.1f} units/day")
 print(f"  Doubling time (early phase): {np.log(2) / k_fit:.1f} days")
 
 
-"""Visualize growth fit with forecast."""
+# In[4]:
+
+
+# Visualize growth fit with forecast.
 
 # Extended time for forecasting
 t_extended = np.linspace(0, 150, 300)
@@ -190,14 +191,14 @@ plt.show()
 print("✓ Growth trend analysis complete")
 
 
-# ======================================================================
-# Part 2: Seasonal Decomposition with Fourier Series
+# ## Part 2: Seasonal Decomposition with Fourier Series
 #
 # Many time series exhibit periodic patterns (daily, weekly, annual cycles). We can model these using Fourier series.
-# ======================================================================
+
+# In[5]:
 
 
-"""Generate seasonal data (temperature with annual cycle)."""
+# Generate seasonal data (temperature with annual cycle).
 
 # Daily temperature over 3 years
 days = np.linspace(0, 3 * 365, 3 * 365)
@@ -223,7 +224,10 @@ print(f"  True parameters: mean={annual_mean}°C, amplitude={annual_amplitude}°
 print(f"  Warming trend: {trend_slope * 365:.2f}°C/year")
 
 
-"""Fit trend + seasonal model."""
+# In[6]:
+
+
+# Fit trend + seasonal model.
 
 
 def trend_seasonal_model(t, mean, trend, amplitude, period, phase):
@@ -277,13 +281,18 @@ errors = np.sqrt(np.diag(pcov_seasonal))
 
 print("Fitted Seasonal Parameters:")
 print(f"  Baseline: {mean_fit:.2f} ± {errors[0]:.2f} °C")
-print(f"  Trend: {trend_fit:.4f} ± {errors[1]:.4f} °C/day = {trend_fit * 365:.2f} °C/year")
+print(
+    f"  Trend: {trend_fit:.4f} ± {errors[1]:.4f} °C/day = {trend_fit * 365:.2f} °C/year"
+)
 print(f"  Amplitude: {amp_fit:.2f} ± {errors[2]:.2f} °C")
 print(f"  Period: {period_fit:.1f} ± {errors[3]:.1f} days")
 print(f"  Phase: {phase_fit:.3f} ± {errors[4]:.3f} rad")
 
 
-"""Decompose time series into components."""
+# In[7]:
+
+
+# Decompose time series into components.
 
 # Fitted components
 trend_fitted = mean_fit + trend_fit * days
@@ -321,9 +330,7 @@ axes[3].plot(days / 365, residuals, "o", alpha=0.4, ms=2, color="gray")
 axes[3].axhline(0, color="k", ls="--", lw=1)
 axes[3].set_ylabel("Residual (°C)")
 axes[3].set_xlabel("Time (years)")
-axes[3].set_title(
-    f"Residuals (std: {np.std(residuals):.2f} °C, should be white noise)"
-)
+axes[3].set_title(f"Residuals (std: {np.std(residuals):.2f} °C, should be white noise)")
 axes[3].grid(alpha=0.3)
 
 plt.tight_layout()
@@ -332,14 +339,14 @@ plt.show()
 print("✓ Seasonal decomposition complete")
 
 
-# ======================================================================
-# Part 3: Forecasting with Uncertainty
+# ## Part 3: Forecasting with Uncertainty
 #
 # Extrapolate the fitted model into the future with prediction intervals.
-# ======================================================================
+
+# In[8]:
 
 
-"""Generate forecast with uncertainty bands."""
+# Generate forecast with uncertainty bands.
 
 # Forecast horizon: 1 additional year
 days_forecast = np.linspace(0, 4 * 365, 4 * 365)
@@ -380,7 +387,10 @@ print(
 print(f"  Prediction interval width: {2 * residual_std:.1f} °C (±1σ residuals)")
 
 
-"""Visualize forecast with prediction intervals."""
+# In[9]:
+
+
+# Visualize forecast with prediction intervals.
 
 fig, ax = plt.subplots(figsize=(14, 6))
 
@@ -430,9 +440,7 @@ ax.fill_between(
 )
 
 # Forecast boundary
-ax.axvline(
-    forecast_boundary / 365, color="gray", ls="--", lw=2, label="Forecast start"
-)
+ax.axvline(forecast_boundary / 365, color="gray", ls="--", lw=2, label="Forecast start")
 
 ax.set_xlabel("Time (years)", fontsize=12)
 ax.set_ylabel("Temperature (°C)", fontsize=12)
@@ -446,14 +454,14 @@ plt.show()
 print("✓ Forecast visualization complete")
 
 
-# ======================================================================
-# Part 4: Residual Diagnostics (Autocorrelation)
+# ## Part 4: Residual Diagnostics (Autocorrelation)
 #
 # For valid inference, residuals should be uncorrelated (white noise). We check this with autocorrelation analysis.
-# ======================================================================
+
+# In[10]:
 
 
-"""Calculate and plot autocorrelation of residuals."""
+# Calculate and plot autocorrelation of residuals.
 
 
 def autocorrelation(x, max_lag=50):
@@ -518,7 +526,7 @@ plt.show()
 
 # Check for significant autocorrelation
 significant_lags = np.sum(np.abs(acf_values[1:]) > conf_bound)  # Exclude lag 0
-print(f"✓ Autocorrelation analysis complete")
+print("✓ Autocorrelation analysis complete")
 print(
     f"  Significant lags (95% level): {significant_lags} / {len(lags) - 1} ({significant_lags / (len(lags) - 1) * 100:.1f}%)"
 )
@@ -530,10 +538,9 @@ else:
     )
 
 
-# ======================================================================
-# Summary and Best Practices
+# ## Summary and Best Practices
 #
-# When to Use NLSQ for Time Series
+# ### When to Use NLSQ for Time Series
 #
 # | **Use Case** | **NLSQ Strength** | **Alternative** |
 # |--------------|-------------------|------------------|
@@ -544,7 +551,7 @@ else:
 # | Irregular sampling | ✅ Excellent (handles any time grid) | Interpolation + ARIMA |
 # | Large datasets (millions of points) | ✅ Excellent (JAX GPU acceleration) | Dask + statsmodels |
 #
-# Key Takeaways
+# ### Key Takeaways
 #
 # 1. **Model Selection**: Choose parametric forms based on domain knowledge
 #    - Growth: Exponential, logistic, Gompertz
@@ -565,14 +572,14 @@ else:
 #    - Use multiple sinusoids: `amp1 * sin(2π t / P1) + amp2 * sin(2π t / P2)`
 #    - Example: Daily + weekly cycles in energy consumption
 #
-# Production Code Template
+# ### Production Code Template
 #
 # ```python
 # from nlsq import CurveFit
 # import jax.numpy as jnp
 #
 # def forecast_time_series(t, y, forecast_days=30):
-#     """Fit trend+seasonal model and forecast."""
+#    """Fit trend+seasonal model and forecast.
 #
 #     # Model
 #     def model(t, mean, trend, amp, period, phase):
@@ -594,14 +601,14 @@ else:
 #     return t_future, y_forecast, forecast_uncertainty
 # ```
 #
-# Next Steps
+# ### Next Steps
 #
 # - **Advanced Seasonality**: Multi-frequency Fourier series for complex cycles
 # - **State-Space Models**: Kalman filtering with NLSQ parameter estimation
 # - **Batch Processing**: Fit thousands of time series in parallel with `jax.vmap`
 # - **Hybrid Models**: Combine NLSQ (trend/seasonal) with ARIMA (residual modeling)
 #
-# References
+# ### References
 #
 # 1. **Time Series Analysis**: Chatfield, *The Analysis of Time Series* (2004)
 # 2. **Forecasting**: Hyndman & Athanasopoulos, *Forecasting: Principles and Practice* (2021)
@@ -609,4 +616,3 @@ else:
 #    - `gallery/biology/growth_curves.py` - Bacterial growth fitting
 #    - `gallery/physics/damped_oscillation.py` - Oscillatory time series
 #    - `advanced_features_demo.ipynb` - Robustness for outliers in time series
-# ======================================================================

@@ -1,18 +1,12 @@
-"""
-Converted from large_dataset_demo.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# NLSQ Large Dataset Fitting Demonstration
+# # NLSQ Large Dataset Fitting Demonstration
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb)
 #
 # **Requirements:** Python 3.12 or higher
 #
-# ⚠️ Deprecation Notice
+# ## ⚠️ Deprecation Notice
 #
 # This notebook demonstrates NLSQ large dataset features:
 #
@@ -27,18 +21,17 @@ This script was automatically generated from a Jupyter notebook.
 #
 # This notebook demonstrates the capabilities of NLSQ for handling very large datasets with automatic memory management, chunking, and streaming optimization for unlimited datasets.
 #
-# Key Features:
+# ## Key Features:
 # - Memory estimation for datasets from 100K to 100M+ points
 # - Automatic memory management and dataset size detection
 # - Chunked processing for datasets that don't fit in memory
-# - Streaming optimization for unlimited dataset sizes 
+# - Streaming optimization for unlimited dataset sizes
 # - Advanced configuration and algorithm selection
-# ======================================================================
+#
 
+# ## Setup and Imports
 
-# ======================================================================
-# Setup and Imports
-# ======================================================================
+# In[1]:
 
 
 #!/usr/bin/env python3
@@ -102,11 +95,11 @@ def complex_model(x, a, b, c, d, e, f):
     return a * jnp.exp(-b * x) + c * jnp.sin(d * x) + e * x**2 + f
 
 
-# ======================================================================
-# 1. Memory Estimation Demo
+# ## 1. Memory Estimation Demo
 #
 # First, let's understand how much memory different dataset sizes require and what processing strategies NLSQ recommends.
-# ======================================================================
+
+# In[2]:
 
 
 def demo_memory_estimation():
@@ -130,7 +123,6 @@ def demo_memory_estimation():
         print(f"\n{description} ({n_points:,} points, {n_params} parameters):")
         print(f"  Total memory estimate: {stats.total_memory_estimate_gb:.3f} GB")
         print(f"  Number of chunks: {stats.n_chunks}")
-        print(f"  Processing strategy: {stats.processing_strategy}")
 
         # Determine strategy description
         if stats.n_chunks == 1:
@@ -146,11 +138,11 @@ def demo_memory_estimation():
 demo_memory_estimation()
 
 
-# ======================================================================
-# 1.5. Advanced Memory Configuration and Algorithm Selection
+# ## 1.5. Advanced Memory Configuration and Algorithm Selection
 #
 # NLSQ now provides sophisticated configuration management and automatic algorithm selection for optimal performance with large datasets.
-# ======================================================================
+
+# In[3]:
 
 
 def demo_advanced_configuration():
@@ -222,11 +214,11 @@ def demo_advanced_configuration():
 demo_advanced_configuration()
 
 
-# ======================================================================
-# 2. Basic Large Dataset Fitting
+# ## 2. Basic Large Dataset Fitting
 #
 # Let's demonstrate fitting a 1 million point dataset using the convenience function `fit_large_dataset`.
-# ======================================================================
+
+# In[4]:
 
 
 def demo_basic_large_dataset_fitting():
@@ -287,11 +279,11 @@ def demo_basic_large_dataset_fitting():
 demo_basic_large_dataset_fitting()
 
 
-# ======================================================================
-# 3.5. Context Managers and Temporary Configuration
+# ## 3.5. Context Managers and Temporary Configuration
 #
 # NLSQ provides context managers for temporary configuration changes, allowing you to optimize settings for specific operations without affecting global state.
-# ======================================================================
+
+# In[5]:
 
 
 def demo_context_managers():
@@ -421,11 +413,11 @@ def demo_context_managers():
 demo_context_managers()
 
 
-# ======================================================================
-# 3. Chunked Processing Demo
+# ## 3. Chunked Processing Demo
 #
 # For datasets that don't fit in memory, NLSQ automatically chunks the data and processes it in batches.
-# ======================================================================
+
+# In[6]:
 
 
 def demo_chunked_processing():
@@ -496,11 +488,12 @@ def demo_chunked_processing():
 demo_chunked_processing()
 
 
-# ======================================================================
-# 4. Streaming Optimization for Unlimited Datasets
+# ## 4. Streaming Optimization for Unlimited Datasets
 #
 # For datasets too large to fit in memory, NLSQ uses streaming optimization with mini-batch gradient descent. **Unlike subsampling (deprecated), streaming processes 100% of data with zero accuracy loss.**
-# ======================================================================
+#
+
+# In[7]:
 
 
 def demo_streaming_optimization():
@@ -527,7 +520,6 @@ def demo_streaming_optimization():
     # Memory estimation
     stats = estimate_memory_requirements(n_points_full, len(true_params))
     print(f"\nFull dataset memory estimate: {stats.total_memory_estimate_gb:.1f} GB")
-    print(f"Processing strategy: {stats.processing_strategy}")
     print(f"Number of chunks required: {stats.n_chunks}")
 
     # Configure streaming optimization
@@ -566,11 +558,11 @@ def demo_streaming_optimization():
 demo_streaming_optimization()
 
 
-# ======================================================================
-# 5. curve_fit_large Convenience Function
+# ## 5. curve_fit_large Convenience Function
 #
 # The `curve_fit_large` function provides automatic detection and handling of large datasets, making it easy to switch between standard and large dataset processing.
-# ======================================================================
+
+# In[8]:
 
 
 def demo_curve_fit_large():
@@ -627,11 +619,11 @@ def demo_curve_fit_large():
 demo_curve_fit_large()
 
 
-# ======================================================================
-# 6. Performance Comparison
+# ## 6. Performance Comparison
 #
 # Let's compare different approaches for various dataset sizes.
-# ======================================================================
+
+# In[9]:
 
 
 def compare_approaches():
@@ -684,8 +676,7 @@ def compare_approaches():
 compare_approaches()
 
 
-# ======================================================================
-# Summary and Key Takeaways
+# ## Summary and Key Takeaways
 #
 # NLSQ provides comprehensive support for large dataset fitting with recent improvements:
 #
@@ -697,7 +688,7 @@ compare_approaches()
 # 6. **Progress Reporting**: Long-running fits provide progress updates
 # 7. **Memory Estimation**: Predict memory requirements before fitting
 #
-# Best Practices:
+# ### Best Practices:
 #
 # - Use `curve_fit_large()` for automatic handling of both small and large datasets
 # - Use `estimate_memory_requirements()` to understand dataset requirements
@@ -706,13 +697,14 @@ compare_approaches()
 # - Enable streaming for very large datasets that exceed memory limits
 # - Use progress reporting for long-running fits
 #
-# Recent Improvements (v810dc5c):
+# ### Recent Improvements (v810dc5c):
 #
 # - **Fixed JAX tracing issues** for functions with many parameters
 # - **Enhanced chunking algorithm** with adaptive learning rates and convergence monitoring
 # - **Ensured return type consistency** across all code paths
 # - **Added comprehensive test coverage** for large dataset functionality
-# ======================================================================
+
+# In[10]:
 
 
 # Print final summary

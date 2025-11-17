@@ -1,15 +1,20 @@
-"""Demonstration of NLSQ Common Function Library
+#!/usr/bin/env python
 
-This script demonstrates the pre-built functions in NLSQ that make curve fitting
-trivial for common use cases. All functions include:
+# # Demonstration of NLSQ Common Function Library
+#
+# This script demonstrates the pre-built functions in NLSQ that make curve fitting
+# trivial for common use cases. All functions include:
+#
+# - Automatic parameter estimation (p0='auto')
+# - Reasonable default bounds
+# - JAX/GPU acceleration
+# - Comprehensive docstrings
+#
+# No manual parameter guessing needed!
+#
 
-- Automatic parameter estimation (p0='auto')
-- Reasonable default bounds
-- JAX/GPU acceleration
-- Comprehensive docstrings
+# In[1]:
 
-No manual parameter guessing needed!
-"""
 
 import matplotlib.pyplot as plt
 import numpy as np

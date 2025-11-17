@@ -1,18 +1,22 @@
-"""
-Enzyme Kinetics: Michaelis-Menten Analysis
-===========================================
+#!/usr/bin/env python
 
-This example demonstrates fitting enzyme kinetics data using the Michaelis-Menten
-model to determine K_M (Michaelis constant) and V_max (maximum velocity). We also
-show Lineweaver-Burk transformation and inhibition analysis.
+# # Enzyme Kinetics: Michaelis-Menten Analysis
+#
+#
+# This example demonstrates fitting enzyme kinetics data using the Michaelis-Menten
+# model to determine K_M (Michaelis constant) and V_max (maximum velocity). We also
+# show Lineweaver-Burk transformation and inhibition analysis.
+#
+# Key Concepts:
+# - Michaelis-Menten kinetics
+# - K_M and V_max determination
+# - Lineweaver-Burk plot (double reciprocal)
+# - Competitive vs non-competitive inhibition
+# - Hill equation for cooperative binding
+#
 
-Key Concepts:
-- Michaelis-Menten kinetics
-- K_M and V_max determination
-- Lineweaver-Burk plot (double reciprocal)
-- Competitive vs non-competitive inhibition
-- Hill equation for cooperative binding
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -102,7 +106,8 @@ def hill_equation(S, Vmax, K50, n):
     return Vmax * S**n / (K50**n + S**n)
 
 
-# === Generate Synthetic Enzyme Kinetics Data ===
+# In[2]:
+
 
 # Substrate concentrations (μM)
 S = np.array([1, 2, 5, 10, 20, 50, 100, 200, 500, 1000])
@@ -121,7 +126,9 @@ v_measured = v_true + noise
 # Measurement uncertainties (5% relative)
 sigma_v = 0.05 * v_measured + 1.0  # Add small constant for low velocities
 
-# === Fit Michaelis-Menten Model ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("ENZYME KINETICS: MICHAELIS-MENTEN ANALYSIS")
@@ -145,7 +152,9 @@ Vmax_fit, Km_fit = popt
 perr = np.sqrt(np.diag(pcov))
 Vmax_err, Km_err = perr
 
-# === Print Results ===
+
+# In[4]:
+
 
 print("\nFitted Parameters:")
 print(f"  V_max: {Vmax_fit:.2f} ± {Vmax_err:.2f} μM/min")
@@ -187,7 +196,9 @@ print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse:.2f} μM/min")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
 
-# === Lineweaver-Burk Plot (Double Reciprocal) ===
+
+# In[5]:
+
 
 print("\n" + "-" * 70)
 print("LINEWEAVER-BURK TRANSFORMATION")
@@ -200,6 +211,9 @@ print("-" * 70)
 S_inv = 1 / S
 v_inv = 1 / v_measured
 sigma_v_inv = sigma_v / v_measured**2  # Error propagation
+
+
+# In[6]:
 
 
 def linear_lb(S_inv, slope, intercept):
@@ -227,7 +241,9 @@ print(f"  V_max: {Vmax_lb:.2f} μM/min")
 print(f"  K_M:   {Km_lb:.2f} μM")
 print("\nNote: Direct Michaelis-Menten fit is preferred (better error weighting)")
 
-# === Competitive Inhibition Example ===
+
+# In[7]:
+
 
 print("\n" + "-" * 70)
 print("COMPETITIVE INHIBITION ANALYSIS")
@@ -243,6 +259,11 @@ v_inhibited = v_inhibited_true + noise_inh
 
 
 # Fit with inhibition model
+
+
+# In[8]:
+
+
 def competitive_inh_fit(S, Vmax, Km, Ki):
     return competitive_inhibition(S, Vmax, Km, I_conc, Ki)
 
@@ -266,7 +287,9 @@ print(f"  V_max:        {Vmax_inh:.2f} μM/min (unchanged)")
 print(f"  K_i:          {Ki_fit:.2f} ± {Ki_err:.2f} μM")
 print(f"  True K_i:     {Ki_true:.2f} μM")
 
-# === Visualization ===
+
+# In[9]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -426,7 +449,9 @@ plt.savefig("enzyme_kinetics.png", dpi=150)
 print("\n✅ Plot saved as 'enzyme_kinetics.png'")
 plt.show()
 
-# === Summary ===
+
+# In[10]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

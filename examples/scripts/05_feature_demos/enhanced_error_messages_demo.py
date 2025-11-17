@@ -1,9 +1,13 @@
-"""
-Demonstration of Enhanced Error Messages in NLSQ
+#!/usr/bin/env python
 
-This example shows how NLSQ provides intelligent, actionable error messages
-when optimization fails, helping users debug issues quickly.
-"""
+# # Demonstration of Enhanced Error Messages in NLSQ
+#
+# This example shows how NLSQ provides intelligent, actionable error messages
+# when optimization fails, helping users debug issues quickly.
+#
+
+# In[1]:
+
 
 import jax.numpy as jnp
 import numpy as np

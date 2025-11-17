@@ -1,18 +1,12 @@
-"""
-Converted from custom_algorithms_advanced.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# Custom Algorithms and Advanced Extensions
+# # Custom Algorithms and Advanced Extensions
 #
-# **Level**: Advanced / Research  
-# **Time**: 60-90 minutes  
+# **Level**: Advanced / Research
+# **Time**: 60-90 minutes
 # **Prerequisites**: NLSQ Quickstart, JAX fundamentals, optimization theory
 #
-# Overview
+# ## Overview
 #
 # This tutorial is for **researchers and advanced users** who want to:
 # - Implement custom optimization algorithms
@@ -20,7 +14,7 @@ This script was automatically generated from a Jupyter notebook.
 # - Extend NLSQ for novel applications
 # - Understand NLSQ's internals for research
 #
-# What You'll Learn
+# ### What You'll Learn
 #
 # 1. **NLSQ Architecture**: Understanding the optimization backend
 # 2. **Custom Loss Functions**: Beyond least squares
@@ -28,20 +22,21 @@ This script was automatically generated from a Jupyter notebook.
 # 4. **Advanced JAX Patterns**: Efficient curve fitting with JAX
 # 5. **Research Extensions**: Constrained optimization, robust methods
 #
-# Use Cases
+# ### Use Cases
 #
 # - **Custom loss**: Asymmetric penalties, quantile regression, robust M-estimators
 # - **Specialized optimizers**: Trust-region methods, second-order algorithms
 # - **Constrained problems**: Inequality constraints, manifold optimization
 # - **Novel applications**: Bayesian inference, inverse problems, PDE-constrained optimization
 #
-# Warning
+# ### Warning
 #
 # This is advanced material. Modifying optimization algorithms requires solid understanding of:
 # - Optimization theory (convexity, convergence, gradients)
 # - JAX programming model (JIT, grad, pytrees)
 # - Numerical stability considerations
-# ======================================================================
+
+# In[1]:
 
 
 """Advanced imports for custom algorithms."""
@@ -70,14 +65,14 @@ if OPTAX_AVAILABLE:
     print(f"  Optax version: {optax.__version__}")
 
 
-# ======================================================================
-# Part 1: Understanding NLSQ's Optimization Backend
+# ## Part 1: Understanding NLSQ's Optimization Backend
 #
 # Before customizing, let's understand how NLSQ works internally.
-# ======================================================================
+
+# In[2]:
 
 
-"""Exploring NLSQ internals."""
+# Exploring NLSQ internals.
 
 # Simple problem: fit exponential
 x_data = jnp.linspace(0, 5, 30)
@@ -130,26 +125,24 @@ gradient = grad_fn(popt, x_data, y_data)
 
 print(f"  Gradient at optimum: {gradient}")
 print(f"  Gradient norm: {jnp.linalg.norm(gradient):.2e} (should be ≈ 0)")
-print(
-    "  → Confirms NLSQ found a critical point where ∇L = 0 ✓"
-)
+print("  → Confirms NLSQ found a critical point where ∇L = 0 ✓")
 
 
-# ======================================================================
-# Part 2: Custom Loss Functions
+# ## Part 2: Custom Loss Functions
 #
 # Beyond standard least squares, we can implement custom loss functions for specialized needs.
-# ======================================================================
+
+# In[3]:
 
 
-"""Example 1: Robust loss function (Huber loss)."""
+# Example 1: Robust loss function (Huber loss).
 
 # Generate data with outliers
 x_robust = jnp.linspace(0, 10, 50)
 y_robust = 2.0 * x_robust + 1.0 + np.random.normal(0, 0.5, 50)
-# Add outliers
-outlier_idx = [5, 15, 35, 42]
-y_robust = y_robust.at[outlier_idx].add(np.array([5, -6, 4, -5]))
+# Add outliers (convert indices to JAX array for .at[] indexing)
+outlier_idx = jnp.array([5, 15, 35, 42])
+y_robust = y_robust.at[outlier_idx].add(jnp.array([5.0, -6.0, 4.0, -5.0]))
 
 
 def linear_model(x, a, b):
@@ -218,9 +211,9 @@ if OPTAX_AVAILABLE:
 
     print("Least Squares (sensitive to outliers):")
     print(f"  a={params_ls[0]:.3f}, b={params_ls[1]:.3f}")
-    print(f"\nHuber Loss (robust to outliers):")
+    print("\nHuber Loss (robust to outliers):")
     print(f"  a={params_huber[0]:.3f}, b={params_huber[1]:.3f}")
-    print(f"\nTrue parameters: a=2.0, b=1.0")
+    print("\nTrue parameters: a=2.0, b=1.0")
 
     # Visualization
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
@@ -268,7 +261,10 @@ else:
     print("⚠ Install optax to run this example: pip install optax")
 
 
-"""Example 2: Asymmetric loss (safety-critical applications)."""
+# In[4]:
+
+
+# Example 2: Asymmetric loss (safety-critical applications).
 
 
 def asymmetric_loss(params, x, y, alpha=2.0):
@@ -310,43 +306,40 @@ if OPTAX_AVAILABLE:
     )
 
 
-# ======================================================================
-# Part 3: Custom Optimization Algorithms
+# ## Part 3: Custom Optimization Algorithms
 #
 # Implement specialized optimization algorithms for specific problem structures.
-# ======================================================================
+
+# In[5]:
 
 
-"""Example: Gradient descent with momentum (from scratch)."""
+# Example: Gradient descent with momentum (from scratch).
 
 
 def gradient_descent_momentum(
     loss_fn, p0, x, y, lr=0.01, momentum=0.9, n_steps=1000, tol=1e-6
 ):
-    """Gradient descent with momentum optimizer.
-
-    Parameters
-    ----------
-    loss_fn : callable
-        Loss function: loss_fn(params, x, y) -> scalar
-    p0 : array
-        Initial parameters
-    lr : float
-        Learning rate
-    momentum : float
-        Momentum coefficient (0 = no momentum, 0.9 typical)
-    n_steps : int
-        Maximum iterations
-    tol : float
-        Convergence tolerance on gradient norm
-
-    Returns
-    -------
-    params : array
-        Optimized parameters
-    history : dict
-        Optimization history (params, loss, grad_norm)
-    """
+    # Gradient descent with momentum optimizer.
+    # Parameters
+    # ----------
+    # loss_fn : callable
+    # Loss function: loss_fn(params, x, y) -> scalar
+    # p0 : array
+    # Initial parameters
+    # lr : float
+    # Learning rate
+    # momentum : float
+    # Momentum coefficient (0 = no momentum, 0.9 typical)
+    # n_steps : int
+    # Maximum iterations
+    # tol : float
+    # Convergence tolerance on gradient norm
+    # Returns
+    # -------
+    # params : array
+    # Optimized parameters
+    # history : dict
+    # Optimization history (params, loss, grad_norm)
     params = jnp.array(p0, dtype=jnp.float32)
     velocity = jnp.zeros_like(params)
 
@@ -392,19 +385,19 @@ print(f"  Optimization steps: {len(history_gd['loss'])}")
 
 # Compare with NLSQ
 popt_nlsq, _ = cf.curve_fit(exponential, x_data, y_data, p0=[0.0, 0.0])
-print(f"\nNLSQ (Levenberg-Marquardt):")
+print("\nNLSQ (Levenberg-Marquardt):")
 print(f"  Final params: a={popt_nlsq[0]:.3f}, b={popt_nlsq[1]:.3f}")
-print(f"\n→ Both converge to similar solution ✓")
+print("\n→ Both converge to similar solution ✓")
 
 
-# ======================================================================
-# Part 4: Advanced JAX Patterns for Curve Fitting
+# ## Part 4: Advanced JAX Patterns for Curve Fitting
 #
 # Leverage JAX's advanced features for efficient batch fitting.
-# ======================================================================
+
+# In[6]:
 
 
-"""Vectorized batch fitting with vmap."""
+# Vectorized batch fitting with vmap.
 
 # Generate multiple datasets
 n_datasets = 100
@@ -417,7 +410,7 @@ b_true_batch = np.random.uniform(0.3, 0.7, n_datasets)
 y_batch = jnp.array(
     [
         a * jnp.exp(-b * x_batch) + np.random.normal(0, 0.05, len(x_batch))
-        for a, b in zip(a_true_batch, b_true_batch)
+        for a, b in zip(a_true_batch, b_true_batch, strict=False)
     ]
 )
 
@@ -465,7 +458,7 @@ b_fitted = params_batch[:, 1]
 a_error = np.mean(np.abs(a_fitted - a_true_batch))
 b_error = np.mean(np.abs(b_fitted - b_true_batch))
 
-print(f"Fitting accuracy:")
+print("Fitting accuracy:")
 print(f"  Mean absolute error in a: {a_error:.4f}")
 print(f"  Mean absolute error in b: {b_error:.4f}")
 
@@ -494,14 +487,14 @@ plt.show()
 print("\n→ vmap enables efficient parallel fitting across datasets ✓")
 
 
-# ======================================================================
-# Part 5: Research Extensions
+# ## Part 5: Research Extensions
 #
 # Advanced techniques for cutting-edge applications.
-# ======================================================================
+
+# In[7]:
 
 
-"""Example: Constrained optimization with penalty method."""
+# Example: Constrained optimization with penalty method.
 
 
 def constrained_loss(params, x, y, lambda_penalty=10.0):
@@ -535,7 +528,9 @@ y_const = (
 if OPTAX_AVAILABLE:
     # Unconstrained fit
     params_unconstr, _ = optimize_custom(
-        lambda p, x, y: jnp.sum((y - (p[0] * jnp.exp(-x) + p[1] * jnp.exp(-2 * x))) ** 2),
+        lambda p, x, y: jnp.sum(
+            (y - (p[0] * jnp.exp(-x) + p[1] * jnp.exp(-2 * x))) ** 2
+        ),
         [0.5, 0.5],
         x_const,
         y_const,
@@ -555,7 +550,7 @@ if OPTAX_AVAILABLE:
     print(
         f"  a={params_unconstr[0]:.4f}, b={params_unconstr[1]:.4f}, sum={params_unconstr[0] + params_unconstr[1]:.4f}"
     )
-    print(f"\nConstrained fit (a + b = 1):")
+    print("\nConstrained fit (a + b = 1):")
     print(
         f"  a={params_constr[0]:.4f}, b={params_constr[1]:.4f}, sum={params_constr[0] + params_constr[1]:.4f}"
     )
@@ -565,10 +560,9 @@ if OPTAX_AVAILABLE:
     )
 
 
-# ======================================================================
-# Summary and Best Practices
+# ## Summary and Best Practices
 #
-# When to Use Custom Algorithms
+# ### When to Use Custom Algorithms
 #
 # | **Application** | **Standard NLSQ** | **Custom Algorithm** |
 # |-----------------|-------------------|----------------------|
@@ -579,7 +573,7 @@ if OPTAX_AVAILABLE:
 # | Batch processing (1000s of fits) | Serial fitting | vmap for parallelization |
 # | Novel research problems | May not apply | Custom optimizer |
 #
-# Implementation Checklist
+# ### Implementation Checklist
 #
 # When implementing custom algorithms:
 #
@@ -590,22 +584,22 @@ if OPTAX_AVAILABLE:
 # 5. **Numerical stability**: Check for NaN/Inf, use stable formulations
 # 6. **Validate results**: Compare with standard methods when possible
 #
-# Advanced JAX Patterns
+# ### Advanced JAX Patterns
 #
 # ```python
-# Pattern 1: Efficient batch fitting
+# # Pattern 1: Efficient batch fitting
 # fit_single = jit(lambda y: optimize(loss_fn, y))
 # fit_batch = vmap(fit_single)  # Parallelize over batch dimension
 # results = fit_batch(y_batch)  # GPU-accelerated
 #
-# Pattern 2: Custom gradients for numerical stability
+# # Pattern 2: Custom gradients for numerical stability
 # from jax import custom_jvp
 #
 # @custom_jvp
 # def stable_exp(x):
 #     return jnp.exp(jnp.clip(x, -50, 50))  # Prevent overflow
 #
-# Pattern 3: Automatic differentiation through optimization
+# # Pattern 3: Automatic differentiation through optimization
 # def meta_objective(hyperparams):
 #     # Fit model with hyperparams
 #     params = optimize(loss_fn, hyperparams)
@@ -615,7 +609,7 @@ if OPTAX_AVAILABLE:
 # optimal_hyperparams = optimize(meta_objective, initial_hyperparams)
 # ```
 #
-# Research Extensions
+# ### Research Extensions
 #
 # Cutting-edge applications:
 #
@@ -625,7 +619,7 @@ if OPTAX_AVAILABLE:
 # 4. **Uncertainty quantification**: Laplace approximation, variational inference
 # 5. **Inverse problems**: Image reconstruction, tomography
 #
-# Production Recommendations
+# ### Production Recommendations
 #
 # For production use:
 # - **Default**: Use standard NLSQ (well-tested, robust)
@@ -634,7 +628,7 @@ if OPTAX_AVAILABLE:
 # - **Monitoring**: Track convergence, gradient norms, numerical stability
 # - **Fallback**: Implement standard NLSQ as backup if custom method fails
 #
-# References
+# ### References
 #
 # 1. **Optimization**: Nocedal & Wright, *Numerical Optimization* (2006)
 # 2. **JAX**: https://jax.readthedocs.io/
@@ -647,4 +641,3 @@ if OPTAX_AVAILABLE:
 # ---
 #
 # **Warning**: Custom algorithms can be powerful but require careful validation. Always test thoroughly before using in production!
-# ======================================================================

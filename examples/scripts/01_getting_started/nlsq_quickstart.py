@@ -1,34 +1,26 @@
-"""
-Converted from nlsq_quickstart.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# NLSQ Quickstart
+# # NLSQ Quickstart
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%20Quickstart.ipynb)
-# ======================================================================
 
-
-# ======================================================================
-# Requirements
+# ## Requirements
 #
 # **Important:** NLSQ requires Python 3.12 or higher. Please ensure your runtime environment meets this requirement before proceeding.
 #
-# Installing and Importing
+# ## Installing and Importing
 #
 # Make sure your runtime type is set to GPU rather than CPU for optimal performance. Then install NLSQ with pip:
-# ======================================================================
+
+# In[1]:
 
 
-!pip install nlsq
+get_ipython().system("pip install nlsq")
 
 
-# ======================================================================
 # Import NLSQ before importing JAX since we need NLSQ to set all the JAX computation to use 64 rather than 32 bit arrays.
-# ======================================================================
+
+# In[2]:
 
 
 # Check Python version
@@ -42,6 +34,9 @@ from nlsq import CurveFit, __version__
 print(f"NLSQ version: {__version__}")
 
 
+# In[3]:
+
+
 # Let's also import some of the new advanced features
 from nlsq import (
     MemoryConfig,
@@ -51,19 +46,18 @@ from nlsq import (
     set_memory_limits,
 )
 
-
-# ======================================================================
 # Now let's define a linear function using jax.numpy. You can construct function just like numpy with a few small caveats (see [current gotchas](https://github.com/Dipolar-Quantum-Gases/nlsq#current-gotchas)).
-# ======================================================================
+
+# In[4]:
 
 
 def linear(x, m, b):
     return m * x + b
 
 
-# ======================================================================
 # Using the function we just created, we'll simulate some synthetic fit data and show what it looks like.
-# ======================================================================
+
+# In[5]:
 
 
 import matplotlib.pyplot as plt
@@ -83,16 +77,13 @@ plt.plot(x, y)
 plt.show()
 
 
-# ======================================================================
 # Now let's use NLSQ to fit this data
-# ======================================================================
 
-
-# ======================================================================
-# Memory Management and Configuration
+# ## Memory Management and Configuration
 #
 # NLSQ now includes sophisticated memory management features that help you optimize performance and handle large datasets more efficiently.
-# ======================================================================
+
+# In[6]:
 
 
 # Check current memory configuration
@@ -110,6 +101,9 @@ print(f"  Recommended chunk size: {memory_stats.recommended_chunk_size}")
 print(f"  Number of chunks needed: {memory_stats.n_chunks}")
 
 
+# In[7]:
+
+
 # You can temporarily change memory settings using context managers
 print("Default memory limit:", get_memory_config().memory_limit_gb, "GB")
 
@@ -123,6 +117,9 @@ print("After context memory limit:", get_memory_config().memory_limit_gb, "GB")
 # Or you can set global memory limits
 set_memory_limits(memory_limit_gb=6.0, safety_factor=0.9)
 print("New global memory limit:", get_memory_config().memory_limit_gb, "GB")
+
+
+# In[8]:
 
 
 # Practical example: Automatically configure memory for large datasets
@@ -146,6 +143,9 @@ print(f"  Set memory limit to: {get_memory_config().memory_limit_gb} GB")
 print("✓ Memory management configured for large dataset processing")
 
 
+# In[9]:
+
+
 jcf = CurveFit()
 popt, pcov = jcf.curve_fit(linear, x, y, p0=(1, 1))
 y_fit = linear(x, *popt)
@@ -154,9 +154,9 @@ print("Actual Parameters", params)
 print("Fit Parameters", popt)
 
 
-# ======================================================================
 # Now we'll take a look at NLSQ's speed. We do the same fit as above with $3\times 10^5$ data points for twenty different sets of data and plot the speed for each of these fits.
-# ======================================================================
+
+# In[10]:
 
 
 import time
@@ -195,16 +195,13 @@ plt.xlabel("Fit Iteration")
 plt.ylabel("Fit Time (seconds)")
 
 
-# ======================================================================
 # As you can see, the first fit is quite slow as JAX is tracing all the functions in the NLSQ CurveFit object behind the scenes. However, after it has traced them once then it runs extremely quickly.
-# ======================================================================
 
-
-# ======================================================================
-# Varying Fit Data Array Size
+# ## Varying Fit Data Array Size
 #
 # What happens if we change the size of the data for each of these random fits though. Here we increase the data size from $10^3$ to $10^6$ and look at the fit speed.
-# ======================================================================
+
+# In[11]:
 
 
 def get_coordinates(length, xmin=0, xmax=10):
@@ -241,11 +238,11 @@ plt.xlabel("Data Length")
 plt.ylabel("Fit Time (seconds)")
 
 
-# ======================================================================
 # The fit speed is slow for every fit. This is because JAX must retrace a function whenever the size of the input array changes. However, NLSQ has a clever way of getting around this. We set a fixed data size (which should be greater than or equal to the largest data we'll fit) and then we use dummy data behind the scenes to keep the array sizes fixed.
 #
 # We do the same fits as above, but this time we set a fixed array size length when we instantiate the CurveFit object.
-# ======================================================================
+
+# In[12]:
 
 
 fixed_length = np.amax(lengths)
@@ -268,11 +265,11 @@ plt.xlabel("Data Length")
 plt.ylabel("Fit Time (seconds)")
 
 
-# ======================================================================
-# Our fits now run extremely fast irrespective of the datasize. There is a slight caveat to this in that the speed of the fits is always that of the fixed data size even if our actual data is smaller. 
+# Our fits now run extremely fast irrespective of the datasize. There is a slight caveat to this in that the speed of the fits is always that of the fixed data size even if our actual data is smaller.
 #
 # If you have two drastically different data sizes in your analysis however, you can instantiate two different CurveFit objects to get an overall fit speedup.
-# ======================================================================
+
+# In[13]:
 
 
 lmin = 10**3
@@ -312,11 +309,11 @@ plt.xlabel("Fit Iteration")
 plt.ylabel("Fit Time (seconds)")
 
 
-# ======================================================================
-# Fitting Multiple Functions
+# ## Fitting Multiple Functions
 #
 # It's important to instantiate a CurveFit object for each different function you're fitting as well to avoid JAX needing to retrace any underlying functions. First we show what happens if we use the same CurveFit object for two functions.
-# ======================================================================
+
+# In[14]:
 
 
 def quad_exp(x, a, b, c, d):
@@ -366,9 +363,9 @@ plt.legend()
 plt.show()
 
 
-# ======================================================================
-# And we see that by using the same fit object retracing is occuring for every fit. Now we instantiate two separate CurveFit objects for the two functions.
-# ======================================================================
+# And we see that by using the same fit object retracing is occurring for every fit. Now we instantiate two separate CurveFit objects for the two functions.
+
+# In[15]:
 
 
 jcf_linear = CurveFit()
@@ -409,16 +406,13 @@ plt.legend()
 plt.show()
 
 
-# ======================================================================
-# And now retracing is only occuring for the first fit for each CurveFit object.
-# ======================================================================
+# And now retracing is only occurring for the first fit for each CurveFit object.
 
-
-# ======================================================================
-# NLSQ vs. SciPy Fit Speed
+# ## NLSQ vs. SciPy Fit Speed
 #
 # Finally, let's compare the speed of NLSQ against SciPy.
-# ======================================================================
+
+# In[16]:
 
 
 def quad_exp_numpy(x, a, b, c, d):
@@ -461,6 +455,4 @@ plt.xlabel("Fit Iteration")
 plt.ylabel("Fit Time (seconds)")
 
 
-# ======================================================================
-# And we see it's so much faster minus the first fit in which tracing is occuring. Thus, by avoiding retracing and utilizing the GPU we get super fast fitting.
-# ======================================================================
+# And we see it's so much faster minus the first fit in which tracing is occurring. Thus, by avoiding retracing and utilizing the GPU we get super fast fitting.

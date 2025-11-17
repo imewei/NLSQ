@@ -1,18 +1,22 @@
-"""
-Radioactive Decay: Half-Life Calculation
-=========================================
+#!/usr/bin/env python
 
-This example demonstrates fitting radioactive decay data to determine
-the half-life of an isotope. We use real-world inspired data for Carbon-14
-(actual half-life: 5,730 years) and show how to propagate uncertainties
-to the calculated half-life.
+# # Radioactive Decay: Half-Life Calculation
+#
+#
+# This example demonstrates fitting radioactive decay data to determine
+# the half-life of an isotope. We use real-world inspired data for Carbon-14
+# (actual half-life: 5,730 years) and show how to propagate uncertainties
+# to the calculated half-life.
+#
+# Key Concepts:
+# - Exponential decay fitting
+# - Half-life calculation from decay constant
+# - Uncertainty propagation
+# - Parameter correlation analysis
+#
 
-Key Concepts:
-- Exponential decay fitting
-- Half-life calculation from decay constant
-- Uncertainty propagation
-- Parameter correlation analysis
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -90,7 +94,8 @@ def propagate_uncertainty(lambda_val, lambda_err):
     return t_half, t_half_err
 
 
-# === Generate Realistic C-14 Decay Data ===
+# In[2]:
+
 
 # True parameters (Carbon-14)
 N0_true = 1000.0  # Initial count rate (counts per minute)
@@ -111,7 +116,9 @@ N_measured = N_true + noise_level
 # Measurement uncertainties (standard deviations)
 sigma = 0.05 * N_true + 5  # Poisson + background
 
-# === Fit the Decay Model ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("RADIOACTIVE DECAY: CARBON-14 HALF-LIFE DETERMINATION")
@@ -133,7 +140,9 @@ N0_err, lambda_err = perr
 # Calculate half-life and propagate uncertainty
 t_half_fit, t_half_err = propagate_uncertainty(lambda_fit, lambda_err)
 
-# === Print Results ===
+
+# In[4]:
+
 
 print("\nFitted Parameters:")
 print(f"  N0 = {N0_fit:.2f} ± {N0_err:.2f} counts/min")
@@ -164,7 +173,9 @@ print("\nGoodness of Fit:")
 print(f"  χ² = {chi_squared:.2f}")
 print(f"  χ²/dof = {chi_squared_reduced:.2f} (expect ≈ 1.0 for good fit)")
 
-# === Visualization ===
+
+# In[5]:
+
 
 fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
@@ -243,7 +254,9 @@ plt.savefig("radioactive_decay.png", dpi=150)
 print("\n✅ Plot saved as 'radioactive_decay.png'")
 plt.show()
 
-# === Summary ===
+
+# In[6]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

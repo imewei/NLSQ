@@ -1,22 +1,16 @@
-"""
-Converted from research_workflow_case_study.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# Research Workflow Case Study: Raman Spectroscopy Peak Analysis
+# # Research Workflow Case Study: Raman Spectroscopy Peak Analysis
 #
-# **Level**: Advanced  
-# **Time**: 40-50 minutes  
+# **Level**: Advanced
+# **Time**: 40-50 minutes
 # **Prerequisites**: NLSQ Quickstart, Advanced Features Demo
 #
-# Overview
+# ## Overview
 #
 # This tutorial demonstrates a **complete research workflow** from raw experimental data to publication-ready results. We analyze Raman spectroscopy data from graphene oxide characterization, following best practices for scientific curve fitting.
 #
-# What You'll Learn
+# ### What You'll Learn
 #
 # 1. **Data Preprocessing**: Baseline subtraction, noise filtering, quality checks
 # 2. **Multi-Peak Fitting**: Lorentzian/Voigt profiles for overlapping peaks
@@ -25,7 +19,7 @@ This script was automatically generated from a Jupyter notebook.
 # 5. **Statistical Analysis**: Goodness-of-fit metrics, residual analysis
 # 6. **Results Reporting**: Tables, uncertainties, physical interpretation
 #
-# Scientific Context
+# ### Scientific Context
 #
 # Raman spectroscopy is widely used to characterize carbon materials. Graphene oxide exhibits two characteristic peaks:
 # - **D-band** (~1350 cm⁻¹): Disorder-induced peak
@@ -33,10 +27,11 @@ This script was automatically generated from a Jupyter notebook.
 #
 # The D/G intensity ratio quantifies the degree of disorder, crucial for materials characterization.
 #
-# Reference
+# ### Reference
 #
 # Based on methodology from: Ferrari & Robertson, *Phys. Rev. B* **61**, 14095 (2000)
-# ======================================================================
+
+# In[1]:
 
 
 """Research workflow case study imports."""
@@ -48,7 +43,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
 
-from nlsq import CurveFit
+from nlsq import CurveFit, __version__
 
 # Publication-quality matplotlib settings
 rcParams["figure.figsize"] = (10, 6)
@@ -65,17 +60,17 @@ rcParams["grid.alpha"] = 0.3
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 print("✓ Imports successful")
-print(f"  NLSQ version: {nlsq.__version__ if hasattr(nlsq, '__version__') else 'dev'}")
+print(f"  NLSQ version: {__version__}")
 
 
-# ======================================================================
-# Part 1: Data Generation and Preprocessing
+# ## Part 1: Data Generation and Preprocessing
 #
 # We'll simulate realistic Raman spectroscopy data with noise, then apply standard preprocessing steps.
-# ======================================================================
+
+# In[2]:
 
 
-"""Generate synthetic Raman spectroscopy data."""
+# Generate synthetic Raman spectroscopy data.
 
 # Experimental parameters (realistic values)
 wavenumber = np.linspace(1000, 2000, 500)  # Raman shift in cm^-1
@@ -138,7 +133,10 @@ print(f"  Signal-to-noise ratio: {clean_signal.max() / noise_level:.1f}")
 print(f"  True D/G ratio: {d_band_true['amp'] / g_band_true['amp']:.3f}")
 
 
-"""Preprocessing: baseline subtraction and quality checks."""
+# In[3]:
+
+
+# Preprocessing: baseline subtraction and quality checks.
 
 # Simple linear baseline estimation from edge regions
 edge_points = 50
@@ -153,7 +151,9 @@ intensity_corrected = intensity_measured - estimated_baseline
 print("Data Quality Checks:")
 print(f"  Max intensity: {intensity_corrected.max():.1f} counts")
 print(f"  Min intensity: {intensity_corrected.min():.1f} counts")
-print(f"  Negative points: {np.sum(intensity_corrected < 0)} / {len(intensity_corrected)}")
+print(
+    f"  Negative points: {np.sum(intensity_corrected < 0)} / {len(intensity_corrected)}"
+)
 
 # Clip small negative values (common in baseline-corrected spectra)
 intensity_corrected = np.maximum(intensity_corrected, 1.0)
@@ -161,7 +161,10 @@ intensity_corrected = np.maximum(intensity_corrected, 1.0)
 print("\n✓ Baseline correction applied")
 
 
-"""Visualize raw and preprocessed data."""
+# In[4]:
+
+
+# Visualize raw and preprocessed data.
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
@@ -174,9 +177,7 @@ ax1.set_title("(a) Raw Raman Spectrum")
 ax1.legend()
 
 # Baseline-corrected data
-ax2.plot(
-    wavenumber, intensity_corrected, "o", ms=2, alpha=0.5, label="Corrected data"
-)
+ax2.plot(wavenumber, intensity_corrected, "o", ms=2, alpha=0.5, label="Corrected data")
 ax2.axhline(0, color="k", ls=":", lw=1)
 ax2.set_xlabel("Raman Shift (cm⁻¹)")
 ax2.set_ylabel("Intensity (counts)")
@@ -189,14 +190,14 @@ plt.show()
 print("✓ Data preprocessing complete")
 
 
-# ======================================================================
-# Part 2: Multi-Peak Fitting with NLSQ
+# ## Part 2: Multi-Peak Fitting with NLSQ
 #
 # Fit the D and G bands simultaneously using a two-Lorentzian model.
-# ======================================================================
+
+# In[5]:
 
 
-"""Define multi-peak model for fitting."""
+# Define multi-peak model for fitting.
 
 
 def lorentzian_jax(x, pos, amp, width):
@@ -230,7 +231,10 @@ def two_peak_model(x, d_pos, d_amp, d_width, g_pos, g_amp, g_width):
 print("✓ Model defined: 6 parameters (2 peaks × 3 parameters)")
 
 
-"""Perform curve fitting with NLSQ."""
+# In[6]:
+
+
+# Perform curve fitting with NLSQ.
 
 # Initial parameter guess (from visual inspection)
 p0 = [
@@ -254,7 +258,7 @@ cf = CurveFit()
 # Fit with uncertainty estimation
 x_fit = jnp.array(wavenumber)
 y_fit = jnp.array(intensity_corrected)
-sigma_fit = jnp.array(sigma_measured)
+sigma_fit = np.array(sigma_measured)  # sigma must be numpy array
 
 popt, pcov = cf.curve_fit(
     two_peak_model,
@@ -288,14 +292,14 @@ print(f"  Amplitude: {g_amp_fit:.1f} ± {g_amp_err:.1f} counts")
 print(f"  FWHM: {g_width_fit:.1f} ± {g_width_err:.1f} cm⁻¹")
 
 
-# ======================================================================
-# Part 3: Uncertainty Quantification and Error Propagation
+# ## Part 3: Uncertainty Quantification and Error Propagation
 #
 # Calculate derived quantities (D/G ratio) with proper error propagation.
-# ======================================================================
+
+# In[7]:
 
 
-"""Error propagation for D/G intensity ratio."""
+# Error propagation for D/G intensity ratio.
 
 # D/G ratio (disorder quantification)
 dg_ratio = d_amp_fit / g_amp_fit
@@ -309,7 +313,9 @@ dg_ratio_err = dg_ratio * np.sqrt(
 print("Derived Quantity:")
 print(f"  D/G Intensity Ratio: {dg_ratio:.3f} ± {dg_ratio_err:.3f}")
 print(f"  True D/G ratio: {d_band_true['amp'] / g_band_true['amp']:.3f}")
-print(f"  Relative error: {abs(dg_ratio - d_band_true['amp'] / g_band_true['amp']) / (d_band_true['amp'] / g_band_true['amp']) * 100:.1f}%")
+print(
+    f"  Relative error: {abs(dg_ratio - d_band_true['amp'] / g_band_true['amp']) / (d_band_true['amp'] / g_band_true['amp']) * 100:.1f}%"
+)
 
 # Physical interpretation
 print("\nPhysical Interpretation:")
@@ -321,7 +327,10 @@ else:
     print("  → High disorder: Heavily oxidized material")
 
 
-"""Bootstrap resampling for robust uncertainty estimation."""
+# In[8]:
+
+
+# Bootstrap resampling for robust uncertainty estimation.
 
 n_bootstrap = 100  # Number of bootstrap samples
 bootstrap_ratios = []
@@ -332,7 +341,7 @@ for i in range(n_bootstrap):
     indices = np.random.choice(len(wavenumber), size=len(wavenumber), replace=True)
     x_boot = x_fit[indices]
     y_boot = y_fit[indices]
-    sigma_boot = sigma_fit[indices]
+    sigma_boot = np.array(sigma_fit[indices])  # sigma must be numpy array
 
     try:
         # Fit bootstrapped sample
@@ -363,15 +372,17 @@ print(f"  Mean D/G ratio: {dg_ratio_boot_mean:.3f} ± {dg_ratio_boot_std:.3f}")
 print(
     f"  95% Confidence Interval: [{dg_ratio_boot_ci[0]:.3f}, {dg_ratio_boot_ci[1]:.3f}]"
 )
-print(f"\n  Agreement with propagated error: {abs(dg_ratio_boot_std - dg_ratio_err) / dg_ratio_err * 100:.1f}%")
+print(
+    f"\n  Agreement with propagated error: {abs(dg_ratio_boot_std - dg_ratio_err) / dg_ratio_err * 100:.1f}%"
+)
 
 
-# ======================================================================
-# Part 4: Statistical Analysis and Goodness-of-Fit
-# ======================================================================
+# ## Part 4: Statistical Analysis and Goodness-of-Fit
+
+# In[9]:
 
 
-"""Calculate goodness-of-fit metrics."""
+# Calculate goodness-of-fit metrics.
 
 # Predicted values
 y_pred = two_peak_model(x_fit, *popt)
@@ -411,7 +422,10 @@ else:
     print("\n  ⚠ Overfit or underestimated uncertainties")
 
 
-"""Residual analysis for model validation."""
+# In[10]:
+
+
+# Residual analysis for model validation.
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -454,20 +468,18 @@ plt.tight_layout()
 plt.show()
 
 print("✓ Residual analysis complete")
-print(
-    f"  Residual mean: {np.mean(weighted_residuals):.3f} (expect 0 for unbiased fit)"
-)
+print(f"  Residual mean: {np.mean(weighted_residuals):.3f} (expect 0 for unbiased fit)")
 print(
     f"  Residual std: {np.std(weighted_residuals):.3f} (expect 1 for correct uncertainties)"
 )
 
 
-# ======================================================================
-# Part 5: Publication-Quality Visualization
-# ======================================================================
+# ## Part 5: Publication-Quality Visualization
+
+# In[11]:
 
 
-"""Create publication-ready figure with all components."""
+# Create publication-ready figure with all components.
 
 fig = plt.figure(figsize=(12, 8))
 gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
@@ -491,9 +503,7 @@ ax_main.errorbar(
 )
 
 # Plot total fit
-ax_main.plot(
-    wavenumber, y_pred, "r-", lw=2.5, label="Total fit", zorder=10, alpha=0.9
-)
+ax_main.plot(wavenumber, y_pred, "r-", lw=2.5, label="Total fit", zorder=10, alpha=0.9)
 
 # Plot individual components
 d_component = lorentzian_jax(x_fit, d_pos_fit, d_amp_fit, d_width_fit)
@@ -511,7 +521,7 @@ ax_main.annotate(
     f"D\n{d_pos_fit:.0f} cm⁻¹",
     xy=(d_pos_fit, d_amp_fit),
     xytext=(d_pos_fit - 100, d_amp_fit + 200),
-    arrowprops=dict(arrowstyle="->", lw=1.5),
+    arrowprops={"arrowstyle": "->", "lw": 1.5},
     fontsize=11,
     ha="center",
 )
@@ -519,7 +529,7 @@ ax_main.annotate(
     f"G\n{g_pos_fit:.0f} cm⁻¹",
     xy=(g_pos_fit, g_amp_fit),
     xytext=(g_pos_fit + 100, g_amp_fit + 200),
-    arrowprops=dict(arrowstyle="->", lw=1.5),
+    arrowprops={"arrowstyle": "->", "lw": 1.5},
     fontsize=11,
     ha="center",
 )
@@ -527,7 +537,9 @@ ax_main.annotate(
 ax_main.set_xlabel("Raman Shift (cm⁻¹)", fontsize=12)
 ax_main.set_ylabel("Intensity (counts)", fontsize=12)
 ax_main.set_title(
-    "Raman Spectrum of Graphene Oxide: D and G Band Analysis", fontsize=14, weight="bold"
+    "Raman Spectrum of Graphene Oxide: D and G Band Analysis",
+    fontsize=14,
+    weight="bold",
 )
 ax_main.legend(loc="upper right", frameon=True, shadow=True)
 ax_main.set_xlim(1000, 2000)
@@ -577,12 +589,8 @@ for i in range(3):
 
 # Bottom right: Bootstrap distribution
 ax_boot = fig.add_subplot(gs[1, 1])
-ax_boot.hist(
-    bootstrap_ratios, bins=20, alpha=0.7, edgecolor="black", color="steelblue"
-)
-ax_boot.axvline(
-    dg_ratio, color="r", ls="--", lw=2, label=f"Fitted: {dg_ratio:.3f}"
-)
+ax_boot.hist(bootstrap_ratios, bins=20, alpha=0.7, edgecolor="black", color="steelblue")
+ax_boot.axvline(dg_ratio, color="r", ls="--", lw=2, label=f"Fitted: {dg_ratio:.3f}")
 ax_boot.axvline(dg_ratio_boot_ci[0], color="orange", ls=":", lw=1.5, label="95% CI")
 ax_boot.axvline(dg_ratio_boot_ci[1], color="orange", ls=":", lw=1.5)
 ax_boot.set_xlabel("D/G Intensity Ratio")
@@ -607,10 +615,9 @@ print("✓ Publication figure generated")
 print("  Recommendation: Save as PDF for LaTeX, PNG (300 dpi) for presentations")
 
 
-# ======================================================================
-# Summary and Best Practices
+# ## Summary and Best Practices
 #
-# Complete Research Workflow
+# ### Complete Research Workflow
 #
 # 1. **Data Preprocessing**
 #    - Baseline correction (polynomial, edge-fitting, or automated)
@@ -646,10 +653,10 @@ print("  Recommendation: Save as PDF for LaTeX, PNG (300 dpi) for presentations"
 #    - Statistical metrics
 #    - Physical interpretation
 #
-# Production Recommendations
+# ### Production Recommendations
 #
 # ```python
-# For batch processing multiple spectra
+# # For batch processing multiple spectra
 # results = []
 # for spectrum_file in spectrum_files:
 #     wavenumber, intensity = load_spectrum(spectrum_file)
@@ -657,13 +664,13 @@ print("  Recommendation: Save as PDF for LaTeX, PNG (300 dpi) for presentations"
 #     popt, pcov = cf.curve_fit(model, x, y, ...)
 #     results.append({'file': spectrum_file, 'params': popt, 'cov': pcov})
 #
-# Save results to structured format
+# # Save results to structured format
 # import pandas as pd
 # df = pd.DataFrame(results)
 # df.to_csv('batch_fitting_results.csv')
 # ```
 #
-# Next Steps
+# ### Next Steps
 #
 # - **Extend to 3+ peaks**: Add more Lorentzian components for complex spectra
 # - **Voigt profiles**: Mix Gaussian and Lorentzian for realistic broadening
@@ -671,7 +678,7 @@ print("  Recommendation: Save as PDF for LaTeX, PNG (300 dpi) for presentations"
 # - **Batch processing**: Analyze multiple samples with automated workflows
 # - **Advanced models**: Background modeling with splines or polynomials
 #
-# References
+# ### References
 #
 # 1. Ferrari & Robertson, *Phys. Rev. B* **61**, 14095 (2000)
 # 2. NLSQ Documentation: https://nlsq.readthedocs.io/
@@ -679,4 +686,3 @@ print("  Recommendation: Save as PDF for LaTeX, PNG (300 dpi) for presentations"
 #    - `nlsq_quickstart.ipynb` - Basic curve fitting
 #    - `advanced_features_demo.ipynb` - Diagnostics and robustness
 #    - `gallery/physics/spectroscopy_peaks.py` - Simple peak fitting
-# ======================================================================

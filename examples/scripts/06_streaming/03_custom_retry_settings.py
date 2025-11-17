@@ -1,17 +1,22 @@
-"""Example 3: Custom Retry Settings for Noisy Data
+#!/usr/bin/env python
 
-This example demonstrates how to configure retry strategies and success rate
-thresholds for datasets with high failure rates or very noisy data.
+# # Example 3: Custom Retry Settings for Noisy Data
+#
+# This example demonstrates how to configure retry strategies and success rate
+# thresholds for datasets with high failure rates or very noisy data.
+#
+# Features demonstrated:
+# - Configurable success rate thresholds
+# - Adaptive retry strategies
+# - Error type analysis
+# - Retry count tracking
+#
+# Run this example:
+#     python examples/streaming/03_custom_retry_settings.py
+#
 
-Features demonstrated:
-- Configurable success rate thresholds
-- Adaptive retry strategies
-- Error type analysis
-- Retry count tracking
+# In[1]:
 
-Run this example:
-    python examples/streaming/03_custom_retry_settings.py
-"""
 
 import jax.numpy as jnp
 import numpy as np

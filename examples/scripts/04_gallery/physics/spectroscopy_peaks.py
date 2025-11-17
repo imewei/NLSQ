@@ -1,18 +1,22 @@
-"""
-Spectroscopy Peak Fitting: Multi-Peak Deconvolution
-====================================================
+#!/usr/bin/env python
 
-This example demonstrates fitting multiple peaks in a spectroscopy spectrum,
-a common task in X-ray, Raman, and optical spectroscopy. We fit overlapping
-Gaussian and Lorentzian peaks with background subtraction.
+# # Spectroscopy Peak Fitting: Multi-Peak Deconvolution
+#
+#
+# This example demonstrates fitting multiple peaks in a spectroscopy spectrum,
+# a common task in X-ray, Raman, and optical spectroscopy. We fit overlapping
+# Gaussian and Lorentzian peaks with background subtraction.
+#
+# Key Concepts:
+# - Multi-peak fitting (3 overlapping peaks)
+# - Gaussian and Lorentzian line shapes
+# - Linear background subtraction
+# - Peak area integration
+# - Parameter constraints (positive widths, amplitudes)
+#
 
-Key Concepts:
-- Multi-peak fitting (3 overlapping peaks)
-- Gaussian and Lorentzian line shapes
-- Linear background subtraction
-- Peak area integration
-- Parameter constraints (positive widths, amplitudes)
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -118,7 +122,8 @@ def multi_peak_model(
     return background + peak1 + peak2 + peak3
 
 
-# === Generate Synthetic Spectroscopy Data ===
+# In[2]:
+
 
 # Energy axis (keV for X-ray spectroscopy example)
 energy = np.linspace(5, 15, 500)  # 500 channels
@@ -160,7 +165,9 @@ spectrum_measured = spectrum_true + noise
 # Measurement uncertainties (Poisson)
 sigma = np.sqrt(spectrum_measured + 10)
 
-# === Fit the Spectrum ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("SPECTROSCOPY PEAK FITTING: MULTI-PEAK DECONVOLUTION")
@@ -253,7 +260,9 @@ perr = np.sqrt(np.diag(pcov))
     width3_err,
 ) = perr
 
-# === Print Results ===
+
+# In[4]:
+
 
 print("\nFitted Parameters:")
 print("\nBackground:")
@@ -295,7 +304,9 @@ chi_squared_reduced = chi_squared / dof
 print("\nGoodness of Fit:")
 print(f"  χ²/dof = {chi_squared_reduced:.2f} (expect ≈ 1.0)")
 
-# === Visualization ===
+
+# In[5]:
+
 
 fig = plt.figure(figsize=(16, 10))
 
@@ -419,7 +430,9 @@ plt.savefig("spectroscopy_peaks.png", dpi=150)
 print("\n✅ Plot saved as 'spectroscopy_peaks.png'")
 plt.show()
 
-# === Summary ===
+
+# In[6]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

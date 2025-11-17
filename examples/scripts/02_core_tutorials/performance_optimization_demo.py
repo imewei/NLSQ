@@ -1,12 +1,6 @@
-"""
-Converted from performance_optimization_demo.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# NLSQ Performance Optimization Features
+# # NLSQ Performance Optimization Features
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/performance_optimization_demo.ipynb)
 #
@@ -23,16 +17,17 @@ This script was automatically generated from a Jupyter notebook.
 # - Memory-constrained environments
 # - Real-time or low-latency applications
 # - Problems with structured sparsity patterns
-# ======================================================================
 
+# ## Setup and Imports
 
-# ======================================================================
-# Setup and Imports
-# ======================================================================
+# In[1]:
 
 
 # Install NLSQ if not already installed
-!pip install nlsq
+get_ipython().system("pip install nlsq")
+
+
+# In[2]:
 
 
 import sys
@@ -52,6 +47,9 @@ from nlsq import CurveFit, __version__
 
 print(f"NLSQ version: {__version__}")
 print(f"JAX devices: {jax.devices()}")
+
+
+# In[3]:
 
 
 # Import advanced performance features
@@ -76,8 +74,7 @@ from nlsq import (
 print("✅ Advanced features imported successfully")
 
 
-# ======================================================================
-# 1. MemoryPool - Zero-Allocation Optimization
+# ## 1. MemoryPool - Zero-Allocation Optimization
 #
 # The MemoryPool pre-allocates and reuses array buffers to eliminate allocation overhead during optimization iterations. This is critical for:
 #
@@ -85,13 +82,14 @@ print("✅ Advanced features imported successfully")
 # - **Repeated fits**: Amortize allocation costs
 # - **Memory-constrained systems**: Predictable memory usage
 #
-# How It Works
+# ### How It Works
 #
 # 1. Pre-allocate buffers for common shapes
 # 2. Reuse buffers instead of creating new arrays
 # 3. Track allocation statistics
 # 4. Automatic cleanup with context managers
-# ======================================================================
+
+# In[4]:
 
 
 def demo_memory_pool_basics():
@@ -142,9 +140,9 @@ def demo_memory_pool_basics():
 demo_memory_pool_basics()
 
 
-# ======================================================================
-# Performance Comparison: With vs Without Memory Pool
-# ======================================================================
+# ### Performance Comparison: With vs Without Memory Pool
+
+# In[5]:
 
 
 def benchmark_memory_pool_performance():
@@ -207,9 +205,9 @@ def benchmark_memory_pool_performance():
 benchmark_memory_pool_performance()
 
 
-# ======================================================================
-# Using MemoryPool as Context Manager
-# ======================================================================
+# ### Using MemoryPool as Context Manager
+
+# In[6]:
 
 
 def demo_memory_pool_context_manager():
@@ -248,8 +246,7 @@ def demo_memory_pool_context_manager():
 demo_memory_pool_context_manager()
 
 
-# ======================================================================
-# 2. SparseJacobian - Exploiting Sparsity for Memory Efficiency
+# ## 2. SparseJacobian - Exploiting Sparsity for Memory Efficiency
 #
 # Many curve fitting problems have **sparse Jacobians** where each data point only depends on a subset of parameters. The `SparseJacobianComputer` exploits this structure for:
 #
@@ -257,13 +254,14 @@ demo_memory_pool_context_manager()
 # - **Faster computation**: Skip zero elements in matrix operations
 # - **Larger problems**: Fit problems that wouldn't fit in memory otherwise
 #
-# When to Use Sparse Jacobians
+# ### When to Use Sparse Jacobians
 #
 # - **Piecewise models**: Different parameters for different data regions
 # - **Multi-component fits**: Independent sub-models
 # - **Localized parameters**: Parameters affecting only nearby data points
 # - **Very large problems**: Millions of data points
-# ======================================================================
+
+# In[7]:
 
 
 def demo_sparse_jacobian_basics():
@@ -339,9 +337,9 @@ def demo_sparse_jacobian_basics():
 demo_sparse_jacobian_basics()
 
 
-# ======================================================================
-# Memory Savings Analysis
-# ======================================================================
+# ### Memory Savings Analysis
+
+# In[8]:
 
 
 def analyze_sparse_jacobian_memory_savings():
@@ -399,9 +397,9 @@ def analyze_sparse_jacobian_memory_savings():
 analyze_sparse_jacobian_memory_savings()
 
 
-# ======================================================================
-# Using Sparse Jacobians in Practice
-# ======================================================================
+# ### Using Sparse Jacobians in Practice
+
+# In[9]:
 
 
 def demo_sparse_jacobian_fitting():
@@ -520,8 +518,7 @@ def demo_sparse_jacobian_fitting():
 demo_sparse_jacobian_fitting()
 
 
-# ======================================================================
-# 3. StreamingOptimizer - Unlimited Dataset Size
+# ## 3. StreamingOptimizer - Unlimited Dataset Size
 #
 # The `StreamingOptimizer` processes data in batches without ever loading the full dataset into memory. This enables:
 #
@@ -530,13 +527,14 @@ demo_sparse_jacobian_fitting()
 # - **Incremental fitting**: Add data incrementally without refitting from scratch
 # - **Distributed data**: Data stored across multiple files or databases
 #
-# When to Use Streaming
+# ### When to Use Streaming
 #
 # - **Very large datasets**: >10GB of data
 # - **Data on disk**: HDF5 files, databases, etc.
 # - **Memory constraints**: Limited RAM relative to data size
 # - **Online learning**: Continuous data streams
-# ======================================================================
+
+# In[10]:
 
 
 def demo_streaming_optimizer_basics():
@@ -628,9 +626,9 @@ def demo_streaming_optimizer_basics():
 demo_streaming_optimizer_basics()
 
 
-# ======================================================================
-# Creating and Using HDF5 Datasets
-# ======================================================================
+# ### Creating and Using HDF5 Datasets
+
+# In[11]:
 
 
 def demo_hdf5_streaming():
@@ -723,11 +721,11 @@ def demo_hdf5_streaming():
 demo_hdf5_streaming()
 
 
-# ======================================================================
-# 4. Combined Example: All Features Together
+# ## 4. Combined Example: All Features Together
 #
 # Let's demonstrate how to combine all three advanced features for maximum performance on a large, sparse problem.
-# ======================================================================
+
+# In[12]:
 
 
 def demo_combined_optimization():
@@ -916,12 +914,11 @@ def demo_combined_optimization():
 demo_combined_optimization()
 
 
-# ======================================================================
-# 5. Best Practices and Recommendations
+# ## 5. Best Practices and Recommendations
 #
-# When to Use Each Feature
+# ### When to Use Each Feature
 #
-# MemoryPool
+# #### MemoryPool
 # ✅ **Use when:**
 # - Fitting the same model many times
 # - Optimization has many iterations
@@ -933,7 +930,7 @@ demo_combined_optimization()
 # - Variable array sizes
 # - Memory is abundant
 #
-# SparseJacobian
+# #### SparseJacobian
 # ✅ **Use when:**
 # - Jacobian has >90% sparsity
 # - Very large problems (millions of points)
@@ -945,7 +942,7 @@ demo_combined_optimization()
 # - Small problems (<10K points)
 # - Simple global models
 #
-# StreamingOptimizer
+# #### StreamingOptimizer
 # ✅ **Use when:**
 # - Dataset >10GB or doesn't fit in memory
 # - Data in files/databases
@@ -957,7 +954,7 @@ demo_combined_optimization()
 # - Batch methods are fast enough
 # - Need exact convergence guarantees
 #
-# Performance Tips
+# ### Performance Tips
 #
 # 1. **Profile first**: Identify actual bottlenecks before optimizing
 # 2. **Combine techniques**: Use multiple features together
@@ -965,7 +962,7 @@ demo_combined_optimization()
 # 4. **Start simple**: Add optimizations incrementally
 # 5. **Monitor memory**: Track memory usage during development
 #
-# Typical Workflows
+# ### Typical Workflows
 #
 # **Small problems (<10K points):**
 # ```python
@@ -987,7 +984,7 @@ demo_combined_optimization()
 # from nlsq import SparseJacobianComputer, SparseOptimizer
 # sparse_comp = SparseJacobianComputer()
 # pattern, sparsity = sparse_comp.detect_sparsity_pattern(func, x0, x_sample)
-# Use sparse-aware optimization
+# # Use sparse-aware optimization
 # ```
 #
 # **Unlimited data:**
@@ -997,11 +994,8 @@ demo_combined_optimization()
 # optimizer = StreamingOptimizer(config)
 # result = optimizer.fit_streaming(func, data_source, p0)
 # ```
-# ======================================================================
 
-
-# ======================================================================
-# Summary
+# ## Summary
 #
 # This notebook demonstrated NLSQ's advanced performance optimization features:
 #
@@ -1020,7 +1014,7 @@ demo_combined_optimization()
 # - Batch-based processing with adaptive learning
 # - Suitable for >10GB datasets or online learning
 #
-# Key Takeaways
+# ### Key Takeaways
 #
 # 1. **Profile before optimizing**: Identify real bottlenecks
 # 2. **Combine techniques**: Multiple features work together
@@ -1032,7 +1026,7 @@ demo_combined_optimization()
 #
 # ---
 #
-# Additional Resources
+# ## Additional Resources
 #
 # - **NLSQ Documentation**: [https://nlsq.readthedocs.io](https://nlsq.readthedocs.io)
 # - **GitHub Repository**: [https://github.com/imewei/NLSQ](https://github.com/imewei/NLSQ)
@@ -1043,4 +1037,3 @@ demo_combined_optimization()
 #   - 2D Gaussian Demo
 #
 # *This notebook demonstrates advanced performance optimization features. Requires Python 3.12+ and NLSQ >= 0.1.0.*
-# ======================================================================

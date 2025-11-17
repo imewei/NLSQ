@@ -1,12 +1,6 @@
-"""
-Converted from advanced_features_demo.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# NLSQ Advanced Features Demo
+# # NLSQ Advanced Features Demo
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/advanced_features_demo.ipynb)
 #
@@ -20,16 +14,17 @@ This script was automatically generated from a Jupyter notebook.
 # - **Smart Caching**: Intelligent caching for repeated optimizations
 # - **Validation & Robustness**: Input validation and robust decomposition methods
 # - **Algorithm Selection**: Intelligent algorithm selection based on problem characteristics
-# ======================================================================
 
+# ## Setup and Imports
 
-# ======================================================================
-# Setup and Imports
-# ======================================================================
+# In[1]:
 
 
 # Install NLSQ if not already installed
-!pip install nlsq
+get_ipython().system("pip install nlsq")
+
+
+# In[2]:
 
 
 # Check Python version first
@@ -74,11 +69,11 @@ print(f"JAX devices: {jax.devices()}")
 print(f"JAX version: {jax.__version__}")
 
 
-# ======================================================================
-# Model Functions for Testing
+# ## Model Functions for Testing
 #
 # We'll define several test functions with different characteristics to demonstrate the advanced features.
-# ======================================================================
+
+# In[3]:
 
 
 def well_conditioned_model(x, a, b, c):
@@ -114,11 +109,11 @@ def problematic_model(x, a, b, c):
 print("✅ Test models defined")
 
 
-# ======================================================================
-# 1. Diagnostics and Monitoring
+# ## 1. Diagnostics and Monitoring
 #
 # NLSQ provides detailed diagnostics about the optimization process, helping you understand convergence behavior and identify potential issues.
-# ======================================================================
+
+# In[4]:
 
 
 def create_diagnostic_data():
@@ -236,11 +231,11 @@ plt.tight_layout()
 plt.show()
 
 
-# ======================================================================
-# Comprehensive Fitting Analysis
+# ### Comprehensive Fitting Analysis
 #
 # Let's fit all datasets and analyze the results to demonstrate diagnostic capabilities.
-# ======================================================================
+
+# In[5]:
 
 
 def comprehensive_fitting_analysis():
@@ -292,11 +287,11 @@ def comprehensive_fitting_analysis():
 fit_results = comprehensive_fitting_analysis()
 
 
-# ======================================================================
-# 2. Algorithm Selection and Optimization Strategies
+# ## 2. Algorithm Selection and Optimization Strategies
 #
 # NLSQ can automatically select the best algorithm based on problem characteristics.
-# ======================================================================
+
+# In[6]:
 
 
 def demonstrate_algorithm_selection():
@@ -397,11 +392,11 @@ def demonstrate_algorithm_selection():
 demonstrate_algorithm_selection()
 
 
-# ======================================================================
-# 3. Robustness and Error Handling
+# ## 3. Robustness and Error Handling
 #
 # Test NLSQ's robustness with challenging datasets and error conditions.
-# ======================================================================
+
+# In[7]:
 
 
 def test_robustness():
@@ -519,11 +514,11 @@ def test_robustness():
 test_robustness()
 
 
-# ======================================================================
-# 4. Memory Management and Performance Optimization
+# ## 4. Memory Management and Performance Optimization
 #
 # Demonstrate NLSQ's advanced memory management capabilities.
-# ======================================================================
+
+# In[8]:
 
 
 def demonstrate_memory_management():
@@ -644,11 +639,11 @@ def demonstrate_memory_management():
 demonstrate_memory_management()
 
 
-# ======================================================================
-# 5. Complex Multi-Parameter Models
+# ## 5. Complex Multi-Parameter Models
 #
 # Test NLSQ with complex models that have many parameters and potential correlation issues.
-# ======================================================================
+
+# In[9]:
 
 
 def test_complex_models():
@@ -788,11 +783,11 @@ def test_complex_models():
 test_complex_models()
 
 
-# ======================================================================
-# 6. Performance Benchmarking
+# ## 6. Performance Benchmarking
 #
 # Compare NLSQ performance across different scenarios and configurations.
-# ======================================================================
+
+# In[10]:
 
 
 def performance_benchmark():
@@ -953,11 +948,11 @@ def performance_benchmark():
 performance_benchmark()
 
 
-# ======================================================================
-# 7. Summary and Best Practices
+# ## 7. Summary and Best Practices
 #
 # Based on all the tests, let's summarize the key findings and provide best practices for using NLSQ's advanced features.
-# ======================================================================
+
+# In[11]:
 
 
 def print_summary_and_best_practices():
@@ -1061,10 +1056,9 @@ def print_summary_and_best_practices():
 print_summary_and_best_practices()
 
 
-# ======================================================================
 # ---
 #
-# 📚 Additional Resources
+# ## 📚 Additional Resources
 #
 # For more information about NLSQ and its advanced features:
 #
@@ -1073,12 +1067,12 @@ print_summary_and_best_practices()
 # - **Issues & Support**: [https://github.com/imewei/NLSQ/issues](https://github.com/imewei/NLSQ/issues)
 # - **PyPI Package**: [https://pypi.org/project/nlsq/](https://pypi.org/project/nlsq/)
 #
-# Other Example Notebooks:
+# ### Other Example Notebooks:
 # - **NLSQ Quickstart**: Basic usage and core features
-# - **2D Gaussian Demo**: Multi-dimensional fitting examples  
+# - **2D Gaussian Demo**: Multi-dimensional fitting examples
 # - **Large Dataset Demo**: Memory management and performance optimization
 #
-# Related Libraries:
+# ### Related Libraries:
 # - **JAX**: [https://jax.readthedocs.io](https://jax.readthedocs.io)
 # - **SciPy**: [https://scipy.org](https://scipy.org)
 # - **NumPy**: [https://numpy.org](https://numpy.org)
@@ -1086,4 +1080,3 @@ print_summary_and_best_practices()
 # ---
 #
 # *This notebook demonstrates NLSQ's advanced features. Requires Python 3.12+ and NLSQ >= 0.1.0. Some features may require optional dependencies.*
-# ======================================================================

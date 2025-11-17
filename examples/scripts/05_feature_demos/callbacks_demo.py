@@ -1,9 +1,13 @@
-"""
-Demo: Progress Callbacks for Optimization Monitoring
+#!/usr/bin/env python
 
-This example demonstrates how to use NLSQ's callback system to monitor
-optimization progress with progress bars, logging, and early stopping.
-"""
+# # Demo: Progress Callbacks for Optimization Monitoring
+#
+# This example demonstrates how to use NLSQ's callback system to monitor
+# optimization progress with progress bars, logging, and early stopping.
+#
+
+# In[1]:
+
 
 import jax.numpy as jnp
 import numpy as np
@@ -33,9 +37,10 @@ def generate_sample_data():
     return x, y, y_true
 
 
-# ============================================================================
-# Example 1: Simple Progress Bar
-# ============================================================================
+# ## Example 1: Simple Progress Bar
+#
+
+# In[2]:
 
 
 def example1_progress_bar():
@@ -63,9 +68,10 @@ def example1_progress_bar():
     )
 
 
-# ============================================================================
-# Example 2: Iteration Logging
-# ============================================================================
+# ## Example 2: Iteration Logging
+#
+
+# In[3]:
 
 
 def example2_iteration_logging():
@@ -101,9 +107,10 @@ def example2_iteration_logging():
         print("".join(lines[:10]))  # Show first 10 lines
 
 
-# ============================================================================
-# Example 3: Early Stopping
-# ============================================================================
+# ## Example 3: Early Stopping
+#
+
+# In[4]:
 
 
 def example3_early_stopping():
@@ -138,9 +145,10 @@ def example3_early_stopping():
     )
 
 
-# ============================================================================
-# Example 4: Combining Multiple Callbacks
-# ============================================================================
+# ## Example 4: Combining Multiple Callbacks
+#
+
+# In[5]:
 
 
 def example4_callback_chain():
@@ -173,9 +181,10 @@ def example4_callback_chain():
     print("Check 'combined.log' for detailed iteration history.")
 
 
-# ============================================================================
-# Example 5: Custom Callback
-# ============================================================================
+# ## Example 5: Custom Callback
+#
+
+# In[6]:
 
 
 class BestParameterTracker(CallbackBase):
@@ -198,6 +207,9 @@ class BestParameterTracker(CallbackBase):
     def get_best(self):
         """Return best parameters found."""
         return self.best_params, self.best_cost
+
+
+# In[7]:
 
 
 def example5_custom_callback():
@@ -225,9 +237,10 @@ def example5_custom_callback():
     print(f"✓ Final fit parameters match best: {np.allclose(popt, best_params)}")
 
 
-# ============================================================================
-# Main Demo
-# ============================================================================
+# ## Main Demo
+#
+
+# In[8]:
 
 
 def main():

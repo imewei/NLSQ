@@ -1,18 +1,23 @@
-"""Example 1: Basic Fault Tolerance with Streaming Optimizer
+#!/usr/bin/env python
 
-This example demonstrates the basic usage of the streaming optimizer with
-fault tolerance enabled (default behavior).
+# # Example 1: Basic Fault Tolerance with Streaming Optimizer
+#
+# This example demonstrates the basic usage of the streaming optimizer with
+# fault tolerance enabled (default behavior).
+#
+# Features demonstrated:
+# - Automatic best parameter tracking
+# - NaN/Inf detection at three validation points
+# - Adaptive retry strategies for failed batches
+# - Success rate validation
+# - Detailed diagnostics
+#
+# Run this example:
+#     python examples/streaming/01_basic_fault_tolerance.py
+#
 
-Features demonstrated:
-- Automatic best parameter tracking
-- NaN/Inf detection at three validation points
-- Adaptive retry strategies for failed batches
-- Success rate validation
-- Detailed diagnostics
+# In[1]:
 
-Run this example:
-    python examples/streaming/01_basic_fault_tolerance.py
-"""
 
 import jax.numpy as jnp
 import numpy as np

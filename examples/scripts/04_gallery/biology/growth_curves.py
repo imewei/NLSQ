@@ -1,18 +1,22 @@
-"""
-Bacterial Growth Curves: Logistic Growth Model
-===============================================
+#!/usr/bin/env python
 
-This example demonstrates fitting bacterial growth curves using the logistic
-growth model. We extract growth rate, lag time, and carrying capacity from
-optical density (OD) measurements.
+# # Bacterial Growth Curves: Logistic Growth Model
+#
+#
+# This example demonstrates fitting bacterial growth curves using the logistic
+# growth model. We extract growth rate, lag time, and carrying capacity from
+# optical density (OD) measurements.
+#
+# Key Concepts:
+# - Logistic growth model (Verhulst equation)
+# - Growth rate (μ) determination
+# - Lag phase, exponential phase, stationary phase
+# - Doubling time calculation
+# - Modified Gompertz model for lag phase
+#
 
-Key Concepts:
-- Logistic growth model (Verhulst equation)
-- Growth rate (μ) determination
-- Lag phase, exponential phase, stationary phase
-- Doubling time calculation
-- Modified Gompertz model for lag phase
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -103,7 +107,8 @@ def exponential_phase(t, N0, mu):
     return N0 * jnp.exp(mu * t)
 
 
-# === Generate Synthetic Growth Curve Data ===
+# In[2]:
+
 
 # Time points (0 to 24 hours, every 30 minutes)
 time = np.linspace(0, 24, 49)
@@ -124,7 +129,9 @@ OD_measured = np.maximum(OD_true + noise, 0.001)  # OD can't be negative
 # Measurement uncertainties
 sigma = 0.02 + 0.03 * OD_measured
 
-# === Fit Logistic Growth Model ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("BACTERIAL GROWTH CURVES: LOGISTIC MODEL FITTING")
@@ -154,7 +161,9 @@ N0_fit, K_fit, r_fit = popt
 perr = np.sqrt(np.diag(pcov))
 N0_err, K_err, r_err = perr
 
-# === Calculate Derived Parameters ===
+
+# In[4]:
+
 
 # Doubling time
 doubling_time = np.log(2) / r_fit
@@ -165,7 +174,9 @@ t_mid = np.log((K_fit - N0_fit) / N0_fit) / r_fit
 # Maximum growth rate (at inflection point, N = K/2)
 max_growth_rate = r_fit * K_fit / 4  # dN/dt at N = K/2
 
-# === Print Results ===
+
+# In[5]:
+
 
 print("\nFitted Parameters:")
 print(f"  N0 (initial OD):    {N0_fit:.4f} ± {N0_err:.4f}")
@@ -194,7 +205,9 @@ print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse:.4f} OD")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
 
-# === Fit Exponential Phase Only ===
+
+# In[6]:
+
 
 print("\n" + "-" * 70)
 print("EXPONENTIAL PHASE ANALYSIS")
@@ -227,7 +240,9 @@ if np.sum(mask_exp) > 5:
     print(f"\nCompare with logistic r:    {r_fit:.3f} hr⁻¹")
     print("(Should be similar in exponential phase)")
 
-# === Growth Phase Classification ===
+
+# In[7]:
+
 
 print("\n" + "-" * 70)
 print("GROWTH PHASE CLASSIFICATION")
@@ -263,7 +278,9 @@ print(f"  Lag phase:         ~{lag_duration:.1f} hours")
 print(f"  Exponential phase: ~{exp_duration:.1f} hours")
 print(f"  Stationary phase:  starts at ~{t_stationary:.1f} hours")
 
-# === Visualization ===
+
+# In[8]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -437,7 +454,9 @@ plt.savefig("growth_curves.png", dpi=150)
 print("\n✅ Plot saved as 'growth_curves.png'")
 plt.show()
 
-# === Summary ===
+
+# In[9]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

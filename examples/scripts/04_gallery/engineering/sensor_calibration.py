@@ -1,19 +1,23 @@
-"""
-Sensor Calibration: Non-Linear Temperature Sensor
-==================================================
+#!/usr/bin/env python
 
-This example demonstrates calibrating a non-linear temperature sensor
-(e.g., thermistor, RTD) by fitting a calibration curve to reference
-measurements. We use polynomial fitting and analyze residuals to assess
-calibration quality.
+# # Sensor Calibration: Non-Linear Temperature Sensor
+#
+#
+# This example demonstrates calibrating a non-linear temperature sensor
+# (e.g., thermistor, RTD) by fitting a calibration curve to reference
+# measurements. We use polynomial fitting and analyze residuals to assess
+# calibration quality.
+#
+# Key Concepts:
+# - Non-linear sensor response modeling
+# - Polynomial calibration curves
+# - Residual analysis for calibration quality
+# - Uncertainty propagation to measured values
+# - Comparison of different calibration models
+#
 
-Key Concepts:
-- Non-linear sensor response modeling
-- Polynomial calibration curves
-- Residual analysis for calibration quality
-- Uncertainty propagation to measured values
-- Comparison of different calibration models
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -72,7 +76,8 @@ def polynomial_calibration(x, *coeffs):
     return result
 
 
-# === Generate Synthetic Sensor Data ===
+# In[2]:
+
 
 # Simulate thermistor-like sensor with non-linear response
 # Sensor voltage vs true temperature (°C)
@@ -100,7 +105,9 @@ voltage_measured = voltage_true + np.random.normal(0, 5, size=len(temp_reference
 sigma_voltage = 5.0 * np.ones_like(voltage_measured)  # mV
 sigma_temp = 0.1 * np.ones_like(temp_reference)  # °C (reference uncertainty)
 
-# === Fit Calibration Models ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("SENSOR CALIBRATION: NON-LINEAR TEMPERATURE SENSOR")
@@ -110,6 +117,9 @@ print("=" * 70)
 print("\n" + "-" * 70)
 print("Model 1: Linear Calibration")
 print("-" * 70)
+
+
+# In[4]:
 
 
 def linear_model(V, a, b):
@@ -142,6 +152,9 @@ print("Model 2: Quadratic Calibration")
 print("-" * 70)
 
 
+# In[5]:
+
+
 def quadratic_model(V, c0, c1, c2):
     return c0 + c1 * V + c2 * V**2
 
@@ -171,6 +184,9 @@ print("Model 3: Cubic Calibration (Recommended)")
 print("-" * 70)
 
 
+# In[6]:
+
+
 def cubic_model(V, d0, d1, d2, d3):
     return d0 + d1 * V + d2 * V**2 + d3 * V**3
 
@@ -195,7 +211,9 @@ print(f"  y = {d0:.4f} + {d1:.6f}*V + {d2:.3e}*V² + {d3:.3e}*V³")
 print(f"  RMSE: {rmse_cubic:.2f} °C")
 print(f"  Max residual: {np.max(np.abs(residuals_cubic)):.2f} °C")
 
-# === Model Comparison ===
+
+# In[7]:
+
 
 print("\n" + "=" * 70)
 print("MODEL COMPARISON")
@@ -214,7 +232,9 @@ print(
 print("-" * 70)
 print(f"✓ Recommended: Cubic model (best accuracy for {len(temp_reference)} points)")
 
-# === Uncertainty Analysis ===
+
+# In[8]:
+
 
 print("\n" + "=" * 70)
 print("UNCERTAINTY ANALYSIS (Cubic Model)")
@@ -243,7 +263,9 @@ print(f"  Sensor voltage: {V_unknown:.1f} ± {V_unknown_err:.1f} mV")
 print(f"  Predicted temperature: {T_predicted:.2f} ± {T_uncertainty:.2f} °C")
 print(f"  Sensitivity: dT/dV = {dT_dV:.4f} °C/mV")
 
-# === Visualization ===
+
+# In[9]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -382,7 +404,9 @@ plt.savefig("sensor_calibration.png", dpi=150)
 print("\n✅ Plot saved as 'sensor_calibration.png'")
 plt.show()
 
-# === Summary ===
+
+# In[10]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

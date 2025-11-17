@@ -1,18 +1,12 @@
-"""
-Converted from ml_integration_tutorial.ipynb
+#!/usr/bin/env python
 
-This script was automatically generated from a Jupyter notebook.
-"""
-
-
-# ======================================================================
-# NLSQ + JAX ML Ecosystem Integration
+# # NLSQ + JAX ML Ecosystem Integration
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/ml_integration_tutorial.ipynb)
 #
 # **Level**: Advanced | **Time**: 45-60 min | **Prerequisites**: NLSQ Quickstart, JAX basics
 #
-# Overview
+# ## Overview
 #
 # This tutorial demonstrates how NLSQ integrates with the JAX machine learning ecosystem for:
 #
@@ -23,7 +17,7 @@ This script was automatically generated from a Jupyter notebook.
 # 5. **Optax Integration**: Using advanced optimizers with NLSQ
 # 6. **Parameter Estimation**: Fitting ML model parameters from experimental data
 #
-# What You'll Learn
+# ### What You'll Learn
 #
 # - ✅ Integrate NLSQ with Flax neural networks
 # - ✅ Build hybrid mechanistic-ML models
@@ -32,7 +26,7 @@ This script was automatically generated from a Jupyter notebook.
 # - ✅ Fit complex multi-component models
 # - ✅ Leverage automatic differentiation for scientific computing
 #
-# Prerequisites
+# ### Prerequisites
 #
 # **Required Knowledge**:
 # - NLSQ basics (complete Quickstart first)
@@ -44,19 +38,17 @@ This script was automatically generated from a Jupyter notebook.
 # **NLSQ Version**: 0.2.0+
 #
 # ---
-# ======================================================================
 
+# ## Setup and Imports
 
-# ======================================================================
-# Setup and Imports
-# ======================================================================
+# In[1]:
 
 
 # Install dependencies (uncomment if needed)
 # !pip install nlsq flax optax equinox
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -65,7 +57,7 @@ import numpy as np
 from jax import grad, jit, vmap
 
 # NLSQ imports
-from nlsq import CurveFit, OptimizeResult, curve_fit, __version__
+from nlsq import CurveFit, OptimizeResult, __version__, curve_fit
 
 # ML ecosystem imports
 try:
@@ -98,12 +90,11 @@ np.random.seed(42)
 key = jax.random.PRNGKey(42)
 
 
-# ======================================================================
 # ---
 #
-# Part 1: Hybrid Mechanistic-ML Models
+# ## Part 1: Hybrid Mechanistic-ML Models
 #
-# Concept: Combining Physics and Learning
+# ### Concept: Combining Physics and Learning
 #
 # Many scientific problems have **known physics** but **unknown corrections**:
 #
@@ -122,12 +113,10 @@ key = jax.random.PRNGKey(42)
 # - ✅ Data-efficient (physics provides structure)
 # - ✅ Extrapolates better than pure ML
 # - ✅ Captures systematic deviations
-# ======================================================================
 
+# ### Example 1.1: Exponential Decay with Neural Network Correction
 
-# ======================================================================
-# Example 1.1: Exponential Decay with Neural Network Correction
-# ======================================================================
+# In[2]:
 
 
 if FLAX_AVAILABLE:
@@ -198,18 +187,18 @@ if FLAX_AVAILABLE:
     plt.tight_layout()
     plt.show()
 
-    print(f"\n📊 Dataset Statistics:")
+    print("\n📊 Dataset Statistics:")
     print(f"   Data points: {len(x_data)}")
-    print(f"   Physics RMSE: {np.sqrt(np.mean((y_data - y_physics)**2)):.3f}")
+    print(f"   Physics RMSE: {np.sqrt(np.mean((y_data - y_physics) ** 2)):.3f}")
     print(f"   Correction amplitude: {np.max(np.abs(y_correction)):.3f}")
 
 
-# ======================================================================
-# Strategy 1: Two-Stage Fitting
+# ### Strategy 1: Two-Stage Fitting
 #
-# **Step 1**: Fit physics parameters with NLSQ  
+# **Step 1**: Fit physics parameters with NLSQ
 # **Step 2**: Train neural network on residuals
-# ======================================================================
+
+# In[3]:
 
 
 if FLAX_AVAILABLE:
@@ -290,10 +279,10 @@ if FLAX_AVAILABLE:
     y_hybrid = y_physics_fit + np.array(correction_pred)
     hybrid_rmse = np.sqrt(np.mean((y_data - y_hybrid) ** 2))
 
-    print(f"\n📊 Results:")
+    print("\n📊 Results:")
     print(f"   Physics-only RMSE: {physics_rmse:.4f}")
     print(f"   Hybrid model RMSE: {hybrid_rmse:.4f}")
-    print(f"   Improvement: {(1 - hybrid_rmse/physics_rmse)*100:.1f}%")
+    print(f"   Improvement: {(1 - hybrid_rmse / physics_rmse) * 100:.1f}%")
 
     # Visualize results
     plt.figure(figsize=(12, 4))
@@ -325,9 +314,7 @@ if FLAX_AVAILABLE:
         label="True correction",
         alpha=0.7,
     )
-    plt.plot(
-        x_data, correction_pred, "r-", linewidth=2, label="NN learned correction"
-    )
+    plt.plot(x_data, correction_pred, "r-", linewidth=2, label="NN learned correction")
     plt.xlabel("x")
     plt.ylabel("Correction")
     plt.title("Learned vs True Correction")
@@ -338,8 +325,7 @@ if FLAX_AVAILABLE:
     plt.show()
 
 
-# ======================================================================
-# Key Insights
+# ### Key Insights
 #
 # 1. **Physics provides structure**: The exponential decay captures the dominant behavior
 # 2. **NN learns deviations**: Small neural network captures systematic errors
@@ -354,13 +340,10 @@ if FLAX_AVAILABLE:
 # - ✅ Extrapolation is important
 #
 # ---
-# ======================================================================
 
-
-# ======================================================================
-# Part 2: Neural ODEs with NLSQ
+# ## Part 2: Neural ODEs with NLSQ
 #
-# Concept: Learning Dynamics
+# ### Concept: Learning Dynamics
 #
 # **Neural ODEs** parameterize the derivative of a system with a neural network:
 #
@@ -375,12 +358,13 @@ if FLAX_AVAILABLE:
 # 2. ODE parameters (if partially mechanistic)
 # 3. Neural network parameters (jointly or in stages)
 #
-# Example 2.1: Damped Oscillator with Learned Damping
-# ======================================================================
+# ### Example 2.1: Damped Oscillator with Learned Damping
+
+# In[4]:
 
 
 # Simple ODE solver (for demonstration; use diffrax in production)
-def euler_integr ate(f, y0, t, *args):
+def euler_integrate(f, y0, t, *args):
     """Simple Euler integration for demonstration."""
     dt = t[1] - t[0]
     y = jnp.zeros((len(t), len(y0)))
@@ -414,9 +398,7 @@ gamma_true = 0.3  # Damping
 y0_true = jnp.array([1.0, 0.0])  # Initial [position, velocity]
 
 # Integrate true system
-y_true = euler_integrate(
-    damped_oscillator_ode, y0_true, t_ode, omega_true, gamma_true
-)
+y_true = euler_integrate(damped_oscillator_ode, y0_true, t_ode, omega_true, gamma_true)
 x_true = y_true[:, 0]  # Extract position
 
 # Add noise to observations
@@ -449,9 +431,9 @@ print(f"True parameters: ω={omega_true}, γ={gamma_true}")
 print(f"Initial state: x₀={y0_true[0]}, v₀={y0_true[1]}")
 
 
-# ======================================================================
-# Fitting ODE Parameters with NLSQ
-# ======================================================================
+# ### Fitting ODE Parameters with NLSQ
+
+# In[5]:
 
 
 print("=" * 70)
@@ -486,9 +468,13 @@ ode_time = time.time() - start_time
 
 omega_fit, gamma_fit, x0_fit, v0_fit = popt_ode
 
-print(f"\n📊 Results:")
-print(f"   Fitted: ω={omega_fit:.4f}, γ={gamma_fit:.4f}, x₀={x0_fit:.4f}, v₀={v0_fit:.4f}")
-print(f"   True:   ω={omega_true:.4f}, γ={gamma_true:.4f}, x₀={y0_true[0]:.4f}, v₀={y0_true[1]:.4f}")
+print("\n📊 Results:")
+print(
+    f"   Fitted: ω={omega_fit:.4f}, γ={gamma_fit:.4f}, x₀={x0_fit:.4f}, v₀={v0_fit:.4f}"
+)
+print(
+    f"   True:   ω={omega_true:.4f}, γ={gamma_true:.4f}, x₀={y0_true[0]:.4f}, v₀={y0_true[1]:.4f}"
+)
 print(f"   Fit time: {ode_time:.3f}s")
 
 # Compute fitted trajectory
@@ -522,8 +508,7 @@ plt.tight_layout()
 plt.show()
 
 
-# ======================================================================
-# Key Takeaways
+# ### Key Takeaways
 #
 # 1. **NLSQ handles ODEs naturally**: Just wrap ODE integration in model function
 # 2. **Automatic differentiation**: JAX computes gradients through ODE solver
@@ -538,13 +523,10 @@ plt.show()
 # ```
 #
 # ---
-# ======================================================================
 
-
-# ======================================================================
-# Part 3: Physics-Informed Loss Functions
+# ## Part 3: Physics-Informed Loss Functions
 #
-# Concept: Incorporating Physical Constraints
+# ### Concept: Incorporating Physical Constraints
 #
 # **Physics-informed fitting** adds physical constraints to the loss:
 #
@@ -558,14 +540,15 @@ plt.show()
 # - **Boundary conditions**: Initial/final state constraints
 # - **Symmetries**: Rotational, translational invariance
 #
-# Example 3.1: Energy-Conserving Pendulum
+# ### Example 3.1: Energy-Conserving Pendulum
 #
 # For a frictionless pendulum, total energy should be conserved:
 #
 # $$
 # E = \frac{1}{2}mv^2 + mgh = \text{constant}
 # $$
-# ======================================================================
+
+# In[6]:
 
 
 # Simple pendulum dynamics
@@ -608,9 +591,7 @@ plt.grid(True, alpha=0.3)
 
 plt.subplot(1, 3, 3)
 plt.plot(t_pend, total_energy, "r-", linewidth=2, label="Total energy")
-plt.axhline(
-    y=jnp.mean(total_energy), color="k", linestyle="--", label="Mean energy"
-)
+plt.axhline(y=jnp.mean(total_energy), color="k", linestyle="--", label="Mean energy")
 plt.xlabel("Time (t)")
 plt.ylabel("Energy (J)")
 plt.title("Energy Conservation")
@@ -625,14 +606,14 @@ print(f"Energy conservation (std dev): {energy_std:.6f}")
 print(f"Energy variation: {energy_std / jnp.mean(total_energy) * 100:.3f}%")
 
 
-# ======================================================================
-# Custom Physics-Informed Fitting
+# ### Custom Physics-Informed Fitting
 #
 # While NLSQ doesn't directly support custom loss functions (it uses least squares), we can:
 # 1. Use NLSQ for standard parameter estimation
 # 2. Add physics penalty in post-processing
 # 3. Or use Optax for full physics-informed optimization
-# ======================================================================
+
+# In[7]:
 
 
 if FLAX_AVAILABLE:
@@ -660,7 +641,10 @@ if FLAX_AVAILABLE:
         energy_var = jnp.var(total_energy)
         loss_physics = lambda_physics * energy_var
 
-        return loss_data + loss_physics, {"loss_data": loss_data, "loss_physics": loss_physics}
+        return loss_data + loss_physics, {
+            "loss_data": loss_data,
+            "loss_physics": loss_physics,
+        }
 
     # Optimize with Optax
     params_init = jnp.array([1.5, 0.4, 0.1])  # [omega, theta0, thetadot0]
@@ -695,7 +679,7 @@ if FLAX_AVAILABLE:
             )
 
     omega_pi, theta0_pi, thetadot0_pi = params
-    print(f"\n📊 Fitted parameters:")
+    print("\n📊 Fitted parameters:")
     print(f"   ω={omega_pi:.4f} (true: {omega_pend:.4f})")
     print(f"   θ₀={theta0_pi:.4f} (true: {y0_pend[0]:.4f})")
     print(f"   dθ₀/dt={thetadot0_pi:.4f} (true: {y0_pend[1]:.4f})")
@@ -711,8 +695,12 @@ if FLAX_AVAILABLE:
     )
 
     # Evaluate energy conservation
-    y_pi = euler_integrate(pendulum_ode, jnp.array([theta0_pi, thetadot0_pi]), t_pend, omega_pi)
-    y_std = euler_integrate(pendulum_ode, jnp.array([popt_std[1], popt_std[2]]), t_pend, popt_std[0])
+    y_pi = euler_integrate(
+        pendulum_ode, jnp.array([theta0_pi, thetadot0_pi]), t_pend, omega_pi
+    )
+    y_std = euler_integrate(
+        pendulum_ode, jnp.array([popt_std[1], popt_std[2]]), t_pend, popt_std[0]
+    )
 
     def compute_energy_std(y, omega):
         kinetic = 0.5 * y[:, 1] ** 2
@@ -722,10 +710,10 @@ if FLAX_AVAILABLE:
     energy_std_pi = compute_energy_std(y_pi, omega_pi)
     energy_std_std = compute_energy_std(y_std, popt_std[0])
 
-    print(f"\n⚡ Energy Conservation:")
+    print("\n⚡ Energy Conservation:")
     print(f"   Physics-informed: σ_E = {energy_std_pi:.6f}")
     print(f"   Standard NLSQ:    σ_E = {energy_std_std:.6f}")
-    print(f"   Improvement: {(1 - energy_std_pi/energy_std_std)*100:.1f}%")
+    print(f"   Improvement: {(1 - energy_std_pi / energy_std_std) * 100:.1f}%")
 
     # Visualize
     plt.figure(figsize=(12, 4))
@@ -749,7 +737,9 @@ if FLAX_AVAILABLE:
     plt.grid(True, alpha=0.3)
 
     plt.subplot(1, 3, 3)
-    energy_std_series = 0.5 * y_std[:, 1] ** 2 + (popt_std[0] ** 2) * (1 - jnp.cos(y_std[:, 0]))
+    energy_std_series = 0.5 * y_std[:, 1] ** 2 + (popt_std[0] ** 2) * (
+        1 - jnp.cos(y_std[:, 0])
+    )
     energy_pi_series = 0.5 * y_pi[:, 1] ** 2 + (omega_pi**2) * (1 - jnp.cos(y_pi[:, 0]))
     plt.plot(t_pend, energy_std_series, "g--", linewidth=2, label="Standard NLSQ")
     plt.plot(t_pend, energy_pi_series, "r-", linewidth=2, label="Physics-informed")
@@ -763,12 +753,11 @@ if FLAX_AVAILABLE:
     plt.show()
 
 
-# ======================================================================
 # ---
 #
-# Summary and Best Practices
+# ## Summary and Best Practices
 #
-# Integration Strategies
+# ### Integration Strategies
 #
 # | Approach | NLSQ Role | ML Role | Best For |
 # |----------|-----------|---------|----------|
@@ -777,7 +766,7 @@ if FLAX_AVAILABLE:
 # | **Physics-Informed** | Pre-fit, then refine | Enforce constraints | Energy/mass conservation, PDEs |
 # | **Joint Optimization** | Parameter estimation | Model flexibility | Complex coupled systems |
 #
-# Key Takeaways
+# ### Key Takeaways
 #
 # 1. **NLSQ + JAX = Powerful Combo**:
 #    - Automatic differentiation through complex models
@@ -799,37 +788,37 @@ if FLAX_AVAILABLE:
 #    - **Optax**: Custom losses, physics-informed training
 #    - **Combined**: Two-stage fitting strategies
 #
-# Production Recommendations
+# ### Production Recommendations
 #
 # ```python
-# 1. Use diffrax for robust ODE integration
+# # 1. Use diffrax for robust ODE integration
 # import diffrax
 # solver = diffrax.Tsit5()
 #
-# 2. Separate training and inference
+# # 2. Separate training and inference
 # @jit
 # def inference_model(params, x):
 #     # Compiled inference only
 #     return model.apply(params, x)
 #
-# 3. Use appropriate precision
-# NLSQ uses float64 by default (good for physics)
-# ML often uses float32 (faster, sufficient for NNs)
+# # 3. Use appropriate precision
+# # NLSQ uses float64 by default (good for physics)
+# # ML often uses float32 (faster, sufficient for NNs)
 #
-# 4. Validate physics constraints
+# # 4. Validate physics constraints
 # def check_energy_conservation(y, params):
 #     energy = compute_energy(y, params)
 #     return jnp.std(energy) < threshold
 #
-# 5. Profile and optimize
-# Use MemoryPool for repeated fitting
+# # 5. Profile and optimize
+# # Use MemoryPool for repeated fitting
 # from nlsq import MemoryPool
 # with MemoryPool() as pool:
 #     for data in datasets:
 #         popt, _ = cf.curve_fit(model, *data)
 # ```
 #
-# Next Steps
+# ### Next Steps
 #
 # - Explore `equinox` for more Pythonic neural network design
 # - Try `diffrax` for production-grade ODE solving
@@ -837,10 +826,10 @@ if FLAX_AVAILABLE:
 # - Read about **Universal Differential Equations** (UDEs)
 # - Study **SciML (Scientific Machine Learning)** ecosystem
 #
-# References
+# ### References
 #
 # 1. **Neural ODEs**: Chen et al., "Neural Ordinary Differential Equations", NeurIPS 2018
-# 2. **PINNs**: Raissi et al., "Physics-informed neural networks", JCP 2019  
+# 2. **PINNs**: Raissi et al., "Physics-informed neural networks", JCP 2019
 # 3. **UDEs**: Rackauckas et al., "Universal Differential Equations", arXiv 2020
 # 4. **JAX Ecosystem**: https://github.com/n2cholas/awesome-jax
 #
@@ -854,4 +843,3 @@ if FLAX_AVAILABLE:
 # - [Performance Optimization Demo](performance_optimization_demo.ipynb) - Production-ready optimization
 #
 # ---
-# ======================================================================

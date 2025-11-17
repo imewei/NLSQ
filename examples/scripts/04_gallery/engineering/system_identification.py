@@ -1,18 +1,22 @@
-"""
-System Identification: First-Order System Step Response
-========================================================
+#!/usr/bin/env python
 
-This example demonstrates system identification by fitting a first-order
-transfer function to step response data. This is common in control systems,
-chemical processes, and thermal systems.
+# # System Identification: First-Order System Step Response
+#
+#
+# This example demonstrates system identification by fitting a first-order
+# transfer function to step response data. This is common in control systems,
+# chemical processes, and thermal systems.
+#
+# Key Concepts:
+# - First-order system dynamics
+# - Step response fitting
+# - Time constant and gain extraction
+# - Model validation with residuals
+# - Rise time and settling time calculation
+#
 
-Key Concepts:
-- First-order system dynamics
-- Step response fitting
-- Time constant and gain extraction
-- Model validation with residuals
-- Rise time and settling time calculation
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -93,7 +97,8 @@ def second_order_step_response(t, K, zeta, omega_n, t_delay):
     return jnp.where(t >= t_delay, response, 0.0)
 
 
-# === Generate Synthetic Step Response Data ===
+# In[2]:
+
 
 # Simulate a thermal system (e.g., heating chamber)
 # Input: step from 0 to 100% power at t=0
@@ -117,7 +122,9 @@ output_measured = output_true + noise
 # Measurement uncertainties
 sigma = 1.5 * np.ones_like(output_measured)
 
-# === Fit First-Order Model ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("SYSTEM IDENTIFICATION: FIRST-ORDER STEP RESPONSE")
@@ -146,7 +153,9 @@ K_fit, tau_fit, t_delay_fit = popt
 perr = np.sqrt(np.diag(pcov))
 K_err, tau_err, t_delay_err = perr
 
-# === Calculate System Characteristics ===
+
+# In[4]:
+
 
 # Time to reach 63.2% of final value (1 time constant)
 t_63 = t_delay_fit + tau_fit
@@ -160,7 +169,9 @@ t_rise = t_90 - t_10
 # For first-order: t_settle ≈ 4*tau
 t_settle_2pct = t_delay_fit + 4 * tau_fit
 
-# === Print Results ===
+
+# In[5]:
+
 
 print("\nFitted Parameters:")
 print(f"  K (gain):        {K_fit:.2f} ± {K_err:.2f} °C")
@@ -195,7 +206,9 @@ print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse:.2f} °C")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f} (expect ≈ 1.0)")
 
-# === Transfer Function ===
+
+# In[6]:
+
 
 print("\n" + "=" * 70)
 print("TRANSFER FUNCTION (Laplace Domain)")
@@ -205,7 +218,9 @@ print(f"\n  Pole location:  s = -{1 / tau_fit:.4f} rad/s")
 print(f"  DC gain:        K = {K_fit:.2f}")
 print(f"  Time delay:     t_d = {t_delay_fit:.2f} s")
 
-# === Model Validation ===
+
+# In[7]:
+
 
 print("\n" + "=" * 70)
 print("MODEL VALIDATION")
@@ -233,7 +248,9 @@ print(
     + f"({'Yes' if p_value_normality > 0.05 else 'No'} at α=0.05)"
 )
 
-# === Visualization ===
+
+# In[8]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -384,7 +401,9 @@ plt.savefig("system_identification.png", dpi=150)
 print("\n✅ Plot saved as 'system_identification.png'")
 plt.show()
 
-# === Summary ===
+
+# In[9]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

@@ -1,18 +1,23 @@
-"""Example 4: Interpreting Detailed Diagnostics
+#!/usr/bin/env python
 
-This example demonstrates how to interpret and analyze the comprehensive
-diagnostic information provided by the streaming optimizer.
+# # Example 4: Interpreting Detailed Diagnostics
+#
+# This example demonstrates how to interpret and analyze the comprehensive
+# diagnostic information provided by the streaming optimizer.
+#
+# Features demonstrated:
+# - Streaming diagnostics structure
+# - Aggregate statistics interpretation
+# - Recent batch statistics analysis
+# - Checkpoint information access
+# - Performance metrics
+#
+# Run this example:
+#     python examples/streaming/04_interpreting_diagnostics.py
+#
 
-Features demonstrated:
-- Streaming diagnostics structure
-- Aggregate statistics interpretation
-- Recent batch statistics analysis
-- Checkpoint information access
-- Performance metrics
+# In[1]:
 
-Run this example:
-    python examples/streaming/04_interpreting_diagnostics.py
-"""
 
 import json
 

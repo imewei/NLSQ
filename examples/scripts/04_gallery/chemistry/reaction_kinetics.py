@@ -1,19 +1,23 @@
-"""
-Chemical Reaction Kinetics: Rate Constant Determination
-========================================================
+#!/usr/bin/env python
 
-This example demonstrates fitting chemical reaction kinetics data to determine
-rate constants and reaction orders. We analyze first-order, second-order, and
-pseudo-first-order reactions using concentration vs time data.
+# # Chemical Reaction Kinetics: Rate Constant Determination
+#
+#
+# This example demonstrates fitting chemical reaction kinetics data to determine
+# rate constants and reaction orders. We analyze first-order, second-order, and
+# pseudo-first-order reactions using concentration vs time data.
+#
+# Key Concepts:
+# - First-order kinetics (exponential decay)
+# - Second-order kinetics (hyperbolic decay)
+# - Rate constant determination
+# - Half-life and reaction order
+# - Integrated rate laws
+# - Arrhenius temperature dependence
+#
 
-Key Concepts:
-- First-order kinetics (exponential decay)
-- Second-order kinetics (hyperbolic decay)
-- Rate constant determination
-- Half-life and reaction order
-- Integrated rate laws
-- Arrhenius temperature dependence
-"""
+# In[1]:
+
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -98,7 +102,8 @@ def pseudo_first_order(t, C0, k_obs):
     return C0 * jnp.exp(-k_obs * t)
 
 
-# === Generate Synthetic Kinetics Data ===
+# In[2]:
+
 
 # Time points (0 to 1000 seconds, every 10 seconds)
 time = np.linspace(0, 1000, 101)
@@ -117,7 +122,9 @@ C_1st_measured = C_1st_true + noise_1st
 # Measurement uncertainties
 sigma_1st = np.asarray(0.02 * C_1st_measured + 0.001)  # Relative + small constant
 
-# === Fit First-Order Kinetics ===
+
+# In[3]:
+
 
 print("=" * 70)
 print("CHEMICAL REACTION KINETICS: RATE CONSTANT DETERMINATION")
@@ -172,7 +179,9 @@ print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse_1st:.5f} M")
 print(f"  χ²/dof:  {chi_squared_reduced_1st:.2f}")
 
-# === Second-Order Reaction ===
+
+# In[4]:
+
 
 print("\n" + "-" * 70)
 print("SECOND-ORDER REACTION ANALYSIS")
@@ -228,7 +237,9 @@ rmse_2nd = np.sqrt(np.mean(residuals_2nd**2))
 print("\nGoodness of Fit:")
 print(f"  RMSE: {rmse_2nd:.5f} M")
 
-# === Determine Reaction Order ===
+
+# In[5]:
+
 
 print("\n" + "-" * 70)
 print("REACTION ORDER DETERMINATION")
@@ -270,7 +281,9 @@ print(f"  1st-order: AIC = {AIC_1st:.2f}")
 print(f"  2nd-order: AIC = {AIC_2nd:.2f}")
 print(f"  → Preferred: {'First-order' if AIC_1st < AIC_2nd else 'Second-order'}")
 
-# === Linearization Check ===
+
+# In[6]:
+
 
 print("\n" + "-" * 70)
 print("LINEARIZATION ANALYSIS")
@@ -278,6 +291,9 @@ print("-" * 70)
 
 # First-order: ln[A] vs t should be linear (slope = -k)
 ln_C_1st = np.log(C_1st_measured)
+
+
+# In[7]:
 
 
 def linear_1st_order(t, ln_C0, k):
@@ -297,6 +313,9 @@ print(f"  Agreement: {abs(k_ln_fit - k_1st_fit) / k_1st_fit * 100:.2f}% differen
 inv_C_2nd = 1 / C_2nd_measured
 
 
+# In[8]:
+
+
 def linear_2nd_order(t, inv_C0, k):
     return inv_C0 + k * t
 
@@ -309,7 +328,9 @@ print(f"  k from linearization: {k_inv_fit:.6f} M⁻¹s⁻¹")
 print(f"  k from direct fit:    {k_2nd_fit:.6f} M⁻¹s⁻¹")
 print(f"  Agreement: {abs(k_inv_fit - k_2nd_fit) / k_2nd_fit * 100:.2f}% difference")
 
-# === Visualization ===
+
+# In[9]:
+
 
 fig = plt.figure(figsize=(16, 12))
 
@@ -536,7 +557,9 @@ plt.savefig("reaction_kinetics.png", dpi=150)
 print("\n✅ Plot saved as 'reaction_kinetics.png'")
 plt.show()
 
-# === Summary ===
+
+# In[10]:
+
 
 print("\n" + "=" * 70)
 print("SUMMARY")

@@ -37,7 +37,13 @@ def notebook_to_script(notebook_path: Path, output_path: Path | None = None) -> 
 
         if cell_type == "markdown":
             python_lines.extend(
-                ["", "# " + "=" * 70, *[f"# {line}" for line in source_text.split("\n")], "# " + "=" * 70, ""]
+                [
+                    "",
+                    "# " + "=" * 70,
+                    *[f"# {line}" for line in source_text.split("\n")],
+                    "# " + "=" * 70,
+                    "",
+                ]
             )
         elif cell_type == "code":
             python_lines.extend(["", source_text.rstrip(), ""])
@@ -92,7 +98,13 @@ def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Pa
                 i += 1
 
             if markdown_lines:
-                cells.append({"cell_type": "markdown", "metadata": {}, "source": [line + "\n" for line in markdown_lines]})
+                cells.append(
+                    {
+                        "cell_type": "markdown",
+                        "metadata": {},
+                        "source": [line + "\n" for line in markdown_lines],
+                    }
+                )
 
         elif line.strip() and not line.strip().startswith("#"):
             # Code line
@@ -114,7 +126,11 @@ def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Pa
     notebook = {
         "cells": cells,
         "metadata": {
-            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3",
+            },
             "language_info": {
                 "codemirror_mode": {"name": "ipython", "version": 3},
                 "file_extension": ".py",
