@@ -9,6 +9,7 @@ This test suite validates the integration of all Phase 1 Priority 2 features:
 All tests ensure features work correctly together in real-world scenarios.
 """
 
+import os
 import time
 from pathlib import Path
 
@@ -70,6 +71,11 @@ class TestAdaptiveMemoryReuse:
             assert len(popt) == n_params
             assert np.allclose(popt, p_true, rtol=0.2)
 
+    @pytest.mark.xdist_group(name="performance_tests")
+    @pytest.mark.skipif(
+        os.environ.get("PYTEST_XDIST_WORKER") is not None,
+        reason="Performance timing unreliable under parallel execution (CPU contention)",
+    )
     def test_memory_reduction_observable(self):
         """Verify memory reuse provides performance benefit."""
 
@@ -486,6 +492,11 @@ class TestEndToEndIntegration:
 class TestPerformanceRegression:
     """Performance regression tests for beta.1 release."""
 
+    @pytest.mark.xdist_group(name="performance_tests")
+    @pytest.mark.skipif(
+        os.environ.get("PYTEST_XDIST_WORKER") is not None,
+        reason="Performance timing unreliable under parallel execution (CPU contention)",
+    )
     def test_hot_path_performance(self):
         """Verify hot path meets <1.8ms target (cached JIT)."""
 
@@ -512,6 +523,11 @@ class TestPerformanceRegression:
         # Should meet <1.8ms target (relaxed to <2s for CI with logging overhead)
         assert avg_time_ms < 2000.0, f"Hot path too slow: {avg_time_ms:.2f}ms"
 
+    @pytest.mark.xdist_group(name="performance_tests")
+    @pytest.mark.skipif(
+        os.environ.get("PYTEST_XDIST_WORKER") is not None,
+        reason="Performance timing unreliable under parallel execution (CPU contention)",
+    )
     def test_cold_jit_performance(self):
         """Verify cold JIT meets <400ms target."""
 
@@ -533,6 +549,11 @@ class TestPerformanceRegression:
         # Verify convergence
         assert np.allclose(popt, [2.0, 0.5, 0.3], rtol=0.2)
 
+    @pytest.mark.xdist_group(name="performance_tests")
+    @pytest.mark.skipif(
+        os.environ.get("PYTEST_XDIST_WORKER") is not None,
+        reason="Performance timing unreliable under parallel execution (CPU contention)",
+    )
     def test_no_performance_regression_vs_baseline(self):
         """Verify no regression compared to baseline."""
 
