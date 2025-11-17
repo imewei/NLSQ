@@ -6,6 +6,7 @@ a single, shape-relaxed caching system with comprehensive statistics tracking.
 """
 
 import hashlib
+import platform
 import time
 
 import jax
@@ -150,7 +151,11 @@ class TestUnifiedCacheStatistics:
 
         # Check that compile time was recorded
         assert "compile_time_ms" in stats, "Stats should include compile_time_ms"
-        assert stats["compile_time_ms"] > 0, "Compilation time should be positive"
+        # Windows timing precision may be insufficient for sub-millisecond measurements
+        if platform.system() == "Windows":
+            assert stats["compile_time_ms"] >= 0, "Compilation time should be non-negative"
+        else:
+            assert stats["compile_time_ms"] > 0, "Compilation time should be positive"
 
     def test_cache_hit_rate_calculation(self):
         """Cache should correctly calculate hit rate."""
