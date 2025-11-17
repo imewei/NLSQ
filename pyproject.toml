@@ -82,8 +82,8 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.0.0",           # Requires NumPy 2.x (tested on 2.3.4)
-    "scipy>=1.14.0",          # Tested on 1.16.2
+    "numpy>=2.0.0",           # Requires NumPy 2.x (tested on 2.3.5)
+    "scipy>=1.14.0",          # Tested on 1.16.3
 
     # JAX ecosystem (CPU-only by default - works on all platforms)
     # GPU users: see GPU ACCELERATION section above for installation
@@ -95,7 +95,7 @@ dependencies = [
                                #   Windows:    pip install "jax[cpu]>=0.6.0" (CPU only)
 
     # Visualization and monitoring
-    "matplotlib>=3.9.0",      # Tested on 3.10.7
+    "matplotlib>=3.10.0",     # Tested on 3.10.7
     "psutil>=6.0.0",          # For memory monitoring (tested on 7.1.0)
     "tqdm>=4.66.0",           # For progress bars (tested on 4.67.1)
 
@@ -105,14 +105,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",           # Tested on 8.4.2
-    "pytest-cov>=4.1",       # Tested on 7.0.0
+    "pytest>=9.0",           # Tested on 9.0.1
+    "pytest-cov>=7.0",       # Tested on 7.0.0
     "pytest-xdist>=3.5",     # Tested on 3.8.0
-    "black>=24.0",           # Tested on 25.9.0 (CalVer)
-    "ruff>=0.10.0",          # Tested on 0.14.1
+    "black>=25.0",           # Tested on 25.11.0 (CalVer)
+    "ruff>=0.14.0",          # Tested on 0.14.5
     "mypy>=1.10",            # Tested on 1.18.2
-    "pre-commit>=4.0",       # Tested on 4.3.0
-    "ipython>=9.0",          # Tested on 9.6.0
+    "pre-commit>=4.0",       # Tested on 4.4.0
+    "ipython>=9.0",          # Tested on 9.7.0
     "bandit>=1.7.5",         # Tested on 1.8.6
     "pyupgrade>=3.15.0",     # Tested on 3.21.0
 ]
@@ -124,11 +124,11 @@ docs = [
     "myst-parser>=4.0",                # Tested on 4.0.1
 ]
 test = [
-    "pytest>=8.0",           # Tested on 8.4.2
-    "pytest-cov>=4.1",       # Tested on 7.0.0
+    "pytest>=9.0",           # Tested on 9.0.1
+    "pytest-cov>=7.0",       # Tested on 7.0.0
     "pytest-xdist>=3.5",     # Tested on 3.8.0
     "pytest-timeout>=2.1",   # Tested on 2.4.0
-    "hypothesis>=6.140",     # Tested on 6.142.1
+    "hypothesis>=6.140",     # Tested on 6.148.1
 ]
 benchmark = [
     "pytest-benchmark>=5.0",   # Tested on 5.1.0
@@ -150,11 +150,11 @@ build = [
 ]
 all = [
     # Development dependencies
-    "pytest>=8.0",
-    "pytest-cov>=4.1",
+    "pytest>=9.0",
+    "pytest-cov>=7.0",
     "pytest-xdist>=3.5",
-    "black>=24.0",
-    "ruff>=0.10.0",
+    "black>=25.0",
+    "ruff>=0.14.0",
     "mypy>=1.10",
     "pre-commit>=4.0",
     "ipython>=9.0",
@@ -206,12 +206,12 @@ local_scheme = "no-local-version"
 
 [tool.black]
 line-length = 88
-target-version = ['py312']
+target-version = ['py313']
 preview = true
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py313"
 fix = true
 
 [tool.ruff.lint]
@@ -258,7 +258,7 @@ ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PL
 known-first-party = ["nlsq"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 # Relax strictness for scientific computing library
 warn_return_any = false
 warn_unused_configs = true
@@ -353,7 +353,7 @@ module = "tests.*"
 ignore_errors = true  # Don't enforce strict typing in tests
 
 [tool.pyright]
-pythonVersion = "3.12"
+pythonVersion = "3.13"
 typeCheckingMode = "strict"
 reportMissingImports = true
 reportMissingTypeStubs = false
@@ -415,8 +415,8 @@ source = ["nlsq"]
 omit = ["*/tests/*", "*/_version.py"]
 
 [tool.coverage.report]
-# Test suite: 1250 tests (as of 2025-10-31)
-# Current coverage: 82.15% (exceeds 80% target)
+# Test suite: 1,557 tests (as of 2025-11-16)
+# Current coverage: 82% (exceeds 80% target)
 # Industry-standard for scientific computing libraries: 70-80%
 precision = 2
 show_missing = true

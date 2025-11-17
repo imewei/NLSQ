@@ -1,5 +1,6 @@
 # Pre-commit configuration
-# Versions aligned with local environment and pyproject.toml (2025-10-17)
+# Versions aligned with local environment and pyproject.toml (2025-11-16)
+# Python 3.13.7, uv package manager
 # See REQUIREMENTS.md for dependency management strategy
 
 repos:
@@ -27,7 +28,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.1  # Aligned with local ruff 0.14.1 and pyproject.toml >=0.10.0
+    rev: v0.14.5  # Aligned with local ruff 0.14.5 and pyproject.toml >=0.14.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -38,7 +39,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [numpy, jax, types-setuptools, scipy, psutil, types-tqdm]
-        args: [--python-version=3.12, --check-untyped-defs]
+        args: [--python-version=3.13, --check-untyped-defs]
         files: ^nlsq/
         exclude: ^(tests/|examples/|benchmark/)
 
@@ -69,10 +70,10 @@ repos:
         exclude: ^(tests/|examples/|benchmark/)
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.0  # Updated to latest version (Python 3.12+ syntax)
+    rev: v3.21.0  # Updated to latest version (Python 3.13+ syntax)
     hooks:
       - id: pyupgrade
-        args: [--py312-plus]
+        args: [--py313-plus]
 
   # Local hooks for project-specific checks
   - repo: local

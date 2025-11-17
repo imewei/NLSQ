@@ -1,17 +1,17 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2025-10-31
-# Requires: Python 3.12+, NumPy 2.0+
+# Updated: 2025-11-16
+# Requires: Python 3.12+ (tested on 3.13), NumPy 2.0+
 # Dependencies managed via pyproject.toml[docs]
 #
 # Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
-# All Sphinx warnings have been resolved as of 2025-10-31
+# All Sphinx warnings have been resolved as of 2025-11-16
 
 version: 2
 
 build:
   os: ubuntu-24.04
   tools:
-    python: "3.12"  # Aligned with pyproject.toml requires-python >=3.12
+    python: "3.13"  # Aligned with pyproject.toml requires-python >=3.12, tested on 3.13
   apt_packages:
     - graphviz
   jobs:
