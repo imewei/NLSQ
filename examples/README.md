@@ -170,40 +170,109 @@ jupyter notebook nlsq_quickstart.ipynb
 
 ---
 
-## 🎓 Feature Demonstrations (Python Scripts)
+## 🎓 Feature Demonstrations
 
 **NEW in v0.1.1**: Phase 1-3 feature demonstrations
 
-Located in `demos/` directory, these Python scripts showcase specific NLSQ v0.1.1 features:
+Located in `demos/` directory, these examples showcase specific NLSQ v0.1.1 features and are available as both **interactive Jupyter notebooks** and **Python scripts**:
+
+---
+
+## 🎨 Domain-Specific Gallery
+
+**NEW**: Scientific application examples organized by field
+
+Located in `gallery/` directory with real-world curve fitting examples, available as both **interactive Jupyter notebooks** and **Python scripts**:
 
 ### Phase 1 Features (Quick Wins)
 
-1. **Result Enhancements** (`demos/result_enhancements_demo.py`)
+1. **Result Enhancements**
+   - Files: `demos/result_enhancements_demo.ipynb` | `demos/result_enhancements_demo.py`
    - Enhanced `.plot()`, `.summary()`, `.confidence_intervals()`
    - Statistical metrics: R², RMSE, AIC, BIC
    - Backward compatible tuple unpacking
 
-2. **Callbacks** (`demos/callbacks_demo.py`)
+2. **Callbacks**
+   - Files: `demos/callbacks_demo.ipynb` | `demos/callbacks_demo.py`
    - `ProgressBar` - Real-time progress monitoring
    - `EarlyStopping` - Automatic termination
    - `IterationLogger` - Optimization logging
 
-3. **Function Library** (`demos/function_library_demo.py`)
+3. **Function Library**
+   - Files: `demos/function_library_demo.ipynb` | `demos/function_library_demo.py`
    - Pre-built models: exponential, gaussian, sigmoid
    - Automatic p0 estimation
    - Smart parameter bounds
 
-4. **Enhanced Error Messages** (`demos/enhanced_error_messages_demo.py`)
+4. **Enhanced Error Messages**
+   - Files: `demos/enhanced_error_messages_demo.ipynb` | `demos/enhanced_error_messages_demo.py`
    - Actionable diagnostics
    - Clear recommendations
    - Better debugging
 
 **Usage**:
 ```bash
+# Run as Jupyter notebook (recommended for interactive exploration)
+jupyter notebook examples/demos/callbacks_demo.ipynb
+
+# Or run as Python script
 python examples/demos/callbacks_demo.py
 ```
 
 **Full Documentation**: See [demos/README.md](demos/README.md)
+
+### Scientific Domains
+
+**Biology** (`gallery/biology/`):
+- Dose-response curves and IC50 calculation
+  - `dose_response.ipynb` | `dose_response.py`
+- Bacterial/cellular growth modeling
+  - `growth_curves.ipynb` | `growth_curves.py`
+- Michaelis-Menten kinetics
+  - `enzyme_kinetics.ipynb` | `enzyme_kinetics.py`
+
+**Chemistry** (`gallery/chemistry/`):
+- pH titration curve fitting
+  - `titration_curves.ipynb` | `titration_curves.py`
+- Chemical reaction rate analysis
+  - `reaction_kinetics.ipynb` | `reaction_kinetics.py`
+
+**Physics** (`gallery/physics/`):
+- Damped harmonic oscillator
+  - `damped_oscillation.ipynb` | `damped_oscillation.py`
+- Exponential decay processes
+  - `radioactive_decay.ipynb` | `radioactive_decay.py`
+- Peak fitting in spectroscopy
+  - `spectroscopy_peaks.ipynb` | `spectroscopy_peaks.py`
+
+**Engineering** (`gallery/engineering/`):
+- Sensor calibration curves
+  - `sensor_calibration.ipynb` | `sensor_calibration.py`
+- Control system parameter estimation
+  - `system_identification.ipynb` | `system_identification.py`
+- Materials property characterization
+  - `materials_characterization.ipynb` | `materials_characterization.py`
+
+**Streaming** (`streaming/`):
+- Fault tolerance basics
+  - `01_basic_fault_tolerance.ipynb` | `01_basic_fault_tolerance.py`
+- Checkpoint and resume functionality
+  - `02_checkpoint_resume.ipynb` | `02_checkpoint_resume.py`
+- Custom retry strategies
+  - `03_custom_retry_settings.ipynb` | `03_custom_retry_settings.py`
+- Diagnostic interpretation
+  - `04_interpreting_diagnostics.ipynb` | `04_interpreting_diagnostics.py`
+
+**Usage**:
+```bash
+# Run as Jupyter notebook (recommended for interactive exploration)
+jupyter notebook examples/gallery/biology/dose_response.ipynb
+jupyter notebook examples/streaming/01_basic_fault_tolerance.ipynb
+
+# Or run as Python script
+python examples/gallery/biology/dose_response.py
+python examples/streaming/01_basic_fault_tolerance.py
+```
 
 ---
 
