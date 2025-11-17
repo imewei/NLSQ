@@ -153,7 +153,9 @@ class TestUnifiedCacheStatistics:
         assert "compile_time_ms" in stats, "Stats should include compile_time_ms"
         # Windows timing precision may be insufficient for sub-millisecond measurements
         if platform.system() == "Windows":
-            assert stats["compile_time_ms"] >= 0, "Compilation time should be non-negative"
+            assert stats["compile_time_ms"] >= 0, (
+                "Compilation time should be non-negative"
+            )
         else:
             assert stats["compile_time_ms"] > 0, "Compilation time should be positive"
 
