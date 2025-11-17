@@ -4,7 +4,7 @@ nlsq.validators module
 .. currentmodule:: nlsq.validators
 
 .. automodule:: nlsq.validators
-   :no-index:
+   :noindex:
 
 Overview
 --------

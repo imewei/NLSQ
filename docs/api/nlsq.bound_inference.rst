@@ -4,7 +4,7 @@ nlsq.bound\_inference module
 .. currentmodule:: nlsq.bound_inference
 
 .. automodule:: nlsq.bound_inference
-   :no-index:
+   :noindex:
 
 Overview
 --------

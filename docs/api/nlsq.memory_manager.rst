@@ -4,7 +4,7 @@ nlsq.memory\_manager module
 .. currentmodule:: nlsq.memory_manager
 
 .. automodule:: nlsq.memory_manager
-   :no-index:
+   :noindex:
 
 Overview
 --------

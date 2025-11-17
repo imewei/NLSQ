@@ -17,11 +17,11 @@ class CurveFitResult(OptimizeResult):
 
     The result can be used in two ways:
 
-    1. **Tuple unpacking (backward compatible)**::
+    1. Tuple unpacking (backward compatible)::
 
         popt, pcov = curve_fit(model, x, y)
 
-    2. **Enhanced result object**::
+    2. Enhanced result object::
 
         result = curve_fit(model, x, y)
         print(f"R² = {result.r_squared:.4f}")
@@ -32,7 +32,7 @@ class CurveFitResult(OptimizeResult):
     Additional Attributes
     ---------------------
     model : callable
-        The model function f(x, *params) used for fitting.
+        The model function f(x, \\*params) used for fitting.
     xdata : array_like
         The independent variable data.
     ydata : array_like
@@ -175,7 +175,7 @@ class CurveFitResult(OptimizeResult):
         Returns
         -------
         predictions : ndarray
-            Model predictions: f(xdata, *popt)
+            Model predictions: f(xdata, \\*popt)
         """
         if self._predictions_cache is None:
             if hasattr(self, "model") and hasattr(self, "xdata"):
@@ -304,7 +304,7 @@ class CurveFitResult(OptimizeResult):
         Returns
         -------
         mae : float
-            Mean absolute error: mean(|residuals|)
+            Mean absolute error: mean(\\|residuals\\|)
 
         Notes
         -----

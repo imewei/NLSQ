@@ -4,7 +4,7 @@ nlsq.device module
 .. currentmodule:: nlsq.device
 
 .. automodule:: nlsq.device
-   :no-index:
+   :noindex:
 
 Overview
 --------

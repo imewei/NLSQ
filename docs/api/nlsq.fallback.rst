@@ -4,7 +4,7 @@ nlsq.fallback module
 .. currentmodule:: nlsq.fallback
 
 .. automodule:: nlsq.fallback
-   :no-index:
+   :noindex:
 
 Overview
 --------

@@ -4,7 +4,7 @@ nlsq.callbacks module
 .. currentmodule:: nlsq.callbacks
 
 .. automodule:: nlsq.callbacks
-   :no-index:
+   :noindex:
 
 Overview
 --------

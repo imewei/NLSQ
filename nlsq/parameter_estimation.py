@@ -259,7 +259,7 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
     -------
     pattern : str
         Detected pattern:
-        - 'linear': Strong linear correlation (|r| > 0.95)
+        - 'linear': Strong linear correlation (\\|r\\| > 0.95)
         - 'exponential_decay': Monotonically decreasing
         - 'exponential_growth': Monotonically increasing
         - 'gaussian': Bell-shaped curve with peak in middle

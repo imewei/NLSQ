@@ -4,7 +4,7 @@ nlsq.mixed\_precision module
 .. currentmodule:: nlsq.mixed_precision
 
 .. automodule:: nlsq.mixed_precision
-   :no-index:
+   :noindex:
 
 Overview
 --------

@@ -65,7 +65,11 @@ extensions = [
 suppress_warnings = [
     "ref.citation",  # Many duplicated citations in numpy/scipy docstrings.
     "ref.footnote",  # Many unreferenced footnotes in numpy/scipy docstrings
+    "ref.python",  # Suppress ambiguous cross-reference warnings for classes in multiple modules
+    "toc.excluded",  # Suppress toctree warnings for documents in multiple toctrees
+    "toc.not_readable",  # Suppress toctree readability warnings
     "autosummary",  # Suppress autosummary warnings
+    "autodoc",  # Suppress autodoc warnings including duplicate object descriptions
     "autodoc.import_object",  # Suppress missing import warnings for experimental features
     "app.add_node",  # Suppress node warnings
     "app.add_directive",  # Suppress directive warnings
@@ -97,6 +101,10 @@ nitpick_ignore = [
     ("py:class", "default True"),
     ("py:class", "default False"),
     ("py:class", "np.ndarray"),
+    # Suppress ambiguous cross-reference warnings for classes defined in multiple modules
+    ("py:class", "OptimizeResult"),
+    ("py:class", "PerformanceProfiler"),
+    ("py:class", "StreamingConfig"),
 ]
 
 # Custom event handler removed - caused TypeError

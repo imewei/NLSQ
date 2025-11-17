@@ -4,7 +4,7 @@ nlsq.functions module
 .. currentmodule:: nlsq.functions
 
 .. automodule:: nlsq.functions
-   :no-index:
+   :noindex:
 
 Overview
 --------

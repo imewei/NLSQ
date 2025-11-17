@@ -5,6 +5,6 @@ Configuration management and environment setup.
 
 .. automodule:: nlsq.config
    :members:
+   :noindex:
    :undoc-members:
    :show-inheritance:
-   :no-index:

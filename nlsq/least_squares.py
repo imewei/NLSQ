@@ -61,10 +61,14 @@ def jacobian_mode_selector(
     Notes
     -----
     Selection heuristic for 'auto' mode:
+
     - Use jacrev when n_params > n_residuals (tall Jacobian, more params than residuals)
+
       - Reverse-mode is O(n_residuals) operations
       - Forward-mode would be O(n_params) operations
+
     - Use jacfwd when n_params <= n_residuals (wide Jacobian, more residuals than params)
+
       - Forward-mode is O(n_params) operations
       - Reverse-mode would be O(n_residuals) operations
 

@@ -4,7 +4,7 @@ nlsq.large\_dataset module
 .. currentmodule:: nlsq.large_dataset
 
 .. automodule:: nlsq.large_dataset
-   :no-index:
+   :noindex:
 
 Overview
 --------
@@ -33,7 +33,7 @@ Classes
 
 .. autoclass:: LDMemoryConfig
    :members:
-   :no-index:
+   :noindex:
 
 Functions
 ---------

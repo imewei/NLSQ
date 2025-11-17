@@ -547,7 +547,7 @@ def detect_sparsity_at_p0(
     Parameters
     ----------
     func : Callable
-        Model function f(x, *params) -> residuals
+        Model function f(x, \\*params) -> residuals
     p0 : np.ndarray
         Initial parameter guess
     xdata : np.ndarray
@@ -573,7 +573,7 @@ def detect_sparsity_at_p0(
     Detection strategy:
     - Samples up to `sample_size` data points for efficiency
     - Uses finite differences to compute Jacobian at p0
-    - Considers elements with |J[i,j]| < threshold as zero
+    - Considers elements with \\|J[i,j]\\| < threshold as zero
     - Caches result to avoid repeated computation
 
     For auto-selection to activate sparse solver, both conditions must be met:

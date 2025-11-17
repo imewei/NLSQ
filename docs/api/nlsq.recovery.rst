@@ -4,7 +4,7 @@ nlsq.recovery module
 .. currentmodule:: nlsq.recovery
 
 .. automodule:: nlsq.recovery
-   :no-index:
+   :noindex:
 
 Overview
 --------

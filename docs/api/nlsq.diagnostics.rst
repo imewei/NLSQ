@@ -4,7 +4,7 @@ nlsq.diagnostics module
 .. currentmodule:: nlsq.diagnostics
 
 .. automodule:: nlsq.diagnostics
-   :no-index:
+   :noindex:
 
 Overview
 --------

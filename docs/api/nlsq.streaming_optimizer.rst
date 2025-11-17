@@ -4,7 +4,7 @@ nlsq.streaming\_optimizer module
 .. currentmodule:: nlsq.streaming_optimizer
 
 .. automodule:: nlsq.streaming_optimizer
-   :no-index:
+   :noindex:
 
 Overview
 --------
@@ -40,7 +40,7 @@ Classes
 
 .. autoclass:: StreamingConfig
    :members:
-   :no-index:
+   :noindex:
 
 Functions
 ---------

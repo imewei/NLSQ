@@ -4,7 +4,7 @@ nlsq.stability module
 .. currentmodule:: nlsq.stability
 
 .. automodule:: nlsq.stability
-   :no-index:
+   :noindex:
 
 Overview
 --------

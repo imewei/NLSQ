@@ -9,8 +9,8 @@ Performance Targets (Task Group 2):
 - Transfer count: Reduce from 24+ → <5 per iteration
 - GPU iteration time: 5-15% reduction
 
-Example Usage:
-    ```python
+Example Usage::
+
     from nlsq.profiling import TransferProfiler
 
     profiler = TransferProfiler(enable=True)
@@ -21,7 +21,6 @@ Example Usage:
 
     diagnostics = profiler.get_diagnostics()
     print(f"Transfer bytes: {diagnostics['transfer_bytes']}")
-    ```
 """
 
 import contextlib
