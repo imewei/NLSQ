@@ -9,6 +9,7 @@ This test suite validates the implementation of:
 All tests ensure GPU-CPU transfers are minimized during optimization.
 """
 
+import os
 import time
 from unittest import mock
 
@@ -266,6 +267,11 @@ class TestTransferReduction:
         assert result.success
         assert np.allclose(result.x, [1.8, 0.5], rtol=0.1)
 
+    @pytest.mark.xdist_group(name="performance_tests")
+    @pytest.mark.skipif(
+        os.environ.get("PYTEST_XDIST_WORKER") is not None,
+        reason="Performance timing unreliable under parallel execution (CPU contention)",
+    )
     def test_jax_operations_in_hot_path(self):
         """Verify JAX operations don't trigger transfers in hot path."""
         # Create JAX arrays
@@ -363,6 +369,11 @@ class TestPerformanceMetrics:
 class TestPerformanceImprovement:
     """Test Task 2.10: Performance improvement validation."""
 
+    @pytest.mark.xdist_group(name="performance_tests")
+    @pytest.mark.skipif(
+        os.environ.get("PYTEST_XDIST_WORKER") is not None,
+        reason="Performance timing unreliable under parallel execution (CPU contention)",
+    )
     def test_async_logging_overhead(self):
         """Verify async logging has minimal overhead."""
 
@@ -390,6 +401,11 @@ class TestPerformanceImprovement:
         # Both should converge to same result
         assert np.allclose(popt1, popt2, rtol=1e-6)
 
+    @pytest.mark.xdist_group(name="performance_tests")
+    @pytest.mark.skipif(
+        os.environ.get("PYTEST_XDIST_WORKER") is not None,
+        reason="Performance timing unreliable under parallel execution (CPU contention)",
+    )
     def test_jax_operations_performance(self):
         """Verify JAX operations are fast (no blocking transfers)."""
         # Large arrays to make transfers noticeable
@@ -445,7 +461,7 @@ class TestIntegration:
         y_data = y_true + 0.1 * np.random.randn(100)
 
         with profile_optimization() as metrics:
-            popt, _pcov = curve_fit(
+            popt, pcov = curve_fit(
                 model,
                 x,
                 y_data,

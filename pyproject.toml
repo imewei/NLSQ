@@ -395,6 +395,7 @@ markers = [
     "integration: integration tests (100ms-1s)",
     "slow: marks tests as slow (>1s each, deselect with '-m \"not slow\"')",
     "smoke: critical smoke tests for CI fast feedback (~50 tests, <30s)",
+    "serial: marks tests that must run serially (no parallel execution)",
     # Feature-based markers
     "jax_compilation: tests triggering JAX JIT compilation overhead",
     "numerical: numerical accuracy tests (can use relaxed tolerances for speed)",
