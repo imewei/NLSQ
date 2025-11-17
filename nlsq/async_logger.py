@@ -44,9 +44,9 @@ def is_jax_array(x: Any) -> bool:
 
 
 def log_iteration_async(
-    iteration: Union[int, jax.Array],
-    cost: Union[float, jax.Array],
-    gradient_norm: Union[float, jax.Array],
+    iteration: int | jax.Array,
+    cost: float | jax.Array,
+    gradient_norm: float | jax.Array,
     message: str = "",
     verbose: int = 0,
 ) -> None:
@@ -105,8 +105,7 @@ def log_iteration_async(
         logger.info(
             f"Optimization: iter={int(iter_val)} | "
             f"cost={float(cost_val):.6e} | "
-            f"‖∇f‖={float(norm_val):.6e}"
-            + (f" | {msg_val}" if msg_val else "")
+            f"‖∇f‖={float(norm_val):.6e}" + (f" | {msg_val}" if msg_val else "")
         )
 
     # Ensure all numeric values are JAX arrays (lightweight operation)
@@ -121,10 +120,10 @@ def log_iteration_async(
 
 def log_convergence_async(
     reason: str,
-    iterations: Union[int, jax.Array],
-    final_cost: Union[float, jax.Array],
+    iterations: int | jax.Array,
+    final_cost: float | jax.Array,
     time_sec: float,
-    final_gradient_norm: Union[float, jax.Array],
+    final_gradient_norm: float | jax.Array,
     verbose: int = 1,
 ) -> None:
     """Log convergence result asynchronously.

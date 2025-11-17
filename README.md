@@ -584,7 +584,7 @@ print(f"Total time: {metrics.total_time_sec:.3f}s")
 print(f"Average iteration: {metrics.avg_iteration_time_ms:.2f}ms")
 
 # Static analysis of transfer patterns
-with open('mymodule.py') as f:
+with open("mymodule.py") as f:
     code = f.read()
 
 analysis = analyze_source_transfers(code)
