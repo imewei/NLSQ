@@ -15,6 +15,11 @@
 # - Documentation with zero warnings enforcement
 # - All 1,557 tests passing with 82% coverage
 #
+# CUDA INSTALLATION (Linux GPU users only):
+#   Before installing from this lockfile, install JAX with CUDA support:
+#   pip install "jax[cuda12-local]>=0.6.0"
+#   See README.md "GPU Acceleration" section for details
+#
 # WARNING: This file becomes outdated quickly. Regenerate periodically with:
 #   uv pip install -r requirements-dev.txt && uv pip freeze > requirements-lock.txt
 

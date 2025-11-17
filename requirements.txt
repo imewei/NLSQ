@@ -1,0 +1,20 @@
+# NLSQ Runtime Dependencies
+# Core dependencies required to run NLSQ
+# For development dependencies, use: requirements-dev.txt
+# For exact reproducibility, use: requirements-lock.txt
+
+# Core scientific computing
+numpy>=2.0.0
+scipy>=1.14.0
+
+# JAX ecosystem (CPU-only by default)
+# GPU users: see GPU ACCELERATION section in README.md
+jax>=0.6.0
+
+# Visualization and monitoring
+matplotlib>=3.10.0
+psutil>=6.0.0
+tqdm>=4.66.0
+
+# Large dataset support
+h5py>=3.10.0
