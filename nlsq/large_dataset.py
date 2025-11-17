@@ -263,7 +263,7 @@ class DataChunker:
         chunk_size: int,
         shuffle: bool = False,
         random_seed: int | None = None,
-    ) -> Generator[tuple[np.ndarray, np.ndarray, int], None, None]:
+    ) -> Generator[tuple[np.ndarray, np.ndarray, int]]:
         """Create data chunks for processing.
 
         Parameters
