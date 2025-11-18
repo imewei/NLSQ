@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from damped_oscillation.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Damped Oscillation: Pendulum Damping Analysis
 #
 #
@@ -14,10 +22,9 @@
 # - Frequency and damping time constants
 # - Comparison with theoretical models
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -97,9 +104,6 @@ def damping_time(gamma):
     return 1 / gamma
 
 
-# In[2]:
-
-
 # True parameters for a lightly damped pendulum
 # (e.g., 1m length pendulum with small air resistance)
 A0_true = 15.0  # Initial amplitude (degrees)
@@ -119,9 +123,6 @@ displacement_measured = displacement_true + noise
 
 # Measurement uncertainties
 sigma = 0.2 * np.ones_like(time)  # Constant uncertainty
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -162,9 +163,6 @@ frequency_fit = omega_fit / (2 * np.pi)
 Q_err = Q_fit * np.sqrt((gamma_err / gamma_fit) ** 2 + (omega_err / omega_fit) ** 2)
 tau_err = tau_fit * (gamma_err / gamma_fit)
 period_err = period_fit * (omega_err / omega_fit)
-
-
-# In[4]:
 
 
 print("\nFitted Parameters:")
@@ -209,9 +207,6 @@ print("\nGoodness of Fit:")
 print(f"  χ²/dof = {chi_squared_reduced:.2f} (expect ≈ 1.0)")
 
 
-# In[5]:
-
-
 print("\n" + "=" * 70)
 print("PHYSICAL INTERPRETATION")
 print("=" * 70)
@@ -246,9 +241,6 @@ elif damping_ratio == 1:
     print("  → Critically damped (ζ = 1)")
 else:
     print("  → Overdamped (ζ > 1)")
-
-
-# In[6]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -393,10 +385,12 @@ ax6.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("damped_oscillation.png", dpi=150)
 print("\n✅ Plot saved as 'damped_oscillation.png'")
-plt.show()
-
-
-# In[7]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "damped_oscillation"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

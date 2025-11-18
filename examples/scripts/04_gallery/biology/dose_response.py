@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from dose_response.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Dose-Response Curves: EC50 and IC50 Determination
 #
 #
@@ -14,10 +22,9 @@
 # - Dynamic range and efficacy
 # - Comparison of multiple drugs/compounds
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -82,9 +89,6 @@ def inhibition_model(dose, top, IC50, hill_slope):
     return top / (1 + jnp.power(dose / IC50, hill_slope))
 
 
-# In[2]:
-
-
 # Drug concentrations (log-spaced: 0.01 to 1000 μM)
 dose = np.logspace(-2, 3, 15)  # 15 concentration points
 
@@ -105,9 +109,6 @@ response_measured = response_true + noise
 
 # Measurement uncertainties (constant CV)
 sigma = 3.0 * np.ones_like(response_measured)
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -139,9 +140,6 @@ perr = np.sqrt(np.diag(pcov))
 bottom_err, top_err, EC50_err, hill_slope_err = perr
 
 
-# In[4]:
-
-
 # Dynamic range
 dynamic_range = top_fit - bottom_fit
 
@@ -149,9 +147,6 @@ dynamic_range = top_fit - bottom_fit
 # For 4PL: EC_x = EC50 * ((100-x)/x)^(1/hill_slope)
 EC20 = EC50_fit * np.power((top_fit - 20) / (20 - bottom_fit), 1 / hill_slope_fit)
 EC80 = EC50_fit * np.power((top_fit - 80) / (80 - bottom_fit), 1 / hill_slope_fit)
-
-
-# In[5]:
 
 
 print("\nFitted Parameters:")
@@ -216,9 +211,6 @@ print(f"  RMSE:    {rmse:.2f} %")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
 
 
-# In[6]:
-
-
 print("\n" + "-" * 70)
 print("COMPARING MULTIPLE COMPOUNDS")
 print("-" * 70)
@@ -258,9 +250,6 @@ print(f"  Hill:     {hill_slope_B_fit:.2f}")
 
 print(f"\nPotency ratio (A/B):  {EC50_fit / EC50_B_fit:.1f}x")
 print(f"Efficacy difference:  {dynamic_range - dynamic_range_B:.1f} %")
-
-
-# In[7]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -467,10 +456,12 @@ ax6.set_title("Summary Table", fontsize=12, fontweight="bold")
 plt.tight_layout()
 plt.savefig("dose_response.png", dpi=150)
 print("\n✅ Plot saved as 'dose_response.png'")
-plt.show()
-
-
-# In[8]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "dose_response"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

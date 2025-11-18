@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from reaction_kinetics.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Chemical Reaction Kinetics: Rate Constant Determination
 #
 #
@@ -15,10 +23,9 @@
 # - Integrated rate laws
 # - Arrhenius temperature dependence
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -102,9 +109,6 @@ def pseudo_first_order(t, C0, k_obs):
     return C0 * jnp.exp(-k_obs * t)
 
 
-# In[2]:
-
-
 # Time points (0 to 1000 seconds, every 10 seconds)
 time = np.linspace(0, 1000, 101)
 
@@ -121,9 +125,6 @@ C_1st_measured = C_1st_true + noise_1st
 
 # Measurement uncertainties
 sigma_1st = np.asarray(0.02 * C_1st_measured + 0.001)  # Relative + small constant
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -178,9 +179,6 @@ rmse_1st = np.sqrt(np.mean(residuals_1st**2))
 print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse_1st:.5f} M")
 print(f"  χ²/dof:  {chi_squared_reduced_1st:.2f}")
-
-
-# In[4]:
 
 
 print("\n" + "-" * 70)
@@ -238,9 +236,6 @@ print("\nGoodness of Fit:")
 print(f"  RMSE: {rmse_2nd:.5f} M")
 
 
-# In[5]:
-
-
 print("\n" + "-" * 70)
 print("REACTION ORDER DETERMINATION")
 print("-" * 70)
@@ -282,18 +277,12 @@ print(f"  2nd-order: AIC = {AIC_2nd:.2f}")
 print(f"  → Preferred: {'First-order' if AIC_1st < AIC_2nd else 'Second-order'}")
 
 
-# In[6]:
-
-
 print("\n" + "-" * 70)
 print("LINEARIZATION ANALYSIS")
 print("-" * 70)
 
 # First-order: ln[A] vs t should be linear (slope = -k)
 ln_C_1st = np.log(C_1st_measured)
-
-
-# In[7]:
 
 
 def linear_1st_order(t, ln_C0, k):
@@ -313,9 +302,6 @@ print(f"  Agreement: {abs(k_ln_fit - k_1st_fit) / k_1st_fit * 100:.2f}% differen
 inv_C_2nd = 1 / C_2nd_measured
 
 
-# In[8]:
-
-
 def linear_2nd_order(t, inv_C0, k):
     return inv_C0 + k * t
 
@@ -327,9 +313,6 @@ print("\nSecond-order linearization (1/[A] vs t):")
 print(f"  k from linearization: {k_inv_fit:.6f} M⁻¹s⁻¹")
 print(f"  k from direct fit:    {k_2nd_fit:.6f} M⁻¹s⁻¹")
 print(f"  Agreement: {abs(k_inv_fit - k_2nd_fit) / k_2nd_fit * 100:.2f}% difference")
-
-
-# In[9]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -555,10 +538,12 @@ ax9.set_title("Summary Table", fontsize=12, fontweight="bold")
 plt.tight_layout()
 plt.savefig("reaction_kinetics.png", dpi=150)
 print("\n✅ Plot saved as 'reaction_kinetics.png'")
-plt.show()
-
-
-# In[10]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "reaction_kinetics"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

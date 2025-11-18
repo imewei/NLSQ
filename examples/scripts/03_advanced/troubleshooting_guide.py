@@ -1,5 +1,12 @@
-#!/usr/bin/env python
+"""
+Converted from troubleshooting_guide.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # NLSQ Troubleshooting Guide
 #
 # **Level**: All Levels
@@ -22,13 +29,12 @@
 # 4. **Performance Problems**: Slow compilation, memory errors
 # 5. **Error Messages**: Decoding common NLSQ/JAX errors
 # 6. **Best Practices**: Preventing issues before they occur
+# ======================================================================
 
-# In[1]:
 
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 
-"""Setup for troubleshooting examples."""
-
-import contextlib
 import warnings
 
 import jax
@@ -46,6 +52,7 @@ print(f"  JAX version: {jax.__version__}")
 print(f"  JAX backend: {jax.default_backend()}")
 
 
+# ======================================================================
 # ## Issue 1: Convergence Failures
 #
 # ### Symptoms
@@ -61,11 +68,10 @@ print(f"  JAX backend: {jax.default_backend()}")
 # 4. **Local minima** (non-convex optimization landscape)
 #
 # ### Solutions
+# ======================================================================
 
-# In[2]:
 
-
-# Demonstrate convergence failure and fix.
+# Demonstrate convergence failure and fix
 
 # Generate test data
 x_data = np.linspace(0, 10, 50)
@@ -75,9 +81,6 @@ y_data = 5.0 * np.exp(-0.5 * x_data) + np.random.normal(0, 0.1, 50)
 def exponential_decay(x, a, b):
     return a * jnp.exp(-b * x)
 
-
-# Create fresh CurveFit instance (avoid lingering state from previous demos)
-cf = CurveFit()
 
 # Create fresh CurveFit instance (avoid lingering state from previous demos)
 cf = CurveFit()
@@ -120,6 +123,7 @@ popt_iter, _ = cf.curve_fit(
 print(f"  Fitted with maxiter=1000: a={popt_iter[0]:.2f}, b={popt_iter[1]:.2f} ✓")
 
 
+# ======================================================================
 # ## Issue 2: Poor Fit Quality
 #
 # ### Symptoms
@@ -135,11 +139,10 @@ print(f"  Fitted with maxiter=1000: a={popt_iter[0]:.2f}, b={popt_iter[1]:.2f} �
 # 4. **Outliers** dominating the fit
 #
 # ### Solutions
+# ======================================================================
 
-# In[3]:
 
-
-# Demonstrate poor fit quality and fixes.
+# Demonstrate poor fit quality and fixes
 
 # Generate data with offset (y = a*exp(-b*x) + c)
 x_data = np.linspace(0, 5, 40)
@@ -181,10 +184,7 @@ print(f"  RMSE with correct model: {rmse_correct:.3f} (much better!) ✓")
 print(f"  Improvement: {(rmse_wrong - rmse_correct) / rmse_wrong * 100:.1f}%")
 
 
-# In[4]:
-
-
-# Demonstrate bounds issues.
+# Demonstrate bounds issues
 
 # PROBLEM: Bounds excluding true parameters
 print("\n❌ PROBLEM: Overly restrictive bounds")
@@ -218,6 +218,7 @@ print(
 )
 
 
+# ======================================================================
 # ## Issue 3: Numerical Instability (NaN, Inf)
 #
 # ### Symptoms
@@ -232,11 +233,10 @@ print(
 # 4. **Invalid operations** (sqrt of negative, log of zero)
 #
 # ### Solutions
+# ======================================================================
 
-# In[5]:
 
-
-# Demonstrate numerical instability and fixes.
+# Demonstrate numerical instability and fixes
 
 # PROBLEM: Exponential overflow
 print("❌ PROBLEM: Exponential overflow")
@@ -303,6 +303,7 @@ print(
 )
 
 
+# ======================================================================
 # ## Issue 4: Performance Problems
 #
 # ### Symptoms
@@ -318,11 +319,10 @@ print(
 # 4. **Unnecessary recompilation** (changing array shapes)
 #
 # ### Solutions
+# ======================================================================
 
-# In[6]:
 
-
-# Performance optimization tips.
+# Performance optimization tips
 
 import time
 
@@ -370,10 +370,7 @@ print("     fit(x, ...)  # Compiles for shape (1000,)")
 print("     fit(x, ...)  # Reuses compilation ✓")
 
 
-# In[7]:
-
-
-# Handling large datasets.
+# Handling large datasets
 
 print("\n✓ SOLUTION 3: Strategies for large datasets (>1M points)\n")
 
@@ -400,14 +397,14 @@ print("  # For distributed data, fit chunks separately then combine")
 print("  # See: examples/streaming/ directory")
 
 
+# ======================================================================
 # ## Issue 5: Common Error Messages
 #
 # ### Quick Reference
+# ======================================================================
 
-# In[8]:
 
-
-# Common error messages and solutions.
+# Common error messages and solutions
 
 print("━" * 80)
 print("COMMON NLSQ/JAX ERROR MESSAGES & SOLUTIONS")
@@ -466,16 +463,16 @@ for i, err in enumerate(errors, 1):
 print("━" * 80)
 
 
+# ======================================================================
 # ## Issue 6: Best Practices Checklist
 #
 # ### Pre-Flight Checklist (Before Fitting)
 #
 # Use this checklist to prevent common issues:
+# ======================================================================
 
-# In[9]:
 
-
-# Pre-fitting checklist.
+# Pre-fitting checklist
 
 print("━" * 80)
 print("NLSQ PRE-FITTING CHECKLIST")
@@ -545,14 +542,14 @@ print("  4. Test on held-out data if available")
 print("━" * 80)
 
 
+# ======================================================================
 # ## Diagnostic Workflow
 #
 # When troubleshooting a fit that's not working:
+# ======================================================================
 
-# In[10]:
 
-
-# Step-by-step diagnostic workflow.
+# Step-by-step diagnostic workflow
 
 print("━" * 80)
 print("DIAGNOSTIC WORKFLOW FOR FAILED FITS")
@@ -618,6 +615,7 @@ print("  https://github.com/your-nlsq-repo/issues")
 print("━" * 80)
 
 
+# ======================================================================
 # ## Summary: Quick Problem Solver
 #
 # | **Symptom** | **Most Likely Cause** | **Quick Fix** |
@@ -649,3 +647,4 @@ print("━" * 80)
 # ---
 #
 # **Remember**: Most fitting issues stem from poor initial guesses, wrong models, or numerical instability. Address these systematically using the diagnostic workflow above.
+# ======================================================================

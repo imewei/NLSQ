@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from spectroscopy_peaks.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Spectroscopy Peak Fitting: Multi-Peak Deconvolution
 #
 #
@@ -14,10 +22,9 @@
 # - Peak area integration
 # - Parameter constraints (positive widths, amplitudes)
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -122,9 +129,6 @@ def multi_peak_model(
     return background + peak1 + peak2 + peak3
 
 
-# In[2]:
-
-
 # Energy axis (keV for X-ray spectroscopy example)
 energy = np.linspace(5, 15, 500)  # 500 channels
 
@@ -164,9 +168,6 @@ spectrum_measured = spectrum_true + noise
 
 # Measurement uncertainties (Poisson)
 sigma = np.sqrt(spectrum_measured + 10)
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -261,9 +262,6 @@ perr = np.sqrt(np.diag(pcov))
 ) = perr
 
 
-# In[4]:
-
-
 print("\nFitted Parameters:")
 print("\nBackground:")
 print(f"  Slope:  {bg_slope_fit:.3f} ± {bg_slope_err:.3f}")
@@ -303,9 +301,6 @@ dof = len(energy) - len(popt)
 chi_squared_reduced = chi_squared / dof
 print("\nGoodness of Fit:")
 print(f"  χ²/dof = {chi_squared_reduced:.2f} (expect ≈ 1.0)")
-
-
-# In[5]:
 
 
 fig = plt.figure(figsize=(16, 10))
@@ -428,10 +423,12 @@ ax5.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("spectroscopy_peaks.png", dpi=150)
 print("\n✅ Plot saved as 'spectroscopy_peaks.png'")
-plt.show()
-
-
-# In[6]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "spectroscopy_peaks"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

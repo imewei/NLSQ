@@ -1,5 +1,12 @@
-#!/usr/bin/env python
+"""
+Converted from function_library_demo.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # Demonstration of NLSQ Common Function Library
 #
 # This script demonstrates the pre-built functions in NLSQ that make curve fitting
@@ -12,9 +19,11 @@
 #
 # No manual parameter guessing needed!
 #
+# ======================================================================
 
-# In[1]:
 
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 
 import matplotlib.pyplot as plt
 import numpy as np

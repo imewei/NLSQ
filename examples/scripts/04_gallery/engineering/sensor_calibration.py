@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from sensor_calibration.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Sensor Calibration: Non-Linear Temperature Sensor
 #
 #
@@ -15,10 +23,9 @@
 # - Uncertainty propagation to measured values
 # - Comparison of different calibration models
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -76,9 +83,6 @@ def polynomial_calibration(x, *coeffs):
     return result
 
 
-# In[2]:
-
-
 # Simulate thermistor-like sensor with non-linear response
 # Sensor voltage vs true temperature (°C)
 
@@ -106,9 +110,6 @@ sigma_voltage = 5.0 * np.ones_like(voltage_measured)  # mV
 sigma_temp = 0.1 * np.ones_like(temp_reference)  # °C (reference uncertainty)
 
 
-# In[3]:
-
-
 print("=" * 70)
 print("SENSOR CALIBRATION: NON-LINEAR TEMPERATURE SENSOR")
 print("=" * 70)
@@ -117,9 +118,6 @@ print("=" * 70)
 print("\n" + "-" * 70)
 print("Model 1: Linear Calibration")
 print("-" * 70)
-
-
-# In[4]:
 
 
 def linear_model(V, a, b):
@@ -152,9 +150,6 @@ print("Model 2: Quadratic Calibration")
 print("-" * 70)
 
 
-# In[5]:
-
-
 def quadratic_model(V, c0, c1, c2):
     return c0 + c1 * V + c2 * V**2
 
@@ -184,9 +179,6 @@ print("Model 3: Cubic Calibration (Recommended)")
 print("-" * 70)
 
 
-# In[6]:
-
-
 def cubic_model(V, d0, d1, d2, d3):
     return d0 + d1 * V + d2 * V**2 + d3 * V**3
 
@@ -212,9 +204,6 @@ print(f"  RMSE: {rmse_cubic:.2f} °C")
 print(f"  Max residual: {np.max(np.abs(residuals_cubic)):.2f} °C")
 
 
-# In[7]:
-
-
 print("\n" + "=" * 70)
 print("MODEL COMPARISON")
 print("=" * 70)
@@ -231,9 +220,6 @@ print(
 )
 print("-" * 70)
 print(f"✓ Recommended: Cubic model (best accuracy for {len(temp_reference)} points)")
-
-
-# In[8]:
 
 
 print("\n" + "=" * 70)
@@ -262,9 +248,6 @@ print("\nExample measurement:")
 print(f"  Sensor voltage: {V_unknown:.1f} ± {V_unknown_err:.1f} mV")
 print(f"  Predicted temperature: {T_predicted:.2f} ± {T_uncertainty:.2f} °C")
 print(f"  Sensitivity: dT/dV = {dT_dV:.4f} °C/mV")
-
-
-# In[9]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -402,10 +385,12 @@ ax6.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("sensor_calibration.png", dpi=150)
 print("\n✅ Plot saved as 'sensor_calibration.png'")
-plt.show()
-
-
-# In[10]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "sensor_calibration"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

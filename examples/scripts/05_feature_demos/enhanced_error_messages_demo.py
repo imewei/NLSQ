@@ -1,13 +1,18 @@
-#!/usr/bin/env python
+"""
+Converted from enhanced_error_messages_demo.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # Demonstration of Enhanced Error Messages in NLSQ
 #
 # This example shows how NLSQ provides intelligent, actionable error messages
 # when optimization fails, helping users debug issues quickly.
 #
-
-# In[1]:
-
+# ======================================================================
 
 import jax.numpy as jnp
 import numpy as np

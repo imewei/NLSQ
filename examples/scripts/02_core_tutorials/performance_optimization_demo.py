@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+"""
+Converted from performance_optimization_demo.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+# ======================================================================
 # # NLSQ Performance Optimization Features
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/performance_optimization_demo.ipynb)
@@ -17,23 +23,19 @@
 # - Memory-constrained environments
 # - Real-time or low-latency applications
 # - Problems with structured sparsity patterns
-
+# ======================================================================
+# ======================================================================
 # ## Setup and Imports
-
-# In[1]:
-
-
+# ======================================================================
 # Install NLSQ if not already installed
-get_ipython().system("pip install nlsq")
-
-
-# In[2]:
-
-
+# !pip install nlsq  # Uncomment to install in notebook environment
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import sys
 import time
 import warnings
 from collections.abc import Callable
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -47,9 +49,6 @@ from nlsq import CurveFit, __version__
 
 print(f"NLSQ version: {__version__}")
 print(f"JAX devices: {jax.devices()}")
-
-
-# In[3]:
 
 
 # Import advanced performance features
@@ -74,6 +73,7 @@ from nlsq import (
 print("✅ Advanced features imported successfully")
 
 
+# ======================================================================
 # ## 1. MemoryPool - Zero-Allocation Optimization
 #
 # The MemoryPool pre-allocates and reuses array buffers to eliminate allocation overhead during optimization iterations. This is critical for:
@@ -88,8 +88,7 @@ print("✅ Advanced features imported successfully")
 # 2. Reuse buffers instead of creating new arrays
 # 3. Track allocation statistics
 # 4. Automatic cleanup with context managers
-
-# In[4]:
+# ======================================================================
 
 
 def demo_memory_pool_basics():
@@ -140,9 +139,9 @@ def demo_memory_pool_basics():
 demo_memory_pool_basics()
 
 
+# ======================================================================
 # ### Performance Comparison: With vs Without Memory Pool
-
-# In[5]:
+# ======================================================================
 
 
 def benchmark_memory_pool_performance():
@@ -205,9 +204,9 @@ def benchmark_memory_pool_performance():
 benchmark_memory_pool_performance()
 
 
+# ======================================================================
 # ### Using MemoryPool as Context Manager
-
-# In[6]:
+# ======================================================================
 
 
 def demo_memory_pool_context_manager():
@@ -246,6 +245,7 @@ def demo_memory_pool_context_manager():
 demo_memory_pool_context_manager()
 
 
+# ======================================================================
 # ## 2. SparseJacobian - Exploiting Sparsity for Memory Efficiency
 #
 # Many curve fitting problems have **sparse Jacobians** where each data point only depends on a subset of parameters. The `SparseJacobianComputer` exploits this structure for:
@@ -260,8 +260,7 @@ demo_memory_pool_context_manager()
 # - **Multi-component fits**: Independent sub-models
 # - **Localized parameters**: Parameters affecting only nearby data points
 # - **Very large problems**: Millions of data points
-
-# In[7]:
+# ======================================================================
 
 
 def demo_sparse_jacobian_basics():
@@ -328,7 +327,11 @@ def demo_sparse_jacobian_basics():
     plt.xticks(range(len(true_params)), ["a1", "b1", "a2", "b2"])
 
     plt.tight_layout()
-    plt.show()
+    # Save figure to file
+    fig_dir = Path(__file__).parent / "figures" / "performance_optimization_demo"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+    plt.close()
 
     print("\n✅ Sparse Jacobian pattern detected successfully")
 
@@ -337,9 +340,9 @@ def demo_sparse_jacobian_basics():
 demo_sparse_jacobian_basics()
 
 
+# ======================================================================
 # ### Memory Savings Analysis
-
-# In[8]:
+# ======================================================================
 
 
 def analyze_sparse_jacobian_memory_savings():
@@ -397,9 +400,9 @@ def analyze_sparse_jacobian_memory_savings():
 analyze_sparse_jacobian_memory_savings()
 
 
+# ======================================================================
 # ### Using Sparse Jacobians in Practice
-
-# In[9]:
+# ======================================================================
 
 
 def demo_sparse_jacobian_fitting():
@@ -508,7 +511,11 @@ def demo_sparse_jacobian_fitting():
 
     plt.colorbar(im, ax=axes[1], label="Non-zero")
     plt.tight_layout()
-    plt.show()
+    # Save figure to file
+    fig_dir = Path(__file__).parent / "figures" / "performance_optimization_demo"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+    plt.close()
 
     print("\n✅ Sparse Jacobian analysis complete")
     print("\n💡 Notice how each Gaussian parameter only affects a localized region!")
@@ -518,6 +525,7 @@ def demo_sparse_jacobian_fitting():
 demo_sparse_jacobian_fitting()
 
 
+# ======================================================================
 # ## 3. StreamingOptimizer - Unlimited Dataset Size
 #
 # The `StreamingOptimizer` processes data in batches without ever loading the full dataset into memory. This enables:
@@ -533,8 +541,7 @@ demo_sparse_jacobian_fitting()
 # - **Data on disk**: HDF5 files, databases, etc.
 # - **Memory constraints**: Limited RAM relative to data size
 # - **Online learning**: Continuous data streams
-
-# In[10]:
+# ======================================================================
 
 
 def demo_streaming_optimizer_basics():
@@ -626,9 +633,9 @@ def demo_streaming_optimizer_basics():
 demo_streaming_optimizer_basics()
 
 
+# ======================================================================
 # ### Creating and Using HDF5 Datasets
-
-# In[11]:
+# ======================================================================
 
 
 def demo_hdf5_streaming():
@@ -721,11 +728,11 @@ def demo_hdf5_streaming():
 demo_hdf5_streaming()
 
 
+# ======================================================================
 # ## 4. Combined Example: All Features Together
 #
 # Let's demonstrate how to combine all three advanced features for maximum performance on a large, sparse problem.
-
-# In[12]:
+# ======================================================================
 
 
 def demo_combined_optimization():
@@ -891,7 +898,11 @@ def demo_combined_optimization():
     axes[1].legend(handles=legend_elements)
 
     plt.tight_layout()
-    plt.show()
+    # Save figure to file
+    fig_dir = Path(__file__).parent / "figures" / "performance_optimization_demo"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+    plt.close()
 
     # Summary
     print("\n" + "=" * 70)
@@ -914,6 +925,7 @@ def demo_combined_optimization():
 demo_combined_optimization()
 
 
+# ======================================================================
 # ## 5. Best Practices and Recommendations
 #
 # ### When to Use Each Feature
@@ -994,7 +1006,10 @@ demo_combined_optimization()
 # optimizer = StreamingOptimizer(config)
 # result = optimizer.fit_streaming(func, data_source, p0)
 # ```
+# ======================================================================
 
+
+# ======================================================================
 # ## Summary
 #
 # This notebook demonstrated NLSQ's advanced performance optimization features:
@@ -1037,3 +1052,4 @@ demo_combined_optimization()
 #   - 2D Gaussian Demo
 #
 # *This notebook demonstrates advanced performance optimization features. Requires Python 3.12+ and NLSQ >= 0.1.0.*
+# ======================================================================

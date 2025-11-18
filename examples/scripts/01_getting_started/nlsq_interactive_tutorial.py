@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from nlsq_interactive_tutorial.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # NLSQ Interactive Tutorial: GPU-Accelerated Curve Fitting
 #
 # **Welcome to NLSQ!** This interactive tutorial will guide you through using NLSQ for fast, GPU-accelerated curve fitting.
@@ -21,7 +29,8 @@
 # ---
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ_Interactive_Tutorial.ipynb)
-
+# ======================================================================
+# ======================================================================
 # ## Section 1: Installation & Setup
 #
 # ### 1.1 Installation
@@ -32,13 +41,9 @@
 # - **Colab (GPU)**: JAX pre-installed ✅
 # - **Local (CPU)**: `pip install nlsq`
 # - **Local (GPU)**: Install JAX with GPU support first, then `pip install nlsq`
-
-# In[1]:
-
-
+# ======================================================================
 # Install NLSQ (skip if already installed)
-get_ipython().system("pip install -q nlsq")
-
+# !pip install -q nlsq  # Uncomment to install in notebook environment
 # Check installation
 import nlsq
 
@@ -46,11 +51,15 @@ print(f"NLSQ version: {nlsq.__version__}")
 print("✅ Installation successful!")
 
 
+# ======================================================================
 # ### 1.2 Imports
 #
 # Let's import the libraries we'll need:
+# ======================================================================
 
-# In[2]:
+
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 
 
 import jax.numpy as jnp
@@ -69,11 +78,11 @@ np.random.seed(42)
 print("✅ All imports successful!")
 
 
+# ======================================================================
 # ### 1.3 Check GPU Availability
 #
 # NLSQ automatically uses GPU if available. Let's check:
-
-# In[3]:
+# ======================================================================
 
 
 import jax
@@ -89,6 +98,7 @@ else:
     print("\n💻 Running on CPU. For GPU, use Runtime -> Change runtime type -> GPU")
 
 
+# ======================================================================
 # ---
 #
 # ## Section 2: Your First Curve Fit
@@ -98,8 +108,7 @@ else:
 # ### 2.1 Generate Sample Data
 #
 # We'll create noisy data following an exponential decay: $y = a \cdot e^{-b \cdot x} + c$
-
-# In[4]:
+# ======================================================================
 
 
 # True parameters
@@ -122,16 +131,21 @@ plt.ylabel("y")
 plt.legend()
 plt.title("Exponential Decay Data")
 plt.grid(True, alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print(f"True parameters: a={a_true}, b={b_true}, c={c_true}")
 
 
+# ======================================================================
 # ### 2.2 Define the Model
 #
 # Define your model as a Python function. **Important**: Use `jax.numpy` (jnp) instead of `numpy` for JAX compatibility!
-
-# In[5]:
+# ======================================================================
 
 
 def exponential_decay(x, a, b, c):
@@ -148,11 +162,11 @@ def exponential_decay(x, a, b, c):
 print("✅ Model defined!")
 
 
+# ======================================================================
 # ### 2.3 Fit the Model
 #
 # Now let's fit the model to our data. NLSQ's API is compatible with SciPy's `curve_fit`:
-
-# In[6]:
+# ======================================================================
 
 
 # Initial parameter guess
@@ -171,9 +185,9 @@ print(f"  c = {c_fit:.4f} (true: {c_true})")
 print("\n✅ Fitting successful!")
 
 
+# ======================================================================
 # ### 2.4 Visualize the Results
-
-# In[7]:
+# ======================================================================
 
 
 # Generate fitted curve
@@ -204,13 +218,18 @@ plt.title("Residual Plot")
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 # Print goodness of fit
 rmse = np.sqrt(np.mean(residuals**2))
 print(f"RMSE: {rmse:.4f}")
 
 
+# ======================================================================
 # ### 🎯 Exercise 1: Try It Yourself!
 #
 # Modify the code above to fit a **linear** model: $y = a \cdot x + b$
@@ -237,13 +256,13 @@ print(f"RMSE: {rmse:.4f}")
 # print(f"Fitted: a={popt[0]:.2f}, b={popt[1]:.2f}")
 # ```
 # </details>
-
-# In[8]:
+# ======================================================================
 
 
 # Your code here
 
 
+# ======================================================================
 # ---
 #
 # ## Section 3: Common Fitting Patterns
@@ -251,8 +270,7 @@ print(f"RMSE: {rmse:.4f}")
 # NLSQ includes a library of common functions for quick fitting.
 #
 # ### 3.1 Using Built-in Functions
-
-# In[9]:
+# ======================================================================
 
 
 # List available functions
@@ -261,11 +279,11 @@ for func_name in functions.__all__:
     print(f"  - {func_name}")
 
 
+# ======================================================================
 # ### 3.2 Example: Gaussian Peak Fitting
 #
 # Fit a Gaussian peak: $y = a \cdot e^{-(x-\mu)^2 / (2\sigma^2)}$
-
-# In[10]:
+# ======================================================================
 
 
 # Generate Gaussian data
@@ -290,16 +308,21 @@ plt.ylabel("y")
 plt.legend()
 plt.title(f"Gaussian Fit: μ={mu_fit:.2f}, σ={sigma_fit:.2f}")
 plt.grid(True, alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print(f"Fitted: amplitude={a_fit:.2f}, mean={mu_fit:.2f}, std={sigma_fit:.2f}")
 
 
+# ======================================================================
 # ### 3.3 Example: Sigmoid (Logistic) Curve
 #
 # Common in dose-response and growth curves: $y = \frac{L}{1 + e^{-k(x-x_0)}} + b$
-
-# In[11]:
+# ======================================================================
 
 
 # Generate sigmoid data
@@ -324,18 +347,23 @@ plt.ylabel("y")
 plt.legend()
 plt.title(f"Sigmoid Fit: L={L_fit:.2f}, x₀={x0_fit:.2f}, k={k_fit:.2f}, b={b_fit:.2f}")
 plt.grid(True, alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_04.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print(
     f"Fitted: max={L_fit:.2f}, midpoint={x0_fit:.2f}, steepness={k_fit:.2f}, baseline={b_fit:.2f}"
 )
 
 
+# ======================================================================
 # ### 3.4 Example: Power Law
 #
 # Common in scaling relationships: $y = a \cdot x^b$
-
-# In[12]:
+# ======================================================================
 
 
 # Generate power law data
@@ -376,16 +404,20 @@ ax2.set_title("Power Law (Log-Log Scale)")
 ax2.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_05.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print(f"Fitted: y = {a_fit:.2f} * x^{b_fit:.2f}")
 
 
+# ======================================================================
 # ### 3.5 Example: Polynomial Fitting
 #
 # Fit polynomials of any degree: $y = a_0 + a_1x + a_2x^2 + ...$
-
-# In[13]:
+# ======================================================================
 
 
 # Generate polynomial data (degree 3)
@@ -412,12 +444,18 @@ plt.ylabel("y")
 plt.legend()
 plt.title("Polynomial Fit (Degree 3)")
 plt.grid(True, alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_06.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print(f"Fitted coefficients: {popt}")
 print(f"True coefficients:   {coeffs_true}")
 
 
+# ======================================================================
 # ### 📋 Summary: Common Functions
 #
 # | Function | Equation | Use Cases |
@@ -431,7 +469,10 @@ print(f"True coefficients:   {coeffs_true}")
 # | `polynomial` | $y = \sum a_i x^i$ | Flexible curve fitting |
 #
 # **Next**: Learn how to handle bounds and constraints!
+# ======================================================================
 
+
+# ======================================================================
 # ---
 #
 # ## Section 4: Parameter Bounds and Constraints
@@ -441,8 +482,7 @@ print(f"True coefficients:   {coeffs_true}")
 # ### 4.1 Fitting with Bounds
 #
 # Let's fit an exponential with constrained parameters:
-
-# In[14]:
+# ======================================================================
 
 
 # Generate data with known parameters
@@ -471,14 +511,19 @@ plt.ylabel("y")
 plt.legend()
 plt.title("Curve Fit with Parameter Bounds")
 plt.grid(True, alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_07.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ### 4.2 Parameter Uncertainties
 #
 # The covariance matrix `pcov` provides parameter uncertainties:
-
-# In[15]:
+# ======================================================================
 
 
 # Extract standard errors from covariance matrix
@@ -496,6 +541,7 @@ print("\nParameter correlation matrix:")
 print(corr)
 
 
+# ======================================================================
 # ---
 #
 # ## Section 5: Error Handling and Diagnostics
@@ -503,8 +549,7 @@ print(corr)
 # NLSQ provides helpful error messages and diagnostics when fits fail.
 #
 # ### 5.1 Common Issues and Solutions
-
-# In[16]:
+# ======================================================================
 
 
 # Example 1: Bad initial guess
@@ -541,11 +586,11 @@ if np.linalg.cond(pcov) > 1e10:
     print("⚠️  Warning: Poorly conditioned covariance (parameters may be correlated)")
 
 
+# ======================================================================
 # ### 5.2 Monitoring Progress with Callbacks
 #
 # Use callbacks to monitor optimization progress:
-
-# In[17]:
+# ======================================================================
 
 
 # Create a progress callback
@@ -581,11 +626,17 @@ if len(iteration_data) > 0:
     plt.ylabel("Cost (log scale)")
     plt.title("Optimization Convergence")
     plt.grid(True, alpha=0.3)
-    plt.show()
+    plt.tight_layout()
+    # Save figure to file
+    fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(fig_dir / "fig_08.png", dpi=300, bbox_inches="tight")
+    plt.close()
 else:
     print("No iteration data collected (optimization converged immediately)")
 
 
+# ======================================================================
 # ---
 #
 # ## Section 6: Large Dataset Handling
@@ -593,8 +644,7 @@ else:
 # NLSQ can handle millions of points efficiently, especially on GPU.
 #
 # ### 6.1 Fitting Large Datasets
-
-# In[18]:
+# ======================================================================
 
 
 import time
@@ -622,11 +672,11 @@ print("\n💡 Note: First fit includes JAX JIT compilation (~1-2 seconds).")
 print("   Subsequent fits reuse compiled code and are much faster!")
 
 
+# ======================================================================
 # ### 6.2 Automatic Chunking for Very Large Datasets
 #
 # For datasets larger than available memory, NLSQ can automatically chunk:
-
-# In[19]:
+# ======================================================================
 
 
 from nlsq import curve_fit_large
@@ -659,6 +709,7 @@ print(f"Processing rate: {n_huge / elapsed:,.0f} points/second")
 print("\n💡 curve_fit_large() automatically manages memory for huge datasets!")
 
 
+# ======================================================================
 # ---
 #
 # ## Section 7: GPU Acceleration
@@ -666,8 +717,7 @@ print("\n💡 curve_fit_large() automatically manages memory for huge datasets!"
 # NLSQ automatically uses GPU when available. Let's benchmark CPU vs GPU performance.
 #
 # ### 7.1 GPU Performance Comparison
-
-# In[20]:
+# ======================================================================
 
 
 import jax
@@ -709,11 +759,11 @@ else:
     print("   3. Restart runtime and re-run notebook")
 
 
+# ======================================================================
 # ### 7.2 Advanced Features
 #
 # NLSQ includes several advanced features:
-
-# In[21]:
+# ======================================================================
 
 
 # 1. Automatic p0 estimation
@@ -792,9 +842,15 @@ plt.ylabel("y")
 plt.legend()
 plt.title("Robust Fitting with Huber Loss")
 plt.grid(True, alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_interactive_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_09.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ---
 #
 # ## Section 8: Conclusion and Next Steps
@@ -840,3 +896,4 @@ plt.show()
 # ---
 #
 # **Happy fitting! 🎯**
+# ======================================================================

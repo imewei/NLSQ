@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+"""
+Converted from ml_integration_tutorial.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+# ======================================================================
 # # NLSQ + JAX ML Ecosystem Integration
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/ml_integration_tutorial.ipynb)
@@ -38,17 +44,17 @@
 # **NLSQ Version**: 0.2.0+
 #
 # ---
-
+# ======================================================================
+# ======================================================================
 # ## Setup and Imports
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 # Install dependencies (uncomment if needed)
 # !pip install nlsq flax optax equinox
-
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -90,6 +96,7 @@ np.random.seed(42)
 key = jax.random.PRNGKey(42)
 
 
+# ======================================================================
 # ---
 #
 # ## Part 1: Hybrid Mechanistic-ML Models
@@ -113,10 +120,12 @@ key = jax.random.PRNGKey(42)
 # - ✅ Data-efficient (physics provides structure)
 # - ✅ Extrapolates better than pure ML
 # - ✅ Captures systematic deviations
+# ======================================================================
 
+
+# ======================================================================
 # ### Example 1.1: Exponential Decay with Neural Network Correction
-
-# In[2]:
+# ======================================================================
 
 
 if FLAX_AVAILABLE:
@@ -185,20 +194,24 @@ if FLAX_AVAILABLE:
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.show()
+    # Save figure to file
+    fig_dir = Path(__file__).parent / "figures" / "ml_integration_tutorial"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+    plt.close()
 
-    print("\n📊 Dataset Statistics:")
-    print(f"   Data points: {len(x_data)}")
-    print(f"   Physics RMSE: {np.sqrt(np.mean((y_data - y_physics) ** 2)):.3f}")
-    print(f"   Correction amplitude: {np.max(np.abs(y_correction)):.3f}")
+print("\n📊 Dataset Statistics:")
+print(f"   Data points: {len(x_data)}")
+print(f"   Physics RMSE: {np.sqrt(np.mean((y_data - y_physics) ** 2)):.3f}")
+print(f"   Correction amplitude: {np.max(np.abs(y_correction)):.3f}")
 
 
+# ======================================================================
 # ### Strategy 1: Two-Stage Fitting
 #
 # **Step 1**: Fit physics parameters with NLSQ
 # **Step 2**: Train neural network on residuals
-
-# In[3]:
+# ======================================================================
 
 
 if FLAX_AVAILABLE:
@@ -322,9 +335,14 @@ if FLAX_AVAILABLE:
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "ml_integration_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ### Key Insights
 #
 # 1. **Physics provides structure**: The exponential decay captures the dominant behavior
@@ -340,7 +358,10 @@ if FLAX_AVAILABLE:
 # - ✅ Extrapolation is important
 #
 # ---
+# ======================================================================
 
+
+# ======================================================================
 # ## Part 2: Neural ODEs with NLSQ
 #
 # ### Concept: Learning Dynamics
@@ -359,8 +380,7 @@ if FLAX_AVAILABLE:
 # 3. Neural network parameters (jointly or in stages)
 #
 # ### Example 2.1: Damped Oscillator with Learned Damping
-
-# In[4]:
+# ======================================================================
 
 
 # Simple ODE solver (for demonstration; use diffrax in production)
@@ -425,15 +445,19 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "ml_integration_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print(f"True parameters: ω={omega_true}, γ={gamma_true}")
 print(f"Initial state: x₀={y0_true[0]}, v₀={y0_true[1]}")
 
 
+# ======================================================================
 # ### Fitting ODE Parameters with NLSQ
-
-# In[5]:
+# ======================================================================
 
 
 print("=" * 70)
@@ -505,9 +529,14 @@ plt.title(f"Residuals (RMSE={ode_rmse:.5f})")
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "ml_integration_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_04.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ### Key Takeaways
 #
 # 1. **NLSQ handles ODEs naturally**: Just wrap ODE integration in model function
@@ -523,7 +552,10 @@ plt.show()
 # ```
 #
 # ---
+# ======================================================================
 
+
+# ======================================================================
 # ## Part 3: Physics-Informed Loss Functions
 #
 # ### Concept: Incorporating Physical Constraints
@@ -547,8 +579,7 @@ plt.show()
 # $$
 # E = \frac{1}{2}mv^2 + mgh = \text{constant}
 # $$
-
-# In[6]:
+# ======================================================================
 
 
 # Simple pendulum dynamics
@@ -599,21 +630,25 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "ml_integration_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_05.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 energy_std = float(jnp.std(total_energy))
 print(f"Energy conservation (std dev): {energy_std:.6f}")
 print(f"Energy variation: {energy_std / jnp.mean(total_energy) * 100:.3f}%")
 
 
+# ======================================================================
 # ### Custom Physics-Informed Fitting
 #
 # While NLSQ doesn't directly support custom loss functions (it uses least squares), we can:
 # 1. Use NLSQ for standard parameter estimation
 # 2. Add physics penalty in post-processing
 # 3. Or use Optax for full physics-informed optimization
-
-# In[7]:
+# ======================================================================
 
 
 if FLAX_AVAILABLE:
@@ -750,9 +785,14 @@ if FLAX_AVAILABLE:
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "ml_integration_tutorial"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_06.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ---
 #
 # ## Summary and Best Practices
@@ -843,3 +883,4 @@ if FLAX_AVAILABLE:
 # - [Performance Optimization Demo](performance_optimization_demo.ipynb) - Production-ready optimization
 #
 # ---
+# ======================================================================

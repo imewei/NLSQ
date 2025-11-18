@@ -1,23 +1,28 @@
-#!/usr/bin/env python
+"""
+Converted from result_enhancements_demo.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # Demo: Enhanced Result Objects with Statistical Analysis
 #
 # This example demonstrates how to use NLSQ's enhanced CurveFitResult class
 # to access statistical properties, confidence intervals, and visualization.
 #
-
-# In[1]:
-
+# ======================================================================
 
 import jax.numpy as jnp
 import numpy as np
 
 from nlsq import curve_fit
 
+# ======================================================================
 # ## Example 1: Basic Statistical Properties
 #
-
-# In[2]:
+# ======================================================================
 
 
 def example1_statistical_properties():
@@ -58,10 +63,10 @@ def example1_statistical_properties():
     print("\n✓ Statistical properties accessed successfully!")
 
 
+# ======================================================================
 # ## Example 2: Backward Compatibility
 #
-
-# In[3]:
+# ======================================================================
 
 
 def example2_backward_compatibility():
@@ -98,10 +103,10 @@ def example2_backward_compatibility():
     print("\n✓ All usage patterns work seamlessly!")
 
 
+# ======================================================================
 # ## Example 3: Confidence Intervals
 #
-
-# In[4]:
+# ======================================================================
 
 
 def example3_confidence_intervals():
@@ -136,10 +141,10 @@ def example3_confidence_intervals():
     print("\n✓ Confidence intervals computed!")
 
 
+# ======================================================================
 # ## Example 4: Prediction Intervals
 #
-
-# In[5]:
+# ======================================================================
 
 
 def example4_prediction_intervals():
@@ -188,10 +193,14 @@ def example4_prediction_intervals():
     print("\n✓ Prediction intervals computed!")
 
 
+# ======================================================================
 # ## Example 5: Visualization
 #
+# ======================================================================
 
-# In[6]:
+
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 
 
 def example5_visualization():
@@ -235,10 +244,10 @@ def example5_visualization():
     print("\n✓ Visualization completed!")
 
 
+# ======================================================================
 # ## Example 6: Summary Report
 #
-
-# In[7]:
+# ======================================================================
 
 
 def example6_summary_report():
@@ -265,10 +274,10 @@ def example6_summary_report():
     print("\n✓ Summary report generated!")
 
 
+# ======================================================================
 # ## Example 7: Model Comparison
 #
-
-# In[8]:
+# ======================================================================
 
 
 def example7_model_comparison():
@@ -327,10 +336,10 @@ def example7_model_comparison():
     print("✓ Exponential model has the lowest AIC/BIC (correct model)")
 
 
+# ======================================================================
 # ## Example 8: Accessing Residuals and Predictions
 #
-
-# In[9]:
+# ======================================================================
 
 
 def example8_residuals_predictions():
@@ -374,10 +383,10 @@ def example8_residuals_predictions():
     print("\n✓ Residuals and predictions accessed successfully!")
 
 
+# ======================================================================
 # ## Main Demo
 #
-
-# In[10]:
+# ======================================================================
 
 
 def main():

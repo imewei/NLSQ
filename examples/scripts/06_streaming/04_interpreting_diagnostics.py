@@ -1,5 +1,12 @@
-#!/usr/bin/env python
+"""
+Converted from 04_interpreting_diagnostics.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # Example 4: Interpreting Detailed Diagnostics
 #
 # This example demonstrates how to interpret and analyze the comprehensive
@@ -15,9 +22,7 @@
 # Run this example:
 #     python examples/streaming/04_interpreting_diagnostics.py
 #
-
-# In[1]:
-
+# ======================================================================
 
 import json
 

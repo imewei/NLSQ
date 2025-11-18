@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from nlsq_challenges.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # NLSQ Challenges: Hands-On Exercises
 #
 # **Level**: Beginner to Advanced
@@ -30,12 +38,9 @@
 # - 🔴 **Advanced**: Complex models, troubleshooting, optimization
 #
 # Good luck!
-
-# In[1]:
-
-
-"""Setup cell - run this first!"""
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -48,6 +53,7 @@ np.random.seed(42)
 print("✓ Setup complete - ready for challenges!")
 
 
+# ======================================================================
 # ## Challenge 1: Simple Linear Fit 🟢
 #
 # **Difficulty**: Beginner
@@ -63,8 +69,7 @@ print("✓ Setup complete - ready for challenges!")
 # - Extracting fitted parameters
 #
 # **Data**:
-
-# In[2]:
+# ======================================================================
 
 
 # Spring displacement (meters)
@@ -82,11 +87,17 @@ plt.ylabel("Force (N)")
 plt.title("Spring Force vs. Displacement")
 plt.legend()
 plt.grid(alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_challenges"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("Your task: Fit F = k * x and report k ± uncertainty")
 
 
+# ======================================================================
 # <details>
 # <summary><b>💡 Hint 1</b> (Click to expand)</summary>
 #
@@ -104,8 +115,7 @@ print("Your task: Fit F = k * x and report k ± uncertainty")
 #
 # Uncertainty: `np.sqrt(pcov[0, 0])` gives the standard error on `k`.
 # </details>
-
-# In[3]:
+# ======================================================================
 
 
 # ═══════════════════════════════════════════════════════════
@@ -115,6 +125,7 @@ print("Your task: Fit F = k * x and report k ± uncertainty")
 # Write your code below:
 
 
+# ======================================================================
 # <details>
 # <summary><b>✅ Click to reveal SOLUTION</b></summary>
 #
@@ -158,7 +169,10 @@ print("Your task: Fit F = k * x and report k ± uncertainty")
 # - [ ] Spring constant extracted from `popt`
 # - [ ] Uncertainty calculated from `pcov`
 # - [ ] Result is reasonable (k ≈ 20 N/m)
+# ======================================================================
 
+
+# ======================================================================
 # ## Challenge 2: Exponential Decay with Offset 🟡
 #
 # **Difficulty**: Intermediate
@@ -178,8 +192,7 @@ print("Your task: Fit F = k * x and report k ± uncertainty")
 # - Plotting residuals
 #
 # **Data**:
-
-# In[4]:
+# ======================================================================
 
 
 # Time (hours)
@@ -196,12 +209,18 @@ plt.xlabel("Time (hours)")
 plt.ylabel("Counts")
 plt.title("Radioactive Decay with Background")
 plt.grid(alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_challenges"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("Your task: Fit N(t) = N0 * exp(-λ * t) + Nbg")
 print("Report: N0, λ (with units!), Nbg, and half-life = ln(2)/λ")
 
 
+# ======================================================================
 # <details>
 # <summary><b>💡 Hint 1</b> (Click to expand)</summary>
 #
@@ -213,8 +232,7 @@ print("Report: N0, λ (with units!), Nbg, and half-life = ln(2)/λ")
 #
 # Use `bounds` to ensure physical parameters: N0 > 0, λ > 0, Nbg ≥ 0.
 # </details>
-
-# In[5]:
+# ======================================================================
 
 
 # ═══════════════════════════════════════════════════════════
@@ -222,6 +240,7 @@ print("Report: N0, λ (with units!), Nbg, and half-life = ln(2)/λ")
 # ═══════════════════════════════════════════════════════════
 
 
+# ======================================================================
 # <details>
 # <summary><b>✅ Click to reveal SOLUTION</b></summary>
 #
@@ -276,7 +295,10 @@ print("Report: N0, λ (with units!), Nbg, and half-life = ln(2)/λ")
 # - [ ] Decay constant λ has correct units
 # - [ ] Half-life calculated correctly
 # - [ ] Fit visually matches data
+# ======================================================================
 
+
+# ======================================================================
 # ## Challenge 3: Noisy Data with Outliers 🟡
 #
 # **Difficulty**: Intermediate
@@ -292,8 +314,7 @@ print("Report: N0, λ (with units!), Nbg, and half-life = ln(2)/λ")
 # - Data cleaning strategies
 #
 # **Data**:
-
-# In[6]:
+# ======================================================================
 
 
 # Wavelength (nm)
@@ -312,16 +333,22 @@ plt.xlabel("Wavelength (nm)")
 plt.ylabel("Intensity")
 plt.title("Spectroscopy Data with Outliers")
 plt.grid(alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_challenges"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("Your task: Fit Gaussian I(x) = A * exp(-(x - x0)^2 / (2 * σ^2))")
 print("Challenge: Handle outliers! Try 2 approaches and compare.")
 
 
+# ======================================================================
 # <details>
 # <summary><b>💡 Hint 1</b> (Click to expand)</summary>
 #
-# Approach 1: Manually remove outliers (points > 3*sigma from smooth curve).
+# Approach 1: Manually remove outliers (points > 3σ from smooth curve).  # noqa: RUF003
 # Approach 2: Use sigma weights to downweight outliers.
 # </details>
 #
@@ -332,8 +359,7 @@ print("Challenge: Handle outliers! Try 2 approaches and compare.")
 # 1. Filter data: `mask = np.abs(y - moving_avg) < 3*std`
 # 2. Or increase `sigma` for suspicious points to reduce their influence
 # </details>
-
-# In[7]:
+# ======================================================================
 
 
 # ═══════════════════════════════════════════════════════════
@@ -341,6 +367,7 @@ print("Challenge: Handle outliers! Try 2 approaches and compare.")
 # ═══════════════════════════════════════════════════════════
 
 
+# ======================================================================
 # <details>
 # <summary><b>✅ Click to reveal SOLUTION</b></summary>
 #
@@ -365,9 +392,9 @@ print("Challenge: Handle outliers! Try 2 approaches and compare.")
 # popt_clean, _ = cf.curve_fit(gaussian, jnp.array(x_clean), jnp.array(y_clean), p0=p0)
 #
 # print("Naive fit (with outliers):")
-# print(f"  A={popt_naive[0]:.1f}, x0={popt_naive[1]:.2f}, sigma={popt_naive[2]:.2f}")
+# print(f"  A={popt_naive[0]:.1f}, x0={popt_naive[1]:.2f}, σ={popt_naive[2]:.2f}")  # noqa: RUF003
 # print(f"\nRobust fit (outliers removed):")
-# print(f"  A={popt_clean[0]:.1f}, x0={popt_clean[1]:.2f}, sigma={popt_clean[2]:.2f}")
+# print(f"  A={popt_clean[0]:.1f}, x0={popt_clean[1]:.2f}, σ={popt_clean[2]:.2f}")  # noqa: RUF003
 # print(f"  Removed {np.sum(~mask)} outliers")
 #
 # # Plot
@@ -381,7 +408,7 @@ print("Challenge: Handle outliers! Try 2 approaches and compare.")
 # plt.show()
 # ```
 #
-# **Expected**: Robust fit should give A≈100, x₀≈510, sigma≈3 (close to true values)
+# **Expected**: Robust fit should give A≈100, x₀≈510, σ≈3 (close to true values)  # noqa: RUF003
 # </details>
 #
 # ### Self-Assessment
@@ -391,7 +418,10 @@ print("Challenge: Handle outliers! Try 2 approaches and compare.")
 # - [ ] Robust fit parameters closer to true values
 # - [ ] Documented which points were removed
 # - [ ] Visualized both fits for comparison
+# ======================================================================
 
+
+# ======================================================================
 # ## Challenge 4: Convergence Debugging 🔴
 #
 # **Difficulty**: Advanced
@@ -407,8 +437,7 @@ print("Challenge: Handle outliers! Try 2 approaches and compare.")
 # - Using bounds and constraints
 #
 # **Broken Code**:
-
-# In[8]:
+# ======================================================================
 
 
 # Data: Logistic growth
@@ -442,11 +471,17 @@ plt.ylabel("Population")
 plt.title("Logistic Growth (Broken Fit)")
 plt.legend()
 plt.grid(alpha=0.3)
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_challenges"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_04.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("\nYour task: Fix the fit! Identify problems and provide working solution below.")
 
 
+# ======================================================================
 # <details>
 # <summary><b>💡 Hint 1</b> (Click to expand)</summary>
 #
@@ -464,8 +499,7 @@ print("\nYour task: Fix the fit! Identify problems and provide working solution 
 # - t0 ≈ time where y ≈ L/2 ≈ 15-20
 # - k ≈ 0.1-0.2 (growth rate)
 # </details>
-
-# In[9]:
+# ======================================================================
 
 
 # ═══════════════════════════════════════════════════════════
@@ -473,6 +507,7 @@ print("\nYour task: Fix the fit! Identify problems and provide working solution 
 # ═══════════════════════════════════════════════════════════
 
 
+# ======================================================================
 # <details>
 # <summary><b>✅ Click to reveal SOLUTION</b></summary>
 #
@@ -534,7 +569,10 @@ print("\nYour task: Fix the fit! Identify problems and provide working solution 
 # - [ ] Used appropriate bounds
 # - [ ] Fit now converges successfully
 # - [ ] Parameters match true values within ~10%
+# ======================================================================
 
+
+# ======================================================================
 # ## Bonus Challenges (Optional)
 #
 # If you've completed all 4 challenges, try these advanced exercises:
@@ -569,3 +607,4 @@ print("\nYour task: Fix the fit! Identify problems and provide working solution 
 # ### Feedback
 #
 # Found these challenges helpful? Have suggestions for more? Open an issue on GitHub!
+# ======================================================================

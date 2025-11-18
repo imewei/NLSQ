@@ -1,5 +1,12 @@
-#!/usr/bin/env python
+"""
+Converted from 03_custom_retry_settings.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # Example 3: Custom Retry Settings for Noisy Data
 #
 # This example demonstrates how to configure retry strategies and success rate
@@ -14,9 +21,7 @@
 # Run this example:
 #     python examples/streaming/03_custom_retry_settings.py
 #
-
-# In[1]:
-
+# ======================================================================
 
 import jax.numpy as jnp
 import numpy as np

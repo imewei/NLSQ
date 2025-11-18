@@ -1,5 +1,12 @@
-#!/usr/bin/env python
+"""
+Converted from 01_basic_fault_tolerance.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # Example 1: Basic Fault Tolerance with Streaming Optimizer
 #
 # This example demonstrates the basic usage of the streaming optimizer with
@@ -15,9 +22,7 @@
 # Run this example:
 #     python examples/streaming/01_basic_fault_tolerance.py
 #
-
-# In[1]:
-
+# ======================================================================
 
 import jax.numpy as jnp
 import numpy as np

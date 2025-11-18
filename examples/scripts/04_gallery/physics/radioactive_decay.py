@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from radioactive_decay.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Radioactive Decay: Half-Life Calculation
 #
 #
@@ -14,10 +22,9 @@
 # - Uncertainty propagation
 # - Parameter correlation analysis
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -94,9 +101,6 @@ def propagate_uncertainty(lambda_val, lambda_err):
     return t_half, t_half_err
 
 
-# In[2]:
-
-
 # True parameters (Carbon-14)
 N0_true = 1000.0  # Initial count rate (counts per minute)
 half_life_true = 5730.0  # years (C-14 half-life)
@@ -115,9 +119,6 @@ N_measured = N_true + noise_level
 
 # Measurement uncertainties (standard deviations)
 sigma = 0.05 * N_true + 5  # Poisson + background
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -139,9 +140,6 @@ N0_err, lambda_err = perr
 
 # Calculate half-life and propagate uncertainty
 t_half_fit, t_half_err = propagate_uncertainty(lambda_fit, lambda_err)
-
-
-# In[4]:
 
 
 print("\nFitted Parameters:")
@@ -172,9 +170,6 @@ chi_squared_reduced = chi_squared / dof
 print("\nGoodness of Fit:")
 print(f"  χ² = {chi_squared:.2f}")
 print(f"  χ²/dof = {chi_squared_reduced:.2f} (expect ≈ 1.0 for good fit)")
-
-
-# In[5]:
 
 
 fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -252,10 +247,12 @@ ax4.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("radioactive_decay.png", dpi=150)
 print("\n✅ Plot saved as 'radioactive_decay.png'")
-plt.show()
-
-
-# In[6]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "radioactive_decay"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

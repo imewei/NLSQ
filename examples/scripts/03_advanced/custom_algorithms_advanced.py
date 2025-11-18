@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from custom_algorithms_advanced.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Custom Algorithms and Advanced Extensions
 #
 # **Level**: Advanced / Research
@@ -35,12 +43,9 @@
 # - Optimization theory (convexity, convergence, gradients)
 # - JAX programming model (JIT, grad, pytrees)
 # - Numerical stability considerations
-
-# In[1]:
-
-
-"""Advanced imports for custom algorithms."""
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -65,14 +70,14 @@ if OPTAX_AVAILABLE:
     print(f"  Optax version: {optax.__version__}")
 
 
+# ======================================================================
 # ## Part 1: Understanding NLSQ's Optimization Backend
 #
 # Before customizing, let's understand how NLSQ works internally.
+# ======================================================================
 
-# In[2]:
 
-
-# Exploring NLSQ internals.
+# Exploring NLSQ internals
 
 # Simple problem: fit exponential
 x_data = jnp.linspace(0, 5, 30)
@@ -128,14 +133,14 @@ print(f"  Gradient norm: {jnp.linalg.norm(gradient):.2e} (should be ≈ 0)")
 print("  → Confirms NLSQ found a critical point where ∇L = 0 ✓")
 
 
+# ======================================================================
 # ## Part 2: Custom Loss Functions
 #
 # Beyond standard least squares, we can implement custom loss functions for specialized needs.
+# ======================================================================
 
-# In[3]:
 
-
-# Example 1: Robust loss function (Huber loss).
+# Example 1: Robust loss function (Huber loss)
 
 # Generate data with outliers
 x_robust = jnp.linspace(0, 10, 50)
@@ -256,15 +261,16 @@ if OPTAX_AVAILABLE:
     ax2.grid(alpha=0.3)
 
     plt.tight_layout()
-    plt.show()
+    # Save figure to file
+    fig_dir = Path(__file__).parent / "figures" / "custom_algorithms_advanced"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+    plt.close()
 else:
     print("⚠ Install optax to run this example: pip install optax")
 
 
-# In[4]:
-
-
-# Example 2: Asymmetric loss (safety-critical applications).
+# Example 2: Asymmetric loss (safety-critical applications)
 
 
 def asymmetric_loss(params, x, y, alpha=2.0):
@@ -306,40 +312,43 @@ if OPTAX_AVAILABLE:
     )
 
 
+# ======================================================================
 # ## Part 3: Custom Optimization Algorithms
 #
 # Implement specialized optimization algorithms for specific problem structures.
+# ======================================================================
 
-# In[5]:
 
-
-# Example: Gradient descent with momentum (from scratch).
+# Example: Gradient descent with momentum (from scratch)
 
 
 def gradient_descent_momentum(
     loss_fn, p0, x, y, lr=0.01, momentum=0.9, n_steps=1000, tol=1e-6
 ):
-    # Gradient descent with momentum optimizer.
-    # Parameters
-    # ----------
-    # loss_fn : callable
-    # Loss function: loss_fn(params, x, y) -> scalar
-    # p0 : array
-    # Initial parameters
-    # lr : float
-    # Learning rate
-    # momentum : float
-    # Momentum coefficient (0 = no momentum, 0.9 typical)
-    # n_steps : int
-    # Maximum iterations
-    # tol : float
-    # Convergence tolerance on gradient norm
-    # Returns
-    # -------
-    # params : array
-    # Optimized parameters
-    # history : dict
-    # Optimization history (params, loss, grad_norm)
+    """Gradient descent with momentum optimizer.
+
+    Parameters
+    ----------
+    loss_fn : callable
+        Loss function: loss_fn(params, x, y) -> scalar
+    p0 : array
+        Initial parameters
+    lr : float
+        Learning rate
+    momentum : float
+        Momentum coefficient (0 = no momentum, 0.9 typical)
+    n_steps : int
+        Maximum iterations
+    tol : float
+        Convergence tolerance on gradient norm
+
+    Returns
+    -------
+    params : array
+        Optimized parameters
+    history : dict
+        Optimization history (params, loss, grad_norm)
+    """
     params = jnp.array(p0, dtype=jnp.float32)
     velocity = jnp.zeros_like(params)
 
@@ -390,14 +399,14 @@ print(f"  Final params: a={popt_nlsq[0]:.3f}, b={popt_nlsq[1]:.3f}")
 print("\n→ Both converge to similar solution ✓")
 
 
+# ======================================================================
 # ## Part 4: Advanced JAX Patterns for Curve Fitting
 #
 # Leverage JAX's advanced features for efficient batch fitting.
+# ======================================================================
 
-# In[6]:
 
-
-# Vectorized batch fitting with vmap.
+# Vectorized batch fitting with vmap
 
 # Generate multiple datasets
 n_datasets = 100
@@ -410,7 +419,7 @@ b_true_batch = np.random.uniform(0.3, 0.7, n_datasets)
 y_batch = jnp.array(
     [
         a * jnp.exp(-b * x_batch) + np.random.normal(0, 0.05, len(x_batch))
-        for a, b in zip(a_true_batch, b_true_batch, strict=False)
+        for a, b in zip(a_true_batch, b_true_batch, strict=True)
     ]
 )
 
@@ -482,19 +491,23 @@ ax2.legend()
 ax2.grid(alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "custom_algorithms_advanced"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("\n→ vmap enables efficient parallel fitting across datasets ✓")
 
 
+# ======================================================================
 # ## Part 5: Research Extensions
 #
 # Advanced techniques for cutting-edge applications.
+# ======================================================================
 
-# In[7]:
 
-
-# Example: Constrained optimization with penalty method.
+# Example: Constrained optimization with penalty method
 
 
 def constrained_loss(params, x, y, lambda_penalty=10.0):
@@ -560,6 +573,7 @@ if OPTAX_AVAILABLE:
     )
 
 
+# ======================================================================
 # ## Summary and Best Practices
 #
 # ### When to Use Custom Algorithms
@@ -641,3 +655,4 @@ if OPTAX_AVAILABLE:
 # ---
 #
 # **Warning**: Custom algorithms can be powerful but require careful validation. Always test thoroughly before using in production!
+# ======================================================================

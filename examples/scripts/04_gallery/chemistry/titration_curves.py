@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from titration_curves.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Acid-Base Titration Curve Analysis
 #
 #
@@ -22,10 +30,9 @@
 # For a titration curve, the relationship between pH and volume of titrant can be
 # modeled using the equilibrium expressions for acid-base reactions.
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from jax import numpy as jnp
@@ -191,10 +198,10 @@ def buffer_capacity(pH, pKa, C_total):
     return beta
 
 
+# ======================================================================
 # ## Example 1: Monoprotic Weak Acid Titration (Acetic Acid)
 #
-
-# In[2]:
+# ======================================================================
 
 
 print("=" * 70)
@@ -303,10 +310,10 @@ print(f"  pH at inflection = {pH_inflection:.2f}")
 print(f"  Max slope = {dpH_dV[inflection_idx]:.2f} pH/mL")
 
 
+# ======================================================================
 # ## Example 2: Buffer Capacity Analysis
 #
-
-# In[3]:
+# ======================================================================
 
 
 print("\n" + "=" * 70)
@@ -333,10 +340,10 @@ print(
 )
 
 
+# ======================================================================
 # ## Example 3: Diprotic Acid Titration (Carbonic Acid)
 #
-
-# In[4]:
+# ======================================================================
 
 
 print("\n" + "=" * 70)
@@ -437,10 +444,10 @@ print(
 )
 
 
+# ======================================================================
 # ## Visualization
 #
-
-# In[5]:
+# ======================================================================
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -637,13 +644,18 @@ ax9.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("titration_curves_analysis.png", dpi=150, bbox_inches="tight")
 print("\n✓ Plot saved as 'titration_curves_analysis.png'")
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "titration_curves"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ## Summary
 #
-
-# In[6]:
+# ======================================================================
 
 
 print("\n" + "=" * 70)

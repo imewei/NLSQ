@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+"""
+Converted from time_series_analysis.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+# ======================================================================
 # # Time Series Analysis with NLSQ
 #
 # **Level**: Intermediate to Advanced
@@ -37,13 +43,11 @@
 # - **Engineering**: Sensor drift, system response, degradation models
 # - **Environmental**: Temperature cycles, tidal patterns, climate trends
 # - **Business**: Product lifecycle, seasonal sales (with physical constraints)
-
-# In[1]:
-
-
-"""Time series analysis imports."""
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import warnings
+from pathlib import Path
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -60,14 +64,14 @@ warnings.filterwarnings("ignore")
 print("✓ Imports successful")
 
 
+# ======================================================================
 # ## Part 1: Trend Fitting
 #
 # We'll explore different growth models commonly found in time series data.
+# ======================================================================
 
-# In[2]:
 
-
-# Generate synthetic growth data (logistic curve).
+# Generate synthetic growth data (logistic curve)
 
 # Time points (days)
 t_data = np.linspace(0, 100, 150)
@@ -115,10 +119,7 @@ print(f"  Time range: {t_data.min():.0f} - {t_data.max():.0f} days")
 print(f"  True parameters: L={L_true}, k={k_true}, t0={t0_true}")
 
 
-# In[3]:
-
-
-# Fit logistic growth model.
+# Fit logistic growth model
 
 cf = CurveFit()
 
@@ -148,10 +149,7 @@ print(f"  Maximum growth rate: {max_growth_rate:.1f} units/day")
 print(f"  Doubling time (early phase): {np.log(2) / k_fit:.1f} days")
 
 
-# In[4]:
-
-
-# Visualize growth fit with forecast.
+# Visualize growth fit with forecast
 
 # Extended time for forecasting
 t_extended = np.linspace(0, 150, 300)
@@ -186,19 +184,23 @@ ax2.legend()
 ax2.grid(alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "time_series_analysis"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("✓ Growth trend analysis complete")
 
 
+# ======================================================================
 # ## Part 2: Seasonal Decomposition with Fourier Series
 #
 # Many time series exhibit periodic patterns (daily, weekly, annual cycles). We can model these using Fourier series.
+# ======================================================================
 
-# In[5]:
 
-
-# Generate seasonal data (temperature with annual cycle).
+# Generate seasonal data (temperature with annual cycle)
 
 # Daily temperature over 3 years
 days = np.linspace(0, 3 * 365, 3 * 365)
@@ -224,10 +226,7 @@ print(f"  True parameters: mean={annual_mean}°C, amplitude={annual_amplitude}°
 print(f"  Warming trend: {trend_slope * 365:.2f}°C/year")
 
 
-# In[6]:
-
-
-# Fit trend + seasonal model.
+# Fit trend + seasonal model
 
 
 def trend_seasonal_model(t, mean, trend, amplitude, period, phase):
@@ -289,10 +288,7 @@ print(f"  Period: {period_fit:.1f} ± {errors[3]:.1f} days")
 print(f"  Phase: {phase_fit:.3f} ± {errors[4]:.3f} rad")
 
 
-# In[7]:
-
-
-# Decompose time series into components.
+# Decompose time series into components
 
 # Fitted components
 trend_fitted = mean_fit + trend_fit * days
@@ -334,19 +330,23 @@ axes[3].set_title(f"Residuals (std: {np.std(residuals):.2f} °C, should be white
 axes[3].grid(alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "time_series_analysis"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("✓ Seasonal decomposition complete")
 
 
+# ======================================================================
 # ## Part 3: Forecasting with Uncertainty
 #
 # Extrapolate the fitted model into the future with prediction intervals.
+# ======================================================================
 
-# In[8]:
 
-
-# Generate forecast with uncertainty bands.
+# Generate forecast with uncertainty bands
 
 # Forecast horizon: 1 additional year
 days_forecast = np.linspace(0, 4 * 365, 4 * 365)
@@ -387,10 +387,7 @@ print(
 print(f"  Prediction interval width: {2 * residual_std:.1f} °C (±1σ residuals)")
 
 
-# In[9]:
-
-
-# Visualize forecast with prediction intervals.
+# Visualize forecast with prediction intervals
 
 fig, ax = plt.subplots(figsize=(14, 6))
 
@@ -449,19 +446,23 @@ ax.legend(loc="upper left")
 ax.grid(alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "time_series_analysis"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("✓ Forecast visualization complete")
 
 
+# ======================================================================
 # ## Part 4: Residual Diagnostics (Autocorrelation)
 #
 # For valid inference, residuals should be uncorrelated (white noise). We check this with autocorrelation analysis.
+# ======================================================================
 
-# In[10]:
 
-
-# Calculate and plot autocorrelation of residuals.
+# Calculate and plot autocorrelation of residuals
 
 
 def autocorrelation(x, max_lag=50):
@@ -522,7 +523,11 @@ ax.legend()
 ax.grid(alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "time_series_analysis"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_04.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 # Check for significant autocorrelation
 significant_lags = np.sum(np.abs(acf_values[1:]) > conf_bound)  # Exclude lag 0
@@ -538,6 +543,7 @@ else:
     )
 
 
+# ======================================================================
 # ## Summary and Best Practices
 #
 # ### When to Use NLSQ for Time Series
@@ -579,7 +585,7 @@ else:
 # import jax.numpy as jnp
 #
 # def forecast_time_series(t, y, forecast_days=30):
-#    """Fit trend+seasonal model and forecast.
+#     """Fit trend+seasonal model and forecast."""
 #
 #     # Model
 #     def model(t, mean, trend, amp, period, phase):
@@ -616,3 +622,4 @@ else:
 #    - `gallery/biology/growth_curves.py` - Bacterial growth fitting
 #    - `gallery/physics/damped_oscillation.py` - Oscillatory time series
 #    - `advanced_features_demo.ipynb` - Robustness for outliers in time series
+# ======================================================================

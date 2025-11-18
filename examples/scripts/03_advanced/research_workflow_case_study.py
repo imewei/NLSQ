@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+"""
+Converted from research_workflow_case_study.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+# ======================================================================
 # # Research Workflow Case Study: Raman Spectroscopy Peak Analysis
 #
 # **Level**: Advanced
@@ -30,13 +36,11 @@
 # ### Reference
 #
 # Based on methodology from: Ferrari & Robertson, *Phys. Rev. B* **61**, 14095 (2000)
-
-# In[1]:
-
-
-"""Research workflow case study imports."""
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import warnings
+from pathlib import Path
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -63,14 +67,14 @@ print("✓ Imports successful")
 print(f"  NLSQ version: {__version__}")
 
 
+# ======================================================================
 # ## Part 1: Data Generation and Preprocessing
 #
 # We'll simulate realistic Raman spectroscopy data with noise, then apply standard preprocessing steps.
+# ======================================================================
 
-# In[2]:
 
-
-# Generate synthetic Raman spectroscopy data.
+# Generate synthetic Raman spectroscopy data
 
 # Experimental parameters (realistic values)
 wavenumber = np.linspace(1000, 2000, 500)  # Raman shift in cm^-1
@@ -133,10 +137,7 @@ print(f"  Signal-to-noise ratio: {clean_signal.max() / noise_level:.1f}")
 print(f"  True D/G ratio: {d_band_true['amp'] / g_band_true['amp']:.3f}")
 
 
-# In[3]:
-
-
-# Preprocessing: baseline subtraction and quality checks.
+# Preprocessing: baseline subtraction and quality checks
 
 # Simple linear baseline estimation from edge regions
 edge_points = 50
@@ -161,10 +162,7 @@ intensity_corrected = np.maximum(intensity_corrected, 1.0)
 print("\n✓ Baseline correction applied")
 
 
-# In[4]:
-
-
-# Visualize raw and preprocessed data.
+# Visualize raw and preprocessed data
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
@@ -185,19 +183,23 @@ ax2.set_title("(b) Baseline-Corrected Spectrum")
 ax2.legend()
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "research_workflow_case_study"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("✓ Data preprocessing complete")
 
 
+# ======================================================================
 # ## Part 2: Multi-Peak Fitting with NLSQ
 #
 # Fit the D and G bands simultaneously using a two-Lorentzian model.
+# ======================================================================
 
-# In[5]:
 
-
-# Define multi-peak model for fitting.
+# Define multi-peak model for fitting
 
 
 def lorentzian_jax(x, pos, amp, width):
@@ -231,10 +233,7 @@ def two_peak_model(x, d_pos, d_amp, d_width, g_pos, g_amp, g_width):
 print("✓ Model defined: 6 parameters (2 peaks × 3 parameters)")
 
 
-# In[6]:
-
-
-# Perform curve fitting with NLSQ.
+# Perform curve fitting with NLSQ
 
 # Initial parameter guess (from visual inspection)
 p0 = [
@@ -292,14 +291,14 @@ print(f"  Amplitude: {g_amp_fit:.1f} ± {g_amp_err:.1f} counts")
 print(f"  FWHM: {g_width_fit:.1f} ± {g_width_err:.1f} cm⁻¹")
 
 
+# ======================================================================
 # ## Part 3: Uncertainty Quantification and Error Propagation
 #
 # Calculate derived quantities (D/G ratio) with proper error propagation.
+# ======================================================================
 
-# In[7]:
 
-
-# Error propagation for D/G intensity ratio.
+# Error propagation for D/G intensity ratio
 
 # D/G ratio (disorder quantification)
 dg_ratio = d_amp_fit / g_amp_fit
@@ -327,10 +326,7 @@ else:
     print("  → High disorder: Heavily oxidized material")
 
 
-# In[8]:
-
-
-# Bootstrap resampling for robust uncertainty estimation.
+# Bootstrap resampling for robust uncertainty estimation
 
 n_bootstrap = 100  # Number of bootstrap samples
 bootstrap_ratios = []
@@ -377,12 +373,12 @@ print(
 )
 
 
+# ======================================================================
 # ## Part 4: Statistical Analysis and Goodness-of-Fit
+# ======================================================================
 
-# In[9]:
 
-
-# Calculate goodness-of-fit metrics.
+# Calculate goodness-of-fit metrics
 
 # Predicted values
 y_pred = two_peak_model(x_fit, *popt)
@@ -422,10 +418,7 @@ else:
     print("\n  ⚠ Overfit or underestimated uncertainties")
 
 
-# In[10]:
-
-
-# Residual analysis for model validation.
+# Residual analysis for model validation
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -465,7 +458,11 @@ ax2.set_title("(b) Residual Distribution")
 ax2.legend()
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "research_workflow_case_study"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("✓ Residual analysis complete")
 print(f"  Residual mean: {np.mean(weighted_residuals):.3f} (expect 0 for unbiased fit)")
@@ -474,12 +471,12 @@ print(
 )
 
 
+# ======================================================================
 # ## Part 5: Publication-Quality Visualization
+# ======================================================================
 
-# In[11]:
 
-
-# Create publication-ready figure with all components.
+# Create publication-ready figure with all components
 
 fig = plt.figure(figsize=(12, 8))
 gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
@@ -609,12 +606,18 @@ plt.suptitle(
 # plt.savefig('raman_analysis_figure1.png', dpi=300, bbox_inches='tight')
 # plt.savefig('raman_analysis_figure1.pdf', bbox_inches='tight')
 
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "research_workflow_case_study"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("✓ Publication figure generated")
 print("  Recommendation: Save as PDF for LaTeX, PNG (300 dpi) for presentations")
 
 
+# ======================================================================
 # ## Summary and Best Practices
 #
 # ### Complete Research Workflow
@@ -686,3 +689,4 @@ print("  Recommendation: Save as PDF for LaTeX, PNG (300 dpi) for presentations"
 #    - `nlsq_quickstart.ipynb` - Basic curve fitting
 #    - `advanced_features_demo.ipynb` - Diagnostics and robustness
 #    - `gallery/physics/spectroscopy_peaks.py` - Simple peak fitting
+# ======================================================================

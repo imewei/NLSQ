@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+"""
+Converted from gpu_optimization_deep_dive.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+# ======================================================================
 # # GPU Optimization and Performance Deep Dive
 #
 # **Level**: Advanced
@@ -34,13 +40,11 @@
 # ### Hardware Requirements
 #
 # This notebook runs on CPU or GPU. GPU examples automatically fall back to CPU if no GPU is available.
-
-# In[1]:
-
-
-"""Setup and hardware detection."""
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import time
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -68,14 +72,14 @@ else:
     print("To use GPU: Install jax[cuda] or jax[rocm] depending on your hardware")
 
 
+# ======================================================================
 # ## Part 1: JIT Compilation Basics
 #
 # Understanding JAX's Just-In-Time (JIT) compilation is crucial for performance.
+# ======================================================================
 
-# In[2]:
 
-
-# Demonstrating JIT compilation overhead and benefits.
+# Demonstrating JIT compilation overhead and benefits
 
 
 # Simple model
@@ -120,10 +124,7 @@ print("Key insight: First call is slow due to JIT compilation.")
 print("            Subsequent calls are much faster (10-100x).")
 
 
-# In[3]:
-
-
-# Understanding what triggers recompilation.
+# Understanding what triggers recompilation
 
 print("Recompilation Triggers:")
 print("=" * 60)
@@ -168,14 +169,14 @@ print("  model(x, a, b) vs model(x, a, b, c) are compiled separately")
 print("  → Expected - different models need different compilations")
 
 
+# ======================================================================
 # ## Part 2: GPU Acceleration
 #
 # Leverage GPU for massive speedups on large problems.
+# ======================================================================
 
-# In[4]:
 
-
-# CPU vs GPU performance comparison.
+# CPU vs GPU performance comparison
 
 # Large dataset (GPU shines here)
 n_points = 10000
@@ -232,14 +233,14 @@ else:
     print("  With GPU: Expect 5-50x speedup for large datasets")
 
 
+# ======================================================================
 # ## Part 3: Batch Processing Strategies
 #
 # Process thousands of fits efficiently with vectorization.
+# ======================================================================
 
-# In[5]:
 
-
-# Batch processing with vmap for maximum throughput.
+# Batch processing with vmap for maximum throughput
 
 print("Batch Processing Benchmark:")
 print("=" * 60)
@@ -258,7 +259,7 @@ b_true_batch = np.random.uniform(0.3, 0.7, n_datasets)
 y_batch_data = jnp.array(
     [
         a * jnp.exp(-b * x_batch_data) + np.random.normal(0, 0.05, n_points_per_dataset)
-        for a, b in zip(a_true_batch, b_true_batch, strict=False)
+        for a, b in zip(a_true_batch, b_true_batch, strict=True)
     ]
 )
 
@@ -332,14 +333,14 @@ print()
 print("Key insight: vmap parallelizes across datasets, JIT compiles once")
 
 
+# ======================================================================
 # ## Part 4: Memory Optimization
 #
 # Avoiding out-of-memory (OOM) errors with large datasets.
+# ======================================================================
 
-# In[6]:
 
-
-# Memory optimization strategies.
+# Memory optimization strategies
 
 print("Memory Optimization Strategies:")
 print("=" * 60)
@@ -387,14 +388,14 @@ print()
 print("→ For datasets >100M points, use chunked processing or streaming")
 
 
+# ======================================================================
 # ## Part 5: Performance Benchmarking
 #
 # Systematic performance measurement and optimization.
+# ======================================================================
 
-# In[7]:
 
-
-# Comprehensive performance benchmark.
+# Comprehensive performance benchmark
 
 
 def benchmark_nlsq(n_points_list, n_params=2, n_runs=5):
@@ -491,7 +492,11 @@ ax2.legend()
 ax2.grid(alpha=0.3, which="both")
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "gpu_optimization_deep_dive"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 print("Interpretation:")
 print("  - Nearly flat scaling: Well-optimized (GPU benefits)")
@@ -499,6 +504,7 @@ print("  - Linear scaling: Expected for iterative optimization")
 print("  - Superlinear scaling: May indicate memory issues or poor caching")
 
 
+# ======================================================================
 # ## Summary and Best Practices
 #
 # ### Performance Optimization Checklist
@@ -601,3 +607,4 @@ print("  - Superlinear scaling: May indicate memory issues or poor caching")
 # ---
 #
 # **Remember**: Premature optimization is the root of all evil. Profile first, optimize what matters!
+# ======================================================================

@@ -1,5 +1,12 @@
-#!/usr/bin/env python
+"""
+Converted from 02_checkpoint_resume.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+
+# ======================================================================
 # # Example 2: Checkpoint Save and Resume
 #
 # This example demonstrates checkpoint save/resume functionality for recovering
@@ -14,9 +21,7 @@
 # Run this example:
 #     python examples/streaming/02_checkpoint_resume.py
 #
-
-# In[1]:
-
+# ======================================================================
 
 import time
 from pathlib import Path

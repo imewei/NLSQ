@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from enzyme_kinetics.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Enzyme Kinetics: Michaelis-Menten Analysis
 #
 #
@@ -14,10 +22,9 @@
 # - Competitive vs non-competitive inhibition
 # - Hill equation for cooperative binding
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -106,9 +113,6 @@ def hill_equation(S, Vmax, K50, n):
     return Vmax * S**n / (K50**n + S**n)
 
 
-# In[2]:
-
-
 # Substrate concentrations (μM)
 S = np.array([1, 2, 5, 10, 20, 50, 100, 200, 500, 1000])
 
@@ -125,9 +129,6 @@ v_measured = v_true + noise
 
 # Measurement uncertainties (5% relative)
 sigma_v = 0.05 * v_measured + 1.0  # Add small constant for low velocities
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -151,9 +152,6 @@ popt, pcov = curve_fit(
 Vmax_fit, Km_fit = popt
 perr = np.sqrt(np.diag(pcov))
 Vmax_err, Km_err = perr
-
-
-# In[4]:
 
 
 print("\nFitted Parameters:")
@@ -197,9 +195,6 @@ print(f"  RMSE:    {rmse:.2f} μM/min")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
 
 
-# In[5]:
-
-
 print("\n" + "-" * 70)
 print("LINEWEAVER-BURK TRANSFORMATION")
 print("-" * 70)
@@ -211,9 +206,6 @@ print("-" * 70)
 S_inv = 1 / S
 v_inv = 1 / v_measured
 sigma_v_inv = sigma_v / v_measured**2  # Error propagation
-
-
-# In[6]:
 
 
 def linear_lb(S_inv, slope, intercept):
@@ -242,9 +234,6 @@ print(f"  K_M:   {Km_lb:.2f} μM")
 print("\nNote: Direct Michaelis-Menten fit is preferred (better error weighting)")
 
 
-# In[7]:
-
-
 print("\n" + "-" * 70)
 print("COMPETITIVE INHIBITION ANALYSIS")
 print("-" * 70)
@@ -259,9 +248,6 @@ v_inhibited = v_inhibited_true + noise_inh
 
 
 # Fit with inhibition model
-
-
-# In[8]:
 
 
 def competitive_inh_fit(S, Vmax, Km, Ki):
@@ -286,9 +272,6 @@ print(f"  Apparent K_M: {Km_inh:.2f} μM (increased from {Km_fit:.2f} μM)")
 print(f"  V_max:        {Vmax_inh:.2f} μM/min (unchanged)")
 print(f"  K_i:          {Ki_fit:.2f} ± {Ki_err:.2f} μM")
 print(f"  True K_i:     {Ki_true:.2f} μM")
-
-
-# In[9]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -447,10 +430,12 @@ ax6.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("enzyme_kinetics.png", dpi=150)
 print("\n✅ Plot saved as 'enzyme_kinetics.png'")
-plt.show()
-
-
-# In[10]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "enzyme_kinetics"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

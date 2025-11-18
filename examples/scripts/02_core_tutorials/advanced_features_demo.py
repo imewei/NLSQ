@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+"""
+Converted from advanced_features_demo.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+# ======================================================================
 # # NLSQ Advanced Features Demo
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/advanced_features_demo.ipynb)
@@ -14,21 +20,17 @@
 # - **Smart Caching**: Intelligent caching for repeated optimizations
 # - **Validation & Robustness**: Input validation and robust decomposition methods
 # - **Algorithm Selection**: Intelligent algorithm selection based on problem characteristics
-
+# ======================================================================
+# ======================================================================
 # ## Setup and Imports
-
-# In[1]:
-
-
+# ======================================================================
 # Install NLSQ if not already installed
-get_ipython().system("pip install nlsq")
-
-
-# In[2]:
-
-
+# !pip install nlsq  # Uncomment to install in notebook environment
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 # Check Python version first
 import sys
+from pathlib import Path
 
 print(f"✅ Python {sys.version} meets requirements")
 
@@ -69,11 +71,11 @@ print(f"JAX devices: {jax.devices()}")
 print(f"JAX version: {jax.__version__}")
 
 
+# ======================================================================
 # ## Model Functions for Testing
 #
 # We'll define several test functions with different characteristics to demonstrate the advanced features.
-
-# In[3]:
+# ======================================================================
 
 
 def well_conditioned_model(x, a, b, c):
@@ -109,11 +111,11 @@ def problematic_model(x, a, b, c):
 print("✅ Test models defined")
 
 
+# ======================================================================
 # ## 1. Diagnostics and Monitoring
 #
 # NLSQ provides detailed diagnostics about the optimization process, helping you understand convergence behavior and identify potential issues.
-
-# In[4]:
+# ======================================================================
 
 
 def create_diagnostic_data():
@@ -228,14 +230,18 @@ for i, (name, data) in enumerate(datasets.items()):
     axes[i].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.show()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "advanced_features_demo"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ### Comprehensive Fitting Analysis
 #
 # Let's fit all datasets and analyze the results to demonstrate diagnostic capabilities.
-
-# In[5]:
+# ======================================================================
 
 
 def comprehensive_fitting_analysis():
@@ -287,11 +293,11 @@ def comprehensive_fitting_analysis():
 fit_results = comprehensive_fitting_analysis()
 
 
+# ======================================================================
 # ## 2. Algorithm Selection and Optimization Strategies
 #
 # NLSQ can automatically select the best algorithm based on problem characteristics.
-
-# In[6]:
+# ======================================================================
 
 
 def demonstrate_algorithm_selection():
@@ -392,11 +398,11 @@ def demonstrate_algorithm_selection():
 demonstrate_algorithm_selection()
 
 
+# ======================================================================
 # ## 3. Robustness and Error Handling
 #
 # Test NLSQ's robustness with challenging datasets and error conditions.
-
-# In[7]:
+# ======================================================================
 
 
 def test_robustness():
@@ -514,11 +520,11 @@ def test_robustness():
 test_robustness()
 
 
+# ======================================================================
 # ## 4. Memory Management and Performance Optimization
 #
 # Demonstrate NLSQ's advanced memory management capabilities.
-
-# In[8]:
+# ======================================================================
 
 
 def demonstrate_memory_management():
@@ -639,11 +645,11 @@ def demonstrate_memory_management():
 demonstrate_memory_management()
 
 
+# ======================================================================
 # ## 5. Complex Multi-Parameter Models
 #
 # Test NLSQ with complex models that have many parameters and potential correlation issues.
-
-# In[9]:
+# ======================================================================
 
 
 def test_complex_models():
@@ -774,7 +780,11 @@ def test_complex_models():
         plt.grid(True, alpha=0.3)
 
         plt.tight_layout()
-        plt.show()
+        # Save figure to file
+        fig_dir = Path(__file__).parent / "figures" / "advanced_features_demo"
+        fig_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
         print(f"  RMS residuals: {np.sqrt(np.mean(residuals**2)):.4f}")
 
@@ -783,11 +793,11 @@ def test_complex_models():
 test_complex_models()
 
 
+# ======================================================================
 # ## 6. Performance Benchmarking
 #
 # Compare NLSQ performance across different scenarios and configurations.
-
-# In[10]:
+# ======================================================================
 
 
 def performance_benchmark():
@@ -941,18 +951,24 @@ def performance_benchmark():
             plt.grid(True, alpha=0.3)
 
             plt.tight_layout()
-            plt.show()
+
+
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "advanced_features_demo"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 # Run performance benchmark
 performance_benchmark()
 
 
+# ======================================================================
 # ## 7. Summary and Best Practices
 #
 # Based on all the tests, let's summarize the key findings and provide best practices for using NLSQ's advanced features.
-
-# In[11]:
+# ======================================================================
 
 
 def print_summary_and_best_practices():
@@ -1056,6 +1072,7 @@ def print_summary_and_best_practices():
 print_summary_and_best_practices()
 
 
+# ======================================================================
 # ---
 #
 # ## 📚 Additional Resources
@@ -1080,3 +1097,4 @@ print_summary_and_best_practices()
 # ---
 #
 # *This notebook demonstrates NLSQ's advanced features. Requires Python 3.12+ and NLSQ >= 0.1.0. Some features may require optional dependencies.*
+# ======================================================================

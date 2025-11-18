@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from materials_characterization.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Materials Characterization: Stress-Strain Curve Analysis
 #
 #
@@ -14,10 +22,9 @@
 # - Strain hardening coefficient calculation
 # - Ultimate tensile strength identification
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -118,9 +125,6 @@ def power_law_hardening(strain, sigma_y, K, n):
     return K * jnp.power(strain, n)
 
 
-# In[2]:
-
-
 # Simulate aluminum alloy (6061-T6 like properties)
 # True material parameters
 E_true = 69.0  # GPa (Young's modulus)
@@ -164,9 +168,6 @@ sigma_strain = 0.0005 * np.ones_like(strain_measured)
 sigma_stress = 2.0 * np.ones_like(stress_measured)
 
 
-# In[3]:
-
-
 print("=" * 70)
 print("MATERIALS CHARACTERIZATION: STRESS-STRAIN ANALYSIS")
 print("=" * 70)
@@ -200,9 +201,6 @@ print(
 )
 
 
-# In[4]:
-
-
 print("\n" + "-" * 70)
 print("YIELD STRENGTH DETERMINATION (0.2% Offset Method)")
 print("-" * 70)
@@ -231,9 +229,6 @@ else:
     sigma_y_fit = sigma_y_true
     epsilon_y_fit = epsilon_y_true
     print("Warning: Could not determine yield point, using estimates")
-
-
-# In[5]:
 
 
 print("\n" + "-" * 70)
@@ -281,9 +276,6 @@ if np.sum(mask_fit_plastic) > 10:
     )
 
 
-# In[6]:
-
-
 print("\n" + "-" * 70)
 print("ULTIMATE TENSILE STRENGTH")
 print("-" * 70)
@@ -295,9 +287,6 @@ print(f"Ultimate Tensile Strength: {UTS_fit:.1f} MPa")
 print(f"Strain at UTS:             {UTS_strain:.4f} ({100 * UTS_strain:.2f}%)")
 print(f"True UTS:                  {UTS_true:.1f} MPa")
 print(f"Error:                     {abs(UTS_fit - UTS_true):.1f} MPa")
-
-
-# In[7]:
 
 
 print("\n" + "=" * 70)
@@ -341,9 +330,6 @@ elif elongation > 5:
     print("  → Moderately ductile (5% < elongation < 20%)")
 else:
     print("  → Brittle material (elongation < 5%)")
-
-
-# In[8]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -553,10 +539,12 @@ ax6.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("materials_characterization.png", dpi=150)
 print("\n✅ Plot saved as 'materials_characterization.png'")
-plt.show()
-
-
-# In[9]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "materials_characterization"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

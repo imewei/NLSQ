@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from growth_curves.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # Bacterial Growth Curves: Logistic Growth Model
 #
 #
@@ -14,10 +22,9 @@
 # - Doubling time calculation
 # - Modified Gompertz model for lag phase
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -107,9 +114,6 @@ def exponential_phase(t, N0, mu):
     return N0 * jnp.exp(mu * t)
 
 
-# In[2]:
-
-
 # Time points (0 to 24 hours, every 30 minutes)
 time = np.linspace(0, 24, 49)
 
@@ -128,9 +132,6 @@ OD_measured = np.maximum(OD_true + noise, 0.001)  # OD can't be negative
 
 # Measurement uncertainties
 sigma = 0.02 + 0.03 * OD_measured
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -162,9 +163,6 @@ perr = np.sqrt(np.diag(pcov))
 N0_err, K_err, r_err = perr
 
 
-# In[4]:
-
-
 # Doubling time
 doubling_time = np.log(2) / r_fit
 
@@ -173,9 +171,6 @@ t_mid = np.log((K_fit - N0_fit) / N0_fit) / r_fit
 
 # Maximum growth rate (at inflection point, N = K/2)
 max_growth_rate = r_fit * K_fit / 4  # dN/dt at N = K/2
-
-
-# In[5]:
 
 
 print("\nFitted Parameters:")
@@ -204,9 +199,6 @@ rmse = np.sqrt(np.mean(residuals**2))
 print("\nGoodness of Fit:")
 print(f"  RMSE:    {rmse:.4f} OD")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f}")
-
-
-# In[6]:
 
 
 print("\n" + "-" * 70)
@@ -239,9 +231,6 @@ if np.sum(mask_exp) > 5:
     print(f"  N0 (extrapolated):        {N0_exp:.4f}")
     print(f"\nCompare with logistic r:    {r_fit:.3f} hr⁻¹")
     print("(Should be similar in exponential phase)")
-
-
-# In[7]:
 
 
 print("\n" + "-" * 70)
@@ -277,9 +266,6 @@ print("Phase durations:")
 print(f"  Lag phase:         ~{lag_duration:.1f} hours")
 print(f"  Exponential phase: ~{exp_duration:.1f} hours")
 print(f"  Stationary phase:  starts at ~{t_stationary:.1f} hours")
-
-
-# In[8]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -452,10 +438,12 @@ ax6.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("growth_curves.png", dpi=150)
 print("\n✅ Plot saved as 'growth_curves.png'")
-plt.show()
-
-
-# In[9]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "growth_curves"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

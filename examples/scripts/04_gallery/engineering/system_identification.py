@@ -1,5 +1,13 @@
-#!/usr/bin/env python
+"""
+Converted from system_identification.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+from pathlib import Path
+
+# ======================================================================
 # # System Identification: First-Order System Step Response
 #
 #
@@ -14,10 +22,9 @@
 # - Model validation with residuals
 # - Rise time and settling time calculation
 #
-
-# In[1]:
-
-
+# ======================================================================
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -97,9 +104,6 @@ def second_order_step_response(t, K, zeta, omega_n, t_delay):
     return jnp.where(t >= t_delay, response, 0.0)
 
 
-# In[2]:
-
-
 # Simulate a thermal system (e.g., heating chamber)
 # Input: step from 0 to 100% power at t=0
 # Output: temperature rise
@@ -121,9 +125,6 @@ output_measured = output_true + noise
 
 # Measurement uncertainties
 sigma = 1.5 * np.ones_like(output_measured)
-
-
-# In[3]:
 
 
 print("=" * 70)
@@ -154,9 +155,6 @@ perr = np.sqrt(np.diag(pcov))
 K_err, tau_err, t_delay_err = perr
 
 
-# In[4]:
-
-
 # Time to reach 63.2% of final value (1 time constant)
 t_63 = t_delay_fit + tau_fit
 
@@ -168,9 +166,6 @@ t_rise = t_90 - t_10
 # Settling time (2% criterion: within 2% of final value)
 # For first-order: t_settle ≈ 4*tau
 t_settle_2pct = t_delay_fit + 4 * tau_fit
-
-
-# In[5]:
 
 
 print("\nFitted Parameters:")
@@ -207,9 +202,6 @@ print(f"  RMSE:    {rmse:.2f} °C")
 print(f"  χ²/dof:  {chi_squared_reduced:.2f} (expect ≈ 1.0)")
 
 
-# In[6]:
-
-
 print("\n" + "=" * 70)
 print("TRANSFER FUNCTION (Laplace Domain)")
 print("=" * 70)
@@ -217,9 +209,6 @@ print(f"\n  G(s) = {K_fit:.2f} / ({tau_fit:.2f}s + 1) * exp(-{t_delay_fit:.2f}s)
 print(f"\n  Pole location:  s = -{1 / tau_fit:.4f} rad/s")
 print(f"  DC gain:        K = {K_fit:.2f}")
 print(f"  Time delay:     t_d = {t_delay_fit:.2f} s")
-
-
-# In[7]:
 
 
 print("\n" + "=" * 70)
@@ -247,9 +236,6 @@ print(
     f"  Residuals normal? p = {p_value_normality:.3f} "
     + f"({'Yes' if p_value_normality > 0.05 else 'No'} at α=0.05)"
 )
-
-
-# In[8]:
 
 
 fig = plt.figure(figsize=(16, 12))
@@ -399,10 +385,12 @@ ax6.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("system_identification.png", dpi=150)
 print("\n✅ Plot saved as 'system_identification.png'")
-plt.show()
-
-
-# In[9]:
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "system_identification"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 print("\n" + "=" * 70)

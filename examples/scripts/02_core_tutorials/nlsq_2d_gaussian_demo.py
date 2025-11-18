@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+"""
+Converted from nlsq_2d_gaussian_demo.ipynb
 
+This script was automatically generated from a Jupyter notebook.
+Plots are saved to the figures/ directory instead of displayed inline.
+"""
+
+# ======================================================================
 # # NLSQ 2D Gaussian Demo
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ_2D_Gaussian_Demo.ipynb)
@@ -7,28 +13,23 @@
 # **Requirements:** Python 3.12 or higher
 #
 # This notebook demonstrates 2D Gaussian fitting with improved GPU error handling and advanced NLSQ features.
-
+# ======================================================================
+# ======================================================================
 # ## Installing and Importing
 #
 # Make sure your runtime type is set to GPU if available (though this will work with CPU as well).
-
-# In[1]:
-
-
+# ======================================================================
 # Install NLSQ if not already installed
-get_ipython().system("pip install nlsq")
-
-
+# !pip install nlsq  # Uncomment to install in notebook environment
+# ======================================================================
 # ## Configure Environment
 #
 # Set up JAX to handle GPU memory properly and avoid cuSolver errors:
-
-# In[2]:
-
-
+# ======================================================================
 import os
 import sys
 import warnings
+from pathlib import Path
 
 # Check Python version
 print(f"✅ Python {sys.version_info.major}.{sys.version_info.minor} meets requirements")
@@ -44,9 +45,9 @@ os.environ["JAX_GPU_MEMORY_FRACTION"] = "0.8"
 print("Environment configured for optimal performance")
 
 
+# ======================================================================
 # Import NLSQ before importing JAX since we need NLSQ to set JAX to use 64-bit precision:
-
-# In[3]:
+# ======================================================================
 
 
 import jax
@@ -66,9 +67,6 @@ except Exception as e:
     print("Will use CPU fallback if needed")
 
 
-# In[4]:
-
-
 # Import advanced NLSQ features
 from nlsq import (
     AlgorithmSelector,
@@ -85,13 +83,16 @@ from nlsq import (
 print("Advanced NLSQ features imported successfully")
 
 
+# ======================================================================
 # ## Define the 2D Gaussian Function
+# ======================================================================
 
+
+# ======================================================================
 # ## Memory Management and Algorithm Selection
 #
 # For 2D fitting problems, memory usage can become significant. Let's demonstrate NLSQ's advanced memory management and automatic algorithm selection.
-
-# In[5]:
+# ======================================================================
 
 
 # Memory management for 2D data
@@ -126,9 +127,6 @@ print(f"  Set memory limit: {get_memory_config().memory_limit_gb} GB")
 print(f"\nMemory configuration completed for {current_size}x{current_size} dataset.")
 
 
-# In[6]:
-
-
 def rotate_coordinates2D(coords, theta):
     """Rotate 2D coordinates by angle theta."""
     R = jnp.array([[jnp.cos(theta), -jnp.sin(theta)], [jnp.sin(theta), jnp.cos(theta)]])
@@ -147,13 +145,16 @@ def gaussian2d(coords, n0, x0, y0, sigma_x, sigma_y, theta, offset):
     return density + offset
 
 
+# ======================================================================
 # ## Generate Synthetic Data
+# ======================================================================
 
+
+# ======================================================================
 # ## Advanced Fitting with Optimized Settings
 #
 # Now let's perform the curve fitting using the recommended algorithm settings and demonstrate robustness features.
-
-# In[7]:
+# ======================================================================
 
 
 # Advanced fitting with optimized settings - placeholder for now
@@ -162,7 +163,8 @@ print("This section will be populated after data generation and algorithm select
 print("Advanced fitting demonstration will appear after the main fitting section.")
 
 
-# In[8]:
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
 
 
 import time
@@ -208,14 +210,19 @@ plt.colorbar(label="Intensity")
 plt.title(f"2D Gaussian Data ({length}x{length})")
 plt.xlabel("X")
 plt.ylabel("Y")
-plt.show()
+plt.tight_layout()
+# Save figure to file
+fig_dir = Path(__file__).parent / "figures" / "nlsq_2d_gaussian_demo"
+fig_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
+# ======================================================================
 # ## Perform Curve Fitting
 #
 # We'll fit the data multiple times with different random seeds to test robustness:
-
-# In[9]:
+# ======================================================================
 
 
 from scipy.optimize import curve_fit
@@ -269,11 +276,11 @@ else:
     print("No successful fits. Please check your environment.")
 
 
+# ======================================================================
 # ## Algorithm Selection and Advanced Optimization
 #
 # Now that we have data, let's demonstrate NLSQ's algorithm selection capabilities.
-
-# In[10]:
+# ======================================================================
 
 
 # Algorithm selection using the actual data we just generated
@@ -373,9 +380,6 @@ if flat_data is not None and len(flat_data) > 0:
         print("Continuing with default settings...")
 else:
     print("No data available for algorithm selection")
-
-
-# In[11]:
 
 
 # Demonstrate handling of larger datasets
@@ -503,20 +507,24 @@ if any(r["success"] for r in large_results):
         plt.grid(True, alpha=0.3)
 
         plt.tight_layout()
-        plt.show()
+        # Save figure to file
+        fig_dir = Path(__file__).parent / "figures" / "nlsq_2d_gaussian_demo"
+        fig_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
-    print(
-        "\n✓ NLSQ successfully handled large 2D datasets with automatic memory management!"
-    )
+        print(
+            "\n✓ NLSQ successfully handled large 2D datasets with automatic memory management!"
+        )
 else:
     print(
         "\nNote: Large dataset tests failed. Try reducing dataset sizes or using CPU mode."
     )
 
 
+# ======================================================================
 # ## Compare with SciPy
-
-# In[12]:
+# ======================================================================
 
 
 # Compare with a single SciPy fit
@@ -562,9 +570,9 @@ if all_results:
     print(f"  SciPy: {scipy_error:.4f}")
 
 
+# ======================================================================
 # ## Visualize Results
-
-# In[13]:
+# ======================================================================
 
 
 if all_results and len(times) > 1:
@@ -592,11 +600,16 @@ if all_results and len(times) > 1:
     plt.ylabel("Y")
 
     plt.tight_layout()
-    plt.show()
+    # Save figure to file
+    fig_dir = Path(__file__).parent / "figures" / "nlsq_2d_gaussian_demo"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(fig_dir / "fig_03.png", dpi=300, bbox_inches="tight")
+    plt.close()
 
     print(f"\nResiduals RMS: {np.sqrt(np.mean(residuals**2)):.4f}")
 
 
+# ======================================================================
 # ## Troubleshooting
 #
 # If you encounter GPU errors:
@@ -610,3 +623,4 @@ if all_results and len(times) > 1:
 # - Automatic GPU/CPU fallback for SVD operations
 # - Better memory management
 # - More robust error handling
+# ======================================================================
