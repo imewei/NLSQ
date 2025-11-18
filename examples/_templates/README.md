@@ -57,12 +57,25 @@ All templates follow this basic structure:
 4. Prerequisites
 5. Motivation (Why This Matters)
 6. Quick Start Example
-7. Main Content (varies by category)
-8. Key Takeaways
-9. Common Questions
-10. Related Resources
-11. Glossary
+7. Setup (Matplotlib Configuration + Imports) ← NEW
+8. Main Content (varies by category)
+9. Key Takeaways
+10. Common Questions
+11. Related Resources
+12. Glossary
 ```
+
+### ⚠️ Critical: Matplotlib Configuration
+
+**ALL notebooks MUST start with this configuration cell:**
+
+```python
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
+%matplotlib inline
+```
+
+This cell should be **Cell 0** (the very first code cell) in every notebook, before any imports. This ensures proper inline plotting in both VS Code and Jupyter environments.
 
 ## Category-Specific Adaptations
 

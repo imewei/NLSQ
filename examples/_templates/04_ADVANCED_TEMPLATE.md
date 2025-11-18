@@ -59,6 +59,27 @@ After completing this advanced tutorial:
 
 ---
 
+## 🔧 Setup
+
+**IMPORTANT:** Always include this configuration cell first (before any imports):
+
+```python
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
+%matplotlib inline
+```
+
+**Then add your imports:**
+
+```python
+import numpy as np
+import jax.numpy as jnp
+from nlsq import curve_fit
+# ... other imports
+```
+
+---
+
 ## 📖 Technical Deep Dive
 
 ### 1. Theoretical Background

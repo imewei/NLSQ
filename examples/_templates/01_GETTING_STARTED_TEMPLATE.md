@@ -58,6 +58,27 @@ Let's fit your first curve! Run this code:
 
 ---
 
+## 🔧 Setup
+
+**IMPORTANT:** Always include this configuration cell first (before any imports):
+
+```python
+# Configure matplotlib for inline plotting in VS Code/Jupyter
+# MUST come before importing matplotlib
+%matplotlib inline
+```
+
+**Then add your imports:**
+
+```python
+import numpy as np
+import jax.numpy as jnp
+from nlsq import curve_fit
+# ... other imports
+```
+
+---
+
 ## 📚 Before You Begin
 
 **First time here?** Perfect! This is exactly where you should start.
