@@ -17,6 +17,16 @@
 | [**Documentation**](https://nlsq.readthedocs.io/)
 | [**Examples**](examples/)
 
+## Quick Navigation
+
+⭐ [**Get Started**](#quickstart-colab-in-the-cloud) - Try NLSQ in your browser with GPU
+📦 [**Installation**](#installation) - Install locally or on your cluster
+🚀 [**GPU Setup**](#linux-gpu-acceleration---recommended-) - Enable GPU acceleration (150-270x faster)
+📊 [**Examples**](#examples-gallery) - 32 example notebooks organized by difficulty
+📚 [**Documentation**](https://nlsq.readthedocs.io/) - Complete API reference and guides
+🐛 [**Troubleshooting**](#gpu-troubleshooting) - Fix common GPU and installation issues
+💬 [**Get Help**](https://github.com/imewei/NLSQ/issues) - Report bugs or ask questions
+
 ## Acknowledgments
 
 NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit), originally developed by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith. We gratefully acknowledge their foundational work on GPU-accelerated curve fitting with JAX. The original JAXFit paper: [arXiv:2208.12187](https://doi.org/10.48550/arXiv.2208.12187).
@@ -145,6 +155,106 @@ Tutorial notebooks:
 - [The basics: fitting basic functions with NLSQ](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%20Quickstart.ipynb)
 - [Fitting 2D images with NLSQ](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%202D%20Gaussian%20Demo.ipynb)
 - [Large dataset fitting demonstration](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb)
+
+## Performance Benchmarks
+
+NLSQ delivers massive speedups on GPU hardware compared to SciPy's CPU-based optimization:
+
+| Dataset Size | Parameters | SciPy (CPU) | NLSQ (GPU) | Speedup | Hardware |
+|--------------|------------|-------------|------------|---------|----------|
+| 1K points    | 3          | 2.5 ms      | 1.7 ms     | **1.5x** | Tesla V100 |
+| 10K points   | 5          | 25 ms       | 2.0 ms     | **12x** | Tesla V100 |
+| 100K points  | 5          | 450 ms      | 3.2 ms     | **140x** | Tesla V100 |
+| 1M points    | 5          | 40.5 s      | 0.15 s     | **270x** | Tesla V100 |
+| 50M points   | 3          | >30 min     | 1.8 s      | **>1000x** | Tesla V100 |
+
+**Key Observations:**
+- Speedup increases with dataset size due to GPU parallelization
+- JIT compilation overhead on first run (~450-650ms), then 1.7-2.0ms on cached runs
+- Excellent scaling: 50x more data → only 1.2x slower (1M → 50M points)
+- Memory-efficient chunking handles datasets larger than GPU memory
+
+See [Performance Guide](https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html) for detailed benchmarks and optimization strategies.
+
+## Examples Gallery
+
+📂 **[examples/](examples/)** - Complete collection of 32 notebooks & scripts
+
+### 🌟 Getting Started (6 notebooks)
+Perfect for first-time users learning NLSQ basics:
+
+- [**Interactive Tutorial**](examples/notebooks/01_getting_started/nlsq_interactive_tutorial.ipynb) - Comprehensive beginner-to-advanced guide ⭐
+- [Quick Start](examples/notebooks/01_getting_started/nlsq_quickstart.ipynb) - 5-minute introduction to NLSQ
+- [Basic Curve Fitting](examples/notebooks/01_getting_started/basic_curve_fitting.ipynb) - Fundamental fitting concepts
+- [Parameter Bounds](examples/notebooks/01_getting_started/parameter_bounds.ipynb) - Constrained optimization
+- [Robust Fitting](examples/notebooks/01_getting_started/robust_fitting.ipynb) - Handling outliers with robust loss functions
+- [Uncertainty Estimation](examples/notebooks/01_getting_started/uncertainty_estimation.ipynb) - Parameter confidence intervals
+
+### 💡 Core Features (7 notebooks)
+Essential NLSQ capabilities for everyday use:
+
+- [GPU vs CPU Performance](examples/notebooks/02_core_tutorials/gpu_vs_cpu.ipynb) - Benchmark GPU acceleration
+- [Large Dataset Demo](examples/notebooks/02_core_tutorials/large_dataset_demo.ipynb) - Fitting 50M+ points
+- [2D Gaussian Fitting](examples/notebooks/02_core_tutorials/nlsq_2d_gaussian_demo.ipynb) - Image fitting
+- [Advanced Features](examples/notebooks/02_core_tutorials/advanced_features_demo.ipynb) - Algorithm selection, caching
+- [Performance Optimization](examples/notebooks/02_core_tutorials/performance_optimization_demo.ipynb) - Maximize speed
+- [Memory Management](examples/notebooks/02_core_tutorials/memory_management.ipynb) - Configure memory limits
+- [Weighted Fitting](examples/notebooks/02_core_tutorials/weighted_fitting.ipynb) - Custom error weights
+
+### 🚀 Advanced Topics (9 notebooks)
+Deep dives into specialized features:
+
+- [Custom Algorithms](examples/notebooks/03_advanced/custom_algorithms_advanced.ipynb) - Implement your own optimizers
+- [GPU Optimization Deep Dive](examples/notebooks/03_advanced/gpu_optimization_deep_dive.ipynb) - Maximize GPU performance
+- [ML Integration](examples/notebooks/03_advanced/ml_integration_tutorial.ipynb) - Combine with JAX ML ecosystem
+- [Time Series Analysis](examples/notebooks/03_advanced/time_series_analysis.ipynb) - Temporal data fitting
+- [Research Workflow](examples/notebooks/03_advanced/research_workflow_case_study.ipynb) - Real-world Raman spectroscopy
+- [Troubleshooting Guide](examples/notebooks/03_advanced/troubleshooting_guide.ipynb) - Debug convergence issues
+- [NLSQ Challenges](examples/notebooks/03_advanced/nlsq_challenges.ipynb) - Difficult optimization problems
+- [Sparse Jacobian](examples/notebooks/03_advanced/sparse_jacobian.ipynb) - Exploit sparsity patterns
+- [Adaptive Algorithms](examples/notebooks/03_advanced/adaptive_algorithms.ipynb) - Auto-tune optimization
+
+### 📚 Application Gallery (12 notebooks)
+Domain-specific examples across sciences:
+
+**Biology** (3):
+- [Dose-Response Curves](examples/notebooks/04_gallery/biology/dose_response.ipynb)
+- [Enzyme Kinetics](examples/notebooks/04_gallery/biology/enzyme_kinetics.ipynb)
+- [Growth Curves](examples/notebooks/04_gallery/biology/growth_curves.ipynb)
+
+**Chemistry** (2):
+- [Reaction Kinetics](examples/notebooks/04_gallery/chemistry/reaction_kinetics.ipynb)
+- [Titration Curves](examples/notebooks/04_gallery/chemistry/titration_curves.ipynb)
+
+**Engineering** (3):
+- [Sensor Calibration](examples/notebooks/04_gallery/engineering/sensor_calibration.ipynb)
+- [Materials Characterization](examples/notebooks/04_gallery/engineering/materials_characterization.ipynb)
+- [System Identification](examples/notebooks/04_gallery/engineering/system_identification.ipynb)
+
+**Physics** (3):
+- [Damped Oscillation](examples/notebooks/04_gallery/physics/damped_oscillation.ipynb)
+- [Radioactive Decay](examples/notebooks/04_gallery/physics/radioactive_decay.ipynb)
+- [Spectroscopy Peaks](examples/notebooks/04_gallery/physics/spectroscopy_peaks.ipynb)
+
+### ⚙️ Feature Demonstrations (4 notebooks)
+In-depth feature showcases:
+
+- [Callbacks System](examples/notebooks/05_feature_demos/callbacks_demo.ipynb) - Monitor optimization progress
+- [Enhanced Error Messages](examples/notebooks/05_feature_demos/enhanced_error_messages_demo.ipynb) - Helpful diagnostics
+- [Function Library](examples/notebooks/05_feature_demos/function_library_demo.ipynb) - Pre-built fitting functions
+- [Result Enhancements](examples/notebooks/05_feature_demos/result_enhancements_demo.ipynb) - Rich result objects
+
+### 🔄 Streaming & Fault Tolerance (4 notebooks)
+Production-ready reliability features:
+
+- [Basic Fault Tolerance](examples/notebooks/06_streaming/01_basic_fault_tolerance.ipynb) - Handle errors gracefully
+- [Checkpoint & Resume](examples/notebooks/06_streaming/02_checkpoint_resume.ipynb) - Save/restore state
+- [Custom Retry Settings](examples/notebooks/06_streaming/03_custom_retry_settings.ipynb) - Configure retries
+- [Diagnostics Interpretation](examples/notebooks/06_streaming/04_interpreting_diagnostics.ipynb) - Understand results
+
+**All examples available as:**
+- 📓 Jupyter notebooks: `examples/notebooks/`
+- 🐍 Python scripts: `examples/scripts/`
 
 ## Large Dataset Support
 

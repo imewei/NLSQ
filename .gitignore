@@ -11,6 +11,10 @@ benchmark/*.prof
 # Test reports (generated)
 test_reports/
 
+# Documentation analysis (generated)
+docs/ast_analysis.json
+docs/coverage_report.json
+
 # Test artifacts
 coverage_baseline.txt
 curve_fit_result*.png

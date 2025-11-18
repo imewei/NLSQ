@@ -1,3 +1,34 @@
+"""Robust loss functions for outlier-resistant curve fitting.
+
+This module provides JIT-compiled implementations of robust loss functions including
+Huber, Cauchy, soft_l1, and arctan for nonlinear least squares optimization.
+These functions reduce the influence of outliers compared to standard least squares.
+
+Robust loss functions replace the squared residual z with a function ρ(z) that
+grows more slowly for large residuals, making the optimization less sensitive to
+outliers while preserving accuracy for well-behaved data.
+
+Available Loss Functions:
+    - 'linear' (default): Standard least squares, ρ(z) = z
+    - 'huber': Quadratic for small residuals, linear for large (recommended)
+    - 'soft_l1': Smooth approximation to L1 loss
+    - 'cauchy': Heavy-tailed, very robust to outliers
+    - 'arctan': Bounded loss function
+
+Example:
+    >>> from nlsq import curve_fit
+    >>> import jax.numpy as jnp
+    >>>
+    >>> def model(x, a, b): return a * jnp.exp(-b * x)
+    >>>
+    >>> # Fit with Huber loss to handle outliers
+    >>> popt, pcov = curve_fit(model, x, y, p0=[2.0, 0.5], loss='huber')
+
+See Also:
+    nlsq.curve_fit : Main fitting function that uses these loss functions
+    nlsq.least_squares : Lower-level interface with loss function control
+"""
+
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
 

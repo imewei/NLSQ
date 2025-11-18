@@ -1,3 +1,40 @@
+"""MINPACK-style algorithms for nonlinear least squares optimization.
+
+This module provides JAX implementations of classic MINPACK algorithms including
+Levenberg-Marquardt and Trust Region Reflective methods with GPU/TPU acceleration.
+These algorithms are the foundation of NLSQ's curve fitting capabilities.
+
+The MINPACK algorithms combine robust optimization strategies with efficient
+linear algebra operations, all JIT-compiled for high performance on modern hardware.
+
+Key Components:
+    - curve_fit: Main high-level interface (SciPy-compatible)
+    - CurveFit: Class-based interface with state management
+    - Levenberg-Marquardt: Classic damped least squares algorithm
+    - Trust Region: Advanced bounded optimization
+
+Algorithms:
+    - 'lm': Levenberg-Marquardt (unbounded problems)
+    - 'trf': Trust Region Reflective (bounded problems, recommended)
+    - 'dogbox': Dogleg with rectangular trust regions
+
+Example:
+    >>> from nlsq import CurveFit
+    >>> import jax.numpy as jnp
+    >>>
+    >>> def exponential(x, a, b): return a * jnp.exp(-b * x)
+    >>>
+    >>> # Class-based interface for reusing compilations
+    >>> fitter = CurveFit()
+    >>> popt1, pcov1 = fitter.curve_fit(exponential, x1, y1, p0=[2.0, 0.5])
+    >>> popt2, pcov2 = fitter.curve_fit(exponential, x2, y2, p0=[2.5, 0.6])
+
+See Also:
+    nlsq.curve_fit : Function-based interface
+    nlsq.least_squares : Lower-level optimization interface
+    nlsq.trf : Trust Region Reflective implementation
+"""
+
 import time
 import warnings
 from collections.abc import Callable
