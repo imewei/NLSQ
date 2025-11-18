@@ -16,7 +16,41 @@ env:
   COVERAGE_THRESHOLD: 80
 
 jobs:
-  # Stage 1: Validate Dependencies
+  # Stage 0: Change Detection (Run in parallel with validation)
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code_changed: ${{ steps.filter.outputs.code }}
+      docs_only: ${{ steps.filter.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check changed files
+        id: filter
+        run: |
+          # Get changed files
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || echo "")
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Check if any code files changed
+          if echo "$CHANGED_FILES" | grep -E '\.(py|toml|txt|lock)$|^\.github/workflows/ci\.yml$' > /dev/null; then
+            echo "code=true" >> $GITHUB_OUTPUT
+            echo "docs_only=false" >> $GITHUB_OUTPUT
+            echo "📝 Code changes detected - running full test suite"
+          else
+            echo "code=false" >> $GITHUB_OUTPUT
+            echo "docs_only=true" >> $GITHUB_OUTPUT
+            echo "📚 Documentation-only changes - skipping tests"
+          fi
+
+  # Stage 1: Validate Dependencies (Fast checks first)
   validate-dependencies:
     name: Validate Dependencies
     runs-on: ubuntu-latest
@@ -27,6 +61,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+          cache: 'pip'
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-lock.txt
 
       - name: Verify dependency specifications
         run: |
@@ -74,11 +112,12 @@ jobs:
 
           echo "✅ JAX platform-specific installation is properly documented"
 
-  # Stage 2: Code Quality
+  # Stage 2: Code Quality (Can run in parallel with dependency validation)
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
-    needs: validate-dependencies
+    needs: detect-changes
+    if: needs.detect-changes.outputs.code_changed == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -87,13 +126,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
           cache: 'pip'
-          cache-dependency-path: 'pyproject.toml'
+          cache-dependency-path: pyproject.toml
 
       - name: Cache pre-commit
         uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
 
       - name: Install dependencies
         run: |
@@ -108,11 +149,12 @@ jobs:
           pip install radon
           radon cc nlsq/ -a -nb --total-average
 
-  # Stage 3: Test Matrix
+  # Stage 3: Test Matrix (Run only if code changed)
   test:
     name: Test - ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    needs: validate-dependencies
+    needs: [detect-changes, validate-dependencies]
+    if: needs.detect-changes.outputs.code_changed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -127,7 +169,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-          cache-dependency-path: 'pyproject.toml'
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Cache test data
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pytest
+            .pytest_cache
+          key: pytest-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('tests/**') }}
+          restore-keys: |
+            pytest-${{ runner.os }}-${{ matrix.python-version }}-
 
       - name: Install dependencies
         run: |
@@ -149,11 +201,13 @@ jobs:
           name: python-${{ matrix.python-version }}
           fail_ci_if_error: false
 
-  # Stage 4: Build & Package
+  # Stage 4: Build & Package (Runs after quality checks pass)
   build:
     name: Build & Validate Package
     runs-on: ubuntu-latest
     needs: [code-quality, test]
+    # Always run build, even if tests are skipped (for docs-only changes)
+    if: always() && (needs.code-quality.result == 'success' || needs.code-quality.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -163,6 +217,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+          cache: 'pip'
 
       - name: Install build tools
         run: |
@@ -186,11 +241,11 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: distributions
+          name: distributions-${{ github.sha }}
           path: dist/
           retention-days: 7
 
-  # Stage 5: Integration Tests
+  # Stage 5: Integration Tests (Reuses build artifacts)
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -206,7 +261,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: distributions
+          name: distributions-${{ github.sha }}
           path: dist/
 
       - name: Install from wheel
@@ -239,12 +294,50 @@ jobs:
     steps:
       - name: Check job statuses
         run: |
-          if [[ "${{ needs.validate-dependencies.result }}" != "success" ]] || \
-             [[ "${{ needs.code-quality.result }}" != "success" ]] || \
-             [[ "${{ needs.test.result }}" != "success" ]] || \
-             [[ "${{ needs.build.result }}" != "success" ]] || \
-             [[ "${{ needs.integration.result }}" != "success" ]]; then
-            echo "❌ One or more CI jobs failed"
+          echo "## 🔍 CI Status Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | ${{ needs.validate-dependencies.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Quality | ${{ needs.code-quality.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration | ${{ needs.integration.result }} |" >> $GITHUB_STEP_SUMMARY
+
+          # Validate required jobs succeeded (or were skipped due to docs-only changes)
+          FAILED=0
+
+          if [[ "${{ needs.validate-dependencies.result }}" != "success" ]]; then
+            echo "❌ Dependency validation failed"
+            FAILED=1
+          fi
+
+          # Code quality and tests can be skipped for docs-only changes
+          if [[ "${{ needs.code-quality.result }}" != "success" ]] && [[ "${{ needs.code-quality.result }}" != "skipped" ]]; then
+            echo "❌ Code quality checks failed"
+            FAILED=1
+          fi
+
+          if [[ "${{ needs.test.result }}" != "success" ]] && [[ "${{ needs.test.result }}" != "skipped" ]]; then
+            echo "❌ Tests failed"
+            FAILED=1
+          fi
+
+          if [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "❌ Build failed"
+            FAILED=1
+          fi
+
+          if [[ "${{ needs.integration.result }}" != "success" ]]; then
+            echo "❌ Integration tests failed"
+            FAILED=1
+          fi
+
+          if [ $FAILED -eq 1 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ One or more CI jobs failed" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          echo "✅ All CI checks passed successfully!"
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All CI checks passed successfully!" >> $GITHUB_STEP_SUMMARY
