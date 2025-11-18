@@ -374,6 +374,7 @@ NLSQ automatically detects and uses GPUs when available.
 **Check GPU availability:**
 ```python
 import jax
+
 print(f"JAX devices: {jax.devices()}")
 ```
 
@@ -412,6 +413,7 @@ RuntimeError: CUDA out of memory
 **Solution**: Use CPU or streaming optimization
 ```python
 import os
+
 os.environ["JAX_PLATFORMS"] = "cpu"
 ```
 
