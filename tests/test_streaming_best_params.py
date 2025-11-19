@@ -5,7 +5,6 @@ the best parameters achieved during optimization and handles
 batch failures gracefully.
 """
 
-
 import numpy as np
 
 from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer

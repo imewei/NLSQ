@@ -14,20 +14,16 @@ class NotebookError(Exception):
     """Base exception for notebook processing errors."""
 
 
-
 class NotebookReadError(NotebookError):
     """Error reading notebook file."""
-
 
 
 class NotebookWriteError(NotebookError):
     """Error writing notebook file."""
 
 
-
 class NotebookValidationError(NotebookError):
     """Invalid notebook structure."""
-
 
 
 def validate_notebook_structure(notebook: dict) -> None:

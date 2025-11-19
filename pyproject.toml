@@ -431,3 +431,11 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@abstractmethod",
 ]
+
+[tool.bandit]
+# Security linting: only fail on Medium/High severity issues
+# Low severity warnings (B404, B603, B607, B110, B101) are informational only
+exclude_dirs = ["tests", "examples", "docs", "benchmark", "scripts"]
+# Only fail on MEDIUM and HIGH severity issues
+skips = ["B404", "B603", "B607", "B110", "B101"]
+

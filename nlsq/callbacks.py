@@ -28,7 +28,6 @@ class StopOptimization(Exception):
     """Exception raised by callbacks to request early termination."""
 
 
-
 class CallbackBase:
     """Base class for optimization callbacks.
 

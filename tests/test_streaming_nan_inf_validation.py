@@ -4,7 +4,6 @@ This module tests the three-point NaN/Inf validation system that protects
 against numerical instabilities during streaming optimization.
 """
 
-
 import numpy as np
 
 from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer

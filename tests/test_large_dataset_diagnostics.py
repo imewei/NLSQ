@@ -336,12 +336,9 @@ class TestMinSuccessRateThreshold(unittest.TestCase):
         fitter = LargeDatasetFitter(config=config)
 
         # Should handle ~50% success rate
-        try:
+        with contextlib.suppress(Exception):
             result = fitter.fit(intermittent_model, xdata, ydata, p0=[2.0, 1.0])
             # May succeed or fail depending on exact success rate
-        except Exception:
-            # Expected if success rate < 50%
-            pass
 
     def test_min_success_rate_strict_80_percent(self):
         """Test strict min_success_rate=0.8 (80%)."""
@@ -404,12 +401,9 @@ class TestMinSuccessRateThreshold(unittest.TestCase):
         fitter = LargeDatasetFitter(config=config)
 
         # 40% success rate should PASS with 30% threshold
-        try:
+        with contextlib.suppress(Exception):
             result = fitter.fit(mostly_failing_model, xdata, ydata, p0=[2.0, 1.0])
             # May succeed with 40% > 30% threshold
-        except Exception:
-            # Failure still possible if too few successful chunks
-            pass
 
 
 class TestLoggerIntegration(unittest.TestCase):

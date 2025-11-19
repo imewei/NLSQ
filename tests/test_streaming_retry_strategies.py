@@ -4,7 +4,6 @@ This module tests error-specific retry strategies that attempt to recover from
 transient failures during streaming optimization.
 """
 
-
 import numpy as np
 
 from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer

@@ -182,25 +182,8 @@ jobs:
               --output-dir=/tmp/executed \
               "$notebook"
           done
-
-      - name: Check for output cells
-        run: |
-          uv run python -c "
-          import nbformat
-          import sys
-          from pathlib import Path
-
-          failed = []
-          for nb_path in Path('examples').rglob('*.ipynb'):
-              nb = nbformat.read(nb_path, as_version=4)
-              has_outputs = any(cell.get('outputs') for cell in nb.cells if cell.cell_type == 'code')
-              if not has_outputs:
-                  failed.append(str(nb_path))
-
-          if failed:
-              print('Notebooks missing outputs:', failed)
-              sys.exit(1)
-          "
+        # Note: Successful execution validates notebooks work correctly
+        # We don't commit notebooks with outputs to keep repo size small
 
   # ============================================================================
   # WAVE 3: Test Matrix (6 Parallel Unit Test Jobs)

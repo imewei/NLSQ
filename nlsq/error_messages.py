@@ -299,7 +299,6 @@ class ConvergenceWarning(UserWarning):
     """
 
 
-
 def check_convergence_quality(result, pcov) -> list[str]:
     """Check quality of converged solution and generate warnings.
 
