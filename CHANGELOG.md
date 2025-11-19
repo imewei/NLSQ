@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- _Nothing yet_
+
+## [0.3.0] - 2025-11-19
+
+### Added
 
 #### Host-Device Transfer Reduction (Task Group 2)
 - **Async Logging Infrastructure**: JAX-aware asynchronous logging to prevent GPU-CPU synchronization

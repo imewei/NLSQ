@@ -25,7 +25,7 @@ Key Features
 - **Production-Ready**: 82.15% test coverage, 1,591 tests, 99.94% pass rate
 - **Large Dataset Support**: Automatic chunking and memory management
 - **Advanced Features**: Automatic fallback, smart bounds, numerical stability
-- **Performance Profiling** (v0.3.0-beta.3): Async logging, transfer analysis, regression gates
+- **Performance Profiling** (v0.3.0): Async logging, transfer analysis, regression gates
 
 Quick Example
 -------------
@@ -114,7 +114,7 @@ Resources
 Project Status
 --------------
 
-**Current Release**: v0.3.0-beta.3
+**Current Release**: v0.3.0
 
 - Production-ready for scientific computing
 - Active development and maintenance
