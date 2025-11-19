@@ -383,9 +383,9 @@ jobs:
         shell: bash
         run: |
           wheel_file=$(ls dist/*.whl | head -n 1)
-          uv pip install "$wheel_file"
-          # Install dev dependencies needed for integration tests
-          uv pip install pytest pytest-cov pytest-xdist
+          # Create virtual environment and install wheel + test dependencies
+          uv venv
+          uv pip install "$wheel_file" pytest pytest-cov pytest-xdist
 
       - name: Run integration tests
         shell: bash
