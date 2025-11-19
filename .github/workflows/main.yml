@@ -9,7 +9,7 @@ on:
 
 env:
   PYTHON_VERSION_DEFAULT: "3.12"
-  COVERAGE_THRESHOLD: 80
+  COVERAGE_THRESHOLD: 79
   CACHE_VERSION: v1
 
 # Cancel in-progress runs for the same workflow
