@@ -390,7 +390,9 @@ jobs:
       - name: Run integration tests
         shell: bash
         run: |
-          uv run pytest tests/ -v -n auto \
+          # Activate venv and run pytest from it
+          source .venv/bin/activate || . .venv/Scripts/activate
+          pytest tests/ -v -n auto \
             -m "not slow" \
             --ignore=tests/unit/
 
