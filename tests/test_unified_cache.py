@@ -5,11 +5,9 @@ three legacy cache systems (compilation_cache, caching, smart_cache) into
 a single, shape-relaxed caching system with comprehensive statistics tracking.
 """
 
-import platform
 import time
 
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 

@@ -26,7 +26,6 @@ Examples:
     configure_notebooks.py --parallel --workers 4
 """
 
-import logging
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path

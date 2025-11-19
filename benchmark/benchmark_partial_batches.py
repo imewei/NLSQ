@@ -235,7 +235,7 @@ def run_partial_batch_benchmarks():
 
 
 if __name__ == "__main__":
-    baseline_data = run_partial_batch_benchmarks()
+    _baseline_data = run_partial_batch_benchmarks()
 
     print("\n" + "=" * 70)
     print("Partial batch benchmark complete!")

@@ -85,7 +85,7 @@ def benchmark_jacobian_direct(n_params: int, n_data: int, n_trials: int = 5):
     times_fwd = []
     for i in range(n_trials):
         start = time.perf_counter()
-        J_fwd = jac_fwd(params).block_until_ready()
+        _J_fwd = jac_fwd(params).block_until_ready()
         elapsed = time.perf_counter() - start
         times_fwd.append(elapsed * 1000)  # Convert to ms
         print(f"  Trial {i + 1}: {elapsed * 1000:.4f} ms")
@@ -95,7 +95,7 @@ def benchmark_jacobian_direct(n_params: int, n_data: int, n_trials: int = 5):
     times_rev = []
     for i in range(n_trials):
         start = time.perf_counter()
-        J_rev = jac_rev(params).block_until_ready()
+        _J_rev = jac_rev(params).block_until_ready()
         elapsed = time.perf_counter() - start
         times_rev.append(elapsed * 1000)  # Convert to ms
         print(f"  Trial {i + 1}: {elapsed * 1000:.4f} ms")
@@ -207,4 +207,4 @@ def run_simple_benchmark():
 
 
 if __name__ == "__main__":
-    baseline = run_simple_benchmark()
+    _baseline = run_simple_benchmark()

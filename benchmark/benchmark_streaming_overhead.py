@@ -255,7 +255,7 @@ def run_benchmarks():
 
 
 if __name__ == "__main__":
-    baseline_data = run_benchmarks()
+    _baseline_data = run_benchmarks()
 
     print("\n" + "=" * 70)
     print("Benchmark complete!")

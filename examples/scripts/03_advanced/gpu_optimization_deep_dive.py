@@ -466,7 +466,7 @@ for i, n in enumerate(bench_results["n_points"]):
 print()
 
 # Plot scaling
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+_, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
 # Time vs problem size
 ax1.errorbar(

@@ -9,7 +9,7 @@ import numpy as np
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
 
-_jax_config = JAXConfig()
+__jax_config = JAXConfig()
 import jax.numpy as jnp
 from jax import jacfwd, jacrev, jit
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular

@@ -36,7 +36,7 @@ def example_1_max_iterations():
 
     try:
         # Force failure with very low max_nfev
-        popt, pcov = curve_fit(exponential, x, y, p0=[1, 1], max_nfev=3)
+        _, _ = curve_fit(exponential, x, y, p0=[1, 1], max_nfev=3)
     except OptimizationError as e:
         print("\n❌ Optimization Failed!")
         print("\n" + str(e))
@@ -100,7 +100,7 @@ def example_3_diagnostic_analysis():
     y = 2 * np.exp(-((x - 1) ** 2) / (2 * 0.5**2))
 
     try:
-        popt, pcov = curve_fit(gaussian, x, y, p0=[1, 0, 1], max_nfev=2)
+        _, _ = curve_fit(gaussian, x, y, p0=[1, 0, 1], max_nfev=2)
     except OptimizationError as e:
         print("\n📊 Analyzing Error Diagnostics:")
         print(f"  • Number of reasons: {len(e.reasons)}")
@@ -141,7 +141,7 @@ def example_4_comparison():
 
     print("\n🟢 NEW ERROR (with enhancement):")
     try:
-        popt, pcov = curve_fit(difficult, x, y, p0=[1, 1, 1], max_nfev=3)
+        _, _ = curve_fit(difficult, x, y, p0=[1, 1, 1], max_nfev=3)
     except OptimizationError as e:
         print(f"\n{e}")
 

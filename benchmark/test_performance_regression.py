@@ -25,8 +25,6 @@ CI/CD Regression Gates:
 """
 
 import json
-import os
-import sys
 import warnings
 from pathlib import Path
 
@@ -56,6 +54,7 @@ def load_baseline():
             return json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         pytest.skip(f"Failed to load baseline: {e}")
+    return None
 
 
 BASELINE = load_baseline()

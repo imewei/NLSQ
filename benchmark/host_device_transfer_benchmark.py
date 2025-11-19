@@ -28,7 +28,6 @@ import numpy as np
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from nlsq import curve_fit
 from nlsq.least_squares import least_squares
 from nlsq.profiling import HAS_JAX_PROFILER, TransferProfiler
 

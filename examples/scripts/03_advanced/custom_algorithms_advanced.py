@@ -221,7 +221,7 @@ if OPTAX_AVAILABLE:
     print("\nTrue parameters: a=2.0, b=1.0")
 
     # Visualization
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
     # Fits
     x_plot = jnp.linspace(0, 10, 100)
@@ -472,7 +472,7 @@ print(f"  Mean absolute error in a: {a_error:.4f}")
 print(f"  Mean absolute error in b: {b_error:.4f}")
 
 # Visualize results
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+_, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
 ax1.scatter(a_true_batch, a_fitted, alpha=0.5, s=20)
 ax1.plot([2, 4], [2, 4], "r--", lw=2, label="Perfect fit")

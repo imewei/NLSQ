@@ -13,7 +13,6 @@ This module tests all stability enhancements including:
 
 import unittest
 
-import numpy as np
 import pytest
 
 from nlsq.config import JAXConfig

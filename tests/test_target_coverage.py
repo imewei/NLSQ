@@ -85,7 +85,7 @@ class TestTargetCoverage(unittest.TestCase):
 
         # Test with bounds that are invalid
         with contextlib.suppress(Exception):
-            popt, _pcov = curve_fit(bad_model, x, y, p0=[1, 0], bounds=([2, 1], [1, 2]))
+            _, _ = curve_fit(bad_model, x, y, p0=[1, 0], bounds=([2, 1], [1, 2]))
             # Should handle invalid bounds
 
     @pytest.mark.filterwarnings(

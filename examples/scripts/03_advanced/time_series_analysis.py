@@ -155,7 +155,7 @@ print(f"  Doubling time (early phase): {np.log(2) / k_fit:.1f} days")
 t_extended = np.linspace(0, 150, 300)
 y_fit = logistic_growth(jnp.array(t_extended), L_fit, k_fit, t0_fit)
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+_, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
 # Main plot: data + fit + forecast
 ax1.plot(t_data, y_observed, "o", alpha=0.5, label="Observed data", ms=4)

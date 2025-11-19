@@ -652,7 +652,6 @@ def compare_approaches():
 
         # Determine strategy
         if stats.n_chunks == 1:
-            strategy = "Single chunk"
             # Streaming handles all large datasets
             strategy = "Streaming"
         else:
@@ -660,7 +659,7 @@ def compare_approaches():
 
         # Time the fit
         start = time.time()
-        result = fit_large_dataset(
+        _result = fit_large_dataset(
             exponential_decay,
             x,
             y,

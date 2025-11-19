@@ -257,4 +257,4 @@ def run_benchmarks():
 
 
 if __name__ == "__main__":
-    results = run_benchmarks()
+    _results = run_benchmarks()

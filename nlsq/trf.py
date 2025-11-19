@@ -96,7 +96,7 @@ import numpy as np
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
 
-_jax_config = JAXConfig()
+__jax_config = JAXConfig()
 import jax.numpy as jnp
 from jax import debug, jit
 from jax.numpy.linalg import norm as jnorm

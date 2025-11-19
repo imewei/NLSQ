@@ -8,7 +8,6 @@ and replaces plt.show() calls with proper display pattern.
 This script uses the shared notebook_utils package for common operations.
 """
 
-import logging
 import re
 import sys
 from pathlib import Path

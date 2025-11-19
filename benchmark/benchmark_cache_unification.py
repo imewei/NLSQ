@@ -60,7 +60,7 @@ def benchmark_cold_jit_time(data_sizes=(100, 1000, 10000)):
         # Time cold JIT compilation
         start = time.time()
         result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
-        _popt, _pcov = result
+        _, _ = result
         cold_time_ms = (time.time() - start) * 1000
 
         times.append(cold_time_ms)
@@ -103,7 +103,7 @@ def benchmark_warm_jit_time(n_iterations=100):
 
         start = time.time()
         result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
-        _popt, _pcov = result
+        _, _ = result
         warm_time_ms = (time.time() - start) * 1000
         times.append(warm_time_ms)
 
@@ -143,7 +143,7 @@ def benchmark_cache_hit_rate(n_fits=1000, data_sizes=(100, 200, 500, 1000)):
         y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, size)
 
         result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
-        _popt, _pcov = result
+        _, _ = result
 
         if (i + 1) % 100 == 0:
             stats = get_cache_stats()

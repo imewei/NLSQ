@@ -202,7 +202,7 @@ def post_process_script_code(code: str, script_name: str, fig_counter: dict) -> 
         fig_num = fig_counter["count"]
 
         # Create figure path
-        fig_path = f"figures/{script_name}/fig_{fig_num:02d}.png"
+        _fig_path = f"figures/{script_name}/fig_{fig_num:02d}.png"
 
         # Replace the pattern
         replacement = (

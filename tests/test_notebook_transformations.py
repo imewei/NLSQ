@@ -10,7 +10,6 @@ Tests cover:
 import json
 
 # Add scripts to path for imports
-import sys
 from pathlib import Path
 
 import pytest

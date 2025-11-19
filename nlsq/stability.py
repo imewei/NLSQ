@@ -866,18 +866,16 @@ def apply_automatic_fixes(
 
     # Fix 2: Rescale ydata if large range
     y_range = np.ptp(ydata)
-    if y_range > 1e4:
+    if y_range > 1e4 and np.isfinite(y_range):
         # Normalize to similar scale as x
         y_min = np.min(ydata)
         y_max = np.max(ydata)
-        # Check for finite range to avoid division warnings with inf data
-        if np.isfinite(y_range):
-            ydata = (ydata - y_min) / y_range
-            fix_info["y_scale"] = y_range
-            fix_info["y_offset"] = y_min
-            applied_fixes.append(
-                f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]"
-            )
+        ydata = (ydata - y_min) / y_range
+        fix_info["y_scale"] = y_range
+        fix_info["y_offset"] = y_min
+        applied_fixes.append(
+            f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]"
+        )
 
     # Fix 3: Replace NaN/Inf in data
     if np.any(~np.isfinite(xdata)):

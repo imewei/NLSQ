@@ -45,9 +45,9 @@ from pathlib import Path
 # Install NLSQ (skip if already installed)
 # !pip install -q nlsq  # Uncomment to install in notebook environment
 # Check installation
-import nlsq
+from nlsq import __version__
 
-print(f"NLSQ version: {nlsq.__version__}")
+print(f"NLSQ version: {__version__}")
 print("✅ Installation successful!")
 
 
@@ -379,7 +379,7 @@ popt, pcov = curve_fit(power_law, x, y, p0=[2, 1.5])
 a_fit, b_fit = popt
 
 # Plot (log-log scale shows linearity)
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+_, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
 # Linear scale
 ax1.scatter(x, y, alpha=0.5, label="Data")

@@ -21,8 +21,7 @@ import jax.numpy as jnp
 import numpy as np
 import psutil
 
-from nlsq import curve_fit
-from nlsq.memory_manager import MemoryManager, get_memory_manager
+from nlsq.memory_manager import MemoryManager
 from nlsq.memory_pool import MemoryPool, round_to_bucket
 
 
@@ -46,7 +45,7 @@ def benchmark_baseline():
     # Generate test data
     np.random.seed(42)
     x = np.linspace(0, 10, 10000)
-    y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, len(x))
+    _y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, len(x))
 
     # Create manager with baseline settings
     manager = MemoryManager(safety_factor=1.2, enable_adaptive_safety=False)
@@ -66,7 +65,7 @@ def benchmark_baseline():
 
     # Get statistics
     pool_stats = pool.get_stats()
-    manager_stats = manager.get_memory_stats()
+    _manager_stats = manager.get_memory_stats()
 
     results = {
         "config": "baseline",
@@ -108,7 +107,7 @@ def benchmark_adaptive_safety():
 
     # Get telemetry
     telemetry = manager.get_safety_telemetry()
-    manager_stats = manager.get_memory_stats()
+    _manager_stats = manager.get_memory_stats()
 
     # Calculate memory reduction vs baseline
     baseline_memory = manager.predict_memory_requirement(
