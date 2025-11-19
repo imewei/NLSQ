@@ -19,11 +19,7 @@ build:
     pre_build:
       - echo "Building NLSQ documentation..."
       - echo "This build requires NumPy 2.0+ (breaking change from 1.x), JAX 0.8.0"
-      - echo "Installing uv for faster dependency resolution..."
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-      - if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
-      - uv --version
+      - echo "uv not required on RTD builders; using pip-installed deps"
       - echo "See REQUIREMENTS.md for dependency details"
     post_build:
       - echo "Documentation build complete"
