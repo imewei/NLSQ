@@ -3,14 +3,22 @@ NLSQ: JAX-accelerated nonlinear least squares curve fitting.
 
 GPU/TPU-accelerated curve fitting with automatic differentiation.
 Provides drop-in SciPy compatibility with curve_fit function.
-Supports large datasets through automatic chunking and sampling.
+Supports large datasets through automatic chunking and streaming optimization.
+
+Key Features
+------------
+- Drop-in replacement for scipy.optimize.curve_fit
+- GPU/TPU acceleration via JAX
+- Automatic memory management for datasets up to 100M+ points
+- Streaming optimization for unlimited data
+- Smart algorithm selection and numerical stability
 
 Examples
 --------
 >>> import jax.numpy as jnp
 >>> from nlsq import curve_fit
 >>> def model(x, a, b): return a * jnp.exp(-b * x)
->>> popt, _pcov = curve_fit(model, xdata, ydata)
+>>> popt, pcov = curve_fit(model, xdata, ydata)
 
 """
 
