@@ -286,3 +286,4 @@ validators_refactoring.patch
 nlsq/_version.py
 /benchmark_results
 benchmark/benchmark_results
+.notebook_transforms.json
