@@ -131,7 +131,7 @@ jobs:
 
       - name: Install security tools
         run: |
-          uv pip install bandit[toml] pip-audit safety
+          uv pip install --system bandit[toml] pip-audit safety
 
       - name: Run Bandit security linter
         run: |
@@ -295,7 +295,7 @@ jobs:
       - name: Verify build artifacts
         run: |
           ls -lh dist/
-          uv run twine check dist/*
+          uvx twine check dist/*
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

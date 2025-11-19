@@ -243,7 +243,7 @@ jobs:
 
       - name: Install security tools
         run: |
-          uv pip install bandit[toml] pip-audit safety semgrep
+          uv pip install --system bandit[toml] pip-audit safety semgrep
 
       - name: Run Bandit (comprehensive)
         run: |

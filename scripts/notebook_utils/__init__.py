@@ -27,27 +27,23 @@ from .core import (
 from .types import NotebookCell, NotebookStats
 
 __all__ = [
-    # Types
     "NotebookCell",
-    "NotebookStats",
-    # Exceptions
     "NotebookError",
     "NotebookReadError",
-    "NotebookWriteError",
+    "NotebookStats",
     "NotebookValidationError",
-    # Core I/O
-    "read_notebook",
-    "write_notebook",
-    "validate_notebook_structure",
-    # Cell utilities
-    "has_matplotlib_magic",
-    "has_ipython_display_import",
-    "uses_display",
-    "find_first_code_cell_index",
-    "find_cell_with_pattern",
+    "NotebookWriteError",
     "cell_contains_pattern",
-    "create_matplotlib_config_cell",
     "create_ipython_display_import_cell",
+    "create_matplotlib_config_cell",
+    "find_cell_with_pattern",
+    "find_first_code_cell_index",
+    "has_ipython_display_import",
+    "has_matplotlib_magic",
+    "read_notebook",
+    "uses_display",
+    "validate_notebook_structure",
+    "write_notebook",
 ]
 
 __version__ = "0.1.0"
