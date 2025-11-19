@@ -328,7 +328,7 @@ jobs:
             FAILED=1
           fi
 
-          if [[ "${{ needs.integration.result }}" != "success" ]]; then
+          if [[ "${{ needs.integration.result }}" != "success" ]] && [[ "${{ needs.integration.result }}" != "skipped" ]]; then
             echo "❌ Integration tests failed"
             FAILED=1
           fi

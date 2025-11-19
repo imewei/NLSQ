@@ -75,10 +75,12 @@ jobs:
         run: |
           # Rebuild to capture warnings (previous build may have failed)
           warnings=$(make html 2>&1 | grep -c "WARNING" || echo "0")
-          echo "warnings=$warnings" >> $GITHUB_OUTPUT
+          # Sanitize to ensure clean numeric output
+          warnings_count=$(echo "$warnings" | tr -cd '0-9')
+          echo "warnings=${warnings_count:-0}" >> $GITHUB_OUTPUT
 
-          if [ "$warnings" -gt "0" ]; then
-            echo "⚠️  Found $warnings warnings in Sphinx build"
+          if [ "${warnings_count:-0}" -gt "0" ]; then
+            echo "⚠️  Found ${warnings_count} warnings in Sphinx build"
           else
             echo "✅ No warnings in Sphinx build"
           fi
