@@ -22,6 +22,7 @@ build:
       - echo "Installing uv for faster dependency resolution..."
       - curl -LsSf https://astral.sh/uv/install.sh | sh
       - export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+      - if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
       - uv --version
       - echo "See REQUIREMENTS.md for dependency details"
     post_build:
