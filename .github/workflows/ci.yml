@@ -189,8 +189,33 @@ jobs:
       - name: Run tests with coverage
         shell: bash
         run: |
-          pytest tests/ -v -n auto --cov=nlsq --cov-report=xml --cov-report=term \
-            --cov-fail-under=${{ env.COVERAGE_THRESHOLD }}
+          # Add platform marker for platform-specific tests
+          PLATFORM_MARKER=""
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            PLATFORM_MARKER="linux"
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            PLATFORM_MARKER="darwin"
+          elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            PLATFORM_MARKER="win32"
+          fi
+
+          pytest tests/ -v -n auto --cov=nlsq \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term \
+            --cov-fail-under=${{ env.COVERAGE_THRESHOLD }} \
+            -m "not slow"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            .coverage
+            htmlcov/
+          retention-days: 7
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == env.PYTHON_VERSION_DEFAULT
@@ -245,18 +270,23 @@ jobs:
           path: dist/
           retention-days: 7
 
-  # Stage 5: Integration Tests (Reuses build artifacts)
+  # Stage 5: Integration Tests (Reuses build artifacts, runs on all platforms)
   integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
+    name: Integration Tests - ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -284,6 +314,39 @@ jobs:
           popt, pcov = nlsq.curve_fit(exponential, x, y)
           print(f'✅ Integration test passed: a={popt[0]:.2f}, b={popt[1]:.2f}')
           "
+
+  # Test Summary: Aggregate results from all platforms
+  test-summary:
+    name: Cross-Platform Test Summary
+    runs-on: ubuntu-latest
+    needs: [test, integration]
+    if: always()
+    steps:
+      - name: Generate test summary
+        run: |
+          echo "## 🧪 Cross-Platform Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Matrix Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Python 3.12 | Python 3.13 |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🐧 Ubuntu | ${{ needs.test.result }} | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🍎 macOS | ${{ needs.test.result }} | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🪟 Windows | ${{ needs.test.result }} | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Integration Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Python 3.12 | Python 3.13 |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🐧 Ubuntu | ${{ needs.integration.result }} | ${{ needs.integration.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🍎 macOS | ${{ needs.integration.result }} | ${{ needs.integration.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🪟 Windows | ${{ needs.integration.result }} | ${{ needs.integration.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Configuration:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Parallel execution: \`pytest -n auto\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage threshold: ${{ env.COVERAGE_THRESHOLD }}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Platforms: Ubuntu, macOS, Windows" >> $GITHUB_STEP_SUMMARY
+          echo "- Python versions: 3.12, 3.13" >> $GITHUB_STEP_SUMMARY
 
   # Final: Success Gate
   ci-success:
