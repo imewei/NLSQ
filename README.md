@@ -17,16 +17,6 @@
 | [**Documentation**](https://nlsq.readthedocs.io/)
 | [**Examples**](examples/)
 
-## Quick Navigation
-
-⭐ [**Get Started**](#quickstart-colab-in-the-cloud) - Try NLSQ in your browser with GPU
-📦 [**Installation**](#installation) - Install locally or on your cluster
-🚀 [**GPU Setup**](#linux-gpu-acceleration---recommended-) - Enable GPU acceleration (150-270x faster)
-📊 [**Examples**](#examples-gallery) - 32 example notebooks organized by difficulty
-📚 [**Documentation**](https://nlsq.readthedocs.io/) - Complete API reference and guides
-🐛 [**Troubleshooting**](#gpu-troubleshooting) - Fix common GPU and installation issues
-💬 [**Get Help**](https://github.com/imewei/NLSQ/issues) - Report bugs or ask questions
-
 ## Acknowledgments
 
 NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit), originally developed by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith. We gratefully acknowledge their foundational work on GPU-accelerated curve fitting with JAX. The original JAXFit paper: [arXiv:2208.12187](https://doi.org/10.48550/arXiv.2208.12187).
