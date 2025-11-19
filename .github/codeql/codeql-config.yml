@@ -1,0 +1,35 @@
+name: "NLSQ CodeQL Configuration"
+
+queries:
+  - uses: security-extended
+  - uses: security-and-quality
+
+paths-ignore:
+  - '**/test_*.py'
+  - '**/tests/**'
+  - '**/*_test.py'
+  - 'docs/**'
+  - 'examples/**'
+  - 'scripts/**'
+  - '.github/**'
+
+# Custom query filters
+query-filters:
+  - exclude:
+      id: py/unused-import
+  - exclude:
+      id: py/unused-local-variable
+  - include:
+      tags:
+        - security
+        - correctness
+      severity: error
+
+# Path-specific configurations
+path-specific-filters:
+  - paths:
+      - nlsq/core/**
+    filters:
+      - include:
+          tags: security
+          severity: warning

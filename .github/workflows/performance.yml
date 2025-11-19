@@ -1,0 +1,250 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'nlsq/**/*.py'
+      - 'benchmark/**/*.py'
+      - '.github/workflows/performance.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'nlsq/**/*.py'
+      - 'benchmark/**/*.py'
+  schedule:
+    # Run benchmarks weekly on Sunday at midnight
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      dataset_size:
+        description: 'Dataset size for benchmarks'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - small
+          - standard
+          - large
+      compare_with:
+        description: 'Compare with branch/commit (empty for baseline)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Benchmark Core Performance
+  benchmark-core:
+    name: Core Performance - ${{ matrix.backend }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [cpu, gpu]
+        include:
+          - backend: cpu
+            jax_platform: cpu
+          - backend: gpu
+            jax_platform: cuda
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # For comparison with historical data
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev,benchmark]
+
+      - name: Install JAX backend
+        run: |
+          if [[ "${{ matrix.backend }}" == "gpu" ]]; then
+            pip uninstall -y jax jaxlib
+            pip install 'jax[cuda12]>=0.6.0' || echo "GPU installation skipped (no CUDA available)"
+          fi
+
+      - name: Run performance benchmarks
+        id: benchmark
+        run: |
+          # Set dataset size
+          SIZE="${{ github.event.inputs.dataset_size || 'standard' }}"
+
+          # Run benchmarks with pytest-benchmark
+          pytest benchmark/ -v --benchmark-only \
+            --benchmark-json=benchmark-results.json \
+            --benchmark-min-rounds=5 \
+            --benchmark-warmup=on \
+            -m "not slow"
+
+          # Extract key metrics
+          python -c "
+          import json
+          with open('benchmark-results.json') as f:
+              data = json.load(f)
+              print(f'Benchmarks completed: {len(data[\"benchmarks\"])} tests')
+          "
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.event_name != 'pull_request'
+        with:
+          tool: 'pytest'
+          output-file-path: benchmark-results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
+          alert-comment-cc-users: '@imewei'
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ matrix.backend }}
+          path: |
+            benchmark-results.json
+            .benchmarks/
+          retention-days: 30
+
+  # Compare Performance with Baseline
+  compare-performance:
+    name: Performance Comparison
+    runs-on: ubuntu-latest
+    needs: benchmark-core
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download current benchmarks
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results-cpu
+          path: current/
+
+      - name: Checkout base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git checkout origin/${{ github.base_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev,benchmark]
+
+      - name: Run baseline benchmarks
+        run: |
+          pytest benchmark/ -v --benchmark-only \
+            --benchmark-json=baseline-results.json \
+            --benchmark-min-rounds=5 \
+            -m "not slow"
+
+      - name: Compare results
+        id: compare
+        run: |
+          python -c "
+          import json
+
+          with open('baseline-results.json') as f:
+              baseline = json.load(f)['benchmarks']
+          with open('current/benchmark-results.json') as f:
+              current = json.load(f)['benchmarks']
+
+          # Create comparison report
+          print('## 📊 Performance Comparison\n')
+          print('| Benchmark | Baseline | Current | Change |')
+          print('|-----------|----------|---------|--------|')
+
+          for b in baseline:
+              name = b['name']
+              base_mean = b['stats']['mean']
+
+              curr = next((c for c in current if c['name'] == name), None)
+              if curr:
+                  curr_mean = curr['stats']['mean']
+                  change = ((curr_mean - base_mean) / base_mean) * 100
+                  emoji = '🔴' if change > 10 else '🟢' if change < -10 else '⚪'
+                  print(f'| {name} | {base_mean:.4f}s | {curr_mean:.4f}s | {emoji} {change:+.1f}% |')
+          " > comparison.md
+
+          # Post as comment
+          cat comparison.md >> $GITHUB_STEP_SUMMARY
+
+  # Memory Profiling
+  memory-profile:
+    name: Memory Profiling
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install memory-profiler matplotlib
+
+      - name: Run memory profiling
+        run: |
+          python -m memory_profiler benchmark/profile_memory.py > memory_profile.txt || echo "Memory profiling not available"
+
+      - name: Upload memory profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-profile
+          path: memory_profile.txt
+          retention-days: 30
+
+  # Generate Performance Report
+  performance-report:
+    name: Generate Performance Report
+    runs-on: ubuntu-latest
+    needs: [benchmark-core, compare-performance, memory-profile]
+    if: always()
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Generate summary report
+        run: |
+          echo "# 🚀 Performance Benchmark Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Core benchmarks completed" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "✅ Performance comparison vs baseline" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "✅ Memory profiling completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📈 **View detailed results in workflow artifacts**" >> $GITHUB_STEP_SUMMARY

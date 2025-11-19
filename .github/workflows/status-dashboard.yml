@@ -1,0 +1,132 @@
+name: Workflow Status Dashboard
+
+on:
+  schedule:
+    # Update dashboard every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI", "Documentation", "Security", "Performance Benchmarks", "CodeQL Advanced Security"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  update-dashboard:
+    name: Update Status Dashboard
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch workflow statuses
+        id: fetch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch recent workflow runs
+          echo "Fetching workflow statuses..."
+
+          # CI Workflow
+          CI_STATUS=$(gh run list --workflow=ci.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+          CI_URL=$(gh run list --workflow=ci.yml --limit 1 --json url --jq '.[0].url' || echo "#")
+
+          # Documentation
+          DOCS_STATUS=$(gh run list --workflow=docs.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+          DOCS_URL=$(gh run list --workflow=docs.yml --limit 1 --json url --jq '.[0].url' || echo "#")
+
+          # Security
+          SEC_STATUS=$(gh run list --workflow=security.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+          SEC_URL=$(gh run list --workflow=security.yml --limit 1 --json url --jq '.[0].url' || echo "#")
+
+          # Performance
+          PERF_STATUS=$(gh run list --workflow=performance.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+          PERF_URL=$(gh run list --workflow=performance.yml --limit 1 --json url --jq '.[0].url' || echo "#")
+
+          # CodeQL
+          CODEQL_STATUS=$(gh run list --workflow=codeql.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+          CODEQL_URL=$(gh run list --workflow=codeql.yml --limit 1 --json url --jq '.[0].url' || echo "#")
+
+          # Save to output
+          echo "ci_status=$CI_STATUS" >> $GITHUB_OUTPUT
+          echo "ci_url=$CI_URL" >> $GITHUB_OUTPUT
+          echo "docs_status=$DOCS_STATUS" >> $GITHUB_OUTPUT
+          echo "docs_url=$DOCS_URL" >> $GITHUB_OUTPUT
+          echo "sec_status=$SEC_STATUS" >> $GITHUB_OUTPUT
+          echo "sec_url=$SEC_URL" >> $GITHUB_OUTPUT
+          echo "perf_status=$PERF_STATUS" >> $GITHUB_OUTPUT
+          echo "perf_url=$PERF_URL" >> $GITHUB_OUTPUT
+          echo "codeql_status=$CODEQL_STATUS" >> $GITHUB_OUTPUT
+          echo "codeql_url=$CODEQL_URL" >> $GITHUB_OUTPUT
+
+      - name: Generate dashboard
+        run: |
+          cat > .github/WORKFLOW_STATUS.md << 'EOF'
+          # 🚀 NLSQ CI/CD Status Dashboard
+
+          Last Updated: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+          ## Workflow Status
+
+          | Workflow | Status | Latest Run |
+          |----------|--------|------------|
+          | 🔧 CI Pipeline | ![CI](${{ steps.fetch.outputs.ci_status == 'success' && 'https://img.shields.io/badge/status-passing-brightgreen' || 'https://img.shields.io/badge/status-failing-red' }}) | [${{ steps.fetch.outputs.ci_status }}](${{ steps.fetch.outputs.ci_url }}) |
+          | 📚 Documentation | ![Docs](${{ steps.fetch.outputs.docs_status == 'success' && 'https://img.shields.io/badge/status-passing-brightgreen' || 'https://img.shields.io/badge/status-failing-red' }}) | [${{ steps.fetch.outputs.docs_status }}](${{ steps.fetch.outputs.docs_url }}) |
+          | 🔒 Security Scan | ![Security](${{ steps.fetch.outputs.sec_status == 'success' && 'https://img.shields.io/badge/status-passing-brightgreen' || 'https://img.shields.io/badge/status-failing-red' }}) | [${{ steps.fetch.outputs.sec_status }}](${{ steps.fetch.outputs.sec_url }}) |
+          | 📊 Performance | ![Perf](${{ steps.fetch.outputs.perf_status == 'success' && 'https://img.shields.io/badge/status-passing-brightgreen' || 'https://img.shields.io/badge/status-failing-red' }}) | [${{ steps.fetch.outputs.perf_status }}](${{ steps.fetch.outputs.perf_url }}) |
+          | 🛡️ CodeQL | ![CodeQL](${{ steps.fetch.outputs.codeql_status == 'success' && 'https://img.shields.io/badge/status-passing-brightgreen' || 'https://img.shields.io/badge/status-failing-red' }}) | [${{ steps.fetch.outputs.codeql_status }}](${{ steps.fetch.outputs.codeql_url }}) |
+
+          ## Coverage & Metrics
+
+          - **Test Coverage**: ![Coverage](https://img.shields.io/codecov/c/github/imewei/NLSQ)
+          - **Code Quality**: ![Code Quality](https://img.shields.io/codefactor/grade/github/imewei/NLSQ)
+          - **Dependencies**: ![Dependencies](https://img.shields.io/librariesio/github/imewei/NLSQ)
+
+          ## Quick Links
+
+          - [View All Workflows](https://github.com/imewei/NLSQ/actions)
+          - [Security Advisories](https://github.com/imewei/NLSQ/security/advisories)
+          - [Dependency Graph](https://github.com/imewei/NLSQ/network/dependencies)
+          - [Code Scanning Alerts](https://github.com/imewei/NLSQ/security/code-scanning)
+
+          ## Automation Status
+
+          - ✅ Dependency Updates: Renovate Bot
+          - ✅ Security Scanning: Daily
+          - ✅ Performance Benchmarks: Weekly
+          - ✅ Code Quality: Pre-commit Hooks
+
+          ---
+
+          *This dashboard is automatically updated every 6 hours and after workflow completions.*
+          EOF
+
+      - name: Commit dashboard updates
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          if git diff --quiet .github/WORKFLOW_STATUS.md; then
+            echo "No changes to dashboard"
+          else
+            git add .github/WORKFLOW_STATUS.md
+            git commit -m "chore(ci): update workflow status dashboard [skip ci]"
+            git push
+          fi
+
+      - name: Post summary
+        run: |
+          echo "## 📊 Workflow Status Dashboard Updated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Last Update:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View full dashboard: `.github/WORKFLOW_STATUS.md`" >> $GITHUB_STEP_SUMMARY
