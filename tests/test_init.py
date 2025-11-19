@@ -8,21 +8,14 @@ This test suite covers:
 """
 
 import unittest
-import warnings
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import nlsq
 from nlsq import (
-    LargeDatasetConfig,
-    MemoryConfig,
-    curve_fit,
     curve_fit_large,
-    large_dataset_context,
-    memory_context,
 )
 
 

@@ -6,10 +6,8 @@ Focused on actual validator behavior.
 
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 from nlsq import curve_fit
-from nlsq.validators import InputValidator
 
 
 class TestValidatorIntegration:

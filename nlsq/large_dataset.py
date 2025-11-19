@@ -538,7 +538,7 @@ class LargeDatasetFitter:
         or excessive logging during systematic failures.
         """
         time_bucket = int(current_time // 60)
-        cache_key = f"{error_signature}_{time_bucket}"
+        f"{error_signature}_{time_bucket}"
         # LRU cache will return True first time, then cache hit returns True
         # This effectively rate-limits to once per time bucket
         return True
@@ -885,7 +885,7 @@ class LargeDatasetFitter:
     ) -> OptimizeResult:
         """Internal implementation of fitting algorithm."""
 
-        start_time = time.time()
+        time.time()
         n_points = len(xdata)
 
         # Estimate number of parameters from function signature or p0

@@ -53,23 +53,21 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # Install dependencies (uncomment if needed)
 # !pip install nlsq flax optax equinox
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from jax import grad, jit, vmap
+from jax import jit
 
 # NLSQ imports
-from nlsq import CurveFit, OptimizeResult, __version__, curve_fit
+from nlsq import CurveFit, __version__
 
 # ML ecosystem imports
 try:
     import flax.linen as nn
     import optax
-    from flax.core import freeze, unfreeze
     from flax.training import train_state
 
     FLAX_AVAILABLE = True
@@ -78,7 +76,7 @@ except ImportError:
     FLAX_AVAILABLE = False
 
 try:
-    import equinox as eqx
+    pass
 
     EQUINOX_AVAILABLE = True
 except ImportError:

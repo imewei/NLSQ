@@ -10,8 +10,6 @@ These tests validate the Phase 1 Priority 2 optimizations for memory reuse:
 import unittest
 
 import jax.numpy as jnp
-import numpy as np
-import pytest
 
 from nlsq.memory_manager import MemoryManager, get_memory_manager
 from nlsq.memory_pool import MemoryPool, clear_global_pool, get_global_pool

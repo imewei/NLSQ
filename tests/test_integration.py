@@ -6,15 +6,12 @@ Tests JAX tracing compatibility, chunking accuracy, and end-to-end validation.
 
 import unittest
 import warnings
-from unittest.mock import patch
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from scipy import optimize as scipy_optimize
 
 from nlsq import (
-    CurveFit,
     LargeDatasetFitter,
     curve_fit,
     curve_fit_large,

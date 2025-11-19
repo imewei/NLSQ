@@ -29,7 +29,7 @@ from unittest.mock import MagicMock, patch
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq import LargeDatasetFitter, curve_fit_large
+from nlsq import LargeDatasetFitter
 from nlsq.large_dataset import LDMemoryConfig
 
 
@@ -261,7 +261,7 @@ class TestSaveDiagnosticsFlag(unittest.TestCase):
         # Should have detailed diagnostics
         if hasattr(result, "chunk_results"):
             if len(result.chunk_results) > 0:
-                chunk = result.chunk_results[0]
+                result.chunk_results[0]
                 # Should have timestamp when save_diagnostics=True
                 # (Implementation may vary)
                 pass  # Check based on actual implementation
@@ -339,7 +339,6 @@ class TestMinSuccessRateThreshold(unittest.TestCase):
         try:
             result = fitter.fit(intermittent_model, xdata, ydata, p0=[2.0, 1.0])
             # May succeed or fail depending on exact success rate
-            pass
         except Exception:
             # Expected if success rate < 50%
             pass
@@ -408,7 +407,6 @@ class TestMinSuccessRateThreshold(unittest.TestCase):
         try:
             result = fitter.fit(mostly_failing_model, xdata, ydata, p0=[2.0, 1.0])
             # May succeed with 40% > 30% threshold
-            pass
         except Exception:
             # Failure still possible if too few successful chunks
             pass

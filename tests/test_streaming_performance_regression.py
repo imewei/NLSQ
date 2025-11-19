@@ -362,7 +362,7 @@ def test_checkpoint_save_overhead(benchmark, small_streaming_data):
         assert result is not None
 
         # Verify checkpoints were created
-        checkpoint_files = list(Path(temp_dir).glob("*.h5"))
+        list(Path(temp_dir).glob("*.h5"))
         # May or may not have checkpoints depending on implementation
 
     finally:

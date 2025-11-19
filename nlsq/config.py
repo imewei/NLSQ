@@ -475,7 +475,7 @@ class JAXConfig:
 
         # Apply GPU memory settings immediately if possible
         try:
-            from jax import config as jax_config
+            pass
 
             if config.gpu_memory_fraction is not None:
                 # Note: JAX memory fraction handling varies by version and backend

@@ -13,7 +13,6 @@ import pytest
 
 from benchmark.benchmark_suite import (
     BenchmarkConfig,
-    BenchmarkProblem,
     BenchmarkResult,
     BenchmarkSuite,
     ExponentialDecayProblem,

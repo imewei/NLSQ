@@ -7,7 +7,6 @@ Tests the performance profiling system for NLSQ.
 
 import time
 
-import numpy as np
 import pytest
 
 from nlsq.profiler import (

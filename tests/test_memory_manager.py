@@ -9,9 +9,8 @@ Tests intelligent memory management including:
 - Chunking strategy estimation
 """
 
-import gc
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 from hypothesis import given, settings
@@ -235,8 +234,8 @@ class TestMemoryPooling(unittest.TestCase):
 
     def test_array_pooling_different_shapes(self):
         """Test pooling with different shapes."""
-        arr1 = self.manager.allocate_array((100, 10))
-        arr2 = self.manager.allocate_array((50, 20))
+        self.manager.allocate_array((100, 10))
+        self.manager.allocate_array((50, 20))
 
         # Pool should contain both arrays
         self.assertEqual(len(self.manager.memory_pool), 2)
@@ -742,7 +741,6 @@ class TestMixedPrecisionIntegration(unittest.TestCase):
 
     def test_get_current_precision_memory_multiplier_with_manager_float32(self):
         """Test memory multiplier with mixed precision manager in float32."""
-        import jax.numpy as jnp
 
         from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
 

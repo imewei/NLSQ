@@ -24,11 +24,9 @@ Example:
     >>> print(f"Success with strategy: {result.fallback_strategy_used}")
 """
 
-import logging
 from collections.abc import Callable
 from typing import Any, ClassVar
 
-import jax.numpy as jnp
 import numpy as np
 
 from nlsq.logging import get_logger

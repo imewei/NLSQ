@@ -28,7 +28,6 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # ======================================================================
 import os
 import sys
-import warnings
 from pathlib import Path
 
 # Check Python version
@@ -69,11 +68,8 @@ except Exception as e:
 
 # Import advanced NLSQ features
 from nlsq import (
-    AlgorithmSelector,
-    LargeDatasetConfig,
     MemoryConfig,
     auto_select_algorithm,
-    configure_for_large_datasets,
     estimate_memory_requirements,
     get_memory_config,
     memory_context,

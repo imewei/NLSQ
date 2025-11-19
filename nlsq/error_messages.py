@@ -298,7 +298,6 @@ class ConvergenceWarning(UserWarning):
     there are potential quality issues (e.g., poor fit, covariance issues).
     """
 
-    pass
 
 
 def check_convergence_quality(result, pcov) -> list[str]:

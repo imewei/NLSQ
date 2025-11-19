@@ -80,7 +80,6 @@ def compiled_models():
     ...     from nlsq import curve_fit
     ...     popt, pcov = curve_fit(compiled_models['linear'], x, y, p0=[1, 1])
     """
-    from nlsq import CurveFit
 
     # Define all common model functions
     def linear(x, a, b):
@@ -597,7 +596,6 @@ def cleanup_jax_cache():
     """Clean up JAX compilation cache after tests"""
     yield
     # Let JAX manage its own cache
-    pass
 
 
 @pytest.fixture
@@ -606,7 +604,7 @@ def temp_array_pool():
     from nlsq.memory_manager import get_memory_manager
 
     manager = get_memory_manager()
-    initial_pool_size = len(manager.memory_pool)
+    len(manager.memory_pool)
 
     yield manager
 

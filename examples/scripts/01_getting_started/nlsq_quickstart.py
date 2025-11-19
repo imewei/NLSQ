@@ -24,7 +24,6 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # Import NLSQ before importing JAX since we need NLSQ to set all the JAX computation to use 64 rather than 32 bit arrays.
 # ======================================================================
 # Check Python version
-import sys
 from pathlib import Path
 
 # Import NLSQ before importing JAX since NLSQ configures JAX to use 64-bit precision

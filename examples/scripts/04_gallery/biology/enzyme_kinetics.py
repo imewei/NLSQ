@@ -25,7 +25,6 @@ from pathlib import Path
 # ======================================================================
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

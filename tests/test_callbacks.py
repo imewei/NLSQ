@@ -99,7 +99,7 @@ def test_progressbar_without_tqdm():
     # If tqdm is already imported (which it usually is), the test behavior changes
     # The ProgressBar will work but won't issue a warning on subsequent instantiations
     try:
-        import tqdm
+        pass
 
         # tqdm is available, so we can't test the warning behavior reliably
         # But we can verify ProgressBar still works
@@ -124,7 +124,7 @@ def test_progressbar_without_tqdm():
 def test_progressbar_updates():
     """Test ProgressBar updates with iteration data."""
     try:
-        import tqdm
+        pass
 
         callback = ProgressBar(max_nfev=10)
         callback(1, 100.0, np.array([1, 2, 3]), {"nfev": 3, "gradient_norm": 10.0})
@@ -313,7 +313,7 @@ def test_callback_chain_close():
 def test_curve_fit_with_progress_callback(simple_data, simple_model):
     """Test curve_fit with ProgressBar callback."""
     try:
-        import tqdm
+        pass
 
         x, y = simple_data
         callback = ProgressBar(max_nfev=50)

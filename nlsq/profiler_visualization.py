@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
@@ -24,7 +23,7 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
-from nlsq.profiler import PerformanceProfiler, ProfileMetrics
+from nlsq.profiler import PerformanceProfiler
 
 
 class ProfilerVisualization:

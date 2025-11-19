@@ -17,8 +17,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.config import JAXConfig
-
 
 @pytest.fixture
 def temp_config_dir():

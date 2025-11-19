@@ -4,12 +4,10 @@ This module tests error-specific retry strategies that attempt to recover from
 transient failures during streaming optimization.
 """
 
-from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
-import pytest
 
-from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestAdaptiveRetryStrategies:

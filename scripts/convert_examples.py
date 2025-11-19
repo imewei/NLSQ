@@ -320,7 +320,6 @@ def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Pa
         i += 1
 
     current_block = []
-    in_comment_section = False
 
     while i < len(lines):
         line = lines[i]

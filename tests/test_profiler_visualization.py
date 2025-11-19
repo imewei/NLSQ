@@ -7,9 +7,7 @@ Tests the visualization and dashboard components for performance profiling.
 
 import json
 import time
-from pathlib import Path
 
-import numpy as np
 import pytest
 
 from nlsq.profiler import PerformanceProfiler, get_global_profiler

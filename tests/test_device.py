@@ -15,13 +15,9 @@ Plus additional tests for:
 """
 
 import subprocess
-import sys
-import unittest.mock
 from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from nlsq.device import check_gpu_availability
 

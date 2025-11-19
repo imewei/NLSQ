@@ -4,12 +4,10 @@ This module tests the three-point NaN/Inf validation system that protects
 against numerical instabilities during streaming optimization.
 """
 
-from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
-import pytest
 
-from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestNaNInfValidation:

@@ -3,12 +3,11 @@
 
 import unittest
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
 from nlsq import __version__
-from nlsq.minpack import CurveFit, curve_fit
+from nlsq.minpack import curve_fit
 
 
 class TestFinalCoverage(unittest.TestCase):

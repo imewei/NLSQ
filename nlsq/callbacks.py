@@ -10,8 +10,7 @@ the current state: iteration number, cost, parameters, gradient norm, etc.
 
 import time
 import warnings
-from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -28,7 +27,6 @@ __all__ = [
 class StopOptimization(Exception):
     """Exception raised by callbacks to request early termination."""
 
-    pass
 
 
 class CallbackBase:
@@ -64,7 +62,6 @@ class CallbackBase:
         info : dict
             Additional information (gradient_norm, nfev, etc.)
         """
-        pass
 
     def close(self) -> None:
         """Clean up resources.
@@ -72,7 +69,6 @@ class CallbackBase:
         Override this method if your callback uses resources that need
         explicit cleanup (files, network connections, etc.).
         """
-        pass
 
 
 class ProgressBar(CallbackBase):

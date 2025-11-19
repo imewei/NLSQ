@@ -20,7 +20,7 @@ class TestTargetCoverage(unittest.TestCase):
         """Test JAX configuration."""
         import jax
 
-        config = JAXConfig()
+        JAXConfig()
         # Test that JAX is configured for 64-bit
         self.assertTrue(jax.config.read("jax_enable_x64"))
 
@@ -148,7 +148,7 @@ class TestTargetCoverage(unittest.TestCase):
             if hasattr(loss, func_name):
                 func = getattr(loss, func_name)
                 with contextlib.suppress(Exception):
-                    result = func(z, 1.0)
+                    func(z, 1.0)
                     # Should handle zeros gracefully
 
         # Test with very large values
@@ -157,7 +157,7 @@ class TestTargetCoverage(unittest.TestCase):
             if hasattr(loss, func_name):
                 func = getattr(loss, func_name)
                 with contextlib.suppress(Exception):
-                    result = func(z, 1.0)
+                    func(z, 1.0)
                     # Should handle large values without overflow
 
     def test_curve_fit_class_methods(self):

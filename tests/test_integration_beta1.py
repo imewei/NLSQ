@@ -11,14 +11,12 @@ All tests ensure features work correctly together in real-world scenarios.
 
 import os
 import time
-from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from nlsq import CurveFit, curve_fit, curve_fit_large
-from nlsq.async_logger import log_iteration_async
 from nlsq.least_squares import LeastSquares
 from nlsq.profiling import analyze_source_transfers, profile_optimization
 

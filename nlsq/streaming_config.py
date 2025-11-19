@@ -5,7 +5,6 @@ comprehensive fault tolerance features for production-ready optimizations.
 """
 
 from dataclasses import dataclass
-from typing import Union
 
 
 @dataclass

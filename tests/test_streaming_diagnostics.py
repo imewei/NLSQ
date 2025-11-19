@@ -8,11 +8,8 @@ This module tests the comprehensive diagnostic collection system including:
 - Diagnostic structure format
 """
 
-import shutil
 import tempfile
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -55,7 +52,7 @@ class TestDiagnosticCollection:
         )
 
         optimizer = StreamingOptimizer(config)
-        data_gen = StreamingDataGenerator((x_data, y_data))
+        StreamingDataGenerator((x_data, y_data))
 
         # Fit with expected failures
         result = optimizer.fit((x_data, y_data), failing_model, p0=np.array([1.0, 1.0]))

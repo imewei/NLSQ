@@ -1,6 +1,6 @@
 """Tests for success rate validation in streaming optimizer (Task Group 5)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Extended tests for stability modules to improve test coverage."""
 
-import os
 import tempfile
 import unittest
-from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
+from nlsq.algorithm_selector import AlgorithmSelector
 from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 from nlsq.memory_manager import (
     MemoryManager,
@@ -18,11 +16,10 @@ from nlsq.memory_manager import (
     get_memory_stats,
 )
 from nlsq.recovery import OptimizationRecovery
-from nlsq.robust_decomposition import RobustDecomposition, robust_decomp
+from nlsq.robust_decomposition import RobustDecomposition
 from nlsq.smart_cache import (
     SmartCache,
     cached_function,
-    cached_jacobian,
     clear_all_caches,
     get_global_cache,
     get_jit_cache,

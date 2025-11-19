@@ -23,7 +23,6 @@ Plots are saved to the figures/ directory instead of displayed inline.
 #
 # ======================================================================
 
-import time
 from pathlib import Path
 
 import jax.numpy as jnp

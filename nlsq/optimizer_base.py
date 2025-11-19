@@ -67,7 +67,6 @@ class OptimizerBase(ABC):
         OptimizeResult
             The optimization result
         """
-        pass
 
     def reset_counters(self):
         """Reset function evaluation counters."""

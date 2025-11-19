@@ -19,7 +19,7 @@ Examples
 """
 
 import logging
-from typing import Any, Union
+from typing import Any
 
 import jax
 import jax.numpy as jnp

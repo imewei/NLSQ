@@ -5,7 +5,6 @@ Target: Cover recovery mechanisms and error handling for Sprint 1 safety net.
 Goal: 10-12 tests covering failure types, recovery strategies, and error paths.
 """
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 

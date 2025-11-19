@@ -198,12 +198,10 @@ LargeDatasetFitter : Alternative for datasets that fit in memory but need chunki
 """
 
 import logging
-import os
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator
 from pathlib import Path
-from typing import Union
 
 import h5py
 import jax.numpy as jnp
@@ -258,7 +256,6 @@ class DataGenerator:
 
     def close(self):
         """Clean up resources."""
-        pass
 
 
 class GeneratorWrapper:

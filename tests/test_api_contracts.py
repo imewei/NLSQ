@@ -7,7 +7,6 @@ and prevent accidental API breakage.
 import inspect
 
 import numpy as np
-import pytest
 
 from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 

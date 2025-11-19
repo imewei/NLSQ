@@ -54,7 +54,7 @@ class TestEnhancedErrorMessages:
             curve_fit(steep_func, xdata, ydata, p0=[8, 3], max_nfev=1)
 
         error = exc_info.value
-        error_str = str(error)
+        str(error)
 
         # Should have diagnostics with gradient information
         assert error.diagnostics is not None

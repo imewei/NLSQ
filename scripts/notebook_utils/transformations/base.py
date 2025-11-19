@@ -39,7 +39,6 @@ class NotebookTransformer(ABC):
         Note:
             Should return NEW list, not mutate input cells
         """
-        pass
 
     @abstractmethod
     def name(self) -> str:
@@ -48,7 +47,6 @@ class NotebookTransformer(ABC):
         Returns:
             Transformation identifier (e.g., "matplotlib_inline")
         """
-        pass
 
     @abstractmethod
     def description(self) -> str:
@@ -57,7 +55,6 @@ class NotebookTransformer(ABC):
         Returns:
             Description of what this transformation does
         """
-        pass
 
     def should_apply(self, cells: list[NotebookCell]) -> bool:
         """Check if transformation should be applied.

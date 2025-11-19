@@ -10,10 +10,7 @@ This test suite covers:
 """
 
 import unittest
-import warnings
-from abc import ABC
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -368,7 +365,7 @@ class TestOptimizerBaseOptimize(unittest.TestCase):
 
         x0 = np.array([1.0, 2.0])
 
-        result = self.optimizer.optimize(fun, x0)
+        self.optimizer.optimize(fun, x0)
 
         self.assertEqual(self.optimizer.nfev, 1)
 
@@ -410,10 +407,10 @@ class TestOptimizerBaseOptimize(unittest.TestCase):
 
         x0 = np.array([1.0])
 
-        result1 = self.optimizer.optimize(fun, x0)
+        self.optimizer.optimize(fun, x0)
         self.assertEqual(self.optimizer.nfev, 1)
 
-        result2 = self.optimizer.optimize(fun, x0)
+        self.optimizer.optimize(fun, x0)
         self.assertEqual(self.optimizer.nfev, 2)
 
 

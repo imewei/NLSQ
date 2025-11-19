@@ -12,8 +12,6 @@ This module tests all stability enhancements including:
 """
 
 import unittest
-import warnings
-from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
@@ -24,9 +22,9 @@ _jax_config = JAXConfig()
 
 import jax.numpy as jnp
 
-from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
-from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
-from nlsq.memory_manager import MemoryManager, get_memory_manager
+from nlsq.algorithm_selector import AlgorithmSelector
+from nlsq.diagnostics import ConvergenceMonitor
+from nlsq.memory_manager import MemoryManager
 from nlsq.recovery import OptimizationRecovery
 from nlsq.robust_decomposition import RobustDecomposition
 from nlsq.smart_cache import SmartCache, cached_function

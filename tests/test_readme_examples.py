@@ -12,7 +12,7 @@ import pytest
 
 # Check if h5py is available for streaming tests
 try:
-    import h5py
+    pass
 
     HAS_H5PY = True
 except ImportError:
@@ -296,7 +296,7 @@ def test_diagnostics_monitoring():
     print(f"Fitted parameters: {popt}")
 
     # For detailed diagnostics, create separate diagnostics object
-    diagnostics = OptimizationDiagnostics()
+    OptimizationDiagnostics()
     print("✅ Diagnostics & Monitoring example passed")
 
 

@@ -31,7 +31,7 @@ except ImportError:
 # Type hints
 # Stability and optimization imports
 import warnings  # For deprecation warnings (v0.2.0)
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 

@@ -1,7 +1,5 @@
 """Tests for enhanced CurveFitResult functionality."""
 
-import io
-import tempfile
 import warnings
 
 import numpy as np
@@ -372,7 +370,6 @@ def test_r_squared_constant_data():
 
 def test_aic_zero_rss():
     """Test AIC with zero residual sum of squares (edge case)."""
-    import jax.numpy as jnp
 
     def model(x, a, b):
         return a * x + b
@@ -383,7 +380,7 @@ def test_aic_zero_rss():
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         result = curve_fit(model, x, y, p0=[2.0, 0.0])
-        aic = result.aic
+        _ = result.aic  # Check property access doesn't raise error
 
         # May warn about undefined AIC if RSS is exactly zero
         # AIC may be NaN or very negative
@@ -406,7 +403,6 @@ def test_missing_model_in_result():
 
 def test_missing_data_in_result():
     """Test behavior when data is not stored in result."""
-    import jax.numpy as jnp
 
     from nlsq._optimize import OptimizeResult
 

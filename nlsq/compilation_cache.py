@@ -8,8 +8,6 @@ import hashlib
 import warnings
 from collections.abc import Callable
 from functools import wraps
-from inspect import signature
-from typing import Any
 
 import jax
 import jax.numpy as jnp

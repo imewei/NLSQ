@@ -9,7 +9,6 @@ Tests automatic algorithm selection based on problem characteristics:
 """
 
 import unittest
-from unittest.mock import MagicMock
 
 import jax.numpy as jnp
 import numpy as np

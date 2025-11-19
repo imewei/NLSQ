@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq import CurveFit, curve_fit
+from nlsq import curve_fit
 
 
 class TestPrepareInputsBounds:

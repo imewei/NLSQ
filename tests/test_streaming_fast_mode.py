@@ -5,12 +5,10 @@ basic error handling to prevent complete crashes.
 """
 
 import time
-from unittest.mock import Mock, patch
 
 import numpy as np
-import pytest
 
-from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestFastModeConfiguration:
@@ -39,7 +37,6 @@ class TestFastModeConfiguration:
 
         # Track whether validation was actually performed
         original_compute = optimizer._compute_loss_and_gradient
-        validation_checks = [0]
 
         def mock_compute(func, params, x_batch, y_batch, mask=None):
             loss, grad = original_compute(func, params, x_batch, y_batch)

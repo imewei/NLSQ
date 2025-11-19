@@ -871,7 +871,7 @@ def apply_automatic_fixes(
         y_min = np.min(ydata)
         y_max = np.max(ydata)
         # Check for finite range to avoid division warnings with inf data
-        if y_range > 0 and np.isfinite(y_range):
+        if np.isfinite(y_range):
             ydata = (ydata - y_min) / y_range
             fix_info["y_scale"] = y_range
             fix_info["y_offset"] = y_min

@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 import pytest
 
-from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestCheckpointSaveResume(TestCase):
@@ -205,7 +205,7 @@ class TestCheckpointSaveResume(TestCase):
         # Test resuming from different checkpoints
         for checkpoint in checkpoint_files[1:4]:  # Test a few checkpoints
             with h5py.File(checkpoint, "r") as f:
-                saved_batch_idx = f["progress"]["batch_idx"][()]
+                f["progress"]["batch_idx"][()]
                 saved_epoch = f["progress"]["epoch"][()]
                 saved_params = f["parameters"]["current"][:]
 
@@ -416,7 +416,7 @@ class TestCheckpointSaveResume(TestCase):
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
         with h5py.File(checkpoint_files[-1], "r") as f:
             saved_iteration = f["progress"]["iteration"][()]
-            saved_epoch = f["progress"]["epoch"][()]
+            f["progress"]["epoch"][()]
 
         # Resume and continue with more epochs
         config_resume = StreamingConfig(

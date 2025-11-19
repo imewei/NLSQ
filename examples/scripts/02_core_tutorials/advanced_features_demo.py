@@ -35,9 +35,6 @@ from pathlib import Path
 print(f"✅ Python {sys.version} meets requirements")
 
 import time
-import warnings
-from dataclasses import dataclass
-from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp
@@ -45,14 +42,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Import NLSQ core functionality
-from nlsq import CurveFit, LeastSquares, OptimizeResult, __version__, curve_fit
+from nlsq import CurveFit, __version__
 
 print(f"NLSQ version: {__version__}")
 
 # Import advanced features - note: some may not be available in all versions
 try:
     from nlsq import (
-        AlgorithmSelector,
         MemoryConfig,
         auto_select_algorithm,
         estimate_memory_requirements,

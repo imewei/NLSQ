@@ -3,8 +3,6 @@
 import unittest
 
 import jax.numpy as jnp
-import numpy as np
-import pytest
 
 from nlsq.memory_pool import (
     MemoryPool,
@@ -91,7 +89,7 @@ class TestMemoryPool(unittest.TestCase):
         """Test statistics tracking."""
         arr1 = self.pool.allocate((10,))
         self.pool.release(arr1)
-        arr2 = self.pool.allocate((10,))
+        self.pool.allocate((10,))
 
         stats = self.pool.get_stats()
         self.assertEqual(stats["allocations"], 1)

@@ -1,7 +1,6 @@
 """Enhanced result objects for curve fitting with convenience methods."""
 
 import warnings
-from typing import Optional
 
 import numpy as np
 

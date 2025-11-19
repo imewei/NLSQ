@@ -32,7 +32,7 @@ def main():
     y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 1000)
 
     start = time.time()
-    result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
+    _ = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])  # Timing only
     cold_time = (time.time() - start) * 1000
     print(f"Cold JIT time: {cold_time:.1f} ms")
 

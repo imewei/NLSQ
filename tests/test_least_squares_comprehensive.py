@@ -7,7 +7,6 @@ Goal: 15 tests covering loss functions, tolerances, scaling, bounds, verbose.
 
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 from nlsq import LeastSquares
 

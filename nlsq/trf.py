@@ -736,7 +736,6 @@ class NullProfiler:
 
     def time_conversion(self, operation: str, start_time: float):
         """No-op conversion timing."""
-        pass
 
     def get_timing_data(self) -> dict:
         """Returns empty timing data."""

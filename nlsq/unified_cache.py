@@ -25,7 +25,6 @@ Design Goals
 import hashlib
 import logging
 import time
-import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Callable

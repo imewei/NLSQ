@@ -1,6 +1,5 @@
 """Tests for common curve fitting functions."""
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 

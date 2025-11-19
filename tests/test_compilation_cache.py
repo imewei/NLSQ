@@ -3,7 +3,6 @@
 import unittest
 
 import jax.numpy as jnp
-import pytest
 
 from nlsq.compilation_cache import (
     CompilationCache,
@@ -50,12 +49,12 @@ class TestCompilationCache(unittest.TestCase):
             return x**2
 
         # First compilation
-        compiled1 = self.cache.compile(simple_func)
+        self.cache.compile(simple_func)
         self.assertEqual(self.cache.stats["compilations"], 1)
         self.assertEqual(self.cache.stats["hits"], 0)
 
         # Second request - should hit cache
-        compiled2 = self.cache.compile(simple_func)
+        self.cache.compile(simple_func)
         self.assertEqual(self.cache.stats["compilations"], 1)  # No new compilation
         self.assertEqual(self.cache.stats["hits"], 1)
 
@@ -177,7 +176,7 @@ class TestCachedJITDecorator(unittest.TestCase):
             return x + 1
 
         cache = get_global_compilation_cache()
-        initial_compilations = cache.stats["compilations"]
+        cache.stats["compilations"]
 
         # First call
         add_one(jnp.array([1.0]))

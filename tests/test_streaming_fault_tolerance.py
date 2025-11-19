@@ -7,7 +7,6 @@ features work together cohesively during streaming optimization.
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -129,7 +128,7 @@ class TestFaultToleranceIntegration:
             result = optimizer.fit_streaming((x_data, y_data), model, p0, verbose=0)
 
             # Check that checkpoints were created
-            checkpoint_files = list(Path(temp_dir).glob("checkpoint_*.h5"))
+            list(Path(temp_dir).glob("checkpoint_*.h5"))
 
             # May or may not have checkpoints depending on implementation
             # Just verify optimization completed

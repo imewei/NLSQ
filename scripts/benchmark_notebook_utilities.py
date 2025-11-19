@@ -20,7 +20,6 @@ import tempfile
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any
 
 import click
 from notebook_utils.pipeline import TransformationPipeline

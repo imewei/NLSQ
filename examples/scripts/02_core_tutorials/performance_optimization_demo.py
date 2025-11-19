@@ -33,8 +33,6 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # MUST come before importing matplotlib
 import sys
 import time
-import warnings
-from collections.abc import Callable
 from pathlib import Path
 
 import jax
@@ -586,7 +584,6 @@ def demo_streaming_optimizer_basics():
 
         def close(self):
             """Cleanup (required by interface)."""
-            pass
 
     # Define model
     def exponential_model(x, a, b, c):
@@ -602,7 +599,7 @@ def demo_streaming_optimizer_basics():
         convergence_tol=1e-6,
     )
 
-    optimizer = StreamingOptimizer(config)
+    StreamingOptimizer(config)
 
     # Simulate large dataset
     total_data_size = 50_000  # 50K points, but processed in batches
@@ -614,7 +611,7 @@ def demo_streaming_optimizer_basics():
     print(f"Optimizer: {'Adam' if config.use_adam else 'SGD'}")
 
     # Create data source
-    data_generator = SimpleDataGenerator(total_data_size, true_params)
+    SimpleDataGenerator(total_data_size, true_params)
 
     # Initial guess
     p0 = np.array([4.0, 1.0, 0.4])

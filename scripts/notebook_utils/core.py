@@ -13,25 +13,21 @@ logger = logging.getLogger(__name__)
 class NotebookError(Exception):
     """Base exception for notebook processing errors."""
 
-    pass
 
 
 class NotebookReadError(NotebookError):
     """Error reading notebook file."""
 
-    pass
 
 
 class NotebookWriteError(NotebookError):
     """Error writing notebook file."""
 
-    pass
 
 
 class NotebookValidationError(NotebookError):
     """Invalid notebook structure."""
 
-    pass
 
 
 def validate_notebook_structure(notebook: dict) -> None:

@@ -3,7 +3,6 @@
 
 import unittest
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -147,7 +146,7 @@ class TestComprehensiveCoverage(unittest.TestCase):
         ls = LeastSquares()
 
         # Test with basic residual function
-        params0 = np.array([1.0, 1.0])
+        np.array([1.0, 1.0])
 
         # Create wrapped function for residuals
         def wrapped_residual(params):

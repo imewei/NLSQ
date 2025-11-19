@@ -6,13 +6,12 @@ This test suite covers:
 - Global diagnostics functions
 """
 
-import time
 import unittest
 import warnings
 
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from nlsq.diagnostics import (

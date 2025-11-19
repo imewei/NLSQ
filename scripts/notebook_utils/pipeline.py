@@ -5,7 +5,6 @@ from pathlib import Path
 
 from .core import read_notebook, write_notebook
 from .transformations.base import NotebookTransformer
-from .types import NotebookCell
 
 logger = logging.getLogger(__name__)
 

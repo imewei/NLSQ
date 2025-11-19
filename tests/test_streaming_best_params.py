@@ -5,12 +5,10 @@ the best parameters achieved during optimization and handles
 batch failures gracefully.
 """
 
-from unittest.mock import Mock, patch
 
 import numpy as np
-import pytest
 
-from nlsq.streaming_optimizer import DataGenerator, StreamingConfig, StreamingOptimizer
+from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestBestParameterTracking:
@@ -222,7 +220,7 @@ class TestBatchErrorIsolation:
                 _ = func(x_batch, params[0], params[1])
                 successful_batches.append(len(successful_batches))
                 return original_compute(func, params, x_batch, y_batch, mask)
-            except ValueError as e:
+            except ValueError:
                 # Return large loss and small gradient for failed batches
                 # Use small gradient to allow some parameter update
                 small_grad = np.ones_like(params) * 0.01

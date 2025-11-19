@@ -144,8 +144,8 @@ class TestSparseAutoSelection:
             full_output=True,
             maxfev=100,
         )
-        popt = result["x"]
-        pcov = result.get("cov_x", None)
+        result["x"]
+        result.get("cov_x", None)
         info = result
 
         # Check for sparsity diagnostics in result
@@ -179,8 +179,8 @@ class TestSparseAutoSelection:
             full_output=True,
             maxfev=100,
         )
-        popt = result["x"]
-        pcov = result.get("cov_x", None)
+        result["x"]
+        result.get("cov_x", None)
         info = result
 
         # Should use dense solver for small problems
@@ -207,8 +207,8 @@ class TestSparseAutoSelection:
         result = curve_fit(
             dense_exponential_model, x_data, y_data, p0=p0, full_output=True, maxfev=50
         )
-        popt = result["x"]
-        pcov = result.get("cov_x", None)
+        result["x"]
+        result.get("cov_x", None)
         info = result
 
         # Dense problem should use dense solver
@@ -244,8 +244,7 @@ class TestSparseDiagnostics:
             maxfev=50,
         )
         popt = result["x"]
-        pcov = result.get("cov_x", None)
-        info = result
+        result.get("cov_x", None)
 
         # Note: sparsity_detected will be added in Task 6.5
         # This test documents expected structure
@@ -312,7 +311,7 @@ class TestSparsePerformance:
 
         np.random.seed(42)
         x_data = np.linspace(0, 100, n_data)
-        true_params = np.ones(n_params) * 2.0
+        np.ones(n_params) * 2.0
 
         # Detect sparsity to estimate memory savings
         p0 = np.ones(n_params)

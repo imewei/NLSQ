@@ -59,7 +59,6 @@ nlsq.error_messages : Enhanced error messages
 
 import inspect
 from collections.abc import Callable
-from typing import Optional, Union
 
 import numpy as np
 
@@ -208,7 +207,7 @@ def estimate_initial_parameters(
     y_min, y_max = np.min(ydata), np.max(ydata)
     y_range = y_max - y_min
     y_mean = np.mean(ydata)
-    y_median = np.median(ydata)
+    np.median(ydata)
 
     x_min, x_max = np.min(xdata), np.max(xdata)
     x_range = x_max - x_min if x_max != x_min else 1.0

@@ -167,13 +167,12 @@ class TestRecompileElimination:
 
         # After implementation, verify recompile count
         if "streaming_diagnostics" in result:
-            diag = result["streaming_diagnostics"]
+            result["streaming_diagnostics"]
             # Should have recompile tracking after implementation
             # Warmup phase may have recompiles, but post-warmup should be zero
             # assert 'recompile_count' in diag
             # assert 'post_warmup_recompiles' in diag
             # assert diag['post_warmup_recompiles'] == 0
-            pass
 
     def test_recompile_tracking_with_shape_changes(self):
         """Test recompile tracking when batch shapes change unexpectedly."""

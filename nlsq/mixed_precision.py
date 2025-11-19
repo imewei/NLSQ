@@ -25,7 +25,6 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional
 
 import jax.numpy as jnp
 import numpy as np

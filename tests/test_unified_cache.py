@@ -5,11 +5,9 @@ three legacy cache systems (compilation_cache, caching, smart_cache) into
 a single, shape-relaxed caching system with comprehensive statistics tracking.
 """
 
-import hashlib
 import platform
 import time
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -265,7 +263,7 @@ class TestUnifiedCacheIntegration:
             exponential_model, (x1, 1.0, 0.5), {}, static_argnums=(1, 2)
         )
         compiled1(x1, 1.0, 0.5)
-        cold_time = time.time() - start_cold
+        time.time() - start_cold
 
         # Second fit: warm start (should use cache)
         x2 = jnp.linspace(0, 1, 75)  # Different size, same dtype/rank
@@ -274,7 +272,7 @@ class TestUnifiedCacheIntegration:
             exponential_model, (x2, 1.0, 0.5), {}, static_argnums=(1, 2)
         )
         compiled2(x2, 1.0, 0.5)
-        warm_time = time.time() - start_warm
+        time.time() - start_warm
 
         # Warm start should ideally be faster, but timing can vary
         # Allow for timing variability in CI environments
@@ -352,7 +350,6 @@ def benchmark_cache_performance():
             benchmark_model, (x, 1.0, 0.5, 0.1), {}, static_argnums=(1, 2, 3)
         )
         # Don't actually run, just measure cache overhead
-        pass
 
     batch_time_ms = (time.time() - start_batch) * 1000
 

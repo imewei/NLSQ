@@ -11,11 +11,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq import curve_fit
 from nlsq.fallback import (
     AddParameterBoundsStrategy,
     AdjustTolerancesStrategy,
-    AlternativeMethodStrategy,
     FallbackOrchestrator,
     FallbackResult,
     FallbackStrategy,
@@ -91,8 +89,8 @@ class TestPerturbInitialGuessStrategy:
         kwargs = {"p0": np.array([1.0])}
 
         # First two should perturb
-        modified1 = strategy.apply(kwargs)
-        modified2 = strategy.apply(kwargs)
+        strategy.apply(kwargs)
+        strategy.apply(kwargs)
 
         # Third should not change (max reached)
         assert strategy.perturbation_count == 2

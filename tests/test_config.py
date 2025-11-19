@@ -144,7 +144,6 @@ class TestJAXConfigIntegration(unittest.TestCase):
     def test_actual_jax_integration(self):
         """Test actual integration with JAX if available."""
         try:
-            import jax
             import jax.numpy as jnp
 
             # Enable 64-bit
