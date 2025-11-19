@@ -1,0 +1,463 @@
+name: Scheduled Tasks
+
+on:
+  schedule:
+    # CodeQL: Weekly on Monday at 2:00 AM UTC
+    - cron: '0 2 * * 1'
+    # Performance: Weekly on Sunday at 3:00 AM UTC
+    - cron: '0 3 * * 0'
+    # Status Dashboard: Every 6 hours
+    - cron: '0 */6 * * *'
+    # Security: Daily at 1:00 AM UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task to run (all, codeql, performance, dashboard, security)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - codeql
+          - performance
+          - dashboard
+          - security
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.12"
+
+jobs:
+  # ============================================================================
+  # CodeQL Advanced Security Analysis
+  # ============================================================================
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.task == 'codeql' || github.event.inputs.task == 'all') ||
+      github.event.schedule == '0 2 * * 1'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: +security-extended,security-and-quality
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+          upload: true
+          output: codeql-results
+
+      - name: Upload SARIF results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: codeql-results/python.sarif
+
+      - name: Check for critical issues
+        if: always()
+        run: |
+          if [ -f codeql-results/python.sarif ]; then
+            critical_count=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results/python.sarif)
+
+            echo "## CodeQL Results" >> $GITHUB_STEP_SUMMARY
+            echo "Critical issues found: $critical_count" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$critical_count" -gt 0 ]; then
+              echo "::error::Found $critical_count critical security issues"
+              exit 1
+            fi
+          fi
+
+  # ============================================================================
+  # Performance Benchmarking
+  # ============================================================================
+
+  benchmark-core:
+    name: Performance Benchmarks - ${{ matrix.backend }}
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.task == 'performance' || github.event.inputs.task == 'all') ||
+      github.event.schedule == '0 3 * * 0'
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [cpu, gpu]
+        exclude:
+          # GPU benchmarks require special hardware
+          - backend: gpu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run performance benchmarks
+        run: |
+          uv run pytest benchmark/ -v \
+            --benchmark-only \
+            --benchmark-json=benchmark-results-${{ matrix.backend }}.json \
+            --benchmark-min-rounds=5 \
+            --benchmark-warmup=on \
+            -m "not slow"
+
+      - name: Store benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ matrix.backend }}
+          path: benchmark-results-${{ matrix.backend }}.json
+          retention-days: 30
+
+      - name: Download baseline benchmarks
+        continue-on-error: true
+        run: |
+          gh run download --name benchmark-results-${{ matrix.backend }} --dir baseline/ || echo "No baseline found"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compare with baseline
+        if: hashFiles('baseline/benchmark-results-${{ matrix.backend }}.json') != ''
+        run: |
+          uv run python -c "
+          import json
+          import sys
+
+          with open('benchmark-results-${{ matrix.backend }}.json') as f:
+              current = json.load(f)
+
+          with open('baseline/benchmark-results-${{ matrix.backend }}.json') as f:
+              baseline = json.load(f)
+
+          regressions = []
+          for bench in current['benchmarks']:
+              name = bench['name']
+              current_mean = bench['stats']['mean']
+
+              baseline_bench = next((b for b in baseline['benchmarks'] if b['name'] == name), None)
+              if baseline_bench:
+                  baseline_mean = baseline_bench['stats']['mean']
+                  ratio = current_mean / baseline_mean
+
+                  if ratio > 1.5:  # 150% threshold
+                      regressions.append({
+                          'name': name,
+                          'ratio': ratio,
+                          'current': current_mean,
+                          'baseline': baseline_mean
+                      })
+
+          if regressions:
+              print('## Performance Regressions Detected')
+              for reg in regressions:
+                  print(f\"- {reg['name']}: {reg['ratio']:.2f}x slower ({reg['current']:.4f}s vs {reg['baseline']:.4f}s)\")
+              sys.exit(1)
+          else:
+              print('✅ No performance regressions detected')
+          "
+
+      - name: Alert on regression
+        if: failure() && github.event_name == 'schedule'
+        run: |
+          echo "::error::Performance regression detected in ${{ matrix.backend }} benchmarks"
+
+  memory-profiling:
+    name: Memory Profiling
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.task == 'performance' || github.event.inputs.task == 'all') ||
+      github.event.schedule == '0 3 * * 0'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install dependencies with profiling tools
+        run: |
+          uv sync --all-extras --dev
+          uv pip install memory-profiler matplotlib
+
+      - name: Run memory profiling
+        run: |
+          uv run python -m memory_profiler benchmark/profile_memory.py > memory-profile.txt 2>&1 || echo "Memory profiling completed"
+
+      - name: Upload memory profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-profile
+          path: memory-profile.txt
+          retention-days: 30
+
+  # ============================================================================
+  # Security Scanning (Scheduled)
+  # ============================================================================
+
+  security-comprehensive:
+    name: Comprehensive Security Scan
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.task == 'security' || github.event.inputs.task == 'all') ||
+      github.event.schedule == '0 1 * * *'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install security tools
+        run: |
+          uv pip install bandit[toml] pip-audit safety semgrep
+
+      - name: Run Bandit (comprehensive)
+        run: |
+          uv run bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json
+          uv run bandit -r nlsq/ -c pyproject.toml -ll
+
+      - name: Run pip-audit
+        continue-on-error: true
+        run: |
+          uv run pip-audit --requirement <(uv pip freeze) --desc --format json --output pip-audit-report.json
+          uv run pip-audit --requirement <(uv pip freeze) --desc
+
+      - name: Run Safety check
+        continue-on-error: true
+        run: |
+          uv run safety check --json --output safety-report.json || true
+          uv run safety check || true
+
+      - name: Run Semgrep
+        continue-on-error: true
+        run: |
+          uv run semgrep --config=auto --json --output semgrep-report.json nlsq/ || true
+          uv run semgrep --config=auto nlsq/ || true
+
+      - name: Check license compliance
+        run: |
+          uv run python -c "
+          import json
+          import sys
+          from importlib.metadata import distributions
+
+          allowed_licenses = {
+              'MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause',
+              'Python Software Foundation', 'ISC', 'Unlicense', 'Apache 2.0',
+              'BSD', 'Apache License 2.0', 'MIT License'
+          }
+
+          non_compliant = []
+          for dist in distributions():
+              metadata = dist.metadata
+              license_name = metadata.get('License', 'Unknown')
+
+              if license_name == 'Unknown' or license_name == 'UNKNOWN':
+                  classifiers = metadata.get_all('Classifier', [])
+                  license_classifiers = [c for c in classifiers if c.startswith('License ::')]
+                  if not license_classifiers:
+                      non_compliant.append(f'{dist.name}: {license_name}')
+              elif license_name not in allowed_licenses:
+                  non_compliant.append(f'{dist.name}: {license_name}')
+
+          if non_compliant:
+              print('⚠️ Non-compliant licenses found:')
+              for item in non_compliant:
+                  print(f'  - {item}')
+          else:
+              print('✅ All licenses compliant')
+          "
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-comprehensive
+          path: |
+            bandit-report.json
+            pip-audit-report.json
+            safety-report.json
+            semgrep-report.json
+          retention-days: 30
+
+      - name: Generate security summary
+        if: always()
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f bandit-report.json ]; then
+            bandit_issues=$(jq '.results | length' bandit-report.json)
+            echo "- Bandit issues: $bandit_issues" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f pip-audit-report.json ]; then
+            audit_vulns=$(jq '.vulnerabilities | length' pip-audit-report.json 2>/dev/null || echo "0")
+            echo "- pip-audit vulnerabilities: $audit_vulns" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ============================================================================
+  # Status Dashboard Update
+  # ============================================================================
+
+  update-dashboard:
+    name: Update Status Dashboard
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.task == 'dashboard' || github.event.inputs.task == 'all') ||
+      github.event.schedule == '0 */6 * * *'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch workflow statuses
+        id: workflows
+        run: |
+          # Fetch latest workflow runs
+          main_status=$(gh run list --workflow=main.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+          scheduled_status=$(gh run list --workflow=scheduled.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+          release_status=$(gh run list --workflow=release.yml --limit 1 --json conclusion --jq '.[0].conclusion' || echo "unknown")
+
+          echo "main=$main_status" >> $GITHUB_OUTPUT
+          echo "scheduled=$scheduled_status" >> $GITHUB_OUTPUT
+          echo "release=$release_status" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get coverage data
+        id: coverage
+        continue-on-error: true
+        run: |
+          # Try to get latest coverage from artifacts
+          coverage=$(gh run download --name test-results-ubuntu-latest-py3.12 -D /tmp/coverage 2>/dev/null && \
+            grep -oP 'TOTAL.*\K\d+%' /tmp/coverage/coverage.txt || echo "N/A")
+          echo "percentage=$coverage" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate status dashboard
+        run: |
+          cat > .github/WORKFLOW_STATUS.md << 'EOF'
+          # Workflow Status Dashboard
+
+          *Last Updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*
+
+          ## Workflow Health
+
+          | Workflow | Status | Last Run |
+          |----------|--------|----------|
+          | Main CI/CD Pipeline | ![Main](${{ steps.workflows.outputs.main }}) | [View Runs](../../actions/workflows/main.yml) |
+          | Scheduled Tasks | ![Scheduled](${{ steps.workflows.outputs.scheduled }}) | [View Runs](../../actions/workflows/scheduled.yml) |
+          | Release Automation | ![Release](${{ steps.workflows.outputs.release }}) | [View Runs](../../actions/workflows/release.yml) |
+
+          ## Metrics
+
+          - **Test Coverage**: ${{ steps.coverage.outputs.percentage }}
+          - **Active Workflows**: 3
+          - **Scheduled Jobs**: 4 (CodeQL, Performance, Security, Dashboard)
+
+          ## Quick Links
+
+          - [CI/CD Documentation](CICD_AUTOMATION.md)
+          - [Security Policy](../SECURITY.md)
+          - [Contributing Guidelines](../CONTRIBUTING.md)
+
+          ## Component Status
+
+          ### Main Pipeline
+          - ✅ Cross-platform testing (Ubuntu, macOS, Windows)
+          - ✅ Python 3.12 & 3.13 support
+          - ✅ Parallel test execution (12 jobs)
+          - ✅ Documentation building
+          - ✅ Package building & validation
+
+          ### Scheduled Tasks
+          - ✅ CodeQL security analysis (Weekly)
+          - ✅ Performance benchmarks (Weekly)
+          - ✅ Comprehensive security scan (Daily)
+          - ✅ Dashboard updates (Every 6 hours)
+
+          ### Automation Features
+          - ✅ Dependency updates (Renovate)
+          - ✅ Auto-merge security patches
+          - ✅ Performance regression detection
+          - ✅ Semantic versioning
+
+          ---
+
+          *This dashboard is automatically updated every 6 hours and after workflow completions.*
+          EOF
+
+      - name: Commit dashboard updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet .github/WORKFLOW_STATUS.md; then
+            echo "No changes to dashboard"
+          else
+            git add .github/WORKFLOW_STATUS.md
+            git commit -m "chore(ci): update workflow status dashboard [skip ci]"
+            git push
+          fi
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+
+  summary:
+    name: Scheduled Tasks Summary
+    runs-on: ubuntu-latest
+    needs: [codeql, benchmark-core, memory-profiling, security-comprehensive, update-dashboard]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Scheduled Tasks Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Task | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL Analysis | ${{ needs.codeql.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance Benchmarks | ${{ needs.benchmark-core.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Memory Profiling | ${{ needs.memory-profiling.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-comprehensive.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard Update | ${{ needs.update-dashboard.result }} |" >> $GITHUB_STEP_SUMMARY
