@@ -21,7 +21,7 @@ build:
       - echo "This build requires NumPy 2.0+ (breaking change from 1.x), JAX 0.8.0"
       - echo "Installing uv for faster dependency resolution..."
       - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.cargo/bin:$PATH"
+      - export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
       - uv --version
       - echo "See REQUIREMENTS.md for dependency details"
     post_build:
