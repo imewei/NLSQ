@@ -51,11 +51,13 @@ Transformers are composed into pipelines:
 
    from notebook_utils.pipeline import TransformationPipeline
 
-   pipeline = TransformationPipeline([
-       MatplotlibInlineTransformer(),
-       IPythonDisplayImportTransformer(),
-       PltShowReplacementTransformer(),
-   ])
+   pipeline = TransformationPipeline(
+       [
+           MatplotlibInlineTransformer(),
+           IPythonDisplayImportTransformer(),
+           PltShowReplacementTransformer(),
+       ]
+   )
 
    # Run with atomic commit and rollback support
    stats = pipeline.run(notebook_path, backup=True)
@@ -156,7 +158,7 @@ Adds ``%matplotlib inline`` magic before the first code cell to enable inline pl
 
 **Example**:
 
-.. code-block:: python
+.. code-block:: text
 
    # Before
    import matplotlib.pyplot as plt
@@ -184,7 +186,7 @@ Adds ``from IPython.display import display`` when the ``display()`` function is 
 
 **Example**:
 
-.. code-block:: python
+.. code-block:: text
 
    # Before
    %matplotlib inline
@@ -358,10 +360,12 @@ For programmatic usage, you can build custom pipelines:
    )
 
    # Build custom pipeline (only matplotlib and imports, no plt.show replacement)
-   pipeline = TransformationPipeline([
-       MatplotlibInlineTransformer(),
-       IPythonDisplayImportTransformer(),
-   ])
+   pipeline = TransformationPipeline(
+       [
+           MatplotlibInlineTransformer(),
+           IPythonDisplayImportTransformer(),
+       ]
+   )
 
    # Process single notebook
    notebook_path = Path("examples/notebooks/my_notebook.ipynb")
@@ -392,6 +396,7 @@ Create custom transformers by subclassing ``NotebookTransformer``:
    from notebook_utils.transformations.base import NotebookTransformer
    from notebook_utils.types import NotebookCell
 
+
    class CustomTransformer(NotebookTransformer):
        def transform(
            self, cells: list[NotebookCell]
@@ -413,6 +418,7 @@ Create custom transformers by subclassing ``NotebookTransformer``:
        def should_apply(self, cells: list[NotebookCell]) -> bool:
            # Return True if transformation should run
            return True
+
 
    # Use in pipeline
    pipeline = TransformationPipeline([CustomTransformer()])
