@@ -11,8 +11,8 @@ from .matplotlib import MatplotlibInlineTransformer
 from .plt_show import PltShowReplacementTransformer
 
 __all__ = [
-    "NotebookTransformer",
-    "MatplotlibInlineTransformer",
     "IPythonDisplayImportTransformer",
+    "MatplotlibInlineTransformer",
+    "NotebookTransformer",
     "PltShowReplacementTransformer",
 ]

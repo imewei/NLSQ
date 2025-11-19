@@ -33,7 +33,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import click
-
 from notebook_utils.pipeline import TransformationPipeline
 from notebook_utils.tracking import ProcessingTracker
 from notebook_utils.transformations import (
@@ -111,7 +110,9 @@ def process_single_notebook(
     "-t",
     "transforms",
     multiple=True,
-    type=click.Choice(["matplotlib", "imports", "plt-show", "all"], case_sensitive=False),
+    type=click.Choice(
+        ["matplotlib", "imports", "plt-show", "all"], case_sensitive=False
+    ),
     default=["all"],
     help="Transformations to apply (can specify multiple)",
 )
@@ -206,9 +207,7 @@ def main(
         # Filter to only notebooks that need processing
         original_count = len(notebooks)
         notebooks = [
-            nb
-            for nb in notebooks
-            if tracker.needs_processing(nb, transform_names)
+            nb for nb in notebooks if tracker.needs_processing(nb, transform_names)
         ]
 
         if len(notebooks) < original_count:
@@ -222,16 +221,16 @@ def main(
             return
 
     # Display configuration
-    click.echo(f"🔍 Configuration:")
+    click.echo("🔍 Configuration:")
     click.echo(f"   Directory: {dir}")
     click.echo(f"   Notebooks: {len(notebooks)}")
-    click.echo(f"   Transformations:")
+    click.echo("   Transformations:")
     for t in pipeline.describe():
         click.echo(f"     - {t['name']}: {t['description']}")
     if dry_run:
-        click.echo(f"   Mode: DRY RUN (no changes will be made)")
+        click.echo("   Mode: DRY RUN (no changes will be made)")
     if backup:
-        click.echo(f"   Backup: Enabled (.bak files will be created)")
+        click.echo("   Backup: Enabled (.bak files will be created)")
     if parallel:
         click.echo(f"   Processing: Parallel ({workers} workers)")
     click.echo()
@@ -273,14 +272,18 @@ def main(
 
                     # Check if any modifications were made
                     has_changes = any(
-                        sum(s.values()) > 0 for s in stats.values() if isinstance(s, dict)
+                        sum(s.values()) > 0
+                        for s in stats.values()
+                        if isinstance(s, dict)
                     )
                     if has_changes:
                         total_modified += 1
 
                     # Mark as processed in incremental mode
                     if tracker and not dry_run:
-                        transform_names = [t.name() for t in pipeline.get_transformers()]
+                        transform_names = [
+                            t.name() for t in pipeline.get_transformers()
+                        ]
                         tracker.mark_processed(nb_path, transform_names, stats)
 
     else:
@@ -294,14 +297,18 @@ def main(
 
                     # Check if any modifications were made
                     has_changes = any(
-                        sum(s.values()) > 0 for s in stats.values() if isinstance(s, dict)
+                        sum(s.values()) > 0
+                        for s in stats.values()
+                        if isinstance(s, dict)
                     )
                     if has_changes:
                         total_modified += 1
 
                     # Mark as processed in incremental mode
                     if tracker and not dry_run:
-                        transform_names = [t.name() for t in pipeline.get_transformers()]
+                        transform_names = [
+                            t.name() for t in pipeline.get_transformers()
+                        ]
                         tracker.mark_processed(nb_path, transform_names, stats)
 
                 except Exception as e:
@@ -327,7 +334,9 @@ def main(
     elif total_modified > 0:
         if dry_run:
             click.echo()
-            click.echo(f"✅ Dry run complete! {total_modified} notebook(s) would be modified.")
+            click.echo(
+                f"✅ Dry run complete! {total_modified} notebook(s) would be modified."
+            )
             click.echo("   Run without --dry-run to apply changes.")
         else:
             click.echo()

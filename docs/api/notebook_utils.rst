@@ -275,9 +275,7 @@ Functions
    .. code-block:: python
 
       success = write_notebook(
-          Path("example.ipynb"),
-          notebook,
-          backup=True  # Creates example.ipynb.bak
+          Path("example.ipynb"), notebook, backup=True  # Creates example.ipynb.bak
       )
 
 Transformation Base Class
@@ -527,16 +525,14 @@ Pipeline Orchestration
              IPythonDisplayImportTransformer,
          )
 
-         pipeline = TransformationPipeline([
-             MatplotlibInlineTransformer(),
-             IPythonDisplayImportTransformer(),
-         ])
-
-         stats = pipeline.run(
-             Path("example.ipynb"),
-             backup=True,
-             dry_run=False
+         pipeline = TransformationPipeline(
+             [
+                 MatplotlibInlineTransformer(),
+                 IPythonDisplayImportTransformer(),
+             ]
          )
+
+         stats = pipeline.run(Path("example.ipynb"), backup=True, dry_run=False)
 
          print(stats)
          # {

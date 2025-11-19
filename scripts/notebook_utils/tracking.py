@@ -71,9 +71,7 @@ class ProcessingTracker:
 
         return sha256.hexdigest()
 
-    def needs_processing(
-        self, notebook_path: Path, transformations: list[str]
-    ) -> bool:
+    def needs_processing(self, notebook_path: Path, transformations: list[str]) -> bool:
         """Check if notebook needs processing.
 
         Args:

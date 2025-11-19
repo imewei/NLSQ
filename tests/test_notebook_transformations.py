@@ -8,14 +8,14 @@ Tests cover:
 """
 
 import json
+
+# Add scripts to path for imports
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
-
-# Add scripts to path for imports
-import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
@@ -41,7 +41,6 @@ from notebook_utils.transformations.plt_show import (
     replace_plt_show,
 )
 from notebook_utils.types import NotebookCell
-
 
 # ============================================================================
 # Test Fixtures
@@ -326,7 +325,13 @@ class TestMatplotlibInlineTransformer:
         """Test magic inserted before first code cell."""
         cells = [
             {"cell_type": "markdown", "source": ["# Title"]},
-            {"cell_type": "code", "source": ["import numpy"], "execution_count": None, "metadata": {}, "outputs": []},
+            {
+                "cell_type": "code",
+                "source": ["import numpy"],
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+            },
         ]
         transformer = MatplotlibInlineTransformer()
         result, _ = transformer.transform(cells)
@@ -723,7 +728,9 @@ class TestProcessingTracker:
         state_file = tmp_path / ".notebook_transforms.json"
         tracker = ProcessingTracker(state_file)
 
-        assert tracker.needs_processing(temp_notebook_file, ["matplotlib_inline"]) is True
+        assert (
+            tracker.needs_processing(temp_notebook_file, ["matplotlib_inline"]) is True
+        )
 
     def test_tracker_mark_processed(self, tmp_path, temp_notebook_file):
         """Test marking file as processed."""
@@ -754,7 +761,9 @@ class TestProcessingTracker:
 
         assert needs is False
 
-    def test_tracker_needs_processing_after_file_change(self, tmp_path, temp_notebook_file):
+    def test_tracker_needs_processing_after_file_change(
+        self, tmp_path, temp_notebook_file
+    ):
         """Test needs_processing returns True after file changes."""
         state_file = tmp_path / ".notebook_transforms.json"
         tracker = ProcessingTracker(state_file)
@@ -765,13 +774,15 @@ class TestProcessingTracker:
         # Modify file
         with open(temp_notebook_file) as f:
             notebook = json.load(f)
-        notebook["cells"].append({
-            "cell_type": "code",
-            "source": ["# New cell"],
-            "execution_count": None,
-            "metadata": {},
-            "outputs": [],
-        })
+        notebook["cells"].append(
+            {
+                "cell_type": "code",
+                "source": ["# New cell"],
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+            }
+        )
         with open(temp_notebook_file, "w") as f:
             json.dump(notebook, f)
 
@@ -947,13 +958,15 @@ class TestIntegration:
         # Modify notebook
         with open(notebook_path) as f:
             notebook = json.load(f)
-        notebook["cells"].append({
-            "cell_type": "code",
-            "source": ["x = 1"],
-            "execution_count": None,
-            "metadata": {},
-            "outputs": [],
-        })
+        notebook["cells"].append(
+            {
+                "cell_type": "code",
+                "source": ["x = 1"],
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+            }
+        )
         with open(notebook_path, "w") as f:
             json.dump(notebook, f)
 

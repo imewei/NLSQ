@@ -61,26 +61,30 @@ def create_synthetic_notebook(
     ]
 
     if has_matplotlib:
-        cells.append({
-            "cell_type": "code",
-            "execution_count": None,
-            "metadata": {},
-            "outputs": [],
-            "source": ["import matplotlib.pyplot as plt"],
-        })
+        cells.append(
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": ["import matplotlib.pyplot as plt"],
+            }
+        )
 
     if has_plt_show:
-        cells.append({
-            "cell_type": "code",
-            "execution_count": None,
-            "metadata": {},
-            "outputs": [],
-            "source": [
-                "fig, ax = plt.subplots()\n",
-                "ax.plot([1, 2, 3])\n",
-                "plt.show()",
-            ],
-        })
+        cells.append(
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": [
+                    "fig, ax = plt.subplots()\n",
+                    "ax.plot([1, 2, 3])\n",
+                    "plt.show()",
+                ],
+            }
+        )
 
     return {
         "cells": cells,
@@ -119,7 +123,9 @@ def create_synthetic_dataset(output_dir: Path, num_notebooks: int) -> list[Path]
     return notebooks
 
 
-def benchmark_sequential(notebooks: list[Path], pipeline: TransformationPipeline) -> dict:
+def benchmark_sequential(
+    notebooks: list[Path], pipeline: TransformationPipeline
+) -> dict:
     """Benchmark sequential processing.
 
     Args:
@@ -234,14 +240,20 @@ def benchmark_incremental(
         "first_run": {
             "time_seconds": first_elapsed,
             "notebooks_processed": processed_first,
-            "notebooks_per_second": processed_first / first_elapsed if first_elapsed > 0 else 0,
+            "notebooks_per_second": processed_first / first_elapsed
+            if first_elapsed > 0
+            else 0,
         },
         "second_run": {
             "time_seconds": second_elapsed,
             "notebooks_processed": processed_second,
-            "notebooks_per_second": processed_second / second_elapsed if second_elapsed > 0 else 0,
+            "notebooks_per_second": processed_second / second_elapsed
+            if second_elapsed > 0
+            else 0,
         },
-        "speedup": first_elapsed / second_elapsed if second_elapsed > 0 else float("inf"),
+        "speedup": first_elapsed / second_elapsed
+        if second_elapsed > 0
+        else float("inf"),
     }
 
 
@@ -272,7 +284,9 @@ def benchmark_incremental(
     default="benchmark_results.json",
     help="Output file for results",
 )
-def main(synthetic: int | None, notebook_dir: Path | None, workers: tuple[int], output: Path):
+def main(
+    synthetic: int | None, notebook_dir: Path | None, workers: tuple[int], output: Path
+):
     """Run performance benchmarks for notebook utilities."""
     click.echo("=" * 70)
     click.echo("Notebook Transformation Utilities - Performance Benchmarks")
@@ -280,11 +294,13 @@ def main(synthetic: int | None, notebook_dir: Path | None, workers: tuple[int], 
     click.echo()
 
     # Create pipeline
-    pipeline = TransformationPipeline([
-        MatplotlibInlineTransformer(),
-        IPythonDisplayImportTransformer(),
-        PltShowReplacementTransformer(),
-    ])
+    pipeline = TransformationPipeline(
+        [
+            MatplotlibInlineTransformer(),
+            IPythonDisplayImportTransformer(),
+            PltShowReplacementTransformer(),
+        ]
+    )
 
     # Determine notebooks to use
     if synthetic:
@@ -337,7 +353,9 @@ def main(synthetic: int | None, notebook_dir: Path | None, workers: tuple[int], 
 
         click.echo(f"  Workers: {worker_count}")
         click.echo(f"    Time: {result['time_seconds']:.3f}s")
-        click.echo(f"    Throughput: {result['notebooks_per_second']:.2f} notebooks/sec")
+        click.echo(
+            f"    Throughput: {result['notebooks_per_second']:.2f} notebooks/sec"
+        )
         click.echo(f"    Speedup: {speedup:.2f}× (Efficiency: {efficiency:.1f}%)")
 
     click.echo()
@@ -355,18 +373,24 @@ def main(synthetic: int | None, notebook_dir: Path | None, workers: tuple[int], 
     result = benchmark_incremental(notebooks, pipeline, tracker)
     results["benchmarks"].append(result)
 
-    click.echo(f"  First run (full processing):")
+    click.echo("  First run (full processing):")
     click.echo(f"    Time: {result['first_run']['time_seconds']:.3f}s")
     click.echo(f"    Processed: {result['first_run']['notebooks_processed']} notebooks")
-    click.echo(f"    Throughput: {result['first_run']['notebooks_per_second']:.2f} notebooks/sec")
+    click.echo(
+        f"    Throughput: {result['first_run']['notebooks_per_second']:.2f} notebooks/sec"
+    )
     click.echo()
-    click.echo(f"  Second run (incremental - unchanged notebooks):")
+    click.echo("  Second run (incremental - unchanged notebooks):")
     click.echo(f"    Time: {result['second_run']['time_seconds']:.3f}s")
-    click.echo(f"    Processed: {result['second_run']['notebooks_processed']} notebooks")
-    if result['second_run']['notebooks_processed'] > 0:
-        click.echo(f"    Throughput: {result['second_run']['notebooks_per_second']:.2f} notebooks/sec")
+    click.echo(
+        f"    Processed: {result['second_run']['notebooks_processed']} notebooks"
+    )
+    if result["second_run"]["notebooks_processed"] > 0:
+        click.echo(
+            f"    Throughput: {result['second_run']['notebooks_per_second']:.2f} notebooks/sec"
+        )
     else:
-        click.echo(f"    Throughput: N/A (no notebooks processed)")
+        click.echo("    Throughput: N/A (no notebooks processed)")
     click.echo()
     click.echo(f"  Speedup: {result['speedup']:.2f}× faster (second run)")
     click.echo()

@@ -67,7 +67,9 @@ class TransformationPipeline:
                     continue
 
                 # Apply transformation
-                logger.debug(f"Applying {transformer.name()}: {transformer.description()}")
+                logger.debug(
+                    f"Applying {transformer.name()}: {transformer.description()}"
+                )
                 cells, stats = transformer.transform(cells)
 
                 # Validate result
