@@ -385,7 +385,7 @@ jobs:
           wheel_file=$(ls dist/*.whl | head -n 1)
           # Create virtual environment and install wheel + test dependencies
           uv venv
-          uv pip install "$wheel_file" pytest pytest-cov pytest-xdist
+          uv pip install "$wheel_file" pytest pytest-cov pytest-xdist hypothesis pytest-benchmark
 
       - name: Run integration tests
         shell: bash
