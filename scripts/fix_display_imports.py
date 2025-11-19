@@ -4,63 +4,45 @@ Fix missing IPython.display imports in notebooks.
 
 Adds 'from IPython.display import display' to notebooks that use display()
 but don't have the import.
+
+This script uses the shared notebook_utils package to avoid code duplication.
 """
 
-import json
+import logging
 import sys
 from pathlib import Path
 
+from notebook_utils import (
+    create_ipython_display_import_cell,
+    find_cell_with_pattern,
+    has_ipython_display_import,
+    read_notebook,
+    uses_display,
+    write_notebook,
+)
 
-def has_ipython_display_import(cells: list[dict]) -> bool:
-    """Check if notebook already imports display from IPython.display."""
-    for cell in cells:
-        if cell.get("cell_type") == "code":
-            source = "".join(cell.get("source", []))
-            if "from IPython.display import display" in source:
-                return True
-    return False
-
-
-def uses_display(cells: list[dict]) -> bool:
-    """Check if notebook uses display() function."""
-    for cell in cells:
-        if cell.get("cell_type") == "code":
-            source = "".join(cell.get("source", []))
-            if "display(" in source:
-                return True
-    return False
-
-
-def find_matplotlib_magic_index(cells: list[dict]) -> int | None:
-    """Find the index of the cell with %matplotlib inline."""
-    for i, cell in enumerate(cells):
-        if cell.get("cell_type") == "code":
-            source = "".join(cell.get("source", []))
-            if "%matplotlib inline" in source:
-                return i
-    return None
-
-
-def create_ipython_display_import_cell() -> dict:
-    """Create cell with IPython.display import."""
-    return {
-        "cell_type": "code",
-        "execution_count": None,
-        "metadata": {},
-        "outputs": [],
-        "source": ["from IPython.display import display"],
-    }
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 def fix_notebook(notebook_path: Path, dry_run: bool = False) -> bool:
     """
     Fix a single notebook by adding missing display import.
 
-    Returns: True if notebook was modified
+    Args:
+        notebook_path: Path to notebook file
+        dry_run: If True, don't write changes
+
+    Returns:
+        True if notebook was modified
     """
-    # Read notebook
-    with open(notebook_path, encoding="utf-8") as f:
-        notebook = json.load(f)
+    # Read notebook using shared utility
+    notebook = read_notebook(notebook_path)
+    if notebook is None:
+        return False
 
     cells = notebook.get("cells", [])
     if not cells:
@@ -74,7 +56,7 @@ def fix_notebook(notebook_path: Path, dry_run: bool = False) -> bool:
         return False
 
     # Add import after %matplotlib inline
-    matplotlib_idx = find_matplotlib_magic_index(cells)
+    matplotlib_idx = find_cell_with_pattern(cells, "%matplotlib inline")
     if matplotlib_idx is not None:
         insert_idx = matplotlib_idx + 1
     else:
@@ -84,11 +66,12 @@ def fix_notebook(notebook_path: Path, dry_run: bool = False) -> bool:
     import_cell = create_ipython_display_import_cell()
     cells.insert(insert_idx, import_cell)
 
-    # Save modified notebook
+    # Save modified notebook using shared utility with atomic write
     if not dry_run:
-        with open(notebook_path, "w", encoding="utf-8") as f:
-            json.dump(notebook, f, indent=1, ensure_ascii=False)
-            f.write("\n")
+        success = write_notebook(notebook_path, notebook, backup=False)
+        if not success:
+            logger.warning(f"Failed to save changes to {notebook_path}")
+            return False
 
     return True
 
@@ -122,6 +105,7 @@ def main():
             else:
                 print("  • No fix needed")
         except Exception as e:
+            logger.exception(f"Error processing {notebook_path}: {e}")
             print(f"  ❌ Error: {e}")
 
     print(f"\n{'=' * 60}")

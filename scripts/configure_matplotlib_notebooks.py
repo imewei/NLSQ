@@ -4,66 +4,34 @@ Configure matplotlib inline plotting in Jupyter notebooks.
 
 Adds %matplotlib inline magic command at the beginning of notebooks
 and replaces plt.show() calls with proper display pattern.
+
+This script uses the shared notebook_utils package for common operations.
 """
 
 import json
+import logging
 import re
 import sys
 from pathlib import Path
 
+from notebook_utils import (
+    NotebookStats,
+    create_ipython_display_import_cell,
+    create_matplotlib_config_cell,
+    find_cell_with_pattern,
+    find_first_code_cell_index,
+    has_ipython_display_import,
+    has_matplotlib_magic,
+    read_notebook,
+    uses_display,
+    write_notebook,
+)
 
-def has_matplotlib_magic(cells: list[dict]) -> bool:
-    """Check if notebook already has %matplotlib inline."""
-    for cell in cells:
-        if cell.get("cell_type") == "code":
-            source = "".join(cell.get("source", []))
-            if "%matplotlib inline" in source:
-                return True
-    return False
-
-
-def find_first_code_cell_index(cells: list[dict]) -> int:
-    """Find index of first code cell."""
-    for i, cell in enumerate(cells):
-        if cell.get("cell_type") == "code":
-            return i
-    return 0
-
-
-def has_ipython_display_import(cells: list[dict]) -> bool:
-    """Check if notebook already imports display from IPython.display."""
-    for cell in cells:
-        if cell.get("cell_type") == "code":
-            source = "".join(cell.get("source", []))
-            if "from IPython.display import display" in source:
-                return True
-    return False
-
-
-def create_matplotlib_config_cell() -> dict:
-    """Create cell with matplotlib configuration."""
-    return {
-        "cell_type": "code",
-        "execution_count": None,
-        "metadata": {},
-        "outputs": [],
-        "source": [
-            "# Configure matplotlib for inline plotting in VS Code/Jupyter\n",
-            "# MUST come before importing matplotlib\n",
-            "%matplotlib inline",
-        ],
-    }
-
-
-def create_ipython_display_import_cell() -> dict:
-    """Create cell with IPython.display import."""
-    return {
-        "cell_type": "code",
-        "execution_count": None,
-        "metadata": {},
-        "outputs": [],
-        "source": ["from IPython.display import display"],
-    }
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 def find_figure_variable(source: list[str], show_line_idx: int) -> str:
@@ -149,22 +117,24 @@ def replace_plt_show(source: list[str]) -> tuple[list[str], int]:
     return modified, replacements
 
 
-def process_notebook(notebook_path: Path, dry_run: bool = False) -> dict[str, int]:
+def process_notebook(notebook_path: Path, dry_run: bool = False) -> NotebookStats:
     """
     Process a single notebook.
 
     Returns: dict with statistics
     """
-    stats = {
-        "matplotlib_magic_added": 0,
-        "ipython_display_import_added": 0,
-        "plt_show_replaced": 0,
-        "cells_modified": 0,
-    }
+    stats = NotebookStats(
+        matplotlib_magic_added=0,
+        ipython_display_import_added=0,
+        plt_show_replaced=0,
+        cells_modified=0,
+    )
 
-    # Read notebook
-    with open(notebook_path, encoding="utf-8") as f:
-        notebook = json.load(f)
+    # Read notebook using shared utility
+    notebook = read_notebook(notebook_path)
+    if notebook is None:
+        logger.warning(f"Skipping {notebook_path} due to read error")
+        return stats
 
     cells = notebook.get("cells", [])
     if not cells:
@@ -184,12 +154,7 @@ def process_notebook(notebook_path: Path, dry_run: bool = False) -> dict[str, in
         stats["matplotlib_magic_added"] = 1
     else:
         # Find where %matplotlib inline is
-        for i, cell in enumerate(cells):
-            if cell.get("cell_type") == "code":
-                source = "".join(cell.get("source", []))
-                if "%matplotlib inline" in source:
-                    matplotlib_magic_idx = i
-                    break
+        matplotlib_magic_idx = find_cell_with_pattern(cells, "%matplotlib inline")
 
     # Replace plt.show() in all code cells
     for cell in cells:
@@ -206,6 +171,10 @@ def process_notebook(notebook_path: Path, dry_run: bool = False) -> dict[str, in
                 stats["cells_modified"] += 1
                 needs_display_import = True
 
+    # Check if notebook already uses display()
+    if uses_display(cells):
+        needs_display_import = True
+
     # Add IPython.display import if needed and not present
     if needs_display_import and not has_ipython_display_import(cells):
         import_cell = create_ipython_display_import_cell()
@@ -218,11 +187,11 @@ def process_notebook(notebook_path: Path, dry_run: bool = False) -> dict[str, in
             cells.insert(first_code_idx, import_cell)
         stats["ipython_display_import_added"] = 1
 
-    # Save modified notebook
+    # Save modified notebook using shared utility with atomic write
     if not dry_run:
-        with open(notebook_path, "w", encoding="utf-8") as f:
-            json.dump(notebook, f, indent=1, ensure_ascii=False)
-            f.write("\n")  # Add trailing newline
+        success = write_notebook(notebook_path, notebook, backup=False)
+        if not success:
+            logger.warning(f"Failed to save changes to {notebook_path}")
 
     return stats
 
@@ -247,14 +216,14 @@ def main():
     print(f"🔍 Found {len(notebooks)} notebooks to process\n")
 
     # Process each notebook
-    total_stats = {
-        "notebooks_processed": 0,
-        "notebooks_modified": 0,
-        "matplotlib_magic_added": 0,
-        "ipython_display_import_added": 0,
-        "plt_show_replaced": 0,
-        "cells_modified": 0,
-    }
+    total_stats = NotebookStats(
+        notebooks_processed=0,
+        notebooks_modified=0,
+        matplotlib_magic_added=0,
+        ipython_display_import_added=0,
+        plt_show_replaced=0,
+        cells_modified=0,
+    )
 
     for notebook_path in notebooks:
         rel_path = notebook_path.relative_to(notebooks_dir)
@@ -292,6 +261,7 @@ def main():
                 print("  • No changes needed")
 
         except Exception as e:
+            logger.exception(f"Error processing {notebook_path}: {e}")
             print(f"  ❌ Error: {e}")
 
     # Print summary
