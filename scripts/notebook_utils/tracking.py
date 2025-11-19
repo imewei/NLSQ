@@ -100,13 +100,9 @@ class ProcessingTracker:
         if set(state_entry.get("transformations", [])) != set(transformations):
             return True
 
-        # Check if file changed
+        # Check if file changed - return True if checksum differs
         current_checksum = self._compute_checksum(notebook_path)
-        if state_entry.get("checksum") != current_checksum:
-            return True
-
-        # Notebook hasn't changed and same transformations
-        return False
+        return state_entry.get("checksum") != current_checksum
 
     def mark_processed(
         self,

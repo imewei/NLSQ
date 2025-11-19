@@ -1,5 +1,6 @@
 """Core I/O utilities for notebook manipulation with robust error handling."""
 
+import contextlib
 import json
 import logging
 import shutil
@@ -168,7 +169,5 @@ def write_notebook(path: Path, notebook: dict, backup: bool = False) -> bool:
     finally:
         # Clean up temp file if it still exists
         if temp_path and temp_path.exists():
-            try:
-                temp_path.unlink()
-            except Exception:
-                pass  # Best effort cleanup
+            with contextlib.suppress(Exception):
+                temp_path.unlink()  # Best effort cleanup

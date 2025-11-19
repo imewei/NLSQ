@@ -129,19 +129,15 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
 
-      - name: Install security tools
-        run: |
-          uv pip install --system bandit[toml] pip-audit safety
-
       - name: Run Bandit security linter
         run: |
-          uv run bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json || true
-          uv run bandit -r nlsq/ -c pyproject.toml
+          uvx bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json || true
+          uvx bandit -r nlsq/ -c pyproject.toml
 
       - name: Run pip-audit
         run: |
           uv pip list --format=json > requirements-all.json
-          uv run pip-audit --requirement <(uv pip freeze) --desc || true
+          uvx pip-audit --requirement <(uv pip freeze) --desc || true
 
       - name: Upload security reports
         if: always()

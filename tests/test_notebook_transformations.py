@@ -512,7 +512,7 @@ class TestPltShowReplacement:
     def test_replace_plt_show_complex_line(self):
         """Test replacement skips complex cases."""
         source = ["result = plt.show() or something"]
-        modified, count = replace_plt_show(source)
+        _modified, count = replace_plt_show(source)
 
         # Should not replace complex cases
         assert count == 0
@@ -564,7 +564,7 @@ class TestPltShowReplacementTransformer:
             }
         ]
         transformer = PltShowReplacementTransformer()
-        result, stats = transformer.transform(cells)
+        _result, stats = transformer.transform(cells)
 
         assert stats["replacements"] == 1
 

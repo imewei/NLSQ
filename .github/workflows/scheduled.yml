@@ -241,32 +241,28 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
 
-      - name: Install security tools
-        run: |
-          uv pip install --system bandit[toml] pip-audit safety semgrep
-
       - name: Run Bandit (comprehensive)
         run: |
-          uv run bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json
-          uv run bandit -r nlsq/ -c pyproject.toml -ll
+          uvx bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json
+          uvx bandit -r nlsq/ -c pyproject.toml -ll
 
       - name: Run pip-audit
         continue-on-error: true
         run: |
-          uv run pip-audit --requirement <(uv pip freeze) --desc --format json --output pip-audit-report.json
-          uv run pip-audit --requirement <(uv pip freeze) --desc
+          uvx pip-audit --requirement <(uv pip freeze) --desc --format json --output pip-audit-report.json
+          uvx pip-audit --requirement <(uv pip freeze) --desc
 
       - name: Run Safety check
         continue-on-error: true
         run: |
-          uv run safety check --json --output safety-report.json || true
-          uv run safety check || true
+          uvx safety check --json --output safety-report.json || true
+          uvx safety check || true
 
       - name: Run Semgrep
         continue-on-error: true
         run: |
-          uv run semgrep --config=auto --json --output semgrep-report.json nlsq/ || true
-          uv run semgrep --config=auto nlsq/ || true
+          uvx semgrep --config=auto --json --output semgrep-report.json nlsq/ || true
+          uvx semgrep --config=auto nlsq/ || true
 
       - name: Check license compliance
         run: |
