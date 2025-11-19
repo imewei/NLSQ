@@ -88,3 +88,23 @@ repos:
         pass_filenames: false
         stages: [manual]  # Run with: pre-commit run --hook-stage manual docs-build
         # Note: -n (nitpicky mode) disabled as too strict for scientific computing library
+
+      - id: validate-notebooks
+        name: Validate Jupyter notebooks configuration
+        entry: python scripts/configure_notebooks.py --dry-run
+        language: system
+        files: ^examples/notebooks/.*\.ipynb$
+        pass_filenames: false
+        stages: [manual]  # Run with: pre-commit run --hook-stage manual validate-notebooks
+        # Validates notebooks have proper matplotlib inline and IPython.display imports
+        # Use --dry-run to check without modifying files
+
+      - id: configure-notebooks
+        name: Configure Jupyter notebooks (auto-fix)
+        entry: python scripts/configure_notebooks.py --incremental
+        language: system
+        files: ^examples/notebooks/.*\.ipynb$
+        pass_filenames: false
+        stages: [manual]  # Run with: pre-commit run --hook-stage manual configure-notebooks
+        # Automatically applies transformations: matplotlib inline, IPython.display imports, plt.show() replacement
+        # Uses incremental mode to skip unchanged notebooks for better performance

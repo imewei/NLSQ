@@ -287,3 +287,4 @@ nlsq/_version.py
 /benchmark_results
 benchmark/benchmark_results
 .notebook_transforms.json
+benchmark_results.json

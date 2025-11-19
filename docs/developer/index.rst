@@ -10,6 +10,7 @@ Documentation for NLSQ developers and contributors.
    performance_tuning_guide
    documentation_quality
    pypi_setup
+   notebook_utilities
    ci_cd/index
 
 Overview
@@ -21,6 +22,7 @@ This section contains technical documentation for developers working on NLSQ:
 - CI/CD pipeline documentation
 - Release and publishing guides
 - Development best practices
+- Notebook configuration utilities
 
 Performance & Optimization
 --------------------------
@@ -49,6 +51,23 @@ Deep technical guide for performance optimization:
 - Memory optimization techniques
 - GPU/TPU utilization
 - Benchmarking methodologies
+
+Notebook Utilities
+------------------
+
+Notebook Configuration Utilities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:doc:`notebook_utilities`
+
+Modern framework for transforming Jupyter notebooks:
+
+- Automated matplotlib inline configuration
+- IPython.display import injection
+- plt.show() replacement with display/close pattern
+- Incremental processing with checksum tracking
+- Parallel execution for large repositories
+- Pipeline composition with rollback support
 
 Documentation Quality
 ---------------------

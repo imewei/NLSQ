@@ -8,6 +8,7 @@ Complete API documentation for NLSQ modules and functions.
 
    modules
    large_datasets_api
+   notebook_utils
 
 Core API
 --------
@@ -62,6 +63,20 @@ Utilities
 - ``nlsq.logging`` - Logging utilities
 
 See :doc:`modules` for complete documentation of all modules.
+
+Development Tools
+-----------------
+
+Notebook Configuration Utilities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Modern framework for transforming Jupyter notebooks with automated configurations:
+
+- :mod:`notebook_utils` - Notebook transformation package
+- :class:`~notebook_utils.pipeline.TransformationPipeline` - Pipeline orchestration
+- :class:`~notebook_utils.tracking.ProcessingTracker` - Incremental processing
+
+See :doc:`notebook_utils` for complete API documentation and :doc:`../developer/notebook_utilities` for usage guide.
 
 Performance Benchmarks
 ----------------------
