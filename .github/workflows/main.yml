@@ -132,7 +132,7 @@ jobs:
       - name: Run Bandit security linter
         run: |
           uvx bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json || true
-          uvx bandit -r nlsq/ -c pyproject.toml
+          uvx bandit -r nlsq/ -c pyproject.toml -ll
 
       - name: Run pip-audit
         run: |

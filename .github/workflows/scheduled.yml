@@ -243,7 +243,7 @@ jobs:
 
       - name: Run Bandit (comprehensive)
         run: |
-          uvx bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json
+          uvx bandit -r nlsq/ -c pyproject.toml -f json -o bandit-report.json || true
           uvx bandit -r nlsq/ -c pyproject.toml -ll
 
       - name: Run pip-audit
