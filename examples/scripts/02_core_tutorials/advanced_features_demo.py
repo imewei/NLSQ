@@ -1057,7 +1057,7 @@ def print_summary_and_best_practices():
             mem_config = get_memory_config()
             print(f"Current memory limit: {mem_config.memory_limit_gb} GB")
         except:
-                # Intentionally ignoring errors
+            # Intentionally ignoring errors
             pass
 
     print("\n✅ Advanced Features Demo Completed Successfully!")
