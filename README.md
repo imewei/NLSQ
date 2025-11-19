@@ -7,9 +7,9 @@
 [![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
 [![Documentation Status](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/en/latest/?badge=latest)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![JAX](https://img.shields.io/badge/JAX-0.6.0+-green.svg)](https://github.com/google/jax)
+[![JAX](https://img.shields.io/badge/JAX-0.8.0-green.svg)](https://github.com/google/jax)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Examples Validated](https://img.shields.io/badge/examples-validated%202025--10--09-brightgreen?style=flat)](https://github.com/imewei/NLSQ/actions/workflows/readme-examples.yml)
+[![Examples Validated](https://img.shields.io/badge/examples-validated%202025--11--19-brightgreen?style=flat)](https://github.com/imewei/NLSQ/actions/workflows/readme-examples.yml)
 
 [**Quickstart**](#quickstart-colab-in-the-cloud)
 | [**Install guide**](#installation)
@@ -248,8 +248,8 @@ Production-ready reliability features:
 
 ## Large Dataset Support
 
-> **Note**: The examples below are tested with NLSQ v0.1.1+ (NumPy 2.0+, JAX 0.6.0+, Python 3.12+)
-> **Last validated**: 2025-10-09 | [Test suite](tests/test_readme_examples.py) | [CI Status](https://github.com/imewei/NLSQ/actions/workflows/readme-examples.yml)
+> **Note**: The examples below are tested with NLSQ v0.1.1+ (NumPy 2.0+, JAX 0.8.0, Python 3.12+)
+> **Last validated**: 2025-11-19 | [Test suite](tests/test_readme_examples.py) | [CI Status](https://github.com/imewei/NLSQ/actions/workflows/readme-examples.yml)
 
 NLSQ includes advanced features for handling very large datasets (20M+ points) that may not fit in memory:
 
@@ -765,7 +765,7 @@ Some standouts:
 ### Requirements
 
 - **Python 3.12 or higher** (3.13 also supported)
-- **JAX 0.6.0+** (tested with 0.8.0)
+- **JAX 0.8.0** (locked version)
 - **NumPy 2.0+** ⚠️ **Breaking change from NumPy 1.x** (tested with 2.3.4)
 - **SciPy 1.14.0+** (tested with 1.16.2)
 
@@ -787,7 +787,7 @@ Some standouts:
 #### Linux (CPU Only)
 
 ```bash
-pip install nlsq "jax[cpu]>=0.6.0"
+pip install nlsq "jax[cpu]==0.8.0"
 ```
 
 #### Linux (GPU Acceleration - Recommended) ⚡
@@ -815,7 +815,7 @@ This single command:
 pip uninstall -y jax jaxlib
 
 # Step 2: Install JAX with CUDA support (best performance)
-pip install "jax[cuda12-local]>=0.6.0"
+pip install "jax[cuda12-local]==0.8.0"
 
 # Step 3: Verify GPU detection
 python -c "import jax; print('Devices:', jax.devices())"
@@ -825,14 +825,14 @@ python -c "import jax; print('Devices:', jax.devices())"
 **Alternative**: For systems without CUDA installed, use bundled CUDA (larger download):
 
 ```bash
-pip install "jax[cuda12]>=0.6.0"
+pip install "jax[cuda12]==0.8.0"
 ```
 
 #### Windows & macOS
 
 ```bash
 # CPU only (GPU not supported natively)
-pip install nlsq "jax[cpu]>=0.6.0"
+pip install nlsq "jax[cpu]==0.8.0"
 ```
 
 **Windows GPU Users**: Use WSL2 (Windows Subsystem for Linux) and follow the Linux GPU installation instructions above.
@@ -880,7 +880,7 @@ nvcc --version  # Should show CUDA 12.1-12.9
 
 # Reinstall JAX with GPU support
 pip uninstall -y jax jaxlib
-pip install "jax[cuda12-local]>=0.6.0"
+pip install "jax[cuda12-local]==0.8.0"
 
 # Verify fix
 python -c "import jax; print(jax.devices())"

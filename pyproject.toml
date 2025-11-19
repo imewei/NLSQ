@@ -85,14 +85,15 @@ dependencies = [
     "numpy>=2.0.0",           # Requires NumPy 2.x (tested on 2.3.5)
     "scipy>=1.14.0",          # Tested on 1.16.3
 
-    # JAX ecosystem (CPU-only by default - works on all platforms)
+    # JAX ecosystem (locked to 0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
-    "jax>=0.6.0",             # JAX 0.6.0+ CPU-only (tested on 0.8.0)
+    "jax==0.8.0",             # JAX 0.8.0 (locked version)
+    "jaxlib==0.8.0",          # JAXlib 0.8.0 (locked version)
                                # Platform-specific extras installed separately:
-                               #   Linux CPU:  pip install "jax[cpu]>=0.6.0"
+                               #   Linux CPU:  pip install "jax[cpu]==0.8.0"
                                #   Linux GPU:  make install-jax-gpu (recommended)
-                               #   macOS:      pip install "jax[cpu]>=0.6.0" (CPU only)
-                               #   Windows:    pip install "jax[cpu]>=0.6.0" (CPU only)
+                               #   macOS:      pip install "jax[cpu]==0.8.0" (CPU only)
+                               #   Windows:    pip install "jax[cpu]==0.8.0" (CPU only)
 
     # Visualization and monitoring
     "matplotlib>=3.10.0",     # Tested on 3.10.7
@@ -195,6 +196,7 @@ Changelog = "https://github.com/imewei/NLSQ/blob/main/CHANGELOG.md"
 [tool.setuptools]
 packages = ["nlsq"]
 include-package-data = true
+zip-safe = false  # Required for type stubs and package data
 
 [tool.setuptools.package-data]
 nlsq = ["py.typed", "*.pyi"]
@@ -203,16 +205,54 @@ nlsq = ["py.typed", "*.pyi"]
 write_to = "nlsq/_version.py"
 version_scheme = "post-release"
 local_scheme = "no-local-version"
+fallback_version = "0.0.0+unknown"  # Fallback for non-git installs
+
+[tool.uv]
+# UV-specific configuration for faster builds and better caching
+# Note: Use dependency-groups for dev dependencies (modern approach)
+package = true  # Enable package mode for proper editable installs
 
 [tool.black]
 line-length = 88
 target-version = ['py313']
 preview = true
+# Exclude generated files and caches
+extend-exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | \.ruff_cache
+  | \.venv
+  | _build
+  | build
+  | dist
+  | nlsq/_version\.py
+)/
+'''
 
 [tool.ruff]
 line-length = 88
 target-version = "py313"
 fix = true
+# Exclude generated files and caches for better performance
+extend-exclude = [
+    ".eggs",
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "_build",
+    "build",
+    "dist",
+    "nlsq/_version.py",
+]
+# Cache configuration for faster subsequent runs
+cache-dir = ".ruff_cache"
+# Output format
+output-format = "concise"
 
 [tool.ruff.lint]
 select = [
@@ -275,6 +315,20 @@ allow_untyped_decorators = true  # Allow untyped decorators
 ignore_errors = false
 # Disable the most problematic error codes for scientific computing
 disable_error_code = ["type-arg", "no-untyped-def", "no-any-return", "assignment"]
+# Performance optimizations
+cache_dir = ".mypy_cache"
+incremental = true  # Enable incremental type checking for faster runs
+show_error_codes = true  # Show error codes for easier filtering
+pretty = true  # Better formatted output
+# Exclude patterns for faster checking
+exclude = [
+    "build/",
+    "dist/",
+    ".venv/",
+    "venv/",
+    ".eggs/",
+    "*.egg-info/",
+]
 
 [[tool.mypy.overrides]]
 module = "jax.*"
@@ -359,11 +413,10 @@ reportMissingImports = true
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
-minversion = "7.4"
+minversion = "9.0"  # Updated to match installed version (9.0.1)
 testpaths = ["tests"]
 pythonpath = ["."]
-# Note: importmode = "importlib" requires pytest >= 7.5 (would provide 2-5% speedup)
-# Disabled for compatibility with pytest 7.4 minimum version
+# Modern pytest features for better performance
 addopts = [
     "--verbose",
     "-ra",
@@ -381,7 +434,15 @@ addopts = [
     # "--cov-report=html",
     # "--cov-report=xml",
     # "--cov-fail-under=80",
+    # Performance optimizations
+    "--tb=short",  # Shorter traceback format for faster output
+    "--no-header",  # Skip header for cleaner output
 ]
+# Console output width for better readability
+console_output_style = "progress"
+# Log configuration
+log_cli = false
+log_cli_level = "WARNING"
 # Warning filters to reduce overhead and noise
 filterwarnings = [
     "ignore::DeprecationWarning",

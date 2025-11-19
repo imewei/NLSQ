@@ -1,20 +1,25 @@
-# NLSQ Development Dependencies (Minimum Versions)
-# Updated: 2025-11-16
+# NLSQ Development Dependencies
+# Updated: 2025-11-19
 # Python: >=3.12 (tested on 3.13.7)
 #
-# Install with: uv pip install -r requirements-dev.txt
-# This includes runtime dependencies + development tools
+# RECOMMENDED: Install using uv for best experience
+#   uv pip install -e ".[dev]"  # Installs from pyproject.toml[dev]
 #
-# Philosophy: Use minimum version constraints (>=) for flexibility
-# - Allows users to upgrade dependencies
-# - CI tests both minimum and latest versions
-# - For reproducible builds, use: uv pip freeze > requirements-lock.txt
+# ALTERNATIVE: Install from this file (legacy support)
+#   uv pip install -r requirements-dev.txt
+#
+# For exact reproducibility:
+#   uv sync  # Uses uv.lock for locked dependencies
+#
+# MIGRATION TO UV:
+# - Primary source of truth: pyproject.toml
+# - Locked dependencies: uv.lock (replaces requirements-lock.txt)
+# - This file maintained for legacy compatibility only
 #
 # RECENT CHANGES:
+# - 2025-11-19: Migration to uv package manager, JAX 0.8.0 lock
 # - v0.3.0-beta.2 (2025-11-16): Phase 1 Priority 2 optimizations, Python 3.13 support
 # - v0.1.6 (2025-10-31): Documentation quality enforcement (pre-commit hook added)
-# - v0.1.6: Mixed precision fallback feature and comprehensive documentation
-# - v0.2.0: h5py moved from optional to required dependency
 
 # Runtime dependencies (from requirements.txt)
 -r requirements.txt

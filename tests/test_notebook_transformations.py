@@ -8,6 +8,7 @@ Tests cover:
 """
 
 import json
+import sys
 
 # Add scripts to path for imports
 from pathlib import Path

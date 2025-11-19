@@ -1,27 +1,36 @@
-# NLSQ Locked Dependencies (Exact Versions for Reproducibility)
-# Auto-generated: uv pip freeze > requirements-lock.txt
-# Last updated: 2025-11-16
+# NLSQ Locked Dependencies
+# Last updated: 2025-11-19
 # Python: 3.13.7
 #
-# PURPOSE: Complete uv pip freeze snapshot for 100% reproducible builds
-# - Includes ALL transitive dependencies with exact versions
-# - Use ONLY if you need exact reproducibility (e.g., production deployment)
-# - For development, use: uv pip install -r requirements-dev.txt
-# - For runtime only, use: uv pip install nlsq
+# ============================================================================
+# DEPRECATED: This file is maintained for legacy compatibility only
+# ============================================================================
 #
-# FEATURES INCLUDED (as of verification date):
-# - Phase 1 Priority 2 optimizations (adaptive memory reuse, sparse activation, streaming batch padding)
-# - Mixed precision fallback support (nlsq.mixed_precision)
-# - Documentation with zero warnings enforcement
-# - All 1,557 tests passing with 82% coverage
+# RECOMMENDED APPROACH (UV):
+#   Use uv.lock for dependency locking (automatically managed by uv)
+#   Install with: uv sync
 #
-# CUDA INSTALLATION (Linux GPU users only):
-#   Before installing from this lockfile, install JAX with CUDA support:
-#   pip install "jax[cuda12-local]>=0.6.0"
-#   See README.md "GPU Acceleration" section for details
+# WHY UV IS BETTER:
+# - Faster dependency resolution (10-100x faster than pip)
+# - Automatic lock file management (uv.lock)
+# - Better dependency conflict detection
+# - Cross-platform reproducibility
+# - Integrated with pyproject.toml
 #
-# WARNING: This file becomes outdated quickly. Regenerate periodically with:
-#   uv pip install -r requirements-dev.txt && uv pip freeze > requirements-lock.txt
+# MIGRATION PATH:
+# 1. Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh
+# 2. Use: uv sync (for development)
+# 3. Use: uv pip install . (for users)
+#
+# LEGACY SUPPORT:
+# This file can still be used with:
+#   pip install -r requirements-lock.txt
+# However, it may not be updated regularly. Use uv.lock for latest locks.
+#
+# To regenerate this file (if needed):
+#   uv pip compile pyproject.toml -o requirements-lock.txt
+#
+# ============================================================================
 
 alabaster==1.0.0
 anyio==4.11.0

@@ -6,6 +6,7 @@ a single, shape-relaxed caching system with comprehensive statistics tracking.
 """
 
 import time
+import platform
 
 import jax.numpy as jnp
 import pytest

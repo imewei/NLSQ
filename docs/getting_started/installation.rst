@@ -13,24 +13,24 @@ For most users, the simplest installation method is:
 **Linux**::
 
     # For CPU-only (basic features)
-    pip install nlsq "jax[cpu]>=0.6.0"
+    pip install nlsq "jax[cpu]==0.8.0"
 
     # For GPU with system CUDA 12 (best performance, requires CUDA installed)
-    pip install nlsq "jax[cuda12-local]>=0.6.0"
+    pip install nlsq "jax[cuda12-local]==0.8.0"
 
     # For GPU with bundled CUDA 12 (larger download, no system CUDA needed)
-    pip install nlsq "jax[cuda12]>=0.6.0"
+    pip install nlsq "jax[cuda12]==0.8.0"
 
     # With all advanced features (recommended)
-    pip install nlsq[all] "jax[cpu]>=0.6.0"
+    pip install nlsq[all] "jax[cpu]==0.8.0"
 
 **macOS/Windows**::
 
     # CPU-only (GPU not supported)
-    pip install nlsq "jax[cpu]>=0.6.0"
+    pip install nlsq "jax[cpu]==0.8.0"
 
     # With all advanced features (recommended)
-    pip install nlsq[all] "jax[cpu]>=0.6.0"
+    pip install nlsq[all] "jax[cpu]==0.8.0"
 
 Installation Options
 --------------------
@@ -95,9 +95,9 @@ System Requirements
 
 Core dependencies:
 
-- JAX 0.6.0 - 0.7.2 (JIT compilation and automatic differentiation)
-- NumPy 1.26.0+ (numerical arrays)
-- SciPy 1.11.0+ (optimization algorithms)
+- JAX 0.8.0 (locked version - JIT compilation and automatic differentiation)
+- NumPy 2.0+ (numerical arrays)
+- SciPy 1.14.0+ (optimization algorithms)
 
 Advanced feature dependencies:
 
@@ -128,7 +128,7 @@ NLSQ works best on Linux systems with full JAX support.
     source nlsq-env/bin/activate
 
     # Install NLSQ with CPU support
-    pip install nlsq "jax[cpu]>=0.6.0"
+    pip install nlsq "jax[cpu]==0.8.0"
 
     # Verify installation
     python -c "import nlsq; print(f'NLSQ {nlsq.__version__} installed successfully')"
@@ -146,10 +146,10 @@ NLSQ works best on Linux systems with full JAX support.
     source nlsq-env/bin/activate
 
     # Option 1: System CUDA 12 (best performance)
-    pip install nlsq "jax[cuda12-local]>=0.6.0"
+    pip install nlsq "jax[cuda12-local]==0.8.0"
 
     # Option 2: Bundled CUDA 12 (no system CUDA needed)
-    pip install nlsq "jax[cuda12]>=0.6.0"
+    pip install nlsq "jax[cuda12]==0.8.0"
 
     # Verify GPU access
     python -c "import jax; print(f'JAX devices: {jax.devices()}')"
@@ -171,7 +171,7 @@ macOS
     source nlsq-env/bin/activate
 
     # Install NLSQ (CPU-only)
-    pip install nlsq "jax[cpu]>=0.6.0"
+    pip install nlsq "jax[cpu]==0.8.0"
 
 **Apple Silicon Macs (M1/M2/M3):**
 
@@ -183,7 +183,7 @@ macOS
 
     # Install with Metal support (experimental, CPU-only)
     pip install --upgrade jax-metal>=0.0.5
-    pip install nlsq "jax[cpu]>=0.6.0"
+    pip install nlsq "jax[cpu]==0.8.0"
 
 Windows
 ~~~~~~~
@@ -206,10 +206,10 @@ Windows Subsystem for Linux 2 provides full Linux compatibility including GPU su
     source nlsq-env/bin/activate
 
     # For CPU-only
-    pip install nlsq "jax[cpu]>=0.6.0"
+    pip install nlsq "jax[cpu]==0.8.0"
 
     # For GPU (requires CUDA 12 installed in WSL2)
-    pip install nlsq "jax[cuda12-local]>=0.6.0"
+    pip install nlsq "jax[cuda12-local]==0.8.0"
 
 **Option 2: Native Windows (CPU-only)**
 
@@ -220,7 +220,7 @@ Windows Subsystem for Linux 2 provides full Linux compatibility including GPU su
     nlsq-env\Scripts\activate
 
     # Install NLSQ (CPU-only)
-    pip install nlsq "jax[cpu]>=0.6.0"
+    pip install nlsq "jax[cpu]==0.8.0"
 
 Development Installation
 ------------------------
@@ -261,7 +261,7 @@ For containerized environments:
         && rm -rf /var/lib/apt/lists/*
 
     # Install NLSQ
-    RUN pip install --upgrade "jax[cpu]>=0.6.0" nlsq
+    RUN pip install --upgrade "jax[cpu]==0.8.0" nlsq
 
     # Verify installation
     RUN python -c "import nlsq; print(f'NLSQ {nlsq.__version__} ready')"
@@ -280,7 +280,7 @@ For containerized environments:
         && rm -rf /var/lib/apt/lists/*
 
     # Install NLSQ with CUDA support
-    RUN pip3.12 install --upgrade "jax[cuda12]>=0.6.0" nlsq
+    RUN pip3.12 install --upgrade "jax[cuda12]==0.8.0" nlsq
 
 Verification and Testing
 ------------------------
@@ -444,7 +444,7 @@ Common Issues and Solutions
 .. code-block:: bash
 
     # Install JAX explicitly
-    pip install --upgrade "jax>=0.6.0"
+    pip install --upgrade "jax==0.8.0"
 
 **CUDA Not Found Error**
 
@@ -455,7 +455,7 @@ Common Issues and Solutions
     nvidia-smi
 
     # Reinstall JAX with CUDA support
-    pip install --upgrade --force-reinstall "jax[cuda12]>=0.6.0"
+    pip install --upgrade --force-reinstall "jax[cuda12]==0.8.0"
 
 **Memory Error with Large Datasets**
 
@@ -479,7 +479,7 @@ Common Issues and Solutions
 .. code-block:: bash
 
     # Use --user flag if needed
-    pip install --user "jax[cpu]>=0.6.0" nlsq
+    pip install --user "jax[cpu]==0.8.0" nlsq
 
 Getting Help
 ~~~~~~~~~~~~
@@ -502,9 +502,7 @@ NLSQ is tested with the following version combinations:
 
 **JAX Versions:**
 
-- JAX 0.6.0 - 0.4.35 (stable)
-- JAX 0.5.0 - 0.6.0 (stable)
-- JAX 0.7.0 - 0.7.2 (latest)
+- JAX 0.8.0 (locked version - recommended)
 
 **Operating Systems:**
 

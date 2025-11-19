@@ -1,6 +1,7 @@
 # Pre-commit configuration
-# Versions aligned with local environment and pyproject.toml (2025-11-16)
+# Updated: 2025-11-19
 # Python 3.13.7, uv package manager
+# Aligned with pyproject.toml and uv.lock
 # See REQUIREMENTS.md for dependency management strategy
 
 repos:

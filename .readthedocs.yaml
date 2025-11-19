@@ -1,7 +1,8 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2025-11-16
-# Requires: Python 3.12+ (tested on 3.13), NumPy 2.0+
+# Updated: 2025-11-19
+# Requires: Python 3.12+ (tested on 3.13), NumPy 2.0+, JAX 0.8.0
 # Dependencies managed via pyproject.toml[docs]
+# Uses uv for fast, reproducible builds
 #
 # Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
 # All Sphinx warnings have been resolved as of 2025-11-16
@@ -17,7 +18,11 @@ build:
   jobs:
     pre_build:
       - echo "Building NLSQ documentation..."
-      - echo "This build requires NumPy 2.0+ (breaking change from 1.x)"
+      - echo "This build requires NumPy 2.0+ (breaking change from 1.x), JAX 0.8.0"
+      - echo "Installing uv for faster dependency resolution..."
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$HOME/.cargo/bin:$PATH"
+      - uv --version
       - echo "See REQUIREMENTS.md for dependency details"
     post_build:
       - echo "Documentation build complete"
