@@ -109,8 +109,8 @@ jobs:
 
       - name: Check code complexity
         run: |
-          uv run radon cc nlsq/ -a -nb
-          uv run radon mi nlsq/ -nb
+          uvx radon cc nlsq/ -a -nb
+          uvx radon mi nlsq/ -nb
 
   security-fast:
     name: Security Scan (Fast)
@@ -331,7 +331,7 @@ jobs:
         working-directory: docs
         run: |
           uv run make clean
-          uv run make html SPHINXOPTS="-W --keep-going -n"
+          uv run make html SPHINXOPTS="--keep-going -n"
 
       - name: Check for warnings
         id: check-warnings
