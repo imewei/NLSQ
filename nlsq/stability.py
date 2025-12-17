@@ -135,6 +135,7 @@ class NumericalStabilityGuard:
             return J, {"has_nan": False, "has_inf": False, "condition_number": np.inf}
 
         # Compute singular values for condition number
+        svd_vals = None  # Initialize to handle exception case
         try:
             svd_vals = jnp.linalg.svdvals(J)
 
@@ -174,7 +175,7 @@ class NumericalStabilityGuard:
             J = J + reg_term
 
         # Check for near-zero singular values
-        if len(svd_vals) > 0:
+        if svd_vals is not None and len(svd_vals) > 0:
             min_sv = jnp.min(svd_vals)
             if min_sv < self.eps * 10:
                 # Add small diagonal regularization
