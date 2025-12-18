@@ -513,6 +513,83 @@ diagnostics = OptimizationDiagnostics()
 # (diagnostics would be populated during optimization)
 ```
 
+### Numerical Stability Mode
+
+NLSQ provides automatic numerical stability monitoring and correction to prevent optimization divergence:
+
+```python
+from nlsq import curve_fit
+import jax.numpy as jnp
+import numpy as np
+
+# Define a model function
+def exponential(x, a, b, c):
+    return a * jnp.exp(-b * x) + c
+
+# Generate data with challenging characteristics
+x = np.linspace(0, 1e6, 1000)  # Large x-range can cause ill-conditioning
+y = 2.5 * np.exp(-0.5 * x) + 1.0
+
+# Option 1: stability='check' - warn about issues but don't fix
+popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability='check')
+
+# Option 2: stability='auto' - automatically detect and fix issues (recommended)
+popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability='auto')
+
+# Option 3: stability=False - disable stability checks (default)
+popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability=False)
+```
+
+**Stability Modes:**
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `stability=False` | No checks (default) | Simple problems, maximum speed |
+| `stability='check'` | Warn about issues | Debugging, identify problems |
+| `stability='auto'` | Auto-detect and fix | Production use, challenging problems |
+
+**Key Features:**
+
+- **NaN/Inf Detection**: Automatically replaces invalid values in Jacobian
+- **Condition Number Monitoring**: Detects ill-conditioned problems
+- **Data Rescaling**: Optional rescaling of data to improve conditioning
+- **SVD Skip for Large Jacobians**: Avoids expensive SVD computation for >10M elements
+
+**Physics Applications (XPCS, scattering, etc.):**
+
+For physics applications where data must maintain physical units:
+
+```python
+# Preserve physical units (don't rescale time delays, scattering vectors, etc.)
+popt, pcov = curve_fit(
+    g2_model, tau, y,
+    p0=[1.0, 0.3, 100.0],
+    stability='auto',
+    rescale_data=False,  # Preserve physical units
+)
+```
+
+**Large Jacobian Optimization:**
+
+For large datasets (>10M Jacobian elements), SVD computation is automatically skipped to prevent performance degradation:
+
+```python
+# Custom SVD threshold (default: 10M elements)
+popt, pcov = curve_fit(
+    model, x_large, y_large,
+    p0=p0,
+    stability='auto',
+    max_jacobian_elements_for_svd=5_000_000,  # Skip SVD above 5M elements
+)
+```
+
+**Performance Impact:**
+- `stability=False`: No overhead
+- `stability='check'`: ~1ms overhead for 1M points
+- `stability='auto'`: ~1-5ms overhead, prevents divergence
+
+For more details, see the [Stability Guide](https://nlsq.readthedocs.io/en/latest/guides/stability.html).
+
 ### Caching System
 
 Optimize performance with caching:

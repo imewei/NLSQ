@@ -3,11 +3,63 @@
 This module provides comprehensive numerical stability monitoring and correction
 capabilities for the NLSQ package, ensuring robust optimization even with
 ill-conditioned problems or extreme parameter values.
+
+Stability Modes
+===============
+
+The stability parameter in curve_fit() controls numerical stability behavior:
+
+- ``stability=False`` (default): No stability checks. Maximum performance.
+- ``stability='check'``: Check for issues and warn, but don't modify data.
+- ``stability='auto'``: Automatically detect and fix numerical issues.
+
+Key Design Decisions (v0.3.0)
+=============================
+
+1. **Initialization-only Jacobian checks**: Stability checks on the Jacobian are
+   performed only at optimization initialization, not per-iteration. Per-iteration
+   Jacobian modification was found to cause optimization divergence due to
+   accumulated numerical perturbations. (commit 8028a03)
+
+2. **SVD skip for large Jacobians**: For Jacobians exceeding max_jacobian_elements_for_svd
+   (default 10M elements), SVD computation is skipped to avoid O(min(m,n)^2 * max(m,n))
+   overhead. Only O(n) NaN/Inf checking is performed.
+
+3. **rescale_data parameter**: Physics applications (XPCS, scattering, etc.) can
+   set rescale_data=False to preserve physical units. The default (True) rescales
+   data to [0, 1] when ill-conditioning is detected.
+
+Module Constants
+================
+
+MAX_JACOBIAN_ELEMENTS_FOR_SVD : int = 10_000_000
+    Default maximum Jacobian elements for SVD computation. For Jacobians
+    exceeding this threshold, SVD is skipped to avoid excessive computation.
+
+    Performance characteristics:
+    - 10M element Jacobian: ~1.5GB RAM, ~5 seconds (GPU)
+    - SVD per iteration can exceed total optimization time
+    - For XPCS applications (1M points x 3 params = 3M), SVD is computed
+    - For large datasets (10M points x 3 params = 30M), SVD is skipped
+
+CONDITION_THRESHOLD : float = 1e12
+    Threshold for detecting ill-conditioned matrices. Condition numbers
+    above this trigger regularization warnings or automatic fixes.
+
+REGULARIZATION_FACTOR : float = 1e-10
+    Default Tikhonov regularization factor for ill-conditioned problems.
+
+See Also
+--------
+NumericalStabilityGuard : Main class for stability operations
+apply_automatic_fixes : Function to apply stability fixes to data
+check_problem_stability : Pre-flight stability check for optimization
 """
 
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
 
 import numpy as np
 
@@ -447,7 +499,7 @@ class NumericalStabilityGuard:
             n_outliers = jnp.sum(outlier_mask)
             warnings.warn(f"Detected {n_outliers} outliers in residuals")
 
-        return residuals, has_outliers
+        return residuals, bool(has_outliers)
 
     def safe_norm(self, x: jnp.ndarray, ord: float = 2) -> float:
         """Compute norm with overflow protection.
@@ -660,7 +712,7 @@ def check_problem_stability(
     xdata: np.ndarray,
     ydata: np.ndarray,
     p0: np.ndarray | None = None,
-    f: callable | None = None,
+    f: Callable | None = None,
 ) -> dict:
     """
     Comprehensive pre-flight stability check for optimization problem.

@@ -268,6 +268,7 @@ def curve_fit_large(
     # Stability parameters
     stability: Literal["auto", "check", False] = False,
     rescale_data: bool = True,
+    max_jacobian_elements_for_svd: int = 10_000_000,
     # Large dataset specific parameters
     memory_limit_gb: float | None = None,
     auto_size_detection: bool = True,
@@ -419,6 +420,7 @@ def curve_fit_large(
         fit_kwargs["check_finite"] = check_finite
         fit_kwargs["stability"] = stability
         fit_kwargs["rescale_data"] = rescale_data
+        fit_kwargs["max_jacobian_elements_for_svd"] = max_jacobian_elements_for_svd
 
         return curve_fit(f, xdata, ydata, **fit_kwargs)
 

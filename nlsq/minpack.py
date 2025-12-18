@@ -81,6 +81,7 @@ def curve_fit(
     bounds_safety_factor: float = 10.0,
     stability: Literal["auto", "check", False] = False,
     rescale_data: bool = True,
+    max_jacobian_elements_for_svd: int = 10_000_000,
     fallback: bool = False,
     max_fallback_attempts: int = 10,
     fallback_verbose: bool = False,
@@ -143,6 +144,19 @@ def curve_fit(
         time delays in seconds, scattering vectors in nm^-1). NaN/Inf handling
         and parameter normalization are still applied when stability='auto'.
         Default: True.
+    max_jacobian_elements_for_svd : int, optional
+        Maximum number of elements in the Jacobian matrix (m × n) for which
+        SVD will be computed during stability checks. For larger Jacobians,
+        SVD is skipped to avoid O(min(m,n)² × max(m,n)) computation overhead.
+        NaN/Inf checking is still performed for large Jacobians.
+
+        Examples of element counts:
+        - 1M data points × 7 params = 7M elements
+        - 100K data points × 100 params = 10M elements
+
+        Set to a larger value if you need condition number checks for large
+        problems, or a smaller value to skip SVD more aggressively.
+        Default: 10,000,000 (10M elements).
     fallback : bool, optional
         Enable automatic fallback strategies for difficult optimization problems.
         When True, the optimizer will automatically try alternative approaches if
@@ -389,6 +403,7 @@ def curve_fit(
         flength=flength,
         use_dynamic_sizing=use_dynamic_sizing,
         cache_config=cache_config,
+        max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
     )
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
@@ -471,6 +486,7 @@ class CurveFit:
         enable_recovery: bool = False,
         enable_overflow_check: bool = False,
         cache_config: dict[str, Any] | None = None,
+        max_jacobian_elements_for_svd: int = 10_000_000,
     ) -> None:
         """Initialize CurveFit instance.
 
@@ -511,6 +527,11 @@ class CurveFit:
 
             If None, uses global cache with default settings.
 
+        max_jacobian_elements_for_svd : int, default 10_000_000
+            Maximum Jacobian size (m × n elements) for SVD computation during
+            stability checks. SVD is skipped for larger Jacobians to avoid
+            O(min(m,n)² × max(m,n)) overhead. Only applies when enable_stability=True.
+
         Notes
         -----
         Fixed length compilation trades memory usage for compilation speed:
@@ -535,9 +556,12 @@ class CurveFit:
         self.enable_stability = enable_stability
         self.enable_recovery = enable_recovery
         self.enable_overflow_check = enable_overflow_check
+        self.max_jacobian_elements_for_svd = max_jacobian_elements_for_svd
 
         if enable_stability:
-            self.stability_guard = NumericalStabilityGuard()
+            self.stability_guard = NumericalStabilityGuard(
+                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd
+            )
             # Use fast validation mode by default for performance
             self.validator = InputValidator(fast_mode=True)
             self.memory_manager = get_memory_manager()
