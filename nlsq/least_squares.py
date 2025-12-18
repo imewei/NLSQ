@@ -23,7 +23,7 @@ from nlsq.memory_manager import get_memory_manager
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.trf import TrustRegionReflective
 from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction, MethodLiteral
-from nlsq.unified_cache import get_global_cache
+from nlsq.unified_cache import cached_jit, get_global_cache
 
 
 def jacobian_mode_selector(
@@ -285,6 +285,8 @@ class AutoDiffJacobian:
         # Select the appropriate JAX differentiation function
         jac_func_ad = jacfwd if mode == "fwd" else jacrev
 
+        # Note: Uses @jit (not cached_jit) because these closures capture 'func'
+        # which changes each call, so caching based on source wouldn't work
         @jit
         def wrap_func(*all_args) -> jnp.ndarray:
             """Wraps the residual fit function such that it can be passed to the
@@ -384,7 +386,10 @@ class LeastSquares:
     """
 
     def __init__(
-        self, enable_stability: bool = False, enable_diagnostics: bool = False
+        self,
+        enable_stability: bool = False,
+        enable_diagnostics: bool = False,
+        max_jacobian_elements_for_svd: int = 10_000_000,
     ) -> None:
         """Initialize LeastSquares with optimization algorithms and autodiff instances.
 
@@ -398,6 +403,9 @@ class LeastSquares:
             Enable numerical stability checks and fixes
         enable_diagnostics : bool, default False
             Enable optimization diagnostics collection
+        max_jacobian_elements_for_svd : int, default 10_000_000
+            Maximum Jacobian size (m × n elements) for SVD computation during
+            stability checks. SVD is skipped for larger Jacobians.
         """
         super().__init__()  # not sure if this is needed
         self.trf = TrustRegionReflective()
@@ -419,9 +427,12 @@ class LeastSquares:
         # Stability and diagnostics systems
         self.enable_stability = enable_stability
         self.enable_diagnostics = enable_diagnostics
+        self.max_jacobian_elements_for_svd = max_jacobian_elements_for_svd
 
         if enable_stability:
-            self.stability_guard = NumericalStabilityGuard()
+            self.stability_guard = NumericalStabilityGuard(
+                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd
+            )
             self.memory_manager = get_memory_manager()
 
         if enable_diagnostics:
@@ -1074,6 +1085,8 @@ class LeastSquares:
             # Quick dimension check for auto mode selection
             # We need to know m (number of residuals) for mode selection
             # Create a temporary residual function for dimension check
+            # Note: Uses @jit (not cached_jit) because this closure captures
+            # different fun/xdata/ydata each call, so caching wouldn't help
             @jit
             def temp_residual(args_temp):
                 func_eval = fun(xdata, *args_temp) - ydata
@@ -1282,6 +1295,8 @@ class LeastSquares:
         None
         """
 
+        # Note: Uses @jit (not cached_jit) because this closure captures 'func'
+        # which changes each call, so caching based on source wouldn't work
         @jit
         def masked_residual_func(
             args: jnp.ndarray,
@@ -1395,6 +1410,8 @@ class LeastSquares:
             The masked Jacobian of the function evaluated at `args` with respect to the data.
         """
 
+        # Note: Uses @jit (not cached_jit) because these closures capture 'jac'
+        # which changes each call, so caching based on source wouldn't work
         @jit
         def jac_func(coords: jnp.ndarray, args: jnp.ndarray) -> jnp.ndarray:
             # Create individual arguments from the array for JAX compatibility
