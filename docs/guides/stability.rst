@@ -52,19 +52,17 @@ Enable stability mode with a single parameter:
    import jax.numpy as jnp
    import numpy as np
 
+
    def exponential(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    # Data with challenging characteristics
    x = np.linspace(0, 1e6, 1000)  # Large x-range
    y = 2.5 * np.exp(-0.5 * x) + 1.0
 
    # Enable automatic stability fixes
-   popt, pcov = curve_fit(
-       exponential, x, y,
-       p0=[2.5, 0.5, 1.0],
-       stability='auto'
-   )
+   popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability="auto")
 
 Physics Applications
 --------------------
@@ -77,9 +75,11 @@ maintain physical units, use ``rescale_data=False``:
    from nlsq import curve_fit
    import jax.numpy as jnp
 
+
    def g2_model(tau, baseline, contrast, gamma):
        """XPCS intensity autocorrelation function."""
        return baseline + contrast * jnp.exp(-2 * gamma * tau) ** 2
+
 
    # Time delays in physical units (seconds)
    tau = np.logspace(-6, 1, 200)  # 1µs to 10s
@@ -87,10 +87,12 @@ maintain physical units, use ``rescale_data=False``:
 
    # Preserve physical units
    popt, pcov = curve_fit(
-       g2_model, tau, y,
+       g2_model,
+       tau,
+       y,
        p0=[1.0, 0.3, 100.0],
-       stability='auto',
-       rescale_data=False  # Don't normalize data
+       stability="auto",
+       rescale_data=False,  # Don't normalize data
    )
 
 **Why use rescale_data=False?**
@@ -115,18 +117,16 @@ NLSQ automatically skips SVD for large Jacobians:
    y_large = model(x_large, *true_params) + noise
 
    # SVD automatically skipped (>10M elements)
-   popt, pcov = curve_fit(
-       model, x_large, y_large,
-       p0=p0,
-       stability='auto'
-   )
+   popt, pcov = curve_fit(model, x_large, y_large, p0=p0, stability="auto")
 
    # Custom threshold
    popt, pcov = curve_fit(
-       model, x_large, y_large,
+       model,
+       x_large,
+       y_large,
        p0=p0,
-       stability='auto',
-       max_jacobian_elements_for_svd=5_000_000  # Skip above 5M
+       stability="auto",
+       max_jacobian_elements_for_svd=5_000_000,  # Skip above 5M
    )
 
 **What happens when SVD is skipped?**
@@ -172,14 +172,14 @@ All stability-related parameters:
    from nlsq import curve_fit
 
    popt, pcov = curve_fit(
-       model, x, y,
+       model,
+       x,
+       y,
        p0=p0,
        # Stability mode
-       stability='auto',           # 'auto', 'check', or False
-
+       stability="auto",  # 'auto', 'check', or False
        # Data rescaling
-       rescale_data=True,          # Rescale data to [0,1] (default)
-
+       rescale_data=True,  # Rescale data to [0,1] (default)
        # SVD threshold
        max_jacobian_elements_for_svd=10_000_000,  # Skip SVD above this
    )
@@ -214,7 +214,7 @@ Optimization Diverges
 
    .. code-block:: python
 
-      popt, pcov = curve_fit(model, x, y, p0=p0, stability='auto')
+      popt, pcov = curve_fit(model, x, y, p0=p0, stability="auto")
 
 2. Check initial parameters:
 
@@ -229,10 +229,7 @@ Optimization Diverges
 
    .. code-block:: python
 
-      popt, pcov = curve_fit(
-          model, x, y, p0=p0,
-          bounds=([0, 0, 0], [10, 10, 10])
-      )
+      popt, pcov = curve_fit(model, x, y, p0=p0, bounds=([0, 0, 0], [10, 10, 10]))
 
 Slow Optimization
 ~~~~~~~~~~~~~~~~~
@@ -252,16 +249,14 @@ Slow Optimization
    .. code-block:: python
 
       popt, pcov = curve_fit(
-          model, x, y, p0=p0,
-          stability='auto',
-          max_jacobian_elements_for_svd=1_000_000
+          model, x, y, p0=p0, stability="auto", max_jacobian_elements_for_svd=1_000_000
       )
 
 3. Use check mode instead of auto:
 
    .. code-block:: python
 
-      popt, pcov = curve_fit(model, x, y, p0=p0, stability='check')
+      popt, pcov = curve_fit(model, x, y, p0=p0, stability="check")
 
 Ill-Conditioned Problems
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -282,11 +277,7 @@ Ill-Conditioned Problems
 
    .. code-block:: python
 
-      popt, pcov = curve_fit(
-          model, x, y, p0=p0,
-          stability='auto',
-          rescale_data=True
-      )
+      popt, pcov = curve_fit(model, x, y, p0=p0, stability="auto", rescale_data=True)
 
 3. Add regularization via bounds:
 
@@ -294,8 +285,7 @@ Ill-Conditioned Problems
 
       # Soft bounds prevent extreme parameters
       popt, pcov = curve_fit(
-          model, x, y, p0=p0,
-          bounds=([-1e10]*n_params, [1e10]*n_params)
+          model, x, y, p0=p0, bounds=([-1e10] * n_params, [1e10] * n_params)
       )
 
 See Also

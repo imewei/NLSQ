@@ -267,6 +267,7 @@ class TestTransferReduction:
         assert result.success
         assert np.allclose(result.x, [1.8, 0.5], rtol=0.1)
 
+
 class TestPerformanceMetrics:
     """Test profiling utilities."""
 
