@@ -35,6 +35,22 @@ Specialized functions for large-scale fitting:
 
 See :doc:`large_datasets_api` for detailed documentation.
 
+Adaptive Hybrid Streaming API
+-----------------------------
+
+Four-phase hybrid optimizer combining parameter normalization, Adam warmup,
+streaming Gauss-Newton, and exact covariance computation:
+
+- :class:`nlsq.AdaptiveHybridStreamingOptimizer` - Main optimizer class
+- :class:`nlsq.HybridStreamingConfig` - Configuration with presets
+- :class:`nlsq.ParameterNormalizer` - Parameter normalization
+
+See:
+
+- :doc:`nlsq.adaptive_hybrid_streaming` - Main optimizer documentation
+- :doc:`nlsq.hybrid_streaming_config` - Configuration options
+- :doc:`nlsq.parameter_normalizer` - Parameter normalization
+
 Module Organization
 -------------------
 
@@ -53,6 +69,9 @@ Advanced Features
 - ``nlsq.mixed_precision`` - Automatic mixed precision management
 - ``nlsq.smart_cache`` - Intelligent caching
 - ``nlsq.diagnostics`` - Performance monitoring
+- ``nlsq.adaptive_hybrid_streaming`` - Four-phase hybrid optimizer
+- ``nlsq.hybrid_streaming_config`` - Hybrid streaming configuration
+- ``nlsq.parameter_normalizer`` - Parameter normalization
 
 Utilities
 ~~~~~~~~~

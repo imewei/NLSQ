@@ -44,6 +44,19 @@ Tools for fitting very large datasets (10M+ points):
    nlsq.mixed_precision
    large_datasets_api
 
+Adaptive Hybrid Streaming (v0.3.0+)
+-----------------------------------
+
+Four-phase hybrid optimizer with parameter normalization, Adam warmup,
+streaming Gauss-Newton, and exact covariance computation:
+
+.. toctree::
+   :maxdepth: 2
+
+   nlsq.adaptive_hybrid_streaming
+   nlsq.hybrid_streaming_config
+   nlsq.parameter_normalizer
+
 Enhanced Features (v0.1.1)
 --------------------------
 
@@ -147,6 +160,11 @@ Complete Module Listing
 - :doc:`nlsq.memory_pool` - Memory pool allocation (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.mixed_precision` - Automatic mixed precision management (NEW in v0.1.6)
 - :doc:`large_datasets_api` - Comprehensive large dataset guide
+
+**Adaptive Hybrid Streaming Modules** (NEW in v0.3.0+):
+- :doc:`nlsq.adaptive_hybrid_streaming` - Four-phase hybrid optimizer
+- :doc:`nlsq.hybrid_streaming_config` - Configuration with presets
+- :doc:`nlsq.parameter_normalizer` - Parameter normalization for gradient balance
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management

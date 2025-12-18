@@ -68,6 +68,7 @@ suppress_warnings = [
     "ref.python",  # Suppress ambiguous cross-reference warnings for classes in multiple modules
     "toc.excluded",  # Suppress toctree warnings for documents in multiple toctrees
     "toc.not_readable",  # Suppress toctree readability warnings
+    "toc.not_included",  # Suppress warnings for autosummary-generated files not in explicit toctree
     "autosummary",  # Suppress autosummary warnings
     "autodoc",  # Suppress autodoc warnings including duplicate object descriptions
     "autodoc.import_object",  # Suppress missing import warnings for experimental features

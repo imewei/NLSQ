@@ -365,6 +365,41 @@ optimizer = StreamingOptimizer(config)
 result = optimizer.fit_streaming(func, data_generator, p0=p0)
 ```
 
+### Adaptive Hybrid Streaming Optimizer (v0.3.0+)
+
+Four-phase hybrid optimizer combining parameter normalization, Adam warmup, streaming Gauss-Newton, and exact covariance computation:
+
+```python
+from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
+import jax.numpy as jnp
+
+# Configure with presets: aggressive, conservative, or memory_optimized
+config = HybridStreamingConfig.aggressive()  # Fast convergence
+# config = HybridStreamingConfig.conservative()  # Higher quality
+# config = HybridStreamingConfig.memory_optimized()  # Lower memory
+
+optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+# Define model
+def model(x, a, b, c):
+    return a * jnp.exp(-b * x) + c
+
+# Fit with bounds-based normalization (addresses gradient imbalance)
+result = optimizer.fit(
+    model=model,
+    x_data=x_data,
+    y_data=y_data,
+    p0=[2.0, 0.5, 0.3],
+    bounds=(jnp.array([1.0, 0.1, 0.0]), jnp.array([10.0, 1.0, 2.0]))
+)
+```
+
+**When to use Adaptive Hybrid Streaming:**
+- Parameters span many orders of magnitude (gradient imbalance)
+- Large datasets (100K+ points) with memory constraints
+- Need production-quality uncertainty estimates
+- Standard optimizers converge slowly near optimum
+
 ### Key Features for Large Datasets:
 
 - **Automatic Size Detection**: `curve_fit_large` automatically switches between standard and chunked fitting
