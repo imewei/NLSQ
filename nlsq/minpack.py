@@ -1412,6 +1412,112 @@ class CurveFit:
             none_mask,
         )
 
+    def _curve_fit_hybrid_streaming(
+        self,
+        f: Callable,
+        xdata: np.ndarray | tuple[np.ndarray],
+        ydata: np.ndarray,
+        p0: np.ndarray | None = None,
+        sigma: np.ndarray | None = None,
+        absolute_sigma: bool = False,
+        check_finite: bool = True,
+        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        callback: Callable | None = None,
+        **kwargs,
+    ) -> CurveFitResult:
+        """Handle curve fitting with hybrid_streaming method.
+
+        This method delegates to AdaptiveHybridStreamingOptimizer for
+        large-scale optimization with parameter normalization, Adam warmup,
+        and streaming Gauss-Newton.
+
+        Parameters
+        ----------
+        f : Callable
+            Model function f(x, *params) -> predictions
+        xdata : array_like
+            Independent variable data
+        ydata : array_like
+            Dependent variable data
+        p0 : array_like, optional
+            Initial parameter guess
+        sigma : array_like, optional
+            Uncertainties in ydata
+        absolute_sigma : bool, default=False
+            Whether sigma is absolute or relative
+        check_finite : bool, default=True
+            Check for finite input values
+        bounds : tuple, optional
+            Parameter bounds as (lower, upper)
+        callback : callable, optional
+            Progress callback function
+        **kwargs
+            Additional parameters (verbose, config overrides)
+
+        Returns
+        -------
+        result : CurveFitResult
+            Optimization result compatible with scipy.optimize.curve_fit
+        """
+        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+
+        # Convert inputs to arrays
+        if check_finite:
+            xdata = np.asarray_chkfinite(xdata, float)
+            ydata = np.asarray_chkfinite(ydata, float)
+        else:
+            xdata = np.asarray(xdata, float)
+            ydata = np.asarray(ydata, float)
+
+        # Determine parameter count and prepare p0
+        if p0 is None:
+            n, p0 = self._determine_parameter_count(f, p0, xdata, ydata)
+        else:
+            p0 = np.atleast_1d(p0)
+            n = p0.size
+
+        # Prepare bounds
+        lb, ub, p0 = self._prepare_bounds_and_initial_guess(bounds, n, p0)
+        bounds_tuple = (lb, ub) if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))) else None
+
+        # Extract verbosity from kwargs
+        verbose = kwargs.pop('verbose', 1)
+
+        # Create configuration (allow kwargs to override defaults)
+        config_overrides = {}
+        for key in list(kwargs.keys()):
+            if hasattr(HybridStreamingConfig, key):
+                config_overrides[key] = kwargs.pop(key)
+
+        config = HybridStreamingConfig(**config_overrides) if config_overrides else HybridStreamingConfig()
+
+        # Create optimizer
+        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+
+        # Run optimization
+        result_dict = optimizer.fit(
+            data_source=(xdata, ydata),
+            func=f,
+            p0=p0,
+            bounds=bounds_tuple,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            callback=callback,
+            verbose=verbose,
+        )
+
+        # Convert to CurveFitResult format
+        # The result_dict from AdaptiveHybridStreamingOptimizer should have:
+        # 'x', 'success', 'message', 'fun', 'pcov', 'perr', 'streaming_diagnostics'
+        result = CurveFitResult(result_dict)
+        result["model"] = f
+        result["xdata"] = xdata
+        result["ydata"] = ydata
+        result["pcov"] = result_dict.get("pcov", np.eye(n) * np.inf)
+
+        return result
+
     def _run_optimization(
         self,
         f: Callable,
@@ -1604,6 +1710,34 @@ class CurveFit:
         callback: Callable | None = None,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Use non-linear least squares to fit a function, f, to data.
+        Assumes ``ydata = f(xdata, \\*params) + eps``.
+
+        Parameters
+        ----------
+        method : str | None, optional
+            Optimization algorithm. Options:
+            - 'trf' (default): Trust Region Reflective
+            - 'lm': Levenberg-Marquardt
+            - 'hybrid_streaming': Adaptive Hybrid Streaming Optimizer (for large datasets)
+            If None, auto-selects 'trf'.
+        """
+        # Check for hybrid_streaming method early and delegate
+        if method == 'hybrid_streaming':
+            return self._curve_fit_hybrid_streaming(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                callback=callback,
+                **kwargs,
+            )
+
         """
         Use non-linear least squares to fit a function, f, to data.
         Assumes ``ydata = f(xdata, \\*params) + eps``.

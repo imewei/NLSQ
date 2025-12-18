@@ -94,6 +94,7 @@ dependencies = [
                                #   Linux GPU:  make install-jax-gpu (recommended)
                                #   macOS:      pip install "jax[cpu]==0.8.0" (CPU only)
                                #   Windows:    pip install "jax[cpu]==0.8.0" (CPU only)
+    "optax>=0.1.7",           # Gradient transformations for Adam warmup (tested with JAX 0.8.0)
 
     # Visualization and monitoring
     "matplotlib>=3.10.0",     # Tested on 3.10.6

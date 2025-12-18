@@ -92,6 +92,11 @@ from nlsq.memory_pool import (
 )
 from nlsq.minpack import CurveFit, curve_fit
 
+# Adaptive Hybrid Streaming Optimizer (Task Group 12)
+from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+from nlsq.hybrid_streaming_config import HybridStreamingConfig
+from nlsq.parameter_normalizer import ParameterNormalizer
+
 # Performance profiling (Days 20-21)
 from nlsq.profiler import (
     PerformanceProfiler,
@@ -170,6 +175,10 @@ __all__ = [
     "LargeDatasetFitter",
     # Advanced API
     "LeastSquares",
+    # Adaptive Hybrid Streaming Optimizer (Task Group 12)
+    "AdaptiveHybridStreamingOptimizer",
+    "HybridStreamingConfig",
+    "ParameterNormalizer",
     # Configuration classes
     "MemoryConfig",
     "MemoryManager",
@@ -402,6 +411,58 @@ def curve_fit_large(
         raise ValueError(f"Need at least 2 data points for fitting, got {len(xdata)}.")
 
     n_points = len(xdata)
+
+    # Handle hybrid_streaming method specially
+    if method == 'hybrid_streaming':
+        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+
+        # Extract verbosity from kwargs
+        verbose = kwargs.pop('verbose', 1)
+
+        # Create configuration (allow kwargs to override defaults)
+        config_overrides = {}
+        for key in list(kwargs.keys()):
+            if hasattr(HybridStreamingConfig, key):
+                config_overrides[key] = kwargs.pop(key)
+
+        config = HybridStreamingConfig(**config_overrides) if config_overrides else HybridStreamingConfig()
+
+        # Prepare p0 and bounds
+        if p0 is None:
+            from inspect import signature
+            sig = signature(f)
+            args = sig.parameters
+            if len(args) < 2:
+                raise ValueError("Unable to determine number of fit parameters.")
+            n_params = len(args) - 1
+            p0 = np.ones(n_params)
+
+        p0 = np.atleast_1d(p0)
+        from nlsq.least_squares import prepare_bounds
+        lb, ub = prepare_bounds(bounds, len(p0))
+        bounds_tuple = (lb, ub) if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))) else None
+
+        # Create optimizer
+        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+
+        # Run optimization
+        result_dict = optimizer.fit(
+            data_source=(xdata, ydata),
+            func=f,
+            p0=p0,
+            bounds=bounds_tuple,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            callback=kwargs.get('callback'),
+            verbose=verbose,
+        )
+
+        # Convert to tuple format for backward compatibility
+        popt = result_dict['x']
+        pcov = result_dict.get('pcov', np.eye(len(p0)) * np.inf)
+
+        return popt, pcov
 
     # Auto-detect if we should use large dataset processing
     if auto_size_detection and n_points < size_threshold:
