@@ -79,6 +79,7 @@ Documentation
    guides/index
    guides/migration_scipy
    guides/advanced_features
+   guides/stability
    guides/performance_guide
    guides/large_datasets
    guides/troubleshooting

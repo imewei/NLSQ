@@ -15,10 +15,14 @@ and ensures data quality before expensive optimization operations begin.
 
 **New in version 0.1.1**: Complete validation system with fast mode and extensive checks.
 
+**New in version 0.3.1**: Added security-focused validation (array size limits, bounds checking,
+parameter validation).
+
 Key Features
 ------------
 
 - **Comprehensive input validation** for all curve fitting parameters
+- **Security validation** (v0.3.1): Array size limits, bounds numeric range, parameter values
 - **Early error detection** with clear, actionable error messages
 - **Data quality checks** for outliers, duplicates, and degenerate cases
 - **Fast mode** to skip expensive checks for performance-critical code
@@ -395,6 +399,64 @@ Build custom validation logic:
     errors, warnings, x, y = custom_validator.validate_my_data(
         x_data, y_data, f=model_func, p0=initial_guess
     )
+
+Security Validation (v0.3.1)
+-----------------------------
+
+The validator includes security-focused checks to prevent resource exhaustion
+and detect malformed inputs early:
+
+.. code-block:: python
+
+   from nlsq.validators import InputValidator, validate_security_constraints
+
+   validator = InputValidator()
+
+   # Security checks run automatically and early in the validation pipeline
+   errors, warnings, x, y = validator.validate_curve_fit_inputs(model, x, y, p0=p0)
+
+   # Or call directly
+   errors, warnings = validate_security_constraints(x, y, n_params=3)
+
+**Array Size Limits**:
+
+- Maximum 10 billion (10^10) data points
+- Maximum 100 billion (10^11) Jacobian elements
+- Detects integer overflow in size calculations
+- Memory estimation warnings (>10GB, >100GB)
+
+.. code-block:: python
+
+   # Example: Excessive data size detection
+   x_huge = np.ones(15_000_000_000)  # 15 billion points
+   # Error: "Data size exceeds maximum allowed (10B points)"
+
+**Bounds Numeric Range**:
+
+- Warns for extreme bound values (absolute value > 1e100)
+- Errors for NaN in bounds
+
+.. code-block:: python
+
+   # Example: Extreme bounds detection
+   bounds = ([0, 0], [1e200, 10])  # Extremely large upper bound
+   # Warning: "Bounds contain extreme values (>1e100)"
+
+**Parameter Value Validation**:
+
+- Warns for extreme initial parameters (abs(p0) > 1e50)
+- Errors for NaN/Inf in initial parameters
+
+.. code-block:: python
+
+   # Example: Invalid parameter detection
+   p0 = [1.0, np.nan, 0.5]
+   # Error: "Initial parameters contain NaN/Inf values"
+
+**Early Fail-Fast**:
+
+Security validation runs before expensive operations to fail fast on
+malformed input that could cause denial-of-service or numerical instability.
 
 Validation Check Reference
 ---------------------------

@@ -8,6 +8,7 @@ Comprehensive guides for using NLSQ effectively in your projects.
 
    migration_scipy
    advanced_features
+   stability
    performance_guide
    large_datasets
    troubleshooting
@@ -40,6 +41,19 @@ Unlock NLSQ's full potential:
 - Numerical stability enhancements
 - Memory management for large datasets
 - Custom loss functions and robust fitting
+
+Numerical Stability
+~~~~~~~~~~~~~~~~~~~
+
+:doc:`stability`
+
+Prevent optimization divergence:
+
+- Stability modes (auto, check, off)
+- Physics applications (XPCS, scattering)
+- Large Jacobian optimization
+- Rescale data options
+- Condition number monitoring
 
 Performance Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~
