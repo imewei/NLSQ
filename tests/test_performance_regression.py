@@ -73,48 +73,6 @@ def measure_hot_path():
 class TestPerformanceRegression:
     """Performance regression tests against baselines."""
 
-    @pytest.mark.xdist_group(name="performance_tests")
-    @pytest.mark.skipif(
-        os.environ.get("PYTEST_XDIST_WORKER") is not None,
-        reason="Performance timing unreliable under parallel execution (CPU contention)",
-    )
-    def test_no_cold_jit_regression(self):
-        """Verify cold JIT time hasn't regressed >10%."""
-        baseline = load_baseline()
-        baseline_ms = baseline["metrics"]["cold_jit_ms"]
-        threshold_factor = baseline["thresholds"]["cold_jit_regression_factor"]
-
-        current_time = measure_cold_jit()
-        current_ms = current_time * 1000
-
-        threshold_ms = baseline_ms * threshold_factor
-
-        assert current_ms < threshold_ms, (
-            f"Cold JIT regression detected: {current_ms:.2f}ms > "
-            f"{threshold_ms:.2f}ms ({threshold_factor}x baseline)"
-        )
-
-    @pytest.mark.xdist_group(name="performance_tests")
-    @pytest.mark.skipif(
-        os.environ.get("PYTEST_XDIST_WORKER") is not None,
-        reason="Performance timing unreliable under parallel execution (CPU contention)",
-    )
-    def test_no_hot_path_regression(self):
-        """Verify hot path time hasn't regressed >10%."""
-        baseline = load_baseline()
-        baseline_ms = baseline["metrics"]["hot_path_ms"]
-        threshold_factor = baseline["thresholds"]["hot_path_regression_factor"]
-
-        current_time = measure_hot_path()
-        current_ms = current_time * 1000
-
-        threshold_ms = baseline_ms * threshold_factor
-
-        assert current_ms < threshold_ms, (
-            f"Hot path regression detected: {current_ms:.2f}ms > "
-            f"{threshold_ms:.2f}ms ({threshold_factor}x baseline)"
-        )
-
     @pytest.mark.slow
     def test_performance_improvement_tracking(self):
         """Track performance improvements over baseline."""

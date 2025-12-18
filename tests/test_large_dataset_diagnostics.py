@@ -266,47 +266,6 @@ class TestSaveDiagnosticsFlag(unittest.TestCase):
                 # (Implementation may vary)
                 pass  # Check based on actual implementation
 
-    @unittest.skip("Performance test - run manually to validate 5-10% speedup claim")
-    def test_save_diagnostics_performance_difference(self):
-        """Benchmark performance difference with save_diagnostics on/off."""
-
-        def model(xdata, a, b, c):
-            return a * jnp.exp(-b * xdata) + c
-
-        np.random.seed(42)
-        n_points = 50_000
-        xdata = jnp.linspace(0, 10, n_points)
-        ydata = 2.0 * jnp.exp(-0.5 * xdata) + 1.0
-
-        # Benchmark without diagnostics
-        config_no_diag = LDMemoryConfig(
-            memory_limit_gb=0.1,
-            save_diagnostics=False,  # Force chunking
-        )
-        fitter_no_diag = LargeDatasetFitter(config=config_no_diag)
-
-        start = time.perf_counter()
-        result1 = fitter_no_diag.fit(model, xdata, ydata, p0=[2.0, 0.5, 1.0])
-        time_no_diag = time.perf_counter() - start
-
-        # Benchmark with diagnostics
-        config_with_diag = LDMemoryConfig(
-            memory_limit_gb=0.1,
-            save_diagnostics=True,  # Force chunking
-        )
-        fitter_with_diag = LargeDatasetFitter(config=config_with_diag)
-
-        start = time.perf_counter()
-        result2 = fitter_with_diag.fit(model, xdata, ydata, p0=[2.0, 0.5, 1.0])
-        time_with_diag = time.perf_counter() - start
-
-        # Should be faster without diagnostics
-        speedup = (time_with_diag - time_no_diag) / time_with_diag * 100
-        print(f"Speedup without diagnostics: {speedup:.1f}%")
-
-        # Expect 5-10% improvement
-        self.assertGreater(speedup, 0, "save_diagnostics=False should be faster")
-
 
 class TestMinSuccessRateThreshold(unittest.TestCase):
     """Test min_success_rate threshold enforcement."""

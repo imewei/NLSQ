@@ -341,48 +341,5 @@ class TestEndToEndValidation(unittest.TestCase):
             curve_fit_large(lambda x, a: a * x, [1, 2, 3], [1, 2], p0=[1.0])
 
 
-class TestPerformanceBenchmarks(unittest.TestCase):
-    """Performance benchmarks for chunked vs non-chunked fitting."""
-
-    @unittest.skip("Performance test - run manually")
-    def test_performance_comparison(self):
-        """Compare performance of chunked vs non-chunked fitting."""
-        import time
-
-        def exponential(x, a, b, c):
-            return a * jnp.exp(-b * x) + c
-
-        # Generate test data
-        sizes = [10_000, 100_000, 500_000]
-        results = {}
-
-        for size in sizes:
-            x = np.linspace(0, 5, size)
-            y = 2.5 * np.exp(-1.3 * x) + 0.1 + np.random.normal(0, 0.01, size)
-
-            # Time regular fit
-            start = time.time()
-            _popt1, _ = curve_fit(exponential, x, y, p0=[1, 1, 0])
-            time_regular = time.time() - start
-
-            # Time chunked fit
-            config = LDMemoryConfig(memory_limit_gb=0.01)
-            fitter = LargeDatasetFitter(config=config)
-            start = time.time()
-            result = fitter.fit(exponential, x, y, p0=[1, 1, 0])
-            time_chunked = time.time() - start
-
-            results[size] = {
-                "regular": time_regular,
-                "chunked": time_chunked,
-                "ratio": time_chunked / time_regular,
-            }
-
-            # Chunked should be within 2x of regular performance
-            self.assertLess(results[size]["ratio"], 2.0)
-
-        print(f"Performance results: {results}")
-
-
 if __name__ == "__main__":
     unittest.main()

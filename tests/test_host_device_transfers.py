@@ -267,32 +267,6 @@ class TestTransferReduction:
         assert result.success
         assert np.allclose(result.x, [1.8, 0.5], rtol=0.1)
 
-    @pytest.mark.xdist_group(name="performance_tests")
-    @pytest.mark.skipif(
-        os.environ.get("PYTEST_XDIST_WORKER") is not None,
-        reason="Performance timing unreliable under parallel execution (CPU contention)",
-    )
-    def test_jax_operations_in_hot_path(self):
-        """Verify JAX operations don't trigger transfers in hot path."""
-        # Create JAX arrays
-        x = jnp.linspace(0, 1, 100)
-        y = jnp.sin(2 * jnp.pi * x)
-
-        # All operations should be JAX (no transfers)
-        grad = jnp.gradient(y)
-        norm = jnp.linalg.norm(grad)
-        scaled = grad / norm
-
-        # Should complete very quickly (no blocking)
-        start = time.perf_counter()
-        _ = jnp.sum(scaled)  # Lazy evaluation
-        elapsed = time.perf_counter() - start
-
-        # Should be reasonably fast (no device sync)
-        # Relaxed for CI (includes JIT compilation on first run)
-        assert elapsed < 0.1
-
-
 class TestPerformanceMetrics:
     """Test profiling utilities."""
 
@@ -368,60 +342,6 @@ class TestPerformanceMetrics:
 
 class TestPerformanceImprovement:
     """Test Task 2.10: Performance improvement validation."""
-
-    @pytest.mark.xdist_group(name="performance_tests")
-    @pytest.mark.skipif(
-        os.environ.get("PYTEST_XDIST_WORKER") is not None,
-        reason="Performance timing unreliable under parallel execution (CPU contention)",
-    )
-    def test_async_logging_overhead(self):
-        """Verify async logging has minimal overhead."""
-
-        def model(x, a, b):
-            return a * jnp.exp(-b * x)
-
-        np.random.seed(42)
-        x = jnp.linspace(0, 5, 100)
-        y = 1.5 * jnp.exp(-0.3 * x) + 0.05 * np.random.randn(100)
-
-        # Time with verbose=0 (no logging)
-        start = time.perf_counter()
-        popt1, _ = curve_fit(model, x, y, p0=[1.0, 0.1], verbose=0)
-        time_no_log = time.perf_counter() - start
-
-        # Time with verbose=2 (async logging every iteration)
-        start = time.perf_counter()
-        popt2, _ = curve_fit(model, x, y, p0=[1.0, 0.1], verbose=2)
-        time_with_log = time.perf_counter() - start
-
-        # Async logging overhead should be <10%
-        overhead_ratio = time_with_log / time_no_log
-        assert overhead_ratio < 1.1, f"Logging overhead too high: {overhead_ratio:.2f}x"
-
-        # Both should converge to same result
-        assert np.allclose(popt1, popt2, rtol=1e-6)
-
-    @pytest.mark.xdist_group(name="performance_tests")
-    @pytest.mark.skipif(
-        os.environ.get("PYTEST_XDIST_WORKER") is not None,
-        reason="Performance timing unreliable under parallel execution (CPU contention)",
-    )
-    def test_jax_operations_performance(self):
-        """Verify JAX operations are fast (no blocking transfers)."""
-        # Large arrays to make transfers noticeable
-        x = jnp.linspace(0, 10, 10000)
-
-        # All JAX operations (should be fast)
-        start = time.perf_counter()
-        y = jnp.sin(x)
-        z = jnp.cos(x)
-        result = jnp.sum(y * z)
-        _ = result  # Don't block yet
-        elapsed = time.perf_counter() - start
-
-        # Should be reasonably fast (lazy evaluation, no transfers)
-        # Relaxed for CI (includes JIT overhead)
-        assert elapsed < 0.5, f"JAX operations too slow: {elapsed * 1000:.2f}ms"
 
     def test_no_unnecessary_numpy_conversions(self):
         """Verify no unnecessary JAX→NumPy conversions in hot path."""

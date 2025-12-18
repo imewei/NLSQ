@@ -228,20 +228,6 @@ class TestValidateCurveFitInputs:
             "p0" in warn.lower() and "bound" in warn.lower() for warn in warnings
         )
 
-    def test_method_invalid_raises(self):
-        """Test invalid method parameter (not supported by validate_curve_fit_inputs)."""
-        # NOTE: validate_curve_fit_inputs doesn't have a 'method' parameter
-        # Method validation happens in curve_fit or least_squares, not here
-        # This test is skipped as it tests non-existent functionality
-        pytest.skip("validate_curve_fit_inputs doesn't validate method parameter")
-
-    def test_method_lm_with_bounds_raises(self):
-        """Test method='lm' with bounds (not supported by validate_curve_fit_inputs)."""
-        # NOTE: validate_curve_fit_inputs doesn't have a 'method' parameter
-        # Method validation happens in curve_fit or least_squares, not here
-        # This test is skipped as it tests non-existent functionality
-        pytest.skip("validate_curve_fit_inputs doesn't validate method parameter")
-
     def test_valid_method_trf(self):
         """Test valid method='trf' passes."""
 

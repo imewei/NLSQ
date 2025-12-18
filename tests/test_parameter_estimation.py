@@ -420,28 +420,6 @@ class TestIntegrationWithCurveFit(unittest.TestCase):
         self.assertAlmostEqual(popt[1], 0.5, delta=0.2)
         self.assertAlmostEqual(popt[2], 1.0, delta=0.3)
 
-    @pytest.mark.skip(reason="p0='auto' may not be implemented yet in curve_fit")
-    def test_curve_fit_auto_vs_manual_p0(self):
-        """Compare curve_fit results with auto vs manual p0."""
-        from nlsq import curve_fit
-
-        def gaussian(x, amp, mu, sigma):
-            return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
-
-        np.random.seed(123)
-        x = np.linspace(-5, 5, 100)
-        y_true = 2 * np.exp(-(x**2) / 2)
-        y = y_true + 0.05 * np.random.randn(len(x))
-
-        # Manual p0
-        popt_manual, _ = curve_fit(gaussian, x, y, p0=[2.0, 0.0, 1.0])
-
-        # Auto p0
-        popt_auto, _ = curve_fit(gaussian, x, y, p0="auto")
-
-        # Should get similar results
-        np.testing.assert_allclose(popt_auto, popt_manual, rtol=0.2)
-
 
 if __name__ == "__main__":
     unittest.main()

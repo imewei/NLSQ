@@ -620,7 +620,9 @@ class TestExceptionHandling:
             dtype=np.float64,
         )
 
-        J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J))
+        # Expect warning about NaN/Inf values
+        with pytest.warns(UserWarning, match="Jacobian contains NaN or Inf"):
+            J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J))
 
         # Should replace NaN/Inf with zeros
         assert issues["has_nan"] is True or issues["has_inf"] is True
@@ -635,7 +637,9 @@ class TestExceptionHandling:
         # Create all-zeros Jacobian
         J = np.zeros((10, 5), dtype=np.float64)
 
-        J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J))
+        # Expect warning about all-zeros Jacobian
+        with pytest.warns(UserWarning, match="Jacobian is all zeros"):
+            J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J))
 
         # Should add perturbation to avoid singularity
         # The perturbation is eps (machine epsilon ~2e-16)

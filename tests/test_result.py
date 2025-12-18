@@ -285,13 +285,6 @@ def test_plot_with_residuals(simple_result):
     plt.close("all")
 
 
-def test_plot_no_matplotlib():
-    """Test plot raises error when matplotlib not available."""
-    # Skip this test - matplotlib mocking is complex and not reliable
-    # The actual error handling is covered by the try/except in plot()
-    pytest.skip("Matplotlib mocking test is unreliable - manual testing required")
-
-
 # ============================================================================
 # Unit Tests - Summary
 # ============================================================================
