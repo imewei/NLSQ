@@ -5,6 +5,7 @@ nlsq.parameter\_normalizer module
 
 .. automodule:: nlsq.parameter_normalizer
    :noindex:
+   :exclude-members: normalization_jacobian
 
 Overview
 --------
@@ -40,6 +41,7 @@ Classes
    :undoc-members:
    :show-inheritance:
    :noindex:
+   :exclude-members: normalization_jacobian
 
 .. autoclass:: NormalizedModelWrapper
    :members:

@@ -5,6 +5,7 @@ nlsq.stability module
 
 .. automodule:: nlsq.stability
    :noindex:
+   :exclude-members: eps, max_float, min_float, condition_threshold, regularization_factor
 
 Overview
 --------
