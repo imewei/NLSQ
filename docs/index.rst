@@ -26,6 +26,7 @@ Key Features
 - **Large Dataset Support**: Automatic chunking and memory management
 - **Advanced Features**: Automatic fallback, smart bounds, numerical stability
 - **Performance Profiling** (v0.3.0): Async logging, transfer analysis, regression gates
+- **Adaptive Hybrid Streaming** (v0.3.0): 4-phase optimizer with parameter normalization
 
 Quick Example
 -------------

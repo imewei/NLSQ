@@ -168,7 +168,7 @@ See [Performance Guide](https://nlsq.readthedocs.io/en/latest/guides/performance
 
 ## Examples Gallery
 
-📂 **[examples/](examples/)** - Complete collection of 32 notebooks & scripts
+📂 **[examples/](examples/)** - Complete collection of 34 notebooks & scripts
 
 ### 🌟 Getting Started (6 notebooks)
 Perfect for first-time users learning NLSQ basics:
@@ -234,13 +234,14 @@ In-depth feature showcases:
 - [Function Library](examples/notebooks/05_feature_demos/function_library_demo.ipynb) - Pre-built fitting functions
 - [Result Enhancements](examples/notebooks/05_feature_demos/result_enhancements_demo.ipynb) - Rich result objects
 
-### 🔄 Streaming & Fault Tolerance (4 notebooks)
+### 🔄 Streaming & Fault Tolerance (5 notebooks)
 Production-ready reliability features:
 
 - [Basic Fault Tolerance](examples/notebooks/06_streaming/01_basic_fault_tolerance.ipynb) - Handle errors gracefully
 - [Checkpoint & Resume](examples/notebooks/06_streaming/02_checkpoint_resume.ipynb) - Save/restore state
 - [Custom Retry Settings](examples/notebooks/06_streaming/03_custom_retry_settings.ipynb) - Configure retries
 - [Diagnostics Interpretation](examples/notebooks/06_streaming/04_interpreting_diagnostics.ipynb) - Understand results
+- [Hybrid Streaming API](examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb) - 4-phase adaptive optimizer (v0.3.0+)
 
 **All examples available as:**
 - 📓 Jupyter notebooks: `examples/notebooks/`
