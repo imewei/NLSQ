@@ -63,7 +63,7 @@ def randomized_svd(
         n_components = min(m, n, 100)
 
     # Ensure we don't request more components than possible
-    n_components = min(n_components, min(m, n))
+    n_components = min(n_components, m, n)
     k = n_components + n_oversamples
 
     # Generate random projection matrix

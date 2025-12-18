@@ -2824,7 +2824,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 # For now, fall back to dense exact solver to maintain correctness
                 st = time.time()
                 svd_output = self.svd_no_bounds(J, d_jnp, f)
-                tree_flatten(svd_output)[0][0].block_until_ready()  # Single sync for timing
+                tree_flatten(svd_output)[0][
+                    0
+                ].block_until_ready()  # Single sync for timing
                 svd_times.append(time.time() - st)
                 J_h = svd_output[0]
 
@@ -2835,7 +2837,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 # Use exact SVD solver (default)
                 st = time.time()
                 svd_output = self.svd_no_bounds(J, d_jnp, f)
-                tree_flatten(svd_output)[0][0].block_until_ready()  # Single sync for timing
+                tree_flatten(svd_output)[0][
+                    0
+                ].block_until_ready()  # Single sync for timing
                 svd_times.append(time.time() - st)
                 J_h = svd_output[0]
 
@@ -2857,9 +2861,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     # CG path: step already computed
                     # For subsequent iterations in inner loop, re-solve with updated alpha
                     if inner_loop_count > 1:
-                        step_h = self.solve_tr_subproblem_cg(
-                            J, f, d_jnp, Delta, alpha
-                        )
+                        step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
                         # No explicit sync needed - JAX async handles it
                     _n_iter = 1  # Dummy value for compatibility
                 else:

@@ -98,8 +98,12 @@ def plot_stability_overhead():
     baseline_time = [0.1 + 0.001 * (m / 1e5) for m in problem_sizes]
 
     # Percentage overhead
-    pct_old = [(oh / bt * 100) for oh, bt in zip(overhead_old, baseline_time)]
-    pct_new = [(oh / bt * 100) for oh, bt in zip(overhead_new, baseline_time)]
+    pct_old = [
+        (oh / bt * 100) for oh, bt in zip(overhead_old, baseline_time, strict=False)
+    ]
+    pct_new = [
+        (oh / bt * 100) for oh, bt in zip(overhead_new, baseline_time, strict=False)
+    ]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle(
@@ -110,9 +114,7 @@ def plot_stability_overhead():
     ax1.loglog(
         problem_sizes, overhead_old, "r-o", linewidth=2, label="OLD (per-iteration)"
     )
-    ax1.loglog(
-        problem_sizes, overhead_new, "g-s", linewidth=2, label="NEW (init-only)"
-    )
+    ax1.loglog(problem_sizes, overhead_new, "g-s", linewidth=2, label="NEW (init-only)")
     ax1.axhline(y=0.01, color="gray", linestyle="--", alpha=0.5, label="0.01s")
     ax1.axhline(y=0.1, color="gray", linestyle="--", alpha=0.5, label="0.1s")
     ax1.set_xlabel("Problem Size (data points)", fontsize=11)
@@ -122,18 +124,18 @@ def plot_stability_overhead():
     ax1.legend(fontsize=10)
 
     # Percentage overhead
-    ax2.semilogx(problem_sizes, pct_old, "r-o", linewidth=2, label="OLD (per-iteration)")
+    ax2.semilogx(
+        problem_sizes, pct_old, "r-o", linewidth=2, label="OLD (per-iteration)"
+    )
     ax2.semilogx(problem_sizes, pct_new, "g-s", linewidth=2, label="NEW (init-only)")
     ax2.axhline(y=1.0, color="orange", linestyle="--", alpha=0.5, label="1% threshold")
-    ax2.axhline(
-        y=10.0, color="red", linestyle="--", alpha=0.5, label="10% threshold"
-    )
+    ax2.axhline(y=10.0, color="red", linestyle="--", alpha=0.5, label="10% threshold")
     ax2.set_xlabel("Problem Size (data points)", fontsize=11)
     ax2.set_ylabel("Stability Overhead (%)", fontsize=11)
     ax2.set_title("Percentage Overhead", fontsize=12)
     ax2.grid(True, alpha=0.3)
     ax2.legend(fontsize=10)
-    ax2.set_ylim([0, max(max(pct_old), max(pct_new)) * 1.2])
+    ax2.set_ylim([0, max(*pct_old, *pct_new) * 1.2])
 
     plt.tight_layout()
     plt.savefig("stability_overhead_comparison.png", dpi=300, bbox_inches="tight")
@@ -161,9 +163,11 @@ def plot_threshold_sensitivity():
     for i, (m, n, label) in enumerate(configs):
         elements = m * n
         for j, threshold in enumerate(thresholds):
-            results[i, j] = 1 if elements <= threshold else 0  # 1 = computed, 0 = skipped
+            results[i, j] = (
+                1 if elements <= threshold else 0
+            )  # 1 = computed, 0 = skipped
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    _fig, ax = plt.subplots(figsize=(10, 6))
     im = ax.imshow(results, cmap="RdYlGn", aspect="auto", vmin=0, vmax=1)
 
     # Set ticks and labels
@@ -198,7 +202,12 @@ def plot_threshold_sensitivity():
 def plot_rescale_impact():
     """Plot impact of data rescaling on convergence."""
     # Simulate different data conditioning scenarios
-    conditions = ["Well-conditioned", "Moderate", "Ill-conditioned", "Very Ill-conditioned"]
+    conditions = [
+        "Well-conditioned",
+        "Moderate",
+        "Ill-conditioned",
+        "Very Ill-conditioned",
+    ]
     condition_numbers = [1e3, 1e6, 1e10, 1e13]
 
     # Estimated iterations with/without rescaling
@@ -209,7 +218,9 @@ def plot_rescale_impact():
 
     # Convergence time (assuming 0.01s per iteration base + overhead)
     time_no_rescale = [0.01 * n for n in iterations_no_rescale]
-    time_with_rescale = [0.01 * n + 0.01 for n in iterations_with_rescale]  # +rescale cost
+    time_with_rescale = [
+        0.01 * n + 0.01 for n in iterations_with_rescale
+    ]  # +rescale cost
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle("Impact of Data Rescaling (rescale_data parameter)", fontsize=14)
@@ -218,8 +229,20 @@ def plot_rescale_impact():
     x = np.arange(len(conditions))
     width = 0.35
 
-    ax1.bar(x - width / 2, iterations_no_rescale, width, label="rescale_data=False", color="steelblue")
-    ax1.bar(x + width / 2, iterations_with_rescale, width, label="rescale_data=True", color="coral")
+    ax1.bar(
+        x - width / 2,
+        iterations_no_rescale,
+        width,
+        label="rescale_data=False",
+        color="steelblue",
+    )
+    ax1.bar(
+        x + width / 2,
+        iterations_with_rescale,
+        width,
+        label="rescale_data=True",
+        color="coral",
+    )
     ax1.set_xlabel("Problem Conditioning", fontsize=11)
     ax1.set_ylabel("Iterations to Convergence", fontsize=11)
     ax1.set_title("Iteration Count", fontsize=12)
@@ -229,13 +252,31 @@ def plot_rescale_impact():
     ax1.grid(True, alpha=0.3, axis="y")
 
     # Add value labels on bars
-    for i, (no_rescale, with_rescale) in enumerate(zip(iterations_no_rescale, iterations_with_rescale)):
-        ax1.text(i - width / 2, no_rescale + 2, str(no_rescale), ha="center", fontsize=9)
-        ax1.text(i + width / 2, with_rescale + 2, str(with_rescale), ha="center", fontsize=9)
+    for i, (no_rescale, with_rescale) in enumerate(
+        zip(iterations_no_rescale, iterations_with_rescale, strict=False)
+    ):
+        ax1.text(
+            i - width / 2, no_rescale + 2, str(no_rescale), ha="center", fontsize=9
+        )
+        ax1.text(
+            i + width / 2, with_rescale + 2, str(with_rescale), ha="center", fontsize=9
+        )
 
     # Time comparison
-    ax2.bar(x - width / 2, time_no_rescale, width, label="rescale_data=False", color="steelblue")
-    ax2.bar(x + width / 2, time_with_rescale, width, label="rescale_data=True", color="coral")
+    ax2.bar(
+        x - width / 2,
+        time_no_rescale,
+        width,
+        label="rescale_data=False",
+        color="steelblue",
+    )
+    ax2.bar(
+        x + width / 2,
+        time_with_rescale,
+        width,
+        label="rescale_data=True",
+        color="coral",
+    )
     ax2.set_xlabel("Problem Conditioning", fontsize=11)
     ax2.set_ylabel("Total Time (seconds)", fontsize=11)
     ax2.set_title("Total Convergence Time", fontsize=12)
@@ -245,9 +286,23 @@ def plot_rescale_impact():
     ax2.grid(True, alpha=0.3, axis="y")
 
     # Add value labels on bars
-    for i, (no_rescale, with_rescale) in enumerate(zip(time_no_rescale, time_with_rescale)):
-        ax2.text(i - width / 2, no_rescale + 0.02, f"{no_rescale:.2f}s", ha="center", fontsize=9)
-        ax2.text(i + width / 2, with_rescale + 0.02, f"{with_rescale:.2f}s", ha="center", fontsize=9)
+    for i, (no_rescale, with_rescale) in enumerate(
+        zip(time_no_rescale, time_with_rescale, strict=False)
+    ):
+        ax2.text(
+            i - width / 2,
+            no_rescale + 0.02,
+            f"{no_rescale:.2f}s",
+            ha="center",
+            fontsize=9,
+        )
+        ax2.text(
+            i + width / 2,
+            with_rescale + 0.02,
+            f"{with_rescale:.2f}s",
+            ha="center",
+            fontsize=9,
+        )
 
     plt.tight_layout()
     plt.savefig("stability_rescale_impact.png", dpi=300, bbox_inches="tight")
