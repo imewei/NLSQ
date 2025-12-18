@@ -115,7 +115,7 @@ Resources
 Project Status
 --------------
 
-**Current Release**: v0.3.0
+**Current Release**: v0.3.1
 
 - Production-ready for scientific computing
 - Active development and maintenance
