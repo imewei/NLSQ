@@ -26,7 +26,7 @@ import jax.numpy as jnp
 
 # Try to use xxhash for faster hashing (10x faster than SHA256)
 try:
-    import xxhash
+    import xxhash  # type: ignore[import-not-found]
 
     HAS_XXHASH = True
 except ImportError:

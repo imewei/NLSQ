@@ -186,10 +186,10 @@ class JAXConfig:
             config.update("jax_compilation_cache_dir", cache_dir)
 
             # Only cache compilations that take at least 1 second
-            min_compile_time = float(
-                os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS", "1")
+            min_compile_time = float(os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS", "1"))
+            config.update(
+                "jax_persistent_cache_min_compile_time_secs", min_compile_time
             )
-            config.update("jax_persistent_cache_min_compile_time_secs", min_compile_time)
 
             logging.debug(f"JAX persistent cache enabled at {cache_dir}")
         except Exception as e:
@@ -808,7 +808,7 @@ def configure_for_large_datasets(
     enable_chunking: bool = True,
     progress_reporting: bool = True,
     mixed_precision_fallback: bool = True,
-    enable_sampling: bool = None,  # Deprecated in v0.2.0
+    enable_sampling: bool | None = None,  # Deprecated in v0.2.0
 ):
     """Configure NLSQ for optimal large dataset performance.
 

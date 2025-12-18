@@ -38,7 +38,7 @@ class InputValidator:
             If False, perform all validation checks.
         """
         self.fast_mode = fast_mode
-        self._function_cache = {}  # Cache function test results
+        self._function_cache: dict[int, bool] = {}  # Cache function test results
 
     def _validate_and_convert_arrays(
         self, xdata: Any, ydata: Any
@@ -65,8 +65,8 @@ class InputValidator:
         n_points : int
             Number of data points
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         # Handle tuple xdata (for multi-dimensional fitting)
         if isinstance(xdata, tuple):
@@ -166,8 +166,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         # Check shapes match
         if len(ydata) != n_points:
@@ -205,8 +205,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         # Check xdata for finite values
         if isinstance(xdata, tuple):
@@ -245,8 +245,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         if p0 is None:
             return errors, warnings_list
@@ -288,8 +288,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         if bounds is None:
             return errors, warnings_list
@@ -341,8 +341,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         if sigma is None:
             return errors, warnings_list
@@ -378,8 +378,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         # Only check for non-tuple xdata
         if isinstance(xdata, tuple):
@@ -427,7 +427,7 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        warnings = []
+        warnings: list[str] = []
 
         # Check if all y values are identical
         try:
@@ -472,8 +472,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         try:
             # Cache function test results to avoid repeated calls
@@ -528,7 +528,7 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        warnings = []
+        warnings: list[str] = []
 
         # Check for duplicates in x
         if not isinstance(xdata, tuple) and hasattr(xdata, "ndim") and xdata.ndim == 1:
@@ -598,8 +598,8 @@ class InputValidator:
         ydata_clean : np.ndarray
             Cleaned and validated ydata
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         # Step 1: Validate and convert arrays
         arr_errors, arr_warnings, xdata, ydata, n_points = (
@@ -695,7 +695,7 @@ class InputValidator:
         x0 : np.ndarray
             Converted x0 array
         """
-        errors = []
+        errors: list[str] = []
 
         # Convert x0
         try:
@@ -729,7 +729,7 @@ class InputValidator:
         errors : list
             List of error messages
         """
-        errors = []
+        errors: list[str] = []
         valid_methods = ["trf", "dogbox", "lm"]
         if method not in valid_methods:
             errors.append(f"method must be one of {valid_methods}, got {method}")
@@ -756,8 +756,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         # Check positive
         if ftol <= 0:
@@ -794,8 +794,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         if max_nfev is not None:
             if max_nfev <= 0:
@@ -826,7 +826,7 @@ class InputValidator:
         errors : list
             List of error messages
         """
-        errors = []
+        errors: list[str] = []
 
         if bounds is None:
             return errors
@@ -876,8 +876,8 @@ class InputValidator:
         warnings : list
             List of warning messages
         """
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         try:
             result = fun(x0)
@@ -1012,7 +1012,9 @@ class InputValidator:
                 lb_arr = np.asarray(lb)
                 # Check for extreme values (excluding inf which is valid)
                 finite_lb = lb_arr[np.isfinite(lb_arr)]
-                if len(finite_lb) > 0 and np.any(np.abs(finite_lb) > max_bound_magnitude):
+                if len(finite_lb) > 0 and np.any(
+                    np.abs(finite_lb) > max_bound_magnitude
+                ):
                     warnings_list.append(
                         f"Lower bounds contain very large values (|lb| > {max_bound_magnitude:.0e}). "
                         "This may cause numerical issues."
@@ -1021,7 +1023,9 @@ class InputValidator:
             if ub is not None:
                 ub_arr = np.asarray(ub)
                 finite_ub = ub_arr[np.isfinite(ub_arr)]
-                if len(finite_ub) > 0 and np.any(np.abs(finite_ub) > max_bound_magnitude):
+                if len(finite_ub) > 0 and np.any(
+                    np.abs(finite_ub) > max_bound_magnitude
+                ):
                     warnings_list.append(
                         f"Upper bounds contain very large values (|ub| > {max_bound_magnitude:.0e}). "
                         "This may cause numerical issues."
@@ -1127,7 +1131,9 @@ class InputValidator:
         warnings_list: list[str] = []
 
         # Check array size limits
-        size_errors, size_warnings = self._validate_array_size_limits(n_points, n_params)
+        size_errors, size_warnings = self._validate_array_size_limits(
+            n_points, n_params
+        )
         errors.extend(size_errors)
         warnings_list.extend(size_warnings)
 
@@ -1187,8 +1193,8 @@ class InputValidator:
         x0_clean : np.ndarray
             Cleaned initial guess
         """
-        errors = []
-        warnings_list = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         # Step 1: Validate and convert x0
         x0_errors, x0 = self._validate_x0_array(x0)

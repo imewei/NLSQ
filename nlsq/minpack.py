@@ -351,8 +351,11 @@ def curve_fit(
                     )
 
                 xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
-                    xdata, ydata, p0, stability_report=stability_report,
-                    rescale_data=rescale_data
+                    xdata,
+                    ydata,
+                    p0,
+                    stability_report=stability_report,
+                    rescale_data=rescale_data,
                 )
 
                 # Update data and parameters

@@ -53,7 +53,7 @@ def benchmark_svd_threshold(
         max_jacobian_elements_for_svd=m * n + 1  # Force SVD
     )
     start = time.perf_counter()
-    J_fixed_svd, issues_svd = guard_with_svd.check_and_fix_jacobian(J)
+    _J_fixed_svd, issues_svd = guard_with_svd.check_and_fix_jacobian(J)
     time_with_svd = time.perf_counter() - start
 
     # Benchmark with SVD skip
@@ -61,7 +61,7 @@ def benchmark_svd_threshold(
         max_jacobian_elements_for_svd=m * n - 1  # Force skip
     )
     start = time.perf_counter()
-    J_fixed_skip, issues_skip = guard_skip_svd.check_and_fix_jacobian(J)
+    _J_fixed_skip, issues_skip = guard_skip_svd.check_and_fix_jacobian(J)
     time_skip_svd = time.perf_counter() - start
 
     return {
@@ -201,15 +201,15 @@ def print_benchmark_results():
         shape = f"{result['m']:,} × {result['n']}"
         elements = f"{result['elements']:,}"
         svd_time = (
-            f"{result['time_with_svd']*1000:.2f}ms"
+            f"{result['time_with_svd'] * 1000:.2f}ms"
             if result["svd_computed"]
             else "N/A"
         )
-        skip_time = f"{result['time_skip_svd']*1000:.2f}ms"
-        speedup = (
-            f"{result['speedup']:.1f}x" if result["speedup"] != np.inf else "N/A"
+        skip_time = f"{result['time_skip_svd'] * 1000:.2f}ms"
+        speedup = f"{result['speedup']:.1f}x" if result["speedup"] != np.inf else "N/A"
+        print(
+            f"{shape:<20} {elements:<15} {svd_time:<12} {skip_time:<12} {speedup:<10}"
         )
-        print(f"{shape:<20} {elements:<15} {svd_time:<12} {skip_time:<12} {speedup:<10}")
     print()
 
     # Benchmark 2: Stability Mode Overhead

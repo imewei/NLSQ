@@ -835,7 +835,7 @@ def check_problem_stability(
 
     # Check 5: Collinearity (for multidimensional data)
     has_collinearity = False
-    collinear_pairs = []
+    collinear_pairs: list[tuple[int, int, float]] = []
     if xdata.ndim == 2 and xdata.shape[1] > 1:
         has_collinearity, collinear_pairs = detect_collinearity(xdata)
         if has_collinearity:
@@ -934,8 +934,8 @@ def apply_automatic_fixes(
     if p0 is not None:
         p0 = np.asarray(p0, dtype=np.float64)
 
-    applied_fixes = []
-    fix_info = {
+    applied_fixes: list[str] = []
+    fix_info: dict[str, float | list[str]] = {
         "x_scale": 1.0,
         "y_scale": 1.0,
         "x_offset": 0.0,

@@ -291,8 +291,13 @@ class TestXPCSDivergenceRegression:
 
         p0 = [1.0, 0.25, 80.0]
         popt, _ = curve_fit(
-            self.g2_model, tau, y_noisy, p0=p0,
-            stability="auto", rescale_data=False, maxfev=1000
+            self.g2_model,
+            tau,
+            y_noisy,
+            p0=p0,
+            stability="auto",
+            rescale_data=False,
+            maxfev=1000,
         )
 
         # Should converge and preserve physical units
@@ -315,8 +320,13 @@ class TestXPCSDivergenceRegression:
 
         p0 = [1.0, 0.25, 80.0]
         popt, _ = curve_fit(
-            self.g2_model, tau, y_noisy, p0=p0,
-            stability="auto", rescale_data=True, maxfev=1000
+            self.g2_model,
+            tau,
+            y_noisy,
+            p0=p0,
+            stability="auto",
+            rescale_data=True,
+            maxfev=1000,
         )
 
         # Should converge (parameters may be rescaled)
@@ -341,8 +351,13 @@ class TestXPCSDivergenceRegression:
 
         p0 = [1.0, 0.25, 80.0]
         popt, _ = curve_fit(
-            self.g2_model, tau, y_noisy, p0=p0,
-            stability="auto", rescale_data=False, maxfev=1000
+            self.g2_model,
+            tau,
+            y_noisy,
+            p0=p0,
+            stability="auto",
+            rescale_data=False,
+            maxfev=1000,
         )
 
         # Should still converge with larger dataset
@@ -362,8 +377,13 @@ class TestXPCSDivergenceRegression:
         # Poor initial guess (2x off on each parameter)
         p0 = [0.5, 0.6, 200.0]
         popt, _ = curve_fit(
-            self.g2_model, tau, y_noisy, p0=p0,
-            stability="auto", rescale_data=False, maxfev=2000
+            self.g2_model,
+            tau,
+            y_noisy,
+            p0=p0,
+            stability="auto",
+            rescale_data=False,
+            maxfev=2000,
         )
 
         # Should still converge reasonably
@@ -391,9 +411,12 @@ class TestMaxJacobianElementsForSVD:
 
         # With custom threshold (this tests the parameter path)
         popt, _ = curve_fit(
-            self.linear_model, x, y, p0=[2.0, 1.0],
+            self.linear_model,
+            x,
+            y,
+            p0=[2.0, 1.0],
             stability="auto",
-            max_jacobian_elements_for_svd=1000  # Very low threshold
+            max_jacobian_elements_for_svd=1000,  # Very low threshold
         )
 
         assert abs(popt[0] - 2.0) < 0.1
@@ -426,7 +449,7 @@ class TestMaxJacobianElementsForSVD:
         J_medium = np.random.randn(2000, 4000).astype(np.float64)
 
         guard = NumericalStabilityGuard(max_jacobian_elements_for_svd=10_000_000)
-        J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J_medium))
+        _, issues = guard.check_and_fix_jacobian(jnp.array(J_medium))
 
         # SVD SHOULD be called for medium matrix
         assert issues["svd_skipped"] is False
@@ -445,7 +468,7 @@ class TestMaxJacobianElementsForSVD:
         J_at_threshold = np.random.randn(100, 100).astype(np.float64)
         assert J_at_threshold.shape[0] * J_at_threshold.shape[1] == 10000
 
-        J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J_at_threshold))
+        _, issues = guard.check_and_fix_jacobian(jnp.array(J_at_threshold))
 
         # Should skip SVD when AT threshold (> check, so exactly at is not skipped)
         # The code uses > not >=, so exactly at threshold should compute SVD
@@ -461,7 +484,7 @@ class TestMaxJacobianElementsForSVD:
         # Just at threshold: 100 x 100 = 10,000 elements
         J_below = np.random.randn(100, 100).astype(np.float64)
 
-        J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J_below))
+        _, issues = guard.check_and_fix_jacobian(jnp.array(J_below))
 
         # Should compute SVD when below threshold
         assert issues["svd_skipped"] is False
@@ -479,7 +502,7 @@ class TestMaxJacobianElementsForSVD:
         J = np.random.randn(50, 40).astype(np.float64)  # 2000 elements
         assert J.shape[0] * J.shape[1] == 2000
 
-        J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J))
+        _, issues = guard.check_and_fix_jacobian(jnp.array(J))
         assert issues["svd_skipped"] is True
         assert "2,000" in issues["reason"]  # Verify element count in message
 
@@ -500,8 +523,7 @@ class TestNumericalAccuracyRegression:
         y = a_true * x + b_true + 0.01 * np.random.randn(100)
 
         popt, _ = curve_fit(
-            lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0],
-            stability="auto"
+            lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="auto"
         )
 
         # High precision for linear fit
@@ -519,13 +541,12 @@ class TestNumericalAccuracyRegression:
         def exp_model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
 
-        popt, _ = curve_fit(
-            exp_model, x, y, p0=[3.0, 0.5, 0.5],
-            stability="auto"
-        )
+        popt, _ = curve_fit(exp_model, x, y, p0=[3.0, 0.5, 0.5], stability="auto")
 
         assert abs(popt[0] - a_true) < 0.1, f"Amplitude error: {abs(popt[0] - a_true)}"
-        assert abs(popt[1] - b_true) < 0.05, f"Decay rate error: {abs(popt[1] - b_true)}"
+        assert abs(popt[1] - b_true) < 0.05, (
+            f"Decay rate error: {abs(popt[1] - b_true)}"
+        )
         assert abs(popt[2] - c_true) < 0.1, f"Offset error: {abs(popt[2] - c_true)}"
 
     def test_gaussian_fit_accuracy(self):
@@ -534,20 +555,19 @@ class TestNumericalAccuracyRegression:
         # Known solution: y = 5.0 * exp(-((x - 3.0)^2) / (2 * 1.5^2))
         A_true, mu_true, sigma_true = 5.0, 3.0, 1.5
         x = np.linspace(0, 10, 200)
-        y = A_true * np.exp(-((x - mu_true) ** 2) / (2 * sigma_true ** 2))
+        y = A_true * np.exp(-((x - mu_true) ** 2) / (2 * sigma_true**2))
         y += 0.05 * np.random.randn(200)
 
         def gaussian(x, A, mu, sigma):
-            return A * jnp.exp(-((x - mu) ** 2) / (2 * sigma ** 2))
+            return A * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
-        popt, _ = curve_fit(
-            gaussian, x, y, p0=[5.0, 3.0, 1.5],
-            stability="auto"
-        )
+        popt, _ = curve_fit(gaussian, x, y, p0=[5.0, 3.0, 1.5], stability="auto")
 
         assert abs(popt[0] - A_true) < 0.2, f"Amplitude error: {abs(popt[0] - A_true)}"
         assert abs(popt[1] - mu_true) < 0.1, f"Mean error: {abs(popt[1] - mu_true)}"
-        assert abs(popt[2] - sigma_true) < 0.2, f"Sigma error: {abs(popt[2] - sigma_true)}"
+        assert abs(popt[2] - sigma_true) < 0.2, (
+            f"Sigma error: {abs(popt[2] - sigma_true)}"
+        )
 
     def test_polynomial_fit_accuracy(self):
         """Test polynomial fit produces accurate parameters."""
@@ -555,15 +575,12 @@ class TestNumericalAccuracyRegression:
         # Known solution: y = 0.5x^2 - 2x + 3
         a_true, b_true, c_true = 0.5, -2.0, 3.0
         x = np.linspace(-5, 5, 100)
-        y = a_true * x ** 2 + b_true * x + c_true + 0.1 * np.random.randn(100)
+        y = a_true * x**2 + b_true * x + c_true + 0.1 * np.random.randn(100)
 
         def poly2(x, a, b, c):
-            return a * x ** 2 + b * x + c
+            return a * x**2 + b * x + c
 
-        popt, _ = curve_fit(
-            poly2, x, y, p0=[0.5, -2.0, 3.0],
-            stability="auto"
-        )
+        popt, _ = curve_fit(poly2, x, y, p0=[0.5, -2.0, 3.0], stability="auto")
 
         assert abs(popt[0] - a_true) < 0.02
         assert abs(popt[1] - b_true) < 0.1
@@ -580,10 +597,7 @@ class TestExceptionHandling:
         guard = NumericalStabilityGuard()
 
         # Create a matrix with extreme values that might cause numerical issues
-        J = np.array([
-            [1e-100, 1e100],
-            [1e100, 1e-100]
-        ], dtype=np.float64)
+        J = np.array([[1e-100, 1e100], [1e100, 1e-100]], dtype=np.float64)
 
         # Should handle gracefully without crashing
         J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J))
@@ -601,11 +615,10 @@ class TestExceptionHandling:
         guard = NumericalStabilityGuard()
 
         # Create Jacobian with NaN and Inf
-        J = np.array([
-            [1.0, np.nan, 2.0],
-            [np.inf, 3.0, 4.0],
-            [5.0, -np.inf, 6.0]
-        ], dtype=np.float64)
+        J = np.array(
+            [[1.0, np.nan, 2.0], [np.inf, 3.0, 4.0], [5.0, -np.inf, 6.0]],
+            dtype=np.float64,
+        )
 
         J_fixed, issues = guard.check_and_fix_jacobian(jnp.array(J))
 
@@ -637,8 +650,7 @@ class TestExceptionHandling:
         y = np.array([1.0, 3.0, 5.0])
 
         popt, _ = curve_fit(
-            lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0],
-            stability="auto"
+            lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="auto"
         )
 
         # Should still produce reasonable fit

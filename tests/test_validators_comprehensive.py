@@ -468,7 +468,7 @@ class TestSecurityValidation:
 
     def test_array_size_limits_normal(self):
         """Test normal array sizes pass validation."""
-        errors, warnings = self.validator._validate_array_size_limits(
+        errors, _ = self.validator._validate_array_size_limits(
             n_points=1000, n_params=5
         )
         assert len(errors) == 0
@@ -487,7 +487,7 @@ class TestSecurityValidation:
     def test_array_size_limits_exceeds_max(self):
         """Test exceeding max array size produces error."""
         # 100B points exceeds 10B limit
-        errors, warnings = self.validator._validate_array_size_limits(
+        errors, _ = self.validator._validate_array_size_limits(
             n_points=100_000_000_000, n_params=10
         )
         assert len(errors) > 0
@@ -495,9 +495,7 @@ class TestSecurityValidation:
 
     def test_array_size_limits_negative(self):
         """Test negative sizes produce errors."""
-        errors, warnings = self.validator._validate_array_size_limits(
-            n_points=-1, n_params=5
-        )
+        errors, _ = self.validator._validate_array_size_limits(n_points=-1, n_params=5)
         assert len(errors) > 0
         assert any("negative" in e.lower() for e in errors)
 
@@ -519,14 +517,14 @@ class TestSecurityValidation:
     def test_bounds_with_nan_produces_error(self):
         """Test NaN in bounds produces error."""
         bounds = ([np.nan, -100], [100, 100])
-        errors, warnings = self.validator._validate_bounds_numeric_range(bounds)
+        errors, _ = self.validator._validate_bounds_numeric_range(bounds)
         assert len(errors) > 0
         assert any("nan" in e.lower() for e in errors)
 
     def test_bounds_with_inf_allowed(self):
         """Test infinite bounds are allowed (common use case)."""
         bounds = ([-np.inf, -100], [np.inf, 100])
-        errors, warnings = self.validator._validate_bounds_numeric_range(bounds)
+        errors, _ = self.validator._validate_bounds_numeric_range(bounds)
         assert len(errors) == 0
 
     def test_parameter_values_normal(self):
@@ -554,7 +552,7 @@ class TestSecurityValidation:
 
     def test_security_constraints_combined(self):
         """Test combined security validation."""
-        errors, warnings = self.validator.validate_security_constraints(
+        errors, _ = self.validator.validate_security_constraints(
             n_points=1000,
             n_params=5,
             bounds=([-100, -100, -100, -100, -100], [100, 100, 100, 100, 100]),
@@ -572,14 +570,16 @@ class TestSecurityValidation:
         ydata = np.array([2, 4, 6])
 
         # Normal case should pass
-        errors, warnings, _, _ = self.validator.validate_curve_fit_inputs(
+        errors, _, _, _ = self.validator.validate_curve_fit_inputs(
             f=model,
             xdata=xdata,
             ydata=ydata,
             p0=[1.0, 1.0],
         )
         # No security errors expected
-        security_errors = [e for e in errors if "exceeds" in e.lower() or "negative" in e.lower()]
+        security_errors = [
+            e for e in errors if "exceeds" in e.lower() or "negative" in e.lower()
+        ]
         assert len(security_errors) == 0
 
 
