@@ -460,7 +460,7 @@ def curve_fit_large(
 
         # Convert to tuple format for backward compatibility
         popt = result_dict['x']
-        pcov = result_dict.get('pcov', np.eye(len(p0)) * np.inf)
+        pcov = result_dict.get('pcov', np.full((len(p0), len(p0)), np.inf))
 
         return popt, pcov
 

@@ -1514,7 +1514,7 @@ class CurveFit:
         result["model"] = f
         result["xdata"] = xdata
         result["ydata"] = ydata
-        result["pcov"] = result_dict.get("pcov", np.eye(n) * np.inf)
+        result["pcov"] = result_dict.get("pcov", np.full((n, n), np.inf))
 
         return result
 
