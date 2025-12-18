@@ -2,7 +2,7 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
-[![NLSQ Version](https://img.shields.io/badge/nlsq-0.3.1+-orange.svg)](https://github.com/imewei/NLSQ)
+[![NLSQ Version](https://img.shields.io/badge/nlsq-0.3.2+-orange.svg)](https://github.com/imewei/NLSQ)
 
 > **⚠️ v0.2.0 Update**: Notebooks updated for NLSQ v0.2.0 with streaming optimization replacing subsampling for zero accuracy loss. See [MIGRATION_V0.2.0.md](../MIGRATION_V0.2.0.md) for details.
 
@@ -486,5 +486,5 @@ If you use NLSQ in your research, please cite:
 ---
 
 <p align="center">
-<i>Last updated: 2025-12-18 | NLSQ v0.3.1</i>
+<i>Last updated: 2025-12-18 | NLSQ v0.3.2</i>
 </p>
