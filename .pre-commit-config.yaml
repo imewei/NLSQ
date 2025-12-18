@@ -1,8 +1,7 @@
 # Pre-commit configuration
-# Updated: 2025-11-19
-# Python 3.13.7, uv package manager
+# Updated: 2025-12-17
+# Python 3.13, uv package manager
 # Aligned with pyproject.toml and uv.lock
-# See REQUIREMENTS.md for dependency management strategy
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -29,7 +28,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.5  # Aligned with local ruff 0.14.5 and pyproject.toml >=0.14.0
+    rev: v0.13.1  # Aligned with local ruff 0.13.1 and pyproject.toml >=0.13.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]

@@ -1,11 +1,9 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2025-11-19
+# Updated: 2025-12-17
 # Requires: Python 3.12+ (tested on 3.13), NumPy 2.0+, JAX 0.8.0
 # Dependencies managed via pyproject.toml[docs]
-# Uses uv for fast, reproducible builds
 #
 # Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
-# All Sphinx warnings have been resolved as of 2025-11-16
 
 version: 2
 
@@ -18,9 +16,7 @@ build:
   jobs:
     pre_build:
       - echo "Building NLSQ documentation..."
-      - echo "This build requires NumPy 2.0+ (breaking change from 1.x), JAX 0.8.0"
-      - echo "uv not required on RTD builders; using pip-installed deps"
-      - echo "See REQUIREMENTS.md for dependency details"
+      - echo "This build requires NumPy 2.0+, JAX 0.8.0"
     post_build:
       - echo "Documentation build complete"
 
