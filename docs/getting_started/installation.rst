@@ -10,7 +10,7 @@ Quick Start
 
 For most users, the simplest installation method is:
 
-**Linux**::
+**Linux (using pip)**::
 
     # For CPU-only (basic features)
     pip install nlsq "jax[cpu]==0.8.0"
@@ -24,13 +24,32 @@ For most users, the simplest installation method is:
     # With all advanced features (recommended)
     pip install nlsq[all] "jax[cpu]==0.8.0"
 
-**macOS/Windows**::
+**Linux (using uv - recommended, faster)**::
+
+    # For CPU-only (basic features)
+    uv pip install nlsq "jax[cpu]==0.8.0"
+
+    # For GPU with system CUDA 12 (best performance)
+    uv pip install nlsq "jax[cuda12-local]==0.8.0"
+
+    # With all advanced features (recommended)
+    uv pip install nlsq[all] "jax[cpu]==0.8.0"
+
+**macOS/Windows (using pip)**::
 
     # CPU-only (GPU not supported)
     pip install nlsq "jax[cpu]==0.8.0"
 
     # With all advanced features (recommended)
     pip install nlsq[all] "jax[cpu]==0.8.0"
+
+**macOS/Windows (using uv)**::
+
+    # CPU-only (GPU not supported)
+    uv pip install nlsq "jax[cpu]==0.8.0"
+
+    # With all advanced features (recommended)
+    uv pip install nlsq[all] "jax[cpu]==0.8.0"
 
 Installation Options
 --------------------
@@ -119,7 +138,7 @@ Linux (Recommended Platform)
 
 NLSQ works best on Linux systems with full JAX support.
 
-**CPU-only installation:**
+**CPU-only installation (pip):**
 
 .. code-block:: bash
 
@@ -129,6 +148,20 @@ NLSQ works best on Linux systems with full JAX support.
 
     # Install NLSQ with CPU support
     pip install nlsq "jax[cpu]==0.8.0"
+
+    # Verify installation
+    python -c "import nlsq; print(f'NLSQ {nlsq.__version__} installed successfully')"
+
+**CPU-only installation (uv - faster):**
+
+.. code-block:: bash
+
+    # Create virtual environment
+    uv venv nlsq-env
+    source nlsq-env/bin/activate
+
+    # Install NLSQ with CPU support
+    uv pip install nlsq "jax[cpu]==0.8.0"
 
     # Verify installation
     python -c "import nlsq; print(f'NLSQ {nlsq.__version__} installed successfully')"
@@ -145,11 +178,15 @@ NLSQ works best on Linux systems with full JAX support.
     python -m venv nlsq-env
     source nlsq-env/bin/activate
 
+    # Using pip:
     # Option 1: System CUDA 12 (best performance)
     pip install nlsq "jax[cuda12-local]==0.8.0"
 
     # Option 2: Bundled CUDA 12 (no system CUDA needed)
     pip install nlsq "jax[cuda12]==0.8.0"
+
+    # Using uv (faster):
+    uv pip install nlsq "jax[cuda12-local]==0.8.0"
 
     # Verify GPU access
     python -c "import jax; print(f'JAX devices: {jax.devices()}')"
@@ -227,11 +264,13 @@ Development Installation
 
 For contributors and advanced users who want to modify NLSQ:
 
+**Using pip:**
+
 .. code-block:: bash
 
     # Clone repository
     git clone https://github.com/imewei/NLSQ.git
-    cd nlsq
+    cd NLSQ
 
     # Create development environment
     python -m venv venv
@@ -244,7 +283,28 @@ For contributors and advanced users who want to modify NLSQ:
     pre-commit install
 
     # Run tests to verify installation
-    python -m unittest discover tests -p "test*.py"
+    pytest
+
+**Using uv (recommended - faster):**
+
+.. code-block:: bash
+
+    # Clone repository
+    git clone https://github.com/imewei/NLSQ.git
+    cd NLSQ
+
+    # Create development environment
+    uv venv venv
+    source venv/bin/activate
+
+    # Install in development mode with all extras
+    uv pip install -e ".[dev,test,docs]"
+
+    # Install pre-commit hooks (recommended)
+    pre-commit install
+
+    # Run tests to verify installation
+    pytest
 
 Docker Installation
 -------------------

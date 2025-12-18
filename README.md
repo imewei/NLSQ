@@ -522,19 +522,21 @@ from nlsq import curve_fit
 import jax.numpy as jnp
 import numpy as np
 
+
 # Define a model function
 def exponential(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 # Generate data with challenging characteristics
 x = np.linspace(0, 1e6, 1000)  # Large x-range can cause ill-conditioning
 y = 2.5 * np.exp(-0.5 * x) + 1.0
 
 # Option 1: stability='check' - warn about issues but don't fix
-popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability='check')
+popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability="check")
 
 # Option 2: stability='auto' - automatically detect and fix issues (recommended)
-popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability='auto')
+popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability="auto")
 
 # Option 3: stability=False - disable stability checks (default)
 popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability=False)
@@ -562,9 +564,11 @@ For physics applications where data must maintain physical units:
 ```python
 # Preserve physical units (don't rescale time delays, scattering vectors, etc.)
 popt, pcov = curve_fit(
-    g2_model, tau, y,
+    g2_model,
+    tau,
+    y,
     p0=[1.0, 0.3, 100.0],
-    stability='auto',
+    stability="auto",
     rescale_data=False,  # Preserve physical units
 )
 ```
@@ -576,9 +580,11 @@ For large datasets (>10M Jacobian elements), SVD computation is automatically sk
 ```python
 # Custom SVD threshold (default: 10M elements)
 popt, pcov = curve_fit(
-    model, x_large, y_large,
+    model,
+    x_large,
+    y_large,
     p0=p0,
-    stability='auto',
+    stability="auto",
     max_jacobian_elements_for_svd=5_000_000,  # Skip SVD above 5M elements
 )
 ```
@@ -863,8 +869,14 @@ Some standouts:
 
 #### Linux (CPU Only)
 
+**Using pip:**
 ```bash
 pip install nlsq "jax[cpu]==0.8.0"
+```
+
+**Using uv (recommended - faster):**
+```bash
+uv pip install nlsq "jax[cpu]==0.8.0"
 ```
 
 #### Linux (GPU Acceleration - Recommended) ⚡
@@ -885,7 +897,7 @@ This single command:
 - Installs GPU-enabled JAX with CUDA 12 support
 - Verifies GPU detection automatically
 
-**Option 2: Manual Install**
+**Option 2: Manual Install (pip)**
 
 ```bash
 # Step 1: Uninstall CPU-only version
@@ -899,10 +911,25 @@ python -c "import jax; print('Devices:', jax.devices())"
 # Expected: [cuda(id=0)] instead of [CpuDevice(id=0)]
 ```
 
+**Option 3: Manual Install (uv)**
+
+```bash
+# Step 1: Uninstall CPU-only version
+uv pip uninstall jax jaxlib
+
+# Step 2: Install JAX with CUDA support
+uv pip install "jax[cuda12-local]==0.8.0"
+
+# Step 3: Verify GPU detection
+python -c "import jax; print('Devices:', jax.devices())"
+```
+
 **Alternative**: For systems without CUDA installed, use bundled CUDA (larger download):
 
 ```bash
 pip install "jax[cuda12]==0.8.0"
+# or with uv:
+uv pip install "jax[cuda12]==0.8.0"
 ```
 
 #### Windows & macOS
@@ -910,18 +937,30 @@ pip install "jax[cuda12]==0.8.0"
 ```bash
 # CPU only (GPU not supported natively)
 pip install nlsq "jax[cpu]==0.8.0"
+# or with uv:
+uv pip install nlsq "jax[cpu]==0.8.0"
 ```
 
 **Windows GPU Users**: Use WSL2 (Windows Subsystem for Linux) and follow the Linux GPU installation instructions above.
 
 #### Development Installation
 
+**Using pip:**
 ```bash
 git clone https://github.com/imewei/NLSQ.git
 cd NLSQ
 pip install -e ".[dev,test,docs]"
+```
 
-# For GPU support in development
+**Using uv (recommended - faster):**
+```bash
+git clone https://github.com/imewei/NLSQ.git
+cd NLSQ
+uv pip install -e ".[dev,test,docs]"
+```
+
+For GPU support in development:
+```bash
 make install-jax-gpu
 ```
 
