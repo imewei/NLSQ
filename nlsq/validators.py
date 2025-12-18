@@ -613,6 +613,16 @@ class InputValidator:
         # Step 2: Estimate number of parameters
         n_params = self._estimate_n_params(f, p0)
 
+        # Step 2.5: Security validation (array size limits, bounds ranges)
+        security_errors, security_warnings = self.validate_security_constraints(
+            n_points, n_params, bounds, p0
+        )
+        errors.extend(security_errors)
+        warnings_list.extend(security_warnings)
+        if security_errors:
+            # Return early on critical security errors
+            return errors, warnings_list, xdata, ydata
+
         # Step 3: Validate data shapes
         shape_errors, shape_warnings = self._validate_data_shapes(
             n_points, ydata, n_params
@@ -883,6 +893,255 @@ class InputValidator:
             errors.append(f"Cannot evaluate function at x0: {e}")
 
         return errors, warnings
+
+    # =========================================================================
+    # Security-focused validation methods
+    # =========================================================================
+
+    def _validate_array_size_limits(
+        self,
+        n_points: int,
+        n_params: int,
+        max_data_points: int = 10_000_000_000,  # 10 billion
+        max_jacobian_elements: int = 100_000_000_000,  # 100 billion
+    ) -> tuple[list[str], list[str]]:
+        """Validate array sizes to prevent memory exhaustion and integer overflow.
+
+        This is a security-focused check to prevent denial-of-service via
+        excessive memory allocation or integer overflow in Jacobian computation.
+
+        Parameters
+        ----------
+        n_points : int
+            Number of data points
+        n_params : int
+            Number of parameters
+        max_data_points : int, default 10_000_000_000
+            Maximum allowed data points (10 billion)
+        max_jacobian_elements : int, default 100_000_000_000
+            Maximum allowed Jacobian elements (100 billion)
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors: list[str] = []
+        warnings_list: list[str] = []
+
+        # Check data point limit
+        if n_points > max_data_points:
+            errors.append(
+                f"Dataset size ({n_points:,} points) exceeds maximum allowed "
+                f"({max_data_points:,} points). This limit prevents memory exhaustion."
+            )
+
+        if n_points < 0:
+            errors.append(f"Invalid negative data point count: {n_points}")
+
+        if n_params < 0:
+            errors.append(f"Invalid negative parameter count: {n_params}")
+
+        # Check for potential integer overflow in Jacobian size calculation
+        # Jacobian has shape (n_points, n_params)
+        try:
+            jacobian_elements = n_points * n_params
+            if jacobian_elements > max_jacobian_elements:
+                errors.append(
+                    f"Jacobian size ({n_points:,} x {n_params:,} = {jacobian_elements:,} elements) "
+                    f"exceeds maximum allowed ({max_jacobian_elements:,} elements). "
+                    "Consider using streaming optimization or reducing dataset size."
+                )
+        except OverflowError:
+            errors.append(
+                f"Integer overflow computing Jacobian size: {n_points} x {n_params}. "
+                "Dataset is too large."
+            )
+
+        # Memory estimation warning (assuming float64)
+        estimated_memory_gb = (n_points * n_params * 8) / (1024**3)
+        if estimated_memory_gb > 100:
+            warnings_list.append(
+                f"Estimated Jacobian memory usage: {estimated_memory_gb:.1f} GB. "
+                "Consider using streaming optimization."
+            )
+        elif estimated_memory_gb > 10:
+            warnings_list.append(
+                f"Large Jacobian estimated at {estimated_memory_gb:.1f} GB memory."
+            )
+
+        return errors, warnings_list
+
+    def _validate_bounds_numeric_range(
+        self,
+        bounds: tuple | None,
+        max_bound_magnitude: float = 1e100,
+    ) -> tuple[list[str], list[str]]:
+        """Validate that bounds are within reasonable numeric ranges.
+
+        This prevents numerical issues from extreme bound values that could
+        cause overflow or underflow during optimization.
+
+        Parameters
+        ----------
+        bounds : tuple | None
+            Parameter bounds as (lb, ub)
+        max_bound_magnitude : float, default 1e100
+            Maximum allowed absolute value for bounds
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors: list[str] = []
+        warnings_list: list[str] = []
+
+        if bounds is None:
+            return errors, warnings_list
+
+        try:
+            lb, ub = bounds
+
+            # Convert to arrays for checking
+            if lb is not None:
+                lb_arr = np.asarray(lb)
+                # Check for extreme values (excluding inf which is valid)
+                finite_lb = lb_arr[np.isfinite(lb_arr)]
+                if len(finite_lb) > 0 and np.any(np.abs(finite_lb) > max_bound_magnitude):
+                    warnings_list.append(
+                        f"Lower bounds contain very large values (|lb| > {max_bound_magnitude:.0e}). "
+                        "This may cause numerical issues."
+                    )
+
+            if ub is not None:
+                ub_arr = np.asarray(ub)
+                finite_ub = ub_arr[np.isfinite(ub_arr)]
+                if len(finite_ub) > 0 and np.any(np.abs(finite_ub) > max_bound_magnitude):
+                    warnings_list.append(
+                        f"Upper bounds contain very large values (|ub| > {max_bound_magnitude:.0e}). "
+                        "This may cause numerical issues."
+                    )
+
+            # Check for NaN in bounds (invalid)
+            if lb is not None and np.any(np.isnan(np.asarray(lb))):
+                errors.append("Lower bounds contain NaN values")
+            if ub is not None and np.any(np.isnan(np.asarray(ub))):
+                errors.append("Upper bounds contain NaN values")
+
+        except Exception as e:
+            errors.append(f"Error validating bounds numeric range: {e}")
+
+        return errors, warnings_list
+
+    def _validate_parameter_values(
+        self,
+        p0: Any | None,
+        max_param_magnitude: float = 1e50,
+    ) -> tuple[list[str], list[str]]:
+        """Validate that initial parameters are within reasonable numeric ranges.
+
+        This prevents numerical issues from extreme parameter values that could
+        cause overflow during function evaluation.
+
+        Parameters
+        ----------
+        p0 : array_like | None
+            Initial parameter guess
+        max_param_magnitude : float, default 1e50
+            Maximum allowed absolute value for parameters
+
+        Returns
+        -------
+        errors : list
+            List of error messages
+        warnings : list
+            List of warning messages
+        """
+        errors: list[str] = []
+        warnings_list: list[str] = []
+
+        if p0 is None:
+            return errors, warnings_list
+
+        try:
+            p0_arr = np.asarray(p0)
+
+            # Check for extreme values
+            if np.any(np.abs(p0_arr) > max_param_magnitude):
+                max_val = np.max(np.abs(p0_arr))
+                warnings_list.append(
+                    f"Initial parameters contain very large values (max |p0| = {max_val:.2e}). "
+                    "This may cause numerical overflow."
+                )
+
+            # Check for subnormal values that might cause underflow
+            finite_p0 = p0_arr[np.isfinite(p0_arr) & (p0_arr != 0)]
+            if len(finite_p0) > 0:
+                min_abs = np.min(np.abs(finite_p0))
+                if min_abs < 1e-300:
+                    warnings_list.append(
+                        f"Initial parameters contain very small values (min |p0| = {min_abs:.2e}). "
+                        "This may cause numerical underflow."
+                    )
+
+        except Exception as e:
+            errors.append(f"Error validating parameter values: {e}")
+
+        return errors, warnings_list
+
+    def validate_security_constraints(
+        self,
+        n_points: int,
+        n_params: int,
+        bounds: tuple | None = None,
+        p0: Any | None = None,
+    ) -> tuple[list[str], list[str]]:
+        """Validate security constraints to prevent DoS and numerical issues.
+
+        This method combines all security-focused validation checks.
+
+        Parameters
+        ----------
+        n_points : int
+            Number of data points
+        n_params : int
+            Number of parameters
+        bounds : tuple | None, optional
+            Parameter bounds
+        p0 : array_like | None, optional
+            Initial parameter guess
+
+        Returns
+        -------
+        errors : list
+            List of critical error messages
+        warnings : list
+            List of warning messages
+        """
+        errors: list[str] = []
+        warnings_list: list[str] = []
+
+        # Check array size limits
+        size_errors, size_warnings = self._validate_array_size_limits(n_points, n_params)
+        errors.extend(size_errors)
+        warnings_list.extend(size_warnings)
+
+        # Check bounds numeric range
+        bounds_errors, bounds_warnings = self._validate_bounds_numeric_range(bounds)
+        errors.extend(bounds_errors)
+        warnings_list.extend(bounds_warnings)
+
+        # Check parameter value range
+        param_errors, param_warnings = self._validate_parameter_values(p0)
+        errors.extend(param_errors)
+        warnings_list.extend(param_warnings)
+
+        return errors, warnings_list
 
     def validate_least_squares_inputs(
         self,

@@ -459,4 +459,128 @@ class TestValidateCurveFitInputs:
         assert any("bound" in err.lower() for err in errors)
 
 
-# Total: 24 comprehensive tests covering all major validation paths
+class TestSecurityValidation:
+    """Tests for security-focused validation methods."""
+
+    def setup_method(self):
+        """Setup validator instance."""
+        self.validator = InputValidator()
+
+    def test_array_size_limits_normal(self):
+        """Test normal array sizes pass validation."""
+        errors, warnings = self.validator._validate_array_size_limits(
+            n_points=1000, n_params=5
+        )
+        assert len(errors) == 0
+
+    def test_array_size_limits_large_warning(self):
+        """Test large arrays produce warnings about memory."""
+        # 200M points x 10 params = 2B elements = ~15 GB (exceeds 10GB warning threshold)
+        errors, warnings = self.validator._validate_array_size_limits(
+            n_points=200_000_000, n_params=10
+        )
+        assert len(errors) == 0
+        # Should warn about large memory (>10GB)
+        assert len(warnings) > 0
+        assert any("memory" in w.lower() or "gb" in w.lower() for w in warnings)
+
+    def test_array_size_limits_exceeds_max(self):
+        """Test exceeding max array size produces error."""
+        # 100B points exceeds 10B limit
+        errors, warnings = self.validator._validate_array_size_limits(
+            n_points=100_000_000_000, n_params=10
+        )
+        assert len(errors) > 0
+        assert any("exceeds maximum" in e.lower() for e in errors)
+
+    def test_array_size_limits_negative(self):
+        """Test negative sizes produce errors."""
+        errors, warnings = self.validator._validate_array_size_limits(
+            n_points=-1, n_params=5
+        )
+        assert len(errors) > 0
+        assert any("negative" in e.lower() for e in errors)
+
+    def test_bounds_numeric_range_normal(self):
+        """Test normal bounds pass validation."""
+        bounds = ([-100, -100], [100, 100])
+        errors, warnings = self.validator._validate_bounds_numeric_range(bounds)
+        assert len(errors) == 0
+        assert len(warnings) == 0
+
+    def test_bounds_numeric_range_extreme(self):
+        """Test extreme bounds produce warnings."""
+        bounds = ([-1e150, -1e150], [1e150, 1e150])
+        errors, warnings = self.validator._validate_bounds_numeric_range(bounds)
+        assert len(errors) == 0
+        assert len(warnings) > 0
+        assert any("large" in w.lower() for w in warnings)
+
+    def test_bounds_with_nan_produces_error(self):
+        """Test NaN in bounds produces error."""
+        bounds = ([np.nan, -100], [100, 100])
+        errors, warnings = self.validator._validate_bounds_numeric_range(bounds)
+        assert len(errors) > 0
+        assert any("nan" in e.lower() for e in errors)
+
+    def test_bounds_with_inf_allowed(self):
+        """Test infinite bounds are allowed (common use case)."""
+        bounds = ([-np.inf, -100], [np.inf, 100])
+        errors, warnings = self.validator._validate_bounds_numeric_range(bounds)
+        assert len(errors) == 0
+
+    def test_parameter_values_normal(self):
+        """Test normal parameter values pass validation."""
+        p0 = [1.0, 2.0, 3.0]
+        errors, warnings = self.validator._validate_parameter_values(p0)
+        assert len(errors) == 0
+        assert len(warnings) == 0
+
+    def test_parameter_values_extreme(self):
+        """Test extreme parameter values produce warnings."""
+        p0 = [1e60, 2.0, 3.0]
+        errors, warnings = self.validator._validate_parameter_values(p0)
+        assert len(errors) == 0
+        assert len(warnings) > 0
+        assert any("large" in w.lower() or "overflow" in w.lower() for w in warnings)
+
+    def test_parameter_values_subnormal(self):
+        """Test subnormal parameter values produce warnings."""
+        p0 = [1e-310, 2.0, 3.0]
+        errors, warnings = self.validator._validate_parameter_values(p0)
+        assert len(errors) == 0
+        assert len(warnings) > 0
+        assert any("small" in w.lower() or "underflow" in w.lower() for w in warnings)
+
+    def test_security_constraints_combined(self):
+        """Test combined security validation."""
+        errors, warnings = self.validator.validate_security_constraints(
+            n_points=1000,
+            n_params=5,
+            bounds=([-100, -100, -100, -100, -100], [100, 100, 100, 100, 100]),
+            p0=[1.0, 2.0, 3.0, 4.0, 5.0],
+        )
+        assert len(errors) == 0
+
+    def test_security_in_curve_fit_validation(self):
+        """Test security validation is called in curve_fit inputs validation."""
+
+        def model(x, a, b):
+            return a * x + b
+
+        xdata = np.array([1, 2, 3])
+        ydata = np.array([2, 4, 6])
+
+        # Normal case should pass
+        errors, warnings, _, _ = self.validator.validate_curve_fit_inputs(
+            f=model,
+            xdata=xdata,
+            ydata=ydata,
+            p0=[1.0, 1.0],
+        )
+        # No security errors expected
+        security_errors = [e for e in errors if "exceeds" in e.lower() or "negative" in e.lower()]
+        assert len(security_errors) == 0
+
+
+# Total: 38 comprehensive tests covering all major validation paths including security
