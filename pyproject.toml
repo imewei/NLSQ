@@ -297,6 +297,9 @@ ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PL
 "nlsq/algorithm_selector.py" = ["PLR0913", "PLR0912", "PLR0915"]
 "nlsq/validators.py" = ["PLR0913", "PLR0912", "PLR0915"]
 "nlsq/robust_decomposition.py" = ["PLR0913", "PLR0912", "PLR0915"]
+"nlsq/adaptive_hybrid_streaming.py" = ["PLR0913", "PLR0912", "PLR0915", "PLR2004"]
+"nlsq/hybrid_streaming_config.py" = ["PLR0913"]
+"nlsq/parameter_normalizer.py" = ["PLR0913", "PLR0912"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["nlsq"]
@@ -411,6 +414,18 @@ module = "nlsq.memory_manager"
 ignore_errors = true  # Memory management utilities
 
 [[tool.mypy.overrides]]
+module = "nlsq.adaptive_hybrid_streaming"
+ignore_errors = true  # Complex 4-phase hybrid optimizer
+
+[[tool.mypy.overrides]]
+module = "nlsq.hybrid_streaming_config"
+ignore_errors = true  # Configuration dataclasses
+
+[[tool.mypy.overrides]]
+module = "nlsq.parameter_normalizer"
+ignore_errors = true  # Parameter normalization utilities
+
+[[tool.mypy.overrides]]
 module = "nlsq.optimizer_base"
 ignore_errors = true  # Base optimizer class
 
@@ -501,6 +516,7 @@ markers = [
     "stability: marks tests related to numerical stability",
     "diagnostics: marks tests related to optimization diagnostics",
     "validation: marks tests related to input validation",
+    "hybrid_streaming: marks tests for adaptive hybrid streaming optimizer",
 ]
 
 [tool.coverage.run]

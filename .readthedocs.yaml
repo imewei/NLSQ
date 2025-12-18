@@ -1,7 +1,11 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2025-12-17
+# Updated: 2025-12-18
 # Requires: Python 3.12+ (tested on 3.13), NumPy 2.0+, JAX 0.8.0
 # Dependencies managed via pyproject.toml[docs]
+#
+# Features documented:
+#   - Adaptive Hybrid Streaming Optimizer with Parameter Normalization (v0.3.0+)
+#   - 4-phase optimization: normalization → Adam warmup → Gauss-Newton → covariance
 #
 # Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
 
