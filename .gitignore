@@ -1,52 +1,21 @@
-# Development scripts
-scripts/dev_cleanup/
+# ============================================================================
+# NLSQ Package .gitignore
+# GPU-Accelerated Nonlinear Least Squares Curve Fitting
+# ============================================================================
 
-# Benchmark
-.benchmarks
-benchmark/results/*.json
-benchmark/results/*.csv
-benchmark/results/*.png
-benchmark/*.prof
-
-# Test reports (generated)
-test_reports/
-
-# Documentation analysis (generated)
-docs/ast_analysis.json
-docs/coverage_report.json
-
-# Test artifacts
-coverage_baseline.txt
-curve_fit_result*.png
-radioactive_decay.png
-
-# Example/Demo output files
-*.png
-*.log
-*.npy
-checkpoints*/
-streaming_diagnostics_example.json
-optimization.log
-combined.log
-
-# NLSQ specific
-nlsq_debug_*.log
-nlsq_profile_*.txt
-nlsq_cache/
-.optimization/
-*.h5
-*.hdf5
-CLAUDE.md
-
-# Byte-compiled / optimized / DLL files
+# ----------------------------------------------------------------------------
+# Python Bytecode & Compiled Files
+# ----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
+*.dylib
+*.dll
 
-# Distribution / packaging
+# ----------------------------------------------------------------------------
+# Distribution / Packaging
+# ----------------------------------------------------------------------------
 .Python
 build/
 develop-eggs/
@@ -65,18 +34,22 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*.whl
+
+# ----------------------------------------------------------------------------
+# Installer & Package Managers
+# ----------------------------------------------------------------------------
+pip-log.txt
+pip-delete-this-directory.txt
+.pypirc
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
+# ----------------------------------------------------------------------------
+# Testing & Coverage
+# ----------------------------------------------------------------------------
 htmlcov/
 .tox/
 .nox/
@@ -87,102 +60,21 @@ nosetests.xml
 coverage.xml
 coverage.json
 *.cover
-*.py.cover
+*.py,cover
 .hypothesis/
 .pytest_cache/
 cover/
+.benchmarks/
 test_report.html
+test_reports/
 bandit_re*.json
 bandit-re*.json
 pip_audit_report.json
-checkpoint_iter_100.npz
-.hypothesis/
+coverage_baseline.txt
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-docs/api/generated/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-#poetry.toml
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-#pdm.lock
-#pdm.toml
-.pdm-python
-.pdm-build/
-
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# ----------------------------------------------------------------------------
+# Virtual Environments
+# ----------------------------------------------------------------------------
 .env
 .envrc
 .venv
@@ -191,101 +83,259 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.conda/
+conda-env/
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# ----------------------------------------------------------------------------
+# Dependency Management
+# ----------------------------------------------------------------------------
+# Pipenv
+Pipfile.lock
 
-# Rope project settings
-.ropeproject
+# UV (uncomment if not tracking lock file)
+# uv.lock
 
-# mkdocs documentation
+# Poetry
+# poetry.lock
+
+# PDM
+# pdm.lock
+.pdm-python
+.pdm-build/
+
+# Pixi
+.pixi/
+# pixi.lock
+
+# PEP 582
+__pypackages__/
+
+# ----------------------------------------------------------------------------
+# Jupyter Notebooks
+# ----------------------------------------------------------------------------
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# ----------------------------------------------------------------------------
+# Documentation
+# ----------------------------------------------------------------------------
+# Sphinx build artifacts
+docs/_build/
+docs/build/
+doc/build/
+.doctrees/
+*.doctree
+
+# Sphinx generated files
+docs/source/_autosummary/
+docs/source/_generated/
+docs/api/generated/
+
+# Documentation analysis (generated)
+docs/ast_analysis.json
+docs/coverage_report.json
+
+# MkDocs
 /site
 
-# mypy
+# ----------------------------------------------------------------------------
+# NLSQ Specific
+# ----------------------------------------------------------------------------
+# Debug and profiling logs
+nlsq_debug_*.log
+nlsq_profile_*.txt
+optimization.log
+combined.log
+
+# Cache directories
+nlsq_cache/
+.nlsq_cache/
+.optimization/
+
+# Checkpoint files
+checkpoints/
+checkpoints_*/
+checkpoint_iter_*.npz
+checkpoint_iter_*.h5
+
+# Streaming diagnostics
+streaming_diagnostics_example.json
+
+# Auto-generated version file (setuptools-scm)
+nlsq/_version.py
+
+# ----------------------------------------------------------------------------
+# Scientific Computing & Data
+# ----------------------------------------------------------------------------
+# Data files
+*.h5
+*.hdf5
+*.mat
+*.npy
+*.npz
+
+# Generated plots/images (from examples)
+curve_fit_result*.png
+radioactive_decay.png
+
+# Uncomment if you want to ignore all generated images:
+# *.png
+# *.jpg
+# *.pdf
+
+# ----------------------------------------------------------------------------
+# Benchmark Results
+# ----------------------------------------------------------------------------
+benchmark_results/
+benchmark/results/*.json
+benchmark/results/*.csv
+benchmark/results/*.png
+benchmark/*.prof
+benchmark/benchmark_results/
+benchmark_results.json
+.notebook_transforms.json
+
+# ----------------------------------------------------------------------------
+# Type Checkers & Linters
+# ----------------------------------------------------------------------------
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Pyre type checker
 .pyre/
-
-# pytype static type analyzer
 .pytype/
+.ruff_cache/
+.pylint_cache/
 
-# Cython debug symbols
-cython_debug/
-
+# ----------------------------------------------------------------------------
+# IDEs & Editors
+# ----------------------------------------------------------------------------
 # PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 
-# Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer,
-#  you could uncomment the following to ignore the entire vscode folder
+# VSCode
 .vscode/
+*.code-workspace
 
-# Abstra
-# Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
-# Learn more at https://abstra.io/docs
-.abstra/
+# Spyder
+.spyderproject
+.spyproject
 
-# Ruff stuff:
-.ruff_cache/
-.nlsq_cache/
+# Rope
+.ropeproject
 
-# PyPI configuration file
-.pypirc
+# Vim
+*.swp
+*.swo
 
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
+# Emacs
+\#*\#
+.\#*
+
+# ----------------------------------------------------------------------------
+# AI-Powered Development Tools
+# ----------------------------------------------------------------------------
+.agent/
+.claude/
+.code/
+.specify/
+.codex/
+.gemini/
+agent-os/
+specs/
+.cursor/
 .cursorignore
 .cursorindexingignore
+.serena/
+.abstra/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# ----------------------------------------------------------------------------
+# Operating System
+# ----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+
+# ----------------------------------------------------------------------------
+# Logs & Temporary Files
+# ----------------------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*~
+
+# ----------------------------------------------------------------------------
+# Profiling
+# ----------------------------------------------------------------------------
+*.prof
+*.lprof
+.prof/
+
+# ----------------------------------------------------------------------------
+# Cython
+# ----------------------------------------------------------------------------
+cython_debug/
+# Uncomment if you have Cython-generated C files to ignore:
+# *.c
+# *.cpp
+
+# ----------------------------------------------------------------------------
+# Miscellaneous
+# ----------------------------------------------------------------------------
+# IPython
+profile_default/
+ipython_config.py
+
+# Jupyter
+.jupyter/
+
+# Environment variables
+.env.local
+.env.*.local
+
+# Translations
+*.mo
+*.pot
+
+# SageMath
+*.sage.py
 
 # Marimo
 marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Claude Code IDE files
-.claude/
-.code/
-agent-os/
-CLAUDE.md
+# PyBuilder
+.pybuilder/
+target/
 
-# OS files
-.DS_Store
-Thumbs.db
-.directory
-*~
-
-# Editor temp files
-*.swp
-*.swo
-*.tmp
-*.bak
-*.orig
-
-# Serena MCP server data
-.serena/
-
-# SpecKit working directory
-.specify/
-
-# Optimization artifacts
+# ----------------------------------------------------------------------------
+# Development Scripts & Artifacts
+# ----------------------------------------------------------------------------
+scripts/dev_cleanup/
+fix-imports/
 validators_refactoring.patch
 
-# Auto-generated version file (created by setuptools-scm)
-nlsq/_version.py
-/benchmark_results
-benchmark/benchmark_results
-.notebook_transforms.json
-benchmark_results.json
+# ----------------------------------------------------------------------------
+# Code Review & Analysis Artifacts (temporary)
+# ----------------------------------------------------------------------------
+commit_*_review.json
+commit_*_breaking_changes.json
+git_workflow_summary_*.md
+code_quality_fixes_summary.md
