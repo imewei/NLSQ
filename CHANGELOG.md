@@ -8,7 +8,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- _Nothing yet_
+
+#### Performance Optimizations
+- **Randomized SVD for Large Matrices**: 3-10x faster SVD computation for large Jacobians
+  - `randomized_svd()` uses Halko et al. (2011) algorithm with O(mnk) complexity
+  - `compute_svd_adaptive()` automatically selects full vs randomized SVD based on matrix size
+  - Threshold: matrices with >500K elements use randomized SVD
+  - **Files Modified**: `nlsq/svd_fallback.py`
+
+- **lax.while_loop CG Solver**: 3-8x GPU acceleration for conjugate gradient solver
+  - Replaced Python loop with `jax.lax.while_loop` for GPU-efficient execution
+  - Eliminates Python interpreter overhead during CG iterations
+  - **Files Modified**: `nlsq/trf.py`
+
+- **xxhash Support for Cache Keys**: 10x faster hashing when xxhash is installed
+  - Optional dependency in `[performance]` extras group
+  - Falls back to MD5/SHA256 when xxhash not available
+  - **Files Modified**: `nlsq/smart_cache.py`
+
+- **TTL-based Memory Caching**: 90% reduction in psutil system call overhead
+  - Configurable TTL (default 1.0s) for memory availability/usage queries
+  - Prevents repeated expensive system calls during optimization
+  - **Files Modified**: `nlsq/memory_manager.py`
+
+- **Function Code Hash Memoization**: 95% faster repeated JIT cache lookups
+  - Memoizes function code hashes by `id(func)` to avoid repeated `inspect.getsource()`
+  - **Files Modified**: `nlsq/compilation_cache.py`
+
+- **Persistent JAX Compilation Cache**: Eliminates 2-10s cold-start overhead
+  - Cache stored in `~/.cache/nlsq/jax_cache` (configurable via `NLSQ_JAX_CACHE_DIR`)
+  - Only caches compilations taking >1s (configurable via `NLSQ_CACHE_MIN_COMPILE_TIME_SECS`)
+  - Disable with `NLSQ_DISABLE_PERSISTENT_CACHE=1`
+  - **Files Modified**: `nlsq/config.py`
+
+#### Stability Enhancements
+- **max_jacobian_elements_for_svd Parameter**: Skip expensive SVD for large Jacobians
+  - Default threshold: 10M elements (configurable)
+  - Prevents O(min(m,n)² × max(m,n)) overhead for large datasets
+  - NaN/Inf checking still performed for large Jacobians
+  - **Files Modified**: `nlsq/minpack.py`, `nlsq/least_squares.py`, `nlsq/__init__.py`
+
+- **rescale_data Parameter**: Preserve physical units in physics applications
+  - `rescale_data=False` prevents data normalization (for XPCS, scattering, etc.)
+  - Stability checks still applied without data rescaling
+  - **Files Modified**: `nlsq/stability.py`, `nlsq/minpack.py`
+
+- **Module-level Stability Documentation**: Comprehensive docstring explaining design decisions
+  - Documents stability modes (`False`, `'check'`, `'auto'`)
+  - Explains SVD skip threshold rationale
+  - Documents key constants (`MAX_JACOBIAN_ELEMENTS_FOR_SVD`, `CONDITION_THRESHOLD`)
+  - **Files Modified**: `nlsq/stability.py`
+
+#### Security Validation
+- **Array Size Limits**: Prevent memory exhaustion and integer overflow
+  - Maximum 10B data points, 100B Jacobian elements
+  - Detects integer overflow in Jacobian size calculation
+  - Memory estimation warnings (>10GB, >100GB)
+  - **Files Modified**: `nlsq/validators.py`
+
+- **Bounds Numeric Range Validation**: Detect extreme bound values
+  - Warns for bounds with |value| > 1e100
+  - Errors for NaN in bounds
+  - **Files Modified**: `nlsq/validators.py`
+
+- **Parameter Value Validation**: Check initial params for extreme values
+  - Warns for |p0| > 1e50
+  - Errors for NaN/Inf in initial parameters
+  - **Files Modified**: `nlsq/validators.py`
+
+- **Early Security Validation**: Fail fast on malformed input
+  - Security validation runs before expensive operations
+  - Returns early on critical security errors
+  - **Files Modified**: `nlsq/validators.py`
+
+#### Diagnostics Improvements
+- **Verbosity Levels for Condition Number**: Reduce overhead for large problems
+  - `verbosity=0`: Skip condition number computation entirely
+  - `verbosity=1`: Use cheap 1-norm estimate (O(nm), 50-90% faster)
+  - `verbosity=2`: Full SVD condition number (O(mn²))
+  - **Files Modified**: `nlsq/diagnostics.py`
+
+### Changed
+- **mypy Configuration**: Strengthened type checking (v0.3.0)
+  - Enabled `warn_return_any`, `no_implicit_optional`, `check_untyped_defs`
+  - Reduced disabled error codes from 4 to 2
+  - Enabled type checking for `validators` and `stability` modules
+  - **Files Modified**: `pyproject.toml`
+
+### Added (Tests & Benchmarks)
+- **XPCS Divergence Regression Tests**: 420 lines of stability integration tests
+  - Tests for XPCS g2 model convergence with various stability settings
+  - Validates rescale_data=False for physics applications
+  - Tests SVD skip behavior for large Jacobians
+  - **Files Added**: `tests/test_stability_integration.py`
+
+- **Security Validation Tests**: 125 lines of comprehensive security tests
+  - Tests array size limits, bounds validation, parameter validation
+  - Edge cases for integer overflow detection
+  - **Files Modified**: `tests/test_validators_comprehensive.py`
+
+- **Stability Performance Benchmarks**: Benchmark and visualization scripts
+  - `benchmark_stability_overhead.py`: Measure SVD skip, init-only checks overhead
+  - `visualize_stability_performance.py`: Generate performance plots
+  - **Files Added**: `benchmark/benchmark_stability_overhead.py`, `scripts/visualize_stability_performance.py`
 
 ## [0.3.0] - 2025-11-19
 
