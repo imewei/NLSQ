@@ -88,4 +88,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: StreamingConfig, MemoryConfig, LargeDatasetConfig
+   :exclude-members: StreamingConfig, MemoryConfig, LargeDatasetConfig, NumericalStabilityGuard, ParameterNormalizer

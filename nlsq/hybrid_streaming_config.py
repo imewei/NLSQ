@@ -149,10 +149,10 @@ class HybridStreamingConfig:
     AdaptiveHybridStreamingOptimizer : Optimizer that uses this configuration
     curve_fit : High-level interface with method='hybrid_streaming'
 
-    References
-    ----------
-    .. [HybridStreaming] Specification: Adaptive Hybrid Streaming Optimizer
-           agent-os/specs/2025-12-18-adaptive-hybrid-streaming-optimizer/spec.md
+    Notes
+    -----
+    Based on Adaptive Hybrid Streaming Optimizer specification:
+    ``agent-os/specs/2025-12-18-adaptive-hybrid-streaming-optimizer/spec.md``
     """
 
     # Phase 0: Parameter normalization

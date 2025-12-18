@@ -101,10 +101,10 @@ class ParameterNormalizer:
     NormalizedModelWrapper : Wraps model functions for normalized parameters
     HybridStreamingConfig : Configuration with normalization_strategy parameter
 
-    References
-    ----------
-    .. [ParamNorm] Specification: Adaptive Hybrid Streaming Optimizer
-           Phase 0: Parameter Normalization Setup
+    Notes
+    -----
+    Implements Phase 0 (Parameter Normalization Setup) of the Adaptive
+    Hybrid Streaming Optimizer specification.
     """
 
     def __init__(
@@ -314,7 +314,7 @@ class NormalizedModelWrapper:
     Parameters
     ----------
     model_fn : callable
-        User model function with signature: model_fn(x, *params) -> predictions
+        User model function with signature: ``model_fn(x, *params) -> predictions``
     normalizer : ParameterNormalizer
         Parameter normalizer instance
 

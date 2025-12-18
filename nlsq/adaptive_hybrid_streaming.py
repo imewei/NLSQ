@@ -114,13 +114,8 @@ class AdaptiveHybridStreamingOptimizer:
 
     Notes
     -----
-    This class is in active development. Currently, only Phase 0 (normalization
-    setup) is implemented. Phases 1-3 will be added in subsequent task groups.
-
-    References
-    ----------
-    .. [HybridStreaming] Specification: Adaptive Hybrid Streaming Optimizer
-           agent-os/specs/2025-12-18-adaptive-hybrid-streaming-optimizer/spec.md
+    Based on Adaptive Hybrid Streaming Optimizer specification:
+    ``agent-os/specs/2025-12-18-adaptive-hybrid-streaming-optimizer/spec.md``
     """
 
     def __init__(self, config: HybridStreamingConfig | None = None):
@@ -188,7 +183,7 @@ class AdaptiveHybridStreamingOptimizer:
         Parameters
         ----------
         model : callable
-            User model function with signature: model(x, *params) -> predictions
+            User model function with signature: ``model(x, *params) -> predictions``
         p0 : array_like
             Initial parameter guess of shape (n_params,)
         bounds : tuple of array_like, optional
@@ -2308,7 +2303,7 @@ class AdaptiveHybridStreamingOptimizer:
             - Generator yielding (x_batch, y_batch)
             - HDF5 file path with datasets
         func : callable
-            Model function with signature: func(x, *params) -> predictions
+            Model function with signature: ``func(x, *params) -> predictions``
         p0 : array_like
             Initial parameter guess of shape (n_params,)
         bounds : tuple of array_like, optional
