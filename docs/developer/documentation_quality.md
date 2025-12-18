@@ -182,8 +182,8 @@ git commit -m "docs: add my_guide"
 
 **Solution:**
 ```bash
-# Use exact CI dependencies
-pip install -r requirements-dev.txt
+# Install dev dependencies
+pip install -e ".[dev,docs]"
 
 # Test with CI flags
 make -C docs html SPHINXOPTS="-W --keep-going -n"

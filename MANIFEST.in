@@ -5,12 +5,7 @@ include CLAUDE.md
 include pyproject.toml
 include uv.lock
 include Makefile
-include tox.ini
 include .editorconfig
-include requirements.txt
-include requirements-dev.txt
-include requirements-lock.txt
-include REQUIREMENTS.md
 recursive-include nlsq *.py *.pyi py.typed *.json *.yaml *.yml
 recursive-include examples *.ipynb *.py *.json *.yaml *.md
 recursive-include docs *.py *.rst *.md *.txt *.yml *.yaml *.json
@@ -33,7 +28,6 @@ prune .ruff_cache
 prune .pytest_cache
 prune .benchmarks
 prune .nlsq_cache
-prune .tox
 exclude .gitignore
 exclude .pre-commit-config.yaml
 exclude .readthedocs.yaml

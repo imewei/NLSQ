@@ -41,7 +41,6 @@ jobs:
               - 'nlsq/**/*.py'
               - 'tests/**/*.py'
               - 'pyproject.toml'
-              - 'requirements*.txt'
               - 'uv.lock'
             docs:
               - 'docs/**'
