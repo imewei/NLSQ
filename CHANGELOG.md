@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Documentation**: Updated test count to 1,779 tests (100% pass rate) across Sphinx documentation
 
+### Fixed
+- **Sphinx Build**: Fixed 6 duplicate object warnings by replacing autosummary stubs with direct autoclass directives
+
 ## [0.3.1] - 2025-12-18
 
 ### Added

@@ -30,24 +30,16 @@ Key Features
 Classes
 -------
 
-.. autosummary::
-   :toctree: generated/
-   :template: class.rst
-
-   ParameterNormalizer
-
 .. autoclass:: ParameterNormalizer
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
    :exclude-members: normalization_jacobian
 
 .. autoclass:: NormalizedModelWrapper
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 Normalization Strategies
 ------------------------
