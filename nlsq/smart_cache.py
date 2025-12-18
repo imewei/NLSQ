@@ -24,6 +24,14 @@ import contextlib
 
 import jax.numpy as jnp
 
+# Try to use xxhash for faster hashing (10x faster than SHA256)
+try:
+    import xxhash
+
+    HAS_XXHASH = True
+except ImportError:
+    HAS_XXHASH = False
+
 
 class SmartCache:
     """Intelligent caching system for optimization computations.
@@ -105,28 +113,44 @@ class SmartCache:
         Returns
         -------
         key : str
-            MD5 hash of arguments
+            Hash of arguments (xxhash if available, MD5 fallback)
+
+        Notes
+        -----
+        Uses xxhash (xxh64) when available for ~10x faster hashing compared
+        to SHA256/MD5. Falls back to MD5 if xxhash is not installed.
         """
         key_parts = []
 
         for arg in args:
             if isinstance(arg, (np.ndarray, jnp.ndarray)):
-                # For arrays, use shape, dtype, and hash of values
-                arr_flat = np.asarray(arg).flatten()
-                if len(arr_flat) > 100:
-                    # For large arrays, combine sampling with full array hash to prevent collisions
-                    sample_indices = np.linspace(0, len(arr_flat) - 1, 100, dtype=int)
-                    sample = arr_flat[sample_indices]
-                    # Include hash of full array data for uniqueness
-                    full_hash = hashlib.sha256(arr_flat.tobytes()).hexdigest()[:16]
-                    key_parts.append(
-                        f"array_{arg.shape}_{arg.dtype}_{hash(sample.tobytes())}_{full_hash}"
-                    )
+                # For arrays, use shape, dtype, and fast hash of values
+                arr = np.asarray(arg)
+                if HAS_XXHASH:
+                    # Fast path: xxhash on contiguous data (10x faster than SHA256)
+                    if arr.flags["C_CONTIGUOUS"]:
+                        data_hash = xxhash.xxh64(arr).hexdigest()[:16]
+                    else:
+                        data_hash = xxhash.xxh64(np.ascontiguousarray(arr)).hexdigest()[
+                            :16
+                        ]
+                    key_parts.append(f"array_{arg.shape}_{arg.dtype}_{data_hash}")
                 else:
-                    # For small arrays, use full array
-                    key_parts.append(
-                        f"array_{arg.shape}_{arg.dtype}_{hash(arr_flat.tobytes())}"
-                    )
+                    # Fallback: sampling + SHA256 for large arrays
+                    arr_flat = arr.flatten()
+                    if len(arr_flat) > 100:
+                        sample_indices = np.linspace(
+                            0, len(arr_flat) - 1, 100, dtype=int
+                        )
+                        sample = arr_flat[sample_indices]
+                        full_hash = hashlib.sha256(arr_flat.tobytes()).hexdigest()[:16]
+                        key_parts.append(
+                            f"array_{arg.shape}_{arg.dtype}_{hash(sample.tobytes())}_{full_hash}"
+                        )
+                    else:
+                        key_parts.append(
+                            f"array_{arg.shape}_{arg.dtype}_{hash(arr_flat.tobytes())}"
+                        )
             elif callable(arg):
                 # For functions, use their name and module
                 key_parts.append(f"func_{arg.__module__}_{arg.__name__}")
@@ -138,6 +162,10 @@ class SmartCache:
             key_parts.append(f"{k}={v}")
 
         key_str = "|".join(key_parts)
+
+        # Use xxhash for final key if available
+        if HAS_XXHASH:
+            return xxhash.xxh64(key_str.encode()).hexdigest()
         return hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
 
     def get(self, key: str) -> Any | None:
