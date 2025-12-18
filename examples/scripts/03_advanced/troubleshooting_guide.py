@@ -35,6 +35,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
 
+import contextlib
 import warnings
 
 import jax
@@ -100,7 +101,9 @@ except Exception as e:
 print("✓ SOLUTION 1: Improve initial guess")
 # Strategy: Estimate from data
 a_guess = y_data[0]  # Initial value (t=0)
-b_guess = -np.log(y_data[-1] / y_data[0]) / (x_data[-1] - x_data[0])  # Decay rate
+# Handle edge case where ratio might be negative due to noise
+ratio = y_data[-1] / y_data[0]
+b_guess = -np.log(max(ratio, 0.01)) / (x_data[-1] - x_data[0])  # Decay rate
 p0_good = [a_guess, b_guess]
 print(f"  Estimated p0: a={p0_good[0]:.2f}, b={p0_good[1]:.2f}")
 

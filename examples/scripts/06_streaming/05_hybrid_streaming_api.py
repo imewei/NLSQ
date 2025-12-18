@@ -112,7 +112,7 @@ def main():
         verbose=0,
         # HybridStreamingConfig overrides:
         warmup_iterations=300,
-        normalization_strategy='bounds',
+        normalization_strategy='p0',  # 'bounds' requires explicit bounds
         phase2_max_iterations=100,
     )
 

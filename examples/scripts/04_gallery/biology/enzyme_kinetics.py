@@ -25,6 +25,7 @@ from pathlib import Path
 # ======================================================================
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import curve_fit
