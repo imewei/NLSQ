@@ -137,6 +137,9 @@ benchmark = [
     "memory-profiler>=0.61",   # Tested on 0.61.0
     "psutil>=6.0",             # Tested on 7.1.0
 ]
+performance = [
+    "xxhash>=3.0.0",           # 10x faster hashing for cache keys
+]
 jupyter = [
     "jupyterlab>=4.0",         # Tested on 4.4.9
     "ipykernel>=6.20",         # Tested on 7.0.1
@@ -299,22 +302,22 @@ known-first-party = ["nlsq"]
 
 [tool.mypy]
 python_version = "3.13"
-# Relax strictness for scientific computing library
-warn_return_any = false
+# Moderate strictness for scientific computing library (v0.3.0 - strengthened)
+warn_return_any = true  # Warn when returning Any (stricter)
 warn_unused_configs = true
 disallow_untyped_defs = false  # Don't require type annotations for all functions
 disallow_any_generics = false  # Allow generics without type parameters (common in NumPy/JAX)
-no_implicit_optional = false  # Allow implicit Optional
+no_implicit_optional = true  # Require explicit Optional (stricter - catches bugs)
 warn_redundant_casts = true
 warn_unused_ignores = false  # Don't warn about unused ignores
 warn_no_return = true
-check_untyped_defs = false  # Don't check untyped functions
+check_untyped_defs = true  # Check untyped functions (stricter)
 strict_equality = false  # Relax equality checks for NumPy arrays
-allow_untyped_calls = true  # Allow calls to untyped functions
+allow_untyped_calls = true  # Allow calls to untyped functions (JAX/SciPy compatibility)
 allow_untyped_decorators = true  # Allow untyped decorators
 ignore_errors = false
-# Disable the most problematic error codes for scientific computing
-disable_error_code = ["type-arg", "no-untyped-def", "no-any-return", "assignment"]
+# Disable problematic error codes for scientific computing (reduced list - stricter)
+disable_error_code = ["type-arg", "no-any-return"]
 # Performance optimizations
 cache_dir = ".mypy_cache"
 incremental = true  # Enable incremental type checking for faster runs
@@ -390,13 +393,18 @@ ignore_errors = true  # Logging utilities
 module = "nlsq.robust_decomposition"
 ignore_errors = true  # Matrix decomposition algorithms
 
+# Critical modules - type checked (v0.3.0 - strengthened)
 [[tool.mypy.overrides]]
 module = "nlsq.validators"
-ignore_errors = true  # Complex validation logic
+ignore_errors = false  # Enable type checking for security validation
+check_untyped_defs = true
+warn_return_any = true
 
 [[tool.mypy.overrides]]
 module = "nlsq.stability"
-ignore_errors = true  # Numerical stability checks
+ignore_errors = false  # Enable type checking for numerical stability
+check_untyped_defs = true
+warn_return_any = true
 
 [[tool.mypy.overrides]]
 module = "nlsq.diagnostics"

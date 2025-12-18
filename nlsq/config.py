@@ -157,8 +157,47 @@ class JAXConfig:
             config.update("jax_enable_x64", True)
             self._x64_enabled = True
 
+        # Configure persistent compilation cache (eliminates 2-10s cold start)
+        self._configure_persistent_cache(config)
+
         # Configure GPU memory if specified
         self._configure_gpu_memory(config)
+
+    def _configure_persistent_cache(self, config):
+        """Configure JAX persistent compilation cache.
+
+        This enables caching of compiled functions across Python sessions,
+        eliminating cold-start overhead of 2-10 seconds.
+        """
+        # Skip if explicitly disabled
+        if os.getenv("NLSQ_DISABLE_PERSISTENT_CACHE") == "1":
+            return
+
+        # Set cache directory
+        cache_dir = os.getenv(
+            "NLSQ_JAX_CACHE_DIR", os.path.expanduser("~/.cache/nlsq/jax_cache")
+        )
+
+        try:
+            # Create cache directory if it doesn't exist
+            os.makedirs(cache_dir, exist_ok=True)
+
+            # Enable persistent compilation cache
+            config.update("jax_compilation_cache_dir", cache_dir)
+
+            # Only cache compilations that take at least 1 second
+            min_compile_time = float(
+                os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS", "1")
+            )
+            config.update("jax_persistent_cache_min_compile_time_secs", min_compile_time)
+
+            logging.debug(f"JAX persistent cache enabled at {cache_dir}")
+        except Exception as e:
+            # Non-fatal: log warning and continue without persistent cache
+            logging.warning(
+                f"Failed to enable JAX persistent compilation cache: {e}. "
+                "Cold-start may be slower."
+            )
 
     def _configure_gpu_memory(self, config):
         """Configure GPU memory settings."""
