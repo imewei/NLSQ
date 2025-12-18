@@ -29,19 +29,16 @@ Key Features
 Classes
 -------
 
-.. autosummary::
-   :toctree: generated/
-   :template: class.rst
-
-   NumericalStabilityGuard
+.. autoclass:: NumericalStabilityGuard
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: eps, max_float, min_float, condition_threshold, regularization_factor
 
 Functions
 ---------
 
-.. autosummary::
-   :toctree: generated/
-
-   check_problem_stability
+.. autofunction:: check_problem_stability
 
 Usage Examples
 --------------
