@@ -782,6 +782,13 @@ class LeastSquares:
     ) -> tuple[Callable, Callable]:
         """Create stability wrapper functions for residuals and Jacobian.
 
+        NOTE: Stability checks are only performed at initialization, not per-iteration.
+        Per-iteration Jacobian modification was found to cause optimization divergence
+        due to accumulated numerical perturbations and expensive SVD computations.
+
+        The residual wrapper still checks for NaN/Inf at each evaluation since this
+        is a cheap O(n) check that can catch numerical explosions early.
+
         Parameters
         ----------
         rfunc : Callable
@@ -792,13 +799,12 @@ class LeastSquares:
         Returns
         -------
         rfunc : Callable
-            Wrapped residual function
+            Wrapped residual function (with NaN/Inf checking)
         jac_func : Callable
-            Wrapped Jacobian function
+            Original Jacobian function (NOT wrapped - stability checked at init only)
         """
         if self.enable_stability:
             original_rfunc = rfunc
-            original_jac_func = jac_func
 
             def stable_rfunc(x, xd, yd, dm, tf):
                 result = original_rfunc(x, xd, yd, dm, tf)
@@ -806,12 +812,10 @@ class LeastSquares:
                     result = self.stability_guard.safe_clip(result, -1e10, 1e10)
                 return result
 
-            def stable_jac_func(x, xd, yd, dm, tf):
-                J = original_jac_func(x, xd, yd, dm, tf)
-                J_fixed, _ = self.stability_guard.check_and_fix_jacobian(J)
-                return J_fixed
-
-            return stable_rfunc, stable_jac_func
+            # NOTE: Jacobian is NOT wrapped - stability checked only at initialization
+            # via _check_and_fix_initial_jacobian(). Per-iteration Jacobian modification
+            # causes optimization divergence due to SVD overhead and accumulated perturbations.
+            return stable_rfunc, jac_func
 
         return rfunc, jac_func
 

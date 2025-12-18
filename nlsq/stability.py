@@ -53,8 +53,17 @@ class NumericalStabilityGuard:
         Default regularization factor for ill-conditioned problems
     """
 
-    def __init__(self):
-        """Initialize stability guard with numerical constants."""
+    def __init__(self, max_jacobian_elements_for_svd: int = 10_000_000):
+        """Initialize stability guard with numerical constants.
+
+        Parameters
+        ----------
+        max_jacobian_elements_for_svd : int, default 10_000_000
+            Maximum number of elements in Jacobian (m × n) for which SVD
+            will be computed. For larger Jacobians, SVD is skipped to avoid
+            excessive computation time. Default is 10M elements, which
+            corresponds to e.g., a (1M × 10) or (100K × 100) matrix.
+        """
         self.eps = np.finfo(np.float64).eps
         self.max_float = np.finfo(np.float64).max
         self.min_float = np.finfo(np.float64).tiny
@@ -62,6 +71,7 @@ class NumericalStabilityGuard:
         self.regularization_factor = 1e-10
         self.max_exp_arg = 700  # log(max_float) ≈ 709
         self.min_exp_arg = -700
+        self.max_jacobian_elements_for_svd = max_jacobian_elements_for_svd
 
         # Create JIT-compiled versions of key functions
         self._create_jit_functions()
@@ -105,9 +115,13 @@ class NumericalStabilityGuard:
 
         This method performs several checks and corrections:
         1. Detects and replaces NaN/Inf values
-        2. Computes condition number
+        2. Computes condition number (skipped for large Jacobians)
         3. Applies regularization if ill-conditioned
         4. Checks for near-zero singular values
+
+        For large Jacobians (> max_jacobian_elements_for_svd elements), SVD
+        computation is skipped to avoid excessive computation time. Only NaN/Inf
+        checking is performed.
 
         Parameters
         ----------
@@ -118,10 +132,13 @@ class NumericalStabilityGuard:
         -------
         J_fixed : jnp.ndarray
             Fixed Jacobian matrix
-        condition_number : float
-            Condition number of the original matrix
+        issues : dict
+            Dictionary with 'has_nan', 'has_inf', 'condition_number', etc.
         """
-        # Check for NaN/Inf
+        m, n = J.shape
+        n_elements = m * n
+
+        # Check for NaN/Inf (always performed - O(n) and important for safety)
         has_invalid = jnp.any(~jnp.isfinite(J))
         if has_invalid:
             warnings.warn("Jacobian contains NaN or Inf values, replacing with zeros")
@@ -130,12 +147,28 @@ class NumericalStabilityGuard:
         # Check if matrix is all zeros
         if jnp.allclose(J, 0.0):
             warnings.warn("Jacobian is all zeros, adding small perturbation")
-            m, n = J.shape
             J = J + self.eps * jnp.ones((m, n))
             return J, {"has_nan": False, "has_inf": False, "condition_number": np.inf}
 
+        # Skip SVD for large Jacobians to avoid excessive computation time
+        # SVD of (m, n) matrix is O(min(m,n)^2 * max(m,n)) which is very expensive
+        # for large matrices (e.g., 10^6 x 7 = 7M elements)
+        if n_elements > self.max_jacobian_elements_for_svd:
+            # For large matrices, only check NaN/Inf - skip condition number check
+            issues = {
+                "has_nan": bool(has_invalid),
+                "has_inf": bool(has_invalid),
+                "is_ill_conditioned": False,
+                "condition_number": None,  # Not computed
+                "regularized": False,
+                "svd_skipped": True,
+                "reason": f"Jacobian too large ({n_elements:,} > {self.max_jacobian_elements_for_svd:,} elements)",
+            }
+            return J, issues
+
         # Compute singular values for condition number
         svd_vals = None  # Initialize to handle exception case
+        condition_number = np.inf
         try:
             svd_vals = jnp.linalg.svdvals(J)
 
@@ -161,6 +194,7 @@ class NumericalStabilityGuard:
             condition_number = np.inf
 
         # Apply fixes based on condition number
+        regularized = False
         if condition_number > self.condition_threshold:
             warnings.warn(
                 f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})"
@@ -168,26 +202,27 @@ class NumericalStabilityGuard:
 
             # Apply Tikhonov regularization without changing dimensions
             # This adds a small diagonal component to improve conditioning
-            m, n = J.shape
             # Create a diagonal regularization term
             reg_term = self.regularization_factor * jnp.eye(m, n)
             # Add regularization to the Jacobian directly
             J = J + reg_term
+            regularized = True
 
         # Check for near-zero singular values
         if svd_vals is not None and len(svd_vals) > 0:
             min_sv = jnp.min(svd_vals)
             if min_sv < self.eps * 10:
                 # Add small diagonal regularization
-                m, n = J.shape
                 J = J + self.eps * 10 * jnp.eye(m, n)
+                regularized = True
 
         issues = {
             "has_nan": bool(has_invalid),
             "has_inf": bool(has_invalid),
             "is_ill_conditioned": condition_number > self.condition_threshold,
             "condition_number": condition_number,
-            "regularized": condition_number > self.condition_threshold,
+            "regularized": regularized,
+            "svd_skipped": False,
         }
         return J, issues
 
@@ -790,6 +825,7 @@ def apply_automatic_fixes(
     ydata: np.ndarray,
     p0: np.ndarray | None = None,
     stability_report: dict | None = None,
+    rescale_data: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, dict]:
     """
     Automatically apply fixes for detected stability issues.
@@ -807,6 +843,11 @@ def apply_automatic_fixes(
         Initial parameter guess
     stability_report : dict, optional
         Report from check_problem_stability(). If None, will be computed.
+    rescale_data : bool, optional
+        If True (default), rescale xdata/ydata to [0, 1] when ill-conditioned
+        or large range is detected. Set to False for physics applications where
+        data must maintain physical units (e.g., time delays in seconds,
+        scattering vectors in nm^-1). Default: True.
 
     Returns
     -------
@@ -830,6 +871,11 @@ def apply_automatic_fixes(
     >>> y = 2.0 * x + 1.0
     >>> x_fixed, y_fixed, p0_fixed, info = apply_automatic_fixes(x, y, [2.0, 1.0])
     >>> print(f"Applied fixes: {info['applied_fixes']}")
+
+    >>> # For physics data, disable rescaling to preserve physical units
+    >>> x_fixed, y_fixed, p0_fixed, info = apply_automatic_fixes(
+    ...     x, y, [2.0, 1.0], rescale_data=False
+    ... )
     """
     xdata = np.asarray(xdata, dtype=np.float64)
     ydata = np.asarray(ydata, dtype=np.float64)
@@ -848,35 +894,36 @@ def apply_automatic_fixes(
     if stability_report is None:
         stability_report = check_problem_stability(xdata, ydata, p0)
 
-    # Fix 1: Rescale xdata if ill-conditioned or large range
-    cond = stability_report["condition_number"]
-    x_range = np.ptp(xdata)
+    # Fix 1: Rescale xdata if ill-conditioned or large range (only if rescale_data=True)
+    if rescale_data:
+        cond = stability_report["condition_number"]
+        x_range = np.ptp(xdata)
 
-    if cond > 1e10 or x_range > 1e4:
-        # Normalize to [0, 1]
-        x_min = np.min(xdata)
-        x_max = np.max(xdata)
-        # Check for finite range to avoid division warnings with inf data
-        if x_range > 0 and np.isfinite(x_range):
-            xdata = (xdata - x_min) / x_range
-            fix_info["x_scale"] = x_range
-            fix_info["x_offset"] = x_min
+        if cond > 1e10 or x_range > 1e4:
+            # Normalize to [0, 1]
+            x_min = np.min(xdata)
+            x_max = np.max(xdata)
+            # Check for finite range to avoid division warnings with inf data
+            if x_range > 0 and np.isfinite(x_range):
+                xdata = (xdata - x_min) / x_range
+                fix_info["x_scale"] = x_range
+                fix_info["x_offset"] = x_min
+                applied_fixes.append(
+                    f"Rescaled xdata from [{x_min:.2e}, {x_max:.2e}] to [0, 1]"
+                )
+
+        # Fix 2: Rescale ydata if large range
+        y_range = np.ptp(ydata)
+        if y_range > 1e4 and np.isfinite(y_range):
+            # Normalize to similar scale as x
+            y_min = np.min(ydata)
+            y_max = np.max(ydata)
+            ydata = (ydata - y_min) / y_range
+            fix_info["y_scale"] = y_range
+            fix_info["y_offset"] = y_min
             applied_fixes.append(
-                f"Rescaled xdata from [{x_min:.2e}, {x_max:.2e}] to [0, 1]"
+                f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]"
             )
-
-    # Fix 2: Rescale ydata if large range
-    y_range = np.ptp(ydata)
-    if y_range > 1e4 and np.isfinite(y_range):
-        # Normalize to similar scale as x
-        y_min = np.min(ydata)
-        y_max = np.max(ydata)
-        ydata = (ydata - y_min) / y_range
-        fix_info["y_scale"] = y_range
-        fix_info["y_offset"] = y_min
-        applied_fixes.append(
-            f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]"
-        )
 
     # Fix 3: Replace NaN/Inf in data
     if np.any(~np.isfinite(xdata)):

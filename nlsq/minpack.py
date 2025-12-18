@@ -80,6 +80,7 @@ def curve_fit(
     auto_bounds: bool = False,
     bounds_safety_factor: float = 10.0,
     stability: Literal["auto", "check", False] = False,
+    rescale_data: bool = True,
     fallback: bool = False,
     max_fallback_attempts: int = 10,
     fallback_verbose: bool = False,
@@ -122,18 +123,26 @@ def curve_fit(
         Control numerical stability checks and automatic fixes:
 
         - 'auto': Check for stability issues and automatically apply fixes
-          (rescale data, normalize parameters, handle NaN/Inf)
+          (optionally rescale data, normalize parameters, handle NaN/Inf)
         - 'check': Check for stability issues and warn, but don't apply fixes
         - False: Skip stability checks entirely (default)
 
         When 'auto', detected issues are fixed before optimization:
 
         - Ill-conditioned data (condition number > 1e10) is rescaled to [0, 1]
-        - Large data ranges (> 1e4) are normalized
+          (only if rescale_data=True)
+        - Large data ranges (> 1e4) are normalized (only if rescale_data=True)
         - NaN/Inf values are replaced with mean
         - Parameter scale mismatches (ratio > 1e6) are normalized
 
         Default: False.
+    rescale_data : bool, optional
+        When stability='auto', controls whether data is automatically rescaled
+        to [0, 1] for ill-conditioned or large-range data. Set to False for
+        physics applications where data must maintain physical units (e.g.,
+        time delays in seconds, scattering vectors in nm^-1). NaN/Inf handling
+        and parameter normalization are still applied when stability='auto'.
+        Default: True.
     fallback : bool, optional
         Enable automatic fallback strategies for difficult optimization problems.
         When True, the optimizer will automatically try alternative approaches if
@@ -322,9 +331,14 @@ def curve_fit(
                 logger.info(
                     f"Applying automatic fixes for {len(stability_report['issues'])} stability issues..."
                 )
+                if not rescale_data:
+                    logger.info(
+                        "  (rescale_data=False: data rescaling disabled for physics applications)"
+                    )
 
                 xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
-                    xdata, ydata, p0, stability_report=stability_report
+                    xdata, ydata, p0, stability_report=stability_report,
+                    rescale_data=rescale_data
                 )
 
                 # Update data and parameters

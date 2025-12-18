@@ -31,7 +31,7 @@ except ImportError:
 # Type hints
 # Stability and optimization imports
 import warnings  # For deprecation warnings (v0.2.0)
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -265,6 +265,9 @@ def curve_fit_large(
     check_finite: bool = True,
     bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
     method: MethodLiteral | None = None,
+    # Stability parameters
+    stability: Literal["auto", "check", False] = False,
+    rescale_data: bool = True,
     # Large dataset specific parameters
     memory_limit_gb: float | None = None,
     auto_size_detection: bool = True,
@@ -414,6 +417,8 @@ def curve_fit_large(
             fit_kwargs["method"] = method
         fit_kwargs["absolute_sigma"] = absolute_sigma
         fit_kwargs["check_finite"] = check_finite
+        fit_kwargs["stability"] = stability
+        fit_kwargs["rescale_data"] = rescale_data
 
         return curve_fit(f, xdata, ydata, **fit_kwargs)
 
