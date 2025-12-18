@@ -93,6 +93,20 @@ print(f"Equinox available: {EQUINOX_AVAILABLE}")
 np.random.seed(42)
 key = jax.random.PRNGKey(42)
 
+# Generate synthetic data: exponential decay + systematic deviation
+# (defined outside FLAX_AVAILABLE block so statistics can be printed)
+x_data = np.linspace(0, 5, 200)
+true_a, true_b = 5.0, 1.2
+
+# Physics component
+y_physics = true_a * np.exp(-true_b * x_data)
+
+# Systematic deviation (sinusoidal correction)
+y_correction = 0.5 * np.sin(3 * x_data) * np.exp(-0.3 * x_data)
+
+# Observed data = physics + correction + noise
+y_data = y_physics + y_correction + np.random.normal(0, 0.1, len(x_data))
+
 
 # ======================================================================
 # ---

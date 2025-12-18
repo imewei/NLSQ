@@ -36,6 +36,8 @@ print(f"✅ Python {sys.version} meets requirements")
 
 import time
 
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
