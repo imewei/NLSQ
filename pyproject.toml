@@ -141,6 +141,9 @@ benchmark = [
 performance = [
     "xxhash>=3.0.0",           # 10x faster hashing for cache keys
 ]
+yaml = [
+    "pyyaml>=6.0",             # YAML configuration file support (tested on 6.0.2)
+]
 jupyter = [
     "jupyterlab>=4.0",         # Tested on 4.4.9
     "ipykernel>=6.20",         # Tested on 7.0.1
@@ -178,6 +181,8 @@ all = [
     "asv>=0.6",
     "memory-profiler>=0.61",
     "psutil>=6.0",
+    # YAML configuration support
+    "pyyaml>=6.0",
     # Jupyter dependencies
     "jupyterlab>=4.0",
     "ipykernel>=6.20",
@@ -355,6 +360,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "matplotlib.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "yaml"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

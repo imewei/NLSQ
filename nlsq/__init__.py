@@ -12,13 +12,16 @@ Key Features
 - Automatic memory management for datasets up to 100M+ points
 - Streaming optimization for unlimited data
 - Smart algorithm selection and numerical stability
+- Unified fit() entry point with automatic workflow selection
 
 Examples
 --------
 >>> import jax.numpy as jnp
->>> from nlsq import curve_fit
+>>> from nlsq import curve_fit, fit
 >>> def model(x, a, b): return a * jnp.exp(-b * x)
 >>> popt, pcov = curve_fit(model, xdata, ydata)
+>>> # Or use unified fit() with automatic workflow selection:
+>>> popt, pcov = fit(model, xdata, ydata, workflow="auto", goal="quality")
 
 """
 
@@ -146,6 +149,18 @@ from nlsq.stability import (
 )
 from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
 
+# Workflow system (Task Group 8) - Unified fit() and workflow selection
+from nlsq.workflow import (
+    WORKFLOW_PRESETS,
+    DatasetSizeTier,
+    MemoryTier,
+    OptimizationGoal,
+    WorkflowConfig,
+    WorkflowSelector,
+    WorkflowTier,
+    auto_select_workflow,
+)
+
 # Streaming optimizer support (requires h5py - optional dependency)
 try:
     from nlsq.streaming_optimizer import (
@@ -165,6 +180,8 @@ from nlsq.validators import InputValidator
 
 # Public API - only expose main user-facing functions
 __all__ = [
+    # Workflow presets dictionary (Task Group 8)
+    "WORKFLOW_PRESETS",
     # Adaptive Hybrid Streaming Optimizer (Task Group 12)
     "AdaptiveHybridStreamingOptimizer",
     # Stability and optimization modules
@@ -175,6 +192,8 @@ __all__ = [
     "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
+    # Workflow system enums and tiers (Task Group 8)
+    "DatasetSizeTier",
     # Fallback strategies (Phase 3)
     "FallbackOrchestrator",
     "FallbackResult",
@@ -191,9 +210,13 @@ __all__ = [
     "MemoryConfig",
     "MemoryManager",
     "MemoryPool",
+    # Workflow memory tier classification (Task Group 8)
+    "MemoryTier",
     "MultiStartOrchestrator",
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
+    # Workflow optimization goal enum (Task Group 8)
+    "OptimizationGoal",
     "OptimizationRecovery",
     # Result types
     "OptimizeResult",
@@ -212,10 +235,18 @@ __all__ = [
     "SparseOptimizer",
     "TRFMemoryPool",
     "TournamentSelector",
+    # Workflow configuration class (Task Group 8)
+    "WorkflowConfig",
+    # Workflow selector class (Task Group 8)
+    "WorkflowSelector",
+    # Workflow tier enum (Task Group 8)
+    "WorkflowTier",
     # Version
     "__version__",
     "apply_automatic_fixes",
     "auto_select_algorithm",
+    # Workflow auto-select function (Task Group 8)
+    "auto_select_workflow",
     # Caching support
     "cached_function",
     "cached_jacobian",
@@ -240,7 +271,7 @@ __all__ = [
     "enable_mixed_precision_fallback",
     "estimate_condition_number",
     "estimate_memory_requirements",
-    # Unified fit function (Task Group 5)
+    # Unified fit function (Task Group 8) - primary entry point
     "fit",
     # Large dataset utilities
     "fit_large_dataset",
@@ -422,6 +453,8 @@ def fit(
     --------
     curve_fit : Lower-level API with full control
     curve_fit_large : Specialized API for large datasets
+    auto_select_workflow : Automatic workflow selection function
+    WorkflowSelector : Class-based workflow selection
     """
     # Input validation
     xdata = np.asarray(xdata)

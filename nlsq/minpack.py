@@ -8,6 +8,7 @@ The MINPACK algorithms combine robust optimization strategies with efficient
 linear algebra operations, all JIT-compiled for high performance on modern hardware.
 
 Key Components:
+    - fit: Unified entry point with workflow-based automatic strategy selection
     - curve_fit: Main high-level interface (SciPy-compatible)
     - CurveFit: Class-based interface with state management
     - Levenberg-Marquardt: Classic damped least squares algorithm
@@ -31,6 +32,7 @@ Example:
 
 See Also:
     nlsq.curve_fit : Function-based interface
+    nlsq.fit : Unified entry point with automatic workflow selection
     nlsq.least_squares : Lower-level optimization interface
     nlsq.trf : Trust Region Reflective implementation
 """
@@ -39,7 +41,7 @@ import time
 import warnings
 from collections.abc import Callable
 from inspect import signature
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 import numpy as np
 
@@ -69,7 +71,648 @@ from nlsq.types import ArrayLike, ModelFunction
 from nlsq.unified_cache import UnifiedCache, get_global_cache
 from nlsq.validators import InputValidator
 
-__all__ = ["CurveFit", "curve_fit"]
+__all__ = ["WORKFLOW_PRESETS", "CurveFit", "curve_fit", "fit"]
+
+
+# Predefined workflow presets for fit() function
+# Following GlobalOptimizationConfig.PRESETS pattern
+WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
+    "standard": {
+        "description": "Standard curve_fit() with default tolerances",
+        "tier": "STANDARD",
+        "enable_multistart": False,
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+    },
+    "quality": {
+        "description": "Highest precision with multi-start and tighter tolerances",
+        "tier": "STANDARD",
+        "enable_multistart": True,
+        "n_starts": 20,
+        "gtol": 1e-10,
+        "ftol": 1e-10,
+        "xtol": 1e-10,
+    },
+    "fast": {
+        "description": "Speed-optimized with looser tolerances",
+        "tier": "STANDARD",
+        "enable_multistart": False,
+        "gtol": 1e-6,
+        "ftol": 1e-6,
+        "xtol": 1e-6,
+    },
+    "large_robust": {
+        "description": "Chunked processing with multi-start for large datasets",
+        "tier": "CHUNKED",
+        "enable_multistart": True,
+        "n_starts": 10,
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+    },
+    "streaming": {
+        "description": "AdaptiveHybridStreamingOptimizer for huge datasets",
+        "tier": "STREAMING",
+        "enable_multistart": False,
+        "gtol": 1e-7,
+        "ftol": 1e-7,
+        "xtol": 1e-7,
+    },
+    "hpc_distributed": {
+        "description": "Multi-GPU/node configuration for HPC clusters",
+        "tier": "STREAMING_CHECKPOINT",
+        "enable_multistart": True,
+        "n_starts": 10,
+        "enable_checkpoints": True,
+        "gtol": 1e-6,
+        "ftol": 1e-6,
+        "xtol": 1e-6,
+    },
+}
+
+
+def fit(
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: ArrayLike | None = None,
+    sigma: ArrayLike | None = None,
+    absolute_sigma: bool = False,
+    check_finite: bool = True,
+    bounds: tuple = (-float("inf"), float("inf")),
+    method: str | None = None,
+    workflow: Union[
+        str, "LDMemoryConfig", "HybridStreamingConfig", "GlobalOptimizationConfig"
+    ] = "auto",
+    goal: Union[str, "OptimizationGoal", None] = None,
+    **kwargs: Any,
+) -> CurveFitResult:
+    """Unified curve fitting entry point with automatic workflow selection.
+
+    This function provides a simplified API for curve fitting that automatically
+    selects the optimal strategy based on dataset size, available memory, and
+    user-specified goals. It coexists with `curve_fit()` and `curve_fit_large()`
+    for users who prefer explicit control.
+
+    Parameters
+    ----------
+    f : callable
+        Model function f(x, \\*params) -> y. Must use jax.numpy operations.
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : array_like, optional
+        Initial parameter guess.
+    sigma : array_like, optional
+        Uncertainties in ydata for weighted fitting.
+    absolute_sigma : bool, optional
+        Whether sigma represents absolute uncertainties.
+    check_finite : bool, optional
+        Check for finite input values.
+    bounds : tuple, optional
+        Parameter bounds as (lower, upper).
+    method : str, optional
+        Optimization algorithm ('trf', 'lm', or None for auto).
+    workflow : str or config object, optional
+        Workflow selection:
+
+        - 'auto': Automatically select based on dataset size and memory (default)
+        - 'standard': Basic curve_fit() with defaults
+        - 'quality': Tightest tolerances + multi-start
+        - 'fast': Loose tolerances for speed
+        - 'large_robust': Chunked + multi-start for large datasets
+        - 'streaming': AdaptiveHybridStreamingOptimizer for huge datasets
+        - 'hpc_distributed': Multi-GPU/node configuration
+        - Custom config object: LDMemoryConfig, HybridStreamingConfig, or GlobalOptimizationConfig
+    goal : str or OptimizationGoal, optional
+        Optimization goal that modifies tolerances:
+
+        - 'fast': Prioritize speed, use looser tolerances
+        - 'robust' or 'global': Standard tolerances, enable multi-start
+        - 'memory_efficient': Minimize memory usage
+        - 'quality': Highest precision, tighter tolerances, multi-start
+
+    **kwargs
+        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss).
+        These are passed through to the underlying curve_fit() function.
+
+    Returns
+    -------
+    result : CurveFitResult
+        Optimization result. Contains popt, pcov, and additional diagnostics.
+        Supports tuple unpacking: popt, pcov = fit(...)
+
+    Raises
+    ------
+    ValueError
+        If workflow name is invalid or goal string is not recognized.
+
+    Examples
+    --------
+    Basic usage with automatic workflow selection:
+
+    >>> import jax.numpy as jnp
+    >>> def model(x, a, b): return a * jnp.exp(-b * x)
+    >>> popt, pcov = fit(model, xdata, ydata, p0=[1, 2])
+
+    Using a named workflow:
+
+    >>> result = fit(model, xdata, ydata, p0=[1, 2], workflow='quality',
+    ...              bounds=([0, 0], [10, 10]))
+
+    Using a goal to adjust tolerances:
+
+    >>> result = fit(model, xdata, ydata, p0=[1, 2], goal='quality')
+
+    Using a custom config object:
+
+    >>> from nlsq.large_dataset import LDMemoryConfig
+    >>> config = LDMemoryConfig(memory_limit_gb=8.0)
+    >>> result = fit(model, xdata, ydata, p0=[1, 2], workflow=config)
+
+    See Also
+    --------
+    curve_fit : Lower-level API with full control
+    curve_fit_large : Specialized API for large datasets
+    auto_select_workflow : Automatic workflow selection function
+    WORKFLOW_PRESETS : Available workflow presets
+    """
+    # Import workflow module components
+    from nlsq.workflow import (
+        OptimizationGoal,
+        WorkflowTier,
+        auto_select_workflow,
+        calculate_adaptive_tolerances,
+    )
+
+    # Convert data to arrays for size calculations
+    xdata_arr = np.asarray(xdata)
+    ydata_arr = np.asarray(ydata)
+    n_points = len(ydata_arr)
+
+    # Handle empty data
+    if n_points == 0:
+        raise ValueError("`ydata` must not be empty!")
+
+    # Determine number of parameters
+    if p0 is not None:
+        p0_arr = np.atleast_1d(p0)
+        n_params = len(p0_arr)
+    else:
+        # Infer from function signature
+        sig = signature(f)
+        args = sig.parameters
+        if len(args) < 2:
+            raise ValueError("Unable to determine number of fit parameters.")
+        n_params = len(args) - 1
+
+    # Convert goal string to OptimizationGoal enum if needed
+    goal_enum: OptimizationGoal | None = None
+    if goal is not None:
+        if isinstance(goal, str):
+            goal_lower = goal.lower()
+            goal_map = {
+                "fast": OptimizationGoal.FAST,
+                "robust": OptimizationGoal.ROBUST,
+                "global": OptimizationGoal.GLOBAL,
+                "memory_efficient": OptimizationGoal.MEMORY_EFFICIENT,
+                "quality": OptimizationGoal.QUALITY,
+            }
+            if goal_lower not in goal_map:
+                raise ValueError(
+                    f"Unknown goal '{goal}'. Must be one of: {list(goal_map.keys())}"
+                )
+            goal_enum = goal_map[goal_lower]
+        elif isinstance(goal, OptimizationGoal):
+            goal_enum = goal
+        else:
+            raise ValueError(
+                f"goal must be a string or OptimizationGoal enum, got {type(goal)}"
+            )
+
+    # Process workflow parameter
+    # Import config classes for isinstance checks
+    from nlsq.global_optimization import GlobalOptimizationConfig
+    from nlsq.hybrid_streaming_config import HybridStreamingConfig
+    from nlsq.large_dataset import LDMemoryConfig
+
+    if isinstance(
+        workflow, (LDMemoryConfig, HybridStreamingConfig, GlobalOptimizationConfig)
+    ):
+        # Custom config object path - route directly to appropriate backend
+        return _fit_with_config(
+            f=f,
+            xdata=xdata_arr,
+            ydata=ydata_arr,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,
+            config=workflow,
+            goal=goal_enum,
+            **kwargs,
+        )
+
+    if isinstance(workflow, str):
+        workflow_lower = workflow.lower()
+
+        if workflow_lower == "auto":
+            # Auto-select workflow based on dataset characteristics
+            config = auto_select_workflow(
+                n_points=n_points,
+                n_params=n_params,
+                goal=goal_enum,
+            )
+            return _fit_with_config(
+                f=f,
+                xdata=xdata_arr,
+                ydata=ydata_arr,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=method,
+                config=config,
+                goal=goal_enum,
+                **kwargs,
+            )
+
+        elif workflow_lower in WORKFLOW_PRESETS:
+            # Named workflow path - apply preset configuration
+            preset = WORKFLOW_PRESETS[workflow_lower]
+            return _fit_with_preset(
+                f=f,
+                xdata=xdata_arr,
+                ydata=ydata_arr,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=method,
+                preset=preset,
+                goal=goal_enum,
+                n_points=n_points,
+                **kwargs,
+            )
+        else:
+            raise ValueError(
+                f"Unknown workflow '{workflow}'. Must be 'auto', one of "
+                f"{list(WORKFLOW_PRESETS.keys())}, or a config object."
+            )
+
+    raise ValueError(
+        f"workflow must be a string or config object, got {type(workflow)}"
+    )
+
+
+def _fit_with_config(
+    f: ModelFunction,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    p0: ArrayLike | None,
+    sigma: ArrayLike | None,
+    absolute_sigma: bool,
+    check_finite: bool,
+    bounds: tuple,
+    method: str | None,
+    config: Any,
+    goal: Any,
+    **kwargs: Any,
+) -> CurveFitResult:
+    """Route fit to appropriate backend based on config type."""
+    from nlsq.global_optimization import GlobalOptimizationConfig
+    from nlsq.hybrid_streaming_config import HybridStreamingConfig
+    from nlsq.large_dataset import LargeDatasetFitter, LDMemoryConfig
+    from nlsq.workflow import OptimizationGoal, calculate_adaptive_tolerances
+
+    n_points = len(ydata)
+
+    # Apply adaptive tolerances if goal is specified and tolerances not in kwargs
+    if goal is not None:
+        n_params = len(np.atleast_1d(p0)) if p0 is not None else 1
+        adaptive_tols = calculate_adaptive_tolerances(n_points, goal)
+        for tol_key in ["gtol", "ftol", "xtol"]:
+            if tol_key not in kwargs:
+                kwargs[tol_key] = adaptive_tols[tol_key]
+
+    if isinstance(config, GlobalOptimizationConfig):
+        # Multi-start optimization path
+        from nlsq.global_optimization import MultiStartOrchestrator
+
+        orchestrator = MultiStartOrchestrator(config=config)
+        result = orchestrator.fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=np.asarray(p0) if p0 is not None else None,
+            bounds=bounds,
+            sigma=np.asarray(sigma) if sigma is not None else None,
+            absolute_sigma=absolute_sigma,
+            method=method,
+            **kwargs,
+        )
+        return result
+
+    elif isinstance(config, HybridStreamingConfig):
+        # Streaming optimization path
+        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+
+        # Prepare p0
+        if p0 is None:
+            sig = signature(f)
+            args = sig.parameters
+            if len(args) < 2:
+                raise ValueError("Unable to determine number of fit parameters.")
+            n_params = len(args) - 1
+            p0 = np.ones(n_params)
+        p0_arr = np.atleast_1d(p0)
+
+        # Prepare bounds
+        lb, ub = prepare_bounds(bounds, len(p0_arr))
+        bounds_tuple = (
+            (lb, ub)
+            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
+            else None
+        )
+
+        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+        result_dict = optimizer.fit(
+            data_source=(xdata, ydata),
+            func=f,
+            p0=p0_arr,
+            bounds=bounds_tuple,
+            sigma=np.asarray(sigma) if sigma is not None else None,
+            absolute_sigma=absolute_sigma,
+            callback=kwargs.get("callback"),
+            verbose=kwargs.get("verbose", 1),
+        )
+
+        # Convert to CurveFitResult
+        result = CurveFitResult(result_dict)
+        result["model"] = f
+        result["xdata"] = xdata
+        result["ydata"] = ydata
+        result["pcov"] = result_dict.get(
+            "pcov", np.full((len(p0_arr), len(p0_arr)), np.inf)
+        )
+        return result
+
+    elif isinstance(config, LDMemoryConfig):
+        # Chunked processing path - use standard curve_fit for small datasets
+        # or LargeDatasetFitter for large ones
+        if n_points < 1_000_000:
+            # Small dataset, use standard curve_fit
+            return curve_fit(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=method,
+                **kwargs,
+            )
+        else:
+            # Large dataset, use LargeDatasetFitter
+            fitter = LargeDatasetFitter(
+                memory_limit_gb=config.memory_limit_gb,
+                config=config,
+            )
+            result = fitter.fit(
+                f,
+                xdata,
+                ydata,
+                p0=np.asarray(p0) if p0 is not None else None,
+                bounds=bounds,
+                method=method if method else "trf",
+                **kwargs,
+            )
+
+            # Ensure we have a CurveFitResult
+            if not isinstance(result, CurveFitResult):
+                # Convert from dict or OptimizeResult
+                result = CurveFitResult(result)
+                result["model"] = f
+                result["xdata"] = xdata
+                result["ydata"] = ydata
+
+            return result
+
+    else:
+        # Unknown config type - fall back to curve_fit
+        return curve_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,
+            **kwargs,
+        )
+
+
+def _fit_with_preset(
+    f: ModelFunction,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    p0: ArrayLike | None,
+    sigma: ArrayLike | None,
+    absolute_sigma: bool,
+    check_finite: bool,
+    bounds: tuple,
+    method: str | None,
+    preset: dict[str, Any],
+    goal: Any,
+    n_points: int,
+    **kwargs: Any,
+) -> CurveFitResult:
+    """Apply a named workflow preset and route to appropriate backend."""
+    from nlsq.workflow import WorkflowTier, calculate_adaptive_tolerances
+
+    tier_str = preset.get("tier", "STANDARD")
+    tier = WorkflowTier[tier_str]
+
+    # Apply preset tolerances (unless overridden in kwargs or by goal)
+    if goal is not None:
+        # Goal overrides preset tolerances
+        adaptive_tols = calculate_adaptive_tolerances(n_points, goal)
+        for tol_key in ["gtol", "ftol", "xtol"]:
+            if tol_key not in kwargs:
+                kwargs[tol_key] = adaptive_tols[tol_key]
+    else:
+        # Use preset tolerances
+        for tol_key in ["gtol", "ftol", "xtol"]:
+            if tol_key not in kwargs and tol_key in preset:
+                kwargs[tol_key] = preset[tol_key]
+
+    # Check if multi-start is enabled
+    enable_multistart = preset.get("enable_multistart", False)
+    n_starts = preset.get("n_starts", 10)
+
+    if tier == WorkflowTier.STANDARD:
+        # Standard curve_fit path
+        if enable_multistart:
+            return curve_fit(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=method,
+                multistart=True,
+                n_starts=n_starts,
+                **kwargs,
+            )
+        else:
+            return curve_fit(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=method,
+                **kwargs,
+            )
+
+    elif tier == WorkflowTier.CHUNKED:
+        # Large dataset with chunking
+        from nlsq.large_dataset import LargeDatasetFitter, LDMemoryConfig
+
+        config = LDMemoryConfig(
+            memory_limit_gb=8.0,  # Default, can be overridden
+            min_chunk_size=1000,
+            max_chunk_size=min(1_000_000, max(10_000, n_points // 10)),
+        )
+
+        if n_points < 1_000_000:
+            # Small enough for standard curve_fit
+            return curve_fit(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=method,
+                multistart=enable_multistart,
+                n_starts=n_starts if enable_multistart else 0,
+                **kwargs,
+            )
+        else:
+            fitter = LargeDatasetFitter(
+                memory_limit_gb=config.memory_limit_gb,
+                config=config,
+            )
+            result = fitter.fit(
+                f,
+                xdata,
+                ydata,
+                p0=np.asarray(p0) if p0 is not None else None,
+                bounds=bounds,
+                method=method if method else "trf",
+                multistart=enable_multistart,
+                n_starts=n_starts if enable_multistart else 0,
+                **kwargs,
+            )
+
+            if not isinstance(result, CurveFitResult):
+                result = CurveFitResult(result)
+                result["model"] = f
+                result["xdata"] = xdata
+                result["ydata"] = ydata
+
+            return result
+
+    elif tier in (WorkflowTier.STREAMING, WorkflowTier.STREAMING_CHECKPOINT):
+        # Streaming optimization path
+        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+
+        # Prepare p0
+        if p0 is None:
+            sig = signature(f)
+            args = sig.parameters
+            if len(args) < 2:
+                raise ValueError("Unable to determine number of fit parameters.")
+            n_params = len(args) - 1
+            p0 = np.ones(n_params)
+        p0_arr = np.atleast_1d(p0)
+
+        # Prepare bounds
+        lb, ub = prepare_bounds(bounds, len(p0_arr))
+        bounds_tuple = (
+            (lb, ub)
+            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
+            else None
+        )
+
+        enable_checkpoints = preset.get(
+            "enable_checkpoints", tier == WorkflowTier.STREAMING_CHECKPOINT
+        )
+
+        config = HybridStreamingConfig(
+            normalize=True,
+            warmup_iterations=200,
+            gauss_newton_tol=kwargs.get("gtol", preset.get("gtol", 1e-8)),
+            enable_checkpoints=enable_checkpoints,
+            enable_multistart=enable_multistart,
+            n_starts=n_starts if enable_multistart else 0,
+        )
+
+        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+        result_dict = optimizer.fit(
+            data_source=(xdata, ydata),
+            func=f,
+            p0=p0_arr,
+            bounds=bounds_tuple,
+            sigma=np.asarray(sigma) if sigma is not None else None,
+            absolute_sigma=absolute_sigma,
+            callback=kwargs.get("callback"),
+            verbose=kwargs.get("verbose", 1),
+        )
+
+        result = CurveFitResult(result_dict)
+        result["model"] = f
+        result["xdata"] = xdata
+        result["ydata"] = ydata
+        result["pcov"] = result_dict.get(
+            "pcov", np.full((len(p0_arr), len(p0_arr)), np.inf)
+        )
+        return result
+
+    else:
+        # Fallback to standard curve_fit
+        return curve_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,
+            **kwargs,
+        )
 
 
 def curve_fit(
@@ -261,6 +904,7 @@ def curve_fit(
     See Also
     --------
     CurveFit.curve_fit : The underlying method with full parameter documentation
+    fit : Unified entry point with automatic workflow selection
     curve_fit_large : For datasets with millions of points requiring special handling
     FallbackOrchestrator : Direct access to fallback system for custom configurations
     MultiStartOrchestrator : Direct access to multi-start system

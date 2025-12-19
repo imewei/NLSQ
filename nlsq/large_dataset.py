@@ -14,6 +14,7 @@ from functools import lru_cache
 from logging import Logger
 from typing import Literal
 
+import jax
 import numpy as np
 import psutil
 
@@ -29,6 +30,12 @@ from nlsq.minpack import CurveFit
 
 # Import streaming optimizer (required dependency as of v0.2.0)
 from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+
+# Import MemoryTier for convenience function
+from nlsq.workflow import MemoryTier
+
+# Default fallback memory in GB when detection fails (per requirements)
+_DEFAULT_FALLBACK_MEMORY_GB = 16.0
 
 
 @dataclass
@@ -99,8 +106,139 @@ class DatasetStats:
     n_chunks: int
 
 
+class GPUMemoryEstimator:
+    """Utilities for estimating GPU memory availability.
+
+    This class provides GPU memory detection via JAX's device API,
+    handling multiple GPUs and graceful fallback for CPU-only environments.
+
+    Examples
+    --------
+    >>> from nlsq.large_dataset import GPUMemoryEstimator
+    >>> estimator = GPUMemoryEstimator()
+    >>> available_gb = estimator.get_available_gpu_memory_gb()
+    >>> print(f"Available GPU memory: {available_gb:.2f} GB")
+    """
+
+    def __init__(self) -> None:
+        """Initialize GPUMemoryEstimator."""
+        self._logger = get_logger(__name__)
+
+    def get_available_gpu_memory_gb(self) -> float:
+        """Get available GPU memory in GB.
+
+        Queries GPU memory via `jax.devices()[i].memory_stats()` and aggregates
+        available memory across all GPUs. Returns 0 for CPU-only environments.
+
+        Returns
+        -------
+        float
+            Available GPU memory in GB, or 0.0 if no GPU or detection fails.
+
+        Notes
+        -----
+        - Re-evaluates on each call (no caching) per requirements.
+        - Handles multiple GPUs by summing available memory.
+        - Returns 0.0 gracefully for CPU-only environments or when detection fails.
+        """
+        total_available_bytes = 0.0
+
+        try:
+            devices = jax.devices()
+
+            for device in devices:
+                # Skip CPU devices
+                platform = getattr(device, "platform", "cpu")
+                if platform == "cpu":
+                    continue
+
+                try:
+                    # Query memory stats from GPU device
+                    memory_stats = device.memory_stats()
+
+                    if memory_stats is not None:
+                        # Calculate available memory: limit - in_use
+                        bytes_limit = memory_stats.get("bytes_limit", 0)
+                        bytes_in_use = memory_stats.get("bytes_in_use", 0)
+                        available = bytes_limit - bytes_in_use
+
+                        if available > 0:
+                            total_available_bytes += available
+                            self._logger.debug(
+                                f"GPU device {device}: "
+                                f"{available / (1024**3):.2f} GB available "
+                                f"({bytes_in_use / (1024**3):.2f} GB in use)"
+                            )
+                except Exception as e:
+                    # Individual device query failed - continue with others
+                    self._logger.debug(
+                        f"GPU memory query failed for device {device}: {e}"
+                    )
+                    continue
+
+        except Exception as e:
+            # Complete device enumeration failed
+            self._logger.debug(f"GPU device enumeration failed: {e}")
+            return 0.0
+
+        return total_available_bytes / (1024**3)
+
+    def get_total_gpu_memory_gb(self) -> float:
+        """Get total GPU memory capacity in GB.
+
+        Returns
+        -------
+        float
+            Total GPU memory capacity in GB, or 0.0 if no GPU.
+        """
+        total_capacity_bytes = 0.0
+
+        try:
+            devices = jax.devices()
+
+            for device in devices:
+                platform = getattr(device, "platform", "cpu")
+                if platform == "cpu":
+                    continue
+
+                try:
+                    memory_stats = device.memory_stats()
+                    if memory_stats is not None:
+                        bytes_limit = memory_stats.get("bytes_limit", 0)
+                        total_capacity_bytes += bytes_limit
+                except Exception:
+                    continue
+
+        except Exception:
+            return 0.0
+
+        return total_capacity_bytes / (1024**3)
+
+    def has_gpu(self) -> bool:
+        """Check if any GPU is available.
+
+        Returns
+        -------
+        bool
+            True if at least one GPU device is available.
+        """
+        try:
+            devices = jax.devices()
+            for device in devices:
+                platform = getattr(device, "platform", "cpu")
+                if platform != "cpu":
+                    return True
+        except Exception:
+            pass
+        return False
+
+
 class MemoryEstimator:
-    """Utilities for estimating memory usage and optimal chunk sizes."""
+    """Utilities for estimating memory usage and optimal chunk sizes.
+
+    This class provides CPU memory detection via psutil, with fallback to 16GB
+    when detection fails (e.g., containerized environments with cgroups).
+    """
 
     @staticmethod
     def estimate_memory_per_point(n_params: int, use_jacobian: bool = True) -> float:
@@ -132,14 +270,76 @@ class MemoryEstimator:
         Returns
         -------
         float
-            Available memory in GB
+            Available memory in GB. Falls back to 16GB if detection fails.
+
+        Notes
+        -----
+        - Re-evaluates on each call (no caching) per requirements.
+        - Falls back to 16GB when detection fails (containerized environments).
         """
         try:
             memory = psutil.virtual_memory()
             return memory.available / (1024**3)  # Convert to GB
         except Exception:
-            # Fallback estimate
-            return 4.0  # Conservative default
+            # Fallback estimate: 16GB per requirements (updated from 4GB)
+            return _DEFAULT_FALLBACK_MEMORY_GB
+
+    @staticmethod
+    def get_total_available_memory_gb() -> float:
+        """Get total available memory (CPU + GPU) in GB.
+
+        Combines available CPU memory from psutil with available GPU memory
+        from JAX device API. Re-evaluates on each call (no caching).
+
+        Returns
+        -------
+        float
+            Total available memory (CPU + GPU) in GB.
+
+        Notes
+        -----
+        - CPU memory: Uses psutil.virtual_memory().available
+        - GPU memory: Uses JAX device API via GPUMemoryEstimator
+        - Falls back to 16GB for CPU if detection fails
+        - Returns 0 for GPU if detection fails or no GPU present
+        """
+        # Get CPU memory
+        cpu_memory_gb = MemoryEstimator.get_available_memory_gb()
+
+        # Get GPU memory
+        gpu_estimator = GPUMemoryEstimator()
+        gpu_memory_gb = gpu_estimator.get_available_gpu_memory_gb()
+
+        return cpu_memory_gb + gpu_memory_gb
+
+    @staticmethod
+    def estimate_maximum_memory_usage_gb(
+        n_points: int, n_params: int, safety_factor: float = 1.2
+    ) -> float:
+        """Estimate maximum memory usage to prevent crashes.
+
+        Parameters
+        ----------
+        n_points : int
+            Number of data points
+        n_params : int
+            Number of parameters
+        safety_factor : float, optional
+            Safety factor for memory estimation (default: 1.2)
+
+        Returns
+        -------
+        float
+            Estimated maximum memory usage in GB.
+
+        Notes
+        -----
+        This method estimates the peak memory usage during optimization,
+        which is useful for workflow selection to prevent out-of-memory crashes.
+        """
+        memory_per_point = MemoryEstimator.estimate_memory_per_point(n_params)
+        total_bytes = n_points * memory_per_point * safety_factor
+        return total_bytes / (1024**3)
 
     @staticmethod
     def calculate_optimal_chunk_size(
@@ -203,6 +403,65 @@ class MemoryEstimator:
         )
 
         return chunk_size, stats
+
+
+def cleanup_memory() -> None:
+    """Perform memory cleanup between workflow phases.
+
+    This function clears both Python garbage and JAX compilation caches,
+    designed to be called between workflow phases to free memory.
+
+    Notes
+    -----
+    - Calls gc.collect() to trigger Python garbage collection
+    - Calls jax.clear_caches() to clear JAX JIT compilation caches
+    - Handles errors gracefully (does not raise exceptions)
+
+    Examples
+    --------
+    >>> from nlsq.large_dataset import cleanup_memory
+    >>> # After completing a workflow phase
+    >>> cleanup_memory()
+    """
+    logger = get_logger(__name__)
+
+    # Python garbage collection
+    try:
+        gc.collect()
+    except Exception as e:
+        logger.debug(f"gc.collect() failed (non-critical): {e}")
+
+    # JAX cache cleanup
+    try:
+        jax.clear_caches()
+    except Exception as e:
+        logger.debug(f"jax.clear_caches() failed (non-critical): {e}")
+
+
+def get_memory_tier(available_memory_gb: float) -> MemoryTier:
+    """Classify available memory into a MemoryTier.
+
+    Convenience function that wraps MemoryTier.from_available_memory_gb()
+    for easier access from this module.
+
+    Parameters
+    ----------
+    available_memory_gb : float
+        Available system memory in gigabytes.
+
+    Returns
+    -------
+    MemoryTier
+        The appropriate memory tier (LOW, MEDIUM, HIGH, or VERY_HIGH).
+
+    Examples
+    --------
+    >>> from nlsq.large_dataset import get_memory_tier
+    >>> tier = get_memory_tier(32.0)
+    >>> tier
+    <MemoryTier.MEDIUM: (64.0, 'Standard memory (16-64GB)')>
+    """
+    return MemoryTier.from_available_memory_gb(available_memory_gb)
 
 
 class ProgressReporter:
@@ -2201,10 +2460,13 @@ def estimate_memory_requirements(n_points: int, n_params: int) -> DatasetStats:
 __all__ = [
     "DataChunker",
     "DatasetStats",
+    "GPUMemoryEstimator",
     "LDMemoryConfig",
     "LargeDatasetFitter",
     "MemoryEstimator",
     "ProgressReporter",
+    "cleanup_memory",
     "estimate_memory_requirements",
     "fit_large_dataset",
+    "get_memory_tier",
 ]
