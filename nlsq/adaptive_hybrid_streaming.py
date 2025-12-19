@@ -31,6 +31,10 @@ import optax
 from .hybrid_streaming_config import HybridStreamingConfig
 from .parameter_normalizer import NormalizedModelWrapper, ParameterNormalizer
 from .stability import NumericalStabilityGuard
+from .global_optimization.tournament import TournamentSelector
+from .global_optimization.sampling import get_sampler, scale_samples_to_bounds, center_samples_around_p0
+from .global_optimization.config import GlobalOptimizationConfig
+
 
 __all__ = ["AdaptiveHybridStreamingOptimizer"]
 
@@ -166,6 +170,12 @@ class AdaptiveHybridStreamingOptimizer:
         self.current_precision: jnp.dtype = jnp.float64  # Default to float64
         self.phase_precisions: dict[int, jnp.dtype] = {}  # Precision per phase
         self.precision_upgrade_triggered: bool = False  # Track if upgrade occurred
+        # Multi-start optimization with tournament selection
+        self.multistart_candidates: jnp.ndarray | None = None
+        self.tournament_selector = None
+        self.multistart_best_candidate: jnp.ndarray | None = None
+        self.multistart_diagnostics: dict[str, Any] | None = None
+
 
     def _setup_normalization(
         self,
@@ -244,6 +254,10 @@ class AdaptiveHybridStreamingOptimizer:
         # Initialize normalized parameters
         self.normalized_params = self.normalizer.normalize(self.original_p0)
 
+
+        # Generate multi-start candidates if enabled
+        if self.config.enable_multistart:
+            self._generate_multistart_candidates(bounds)
         # Record Phase 0 completion in history
         phase_record = {
             'phase': 0,
@@ -254,6 +268,165 @@ class AdaptiveHybridStreamingOptimizer:
             'has_bounds': bounds is not None,
         }
         self.phase_history.append(phase_record)
+
+
+    def _generate_multistart_candidates(
+        self,
+        bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
+    ) -> None:
+        """Generate multi-start candidates using LHS or other sampling methods.
+
+        Parameters
+        ----------
+        bounds : tuple of array_like, optional
+            Parameter bounds as (lb, ub).
+
+        Notes
+        -----
+        Generates n_starts candidates using the configured sampler (LHS, Sobol, Halton).
+        If center_on_p0 is True, centers samples around the initial guess p0.
+        Stores candidates in self.multistart_candidates.
+        """
+        import numpy as np
+        import jax
+
+        n_params = len(self.original_p0)
+        n_starts = self.config.n_starts
+
+        # Get sampler function
+        sampler = get_sampler(self.config.multistart_sampler)
+
+        # Generate samples in [0, 1] hypercube
+        rng_key = jax.random.PRNGKey(42)  # Fixed seed for reproducibility
+        samples = sampler(n_starts, n_params, rng_key=rng_key)
+        samples = np.asarray(samples)
+
+        # Scale samples to bounds or around p0
+        if bounds is not None and self.config.center_on_p0:
+            # Center samples around p0 within bounds
+            lb, ub = np.asarray(bounds[0]), np.asarray(bounds[1])
+            p0 = np.asarray(self.original_p0)
+
+            # Scale factor controls how much of the bounds to explore
+            scale = self.config.scale_factor
+
+            # Center around p0 with scaled range
+            range_half = (ub - lb) * scale / 2
+            center_lb = np.maximum(lb, p0 - range_half)
+            center_ub = np.minimum(ub, p0 + range_half)
+
+            # Scale samples to centered bounds
+            candidates = center_lb + samples * (center_ub - center_lb)
+
+        elif bounds is not None:
+            # Scale samples to full bounds
+            lb, ub = np.asarray(bounds[0]), np.asarray(bounds[1])
+            candidates = lb + samples * (ub - lb)
+
+        else:
+            # No bounds: scale around p0 with heuristic range
+            p0 = np.asarray(self.original_p0)
+            scale_factor = self.config.scale_factor
+
+            # Use p0 magnitude as scale (avoid zero)
+            p0_scale = np.abs(p0) + 0.1
+            range_half = p0_scale * scale_factor
+
+            # Center samples around p0
+            candidates = p0 + (samples - 0.5) * 2 * range_half
+
+        self.multistart_candidates = jnp.asarray(candidates)
+
+    def _run_tournament_selection(
+        self,
+        data_source: tuple[jnp.ndarray, jnp.ndarray],
+        model: callable,
+    ) -> jnp.ndarray:
+        """Run tournament selection to find the best starting candidate.
+
+        Parameters
+        ----------
+        data_source : tuple
+            Data as (x_data, y_data).
+        model : callable
+            Model function.
+
+        Returns
+        -------
+        best_params : array_like
+            Best starting parameters in normalized space.
+        """
+        import numpy as np
+
+        # Create GlobalOptimizationConfig from HybridStreamingConfig
+        global_config = GlobalOptimizationConfig(
+            n_starts=self.config.n_starts,
+            elimination_rounds=self.config.elimination_rounds,
+            elimination_fraction=self.config.elimination_fraction,
+            batches_per_round=self.config.batches_per_round,
+        )
+
+        # Convert candidates to normalized space
+        normalized_candidates = np.array([
+            np.asarray(self.normalizer.normalize(jnp.asarray(c)))
+            for c in self.multistart_candidates
+        ])
+
+        # Create tournament selector
+        self.tournament_selector = TournamentSelector(
+            candidates=normalized_candidates,
+            config=global_config,
+        )
+
+        # Create data batch generator
+        x_data, y_data = data_source
+        x_data = np.asarray(x_data)
+        y_data = np.asarray(y_data)
+
+        chunk_size = self.config.chunk_size
+        n_points = len(x_data)
+
+        def data_batch_generator():
+            # Shuffle indices for each epoch
+            indices = np.arange(n_points)
+            np.random.shuffle(indices)
+
+            # Yield chunks
+            for i in range(0, n_points, chunk_size):
+                batch_idx = indices[i:i + chunk_size]
+                yield x_data[batch_idx], y_data[batch_idx]
+
+            # Repeat if needed for more rounds
+            for _ in range(self.config.elimination_rounds * self.config.batches_per_round):
+                np.random.shuffle(indices)
+                for i in range(0, n_points, chunk_size):
+                    batch_idx = indices[i:i + chunk_size]
+                    yield x_data[batch_idx], y_data[batch_idx]
+
+        # Run tournament with normalized model
+        try:
+            best_candidates = self.tournament_selector.run_tournament(
+                data_batch_iterator=data_batch_generator(),
+                model=self.normalized_model,
+                top_m=1,
+            )
+
+            # Store diagnostics
+            self.multistart_diagnostics = self.tournament_selector.get_diagnostics()
+
+            # Return best candidate
+            best_normalized = best_candidates[0]
+            self.multistart_best_candidate = best_normalized
+
+            return jnp.asarray(best_normalized)
+
+        except Exception as e:
+            # Fallback: use original p0
+            import warnings
+            warnings.warn(f"Tournament selection failed: {e}. Using p0 as starting point.")
+            self.multistart_diagnostics = {"error": str(e), "fallback": True}
+            return self.normalized_params
+
 
     def _create_adam_optimizer(
         self,
@@ -574,7 +747,12 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
         # Initialize parameters in normalized space
-        current_params = self.normalized_params
+        # Run tournament selection if multi-start enabled
+        if self.config.enable_multistart and self.multistart_candidates is not None:
+            current_params = self._run_tournament_selection(data_source, model)
+        else:
+            current_params = self.normalized_params
+
 
         # Create Adam optimizer
         optimizer, opt_state = self._create_adam_optimizer(current_params)
@@ -1733,6 +1911,26 @@ class AdaptiveHybridStreamingOptimizer:
                 if self.normalizer.offsets is not None:
                     norm_group.create_dataset('offsets', data=self.normalizer.offsets)
 
+            # Save tournament state (if exists)
+            if self.tournament_selector is not None:
+                tournament_group = phase_state.create_group('tournament_state')
+                tournament_checkpoint = self.tournament_selector.to_checkpoint()
+                for key, value in tournament_checkpoint.items():
+                    if isinstance(value, (list, dict)):
+                        tournament_bytes = pickle.dumps(value)
+                        tournament_group.create_dataset(key, data=np.void(tournament_bytes))
+                    elif value is not None:
+                        try:
+                            tournament_group.create_dataset(key, data=value)
+                        except TypeError:
+                            tournament_bytes = pickle.dumps(value)
+                            tournament_group.create_dataset(key, data=np.void(tournament_bytes))
+
+            # Save multi-start candidates (if exists)
+            if self.multistart_candidates is not None:
+                phase_state.create_dataset('multistart_candidates', data=self.multistart_candidates)
+
+
     def _load_checkpoint(self, checkpoint_path: str | Path) -> None:
         """Load checkpoint and restore phase-specific state.
 
@@ -1806,6 +2004,33 @@ class AdaptiveHybridStreamingOptimizer:
 
                 # Note: Full normalizer reconstruction requires bounds/p0
                 # This is a partial restore - full normalizer created in _setup_normalization
+
+            # Restore tournament state (if exists)
+            if 'tournament_state' in phase_state and self.config.enable_multistart:
+                tournament_group = phase_state['tournament_state']
+                tournament_checkpoint = {}
+                for key in tournament_group.keys():
+                    value = tournament_group[key][()]
+                    if isinstance(value, np.void):
+                        tournament_checkpoint[key] = pickle.loads(bytes(value))
+                    else:
+                        tournament_checkpoint[key] = np.array(value) if hasattr(value, '__len__') else value
+                
+                # Create GlobalOptimizationConfig for tournament
+                global_config = GlobalOptimizationConfig(
+                    n_starts=self.config.n_starts,
+                    elimination_rounds=self.config.elimination_rounds,
+                    elimination_fraction=self.config.elimination_fraction,
+                    batches_per_round=self.config.batches_per_round,
+                )
+                self.tournament_selector = TournamentSelector.from_checkpoint(
+                    tournament_checkpoint, global_config
+                )
+
+            # Restore multi-start candidates (if exists)
+            if 'multistart_candidates' in phase_state:
+                self.multistart_candidates = jnp.array(phase_state['multistart_candidates'])
+
 
     def _detect_available_devices(self) -> dict[str, Any]:
         """Detect available GPU/TPU devices using JAX.

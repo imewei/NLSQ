@@ -6,6 +6,7 @@ exact covariance computation.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -108,6 +109,31 @@ class HybridStreamingConfig:
     callback_frequency : int, default=10
         Call progress callback every N iterations (if callback provided).
 
+    enable_multistart : bool, default=False
+        Enable multi-start optimization with tournament selection during Phase 1.
+        When enabled, generates multiple starting points using LHS sampling and
+        uses tournament elimination to select the best candidate for Phase 2.
+
+    n_starts : int, default=10
+        Number of starting points for multi-start optimization.
+        Only used when enable_multistart=True.
+
+    multistart_sampler : str, default='lhs'
+        Sampling method for generating starting points.
+        Options: 'lhs' (Latin Hypercube), 'sobol', 'halton'.
+
+    elimination_rounds : int, default=3
+        Number of tournament elimination rounds.
+        Each round eliminates elimination_fraction of candidates.
+
+    elimination_fraction : float, default=0.5
+        Fraction of candidates to eliminate per round.
+        Must be in (0, 1). Default 0.5 = eliminate half each round.
+
+    batches_per_round : int, default=50
+        Number of data batches to use for evaluation in each tournament round.
+        More batches = more reliable selection but slower.
+
     Examples
     --------
     Default configuration:
@@ -144,10 +170,20 @@ class HybridStreamingConfig:
     ...     precision='float64'
     ... )
 
+    With multi-start tournament selection:
+
+    >>> config = HybridStreamingConfig(
+    ...     enable_multistart=True,
+    ...     n_starts=20,
+    ...     elimination_rounds=3,
+    ...     batches_per_round=50,
+    ... )
+
     See Also
     --------
     AdaptiveHybridStreamingOptimizer : Optimizer that uses this configuration
     curve_fit : High-level interface with method='hybrid_streaming'
+    TournamentSelector : Tournament selection for multi-start optimization
 
     Notes
     -----
@@ -201,6 +237,16 @@ class HybridStreamingConfig:
 
     # Progress monitoring
     callback_frequency: int = 10
+
+    # Multi-start optimization with tournament selection
+    enable_multistart: bool = False
+    n_starts: int = 10
+    multistart_sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs'
+    elimination_rounds: int = 3
+    elimination_fraction: float = 0.5
+    batches_per_round: int = 50
+    center_on_p0: bool = True
+    scale_factor: float = 1.0
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -280,6 +326,28 @@ class HybridStreamingConfig:
         if self.gradient_clip_value is not None:
             assert self.gradient_clip_value > 0, (
                 "gradient_clip_value must be positive"
+            )
+
+        # Validate multi-start parameters
+        if self.enable_multistart:
+            assert self.n_starts >= 1, (
+                "n_starts must be >= 1 when enable_multistart=True"
+            )
+            assert self.multistart_sampler in ('lhs', 'sobol', 'halton'), (
+                f"multistart_sampler must be 'lhs', 'sobol', or 'halton', "
+                f"got: {self.multistart_sampler}"
+            )
+            assert 0 < self.elimination_fraction < 1, (
+                f"elimination_fraction must be in (0, 1), got: {self.elimination_fraction}"
+            )
+            assert self.elimination_rounds >= 0, (
+                "elimination_rounds must be non-negative"
+            )
+            assert self.batches_per_round > 0, (
+                "batches_per_round must be positive"
+            )
+            assert self.scale_factor > 0, (
+                "scale_factor must be positive"
             )
 
     @classmethod
@@ -389,4 +457,39 @@ class HybridStreamingConfig:
             enable_checkpoints=True,
             checkpoint_frequency=50,  # More frequent saves
             # Keep other defaults
+        )
+
+    @classmethod
+    def with_multistart(cls, n_starts: int = 10, **kwargs):
+        """Create configuration with multi-start tournament selection enabled.
+
+        This preset enables multi-start optimization for finding global optima:
+        - Tournament selection during Phase 1 warmup
+        - LHS sampling for generating starting points
+        - Progressive elimination to select best candidate
+
+        Parameters
+        ----------
+        n_starts : int, default=10
+            Number of starting points to generate.
+        **kwargs
+            Additional configuration parameters to override.
+
+        Returns
+        -------
+        HybridStreamingConfig
+            Configuration with multi-start enabled.
+
+        Examples
+        --------
+        >>> config = HybridStreamingConfig.with_multistart(n_starts=20)
+        >>> config.enable_multistart
+        True
+        >>> config.n_starts
+        20
+        """
+        return cls(
+            enable_multistart=True,
+            n_starts=n_starts,
+            **kwargs,
         )

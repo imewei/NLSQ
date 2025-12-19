@@ -85,6 +85,13 @@ def curve_fit(
     fallback: bool = False,
     max_fallback_attempts: int = 10,
     fallback_verbose: bool = False,
+    # Multi-start optimization parameters (Task Group 5)
+    multistart: bool = False,
+    n_starts: int = 10,
+    global_search: bool = False,
+    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    center_on_p0: bool = True,
+    scale_factor: float = 1.0,
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
     """
@@ -145,14 +152,14 @@ def curve_fit(
         and parameter normalization are still applied when stability='auto'.
         Default: True.
     max_jacobian_elements_for_svd : int, optional
-        Maximum number of elements in the Jacobian matrix (m × n) for which
+        Maximum number of elements in the Jacobian matrix (m x n) for which
         SVD will be computed during stability checks. For larger Jacobians,
-        SVD is skipped to avoid O(min(m,n)² × max(m,n)) computation overhead.
+        SVD is skipped to avoid O(min(m,n)^2 x max(m,n)) computation overhead.
         NaN/Inf checking is still performed for large Jacobians.
 
         Examples of element counts:
-        - 1M data points × 7 params = 7M elements
-        - 100K data points × 100 params = 10M elements
+        - 1M data points x 7 params = 7M elements
+        - 100K data points x 100 params = 10M elements
 
         Set to a larger value if you need condition number checks for large
         problems, or a smaller value to skip SVD more aggressively.
@@ -177,6 +184,36 @@ def curve_fit(
     fallback_verbose : bool, optional
         Print detailed information about fallback attempts.
         Only used when fallback=True. Default: False.
+    multistart : bool, optional
+        Enable multi-start optimization for global search. When True, generates
+        multiple starting points using Latin Hypercube Sampling (or other samplers)
+        and evaluates each, selecting the best result. This helps find global
+        optima in problems with multiple local minima. Default: False.
+    n_starts : int, optional
+        Number of starting points for multi-start optimization. Only used when
+        multistart=True or global_search=True. Default: 10.
+    global_search : bool, optional
+        Shorthand for enabling multi-start with n_starts=20. Equivalent to
+        multistart=True, n_starts=20. Useful for thorough global search.
+        Default: False.
+    sampler : {'lhs', 'sobol', 'halton'}, optional
+        Sampling strategy for generating starting points in multi-start:
+
+        - 'lhs': Latin Hypercube Sampling (stratified random, default)
+        - 'sobol': Sobol quasi-random sequence (deterministic, low-discrepancy)
+        - 'halton': Halton quasi-random sequence (deterministic, prime bases)
+
+        Only used when multistart=True or global_search=True. Default: 'lhs'.
+    center_on_p0 : bool, optional
+        When True, center multi-start samples around the initial guess p0 rather
+        than uniformly across the full parameter bounds. This provides more
+        focused exploration around a data-informed starting region.
+        Only used when multistart=True or global_search=True. Default: True.
+    scale_factor : float, optional
+        Scale factor for the exploration region when center_on_p0=True.
+        Multiplier for the exploration range around p0. Smaller values (0.5)
+        mean tighter exploration, larger values (2.0) mean wider exploration.
+        Only used when multistart=True or global_search=True. Default: 1.0.
     *args, **kwargs
         Additional arguments passed to CurveFit.curve_fit method.
 
@@ -194,6 +231,12 @@ def curve_fit(
     - fallback_attempts : int
         Number of optimization attempts before success
 
+    When multistart=True or global_search=True, the returned object contains:
+
+    - multistart_diagnostics : dict
+        Dictionary with multi-start exploration details including n_starts,
+        best_loss, all_losses, exploration time, etc.
+
     Notes
     -----
     This function creates a CurveFit instance internally and calls its curve_fit method.
@@ -208,11 +251,19 @@ def curve_fit(
     - Problems with outliers
     - Numerically challenging models
 
+    When multistart=True or global_search=True, the optimizer explores multiple
+    starting points to find the global optimum. This is particularly useful for:
+
+    - Problems with multiple local minima
+    - Complex multi-modal objective functions
+    - Cases where the initial guess may not be close to the global optimum
+
     See Also
     --------
     CurveFit.curve_fit : The underlying method with full parameter documentation
     curve_fit_large : For datasets with millions of points requiring special handling
     FallbackOrchestrator : Direct access to fallback system for custom configurations
+    MultiStartOrchestrator : Direct access to multi-start system
 
     Examples
     --------
@@ -228,6 +279,21 @@ def curve_fit(
     >>> y = 2.5 * np.exp(-1.3 * x) + 0.1 * np.random.normal(size=len(x))
     >>> popt, _pcov = curve_fit(exponential, x, y, p0=[2, 1])
 
+    Using multi-start for global search:
+
+    >>> # Enable multi-start with default n_starts=10
+    >>> result = curve_fit(exponential, x, y, p0=[2, 1],
+    ...                   bounds=([0, 0], [10, 5]), multistart=True)
+    >>>
+    >>> # Use global_search shorthand for thorough exploration (n_starts=20)
+    >>> result = curve_fit(exponential, x, y, p0=[2, 1],
+    ...                   bounds=([0, 0], [10, 5]), global_search=True)
+    >>>
+    >>> # Customize multi-start with different sampler
+    >>> result = curve_fit(exponential, x, y, p0=[2, 1],
+    ...                   bounds=([0, 0], [10, 5]),
+    ...                   multistart=True, n_starts=15, sampler='sobol')
+
     Using fallback for difficult problems:
 
     >>> # Very poor initial guess - may fail without fallback
@@ -237,46 +303,20 @@ def curve_fit(
     >>> if result.fallback_strategy_used:
     ...     print(f"Recovered using: {result.fallback_strategy_used}")
 
-    Verbose fallback for debugging:
-
-    >>> result = curve_fit(
-    ...     exponential, x, y, p0=[1000, -10],
-    ...     fallback=True, fallback_verbose=True
-    ... )
-    Attempt 1/10: Original parameters
-    ❌ Failed: RuntimeError: Optimization failed
-    Attempt 2/10: Try alternative optimization method
-    ✅ Success with alternative_method!
-
-    Using automatic bounds inference:
-
-    >>> # Infer reasonable bounds automatically from data
-    >>> result = curve_fit(exponential, x, y, p0=[2, 1], auto_bounds=True)
-    >>>
-    >>> # Combine with user bounds (user bounds take precedence)
-    >>> result = curve_fit(
-    ...     exponential, x, y, p0=[2, 1],
-    ...     auto_bounds=True,
-    ...     bounds=([0, -np.inf], [np.inf, np.inf])  # Only constrain first parameter
-    ... )
-
-    Using stability checks to detect and fix numerical issues:
-
-    >>> # Check for stability issues and apply automatic fixes
-    >>> result = curve_fit(exponential, x, y, p0=[2, 1], stability='auto')
-    >>>
-    >>> # Only check and warn about issues (no automatic fixes)
-    >>> result = curve_fit(exponential, x, y, p0=[2, 1], stability='check')
-
-    Combined auto_bounds + stability + fallback for maximum robustness:
+    Combined multi-start + fallback for maximum robustness:
 
     >>> result = curve_fit(
     ...     exponential, x, y, p0=[2, 1],
-    ...     auto_bounds=True,
-    ...     stability='auto',
+    ...     bounds=([0, 0], [10, 5]),
+    ...     global_search=True,
     ...     fallback=True
     ... )
     """
+    # Handle global_search shorthand
+    if global_search:
+        multistart = True
+        n_starts = 20
+
     # Handle automatic bounds inference
     if auto_bounds:
         from nlsq.bound_inference import infer_bounds, merge_bounds
@@ -371,7 +411,44 @@ def curve_fit(
 
                 # Log applied fixes
                 for fix in fix_info["applied_fixes"]:
-                    logger.info(f"  ✓ {fix}")
+                    logger.info(f"  - {fix}")
+
+    # Handle multi-start optimization
+    if multistart and n_starts > 0:
+        from nlsq.global_optimization import GlobalOptimizationConfig, MultiStartOrchestrator
+
+        # Extract p0 from args or kwargs
+        p0 = None
+        if args and len(args) >= 1:
+            p0 = args[0]
+        elif "p0" in kwargs:
+            p0 = kwargs["p0"]
+
+        # Extract bounds from kwargs
+        bounds = kwargs.get("bounds", (-np.inf, np.inf))
+
+        # Create multi-start config
+        multistart_config = GlobalOptimizationConfig(
+            n_starts=n_starts,
+            sampler=sampler,
+            center_on_p0=center_on_p0,
+            scale_factor=scale_factor,
+        )
+
+        # Create orchestrator
+        orchestrator = MultiStartOrchestrator(config=multistart_config)
+
+        # Run multi-start optimization
+        result = orchestrator.fit(
+            f=f,
+            xdata=np.asarray(xdata),
+            ydata=np.asarray(ydata),
+            p0=np.asarray(p0) if p0 is not None else None,
+            bounds=bounds,
+            **{k: v for k, v in kwargs.items() if k not in ['bounds', 'p0']},
+        )
+
+        return result
 
     # Use fallback orchestrator if requested
     if fallback:
@@ -393,9 +470,18 @@ def curve_fit(
                 fallback_kwargs.setdefault("absolute_sigma", args[2])
             # Remaining args would be unusual, pass through kwargs
 
-        return orchestrator.fit_with_fallback(f, xdata, ydata, **fallback_kwargs)
+        result = orchestrator.fit_with_fallback(f, xdata, ydata, **fallback_kwargs)
 
-    # Standard path without fallback
+        # Add empty multi-start diagnostics for consistency
+        if not hasattr(result, 'multistart_diagnostics') and 'multistart_diagnostics' not in result:
+            result['multistart_diagnostics'] = {
+                'n_starts_configured': 0,
+                'bypassed': True,
+            }
+
+        return result
+
+    # Standard path without fallback or multi-start
     # Extract CurveFit constructor parameters from kwargs
     flength = kwargs.pop("flength", None)
     use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
@@ -409,6 +495,12 @@ def curve_fit(
         max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
     )
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
+
+    # Add empty multi-start diagnostics for consistency
+    result['multistart_diagnostics'] = {
+        'n_starts_configured': n_starts if multistart else 0,
+        'bypassed': True,  # Bypassed because n_starts was 0 or multistart was False
+    }
 
     # Return enhanced result object that supports both tuple unpacking
     # (popt, pcov = curve_fit(...)) and direct use (result = curve_fit(...))
@@ -531,9 +623,9 @@ class CurveFit:
             If None, uses global cache with default settings.
 
         max_jacobian_elements_for_svd : int, default 10_000_000
-            Maximum Jacobian size (m × n elements) for SVD computation during
+            Maximum Jacobian size (m x n elements) for SVD computation during
             stability checks. SVD is skipped for larger Jacobians to avoid
-            O(min(m,n)² × max(m,n)) overhead. Only applies when enable_stability=True.
+            O(min(m,n)^2 x max(m,n)) overhead. Only applies when enable_stability=True.
 
         Notes
         -----

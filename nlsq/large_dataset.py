@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from logging import Logger
+from typing import Literal
 
 import numpy as np
 import psutil
@@ -332,6 +333,7 @@ class LargeDatasetFitter:
     - Streaming optimization for unlimited datasets (no accuracy loss)
     - Real-time progress monitoring with ETA for long-running fits
     - Full integration with NLSQ optimization algorithms and GPU acceleration
+    - Multi-start optimization with subsample exploration for global search
 
     Memory Management Algorithm
     ---------------------------
@@ -345,6 +347,12 @@ class LargeDatasetFitter:
     - **Single Pass**: For datasets fitting within memory limits
     - **Sequential Chunking**: Processes data in optimal-sized chunks with parameter propagation
     - **Streaming Optimization**: Mini-batch gradient descent for unlimited datasets (no subsampling)
+
+    Multi-Start Optimization
+    ------------------------
+    For medium-sized datasets (1M-100M points), multi-start optimization uses subsample
+    exploration: a representative subset of data is used to evaluate multiple starting
+    points, and the best starting point is then used for the full chunked optimization.
 
     Performance Characteristics
     ---------------------------
@@ -361,6 +369,14 @@ class LargeDatasetFitter:
         Advanced configuration for fine-tuning memory management behavior.
     curve_fit_class : nlsq.minpack.CurveFit, optional
         Custom CurveFit instance for specialized fitting requirements.
+    multistart : bool, default False
+        Enable multi-start optimization for global search.
+    n_starts : int, default 10
+        Number of starting points for multi-start optimization.
+    sampler : str, default 'lhs'
+        Sampling strategy for multi-start: 'lhs', 'sobol', or 'halton'.
+    multistart_subsample_size : int, default 100_000
+        Size of subsample used for multi-start exploration.
 
     Attributes
     ----------
@@ -422,6 +438,21 @@ class LargeDatasetFitter:
     >>> print(f"Parameters: {result.popt}")
     >>> print(f"Chunks used: {result.n_chunks}")
 
+    Multi-start optimization with subsample exploration:
+
+    >>> fitter = LargeDatasetFitter(
+    ...     memory_limit_gb=4.0,
+    ...     multistart=True,
+    ...     n_starts=10,
+    ...     sampler='lhs',
+    ...     multistart_subsample_size=50_000
+    ... )
+    >>> result = fitter.fit(
+    ...     lambda x, a, b, c: a * jnp.exp(-b * x) + c,
+    ...     x, y, p0=[2, 1, 0],
+    ...     bounds=([0, 0, 0], [10, 5, 10])
+    ... )
+
     Advanced configuration with progress monitoring:
 
     >>> config = LDMemoryConfig(
@@ -471,6 +502,11 @@ class LargeDatasetFitter:
         logger: Logger | None = None,
         enable_mixed_precision: bool | None = None,
         mixed_precision_config=None,
+        # Multi-start parameters (Task Group 3)
+        multistart: bool = False,
+        n_starts: int = 10,
+        sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+        multistart_subsample_size: int = 100_000,
     ) -> None:
         """Initialize LargeDatasetFitter.
 
@@ -487,12 +523,26 @@ class LargeDatasetFitter:
             If None, uses NLSQ's internal logger. This allows chunk failure
             warnings to appear in your application's logs.
         enable_mixed_precision : bool, optional
-            Enable mixed precision optimization (float32 → float64 fallback).
+            Enable mixed precision optimization (float32 -> float64 fallback).
             If None (default), automatically enables for chunked datasets
             (provides 50% additional memory savings). Set to False to disable.
         mixed_precision_config : MixedPrecisionConfig, optional
             Custom configuration for mixed precision behavior. If None and
             mixed precision is enabled, uses default configuration.
+        multistart : bool, optional
+            Enable multi-start optimization for global search (default: False).
+            When enabled, explores multiple starting points on a subsample
+            before running the full chunked optimization.
+        n_starts : int, optional
+            Number of starting points for multi-start optimization (default: 10).
+            Set to 0 to disable multi-start even when multistart=True.
+        sampler : str, optional
+            Sampling strategy for generating starting points (default: 'lhs').
+            Options: 'lhs' (Latin Hypercube), 'sobol', 'halton'.
+        multistart_subsample_size : int, optional
+            Size of subsample used for multi-start exploration (default: 100_000).
+            This should be small enough to fit in memory but large enough for
+            reliable parameter estimation.
         """
         if config is None:
             config = LDMemoryConfig(memory_limit_gb=memory_limit_gb)
@@ -503,6 +553,23 @@ class LargeDatasetFitter:
         # Mixed precision settings
         self.enable_mixed_precision = enable_mixed_precision
         self.mixed_precision_config = mixed_precision_config
+
+        # Multi-start configuration (Task Group 3)
+        self.multistart = multistart
+        self.n_starts = n_starts
+        self.sampler = sampler
+        self.multistart_subsample_size = multistart_subsample_size
+
+        # Create GlobalOptimizationConfig if multi-start is enabled
+        self._multistart_config = None
+        if self.multistart and self.n_starts > 0:
+            from nlsq.global_optimization import GlobalOptimizationConfig
+            self._multistart_config = GlobalOptimizationConfig(
+                n_starts=self.n_starts,
+                sampler=self.sampler,
+                center_on_p0=True,
+                scale_factor=1.0,
+            )
 
         # Initialize curve fitting backend
         if curve_fit_class is None:
@@ -736,7 +803,7 @@ class LargeDatasetFitter:
                 )
 
             self.logger.debug(
-                f"✓ Model validation passed: "
+                f"Model validation passed: "
                 f"f({x_test.shape}, {len(p0_test)} params) -> {output_test.shape}"
             )
 
@@ -752,6 +819,150 @@ class LargeDatasetFitter:
                 f"Proceeding with chunked fitting, but errors may occur."
             )
             # Don't fail here - let chunking proceed and catch real errors
+
+    def _subsample_for_multistart(
+        self,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        random_seed: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Extract representative subsample from data for multi-start exploration.
+
+        This method creates a memory-efficient subsample of the full dataset
+        for evaluating multiple starting points. Uses uniform random sampling
+        to ensure the subsample is representative of the full dataset.
+
+        Parameters
+        ----------
+        xdata : np.ndarray
+            Full independent variable data
+        ydata : np.ndarray
+            Full dependent variable data
+        random_seed : int, optional
+            Random seed for reproducibility
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            (x_subsample, y_subsample) arrays for multi-start exploration
+        """
+        n_points = len(xdata)
+
+        # Determine subsample size, respecting memory limits
+        # Use multistart_subsample_size but cap at actual data size
+        subsample_size = min(self.multistart_subsample_size, n_points)
+
+        # Also respect memory config: subsample should fit in available memory
+        # Estimate memory per point (conservative estimate)
+        estimated_memory_per_point = 16 * 2  # x and y, float64
+        available_memory_bytes = self.config.memory_limit_gb * (1024**3) * 0.5  # 50% for subsample
+        max_subsample_from_memory = int(available_memory_bytes / estimated_memory_per_point)
+
+        # Take minimum of configured size and memory-safe size
+        subsample_size = min(subsample_size, max_subsample_from_memory)
+
+        # If subsample size equals or exceeds data size, return full data
+        if subsample_size >= n_points:
+            self.logger.debug(
+                f"Subsample size ({subsample_size}) >= dataset size ({n_points}), "
+                "using full dataset for multi-start exploration"
+            )
+            return xdata, ydata
+
+        # Generate random indices for uniform sampling
+        rng = np.random.default_rng(random_seed)
+        subsample_indices = rng.choice(n_points, size=subsample_size, replace=False)
+
+        # Sort indices to maintain some data ordering (helps with cache locality)
+        subsample_indices = np.sort(subsample_indices)
+
+        x_subsample = xdata[subsample_indices]
+        y_subsample = ydata[subsample_indices]
+
+        self.logger.info(
+            f"Created subsample of {subsample_size:,} points "
+            f"({100 * subsample_size / n_points:.1f}% of dataset) for multi-start exploration"
+        )
+
+        return x_subsample, y_subsample
+
+    def _run_multistart_exploration(
+        self,
+        f: Callable,
+        x_subsample: np.ndarray,
+        y_subsample: np.ndarray,
+        p0: np.ndarray | None,
+        bounds: tuple,
+        **kwargs,
+    ) -> tuple[np.ndarray, dict]:
+        """Run multi-start exploration on subsample to find best starting point.
+
+        Uses MultiStartOrchestrator to evaluate multiple starting points
+        generated by LHS/Sobol/Halton sampling and returns the best one.
+
+        Parameters
+        ----------
+        f : Callable
+            Model function f(x, *params) -> y
+        x_subsample : np.ndarray
+            Subsample of independent variable data
+        y_subsample : np.ndarray
+            Subsample of dependent variable data
+        p0 : np.ndarray | None
+            Initial parameter guess (used for centering if center_on_p0=True)
+        bounds : tuple
+            Parameter bounds (lower, upper)
+        **kwargs
+            Additional arguments passed to curve_fit
+
+        Returns
+        -------
+        tuple[np.ndarray, dict]
+            (best_starting_point, multistart_diagnostics)
+            - best_starting_point: Best parameters found from exploration
+            - multistart_diagnostics: Dictionary with exploration details
+        """
+        from nlsq.global_optimization import MultiStartOrchestrator
+
+        exploration_start_time = time.time()
+
+        # Create orchestrator with our config
+        orchestrator = MultiStartOrchestrator(
+            config=self._multistart_config,
+            curve_fit_instance=self.curve_fit,
+        )
+
+        self.logger.info(
+            f"Running multi-start exploration with {self.n_starts} starting points "
+            f"on {len(x_subsample):,} point subsample using {self.sampler} sampling"
+        )
+
+        # Run exploration on subsample
+        result = orchestrator.fit(
+            f=f,
+            xdata=x_subsample,
+            ydata=y_subsample,
+            p0=p0,
+            bounds=bounds,
+            **kwargs,
+        )
+
+        exploration_time = time.time() - exploration_start_time
+
+        # Extract diagnostics from result
+        diagnostics = result.get('multistart_diagnostics', {})
+        diagnostics['exploration_time_seconds'] = exploration_time
+        diagnostics['subsample_size'] = len(x_subsample)
+
+        # Get the best starting point
+        best_params = result.popt if hasattr(result, 'popt') else result.get('popt', p0)
+
+        self.logger.info(
+            f"Multi-start exploration completed in {exploration_time:.2f}s. "
+            f"Best loss: {diagnostics.get('best_loss', 'N/A')}"
+        )
+
+        return np.asarray(best_params), diagnostics
 
     def estimate_requirements(self, n_points: int, n_params: int) -> DatasetStats:
         """Estimate memory requirements and processing strategy.
@@ -885,7 +1096,7 @@ class LargeDatasetFitter:
     ) -> OptimizeResult:
         """Internal implementation of fitting algorithm."""
 
-        time.time()
+        fit_start_time = time.time()
         n_points = len(xdata)
 
         # Estimate number of parameters from function signature or p0
@@ -907,6 +1118,50 @@ class LargeDatasetFitter:
         # Determine if chunking is needed
         needs_chunking = stats.n_chunks > 1
 
+        # Initialize multi-start diagnostics
+        multistart_diagnostics = {
+            'n_starts_configured': self.n_starts if self.multistart else 0,
+            'sampler': self.sampler,
+            'bypassed': False,
+        }
+
+        # Run multi-start exploration if enabled and chunking is needed
+        # (for single-chunk datasets, multi-start overhead isn't worth it)
+        if self.multistart and self.n_starts > 0 and needs_chunking:
+            self.logger.info("Multi-start optimization enabled for chunked dataset")
+
+            # Create subsample for exploration
+            x_subsample, y_subsample = self._subsample_for_multistart(xdata, ydata)
+
+            # Run multi-start exploration
+            best_p0, exploration_diagnostics = self._run_multistart_exploration(
+                f=f,
+                x_subsample=x_subsample,
+                y_subsample=y_subsample,
+                p0=np.array(p0) if p0 is not None else None,
+                bounds=bounds,
+                **kwargs,
+            )
+
+            # Update p0 with best starting point
+            p0 = best_p0
+            multistart_diagnostics.update(exploration_diagnostics)
+            multistart_diagnostics['best_starting_point'] = best_p0.tolist() if hasattr(best_p0, 'tolist') else list(best_p0)
+
+            self.logger.info(
+                f"Using best starting point from multi-start exploration: {best_p0}"
+            )
+        elif self.multistart and self.n_starts == 0:
+            # Multi-start enabled but n_starts=0 means skip
+            multistart_diagnostics['bypassed'] = True
+            multistart_diagnostics['n_starts_evaluated'] = 0
+            self.logger.debug("Multi-start disabled (n_starts=0)")
+        elif self.multistart and not needs_chunking:
+            # Single chunk dataset - skip multi-start overhead
+            multistart_diagnostics['bypassed'] = True
+            multistart_diagnostics['bypass_reason'] = 'single_chunk_dataset'
+            self.logger.debug("Multi-start skipped for single-chunk dataset")
+
         # Auto-enable mixed precision for chunked datasets (50% additional memory savings)
         enable_mp = self.enable_mixed_precision
         if enable_mp is None and needs_chunking:
@@ -927,12 +1182,12 @@ class LargeDatasetFitter:
 
             mixed_precision_manager = MixedPrecisionManager(mp_config)
             self.logger.info(
-                "Mixed precision optimization enabled (float32 → float64 fallback)"
+                "Mixed precision optimization enabled (float32 -> float64 fallback)"
             )
 
         # Handle datasets that fit in memory
         if stats.n_chunks == 1:
-            return self._fit_single_chunk(
+            result = self._fit_single_chunk(
                 f,
                 xdata,
                 ydata,
@@ -943,9 +1198,12 @@ class LargeDatasetFitter:
                 mixed_precision_manager=mixed_precision_manager,
                 **kwargs,
             )
+            # Add multi-start diagnostics to result
+            result['multistart_diagnostics'] = multistart_diagnostics
+            return result
 
         # Handle chunked processing (will use streaming if enabled for very large datasets)
-        return self._fit_chunked(
+        result = self._fit_chunked(
             f,
             xdata,
             ydata,
@@ -958,6 +1216,12 @@ class LargeDatasetFitter:
             mixed_precision_manager=mixed_precision_manager,
             **kwargs,
         )
+
+        # Add multi-start diagnostics and timing to result
+        multistart_diagnostics['total_fit_time_seconds'] = time.time() - fit_start_time
+        result['multistart_diagnostics'] = multistart_diagnostics
+
+        return result
 
     def _fit_single_chunk(
         self,
@@ -1744,7 +2008,7 @@ class LargeDatasetFitter:
                 final_memory = process.memory_info().rss / (1024**3)  # GB
                 memory_delta = final_memory - initial_memory
                 self.logger.debug(
-                    f"Final memory usage: {final_memory:.2f} GB (Δ{memory_delta:+.2f} GB)"
+                    f"Final memory usage: {final_memory:.2f} GB (delta: {memory_delta:+.2f} GB)"
                 )
             except Exception as e:
                 # Memory monitoring is best effort - log but don't fail
@@ -1791,6 +2055,11 @@ def fit_large_dataset(
     logger: Logger | None = None,
     enable_mixed_precision: bool | None = None,
     mixed_precision_config=None,
+    # Multi-start parameters (Task Group 3)
+    multistart: bool = False,
+    n_starts: int = 10,
+    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    multistart_subsample_size: int = 100_000,
     **kwargs,
 ) -> OptimizeResult:
     """Convenience function for fitting large datasets.
@@ -1812,12 +2081,24 @@ def fit_large_dataset(
     logger : logging.Logger, optional
         External logger for application integration (default: None)
     enable_mixed_precision : bool, optional
-        Enable mixed precision optimization (float32 → float64 fallback).
+        Enable mixed precision optimization (float32 -> float64 fallback).
         If None (default), automatically enables for chunked datasets
         (provides 50% additional memory savings). Set to False to disable.
     mixed_precision_config : MixedPrecisionConfig, optional
         Custom configuration for mixed precision behavior. If None and
         mixed precision is enabled, uses default configuration.
+    multistart : bool, optional
+        Enable multi-start optimization for global search (default: False).
+        When enabled, explores multiple starting points on a subsample
+        before running the full chunked optimization.
+    n_starts : int, optional
+        Number of starting points for multi-start optimization (default: 10).
+        Set to 0 to disable multi-start even when multistart=True.
+    sampler : str, optional
+        Sampling strategy for generating starting points (default: 'lhs').
+        Options: 'lhs' (Latin Hypercube), 'sobol', 'halton'.
+    multistart_subsample_size : int, optional
+        Size of subsample used for multi-start exploration (default: 100_000).
     **kwargs
         Additional arguments passed to curve_fit
 
@@ -1847,6 +2128,17 @@ def fit_large_dataset(
     >>> print(f"Fitted parameters: {result.popt}")
     >>> print(f"Success rate: {result.success_rate:.1%}")
     >>>
+    >>> # Fit with multi-start optimization
+    >>> result = fit_large_dataset(
+    ...     lambda x, a, b: a * jnp.exp(-b * x),
+    ...     x_large, y_large,
+    ...     p0=[2.0, 1.0],
+    ...     bounds=([0, 0], [10, 5]),
+    ...     multistart=True,
+    ...     n_starts=10,
+    ...     sampler='lhs'
+    ... )
+    >>>
     >>> # Check failure diagnostics if some chunks failed
     >>> if result.failure_summary['total_failures'] > 0:
     ...     print(f"Failed chunks: {result.failure_summary['failed_chunk_indices']}")
@@ -1857,6 +2149,10 @@ def fit_large_dataset(
         logger=logger,
         enable_mixed_precision=enable_mixed_precision,
         mixed_precision_config=mixed_precision_config,
+        multistart=multistart,
+        n_starts=n_starts,
+        sampler=sampler,
+        multistart_subsample_size=multistart_subsample_size,
     )
 
     if show_progress:

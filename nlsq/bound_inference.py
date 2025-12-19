@@ -26,6 +26,7 @@ import numpy as np
 __all__ = [
     "BoundsInference",
     "infer_bounds",
+    "infer_bounds_for_multistart",
     "merge_bounds",
 ]
 
@@ -257,6 +258,129 @@ def infer_bounds(
         enforce_positivity=enforce_positivity,
     )
     return inference.infer()
+
+
+def infer_bounds_for_multistart(
+    xdata,
+    ydata,
+    p0,
+    user_bounds: tuple | None = None,
+    safety_factor: float = 20.0,
+    enforce_positivity: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Infer bounds suitable for multi-start LHS sampling.
+
+    This is a wrapper around infer_bounds() with defaults appropriate for
+    global exploration in multi-start optimization. Uses a larger safety_factor
+    to allow broader exploration of the parameter space.
+
+    Parameters
+    ----------
+    xdata : array_like
+        Independent variable data
+    ydata : array_like
+        Dependent variable data
+    p0 : array_like
+        Initial parameter guess (used for centering and scale inference)
+    user_bounds : tuple, optional
+        User-provided (lower, upper) bounds. If provided and finite, these
+        take precedence over inferred bounds.
+    safety_factor : float, optional
+        Multiplier for bound ranges. Default: 20.0 (larger than standard
+        infer_bounds to allow broader exploration)
+    enforce_positivity : bool, optional
+        Force all bounds to be non-negative if p0 is positive. Default: True
+
+    Returns
+    -------
+    lower_bounds : ndarray
+        Lower bounds suitable for LHS sampling
+    upper_bounds : ndarray
+        Upper bounds suitable for LHS sampling
+
+    Notes
+    -----
+    This function ensures that returned bounds are always finite, which is
+    required for Latin Hypercube Sampling. If user provides infinite bounds,
+    they are replaced with inferred finite bounds.
+
+    The default safety_factor of 20.0 is larger than the standard 10.0 used
+    in infer_bounds() to allow for broader exploration during multi-start
+    optimization.
+
+    Examples
+    --------
+    Basic usage for multi-start:
+
+    >>> import numpy as np
+    >>> x = np.linspace(0, 10, 100)
+    >>> y = 2.5 * np.exp(-0.5 * x) + 1.0
+    >>> p0 = [2.0, 0.5, 1.0]
+    >>> bounds = infer_bounds_for_multistart(x, y, p0)
+    >>> # bounds will be wider than standard infer_bounds
+
+    With user-provided bounds (finite bounds are preserved):
+
+    >>> user_bounds = ([0, 0, 0], [10, np.inf, 5])
+    >>> bounds = infer_bounds_for_multistart(x, y, p0, user_bounds=user_bounds)
+    >>> # First and third params use user bounds, second is inferred
+
+    See Also
+    --------
+    infer_bounds : Standard bound inference with smaller safety_factor
+    merge_bounds : Merge user-provided and inferred bounds
+    """
+    p0 = np.asarray(p0)
+
+    # Infer bounds with larger safety factor for exploration
+    inferred_bounds = infer_bounds(
+        xdata,
+        ydata,
+        p0,
+        safety_factor=safety_factor,
+        enforce_positivity=enforce_positivity,
+    )
+
+    # If user provides bounds, merge them
+    if user_bounds is not None:
+        merged_bounds = merge_bounds(inferred_bounds, user_bounds)
+    else:
+        merged_bounds = inferred_bounds
+
+    # Ensure all bounds are finite (required for LHS)
+    lower, upper = merged_bounds
+
+    # Replace any remaining infinities with inferred values
+    inferred_lower, inferred_upper = inferred_bounds
+
+    lower = np.where(np.isfinite(lower), lower, inferred_lower)
+    upper = np.where(np.isfinite(upper), upper, inferred_upper)
+
+    # Final check: if bounds are still not finite, use fallback
+    if not np.all(np.isfinite(lower)):
+        # Fallback for lower bounds: use p0 / safety_factor or -safety_factor
+        for i in range(len(lower)):
+            if not np.isfinite(lower[i]):
+                if p0[i] > 0:
+                    lower[i] = p0[i] / safety_factor
+                elif p0[i] < 0:
+                    lower[i] = p0[i] * safety_factor
+                else:
+                    lower[i] = -safety_factor
+
+    if not np.all(np.isfinite(upper)):
+        # Fallback for upper bounds: use p0 * safety_factor or safety_factor
+        for i in range(len(upper)):
+            if not np.isfinite(upper[i]):
+                if p0[i] > 0:
+                    upper[i] = p0[i] * safety_factor
+                elif p0[i] < 0:
+                    upper[i] = p0[i] / safety_factor
+                else:
+                    upper[i] = safety_factor
+
+    return lower, upper
 
 
 def merge_bounds(

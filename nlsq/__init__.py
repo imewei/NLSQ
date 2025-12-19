@@ -97,6 +97,13 @@ from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
 from nlsq.hybrid_streaming_config import HybridStreamingConfig
 from nlsq.parameter_normalizer import ParameterNormalizer
 
+# Global optimization (Task Group 5)
+from nlsq.global_optimization import (
+    GlobalOptimizationConfig,
+    MultiStartOrchestrator,
+    TournamentSelector,
+)
+
 # Performance profiling (Days 20-21)
 from nlsq.profiler import (
     PerformanceProfiler,
@@ -170,6 +177,10 @@ __all__ = [
     "FallbackOrchestrator",
     "FallbackResult",
     "FallbackStrategy",
+    # Global optimization (Task Group 5)
+    "GlobalOptimizationConfig",
+    "MultiStartOrchestrator",
+    "TournamentSelector",
     "InputValidator",
     "LargeDatasetConfig",
     "LargeDatasetFitter",
@@ -229,6 +240,8 @@ __all__ = [
     "enable_mixed_precision_fallback",
     "estimate_condition_number",
     "estimate_memory_requirements",
+    # Unified fit function (Task Group 5)
+    "fit",
     # Large dataset utilities
     "fit_large_dataset",
     # Common functions library
@@ -263,6 +276,273 @@ if _HAS_STREAMING:
     )
 
 
+# Preset configurations for the fit() function
+_FIT_PRESETS = {
+    'fast': {
+        'n_starts': 0,
+        'multistart': False,
+        'description': 'Single-start optimization for maximum speed',
+    },
+    'robust': {
+        'n_starts': 5,
+        'multistart': True,
+        'description': 'Multi-start with 5 starts for robustness',
+    },
+    'global': {
+        'n_starts': 20,
+        'multistart': True,
+        'description': 'Thorough global search with 20 starts',
+    },
+    'streaming': {
+        'n_starts': 10,
+        'multistart': True,
+        'use_streaming': True,
+        'description': 'Streaming optimization for large datasets with multi-start',
+    },
+    'large': {
+        'n_starts': 5,
+        'multistart': True,
+        'use_large_dataset': True,
+        'description': 'Auto-detect dataset size and use appropriate strategy',
+    },
+}
+
+
+def fit(
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: ArrayLike | None = None,
+    sigma: ArrayLike | None = None,
+    absolute_sigma: bool = False,
+    check_finite: bool = True,
+    bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
+    method: MethodLiteral | None = None,
+    preset: Literal['fast', 'robust', 'global', 'streaming', 'large'] | None = None,
+    # Multi-start parameters (can override preset)
+    multistart: bool | None = None,
+    n_starts: int | None = None,
+    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    center_on_p0: bool = True,
+    scale_factor: float = 1.0,
+    # Large dataset parameters
+    memory_limit_gb: float | None = None,
+    size_threshold: int = 1_000_000,
+    show_progress: bool = False,
+    chunk_size: int | None = None,
+    **kwargs: Any,
+) -> tuple[np.ndarray, np.ndarray] | OptimizeResult:
+    """Unified curve fitting function with preset-based configuration.
+
+    This function provides a simplified API for curve fitting with sensible
+    defaults based on preset configurations. It automatically selects the
+    appropriate backend (curve_fit, curve_fit_large, or streaming) based on
+    the preset and dataset characteristics.
+
+    Parameters
+    ----------
+    f : callable
+        Model function f(x, \\*params) -> y. Must use jax.numpy operations.
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : array_like, optional
+        Initial parameter guess.
+    sigma : array_like, optional
+        Uncertainties in ydata for weighted fitting.
+    absolute_sigma : bool, optional
+        Whether sigma represents absolute uncertainties.
+    check_finite : bool, optional
+        Check for finite input values.
+    bounds : tuple, optional
+        Parameter bounds as (lower, upper).
+    method : str, optional
+        Optimization algorithm ('trf', 'lm', or None for auto).
+    preset : {'fast', 'robust', 'global', 'streaming', 'large'}, optional
+        Preset configuration to use:
+
+        - 'fast': Single-start optimization for maximum speed (n_starts=0)
+        - 'robust': Multi-start with 5 starts for robustness
+        - 'global': Thorough global search with 20 starts
+        - 'streaming': Streaming optimization for large datasets with multi-start
+        - 'large': Auto-detect dataset size and use appropriate strategy
+
+        If None, defaults to 'fast' for small datasets or 'large' for datasets
+        exceeding size_threshold.
+    multistart : bool, optional
+        Override preset's multi-start setting.
+    n_starts : int, optional
+        Override preset's n_starts setting.
+    sampler : {'lhs', 'sobol', 'halton'}, optional
+        Sampling strategy for multi-start. Default: 'lhs'.
+    center_on_p0 : bool, optional
+        Center multi-start samples around p0. Default: True.
+    scale_factor : float, optional
+        Scale factor for exploration region. Default: 1.0.
+    memory_limit_gb : float, optional
+        Maximum memory usage in GB for large datasets.
+    size_threshold : int, optional
+        Point threshold for large dataset processing (default: 1M).
+    show_progress : bool, optional
+        Display progress bar for long operations.
+    chunk_size : int, optional
+        Override automatic chunk size calculation.
+    **kwargs
+        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss).
+
+    Returns
+    -------
+    result : CurveFitResult or tuple
+        Optimization result. Contains popt, pcov, and multistart_diagnostics.
+        Supports tuple unpacking: popt, pcov = fit(...)
+
+    Examples
+    --------
+    Basic usage with default preset:
+
+    >>> popt, pcov = fit(model_func, xdata, ydata, p0=[1, 2, 3])
+
+    Using 'robust' preset for multi-start:
+
+    >>> result = fit(model_func, xdata, ydata, p0=[1, 2, 3],
+    ...              bounds=([0, 0, 0], [10, 10, 10]), preset='robust')
+
+    Using 'global' preset for thorough search:
+
+    >>> result = fit(model_func, xdata, ydata, p0=[1, 2, 3],
+    ...              bounds=([0, 0, 0], [10, 10, 10]), preset='global')
+
+    Large dataset with auto-detection:
+
+    >>> result = fit(model_func, big_xdata, big_ydata,
+    ...              preset='large', show_progress=True)
+
+    See Also
+    --------
+    curve_fit : Lower-level API with full control
+    curve_fit_large : Specialized API for large datasets
+    """
+    # Input validation
+    xdata = np.asarray(xdata)
+    ydata = np.asarray(ydata)
+    n_points = len(xdata)
+
+    # Auto-select preset if not provided
+    if preset is None:
+        if n_points >= size_threshold:
+            preset = 'large'
+        else:
+            preset = 'fast'
+
+    # Get preset configuration
+    preset_config = _FIT_PRESETS.get(preset, _FIT_PRESETS['fast'])
+
+    # Apply preset defaults, allowing overrides
+    effective_multistart = multistart if multistart is not None else preset_config.get('multistart', False)
+    effective_n_starts = n_starts if n_starts is not None else preset_config.get('n_starts', 0)
+    use_streaming = preset_config.get('use_streaming', False)
+    use_large_dataset = preset_config.get('use_large_dataset', False)
+
+    # Determine which backend to use
+    if use_streaming or preset == 'streaming':
+        # Use AdaptiveHybridStreaming for streaming preset
+        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+
+        # Prepare p0
+        if p0 is None:
+            from inspect import signature
+            sig = signature(f)
+            args = sig.parameters
+            if len(args) < 2:
+                raise ValueError("Unable to determine number of fit parameters.")
+            n_params = len(args) - 1
+            p0 = np.ones(n_params)
+        p0 = np.atleast_1d(p0)
+
+        # Prepare bounds
+        from nlsq.least_squares import prepare_bounds
+        lb, ub = prepare_bounds(bounds, len(p0))
+        bounds_tuple = (lb, ub) if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))) else None
+
+        # Create config with multi-start settings
+        # Use the correct parameter names from HybridStreamingConfig
+        config = HybridStreamingConfig(
+            enable_multistart=effective_multistart and effective_n_starts > 0,
+            n_starts=effective_n_starts if effective_multistart else 10,
+            multistart_sampler=sampler,
+        )
+
+        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+
+        result_dict = optimizer.fit(
+            data_source=(xdata, ydata),
+            func=f,
+            p0=p0,
+            bounds=bounds_tuple,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            callback=kwargs.get('callback'),
+            verbose=kwargs.get('verbose', 1),
+        )
+
+        # Convert to standard result format
+        from nlsq.result import CurveFitResult
+        result = CurveFitResult(result_dict)
+        result['pcov'] = result_dict.get('pcov', np.full((len(p0), len(p0)), np.inf))
+        result['multistart_diagnostics'] = {
+            'n_starts_configured': effective_n_starts,
+            'bypassed': not effective_multistart or effective_n_starts == 0,
+            'preset': preset,
+        }
+        return result
+
+    elif use_large_dataset or n_points >= size_threshold:
+        # Use curve_fit_large for large datasets
+        return curve_fit_large(
+            f,
+            xdata,
+            ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,
+            memory_limit_gb=memory_limit_gb,
+            size_threshold=size_threshold,
+            show_progress=show_progress,
+            chunk_size=chunk_size,
+            multistart=effective_multistart,
+            n_starts=effective_n_starts,
+            sampler=sampler,
+            center_on_p0=center_on_p0,
+            scale_factor=scale_factor,
+            **kwargs,
+        )
+
+    else:
+        # Use standard curve_fit
+        return curve_fit(
+            f,
+            xdata,
+            ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,
+            multistart=effective_multistart,
+            n_starts=effective_n_starts,
+            sampler=sampler,
+            center_on_p0=center_on_p0,
+            scale_factor=scale_factor,
+            **kwargs,
+        )
+
+
 # Convenience function for large dataset curve fitting
 def curve_fit_large(
     f: ModelFunction,
@@ -284,6 +564,13 @@ def curve_fit_large(
     size_threshold: int = 1_000_000,  # 1M points
     show_progress: bool = False,
     chunk_size: int | None = None,
+    # Multi-start optimization parameters (Task Group 5)
+    multistart: bool = False,
+    n_starts: int = 10,
+    global_search: bool = False,
+    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    center_on_p0: bool = True,
+    scale_factor: float = 1.0,
     # Deprecated parameters (v0.2.0)
     enable_sampling: bool | None = None,
     sampling_threshold: int | None = None,
@@ -327,6 +614,18 @@ def curve_fit_large(
         Display progress bar for long operations.
     chunk_size : int, optional
         Override automatic chunk size calculation.
+    multistart : bool, optional
+        Enable multi-start optimization for global search. Default: False.
+    n_starts : int, optional
+        Number of starting points for multi-start optimization. Default: 10.
+    global_search : bool, optional
+        Shorthand for multistart=True, n_starts=20. Default: False.
+    sampler : {'lhs', 'sobol', 'halton'}, optional
+        Sampling strategy for multi-start. Default: 'lhs'.
+    center_on_p0 : bool, optional
+        Center multi-start samples around p0. Default: True.
+    scale_factor : float, optional
+        Scale factor for exploration region. Default: 1.0.
     enable_sampling : bool, optional
         **Deprecated in v0.2.0**. This parameter is ignored. Use streaming
         optimization instead. See MIGRATION_V0.2.0.md for details.
@@ -384,6 +683,12 @@ def curve_fit_large(
     >>> popt, _pcov = curve_fit_large(model_func, big_xdata, big_ydata,
     ...                             show_progress=True, memory_limit_gb=8)
 
+    With multi-start optimization:
+
+    >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata,
+    ...                             p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]),
+    ...                             multistart=True, n_starts=10)
+
     Using external logger for diagnostics:
 
     >>> import logging
@@ -393,6 +698,11 @@ def curve_fit_large(
     >>> # Chunk failures now appear in myapp's logs
     """
     import numpy as np
+
+    # Handle global_search shorthand
+    if global_search:
+        multistart = True
+        n_starts = 20
 
     # Input validation
     xdata = np.asarray(xdata)
@@ -482,6 +792,12 @@ def curve_fit_large(
         fit_kwargs["stability"] = stability
         fit_kwargs["rescale_data"] = rescale_data
         fit_kwargs["max_jacobian_elements_for_svd"] = max_jacobian_elements_for_svd
+        # Add multi-start parameters
+        fit_kwargs["multistart"] = multistart
+        fit_kwargs["n_starts"] = n_starts
+        fit_kwargs["sampler"] = sampler
+        fit_kwargs["center_on_p0"] = center_on_p0
+        fit_kwargs["scale_factor"] = scale_factor
 
         return curve_fit(f, xdata, ydata, **fit_kwargs)
 
@@ -557,6 +873,13 @@ def curve_fit_large(
             kwargs["absolute_sigma"] = absolute_sigma
         if not check_finite:
             kwargs["check_finite"] = check_finite
+
+        # Add multi-start parameters to kwargs
+        kwargs["multistart"] = multistart
+        kwargs["n_starts"] = n_starts
+        kwargs["sampler"] = sampler
+        kwargs["center_on_p0"] = center_on_p0
+        kwargs["scale_factor"] = scale_factor
 
         # Convert p0 to appropriate type for LargeDatasetFitter
         # LargeDatasetFitter expects np.ndarray | list | None (no tuple or jnp.ndarray)
