@@ -108,31 +108,26 @@ Fine-tune specific parameters:
     config = HybridStreamingConfig(
         # Normalization
         normalize=True,
-        normalization_strategy='bounds',  # 'auto', 'bounds', 'p0', 'none'
-
+        normalization_strategy="bounds",  # 'auto', 'bounds', 'p0', 'none'
         # Phase 1: Adam warmup
         warmup_iterations=300,
         max_warmup_iterations=800,
         warmup_learning_rate=0.01,
         loss_plateau_threshold=5e-4,
         gradient_norm_threshold=5e-3,
-
         # Phase 2: Gauss-Newton
         gauss_newton_max_iterations=150,
         gauss_newton_tol=1e-9,
         trust_region_initial=0.5,
         regularization_factor=1e-8,
-
         # Streaming
         chunk_size=20000,
-
         # Fault tolerance
         enable_checkpoints=True,
         checkpoint_frequency=50,
         validate_numerics=True,
-
         # Precision
-        precision='float64',  # 'auto', 'float32', 'float64'
+        precision="float64",  # 'auto', 'float32', 'float64'
     )
 
 Normalization Strategies
@@ -143,16 +138,16 @@ Configure how parameters are normalized:
 .. code-block:: python
 
     # Auto-detect: use bounds if provided, else p0-based
-    config = HybridStreamingConfig(normalization_strategy='auto')
+    config = HybridStreamingConfig(normalization_strategy="auto")
 
     # Normalize to [0, 1] using parameter bounds
-    config = HybridStreamingConfig(normalization_strategy='bounds')
+    config = HybridStreamingConfig(normalization_strategy="bounds")
 
     # Scale by initial parameter magnitudes
-    config = HybridStreamingConfig(normalization_strategy='p0')
+    config = HybridStreamingConfig(normalization_strategy="p0")
 
     # No normalization (identity transform)
-    config = HybridStreamingConfig(normalization_strategy='none')
+    config = HybridStreamingConfig(normalization_strategy="none")
 
 Switching Criteria
 ~~~~~~~~~~~~~~~~~~
@@ -163,7 +158,7 @@ Control when Phase 1 switches to Phase 2:
 
     config = HybridStreamingConfig(
         # Any of these criteria can trigger switch
-        active_switching_criteria=['plateau', 'gradient', 'max_iter'],
+        active_switching_criteria=["plateau", "gradient", "max_iter"],
         # Loss plateau detection threshold
         loss_plateau_threshold=1e-4,
         # Gradient norm threshold

@@ -198,20 +198,20 @@ class MultiStartOrchestrator:
         # Generate samples in [0, 1]^n
         if self.config.sampler == "lhs":
             # LHS accepts rng_key
-            samples = sampler(n_starts, n_params, rng_key=rng_key)
+            samples_raw = sampler(n_starts, n_params, rng_key=rng_key)
         else:
             # Sobol and Halton are deterministic
-            samples = sampler(n_starts, n_params)
+            samples_raw = sampler(n_starts, n_params)
 
         # Convert to numpy
-        samples = np.asarray(samples)
+        samples = np.asarray(samples_raw)
 
         # Scale to bounds
         if self.config.center_on_p0 and p0 is not None:
             # Center samples around p0
             import jax.numpy as jnp
 
-            samples_jnp = jnp.asarray(samples)
+            samples_jnp = jnp.asarray(samples_raw)
             p0_jnp = jnp.asarray(p0)
             lb_jnp = jnp.asarray(lb)
             ub_jnp = jnp.asarray(ub)
@@ -228,7 +228,7 @@ class MultiStartOrchestrator:
             # Scale to full bounds
             import jax.numpy as jnp
 
-            samples_jnp = jnp.asarray(samples)
+            samples_jnp = jnp.asarray(samples_raw)
             lb_jnp = jnp.asarray(lb)
             ub_jnp = jnp.asarray(ub)
 
@@ -272,7 +272,7 @@ class MultiStartOrchestrator:
         if len(starting_points) == 0:
             return []
 
-        results = []
+        results: list[tuple[np.ndarray, float, CurveFitResult | None]] = []
         n_starts = len(starting_points)
 
         self.logger.debug(
@@ -284,7 +284,7 @@ class MultiStartOrchestrator:
         for i, p0 in enumerate(starting_points):
             try:
                 # Run optimization from this starting point
-                result = self.curve_fit.curve_fit(
+                result: CurveFitResult = self.curve_fit.curve_fit(  # type: ignore[assignment]
                     f,
                     xdata,
                     ydata,
@@ -377,7 +377,7 @@ class MultiStartOrchestrator:
         ydata = np.asarray(ydata)
 
         # Diagnostics tracking
-        diagnostics = {
+        diagnostics: dict[str, Any] = {
             "n_starts_configured": self.config.n_starts,
             "sampler": self.config.sampler,
             "center_on_p0": self.config.center_on_p0,
@@ -394,7 +394,7 @@ class MultiStartOrchestrator:
             diagnostics["n_starts_evaluated"] = 0
 
             # Run single-start optimization
-            result = self.curve_fit.curve_fit(
+            result: CurveFitResult = self.curve_fit.curve_fit(  # type: ignore[assignment]
                 f,
                 xdata,
                 ydata,
@@ -509,7 +509,7 @@ class MultiStartOrchestrator:
                 "All starting points failed, falling back to single-start"
             )
             # Fall back to single-start with original p0
-            result = self.curve_fit.curve_fit(
+            result = self.curve_fit.curve_fit(  # type: ignore[assignment]
                 f,
                 xdata,
                 ydata,
@@ -539,7 +539,7 @@ class MultiStartOrchestrator:
                 result = best_result
             else:
                 # Shouldn't happen, but fallback
-                result = self.curve_fit.curve_fit(
+                result = self.curve_fit.curve_fit(  # type: ignore[assignment]
                     f,
                     xdata,
                     ydata,
@@ -553,6 +553,6 @@ class MultiStartOrchestrator:
 
         # Also add as attribute for convenience
         if not hasattr(result, "multistart_diagnostics"):
-            result.multistart_diagnostics = diagnostics
+            result.multistart_diagnostics = diagnostics  # type: ignore[attr-defined]
 
         return result

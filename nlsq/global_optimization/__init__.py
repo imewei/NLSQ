@@ -76,18 +76,18 @@ from nlsq.global_optimization.sampling import (
 from nlsq.global_optimization.tournament import TournamentSelector
 
 __all__ = [
+    "PRESETS",
     # Configuration
     "GlobalOptimizationConfig",
-    "PRESETS",
-    # Sampling functions
-    "latin_hypercube_sample",
-    "sobol_sample",
-    "halton_sample",
-    "scale_samples_to_bounds",
-    "center_samples_around_p0",
-    "get_sampler",
     # Multi-start orchestration
     "MultiStartOrchestrator",
     # Tournament selection for large datasets
     "TournamentSelector",
+    "center_samples_around_p0",
+    "get_sampler",
+    "halton_sample",
+    # Sampling functions
+    "latin_hypercube_sample",
+    "scale_samples_to_bounds",
+    "sobol_sample",
 ]

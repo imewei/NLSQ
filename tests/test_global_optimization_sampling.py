@@ -142,11 +142,13 @@ class TestBoundsTransformation:
     def test_scale_samples_to_bounds(self):
         """Test bounds-aware scaling transforms samples to [lb, ub]."""
         # Samples in [0, 1]
-        samples = jnp.array([
-            [0.0, 0.0, 0.0],
-            [0.5, 0.5, 0.5],
-            [1.0, 1.0, 1.0],
-        ])
+        samples = jnp.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.5, 0.5, 0.5],
+                [1.0, 1.0, 1.0],
+            ]
+        )
         lb = jnp.array([0.0, -10.0, 100.0])
         ub = jnp.array([10.0, 10.0, 200.0])
 
@@ -163,11 +165,13 @@ class TestBoundsTransformation:
     def test_center_samples_around_p0(self):
         """Test centering samples around p0 with scale factor."""
         # Samples in [0, 1]
-        samples = jnp.array([
-            [0.0, 0.0],
-            [0.5, 0.5],
-            [1.0, 1.0],
-        ])
+        samples = jnp.array(
+            [
+                [0.0, 0.0],
+                [0.5, 0.5],
+                [1.0, 1.0],
+            ]
+        )
         p0 = jnp.array([5.0, 10.0])
         lb = jnp.array([0.0, 0.0])
         ub = jnp.array([10.0, 20.0])
@@ -198,7 +202,7 @@ class TestSamplerFactory:
 
     def test_get_sampler_lhs(self):
         """Test get_sampler returns LHS for 'lhs'."""
-        sampler = get_sampler('lhs')
+        sampler = get_sampler("lhs")
         samples = sampler(10, 3)
 
         assert samples.shape == (10, 3)
@@ -208,14 +212,14 @@ class TestSamplerFactory:
 
     def test_get_sampler_sobol(self):
         """Test get_sampler returns Sobol for 'sobol'."""
-        sampler = get_sampler('sobol')
+        sampler = get_sampler("sobol")
         samples = sampler(10, 3)
 
         assert samples.shape == (10, 3)
 
     def test_get_sampler_halton(self):
         """Test get_sampler returns Halton for 'halton'."""
-        sampler = get_sampler('halton')
+        sampler = get_sampler("halton")
         samples = sampler(10, 3)
 
         assert samples.shape == (10, 3)
@@ -223,12 +227,12 @@ class TestSamplerFactory:
     def test_get_sampler_invalid_type(self):
         """Test get_sampler raises error for invalid type."""
         with pytest.raises(ValueError, match="Unknown sampler type"):
-            get_sampler('invalid_sampler')
+            get_sampler("invalid_sampler")
 
     def test_get_sampler_case_insensitive(self):
         """Test get_sampler is case insensitive."""
-        sampler1 = get_sampler('LHS')
-        sampler2 = get_sampler('lhs')
+        sampler1 = get_sampler("LHS")
+        sampler2 = get_sampler("lhs")
 
         # Both should work and return similar samplers
         samples1 = sampler1(5, 2)

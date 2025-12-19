@@ -51,7 +51,9 @@ class TestFaultToleranceCheckpoints:
             bounds = (jnp.array([0.0, 0.0]), jnp.array([10.0, 2.0]))
 
             # Run optimization (will auto-save checkpoints)
-            result = optimizer.fit((x_data, y_data), model, p0, bounds=bounds, verbose=0)
+            result = optimizer.fit(
+                (x_data, y_data), model, p0, bounds=bounds, verbose=0
+            )
 
             # Verify checkpoint was created
             checkpoint_files = list(Path(tmpdir).glob("checkpoint_*.h5"))
@@ -59,29 +61,29 @@ class TestFaultToleranceCheckpoints:
 
             # Load checkpoint and verify contents
             checkpoint_path = checkpoint_files[0]
-            with h5py.File(checkpoint_path, 'r') as f:
+            with h5py.File(checkpoint_path, "r") as f:
                 # Check version
-                assert 'version' in f.attrs
-                assert f.attrs['version'] == '3.0'  # Hybrid optimizer version
+                assert "version" in f.attrs
+                assert f.attrs["version"] == "3.0"  # Hybrid optimizer version
 
                 # Check phase-specific state exists
-                assert 'phase_state' in f
-                assert 'current_phase' in f['phase_state']
-                assert 'normalized_params' in f['phase_state']
+                assert "phase_state" in f
+                assert "current_phase" in f["phase_state"]
+                assert "normalized_params" in f["phase_state"]
 
                 # Check Phase 1 optimizer state (if saved during Phase 1)
                 # Phase 1 uses Optax Adam optimizer
-                if 'phase1_optimizer_state' in f['phase_state']:
-                    assert 'mu' in f['phase_state/phase1_optimizer_state']
-                    assert 'nu' in f['phase_state/phase1_optimizer_state']
+                if "phase1_optimizer_state" in f["phase_state"]:
+                    assert "mu" in f["phase_state/phase1_optimizer_state"]
+                    assert "nu" in f["phase_state/phase1_optimizer_state"]
 
                 # Check Phase 2 accumulators (if saved during/after Phase 2)
-                if 'phase2_jtj_accumulator' in f['phase_state']:
-                    jtj = f['phase_state/phase2_jtj_accumulator'][()]
+                if "phase2_jtj_accumulator" in f["phase_state"]:
+                    jtj = f["phase_state/phase2_jtj_accumulator"][()]
                     assert jtj.shape == (2, 2)  # n_params x n_params
 
-                if 'phase2_jtr_accumulator' in f['phase_state']:
-                    jtr = f['phase_state/phase2_jtr_accumulator'][()]
+                if "phase2_jtr_accumulator" in f["phase_state"]:
+                    jtr = f["phase_state/phase2_jtr_accumulator"][()]
                     assert jtr.shape == (2,)  # n_params
 
     def test_checkpoint_resume_from_any_phase(self):
@@ -118,9 +120,9 @@ class TestFaultToleranceCheckpoints:
             latest_checkpoint = checkpoint_files[-1]
 
             # Load checkpoint to verify phase
-            with h5py.File(latest_checkpoint, 'r') as f:
-                saved_phase = int(f['phase_state/current_phase'][()])
-                saved_params = jnp.array(f['phase_state/normalized_params'])
+            with h5py.File(latest_checkpoint, "r") as f:
+                saved_phase = int(f["phase_state/current_phase"][()])
+                saved_params = jnp.array(f["phase_state/normalized_params"])
 
             # Create new optimizer and resume from checkpoint
             config2 = config
@@ -131,8 +133,8 @@ class TestFaultToleranceCheckpoints:
             result2 = optimizer2.fit((x_data, y_data), model, p0, verbose=0)
 
             # Verify results are similar (resumed optimization should complete)
-            assert result2['success']
-            assert jnp.allclose(result2['x'], result1['x'], rtol=0.1)
+            assert result2["success"]
+            assert jnp.allclose(result2["x"], result1["x"], rtol=0.1)
 
     def test_best_parameter_tracking_across_phases(self):
         """Test best parameters are tracked across all phases."""
@@ -147,7 +149,9 @@ class TestFaultToleranceCheckpoints:
         # Create data with some noise
         np.random.seed(42)
         x_data = np.linspace(0, 5, 40)
-        y_data = 3.0 * x_data**2 + 0.5 * x_data + 1.0 + 0.5 * np.random.randn(len(x_data))
+        y_data = (
+            3.0 * x_data**2 + 0.5 * x_data + 1.0 + 0.5 * np.random.randn(len(x_data))
+        )
 
         def model(x, a, b, c):
             return a * x**2 + b * x + c
@@ -159,22 +163,22 @@ class TestFaultToleranceCheckpoints:
         result = optimizer.fit((x_data, y_data), model, p0, bounds=bounds, verbose=0)
 
         # Verify we got best parameters (not just final)
-        assert result['success']
-        assert 'x' in result
-        assert len(result['x']) == 3
+        assert result["success"]
+        assert "x" in result
+        assert len(result["x"]) == 3
 
         # Check phase history tracks best parameters
         assert len(optimizer.phase_history) >= 3  # At least Phases 0, 1, 2
 
         # Phase 1 should have best_loss tracked
-        phase1_record = [p for p in optimizer.phase_history if p['phase'] == 1]
+        phase1_record = [p for p in optimizer.phase_history if p["phase"] == 1]
         assert len(phase1_record) > 0
-        assert 'best_loss' in phase1_record[0]
+        assert "best_loss" in phase1_record[0]
 
         # Phase 2 should have best_cost tracked
-        phase2_record = [p for p in optimizer.phase_history if p['phase'] == 2]
+        phase2_record = [p for p in optimizer.phase_history if p["phase"] == 2]
         assert len(phase2_record) > 0
-        assert 'best_cost' in phase2_record[0]
+        assert "best_cost" in phase2_record[0]
 
 
 class TestNaNInfValidation:
@@ -209,7 +213,7 @@ class TestNaNInfValidation:
             assert result is not None
         except Exception as e:
             # Should raise a clear error about numerical issues
-            assert 'NaN' in str(e) or 'numerical' in str(e).lower()
+            assert "NaN" in str(e) or "numerical" in str(e).lower()
 
     def test_nan_detection_in_parameters(self):
         """Test NaN detection in parameter updates."""
@@ -233,11 +237,15 @@ class TestNaNInfValidation:
         try:
             result = optimizer.fit((x_data, y_data), model, p0, verbose=0)
             # If it succeeds, parameters should be finite
-            if result['success']:
-                assert jnp.all(jnp.isfinite(result['x']))
+            if result["success"]:
+                assert jnp.all(jnp.isfinite(result["x"]))
         except Exception as e:
             # Should catch numerical issues
-            assert 'numerical' in str(e).lower() or 'nan' in str(e).lower() or 'inf' in str(e).lower()
+            assert (
+                "numerical" in str(e).lower()
+                or "nan" in str(e).lower()
+                or "inf" in str(e).lower()
+            )
 
     def test_nan_detection_in_loss(self):
         """Test NaN detection in loss computation."""
@@ -262,7 +270,7 @@ class TestNaNInfValidation:
             assert result is not None
         except ValueError as e:
             # Expected error for NaN in input data
-            assert 'NaN' in str(e) or 'inf' in str(e).lower()
+            assert "NaN" in str(e) or "inf" in str(e).lower()
 
 
 class TestAdaptiveRetry:
@@ -297,7 +305,7 @@ class TestAdaptiveRetry:
 
         # Should complete (regularization handles singular matrices)
         assert result is not None
-        assert 'x' in result
+        assert "x" in result
 
     def test_graceful_degradation_on_persistent_errors(self):
         """Test graceful degradation when errors persist after retries."""
@@ -325,8 +333,8 @@ class TestAdaptiveRetry:
 
         # Should return result (possibly with warnings)
         assert result is not None
-        assert 'x' in result
-        assert 'success' in result
+        assert "x" in result
+        assert "success" in result
 
 
 class TestFaultToleranceIntegration:
@@ -357,7 +365,9 @@ class TestFaultToleranceIntegration:
 
             # First run
             optimizer1 = AdaptiveHybridStreamingOptimizer(config)
-            result1 = optimizer1.fit((x_data, y_data), model, p0, bounds=bounds, verbose=0)
+            result1 = optimizer1.fit(
+                (x_data, y_data), model, p0, bounds=bounds, verbose=0
+            )
 
             # Get checkpoint
             checkpoints = sorted(Path(tmpdir).glob("checkpoint_*.h5"))
@@ -365,10 +375,12 @@ class TestFaultToleranceIntegration:
                 # Resume from checkpoint
                 config.resume_from_checkpoint = str(checkpoints[-1])
                 optimizer2 = AdaptiveHybridStreamingOptimizer(config)
-                result2 = optimizer2.fit((x_data, y_data), model, p0, bounds=bounds, verbose=0)
+                result2 = optimizer2.fit(
+                    (x_data, y_data), model, p0, bounds=bounds, verbose=0
+                )
 
                 # Results should be similar (best params preserved)
-                assert jnp.allclose(result2['x'], result1['x'], rtol=0.15)
+                assert jnp.allclose(result2["x"], result1["x"], rtol=0.15)
 
     def test_validation_with_checkpoints(self):
         """Test NaN/Inf validation works with checkpoint save/resume."""
@@ -394,14 +406,14 @@ class TestFaultToleranceIntegration:
             result = optimizer.fit((x_data, y_data), model, p0, verbose=0)
 
             # Should succeed and have checkpoints
-            assert result['success']
+            assert result["success"]
             checkpoints = list(Path(tmpdir).glob("checkpoint_*.h5"))
             assert len(checkpoints) > 0
 
             # Verify checkpoint contains validation info
-            with h5py.File(checkpoints[0], 'r') as f:
+            with h5py.File(checkpoints[0], "r") as f:
                 # Check version
-                assert f.attrs['version'] == '3.0'
+                assert f.attrs["version"] == "3.0"
                 # Parameters should be finite
-                params = jnp.array(f['phase_state/normalized_params'])
+                params = jnp.array(f["phase_state/normalized_params"])
                 assert jnp.all(jnp.isfinite(params))

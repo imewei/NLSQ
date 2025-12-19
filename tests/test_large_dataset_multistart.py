@@ -45,7 +45,7 @@ class TestLargeDatasetMultiStart:
             config=config,
             multistart=True,
             n_starts=5,
-            sampler='lhs',
+            sampler="lhs",
             multistart_subsample_size=50_000,  # Smaller for testing
         )
 
@@ -59,16 +59,18 @@ class TestLargeDatasetMultiStart:
 
         # Verify fit succeeded
         assert result is not None
-        assert hasattr(result, 'popt') or 'popt' in result
-        assert result.success or result.get('success', True)
+        assert hasattr(result, "popt") or "popt" in result
+        assert result.success or result.get("success", True)
 
         # Check that multi-start diagnostics are present
-        assert 'multistart_diagnostics' in result or hasattr(result, 'multistart_diagnostics')
-        diagnostics = result.get('multistart_diagnostics', {})
+        assert "multistart_diagnostics" in result or hasattr(
+            result, "multistart_diagnostics"
+        )
+        diagnostics = result.get("multistart_diagnostics", {})
 
         # Verify subsample was used for exploration
-        if 'subsample_size' in diagnostics:
-            assert diagnostics['subsample_size'] <= 50_000
+        if "subsample_size" in diagnostics:
+            assert diagnostics["subsample_size"] <= 50_000
 
     def test_best_starting_point_from_subsample_used_for_chunked_fit(self):
         """Test best starting point from subsample is used for chunked fit."""
@@ -92,7 +94,7 @@ class TestLargeDatasetMultiStart:
             config=config,
             multistart=True,
             n_starts=5,
-            sampler='lhs',
+            sampler="lhs",
             multistart_subsample_size=30_000,
         )
 
@@ -106,17 +108,17 @@ class TestLargeDatasetMultiStart:
 
         # Verify fit succeeded
         assert result is not None
-        assert result.success or result.get('success', True)
+        assert result.success or result.get("success", True)
 
         # Parameters should be close to true values
-        popt = result.popt if hasattr(result, 'popt') else result.get('popt')
+        popt = result.popt if hasattr(result, "popt") else result.get("popt")
         np.testing.assert_array_almost_equal(popt, true_params, decimal=1)
 
         # Check that best starting point was recorded in diagnostics
-        diagnostics = result.get('multistart_diagnostics', {})
-        if 'best_starting_point' in diagnostics or 'best_loss' in diagnostics:
+        diagnostics = result.get("multistart_diagnostics", {})
+        if "best_starting_point" in diagnostics or "best_loss" in diagnostics:
             # Best starting point should have been used
-            assert 'best_loss' in diagnostics or 'best_starting_point' in diagnostics
+            assert "best_loss" in diagnostics or "best_starting_point" in diagnostics
 
     def test_multistart_skipped_when_n_starts_zero(self):
         """Test multi-start is skipped when n_starts=0."""
@@ -138,7 +140,7 @@ class TestLargeDatasetMultiStart:
         fitter = LargeDatasetFitter(
             config=config,
             multistart=True,  # Enabled but...
-            n_starts=0,       # ...zero starts should skip multi-start
+            n_starts=0,  # ...zero starts should skip multi-start
         )
 
         result = fitter.fit(
@@ -150,12 +152,15 @@ class TestLargeDatasetMultiStart:
 
         # Verify fit succeeded
         assert result is not None
-        assert result.success or result.get('success', True)
+        assert result.success or result.get("success", True)
 
         # Check that multi-start was bypassed
-        diagnostics = result.get('multistart_diagnostics', {})
+        diagnostics = result.get("multistart_diagnostics", {})
         if diagnostics:
-            assert diagnostics.get('bypassed', False) or diagnostics.get('n_starts_evaluated', 0) == 0
+            assert (
+                diagnostics.get("bypassed", False)
+                or diagnostics.get("n_starts_evaluated", 0) == 0
+            )
 
     def test_multistart_respects_memory_limits_for_subsample(self):
         """Test multi-start respects memory limits when generating subsample."""
@@ -167,7 +172,10 @@ class TestLargeDatasetMultiStart:
         n_points = 300_000
         x = np.linspace(0, 10, n_points)
         true_params = [2.0, 3.0, 0.5, 1.0]
-        y = true_params[0] * np.sin(true_params[1] * x + true_params[2]) + true_params[3]
+        y = (
+            true_params[0] * np.sin(true_params[1] * x + true_params[2])
+            + true_params[3]
+        )
         y = y + np.random.normal(0, 0.15, len(y))
 
         # Create fitter with very limited memory to test subsample respects limits
@@ -180,7 +188,7 @@ class TestLargeDatasetMultiStart:
             config=config,
             multistart=True,
             n_starts=3,
-            sampler='sobol',  # Use Sobol for determinism
+            sampler="sobol",  # Use Sobol for determinism
             multistart_subsample_size=20_000,  # Request smaller subsample
         )
 
@@ -195,7 +203,7 @@ class TestLargeDatasetMultiStart:
 
         # Verify fit completed (may not be perfect due to memory constraints)
         assert result is not None
-        popt = result.popt if hasattr(result, 'popt') else result.get('popt')
+        popt = result.popt if hasattr(result, "popt") else result.get("popt")
         assert len(popt) == 4
 
     def test_result_includes_multistart_exploration_diagnostics(self):
@@ -219,7 +227,7 @@ class TestLargeDatasetMultiStart:
             config=config,
             multistart=True,
             n_starts=5,
-            sampler='halton',  # Use Halton sequence
+            sampler="halton",  # Use Halton sequence
             multistart_subsample_size=25_000,
         )
 
@@ -233,17 +241,19 @@ class TestLargeDatasetMultiStart:
 
         # Verify fit succeeded
         assert result is not None
-        assert result.success or result.get('success', True)
+        assert result.success or result.get("success", True)
 
         # Check for multi-start diagnostics in result
-        assert 'multistart_diagnostics' in result or hasattr(result, 'multistart_diagnostics')
+        assert "multistart_diagnostics" in result or hasattr(
+            result, "multistart_diagnostics"
+        )
 
-        diagnostics = result.get('multistart_diagnostics', {})
+        diagnostics = result.get("multistart_diagnostics", {})
 
         # Should have exploration-related diagnostics
         expected_keys = [
-            'n_starts_configured',
-            'sampler',
+            "n_starts_configured",
+            "sampler",
         ]
         found_any = any(key in diagnostics for key in expected_keys)
 
@@ -251,10 +261,10 @@ class TestLargeDatasetMultiStart:
         if diagnostics:
             # At minimum, we should know if multi-start was used
             assert (
-                'n_starts_configured' in diagnostics or
-                'n_starts_evaluated' in diagnostics or
-                'bypassed' in diagnostics or
-                found_any
+                "n_starts_configured" in diagnostics
+                or "n_starts_evaluated" in diagnostics
+                or "bypassed" in diagnostics
+                or found_any
             )
 
 
@@ -280,13 +290,13 @@ class TestFitLargeDatasetMultiStart:
             memory_limit_gb=0.1,
             multistart=True,
             n_starts=3,
-            sampler='lhs',
+            sampler="lhs",
             multistart_subsample_size=20_000,
         )
 
         # Verify fit succeeded
         assert result is not None
-        popt = result.popt if hasattr(result, 'popt') else result.get('popt')
+        popt = result.popt if hasattr(result, "popt") else result.get("popt")
         assert len(popt) == 2
 
         # Parameters should be reasonable

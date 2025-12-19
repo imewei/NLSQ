@@ -40,6 +40,9 @@ import numpy as np
 # Progress callbacks (Day 3 - User Experience)
 from nlsq import callbacks, functions
 from nlsq._optimize import OptimizeResult, OptimizeWarning
+
+# Adaptive Hybrid Streaming Optimizer (Task Group 12)
+from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
 # Bounds inference (Phase 3 - Day 17)
@@ -70,6 +73,14 @@ from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 # Fallback strategies (Phase 3 - Days 15-16)
 from nlsq.fallback import FallbackOrchestrator, FallbackResult, FallbackStrategy
 
+# Global optimization (Task Group 5)
+from nlsq.global_optimization import (
+    GlobalOptimizationConfig,
+    MultiStartOrchestrator,
+    TournamentSelector,
+)
+from nlsq.hybrid_streaming_config import HybridStreamingConfig
+
 # Large dataset support
 from nlsq.large_dataset import (
     LargeDatasetFitter,
@@ -91,18 +102,7 @@ from nlsq.memory_pool import (
     get_global_pool,
 )
 from nlsq.minpack import CurveFit, curve_fit
-
-# Adaptive Hybrid Streaming Optimizer (Task Group 12)
-from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
-from nlsq.hybrid_streaming_config import HybridStreamingConfig
 from nlsq.parameter_normalizer import ParameterNormalizer
-
-# Global optimization (Task Group 5)
-from nlsq.global_optimization import (
-    GlobalOptimizationConfig,
-    MultiStartOrchestrator,
-    TournamentSelector,
-)
 
 # Performance profiling (Days 20-21)
 from nlsq.profiler import (
@@ -165,6 +165,8 @@ from nlsq.validators import InputValidator
 
 # Public API - only expose main user-facing functions
 __all__ = [
+    # Adaptive Hybrid Streaming Optimizer (Task Group 12)
+    "AdaptiveHybridStreamingOptimizer",
     # Stability and optimization modules
     "AlgorithmSelector",
     # Bounds inference (Phase 3)
@@ -179,27 +181,24 @@ __all__ = [
     "FallbackStrategy",
     # Global optimization (Task Group 5)
     "GlobalOptimizationConfig",
-    "MultiStartOrchestrator",
-    "TournamentSelector",
+    "HybridStreamingConfig",
     "InputValidator",
     "LargeDatasetConfig",
     "LargeDatasetFitter",
     # Advanced API
     "LeastSquares",
-    # Adaptive Hybrid Streaming Optimizer (Task Group 12)
-    "AdaptiveHybridStreamingOptimizer",
-    "HybridStreamingConfig",
-    "ParameterNormalizer",
     # Configuration classes
     "MemoryConfig",
     "MemoryManager",
     "MemoryPool",
+    "MultiStartOrchestrator",
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
     "OptimizationRecovery",
     # Result types
     "OptimizeResult",
     "OptimizeWarning",
+    "ParameterNormalizer",
     # Performance profiling (Days 20-21)
     "PerformanceProfiler",
     "ProfileMetrics",
@@ -212,6 +211,7 @@ __all__ = [
     "SparseJacobianComputer",
     "SparseOptimizer",
     "TRFMemoryPool",
+    "TournamentSelector",
     # Version
     "__version__",
     "apply_automatic_fixes",
@@ -278,32 +278,32 @@ if _HAS_STREAMING:
 
 # Preset configurations for the fit() function
 _FIT_PRESETS = {
-    'fast': {
-        'n_starts': 0,
-        'multistart': False,
-        'description': 'Single-start optimization for maximum speed',
+    "fast": {
+        "n_starts": 0,
+        "multistart": False,
+        "description": "Single-start optimization for maximum speed",
     },
-    'robust': {
-        'n_starts': 5,
-        'multistart': True,
-        'description': 'Multi-start with 5 starts for robustness',
+    "robust": {
+        "n_starts": 5,
+        "multistart": True,
+        "description": "Multi-start with 5 starts for robustness",
     },
-    'global': {
-        'n_starts': 20,
-        'multistart': True,
-        'description': 'Thorough global search with 20 starts',
+    "global": {
+        "n_starts": 20,
+        "multistart": True,
+        "description": "Thorough global search with 20 starts",
     },
-    'streaming': {
-        'n_starts': 10,
-        'multistart': True,
-        'use_streaming': True,
-        'description': 'Streaming optimization for large datasets with multi-start',
+    "streaming": {
+        "n_starts": 10,
+        "multistart": True,
+        "use_streaming": True,
+        "description": "Streaming optimization for large datasets with multi-start",
     },
-    'large': {
-        'n_starts': 5,
-        'multistart': True,
-        'use_large_dataset': True,
-        'description': 'Auto-detect dataset size and use appropriate strategy',
+    "large": {
+        "n_starts": 5,
+        "multistart": True,
+        "use_large_dataset": True,
+        "description": "Auto-detect dataset size and use appropriate strategy",
     },
 }
 
@@ -318,11 +318,11 @@ def fit(
     check_finite: bool = True,
     bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
     method: MethodLiteral | None = None,
-    preset: Literal['fast', 'robust', 'global', 'streaming', 'large'] | None = None,
+    preset: Literal["fast", "robust", "global", "streaming", "large"] | None = None,
     # Multi-start parameters (can override preset)
     multistart: bool | None = None,
     n_starts: int | None = None,
-    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
     # Large dataset parameters
@@ -431,21 +431,26 @@ def fit(
     # Auto-select preset if not provided
     if preset is None:
         if n_points >= size_threshold:
-            preset = 'large'
+            preset = "large"
         else:
-            preset = 'fast'
+            preset = "fast"
 
     # Get preset configuration
-    preset_config = _FIT_PRESETS.get(preset, _FIT_PRESETS['fast'])
+    preset_config = _FIT_PRESETS.get(preset, _FIT_PRESETS["fast"])
 
     # Apply preset defaults, allowing overrides
-    effective_multistart = multistart if multistart is not None else preset_config.get('multistart', False)
-    effective_n_starts = n_starts if n_starts is not None else preset_config.get('n_starts', 0)
-    use_streaming = preset_config.get('use_streaming', False)
-    use_large_dataset = preset_config.get('use_large_dataset', False)
+    effective_multistart: bool = (
+        multistart
+        if multistart is not None
+        else bool(preset_config.get("multistart", False))
+    )
+    _n_starts_default: int = preset_config.get("n_starts", 0)  # type: ignore[assignment]
+    effective_n_starts: int = n_starts if n_starts is not None else _n_starts_default
+    use_streaming = preset_config.get("use_streaming", False)
+    use_large_dataset = preset_config.get("use_large_dataset", False)
 
     # Determine which backend to use
-    if use_streaming or preset == 'streaming':
+    if use_streaming or preset == "streaming":
         # Use AdaptiveHybridStreaming for streaming preset
         from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
         from nlsq.hybrid_streaming_config import HybridStreamingConfig
@@ -453,6 +458,7 @@ def fit(
         # Prepare p0
         if p0 is None:
             from inspect import signature
+
             sig = signature(f)
             args = sig.parameters
             if len(args) < 2:
@@ -463,8 +469,13 @@ def fit(
 
         # Prepare bounds
         from nlsq.least_squares import prepare_bounds
+
         lb, ub = prepare_bounds(bounds, len(p0))
-        bounds_tuple = (lb, ub) if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))) else None
+        bounds_tuple = (
+            (lb, ub)
+            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
+            else None
+        )
 
         # Create config with multi-start settings
         # Use the correct parameter names from HybridStreamingConfig
@@ -479,22 +490,23 @@ def fit(
         result_dict = optimizer.fit(
             data_source=(xdata, ydata),
             func=f,
-            p0=p0,
-            bounds=bounds_tuple,
-            sigma=sigma,
+            p0=p0,  # type: ignore[arg-type]
+            bounds=bounds_tuple,  # type: ignore[arg-type]
+            sigma=sigma,  # type: ignore[arg-type]
             absolute_sigma=absolute_sigma,
-            callback=kwargs.get('callback'),
-            verbose=kwargs.get('verbose', 1),
+            callback=kwargs.get("callback"),
+            verbose=kwargs.get("verbose", 1),
         )
 
         # Convert to standard result format
         from nlsq.result import CurveFitResult
+
         result = CurveFitResult(result_dict)
-        result['pcov'] = result_dict.get('pcov', np.full((len(p0), len(p0)), np.inf))
-        result['multistart_diagnostics'] = {
-            'n_starts_configured': effective_n_starts,
-            'bypassed': not effective_multistart or effective_n_starts == 0,
-            'preset': preset,
+        result["pcov"] = result_dict.get("pcov", np.full((len(p0), len(p0)), np.inf))
+        result["multistart_diagnostics"] = {
+            "n_starts_configured": effective_n_starts,
+            "bypassed": not effective_multistart or effective_n_starts == 0,
+            "preset": preset,
         }
         return result
 
@@ -568,7 +580,7 @@ def curve_fit_large(
     multistart: bool = False,
     n_starts: int = 10,
     global_search: bool = False,
-    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
     # Deprecated parameters (v0.2.0)
@@ -723,12 +735,12 @@ def curve_fit_large(
     n_points = len(xdata)
 
     # Handle hybrid_streaming method specially
-    if method == 'hybrid_streaming':
+    if method == "hybrid_streaming":
         from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
         from nlsq.hybrid_streaming_config import HybridStreamingConfig
 
         # Extract verbosity from kwargs
-        verbose = kwargs.pop('verbose', 1)
+        verbose = kwargs.pop("verbose", 1)
 
         # Create configuration (allow kwargs to override defaults)
         config_overrides = {}
@@ -736,11 +748,16 @@ def curve_fit_large(
             if hasattr(HybridStreamingConfig, key):
                 config_overrides[key] = kwargs.pop(key)
 
-        config = HybridStreamingConfig(**config_overrides) if config_overrides else HybridStreamingConfig()
+        config = (
+            HybridStreamingConfig(**config_overrides)
+            if config_overrides
+            else HybridStreamingConfig()
+        )
 
         # Prepare p0 and bounds
         if p0 is None:
             from inspect import signature
+
             sig = signature(f)
             args = sig.parameters
             if len(args) < 2:
@@ -750,8 +767,13 @@ def curve_fit_large(
 
         p0 = np.atleast_1d(p0)
         from nlsq.least_squares import prepare_bounds
+
         lb, ub = prepare_bounds(bounds, len(p0))
-        bounds_tuple = (lb, ub) if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))) else None
+        bounds_tuple = (
+            (lb, ub)
+            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
+            else None
+        )
 
         # Create optimizer
         optimizer = AdaptiveHybridStreamingOptimizer(config=config)
@@ -760,17 +782,17 @@ def curve_fit_large(
         result_dict = optimizer.fit(
             data_source=(xdata, ydata),
             func=f,
-            p0=p0,
-            bounds=bounds_tuple,
-            sigma=sigma,
+            p0=p0,  # type: ignore[arg-type]
+            bounds=bounds_tuple,  # type: ignore[arg-type]
+            sigma=sigma,  # type: ignore[arg-type]
             absolute_sigma=absolute_sigma,
-            callback=kwargs.get('callback'),
+            callback=kwargs.get("callback"),
             verbose=verbose,
         )
 
         # Convert to tuple format for backward compatibility
-        popt = result_dict['x']
-        pcov = result_dict.get('pcov', np.full((len(p0), len(p0)), np.inf))
+        popt = result_dict["x"]
+        pcov = result_dict.get("pcov", np.full((len(p0), len(p0)), np.inf))
 
         return popt, pcov
 

@@ -20,21 +20,25 @@ from __future__ import annotations
 
 import pickle
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Tuple
+from typing import Any
 
 import h5py
 import jax
 import jax.numpy as jnp
 import optax
 
+from .global_optimization.config import GlobalOptimizationConfig
+from .global_optimization.sampling import (
+    center_samples_around_p0,
+    get_sampler,
+    scale_samples_to_bounds,
+)
+from .global_optimization.tournament import TournamentSelector
 from .hybrid_streaming_config import HybridStreamingConfig
 from .parameter_normalizer import NormalizedModelWrapper, ParameterNormalizer
 from .stability import NumericalStabilityGuard
-from .global_optimization.tournament import TournamentSelector
-from .global_optimization.sampling import get_sampler, scale_samples_to_bounds, center_samples_around_p0
-from .global_optimization.config import GlobalOptimizationConfig
-
 
 __all__ = ["AdaptiveHybridStreamingOptimizer"]
 
@@ -176,7 +180,6 @@ class AdaptiveHybridStreamingOptimizer:
         self.multistart_best_candidate: jnp.ndarray | None = None
         self.multistart_diagnostics: dict[str, Any] | None = None
 
-
     def _setup_normalization(
         self,
         model: callable,
@@ -223,22 +226,19 @@ class AdaptiveHybridStreamingOptimizer:
         # Determine normalization strategy
         if not self.config.normalize:
             # Normalization disabled: use identity transform
-            strategy = 'none'
+            strategy = "none"
         else:
             # Use configured strategy
             strategy = self.config.normalization_strategy
 
         # Create ParameterNormalizer
         self.normalizer = ParameterNormalizer(
-            p0=self.original_p0,
-            bounds=bounds,
-            strategy=strategy
+            p0=self.original_p0, bounds=bounds, strategy=strategy
         )
 
         # Create NormalizedModelWrapper
         self.normalized_model = NormalizedModelWrapper(
-            model_fn=model,
-            normalizer=self.normalizer
+            model_fn=model, normalizer=self.normalizer
         )
 
         # Transform bounds to normalized space
@@ -254,21 +254,19 @@ class AdaptiveHybridStreamingOptimizer:
         # Initialize normalized parameters
         self.normalized_params = self.normalizer.normalize(self.original_p0)
 
-
         # Generate multi-start candidates if enabled
         if self.config.enable_multistart:
             self._generate_multistart_candidates(bounds)
         # Record Phase 0 completion in history
         phase_record = {
-            'phase': 0,
-            'name': 'normalization_setup',
-            'strategy': self.normalizer.strategy,
-            'timestamp': time.time(),
-            'normalized_params_shape': self.normalized_params.shape,
-            'has_bounds': bounds is not None,
+            "phase": 0,
+            "name": "normalization_setup",
+            "strategy": self.normalizer.strategy,
+            "timestamp": time.time(),
+            "normalized_params_shape": self.normalized_params.shape,
+            "has_bounds": bounds is not None,
         }
         self.phase_history.append(phase_record)
-
 
     def _generate_multistart_candidates(
         self,
@@ -287,8 +285,8 @@ class AdaptiveHybridStreamingOptimizer:
         If center_on_p0 is True, centers samples around the initial guess p0.
         Stores candidates in self.multistart_candidates.
         """
-        import numpy as np
         import jax
+        import numpy as np
 
         n_params = len(self.original_p0)
         n_starts = self.config.n_starts
@@ -367,10 +365,12 @@ class AdaptiveHybridStreamingOptimizer:
         )
 
         # Convert candidates to normalized space
-        normalized_candidates = np.array([
-            np.asarray(self.normalizer.normalize(jnp.asarray(c)))
-            for c in self.multistart_candidates
-        ])
+        normalized_candidates = np.array(
+            [
+                np.asarray(self.normalizer.normalize(jnp.asarray(c)))
+                for c in self.multistart_candidates
+            ]
+        )
 
         # Create tournament selector
         self.tournament_selector = TournamentSelector(
@@ -393,14 +393,16 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Yield chunks
             for i in range(0, n_points, chunk_size):
-                batch_idx = indices[i:i + chunk_size]
+                batch_idx = indices[i : i + chunk_size]
                 yield x_data[batch_idx], y_data[batch_idx]
 
             # Repeat if needed for more rounds
-            for _ in range(self.config.elimination_rounds * self.config.batches_per_round):
+            for _ in range(
+                self.config.elimination_rounds * self.config.batches_per_round
+            ):
                 np.random.shuffle(indices)
                 for i in range(0, n_points, chunk_size):
-                    batch_idx = indices[i:i + chunk_size]
+                    batch_idx = indices[i : i + chunk_size]
                     yield x_data[batch_idx], y_data[batch_idx]
 
         # Run tournament with normalized model
@@ -423,15 +425,17 @@ class AdaptiveHybridStreamingOptimizer:
         except Exception as e:
             # Fallback: use original p0
             import warnings
-            warnings.warn(f"Tournament selection failed: {e}. Using p0 as starting point.")
+
+            warnings.warn(
+                f"Tournament selection failed: {e}. Using p0 as starting point."
+            )
             self.multistart_diagnostics = {"error": str(e), "fallback": True}
             return self.normalized_params
-
 
     def _create_adam_optimizer(
         self,
         params: jnp.ndarray,
-    ) -> Tuple[optax.GradientTransformation, optax.OptState]:
+    ) -> tuple[optax.GradientTransformation, optax.OptState]:
         """Create Adam optimizer with optax, optionally with learning rate schedule and gradient clipping.
 
         Parameters
@@ -528,7 +532,9 @@ class AdaptiveHybridStreamingOptimizer:
         normalized_model = self.normalized_model
 
         @jax.jit
-        def loss_fn(params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray) -> float:
+        def loss_fn(
+            params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+        ) -> float:
             """Compute mean squared residuals in normalized space.
 
             Parameters
@@ -552,7 +558,7 @@ class AdaptiveHybridStreamingOptimizer:
             residuals = y_batch - predictions
 
             # Return mean squared residuals
-            return jnp.mean(residuals ** 2)
+            return jnp.mean(residuals**2)
 
         return loss_fn
 
@@ -564,7 +570,7 @@ class AdaptiveHybridStreamingOptimizer:
         loss_fn: Callable,
         x_batch: jnp.ndarray,
         y_batch: jnp.ndarray,
-    ) -> Tuple[jnp.ndarray, float, float, optax.OptState]:
+    ) -> tuple[jnp.ndarray, float, float, optax.OptState]:
         """Perform single Adam optimization step with numerical validation.
 
         Parameters
@@ -605,11 +611,16 @@ class AdaptiveHybridStreamingOptimizer:
         loss_value, grads = jax.value_and_grad(loss_fn)(params, x_batch, y_batch)
 
         # Validate loss and gradients
-        if not self._validate_numerics(params, loss=float(loss_value), gradients=grads, context="in Adam step"):
+        if not self._validate_numerics(
+            params, loss=float(loss_value), gradients=grads, context="in Adam step"
+        ):
             # Handle numerical issues
-            if hasattr(self.config, 'enable_fault_tolerance') and self.config.enable_fault_tolerance:
+            if (
+                hasattr(self.config, "enable_fault_tolerance")
+                and self.config.enable_fault_tolerance
+            ):
                 # Return current params unchanged (fallback)
-                return params, float('inf'), float('inf'), opt_state
+                return params, float("inf"), float("inf"), opt_state
             else:
                 raise ValueError("Numerical issues detected in Adam step")
 
@@ -623,7 +634,10 @@ class AdaptiveHybridStreamingOptimizer:
         # Validate updated parameters
         if not self._validate_numerics(new_params, context="after Adam update"):
             # Fallback: keep old parameters
-            if hasattr(self.config, 'enable_fault_tolerance') and self.config.enable_fault_tolerance:
+            if (
+                hasattr(self.config, "enable_fault_tolerance")
+                and self.config.enable_fault_tolerance
+            ):
                 return params, float(loss_value), float(grad_norm), opt_state
             else:
                 raise ValueError("NaN/Inf in parameters after Adam update")
@@ -644,7 +658,7 @@ class AdaptiveHybridStreamingOptimizer:
         current_loss: float,
         prev_loss: float,
         grad_norm: float,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """Check if Phase 1 should switch to Phase 2.
 
         Parameters
@@ -675,20 +689,22 @@ class AdaptiveHybridStreamingOptimizer:
         active_criteria = self.config.active_switching_criteria
 
         # Check max iterations criterion
-        if 'max_iter' in active_criteria:
+        if "max_iter" in active_criteria:
             if iteration >= self.config.max_warmup_iterations:
                 return True, "Maximum warmup iterations reached"
 
         # Check gradient norm criterion
-        if 'gradient' in active_criteria:
+        if "gradient" in active_criteria:
             if grad_norm < self.config.gradient_norm_threshold:
                 return True, "Gradient norm below threshold"
 
         # Check loss plateau criterion
-        if 'plateau' in active_criteria:
+        if "plateau" in active_criteria:
             # Compute relative loss change
             eps = jnp.finfo(jnp.float64).eps
-            relative_change = jnp.abs(current_loss - prev_loss) / (jnp.abs(prev_loss) + eps)
+            relative_change = jnp.abs(current_loss - prev_loss) / (
+                jnp.abs(prev_loss) + eps
+            )
 
             if relative_change < self.config.loss_plateau_threshold:
                 return True, "Loss plateau detected"
@@ -701,7 +717,7 @@ class AdaptiveHybridStreamingOptimizer:
         data_source: Any,
         model: Callable,
         p0: jnp.ndarray,
-        bounds: Tuple[jnp.ndarray, jnp.ndarray] | None = None,
+        bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     ) -> dict[str, Any]:
         """Run Phase 1 Adam warmup.
 
@@ -753,7 +769,6 @@ class AdaptiveHybridStreamingOptimizer:
         else:
             current_params = self.normalized_params
 
-
         # Create Adam optimizer
         optimizer, opt_state = self._create_adam_optimizer(current_params)
 
@@ -762,10 +777,10 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Best parameter tracking
         best_params = current_params
-        best_loss = float('inf')
+        best_loss = float("inf")
 
         # Initialize previous loss
-        prev_loss = float('inf')
+        prev_loss = float("inf")
 
         # Warmup loop
         for iteration in range(self.config.max_warmup_iterations):
@@ -792,12 +807,20 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
             # Save checkpoint periodically if enabled
-            if (hasattr(self.config, 'enable_checkpoints') and self.config.enable_checkpoints and
-                hasattr(self.config, 'checkpoint_frequency') and
-                (iteration + 1) % self.config.checkpoint_frequency == 0):
-
-                if hasattr(self.config, 'checkpoint_dir') and self.config.checkpoint_dir:
-                    checkpoint_path = Path(self.config.checkpoint_dir) / f"checkpoint_phase1_iter{iteration+1}.h5"
+            if (
+                hasattr(self.config, "enable_checkpoints")
+                and self.config.enable_checkpoints
+                and hasattr(self.config, "checkpoint_frequency")
+                and (iteration + 1) % self.config.checkpoint_frequency == 0
+            ):
+                if (
+                    hasattr(self.config, "checkpoint_dir")
+                    and self.config.checkpoint_dir
+                ):
+                    checkpoint_path = (
+                        Path(self.config.checkpoint_dir)
+                        / f"checkpoint_phase1_iter{iteration + 1}.h5"
+                    )
                     self.current_phase = 1
                     self.normalized_params = current_params
                     self._save_checkpoint(checkpoint_path)
@@ -814,23 +837,23 @@ class AdaptiveHybridStreamingOptimizer:
                 if should_switch:
                     # Record Phase 1 completion
                     phase_record = {
-                        'phase': 1,
-                        'name': 'adam_warmup',
-                        'iterations': iteration + 1,
-                        'final_loss': loss_value,
-                        'best_loss': best_loss,
-                        'switch_reason': reason,
-                        'timestamp': time.time(),
+                        "phase": 1,
+                        "name": "adam_warmup",
+                        "iterations": iteration + 1,
+                        "final_loss": loss_value,
+                        "best_loss": best_loss,
+                        "switch_reason": reason,
+                        "timestamp": time.time(),
                     }
                     self.phase_history.append(phase_record)
 
                     return {
-                        'final_params': current_params,
-                        'best_params': best_params,
-                        'best_loss': best_loss,
-                        'final_loss': loss_value,
-                        'iterations': iteration + 1,
-                        'switch_reason': reason,
+                        "final_params": current_params,
+                        "best_params": best_params,
+                        "best_loss": best_loss,
+                        "final_loss": loss_value,
+                        "iterations": iteration + 1,
+                        "switch_reason": reason,
                     }
 
             # Update previous loss
@@ -838,23 +861,23 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Maximum iterations reached (this shouldn't happen if max_iter criterion active)
         phase_record = {
-            'phase': 1,
-            'name': 'adam_warmup',
-            'iterations': self.config.max_warmup_iterations,
-            'final_loss': loss_value,
-            'best_loss': best_loss,
-            'switch_reason': 'Maximum iterations reached',
-            'timestamp': time.time(),
+            "phase": 1,
+            "name": "adam_warmup",
+            "iterations": self.config.max_warmup_iterations,
+            "final_loss": loss_value,
+            "best_loss": best_loss,
+            "switch_reason": "Maximum iterations reached",
+            "timestamp": time.time(),
         }
         self.phase_history.append(phase_record)
 
         return {
-            'final_params': current_params,
-            'best_params': best_params,
-            'best_loss': best_loss,
-            'final_loss': loss_value,
-            'iterations': self.config.max_warmup_iterations,
-            'switch_reason': 'Maximum iterations reached',
+            "final_params": current_params,
+            "best_params": best_params,
+            "best_loss": best_loss,
+            "final_loss": loss_value,
+            "iterations": self.config.max_warmup_iterations,
+            "switch_reason": "Maximum iterations reached",
         }
 
     def _compute_jacobian_chunk(
@@ -885,6 +908,7 @@ class AdaptiveHybridStreamingOptimizer:
         Uses jax.jacrev with vmap for efficient per-point gradient computation.
         The normalized model wrapper automatically handles parameter denormalization.
         """
+
         # Define function to compute model output for a single x value
         def model_at_x(p, x_single):
             # Call normalized model (which handles denormalization internally)
@@ -905,7 +929,7 @@ class AdaptiveHybridStreamingOptimizer:
         params: jnp.ndarray,
         JTJ_prev: jnp.ndarray,
         JTr_prev: jnp.ndarray,
-    ) -> Tuple[jnp.ndarray, jnp.ndarray, float]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
         """Accumulate J^T J and J^T r across chunks for memory-efficient Gauss-Newton.
 
         This is the key method that enables streaming optimization. Instead of storing
@@ -960,7 +984,7 @@ class AdaptiveHybridStreamingOptimizer:
         JTr_new = JTr_prev + J_chunk.T @ residuals
 
         # Compute residual sum of squares for this chunk
-        residual_sum_sq = float(jnp.sum(residuals ** 2))
+        residual_sum_sq = float(jnp.sum(residuals**2))
 
         # Store accumulators for checkpointing
         self.phase2_JTJ_accumulator = JTJ_new
@@ -974,7 +998,7 @@ class AdaptiveHybridStreamingOptimizer:
         JTr: jnp.ndarray,
         trust_radius: float,
         regularization: float = 1e-10,
-    ) -> Tuple[jnp.ndarray, float]:
+    ) -> tuple[jnp.ndarray, float]:
         """Solve Gauss-Newton step using SVD following trf.py patterns.
 
         Solves the trust region subproblem:
@@ -1138,8 +1162,8 @@ class AdaptiveHybridStreamingOptimizer:
         # Accumulate J^T J and J^T r across chunks
         n_points = len(x_data)
         for i in range(0, n_points, chunk_size):
-            x_chunk = x_data[i:i+chunk_size]
-            y_chunk = y_data[i:i+chunk_size]
+            x_chunk = x_data[i : i + chunk_size]
+            y_chunk = y_data[i : i + chunk_size]
 
             JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
                 x_chunk, y_chunk, current_params, JTJ, JTr
@@ -1160,12 +1184,12 @@ class AdaptiveHybridStreamingOptimizer:
         # Evaluate cost at new parameters
         new_cost = 0.0
         for i in range(0, n_points, chunk_size):
-            x_chunk = x_data[i:i+chunk_size]
-            y_chunk = y_data[i:i+chunk_size]
+            x_chunk = x_data[i : i + chunk_size]
+            y_chunk = y_data[i : i + chunk_size]
 
             predictions = self.normalized_model(x_chunk, *new_params)
             residuals = y_chunk - predictions
-            new_cost += float(jnp.sum(residuals ** 2))
+            new_cost += float(jnp.sum(residuals**2))
 
         # Compute actual reduction
         actual_reduction = total_cost - new_cost
@@ -1188,13 +1212,13 @@ class AdaptiveHybridStreamingOptimizer:
             new_trust_radius = trust_radius
 
         return {
-            'new_params': new_params,
-            'new_cost': new_cost,
-            'step': step,
-            'actual_reduction': actual_reduction,
-            'predicted_reduction': predicted_reduction,
-            'trust_radius': new_trust_radius,
-            'gradient_norm': gradient_norm,
+            "new_params": new_params,
+            "new_cost": new_cost,
+            "step": step,
+            "actual_reduction": actual_reduction,
+            "predicted_reduction": predicted_reduction,
+            "trust_radius": new_trust_radius,
+            "gradient_norm": gradient_norm,
         }
 
     def _run_phase2_gauss_newton(
@@ -1256,8 +1280,8 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Compute initial JTJ
         for i in range(0, n_points, chunk_size):
-            x_chunk = x_data[i:i+chunk_size]
-            y_chunk = y_data[i:i+chunk_size]
+            x_chunk = x_data[i : i + chunk_size]
+            y_chunk = y_data[i : i + chunk_size]
 
             final_JTJ, final_JTr, res_sq = self._accumulate_jtj_jtr(
                 x_chunk, y_chunk, current_params, final_JTJ, final_JTr
@@ -1267,7 +1291,7 @@ class AdaptiveHybridStreamingOptimizer:
         # Gauss-Newton loop
         for iteration in range(self.config.gauss_newton_max_iterations):
             # Perform one Gauss-Newton iteration with retry logic
-            max_retries = getattr(self.config, 'max_retries_per_batch', 0)
+            max_retries = getattr(self.config, "max_retries_per_batch", 0)
             retry_attempt = 0
 
             while retry_attempt <= max_retries:
@@ -1277,10 +1301,12 @@ class AdaptiveHybridStreamingOptimizer:
                     )
 
                     # Validate results
-                    new_params = iter_result['new_params']
-                    new_cost = iter_result['new_cost']
+                    new_params = iter_result["new_params"]
+                    new_cost = iter_result["new_cost"]
 
-                    if not jnp.all(jnp.isfinite(new_params)) or not jnp.isfinite(new_cost):
+                    if not jnp.all(jnp.isfinite(new_params)) or not jnp.isfinite(
+                        new_cost
+                    ):
                         if retry_attempt < max_retries:
                             # Retry with reduced trust region
                             trust_radius *= 0.5
@@ -1290,8 +1316,8 @@ class AdaptiveHybridStreamingOptimizer:
                             # Max retries reached, use best known params
                             new_params = best_params
                             new_cost = best_cost
-                            iter_result['gradient_norm'] = 0.0
-                            iter_result['actual_reduction'] = 0.0
+                            iter_result["gradient_norm"] = 0.0
+                            iter_result["actual_reduction"] = 0.0
                             break
 
                     # Success
@@ -1302,29 +1328,31 @@ class AdaptiveHybridStreamingOptimizer:
                         # Retry with reduced trust region
                         trust_radius *= 0.5
                         retry_attempt += 1
+                    # Max retries reached, use fallback
+                    elif (
+                        hasattr(self.config, "enable_fault_tolerance")
+                        and self.config.enable_fault_tolerance
+                    ):
+                        # Use best parameters as fallback
+                        new_params = best_params
+                        new_cost = best_cost
+                        iter_result = {
+                            "new_params": new_params,
+                            "new_cost": new_cost,
+                            "gradient_norm": 0.0,
+                            "actual_reduction": 0.0,
+                            "trust_radius": trust_radius,
+                        }
+                        break
                     else:
-                        # Max retries reached, use fallback
-                        if hasattr(self.config, 'enable_fault_tolerance') and self.config.enable_fault_tolerance:
-                            # Use best parameters as fallback
-                            new_params = best_params
-                            new_cost = best_cost
-                            iter_result = {
-                                'new_params': new_params,
-                                'new_cost': new_cost,
-                                'gradient_norm': 0.0,
-                                'actual_reduction': 0.0,
-                                'trust_radius': trust_radius
-                            }
-                            break
-                        else:
-                            raise
+                        raise
 
             # Extract results
-            new_params = iter_result['new_params']
-            new_cost = iter_result['new_cost']
-            gradient_norm = iter_result['gradient_norm']
-            actual_reduction = iter_result['actual_reduction']
-            trust_radius = iter_result['trust_radius']
+            new_params = iter_result["new_params"]
+            new_cost = iter_result["new_cost"]
+            gradient_norm = iter_result["gradient_norm"]
+            actual_reduction = iter_result["actual_reduction"]
+            trust_radius = iter_result["trust_radius"]
 
             # Update best parameters
             if new_cost < best_cost:
@@ -1340,16 +1368,24 @@ class AdaptiveHybridStreamingOptimizer:
             self._upgrade_precision_if_needed(
                 params=new_params,
                 loss=new_cost,
-                gradients=iter_result.get('gradient'),
+                gradients=iter_result.get("gradient"),
             )
 
             # Save checkpoint periodically if enabled
-            if (hasattr(self.config, 'enable_checkpoints') and self.config.enable_checkpoints and
-                hasattr(self.config, 'checkpoint_frequency') and
-                (iteration + 1) % self.config.checkpoint_frequency == 0):
-
-                if hasattr(self.config, 'checkpoint_dir') and self.config.checkpoint_dir:
-                    checkpoint_path = Path(self.config.checkpoint_dir) / f"checkpoint_phase2_iter{iteration+1}.h5"
+            if (
+                hasattr(self.config, "enable_checkpoints")
+                and self.config.enable_checkpoints
+                and hasattr(self.config, "checkpoint_frequency")
+                and (iteration + 1) % self.config.checkpoint_frequency == 0
+            ):
+                if (
+                    hasattr(self.config, "checkpoint_dir")
+                    and self.config.checkpoint_dir
+                ):
+                    checkpoint_path = (
+                        Path(self.config.checkpoint_dir)
+                        / f"checkpoint_phase2_iter{iteration + 1}.h5"
+                    )
                     self.current_phase = 2
                     self.normalized_params = current_params
                     self._save_checkpoint(checkpoint_path)
@@ -1371,8 +1407,8 @@ class AdaptiveHybridStreamingOptimizer:
 
                 n_points = len(x_data)
                 for i in range(0, n_points, chunk_size):
-                    x_chunk = x_data[i:i+chunk_size]
-                    y_chunk = y_data[i:i+chunk_size]
+                    x_chunk = x_data[i : i + chunk_size]
+                    y_chunk = y_data[i : i + chunk_size]
 
                     JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
                         x_chunk, y_chunk, current_params, JTJ, JTr
@@ -1389,27 +1425,27 @@ class AdaptiveHybridStreamingOptimizer:
             if gradient_norm < self.config.gauss_newton_tol:
                 # Record Phase 2 completion
                 phase_record = {
-                    'phase': 2,
-                    'name': 'gauss_newton',
-                    'iterations': iteration + 1,
-                    'final_cost': new_cost,
-                    'best_cost': best_cost,
-                    'convergence_reason': 'Gradient norm below tolerance',
-                    'gradient_norm': gradient_norm,
-                    'timestamp': time.time(),
+                    "phase": 2,
+                    "name": "gauss_newton",
+                    "iterations": iteration + 1,
+                    "final_cost": new_cost,
+                    "best_cost": best_cost,
+                    "convergence_reason": "Gradient norm below tolerance",
+                    "gradient_norm": gradient_norm,
+                    "timestamp": time.time(),
                 }
                 self.phase_history.append(phase_record)
 
                 return {
-                    'final_params': new_params,
-                    'best_params': best_params,
-                    'best_cost': best_cost,
-                    'final_cost': new_cost,
-                    'iterations': iteration + 1,
-                    'convergence_reason': 'Gradient norm below tolerance',
-                    'gradient_norm': gradient_norm,
-                    'JTJ_final': final_JTJ,
-                    'residual_sum_sq': final_residual_sum_sq,
+                    "final_params": new_params,
+                    "best_params": best_params,
+                    "best_cost": best_cost,
+                    "final_cost": new_cost,
+                    "iterations": iteration + 1,
+                    "convergence_reason": "Gradient norm below tolerance",
+                    "gradient_norm": gradient_norm,
+                    "JTJ_final": final_JTJ,
+                    "residual_sum_sq": final_residual_sum_sq,
                 }
 
             # Check convergence: cost change
@@ -1418,52 +1454,52 @@ class AdaptiveHybridStreamingOptimizer:
 
             if relative_change < self.config.gauss_newton_tol:
                 phase_record = {
-                    'phase': 2,
-                    'name': 'gauss_newton',
-                    'iterations': iteration + 1,
-                    'final_cost': new_cost,
-                    'best_cost': best_cost,
-                    'convergence_reason': 'Cost change below tolerance',
-                    'gradient_norm': gradient_norm,
-                    'timestamp': time.time(),
+                    "phase": 2,
+                    "name": "gauss_newton",
+                    "iterations": iteration + 1,
+                    "final_cost": new_cost,
+                    "best_cost": best_cost,
+                    "convergence_reason": "Cost change below tolerance",
+                    "gradient_norm": gradient_norm,
+                    "timestamp": time.time(),
                 }
                 self.phase_history.append(phase_record)
 
                 return {
-                    'final_params': new_params,
-                    'best_params': best_params,
-                    'best_cost': best_cost,
-                    'final_cost': new_cost,
-                    'iterations': iteration + 1,
-                    'convergence_reason': 'Cost change below tolerance',
-                    'gradient_norm': gradient_norm,
-                    'JTJ_final': final_JTJ,
-                    'residual_sum_sq': final_residual_sum_sq,
+                    "final_params": new_params,
+                    "best_params": best_params,
+                    "best_cost": best_cost,
+                    "final_cost": new_cost,
+                    "iterations": iteration + 1,
+                    "convergence_reason": "Cost change below tolerance",
+                    "gradient_norm": gradient_norm,
+                    "JTJ_final": final_JTJ,
+                    "residual_sum_sq": final_residual_sum_sq,
                 }
 
         # Maximum iterations reached
         phase_record = {
-            'phase': 2,
-            'name': 'gauss_newton',
-            'iterations': self.config.gauss_newton_max_iterations,
-            'final_cost': prev_cost,
-            'best_cost': best_cost,
-            'convergence_reason': 'Maximum iterations reached',
-            'gradient_norm': gradient_norm,
-            'timestamp': time.time(),
+            "phase": 2,
+            "name": "gauss_newton",
+            "iterations": self.config.gauss_newton_max_iterations,
+            "final_cost": prev_cost,
+            "best_cost": best_cost,
+            "convergence_reason": "Maximum iterations reached",
+            "gradient_norm": gradient_norm,
+            "timestamp": time.time(),
         }
         self.phase_history.append(phase_record)
 
         return {
-            'final_params': best_params,  # Use best, not current
-            'best_params': best_params,
-            'best_cost': best_cost,
-            'final_cost': prev_cost,
-            'iterations': self.config.gauss_newton_max_iterations,
-            'convergence_reason': 'Maximum iterations reached',
-            'gradient_norm': gradient_norm,
-            'JTJ_final': final_JTJ,
-            'residual_sum_sq': final_residual_sum_sq,
+            "final_params": best_params,  # Use best, not current
+            "best_params": best_params,
+            "best_cost": best_cost,
+            "final_cost": prev_cost,
+            "iterations": self.config.gauss_newton_max_iterations,
+            "convergence_reason": "Maximum iterations reached",
+            "gradient_norm": gradient_norm,
+            "JTJ_final": final_JTJ,
+            "residual_sum_sq": final_residual_sum_sq,
         }
 
     def _denormalize_params(self, normalized_params: jnp.ndarray) -> jnp.ndarray:
@@ -1495,7 +1531,9 @@ class AdaptiveHybridStreamingOptimizer:
         >>> original_result = optimizer._denormalize_params(normalized_result)
         """
         if self.normalizer is None:
-            raise RuntimeError("Normalizer not initialized. Call _setup_normalization first.")
+            raise RuntimeError(
+                "Normalizer not initialized. Call _setup_normalization first."
+            )
 
         return self.normalizer.denormalize(normalized_params)
 
@@ -1573,7 +1611,9 @@ class AdaptiveHybridStreamingOptimizer:
         By chain rule: Cov(p_orig) = D @ Cov(p_norm) @ D^T
         """
         if self.normalization_jacobian is None:
-            raise RuntimeError("Normalization Jacobian not available. Call _setup_normalization first.")
+            raise RuntimeError(
+                "Normalization Jacobian not available. Call _setup_normalization first."
+            )
 
         # Get denormalization Jacobian (diagonal matrix with scales)
         D = self.normalization_jacobian
@@ -1591,7 +1631,7 @@ class AdaptiveHybridStreamingOptimizer:
         cov_orig: jnp.ndarray,
         residual_sum_sq: float,
         n_points: int,
-    ) -> Tuple[jnp.ndarray, float]:
+    ) -> tuple[jnp.ndarray, float]:
         """Apply residual variance scaling to covariance matrix.
 
         Scales the covariance by the residual variance estimate:
@@ -1685,11 +1725,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Compute standard errors (sqrt of variances)
         # Handle negative variances by setting to NaN
-        perr = jnp.where(
-            variances >= 0,
-            jnp.sqrt(variances),
-            jnp.nan
-        )
+        perr = jnp.where(variances >= 0, jnp.sqrt(variances), jnp.nan)
 
         return perr
 
@@ -1765,21 +1801,23 @@ class AdaptiveHybridStreamingOptimizer:
         # Record Phase 3 completion
         phase_duration = time.time() - phase_start
         phase_record = {
-            'phase': 3,
-            'name': 'denormalization_covariance',
-            'duration': phase_duration,
-            'sigma_sq': sigma_sq,
-            'cov_condition': float(jnp.linalg.cond(pcov)) if jnp.isfinite(pcov).all() else jnp.inf,
-            'timestamp': time.time(),
+            "phase": 3,
+            "name": "denormalization_covariance",
+            "duration": phase_duration,
+            "sigma_sq": sigma_sq,
+            "cov_condition": float(jnp.linalg.cond(pcov))
+            if jnp.isfinite(pcov).all()
+            else jnp.inf,
+            "timestamp": time.time(),
         }
         self.phase_history.append(phase_record)
 
         return {
-            'popt': popt,
-            'pcov': pcov,
-            'perr': perr,
-            'sigma_sq': sigma_sq,
-            'diagnostics': phase_record,
+            "popt": popt,
+            "pcov": pcov,
+            "perr": perr,
+            "sigma_sq": sigma_sq,
+            "diagnostics": phase_record,
         }
 
     def _validate_numerics(
@@ -1812,12 +1850,18 @@ class AdaptiveHybridStreamingOptimizer:
         ValueError
             If validate_numerics is enabled and non-finite values detected
         """
-        if not hasattr(self.config, 'validate_numerics') or not self.config.validate_numerics:
+        if (
+            not hasattr(self.config, "validate_numerics")
+            or not self.config.validate_numerics
+        ):
             return True
 
         # Check parameters
         if not jnp.all(jnp.isfinite(params)):
-            if hasattr(self.config, 'enable_fault_tolerance') and self.config.enable_fault_tolerance:
+            if (
+                hasattr(self.config, "enable_fault_tolerance")
+                and self.config.enable_fault_tolerance
+            ):
                 # Log warning but continue
                 return False
             else:
@@ -1825,14 +1869,20 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Check loss
         if loss is not None and not jnp.isfinite(loss):
-            if hasattr(self.config, 'enable_fault_tolerance') and self.config.enable_fault_tolerance:
+            if (
+                hasattr(self.config, "enable_fault_tolerance")
+                and self.config.enable_fault_tolerance
+            ):
                 return False
             else:
                 raise ValueError(f"NaN/Inf detected in loss {context}")
 
         # Check gradients
         if gradients is not None and not jnp.all(jnp.isfinite(gradients)):
-            if hasattr(self.config, 'enable_fault_tolerance') and self.config.enable_fault_tolerance:
+            if (
+                hasattr(self.config, "enable_fault_tolerance")
+                and self.config.enable_fault_tolerance
+            ):
                 return False
             else:
                 raise ValueError(f"NaN/Inf detected in gradients {context}")
@@ -1862,74 +1912,90 @@ class AdaptiveHybridStreamingOptimizer:
         checkpoint_path = Path(checkpoint_path)
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with h5py.File(checkpoint_path, 'w') as f:
+        with h5py.File(checkpoint_path, "w") as f:
             # Version metadata
-            f.attrs['version'] = '3.0'
-            f.attrs['timestamp'] = time.time()
+            f.attrs["version"] = "3.0"
+            f.attrs["timestamp"] = time.time()
 
             # Create phase_state group
-            phase_state = f.create_group('phase_state')
+            phase_state = f.create_group("phase_state")
 
             # Save current phase and parameters
-            phase_state.create_dataset('current_phase', data=self.current_phase)
+            phase_state.create_dataset("current_phase", data=self.current_phase)
             if self.normalized_params is not None:
-                phase_state.create_dataset('normalized_params', data=self.normalized_params)
+                phase_state.create_dataset(
+                    "normalized_params", data=self.normalized_params
+                )
 
             # Save Phase 1 optimizer state (Optax Adam)
             if self.phase1_optimizer_state is not None:
-                opt_state_group = phase_state.create_group('phase1_optimizer_state')
+                opt_state_group = phase_state.create_group("phase1_optimizer_state")
                 # Optax Adam state has structure: (ScaleByAdamState, EmptyState)
                 # ScaleByAdamState has: count, mu, nu
                 adam_state = self.phase1_optimizer_state[0]
-                opt_state_group.create_dataset('count', data=int(adam_state.count))
-                opt_state_group.create_dataset('mu', data=adam_state.mu)
-                opt_state_group.create_dataset('nu', data=adam_state.nu)
+                opt_state_group.create_dataset("count", data=int(adam_state.count))
+                opt_state_group.create_dataset("mu", data=adam_state.mu)
+                opt_state_group.create_dataset("nu", data=adam_state.nu)
 
             # Save Phase 2 accumulators
             if self.phase2_JTJ_accumulator is not None:
-                phase_state.create_dataset('phase2_jtj_accumulator', data=self.phase2_JTJ_accumulator)
+                phase_state.create_dataset(
+                    "phase2_jtj_accumulator", data=self.phase2_JTJ_accumulator
+                )
             if self.phase2_JTr_accumulator is not None:
-                phase_state.create_dataset('phase2_jtr_accumulator', data=self.phase2_JTr_accumulator)
+                phase_state.create_dataset(
+                    "phase2_jtr_accumulator", data=self.phase2_JTr_accumulator
+                )
 
             # Save best parameters tracking
             if self.best_params_global is not None:
-                phase_state.create_dataset('best_params_global', data=self.best_params_global)
-            phase_state.create_dataset('best_cost_global', data=self.best_cost_global)
+                phase_state.create_dataset(
+                    "best_params_global", data=self.best_params_global
+                )
+            phase_state.create_dataset("best_cost_global", data=self.best_cost_global)
 
             # Save phase history as pickle (easier for complex structures)
             if self.phase_history:
                 import numpy as np
+
                 phase_history_bytes = pickle.dumps(self.phase_history)
-                phase_state.create_dataset('phase_history', data=np.void(phase_history_bytes))
+                phase_state.create_dataset(
+                    "phase_history", data=np.void(phase_history_bytes)
+                )
 
             # Save normalization state (if exists)
             if self.normalizer is not None:
-                norm_group = phase_state.create_group('normalizer_state')
-                norm_group.attrs['strategy'] = self.normalizer.strategy
+                norm_group = phase_state.create_group("normalizer_state")
+                norm_group.attrs["strategy"] = self.normalizer.strategy
                 if self.normalizer.scales is not None:
-                    norm_group.create_dataset('scales', data=self.normalizer.scales)
+                    norm_group.create_dataset("scales", data=self.normalizer.scales)
                 if self.normalizer.offsets is not None:
-                    norm_group.create_dataset('offsets', data=self.normalizer.offsets)
+                    norm_group.create_dataset("offsets", data=self.normalizer.offsets)
 
             # Save tournament state (if exists)
             if self.tournament_selector is not None:
-                tournament_group = phase_state.create_group('tournament_state')
+                tournament_group = phase_state.create_group("tournament_state")
                 tournament_checkpoint = self.tournament_selector.to_checkpoint()
                 for key, value in tournament_checkpoint.items():
                     if isinstance(value, (list, dict)):
                         tournament_bytes = pickle.dumps(value)
-                        tournament_group.create_dataset(key, data=np.void(tournament_bytes))
+                        tournament_group.create_dataset(
+                            key, data=np.void(tournament_bytes)
+                        )
                     elif value is not None:
                         try:
                             tournament_group.create_dataset(key, data=value)
                         except TypeError:
                             tournament_bytes = pickle.dumps(value)
-                            tournament_group.create_dataset(key, data=np.void(tournament_bytes))
+                            tournament_group.create_dataset(
+                                key, data=np.void(tournament_bytes)
+                            )
 
             # Save multi-start candidates (if exists)
             if self.multistart_candidates is not None:
-                phase_state.create_dataset('multistart_candidates', data=self.multistart_candidates)
-
+                phase_state.create_dataset(
+                    "multistart_candidates", data=self.multistart_candidates
+                )
 
     def _load_checkpoint(self, checkpoint_path: str | Path) -> None:
         """Load checkpoint and restore phase-specific state.
@@ -1950,72 +2016,87 @@ class AdaptiveHybridStreamingOptimizer:
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-        with h5py.File(checkpoint_path, 'r') as f:
+        with h5py.File(checkpoint_path, "r") as f:
             # Check version
-            version = f.attrs.get('version', '1.0')
-            if not version.startswith('3.'):
-                raise ValueError(f"Incompatible checkpoint version: {version} (expected 3.x)")
+            version = f.attrs.get("version", "1.0")
+            if not version.startswith("3."):
+                raise ValueError(
+                    f"Incompatible checkpoint version: {version} (expected 3.x)"
+                )
 
-            phase_state = f['phase_state']
+            phase_state = f["phase_state"]
 
             # Restore current phase
-            self.current_phase = int(phase_state['current_phase'][()])
+            self.current_phase = int(phase_state["current_phase"][()])
 
             # Restore normalized parameters
-            if 'normalized_params' in phase_state:
-                self.normalized_params = jnp.array(phase_state['normalized_params'])
+            if "normalized_params" in phase_state:
+                self.normalized_params = jnp.array(phase_state["normalized_params"])
 
             # Restore Phase 1 optimizer state
-            if 'phase1_optimizer_state' in phase_state:
-                opt_state_group = phase_state['phase1_optimizer_state']
-                count = int(opt_state_group['count'][()])
-                mu = jnp.array(opt_state_group['mu'])
-                nu = jnp.array(opt_state_group['nu'])
+            if "phase1_optimizer_state" in phase_state:
+                opt_state_group = phase_state["phase1_optimizer_state"]
+                count = int(opt_state_group["count"][()])
+                mu = jnp.array(opt_state_group["mu"])
+                nu = jnp.array(opt_state_group["nu"])
 
                 # Reconstruct Optax Adam state structure
                 # Note: This is a simplified reconstruction
                 # Full state may require creating optimizer instance
                 from optax._src.transform import ScaleByAdamState
+
                 adam_state = ScaleByAdamState(count=count, mu=mu, nu=nu)
                 self.phase1_optimizer_state = (adam_state, optax.EmptyState())
 
             # Restore Phase 2 accumulators
-            if 'phase2_jtj_accumulator' in phase_state:
-                self.phase2_JTJ_accumulator = jnp.array(phase_state['phase2_jtj_accumulator'])
-            if 'phase2_jtr_accumulator' in phase_state:
-                self.phase2_JTr_accumulator = jnp.array(phase_state['phase2_jtr_accumulator'])
+            if "phase2_jtj_accumulator" in phase_state:
+                self.phase2_JTJ_accumulator = jnp.array(
+                    phase_state["phase2_jtj_accumulator"]
+                )
+            if "phase2_jtr_accumulator" in phase_state:
+                self.phase2_JTr_accumulator = jnp.array(
+                    phase_state["phase2_jtr_accumulator"]
+                )
 
             # Restore best parameters tracking
-            if 'best_params_global' in phase_state:
-                self.best_params_global = jnp.array(phase_state['best_params_global'])
-            self.best_cost_global = float(phase_state['best_cost_global'][()])
+            if "best_params_global" in phase_state:
+                self.best_params_global = jnp.array(phase_state["best_params_global"])
+            self.best_cost_global = float(phase_state["best_cost_global"][()])
 
             # Restore phase history
-            if 'phase_history' in phase_state:
-                phase_history_bytes = bytes(phase_state['phase_history'][()])
-                self.phase_history = pickle.loads(phase_history_bytes)
+            if "phase_history" in phase_state:
+                phase_history_bytes = bytes(phase_state["phase_history"][()])
+                self.phase_history = pickle.loads(phase_history_bytes)  # nosec B301
 
             # Restore normalizer state (if exists)
-            if 'normalizer_state' in phase_state:
-                norm_group = phase_state['normalizer_state']
-                strategy = norm_group.attrs['strategy']
-                scales = jnp.array(norm_group['scales']) if 'scales' in norm_group else None
-                offsets = jnp.array(norm_group['offsets']) if 'offsets' in norm_group else None
+            if "normalizer_state" in phase_state:
+                norm_group = phase_state["normalizer_state"]
+                strategy = norm_group.attrs["strategy"]
+                scales = (
+                    jnp.array(norm_group["scales"]) if "scales" in norm_group else None
+                )
+                offsets = (
+                    jnp.array(norm_group["offsets"])
+                    if "offsets" in norm_group
+                    else None
+                )
 
                 # Note: Full normalizer reconstruction requires bounds/p0
                 # This is a partial restore - full normalizer created in _setup_normalization
 
             # Restore tournament state (if exists)
-            if 'tournament_state' in phase_state and self.config.enable_multistart:
-                tournament_group = phase_state['tournament_state']
+            if "tournament_state" in phase_state and self.config.enable_multistart:
+                tournament_group = phase_state["tournament_state"]
                 tournament_checkpoint = {}
-                for key in tournament_group.keys():
+                for key in tournament_group:
                     value = tournament_group[key][()]
                     if isinstance(value, np.void):
-                        tournament_checkpoint[key] = pickle.loads(bytes(value))
+                        tournament_checkpoint[key] = pickle.loads(bytes(value))  # nosec B301
                     else:
-                        tournament_checkpoint[key] = np.array(value) if hasattr(value, '__len__') else value
-                
+                        tournament_checkpoint[key] = (
+                            np.array(value) if hasattr(value, "__len__") else value
+                        )
+
                 # Create GlobalOptimizationConfig for tournament
                 global_config = GlobalOptimizationConfig(
                     n_starts=self.config.n_starts,
@@ -2028,9 +2109,10 @@ class AdaptiveHybridStreamingOptimizer:
                 )
 
             # Restore multi-start candidates (if exists)
-            if 'multistart_candidates' in phase_state:
-                self.multistart_candidates = jnp.array(phase_state['multistart_candidates'])
-
+            if "multistart_candidates" in phase_state:
+                self.multistart_candidates = jnp.array(
+                    phase_state["multistart_candidates"]
+                )
 
     def _detect_available_devices(self) -> dict[str, Any]:
         """Detect available GPU/TPU devices using JAX.
@@ -2065,21 +2147,21 @@ class AdaptiveHybridStreamingOptimizer:
         if device_count > 0:
             platform = devices[0].platform
             # Map JAX platform names to our device types
-            if platform == 'cpu':
-                device_type = 'cpu'
-            elif platform in ['gpu', 'cuda', 'rocm']:
-                device_type = 'gpu'
-            elif platform == 'tpu':
-                device_type = 'tpu'
+            if platform == "cpu":
+                device_type = "cpu"
+            elif platform in ["gpu", "cuda", "rocm"]:
+                device_type = "gpu"
+            elif platform == "tpu":
+                device_type = "tpu"
             else:
-                device_type = 'cpu'  # Default fallback
+                device_type = "cpu"  # Default fallback
         else:
-            device_type = 'cpu'
+            device_type = "cpu"
 
         device_info = {
-            'device_count': device_count,
-            'device_type': device_type,
-            'devices': devices,
+            "device_count": device_count,
+            "device_type": device_type,
+            "devices": devices,
         }
 
         # Store for later use
@@ -2112,14 +2194,11 @@ class AdaptiveHybridStreamingOptimizer:
             return False
 
         # Check if multiple devices available
-        if device_info['device_count'] <= 1:
+        if device_info["device_count"] <= 1:
             return False
 
         # Don't use multi-device for CPU (no benefit)
-        if device_info['device_type'] == 'cpu':
-            return False
-
-        return True
+        return device_info["device_type"] != "cpu"
 
     def _setup_multi_device(self, device_info: dict[str, Any]) -> dict[str, Any]:
         """Setup multi-device configuration for data-parallel computation.
@@ -2156,18 +2235,18 @@ class AdaptiveHybridStreamingOptimizer:
         if should_use:
             # Multi-device configuration
             multi_device_config = {
-                'use_multi_device': True,
-                'device_count': device_info['device_count'],
-                'devices': device_info['devices'],
-                'axis_name': 'devices',
+                "use_multi_device": True,
+                "device_count": device_info["device_count"],
+                "devices": device_info["devices"],
+                "axis_name": "devices",
             }
         else:
             # Single-device fallback
             multi_device_config = {
-                'use_multi_device': False,
-                'device_count': 1,
-                'devices': device_info['devices'][:1] if device_info['devices'] else [],
-                'axis_name': None,
+                "use_multi_device": False,
+                "device_count": 1,
+                "devices": device_info["devices"][:1] if device_info["devices"] else [],
+                "axis_name": None,
             }
 
         # Store for later use
@@ -2247,8 +2326,8 @@ class AdaptiveHybridStreamingOptimizer:
 
         For proper multi-device aggregation:
         ```python
-        if self.multi_device_config['use_multi_device']:
-            JTJ_global = jax.lax.psum(JTJ_local, axis_name='devices')
+        if self.multi_device_config["use_multi_device"]:
+            JTJ_global = jax.lax.psum(JTJ_local, axis_name="devices")
         else:
             JTJ_global = JTJ_local
         ```
@@ -2261,9 +2340,9 @@ class AdaptiveHybridStreamingOptimizer:
         >>> assert jnp.allclose(JTJ_agg, JTJ)  # Same on single device
         """
         # Check if multi-device is configured and enabled
-        if (self.multi_device_config is not None and
-            self.multi_device_config.get('use_multi_device', False)):
-
+        if self.multi_device_config is not None and self.multi_device_config.get(
+            "use_multi_device", False
+        ):
             # Multi-device aggregation would use psum
             # For now, we just return the local matrix (single-device fallback)
             # Future implementation:
@@ -2271,10 +2350,11 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Log warning about fallback
             import warnings
+
             warnings.warn(
                 "Multi-device aggregation not yet fully implemented. "
                 "Falling back to single-device computation.",
-                UserWarning
+                UserWarning,
             )
 
         # Single-device case or fallback: return unchanged
@@ -2297,7 +2377,7 @@ class AdaptiveHybridStreamingOptimizer:
         Sets self.current_precision and self.phase_precisions.
         Immediately transitions to Phase 1 precision for 'auto' mode after setup.
         """
-        if self.config.precision == 'auto':
+        if self.config.precision == "auto":
             # Auto mode: float32 for Phase 1, float64 for others
             self.phase_precisions = {
                 0: jnp.float64,  # Normalization: always float64
@@ -2308,7 +2388,7 @@ class AdaptiveHybridStreamingOptimizer:
             # Phase 0 is just setup, start in Phase 1 precision (float32)
             self.current_precision = jnp.float32
 
-        elif self.config.precision == 'float32':
+        elif self.config.precision == "float32":
             # User forces float32 throughout
             self.phase_precisions = {
                 0: jnp.float32,
@@ -2318,7 +2398,7 @@ class AdaptiveHybridStreamingOptimizer:
             }
             self.current_precision = jnp.float32
 
-        elif self.config.precision == 'float64':
+        elif self.config.precision == "float64":
             # User forces float64 throughout
             self.phase_precisions = {
                 0: jnp.float64,
@@ -2381,10 +2461,14 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Convert Phase 2 accumulators
         if self.phase2_JTJ_accumulator is not None:
-            self.phase2_JTJ_accumulator = self.phase2_JTJ_accumulator.astype(target_dtype)
+            self.phase2_JTJ_accumulator = self.phase2_JTJ_accumulator.astype(
+                target_dtype
+            )
 
         if self.phase2_JTr_accumulator is not None:
-            self.phase2_JTr_accumulator = self.phase2_JTr_accumulator.astype(target_dtype)
+            self.phase2_JTr_accumulator = self.phase2_JTr_accumulator.astype(
+                target_dtype
+            )
 
         # Convert best parameters tracking
         if self.best_params_global is not None:
@@ -2439,10 +2523,7 @@ class AdaptiveHybridStreamingOptimizer:
             return True
 
         # Check gradients for NaN/Inf
-        if gradients is not None and not jnp.all(jnp.isfinite(gradients)):
-            return True
-
-        return False
+        return bool(gradients is not None and not jnp.all(jnp.isfinite(gradients)))
 
     def _upgrade_precision_if_needed(
         self,
@@ -2468,8 +2549,10 @@ class AdaptiveHybridStreamingOptimizer:
         """
         if self._check_precision_upgrade_needed(params, loss, gradients):
             # Log upgrade
-            if hasattr(self.config, 'verbose') and self.config.verbose:
-                print("WARNING: Numerical issues detected in float32. Upgrading to float64.")
+            if hasattr(self.config, "verbose") and self.config.verbose:
+                print(
+                    "WARNING: Numerical issues detected in float32. Upgrading to float64."
+                )
 
             # Convert to float64
             self._convert_precision(jnp.float64)
@@ -2598,7 +2681,7 @@ class AdaptiveHybridStreamingOptimizer:
         self._setup_normalization(func, p0_array, bounds)
         self._setup_precision()  # Setup precision strategy
         phase0_duration = time.time() - phase0_start
-        phase_timings['phase0_normalization'] = phase0_duration
+        phase_timings["phase0_normalization"] = phase0_duration
 
         if verbose >= 1:
             print(f"Phase 0: Normalization setup complete ({phase0_duration:.3f}s)")
@@ -2624,17 +2707,19 @@ class AdaptiveHybridStreamingOptimizer:
             bounds=bounds,
         )
         phase1_duration = time.time() - phase1_start
-        phase_timings['phase1_warmup'] = phase1_duration
-        phase_iterations['phase1'] = phase1_result['iterations']
+        phase_timings["phase1_warmup"] = phase1_duration
+        phase_iterations["phase1"] = phase1_result["iterations"]
 
         if verbose >= 1:
-            print(f"Phase 1 complete: {phase1_result['iterations']} iterations ({phase1_duration:.3f}s)")
+            print(
+                f"Phase 1 complete: {phase1_result['iterations']} iterations ({phase1_duration:.3f}s)"
+            )
             print(f"  Best loss: {phase1_result['best_loss']:.6e}")
             print(f"  Switch reason: {phase1_result['switch_reason']}")
             print()
 
         # Use best parameters from Phase 1 as starting point for Phase 2
-        warmup_params = phase1_result['best_params']
+        warmup_params = phase1_result["best_params"]
 
         # ============================================================
         # Phase 2: Streaming Gauss-Newton
@@ -2652,11 +2737,13 @@ class AdaptiveHybridStreamingOptimizer:
             initial_params=warmup_params,
         )
         phase2_duration = time.time() - phase2_start
-        phase_timings['phase2_gauss_newton'] = phase2_duration
-        phase_iterations['phase2'] = phase2_result['iterations']
+        phase_timings["phase2_gauss_newton"] = phase2_duration
+        phase_iterations["phase2"] = phase2_result["iterations"]
 
         if verbose >= 1:
-            print(f"Phase 2 complete: {phase2_result['iterations']} iterations ({phase2_duration:.3f}s)")
+            print(
+                f"Phase 2 complete: {phase2_result['iterations']} iterations ({phase2_duration:.3f}s)"
+            )
             print(f"  Final cost: {phase2_result['final_cost']:.6e}")
             print(f"  Convergence: {phase2_result['convergence_reason']}")
             print(f"  Gradient norm: {phase2_result['gradient_norm']:.6e}")
@@ -2674,13 +2761,13 @@ class AdaptiveHybridStreamingOptimizer:
 
         phase3_start = time.time()
         phase3_result = self._run_phase3_finalize(
-            optimized_params_normalized=phase2_result['final_params'],
-            JTJ_final=phase2_result['JTJ_final'],
-            residual_sum_sq=phase2_result['residual_sum_sq'],
+            optimized_params_normalized=phase2_result["final_params"],
+            JTJ_final=phase2_result["JTJ_final"],
+            residual_sum_sq=phase2_result["residual_sum_sq"],
             n_points=n_points,
         )
         phase3_duration = time.time() - phase3_start
-        phase_timings['phase3_finalize'] = phase3_duration
+        phase_timings["phase3_finalize"] = phase3_duration
 
         if verbose >= 1:
             print(f"Phase 3 complete ({phase3_duration:.3f}s)")
@@ -2693,37 +2780,37 @@ class AdaptiveHybridStreamingOptimizer:
         total_duration = time.time() - total_start_time
 
         # Compute final residuals for 'fun' field
-        final_predictions = func(x_data, *phase3_result['popt'])
+        final_predictions = func(x_data, *phase3_result["popt"])
         final_residuals = y_data - final_predictions
 
         # Build streaming diagnostics
         streaming_diagnostics = {
-            'phase_timings': phase_timings,
-            'phase_iterations': phase_iterations,
-            'total_time': total_duration,
-            'warmup_diagnostics': {
-                'best_loss': phase1_result['best_loss'],
-                'final_loss': phase1_result['final_loss'],
-                'switch_reason': phase1_result['switch_reason'],
+            "phase_timings": phase_timings,
+            "phase_iterations": phase_iterations,
+            "total_time": total_duration,
+            "warmup_diagnostics": {
+                "best_loss": phase1_result["best_loss"],
+                "final_loss": phase1_result["final_loss"],
+                "switch_reason": phase1_result["switch_reason"],
             },
-            'gauss_newton_diagnostics': {
-                'best_cost': phase2_result['best_cost'],
-                'final_cost': phase2_result['final_cost'],
-                'gradient_norm': phase2_result['gradient_norm'],
-                'convergence_reason': phase2_result['convergence_reason'],
+            "gauss_newton_diagnostics": {
+                "best_cost": phase2_result["best_cost"],
+                "final_cost": phase2_result["final_cost"],
+                "gradient_norm": phase2_result["gradient_norm"],
+                "convergence_reason": phase2_result["convergence_reason"],
             },
-            'phase_history': self.phase_history,
+            "phase_history": self.phase_history,
         }
 
         # Format result dictionary (scipy-compatible + NLSQ extensions)
         result = {
-            'x': phase3_result['popt'],           # Optimized parameters
-            'success': True,                       # Always True if we reach here
-            'message': phase2_result['convergence_reason'],
-            'fun': final_residuals,                # Final residuals
-            'pcov': phase3_result['pcov'],         # Covariance matrix
-            'perr': phase3_result['perr'],         # Standard errors (NLSQ extension)
-            'streaming_diagnostics': streaming_diagnostics,  # NLSQ extension
+            "x": phase3_result["popt"],  # Optimized parameters
+            "success": True,  # Always True if we reach here
+            "message": phase2_result["convergence_reason"],
+            "fun": final_residuals,  # Final residuals
+            "pcov": phase3_result["pcov"],  # Covariance matrix
+            "perr": phase3_result["perr"],  # Standard errors (NLSQ extension)
+            "streaming_diagnostics": streaming_diagnostics,  # NLSQ extension
         }
 
         if verbose >= 1:
@@ -2768,8 +2855,8 @@ class AdaptiveHybridStreamingOptimizer:
         }
 
         return {
-            'current_phase': self.current_phase,
-            'phase_name': phase_names.get(self.current_phase, "Unknown"),
-            'phase_history': self.phase_history,
-            'total_phases': 4,
+            "current_phase": self.current_phase,
+            "phase_name": phase_names.get(self.current_phase, "Unknown"),
+            "phase_history": self.phase_history,
+            "total_phases": 4,
         }

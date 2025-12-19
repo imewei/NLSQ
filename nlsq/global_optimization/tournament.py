@@ -297,7 +297,7 @@ class TournamentSelector:
 
         # Compute average loss for this round (avoid division by zero)
         # Use safe division with masked array to prevent warning
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             avg_round_losses = np.where(
                 round_loss_counts > 0,
                 round_losses / np.maximum(round_loss_counts, 1),
@@ -316,14 +316,18 @@ class TournamentSelector:
             self._eliminate_worst(n_to_eliminate, avg_round_losses)
 
         # Record round history
-        self.round_history.append({
-            "round": round_number,
-            "n_survivors_before": n_survivors_before,
-            "n_survivors_after": self.n_survivors,
-            "n_eliminated": n_survivors_before - self.n_survivors,
-            "batches_evaluated": min(batch_idx + 1, self.config.batches_per_round),
-            "mean_loss": float(np.mean(avg_round_losses[self.survival_mask])) if self.n_survivors > 0 else np.inf,
-        })
+        self.round_history.append(
+            {
+                "round": round_number,
+                "n_survivors_before": n_survivors_before,
+                "n_survivors_after": self.n_survivors,
+                "n_eliminated": n_survivors_before - self.n_survivors,
+                "batches_evaluated": min(batch_idx + 1, self.config.batches_per_round),
+                "mean_loss": float(np.mean(avg_round_losses[self.survival_mask]))
+                if self.n_survivors > 0
+                else np.inf,
+            }
+        )
 
         self.logger.debug(
             f"Round {round_number} complete: {n_survivors_before} -> {self.n_survivors} survivors"
@@ -372,8 +376,8 @@ class TournamentSelector:
         np.ndarray
             Loss values for each candidate (inf for eliminated or failed).
         """
-        x_batch = jnp.asarray(x_batch)
-        y_batch = jnp.asarray(y_batch)
+        x_jax = jnp.asarray(x_batch)
+        y_jax = jnp.asarray(y_batch)
 
         losses = np.full(self.n_candidates, np.inf)
 
@@ -383,25 +387,21 @@ class TournamentSelector:
 
             try:
                 params = self.candidates[i]
-                predictions = model(x_batch, *params)
-                residuals = y_batch - predictions
+                predictions = model(x_jax, *params)
+                residuals = y_jax - predictions
 
                 # Compute mean squared error
-                loss = float(jnp.mean(residuals ** 2))
+                loss = float(jnp.mean(residuals**2))
 
                 if np.isfinite(loss):
                     losses[i] = loss
                 else:
                     self.numerical_failures += 1
-                    self.logger.debug(
-                        f"Candidate {i}: Non-finite loss {loss}"
-                    )
+                    self.logger.debug(f"Candidate {i}: Non-finite loss {loss}")
 
             except Exception as e:
                 self.numerical_failures += 1
-                self.logger.debug(
-                    f"Candidate {i} failed evaluation: {str(e)[:50]}"
-                )
+                self.logger.debug(f"Candidate {i} failed evaluation: {str(e)[:50]}")
                 # Keep loss as inf
 
         return losses

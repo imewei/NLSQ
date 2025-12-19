@@ -388,9 +388,11 @@ config = HybridStreamingConfig.aggressive()  # Fast convergence
 
 optimizer = AdaptiveHybridStreamingOptimizer(config)
 
+
 # Define model
 def model(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 # Fit with bounds-based normalization (addresses gradient imbalance)
 result = optimizer.fit(
@@ -398,7 +400,7 @@ result = optimizer.fit(
     x_data=x_data,
     y_data=y_data,
     p0=[2.0, 0.5, 0.3],
-    bounds=(jnp.array([1.0, 0.1, 0.0]), jnp.array([10.0, 1.0, 2.0]))
+    bounds=(jnp.array([1.0, 0.1, 0.0]), jnp.array([10.0, 1.0, 2.0])),
 )
 ```
 
@@ -553,18 +555,25 @@ x = np.linspace(0, 5, 100)
 y = 3.0 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 100)
 
 # Option 1: Use fit() with preset (simplest)
-popt, pcov = fit(multimodal_model, x, y, preset='robust',
-                 bounds=([0, 0, 0], [10, 5, 10]))
+popt, pcov = fit(
+    multimodal_model, x, y, preset="robust", bounds=([0, 0, 0], [10, 5, 10])
+)
 
 # Option 2: Use curve_fit() with multi-start parameters
-popt, pcov = curve_fit(multimodal_model, x, y, p0=[1, 1, 1],
-                       bounds=([0, 0, 0], [10, 5, 10]),
-                       multistart=True, n_starts=10, sampler='lhs')
+popt, pcov = curve_fit(
+    multimodal_model,
+    x,
+    y,
+    p0=[1, 1, 1],
+    bounds=([0, 0, 0], [10, 5, 10]),
+    multistart=True,
+    n_starts=10,
+    sampler="lhs",
+)
 
 # Option 3: Use MultiStartOrchestrator for full control
-orchestrator = MultiStartOrchestrator.from_preset('global')
-result = orchestrator.fit(multimodal_model, x, y,
-                          bounds=([0, 0, 0], [10, 5, 10]))
+orchestrator = MultiStartOrchestrator.from_preset("global")
+result = orchestrator.fit(multimodal_model, x, y, bounds=([0, 0, 0], [10, 5, 10]))
 print(f"Best params: {result.popt}")
 print(f"Multi-start diagnostics: {result.multistart_diagnostics}")
 ```
@@ -605,10 +614,12 @@ config = GlobalOptimizationConfig(
 
 selector = TournamentSelector(candidates, config)
 
+
 # Run tournament on streaming data
 def data_generator():
     for _ in range(200):
         yield x_batch, y_batch
+
 
 best_candidates = selector.run_tournament(data_generator(), model, top_m=1)
 ```

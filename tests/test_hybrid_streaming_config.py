@@ -119,9 +119,7 @@ class TestHybridStreamingConfigValidation:
     def test_warmup_iterations_constraint(self):
         """Test that warmup_iterations must be <= max_warmup_iterations."""
         with pytest.raises(AssertionError, match="warmup_iterations"):
-            HybridStreamingConfig(
-                warmup_iterations=600, max_warmup_iterations=500
-            )
+            HybridStreamingConfig(warmup_iterations=600, max_warmup_iterations=500)
 
     def test_negative_values_rejected(self):
         """Test that negative values for positive parameters are rejected."""

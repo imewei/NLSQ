@@ -40,53 +40,52 @@ Custom configuration:
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-
 # Preset configurations for common use cases
 PRESETS: dict[str, dict[str, Any]] = {
-    'fast': {
-        'n_starts': 0,
-        'sampler': 'lhs',
-        'center_on_p0': False,
-        'scale_factor': 1.0,
-        'elimination_rounds': 0,
-        'elimination_fraction': 0.5,
-        'batches_per_round': 50,
+    "fast": {
+        "n_starts": 0,
+        "sampler": "lhs",
+        "center_on_p0": False,
+        "scale_factor": 1.0,
+        "elimination_rounds": 0,
+        "elimination_fraction": 0.5,
+        "batches_per_round": 50,
     },
-    'robust': {
-        'n_starts': 5,
-        'sampler': 'lhs',
-        'center_on_p0': True,
-        'scale_factor': 1.0,
-        'elimination_rounds': 2,
-        'elimination_fraction': 0.5,
-        'batches_per_round': 50,
+    "robust": {
+        "n_starts": 5,
+        "sampler": "lhs",
+        "center_on_p0": True,
+        "scale_factor": 1.0,
+        "elimination_rounds": 2,
+        "elimination_fraction": 0.5,
+        "batches_per_round": 50,
     },
-    'global': {
-        'n_starts': 20,
-        'sampler': 'lhs',
-        'center_on_p0': True,
-        'scale_factor': 1.0,
-        'elimination_rounds': 3,
-        'elimination_fraction': 0.5,
-        'batches_per_round': 100,
+    "global": {
+        "n_starts": 20,
+        "sampler": "lhs",
+        "center_on_p0": True,
+        "scale_factor": 1.0,
+        "elimination_rounds": 3,
+        "elimination_fraction": 0.5,
+        "batches_per_round": 100,
     },
-    'thorough': {
-        'n_starts': 50,
-        'sampler': 'lhs',
-        'center_on_p0': True,
-        'scale_factor': 1.0,
-        'elimination_rounds': 4,
-        'elimination_fraction': 0.5,
-        'batches_per_round': 150,
+    "thorough": {
+        "n_starts": 50,
+        "sampler": "lhs",
+        "center_on_p0": True,
+        "scale_factor": 1.0,
+        "elimination_rounds": 4,
+        "elimination_fraction": 0.5,
+        "batches_per_round": 150,
     },
-    'streaming': {
-        'n_starts': 10,
-        'sampler': 'lhs',
-        'center_on_p0': True,
-        'scale_factor': 1.0,
-        'elimination_rounds': 3,
-        'elimination_fraction': 0.5,
-        'batches_per_round': 50,
+    "streaming": {
+        "n_starts": 10,
+        "sampler": "lhs",
+        "center_on_p0": True,
+        "scale_factor": 1.0,
+        "elimination_rounds": 3,
+        "elimination_fraction": 0.5,
+        "batches_per_round": 50,
     },
 }
 
@@ -160,7 +159,7 @@ class GlobalOptimizationConfig:
 
     # Sampling configuration
     n_starts: int = 10
-    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs'
+    sampler: Literal["lhs", "sobol", "halton"] = "lhs"
 
     # Centering configuration
     center_on_p0: bool = True
@@ -181,19 +180,17 @@ class GlobalOptimizationConfig:
             raise ValueError(f"n_starts must be non-negative, got {self.n_starts}")
 
         # Validate sampler
-        valid_samplers = ('lhs', 'sobol', 'halton')
+        valid_samplers = ("lhs", "sobol", "halton")
         if self.sampler.lower() not in valid_samplers:
             raise ValueError(
                 f"sampler must be one of {valid_samplers}, got '{self.sampler}'"
             )
         # Normalize sampler to lowercase
-        object.__setattr__(self, 'sampler', self.sampler.lower())
+        object.__setattr__(self, "sampler", self.sampler.lower())
 
         # Validate scale_factor
         if self.scale_factor <= 0:
-            raise ValueError(
-                f"scale_factor must be positive, got {self.scale_factor}"
-            )
+            raise ValueError(f"scale_factor must be positive, got {self.scale_factor}")
 
         # Validate elimination_fraction
         if not 0 < self.elimination_fraction < 1:
@@ -217,10 +214,10 @@ class GlobalOptimizationConfig:
         if self.n_starts == 0 and self.elimination_rounds > 0:
             # Tournament selection makes no sense with 0 starts
             # Silently set elimination_rounds to 0
-            object.__setattr__(self, 'elimination_rounds', 0)
+            object.__setattr__(self, "elimination_rounds", 0)
 
     @classmethod
-    def from_preset(cls, preset_name: str) -> 'GlobalOptimizationConfig':
+    def from_preset(cls, preset_name: str) -> "GlobalOptimizationConfig":
         """Create configuration from a named preset.
 
         Parameters
@@ -257,7 +254,7 @@ class GlobalOptimizationConfig:
             )
 
         preset_values = PRESETS[preset_name_lower].copy()
-        preset_values['_preset'] = preset_name_lower
+        preset_values["_preset"] = preset_name_lower
         return cls(**preset_values)
 
     @property
@@ -299,18 +296,18 @@ class GlobalOptimizationConfig:
         20
         """
         return {
-            'n_starts': self.n_starts,
-            'sampler': self.sampler,
-            'center_on_p0': self.center_on_p0,
-            'scale_factor': self.scale_factor,
-            'elimination_rounds': self.elimination_rounds,
-            'elimination_fraction': self.elimination_fraction,
-            'batches_per_round': self.batches_per_round,
-            '_preset': self._preset,
+            "n_starts": self.n_starts,
+            "sampler": self.sampler,
+            "center_on_p0": self.center_on_p0,
+            "scale_factor": self.scale_factor,
+            "elimination_rounds": self.elimination_rounds,
+            "elimination_fraction": self.elimination_fraction,
+            "batches_per_round": self.batches_per_round,
+            "_preset": self._preset,
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> 'GlobalOptimizationConfig':
+    def from_dict(cls, d: dict[str, Any]) -> "GlobalOptimizationConfig":
         """Deserialize configuration from a dictionary.
 
         Parameters
@@ -332,14 +329,19 @@ class GlobalOptimizationConfig:
         """
         # Filter to known fields
         known_fields = {
-            'n_starts', 'sampler', 'center_on_p0', 'scale_factor',
-            'elimination_rounds', 'elimination_fraction', 'batches_per_round',
-            '_preset',
+            "n_starts",
+            "sampler",
+            "center_on_p0",
+            "scale_factor",
+            "elimination_rounds",
+            "elimination_fraction",
+            "batches_per_round",
+            "_preset",
         }
         filtered = {k: v for k, v in d.items() if k in known_fields}
         return cls(**filtered)
 
-    def with_overrides(self, **kwargs: Any) -> 'GlobalOptimizationConfig':
+    def with_overrides(self, **kwargs: Any) -> "GlobalOptimizationConfig":
         """Create a new config with specified overrides.
 
         Parameters
@@ -362,6 +364,6 @@ class GlobalOptimizationConfig:
         d = self.to_dict()
         d.update(kwargs)
         # Clear preset if we're overriding values
-        if kwargs and '_preset' not in kwargs:
-            d['_preset'] = None
+        if kwargs and "_preset" not in kwargs:
+            d["_preset"] = None
         return self.from_dict(d)

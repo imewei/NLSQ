@@ -14,7 +14,7 @@ import pytest
 
 from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
 from nlsq.hybrid_streaming_config import HybridStreamingConfig
-from nlsq.parameter_normalizer import ParameterNormalizer, NormalizedModelWrapper
+from nlsq.parameter_normalizer import NormalizedModelWrapper, ParameterNormalizer
 
 
 class TestPhase0NormalizationSetup:
@@ -25,7 +25,7 @@ class TestPhase0NormalizationSetup:
         # Create optimizer with bounds
         config = HybridStreamingConfig(
             normalize=True,
-            normalization_strategy='auto'  # Should use bounds
+            normalization_strategy="auto",  # Should use bounds
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -45,7 +45,7 @@ class TestPhase0NormalizationSetup:
         assert isinstance(optimizer.normalizer, ParameterNormalizer)
 
         # Verify strategy selection (should use bounds)
-        assert optimizer.normalizer.strategy == 'bounds'
+        assert optimizer.normalizer.strategy == "bounds"
 
         # Verify normalized model wrapper created
         assert optimizer.normalized_model is not None
@@ -68,7 +68,7 @@ class TestPhase0NormalizationSetup:
         # Create optimizer without bounds
         config = HybridStreamingConfig(
             normalize=True,
-            normalization_strategy='auto'  # Should use p0
+            normalization_strategy="auto",  # Should use p0
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -88,7 +88,7 @@ class TestPhase0NormalizationSetup:
         assert isinstance(optimizer.normalizer, ParameterNormalizer)
 
         # Verify strategy selection (should use p0)
-        assert optimizer.normalizer.strategy == 'p0'
+        assert optimizer.normalizer.strategy == "p0"
 
         # Verify normalized parameters are all 1.0 (p0/p0 = 1)
         normalized_p0 = optimizer.normalizer.normalize(p0)
@@ -105,7 +105,7 @@ class TestPhase0NormalizationSetup:
         # Create optimizer with normalization disabled
         config = HybridStreamingConfig(
             normalize=False,  # Disable normalization
-            normalization_strategy='none'
+            normalization_strategy="none",
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -122,7 +122,7 @@ class TestPhase0NormalizationSetup:
 
         # Verify normalizer created with identity strategy
         assert optimizer.normalizer is not None
-        assert optimizer.normalizer.strategy == 'none'
+        assert optimizer.normalizer.strategy == "none"
 
         # Verify normalization is identity (no change)
         normalized_p0 = optimizer.normalizer.normalize(p0)
@@ -142,17 +142,14 @@ class TestPhase0NormalizationSetup:
     def test_bounds_transformation_for_phase2(self):
         """Test that bounds are correctly transformed for Phase 2 optimization."""
         # Create optimizer with bounds
-        config = HybridStreamingConfig(
-            normalize=True,
-            normalization_strategy='bounds'
-        )
+        config = HybridStreamingConfig(normalize=True, normalization_strategy="bounds")
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
         # Define test parameters with bounds
         p0 = jnp.array([25.0, 0.25, 3.0])
         bounds = (
             jnp.array([10.0, 0.0, 1.0]),  # Lower bounds
-            jnp.array([50.0, 1.0, 5.0])   # Upper bounds
+            jnp.array([50.0, 1.0, 5.0]),  # Upper bounds
         )
 
         # Define model
@@ -300,10 +297,7 @@ class TestPhase1AdamWarmup:
 
     def test_adam_optimizer_initialization(self):
         """Test Adam optimizer initialization with optax."""
-        config = HybridStreamingConfig(
-            warmup_learning_rate=0.01,
-            warmup_iterations=10
-        )
+        config = HybridStreamingConfig(warmup_learning_rate=0.01, warmup_iterations=10)
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
         # Define test parameters
@@ -328,13 +322,12 @@ class TestPhase1AdamWarmup:
 
         # Verify optimizer state structure (optax state is a pytree)
         # For Adam, state has multiple components
-        assert hasattr(opt_state, 'count') or isinstance(opt_state, tuple)
+        assert hasattr(opt_state, "count") or isinstance(opt_state, tuple)
 
     def test_loss_plateau_triggers_switch(self):
         """Test that loss plateau detection triggers Phase 2 switch."""
         config = HybridStreamingConfig(
-            loss_plateau_threshold=1e-4,
-            active_switching_criteria=['plateau']
+            loss_plateau_threshold=1e-4, active_switching_criteria=["plateau"]
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -347,18 +340,17 @@ class TestPhase1AdamWarmup:
             iteration=10,
             current_loss=current_loss,
             prev_loss=prev_loss,
-            grad_norm=grad_norm
+            grad_norm=grad_norm,
         )
 
         # Should trigger switch due to plateau
         assert should_switch
-        assert 'plateau' in reason.lower()
+        assert "plateau" in reason.lower()
 
     def test_gradient_norm_threshold_triggers_switch(self):
         """Test that small gradient norm triggers Phase 2 switch."""
         config = HybridStreamingConfig(
-            gradient_norm_threshold=1e-3,
-            active_switching_criteria=['gradient']
+            gradient_norm_threshold=1e-3, active_switching_criteria=["gradient"]
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -371,19 +363,19 @@ class TestPhase1AdamWarmup:
             iteration=10,
             current_loss=current_loss,
             prev_loss=prev_loss,
-            grad_norm=grad_norm
+            grad_norm=grad_norm,
         )
 
         # Should trigger switch due to gradient
         assert should_switch
-        assert 'gradient' in reason.lower()
+        assert "gradient" in reason.lower()
 
     def test_max_iterations_triggers_switch(self):
         """Test that max iterations triggers Phase 2 switch."""
         config = HybridStreamingConfig(
             warmup_iterations=50,  # Must be <= max_warmup_iterations
             max_warmup_iterations=100,
-            active_switching_criteria=['max_iter']
+            active_switching_criteria=["max_iter"],
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -396,19 +388,17 @@ class TestPhase1AdamWarmup:
             iteration=100,  # At max
             current_loss=current_loss,
             prev_loss=prev_loss,
-            grad_norm=grad_norm
+            grad_norm=grad_norm,
         )
 
         # Should trigger switch due to max iterations
         assert should_switch
-        assert 'max' in reason.lower() or 'iteration' in reason.lower()
+        assert "max" in reason.lower() or "iteration" in reason.lower()
 
     def test_best_parameter_tracking_during_warmup(self):
         """Test that best parameters are tracked during warmup."""
         config = HybridStreamingConfig(
-            warmup_iterations=20,
-            warmup_learning_rate=0.1,
-            chunk_size=100
+            warmup_iterations=20, warmup_learning_rate=0.1, chunk_size=100
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -430,19 +420,17 @@ class TestPhase1AdamWarmup:
         result = optimizer._run_phase1_warmup(data_source, model, p0, bounds)
 
         # Verify best params tracked
-        assert 'best_params' in result
-        assert 'best_loss' in result
-        assert result['best_params'] is not None
+        assert "best_params" in result
+        assert "best_loss" in result
+        assert result["best_params"] is not None
 
         # Best loss should be less than or equal to final loss
-        assert result['best_loss'] <= result.get('final_loss', jnp.inf)
+        assert result["best_loss"] <= result.get("final_loss", jnp.inf)
 
     def test_warmup_in_normalized_parameter_space(self):
         """Test that warmup operates in normalized parameter space."""
         config = HybridStreamingConfig(
-            warmup_iterations=10,
-            normalize=True,
-            normalization_strategy='p0'
+            warmup_iterations=10, normalize=True, normalization_strategy="p0"
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -478,7 +466,7 @@ class TestPhase1AdamWarmup:
         config = HybridStreamingConfig(
             warmup_iterations=50,
             max_warmup_iterations=100,
-            active_switching_criteria=['plateau', 'gradient', 'max_iter']
+            active_switching_criteria=["plateau", "gradient", "max_iter"],
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -488,11 +476,11 @@ class TestPhase1AdamWarmup:
         grad_norm = 0.1
 
         # Check if we should stop (implementation may or may not stop)
-        should_switch, reason = optimizer._check_phase1_switch_criteria(
+        _should_switch, _reason = optimizer._check_phase1_switch_criteria(
             iteration=10,
             current_loss=current_loss,
             prev_loss=prev_loss,
-            grad_norm=grad_norm
+            grad_norm=grad_norm,
         )
 
         # If early stopping is implemented, loss increase should trigger switch
@@ -619,8 +607,8 @@ class TestPhase2GaussNewton:
 
         chunk_size = 20
         for i in range(0, len(x_data), chunk_size):
-            x_chunk = x_data[i:i+chunk_size]
-            y_chunk = y_data[i:i+chunk_size]
+            x_chunk = x_data[i : i + chunk_size]
+            y_chunk = y_data[i : i + chunk_size]
 
             JTJ, JTr, _ = optimizer._accumulate_jtj_jtr(
                 x_chunk, y_chunk, normalized_params, JTJ, JTr
@@ -697,8 +685,7 @@ class TestPhase2GaussNewton:
     def test_convergence_detection(self):
         """Test convergence detection based on gradient and cost tolerance."""
         config = HybridStreamingConfig(
-            gauss_newton_tol=1e-6,
-            gauss_newton_max_iterations=100
+            gauss_newton_tol=1e-6, gauss_newton_max_iterations=100
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -720,7 +707,7 @@ class TestPhase2GaussNewton:
         # Check convergence (gradient should be zero)
         # This will be tested in the full Gauss-Newton iteration
         # For now, just verify the method exists
-        assert hasattr(optimizer, '_run_phase2_gauss_newton')
+        assert hasattr(optimizer, "_run_phase2_gauss_newton")
 
     def test_rank_deficient_jtj_handling(self):
         """Test handling of rank-deficient J^T J with regularization."""
@@ -752,10 +739,7 @@ class TestPhase2GaussNewton:
 
     def test_operation_in_normalized_space(self):
         """Test that Phase 2 operates correctly in normalized parameter space."""
-        config = HybridStreamingConfig(
-            normalize=True,
-            normalization_strategy='p0'
-        )
+        config = HybridStreamingConfig(normalize=True, normalization_strategy="p0")
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
         # Define model with different parameter scales
@@ -796,10 +780,7 @@ class TestPhase3DenormalizationCovariance:
 
     def test_parameter_denormalization_accuracy(self):
         """Test that parameters are accurately denormalized to original space."""
-        config = HybridStreamingConfig(
-            normalize=True,
-            normalization_strategy='bounds'
-        )
+        config = HybridStreamingConfig(normalize=True, normalization_strategy="bounds")
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
         # Define model
@@ -821,7 +802,7 @@ class TestPhase3DenormalizationCovariance:
 
         # Verify denormalization accuracy
         expected_a = 10.0 + 0.6 * (100.0 - 10.0)  # 64.0
-        expected_b = 0.0 + 0.7 * (10.0 - 0.0)     # 7.0
+        expected_b = 0.0 + 0.7 * (10.0 - 0.0)  # 7.0
 
         assert jnp.allclose(denormalized_params[0], expected_a)
         assert jnp.allclose(denormalized_params[1], expected_b)
@@ -848,8 +829,7 @@ class TestPhase3DenormalizationCovariance:
 
         # Create mock normalized covariance
         # Small diagonal covariance in normalized space
-        cov_norm = jnp.array([[0.01, 0.005],
-                              [0.005, 0.02]])
+        cov_norm = jnp.array([[0.01, 0.005], [0.005, 0.02]])
 
         # Transform to original space
         cov_orig = optimizer._transform_covariance(cov_norm)
@@ -886,8 +866,7 @@ class TestPhase3DenormalizationCovariance:
         optimizer._setup_normalization(model, p0, bounds)
 
         # Create mock covariance before scaling
-        cov_before = jnp.array([[1.0, 0.5],
-                                [0.5, 2.0]])
+        cov_before = jnp.array([[1.0, 0.5], [0.5, 2.0]])
 
         # Mock residual sum of squares
         residual_sum_sq = 100.0
@@ -916,8 +895,7 @@ class TestPhase3DenormalizationCovariance:
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
         # Create mock covariance matrix
-        pcov = jnp.array([[4.0, 1.0],
-                          [1.0, 9.0]])
+        pcov = jnp.array([[4.0, 1.0], [1.0, 9.0]])
 
         # Compute standard errors
         perr = optimizer._compute_standard_errors(pcov)
@@ -946,9 +924,7 @@ class TestPhase3DenormalizationCovariance:
         optimizer._setup_normalization(model, p0, bounds)
 
         # Create mock J^T J (should be symmetric)
-        JTJ = jnp.array([[10.0, 2.0, 1.0],
-                         [2.0, 8.0, 3.0],
-                         [1.0, 3.0, 5.0]])
+        JTJ = jnp.array([[10.0, 2.0, 1.0], [2.0, 8.0, 3.0], [1.0, 3.0, 5.0]])
 
         # Compute normalized covariance (pseudo-inverse)
         cov_norm = optimizer._compute_normalized_covariance(JTJ)
@@ -976,7 +952,7 @@ class TestPhase3DenormalizationCovariance:
         optimizer._setup_normalization(model, p0, bounds)
 
         # Verify normalizer uses 'none' strategy
-        assert optimizer.normalizer.strategy == 'none'
+        assert optimizer.normalizer.strategy == "none"
 
         # Mock normalized parameters (should be same as original)
         normalized_params = jnp.array([2.0, 1.0])
@@ -986,8 +962,7 @@ class TestPhase3DenormalizationCovariance:
         assert jnp.allclose(denormalized, normalized_params)
 
         # Mock normalized covariance
-        cov_norm = jnp.array([[1.0, 0.0],
-                              [0.0, 1.0]])
+        cov_norm = jnp.array([[1.0, 0.0], [0.0, 1.0]])
 
         # Transform covariance (should be identity for 'none' strategy)
         cov_orig = optimizer._transform_covariance(cov_norm)
@@ -1004,7 +979,7 @@ class TestAPIIntegration:
         """Test standalone fit() method with simple linear model."""
         config = HybridStreamingConfig(
             normalize=True,
-            normalization_strategy='p0',
+            normalization_strategy="p0",
             warmup_iterations=50,
             max_warmup_iterations=100,
             gauss_newton_max_iterations=20,
@@ -1032,30 +1007,30 @@ class TestAPIIntegration:
         )
 
         # Verify result structure
-        assert 'x' in result
-        assert 'success' in result
-        assert 'message' in result
-        assert 'fun' in result
-        assert 'pcov' in result
-        assert 'perr' in result
-        assert 'streaming_diagnostics' in result
+        assert "x" in result
+        assert "success" in result
+        assert "message" in result
+        assert "fun" in result
+        assert "pcov" in result
+        assert "perr" in result
+        assert "streaming_diagnostics" in result
 
         # Verify success
-        assert result['success'] is True
+        assert result["success"] is True
 
         # Verify parameters are close to true values
-        assert jnp.allclose(result['x'], true_params, atol=0.5)
+        assert jnp.allclose(result["x"], true_params, atol=0.5)
 
         # Verify covariance is positive semi-definite
-        eigenvalues = jnp.linalg.eigvalsh(result['pcov'])
+        eigenvalues = jnp.linalg.eigvalsh(result["pcov"])
         assert jnp.all(eigenvalues >= -1e-10)
 
         # Verify streaming diagnostics structure
-        diag = result['streaming_diagnostics']
-        assert 'phase_timings' in diag
-        assert 'phase_iterations' in diag
-        assert 'warmup_diagnostics' in diag
-        assert 'gauss_newton_diagnostics' in diag
+        diag = result["streaming_diagnostics"]
+        assert "phase_timings" in diag
+        assert "phase_iterations" in diag
+        assert "warmup_diagnostics" in diag
+        assert "gauss_newton_diagnostics" in diag
 
     def test_result_scipy_compatibility(self):
         """Test that result format matches scipy.optimize.curve_fit."""
@@ -1079,14 +1054,14 @@ class TestAPIIntegration:
         )
 
         # Verify scipy-compatible fields
-        assert 'x' in result  # popt equivalent
-        assert 'pcov' in result
-        assert result['x'].shape == (2,)
-        assert result['pcov'].shape == (2, 2)
+        assert "x" in result  # popt equivalent
+        assert "pcov" in result
+        assert result["x"].shape == (2,)
+        assert result["pcov"].shape == (2, 2)
 
         # Verify residuals
-        assert 'fun' in result
-        assert result['fun'].shape == y_data.shape
+        assert "fun" in result
+        assert result["fun"].shape == y_data.shape
 
     def test_streaming_diagnostics_content(self):
         """Test that streaming_diagnostics contains all required fields."""
@@ -1109,34 +1084,34 @@ class TestAPIIntegration:
             verbose=0,
         )
 
-        diag = result['streaming_diagnostics']
+        diag = result["streaming_diagnostics"]
 
         # Verify phase timings
-        assert 'phase_timings' in diag
-        assert 'phase0_normalization' in diag['phase_timings']
-        assert 'phase1_warmup' in diag['phase_timings']
-        assert 'phase2_gauss_newton' in diag['phase_timings']
-        assert 'phase3_finalize' in diag['phase_timings']
+        assert "phase_timings" in diag
+        assert "phase0_normalization" in diag["phase_timings"]
+        assert "phase1_warmup" in diag["phase_timings"]
+        assert "phase2_gauss_newton" in diag["phase_timings"]
+        assert "phase3_finalize" in diag["phase_timings"]
 
         # Verify phase iterations
-        assert 'phase_iterations' in diag
-        assert 'phase1' in diag['phase_iterations']
-        assert 'phase2' in diag['phase_iterations']
+        assert "phase_iterations" in diag
+        assert "phase1" in diag["phase_iterations"]
+        assert "phase2" in diag["phase_iterations"]
 
         # Verify warmup diagnostics
-        assert 'warmup_diagnostics' in diag
-        warmup = diag['warmup_diagnostics']
-        assert 'best_loss' in warmup
-        assert 'final_loss' in warmup
-        assert 'switch_reason' in warmup
+        assert "warmup_diagnostics" in diag
+        warmup = diag["warmup_diagnostics"]
+        assert "best_loss" in warmup
+        assert "final_loss" in warmup
+        assert "switch_reason" in warmup
 
         # Verify Gauss-Newton diagnostics
-        assert 'gauss_newton_diagnostics' in diag
-        gn = diag['gauss_newton_diagnostics']
-        assert 'best_cost' in gn
-        assert 'final_cost' in gn
-        assert 'gradient_norm' in gn
-        assert 'convergence_reason' in gn
+        assert "gauss_newton_diagnostics" in diag
+        gn = diag["gauss_newton_diagnostics"]
+        assert "best_cost" in gn
+        assert "final_cost" in gn
+        assert "gradient_norm" in gn
+        assert "convergence_reason" in gn
 
     def test_pcov_and_perr_relationship(self):
         """Test that perr = sqrt(diag(pcov))."""
@@ -1160,14 +1135,14 @@ class TestAPIIntegration:
         )
 
         # Verify perr = sqrt(diag(pcov))
-        expected_perr = jnp.sqrt(jnp.diag(result['pcov']))
-        assert jnp.allclose(result['perr'], expected_perr, rtol=1e-10)
+        expected_perr = jnp.sqrt(jnp.diag(result["pcov"]))
+        assert jnp.allclose(result["perr"], expected_perr, rtol=1e-10)
 
     def test_with_bounds(self):
         """Test fit() with parameter bounds."""
         config = HybridStreamingConfig(
             normalize=True,
-            normalization_strategy='bounds',
+            normalization_strategy="bounds",
             warmup_iterations=40,
             gauss_newton_max_iterations=15,
         )
@@ -1192,11 +1167,11 @@ class TestAPIIntegration:
         )
 
         # Verify parameters are within bounds
-        assert jnp.all(result['x'] >= bounds[0])
-        assert jnp.all(result['x'] <= bounds[1])
+        assert jnp.all(result["x"] >= bounds[0])
+        assert jnp.all(result["x"] <= bounds[1])
 
         # Verify close to true values
-        assert jnp.allclose(result['x'], true_params, atol=0.3)
+        assert jnp.allclose(result["x"], true_params, atol=0.3)
 
     def test_verbose_output_levels(self):
         """Test that verbose levels control output (smoke test)."""
@@ -1219,7 +1194,7 @@ class TestAPIIntegration:
             p0=jnp.array([1.5]),
             verbose=0,
         )
-        assert result0['success']
+        assert result0["success"]
 
         # Test verbose=1 (progress)
         optimizer1 = AdaptiveHybridStreamingOptimizer(config)
@@ -1229,7 +1204,7 @@ class TestAPIIntegration:
             p0=jnp.array([1.5]),
             verbose=1,
         )
-        assert result1['success']
+        assert result1["success"]
 
     def test_phase_history_tracking(self):
         """Test that phase_history is properly populated."""
@@ -1253,26 +1228,32 @@ class TestAPIIntegration:
         )
 
         # Verify phase_history exists in streaming_diagnostics
-        assert 'phase_history' in result['streaming_diagnostics']
-        phase_history = result['streaming_diagnostics']['phase_history']
+        assert "phase_history" in result["streaming_diagnostics"]
+        phase_history = result["streaming_diagnostics"]["phase_history"]
 
         # Should have 4 phases (0, 1, 2, 3)
         assert len(phase_history) == 4
 
         # Verify each phase has correct structure
-        phase_names = ['normalization_setup', 'adam_warmup', 'gauss_newton', 'denormalization_covariance']
+        phase_names = [
+            "normalization_setup",
+            "adam_warmup",
+            "gauss_newton",
+            "denormalization_covariance",
+        ]
         for i, expected_name in enumerate(phase_names):
-            assert phase_history[i]['phase'] == i
-            assert phase_history[i]['name'] == expected_name
-            assert 'timestamp' in phase_history[i]
+            assert phase_history[i]["phase"] == i
+            assert phase_history[i]["name"] == expected_name
+            assert "timestamp" in phase_history[i]
 
 
-class TestAPIIntegration:
-    """Tests for Task Group 7: API Integration."""
+class TestAPIIntegrationCurveFit:
+    """Tests for Task Group 7: API Integration with curve_fit."""
 
     def test_curve_fit_with_hybrid_streaming_method(self):
         """Test method='hybrid_streaming' in curve_fit()."""
         import numpy as np
+
         from nlsq import curve_fit
 
         # Generate test data
@@ -1290,7 +1271,7 @@ class TestAPIIntegration:
             x,
             y,
             p0=np.array([4.0, 0.4]),
-            method='hybrid_streaming',
+            method="hybrid_streaming",
             verbose=0,
         )
 
@@ -1309,6 +1290,7 @@ class TestAPIIntegration:
     def test_curve_fit_large_with_hybrid_streaming_method(self):
         """Test method='hybrid_streaming' in curve_fit_large()."""
         import numpy as np
+
         from nlsq import curve_fit_large
 
         # Generate test data
@@ -1326,7 +1308,7 @@ class TestAPIIntegration:
             x,
             y,
             p0=np.array([2.5, 0.25, 0.8]),
-            method='hybrid_streaming',
+            method="hybrid_streaming",
             verbose=0,
         )
 
@@ -1342,6 +1324,7 @@ class TestAPIIntegration:
     def test_hybrid_streaming_with_bounds(self):
         """Test hybrid_streaming with parameter bounds."""
         import numpy as np
+
         from nlsq import curve_fit
 
         # Generate test data
@@ -1360,11 +1343,11 @@ class TestAPIIntegration:
             y,
             p0=np.array([1.5, 1.0]),
             bounds=([0, 0], [5, 3]),
-            method='hybrid_streaming',
+            method="hybrid_streaming",
             verbose=0,
         )
 
-        popt, pcov = result
+        popt, _pcov = result
 
         # Verify parameters respect bounds
         assert np.all(popt >= np.array([0, 0]))
@@ -1376,6 +1359,7 @@ class TestAPIIntegration:
     def test_hybrid_streaming_returns_scipy_compatible_result(self):
         """Test that hybrid_streaming returns scipy-compatible result."""
         import numpy as np
+
         from nlsq import curve_fit
 
         # Generate test data
@@ -1391,14 +1375,14 @@ class TestAPIIntegration:
             x,
             y,
             p0=np.array([1.5]),
-            method='hybrid_streaming',
+            method="hybrid_streaming",
             verbose=0,
         )
 
         # Check result has expected fields
-        assert 'x' in result
-        assert 'pcov' in result
-        assert 'success' in result
+        assert "x" in result
+        assert "pcov" in result
+        assert "success" in result
 
         # Verify tuple unpacking works
         popt, pcov = result
@@ -1422,15 +1406,15 @@ class TestMultiDeviceSupport:
         device_info = optimizer._detect_available_devices()
 
         # Verify structure
-        assert 'device_count' in device_info
-        assert 'device_type' in device_info
-        assert 'devices' in device_info
+        assert "device_count" in device_info
+        assert "device_type" in device_info
+        assert "devices" in device_info
 
         # Verify device count is positive
-        assert device_info['device_count'] > 0
+        assert device_info["device_count"] > 0
 
         # Verify device type is recognized
-        assert device_info['device_type'] in ['cpu', 'gpu', 'tpu']
+        assert device_info["device_type"] in ["cpu", "gpu", "tpu"]
 
     def test_multi_device_disabled_by_default(self):
         """Test that multi-device is disabled by default in config."""
@@ -1493,8 +1477,7 @@ class TestMultiDeviceSupport:
         optimizer._setup_normalization(model, p0, None)
 
         # Create mock J^T J matrices (as if from different devices)
-        JTJ_local = jnp.array([[10.0, 2.0],
-                               [2.0, 8.0]])
+        JTJ_local = jnp.array([[10.0, 2.0], [2.0, 8.0]])
 
         # Aggregate (on single device, should just return the matrix)
         JTJ_global = optimizer._aggregate_jtj_across_devices(JTJ_local)
@@ -1519,15 +1502,17 @@ class TestMultiDeviceSupport:
 
         # Create small dataset
         x_data = jnp.linspace(0, 5, 50)
-        y_data = 1.0 * jnp.exp(-0.5 * x_data) + 0.01 * jax.random.normal(jax.random.PRNGKey(0), (50,))
+        y_data = 1.0 * jnp.exp(-0.5 * x_data) + 0.01 * jax.random.normal(
+            jax.random.PRNGKey(0), (50,)
+        )
 
         # Try multi-device setup (should fall back gracefully)
         device_info = optimizer._detect_available_devices()
         multi_device_config = optimizer._setup_multi_device(device_info)
 
         # Verify fallback configuration exists
-        assert 'use_multi_device' in multi_device_config
-        assert 'device_count' in multi_device_config
+        assert "use_multi_device" in multi_device_config
+        assert "device_count" in multi_device_config
 
         # Should work even if multi-device not available
         params = jnp.array([1.0, 1.0])
@@ -1547,7 +1532,7 @@ class TestMixedPrecisionSupport:
     def test_float32_warmup_phase(self):
         """Test float32 warmup phase with precision='auto'."""
         config = HybridStreamingConfig(
-            precision='auto',  # Should use float32 for Phase 1
+            precision="auto",  # Should use float32 for Phase 1
             warmup_iterations=50,
             max_warmup_iterations=100,
         )
@@ -1577,7 +1562,7 @@ class TestMixedPrecisionSupport:
     def test_float64_gauss_newton_phase(self):
         """Test float64 Gauss-Newton phase with precision='auto'."""
         config = HybridStreamingConfig(
-            precision='auto',  # Should upgrade to float64 for Phase 2
+            precision="auto",  # Should upgrade to float64 for Phase 2
             warmup_iterations=50,
             gauss_newton_max_iterations=20,
         )
@@ -1601,17 +1586,19 @@ class TestMixedPrecisionSupport:
 
         # Verify transition to float64 for Phase 2
         # Check phase history for precision transitions
-        assert 'streaming_diagnostics' in result
-        assert 'phase_history' in result['streaming_diagnostics']
+        assert "streaming_diagnostics" in result
+        assert "phase_history" in result["streaming_diagnostics"]
 
         # Verify success
-        assert result['success']
-        assert jnp.allclose(result['x'], jnp.array([2.0]), atol=0.05)  # Relaxed tolerance
+        assert result["success"]
+        assert jnp.allclose(
+            result["x"], jnp.array([2.0]), atol=0.05
+        )  # Relaxed tolerance
 
     def test_auto_precision_upgrade_on_nan(self):
         """Test auto precision upgrade when NaN detected in float32."""
         config = HybridStreamingConfig(
-            precision='auto',
+            precision="auto",
             warmup_iterations=10,
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
@@ -1638,7 +1625,7 @@ class TestMixedPrecisionSupport:
     def test_user_override_float32_throughout(self):
         """Test user override via precision='float32' throughout."""
         config = HybridStreamingConfig(
-            precision='float32',  # User forces float32
+            precision="float32",  # User forces float32
             warmup_iterations=20,
             gauss_newton_max_iterations=10,
         )
@@ -1661,16 +1648,16 @@ class TestMixedPrecisionSupport:
         )
 
         # Verify success
-        assert result['success']
+        assert result["success"]
 
         # Verify stayed in float32 (check parameter dtype)
-        assert result['x'].dtype == jnp.float32 or result['x'].dtype == jnp.float64
+        assert result["x"].dtype == jnp.float32 or result["x"].dtype == jnp.float64
         # Note: Final result may be cast to float64 for covariance accuracy
 
     def test_user_override_float64_throughout(self):
         """Test user override via precision='float64' throughout."""
         config = HybridStreamingConfig(
-            precision='float64',  # User forces float64
+            precision="float64",  # User forces float64
             warmup_iterations=50,
             gauss_newton_max_iterations=20,
         )
@@ -1699,13 +1686,15 @@ class TestMixedPrecisionSupport:
         )
 
         # Verify success
-        assert result['success']
-        assert jnp.allclose(result['x'], jnp.array([2.0]), atol=0.05)  # Relaxed tolerance
+        assert result["success"]
+        assert jnp.allclose(
+            result["x"], jnp.array([2.0]), atol=0.05
+        )  # Relaxed tolerance
 
     def test_precision_consistency_in_covariance(self):
         """Test precision consistency in covariance computation."""
         config = HybridStreamingConfig(
-            precision='auto',  # Should use float64 for covariance
+            precision="auto",  # Should use float64 for covariance
             warmup_iterations=20,
             gauss_newton_max_iterations=10,
         )
@@ -1728,19 +1717,19 @@ class TestMixedPrecisionSupport:
         )
 
         # Verify covariance matrix is computed
-        assert 'pcov' in result
-        assert result['pcov'].shape == (2, 2)
+        assert "pcov" in result
+        assert result["pcov"].shape == (2, 2)
 
         # Verify covariance is in float64 for accuracy
         # (Phase 3 always uses float64 for covariance)
-        assert result['pcov'].dtype == jnp.float64
+        assert result["pcov"].dtype == jnp.float64
 
         # Verify standard errors computed
-        assert 'perr' in result
-        assert result['perr'].shape == (2,)
+        assert "perr" in result
+        assert result["perr"].shape == (2,)
 
         # Verify success
-        assert result['success']
+        assert result["success"]
 
 
 class TestOptaxEnhancements:
@@ -1783,7 +1772,7 @@ class TestOptaxEnhancements:
         # Run multiple steps to see schedule effect
         # (first step has zero lr during warmup phase)
         for step in range(20):
-            loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
+            _loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
             updates, opt_state = opt.update(grads, opt_state)
             params = optax.apply_updates(params, updates)
 
@@ -1819,17 +1808,19 @@ class TestOptaxEnhancements:
         loss_fn = optimizer._create_warmup_loss_fn()
 
         # Compute gradient (would be large without clipping)
-        loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
+        _loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
 
         # Verify gradients are large
         grad_norm = jnp.linalg.norm(grads)
         assert grad_norm > 1.0  # Gradients before clipping are large
 
         # Apply optimizer update with clipping
-        updates, new_opt_state = opt.update(grads, opt_state)
+        updates, _new_opt_state = opt.update(grads, opt_state)
 
         # Verify clipping worked (updates should be bounded)
-        update_norm = jnp.linalg.norm(jnp.concatenate([jnp.ravel(u) for u in jax.tree_util.tree_leaves(updates)]))
+        update_norm = jnp.linalg.norm(
+            jnp.concatenate([jnp.ravel(u) for u in jax.tree_util.tree_leaves(updates)])
+        )
         # Updates are bounded by learning_rate * clip_value
         # With lr=0.1 and clip=1.0, updates should be reasonable
         assert jnp.isfinite(update_norm)
@@ -1867,7 +1858,7 @@ class TestOptaxEnhancements:
         y_data = 2.0 * x_data + 1.0
 
         for _ in range(5):
-            loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
+            _loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
             updates, opt_state = opt.update(grads, opt_state)
             params = optax.apply_updates(params, updates)
 
@@ -1942,7 +1933,9 @@ class TestOptaxEnhancements:
         # Verify parameters converged somewhat
         final_loss, _ = jax.value_and_grad(loss_fn)(params, x_data, y_data)
         # Loss should decrease over iterations (relaxed tolerance for 10 steps)
-        assert final_loss < 5.0  # Should decrease but may not fully converge in 10 steps
+        assert (
+            final_loss < 5.0
+        )  # Should decrease but may not fully converge in 10 steps
 
 
 if __name__ == "__main__":

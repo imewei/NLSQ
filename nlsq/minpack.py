@@ -89,7 +89,7 @@ def curve_fit(
     multistart: bool = False,
     n_starts: int = 10,
     global_search: bool = False,
-    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
     **kwargs: Any,
@@ -415,7 +415,10 @@ def curve_fit(
 
     # Handle multi-start optimization
     if multistart and n_starts > 0:
-        from nlsq.global_optimization import GlobalOptimizationConfig, MultiStartOrchestrator
+        from nlsq.global_optimization import (
+            GlobalOptimizationConfig,
+            MultiStartOrchestrator,
+        )
 
         # Extract p0 from args or kwargs
         p0 = None
@@ -445,7 +448,7 @@ def curve_fit(
             ydata=np.asarray(ydata),
             p0=np.asarray(p0) if p0 is not None else None,
             bounds=bounds,
-            **{k: v for k, v in kwargs.items() if k not in ['bounds', 'p0']},
+            **{k: v for k, v in kwargs.items() if k not in ["bounds", "p0"]},
         )
 
         return result
@@ -473,10 +476,13 @@ def curve_fit(
         result = orchestrator.fit_with_fallback(f, xdata, ydata, **fallback_kwargs)
 
         # Add empty multi-start diagnostics for consistency
-        if not hasattr(result, 'multistart_diagnostics') and 'multistart_diagnostics' not in result:
-            result['multistart_diagnostics'] = {
-                'n_starts_configured': 0,
-                'bypassed': True,
+        if (
+            not hasattr(result, "multistart_diagnostics")
+            and "multistart_diagnostics" not in result
+        ):
+            result["multistart_diagnostics"] = {
+                "n_starts_configured": 0,
+                "bypassed": True,
             }
 
         return result
@@ -497,9 +503,9 @@ def curve_fit(
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
     # Add empty multi-start diagnostics for consistency
-    result['multistart_diagnostics'] = {
-        'n_starts_configured': n_starts if multistart else 0,
-        'bypassed': True,  # Bypassed because n_starts was 0 or multistart was False
+    result["multistart_diagnostics"] = {
+        "n_starts_configured": n_starts if multistart else 0,
+        "bypassed": True,  # Bypassed because n_starts was 0 or multistart was False
     }
 
     # Return enhanced result object that supports both tuple unpacking
@@ -1571,10 +1577,14 @@ class CurveFit:
 
         # Prepare bounds
         lb, ub, p0 = self._prepare_bounds_and_initial_guess(bounds, n, p0)
-        bounds_tuple = (lb, ub) if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))) else None
+        bounds_tuple = (
+            (lb, ub)
+            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
+            else None
+        )
 
         # Extract verbosity from kwargs
-        verbose = kwargs.pop('verbose', 1)
+        verbose = kwargs.pop("verbose", 1)
 
         # Create configuration (allow kwargs to override defaults)
         config_overrides = {}
@@ -1582,7 +1592,11 @@ class CurveFit:
             if hasattr(HybridStreamingConfig, key):
                 config_overrides[key] = kwargs.pop(key)
 
-        config = HybridStreamingConfig(**config_overrides) if config_overrides else HybridStreamingConfig()
+        config = (
+            HybridStreamingConfig(**config_overrides)
+            if config_overrides
+            else HybridStreamingConfig()
+        )
 
         # Create optimizer
         optimizer = AdaptiveHybridStreamingOptimizer(config=config)
@@ -1816,7 +1830,7 @@ class CurveFit:
             If None, auto-selects 'trf'.
         """
         # Check for hybrid_streaming method early and delegate
-        if method == 'hybrid_streaming':
+        if method == "hybrid_streaming":
             return self._curve_fit_hybrid_streaming(
                 f=f,
                 xdata=xdata,

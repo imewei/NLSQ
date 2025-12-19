@@ -112,21 +112,21 @@ class NumericalStabilityGuard:
     """
 
     __slots__ = (
-        "eps",
-        "max_float",
-        "min_float",
-        "condition_threshold",
-        "regularization_factor",
-        "max_exp_arg",
-        "min_exp_arg",
-        "max_jacobian_elements_for_svd",
+        "_check_gradient_jit",
+        "_check_jacobian_fast_jit",
+        "_safe_divide_jit",
         "_safe_exp_jit",
         "_safe_log_jit",
-        "_safe_divide_jit",
-        "_safe_sqrt_jit",
-        "_check_jacobian_fast_jit",
-        "_check_gradient_jit",
         "_safe_norm_jit",
+        "_safe_sqrt_jit",
+        "condition_threshold",
+        "eps",
+        "max_exp_arg",
+        "max_float",
+        "max_jacobian_elements_for_svd",
+        "min_exp_arg",
+        "min_float",
+        "regularization_factor",
     )
 
     def __init__(self, max_jacobian_elements_for_svd: int = 10_000_000):
@@ -257,7 +257,9 @@ class NumericalStabilityGuard:
             # Fast path: JIT-compiled NaN/Inf check only (10-50x faster)
             J_fixed, has_invalid = self._check_jacobian_fast_jit(J)
             if has_invalid:
-                warnings.warn("Jacobian contains NaN or Inf values, replacing with zeros")
+                warnings.warn(
+                    "Jacobian contains NaN or Inf values, replacing with zeros"
+                )
             issues = {
                 "has_nan": bool(has_invalid),
                 "has_inf": bool(has_invalid),
@@ -765,7 +767,7 @@ def detect_collinearity(
     # Build result list (only for pairs exceeding threshold)
     collinear_pairs = [
         (int(i), int(j), float(c))
-        for i, j, c in zip(high_corr_i, high_corr_j, high_corr_vals)
+        for i, j, c in zip(high_corr_i, high_corr_j, high_corr_vals, strict=False)
     ]
 
     has_collinearity = len(collinear_pairs) > 0

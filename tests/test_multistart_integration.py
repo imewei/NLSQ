@@ -87,21 +87,21 @@ class TestEndToEndWorkflows:
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset='global',
+            preset="global",
         )
 
         # Verify result structure
         assert result is not None
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
         # Verify parameters are reasonably close to true values
         np.testing.assert_allclose(popt, true_params, rtol=0.3)
 
         # Verify multi-start diagnostics
-        diagnostics = result.get('multistart_diagnostics', {})
-        assert diagnostics.get('n_starts_configured') == 20
-        assert not diagnostics.get('bypassed', True)
+        diagnostics = result.get("multistart_diagnostics", {})
+        assert diagnostics.get("n_starts_configured") == 20
+        assert not diagnostics.get("bypassed", True)
 
     @pytest.mark.slow
     def test_curve_fit_large_multistart_on_2m_dataset(self):
@@ -127,12 +127,16 @@ class TestEndToEndWorkflows:
             bounds=([0.1, 0.01, 0.1], [10.0, 2.0, 5.0]),
             multistart=True,
             n_starts=5,
-            sampler='lhs',
+            sampler="lhs",
             memory_limit_gb=0.5,  # Limit memory to force chunking
         )
 
         # Verify result
-        popt = result[0] if isinstance(result, tuple) else (result.popt if hasattr(result, 'popt') else result['popt'])
+        popt = (
+            result[0]
+            if isinstance(result, tuple)
+            else (result.popt if hasattr(result, "popt") else result["popt"])
+        )
         assert len(popt) == 3
 
         # Parameters should be reasonably accurate
@@ -212,7 +216,7 @@ class TestEdgeCases:
         When n_starts=1, multi-start should behave like single-start but using
         an LHS-sampled initial point instead of p0.
         """
-        xdata, ydata, true_params = generate_test_data(n_points=300)
+        xdata, ydata, _true_params = generate_test_data(n_points=300)
 
         # Run with n_starts=1
         result = curve_fit(
@@ -227,14 +231,14 @@ class TestEdgeCases:
 
         # Verify result is valid
         assert result is not None
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
         # Verify diagnostics indicate single start
-        diagnostics = result.get('multistart_diagnostics', {})
-        assert diagnostics.get('n_starts_configured', 0) == 1
+        diagnostics = result.get("multistart_diagnostics", {})
+        assert diagnostics.get("n_starts_configured", 0) == 1
         # With n_starts=1, we evaluated exactly 1 starting point
-        assert diagnostics.get('n_starts_evaluated', 0) <= 1
+        assert diagnostics.get("n_starts_evaluated", 0) <= 1
 
         # Parameters should still be reasonable
         assert 0.1 < popt[0] < 10.0
@@ -250,12 +254,14 @@ class TestEdgeCases:
         np.random.seed(42)
 
         # Create candidates that will cause numerical issues (very large values)
-        candidates = np.array([
-            [1e10, 1e10],
-            [1e15, 1e15],
-            [-1e10, -1e10],
-            [0.0, 0.0],  # One reasonable candidate
-        ])
+        candidates = np.array(
+            [
+                [1e10, 1e10],
+                [1e15, 1e15],
+                [-1e10, -1e10],
+                [0.0, 0.0],  # One reasonable candidate
+            ]
+        )
 
         config = GlobalOptimizationConfig(
             n_starts=n_candidates,
@@ -313,7 +319,9 @@ class TestPerformance:
         np.random.seed(42)
         xdata = np.linspace(0, 10, n_points)
         true_params = [2.0, 3.0]
-        ydata = linear_model(xdata, *true_params) + 0.1 * np.random.normal(size=n_points)
+        ydata = linear_model(xdata, *true_params) + 0.1 * np.random.normal(
+            size=n_points
+        )
 
         bounds = ([0, 0], [10, 10])
         p0 = [1.0, 1.0]
@@ -347,7 +355,7 @@ class TestPerformance:
         multi_start_time = time.perf_counter() - start_time
 
         # Verify result is valid
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 2
 
         # Calculate overhead
@@ -363,7 +371,7 @@ class TestPerformance:
         overhead_ratio = (multi_start_per_fit / single_start_per_fit) - 1.0
 
         # Print timing info for debugging
-        print(f"\nPerformance test results:")
+        print("\nPerformance test results:")
         print(f"  Single-start time: {single_start_time:.3f}s")
         print(f"  Multi-start time (n_starts=5): {multi_start_time:.3f}s")
         print(f"  Per-fit overhead: {overhead_ratio * 100:.1f}%")

@@ -505,7 +505,7 @@ class LargeDatasetFitter:
         # Multi-start parameters (Task Group 3)
         multistart: bool = False,
         n_starts: int = 10,
-        sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+        sampler: Literal["lhs", "sobol", "halton"] = "lhs",
         multistart_subsample_size: int = 100_000,
     ) -> None:
         """Initialize LargeDatasetFitter.
@@ -564,6 +564,7 @@ class LargeDatasetFitter:
         self._multistart_config = None
         if self.multistart and self.n_starts > 0:
             from nlsq.global_optimization import GlobalOptimizationConfig
+
             self._multistart_config = GlobalOptimizationConfig(
                 n_starts=self.n_starts,
                 sampler=self.sampler,
@@ -855,8 +856,12 @@ class LargeDatasetFitter:
         # Also respect memory config: subsample should fit in available memory
         # Estimate memory per point (conservative estimate)
         estimated_memory_per_point = 16 * 2  # x and y, float64
-        available_memory_bytes = self.config.memory_limit_gb * (1024**3) * 0.5  # 50% for subsample
-        max_subsample_from_memory = int(available_memory_bytes / estimated_memory_per_point)
+        available_memory_bytes = (
+            self.config.memory_limit_gb * (1024**3) * 0.5
+        )  # 50% for subsample
+        max_subsample_from_memory = int(
+            available_memory_bytes / estimated_memory_per_point
+        )
 
         # Take minimum of configured size and memory-safe size
         subsample_size = min(subsample_size, max_subsample_from_memory)
@@ -950,12 +955,12 @@ class LargeDatasetFitter:
         exploration_time = time.time() - exploration_start_time
 
         # Extract diagnostics from result
-        diagnostics = result.get('multistart_diagnostics', {})
-        diagnostics['exploration_time_seconds'] = exploration_time
-        diagnostics['subsample_size'] = len(x_subsample)
+        diagnostics = result.get("multistart_diagnostics", {})
+        diagnostics["exploration_time_seconds"] = exploration_time
+        diagnostics["subsample_size"] = len(x_subsample)
 
         # Get the best starting point
-        best_params = result.popt if hasattr(result, 'popt') else result.get('popt', p0)
+        best_params = result.popt if hasattr(result, "popt") else result.get("popt", p0)
 
         self.logger.info(
             f"Multi-start exploration completed in {exploration_time:.2f}s. "
@@ -1120,9 +1125,9 @@ class LargeDatasetFitter:
 
         # Initialize multi-start diagnostics
         multistart_diagnostics = {
-            'n_starts_configured': self.n_starts if self.multistart else 0,
-            'sampler': self.sampler,
-            'bypassed': False,
+            "n_starts_configured": self.n_starts if self.multistart else 0,
+            "sampler": self.sampler,
+            "bypassed": False,
         }
 
         # Run multi-start exploration if enabled and chunking is needed
@@ -1146,20 +1151,22 @@ class LargeDatasetFitter:
             # Update p0 with best starting point
             p0 = best_p0
             multistart_diagnostics.update(exploration_diagnostics)
-            multistart_diagnostics['best_starting_point'] = best_p0.tolist() if hasattr(best_p0, 'tolist') else list(best_p0)
+            multistart_diagnostics["best_starting_point"] = (
+                best_p0.tolist() if hasattr(best_p0, "tolist") else list(best_p0)
+            )
 
             self.logger.info(
                 f"Using best starting point from multi-start exploration: {best_p0}"
             )
         elif self.multistart and self.n_starts == 0:
             # Multi-start enabled but n_starts=0 means skip
-            multistart_diagnostics['bypassed'] = True
-            multistart_diagnostics['n_starts_evaluated'] = 0
+            multistart_diagnostics["bypassed"] = True
+            multistart_diagnostics["n_starts_evaluated"] = 0
             self.logger.debug("Multi-start disabled (n_starts=0)")
         elif self.multistart and not needs_chunking:
             # Single chunk dataset - skip multi-start overhead
-            multistart_diagnostics['bypassed'] = True
-            multistart_diagnostics['bypass_reason'] = 'single_chunk_dataset'
+            multistart_diagnostics["bypassed"] = True
+            multistart_diagnostics["bypass_reason"] = "single_chunk_dataset"
             self.logger.debug("Multi-start skipped for single-chunk dataset")
 
         # Auto-enable mixed precision for chunked datasets (50% additional memory savings)
@@ -1199,7 +1206,7 @@ class LargeDatasetFitter:
                 **kwargs,
             )
             # Add multi-start diagnostics to result
-            result['multistart_diagnostics'] = multistart_diagnostics
+            result["multistart_diagnostics"] = multistart_diagnostics
             return result
 
         # Handle chunked processing (will use streaming if enabled for very large datasets)
@@ -1218,8 +1225,8 @@ class LargeDatasetFitter:
         )
 
         # Add multi-start diagnostics and timing to result
-        multistart_diagnostics['total_fit_time_seconds'] = time.time() - fit_start_time
-        result['multistart_diagnostics'] = multistart_diagnostics
+        multistart_diagnostics["total_fit_time_seconds"] = time.time() - fit_start_time
+        result["multistart_diagnostics"] = multistart_diagnostics
 
         return result
 
@@ -2058,7 +2065,7 @@ def fit_large_dataset(
     # Multi-start parameters (Task Group 3)
     multistart: bool = False,
     n_starts: int = 10,
-    sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs',
+    sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     multistart_subsample_size: int = 100_000,
     **kwargs,
 ) -> OptimizeResult:

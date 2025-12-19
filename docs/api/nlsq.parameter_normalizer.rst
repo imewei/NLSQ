@@ -59,7 +59,7 @@ meaningful parameter bounds:
     p0 = jnp.array([50.0, 0.5])
     bounds = (jnp.array([10.0, 0.0]), jnp.array([100.0, 1.0]))
 
-    normalizer = ParameterNormalizer(p0, bounds, strategy='bounds')
+    normalizer = ParameterNormalizer(p0, bounds, strategy="bounds")
 
     # Normalize: (50-10)/(100-10) = 0.444, (0.5-0)/(1-0) = 0.5
     normalized = normalizer.normalize(p0)
@@ -80,7 +80,7 @@ vastly different scales but no clear bounds:
     # Parameters: large, medium, small
     p0 = jnp.array([1000.0, 1.0, 0.001])
 
-    normalizer = ParameterNormalizer(p0, bounds=None, strategy='p0')
+    normalizer = ParameterNormalizer(p0, bounds=None, strategy="p0")
 
     # All parameters normalized to ~1.0
     normalized = normalizer.normalize(p0)
@@ -99,7 +99,7 @@ Identity transform when normalization is not needed:
 .. code-block:: python
 
     p0 = jnp.array([5.0, 15.0])
-    normalizer = ParameterNormalizer(p0, bounds=None, strategy='none')
+    normalizer = ParameterNormalizer(p0, bounds=None, strategy="none")
 
     normalized = normalizer.normalize(p0)
     print(jnp.allclose(normalized, p0))  # True
@@ -112,11 +112,11 @@ Automatically selects the best strategy:
 .. code-block:: python
 
     # With bounds: uses bounds-based
-    normalizer = ParameterNormalizer(p0, bounds=bounds, strategy='auto')
+    normalizer = ParameterNormalizer(p0, bounds=bounds, strategy="auto")
     print(normalizer.strategy)  # 'bounds'
 
     # Without bounds: uses p0-based
-    normalizer = ParameterNormalizer(p0, bounds=None, strategy='auto')
+    normalizer = ParameterNormalizer(p0, bounds=None, strategy="auto")
     print(normalizer.strategy)  # 'p0'
 
 Usage Examples
@@ -132,14 +132,16 @@ Use ``NormalizedModelWrapper`` to transparently work in normalized space:
     import jax.numpy as jnp
     from nlsq.parameter_normalizer import ParameterNormalizer, NormalizedModelWrapper
 
+
     # Define model in original parameter space
     def model(x, amplitude, decay):
         return amplitude * jnp.exp(-decay * x)
 
+
     # Setup normalization
     p0 = jnp.array([100.0, 0.1])  # Very different scales
     bounds = (jnp.array([10.0, 0.01]), jnp.array([200.0, 1.0]))
-    normalizer = ParameterNormalizer(p0, bounds, strategy='bounds')
+    normalizer = ParameterNormalizer(p0, bounds, strategy="bounds")
 
     # Wrap model
     wrapped_model = NormalizedModelWrapper(model, normalizer)
@@ -162,16 +164,20 @@ All operations are JAX JIT-compatible:
     import jax
     from nlsq.parameter_normalizer import ParameterNormalizer, NormalizedModelWrapper
 
+
     def model(x, a, b):
         return a * x + b
 
+
     p0 = jnp.array([5.0, 10.0])
-    normalizer = ParameterNormalizer(p0, bounds=None, strategy='p0')
+    normalizer = ParameterNormalizer(p0, bounds=None, strategy="p0")
     wrapped = NormalizedModelWrapper(model, normalizer)
+
 
     @jax.jit
     def compute_predictions(x, a_norm, b_norm):
         return wrapped(x, a_norm, b_norm)
+
 
     x = jnp.array([1.0, 2.0, 3.0])
     normalized = normalizer.normalize(p0)
@@ -186,7 +192,7 @@ Transform bounds to normalized space:
 
     p0 = jnp.array([50.0])
     bounds = (jnp.array([10.0]), jnp.array([100.0]))
-    normalizer = ParameterNormalizer(p0, bounds, strategy='bounds')
+    normalizer = ParameterNormalizer(p0, bounds, strategy="bounds")
 
     lb_norm, ub_norm = normalizer.transform_bounds()
     print(lb_norm, ub_norm)  # [0.] [1.]

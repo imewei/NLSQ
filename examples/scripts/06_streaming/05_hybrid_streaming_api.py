@@ -12,8 +12,9 @@ The hybrid streaming optimizer provides:
 - Automatic memory management for large datasets
 """
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+
 from nlsq import curve_fit, curve_fit_large
 
 
@@ -44,7 +45,7 @@ def main():
         x,
         y,
         p0=np.array([4.0, 0.4, 0.8]),
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         verbose=1,
     )
 
@@ -68,7 +69,7 @@ def main():
         y,
         p0=np.array([4.0, 0.4, 0.8]),
         bounds=([0, 0, 0], [10, 2, 5]),
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         verbose=0,  # Silent mode
     )
 
@@ -83,14 +84,16 @@ def main():
 
     # Generate larger dataset
     x_large = np.linspace(0, 10, 10000)
-    y_large = exponential_decay(x_large, *true_params) + np.random.normal(0, 0.1, len(x_large))
+    y_large = exponential_decay(x_large, *true_params) + np.random.normal(
+        0, 0.1, len(x_large)
+    )
 
     popt, pcov = curve_fit_large(
         exponential_decay,
         x_large,
         y_large,
         p0=np.array([4.0, 0.4, 0.8]),
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         verbose=1,
     )
 
@@ -108,11 +111,11 @@ def main():
         x,
         y,
         p0=np.array([4.0, 0.4, 0.8]),
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         verbose=0,
         # HybridStreamingConfig overrides:
         warmup_iterations=300,
-        normalization_strategy='p0',  # 'bounds' requires explicit bounds
+        normalization_strategy="p0",  # 'bounds' requires explicit bounds
         phase2_max_iterations=100,
     )
 
@@ -130,7 +133,7 @@ def main():
         x,
         y,
         p0=np.array([4.0, 0.4, 0.8]),
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         verbose=0,
     )
 
@@ -138,9 +141,9 @@ def main():
     print(f"Message: {result['message']}")
     print(f"Final cost: {result.get('cost', 'N/A')}")
 
-    if 'streaming_diagnostics' in result:
-        diag = result['streaming_diagnostics']
-        print(f"\nStreaming diagnostics available:")
+    if "streaming_diagnostics" in result:
+        diag = result["streaming_diagnostics"]
+        print("\nStreaming diagnostics available:")
         print(f"  Keys: {list(diag.keys())}")
 
     print()

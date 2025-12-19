@@ -48,12 +48,12 @@ import jax
 import jax.numpy as jnp
 
 __all__ = [
-    "latin_hypercube_sample",
-    "sobol_sample",
-    "halton_sample",
-    "scale_samples_to_bounds",
     "center_samples_around_p0",
     "get_sampler",
+    "halton_sample",
+    "latin_hypercube_sample",
+    "scale_samples_to_bounds",
+    "sobol_sample",
 ]
 
 
@@ -167,7 +167,9 @@ def latin_hypercube_sample(
     for dim in range(n_dims):
         # Generate random positions within each stratum
         key_uniform = keys[dim]
-        key_perm = keys[dim + 1] if dim + 1 < len(keys) else jax.random.fold_in(keys[0], dim)
+        key_perm = (
+            keys[dim + 1] if dim + 1 < len(keys) else jax.random.fold_in(keys[0], dim)
+        )
 
         # Random offset within each stratum
         uniform_samples = jax.random.uniform(key_perm, shape=(n_samples,))
@@ -255,7 +257,7 @@ def sobol_sample(
     for i in range(skip + n_samples):
         if i >= skip:
             # Convert current state to floating point in [0, 1]
-            sample = [x[dim] / (2.0 ** max_bits) for dim in range(n_dims)]
+            sample = [x[dim] / (2.0**max_bits) for dim in range(n_dims)]
             samples.append(sample)
 
         # Find position of rightmost zero bit in (i+1)
@@ -500,9 +502,9 @@ def get_sampler(sampler_type: str) -> Callable[..., jax.Array]:
     sampler_type_lower = sampler_type.lower()
 
     samplers: dict[str, Callable[..., jax.Array]] = {
-        'lhs': latin_hypercube_sample,
-        'sobol': sobol_sample,
-        'halton': halton_sample,
+        "lhs": latin_hypercube_sample,
+        "sobol": sobol_sample,
+        "halton": halton_sample,
     }
 
     if sampler_type_lower not in samplers:

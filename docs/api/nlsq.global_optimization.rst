@@ -31,20 +31,20 @@ Basic multi-start optimization:
    import jax.numpy as jnp
    import numpy as np
 
+
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    x = np.linspace(0, 5, 100)
    y = 3.0 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 100)
 
    # Method 1: Use fit() with preset
-   popt, pcov = fit(model, x, y, preset='robust',
-                    bounds=([0, 0, 0], [10, 5, 10]))
+   popt, pcov = fit(model, x, y, preset="robust", bounds=([0, 0, 0], [10, 5, 10]))
 
    # Method 2: Use MultiStartOrchestrator directly
-   orchestrator = MultiStartOrchestrator.from_preset('global')
-   result = orchestrator.fit(model, x, y,
-                             bounds=([0, 0, 0], [10, 5, 10]))
+   orchestrator = MultiStartOrchestrator.from_preset("global")
+   result = orchestrator.fit(model, x, y, bounds=([0, 0, 0], [10, 5, 10]))
 
 Configuration
 -------------
@@ -134,12 +134,14 @@ Using curve_fit with multi-start
    from nlsq import curve_fit
 
    popt, pcov = curve_fit(
-       model, x, y,
+       model,
+       x,
+       y,
        p0=[1, 1, 1],
        bounds=([0, 0, 0], [10, 10, 10]),
        multistart=True,
        n_starts=10,
-       sampler='lhs',
+       sampler="lhs",
        center_on_p0=True,
    )
 
@@ -152,7 +154,7 @@ Custom configuration
 
    config = GlobalOptimizationConfig(
        n_starts=30,
-       sampler='sobol',
+       sampler="sobol",
        center_on_p0=True,
        scale_factor=0.5,  # Tighter exploration around p0
    )
@@ -184,15 +186,15 @@ Tournament selection for streaming
 
    selector = TournamentSelector(candidates, config)
 
+
    def data_generator():
        for _ in range(200):
            x_batch = np.random.randn(100)
            y_batch = model(x_batch, *true_params)
            yield x_batch, y_batch
 
-   best_candidates = selector.run_tournament(
-       data_generator(), model, top_m=1
-   )
+
+   best_candidates = selector.run_tournament(data_generator(), model, top_m=1)
 
 See Also
 --------

@@ -106,9 +106,11 @@ Create an optimizer with default configuration:
     config = HybridStreamingConfig()
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
+
     # Define model
     def exponential(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
 
     # Prepare data
     x_data = jnp.linspace(0, 10, 1000000)  # 1M points
@@ -131,15 +133,12 @@ Use parameter bounds for normalization:
 
     config = HybridStreamingConfig(
         normalize=True,
-        normalization_strategy='bounds',
+        normalization_strategy="bounds",
     )
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
     # Parameters: amplitude [1, 10], decay [0.1, 1.0], offset [0, 2]
-    bounds = (
-        jnp.array([1.0, 0.1, 0.0]),
-        jnp.array([10.0, 1.0, 2.0])
-    )
+    bounds = (jnp.array([1.0, 0.1, 0.0]), jnp.array([10.0, 1.0, 2.0]))
 
     result = optimizer.fit(
         model=exponential,
@@ -200,7 +199,7 @@ Control when Phase 1 switches to Phase 2:
         max_warmup_iterations=800,
         loss_plateau_threshold=1e-5,  # Tighter plateau detection
         gradient_norm_threshold=1e-4,  # Lower gradient threshold
-        active_switching_criteria=['plateau', 'gradient'],  # Remove max_iter
+        active_switching_criteria=["plateau", "gradient"],  # Remove max_iter
     )
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -214,7 +213,7 @@ Enable checkpointing for long optimizations:
     config = HybridStreamingConfig(
         enable_checkpoints=True,
         checkpoint_frequency=50,
-        checkpoint_dir='/path/to/checkpoints',
+        checkpoint_dir="/path/to/checkpoints",
         validate_numerics=True,
         enable_fault_tolerance=True,
         max_retries_per_batch=3,
@@ -222,9 +221,7 @@ Enable checkpointing for long optimizations:
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
     # Resume from checkpoint
-    config_resume = HybridStreamingConfig(
-        resume_from_checkpoint='/path/to/checkpoint.pkl'
-    )
+    config_resume = HybridStreamingConfig(resume_from_checkpoint="/path/to/checkpoint.pkl")
 
 Phase Tracking
 ~~~~~~~~~~~~~~

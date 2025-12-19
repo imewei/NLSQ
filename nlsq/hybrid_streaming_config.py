@@ -208,7 +208,9 @@ class HybridStreamingConfig:
     lr_schedule_warmup_steps: int = 50
     lr_schedule_decay_steps: int = 450
     lr_schedule_end_value: float = 0.0001
-    gradient_clip_value: float | None = None  # None = no clipping, e.g., 1.0 for clipping
+    gradient_clip_value: float | None = (
+        None  # None = no clipping, e.g., 1.0 for clipping
+    )
 
     # Phase 2: Gauss-Newton
     gauss_newton_max_iterations: int = 100
@@ -241,7 +243,7 @@ class HybridStreamingConfig:
     # Multi-start optimization with tournament selection
     enable_multistart: bool = False
     n_starts: int = 10
-    multistart_sampler: Literal['lhs', 'sobol', 'halton'] = 'lhs'
+    multistart_sampler: Literal["lhs", "sobol", "halton"] = "lhs"
     elimination_rounds: int = 3
     elimination_fraction: float = 0.5
     batches_per_round: int = 50
@@ -274,15 +276,9 @@ class HybridStreamingConfig:
         )
 
         # Validate positive values
-        assert self.warmup_iterations >= 0, (
-            "warmup_iterations must be non-negative"
-        )
-        assert self.max_warmup_iterations > 0, (
-            "max_warmup_iterations must be positive"
-        )
-        assert self.warmup_learning_rate > 0, (
-            "warmup_learning_rate must be positive"
-        )
+        assert self.warmup_iterations >= 0, "warmup_iterations must be non-negative"
+        assert self.max_warmup_iterations > 0, "max_warmup_iterations must be positive"
+        assert self.warmup_learning_rate > 0, "warmup_learning_rate must be positive"
         assert self.loss_plateau_threshold > 0, (
             "loss_plateau_threshold must be positive"
         )
@@ -292,24 +288,14 @@ class HybridStreamingConfig:
         assert self.gauss_newton_max_iterations > 0, (
             "gauss_newton_max_iterations must be positive"
         )
-        assert self.gauss_newton_tol > 0, (
-            "gauss_newton_tol must be positive"
-        )
-        assert self.trust_region_initial > 0, (
-            "trust_region_initial must be positive"
-        )
+        assert self.gauss_newton_tol > 0, "gauss_newton_tol must be positive"
+        assert self.trust_region_initial > 0, "trust_region_initial must be positive"
         assert self.regularization_factor >= 0, (
             "regularization_factor must be non-negative"
         )
-        assert self.chunk_size > 0, (
-            "chunk_size must be positive"
-        )
-        assert self.checkpoint_frequency > 0, (
-            "checkpoint_frequency must be positive"
-        )
-        assert self.callback_frequency > 0, (
-            "callback_frequency must be positive"
-        )
+        assert self.chunk_size > 0, "chunk_size must be positive"
+        assert self.checkpoint_frequency > 0, "checkpoint_frequency must be positive"
+        assert self.callback_frequency > 0, "callback_frequency must be positive"
 
         # Validate Optax enhancement parameters
         if self.use_learning_rate_schedule:
@@ -324,16 +310,14 @@ class HybridStreamingConfig:
             )
 
         if self.gradient_clip_value is not None:
-            assert self.gradient_clip_value > 0, (
-                "gradient_clip_value must be positive"
-            )
+            assert self.gradient_clip_value > 0, "gradient_clip_value must be positive"
 
         # Validate multi-start parameters
         if self.enable_multistart:
             assert self.n_starts >= 1, (
                 "n_starts must be >= 1 when enable_multistart=True"
             )
-            assert self.multistart_sampler in ('lhs', 'sobol', 'halton'), (
+            assert self.multistart_sampler in ("lhs", "sobol", "halton"), (
                 f"multistart_sampler must be 'lhs', 'sobol', or 'halton', "
                 f"got: {self.multistart_sampler}"
             )
@@ -343,12 +327,8 @@ class HybridStreamingConfig:
             assert self.elimination_rounds >= 0, (
                 "elimination_rounds must be non-negative"
             )
-            assert self.batches_per_round > 0, (
-                "batches_per_round must be positive"
-            )
-            assert self.scale_factor > 0, (
-                "scale_factor must be positive"
-            )
+            assert self.batches_per_round > 0, "batches_per_round must be positive"
+            assert self.scale_factor > 0, "scale_factor must be positive"
 
     @classmethod
     def aggressive(cls):

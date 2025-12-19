@@ -73,9 +73,7 @@ class TestParameterNormalizer:
 
         # Test with p0-based normalization
         p0_nobounds = jnp.array([100.0, 0.1, 10.0])
-        normalizer_p0 = ParameterNormalizer(
-            p0=p0_nobounds, bounds=None, strategy="p0"
-        )
+        normalizer_p0 = ParameterNormalizer(p0=p0_nobounds, bounds=None, strategy="p0")
 
         normalized_p0 = normalizer_p0.normalize(p0_nobounds)
         denormalized_p0 = normalizer_p0.denormalize(normalized_p0)
@@ -97,9 +95,7 @@ class TestParameterNormalizer:
 
         # p0-based: Jacobian should be diag(scale_factors)
         p0_nobounds = jnp.array([100.0, 0.01])
-        normalizer_p0 = ParameterNormalizer(
-            p0=p0_nobounds, bounds=None, strategy="p0"
-        )
+        normalizer_p0 = ParameterNormalizer(p0=p0_nobounds, bounds=None, strategy="p0")
 
         jacobian_p0 = normalizer_p0.normalization_jacobian
 

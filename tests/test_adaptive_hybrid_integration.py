@@ -10,11 +10,11 @@ This module contains strategic integration tests that verify:
 6. Backward compatibility with existing APIs
 """
 
-import pytest
-import numpy as np
-import jax.numpy as jnp
-from scipy.optimize import curve_fit as scipy_curve_fit
 import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+from scipy.optimize import curve_fit as scipy_curve_fit
 
 from nlsq import curve_fit, curve_fit_large
 from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
@@ -27,6 +27,7 @@ class TestFullPipelineIntegration:
 
     def test_full_pipeline_exponential_decay(self):
         """Test full 4-phase optimization on exponential decay model."""
+
         # Generate synthetic data
         def exponential_model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
@@ -57,29 +58,34 @@ class TestFullPipelineIntegration:
             func=exponential_model,
             p0=p0,
             bounds=([0, 0, 0], [10, 2, 5]),
-            verbose=0
+            verbose=0,
         )
 
         # Verify convergence
-        assert result['success'], f"Optimization failed: {result.get('message')}"
+        assert result["success"], f"Optimization failed: {result.get('message')}"
 
         # Verify parameters close to true values (within 30% - hybrid method is a 2-stage optimizer)
-        popt = result['x']
+        popt = result["x"]
         param_errors = jnp.abs((popt - true_params) / true_params)
-        assert jnp.all(param_errors < 0.30), f"Parameter errors too large: {param_errors}"
+        assert jnp.all(param_errors < 0.30), (
+            f"Parameter errors too large: {param_errors}"
+        )
 
         # Verify covariance matrix is symmetric
-        pcov = result['pcov']
+        pcov = result["pcov"]
         assert jnp.allclose(pcov, pcov.T), "Covariance matrix not symmetric"
 
         # Verify all phases completed (check phase_history)
-        diagnostics = result.get('streaming_diagnostics', {})
-        phase_history = diagnostics.get('phase_history', [])
-        completed_phases = [p['phase'] for p in phase_history]
-        assert set(completed_phases) == {0, 1, 2, 3}, f"Not all phases completed: {completed_phases}"
+        diagnostics = result.get("streaming_diagnostics", {})
+        phase_history = diagnostics.get("phase_history", [])
+        completed_phases = [p["phase"] for p in phase_history]
+        assert set(completed_phases) == {0, 1, 2, 3}, (
+            f"Not all phases completed: {completed_phases}"
+        )
 
     def test_full_pipeline_gaussian_model(self):
         """Test full pipeline on Gaussian model with multiple parameters."""
+
         def gaussian_model(x, amplitude, mean, stddev, baseline):
             return amplitude * jnp.exp(-0.5 * ((x - mean) / stddev) ** 2) + baseline
 
@@ -98,11 +104,12 @@ class TestFullPipelineIntegration:
         # Fit with hybrid streaming method
         result = curve_fit(
             gaussian_model,
-            x, y_noisy,
+            x,
+            y_noisy,
             p0=p0,
             bounds=([0, -5, 0.1, 0], [20, 5, 5, 10]),
-            method='hybrid_streaming',
-            verbose=0
+            method="hybrid_streaming",
+            verbose=0,
         )
 
         popt, pcov = result
@@ -123,6 +130,7 @@ class TestSciPyCompatibility:
 
     def test_scipy_compatibility_exponential_model(self):
         """Verify results match scipy.optimize.curve_fit on exponential decay."""
+
         def exponential_model(x, a, b, c):
             return a * np.exp(-b * x) + c
 
@@ -140,9 +148,7 @@ class TestSciPyCompatibility:
 
         # SciPy fit
         popt_scipy, pcov_scipy = scipy_curve_fit(
-            exponential_model, x, y_noisy,
-            p0=p0,
-            bounds=([0, 0, 0], [10, 2, 2])
+            exponential_model, x, y_noisy, p0=p0, bounds=([0, 0, 0], [10, 2, 2])
         )
 
         # NLSQ hybrid streaming fit
@@ -154,23 +160,30 @@ class TestSciPyCompatibility:
             return a * jnp.exp(-b * x) + c
 
         popt_nlsq, pcov_nlsq = curve_fit(
-            jax_model, x_jax, y_jax,
+            jax_model,
+            x_jax,
+            y_jax,
             p0=p0_jax,
             bounds=([0, 0, 0], [10, 2, 2]),
-            method='hybrid_streaming',
-            verbose=0
+            method="hybrid_streaming",
+            verbose=0,
         )
 
         # Compare parameters (should match within 5% - hybrid method uses different algorithm)
         param_diff = np.abs((np.array(popt_nlsq) - popt_scipy) / popt_scipy)
-        assert np.all(param_diff < 0.05), f"Parameter mismatch: NLSQ={popt_nlsq}, SciPy={popt_scipy}, diff={param_diff}"
+        assert np.all(param_diff < 0.05), (
+            f"Parameter mismatch: NLSQ={popt_nlsq}, SciPy={popt_scipy}, diff={param_diff}"
+        )
 
         # Compare covariance (should match within 10% due to different algorithms)
-        pcov_diff = np.abs((np.array(pcov_nlsq) - pcov_scipy) / (np.abs(pcov_scipy) + 1e-10))
+        pcov_diff = np.abs(
+            (np.array(pcov_nlsq) - pcov_scipy) / (np.abs(pcov_scipy) + 1e-10)
+        )
         assert np.all(pcov_diff < 0.10), f"Covariance mismatch: {pcov_diff}"
 
     def test_scipy_compatibility_power_law(self):
         """Verify results match scipy on power law model."""
+
         def power_law(x, a, b):
             return a * np.power(x, b)
 
@@ -185,23 +198,26 @@ class TestSciPyCompatibility:
         p0 = np.array([1.5, 0.4])
 
         # SciPy
-        popt_scipy, pcov_scipy = scipy_curve_fit(power_law, x, y_noisy, p0=p0)
+        popt_scipy, _pcov_scipy = scipy_curve_fit(power_law, x, y_noisy, p0=p0)
 
         # NLSQ
         def jax_power_law(x, a, b):
             return a * jnp.power(x, b)
 
-        popt_nlsq, pcov_nlsq = curve_fit(
+        popt_nlsq, _pcov_nlsq = curve_fit(
             jax_power_law,
-            jnp.array(x), jnp.array(y_noisy),
+            jnp.array(x),
+            jnp.array(y_noisy),
             p0=jnp.array(p0),
-            method='hybrid_streaming',
-            verbose=0
+            method="hybrid_streaming",
+            verbose=0,
         )
 
         # Verify parameters match (within 10% - different optimization methods)
         param_diff = np.abs((np.array(popt_nlsq) - popt_scipy) / popt_scipy)
-        assert np.all(param_diff < 0.10), f"Power law parameters don't match scipy: diff={param_diff}"
+        assert np.all(param_diff < 0.10), (
+            f"Power law parameters don't match scipy: diff={param_diff}"
+        )
 
 
 class TestCovarianceAccuracy:
@@ -230,10 +246,7 @@ class TestCovarianceAccuracy:
 
         # NLSQ fit
         popt, pcov = curve_fit(
-            linear_model, x, y_noisy,
-            p0=p0,
-            method='hybrid_streaming',
-            verbose=0
+            linear_model, x, y_noisy, p0=p0, method="hybrid_streaming", verbose=0
         )
 
         # Analytical covariance
@@ -242,12 +255,14 @@ class TestCovarianceAccuracy:
 
         # Estimate residual variance
         residuals = y_noisy - linear_model(x, *popt)
-        sigma_sq_est = jnp.sum(residuals ** 2) / (len(x) - 2)
+        sigma_sq_est = jnp.sum(residuals**2) / (len(x) - 2)
 
         pcov_analytical = sigma_sq_est * XTX_inv
 
         # Compare covariances (should match within 10% due to finite sample)
-        cov_diff = jnp.abs((pcov - pcov_analytical) / (jnp.abs(pcov_analytical) + 1e-10))
+        cov_diff = jnp.abs(
+            (pcov - pcov_analytical) / (jnp.abs(pcov_analytical) + 1e-10)
+        )
         assert jnp.all(cov_diff < 0.1), f"Covariance accuracy issue: diff={cov_diff}"
 
         # Standard errors should be reasonable
@@ -262,6 +277,7 @@ class TestLargeDatasetPerformance:
     @pytest.mark.slow
     def test_large_dataset_memory_efficient(self):
         """Verify optimizer handles 1M+ points with streaming."""
+
         def simple_model(x, a, b):
             return a * jnp.sin(b * x)
 
@@ -287,21 +303,19 @@ class TestLargeDatasetPerformance:
 
         # Should complete without OOM
         result = optimizer.fit(
-            data_source=(x, y_noisy),
-            func=simple_model,
-            p0=p0,
-            verbose=0
+            data_source=(x, y_noisy), func=simple_model, p0=p0, verbose=0
         )
 
-        assert result['success'], "Large dataset optimization failed"
+        assert result["success"], "Large dataset optimization failed"
 
         # Parameters should be reasonable
-        popt = result['x']
+        popt = result["x"]
         assert jnp.abs(popt[0] - 5.0) < 0.5, f"Parameter a error: {popt[0]}"
         assert jnp.abs(popt[1] - 0.1) < 0.02, f"Parameter b error: {popt[1]}"
 
     def test_curve_fit_large_integration(self):
         """Test curve_fit_large with hybrid_streaming method."""
+
         def exponential_model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
 
@@ -318,19 +332,25 @@ class TestLargeDatasetPerformance:
 
         # Use curve_fit_large
         popt, pcov = curve_fit_large(
-            exponential_model, x, y_noisy,
+            exponential_model,
+            x,
+            y_noisy,
             p0=p0,
             bounds=([0, 0, 0], [10, 2, 5]),
-            method='hybrid_streaming',
-            verbose=0
+            method="hybrid_streaming",
+            verbose=0,
         )
 
         # Verify results
         assert popt.shape == (3,), "Parameters shape incorrect"
         assert pcov.shape == (3, 3), "Covariance shape incorrect"
 
-        param_errors = jnp.abs((popt - jnp.array([3.0, 0.5, 1.0])) / jnp.array([3.0, 0.5, 1.0]))
-        assert jnp.all(param_errors < 0.05), f"curve_fit_large accuracy issue: {param_errors}"
+        param_errors = jnp.abs(
+            (popt - jnp.array([3.0, 0.5, 1.0])) / jnp.array([3.0, 0.5, 1.0])
+        )
+        assert jnp.all(param_errors < 0.05), (
+            f"curve_fit_large accuracy issue: {param_errors}"
+        )
 
 
 class TestEdgeCases:
@@ -338,6 +358,7 @@ class TestEdgeCases:
 
     def test_all_parameters_at_bounds(self):
         """Test optimization when optimal parameters are at bounds."""
+
         def bounded_model(x, a, b):
             return a * x + b
 
@@ -352,12 +373,14 @@ class TestEdgeCases:
         p0 = jnp.array([5.0, 1.0])
         bounds = ([0, 0], [10, 5])
 
-        popt, pcov = curve_fit(
-            bounded_model, x, y_noisy,
+        popt, _pcov = curve_fit(
+            bounded_model,
+            x,
+            y_noisy,
             p0=p0,
             bounds=bounds,
-            method='hybrid_streaming',
-            verbose=0
+            method="hybrid_streaming",
+            verbose=0,
         )
 
         # Should converge near bounds (hybrid method may not reach exact bounds)
@@ -367,6 +390,7 @@ class TestEdgeCases:
 
     def test_single_parameter_optimization(self):
         """Test simplest case: single parameter."""
+
         def single_param_model(x, a):
             return a * x
 
@@ -380,10 +404,7 @@ class TestEdgeCases:
         p0 = jnp.array([2.0])
 
         popt, pcov = curve_fit(
-            single_param_model, x, y_noisy,
-            p0=p0,
-            method='hybrid_streaming',
-            verbose=0
+            single_param_model, x, y_noisy, p0=p0, method="hybrid_streaming", verbose=0
         )
 
         # Verify single parameter
@@ -394,6 +415,7 @@ class TestEdgeCases:
 
     def test_highly_correlated_parameters(self):
         """Test optimization with highly correlated parameters."""
+
         # Model: y = a*x + b*x = (a+b)*x
         # Parameters a and b are perfectly correlated
         def correlated_model(x, a, b, c):
@@ -412,14 +434,13 @@ class TestEdgeCases:
 
         # Should still converge, though covariance may be ill-conditioned
         popt, pcov = curve_fit(
-            correlated_model, x, y_noisy,
-            p0=p0,
-            method='hybrid_streaming',
-            verbose=0
+            correlated_model, x, y_noisy, p0=p0, method="hybrid_streaming", verbose=0
         )
 
         # Sum a+b should be close to 3 (correlated parameters may not converge precisely)
-        assert jnp.abs((popt[0] + popt[1]) - 3.0) < 0.6, f"Correlated sum error: {popt[0]+popt[1]}"
+        assert jnp.abs((popt[0] + popt[1]) - 3.0) < 0.6, (
+            f"Correlated sum error: {popt[0] + popt[1]}"
+        )
         assert jnp.abs(popt[2] - 1.0) < 0.35, f"Independent parameter error: {popt[2]}"
 
         # Covariance should show correlation
@@ -432,6 +453,7 @@ class TestBackwardCompatibility:
 
     def test_existing_streaming_optimizer_unchanged(self):
         """Verify StreamingOptimizer still works after adding hybrid method."""
+
         def simple_model(x, a, b):
             return a * jnp.exp(-b * x)
 
@@ -446,26 +468,22 @@ class TestBackwardCompatibility:
 
         # Original StreamingOptimizer should still work
         from nlsq.streaming_config import StreamingConfig
-        config = StreamingConfig(
-            batch_size=100,
-            max_epochs=10
-        )
+
+        config = StreamingConfig(batch_size=100, max_epochs=10)
 
         optimizer = StreamingOptimizer(config=config)
 
         # This should work without errors
         result = optimizer.fit(
-            data_source=(x, y_noisy),
-            func=simple_model,
-            p0=p0,
-            verbose=0
+            data_source=(x, y_noisy), func=simple_model, p0=p0, verbose=0
         )
 
-        assert 'x' in result, "StreamingOptimizer result format changed"
-        assert 'success' in result, "StreamingOptimizer result format changed"
+        assert "x" in result, "StreamingOptimizer result format changed"
+        assert "success" in result, "StreamingOptimizer result format changed"
 
     def test_curve_fit_default_method_unchanged(self):
         """Verify default curve_fit method still works."""
+
         def linear_model(x, a, b):
             return a * x + b
 
@@ -479,11 +497,7 @@ class TestBackwardCompatibility:
         p0 = jnp.array([1.5, 0.5])
 
         # Default method (should be 'trf' or 'lm', not 'hybrid_streaming')
-        popt, pcov = curve_fit(
-            linear_model, x, y_noisy,
-            p0=p0,
-            verbose=0
-        )
+        popt, pcov = curve_fit(linear_model, x, y_noisy, p0=p0, verbose=0)
 
         # Should still work
         assert popt.shape == (2,), "Default curve_fit broken"
@@ -495,6 +509,7 @@ class TestCheckpointResume:
 
     def test_checkpoint_resume_from_phase1(self):
         """Test resuming optimization from Phase 1 checkpoint."""
+
         def exponential_model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
 
@@ -508,10 +523,10 @@ class TestCheckpointResume:
         p0 = jnp.array([4.0, 0.4, 0.8])
 
         # Test checkpoint save/load mechanism
-        import tempfile
         import os
+        import tempfile
 
-        with tempfile.NamedTemporaryFile(suffix='.h5', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
             checkpoint_path = tmp.name
 
         try:
@@ -523,10 +538,7 @@ class TestCheckpointResume:
 
             optimizer1 = AdaptiveHybridStreamingOptimizer(config=config_short)
             result1 = optimizer1.fit(
-                data_source=(x, y_noisy),
-                func=exponential_model,
-                p0=p0,
-                verbose=0
+                data_source=(x, y_noisy), func=exponential_model, p0=p0, verbose=0
             )
 
             # Save checkpoint manually
@@ -541,19 +553,16 @@ class TestCheckpointResume:
             optimizer2._load_checkpoint(checkpoint_path)
 
             # Verify state was restored (basic check)
-            assert hasattr(optimizer2, 'current_phase'), "State not restored"
+            assert hasattr(optimizer2, "current_phase"), "State not restored"
             assert optimizer2.best_params_global is not None, "Best params not restored"
 
             # Continue optimization
             result2 = optimizer2.fit(
-                data_source=(x, y_noisy),
-                func=exponential_model,
-                p0=p0,
-                verbose=0
+                data_source=(x, y_noisy), func=exponential_model, p0=p0, verbose=0
             )
 
             # Verify it converged
-            assert result2['success'], "Resumed optimization failed"
+            assert result2["success"], "Resumed optimization failed"
 
         finally:
             if os.path.exists(checkpoint_path):

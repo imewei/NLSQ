@@ -48,7 +48,9 @@ class TestTournamentSelector:
         def data_batch_generator():
             for _ in range(20):  # Enough batches for all rounds
                 x_batch = np.linspace(0, 5, 50)
-                y_batch = 1.0 * x_batch**2 + 2.0 * x_batch + 3.0 + np.random.randn(50) * 0.1
+                y_batch = (
+                    1.0 * x_batch**2 + 2.0 * x_batch + 3.0 + np.random.randn(50) * 0.1
+                )
                 yield x_batch, y_batch
 
         # Run tournament
@@ -75,7 +77,9 @@ class TestTournamentSelector:
         n_candidates = 8
         n_params = 2
         np.random.seed(42)
-        candidates = np.random.randn(n_candidates, n_params) * 0.5 + np.array([2.0, 3.0])
+        candidates = np.random.randn(n_candidates, n_params) * 0.5 + np.array(
+            [2.0, 3.0]
+        )
 
         config = GlobalOptimizationConfig(
             n_starts=n_candidates,
@@ -121,7 +125,9 @@ class TestTournamentSelector:
 
         # Create candidates with one "good" candidate close to true params
         true_params = np.array([1.5, 0.3, 2.0])
-        candidates = np.random.randn(n_candidates, n_params) * 2.0 + np.array([5.0, 5.0, 5.0])
+        candidates = np.random.randn(n_candidates, n_params) * 2.0 + np.array(
+            [5.0, 5.0, 5.0]
+        )
         # Make one candidate close to true params (index 3)
         candidates[3] = true_params + np.random.randn(n_params) * 0.05
 
@@ -140,7 +146,9 @@ class TestTournamentSelector:
         def data_batch_generator():
             for _ in range(50):
                 x_batch = np.linspace(0, 5, 50)
-                y_batch = 1.5 * np.exp(-0.3 * x_batch) + 2.0 + np.random.randn(50) * 0.05
+                y_batch = (
+                    1.5 * np.exp(-0.3 * x_batch) + 2.0 + np.random.randn(50) * 0.05
+                )
                 yield x_batch, y_batch
 
         best_candidates = selector.run_tournament(
@@ -200,8 +208,8 @@ class TestTournamentSelector:
 
     def test_checkpoint_save_resume_preserves_tournament_state(self):
         """Test multi-start checkpoint save/resume preserves tournament state."""
-        import tempfile
         import pickle
+        import tempfile
         from pathlib import Path
 
         n_candidates = 8
@@ -234,12 +242,12 @@ class TestTournamentSelector:
         # Save checkpoint
         checkpoint_state = selector.to_checkpoint()
 
-        with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.pkl') as f:
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".pkl") as f:
             pickle.dump(checkpoint_state, f)
             checkpoint_path = Path(f.name)
 
         # Load checkpoint into new selector
-        with open(checkpoint_path, 'rb') as f:
+        with open(checkpoint_path, "rb") as f:
             loaded_state = pickle.load(f)
 
         new_selector = TournamentSelector.from_checkpoint(loaded_state, config)
@@ -247,8 +255,12 @@ class TestTournamentSelector:
         # Verify state preserved
         assert new_selector.current_round == selector.current_round
         assert new_selector.n_survivors == selector.n_survivors
-        np.testing.assert_array_equal(new_selector.survival_mask, selector.survival_mask)
-        np.testing.assert_array_almost_equal(new_selector.cumulative_losses, selector.cumulative_losses)
+        np.testing.assert_array_equal(
+            new_selector.survival_mask, selector.survival_mask
+        )
+        np.testing.assert_array_almost_equal(
+            new_selector.cumulative_losses, selector.cumulative_losses
+        )
 
         # Clean up
         checkpoint_path.unlink()

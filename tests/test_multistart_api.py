@@ -13,10 +13,9 @@ These tests verify Task Group 5 of the multi-start optimization specification:
 - fit() auto-detects dataset size and selects appropriate strategy
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-
-import jax.numpy as jnp
 
 
 def exponential_model(x, a, b, c):
@@ -67,16 +66,24 @@ class TestCurveFitMultistart:
         )
 
         # Check that result has multi-start diagnostics
-        assert hasattr(result, 'multistart_diagnostics') or 'multistart_diagnostics' in result
-        diagnostics = result.get('multistart_diagnostics', result.multistart_diagnostics if hasattr(result, 'multistart_diagnostics') else {})
+        assert (
+            hasattr(result, "multistart_diagnostics")
+            or "multistart_diagnostics" in result
+        )
+        diagnostics = result.get(
+            "multistart_diagnostics",
+            result.multistart_diagnostics
+            if hasattr(result, "multistart_diagnostics")
+            else {},
+        )
 
         # Verify multi-start was enabled (n_starts_configured > 0 and not bypassed)
-        assert diagnostics.get('n_starts_configured', 0) > 0
+        assert diagnostics.get("n_starts_configured", 0) > 0
         # Default n_starts should be 10
-        assert diagnostics.get('n_starts_configured') == 10
+        assert diagnostics.get("n_starts_configured") == 10
 
         # Check that fit succeeded
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
         # Parameters should be reasonably close to true values
         assert abs(popt[0] - true_params[0]) < 0.5
@@ -87,7 +94,7 @@ class TestCurveFitMultistart:
         """Test that curve_fit(..., multistart=True, n_starts=20) overrides default n_starts."""
         from nlsq import curve_fit
 
-        xdata, ydata, true_params = generate_test_data(n_points=500)
+        xdata, ydata, _true_params = generate_test_data(n_points=500)
 
         # Fit with custom n_starts (requires multistart=True to take effect)
         result = curve_fit(
@@ -101,18 +108,23 @@ class TestCurveFitMultistart:
         )
 
         # Check that n_starts was set to 20
-        diagnostics = result.get('multistart_diagnostics', result.multistart_diagnostics if hasattr(result, 'multistart_diagnostics') else {})
-        assert diagnostics.get('n_starts_configured') == 20
+        diagnostics = result.get(
+            "multistart_diagnostics",
+            result.multistart_diagnostics
+            if hasattr(result, "multistart_diagnostics")
+            else {},
+        )
+        assert diagnostics.get("n_starts_configured") == 20
 
         # Check that fit succeeded
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
     def test_global_search_shorthand(self):
         """Test that global_search=True is shorthand for multistart=True, n_starts=20."""
         from nlsq import curve_fit
 
-        xdata, ydata, true_params = generate_test_data(n_points=500)
+        xdata, ydata, _true_params = generate_test_data(n_points=500)
 
         # Fit with global_search=True
         result = curve_fit(
@@ -125,11 +137,16 @@ class TestCurveFitMultistart:
         )
 
         # Check that global_search enabled multistart with n_starts=20
-        diagnostics = result.get('multistart_diagnostics', result.multistart_diagnostics if hasattr(result, 'multistart_diagnostics') else {})
-        assert diagnostics.get('n_starts_configured') == 20
+        diagnostics = result.get(
+            "multistart_diagnostics",
+            result.multistart_diagnostics
+            if hasattr(result, "multistart_diagnostics")
+            else {},
+        )
+        assert diagnostics.get("n_starts_configured") == 20
 
         # Check that fit succeeded
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
 
@@ -140,7 +157,7 @@ class TestFitFunction:
         """Test that fit(preset='robust') applies correct multi-start configuration."""
         from nlsq import fit
 
-        xdata, ydata, true_params = generate_test_data(n_points=500)
+        xdata, ydata, _true_params = generate_test_data(n_points=500)
 
         # Fit with 'robust' preset
         result = fit(
@@ -149,24 +166,29 @@ class TestFitFunction:
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset='robust',
+            preset="robust",
         )
 
         # Check multi-start diagnostics
-        diagnostics = result.get('multistart_diagnostics', result.multistart_diagnostics if hasattr(result, 'multistart_diagnostics') else {})
+        diagnostics = result.get(
+            "multistart_diagnostics",
+            result.multistart_diagnostics
+            if hasattr(result, "multistart_diagnostics")
+            else {},
+        )
 
         # 'robust' preset should use n_starts=5
-        assert diagnostics.get('n_starts_configured') == 5
+        assert diagnostics.get("n_starts_configured") == 5
 
         # Check that fit succeeded
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
     def test_fit_streaming_preset(self):
         """Test that fit(preset='streaming') uses AdaptiveHybridStreaming with tournament."""
         from nlsq import fit
 
-        xdata, ydata, true_params = generate_test_data(n_points=500)
+        xdata, ydata, _true_params = generate_test_data(n_points=500)
 
         # Fit with 'streaming' preset
         result = fit(
@@ -175,17 +197,24 @@ class TestFitFunction:
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset='streaming',
+            preset="streaming",
         )
 
         # Check that fit succeeded
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
         # 'streaming' preset should configure n_starts=10
-        diagnostics = result.get('multistart_diagnostics', result.multistart_diagnostics if hasattr(result, 'multistart_diagnostics') else {})
+        diagnostics = result.get(
+            "multistart_diagnostics",
+            result.multistart_diagnostics
+            if hasattr(result, "multistart_diagnostics")
+            else {},
+        )
         # Check n_starts is 10 for streaming preset (even if multi-start is bypassed for small datasets)
-        assert diagnostics.get('n_starts_configured', 0) == 10 or diagnostics.get('bypassed', False)
+        assert diagnostics.get("n_starts_configured", 0) == 10 or diagnostics.get(
+            "bypassed", False
+        )
 
     def test_fit_auto_detects_dataset_size(self):
         """Test that fit() auto-detects dataset size and selects appropriate strategy."""
@@ -200,11 +229,11 @@ class TestFitFunction:
             ydata_small,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset='large',  # 'large' preset should auto-detect
+            preset="large",  # 'large' preset should auto-detect
         )
 
         # Check that fit succeeded
-        popt = result_small.popt if hasattr(result_small, 'popt') else result_small[0]
+        popt = result_small.popt if hasattr(result_small, "popt") else result_small[0]
         assert len(popt) == 3
 
         # For small datasets with 'large' preset, it should still work but may not use
@@ -223,18 +252,23 @@ class TestFitFunction:
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset='fast',
+            preset="fast",
         )
 
         # Check multi-start diagnostics
-        diagnostics = result.get('multistart_diagnostics', result.multistart_diagnostics if hasattr(result, 'multistart_diagnostics') else {})
+        diagnostics = result.get(
+            "multistart_diagnostics",
+            result.multistart_diagnostics
+            if hasattr(result, "multistart_diagnostics")
+            else {},
+        )
 
         # 'fast' preset should have n_starts=0
-        assert diagnostics.get('n_starts_configured') == 0
-        assert diagnostics.get('bypassed', True)  # Should be bypassed
+        assert diagnostics.get("n_starts_configured") == 0
+        assert diagnostics.get("bypassed", True)  # Should be bypassed
 
         # Check that fit succeeded
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
     def test_fit_global_preset(self):
@@ -249,17 +283,22 @@ class TestFitFunction:
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset='global',
+            preset="global",
         )
 
         # Check multi-start diagnostics
-        diagnostics = result.get('multistart_diagnostics', result.multistart_diagnostics if hasattr(result, 'multistart_diagnostics') else {})
+        diagnostics = result.get(
+            "multistart_diagnostics",
+            result.multistart_diagnostics
+            if hasattr(result, "multistart_diagnostics")
+            else {},
+        )
 
         # 'global' preset should have n_starts=20
-        assert diagnostics.get('n_starts_configured') == 20
+        assert diagnostics.get("n_starts_configured") == 20
 
         # Check that fit succeeded
-        popt = result.popt if hasattr(result, 'popt') else result[0]
+        popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
 
@@ -270,7 +309,7 @@ class TestCurveFitLargeMultistart:
         """Test curve_fit_large with multistart parameter."""
         from nlsq import curve_fit_large
 
-        xdata, ydata, true_params = generate_test_data(n_points=500)
+        xdata, ydata, _true_params = generate_test_data(n_points=500)
 
         # Note: For small datasets, curve_fit_large may delegate to standard curve_fit
         result = curve_fit_large(
@@ -284,7 +323,11 @@ class TestCurveFitLargeMultistart:
         )
 
         # Check that fit succeeded
-        popt = result[0] if isinstance(result, tuple) else (result.popt if hasattr(result, 'popt') else result['popt'])
+        popt = (
+            result[0]
+            if isinstance(result, tuple)
+            else (result.popt if hasattr(result, "popt") else result["popt"])
+        )
         assert len(popt) == 3
 
 
@@ -294,28 +337,31 @@ class TestAPIExports:
     def test_fit_function_exported(self):
         """Test that fit function is exported from nlsq."""
         import nlsq
-        assert hasattr(nlsq, 'fit')
+
+        assert hasattr(nlsq, "fit")
         assert callable(nlsq.fit)
 
     def test_global_optimization_exports(self):
         """Test that global optimization classes are exported."""
         import nlsq
-        assert hasattr(nlsq, 'GlobalOptimizationConfig')
-        assert hasattr(nlsq, 'MultiStartOrchestrator')
-        assert hasattr(nlsq, 'TournamentSelector')
+
+        assert hasattr(nlsq, "GlobalOptimizationConfig")
+        assert hasattr(nlsq, "MultiStartOrchestrator")
+        assert hasattr(nlsq, "TournamentSelector")
 
     def test_curve_fit_multistart_parameters(self):
         """Test that curve_fit accepts multi-start parameters."""
         import inspect
+
         from nlsq import curve_fit
 
         sig = inspect.signature(curve_fit)
         params = sig.parameters
 
         # Check that multistart parameters are present
-        assert 'multistart' in params
-        assert 'n_starts' in params
-        assert 'global_search' in params
-        assert 'sampler' in params
-        assert 'center_on_p0' in params
-        assert 'scale_factor' in params
+        assert "multistart" in params
+        assert "n_starts" in params
+        assert "global_search" in params
+        assert "sampler" in params
+        assert "center_on_p0" in params
+        assert "scale_factor" in params

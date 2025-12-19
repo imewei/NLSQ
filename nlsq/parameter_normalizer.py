@@ -18,7 +18,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import jit
 
-__all__ = ["ParameterNormalizer", "NormalizedModelWrapper"]
+__all__ = ["NormalizedModelWrapper", "ParameterNormalizer"]
 
 
 class ParameterNormalizer:
