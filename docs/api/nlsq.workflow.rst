@@ -57,6 +57,7 @@ WorkflowTier
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 OptimizationGoal
 ~~~~~~~~~~~~~~~~
@@ -65,6 +66,7 @@ OptimizationGoal
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 DatasetSizeTier
 ~~~~~~~~~~~~~~~
@@ -73,6 +75,7 @@ DatasetSizeTier
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 MemoryTier
 ~~~~~~~~~~
@@ -81,6 +84,7 @@ MemoryTier
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 Configuration
 -------------
@@ -92,6 +96,7 @@ WorkflowConfig
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 WORKFLOW_PRESETS
 ~~~~~~~~~~~~~~~~
@@ -116,11 +121,13 @@ WorkflowSelector
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 auto_select_workflow
 ~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: nlsq.workflow.auto_select_workflow
+   :no-index:
 
 Memory Detection
 ----------------
@@ -131,11 +138,13 @@ get_total_available_memory_gb
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: nlsq.workflow.get_total_available_memory_gb
+   :no-index:
 
 get_memory_tier
 ~~~~~~~~~~~~~~~
 
 .. autofunction:: nlsq.workflow.get_memory_tier
+   :no-index:
 
 Cluster Detection
 -----------------
@@ -147,6 +156,7 @@ ClusterInfo
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 ClusterDetector
 ~~~~~~~~~~~~~~~
@@ -155,6 +165,7 @@ ClusterDetector
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 YAML Configuration
 ------------------
@@ -226,4 +237,5 @@ Module Contents
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
    :exclude-members: WorkflowTier, OptimizationGoal, DatasetSizeTier, MemoryTier, WorkflowConfig, WorkflowSelector, ClusterInfo, ClusterDetector, auto_select_workflow, get_total_available_memory_gb, get_memory_tier

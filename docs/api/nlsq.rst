@@ -88,4 +88,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: StreamingConfig, MemoryConfig, LargeDatasetConfig, NumericalStabilityGuard, ParameterNormalizer, GlobalOptimizationConfig, MultiStartOrchestrator, TournamentSelector
+   :exclude-members: StreamingConfig, MemoryConfig, LargeDatasetConfig, NumericalStabilityGuard, ParameterNormalizer, GlobalOptimizationConfig, MultiStartOrchestrator, TournamentSelector, WorkflowTier, OptimizationGoal, DatasetSizeTier, MemoryTier, WorkflowConfig, WorkflowSelector, ClusterInfo, ClusterDetector, auto_select_workflow, get_total_available_memory_gb, get_memory_tier, WORKFLOW_PRESETS, fit

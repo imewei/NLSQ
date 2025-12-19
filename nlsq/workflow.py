@@ -247,7 +247,15 @@ class DatasetSizeTier(Enum):
         <DatasetSizeTier.VERY_LARGE: (10000000, 1e-07)>
         """
         # Ordered from smallest to largest
-        tiers = [cls.TINY, cls.SMALL, cls.MEDIUM, cls.LARGE, cls.VERY_LARGE, cls.HUGE, cls.MASSIVE]
+        tiers = [
+            cls.TINY,
+            cls.SMALL,
+            cls.MEDIUM,
+            cls.LARGE,
+            cls.VERY_LARGE,
+            cls.HUGE,
+            cls.MASSIVE,
+        ]
         for tier in tiers:
             if n_points < tier.max_points:
                 return tier
@@ -760,7 +768,9 @@ class MultiGPUConfig:
         }
 
 
-def get_multi_gpu_config(cluster_info: ClusterInfo | None = None) -> MultiGPUConfig | None:
+def get_multi_gpu_config(
+    cluster_info: ClusterInfo | None = None,
+) -> MultiGPUConfig | None:
     """Generate multi-GPU sharding configuration.
 
     Creates a MultiGPUConfig based on detected cluster or local GPU setup.
@@ -1334,24 +1344,22 @@ def load_yaml_config(config_path: str | Path | None = None) -> dict[str, Any] | 
     -----
     pyyaml is an optional dependency. Install with: pip install pyyaml
 
-    The YAML file should have the following structure:
+    The YAML file should have the following structure::
 
-    ```yaml
-    # Default workflow settings
-    default_workflow: standard
-    memory_limit_gb: 32.0
+        # Default workflow settings
+        default_workflow: standard
+        memory_limit_gb: 32.0
 
-    # Custom workflow definitions
-    workflows:
-      my_custom_workflow:
-        tier: CHUNKED
-        goal: QUALITY
-        enable_multistart: true
-        n_starts: 15
-        gtol: 1e-9
-        ftol: 1e-9
-        xtol: 1e-9
-    ```
+        # Custom workflow definitions
+        workflows:
+          my_custom_workflow:
+            tier: CHUNKED
+            goal: QUALITY
+            enable_multistart: true
+            n_starts: 15
+            gtol: 1e-9
+            ftol: 1e-9
+            xtol: 1e-9
 
     Examples
     --------
@@ -1512,15 +1520,13 @@ def get_custom_workflow(
 
     Examples
     --------
-    Given a nlsq.yaml file with:
+    Given a nlsq.yaml file with::
 
-    ```yaml
-    workflows:
-      my_custom:
-        tier: CHUNKED
-        goal: QUALITY
-        n_starts: 15
-    ```
+        workflows:
+          my_custom:
+            tier: CHUNKED
+            goal: QUALITY
+            n_starts: 15
 
     >>> config = get_custom_workflow("my_custom")
     >>> config.tier
@@ -1588,7 +1594,9 @@ def validate_custom_workflow(workflow_def: dict[str, Any]) -> tuple[bool, str | 
 
 
 # Type alias for config return types from WorkflowSelector
-ConfigType = Union["LDMemoryConfig", "HybridStreamingConfig", "GlobalOptimizationConfig"]
+ConfigType = Union[
+    "LDMemoryConfig", "HybridStreamingConfig", "GlobalOptimizationConfig"
+]
 
 
 class WorkflowSelector:
@@ -1598,19 +1606,20 @@ class WorkflowSelector:
     mapping dataset size and memory tier to the appropriate workflow tier and
     config class.
 
-    The selection matrix is:
+    The selection matrix is::
 
-    | Dataset Size   | Low Memory (<16GB) | Medium (16-64GB) | High (64-128GB) | Very High (>128GB) |
-    |----------------|-------------------|------------------|-----------------|-------------------|
-    | Small (<10K)   | standard          | standard         | standard        | standard+quality  |
-    | Medium (10K-1M)| chunked           | standard         | standard+ms     | standard+ms       |
-    | Large (1M-10M) | streaming         | chunked          | chunked+ms      | chunked+ms        |
-    | Huge (10M-100M)| streaming+ckpt    | streaming        | chunked         | chunked+ms        |
-    | Massive (>100M)| streaming+ckpt    | streaming+ckpt   | streaming       | streaming+ms      |
+        Dataset Size    | Low (<16GB) | Medium (16-64GB) | High (64-128GB) | Very High (>128GB)
+        ----------------|-------------|------------------|-----------------|-------------------
+        Small (<10K)    | standard    | standard         | standard        | standard+quality
+        Medium (10K-1M) | chunked     | standard         | standard+ms     | standard+ms
+        Large (1M-10M)  | streaming   | chunked          | chunked+ms      | chunked+ms
+        Huge (10M-100M) | stream+ckpt | streaming        | chunked         | chunked+ms
+        Massive (>100M) | stream+ckpt | streaming+ckpt   | streaming       | streaming+ms
 
     Where:
-    - ms = multi-start enabled
-    - ckpt = checkpointing enabled
+
+    * ms = multi-start enabled
+    * ckpt = checkpointing enabled
 
     Parameters
     ----------
@@ -1724,7 +1733,10 @@ class WorkflowSelector:
             # Small datasets: always STANDARD
             tier = WorkflowTier.STANDARD
             # Very high memory + quality: enable multi-start
-            if memory_tier == MemoryTier.VERY_HIGH and normalized_goal == OptimizationGoal.QUALITY:
+            if (
+                memory_tier == MemoryTier.VERY_HIGH
+                and normalized_goal == OptimizationGoal.QUALITY
+            ):
                 enable_multistart = True
         elif size_category == "medium":
             # Medium datasets
@@ -1757,7 +1769,9 @@ class WorkflowSelector:
                 tier = WorkflowTier.CHUNKED
                 enable_multistart = True
         # Massive datasets (>100M)
-        elif memory_tier in (MemoryTier.LOW, MemoryTier.MEDIUM) or memory_efficient_mode:
+        elif (
+            memory_tier in (MemoryTier.LOW, MemoryTier.MEDIUM) or memory_efficient_mode
+        ):
             tier = WorkflowTier.STREAMING_CHECKPOINT
             enable_checkpoints = True
         elif memory_tier == MemoryTier.HIGH:
@@ -1934,7 +1948,8 @@ class WorkflowSelector:
             safety_factor=0.8,
             min_chunk_size=1000,
             max_chunk_size=chunk_size,
-            use_streaming=tier in (WorkflowTier.STREAMING, WorkflowTier.STREAMING_CHECKPOINT),
+            use_streaming=tier
+            in (WorkflowTier.STREAMING, WorkflowTier.STREAMING_CHECKPOINT),
             streaming_batch_size=50000,
             streaming_max_epochs=10,
         )
@@ -2120,7 +2135,9 @@ def generate_perturbed_parameters(
         perturbed = []
         for param in p0:
             # Scale perturbation by parameter magnitude (avoid division by zero)
-            scale = abs(param) * perturbation_scale if param != 0 else perturbation_scale
+            scale = (
+                abs(param) * perturbation_scale if param != 0 else perturbation_scale
+            )
             perturbation = random.uniform(-scale, scale)
             perturbed.append(param + perturbation)
         perturbed_params.append(perturbed)
@@ -2233,8 +2250,6 @@ def get_quality_precision_config() -> dict[str, Any]:
     }
 
 
-
-
 __all__ = [
     # Configuration
     "WORKFLOW_PRESETS",
@@ -2252,18 +2267,18 @@ __all__ = [
     "WorkflowTier",
     "auto_select_workflow",
     "calculate_adaptive_tolerances",
+    # Checkpointing and Quality Goal (Task Group 7)
+    "compare_validation_results",
+    "create_checkpoint_directory",
     "create_distributed_config",
+    "generate_perturbed_parameters",
     # YAML Configuration (Task Group 5)
     "get_custom_workflow",
     "get_env_overrides",
     "get_multi_gpu_config",
+    "get_quality_n_starts",
+    "get_quality_precision_config",
     "load_config_with_overrides",
     "load_yaml_config",
     "validate_custom_workflow",
-    # Checkpointing and Quality Goal (Task Group 7)
-    "compare_validation_results",
-    "create_checkpoint_directory",
-    "generate_perturbed_parameters",
-    "get_quality_n_starts",
-    "get_quality_precision_config",
 ]
