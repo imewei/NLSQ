@@ -5,6 +5,120 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-12-19
+
+### Added
+
+#### Workflow System (Unified fit() Entry Point)
+- **Unified `fit()` function**: Single entry point that coexists with `curve_fit()` and `curve_fit_large()`
+  - Automatic workflow selection based on dataset size and memory
+  - Named presets for common use cases ('fast', 'robust', 'global', etc.)
+  - Custom `WorkflowConfig` for fine-grained control
+  - **Files Added**: `nlsq/workflow.py`
+
+- **WorkflowTier enum**: Processing strategy selection
+  - `STANDARD`: Direct optimization for small datasets (< 100K points)
+  - `CHUNKED`: Memory-efficient chunked processing (100K - 10M points)
+  - `STREAMING`: Streaming optimization for huge datasets (> 10M points)
+  - `STREAMING_CHECKPOINT`: Streaming with automatic checkpointing
+
+- **OptimizationGoal enum**: Optimization objective specification
+  - `FAST`: Minimum iterations, relaxed tolerances
+  - `ROBUST`: Multi-start with 5 starting points
+  - `GLOBAL`: Thorough global search with 20 starts
+  - `MEMORY_EFFICIENT`: Aggressive chunking, streaming fallback
+  - `QUALITY`: Tight tolerances with validation passes
+
+- **Adaptive tolerances**: Automatic tolerance adjustment based on dataset size
+  - `DatasetSizeTier` enum: TINY, SMALL, MEDIUM, LARGE, VERY_LARGE, MASSIVE
+  - Tolerances range from 1e-12 (TINY) to 1e-5 (MASSIVE)
+
+- **Memory detection**: Automatic CPU/GPU memory detection
+  - `MemoryTier` enum: LOW (< 16GB), MEDIUM (16-64GB), HIGH (64-128GB), VERY_HIGH (> 128GB)
+  - `GPUMemoryEstimator` class using JAX device API
+  - Memory cleanup utilities
+
+- **WorkflowSelector**: Automatic tier selection
+  - Dataset size × memory tier selection matrix
+  - Fallback strategies for memory-constrained environments
+
+- **YAML configuration**: Configuration file support
+  - Load from `./nlsq.yaml` in project directory
+  - Tolerance, workflow, and cluster settings
+  - Environment variable overrides (NLSQ_WORKFLOW_GOAL, NLSQ_MEMORY_LIMIT_GB, etc.)
+
+- **7 workflow presets**: Ready-to-use configurations
+  - `fast`: Maximum speed, relaxed tolerances
+  - `robust`: Multi-start for reliability
+  - `global`: Thorough global search
+  - `memory_efficient`: Aggressive memory management
+  - `quality`: Highest accuracy with validation
+  - `hpc`: PBS Pro cluster configuration
+  - `streaming`: Tournament selection for streaming data
+
+- **Cluster detection**: HPC environment support
+  - `ClusterDetector` class for PBS Pro auto-detection
+  - `ClusterInfo` dataclass with nodes, GPUs, memory info
+  - `MultiGPUConfig` for multi-GPU coordination
+
+- **Checkpointing**: Automatic checkpoint support for long jobs
+  - Automatic checkpoint directory creation
+  - Resume from checkpoint on failure
+
+#### Documentation
+- **Migration guide**: `docs/migration/curve_fit_to_fit.md`
+  - Step-by-step migration from `curve_fit()` to `fit()`
+  - Code examples for all workflow options
+  - FAQ and troubleshooting
+
+- **API documentation**: Complete Sphinx docs for workflow module
+  - **Files Added**: `docs/api/nlsq.workflow.rst`
+
+#### Tests
+- **148 new tests** for workflow system
+  - `tests/test_workflow.py`: Unit tests for workflow module
+  - `tests/test_fit.py`: fit() function tests
+  - `tests/test_memory_detection.py`: Memory detection tests
+  - `tests/test_distributed.py`: Distributed processing tests
+  - `tests/test_workflow_integration.py`: End-to-end integration tests
+
+### Changed
+- **Documentation**: Updated test count to 1,989 tests (100% pass rate)
+- **docs/index.rst**: Added Workflow System to Key Features list
+- **docs/api/modules.rst**: Added workflow module to API reference
+- **nlsq/__init__.py**: Export workflow components (fit, WorkflowConfig, WorkflowTier, etc.)
+- **nlsq/minpack.py**: Added fit() function with workflow selection logic
+- **nlsq/large_dataset.py**: Extended with GPUMemoryEstimator and memory utilities
+- **pyproject.toml**: Added optional `yaml` dependency for YAML configuration
+
+### Technical Details
+
+**New Module Structure:**
+```
+nlsq/workflow.py          # Main workflow module (2,270 lines)
+├── WorkflowTier          # Processing strategy enum
+├── OptimizationGoal      # Optimization objective enum
+├── DatasetSizeTier       # Dataset size classification
+├── MemoryTier            # Memory tier classification
+├── WorkflowConfig        # Configuration dataclass
+├── WorkflowSelector      # Automatic tier selection
+├── ClusterInfo           # Cluster information dataclass
+├── ClusterDetector       # PBS Pro cluster detection
+├── WORKFLOW_PRESETS      # Named preset configurations
+└── auto_select_workflow  # Main selection function
+```
+
+**Public API Exports:**
+- `fit`
+- `auto_select_workflow`
+- `WorkflowSelector`
+- `WorkflowConfig`
+- `WorkflowTier`
+- `OptimizationGoal`
+- `DatasetSizeTier`
+- `MemoryTier`
+- `WORKFLOW_PRESETS`
+
 ## [0.3.3] - 2025-12-19
 
 ### Added

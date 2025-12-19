@@ -68,6 +68,17 @@ optima in problems with multiple local minima:
 
    nlsq.global_optimization
 
+Workflow System (v0.3.4+)
+-------------------------
+
+Unified workflow system with automatic strategy selection based on dataset size
+and available memory:
+
+.. toctree::
+   :maxdepth: 2
+
+   nlsq.workflow
+
 Enhanced Features (v0.1.1)
 --------------------------
 
@@ -179,6 +190,9 @@ Complete Module Listing
 
 **Global Optimization Modules** (NEW in v0.3.3+):
 - :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers
+
+**Workflow System Modules** (NEW in v0.3.4+):
+- :doc:`nlsq.workflow` - Unified fit() with auto-selection, presets, YAML config
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management

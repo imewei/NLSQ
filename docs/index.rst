@@ -22,12 +22,13 @@ Key Features
 - **GPU/TPU Acceleration**: 150-270x faster than SciPy on large datasets
 - **Drop-in Compatibility**: Minimal code changes from ``scipy.optimize.curve_fit``
 - **Automatic Differentiation**: JAX autodiff eliminates manual Jacobian calculations
-- **Production-Ready**: 1,834 tests, 100% pass rate
+- **Production-Ready**: 1,989 tests, 100% pass rate
 - **Large Dataset Support**: Automatic chunking and memory management
 - **Advanced Features**: Automatic fallback, smart bounds, numerical stability
 - **Performance Profiling** (v0.3.0): Async logging, transfer analysis, regression gates
 - **Adaptive Hybrid Streaming** (v0.3.0): 4-phase optimizer with parameter normalization
 - **Global Optimization** (v0.3.3): Multi-start with LHS, Sobol, Halton samplers
+- **Workflow System** (v0.3.4): Unified ``fit()`` with auto-selection, presets, YAML config
 
 Quick Example
 -------------
@@ -86,6 +87,7 @@ Documentation
    guides/large_datasets
    guides/troubleshooting
    migration/streaming_fault_tolerance
+   migration/curve_fit_to_fit
 
 .. toctree::
    :maxdepth: 2
@@ -117,13 +119,14 @@ Resources
 Project Status
 --------------
 
-**Current Release**: v0.3.2
+**Current Release**: v0.3.4
 
 - Production-ready for scientific computing
 - Active development and maintenance
-- Comprehensive test suite (1,834 tests, 100% pass rate)
+- Comprehensive test suite (1,989 tests, 100% pass rate)
 - Performance profiling and regression detection infrastructure
 - Global optimization with multi-start LHS sampling (v0.3.3+)
+- Workflow system with unified fit() and auto-selection (v0.3.4+)
 
 Citation
 --------

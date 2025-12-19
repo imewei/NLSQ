@@ -67,6 +67,16 @@ NLSQ provides a drop-in replacement for SciPy's curve_fit function with advanced
 - **Convergence analysis** and parameter adjustment
 - **Robustness testing** with multiple initialization strategies
 
+## Workflow System (v0.3.4+)
+- **Unified `fit()` entry point** with automatic workflow selection
+- **Workflow tiers**: STANDARD, CHUNKED, STREAMING, STREAMING_CHECKPOINT
+- **Optimization goals**: FAST, ROBUST, GLOBAL, MEMORY_EFFICIENT, QUALITY
+- **Adaptive tolerances** based on dataset size (1e-12 for small to 1e-5 for massive)
+- **Auto-detection** of CPU/GPU memory and PBS Pro HPC clusters
+- **YAML configuration** with environment variable overrides
+- **7 workflow presets**: fast, robust, global, memory_efficient, quality, hpc, streaming
+- **Checkpointing** for long-running optimizations with automatic resume
+
 ## Diagnostics & Monitoring
 - **Convergence monitoring** with diagnostics
 - **Optimization recovery** from failed fits with fallback strategies
@@ -622,6 +632,95 @@ def data_generator():
 
 
 best_candidates = selector.run_tournament(data_generator(), model, top_m=1)
+```
+
+### Workflow System (v0.3.4+)
+
+The unified `fit()` function automatically selects the optimal fitting strategy based on dataset size and available memory:
+
+```python
+from nlsq import fit, WorkflowConfig, WorkflowTier, OptimizationGoal
+import jax.numpy as jnp
+import numpy as np
+
+
+# Define model
+def exponential(x, a, b, c):
+    return a * jnp.exp(-b * x) + c
+
+
+# Generate data
+x = np.linspace(0, 10, 1_000_000)  # 1M points
+y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, len(x))
+
+# Option 1: Auto-select workflow based on dataset/memory (simplest)
+popt, pcov = fit(exponential, x, y, p0=[2.5, 0.6, 0.2])
+
+# Option 2: Use a named preset
+popt, pcov = fit(exponential, x, y, p0=[2.5, 0.6, 0.2], preset="robust")
+
+# Option 3: Specify workflow explicitly
+popt, pcov = fit(exponential, x, y, p0=[2.5, 0.6, 0.2], workflow=WorkflowTier.STREAMING)
+
+# Option 4: Custom configuration
+config = WorkflowConfig(
+    tier=WorkflowTier.CHUNKED,
+    goal=OptimizationGoal.QUALITY,
+    memory_limit_gb=8.0,
+    enable_checkpointing=True,
+)
+popt, pcov = fit(exponential, x, y, p0=[2.5, 0.6, 0.2], config=config)
+```
+
+**Workflow Tiers:**
+
+| Tier | Description | Dataset Size |
+|------|-------------|--------------|
+| `STANDARD` | Direct optimization, no chunking | < 100K points |
+| `CHUNKED` | Memory-efficient chunked processing | 100K - 10M points |
+| `STREAMING` | Streaming optimization for huge datasets | > 10M points |
+| `STREAMING_CHECKPOINT` | Streaming with automatic checkpointing | > 10M points, long jobs |
+
+**Workflow Presets:**
+
+| Preset | Goal | Description |
+|--------|------|-------------|
+| `'fast'` | FAST | Minimum iterations, relaxed tolerances |
+| `'robust'` | ROBUST | Multi-start with 5 starting points |
+| `'global'` | GLOBAL | Thorough global search with 20 starts |
+| `'memory_efficient'` | MEMORY_EFFICIENT | Aggressive chunking, streaming fallback |
+| `'quality'` | QUALITY | Tight tolerances, validation passes |
+| `'hpc'` | ROBUST | PBS Pro cluster configuration |
+| `'streaming'` | MEMORY_EFFICIENT | Tournament selection for streaming |
+
+**YAML Configuration:**
+
+Create `nlsq.yaml` in your project directory:
+
+```yaml
+workflow:
+  goal: robust
+  memory_limit_gb: 16.0
+  enable_checkpointing: true
+  checkpoint_dir: ./checkpoints
+
+tolerances:
+  ftol: 1e-10
+  xtol: 1e-10
+  gtol: 1e-10
+
+cluster:
+  type: pbs
+  nodes: 4
+  gpus_per_node: 2
+```
+
+**Environment Variable Overrides:**
+
+```bash
+export NLSQ_WORKFLOW_GOAL=quality
+export NLSQ_MEMORY_LIMIT_GB=32.0
+export NLSQ_CHECKPOINT_DIR=/scratch/checkpoints
 ```
 
 ### Diagnostics & Monitoring
