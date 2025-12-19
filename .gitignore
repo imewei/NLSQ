@@ -151,6 +151,7 @@ combined.log
 # Cache directories
 nlsq_cache/
 .nlsq_cache/
+nlsq_checkpoints/
 .optimization/
 
 # Checkpoint files
