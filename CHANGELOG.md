@@ -5,6 +5,112 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2025-12-19
+
+### Added
+
+#### Global Optimization (Multi-Start with LHS)
+- **Multi-start optimization**: Find global optima in problems with multiple local minima
+  - `MultiStartOrchestrator` class for coordinating parallel starting point evaluation
+  - Factory method `from_preset()` for quick configuration
+  - Automatic best-result selection from multiple optimization runs
+  - **Files Added**: `nlsq/global_optimization/multi_start.py`
+
+- **Latin Hypercube Sampling (LHS)**: Stratified random sampling for better parameter space coverage
+  - `latin_hypercube_sample()` function generates well-distributed starting points
+  - Ensures each parameter dimension is evenly sampled
+  - **Files Added**: `nlsq/global_optimization/sampling.py`
+
+- **Quasi-random sequences**: Deterministic, low-discrepancy sampling alternatives
+  - `sobol_sample()` for Sobol sequence generation
+  - `halton_sample()` for Halton sequence generation
+  - Better space coverage than pure random sampling
+  - **Files Added**: `nlsq/global_optimization/sampling.py`
+
+- **Tournament selection**: Memory-efficient optimization for streaming/large datasets
+  - `TournamentSelector` class for progressive candidate elimination
+  - Configurable elimination rounds and fractions
+  - Checkpoint/restore support for fault tolerance
+  - Diagnostics tracking for tournament progress
+  - **Files Added**: `nlsq/global_optimization/tournament.py`
+
+- **Preset configurations**: Ready-to-use configurations for common scenarios
+  - `fast`: n_starts=0, multi-start disabled for maximum speed
+  - `robust`: n_starts=5, light multi-start for robustness
+  - `global`: n_starts=20, thorough global search
+  - `thorough`: n_starts=50, exhaustive search
+  - `streaming`: n_starts=10, tournament selection for large datasets
+  - **Files Added**: `nlsq/global_optimization/config.py`
+
+- **GlobalOptimizationConfig**: Comprehensive configuration dataclass
+  - `n_starts`: Number of starting points
+  - `sampler`: Sampling method ('lhs', 'sobol', 'halton', 'random')
+  - `center_on_p0`: Whether to center samples around initial guess
+  - `scale_factor`: Controls exploration range around p0
+  - Tournament parameters: `elimination_rounds`, `elimination_fraction`, `batches_per_round`
+  - **Files Added**: `nlsq/global_optimization/config.py`
+
+- **Utility functions**: Helper functions for sample manipulation
+  - `scale_samples_to_bounds()`: Transform unit samples to parameter bounds
+  - `center_samples_around_p0()`: Center samples around initial guess
+  - `get_sampler()`: Factory function for sampler selection
+
+- **curve_fit integration**: Multi-start support in main API
+  - `multistart=True` parameter enables multi-start optimization
+  - `n_starts`, `sampler`, `center_on_p0` parameters for configuration
+  - Compatible with existing `fit()` function via `preset` parameter
+
+#### Documentation
+- **API Documentation**: Complete Sphinx documentation for global_optimization module
+  - Autodoc directives for all classes and functions
+  - Usage examples with code blocks
+  - Integration guide with existing NLSQ infrastructure
+  - **Files Added**: `docs/api/nlsq.global_optimization.rst`
+
+- **README Updates**: Added Global Optimization section to README.md
+  - Core features summary
+  - Code examples for MultiStartOrchestrator and curve_fit integration
+  - Preset configuration table
+
+### Changed
+- **Documentation**: Updated test count to 1,834 tests (100% pass rate)
+- **docs/index.rst**: Added Global Optimization to Key Features list
+- **docs/api/modules.rst**: Added global_optimization module to API reference
+
+### Technical Details
+
+**New Module Structure:**
+```
+nlsq/global_optimization/
+├── __init__.py          # Public API exports
+├── config.py            # GlobalOptimizationConfig and PRESETS
+├── sampling.py          # LHS, Sobol, Halton samplers
+├── multi_start.py       # MultiStartOrchestrator
+└── tournament.py        # TournamentSelector
+```
+
+**Public API Exports:**
+- `GlobalOptimizationConfig`
+- `MultiStartOrchestrator`
+- `TournamentSelector`
+- `latin_hypercube_sample`
+- `sobol_sample`
+- `halton_sample`
+- `scale_samples_to_bounds`
+- `center_samples_around_p0`
+- `get_sampler`
+- `PRESETS`
+
+**Test Results:**
+- Tests: 1,834 passing (100% success rate) ✅
+- New global optimization tests added
+- All existing tests remain passing
+
+**Backward Compatibility:**
+- 100% API backward compatible
+- All new features are opt-in
+- No breaking changes
+
 ## [0.3.2] - 2025-12-18
 
 ### Changed

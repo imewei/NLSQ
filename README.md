@@ -57,6 +57,13 @@ NLSQ provides a drop-in replacement for SciPy's curve_fit function with advanced
 ## Algorithm Selection
 - **Automatic algorithm selection** based on problem characteristics
 - **Performance optimization** with problem-specific tuning
+
+## Global Optimization (v0.3.3+)
+- **Multi-start optimization** with Latin Hypercube Sampling (LHS)
+- **Quasi-random samplers**: Sobol and Halton sequences for deterministic sampling
+- **Preset configurations**: 'fast', 'robust', 'global', 'thorough', 'streaming'
+- **Tournament selection** for memory-efficient large dataset optimization
+- **Automatic bounds inference** when bounds are not provided
 - **Convergence analysis** and parameter adjustment
 - **Robustness testing** with multiple initialization strategies
 
@@ -523,6 +530,87 @@ popt, pcov = curve_fit(model_nonlinear, x, y, p0=[1.0, 0.5, 0.1], method=method)
 
 print(f"Selected algorithm: {method}")
 print(f"Fitted parameters: {popt}")
+```
+
+### Multi-Start Global Optimization (v0.3.3+)
+
+NLSQ provides multi-start optimization with Latin Hypercube Sampling (LHS) for finding global optima in problems with multiple local minima:
+
+```python
+from nlsq import fit, curve_fit
+from nlsq.global_optimization import MultiStartOrchestrator, GlobalOptimizationConfig
+import jax.numpy as jnp
+import numpy as np
+
+
+# Define model with multiple local minima
+def multimodal_model(x, a, b, c):
+    return a * jnp.exp(-b * x) + c
+
+
+# Generate data
+x = np.linspace(0, 5, 100)
+y = 3.0 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 100)
+
+# Option 1: Use fit() with preset (simplest)
+popt, pcov = fit(multimodal_model, x, y, preset='robust',
+                 bounds=([0, 0, 0], [10, 5, 10]))
+
+# Option 2: Use curve_fit() with multi-start parameters
+popt, pcov = curve_fit(multimodal_model, x, y, p0=[1, 1, 1],
+                       bounds=([0, 0, 0], [10, 5, 10]),
+                       multistart=True, n_starts=10, sampler='lhs')
+
+# Option 3: Use MultiStartOrchestrator for full control
+orchestrator = MultiStartOrchestrator.from_preset('global')
+result = orchestrator.fit(multimodal_model, x, y,
+                          bounds=([0, 0, 0], [10, 5, 10]))
+print(f"Best params: {result.popt}")
+print(f"Multi-start diagnostics: {result.multistart_diagnostics}")
+```
+
+**Preset Configurations:**
+
+| Preset | n_starts | Description |
+|--------|----------|-------------|
+| `'fast'` | 0 | Single-start (disabled) for maximum speed |
+| `'robust'` | 5 | Light multi-start for robustness |
+| `'global'` | 20 | Thorough global search |
+| `'thorough'` | 50 | Exhaustive search |
+| `'streaming'` | 10 | Tournament selection for large datasets |
+
+**Sampling Strategies:**
+- `'lhs'` (Latin Hypercube Sampling): Best coverage guarantees, recommended for most cases
+- `'sobol'`: Sobol quasi-random sequence, deterministic and reproducible
+- `'halton'`: Halton sequence using prime bases
+
+**Tournament Selection for Large Datasets:**
+
+For streaming/large datasets where evaluating all candidates is expensive:
+
+```python
+from nlsq.global_optimization import TournamentSelector, GlobalOptimizationConfig
+from nlsq.global_optimization import latin_hypercube_sample
+
+# Generate candidates using LHS
+candidates = latin_hypercube_sample(20, 3)  # 20 candidates, 3 parameters
+
+# Configure tournament
+config = GlobalOptimizationConfig(
+    n_starts=20,
+    elimination_rounds=3,
+    elimination_fraction=0.5,  # Eliminate half each round
+    batches_per_round=50,
+)
+
+selector = TournamentSelector(candidates, config)
+
+# Run tournament on streaming data
+def data_generator():
+    for _ in range(200):
+        yield x_batch, y_batch
+
+best_candidates = selector.run_tournament(data_generator(), model, top_m=1)
 ```
 
 ### Diagnostics & Monitoring

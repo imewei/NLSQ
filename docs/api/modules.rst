@@ -57,6 +57,17 @@ streaming Gauss-Newton, and exact covariance computation:
    nlsq.hybrid_streaming_config
    nlsq.parameter_normalizer
 
+Global Optimization (v0.3.3+)
+-----------------------------
+
+Multi-start optimization with Latin Hypercube Sampling (LHS) for finding global
+optima in problems with multiple local minima:
+
+.. toctree::
+   :maxdepth: 2
+
+   nlsq.global_optimization
+
 Enhanced Features (v0.1.1)
 --------------------------
 
@@ -165,6 +176,9 @@ Complete Module Listing
 - :doc:`nlsq.adaptive_hybrid_streaming` - Four-phase hybrid optimizer
 - :doc:`nlsq.hybrid_streaming_config` - Configuration with presets
 - :doc:`nlsq.parameter_normalizer` - Parameter normalization for gradient balance
+
+**Global Optimization Modules** (NEW in v0.3.3+):
+- :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management
