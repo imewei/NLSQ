@@ -816,7 +816,9 @@ class LargeDatasetFitter:
         # Multi-start configuration (Task Group 3)
         self.multistart = multistart
         # Ensure enough starts for robust exploration on large datasets
-        self.n_starts = max(n_starts, 8) if multistart else n_starts
+        # Only enforce minimum when multistart is enabled AND n_starts > 0
+        # (n_starts=0 explicitly disables multistart exploration)
+        self.n_starts = max(n_starts, 8) if (multistart and n_starts > 0) else n_starts
         self.sampler = sampler
         self.multistart_subsample_size = multistart_subsample_size
 
