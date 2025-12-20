@@ -288,15 +288,40 @@ class OptimizationDiagnostics:
         self.peak_memory = 0
         self.initial_memory = self._get_memory_usage()
 
-    def start_optimization(self, x0: np.ndarray, problem_name: str = "optimization"):
+        # Problem metadata (initialized by start_optimization)
+        self.n_params = None
+        self.n_data = None
+        self.method = None
+        self.loss = None
+        self.initial_params = None
+        self.problem_name = None
+
+    def start_optimization(
+        self,
+        x0: np.ndarray | None = None,
+        problem_name: str = "optimization",
+        *,
+        n_params: int | None = None,
+        n_data: int | None = None,
+        method: str | None = None,
+        loss: str | None = None,
+    ):
         """Initialize diagnostics for new optimization.
 
         Parameters
         ----------
-        x0 : np.ndarray
-            Initial parameters
+        x0 : np.ndarray, optional
+            Initial parameters (legacy API)
         problem_name : str
             Name for this optimization problem
+        n_params : int, optional
+            Number of parameters (new API from LeastSquares)
+        n_data : int, optional
+            Number of data points (new API from LeastSquares)
+        method : str, optional
+            Optimization method (new API from LeastSquares)
+        loss : str, optional
+            Loss function name (new API from LeastSquares)
         """
         self.problem_name = problem_name
         self.start_time = time.time()
@@ -305,7 +330,22 @@ class OptimizationDiagnostics:
         self.numerical_issues = []
         self.function_eval_count = 0
         self.jacobian_eval_count = 0
-        self.initial_params = x0.copy()
+
+        # Store problem metadata (new API)
+        self.n_params = n_params
+        self.n_data = n_data
+        self.method = method
+        self.loss = loss
+
+        # Handle both legacy (x0) and new (n_params) API
+        if x0 is not None:
+            self.initial_params = x0.copy()
+        elif n_params is not None:
+            # Create placeholder for initial params when only n_params provided
+            self.initial_params = np.zeros(n_params)
+        else:
+            self.initial_params = None
+
         self.initial_memory = self._get_memory_usage()
 
     def record_iteration(
