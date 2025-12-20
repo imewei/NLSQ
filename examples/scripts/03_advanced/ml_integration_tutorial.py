@@ -52,6 +52,8 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # MUST come before importing matplotlib
 # Install dependencies (uncomment if needed)
 # !pip install nlsq flax optax equinox
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -63,6 +65,11 @@ from jax import jit
 
 # NLSQ imports
 from nlsq import CurveFit, __version__
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+if QUICK:
+    print("Quick mode: skipping ML integration demo (unset NLSQ_EXAMPLES_QUICK for full run).")
+    sys.exit(0)
 
 # ML ecosystem imports
 try:

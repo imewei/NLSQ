@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-12-20
+
+### Removed
+
+#### Randomized SVD (BREAKING CHANGE)
+- **Completely removed `randomized_svd` function** from `nlsq/svd_fallback.py`
+  - Randomized SVD caused optimization divergence in iterative least-squares solvers
+  - Approximation error accumulated across trust-region iterations
+  - Caused 3-25x worse fitting errors in XPCS applications
+
+- **Removed `RANDOMIZED_SVD_THRESHOLD` constant**
+  - No longer needed since randomized SVD is not available
+
+- **Removed `from jax import random` import**
+  - No random number generation needed for deterministic SVD
+
+### Changed
+
+- **`compute_svd_adaptive` now always uses full deterministic SVD**
+  - The `use_randomized` parameter is ignored (with deprecation warning if True)
+  - The `n_components` parameter is ignored
+  - Function is deprecated; use `compute_svd_with_fallback` directly
+
+- **`trf.py` uses `compute_svd_with_fallback` directly**
+  - Simplified import (removed `compute_svd_adaptive`)
+  - Updated comments to reflect deterministic SVD usage
+
+### Added
+
+- **Comprehensive regression tests** in `tests/test_svd_regression.py`
+  - `TestNoRandomizedSVD`: Verifies randomized SVD code paths are removed
+  - `TestSVDDeterminism`: Verifies SVD is fully deterministic
+  - `TestOptimizationConvergence`: Verifies large dataset convergence
+
+### Technical Details
+
+**Root Cause Analysis:**
+Randomized SVD (Halko et al. 2011) uses random projections which introduce
+O(1/sqrt(oversamples)) error. For iterative optimization, this error accumulates
+across trust-region iterations, causing the algorithm to take poor steps and
+terminate early at worse local minima.
+
+**Evidence from homodyne XPCS fitting (50K points, 13 params):**
+| SVD Method     | D0 Error | Alpha Error | Iterations |
+|----------------|----------|-------------|------------|
+| Full SVD       | 9.74%    | 0.59%       | 15         |
+| Randomized SVD | 30.18%   | 14.66%      | 6          |
+
+**Migration:**
+- Code using `randomized_svd` directly will fail (function removed)
+- Code using `compute_svd_adaptive(use_randomized=True)` will get a deprecation warning
+- No action needed if using `compute_svd_with_fallback` or default settings
+
 ## [0.3.4] - 2025-12-19
 
 ### Added

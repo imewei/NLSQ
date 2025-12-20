@@ -16,10 +16,21 @@ Run this example:
     python examples/scripts/07_global_optimization/02_sampling_strategies.py
 """
 
+import os
+import sys
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
+
+if os.environ.get("NLSQ_EXAMPLES_QUICK"):
+    print("Quick mode: skipping sampling strategies visualization.")
+    sys.exit(0)
 
 from nlsq import curve_fit
 from nlsq.global_optimization import (
@@ -166,9 +177,10 @@ def main():
         ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("figures/02_sampling_comparison_2d.png", dpi=300, bbox_inches="tight")
+    out_path = FIG_DIR / "02_sampling_comparison_2d.png"
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/02_sampling_comparison_2d.png")
+    print(f"  Saved: {out_path}")
 
     # =========================================================================
     # 3. LHS stratification visualization
@@ -213,9 +225,9 @@ def main():
     ax2.set_title("LHS: Exactly one sample per stratum per dimension")
 
     plt.tight_layout()
-    plt.savefig("figures/02_lhs_stratification.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "02_lhs_stratification.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/02_lhs_stratification.png")
+    print(f"  Saved: {FIG_DIR / '02_lhs_stratification.png'}")
 
     # =========================================================================
     # 4. Quasi-random progressive fill
@@ -255,9 +267,9 @@ def main():
         axes[1, i].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("figures/02_quasi_random_progressive.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "02_quasi_random_progressive.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/02_quasi_random_progressive.png")
+    print(f"  Saved: {FIG_DIR / '02_quasi_random_progressive.png'}")
 
     # =========================================================================
     # 5. Discrepancy comparison
@@ -305,9 +317,9 @@ def main():
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("figures/02_discrepancy_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "02_discrepancy_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/02_discrepancy_comparison.png")
+    print(f"  Saved: {FIG_DIR / '02_discrepancy_comparison.png'}")
 
     # =========================================================================
     # 6. Success rate comparison
@@ -393,9 +405,9 @@ def main():
     ax.set_ylim(0, 105)
 
     plt.tight_layout()
-    plt.savefig("figures/02_success_rate_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "02_success_rate_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/02_success_rate_comparison.png")
+    print(f"  Saved: {FIG_DIR / '02_success_rate_comparison.png'}")
 
     # =========================================================================
     # 7. Demonstrate samplers with curve_fit()

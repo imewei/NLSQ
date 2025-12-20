@@ -105,9 +105,8 @@ from jax.tree_util import tree_flatten
 # Setup logging
 from nlsq.logging import get_logger
 
-# Import safe SVD with fallback
+# Import safe SVD with fallback (full deterministic SVD only)
 from nlsq.svd_fallback import (
-    compute_svd_adaptive,
     compute_svd_with_fallback,
     initialize_gpu_safely,
 )
@@ -339,8 +338,8 @@ class TrustRegionJITFunctions:
                  the dot product of U.T and f.
             """
             J_h = J * d
-            # Use adaptive SVD (randomized for large matrices, 3-10x faster)
-            U, s, V = compute_svd_adaptive(J_h, full_matrices=False)
+            # Use full deterministic SVD for numerical precision
+            U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
             uf = U.T.dot(f)
             return J_h, U, s, V, uf
 
@@ -385,8 +384,8 @@ class TrustRegionJITFunctions:
             J_h = J * d
             J_augmented = jnp.concatenate([J_h, J_diag])
             f_augmented = jnp.concatenate([f, f_zeros])
-            # Use adaptive SVD (randomized for large matrices, 3-10x faster)
-            U, s, V = compute_svd_adaptive(J_augmented, full_matrices=False)
+            # Use full deterministic SVD for numerical precision
+            U, s, V = compute_svd_with_fallback(J_augmented, full_matrices=False)
             uf = U.T.dot(f_augmented)
             return J_h, U, s, V, uf
 

@@ -17,6 +17,7 @@ Run this example:
 
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 from nlsq.large_dataset import GPUMemoryEstimator, MemoryEstimator, get_memory_tier
 from nlsq.workflow import (
@@ -28,6 +29,9 @@ from nlsq.workflow import (
     auto_select_workflow,
     calculate_adaptive_tolerances,
 )
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def main():
@@ -502,9 +506,9 @@ def main():
     ax.text(5.2, 4.7, "MEMORY_EFFICIENT: Force streaming/chunking", fontsize=9)
 
     plt.tight_layout()
-    plt.savefig("figures/06_selection_algorithm.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "06_selection_algorithm.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/06_selection_algorithm.png")
+    print(f"  Saved: {FIG_DIR / '06_selection_algorithm.png'}")
 
     # =========================================================================
     # Summary

@@ -17,6 +17,7 @@ Run this example:
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 from nlsq import OptimizationGoal, WorkflowConfig, WorkflowTier, fit
 from nlsq.large_dataset import MemoryEstimator, get_memory_tier
@@ -25,6 +26,9 @@ from nlsq.workflow import (
     MemoryTier,
     auto_select_workflow,
 )
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def exponential_decay(x, a, b, c):
@@ -283,9 +287,9 @@ def main():
     )
 
     plt.tight_layout()
-    plt.savefig("figures/02_tier_decision_tree.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "02_tier_decision_tree.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/02_tier_decision_tree.png")
+    print(f"  Saved: {FIG_DIR / '02_tier_decision_tree.png'}")
 
     # =========================================================================
     # 6. Manual Tier Override
@@ -384,9 +388,9 @@ def main():
     ax.set_ylim(1e-3, 1e3)
 
     plt.tight_layout()
-    plt.savefig("figures/02_memory_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "02_memory_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/02_memory_comparison.png")
+    print(f"  Saved: {FIG_DIR / '02_memory_comparison.png'}")
 
     # =========================================================================
     # Summary

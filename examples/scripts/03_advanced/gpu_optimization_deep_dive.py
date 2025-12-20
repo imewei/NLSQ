@@ -50,6 +50,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from jax import jit, vmap
 
 from nlsq import CurveFit
@@ -57,6 +58,13 @@ from nlsq import CurveFit
 # Detect available devices
 devices = jax.devices()
 has_gpu = any("gpu" in str(d).lower() for d in devices)
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
 
 print("Hardware Configuration:")
 print(f"  JAX version: {jax.__version__}")
@@ -88,7 +96,7 @@ def exponential_model(x, a, b):
 
 
 # Test data
-x_test = jnp.linspace(0, 5, 1000)
+x_test = jnp.linspace(0, 5, cap_samples(1000))
 y_test = exponential_model(x_test, 3.0, 0.5) + np.random.normal(0, 0.1, len(x_test))
 
 cf = CurveFit()
@@ -135,8 +143,8 @@ print("\n1. Changing array shapes triggers recompilation:")
 x_100 = jnp.linspace(0, 5, 100)
 y_100 = exponential_model(x_100, 3.0, 0.5) + np.random.normal(0, 0.1, 100)
 
-x_200 = jnp.linspace(0, 5, 200)
-y_200 = exponential_model(x_200, 3.0, 0.5) + np.random.normal(0, 0.1, 200)
+x_200 = jnp.linspace(0, 5, cap_samples(200))
+y_200 = exponential_model(x_200, 3.0, 0.5) + np.random.normal(0, 0.1, cap_samples(200))
 
 cf_new = CurveFit()
 
@@ -179,7 +187,7 @@ print("  → Expected - different models need different compilations")
 # CPU vs GPU performance comparison
 
 # Large dataset (GPU shines here)
-n_points = 10000
+n_points = cap_samples(10000)
 x_large = jnp.linspace(0, 10, n_points)
 y_large = (
     3.0 * jnp.exp(-0.5 * x_large)
@@ -246,7 +254,7 @@ print("Batch Processing Benchmark:")
 print("=" * 60)
 
 # Generate batch of datasets
-n_datasets = 1000
+n_datasets = max(10, cap_samples(1000))
 n_points_per_dataset = 50
 
 x_batch_data = jnp.linspace(0, 5, n_points_per_dataset)
@@ -373,7 +381,7 @@ def get_array_memory_mb(arr):
     return arr.nbytes / (1024**2)
 
 
-large_array = jnp.ones((10000, 1000), dtype=jnp.float32)
+large_array = jnp.ones((cap_samples(10000), cap_samples(1000)), dtype=jnp.float32)
 print(
     f"   Example: {large_array.shape} array uses {get_array_memory_mb(large_array):.1f} MB"
 )
@@ -448,7 +456,7 @@ print("(This may take 30-60 seconds)")
 print()
 
 # Test different problem sizes
-sizes = [100, 500, 1000, 5000, 10000]
+sizes = [cap_samples(s) for s in [100, 500, 1000, 5000, 10000]]
 bench_results = benchmark_nlsq(sizes, n_runs=5)
 
 # Display results

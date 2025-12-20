@@ -15,6 +15,7 @@ Run this example:
 """
 
 import time
+from pathlib import Path
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -22,6 +23,9 @@ import numpy as np
 
 from nlsq import OptimizationGoal, WorkflowConfig, WorkflowTier, fit
 from nlsq.workflow import DatasetSizeTier, calculate_adaptive_tolerances
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def exponential_decay(x, a, b, c):
@@ -323,9 +327,9 @@ def main():
     ax4.legend()
 
     plt.tight_layout()
-    plt.savefig("figures/03_goal_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "03_goal_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/03_goal_comparison.png")
+    print(f"  Saved: {FIG_DIR / '03_goal_comparison.png'}")
 
     # =========================================================================
     # Summary

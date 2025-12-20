@@ -15,6 +15,10 @@ Run this example:
     python examples/scripts/07_global_optimization/04_tournament_selection.py
 """
 
+import os
+import sys
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -28,6 +32,20 @@ from nlsq.global_optimization import (
     scale_samples_to_bounds,
 )
 
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
+
+
+if QUICK:
+    print("Quick mode: running abbreviated tournament selection demo.")
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def multimodal_model(x, a, b, c):
     """Sinusoidal model with multiple local minima.
@@ -37,7 +55,9 @@ def multimodal_model(x, a, b, c):
     return a * jnp.sin(b * x) + c
 
 
-def create_data_batch_generator(n_batches=100, batch_size=500, noise_level=0.3):
+def create_data_batch_generator(
+    n_batches=cap_samples(100), batch_size=cap_samples(500), noise_level=0.3
+):
     """Generator that yields streaming data batches.
 
     Simulates a streaming scenario where data arrives in batches
@@ -246,9 +266,9 @@ def main():
         ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("figures/04_tournament_progression.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "04_tournament_progression.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/04_tournament_progression.png")
+    print(f"  Saved: {FIG_DIR / '04_tournament_progression.png'}")
 
     # =========================================================================
     # 6. Save candidate losses visualization
@@ -285,9 +305,9 @@ def main():
     ax.grid(True, alpha=0.3, axis="y")
 
     plt.tight_layout()
-    plt.savefig("figures/04_candidate_losses.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "04_candidate_losses.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/04_candidate_losses.png")
+    print(f"  Saved: {FIG_DIR / '04_candidate_losses.png'}")
 
     # =========================================================================
     # 7. Compare elimination strategies
@@ -388,9 +408,9 @@ def main():
     ax3.set_title("Best Candidate Accuracy")
 
     plt.tight_layout()
-    plt.savefig("figures/04_elimination_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "04_elimination_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/04_elimination_comparison.png")
+    print(f"  Saved: {FIG_DIR / '04_elimination_comparison.png'}")
 
     # =========================================================================
     # 8. Demonstrate checkpointing

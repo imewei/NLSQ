@@ -18,6 +18,7 @@ Run this example:
 import os
 import pickle
 import shutil
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +34,10 @@ from nlsq.workflow import (
     create_distributed_config,
     WORKFLOW_PRESETS,
 )
+
+if os.environ.get("NLSQ_EXAMPLES_QUICK"):
+    print("Quick mode: skipping HPC and checkpointing demo.")
+    sys.exit(0)
 
 
 def save_checkpoint(checkpoint_dir, iteration, params, loss, metadata=None):

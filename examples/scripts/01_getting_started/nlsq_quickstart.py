@@ -23,6 +23,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # ======================================================================
 # Import NLSQ before importing JAX since we need NLSQ to set all the JAX computation to use 64 rather than 32 bit arrays.
 # ======================================================================
+import os
 # Check Python version
 from pathlib import Path
 
@@ -63,6 +64,13 @@ def linear(x, m, b):
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
 
 # make the synthetic data
 length = 1000
@@ -129,7 +137,7 @@ print("New global memory limit:", get_memory_config().memory_limit_gb, "GB")
 print("=== Automatic Memory Management Example ===")
 
 # Simulate a larger dataset scenario
-large_n_points = 50000
+large_n_points = cap_samples(50000)
 large_n_params = 5
 
 # Get memory requirements
@@ -172,13 +180,13 @@ def get_random_parameters(mmin=1, mmax=10, bmin=0, bmax=10):
     return m, b
 
 
-length = 3 * 10**5
+length = cap_samples(3 * 10**5)
 x = np.linspace(0, 10, length)
 
 jcf = CurveFit()
 nlsq_fit_times = []
 scipy_fit_times = []
-nsamples = 21
+nsamples = 3 if QUICK else 21
 for i in range(nsamples):
     params = get_random_parameters()
     y = linear(x, *params) + np.random.normal(0, 0.2, size=length)
@@ -218,8 +226,8 @@ def get_random_data(length):
     return xdata, ydata
 
 
-lmin = 10**3
-lmax = 10**6
+lmin = min(10**3, MAX_SAMPLES)
+lmax = cap_samples(10**6)
 nlengths = 20
 lengths = np.linspace(lmin, lmax, nlengths, dtype=int)
 
@@ -248,7 +256,7 @@ plt.ylabel("Fit Time (seconds)")
 # ======================================================================
 
 
-fixed_length = np.amax(lengths)
+fixed_length = cap_samples(int(np.amax(lengths)))
 jcf = CurveFit(flength=fixed_length)
 
 nlsq_fit_times = []
@@ -275,11 +283,11 @@ plt.ylabel("Fit Time (seconds)")
 # ======================================================================
 
 
-lmin = 10**3
-lmax = 10**6
+lmin = min(10**3, MAX_SAMPLES)
+lmax = cap_samples(10**6)
 nlengths = 20
-lengths1 = np.linspace(10**3, 5 * 10**4, nlengths, dtype=int)
-lengths2 = np.linspace(10**5, 10**6, nlengths, dtype=int)
+lengths1 = np.linspace(min(10**3, MAX_SAMPLES), min(5 * 10**4, MAX_SAMPLES), nlengths, dtype=int)
+lengths2 = np.linspace(min(10**5, MAX_SAMPLES), cap_samples(10**6), nlengths, dtype=int)
 
 fixed_length1 = np.amax(lengths1)
 fixed_length2 = np.amax(lengths2)
@@ -323,11 +331,11 @@ def quad_exp(x, a, b, c, d):
     return a * x**2 + b * x + c + jnp.exp(d)
 
 
-length = 3 * 10**5
+length = cap_samples(3 * 10**5)
 x = np.linspace(0, 10, length)
 
 jcf = CurveFit()
-nsamples = 21
+nsamples = 3 if QUICK else 21
 
 all_linear_params = np.random.random(size=(nsamples, 2))
 all_quad_params = np.random.random(size=(nsamples, 4))
@@ -439,13 +447,13 @@ def quad_exp_numpy(x, a, b, c, d):
     return a * x**2 + b * x + c + np.exp(d_clipped)
 
 
-length = 3 * 10**5
+length = cap_samples(3 * 10**5)
 x = np.linspace(0, 10, length)
 
 jcf = CurveFit()
 nlsq_fit_times = []
 scipy_fit_times = []
-nsamples = 21
+nsamples = 3 if QUICK else 21
 
 all_params = np.random.random(size=(nsamples, 4))
 

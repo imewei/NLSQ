@@ -17,8 +17,12 @@ Run this example:
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 from nlsq import OptimizationGoal, WorkflowConfig, curve_fit, curve_fit_large, fit
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def exponential_decay(x, a, b, c):
@@ -213,9 +217,9 @@ def main():
     ax2.set_title("Residuals")
 
     plt.tight_layout()
-    plt.savefig("figures/01_fit_result.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "01_fit_result.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/01_fit_result.png")
+    print(f"  Saved: {FIG_DIR / '01_fit_result.png'}")
 
     # =========================================================================
     # Summary

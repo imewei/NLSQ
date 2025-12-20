@@ -12,6 +12,9 @@ The hybrid streaming optimizer provides:
 - Automatic memory management for large datasets
 """
 
+import os
+import sys
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -24,6 +27,10 @@ def exponential_decay(x, a, b, c):
 
 
 def main():
+    if os.environ.get("NLSQ_EXAMPLES_QUICK"):
+        print("Quick mode: skipping hybrid streaming demo (full run requires more time).")
+        return
+
     print("=" * 70)
     print("Hybrid Streaming Optimizer API Demo")
     print("=" * 70)

@@ -19,6 +19,7 @@ Key Concepts:
 - Global optimization for multi-modal landscapes (critical for spectroscopy)
 """
 
+import os
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -26,6 +27,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+# Keep quick-mode runs light for CI/automation
+QUICK_MODE = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -193,7 +197,8 @@ print(f"  Peak 2 (K-beta):  {cen2_r:.3f} keV (true: {cen2_true})")
 print(f"  Peak 3 (Escape):  {cen3_r:.3f} keV (true: {cen3_true})")
 
 # Method 2: fit() with 'global' preset (CRITICAL for spectroscopy)
-print("\nMethod 2: fit() with 'global' preset (20 starts)")
+global_starts = 8 if QUICK_MODE else 20
+print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
 print("  (Global optimization is especially important for multi-peak fitting)")
 popt_global, pcov_global = fit(
     multi_peak_model,
@@ -204,6 +209,7 @@ popt_global, pcov_global = fit(
     bounds=bounds,
     absolute_sigma=True,
     preset="global",
+    n_starts=global_starts,
 )
 
 perr_global = np.sqrt(np.diag(pcov_global))
@@ -228,7 +234,8 @@ print(f"  Peak 2 (K-beta):  {cen2_g:.3f} keV")
 print(f"  Peak 3 (Escape):  {cen3_g:.3f} keV")
 
 # Method 3: GlobalOptimizationConfig with many starts (for difficult spectra)
-print("\nMethod 3: GlobalOptimizationConfig with 30 starts (thorough search)")
+custom_starts = 12 if QUICK_MODE else 30
+print(f"\nMethod 3: GlobalOptimizationConfig with {custom_starts} starts (thorough search)")
 popt_custom, pcov_custom = fit(
     multi_peak_model,
     energy,
@@ -238,7 +245,7 @@ popt_custom, pcov_custom = fit(
     bounds=bounds,
     absolute_sigma=True,
     multistart=True,
-    n_starts=30,
+    n_starts=custom_starts,
     sampler="lhs",
 )
 
@@ -505,12 +512,12 @@ print("\nWhy Global Optimization is Critical for Spectroscopy:")
 print("  - Multi-peak fitting has many local minima")
 print("  - Peak overlap creates parameter correlations")
 print("  - Poor initial guesses can lead to unphysical results")
-print("  - preset='global' (20 starts) recommended for complex spectra")
-print("  - For very complex spectra, use multistart=True with n_starts=30+")
+print(f"  - preset='global' ({global_starts} starts) recommended for complex spectra")
+print(f"  - For very complex spectra, use multistart=True with n_starts={custom_starts}+")
 print("\nAPI Methods Used:")
 print("  - fit() with preset='robust' (5 multi-starts)")
-print("  - fit() with preset='global' (20 multi-starts)")
-print("  - fit() with GlobalOptimizationConfig (30 custom starts)")
+print(f"  - fit() with preset='global' ({global_starts} multi-starts)")
+print(f"  - fit() with GlobalOptimizationConfig ({custom_starts} custom starts)")
 print("\nThis example demonstrates:")
 print("  - Multi-peak fitting with fit() API")
 print("  - Global optimization for multi-modal loss landscapes")

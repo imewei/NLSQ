@@ -41,8 +41,16 @@ import warnings
 import jax
 import jax.numpy as jnp
 import numpy as np
+import os
 
 from nlsq import CurveFit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
 
 # Show all warnings (helpful for debugging)
 warnings.filterwarnings("default")
@@ -331,8 +339,8 @@ import time
 # PROBLEM: Slow first call (JIT compilation)
 print("ℹ UNDERSTANDING: JIT compilation (first call slow, then fast)")
 
-x_perf = jnp.linspace(0, 10, 1000)
-y_perf = 2.0 * jnp.sin(x_perf) + np.random.normal(0, 0.1, 1000)
+x_perf = jnp.linspace(0, 10, cap_samples(1000))
+y_perf = 2.0 * jnp.sin(x_perf) + np.random.normal(0, 0.1, cap_samples(1000))
 
 
 def sine_model(x, a, b):

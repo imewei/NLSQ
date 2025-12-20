@@ -39,6 +39,8 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # ======================================================================
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
+import os
+import sys
 import warnings
 from pathlib import Path
 
@@ -48,6 +50,14 @@ import numpy as np
 from matplotlib import rcParams
 
 from nlsq import CurveFit, __version__
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+if QUICK:
+    print(
+        "Quick mode: skipping full research workflow demo "
+        "(unset NLSQ_EXAMPLES_QUICK for full run)."
+    )
+    sys.exit(0)
 
 # Publication-quality matplotlib settings
 rcParams["figure.figsize"] = (10, 6)

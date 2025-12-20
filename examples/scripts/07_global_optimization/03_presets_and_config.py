@@ -18,6 +18,10 @@ Run this example:
 
 import time
 
+import os
+import sys
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -28,6 +32,20 @@ from nlsq.global_optimization import (
     center_samples_around_p0,
     latin_hypercube_sample,
 )
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
+
+
+if QUICK:
+    print("Quick mode: running abbreviated global optimization preset demo.")
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def multimodal_model(x, a, b, c, d):
@@ -150,7 +168,7 @@ def main():
     print("-" * 70)
 
     # Generate synthetic data
-    n_samples = 200
+    n_samples = cap_samples(200)
     x_data = np.linspace(0, 4 * np.pi, n_samples)
 
     # True parameters
@@ -295,9 +313,9 @@ def main():
         )
 
     plt.tight_layout()
-    plt.savefig("figures/03_preset_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "03_preset_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/03_preset_comparison.png")
+    print(f"  Saved: {FIG_DIR / '03_preset_comparison.png'}")
 
     # =========================================================================
     # 7. Scale factor visualization
@@ -318,7 +336,7 @@ def main():
 
     for ax, sf in zip(axes, scale_factors):
         centered = center_samples_around_p0(
-            base_samples, p0_demo, lb, ub, scale_factor=sf
+            base_samples, p0_demo, scale_factor=sf, lb=lb, ub=ub
         )
 
         ax.scatter(centered[:, 0], centered[:, 1], alpha=0.6, s=30)
@@ -338,9 +356,9 @@ def main():
         "Effect of scale_factor on Exploration Range (center_on_p0=True)", y=1.02
     )
     plt.tight_layout()
-    plt.savefig("figures/03_scale_factor_effect.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "03_scale_factor_effect.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/03_scale_factor_effect.png")
+    print(f"  Saved: {FIG_DIR / '03_scale_factor_effect.png'}")
 
     # =========================================================================
     # 8. Tournament elimination visualization
@@ -371,9 +389,9 @@ def main():
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("figures/03_tournament_elimination.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "03_tournament_elimination.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/03_tournament_elimination.png")
+    print(f"  Saved: {FIG_DIR / '03_tournament_elimination.png'}")
 
     # =========================================================================
     # Summary

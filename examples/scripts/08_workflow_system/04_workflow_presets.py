@@ -15,6 +15,7 @@ Run this example:
 """
 
 import time
+from pathlib import Path
 from pprint import pprint
 
 import jax.numpy as jnp
@@ -22,6 +23,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import WORKFLOW_PRESETS, WorkflowConfig, fit
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def exponential_model(x, a, b, c):
@@ -297,9 +301,9 @@ def main():
         )
 
     plt.tight_layout()
-    plt.savefig("figures/04_preset_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "04_preset_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/04_preset_comparison.png")
+    print(f"  Saved: {FIG_DIR / '04_preset_comparison.png'}")
 
     # =========================================================================
     # Summary

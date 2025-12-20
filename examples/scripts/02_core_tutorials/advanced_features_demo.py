@@ -40,6 +40,14 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
 
 # Import NLSQ core functionality
 from nlsq import CurveFit, __version__
@@ -535,7 +543,7 @@ def demonstrate_memory_management():
 
         # Basic performance test
         print("\n--- Basic Performance Test ---")
-        sizes = [1000, 10000, 50000]
+        sizes = [cap_samples(1000), cap_samples(10000), cap_samples(50000)]
 
         for size in sizes:
             x_perf = np.linspace(0, 5, size)
@@ -570,7 +578,12 @@ def demonstrate_memory_management():
 
     # Test memory estimation
     print("\n--- Memory Estimation ---")
-    test_sizes = [10000, 100000, 1000000, 10000000]
+    test_sizes = [
+        cap_samples(10000),
+        cap_samples(100000),
+        cap_samples(1000000),
+        cap_samples(10000000),
+    ]
     n_params = 5
 
     for size in test_sizes:
@@ -588,7 +601,7 @@ def demonstrate_memory_management():
 
     # Generate moderately large dataset
     np.random.seed(456)
-    large_size = 50000
+    large_size = cap_samples(50000)
     x_large = np.linspace(0, 5, large_size)
     y_large = np.array(
         well_conditioned_model(x_large, 5.0, 1.2, 0.5)
@@ -804,18 +817,18 @@ def performance_benchmark():
 
     # Benchmark configurations
     benchmark_cases = [
-        ("Small (1K)", 1000, well_conditioned_model, [5.0, 1.2, 0.5]),
-        ("Medium (10K)", 10000, well_conditioned_model, [5.0, 1.2, 0.5]),
-        ("Large (100K)", 100000, well_conditioned_model, [5.0, 1.2, 0.5]),
+        ("Small (1K)", cap_samples(1000), well_conditioned_model, [5.0, 1.2, 0.5]),
+        ("Medium (10K)", cap_samples(10000), well_conditioned_model, [5.0, 1.2, 0.5]),
+        ("Large (100K)", cap_samples(100000), well_conditioned_model, [5.0, 1.2, 0.5]),
         (
             "Multi-param (1K)",
-            1000,
+            cap_samples(1000),
             multi_peak_gaussian,
             [3.0, 2.0, 0.8, 2.5, 7.0, 1.2, 0.2],
         ),
         (
             "Multi-param (10K)",
-            10000,
+            cap_samples(10000),
             multi_peak_gaussian,
             [3.0, 2.0, 0.8, 2.5, 7.0, 1.2, 0.2],
         ),
@@ -840,7 +853,7 @@ def performance_benchmark():
         p0 = [p * np.random.uniform(0.9, 1.1) for p in true_params]
 
         # Benchmark multiple runs for statistical significance
-        n_runs = 3 if n_points <= 10000 else 1  # Fewer runs for large datasets
+        n_runs = 1 if QUICK else (3 if n_points <= 10000 else 1)
         times = []
         successes = 0
 

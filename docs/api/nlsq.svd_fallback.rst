@@ -10,21 +10,20 @@ nlsq.svd\_fallback module
 Overview
 --------
 
-The ``svd_fallback`` module provides SVD computation with GPU/CPU fallback and
-randomized SVD for large matrices.
+The ``svd_fallback`` module provides full deterministic SVD computation with
+GPU/CPU/NumPy fallback chain for robust numerical precision.
 
-**New in version 0.3.1**: Added ``randomized_svd`` and ``compute_svd_adaptive`` for
-3-10x faster SVD on large matrices.
+**Changed in version 0.3.5**: Randomized SVD has been completely removed.
+All SVD operations now use full deterministic SVD for numerical precision
+and reproducibility in optimization.
 
 Key Features
 ------------
 
+- **Full deterministic SVD** for numerical precision
 - **GPU/CPU fallback** for robust SVD computation
-- **Randomized SVD** for large matrices (3-10x faster)
-- **Adaptive algorithm selection** based on matrix size
-- **Automatic fallback** to stable algorithms
-- **Precision switching** (float64 → float32 → relaxed tolerances)
-- **Regularization strategies** for ill-conditioned matrices
+- **NumPy fallback** as last resort if JAX fails
+- **Reproducible results** across runs and platforms
 
 Functions
 ---------
@@ -33,60 +32,53 @@ Functions
    :toctree: generated/
 
    compute_svd_with_fallback
-   randomized_svd
    compute_svd_adaptive
 
-Randomized SVD (New in v0.3.1)
-------------------------------
+compute_svd_with_fallback (Primary API)
+---------------------------------------
 
-For large matrices, randomized SVD provides significant speedups:
+The recommended function for SVD in NLSQ:
 
 .. code-block:: python
 
-   from nlsq.svd_fallback import randomized_svd
+   from nlsq.svd_fallback import compute_svd_with_fallback
    import jax.numpy as jnp
 
-   # Large matrix (1M x 10)
-   A = jnp.ones((1_000_000, 10))
+   # Matrix of any size
+   A = jnp.ones((100_000, 50))
 
-   # Randomized SVD (3-10x faster than full SVD)
-   U, s, V = randomized_svd(
-       A,
-       n_components=10,  # Number of components to compute
-       n_oversamples=10,  # Additional samples for accuracy
-       n_iter=2,  # Power iterations for accuracy
-       random_state=42,  # Reproducibility
-   )
+   # Full deterministic SVD with automatic fallback
+   U, s, V = compute_svd_with_fallback(A, full_matrices=False)
 
-   print(f"U shape: {U.shape}")  # (1000000, 10)
-   print(f"s shape: {s.shape}")  # (10,)
-   print(f"V shape: {V.shape}")  # (10, 10)
+   print(f"U shape: {U.shape}")  # (100000, 50)
+   print(f"s shape: {s.shape}")  # (50,)
+   print(f"V shape: {V.shape}")  # (50, 50)
 
-**Algorithm**: Uses Halko, Martinsson, and Tropp (2011) with O(mnk) complexity
-vs O(mn*min(m,n)) for full SVD.
+**Fallback Sequence**:
 
-Adaptive SVD Selection
-----------------------
+1. **JAX GPU SVD** (jax.scipy.linalg.svd on GPU)
+2. **JAX CPU SVD** (automatic fallback if GPU fails with cuSolver error)
+3. **NumPy SVD** (last resort if JAX CPU also fails)
 
-Let NLSQ automatically choose the best SVD algorithm:
+compute_svd_adaptive (Deprecated)
+---------------------------------
+
+.. deprecated:: 0.3.5
+   This function now always uses full deterministic SVD.
+   The ``use_randomized`` and ``n_components`` parameters are ignored.
+   Use ``compute_svd_with_fallback`` directly instead.
 
 .. code-block:: python
 
    from nlsq.svd_fallback import compute_svd_adaptive
    import jax.numpy as jnp
 
-   # Matrix of any size
+   # compute_svd_adaptive now always uses full SVD
    A = jnp.ones((100_000, 50))
+   U, s, V = compute_svd_adaptive(A)  # Same as compute_svd_with_fallback
 
-   # Automatically uses randomized SVD for large matrices
-   U, s, V = compute_svd_adaptive(A)
-
-   # Force specific algorithm
-   U, s, V = compute_svd_adaptive(A, use_randomized=True)  # Force randomized
-   U, s, V = compute_svd_adaptive(A, use_randomized=False)  # Force full SVD
-
-**Threshold**: Matrices with >500K elements use randomized SVD by default.
-Configure via ``RANDOMIZED_SVD_THRESHOLD`` constant.
+   # This will issue a DeprecationWarning:
+   U, s, V = compute_svd_adaptive(A, use_randomized=True)
 
 GPU/CPU Fallback
 ----------------
@@ -101,31 +93,32 @@ Handle GPU failures gracefully:
    # Matrix that might cause numerical issues
    A = jnp.array([[1e10, 1.0], [1.0, 1e-10]])
 
-   # SVD with automatic GPU→CPU fallback
-   U, s, Vt = compute_svd_with_fallback(A, full_matrices=False)
+   # SVD with automatic GPU→CPU→NumPy fallback
+   U, s, V = compute_svd_with_fallback(A, full_matrices=False)
 
    print(f"Singular values: {s}")
 
-**Fallback Sequence**:
+Why Full SVD Only?
+------------------
 
-1. **GPU SVD** (jax.scipy.linalg.svd on GPU)
-2. **CPU SVD** (automatic fallback if GPU fails)
+Randomized SVD (available in v0.3.1-v0.3.4) was removed because it caused
+optimization divergence in iterative least-squares solvers:
 
-Performance Comparison
-----------------------
+- **Approximation error accumulates** across trust-region iterations
+- **Early termination** at worse local minima
+- **3-25x worse fitting errors** in sensitive applications
 
-+------------------+------------+------------+----------+
-| Matrix Size      | Full SVD   | Random SVD | Speedup  |
-+==================+============+============+==========+
-| 100K × 10        | 50ms       | 15ms       | 3.3x     |
-+------------------+------------+------------+----------+
-| 1M × 10          | 500ms      | 80ms       | 6.2x     |
-+------------------+------------+------------+----------+
-| 10M × 10         | 5s         | 600ms      | 8.3x     |
-+------------------+------------+------------+----------+
+Evidence from XPCS fitting (50K points, 13 params):
 
-**Note**: Randomized SVD is approximate. For condition number monitoring,
-use ``n_iter=4`` for higher accuracy.
++-------------------+------------+--------------+------------+
+| SVD Method        | D0 Error   | Alpha Error  | Iterations |
++===================+============+==============+============+
+| Full SVD (v0.3.0) | 9.74%      | 0.59%        | 15         |
++-------------------+------------+--------------+------------+
+| Randomized SVD    | 30.18%     | 14.66%       | 6          |
++-------------------+------------+--------------+------------+
+
+See ``tests/test_svd_regression.py`` for detailed regression tests.
 
 See Also
 --------

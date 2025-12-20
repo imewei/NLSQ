@@ -46,6 +46,9 @@ from pathlib import Path
 # ======================================================================
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
+import os
+import sys
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -68,6 +71,11 @@ print(f"  JAX version: {jax.__version__}")
 print(f"  JAX devices: {jax.devices()}")
 if OPTAX_AVAILABLE:
     print(f"  Optax version: {optax.__version__}")
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+if QUICK:
+    print("Quick mode: skipping advanced algorithm deep dive.")
+    sys.exit(0)
 
 
 # ======================================================================

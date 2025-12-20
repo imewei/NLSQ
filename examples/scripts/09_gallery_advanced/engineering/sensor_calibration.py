@@ -18,6 +18,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -25,6 +27,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+if os.environ.get("NLSQ_EXAMPLES_QUICK"):
+    print("Quick mode: skipping advanced sensor calibration demo.")
+    sys.exit(0)
 
 # Set random seed
 np.random.seed(42)

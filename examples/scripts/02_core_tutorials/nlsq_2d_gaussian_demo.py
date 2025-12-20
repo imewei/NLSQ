@@ -38,6 +38,13 @@ os.environ["JAX_PREALLOCATE_GPU_MEMORY"] = "false"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["JAX_GPU_MEMORY_FRACTION"] = "0.8"
 
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
+
 # Optional: Force CPU if GPU issues persist
 # os.environ['JAX_PLATFORMS'] = 'cpu'
 
@@ -108,7 +115,7 @@ for size in sizes:
     print()
 
 # We'll set the current dataset size that will be used later
-current_size = 200  # This will match the 'length' variable defined later
+current_size = cap_samples(200)  # This will match the 'length' variable defined later
 current_points = current_size * current_size
 current_stats = estimate_memory_requirements(current_points, n_params)
 
@@ -189,7 +196,7 @@ def get_gaussian_parameters(length):
 
 
 # Start with a moderate size for testing
-length = 200  # Reduced from 500 to avoid memory issues
+length = cap_samples(200)  # Reduced from 500 to avoid memory issues
 XY_tuple = get_coordinates(length, length)
 
 params = get_gaussian_parameters(length)

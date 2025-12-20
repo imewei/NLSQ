@@ -17,8 +17,12 @@ Run this example:
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 from nlsq import curve_fit, curve_fit_large, GlobalOptimizationConfig
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def damped_oscillation(x, a, b, c, d):
@@ -366,9 +370,9 @@ def main():
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig("figures/05_peak_fitting.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "05_peak_fitting.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/05_peak_fitting.png")
+    print(f"  Saved: {FIG_DIR / '05_peak_fitting.png'}")
 
     # Comparison visualization
     y_pred_single = damped_oscillation(x_data, *popt_single)
@@ -425,9 +429,9 @@ def main():
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig("figures/05_multistart_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "05_multistart_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/05_multistart_comparison.png")
+    print(f"  Saved: {FIG_DIR / '05_multistart_comparison.png'}")
 
     # =========================================================================
     # Summary

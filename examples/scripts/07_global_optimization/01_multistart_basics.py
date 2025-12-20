@@ -19,9 +19,13 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 from nlsq import GlobalOptimizationConfig, curve_fit
 from nlsq.global_optimization import latin_hypercube_sample, scale_samples_to_bounds
+
+FIG_DIR = Path(__file__).parent / "figures"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def multimodal_model(x, a, b, c, d):
@@ -71,9 +75,9 @@ def main():
     ax.set_title("Synthetic Data: Multimodal Sinusoidal Model")
     ax.legend()
     plt.tight_layout()
-    plt.savefig("figures/01_data_visualization.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "01_data_visualization.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/01_data_visualization.png")
+    print(f"  Saved: {FIG_DIR / '01_data_visualization.png'}")
 
     # =========================================================================
     # 2. Single-start optimization with different initial guesses
@@ -226,9 +230,9 @@ def main():
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig("figures/01_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "01_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/01_comparison.png")
+    print(f"  Saved: {FIG_DIR / '01_comparison.png'}")
 
     # =========================================================================
     # 5. Loss landscape visualization
@@ -291,9 +295,9 @@ def main():
     ax.legend(loc="upper right")
 
     plt.tight_layout()
-    plt.savefig("figures/01_loss_landscape.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "01_loss_landscape.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/01_loss_landscape.png")
+    print(f"  Saved: {FIG_DIR / '01_loss_landscape.png'}")
 
     # =========================================================================
     # 6. Starting point distribution
@@ -365,9 +369,9 @@ def main():
     ax2.legend(loc="upper right", fontsize=8)
 
     plt.tight_layout()
-    plt.savefig("figures/01_starting_points.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIG_DIR / "01_starting_points.png", dpi=300, bbox_inches="tight")
     plt.close()
-    print("  Saved: figures/01_starting_points.png")
+    print(f"  Saved: {FIG_DIR / '01_starting_points.png'}")
 
     # =========================================================================
     # Summary
