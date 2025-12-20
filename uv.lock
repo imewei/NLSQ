@@ -1898,6 +1898,7 @@ all = [
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
     { name = "pyupgrade" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "setuptools" },
     { name = "setuptools-scm" },
@@ -1954,6 +1955,9 @@ test = [
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
 ]
+yaml = [
+    { name = "pyyaml" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -2008,6 +2012,8 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'test'", specifier = ">=3.5" },
     { name = "pyupgrade", marker = "extra == 'all'", specifier = ">=3.15.0" },
     { name = "pyupgrade", marker = "extra == 'dev'", specifier = ">=3.15.0" },
+    { name = "pyyaml", marker = "extra == 'all'", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'all'", specifier = ">=0.13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.13.0" },
     { name = "scipy", specifier = ">=1.14.0" },
@@ -2028,7 +2034,7 @@ requires-dist = [
     { name = "wheel", marker = "extra == 'build'", specifier = ">=0.45" },
     { name = "xxhash", marker = "extra == 'performance'", specifier = ">=3.0.0" },
 ]
-provides-extras = ["dev", "docs", "test", "benchmark", "performance", "jupyter", "build", "all"]
+provides-extras = ["dev", "docs", "test", "benchmark", "performance", "yaml", "jupyter", "build", "all"]
 
 [[package]]
 name = "nodeenv"
