@@ -1,0 +1,85 @@
+# NLSQ Workflow Configuration Example
+# =====================================
+#
+# This file demonstrates YAML configuration for NLSQ workflows.
+# Place this file in your working directory or specify a custom path.
+#
+# Environment variables override these settings:
+#   - NLSQ_WORKFLOW_GOAL: Override optimization goal
+#   - NLSQ_MEMORY_LIMIT_GB: Override memory limit
+#   - NLSQ_DEFAULT_WORKFLOW: Override default workflow
+#   - NLSQ_CHECKPOINT_DIR: Override checkpoint directory
+
+# Top-level defaults
+default_workflow: standard
+memory_limit_gb: 16.0
+
+# Custom workflow definitions
+workflows:
+  # High-precision workflow for publication-quality results
+  high_precision:
+    tier: STANDARD
+    goal: QUALITY
+    gtol: 1.0e-10
+    ftol: 1.0e-10
+    xtol: 1.0e-10
+    enable_multistart: true
+    n_starts: 20
+    sampler: lhs
+    center_on_p0: true
+    scale_factor: 1.0
+
+  # Fast exploration for quick parameter estimation
+  quick_explore:
+    tier: STANDARD
+    goal: FAST
+    gtol: 1.0e-5
+    ftol: 1.0e-5
+    xtol: 1.0e-5
+    enable_multistart: false
+
+  # Large dataset workflow with chunking
+  large_data:
+    tier: CHUNKED
+    goal: ROBUST
+    gtol: 1.0e-8
+    ftol: 1.0e-8
+    xtol: 1.0e-8
+    memory_limit_gb: 8.0
+    chunk_size: 100000
+    enable_multistart: true
+    n_starts: 10
+    sampler: lhs
+
+  # Streaming workflow for huge datasets
+  streaming:
+    tier: STREAMING
+    goal: ROBUST
+    gtol: 1.0e-7
+    ftol: 1.0e-7
+    xtol: 1.0e-7
+    enable_multistart: false
+
+  # HPC workflow with checkpointing for fault tolerance
+  hpc_checkpoint:
+    tier: STREAMING_CHECKPOINT
+    goal: ROBUST
+    gtol: 1.0e-7
+    ftol: 1.0e-7
+    xtol: 1.0e-7
+    enable_checkpoints: true
+    checkpoint_dir: ./nlsq_checkpoints
+    enable_multistart: true
+    n_starts: 10
+    sampler: lhs
+
+  # Memory-efficient workflow for constrained environments
+  memory_efficient:
+    tier: STREAMING
+    goal: MEMORY_EFFICIENT
+    gtol: 1.0e-7
+    ftol: 1.0e-7
+    xtol: 1.0e-7
+    memory_limit_gb: 4.0
+    chunk_size: 5000
+    enable_multistart: false

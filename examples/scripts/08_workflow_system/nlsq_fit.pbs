@@ -1,0 +1,126 @@
+#!/bin/bash
+#PBS -N nlsq_fit
+#PBS -l select=4:ncpus=32:ngpus=8:mem=256gb
+#PBS -l walltime=24:00:00
+#PBS -q gpu
+#PBS -j oe
+#PBS -o nlsq_fit.log
+
+# ==============================================================================
+# NLSQ Curve Fitting Job Script for PBS Pro
+# ==============================================================================
+#
+# This script demonstrates running NLSQ on a multi-node GPU cluster with
+# automatic checkpointing for fault tolerance.
+#
+# Resources requested:
+#   - 4 nodes with 32 CPUs each
+#   - 8 GPUs per node (e.g., NVIDIA A100)
+#   - 256GB RAM per node
+#   - 24 hour walltime
+#
+# Adjust these values based on your cluster configuration and job requirements.
+#
+# Usage:
+#   qsub nlsq_fit.pbs
+#
+# ==============================================================================
+
+# Change to submission directory
+cd $PBS_O_WORKDIR
+
+# Load required modules (adjust for your cluster)
+module load python/3.12
+module load cuda/12.0
+module load cudnn/8.9
+
+# Activate virtual environment
+source ./venv/bin/activate
+
+# ==============================================================================
+# NLSQ Environment Configuration
+# ==============================================================================
+
+# Optimization goal: fast, robust, quality, memory_efficient
+export NLSQ_WORKFLOW_GOAL=robust
+
+# Memory limit per node (GB) - adjust based on available RAM
+export NLSQ_MEMORY_LIMIT_GB=200
+
+# Checkpoint directory for fault tolerance
+export NLSQ_CHECKPOINT_DIR=$PBS_O_WORKDIR/checkpoints
+
+# Optional: Force CPU backend for debugging
+# export NLSQ_FORCE_CPU=1
+
+# Optional: Enable debug logging
+# export NLSQ_DEBUG=1
+
+# Create checkpoint directory
+mkdir -p $NLSQ_CHECKPOINT_DIR
+
+# ==============================================================================
+# Job Information
+# ==============================================================================
+
+echo "========================================"
+echo "NLSQ Curve Fitting Job Started"
+echo "========================================"
+echo "Job ID: $PBS_JOBID"
+echo "Job Name: $PBS_JOBNAME"
+echo "Queue: $PBS_QUEUE"
+echo "Start Time: $(date)"
+echo "Working Directory: $PBS_O_WORKDIR"
+echo ""
+echo "Node list:"
+cat $PBS_NODEFILE
+echo ""
+echo "NLSQ Configuration:"
+echo "  NLSQ_WORKFLOW_GOAL: $NLSQ_WORKFLOW_GOAL"
+echo "  NLSQ_MEMORY_LIMIT_GB: $NLSQ_MEMORY_LIMIT_GB"
+echo "  NLSQ_CHECKPOINT_DIR: $NLSQ_CHECKPOINT_DIR"
+echo "========================================"
+
+# ==============================================================================
+# Run NLSQ Fitting
+# ==============================================================================
+
+# Check if resuming from checkpoint
+if [ -d "$NLSQ_CHECKPOINT_DIR" ] && [ "$(ls -A $NLSQ_CHECKPOINT_DIR)" ]; then
+    echo "Found existing checkpoints, will attempt to resume..."
+fi
+
+# Run the fitting script
+# Adjust arguments based on your data and model
+python fit_large_dataset.py \
+    --data-file ./data/large_dataset.h5 \
+    --output-dir ./results \
+    --checkpoint-dir $NLSQ_CHECKPOINT_DIR \
+    --enable-checkpoints \
+    --checkpoint-interval 50
+
+# Capture exit status
+EXIT_STATUS=$?
+
+# ==============================================================================
+# Job Completion
+# ==============================================================================
+
+echo "========================================"
+echo "Job Completed"
+echo "========================================"
+echo "End Time: $(date)"
+echo "Exit Status: $EXIT_STATUS"
+echo ""
+
+if [ $EXIT_STATUS -eq 0 ]; then
+    echo "Fitting completed successfully!"
+    echo "Results saved to: ./results/"
+else
+    echo "Fitting failed with exit status $EXIT_STATUS"
+    echo "Check logs for errors. Checkpoints saved to: $NLSQ_CHECKPOINT_DIR"
+fi
+
+echo "========================================"
+
+exit $EXIT_STATUS
