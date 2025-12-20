@@ -323,7 +323,7 @@ def main():
         p0=p0_spec,
         bounds=peak_bounds,
         multistart=True,
-        n_starts=20,
+        n_starts=6 if QUICK else 20,
         sampler="lhs",
     )
 

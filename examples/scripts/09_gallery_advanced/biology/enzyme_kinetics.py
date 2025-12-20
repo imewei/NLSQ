@@ -18,6 +18,7 @@ Key Concepts:
 - Multi-start optimization for robust parameter estimation
 """
 
+import os
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -25,6 +26,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -193,7 +196,7 @@ print("-" * 70)
 
 # Create custom global optimization configuration
 global_config = GlobalOptimizationConfig(
-    n_starts=15,
+    n_starts=4 if QUICK else 15,
     sampler="lhs",
     center_on_p0=True,
     scale_factor=1.0,
@@ -209,7 +212,7 @@ popt_custom, pcov_custom = fit(
     absolute_sigma=True,
     bounds=([0, 0], [200, 500]),
     multistart=True,
-    n_starts=15,
+    n_starts=4 if QUICK else 15,
     sampler="lhs",
 )
 

@@ -89,7 +89,7 @@ def multi_peak_model(
 
 
 # Energy axis (keV for X-ray spectroscopy)
-energy = np.linspace(5, 15, 500)
+energy = np.linspace(5, 15, 150 if QUICK_MODE else 500)
 
 # True parameters
 bg_slope_true = 2.0
@@ -198,7 +198,7 @@ print(f"  Peak 2 (K-beta):  {cen2_r:.3f} keV (true: {cen2_true})")
 print(f"  Peak 3 (Escape):  {cen3_r:.3f} keV (true: {cen3_true})")
 
 # Method 2: fit() with 'global' preset (CRITICAL for spectroscopy)
-global_starts = 8 if QUICK_MODE else 20
+global_starts = 4 if QUICK_MODE else 20
 print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
 print("  (Global optimization is especially important for multi-peak fitting)")
 popt_global, pcov_global = fit(
@@ -235,7 +235,7 @@ print(f"  Peak 2 (K-beta):  {cen2_g:.3f} keV")
 print(f"  Peak 3 (Escape):  {cen3_g:.3f} keV")
 
 # Method 3: GlobalOptimizationConfig with many starts (for difficult spectra)
-custom_starts = 12 if QUICK_MODE else 30
+custom_starts = 4 if QUICK_MODE else 30
 print(
     f"\nMethod 3: GlobalOptimizationConfig with {custom_starts} starts (thorough search)"
 )
