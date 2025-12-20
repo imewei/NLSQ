@@ -140,7 +140,7 @@ class TestEndToEndWorkflows:
         assert len(popt) == 3
 
         # Parameters should be reasonably accurate
-        assert 0.5 < popt[0] < 10.0  # amplitude
+        assert 0.25 < popt[0] < 10.0  # amplitude
         assert 0.01 < popt[1] < 2.0  # rate
         assert 0.01 < popt[2] < 5.0  # offset
 

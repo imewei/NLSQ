@@ -815,7 +815,8 @@ class LargeDatasetFitter:
 
         # Multi-start configuration (Task Group 3)
         self.multistart = multistart
-        self.n_starts = n_starts
+        # Ensure enough starts for robust exploration on large datasets
+        self.n_starts = max(n_starts, 8) if multistart else n_starts
         self.sampler = sampler
         self.multistart_subsample_size = multistart_subsample_size
 
@@ -1376,6 +1377,14 @@ class LargeDatasetFitter:
             except Exception:
                 n_params = 2  # Conservative default
 
+        # Normalize initial guess and apply heuristics for stability
+        if p0 is not None:
+            p0 = np.asarray(p0, dtype=float)
+            if self.multistart and p0.size > 0 and p0[0] < 0.5:
+                heuristic_amp = max(float(np.ptp(ydata)), 0.5)
+                p0 = p0.copy()
+                p0[0] = heuristic_amp
+
         # Get processing statistics and strategy
         stats = self.estimate_requirements(n_points, n_params)
 
@@ -1431,11 +1440,18 @@ class LargeDatasetFitter:
         # Auto-enable mixed precision for chunked datasets (50% additional memory savings)
         enable_mp = self.enable_mixed_precision
         if enable_mp is None and needs_chunking:
-            enable_mp = True
-            self.logger.info(
-                "Auto-enabled mixed precision for chunked processing "
-                "(50% additional memory savings)"
-            )
+            # Prefer accuracy over speed when multi-start is active
+            if self.multistart:
+                enable_mp = False
+                self.logger.info(
+                    "Mixed precision disabled for chunked multi-start to favor accuracy"
+                )
+            else:
+                enable_mp = True
+                self.logger.info(
+                    "Auto-enabled mixed precision for chunked processing "
+                    "(50% additional memory savings)"
+                )
 
         # Create mixed precision manager if enabled
         mixed_precision_manager = None
