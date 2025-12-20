@@ -17,6 +17,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -24,6 +26,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -80,7 +84,7 @@ UTS_true = 310.0  # MPa (ultimate tensile strength)
 epsilon_y_true = sigma_y_true / (E_true * 1000)  # Yield strain
 
 # Generate strain data (0% to 12% strain)
-strain = np.linspace(0, 0.12, 250)
+strain = np.linspace(0, 0.12, 120 if QUICK else 250)
 
 # Build stress-strain curve in three regions
 mask_elastic = strain <= epsilon_y_true
@@ -154,6 +158,7 @@ popt_elastic_g, pcov_elastic_g = fit(
     sigma=sigma_stress[mask_fit_elastic],
     absolute_sigma=True,
     preset="global",
+    n_starts=6 if QUICK else 20,
 )
 
 E_g = popt_elastic_g[0]
@@ -191,6 +196,10 @@ else:
     sigma_y_fit = sigma_y_true
     epsilon_y_fit = epsilon_y_true
     print("Warning: Could not determine yield point, using estimates")
+
+if QUICK:
+    print("⏩ Quick mode: skipping hardening/necking analyses and plots.")
+    sys.exit(0)
 
 
 # =============================================================================

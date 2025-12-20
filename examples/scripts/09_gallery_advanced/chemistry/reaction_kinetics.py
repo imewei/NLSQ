@@ -18,6 +18,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -25,6 +27,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -100,7 +104,7 @@ def pseudo_first_order(t, C0, k_obs):
 
 
 # Time points (0 to 1000 seconds, every 10 seconds)
-time = np.linspace(0, 1000, 101)
+time = np.linspace(0, 1000, 51 if QUICK else 101)
 
 # First-order reaction parameters
 C0_1st = 1.0  # M (initial concentration)
@@ -159,7 +163,8 @@ print(
 )
 
 # Method 2: fit() with 'global' preset
-print("\nMethod 2: fit() with 'global' preset")
+global_starts = 6 if QUICK else 20
+print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
 popt_1st_global, pcov_1st_global = fit(
     first_order_decay,
     time,
@@ -169,6 +174,7 @@ popt_1st_global, pcov_1st_global = fit(
     absolute_sigma=True,
     bounds=([0, 0], [2, 0.1]),
     preset="global",
+    n_starts=global_starts,
 )
 
 C0_1st_g, k_1st_g = popt_1st_global
@@ -253,7 +259,7 @@ print("-" * 70)
 # for model selection
 
 global_config = GlobalOptimizationConfig(
-    n_starts=20,
+    n_starts=6 if QUICK else 20,
     sampler="lhs",
     center_on_p0=True,
     scale_factor=1.5,
@@ -268,7 +274,7 @@ popt_1st_model, _ = fit(
     sigma=sigma_1st,
     bounds=([0, 0], [2, 0.1]),
     multistart=True,
-    n_starts=20,
+    n_starts=6 if QUICK else 20,
     sampler="lhs",
 )
 
@@ -280,7 +286,7 @@ popt_2nd_model, _ = fit(
     sigma=sigma_1st,
     bounds=([0, 0], [2, 0.1]),
     multistart=True,
-    n_starts=20,
+    n_starts=6 if QUICK else 20,
     sampler="lhs",
 )
 
@@ -308,6 +314,10 @@ print("\nModel Selection (AIC, lower is better):")
 print(f"  1st-order: AIC = {AIC_1st:.2f}")
 print(f"  2nd-order: AIC = {AIC_2nd:.2f}")
 print(f"  Preferred: {'First-order' if AIC_1st < AIC_2nd else 'Second-order'}")
+
+if QUICK:
+    print("⏩ Quick mode: skipping linearization and additional analyses.")
+    sys.exit(0)
 
 
 # =============================================================================

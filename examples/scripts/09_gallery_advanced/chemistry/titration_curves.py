@@ -18,6 +18,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -25,6 +27,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -138,7 +142,7 @@ pKa_true = 4.76  # Acetic acid
 Ve_true = 25.0  # mL (equivalence point)
 
 # Generate synthetic titration data
-V_titrant = np.linspace(0.1, 40, 100)
+V_titrant = np.linspace(0.1, 40, 50 if QUICK else 100)
 
 # Calculate true pH values
 pH_true = np.zeros_like(V_titrant)
@@ -207,7 +211,8 @@ print(f"  pKa = {pKa_fit:.3f} +/- {pKa_err:.3f} (true: {pKa_true})")
 print(f"  Ve = {Ve_fit:.2f} +/- {Ve_err:.2f} mL (true: {Ve_true})")
 
 # Method 2: fit() with 'global' preset
-print("\nMethod 2: fit() with 'global' preset")
+global_starts = 6 if QUICK else 20
+print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
 popt_global, pcov_global = fit(
     simplified_titration,
     V_fit,
@@ -217,6 +222,7 @@ popt_global, pcov_global = fit(
     bounds=(bounds_lower, bounds_upper),
     absolute_sigma=True,
     preset="global",
+    n_starts=global_starts,
 )
 
 pKa_g, Ve_g, pH0_g = popt_global
@@ -229,7 +235,7 @@ print(f"  Ve = {Ve_g:.2f} +/- {perr_g[1]:.2f} mL")
 print("\nMethod 3: GlobalOptimizationConfig with custom settings")
 
 global_config = GlobalOptimizationConfig(
-    n_starts=15,
+    n_starts=6 if QUICK else 15,
     sampler="lhs",
     center_on_p0=True,
     scale_factor=1.0,
@@ -244,7 +250,7 @@ popt_custom, pcov_custom = fit(
     bounds=(bounds_lower, bounds_upper),
     absolute_sigma=True,
     multistart=True,
-    n_starts=15,
+    n_starts=6 if QUICK else 15,
     sampler="lhs",
 )
 
@@ -323,6 +329,10 @@ print(f"Effective buffer range: {pKa_fit - 1:.2f} - {pKa_fit + 1:.2f} (pKa +/- 1
 # =============================================================================
 # Diprotic Acid Titration (Carbonic Acid)
 # =============================================================================
+if QUICK:
+    print("⏩ Quick mode: skipping buffer capacity and diprotic sections.")
+    sys.exit(0)
+
 print("\n" + "-" * 70)
 print("DIPROTIC ACID TITRATION (Carbonic Acid) with fit() API")
 print("-" * 70)

@@ -14,6 +14,7 @@ Run this example:
     python examples/scripts/07_global_optimization/05_multistart_integration.py
 """
 
+import os
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -21,6 +22,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, curve_fit, curve_fit_large
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -64,7 +67,7 @@ def main():
     print("-" * 50)
 
     # Generate synthetic data
-    n_samples = 300
+    n_samples = 120 if QUICK else 300
     x_data = np.linspace(0, 10, n_samples)
 
     # True parameters
@@ -108,7 +111,7 @@ def main():
         p0=p0,
         bounds=bounds,
         multistart=True,  # Enable multi-start
-        n_starts=10,  # Number of starting points
+        n_starts=4 if QUICK else 10,  # Number of starting points
         sampler="lhs",  # Latin Hypercube Sampling
     )
 
@@ -137,7 +140,7 @@ def main():
         p0=[3.0, 0.4, 2.5, 0.5],
         bounds=tight_bounds,
         multistart=True,
-        n_starts=10,
+        n_starts=4 if QUICK else 10,
         sampler="lhs",
     )
 
@@ -170,7 +173,7 @@ def main():
     print("-" * 50)
 
     # Generate data for exponential model
-    x_exp = np.linspace(0, 5, 200)
+    x_exp = np.linspace(0, 5, 120 if QUICK else 200)
     y_exp_true = 2.5 * np.exp(-1.3 * x_exp) + 0.5
     y_exp = y_exp_true + 0.1 * np.random.randn(len(x_exp))
 
@@ -181,7 +184,7 @@ def main():
         y_exp,
         p0=[2.0, 1.0, 0.0],
         multistart=True,
-        n_starts=8,
+        n_starts=4 if QUICK else 8,
         sampler="lhs",
     )
 
@@ -199,7 +202,7 @@ def main():
     print("-" * 50)
 
     config = GlobalOptimizationConfig(
-        n_starts=15,
+        n_starts=6 if QUICK else 15,
         sampler="sobol",
         center_on_p0=True,
         scale_factor=0.8,
@@ -235,7 +238,7 @@ def main():
     print("-" * 50)
 
     # Generate larger dataset
-    n_large = 50000
+    n_large = 10000 if QUICK else 50000
     x_large = np.linspace(0, 10, n_large)
 
     y_large_true = (
@@ -253,7 +256,7 @@ def main():
         p0=p0,
         bounds=bounds,
         multistart=True,
-        n_starts=10,
+        n_starts=3 if QUICK else 10,
         sampler="lhs",
         memory_limit_gb=1.0,
     )

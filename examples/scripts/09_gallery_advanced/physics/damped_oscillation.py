@@ -18,6 +18,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -26,6 +28,8 @@ import numpy as np
 from scipy import signal
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -75,7 +79,7 @@ omega0_true = 2 * np.pi / 2.0  # Natural frequency (rad/s)
 phi_true = 0.0  # Phase offset
 
 # Time points
-time = np.linspace(0, 60, 300)
+time = np.linspace(0, 60, 150 if QUICK else 300)
 
 # True oscillation
 displacement_true = damped_oscillator(time, A0_true, gamma_true, omega0_true, phi_true)
@@ -128,7 +132,8 @@ print(f"  omega (frequency): {omega_fit:.4f} +/- {omega_err:.4f} rad/s")
 print(f"  phi (phase): {phi_fit:.4f} +/- {phi_err:.4f} rad")
 
 # Method 2: fit() with 'global' preset
-print("\nMethod 2: fit() with 'global' preset")
+global_starts = 6 if QUICK else 20
+print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
 popt_global, pcov_global = fit(
     damped_oscillator,
     time,
@@ -138,6 +143,7 @@ popt_global, pcov_global = fit(
     bounds=bounds,
     absolute_sigma=True,
     preset="global",
+    n_starts=global_starts,
 )
 
 A0_g, gamma_g, omega_g, phi_g = popt_global
@@ -159,7 +165,7 @@ popt_custom, pcov_custom = fit(
     bounds=bounds,
     absolute_sigma=True,
     multistart=True,
-    n_starts=15,
+    n_starts=6 if QUICK else 15,
     sampler="lhs",
 )
 
@@ -170,6 +176,10 @@ print(f"  A0: {A0_c:.3f} +/- {perr_c[0]:.3f}")
 print(f"  gamma: {gamma_c:.5f} +/- {perr_c[1]:.5f}")
 print(f"  omega: {omega_c:.4f} +/- {perr_c[2]:.4f}")
 print(f"  phi: {phi_c:.4f} +/- {perr_c[3]:.4f}")
+
+if QUICK:
+    print("⏩ Quick mode: skipping extended plots and analyses.")
+    sys.exit(0)
 
 
 # Use robust preset results for analysis
@@ -436,8 +446,11 @@ print(f"\n  Estimated pendulum length: {length_estimated:.3f} m")
 print(f"  Damping regime: Lightly damped (zeta = {damping_ratio:.4f})")
 print("\nAPI Methods Used:")
 print("  - fit() with preset='robust' (5 multi-starts)")
-print("  - fit() with preset='global' (20 multi-starts)")
-print("  - fit() with GlobalOptimizationConfig (custom settings)")
+print(f"  - fit() with preset='global' ({global_starts} multi-starts)")
+print(f"  - fit() with GlobalOptimizationConfig ({6 if QUICK else 15} custom starts)")
+if QUICK:
+    print("⏩ Quick mode: skipping extended plotting.")
+    sys.exit(0)
 print("\nThis example demonstrates:")
 print("  - Damped harmonic oscillator fitting with fit() API")
 print("  - Global optimization for robust parameter estimation")

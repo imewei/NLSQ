@@ -18,6 +18,8 @@ Key Concepts:
 - Multi-start optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -25,6 +27,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -69,7 +73,7 @@ def inhibition_model(dose, top, IC50, hill_slope):
 
 
 # Drug concentrations (log-spaced: 0.01 to 1000 uM)
-dose = np.logspace(-2, 3, 15)  # 15 concentration points
+dose = np.logspace(-2, 3, 10 if QUICK else 15)  # concentration points
 
 # True parameters for agonist (stimulation) curve
 bottom_true = 5.0  # Baseline response (% of max)
@@ -131,8 +135,9 @@ print(f"  Hill slope = {hill_slope_fit:.3f} +/- {hill_slope_err:.3f}")
 # =============================================================================
 # Method 2: Using fit() with 'global' preset (thorough global search)
 # =============================================================================
+global_starts = 6 if QUICK else 20
 print("\n" + "-" * 70)
-print("Method 2: fit() with 'global' preset (20 starts)")
+print(f"Method 2: fit() with 'global' preset ({global_starts} starts)")
 print("-" * 70)
 
 popt_global, pcov_global = fit(
@@ -144,6 +149,7 @@ popt_global, pcov_global = fit(
     bounds=bounds,
     absolute_sigma=True,
     preset="global",  # Thorough global search with 20 starts
+    n_starts=global_starts,
 )
 
 bottom_g, top_g, EC50_g, hill_slope_g = popt_global
@@ -160,8 +166,9 @@ print("Method 3: GlobalOptimizationConfig with custom settings")
 print("-" * 70)
 
 # Create a custom global optimization configuration
+custom_starts = 6 if QUICK else 15
 global_config = GlobalOptimizationConfig(
-    n_starts=15,  # 15 starting points
+    n_starts=custom_starts,  # starting points
     sampler="lhs",  # Latin Hypercube Sampling for good coverage
     center_on_p0=True,  # Center samples around initial guess
     scale_factor=1.0,  # Exploration range scale
@@ -179,7 +186,7 @@ popt_custom, pcov_custom = fit(
     bounds=bounds,
     absolute_sigma=True,
     multistart=True,
-    n_starts=15,
+    n_starts=custom_starts,
     sampler="lhs",
     center_on_p0=True,
     scale_factor=1.0,
@@ -274,6 +281,10 @@ hill_slope_B = 0.9
 response_B_true = four_parameter_logistic(dose, bottom_B, top_B, EC50_B, hill_slope_B)
 noise_B = np.random.normal(0, 3.0, size=len(dose))
 response_B = response_B_true + noise_B
+
+if QUICK:
+    print("⏩ Quick mode: skipping compound B comparison and heavy plotting.")
+    sys.exit(0)
 
 # Fit Drug B with robust preset
 popt_B, pcov_B = fit(

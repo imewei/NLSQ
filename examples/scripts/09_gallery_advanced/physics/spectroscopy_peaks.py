@@ -20,6 +20,7 @@ Key Concepts:
 """
 
 import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -528,6 +529,11 @@ print("\nAPI Methods Used:")
 print("  - fit() with preset='robust' (5 multi-starts)")
 print(f"  - fit() with preset='global' ({global_starts} multi-starts)")
 print(f"  - fit() with GlobalOptimizationConfig ({custom_starts} custom starts)")
+
+if QUICK_MODE:
+    print("⏩ Quick mode: skipping extended plotting.")
+    sys.exit(0)
+
 print("\nThis example demonstrates:")
 print("  - Multi-peak fitting with fit() API")
 print("  - Global optimization for multi-modal loss landscapes")

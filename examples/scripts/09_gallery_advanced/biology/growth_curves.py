@@ -18,6 +18,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -25,6 +27,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -107,7 +111,7 @@ def exponential_phase(t, N0, mu):
 
 
 # Time points (0 to 24 hours, every 30 minutes)
-time = np.linspace(0, 24, 49)
+time = np.linspace(0, 24, 25 if QUICK else 49)
 
 # True growth parameters
 N0_true = 0.01  # Initial OD600
@@ -164,6 +168,10 @@ print(f"  N0 = {N0_fit:.4f} +/- {N0_err:.4f} (true: {N0_true})")
 print(f"  K = {K_fit:.3f} +/- {K_err:.3f} (true: {K_true})")
 print(f"  r = {r_fit:.3f} +/- {r_err:.3f} hr^-1 (true: {r_true})")
 
+if QUICK:
+    print("⏩ Quick mode: skipping extended comparisons and plots.")
+    sys.exit(0)
+
 
 # =============================================================================
 # Method 2: Using fit() with 'global' preset for thorough search
@@ -181,6 +189,7 @@ popt_global, pcov_global = fit(
     bounds=bounds,
     absolute_sigma=True,
     preset="global",
+    n_starts=6 if QUICK else 20,
 )
 
 N0_g, K_g, r_g = popt_global
@@ -200,7 +209,7 @@ print("-" * 70)
 
 # Create custom global optimization configuration
 global_config = GlobalOptimizationConfig(
-    n_starts=15,
+    n_starts=6 if QUICK else 15,
     sampler="lhs",
     center_on_p0=True,
     scale_factor=1.0,
@@ -216,7 +225,7 @@ popt_custom, pcov_custom = fit(
     bounds=bounds,
     absolute_sigma=True,
     multistart=True,
-    n_starts=15,
+    n_starts=6 if QUICK else 15,
     sampler="lhs",
 )
 
