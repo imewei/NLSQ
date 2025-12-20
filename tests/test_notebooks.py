@@ -48,7 +48,7 @@ def test_notebook_executes(notebook_path: Path, tmp_path: Path):
         pytest.skip("Skipped heavy global optimization notebook in quick mode")
 
     # Ensure sitecustomize quick patches are discoverable
-    quick_path = REPO_ROOT / "tools" / "quick_sitecustomize"
+    quick_path = REPO_ROOT / "scripts" / "quick_sitecustomize"
     env["PYTHONPATH"] = os.pathsep.join(
         [str(REPO_ROOT), str(quick_path), env.get("PYTHONPATH", "")]
     )

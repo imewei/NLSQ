@@ -41,7 +41,7 @@ def test_example_script_runs(
         pytest.skip("Skipped advanced gallery in quick mode")
 
     # Ensure sitecustomize quick patches are loaded
-    extra_path = REPO_ROOT / "tools" / "quick_sitecustomize"
+    extra_path = REPO_ROOT / "scripts" / "quick_sitecustomize"
     env["PYTHONPATH"] = os.pathsep.join(
         [str(REPO_ROOT), str(extra_path), env.get("PYTHONPATH", "")]
     )
