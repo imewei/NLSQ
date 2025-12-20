@@ -531,6 +531,7 @@ NLSQ automatically detects and uses GPUs when available.
 
 ```python
 import jax
+
 print(f"JAX devices: {jax.devices()}")
 ```
 

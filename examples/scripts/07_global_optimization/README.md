@@ -57,12 +57,12 @@ from nlsq import GlobalOptimizationConfig, curve_fit
 config = GlobalOptimizationConfig()
 
 # From preset
-config = GlobalOptimizationConfig.from_preset('robust')
+config = GlobalOptimizationConfig.from_preset("robust")
 
 # Custom configuration
 config = GlobalOptimizationConfig(
     n_starts=20,
-    sampler='lhs',
+    sampler="lhs",
     center_on_p0=True,
     scale_factor=1.0,
     elimination_rounds=2,
@@ -72,7 +72,9 @@ config = GlobalOptimizationConfig(
 
 # Use with curve_fit
 popt, pcov = curve_fit(
-    model, x, y,
+    model,
+    x,
+    y,
     p0=p0,
     bounds=bounds,
     global_optimization=config,
@@ -94,10 +96,10 @@ popt, pcov = curve_fit(
 ```python
 from nlsq.global_optimization import (
     latin_hypercube_sample,  # Stratified random sampling
-    sobol_sample,            # Deterministic quasi-random
-    halton_sample,           # Prime-based quasi-random
-    scale_samples_to_bounds, # Scale [0,1] samples to bounds
-    center_samples_around_p0,# Center samples on initial guess
+    sobol_sample,  # Deterministic quasi-random
+    halton_sample,  # Prime-based quasi-random
+    scale_samples_to_bounds,  # Scale [0,1] samples to bounds
+    center_samples_around_p0,  # Center samples on initial guess
 )
 import jax
 
@@ -116,7 +118,7 @@ scaled = scale_samples_to_bounds(samples, lb, ub)
 ```python
 from nlsq.global_optimization import TournamentSelector, GlobalOptimizationConfig
 
-config = GlobalOptimizationConfig.from_preset('streaming')
+config = GlobalOptimizationConfig.from_preset("streaming")
 selector = TournamentSelector(candidates, config)
 
 # Run tournament on streaming data

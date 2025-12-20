@@ -14,10 +14,11 @@ Run this example:
     python examples/scripts/08_workflow_system/02_workflow_tiers.py
 """
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
 from nlsq import OptimizationGoal, WorkflowConfig, WorkflowTier, fit
 from nlsq.large_dataset import MemoryEstimator, get_memory_tier
@@ -114,7 +115,7 @@ def main():
             print(f"  {size_tier.name:12s}: > 100M points, tolerance = {tol:.0e}")
         else:
             print(
-                f"  {size_tier.name:12s}: < {max_pts/1e6:.0f}M points, tolerance = {tol:.0e}"
+                f"  {size_tier.name:12s}: < {max_pts / 1e6:.0f}M points, tolerance = {tol:.0e}"
             )
 
     # =========================================================================
@@ -131,7 +132,9 @@ def main():
     # Check current system memory
     available_memory = MemoryEstimator.get_available_memory_gb()
     current_tier = get_memory_tier(available_memory)
-    print(f"\n  Current system: {available_memory:.1f} GB available -> {current_tier.name}")
+    print(
+        f"\n  Current system: {available_memory:.1f} GB available -> {current_tier.name}"
+    )
 
     # =========================================================================
     # 4. Automatic Tier Selection
@@ -161,9 +164,9 @@ def main():
             tier = config_type
 
         if n_points >= 1_000_000:
-            size_str = f"{n_points/1_000_000:.0f}M"
+            size_str = f"{n_points / 1_000_000:.0f}M"
         elif n_points >= 1_000:
-            size_str = f"{n_points/1_000:.0f}K"
+            size_str = f"{n_points / 1_000:.0f}K"
         else:
             size_str = str(n_points)
 
@@ -208,7 +211,9 @@ def main():
             (0.5, 6.2), 3, 0.8, fill=True, facecolor="lightgreen", edgecolor="black"
         )
     )
-    ax.text(2, 6.6, "STANDARD", ha="center", va="center", fontsize=10, fontweight="bold")
+    ax.text(
+        2, 6.6, "STANDARD", ha="center", va="center", fontsize=10, fontweight="bold"
+    )
 
     # Medium
     ax.plot([5, 5], [8.2, 7.0], "k-", linewidth=1)
@@ -238,7 +243,9 @@ def main():
             (1.5, 4.2), 3, 0.8, fill=True, facecolor="lightgreen", edgecolor="black"
         )
     )
-    ax.text(3, 4.6, "STANDARD", ha="center", va="center", fontsize=10, fontweight="bold")
+    ax.text(
+        3, 4.6, "STANDARD", ha="center", va="center", fontsize=10, fontweight="bold"
+    )
 
     ax.plot([5.8, 7, 7], [6.2, 5.5, 5.0], "k-", linewidth=1)
     ax.text(6.5, 5.6, "< 16GB", fontsize=9)
@@ -273,7 +280,13 @@ def main():
     # Additional note for massive datasets
     ax.add_patch(
         plt.Rectangle(
-            (0.5, 0.5), 9, 1.2, fill=True, facecolor="lightgray", edgecolor="black", alpha=0.3
+            (0.5, 0.5),
+            9,
+            1.2,
+            fill=True,
+            facecolor="lightgray",
+            edgecolor="black",
+            alpha=0.3,
         )
     )
     ax.text(
@@ -332,9 +345,7 @@ def main():
         y_data,
         p0=[1.0, 1.0, 0.0],
     )
-    print(
-        f"  Fitted: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}"
-    )
+    print(f"  Fitted: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
 
     # =========================================================================
     # 8. Memory Usage Comparison

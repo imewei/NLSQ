@@ -255,7 +255,7 @@ def main():
     ax1.set_xlabel("Preset")
     ax1.set_ylabel("Sum of Squared Residuals")
     ax1.set_title("Fit Quality by Preset")
-    for bar, ssr in zip(bars, ssrs):
+    for bar, ssr in zip(bars, ssrs, strict=False):
         ax1.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height(),
@@ -272,7 +272,7 @@ def main():
     ax2.set_xlabel("Preset")
     ax2.set_ylabel("Time (seconds)")
     ax2.set_title("Computation Time by Preset")
-    for bar, t in zip(bars, times):
+    for bar, t in zip(bars, times, strict=False):
         ax2.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height(),
@@ -290,7 +290,7 @@ def main():
     ax3.set_ylabel("gtol")
     ax3.set_title("Tolerance (gtol) by Preset")
     ax3.set_yscale("log")
-    for bar, t in zip(bars, tols):
+    for bar, t in zip(bars, tols, strict=False):
         ax3.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height(),

@@ -24,6 +24,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # Import NLSQ before importing JAX since we need NLSQ to set all the JAX computation to use 64 rather than 32 bit arrays.
 # ======================================================================
 import os
+
 # Check Python version
 from pathlib import Path
 
@@ -71,6 +72,7 @@ MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
+
 
 # make the synthetic data
 length = 1000
@@ -286,7 +288,9 @@ plt.ylabel("Fit Time (seconds)")
 lmin = min(10**3, MAX_SAMPLES)
 lmax = cap_samples(10**6)
 nlengths = 20
-lengths1 = np.linspace(min(10**3, MAX_SAMPLES), min(5 * 10**4, MAX_SAMPLES), nlengths, dtype=int)
+lengths1 = np.linspace(
+    min(10**3, MAX_SAMPLES), min(5 * 10**4, MAX_SAMPLES), nlengths, dtype=int
+)
 lengths2 = np.linspace(min(10**5, MAX_SAMPLES), cap_samples(10**6), nlengths, dtype=int)
 
 fixed_length1 = np.amax(lengths1)

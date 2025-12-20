@@ -55,9 +55,7 @@ def multimodal_model(x, a, b, c):
     return a * jnp.sin(b * x) + c
 
 
-def create_data_batch_generator(
-    n_batches=cap_samples(100), batch_size=cap_samples(500), noise_level=0.3
-):
+def create_data_batch_generator(n_batches=None, batch_size=None, noise_level=0.3):
     """Generator that yields streaming data batches.
 
     Simulates a streaming scenario where data arrives in batches
@@ -77,6 +75,11 @@ def create_data_batch_generator(
     tuple[np.ndarray, np.ndarray]
         (x_batch, y_batch) data pairs
     """
+    n_batches = cap_samples(100) if n_batches is None else cap_samples(int(n_batches))
+    batch_size = (
+        cap_samples(500) if batch_size is None else cap_samples(int(batch_size))
+    )
+
     # True parameters
     true_a, true_b, true_c = 2.5, 1.8, 1.0
 
@@ -127,10 +130,10 @@ def main():
     candidates = scale_samples_to_bounds(lhs_samples, lb, ub)
 
     print(f"  Generated {n_candidates} candidates in {n_params}D parameter space")
-    print(f"  First 5 candidates:")
+    print("  First 5 candidates:")
     for i in range(5):
         print(
-            f"    Candidate {i}: a={candidates[i,0]:.2f}, b={candidates[i,1]:.2f}, c={candidates[i,2]:.2f}"
+            f"    Candidate {i}: a={candidates[i, 0]:.2f}, b={candidates[i, 1]:.2f}, c={candidates[i, 2]:.2f}"
         )
 
     # =========================================================================
@@ -154,13 +157,13 @@ def main():
 
     # Calculate expected progression
     expected_survivors = n_candidates
-    print(f"\n  Expected tournament progression:")
+    print("\n  Expected tournament progression:")
     print(f"    Start: {expected_survivors} candidates")
     for r in range(config.elimination_rounds):
         expected_survivors = max(
             1, int(expected_survivors * (1 - config.elimination_fraction))
         )
-        print(f"    After round {r+1}: {expected_survivors} survivors")
+        print(f"    After round {r + 1}: {expected_survivors} survivors")
 
     # =========================================================================
     # 3. Run tournament selection
@@ -172,7 +175,9 @@ def main():
 
     # Need enough batches for all rounds
     total_batches_needed = config.elimination_rounds * config.batches_per_round + 10
-    data_gen = create_data_batch_generator(n_batches=total_batches_needed, batch_size=500)
+    data_gen = create_data_batch_generator(
+        n_batches=total_batches_needed, batch_size=500
+    )
 
     # Run tournament and get top candidates
     best_candidates = selector.run_tournament(
@@ -181,10 +186,10 @@ def main():
         top_m=3,  # Return top 3 candidates
     )
 
-    print(f"\n  Tournament complete!")
-    print(f"  Top 3 candidates:")
+    print("\n  Tournament complete!")
+    print("  Top 3 candidates:")
     for i, params in enumerate(best_candidates):
-        print(f"    {i+1}. a={params[0]:.3f}, b={params[1]:.3f}, c={params[2]:.3f}")
+        print(f"    {i + 1}. a={params[0]:.3f}, b={params[1]:.3f}, c={params[2]:.3f}")
 
     # =========================================================================
     # 4. Tournament diagnostics
@@ -247,14 +252,16 @@ def main():
     ax1.grid(True, alpha=0.3)
 
     # Add annotations
-    for r, s in zip(rounds, survivors):
+    for r, s in zip(rounds, survivors, strict=False):
         ax1.annotate(
             str(s), (r, s), textcoords="offset points", xytext=(0, 10), ha="center"
         )
 
     # Right: Mean loss evolution
     ax2 = axes[1]
-    valid_rounds = [r for r, m in zip(rounds, mean_losses) if m is not None]
+    valid_rounds = [
+        r for r, m in zip(rounds, mean_losses, strict=False) if m is not None
+    ]
     valid_losses = [m for m in mean_losses if m is not None]
 
     if valid_losses:
@@ -364,7 +371,9 @@ def main():
 
     # Plot survivor progression for each strategy
     ax1 = axes[0]
-    for (elim_frac, data), color in zip(comparison_results.items(), plot_colors):
+    for (elim_frac, data), color in zip(
+        comparison_results.items(), plot_colors, strict=False
+    ):
         rounds_plot = [0] + [r["round"] + 1 for r in data["round_history"]]
         survivors_plot = [n_candidates] + [
             r["n_survivors_after"] for r in data["round_history"]
@@ -434,7 +443,7 @@ def main():
     # Save checkpoint
     checkpoint = selector.to_checkpoint()
 
-    print(f"  Checkpoint contents:")
+    print("  Checkpoint contents:")
     for ckpt_key, value in checkpoint.items():
         if isinstance(value, np.ndarray):
             print(f"    {ckpt_key}: ndarray shape={value.shape}")
@@ -446,7 +455,7 @@ def main():
     # Restore from checkpoint
     restored_selector = TournamentSelector.from_checkpoint(checkpoint, config)
 
-    print(f"\n  Restored selector:")
+    print("\n  Restored selector:")
     print(f"    n_candidates: {restored_selector.n_candidates}")
     print(f"    n_survivors:  {restored_selector.n_survivors}")
     print(f"    current_round: {restored_selector.current_round}")

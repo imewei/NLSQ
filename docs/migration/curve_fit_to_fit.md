@@ -14,20 +14,29 @@ The new `fit()` function provides a simplified API with automatic workflow selec
 from nlsq import curve_fit
 import jax.numpy as jnp
 
+
 def model(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 # Basic fitting
 popt, pcov = curve_fit(model, xdata, ydata, p0=[1, 1, 0])
 
 # With bounds
-popt, pcov = curve_fit(model, xdata, ydata, p0=[1, 1, 0],
-                       bounds=([0, 0, -10], [10, 5, 10]))
+popt, pcov = curve_fit(
+    model, xdata, ydata, p0=[1, 1, 0], bounds=([0, 0, -10], [10, 5, 10])
+)
 
 # With multi-start optimization
-popt, pcov = curve_fit(model, xdata, ydata, p0=[1, 1, 0],
-                       bounds=([0, 0, -10], [10, 5, 10]),
-                       multistart=True, n_starts=10)
+popt, pcov = curve_fit(
+    model,
+    xdata,
+    ydata,
+    p0=[1, 1, 0],
+    bounds=([0, 0, -10], [10, 5, 10]),
+    multistart=True,
+    n_starts=10,
+)
 ```
 
 ### After (fit)
@@ -36,21 +45,28 @@ popt, pcov = curve_fit(model, xdata, ydata, p0=[1, 1, 0],
 from nlsq import fit
 import jax.numpy as jnp
 
+
 def model(x, a, b, c):
     return a * jnp.exp(-b * x) + c
+
 
 # Basic fitting (auto-selects appropriate workflow)
 popt, pcov = fit(model, xdata, ydata, p0=[1, 1, 0])
 
 # With goal-based configuration
-popt, pcov = fit(model, xdata, ydata, p0=[1, 1, 0],
-                 goal="quality",
-                 bounds=([0, 0, -10], [10, 5, 10]))
+popt, pcov = fit(
+    model, xdata, ydata, p0=[1, 1, 0], goal="quality", bounds=([0, 0, -10], [10, 5, 10])
+)
 
 # Using named workflow presets
-popt, pcov = fit(model, xdata, ydata, p0=[1, 1, 0],
-                 workflow="robust",  # Enables multi-start with 5 starts
-                 bounds=([0, 0, -10], [10, 5, 10]))
+popt, pcov = fit(
+    model,
+    xdata,
+    ydata,
+    p0=[1, 1, 0],
+    workflow="robust",  # Enables multi-start with 5 starts
+    bounds=([0, 0, -10], [10, 5, 10]),
+)
 ```
 
 ## Key Concepts
@@ -109,19 +125,25 @@ popt, pcov = fit(model, x, y, p0=[1, 2, 3])
 
 ```python
 # Before
-popt, pcov = curve_fit(model, x, y, p0=[1, 2, 3],
-                       bounds=([0, 0, 0], [10, 10, 10]),
-                       multistart=True, n_starts=10)
+popt, pcov = curve_fit(
+    model,
+    x,
+    y,
+    p0=[1, 2, 3],
+    bounds=([0, 0, 0], [10, 10, 10]),
+    multistart=True,
+    n_starts=10,
+)
 
 # After (using preset)
-popt, pcov = fit(model, x, y, p0=[1, 2, 3],
-                 bounds=([0, 0, 0], [10, 10, 10]),
-                 preset="robust")  # Automatically enables multi-start
+popt, pcov = fit(
+    model, x, y, p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]), preset="robust"
+)  # Automatically enables multi-start
 
 # Or with goal
-popt, pcov = fit(model, x, y, p0=[1, 2, 3],
-                 bounds=([0, 0, 0], [10, 10, 10]),
-                 goal="quality")  # Enables multi-start with 20 starts
+popt, pcov = fit(
+    model, x, y, p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]), goal="quality"
+)  # Enables multi-start with 20 starts
 ```
 
 ### Example 3: Large Dataset Processing
@@ -130,22 +152,25 @@ popt, pcov = fit(model, x, y, p0=[1, 2, 3],
 # Before
 from nlsq import curve_fit_large
 
-popt, pcov = curve_fit_large(model, large_x, large_y,
-                              p0=[1, 2, 3],
-                              memory_limit_gb=8.0,
-                              show_progress=True)
+popt, pcov = curve_fit_large(
+    model, large_x, large_y, p0=[1, 2, 3], memory_limit_gb=8.0, show_progress=True
+)
 
 # After (automatic detection)
-popt, pcov = fit(model, large_x, large_y,
-                 p0=[1, 2, 3],
-                 show_progress=True)  # Auto-selects large dataset workflow
+popt, pcov = fit(
+    model, large_x, large_y, p0=[1, 2, 3], show_progress=True
+)  # Auto-selects large dataset workflow
 
 # Or explicitly
-popt, pcov = fit(model, large_x, large_y,
-                 p0=[1, 2, 3],
-                 preset="large",
-                 memory_limit_gb=8.0,
-                 show_progress=True)
+popt, pcov = fit(
+    model,
+    large_x,
+    large_y,
+    p0=[1, 2, 3],
+    preset="large",
+    memory_limit_gb=8.0,
+    show_progress=True,
+)
 ```
 
 ### Example 4: Streaming Optimization
@@ -196,11 +221,7 @@ from nlsq import WorkflowSelector, OptimizationGoal
 selector = WorkflowSelector(memory_limit_gb=32.0)
 
 # Get config for dataset characteristics
-config = selector.select(
-    n_points=5_000_000,
-    n_params=5,
-    goal=OptimizationGoal.QUALITY
-)
+config = selector.select(n_points=5_000_000, n_params=5, goal=OptimizationGoal.QUALITY)
 
 # Use the config
 fit(model, x, y, p0=p0, workflow=config)
@@ -212,10 +233,7 @@ Or use the convenience function:
 from nlsq import auto_select_workflow, OptimizationGoal
 
 config = auto_select_workflow(
-    n_points=len(xdata),
-    n_params=3,
-    goal=OptimizationGoal.ROBUST,
-    memory_limit_gb=16.0
+    n_points=len(xdata), n_params=3, goal=OptimizationGoal.ROBUST, memory_limit_gb=16.0
 )
 ```
 
@@ -282,28 +300,28 @@ export NLSQ_DEFAULT_WORKFLOW=robust
 
 ```python
 fit(
-    f,                      # Model function
-    xdata,                  # Independent variable data
-    ydata,                  # Dependent variable data
-    p0=None,                # Initial parameters
-    sigma=None,             # Measurement uncertainties
-    absolute_sigma=False,   # Interpret sigma as absolute
-    check_finite=True,      # Check for NaN/Inf
-    bounds=(-inf, inf),     # Parameter bounds
-    method=None,            # Optimization method
-    preset=None,            # Workflow preset name
-    workflow="auto",        # Workflow config or "auto"
-    goal=None,              # Optimization goal
-    multistart=None,        # Override preset multi-start
-    n_starts=None,          # Override preset n_starts
-    sampler="lhs",          # Multi-start sampling strategy
-    center_on_p0=True,      # Center samples on initial guess
-    scale_factor=1.0,       # Exploration scale factor
-    memory_limit_gb=None,   # Memory limit for large datasets
+    f,  # Model function
+    xdata,  # Independent variable data
+    ydata,  # Dependent variable data
+    p0=None,  # Initial parameters
+    sigma=None,  # Measurement uncertainties
+    absolute_sigma=False,  # Interpret sigma as absolute
+    check_finite=True,  # Check for NaN/Inf
+    bounds=(-inf, inf),  # Parameter bounds
+    method=None,  # Optimization method
+    preset=None,  # Workflow preset name
+    workflow="auto",  # Workflow config or "auto"
+    goal=None,  # Optimization goal
+    multistart=None,  # Override preset multi-start
+    n_starts=None,  # Override preset n_starts
+    sampler="lhs",  # Multi-start sampling strategy
+    center_on_p0=True,  # Center samples on initial guess
+    scale_factor=1.0,  # Exploration scale factor
+    memory_limit_gb=None,  # Memory limit for large datasets
     size_threshold=1_000_000,  # Threshold for large datasets
-    show_progress=False,    # Display progress bar
-    chunk_size=None,        # Override chunk size
-    **kwargs                # Additional optimizer parameters
+    show_progress=False,  # Display progress bar
+    chunk_size=None,  # Override chunk size
+    **kwargs,  # Additional optimizer parameters
 )
 ```
 
@@ -313,15 +331,15 @@ fit(
 from nlsq import WorkflowTier, OptimizationGoal
 
 # Tiers
-WorkflowTier.STANDARD           # Standard in-memory processing
-WorkflowTier.CHUNKED            # Chunked processing for large datasets
-WorkflowTier.STREAMING          # Streaming optimization
+WorkflowTier.STANDARD  # Standard in-memory processing
+WorkflowTier.CHUNKED  # Chunked processing for large datasets
+WorkflowTier.STREAMING  # Streaming optimization
 WorkflowTier.STREAMING_CHECKPOINT  # Streaming with checkpoints
 
 # Goals
-OptimizationGoal.FAST           # Speed-optimized
-OptimizationGoal.ROBUST         # Balanced (default)
-OptimizationGoal.QUALITY        # Quality-optimized
+OptimizationGoal.FAST  # Speed-optimized
+OptimizationGoal.ROBUST  # Balanced (default)
+OptimizationGoal.QUALITY  # Quality-optimized
 OptimizationGoal.MEMORY_EFFICIENT  # Memory-optimized
 ```
 
@@ -343,6 +361,7 @@ fit(model, x, y, workflow="standard")  # Use valid preset
 
 # Fix: Use a valid goal name or enum
 from nlsq import OptimizationGoal
+
 fit(model, x, y, goal=OptimizationGoal.QUALITY)
 ```
 
@@ -350,8 +369,12 @@ fit(model, x, y, goal=OptimizationGoal.QUALITY)
 
 ```python
 # Try using explicit large dataset settings
-fit(model, x, y,
+fit(
+    model,
+    x,
+    y,
     preset="large",
     memory_limit_gb=16.0,  # Increase if available
-    show_progress=True)
+    show_progress=True,
+)
 ```

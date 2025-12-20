@@ -154,7 +154,9 @@ t_half_1st_err = t_half_1st * (k_1st_err / k_1st_fit)
 
 print(f"  [A]_0: {C0_1st_fit:.4f} +/- {C0_1st_err:.4f} M (true: {C0_1st})")
 print(f"  k:    {k_1st_fit:.6f} +/- {k_1st_err:.6f} s^-1 (true: {k_1st_true})")
-print(f"  t_1/2: {t_half_1st:.2f} +/- {t_half_1st_err:.2f} s (true: {np.log(2) / k_1st_true:.2f})")
+print(
+    f"  t_1/2: {t_half_1st:.2f} +/- {t_half_1st_err:.2f} s (true: {np.log(2) / k_1st_true:.2f})"
+)
 
 # Method 2: fit() with 'global' preset
 print("\nMethod 2: fit() with 'global' preset")
@@ -228,13 +230,15 @@ t_half_2nd_err = t_half_2nd * np.sqrt(
 print("Fitted Parameters (robust preset):")
 print(f"  [A]_0: {C0_2nd_fit:.4f} +/- {C0_2nd_err:.4f} M (true: {C0_2nd})")
 print(f"  k:    {k_2nd_fit:.6f} +/- {k_2nd_err:.6f} M^-1 s^-1 (true: {k_2nd_true})")
-print(f"\nHalf-Life (concentration-dependent):")
-print(f"  t_1/2: {t_half_2nd:.2f} +/- {t_half_2nd_err:.2f} s (true: {1 / (k_2nd_true * C0_2nd):.2f})")
+print("\nHalf-Life (concentration-dependent):")
+print(
+    f"  t_1/2: {t_half_2nd:.2f} +/- {t_half_2nd_err:.2f} s (true: {1 / (k_2nd_true * C0_2nd):.2f})"
+)
 
 residuals_2nd = C_2nd_measured - second_order_decay(time, *popt_2nd)
 rmse_2nd = np.sqrt(np.mean(residuals_2nd**2))
 
-print(f"\nGoodness of Fit:")
+print("\nGoodness of Fit:")
 print(f"  RMSE: {rmse_2nd:.5f} M")
 
 
@@ -375,7 +379,11 @@ ax1.plot(
     alpha=0.7,
 )
 ax1.plot(
-    t_fine, first_order_decay(t_fine, *popt_1st_robust), "g-", linewidth=2.5, label="Fitted (robust)"
+    t_fine,
+    first_order_decay(t_fine, *popt_1st_robust),
+    "g-",
+    linewidth=2.5,
+    label="Fitted (robust)",
 )
 
 ax1.axhline(C0_1st_fit / 2, color="orange", linestyle=":", alpha=0.5)
@@ -587,7 +595,9 @@ print(f"  Initial conc.: {C0_1st_fit:.4f} +/- {C0_1st_err:.4f} M")
 
 print("\nSecond-Order Reaction:")
 print(f"  Rate constant: {k_2nd_fit:.6f} +/- {k_2nd_err:.6f} M^-1 s^-1")
-print(f"  Half-life:     {t_half_2nd:.2f} +/- {t_half_2nd_err:.2f} s (at [A]_0 = {C0_2nd_fit:.2f} M)")
+print(
+    f"  Half-life:     {t_half_2nd:.2f} +/- {t_half_2nd_err:.2f} s (at [A]_0 = {C0_2nd_fit:.2f} M)"
+)
 print(f"  Initial conc.: {C0_2nd_fit:.4f} +/- {C0_2nd_err:.4f} M")
 
 print("\nModel Selection with Global Optimization:")

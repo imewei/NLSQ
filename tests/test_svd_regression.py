@@ -19,10 +19,10 @@ Historical context:
 
 import warnings
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax.numpy as jnp
 from nlsq import LeastSquares
 from nlsq.svd_fallback import compute_svd_adaptive, compute_svd_with_fallback
 
@@ -49,6 +49,7 @@ class TestNoRandomizedSVD:
     def test_no_random_import(self):
         """Verify jax.random is not imported in svd_fallback."""
         import inspect
+
         from nlsq import svd_fallback
 
         source = inspect.getsource(svd_fallback)
@@ -66,7 +67,7 @@ class TestNoRandomizedSVD:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            U, s, V = compute_svd_adaptive(A, use_randomized=True)
+            _, _, _ = compute_svd_adaptive(A, use_randomized=True)
 
             # Should issue a deprecation warning
             assert len(w) == 1
@@ -265,13 +266,15 @@ class TestOptimizationConvergence:
 
         # D0 should be recovered within 20% (allowing for noise)
         D0_error = abs(D0_recovered - ground_truth["D0"]) / ground_truth["D0"]
-        assert D0_error < 0.20, f"D0 recovery error too high: {D0_error*100:.1f}%"
+        assert D0_error < 0.20, f"D0 recovery error too high: {D0_error * 100:.1f}%"
 
         # Alpha should be recovered within 30% (more sensitive to noise)
         alpha_error = (
             abs(alpha_recovered - ground_truth["alpha"]) / ground_truth["alpha"]
         )
-        assert alpha_error < 0.30, f"alpha recovery error too high: {alpha_error*100:.1f}%"
+        assert alpha_error < 0.30, (
+            f"alpha recovery error too high: {alpha_error * 100:.1f}%"
+        )
 
         # Should converge (not hit max iterations)
         assert result.get("success", True), "Optimization should converge"
@@ -300,7 +303,12 @@ class TestOptimizationConvergence:
             g2 = 1.0 + 0.5 * decay
             xdata_list.append(
                 np.column_stack(
-                    [t1_flat, t2_flat, np.full(len(t1_flat), i), np.full(len(t1_flat), i)]
+                    [
+                        t1_flat,
+                        t2_flat,
+                        np.full(len(t1_flat), i),
+                        np.full(len(t1_flat), i),
+                    ]
                 )
             )
             ydata_list.append(g2)
@@ -352,8 +360,10 @@ class TestOptimizationConvergence:
 
         # Results should be identical
         np.testing.assert_array_almost_equal(
-            results[0], results[1], decimal=10,
-            err_msg="Optimization results differ between runs - not deterministic"
+            results[0],
+            results[1],
+            decimal=10,
+            err_msg="Optimization results differ between runs - not deterministic",
         )
 
 

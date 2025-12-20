@@ -363,7 +363,9 @@ ax1.axvline(
 ax1.set_xscale("log")
 ax1.set_xlabel("Dose (uM, log scale)", fontsize=12)
 ax1.set_ylabel("Response (%)", fontsize=12)
-ax1.set_title("Dose-Response Curve (4PL Model) - fit() API", fontsize=14, fontweight="bold")
+ax1.set_title(
+    "Dose-Response Curve (4PL Model) - fit() API", fontsize=14, fontweight="bold"
+)
 ax1.legend(loc="lower right")
 ax1.grid(True, alpha=0.3, which="both")
 

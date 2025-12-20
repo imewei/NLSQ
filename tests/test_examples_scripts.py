@@ -17,12 +17,15 @@ def discover_scripts() -> list[Path]:
 
 
 SCRIPT_PARAMS = [
-    pytest.param(path, id=str(path.relative_to(SCRIPTS_ROOT))) for path in discover_scripts()
+    pytest.param(path, id=str(path.relative_to(SCRIPTS_ROOT)))
+    for path in discover_scripts()
 ]
 
 
 @pytest.mark.parametrize("script_path", SCRIPT_PARAMS)
-def test_example_script_runs(script_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_example_script_runs(
+    script_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     env = os.environ.copy()
     env["NLSQ_EXAMPLES_QUICK"] = env.get("NLSQ_EXAMPLES_QUICK", "1")
     env.setdefault("MPLBACKEND", "Agg")
@@ -32,11 +35,13 @@ def test_example_script_runs(script_path: Path, tmp_path: Path, monkeypatch: pyt
     env.setdefault("JAX_DISABLE_JIT", "1")
     env.setdefault("NLSQ_EXAMPLES_SKIP_ADVANCED", "0")
 
-    if env["NLSQ_EXAMPLES_SKIP_ADVANCED"] == "1" and "09_gallery_advanced" in str(script_path):
+    if env["NLSQ_EXAMPLES_SKIP_ADVANCED"] == "1" and "09_gallery_advanced" in str(
+        script_path
+    ):
         pytest.skip("Skipped advanced gallery in quick mode")
 
     # Ensure sitecustomize quick patches are loaded
-    extra_path = REPO_ROOT / "tests" / "quick_sitecustomize"
+    extra_path = REPO_ROOT / "tools" / "quick_sitecustomize"
     env["PYTHONPATH"] = os.pathsep.join(
         [str(REPO_ROOT), str(extra_path), env.get("PYTHONPATH", "")]
     )
@@ -48,10 +53,10 @@ def test_example_script_runs(script_path: Path, tmp_path: Path, monkeypatch: pyt
 
     result = subprocess.run(
         [sys.executable, str(local_script)],
+        check=False,
         cwd=tmp_path,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=60,
     )

@@ -272,13 +272,21 @@ ax1.plot(
 )
 t_fine = np.linspace(0, 60, 1000)
 ax1.plot(
-    t_fine, damped_oscillator(t_fine, *popt), "r-", linewidth=2, label="Fitted model (robust)"
+    t_fine,
+    damped_oscillator(t_fine, *popt),
+    "r-",
+    linewidth=2,
+    label="Fitted model (robust)",
 )
 
 envelope_upper = A0_fit * np.exp(-gamma_fit * t_fine)
 envelope_lower = -envelope_upper
 ax1.plot(
-    t_fine, envelope_upper, "g--", linewidth=1.5, label=f"Envelope (tau = {tau_fit:.1f}s)"
+    t_fine,
+    envelope_upper,
+    "g--",
+    linewidth=1.5,
+    label=f"Envelope (tau = {tau_fit:.1f}s)",
 )
 ax1.plot(t_fine, envelope_lower, "g--", linewidth=1.5)
 
@@ -415,8 +423,12 @@ print("\n" + "=" * 70)
 print("SUMMARY")
 print("=" * 70)
 print("Damped oscillation parameters determined using fit() API:")
-print(f"\n  Fitted damping coefficient: gamma = {gamma_fit:.5f} +/- {gamma_err:.5f} s^-1")
-print(f"  Fitted angular frequency:   omega = {omega_fit:.4f} +/- {omega_err:.4f} rad/s")
+print(
+    f"\n  Fitted damping coefficient: gamma = {gamma_fit:.5f} +/- {gamma_err:.5f} s^-1"
+)
+print(
+    f"  Fitted angular frequency:   omega = {omega_fit:.4f} +/- {omega_err:.4f} rad/s"
+)
 print(f"  Quality factor:             Q = {Q_fit:.1f} +/- {Q_err:.1f}")
 print(f"  Damping time:               tau = {tau_fit:.2f} +/- {tau_err:.2f} s")
 print(f"  Period:                     T = {period_fit:.3f} +/- {period_err:.3f} s")

@@ -18,12 +18,12 @@ Run this example:
 
 import os
 import sys
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -159,7 +159,7 @@ def main():
         "Halton": np.array(halton_samples),
     }
 
-    for ax, (name, samples) in zip(axes.flat, samples_dict.items()):
+    for ax, (name, samples) in zip(axes.flat, samples_dict.items(), strict=False):
         ax.scatter(
             samples[:, 0],
             samples[:, 1],
@@ -267,7 +267,9 @@ def main():
         axes[1, i].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig(FIG_DIR / "02_quasi_random_progressive.png", dpi=300, bbox_inches="tight")
+    plt.savefig(
+        FIG_DIR / "02_quasi_random_progressive.png", dpi=300, bbox_inches="tight"
+    )
     plt.close()
     print(f"  Saved: {FIG_DIR / '02_quasi_random_progressive.png'}")
 
@@ -282,9 +284,7 @@ def main():
 
     for n in sample_sizes:
         random_s = np.random.rand(n, 2)
-        lhs_s = np.array(
-            latin_hypercube_sample(n, 2, rng_key=jax.random.PRNGKey(42))
-        )
+        lhs_s = np.array(latin_hypercube_sample(n, 2, rng_key=jax.random.PRNGKey(42)))
         sobol_s = np.array(sobol_sample(n, 2))
         halton_s = np.array(halton_sample(n, 2))
 
@@ -405,7 +405,9 @@ def main():
     ax.set_ylim(0, 105)
 
     plt.tight_layout()
-    plt.savefig(FIG_DIR / "02_success_rate_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig(
+        FIG_DIR / "02_success_rate_comparison.png", dpi=300, bbox_inches="tight"
+    )
     plt.close()
     print(f"  Saved: {FIG_DIR / '02_success_rate_comparison.png'}")
 

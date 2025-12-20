@@ -411,7 +411,9 @@ ax1.errorbar(
 )
 ax1.plot(V_fit, pH_fitted_curve, "r-", linewidth=2, label="Fitted curve (robust)")
 ax1.axvline(Ve_fit, color="g", linestyle="--", label=f"Ve = {Ve_fit:.2f} mL")
-ax1.axhline(pKa_fit, color="orange", linestyle="--", alpha=0.5, label=f"pKa = {pKa_fit:.2f}")
+ax1.axhline(
+    pKa_fit, color="orange", linestyle="--", alpha=0.5, label=f"pKa = {pKa_fit:.2f}"
+)
 
 ax1.set_xlabel("Volume of NaOH (mL)", fontsize=11)
 ax1.set_ylabel("pH", fontsize=11)
@@ -431,7 +433,9 @@ ax2.axvline(
 
 ax2.set_xlabel("Volume of NaOH (mL)", fontsize=11)
 ax2.set_ylabel("dpH/dV (pH/mL)", fontsize=11)
-ax2.set_title("First Derivative\n(Equivalence Point Detection)", fontsize=12, fontweight="bold")
+ax2.set_title(
+    "First Derivative\n(Equivalence Point Detection)", fontsize=12, fontweight="bold"
+)
 ax2.legend(fontsize=9)
 ax2.grid(True, alpha=0.3)
 
@@ -439,7 +443,9 @@ ax2.grid(True, alpha=0.3)
 ax3 = plt.subplot(3, 3, 3)
 ax3.scatter(V_fit, residuals, alpha=0.6, s=30)
 ax3.axhline(0, color="r", linestyle="--", linewidth=1)
-ax3.axhline(2 * rmse, color="orange", linestyle=":", label=f"+/- 2sigma ({2 * rmse:.3f})")
+ax3.axhline(
+    2 * rmse, color="orange", linestyle=":", label=f"+/- 2sigma ({2 * rmse:.3f})"
+)
 ax3.axhline(-2 * rmse, color="orange", linestyle=":")
 
 ax3.set_xlabel("Volume of NaOH (mL)", fontsize=11)
@@ -472,7 +478,9 @@ params_err = [pKa_err, Ve_err]
 x_pos = np.arange(len(params_names))
 width = 0.35
 
-ax5.bar(x_pos - width / 2, params_true_vals, width, label="True", alpha=0.7, color="blue")
+ax5.bar(
+    x_pos - width / 2, params_true_vals, width, label="True", alpha=0.7, color="blue"
+)
 ax5.bar(
     x_pos + width / 2,
     params_fitted,
@@ -522,8 +530,12 @@ ax7.errorbar(
     capsize=2,
 )
 ax7.plot(V_di, pH_di_fitted, "r-", linewidth=2, label="Fitted curve")
-ax7.axvline(Ve1_fit, color="g", linestyle="--", alpha=0.7, label=f"Ve1 = {Ve1_fit:.1f} mL")
-ax7.axvline(Ve2_fit, color="b", linestyle="--", alpha=0.7, label=f"Ve2 = {Ve2_fit:.1f} mL")
+ax7.axvline(
+    Ve1_fit, color="g", linestyle="--", alpha=0.7, label=f"Ve1 = {Ve1_fit:.1f} mL"
+)
+ax7.axvline(
+    Ve2_fit, color="b", linestyle="--", alpha=0.7, label=f"Ve2 = {Ve2_fit:.1f} mL"
+)
 ax7.axhline(pKa1_fit_di, color="orange", linestyle=":", alpha=0.5)
 ax7.axhline(pKa2_fit_di, color="purple", linestyle=":", alpha=0.5)
 
@@ -547,8 +559,15 @@ dpH_dV_second = dpH_dV_di[mask_second]
 idx_second = np.argmax(dpH_dV_second)
 Ve2_inflection = V_di[mask_second][idx_second]
 
-ax8.axvline(Ve1_inflection, color="g", linestyle="--", label=f"1st: {Ve1_inflection:.1f} mL")
-ax8.axvline(Ve2_inflection, color="purple", linestyle="--", label=f"2nd: {Ve2_inflection:.1f} mL")
+ax8.axvline(
+    Ve1_inflection, color="g", linestyle="--", label=f"1st: {Ve1_inflection:.1f} mL"
+)
+ax8.axvline(
+    Ve2_inflection,
+    color="purple",
+    linestyle="--",
+    label=f"2nd: {Ve2_inflection:.1f} mL",
+)
 
 ax8.set_xlabel("Volume of NaOH (mL)", fontsize=11)
 ax8.set_ylabel("dpH/dV (pH/mL)", fontsize=11)
@@ -611,11 +630,17 @@ print(f"   Max buffer capacity = {max_beta:.4f} mol/(L*pH) at pH = {pH_max_beta:
 print(f"   Fit quality: RMSE = {rmse:.4f}, chi^2/dof = {reduced_chi_squared:.3f}")
 
 print("\n2. DIPROTIC TITRATION (Carbonic Acid):")
-print(f"   pKa1 (fitted) = {pKa1_fit_di:.2f} +/- {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})")
-print(f"   pKa2 (fitted) = {pKa2_fit_di:.2f} +/- {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})")
+print(
+    f"   pKa1 (fitted) = {pKa1_fit_di:.2f} +/- {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})"
+)
+print(
+    f"   pKa2 (fitted) = {pKa2_fit_di:.2f} +/- {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})"
+)
 print(f"   First equivalence = {Ve1_fit:.2f} +/- {Ve1_err:.2f} mL")
 print(f"   Second equivalence = {Ve2_fit:.2f} +/- {Ve2_err:.2f} mL")
-print(f"   Fit quality: RMSE = {rmse_di:.4f}, chi^2/dof = {chi_squared_di / dof_di:.3f}")
+print(
+    f"   Fit quality: RMSE = {rmse_di:.4f}, chi^2/dof = {chi_squared_di / dof_di:.3f}"
+)
 
 print("\n3. API Methods Used:")
 print("   - fit() with preset='robust' (5 multi-starts)")

@@ -33,10 +33,13 @@ class TestClusterDetector:
         nodefile.write_text("node01\nnode01\nnode02\nnode02\nnode03\nnode03\n")
 
         # Mock environment and JAX devices
-        with patch.dict(os.environ, {
-            "PBS_NODEFILE": str(nodefile),
-            "PBS_JOBID": "12345.pbs_server",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "PBS_NODEFILE": str(nodefile),
+                "PBS_JOBID": "12345.pbs_server",
+            },
+        ):
             detector = ClusterDetector(default_gpus_per_node=8)
 
             # Check PBS environment detection

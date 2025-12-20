@@ -13,11 +13,11 @@ Tests cover:
 - fit() error handling for invalid workflow names
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-import jax.numpy as jnp
 
-from nlsq.minpack import fit, curve_fit, CurveFit
+from nlsq.minpack import CurveFit, curve_fit, fit
 from nlsq.result import CurveFitResult
 from nlsq.workflow import OptimizationGoal
 

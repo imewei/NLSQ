@@ -34,13 +34,13 @@ from pathlib import Path
 
 print(f"✅ Python {sys.version} meets requirements")
 
+import os
 import time
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
@@ -48,6 +48,7 @@ MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
+
 
 # Import NLSQ core functionality
 from nlsq import CurveFit, __version__

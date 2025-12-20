@@ -183,9 +183,7 @@ def main():
         y_pred = exponential_decay(x_data, *popt)
         ssr = float(jnp.sum((y_data - y_pred) ** 2))
 
-        param_errors = [
-            abs(popt[i] - [true_a, true_b, true_c][i]) for i in range(3)
-        ]
+        param_errors = [abs(popt[i] - [true_a, true_b, true_c][i]) for i in range(3)]
 
         results[goal_name] = {
             "popt": popt,
@@ -265,7 +263,11 @@ def main():
     ax1 = axes[0, 0]
     sizes = np.logspace(2, 8, 50).astype(int)
 
-    for goal in [OptimizationGoal.FAST, OptimizationGoal.ROBUST, OptimizationGoal.QUALITY]:
+    for goal in [
+        OptimizationGoal.FAST,
+        OptimizationGoal.ROBUST,
+        OptimizationGoal.QUALITY,
+    ]:
         tols = [calculate_adaptive_tolerances(n, goal)["gtol"] for n in sizes]
         ax1.loglog(sizes, tols, label=goal.name, linewidth=2)
 
@@ -283,7 +285,7 @@ def main():
     ax2.set_xlabel("Goal")
     ax2.set_ylabel("Sum of Squared Residuals")
     ax2.set_title("Fit Quality by Goal")
-    for bar, ssr in zip(bars, ssrs):
+    for bar, ssr in zip(bars, ssrs, strict=False):
         ax2.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height(),
@@ -300,7 +302,7 @@ def main():
     ax3.set_xlabel("Goal")
     ax3.set_ylabel("Time (seconds)")
     ax3.set_title("Computation Time by Goal")
-    for bar, t in zip(bars, times):
+    for bar, t in zip(bars, times, strict=False):
         ax3.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height(),

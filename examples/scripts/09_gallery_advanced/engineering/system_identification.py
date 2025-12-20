@@ -316,8 +316,12 @@ ax1.plot(
 )
 
 ax1.axhline(K_fit * 0.632, color="blue", linestyle=":", alpha=0.5)
-ax1.axvline(t_63, color="blue", linestyle=":", alpha=0.5, label=f"63.2% at t={t_63:.1f}s")
-ax1.axhline(K_fit, color="gray", linestyle="--", alpha=0.5, label=f"Steady-state: {K_fit:.1f}C")
+ax1.axvline(
+    t_63, color="blue", linestyle=":", alpha=0.5, label=f"63.2% at t={t_63:.1f}s"
+)
+ax1.axhline(
+    K_fit, color="gray", linestyle="--", alpha=0.5, label=f"Steady-state: {K_fit:.1f}C"
+)
 
 ax1.set_xlabel("Time (s)", fontsize=12)
 ax1.set_ylabel("Temperature Rise (C)", fontsize=12)

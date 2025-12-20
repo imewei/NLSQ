@@ -14,10 +14,11 @@ Run this example:
     python examples/scripts/08_workflow_system/01_fit_quickstart.py
 """
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
 from nlsq import OptimizationGoal, WorkflowConfig, curve_fit, curve_fit_large, fit
 
@@ -238,7 +239,9 @@ def main():
     print(
         f"  preset='robust': a={popt_robust[0]:.4f}, b={popt_robust[1]:.4f}, c={popt_robust[2]:.4f}"
     )
-    print(f"  curve_fit():     a={popt_cf[0]:.4f}, b={popt_cf[1]:.4f}, c={popt_cf[2]:.4f}")
+    print(
+        f"  curve_fit():     a={popt_cf[0]:.4f}, b={popt_cf[1]:.4f}, c={popt_cf[2]:.4f}"
+    )
     print()
     print("Key takeaways:")
     print("  - fit() is the unified entry point with automatic workflow selection")

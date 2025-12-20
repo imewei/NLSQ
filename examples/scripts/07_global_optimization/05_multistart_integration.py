@@ -14,12 +14,13 @@ Run this example:
     python examples/scripts/07_global_optimization/05_multistart_integration.py
 """
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
-from nlsq import curve_fit, curve_fit_large, GlobalOptimizationConfig
+from nlsq import GlobalOptimizationConfig, curve_fit, curve_fit_large
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -94,7 +95,7 @@ def main():
         bounds=bounds,
     )
 
-    print(f"\n  Single-start result:")
+    print("\n  Single-start result:")
     print(
         f"    a={popt_single[0]:.4f}, b={popt_single[1]:.4f}, c={popt_single[2]:.4f}, d={popt_single[3]:.4f}"
     )
@@ -111,7 +112,7 @@ def main():
         sampler="lhs",  # Latin Hypercube Sampling
     )
 
-    print(f"\n  Multi-start result:")
+    print("\n  Multi-start result:")
     print(
         f"    a={popt_multi[0]:.4f}, b={popt_multi[1]:.4f}, c={popt_multi[2]:.4f}, d={popt_multi[3]:.4f}"
     )
@@ -148,7 +149,13 @@ def main():
     # Verify bounds
     print("\n  Bounds verification:")
     for i, (name, val, lo, hi) in enumerate(
-        zip(["a", "b", "c", "d"], popt_tight, tight_bounds[0], tight_bounds[1])
+        zip(
+            ["a", "b", "c", "d"],
+            popt_tight,
+            tight_bounds[0],
+            tight_bounds[1],
+            strict=False,
+        )
     ):
         in_bounds = lo <= val <= hi
         print(
@@ -182,7 +189,7 @@ def main():
     print(
         f"    a={popt_unbound[0]:.4f}, b={popt_unbound[1]:.4f}, c={popt_unbound[2]:.4f}"
     )
-    print(f"  True values: a=2.5, b=1.3, c=0.5")
+    print("  True values: a=2.5, b=1.3, c=0.5")
 
     # =========================================================================
     # 4. Using GlobalOptimizationConfig
@@ -232,9 +239,7 @@ def main():
     x_large = np.linspace(0, 10, n_large)
 
     y_large_true = (
-        true_a
-        * np.exp(-true_b * x_large)
-        * np.cos(true_c * x_large + true_d)
+        true_a * np.exp(-true_b * x_large) * np.cos(true_c * x_large + true_d)
     )
     y_large = y_large_true + 0.15 * np.random.randn(n_large)
 
@@ -253,7 +258,7 @@ def main():
         memory_limit_gb=1.0,
     )
 
-    print(f"\n  curve_fit_large with multi-start:")
+    print("\n  curve_fit_large with multi-start:")
     print(
         f"    a={popt_large[0]:.4f}, b={popt_large[1]:.4f}, c={popt_large[2]:.4f}, d={popt_large[3]:.4f}"
     )
@@ -299,7 +304,7 @@ def main():
         bounds=peak_bounds,
     )
 
-    print(f"\n  Single-start result:")
+    print("\n  Single-start result:")
     print(
         f"    Peak 1: a={popt_spec_single[0]:.3f}, mu={popt_spec_single[1]:.3f}, sigma={popt_spec_single[2]:.3f}"
     )
@@ -319,7 +324,7 @@ def main():
         sampler="lhs",
     )
 
-    print(f"\n  Multi-start result:")
+    print("\n  Multi-start result:")
     print(
         f"    Peak 1: a={popt_spec_multi[0]:.3f}, mu={popt_spec_multi[1]:.3f}, sigma={popt_spec_multi[2]:.3f}"
     )
@@ -414,9 +419,7 @@ def main():
     width = 0.25
 
     ax2.bar(x_pos - width, params_true, width, label="True", color="green", alpha=0.7)
-    ax2.bar(
-        x_pos, params_single, width, label="Single-start", color="blue", alpha=0.7
-    )
+    ax2.bar(x_pos, params_single, width, label="Single-start", color="blue", alpha=0.7)
     ax2.bar(
         x_pos + width, params_multi, width, label="Multi-start", color="red", alpha=0.7
     )

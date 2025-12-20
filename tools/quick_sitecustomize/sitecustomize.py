@@ -8,10 +8,10 @@ repeatable during automated runs. Only used by the example-script test harness.
 
 from __future__ import annotations
 
+import numbers
 import os
 import random
 import sys
-import numbers
 from typing import Iterable
 
 

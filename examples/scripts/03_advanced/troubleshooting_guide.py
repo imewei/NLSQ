@@ -36,12 +36,12 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # MUST come before importing matplotlib
 
 import contextlib
+import os
 import warnings
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import os
 
 from nlsq import CurveFit
 
@@ -51,6 +51,7 @@ MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
+
 
 # Show all warnings (helpful for debugging)
 warnings.filterwarnings("default")

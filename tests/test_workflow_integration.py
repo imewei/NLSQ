@@ -11,27 +11,27 @@ workflow system, testing:
 """
 
 import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
-from nlsq.minpack import fit, curve_fit
+from nlsq.minpack import curve_fit, fit
 from nlsq.result import CurveFitResult
 from nlsq.workflow import (
-    WorkflowTier,
+    WORKFLOW_PRESETS,
+    MemoryTier,
     OptimizationGoal,
     WorkflowConfig,
     WorkflowSelector,
+    WorkflowTier,
     auto_select_workflow,
-    WORKFLOW_PRESETS,
     calculate_adaptive_tolerances,
-    load_yaml_config,
     get_env_overrides,
-    MemoryTier,
+    load_yaml_config,
 )
 
 
@@ -299,10 +299,13 @@ workflows:
     def test_env_overrides_take_precedence(self, tmp_path):
         """Test that environment variables override YAML config."""
         # Set environment variables
-        with patch.dict(os.environ, {
-            "NLSQ_WORKFLOW_GOAL": "fast",
-            "NLSQ_MEMORY_LIMIT_GB": "8.0",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "NLSQ_WORKFLOW_GOAL": "fast",
+                "NLSQ_MEMORY_LIMIT_GB": "8.0",
+            },
+        ):
             overrides = get_env_overrides()
 
             assert overrides.get("goal") == "FAST"
@@ -415,12 +418,10 @@ class TestPackageExports:
     def test_workflow_components_importable(self):
         """Test workflow components can be imported."""
         from nlsq.workflow import (
-            WorkflowTier,
+            WORKFLOW_PRESETS,
             OptimizationGoal,
             WorkflowConfig,
             WorkflowSelector,
-            auto_select_workflow,
-            WORKFLOW_PRESETS,
         )
 
         assert WorkflowTier is not None

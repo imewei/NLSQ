@@ -182,7 +182,9 @@ if len(yield_index) > 0:
     epsilon_y_fit = strain_measured[yield_index]
 
     print(f"  Yield Strength (sigma_y):  {sigma_y_fit:.1f} MPa")
-    print(f"  Yield Strain (epsilon_y):  {epsilon_y_fit:.4f} ({100 * epsilon_y_fit:.2f}%)")
+    print(
+        f"  Yield Strain (epsilon_y):  {epsilon_y_fit:.4f} ({100 * epsilon_y_fit:.2f}%)"
+    )
     print(f"  True yield strength:       {sigma_y_true:.1f} MPa")
     print(f"  Error:                     {abs(sigma_y_fit - sigma_y_true):.1f} MPa")
 else:
@@ -268,7 +270,9 @@ if np.sum(mask_fit_plastic) > 10:
     # Strain hardening rate
     eps_avg = np.mean(strain_plastic_fit)
     hardening_rate = n_fit * K_fit * eps_avg ** (n_fit - 1)
-    print(f"\n  Strain hardening rate: {hardening_rate:.1f} MPa (at eps_p = {eps_avg:.4f})")
+    print(
+        f"\n  Strain hardening rate: {hardening_rate:.1f} MPa (at eps_p = {eps_avg:.4f})"
+    )
 
 
 # =============================================================================
@@ -367,8 +371,20 @@ if np.sum(mask_fit_plastic) > 10:
         label=f"Plastic fit (n={n_fit:.3f})",
     )
 
-ax1.axhline(sigma_y_fit, color="orange", linestyle="--", linewidth=1.5, label=f"Yield ({sigma_y_fit:.0f} MPa)")
-ax1.axhline(UTS_fit, color="red", linestyle="--", linewidth=1.5, label=f"UTS ({UTS_fit:.0f} MPa)")
+ax1.axhline(
+    sigma_y_fit,
+    color="orange",
+    linestyle="--",
+    linewidth=1.5,
+    label=f"Yield ({sigma_y_fit:.0f} MPa)",
+)
+ax1.axhline(
+    UTS_fit,
+    color="red",
+    linestyle="--",
+    linewidth=1.5,
+    label=f"UTS ({UTS_fit:.0f} MPa)",
+)
 ax1.axvline(epsilon_y_fit * 100, color="orange", linestyle=":", alpha=0.5)
 
 ax1.set_xlabel("Strain (%)", fontsize=12)

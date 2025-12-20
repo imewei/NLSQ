@@ -28,7 +28,9 @@ def exponential_decay(x, a, b, c):
 
 def main():
     if os.environ.get("NLSQ_EXAMPLES_QUICK"):
-        print("Quick mode: skipping hybrid streaming demo (full run requires more time).")
+        print(
+            "Quick mode: skipping hybrid streaming demo (full run requires more time)."
+        )
         return
 
     print("=" * 70)

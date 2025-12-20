@@ -43,6 +43,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # ======================================================================
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
+import os
 import time
 from pathlib import Path
 
@@ -50,7 +51,6 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 from jax import jit, vmap
 
 from nlsq import CurveFit
@@ -65,6 +65,7 @@ MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
+
 
 print("Hardware Configuration:")
 print(f"  JAX version: {jax.__version__}")

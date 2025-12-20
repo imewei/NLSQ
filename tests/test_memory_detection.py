@@ -49,7 +49,9 @@ class TestCPUMemoryDetection:
             available_gb = MemoryEstimator.get_available_memory_gb()
 
             # Should fall back to 16 GB (updated from 4 GB per requirements)
-            assert available_gb == 16.0, f"Expected 16.0 GB fallback, got {available_gb}"
+            assert available_gb == 16.0, (
+                f"Expected 16.0 GB fallback, got {available_gb}"
+            )
 
     def test_cpu_memory_detection_returns_positive(self):
         """Test that CPU memory detection always returns a positive value."""
@@ -111,7 +113,9 @@ class TestGPUMemoryDetection:
             available_gb = estimator.get_available_gpu_memory_gb()
 
             # Should return 0 for CPU-only environment
-            assert available_gb == 0.0, f"Expected 0 GB for CPU-only, got {available_gb}"
+            assert available_gb == 0.0, (
+                f"Expected 0 GB for CPU-only, got {available_gb}"
+            )
 
     def test_multiple_gpus_aggregate_memory(self):
         """Test that multiple GPUs aggregate available memory."""
@@ -157,12 +161,14 @@ class TestCombinedMemoryEstimation:
             "bytes_in_use": 8 * 1024**3,  # 8 GB in use
         }
 
-        with patch("psutil.virtual_memory", return_value=mock_cpu_memory):
-            with patch.object(jax, "devices", return_value=[mock_gpu]):
-                total_gb = MemoryEstimator.get_total_available_memory_gb()
+        with (
+            patch("psutil.virtual_memory", return_value=mock_cpu_memory),
+            patch.object(jax, "devices", return_value=[mock_gpu]),
+        ):
+            total_gb = MemoryEstimator.get_total_available_memory_gb()
 
-                # CPU (64) + GPU available (40-8=32) = 96 GB
-                assert 95.9 <= total_gb <= 96.1, f"Expected ~96 GB, got {total_gb}"
+            # CPU (64) + GPU available (40-8=32) = 96 GB
+            assert 95.9 <= total_gb <= 96.1, f"Expected ~96 GB, got {total_gb}"
 
     def test_combined_memory_cpu_only(self):
         """Test combined memory when no GPU available."""
@@ -174,12 +180,14 @@ class TestCombinedMemoryEstimation:
         mock_cpu_device = MagicMock()
         mock_cpu_device.platform = "cpu"
 
-        with patch("psutil.virtual_memory", return_value=mock_cpu_memory):
-            with patch.object(jax, "devices", return_value=[mock_cpu_device]):
-                total_gb = MemoryEstimator.get_total_available_memory_gb()
+        with (
+            patch("psutil.virtual_memory", return_value=mock_cpu_memory),
+            patch.object(jax, "devices", return_value=[mock_cpu_device]),
+        ):
+            total_gb = MemoryEstimator.get_total_available_memory_gb()
 
-                # CPU only: 32 GB (GPU = 0)
-                assert 31.9 <= total_gb <= 32.1, f"Expected ~32 GB, got {total_gb}"
+            # CPU only: 32 GB (GPU = 0)
+            assert 31.9 <= total_gb <= 32.1, f"Expected ~32 GB, got {total_gb}"
 
     def test_memory_estimation_no_caching(self):
         """Test that memory estimation re-evaluates on each call (no caching)."""
@@ -219,19 +227,23 @@ class TestMemoryCleanup:
 
     def test_memory_cleanup_calls_jax_clear_caches(self):
         """Test that memory cleanup calls jax.clear_caches()."""
-        with patch.object(gc, "collect"):
-            with patch.object(jax, "clear_caches") as mock_clear:
-                cleanup_memory()
+        with (
+            patch.object(gc, "collect"),
+            patch.object(jax, "clear_caches") as mock_clear,
+        ):
+            cleanup_memory()
 
-                # jax.clear_caches should have been called
-                mock_clear.assert_called_once()
+            # jax.clear_caches should have been called
+            mock_clear.assert_called_once()
 
     def test_memory_cleanup_graceful_on_error(self):
         """Test that memory cleanup handles errors gracefully."""
-        with patch.object(gc, "collect"):
-            with patch.object(jax, "clear_caches", side_effect=Exception("Cache error")):
-                # Should not raise exception
-                cleanup_memory()  # No exception = test passes
+        with (
+            patch.object(gc, "collect"),
+            patch.object(jax, "clear_caches", side_effect=Exception("Cache error")),
+        ):
+            # Should not raise exception
+            cleanup_memory()  # No exception = test passes
 
 
 class TestMemoryTierClassification:

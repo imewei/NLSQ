@@ -16,10 +16,9 @@ Run this example:
     python examples/scripts/07_global_optimization/03_presets_and_config.py
 """
 
-import time
-
 import os
 import sys
+import time
 from pathlib import Path
 
 import jax
@@ -106,7 +105,7 @@ def main():
         config = GlobalOptimizationConfig.from_preset(preset_name)
         print(
             f"{preset_name:<12} {config.n_starts:<10} {config.sampler:<8} "
-            f"{str(config.center_on_p0):<14} {config.elimination_rounds:<12}"
+            f"{config.center_on_p0!s:<14} {config.elimination_rounds:<12}"
         )
 
     # =========================================================================
@@ -271,7 +270,7 @@ def main():
     ax2.set_xlabel("Preset")
     ax2.set_ylabel("Sum of Squared Residuals (SSR)")
     ax2.set_title("Fit Quality by Preset")
-    for bar, ssr in zip(bars, ssrs):
+    for bar, ssr in zip(bars, ssrs, strict=False):
         ax2.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() + 0.1,
@@ -287,7 +286,7 @@ def main():
     ax3.set_xlabel("Preset")
     ax3.set_ylabel("Time (seconds)")
     ax3.set_title("Computation Time by Preset")
-    for bar, t in zip(bars, times):
+    for bar, t in zip(bars, times, strict=False):
         ax3.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() + 0.01,
@@ -303,7 +302,7 @@ def main():
     ax4.set_xlabel("Preset")
     ax4.set_ylabel("Number of Starting Points")
     ax4.set_title("Starting Points by Preset")
-    for bar, n in zip(bars, n_starts_list):
+    for bar, n in zip(bars, n_starts_list, strict=False):
         ax4.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() + 0.2,
@@ -334,14 +333,20 @@ def main():
 
     fig, axes = plt.subplots(1, 4, figsize=(16, 4))
 
-    for ax, sf in zip(axes, scale_factors):
+    for ax, sf in zip(axes, scale_factors, strict=False):
         centered = center_samples_around_p0(
             base_samples, p0_demo, scale_factor=sf, lb=lb, ub=ub
         )
 
         ax.scatter(centered[:, 0], centered[:, 1], alpha=0.6, s=30)
         ax.scatter(
-            [p0_demo[0]], [p0_demo[1]], color="red", s=100, marker="*", label="p0", zorder=5
+            [p0_demo[0]],
+            [p0_demo[1]],
+            color="red",
+            s=100,
+            marker="*",
+            label="p0",
+            zorder=5,
         )
         ax.set_xlim(0, 10)
         ax.set_ylim(0, 10)

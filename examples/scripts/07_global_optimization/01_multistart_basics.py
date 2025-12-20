@@ -15,11 +15,12 @@ Run this example:
     python examples/scripts/07_global_optimization/01_multistart_basics.py
 """
 
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
 from nlsq import GlobalOptimizationConfig, curve_fit
 from nlsq.global_optimization import latin_hypercube_sample, scale_samples_to_bounds
@@ -109,13 +110,13 @@ def main():
             y_pred = multimodal_model(x_data, *popt)
             ssr = float(jnp.sum((y_data - y_pred) ** 2))
             single_start_results.append({"p0": p0, "popt": popt, "ssr": ssr})
-            print(f"  Guess {i+1}: p0={p0}")
+            print(f"  Guess {i + 1}: p0={p0}")
             print(
                 f"    Result: a={popt[0]:.3f}, b={popt[1]:.3f}, c={popt[2]:.3f}, d={popt[3]:.3f}"
             )
             print(f"    SSR: {ssr:.4f}")
         except Exception as e:
-            print(f"  Guess {i+1}: Failed - {e}")
+            print(f"  Guess {i + 1}: Failed - {e}")
             single_start_results.append({"p0": p0, "popt": None, "ssr": float("inf")})
 
     # =========================================================================
@@ -132,7 +133,7 @@ def main():
         scale_factor=1.0,
     )
 
-    print(f"  GlobalOptimizationConfig:")
+    print("  GlobalOptimizationConfig:")
     print(f"    n_starts: {global_config.n_starts}")
     print(f"    sampler: {global_config.sampler}")
     print(f"    center_on_p0: {global_config.center_on_p0}")

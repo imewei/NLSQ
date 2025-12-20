@@ -16,8 +16,8 @@ Run this example:
 import os
 from pathlib import Path
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 
 try:
     import yaml
@@ -27,11 +27,11 @@ except ImportError:
 
 from nlsq import curve_fit
 from nlsq.workflow import (
-    load_yaml_config,
+    WorkflowConfig,
     get_custom_workflow,
     get_env_overrides,
     load_config_with_overrides,
-    WorkflowConfig,
+    load_yaml_config,
 )
 
 

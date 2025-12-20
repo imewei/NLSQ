@@ -5,8 +5,6 @@ This script was automatically generated from a Jupyter notebook.
 Plots are saved to the figures/ directory instead of displayed inline.
 """
 
-from pathlib import Path
-
 # ======================================================================
 # # Custom Algorithms and Advanced Extensions
 #
@@ -48,6 +46,7 @@ from pathlib import Path
 # MUST come before importing matplotlib
 import os
 import sys
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp

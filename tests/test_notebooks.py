@@ -19,7 +19,8 @@ def discover_notebooks() -> list[Path]:
 
 
 NOTEBOOK_PARAMS = [
-    pytest.param(path, id=str(path.relative_to(NB_ROOT))) for path in discover_notebooks()
+    pytest.param(path, id=str(path.relative_to(NB_ROOT)))
+    for path in discover_notebooks()
 ]
 
 
@@ -31,7 +32,9 @@ def test_notebook_executes(notebook_path: Path, tmp_path: Path):
     env.setdefault("JAX_DISABLE_JIT", "1")
     env.setdefault("PYTHONHASHSEED", "0")
     env.setdefault("MPLBACKEND", "Agg")
-    env.setdefault("NLSQ_NOTEBOOKS_SKIP_ADVANCED", env.get("NLSQ_EXAMPLES_SKIP_ADVANCED", "0"))
+    env.setdefault(
+        "NLSQ_NOTEBOOKS_SKIP_ADVANCED", env.get("NLSQ_EXAMPLES_SKIP_ADVANCED", "0")
+    )
     env.setdefault("NLSQ_NOTEBOOKS_SKIP_HEAVY", "0")
 
     # Skip heavy advanced gallery notebooks in quick mode
@@ -39,12 +42,16 @@ def test_notebook_executes(notebook_path: Path, tmp_path: Path):
         notebook_path
     ):
         pytest.skip("Skipped advanced gallery notebook in quick mode")
-    if env["NLSQ_NOTEBOOKS_SKIP_HEAVY"] == "1" and "07_global_optimization" in str(notebook_path):
+    if env["NLSQ_NOTEBOOKS_SKIP_HEAVY"] == "1" and "07_global_optimization" in str(
+        notebook_path
+    ):
         pytest.skip("Skipped heavy global optimization notebook in quick mode")
 
     # Ensure sitecustomize quick patches are discoverable
-    quick_path = REPO_ROOT / "tests" / "quick_sitecustomize"
-    env["PYTHONPATH"] = os.pathsep.join([str(REPO_ROOT), str(quick_path), env.get("PYTHONPATH", "")])
+    quick_path = REPO_ROOT / "tools" / "quick_sitecustomize"
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO_ROOT), str(quick_path), env.get("PYTHONPATH", "")]
+    )
 
     local_nb = tmp_path / notebook_path.relative_to(REPO_ROOT)
     local_nb.parent.mkdir(parents=True, exist_ok=True)

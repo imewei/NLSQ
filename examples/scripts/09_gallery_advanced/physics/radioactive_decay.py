@@ -239,7 +239,11 @@ ax1.errorbar(
 ax1.plot(time, N_true, "r--", linewidth=2, label="True decay")
 t_fine = np.linspace(0, 20000, 200)
 ax1.plot(
-    t_fine, radioactive_decay(t_fine, *popt), "g-", linewidth=2, label="Fitted decay (robust)"
+    t_fine,
+    radioactive_decay(t_fine, *popt),
+    "g-",
+    linewidth=2,
+    label="Fitted decay (robust)",
 )
 
 ax1.set_xlabel("Time (years)")

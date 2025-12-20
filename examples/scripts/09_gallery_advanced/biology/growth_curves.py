@@ -279,6 +279,7 @@ print("-" * 70)
 mask_exp = (OD_measured > 0.1) & (OD_measured < 0.6)
 
 if np.sum(mask_exp) > 5:
+
     def linear_log(t, ln_N0, mu):
         return ln_N0 + mu * t
 
@@ -364,7 +365,11 @@ ax1.plot(
     alpha=0.7,
 )
 ax1.plot(
-    t_fine, logistic_growth(t_fine, *popt_robust), "g-", linewidth=2.5, label="Fitted (robust)"
+    t_fine,
+    logistic_growth(t_fine, *popt_robust),
+    "g-",
+    linewidth=2.5,
+    label="Fitted (robust)",
 )
 
 ax1.axhline(
@@ -389,7 +394,11 @@ ax1.grid(True, alpha=0.3)
 ax2 = plt.subplot(3, 2, 2)
 ax2.semilogy(time, OD_measured, "o", markersize=6, alpha=0.6, label="Measured OD")
 ax2.semilogy(
-    t_fine, logistic_growth(t_fine, *popt_robust), "g-", linewidth=2.5, label="Fitted logistic"
+    t_fine,
+    logistic_growth(t_fine, *popt_robust),
+    "g-",
+    linewidth=2.5,
+    label="Fitted logistic",
 )
 
 if np.sum(mask_exp) > 5:

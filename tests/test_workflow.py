@@ -203,7 +203,9 @@ class TestAdaptiveTolerances:
         """Test that QUALITY goal uses one tier tighter tolerances."""
         # Base tolerance for VERY_LARGE is 1e-7
         base_tols = calculate_adaptive_tolerances(5_000_000)
-        quality_tols = calculate_adaptive_tolerances(5_000_000, goal=OptimizationGoal.QUALITY)
+        quality_tols = calculate_adaptive_tolerances(
+            5_000_000, goal=OptimizationGoal.QUALITY
+        )
 
         # Quality should use LARGE tier tolerance (1e-8) instead of VERY_LARGE (1e-7)
         assert quality_tols["gtol"] == 1e-8
@@ -222,8 +224,12 @@ class TestAdaptiveTolerances:
     def test_robust_and_global_use_base_tolerances(self):
         """Test that ROBUST and GLOBAL goals don't shift tolerances."""
         base_tols = calculate_adaptive_tolerances(5_000_000)
-        robust_tols = calculate_adaptive_tolerances(5_000_000, goal=OptimizationGoal.ROBUST)
-        global_tols = calculate_adaptive_tolerances(5_000_000, goal=OptimizationGoal.GLOBAL)
+        robust_tols = calculate_adaptive_tolerances(
+            5_000_000, goal=OptimizationGoal.ROBUST
+        )
+        global_tols = calculate_adaptive_tolerances(
+            5_000_000, goal=OptimizationGoal.GLOBAL
+        )
 
         assert robust_tols["gtol"] == base_tols["gtol"]
         assert global_tols["gtol"] == base_tols["gtol"]
@@ -235,7 +241,9 @@ class TestAdaptiveTolerances:
         assert tiny_quality["gtol"] == 1e-12  # Stays at tightest
 
         # MASSIVE dataset with FAST goal - can't go looser, stays at MASSIVE
-        massive_fast = calculate_adaptive_tolerances(500_000_000, goal=OptimizationGoal.FAST)
+        massive_fast = calculate_adaptive_tolerances(
+            500_000_000, goal=OptimizationGoal.FAST
+        )
         assert massive_fast["gtol"] == 1e-5  # Stays at loosest
 
 
@@ -685,7 +693,9 @@ class TestWorkflowPresetsDict:
 
         for preset_name, preset_config in WORKFLOW_PRESETS.items():
             for field in required_fields:
-                assert field in preset_config, f"Preset '{preset_name}' missing field '{field}'"
+                assert field in preset_config, (
+                    f"Preset '{preset_name}' missing field '{field}'"
+                )
 
 
 class TestStandardPreset:
@@ -1194,4 +1204,7 @@ class TestPrecisionAutoIntegration:
         assert precision_config["precision"] == "auto"
         # Auto precision leverages float32->float64 upgrade when needed
         assert "description" in precision_config
-        assert "float64" in precision_config["description"].lower() or "auto" in precision_config["description"].lower()
+        assert (
+            "float64" in precision_config["description"].lower()
+            or "auto" in precision_config["description"].lower()
+        )

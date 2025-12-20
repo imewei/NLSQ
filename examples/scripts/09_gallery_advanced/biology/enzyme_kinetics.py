@@ -419,7 +419,11 @@ ax4.plot(S, v_measured, "o", markersize=8, label="No inhibitor", alpha=0.7)
 ax4.plot(S, v_inhibited, "s", markersize=8, label=f"[I] = {I_conc:.0f} uM", alpha=0.7)
 
 ax4.plot(
-    S_fine, michaelis_menten(S_fine, *popt_robust), "g-", linewidth=2, label="No inhibitor fit"
+    S_fine,
+    michaelis_menten(S_fine, *popt_robust),
+    "g-",
+    linewidth=2,
+    label="No inhibitor fit",
 )
 ax4.plot(
     S_fine,

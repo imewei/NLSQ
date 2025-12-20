@@ -24,15 +24,15 @@ from pathlib import Path
 import numpy as np
 
 from nlsq.workflow import (
-    WorkflowConfig,
-    WorkflowTier,
-    OptimizationGoal,
+    WORKFLOW_PRESETS,
     ClusterDetector,
     ClusterInfo,
+    OptimizationGoal,
+    WorkflowConfig,
+    WorkflowTier,
     create_checkpoint_directory,
-    get_multi_gpu_config,
     create_distributed_config,
-    WORKFLOW_PRESETS,
+    get_multi_gpu_config,
 )
 
 if os.environ.get("NLSQ_EXAMPLES_QUICK"):
@@ -158,7 +158,7 @@ def main():
     cluster_info = detector.detect()
 
     if cluster_info:
-        print(f"\n  Cluster detected:")
+        print("\n  Cluster detected:")
         print(f"    Scheduler: {cluster_info.scheduler}")
         print(f"    Node count: {cluster_info.node_count}")
         print(f"    GPUs per node: {cluster_info.gpus_per_node}")

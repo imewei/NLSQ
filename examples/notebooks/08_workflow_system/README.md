@@ -140,7 +140,7 @@ presets = list(WORKFLOW_PRESETS.keys())
 # ['standard', 'quality', 'fast', 'large_robust', 'streaming', 'hpc_distributed', 'memory_efficient']
 
 # Inspect a preset
-print(WORKFLOW_PRESETS['quality'])
+print(WORKFLOW_PRESETS["quality"])
 ```
 
 | Preset | Tier | Goal | Multi-start | Best For |

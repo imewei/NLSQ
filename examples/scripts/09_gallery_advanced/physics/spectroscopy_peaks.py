@@ -235,7 +235,9 @@ print(f"  Peak 3 (Escape):  {cen3_g:.3f} keV")
 
 # Method 3: GlobalOptimizationConfig with many starts (for difficult spectra)
 custom_starts = 12 if QUICK_MODE else 30
-print(f"\nMethod 3: GlobalOptimizationConfig with {custom_starts} starts (thorough search)")
+print(
+    f"\nMethod 3: GlobalOptimizationConfig with {custom_starts} starts (thorough search)"
+)
 popt_custom, pcov_custom = fit(
     multi_peak_model,
     energy,
@@ -378,7 +380,13 @@ ax1.errorbar(
     capsize=0,
     markersize=3,
 )
-ax1.plot(energy, multi_peak_model(energy, *popt), "r-", linewidth=2, label="Total fit (global)")
+ax1.plot(
+    energy,
+    multi_peak_model(energy, *popt),
+    "r-",
+    linewidth=2,
+    label="Total fit (global)",
+)
 
 bg = popt[0] * energy + popt[1]
 ax1.plot(energy, bg, "k--", linewidth=1.5, label="Background")
@@ -513,7 +521,9 @@ print("  - Multi-peak fitting has many local minima")
 print("  - Peak overlap creates parameter correlations")
 print("  - Poor initial guesses can lead to unphysical results")
 print(f"  - preset='global' ({global_starts} starts) recommended for complex spectra")
-print(f"  - For very complex spectra, use multistart=True with n_starts={custom_starts}+")
+print(
+    f"  - For very complex spectra, use multistart=True with n_starts={custom_starts}+"
+)
 print("\nAPI Methods Used:")
 print("  - fit() with preset='robust' (5 multi-starts)")
 print(f"  - fit() with preset='global' ({global_starts} multi-starts)")

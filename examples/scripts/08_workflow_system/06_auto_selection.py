@@ -15,9 +15,10 @@ Run this example:
     python examples/scripts/08_workflow_system/06_auto_selection.py
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
 from nlsq.large_dataset import GPUMemoryEstimator, MemoryEstimator, get_memory_tier
 from nlsq.workflow import (
@@ -90,9 +91,9 @@ def main():
         if max_pts == float("inf"):
             max_str = "unlimited"
         elif max_pts >= 1_000_000:
-            max_str = f"{max_pts/1_000_000:.0f}M"
+            max_str = f"{max_pts / 1_000_000:.0f}M"
         elif max_pts >= 1_000:
-            max_str = f"{max_pts/1_000:.0f}K"
+            max_str = f"{max_pts / 1_000:.0f}K"
         else:
             max_str = str(max_pts)
 
@@ -107,9 +108,9 @@ def main():
         tier = DatasetSizeTier.from_n_points(n_points)
 
         if n_points >= 1_000_000:
-            size_str = f"{n_points/1_000_000:.0f}M"
+            size_str = f"{n_points / 1_000_000:.0f}M"
         elif n_points >= 1_000:
-            size_str = f"{n_points/1_000:.0f}K"
+            size_str = f"{n_points / 1_000:.0f}K"
         else:
             size_str = str(n_points)
 
@@ -184,9 +185,9 @@ def main():
         config_type = type(config).__name__
 
         if n_points >= 1_000_000:
-            size_str = f"{n_points/1_000_000:.0f}M"
+            size_str = f"{n_points / 1_000_000:.0f}M"
         elif n_points >= 1_000:
-            size_str = f"{n_points/1_000:.0f}K"
+            size_str = f"{n_points / 1_000:.0f}K"
         else:
             size_str = str(n_points)
 
@@ -262,9 +263,9 @@ def main():
         tolerances = calculate_adaptive_tolerances(n_points, goal)
 
         if n_points >= 1_000_000:
-            size_str = f"{n_points/1_000_000:.0f}M"
+            size_str = f"{n_points / 1_000_000:.0f}M"
         else:
-            size_str = f"{n_points/1_000:.0f}K"
+            size_str = f"{n_points / 1_000:.0f}K"
 
         goal_str = goal.name if goal else "None"
 
@@ -307,16 +308,14 @@ def main():
         )
     )
     ax.text(2, 12.1, "INPUT", ha="center", va="center", fontsize=12, fontweight="bold")
-    ax.text(
-        2, 11.7, "n_points, n_params, goal", ha="center", va="center", fontsize=9
-    )
+    ax.text(2, 11.7, "n_points, n_params, goal", ha="center", va="center", fontsize=9)
 
     # Arrow down
     ax.annotate(
         "",
         xy=(2, 10.3),
         xytext=(2, 11.5),
-        arrowprops=dict(arrowstyle="->", color="black", lw=2),
+        arrowprops={"arrowstyle": "->", "color": "black", "lw": 2},
     )
 
     # Step 2: Get Memory
@@ -326,7 +325,13 @@ def main():
         )
     )
     ax.text(
-        2, 9.8, "1. Get Memory", ha="center", va="center", fontsize=10, fontweight="bold"
+        2,
+        9.8,
+        "1. Get Memory",
+        ha="center",
+        va="center",
+        fontsize=10,
+        fontweight="bold",
     )
     ax.text(2, 9.5, "get_available_memory_gb()", ha="center", va="center", fontsize=8)
 
@@ -335,7 +340,7 @@ def main():
         "",
         xy=(2, 8.1),
         xytext=(2, 9.3),
-        arrowprops=dict(arrowstyle="->", color="black", lw=2),
+        arrowprops={"arrowstyle": "->", "color": "black", "lw": 2},
     )
 
     # Step 3: Classify Memory
@@ -360,7 +365,7 @@ def main():
         "",
         xy=(2, 5.9),
         xytext=(2, 7.1),
-        arrowprops=dict(arrowstyle="->", color="black", lw=2),
+        arrowprops={"arrowstyle": "->", "color": "black", "lw": 2},
     )
 
     # Step 4: Classify Dataset
@@ -385,7 +390,7 @@ def main():
         "",
         xy=(2, 3.7),
         xytext=(2, 4.9),
-        arrowprops=dict(arrowstyle="->", color="black", lw=2),
+        arrowprops={"arrowstyle": "->", "color": "black", "lw": 2},
     )
 
     # Step 5: Apply Matrix
@@ -416,7 +421,7 @@ def main():
         "",
         xy=(2, 1.5),
         xytext=(2, 2.7),
-        arrowprops=dict(arrowstyle="->", color="black", lw=2),
+        arrowprops={"arrowstyle": "->", "color": "black", "lw": 2},
     )
 
     # Step 6: Output
@@ -436,9 +441,7 @@ def main():
 
     # Memory Tier Reference (right side)
     ax.add_patch(
-        plt.Rectangle(
-            (5, 8), 4.5, 4.5, fill=True, facecolor="white", edgecolor="black"
-        )
+        plt.Rectangle((5, 8), 4.5, 4.5, fill=True, facecolor="white", edgecolor="black")
     )
     ax.text(7.25, 12, "MemoryTier", ha="center", fontsize=11, fontweight="bold")
     ax.text(5.2, 11.3, "LOW: < 16 GB", fontsize=9)
@@ -474,7 +477,9 @@ def main():
             (5, 0.5), 10.5, 3, fill=True, facecolor="white", edgecolor="black"
         )
     )
-    ax.text(10.25, 3, "Output Config Types", ha="center", fontsize=11, fontweight="bold")
+    ax.text(
+        10.25, 3, "Output Config Types", ha="center", fontsize=11, fontweight="bold"
+    )
     ax.text(
         5.2,
         2.3,
@@ -499,9 +504,7 @@ def main():
     )
     ax.text(10.25, 7, "Goal Modifiers", ha="center", fontsize=11, fontweight="bold")
     ax.text(5.2, 6.3, "FAST: Disable multistart, looser tolerances", fontsize=9)
-    ax.text(
-        5.2, 5.7, "ROBUST/GLOBAL: Enable multistart (if memory allows)", fontsize=9
-    )
+    ax.text(5.2, 5.7, "ROBUST/GLOBAL: Enable multistart (if memory allows)", fontsize=9)
     ax.text(5.2, 5.1, "QUALITY: Enable multistart + tighter tolerances", fontsize=9)
     ax.text(5.2, 4.7, "MEMORY_EFFICIENT: Force streaming/chunking", fontsize=9)
 
