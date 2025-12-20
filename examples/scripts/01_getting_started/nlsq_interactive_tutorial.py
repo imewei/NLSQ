@@ -5,6 +5,8 @@ This script was automatically generated from a Jupyter notebook.
 Plots are saved to the figures/ directory instead of displayed inline.
 """
 
+import os
+import sys
 from pathlib import Path
 
 # ======================================================================
@@ -72,6 +74,13 @@ from nlsq import (
     functions,  # Common fitting functions
 )
 
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
+
 # Set random seed for reproducibility
 np.random.seed(42)
 
@@ -115,7 +124,7 @@ else:
 a_true, b_true, c_true = 10.0, 0.5, 2.0
 
 # Generate x data
-x = np.linspace(0, 10, 100)
+x = np.linspace(0, 10, cap_samples(100))
 
 # Generate y data with noise
 y_true = a_true * np.exp(-b_true * x) + c_true
@@ -227,6 +236,10 @@ plt.close()
 # Print goodness of fit
 rmse = np.sqrt(np.mean(residuals**2))
 print(f"RMSE: {rmse:.4f}")
+
+if QUICK:
+    print("⏩ Quick mode enabled: skipping extended tutorial sections.")
+    sys.exit(0)
 
 
 # ======================================================================
@@ -650,7 +663,7 @@ else:
 import time
 
 # Generate large dataset
-n_points = 100000  # 100K points
+n_points = cap_samples(100000)  # 100K points (capped in quick mode)
 x_large = np.linspace(0, 10, n_points)
 y_large = 5.0 * np.exp(-0.3 * x_large) + 1.0 + np.random.normal(0, 0.2, size=n_points)
 
@@ -682,8 +695,8 @@ print("   Subsequent fits reuse compiled code and are much faster!")
 from nlsq import curve_fit_large
 
 # Simulate very large dataset (10M points would be ~160 MB)
-# Using 500K points for demo (faster in Colab)
-n_huge = 500000
+# Using 500K points for demo (capped in quick mode)
+n_huge = cap_samples(500000)
 x_huge = np.linspace(0, 10, n_huge)
 y_huge = 5.0 * np.exp(-0.3 * x_huge) + 1.0 + np.random.normal(0, 0.2, size=n_huge)
 
@@ -726,7 +739,7 @@ import jax
 current_backend = jax.devices()[0].platform
 print(f"Current backend: {current_backend}")
 
-if current_backend == "gpu":
+if current_backend == "gpu" and not QUICK:
     print("\n🚀 GPU detected! Running performance comparison...")
 
     # Create large dataset for GPU test

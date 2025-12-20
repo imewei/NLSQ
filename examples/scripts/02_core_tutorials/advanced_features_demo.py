@@ -126,7 +126,7 @@ print("✅ Test models defined")
 def create_diagnostic_data():
     """Create test datasets with different characteristics."""
     np.random.seed(42)
-    x = np.linspace(0, 5, 1000)
+    x = np.linspace(0, 5, 300 if QUICK else 1000)
 
     datasets = {
         "clean": {
@@ -160,8 +160,14 @@ def create_diagnostic_data():
     }
 
     # Add some outliers to the outlier dataset - now safe since y is a numpy array
-    outlier_indices = np.random.choice(len(x), 50, replace=False)
-    datasets["outliers"]["y"][outlier_indices] += np.random.normal(0, 1.0, 50)
+    outlier_indices = np.random.choice(len(x), 10 if QUICK else 50, replace=False)
+    datasets["outliers"]["y"][outlier_indices] += np.random.normal(
+        0, 1.0, len(outlier_indices)
+    )
+
+    if QUICK:
+        # Keep the example short and deterministic in CI
+        datasets = {k: datasets[k] for k in ["clean", "noisy"]}
 
     return datasets
 
@@ -260,7 +266,11 @@ def comprehensive_fitting_analysis():
 
     results = {}
 
-    for dataset_name, data in datasets.items():
+    selected = list(datasets.items())
+    if QUICK:
+        selected = selected[:1]
+
+    for dataset_name, data in selected:
         print(f"\nProcessing {dataset_name} dataset...")
 
         # Initial parameter guess (slightly off from true values)
@@ -310,6 +320,10 @@ def demonstrate_algorithm_selection():
     print("=" * 70)
     print("ALGORITHM SELECTION DEMONSTRATION")
     print("=" * 70)
+
+    if QUICK:
+        print("⏩ Quick mode: skipping algorithm selection demo for speed.")
+        return
 
     if not ADVANCED_FEATURES_AVAILABLE:
         print("⚠️  Advanced algorithm selection not available in this version")
@@ -422,11 +436,15 @@ def test_robustness():
     print("\n--- Test 1: Bad Initial Guesses ---")
     test_data = datasets["clean"]
 
-    bad_guesses = [
-        [100, 0.01, -10],  # Very different from true values
-        [0.01, 100, 100],  # Poor scaling
-        [-5, -1, -2],  # Wrong signs
-    ]
+    bad_guesses = (
+        [[100, 0.01, -10]]
+        if QUICK
+        else [
+            [100, 0.01, -10],
+            [0.01, 100, 100],
+            [-5, -1, -2],
+        ]
+    )
 
     for i, p0 in enumerate(bad_guesses):
         try:
@@ -469,7 +487,7 @@ def test_robustness():
 
     # Test 3: Extreme noise levels
     print("\n--- Test 3: Extreme Noise Levels ---")
-    noise_levels = [0.5, 1.0, 2.0]  # Very high noise
+    noise_levels = [0.5] if QUICK else [0.5, 1.0, 2.0]  # Very high noise
 
     for noise in noise_levels:
         try:
@@ -506,9 +524,14 @@ def test_robustness():
 
     edge_cases = [
         ("Very few points", test_data["x"][:10], test_data["y"][:10]),
-        ("Single x value", np.array([1.0, 1.0, 1.0]), np.array([2.0, 2.1, 1.9])),
-        ("Constant y values", test_data["x"][:100], np.ones(100) * 2.5),
     ]
+    if not QUICK:
+        edge_cases.extend(
+            [
+                ("Single x value", np.array([1.0, 1.0, 1.0]), np.array([2.0, 2.1, 1.9])),
+                ("Constant y values", test_data["x"][:100], np.ones(100) * 2.5),
+            ]
+        )
 
     for case_name, x_edge, y_edge in edge_cases:
         try:
@@ -537,6 +560,10 @@ def demonstrate_memory_management():
     print("=" * 70)
     print("MEMORY MANAGEMENT AND PERFORMANCE OPTIMIZATION")
     print("=" * 70)
+
+    if QUICK:
+        print("⏩ Quick mode: skipping memory management demo for speed.")
+        return
 
     if not ADVANCED_FEATURES_AVAILABLE:
         print("⚠️  Advanced memory management not available in this version")
@@ -667,6 +694,10 @@ def test_complex_models():
     print("=" * 70)
     print("COMPLEX MULTI-PARAMETER MODEL TESTING")
     print("=" * 70)
+
+    if QUICK:
+        print("⏩ Quick mode: skipping complex model tests.")
+        return
 
     cf = CurveFit()
 
@@ -815,6 +846,10 @@ def performance_benchmark():
     print("=" * 70)
     print("PERFORMANCE BENCHMARKING")
     print("=" * 70)
+
+    if QUICK:
+        print("⏩ Quick mode: skipping performance benchmark.")
+        return
 
     # Benchmark configurations
     benchmark_cases = [
