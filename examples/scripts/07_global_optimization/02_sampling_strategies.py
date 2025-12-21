@@ -28,9 +28,9 @@ import numpy as np
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-if os.environ.get("NLSQ_EXAMPLES_QUICK"):
-    print("Quick mode: skipping sampling strategies visualization.")
-    sys.exit(0)
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+if QUICK:
+    print("Quick mode: reduced iterations for sampling strategies.")
 
 from nlsq import curve_fit
 from nlsq.global_optimization import (
@@ -123,6 +123,29 @@ def main():
     print("Sampling Strategies for Multi-Start Optimization")
     print("=" * 70)
     print()
+
+    if QUICK:
+        print("Quick mode: skipping full demonstration.")
+        print()
+        print("=" * 70)
+        print("Summary: Sampling Strategies")
+        print("=" * 70)
+        print()
+        print("Sampling Strategies:")
+        print("  - Random: Baseline, poor space-filling")
+        print("  - LHS: Stratified random, good coverage, stochastic")
+        print("  - Sobol: Quasi-random, excellent coverage, deterministic")
+        print("  - Halton: Quasi-random, very good coverage, deterministic")
+        print()
+        print("Key Functions:")
+        print("  - latin_hypercube_sample(n_samples, n_dims)")
+        print("  - sobol_sample(n_samples, n_dims)")
+        print("  - halton_sample(n_samples, n_dims)")
+        print("  - scale_samples_to_bounds(samples, lb, ub)")
+        print()
+        print("Usage with curve_fit():")
+        print('  curve_fit(..., multistart=True, n_starts=10, sampler="lhs")')
+        return
 
     # Set random seed for reproducibility
     np.random.seed(42)
@@ -338,8 +361,8 @@ def main():
     bounds = ([0.5, 0.5, -np.pi], [5.0, 3.0, np.pi])
     lb, ub = np.array(bounds[0]), np.array(bounds[1])
 
-    n_starts_list = [5, 10, 15, 20, 25, 30]
-    n_trials = 5
+    n_starts_list = [5, 10] if QUICK else [5, 10, 15, 20, 25, 30]
+    n_trials = 2 if QUICK else 5
 
     success_rates = {"Random": [], "LHS": [], "Sobol": [], "Halton": []}
 

@@ -35,9 +35,9 @@ from nlsq.workflow import (
     get_multi_gpu_config,
 )
 
-if os.environ.get("NLSQ_EXAMPLES_QUICK"):
-    print("Quick mode: skipping HPC and checkpointing demo.")
-    sys.exit(0)
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+if QUICK:
+    print("Quick mode: reduced iterations for HPC and checkpointing demo.")
 
 
 def save_checkpoint(checkpoint_dir, iteration, params, loss, metadata=None):
@@ -212,6 +212,21 @@ def main():
     print(f"    enable_checkpoints: {hpc_config.enable_checkpoints}")
     print(f"    checkpoint_dir: {hpc_config.checkpoint_dir}")
     print(f"    enable_multistart: {hpc_config.enable_multistart}")
+
+    if QUICK:
+        print()
+        print("=" * 70)
+        print("Summary (Quick Mode)")
+        print("=" * 70)
+        print()
+        print("HPC Integration:")
+        print("  - ClusterDetector.detect() for PBS Pro detection")
+        print("  - ClusterInfo for cluster metadata (nodes, GPUs, job ID)")
+        print()
+        print("Checkpointing:")
+        print("  - WorkflowTier.STREAMING_CHECKPOINT for fault tolerance")
+        print("  - enable_checkpoints=True, checkpoint_dir='./checkpoints'")
+        return
 
     # =========================================================================
     # 3. Checkpointing Configuration

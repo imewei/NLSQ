@@ -26,6 +26,8 @@ except ImportError:
     raise
 
 from nlsq import curve_fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 from nlsq.workflow import (
     WorkflowConfig,
     get_custom_workflow,
@@ -133,7 +135,7 @@ def main():
                 "ftol": 1e-10,
                 "xtol": 1e-10,
                 "enable_multistart": True,
-                "n_starts": 20,
+                "n_starts": 4 if QUICK else 20,
                 "sampler": "lhs",
             },
             "quick_explore": {
@@ -153,7 +155,7 @@ def main():
                 "memory_limit_gb": 8.0,
                 "chunk_size": 100000,
                 "enable_multistart": True,
-                "n_starts": 10,
+                "n_starts": 4 if QUICK else 10,
             },
             "hpc_checkpoint": {
                 "tier": "STREAMING_CHECKPOINT",
@@ -164,7 +166,7 @@ def main():
                 "enable_checkpoints": True,
                 "checkpoint_dir": "./checkpoints",
                 "enable_multistart": True,
-                "n_starts": 10,
+                "n_starts": 4 if QUICK else 10,
             },
         },
     }
@@ -249,7 +251,7 @@ def main():
     print("5. Using custom workflows with curve_fit:")
 
     # Generate test data
-    x_data = np.linspace(0, 5, 300)
+    x_data = np.linspace(0, 5, 100 if QUICK else 300)
     true_a, true_b, true_c = 2.5, 1.2, 0.5
     y_true = true_a * np.exp(-true_b * x_data) + true_c
     y_data = y_true + 0.1 * np.random.randn(len(x_data))
