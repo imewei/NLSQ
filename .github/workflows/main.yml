@@ -11,6 +11,7 @@ env:
   PYTHON_VERSION_DEFAULT: "3.12"
   COVERAGE_THRESHOLD: 79
   CACHE_VERSION: v1
+  PYTHONIOENCODING: utf-8  # Fix Windows Unicode encoding for emoji in scripts
 
 # Cancel in-progress runs for the same workflow
 concurrency:
