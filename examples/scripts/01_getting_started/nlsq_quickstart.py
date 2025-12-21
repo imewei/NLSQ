@@ -24,6 +24,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # Import NLSQ before importing JAX since we need NLSQ to set all the JAX computation to use 64 rather than 32 bit arrays.
 # ======================================================================
 import os
+import sys
 
 # Check Python version
 from pathlib import Path
@@ -75,7 +76,7 @@ def cap_samples(n: int) -> int:
 
 
 # make the synthetic data
-length = 1000
+length = cap_samples(1000)
 x = np.linspace(0, 10, length)
 params = (3, 5)
 y = linear(x, *params)
@@ -181,6 +182,10 @@ def get_random_parameters(mmin=1, mmax=10, bmin=0, bmax=10):
     b = bmin + deltab * np.random.random()
     return m, b
 
+
+if QUICK:
+    print("⏩ Quick mode: skipping extended speed benchmark.")
+    sys.exit(0)
 
 length = cap_samples(3 * 10**5)
 x = np.linspace(0, 10, length)
