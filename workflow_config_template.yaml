@@ -1,111 +1,331 @@
-# Workflow System Configuration Template
-# - Copy this file and edit values as needed.
-# - All sections include guidance on intent, safe defaults, and pitfalls.
-# - Keep comments when sharing internally; remove only if required by tooling.
+# ==============================================================================
+# NLSQ Workflow Configuration Template
+# ==============================================================================
+# Version: 2.0 (Updated for NLSQ v0.2.0+)
+#
+# This template provides comprehensive configuration options for NLSQ curve
+# fitting workflows. Copy this file to your project and customize as needed.
+#
+# Quick Start:
+#   1. Copy this file: cp workflow_config_template.yaml nlsq.yaml
+#   2. Set project_root in paths section
+#   3. Choose a default_workflow preset or define custom workflows
+#   4. Run: python -c "from nlsq.workflow import load_yaml_config; print(load_yaml_config())"
+#
+# Documentation: https://nlsq.readthedocs.io/en/latest/guides/workflow_options.html
+# ==============================================================================
+
+# ==============================================================================
+# TUTORIAL: Understanding NLSQ Workflow System
+# ==============================================================================
+#
+# NLSQ provides a tiered workflow system that automatically selects optimal
+# fitting strategies based on your dataset size, available memory, and goals.
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ WORKFLOW TIERS (Processing Strategies)                                      │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ STANDARD              │ Direct curve_fit() for datasets < 10K points       │
+# │ CHUNKED               │ Memory-managed chunking for 10K-10M points          │
+# │ STREAMING             │ Mini-batch gradient descent for 10M-100M points     │
+# │ STREAMING_CHECKPOINT  │ Streaming with fault tolerance for 100M+ points     │
+# └─────────────────────────────────────────────────────────────────────────────┘
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ OPTIMIZATION GOALS                                                          │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ FAST              │ Speed priority, looser tolerances, no multi-start       │
+# │ ROBUST            │ Balanced precision/speed, multi-start enabled           │
+# │ GLOBAL            │ Synonym for ROBUST, emphasizes global optimum search    │
+# │ QUALITY           │ Highest precision, tighter tolerances, validation       │
+# │ MEMORY_EFFICIENT  │ Minimize memory with streaming/small chunks             │
+# └─────────────────────────────────────────────────────────────────────────────┘
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ DATASET SIZE TIERS & RECOMMENDED TOLERANCES                                 │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Size Tier    │ Data Points   │ Recommended tol │ Notes                      │
+# │──────────────│───────────────│─────────────────│────────────────────────────│
+# │ TINY         │ < 1,000       │ 1e-12           │ Maximum precision          │
+# │ SMALL        │ 1K - 10K      │ 1e-10           │ High precision             │
+# │ MEDIUM       │ 10K - 100K    │ 1e-9            │ Balanced                   │
+# │ LARGE        │ 100K - 1M     │ 1e-8            │ Standard (NLSQ default)    │
+# │ VERY_LARGE   │ 1M - 10M      │ 1e-7            │ Chunked processing         │
+# │ HUGE         │ 10M - 100M    │ 1e-6            │ Streaming mode             │
+# │ MASSIVE      │ > 100M        │ 1e-5            │ Streaming + checkpoints    │
+# └─────────────────────────────────────────────────────────────────────────────┘
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ WORKFLOW SELECTION MATRIX                                                   │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Dataset Size │ Low (<16GB) │ Medium (16-64GB) │ High (64-128GB) │ >128GB    │
+# │──────────────│─────────────│──────────────────│─────────────────│───────────│
+# │ Small <10K   │ standard    │ standard         │ standard        │ +quality  │
+# │ Medium 10K-1M│ chunked     │ standard         │ standard+ms     │ +ms       │
+# │ Large 1M-10M │ streaming   │ chunked          │ chunked+ms      │ chunked+ms│
+# │ Huge 10M-100M│ stream+ckpt │ streaming        │ chunked         │ chunked+ms│
+# │ Massive >100M│ stream+ckpt │ streaming+ckpt   │ streaming       │ stream+ms │
+# └─────────────────────────────────────────────────────────────────────────────┘
+# (ms = multi-start, ckpt = checkpointing)
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ FOUR-PHASE HYBRID STREAMING OPTIMIZER                                       │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ The streaming optimizer uses a 4-phase approach for optimal convergence:    │
+# │                                                                             │
+# │ Phase 0: Parameter Normalization                                            │
+# │   - Scales parameters to similar magnitudes                                 │
+# │   - Strategies: 'auto', 'bounds', 'p0', 'none'                              │
+# │   - Improves gradient signal quality                                        │
+# │                                                                             │
+# │ Phase 1: Adam Warmup (Mini-batch gradient descent)                          │
+# │   - Fast initial convergence from any starting point                        │
+# │   - Adaptive switching based on plateau/gradient criteria                   │
+# │   - Default: 200-500 iterations                                             │
+# │                                                                             │
+# │ Phase 2: Streaming Gauss-Newton                                             │
+# │   - Exact J^T J accumulation across data chunks                             │
+# │   - Quadratic convergence near optimum                                      │
+# │   - Trust region control for stability                                      │
+# │                                                                             │
+# │ Phase 3: Covariance & Denormalization                                       │
+# │   - Compute exact covariance matrix                                         │
+# │   - Transform back to original parameter space                              │
+# └─────────────────────────────────────────────────────────────────────────────┘
+#
+# ==============================================================================
+# TUTORIAL: Common Configuration Patterns
+# ==============================================================================
+#
+# Pattern 1: Small Dataset, Maximum Precision (< 10K points)
+# ──────────────────────────────────────────────────────────
+#   default_workflow: "quality"
+#   # or custom:
+#   workflows:
+#     my_precision:
+#       tier: "STANDARD"
+#       goal: "QUALITY"
+#       gtol: 1.0e-12
+#       ftol: 1.0e-12
+#       xtol: 1.0e-12
+#       enable_multistart: true
+#       n_starts: 25
+#
+# Pattern 2: Large Dataset, Balanced Performance (100K - 10M points)
+# ──────────────────────────────────────────────────────────────────
+#   default_workflow: "large_robust"
+#   # or custom:
+#   workflows:
+#     my_large:
+#       tier: "CHUNKED"
+#       goal: "ROBUST"
+#       gtol: 1.0e-8
+#       ftol: 1.0e-8
+#       xtol: 1.0e-8
+#       enable_multistart: true
+#       n_starts: 10
+#       chunk_size: 100000
+#
+# Pattern 3: Huge Dataset, Memory Constrained (10M+ points, <16GB RAM)
+# ────────────────────────────────────────────────────────────────────
+#   default_workflow: "streaming"
+#   memory_limit_gb: 8.0
+#   # or custom:
+#   workflows:
+#     my_streaming:
+#       tier: "STREAMING"
+#       goal: "MEMORY_EFFICIENT"
+#       gtol: 1.0e-6
+#       enable_checkpoints: true
+#       checkpoint_dir: "checkpoints"
+#
+# Pattern 4: HPC Multi-GPU Cluster (PBS Pro)
+# ──────────────────────────────────────────
+#   default_workflow: "hpc_distributed"
+#   # Auto-detects cluster via PBS_NODEFILE
+#
+# Pattern 5: Quick Development/Testing
+# ────────────────────────────────────
+#   default_workflow: "fast"
+#   runtime:
+#     precision: "float32"
+#   fitting:
+#     termination:
+#       max_iterations: 50
+#
+# ==============================================================================
 
 metadata:
-  # Human-friendly name used in logs/reports; no runtime effect.
-  # Recommended: short, unique, stable across reruns for comparability.
+  # Human-friendly name for logs/reports. Keep short, unique, and stable.
   workflow_name: "example_workflow"
-  # Brief description of the workflow purpose and dataset scope.
-  description: "Template configuration for workflow system runs."
-  # Configuration schema or template version; update when fields change.
-  version: "1.0"
-  # Optional contact for ownership and review.
+  # Brief description of workflow purpose.
+  description: "NLSQ workflow configuration template with optimized defaults."
+  # Configuration version for tracking changes.
+  version: "2.0"
+  # Optional ownership information.
   author: ""
   contact: ""
 
-# Workflow System (NLSQ internal schema)
-# - These top-level keys match nlsq.workflow YAML loading.
-# - If you only use the internal workflow system, these keys are sufficient.
-# - Pitfall: workflow names are case-sensitive when referenced by name.
-default_workflow: "standard"  # Preset or custom workflow name.
-# Memory budget used by workflow auto-selection; set to null to auto-detect.
-# Performance: lower limits may force streaming/chunked tiers.
-memory_limit_gb: 16.0
-# Custom workflow definitions; each entry maps to WorkflowConfig.from_dict.
+# ==============================================================================
+# WORKFLOW SYSTEM SETTINGS
+# ==============================================================================
+# These settings control the NLSQ workflow tier and optimization behavior.
+# The default_workflow can be a preset name or a custom workflow defined below.
+#
+# Built-in presets:
+#   - standard:         Standard curve_fit() with default tolerances
+#   - quality:          Highest precision with multi-start and tight tolerances
+#   - fast:             Speed-optimized with looser tolerances
+#   - large_robust:     Chunked processing with multi-start for large datasets
+#   - streaming:        AdaptiveHybridStreamingOptimizer for huge datasets
+#   - hpc_distributed:  Multi-GPU/node configuration for HPC clusters
+#   - memory_efficient: Minimize memory with streaming/small chunks
+
+default_workflow: "standard"
+
+# Memory limit for workflow auto-selection. Set to null to auto-detect.
+# Performance: Lower limits force streaming/chunked tiers.
+# Precision: Higher limits allow more data in memory for better accuracy.
+memory_limit_gb: null  # Auto-detect (recommended)
+
+# Custom workflow definitions. Each entry maps to WorkflowConfig.from_dict().
+# Override any preset or create entirely new configurations.
 workflows:
-  # Example custom workflow (safe defaults).
-  example_custom:
-    tier: "STANDARD"  # STANDARD | CHUNKED | STREAMING | STREAMING_CHECKPOINT
-    goal: "ROBUST"    # FAST | ROBUST | GLOBAL | MEMORY_EFFICIENT | QUALITY
+  # Example: Precision-focused workflow for publication-quality results
+  precision_first:
+    tier: "STANDARD"
+    goal: "QUALITY"
+    gtol: 1.0e-10
+    ftol: 1.0e-10
+    xtol: 1.0e-10
+    enable_multistart: true
+    n_starts: 20
+    sampler: "lhs"           # "lhs", "sobol", or "halton"
+    center_on_p0: true       # Center samples around initial guess
+    scale_factor: 1.0        # Exploration region scale
+    enable_checkpoints: false
+
+  # Example: Large dataset with multi-start
+  large_multistart:
+    tier: "CHUNKED"
+    goal: "ROBUST"
     gtol: 1.0e-8
     ftol: 1.0e-8
     xtol: 1.0e-8
-    enable_multistart: false
+    enable_multistart: true
     n_starts: 10
-    sampler: "default"  # "default" or "lhs"
+    sampler: "lhs"
+    chunk_size: 100000       # Points per chunk (CHUNKED tier only)
     enable_checkpoints: false
+
+  # Example: Memory-constrained streaming
+  low_memory_streaming:
+    tier: "STREAMING"
+    goal: "MEMORY_EFFICIENT"
+    gtol: 1.0e-7
+    ftol: 1.0e-7
+    xtol: 1.0e-7
+    enable_multistart: false
+    chunk_size: 5000         # Smaller chunks for lower memory
+    enable_checkpoints: true
     checkpoint_dir: "checkpoints"
-    chunk_size: null  # Only for CHUNKED tier
+
+# ==============================================================================
+# PATHS
+# ==============================================================================
+# File system locations for workflow artifacts.
+# Use absolute paths for production; relative paths resolve from project_root.
 
 paths:
-  # Base directory for relative paths; set explicitly for portability.
-  # Pitfall: leaving blank may resolve relative paths to unexpected CWDs.
+  # Base directory for relative paths. Set explicitly for portability.
   project_root: "/path/to/project"
-  # Input data location; can be absolute or relative to project_root.
+  # Input data location.
   input_dir: "data/input"
-  # Primary outputs (results, reports); ensure write permissions.
+  # Primary outputs (results, reports).
   output_dir: "data/output"
-  # Logs and trace files; keep separate for easier cleanup.
+  # Log files; keep separate for cleanup.
   logs_dir: "logs"
-  # Cache location (compiled artifacts, intermediates); can be cleared safely.
+  # JIT compilation cache; safe to clear.
   cache_dir: "cache"
-  # Temporary scratch space; should be on fast local storage if possible.
+  # Temporary scratch space; use fast local storage.
   temp_dir: "tmp"
 
+# ==============================================================================
+# RUNTIME
+# ==============================================================================
+# Execution environment settings affecting performance and reproducibility.
+
 runtime:
-  # Device selection: "cpu" or "gpu". Default CPU for safety and parity.
-  # Determinism: CPU tends to be more reproducible than GPU.
+  # Device selection: "cpu" or "gpu".
+  # CPU is default for reproducibility; GPU provides 150-270x speedup.
+  # Note: GPU requires Linux + NVIDIA + CUDA 12.1-12.9
   device: "cpu"
-  # Threads/workers used by parallel sections. Keep modest to avoid oversubscription.
-  # Performance: set to <= physical cores; too high can slow I/O.
+
+  # Thread/worker counts for parallel sections.
+  # Performance: Set <= physical cores to avoid oversubscription.
   threads: 4
   workers: 2
-  # Numeric precision/dtype; float64 improves accuracy but can be slower.
-  # Pitfall: mixed dtypes can lead to subtle discrepancies.
+
+  # Numerical precision.
+  # "float64" (default): Maximum accuracy, recommended for scientific work.
+  # "float32": Faster, less memory, but reduced precision.
+  # Precision priority per user requirements - always use float64.
   precision: "float64"
   dtype: "float64"
-  # Fixed seed for reproducible sampling/initialization.
-  # Determinism: change only when you want different stochastic results.
-  random_seed: 0
-  # Verbosity and logging; higher = more detail and overhead.
+
+  # Random seed for reproducibility.
+  # Determinism: Same seed produces identical results on same hardware.
+  random_seed: 42
+
+  # Verbosity and logging.
+  # 0: Silent, 1: Progress, 2: Detailed, 3: Debug
   verbosity: 1
   log_level: "INFO"
 
+# ==============================================================================
+# LOGGING
+# ==============================================================================
+# Logging configuration for debugging and audit trails.
+
 logging:
-  # Log file path; relative to logs_dir or absolute.
+  # Log file path (relative to logs_dir or absolute).
   log_file: "workflow.log"
-  # Console logging on/off. Disable for quiet batch runs.
+  # Console logging toggle.
   console: true
-  # Structured logging for ingestion by external tools.
-  # Performance: slight overhead when enabled.
+  # Structured logging for external tool ingestion.
   structured:
     enabled: false
-    format: "json"  # "json" or "yaml"; keep "json" for tooling.
+    format: "json"  # "json" for tooling compatibility
   # Log rotation to prevent unbounded growth.
   rotation:
     enabled: true
     max_bytes: 10485760  # 10 MB
     backup_count: 5
-  # Timestamp settings; disable only if your platform adds its own.
+  # Timestamps.
   timestamps:
     enabled: true
     timezone: "UTC"
 
+# ==============================================================================
+# DATA
+# ==============================================================================
+# Dataset configuration and validation rules.
+
 data:
-  # Dataset identifier used in reports/exports; not used to locate files.
+  # Dataset identifier for reports/exports.
   dataset_id: "dataset_001"
   # File discovery patterns under input_dir.
-  # Pitfall: overly broad patterns can include unintended files.
   file_patterns:
     - "*.csv"
     - "*.parquet"
-  # Expected file formats; used by parsers/validators.
+    - "*.h5"       # HDF5 for large datasets
+    - "*.hdf5"
+  # Expected file formats.
   file_formats:
     - "csv"
     - "parquet"
-  # Parsing options; keep strict to avoid silent type coercion.
+    - "hdf5"
+  # Parsing options.
   parsing:
     delimiter: ","
     encoding: "utf-8"
@@ -114,8 +334,8 @@ data:
       - ""
       - "NA"
       - "null"
-  # Validation rules for columns and ranges.
-  # Determinism: strict validation improves reproducibility.
+      - "NaN"
+  # Validation rules.
   validation:
     required_columns:
       - "x"
@@ -131,98 +351,197 @@ data:
         min: null
         max: null
 
+# ==============================================================================
+# PREPROCESSING
+# ==============================================================================
+# Data preprocessing before fitting.
+# Note: Subsampling was removed in v0.2.0. NLSQ uses streaming for 100% data.
+
 preprocessing:
-  # Normalization/scaling applied before fitting.
-  # Pitfall: changing preprocessing changes parameter meaning.
+  # Normalization/scaling before fitting.
+  # Warning: Changing preprocessing changes parameter interpretation.
   normalization:
     enabled: false
     method: "standard"  # "standard", "minmax", "robust", "none"
-  # Filtering/masking of data points (e.g., outliers, ranges).
+  # Outlier filtering.
   filtering:
     enabled: false
-    method: "none"  # "none", "iqr", "zscore", "custom"
+    method: "none"      # "none", "iqr", "zscore", "custom"
     threshold: 3.0
-  # Downsampling for speed; disabled by default to preserve accuracy.
-  # Performance: enabling improves speed but reduces fidelity.
-  downsampling:
-    enabled: false
-    method: "uniform"  # "uniform", "random"
-    max_points: 10000
-    seed: 0
+
+# ==============================================================================
+# MODEL
+# ==============================================================================
+# Model function and parameter configuration.
 
 model:
-  # Model identifier used by the workflow system to select a function.
+  # Model identifier for workflow system.
   model_name: "my_model"
   model_id: "model_v1"
-  # Parameter definitions; keep bounds tight to improve convergence.
-  # Pitfall: overly tight bounds can bias solutions.
+  # Parameter definitions.
+  # Bounds should be informed by physical constraints; overly tight bounds bias.
   parameters:
-    - name: "param_a"
+    - name: "amplitude"
       initial: 1.0
       bounds: [0.0, 10.0]
       fixed: false
       transform: "none"  # "none", "log", "logit", "exp"
-    - name: "param_b"
+    - name: "decay_rate"
       initial: 0.1
-      bounds: [0.0, 1.0]
+      bounds: [0.001, 1.0]
       fixed: false
       transform: "none"
-  # Optional constraints between parameters.
-  # Determinism: constraints reduce solution variability.
+    - name: "offset"
+      initial: 0.0
+      bounds: [-1.0, 1.0]
+      fixed: false
+      transform: "none"
+  # Optional parameter constraints.
   constraints:
     enabled: false
     expressions:
-      - "param_a > param_b"
+      - "amplitude > offset"
+
+# ==============================================================================
+# FITTING
+# ==============================================================================
+# Core fitting algorithm configuration.
 
 fitting:
-  # Method selection; keep safe defaults.
-  # Example values: "nlsq", "nuts", "hybrid".
-  method: "nlsq"
-  # Objective options; robust losses can stabilize outliers but add cost.
+  # Fitting method.
+  method: "nlsq"  # "nlsq", "hybrid_streaming"
+  # Objective function options.
   objective:
-    weights: null  # null or array/column reference
-    robust_loss: "none"  # "none", "huber", "soft_l1"
-  # Convergence/termination; tighter tolerances improve accuracy but cost time.
+    weights: null        # null or array/column reference
+    robust_loss: "none"  # "none", "huber", "soft_l1", "cauchy"
+  # Convergence tolerances.
+  # These should match dataset size tier recommendations (see tutorial above).
   termination:
-    ftol: 1.0e-8  # NLSQ naming matches internal WorkflowConfig
-    xtol: 1.0e-8
-    gtol: 1.0e-8
+    ftol: 1.0e-8   # Function tolerance
+    xtol: 1.0e-8   # Parameter tolerance
+    gtol: 1.0e-8   # Gradient tolerance
     max_iterations: 200
     max_function_evals: 2000
-  # Jacobian options; analytic is fastest if correct.
-  # Pitfall: incorrect analytic Jacobian can break convergence.
+  # Jacobian computation.
   jacobian:
-    mode: "auto"  # "auto", "analytic", "finite_diff"
-    finite_diff_step: 1.0e-6
-  # Multi-start settings; disabled by default to avoid extra cost.
+    mode: "auto"   # "auto" uses JAX autodiff (recommended)
+    finite_diff_step: 1.0e-8
+  # Multi-start optimization for global optimum search.
   multistart:
-    # These keys map to internal names enable_multistart / n_starts / sampler.
     enabled: false
     num_starts: 10
-    method: "default"  # "default" or "lhs"
-    seed: 0
+    sampler: "lhs"       # "lhs", "sobol", "halton"
+    center_on_p0: true   # Center around initial guess
+    scale_factor: 1.0    # Exploration region scale
+    seed: 42
+
+# ==============================================================================
+# HYBRID STREAMING OPTIMIZER
+# ==============================================================================
+# Configuration for the four-phase AdaptiveHybridStreamingOptimizer.
+# Used when tier is STREAMING or STREAMING_CHECKPOINT.
+
+hybrid_streaming:
+  # Phase 0: Parameter Normalization
+  normalize: true
+  normalization_strategy: "auto"  # "auto", "bounds", "p0", "none"
+
+  # Phase 1: Adam Warmup
+  warmup_iterations: 200        # Initial iterations before switch check
+  max_warmup_iterations: 500    # Force switch to Phase 2
+  warmup_learning_rate: 0.001   # Adam learning rate
+  loss_plateau_threshold: 1.0e-4   # Plateau detection threshold
+  gradient_norm_threshold: 1.0e-3  # Early switch if gradient small
+
+  # Optax learning rate schedule (optional)
+  use_learning_rate_schedule: false
+  lr_schedule_warmup_steps: 50
+  lr_schedule_decay_steps: 450
+  lr_schedule_end_value: 0.0001
+  gradient_clip_value: null  # Set to 1.0 for gradient clipping
+
+  # Phase 2: Gauss-Newton
+  gauss_newton_max_iterations: 100
+  gauss_newton_tol: 1.0e-8
+  trust_region_initial: 1.0
+  regularization_factor: 1.0e-10
+
+  # Streaming chunk configuration
+  chunk_size: 10000  # Points per chunk
+
+  # Fault tolerance
+  enable_checkpoints: true
+  checkpoint_frequency: 100
+  checkpoint_dir: null  # Auto-generate timestamped directory
+  validate_numerics: true
+  enable_fault_tolerance: true
+  max_retries_per_batch: 2
+  min_success_rate: 0.5
+
+  # Precision control
+  # "auto": float32 for Phase 1, float64 for Phase 2+ (recommended)
+  precision: "auto"
+
+  # Multi-device (multi-GPU) support
+  enable_multi_device: false
+
+  # Progress monitoring
+  callback_frequency: 10
+
+  # Tournament selection for multi-start streaming
+  enable_multistart: false
+  n_starts: 10
+  multistart_sampler: "lhs"
+  elimination_rounds: 3
+  elimination_fraction: 0.5
+  batches_per_round: 50
+
+# ==============================================================================
+# GLOBAL OPTIMIZATION
+# ==============================================================================
+# Multi-start global optimization with Latin Hypercube Sampling.
+
+global_optimization:
+  # Presets: "fast", "robust", "global", "thorough", "streaming"
+  preset: null  # Use preset or define custom below
+
+  # Custom configuration (overrides preset if set)
+  n_starts: 10               # Number of starting points (0 = disabled)
+  sampler: "lhs"             # "lhs", "sobol", "halton"
+  center_on_p0: true         # Center samples around initial guess
+  scale_factor: 1.0          # Exploration region scale factor
+
+  # Tournament selection for large datasets
+  elimination_rounds: 3      # Rounds of elimination
+  elimination_fraction: 0.5  # Fraction eliminated per round
+  batches_per_round: 50      # Data batches for evaluation
+
+# ==============================================================================
+# TRUST REGION / STEP SIZE
+# ==============================================================================
+# Advanced optimization tuning. Change only for troubleshooting convergence.
 
 optimization:
-  # Step-size/solver tuning; keep defaults unless you see instability.
-  # Determinism: changing these can alter convergence paths.
   step_size:
     initial: 1.0
-    min: 1.0e-6
+    min: 1.0e-10
     max: 10.0
-  # Damping/trust-region parameters (if supported by the solver).
   trust_region:
     enabled: true
     initial_radius: 1.0
     max_radius: 100.0
-    min_radius: 1.0e-6
+    min_radius: 1.0e-10
   damping:
     lambda_init: 1.0
-    lambda_min: 1.0e-6
-    lambda_max: 1.0e6
+    lambda_min: 1.0e-10
+    lambda_max: 1.0e10
+
+# ==============================================================================
+# WORKFLOW STEPS
+# ==============================================================================
+# Ordered pipeline steps. Disable unneeded steps for performance.
 
 workflow_steps:
-  # Ordered steps; disable steps you do not need.
-  # Pitfall: skipping validation can hide data issues.
   - name: "load_data"
     enabled: true
     inputs: []
@@ -244,115 +563,171 @@ workflow_steps:
     inputs: ["fit_result"]
     outputs: ["final_result"]
 
+# ==============================================================================
+# VALIDATION AND QUALITY CONTROL
+# ==============================================================================
+
 validation_and_qc:
-  # Sanity checks for outputs; keep enabled for CI/stability.
+  # Sanity checks for outputs.
   sanity_checks:
     enabled: true
     checks:
       - "finite_parameters"
       - "nonnegative_variances"
-  # Numerical parity checks between methods or devices.
-  # Performance: disable for large runs if not needed.
+      - "positive_definite_covariance"
+  # Numerical parity checks (useful for CPU/GPU comparison).
   numerical_parity:
     enabled: false
-    tolerance: 1.0e-6
-  # Acceptance thresholds for final fit quality.
+    tolerance: 1.0e-8
+  # Acceptance thresholds for fit quality.
   acceptance:
     max_rmse: null
     max_mae: null
     min_r2: null
 
+# ==============================================================================
+# REPORTING
+# ==============================================================================
+
 reporting:
-  # Summary outputs; disable heavy plots for quick runs.
   summary:
     enabled: true
     include_tables: true
-    include_plots: false
-  # Export formats; keep minimal for speed.
+    include_plots: false  # Disable for batch runs
   formats:
     - "json"
     - "csv"
 
+# ==============================================================================
+# EXPORT
+# ==============================================================================
+
 export:
-  # Bundle artifacts for reproducibility and sharing.
   artifact_bundle:
     enabled: true
     include_data_snapshot: false
     include_logs: true
-  # Include a frozen config snapshot in outputs.
   config_snapshot:
     enabled: true
     filename: "config_snapshot.yaml"
 
+# ==============================================================================
+# ADVANCED
+# ==============================================================================
+
 advanced:
-  # Memory settings; keep conservative to avoid OOM.
+  # Memory management.
   memory:
-    adaptive_fraction: 0.5
-    max_gb: null
-  # Timeouts for long-running stages (seconds).
+    adaptive_fraction: 0.5   # Fraction of available memory to use
+    max_gb: null             # Hard limit (null = no limit)
+  # Timeouts (seconds).
   timeouts:
-    per_step: 120
-    total: 3600
-  # Checkpointing for long runs; safe default off.
+    per_step: 300            # 5 minutes per step
+    total: 7200              # 2 hours total
+  # Checkpointing for long runs.
   checkpointing:
     enabled: false
     interval_steps: 50
     directory: "checkpoints"
-  # Debug flags; keep off unless troubleshooting.
+  # Debug flags.
   debug:
     enabled: false
     trace: false
     save_intermediate_arrays: false
+    profile_jit: false       # Profile JAX JIT compilation
 
-# -----------------------------------------------------------------------------
-# Example profiles (copy and edit). Keep these commented out in the template.
-# -----------------------------------------------------------------------------
+# ==============================================================================
+# EXAMPLE PROFILES
+# ==============================================================================
+# Copy and uncomment these profiles, then set default_workflow to the name.
 
-# precision_first_cpu:
+# precision_publication:
+#   # Maximum precision for publication-quality results
 #   runtime:
 #     device: "cpu"
 #     precision: "float64"
 #     dtype: "float64"
-#     threads: 2
-#     workers: 1
+#     random_seed: 42
 #   fitting:
 #     termination:
-#       ftol: 1.0e-10
-#       xtol: 1.0e-10
-#       gtol: 1.0e-10
+#       ftol: 1.0e-12
+#       xtol: 1.0e-12
+#       gtol: 1.0e-12
 #       max_iterations: 500
-#       max_function_evals: 5000
+#       max_function_evals: 10000
+#     multistart:
+#       enabled: true
+#       num_starts: 25
+#       sampler: "lhs"
 #   validation_and_qc:
 #     sanity_checks:
 #       enabled: true
 #     numerical_parity:
 #       enabled: true
-#       tolerance: 1.0e-8
+#       tolerance: 1.0e-10
 
-# fast_dev:
+# fast_development:
+#   # Quick iteration during development
 #   runtime:
 #     device: "cpu"
-#     threads: 4
-#     workers: 2
 #     precision: "float32"
-#     dtype: "float32"
-#   preprocessing:
-#     downsampling:
-#       enabled: true
-#       method: "uniform"
-#       max_points: 2000
+#     verbosity: 2
 #   fitting:
 #     termination:
+#       ftol: 1.0e-6
 #       max_iterations: 50
-#       max_function_evals: 300
+#       max_function_evals: 200
+#     multistart:
+#       enabled: false
 #   reporting:
 #     summary:
 #       include_plots: false
 
-# multistart_lhs:
-#   fitting:
-#     multistart:
+# large_dataset_gpu:
+#   # GPU-accelerated large dataset processing
+#   runtime:
+#     device: "gpu"
+#     precision: "float64"
+#     threads: 8
+#   hybrid_streaming:
+#     warmup_iterations: 300
+#     chunk_size: 50000
+#     precision: "auto"
+#     enable_checkpoints: true
+#   advanced:
+#     memory:
+#       adaptive_fraction: 0.7
+
+# hpc_cluster:
+#   # HPC multi-node configuration (PBS Pro)
+#   runtime:
+#     device: "gpu"
+#     precision: "float64"
+#   hybrid_streaming:
+#     enable_multi_device: true
+#     chunk_size: 100000
+#     enable_checkpoints: true
+#     checkpoint_frequency: 50
+#     enable_multistart: true
+#     n_starts: 20
+#   advanced:
+#     checkpointing:
 #       enabled: true
-#       num_starts: 25
-#       method: "lhs"
-#       seed: 42
+#       interval_steps: 25
+
+# memory_constrained:
+#   # Minimal memory footprint
+#   runtime:
+#     device: "cpu"
+#     precision: "float32"
+#     threads: 2
+#     workers: 1
+#   hybrid_streaming:
+#     chunk_size: 2000
+#     precision: "float32"
+#     enable_checkpoints: true
+#     checkpoint_frequency: 25
+#   advanced:
+#     memory:
+#       adaptive_fraction: 0.3
+#       max_gb: 4.0
