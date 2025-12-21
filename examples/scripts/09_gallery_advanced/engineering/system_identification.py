@@ -18,6 +18,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -26,6 +28,9 @@ import numpy as np
 from scipy import stats
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 
 # Set random seed
 np.random.seed(42)
@@ -101,7 +106,7 @@ tau_true = 15.0  # seconds (time constant)
 t_delay_true = 2.0  # seconds (transport delay)
 
 # Time vector
-time = np.linspace(0, 100, 200)
+time = np.linspace(0, 100, 120 if QUICK else 200)
 
 # True step response
 output_true = first_order_step_response(time, K_true, tau_true, t_delay_true)
@@ -142,6 +147,7 @@ popt, pcov = fit(
     bounds=bounds,
     absolute_sigma=True,
     preset="robust",
+    **FIT_KWARGS,
 )
 
 K_fit, tau_fit, t_delay_fit = popt
@@ -151,6 +157,10 @@ K_err, tau_err, t_delay_err = perr
 print(f"  K (gain):        {K_fit:.2f} +/- {K_err:.2f} C")
 print(f"  tau (time const): {tau_fit:.2f} +/- {tau_err:.2f} s")
 print(f"  t_d (delay):     {t_delay_fit:.2f} +/- {t_delay_err:.2f} s")
+
+if QUICK:
+    print("\n⏩ Quick mode: skipping global/custom fits and extended analysis.")
+    sys.exit(0)
 
 # Method 2: fit() with 'global' preset
 print("\nMethod 2: fit() with 'global' preset")
