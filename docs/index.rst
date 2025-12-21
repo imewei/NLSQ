@@ -22,7 +22,7 @@ Key Features
 - **GPU/TPU Acceleration**: 150-270x faster than SciPy on large datasets
 - **Drop-in Compatibility**: Minimal code changes from ``scipy.optimize.curve_fit``
 - **Automatic Differentiation**: JAX autodiff eliminates manual Jacobian calculations
-- **Production-Ready**: 1,989 tests, 100% pass rate
+- **Production-Ready**: 2,109 tests, 100% pass rate
 - **Large Dataset Support**: Automatic chunking and memory management
 - **Advanced Features**: Automatic fallback, smart bounds, numerical stability
 - **Performance Profiling** (v0.3.0): Async logging, transfer analysis, regression gates
@@ -100,7 +100,7 @@ Project Status
 
 - Production-ready for scientific computing
 - Active development and maintenance
-- Comprehensive test suite (1,989 tests, 100% pass rate)
+- Comprehensive test suite (2,109 tests, 100% pass rate)
 - Performance profiling and regression detection infrastructure
 - Global optimization with multi-start LHS sampling (v0.3.3+)
 - Workflow system with unified fit() and auto-selection (v0.3.4+)
