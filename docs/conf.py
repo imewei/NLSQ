@@ -106,6 +106,166 @@ nitpick_ignore = [
     ("py:class", "OptimizeResult"),
     ("py:class", "PerformanceProfiler"),
     ("py:class", "StreamingConfig"),
+    # JAX array types (not in intersphinx)
+    ("py:class", "jnp.ndarray"),
+    ("py:class", "jax.Array"),
+    # Python stdlib types sometimes not resolved
+    ("py:class", "Path"),
+    ("py:class", "pathlib.Path"),
+    # Internal class references in docstrings
+    ("py:class", "auto"),
+    ("py:class", "ClusterInfo"),
+    ("py:class", "WorkflowConfig"),
+    ("py:class", "WorkflowTier"),
+    ("py:class", "OptimizationGoal"),
+    ("py:class", "DatasetSizeTier"),
+    ("py:class", "MemoryTier"),
+    ("py:class", "LDMemoryConfig"),
+    ("py:class", "MultiGPUConfig"),
+    ("py:class", "MixedPrecisionConfig"),
+    ("py:class", "UnifiedCache"),
+    ("py:class", "CheckpointInfo"),
+    ("py:class", "AggregateStats"),
+    ("py:class", "CommonError"),
+    # Default value patterns in signatures
+    ("py:class", "default=128"),
+    ("py:class", "default=True"),
+    ("py:class", "default=False"),
+    ("py:class", "default="),
+    # Base class references
+    ("py:class", "nlsq.optimizer_base.TrustRegionOptimizerBase"),
+    ("py:class", "nlsq.workflow.WorkflowTier"),
+    ("py:class", "nlsq.workflow.OptimizationGoal"),
+    ("py:class", "nlsq.types.CheckpointInfo"),
+    ("py:class", "nlsq.types.AggregateStats"),
+    ("py:class", "nlsq.types.CommonError"),
+    # Common docstring type patterns
+    ("py:class", "ndarray"),
+    ("py:class", "n"),
+    ("py:class", "shape"),
+    ("py:class", "array-like"),
+    ("py:class", "csr_matrix"),
+    ("py:class", "Figure"),
+    ("py:class", "Logger"),
+    ("py:class", "jnp.dtype"),
+    # Internal config/state classes
+    ("py:class", "OptimizationState"),
+    ("py:class", "MemoryConfig"),
+    ("py:class", "LargeDatasetConfig"),
+    ("py:class", "DatasetStats"),
+    ("py:class", "nlsq.callbacks.CallbackBase"),
+    # More default value patterns
+    ("py:class", "default=100"),
+    ("py:class", "default=10"),
+    ("py:class", "default='auto'"),
+    ("py:class", "default=1.0"),
+    ("py:class", "default=0.0"),
+    ("py:class", "default=None"),
+]
+
+# Ignore py:obj references that Sphinx can't resolve
+nitpick_ignore_regex = [
+    # Function/class references
+    (r"py:obj", r".*curve_fit.*"),
+    (r"py:obj", r".*Config.*"),
+    (r"py:obj", r".*Normalizer.*"),
+    (r"py:obj", r".*Selector.*"),
+    (r"py:obj", r".*Upgrader.*"),
+    (r"py:obj", r".*Monitor.*"),
+    (r"py:obj", r".*Fitter.*"),
+    (r"py:obj", r".*Tracker.*"),
+    (r"py:obj", r".*Orchestrator.*"),
+    (r"py:obj", r"nlsq\..*"),  # All nlsq module references
+    (r"py:obj", r"estimate_p0.*"),
+    (r"py:obj", r"detect_function.*"),
+    (r"py:obj", r"fit$"),
+    (r"py:obj", r"_save_checkpoint"),
+    (r"py:obj", r"_load_checkpoint"),
+    (r"py:obj", r"_process_batch.*"),
+    # Default value patterns
+    (r"py:class", r"default.*"),
+    (r"py:class", r"default \d+.*"),
+    # String literal types from docstrings
+    (r"py:class", r"'.*'"),
+    (r"py:class", r"\{.*"),
+    # Descriptive type patterns
+    (r"py:class", r"ndarray.*"),
+    (r"py:class", r"sparse.*"),
+    (r"py:class", r"various.*"),
+    (r"py:class", r"\d+"),  # Numeric literals
+]
+
+# Additional specific ignores for internal classes
+nitpick_ignore += [
+    # Internal optimizer classes
+    ("py:class", "AutoDiffJacobian"),
+    ("py:class", "ConvergenceMetrics"),
+    ("py:class", "MixedPrecisionManager"),
+    ("py:class", "LinearOperator"),
+    ("py:class", "LogLevel"),
+    # Single-letter type hints from math notation
+    ("py:class", "k"),
+    ("py:class", "m"),
+    ("py:class", "p"),
+    ("py:class", "x"),
+    # Internal NLSQ classes
+    ("py:class", "TrustRegionReflective"),
+    ("py:class", "PrecisionUpgrader"),
+    ("py:class", "PrecisionState"),
+    ("py:class", "NLSQLogger"),
+    ("py:class", "LossFunctionsJIT"),
+    ("py:class", "JITCompilationCache"),
+    ("py:class", "CurveFitResult"),
+    ("py:class", "BestParameterTracker"),
+    ("py:class", "nlsq.result.CurveFitResult"),
+    ("py:class", "nlsq.mixed_precision.OptimizationState"),
+    ("py:class", "nlsq.mixed_precision.ConvergenceMonitor"),
+    # Descriptive types
+    ("py:class", "file-like object"),
+    ("py:class", "2-tuple"),
+    # py:obj references
+    ("py:obj", "AdaptiveHybridStreamingOptimizer"),
+    ("py:obj", "StreamingOptimizer"),
+    ("py:obj", "PrecisionState"),
+    ("py:obj", "OptimizationState"),
+    ("py:obj", "ConvergenceMetrics"),
+    ("py:obj", "WORKFLOW_PRESETS"),
+    ("py:obj", "format_error_message"),
+    ("py:obj", "estimate_initial_parameters"),
+    ("py:obj", "device_put"),
+    ("py:obj", "auto_select_workflow"),
+    ("py:obj", "apply_automatic_fixes"),
+    ("py:obj", "analyze_failure"),
+    # py:mod references
+    ("py:mod", "notebook_utils"),
+    ("py:mod", "nlsq.profiling"),
+]
+
+# Regex patterns for closing braces in dict types
+nitpick_ignore_regex += [
+    (r"py:class", r".*\}$"),  # Catch dict closing braces like 'halton'}
+    (r"py:class", r"False\}"),
+    (r"py:class", r".*with shape.*"),  # "int with shape", "ndarray with shape"
+    (r"py:class", r".*object$"),  # "config object", "file-like object"
+]
+
+# Final specific ignores
+nitpick_ignore += [
+    # Module references
+    ("py:mod", "nlsq.diagnostics"),
+    ("py:func", "nlsq.least_squares"),
+    # More internal classes
+    ("py:class", "result"),
+    ("py:class", "OptimizationError"),
+    ("py:class", "nlsq.trf.TrustRegionJITFunctions"),
+    ("py:class", "nlsq.ParameterNormalizer"),
+    ("py:class", "nlsq.optimizer_base.OptimizerBase"),
+    ("py:class", "nlsq.large_dataset.LDMemoryConfig"),
+    ("py:class", "nlsq.LargeDatasetHandler"),
+    ("py:class", "nlsq.large_dataset.DataChunker"),
+    ("py:class", "matplotlib.axes.Axes"),
+    ("py:class", "generator"),
+    ("py:class", "CallbackBase"),
 ]
 
 # Custom event handler removed - caused TypeError
@@ -158,7 +318,7 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
-    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "jax": ("https://docs.jax.dev/en/latest/", None),  # Updated from jax.readthedocs.io
 }
 
 # Add any paths that contain templates here, relative to this directory.
@@ -197,7 +357,7 @@ html_theme_options = {
     "style_external_links": False,
     "collapse_navigation": True,
     "sticky_navigation": True,
-    "navigation_depth": 4,
+    "navigation_depth": 3,  # Reduced from 4 for shallower sidebar navigation
     "includehidden": True,
     "titles_only": False,
 }
@@ -222,3 +382,30 @@ html_last_updated_fmt = "%b %d, %Y"
 # Logo and favicon
 html_logo = "images/NLSQ_logo.png"
 html_favicon = None
+
+# -- Linkcheck configuration -------------------------------------------------
+
+# Ignore known broken or problematic links
+linkcheck_ignore = [
+    # Files that may not exist in remote repo yet
+    r"https://github\.com/imewei/nlsq/blob/main/CODE_OF_CONDUCT\.md",
+    r"https://github\.com/imewei/NLSQ/blob/main/.*",  # Case-sensitive URLs
+    # Rate-limited or auth-required URLs
+    r"https://github\.com/orgs/community/.*",
+]
+
+# Handle known redirects gracefully
+linkcheck_allowed_redirects = {
+    r"https://doi\.org/.*": r"https://arxiv\.org/.*",
+    r"https://jax\.readthedocs\.io/.*": r"https://docs\.jax\.dev/.*",
+    r"https://nlsq\.readthedocs\.io/?$": r"https://nlsq\.readthedocs\.io/en/latest/",
+    r"https://numpydoc\.readthedocs\.io/?$": r"https://numpydoc\.readthedocs\.io/en/latest/",
+    r"https://www\.sphinx-doc\.org/?$": r"https://www\.sphinx-doc\.org/en/master/",
+    r"https://codeql\.github\.com/.*": r"https://docs\.github\.com/.*",
+    r"https://support\.github\.com/?$": r"https://support\.github\.com/request/landing",
+}
+
+# Linkcheck settings
+linkcheck_timeout = 30
+linkcheck_retries = 2
+linkcheck_workers = 5

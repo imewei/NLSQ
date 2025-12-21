@@ -69,36 +69,21 @@ Documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide (Workflow-Based)
+   :caption: User Guide
 
    user_guide/index
 
 .. toctree::
    :maxdepth: 2
-   :caption: Advanced / Developer Guide
+   :caption: Advanced / Developer
 
    advanced/index
-   developer/index
-   architecture/index
 
 .. toctree::
    :maxdepth: 2
    :caption: API Reference
 
    api/index
-   api/modules
-   api/large_datasets_api
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Developer Documentation
-
-   developer/index
-   developer/optimization_case_study
-   developer/performance_tuning_guide
-   developer/pypi_setup
-   developer/ci_cd/index
-   architecture/index
 
 Resources
 ---------
