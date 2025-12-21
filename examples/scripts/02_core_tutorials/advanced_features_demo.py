@@ -528,7 +528,11 @@ def test_robustness():
     if not QUICK:
         edge_cases.extend(
             [
-                ("Single x value", np.array([1.0, 1.0, 1.0]), np.array([2.0, 2.1, 1.9])),
+                (
+                    "Single x value",
+                    np.array([1.0, 1.0, 1.0]),
+                    np.array([2.0, 2.1, 1.9]),
+                ),
                 ("Constant y values", test_data["x"][:100], np.ones(100) * 2.5),
             ]
         )
