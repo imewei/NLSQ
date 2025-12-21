@@ -18,10 +18,14 @@ Your First Fit
 
 Let's start with the simplest possible example - fitting a line to data.
 
+**Recommended: Using the fit() Function**
+
+The ``fit()`` function is the recommended entry point with preset-based configuration:
+
 .. code-block:: python
 
     import numpy as np
-    from nlsq import CurveFit
+    from nlsq import fit
 
 
     # Define the model function
@@ -33,9 +37,8 @@ Let's start with the simplest possible example - fitting a line to data.
     x = np.array([0, 1, 2, 3, 4, 5])
     y = np.array([1, 3, 5, 7, 9, 11])  # y = 2x + 1
 
-    # Create fitter and fit
-    cf = CurveFit()
-    popt, pcov = cf.curve_fit(linear, x, y)
+    # Fit with preset (fast, robust, or global)
+    popt, pcov = fit(linear, x, y, preset="fast")
 
     print(f"Fitted parameters: m = {popt[0]:.3f}, b = {popt[1]:.3f}")
     print(
@@ -49,6 +52,24 @@ Let's start with the simplest possible example - fitting a line to data.
     Fitted parameters: m = 2.000, b = 1.000
     Parameter uncertainties: σ_m = 0.000, σ_b = 0.000
 
+**Available Presets:**
+
+- ``'fast'``: Single-start optimization for maximum speed
+- ``'robust'``: Multi-start with 5 starts for improved convergence
+- ``'global'``: Thorough global search with 20 starts
+- ``'large'``: Auto-detect dataset size and use appropriate strategy
+
+**Alternative: Using the CurveFit Class**
+
+For advanced use cases or SciPy compatibility:
+
+.. code-block:: python
+
+    from nlsq import CurveFit
+
+    cf = CurveFit()
+    popt, pcov = cf.curve_fit(linear, x, y)
+
 Nonlinear Fitting with JAX
 ---------------------------
 
@@ -58,7 +79,7 @@ For functions that use mathematical operations like exponentials, use JAX numpy 
 
     import numpy as np
     import jax.numpy as jnp
-    from nlsq import CurveFit
+    from nlsq import fit
 
 
     # Define exponential decay function using JAX numpy
@@ -72,9 +93,8 @@ For functions that use mathematical operations like exponentials, use JAX numpy 
     y_true = true_params[0] * np.exp(-x_data / true_params[1])
     y_data = y_true + 0.1 * np.random.normal(size=len(x_data))
 
-    # Fit with initial guess
-    cf = CurveFit()
-    popt, pcov = cf.curve_fit(exponential_decay, x_data, y_data, p0=[2.0, 1.0])
+    # Fit with initial guess and robust preset for better convergence
+    popt, pcov = fit(exponential_decay, x_data, y_data, p0=[2.0, 1.0], preset="robust")
 
     # Extract results
     A_fit, tau_fit = popt
@@ -101,7 +121,7 @@ NLSQ excels at fitting complex functions with many parameters:
 
     import numpy as np
     import jax.numpy as jnp
-    from nlsq import CurveFit
+    from nlsq import fit
 
 
     # Define a damped oscillation function
@@ -120,10 +140,9 @@ NLSQ excels at fitting complex functions with many parameters:
     )
     y_data = y_true + 0.2 * np.random.normal(size=len(t))
 
-    # Fit with reasonable initial guess
+    # Fit with global preset for complex multi-parameter optimization
     p0 = [2.5, 1.2, 1.8, 0.3, 0.8]
-    cf = CurveFit()
-    popt, pcov = cf.curve_fit(damped_oscillation, t, y_data, p0=p0)
+    popt, pcov = fit(damped_oscillation, t, y_data, p0=p0, preset="global")
 
     # Display results
     param_names = ["Amplitude", "Frequency", "Decay time", "Phase", "Offset"]

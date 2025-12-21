@@ -17,7 +17,9 @@ The main NLSQ API provides drop-in replacements for SciPy's curve fitting functi
 Main Functions
 ~~~~~~~~~~~~~~
 
-- :func:`nlsq.curve_fit` - High-level curve fitting interface
+- :func:`nlsq.fit` - **Unified curve fitting with preset-based configuration** (recommended)
+- :func:`nlsq.curve_fit` - High-level curve fitting interface (SciPy-compatible)
+- :func:`nlsq.curve_fit_large` - Automatic chunking for large datasets
 - :func:`nlsq.least_squares` - Low-level least squares solver
 - :class:`nlsq.CurveFit` - Reusable curve fitting class (JIT-compiled)
 

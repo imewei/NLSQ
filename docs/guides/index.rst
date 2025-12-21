@@ -93,3 +93,14 @@ Solutions to common issues:
 - JAX compatibility issues
 - Performance problems
 - Installation issues
+
+Migration Guides
+~~~~~~~~~~~~~~~~
+
+Guides for upgrading to newer NLSQ versions and APIs:
+
+:doc:`/migration/curve_fit_to_fit`
+    Transition from ``curve_fit()`` to the unified ``fit()`` function with preset-based configuration.
+
+:doc:`/migration/streaming_fault_tolerance`
+    Enable fault-tolerant streaming optimization for large datasets with checkpoint/resume support.
