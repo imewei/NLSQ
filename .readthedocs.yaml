@@ -1,5 +1,5 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2025-12-18
+# Updated: 2025-12-21
 # Requires: Python 3.12+ (tested on 3.13), NumPy 2.0+, JAX 0.8.0
 # Dependencies managed via pyproject.toml[docs]
 #
