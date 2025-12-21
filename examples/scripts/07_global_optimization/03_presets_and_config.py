@@ -190,7 +190,10 @@ def main():
 
         start_time = time.time()
 
-        if config.n_starts > 0:
+        effective_n_starts = (
+            min(config.n_starts, 5) if QUICK and config.n_starts > 0 else config.n_starts
+        )
+        if effective_n_starts > 0:
             popt, pcov = curve_fit(
                 multimodal_model,
                 x_data,
@@ -198,7 +201,7 @@ def main():
                 p0=p0,
                 bounds=bounds,
                 multistart=True,
-                n_starts=config.n_starts,
+                n_starts=effective_n_starts,
                 sampler=config.sampler,
             )
         else:
@@ -219,11 +222,11 @@ def main():
             "popt": popt,
             "ssr": ssr,
             "time": elapsed,
-            "n_starts": config.n_starts,
+            "n_starts": effective_n_starts,
         }
 
         print(f"\n  {preset_name.upper()}:")
-        print(f"    n_starts:   {config.n_starts}")
+        print(f"    n_starts:   {effective_n_starts}")
         print(f"    Time:       {elapsed:.3f}s")
         print(f"    SSR:        {ssr:.4f}")
         print(

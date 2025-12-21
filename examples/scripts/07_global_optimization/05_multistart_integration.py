@@ -24,6 +24,12 @@ import numpy as np
 from nlsq import GlobalOptimizationConfig, curve_fit, curve_fit_large
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,7 +73,7 @@ def main():
     print("-" * 50)
 
     # Generate synthetic data
-    n_samples = 120 if QUICK else 300
+    n_samples = cap_samples(300)
     x_data = np.linspace(0, 10, n_samples)
 
     # True parameters
@@ -96,6 +102,7 @@ def main():
         y_data,
         p0=p0,
         bounds=bounds,
+        **FIT_KWARGS,
     )
 
     print("\n  Single-start result:")
@@ -111,8 +118,9 @@ def main():
         p0=p0,
         bounds=bounds,
         multistart=True,  # Enable multi-start
-        n_starts=4 if QUICK else 10,  # Number of starting points
+        n_starts=2 if QUICK else 10,  # Number of starting points
         sampler="lhs",  # Latin Hypercube Sampling
+        **FIT_KWARGS,
     )
 
     print("\n  Multi-start result:")
@@ -140,8 +148,9 @@ def main():
         p0=[3.0, 0.4, 2.5, 0.5],
         bounds=tight_bounds,
         multistart=True,
-        n_starts=4 if QUICK else 10,
+        n_starts=2 if QUICK else 10,
         sampler="lhs",
+        **FIT_KWARGS,
     )
 
     print("  Result with tight bounds:")
@@ -173,7 +182,7 @@ def main():
     print("-" * 50)
 
     # Generate data for exponential model
-    x_exp = np.linspace(0, 5, 120 if QUICK else 200)
+    x_exp = np.linspace(0, 5, cap_samples(200))
     y_exp_true = 2.5 * np.exp(-1.3 * x_exp) + 0.5
     y_exp = y_exp_true + 0.1 * np.random.randn(len(x_exp))
 
@@ -184,8 +193,9 @@ def main():
         y_exp,
         p0=[2.0, 1.0, 0.0],
         multistart=True,
-        n_starts=4 if QUICK else 8,
+        n_starts=2 if QUICK else 8,
         sampler="lhs",
+        **FIT_KWARGS,
     )
 
     print("  Unbounded multi-start result:")
@@ -202,7 +212,7 @@ def main():
     print("-" * 50)
 
     config = GlobalOptimizationConfig(
-        n_starts=6 if QUICK else 15,
+        n_starts=4 if QUICK else 15,
         sampler="sobol",
         center_on_p0=True,
         scale_factor=0.8,
@@ -224,7 +234,12 @@ def main():
         multistart=True,
         n_starts=config.n_starts,
         sampler=config.sampler,
+        **FIT_KWARGS,
     )
+
+    if QUICK:
+        print("⏩ Quick mode: skipping large dataset and peak fitting sections.")
+        return
 
     print(
         f"\n  Result: a={popt_config[0]:.4f}, b={popt_config[1]:.4f}, c={popt_config[2]:.4f}, d={popt_config[3]:.4f}"
@@ -238,7 +253,7 @@ def main():
     print("-" * 50)
 
     # Generate larger dataset
-    n_large = 10000 if QUICK else 50000
+    n_large = cap_samples(10000 if QUICK else 50000)
     x_large = np.linspace(0, 10, n_large)
 
     y_large_true = (
@@ -256,9 +271,10 @@ def main():
         p0=p0,
         bounds=bounds,
         multistart=True,
-        n_starts=3 if QUICK else 10,
+        n_starts=2 if QUICK else 10,
         sampler="lhs",
         memory_limit_gb=1.0,
+        **FIT_KWARGS,
     )
 
     print("\n  curve_fit_large with multi-start:")
@@ -274,7 +290,7 @@ def main():
     print("-" * 50)
 
     # Generate spectroscopy data
-    n_spec = 500
+    n_spec = cap_samples(500)
     x_spec = np.linspace(0, 10, n_spec)
 
     true_params_spec = [3.0, 3.5, 0.5, 2.0, 5.0, 0.8, 0.5]
@@ -305,6 +321,7 @@ def main():
         y_spec,
         p0=p0_spec,
         bounds=peak_bounds,
+        **FIT_KWARGS,
     )
 
     print("\n  Single-start result:")
@@ -323,8 +340,9 @@ def main():
         p0=p0_spec,
         bounds=peak_bounds,
         multistart=True,
-        n_starts=6 if QUICK else 20,
+        n_starts=3 if QUICK else 20,
         sampler="lhs",
+        **FIT_KWARGS,
     )
 
     print("\n  Multi-start result:")
