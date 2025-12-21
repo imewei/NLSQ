@@ -19,6 +19,7 @@ Key Concepts:
 """
 
 import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -28,6 +29,7 @@ import numpy as np
 from nlsq import GlobalOptimizationConfig, fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 
 # Set random seed
 np.random.seed(42)
@@ -152,6 +154,7 @@ popt_robust, pcov_robust = fit(
     absolute_sigma=True,
     bounds=([0, 0], [200, 500]),
     preset="robust",
+    **FIT_KWARGS,
 )
 
 Vmax_fit, Km_fit = popt_robust
@@ -160,6 +163,10 @@ Vmax_err, Km_err = perr
 
 print(f"  V_max = {Vmax_fit:.2f} +/- {Vmax_err:.2f} uM/min (true: {Vmax_true})")
 print(f"  K_M = {Km_fit:.2f} +/- {Km_err:.2f} uM (true: {Km_true})")
+
+if QUICK:
+    print("\n⏩ Quick mode: skipping global/custom fits and extended analyses.")
+    sys.exit(0)
 
 
 # =============================================================================
