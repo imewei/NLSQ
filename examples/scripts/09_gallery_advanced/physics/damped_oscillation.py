@@ -30,6 +30,7 @@ from scipy import signal
 from nlsq import GlobalOptimizationConfig, fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 
 # Set random seed
 np.random.seed(42)
@@ -79,7 +80,7 @@ omega0_true = 2 * np.pi / 2.0  # Natural frequency (rad/s)
 phi_true = 0.0  # Phase offset
 
 # Time points
-time = np.linspace(0, 60, 150 if QUICK else 300)
+time = np.linspace(0, 60, 120 if QUICK else 300)
 
 # True oscillation
 displacement_true = damped_oscillator(time, A0_true, gamma_true, omega0_true, phi_true)
@@ -120,6 +121,7 @@ popt, pcov = fit(
     bounds=bounds,
     absolute_sigma=True,
     preset="robust",
+    **FIT_KWARGS,
 )
 
 A0_fit, gamma_fit, omega_fit, phi_fit = popt
@@ -131,8 +133,12 @@ print(f"  gamma (damping): {gamma_fit:.5f} +/- {gamma_err:.5f} s^-1")
 print(f"  omega (frequency): {omega_fit:.4f} +/- {omega_err:.4f} rad/s")
 print(f"  phi (phase): {phi_fit:.4f} +/- {phi_err:.4f} rad")
 
+if QUICK:
+    print("\n⏩ Quick mode: skipping global/custom fits and extended plots.")
+    sys.exit(0)
+
 # Method 2: fit() with 'global' preset
-global_starts = 6 if QUICK else 20
+global_starts = 20
 print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
 popt_global, pcov_global = fit(
     damped_oscillator,
@@ -165,7 +171,7 @@ popt_custom, pcov_custom = fit(
     bounds=bounds,
     absolute_sigma=True,
     multistart=True,
-    n_starts=6 if QUICK else 15,
+    n_starts=15,
     sampler="lhs",
 )
 
@@ -176,10 +182,6 @@ print(f"  A0: {A0_c:.3f} +/- {perr_c[0]:.3f}")
 print(f"  gamma: {gamma_c:.5f} +/- {perr_c[1]:.5f}")
 print(f"  omega: {omega_c:.4f} +/- {perr_c[2]:.4f}")
 print(f"  phi: {phi_c:.4f} +/- {perr_c[3]:.4f}")
-
-if QUICK:
-    print("⏩ Quick mode: skipping extended plots and analyses.")
-    sys.exit(0)
 
 
 # Use robust preset results for analysis

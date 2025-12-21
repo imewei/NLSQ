@@ -18,6 +18,8 @@ Key Concepts:
 - Global optimization for robust parameter estimation
 """
 
+import os
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -25,6 +27,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import GlobalOptimizationConfig, fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 
 # Set random seed
 np.random.seed(42)
@@ -69,7 +74,7 @@ half_life_true = 5730.0  # years (C-14 half-life)
 lambda_true = np.log(2) / half_life_true  # decay constant
 
 # Time points
-time = np.linspace(0, 20000, 30)
+time = np.linspace(0, 20000, 20 if QUICK else 30)
 
 # True decay curve
 N_true = N0_true * np.exp(-lambda_true * time)
@@ -106,6 +111,7 @@ popt, pcov = fit(
     sigma=sigma,
     absolute_sigma=True,
     preset="robust",
+    **FIT_KWARGS,
 )
 
 N0_fit, lambda_fit = popt
@@ -117,6 +123,10 @@ t_half_fit, t_half_err = propagate_uncertainty(lambda_fit, lambda_err)
 print(f"  N0 = {N0_fit:.2f} +/- {N0_err:.2f} counts/min")
 print(f"  lambda = {lambda_fit:.6e} +/- {lambda_err:.6e} yr^-1")
 print(f"  t_1/2 = {t_half_fit:.0f} +/- {t_half_err:.0f} years")
+
+if QUICK:
+    print("\n⏩ Quick mode: skipping global/custom fits and extended analysis.")
+    sys.exit(0)
 
 # Method 2: fit() with 'global' preset
 print("\nMethod 2: fit() with 'global' preset")

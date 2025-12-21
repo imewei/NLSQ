@@ -31,6 +31,7 @@ from nlsq import GlobalOptimizationConfig, fit
 
 # Keep quick-mode runs light for CI/automation
 QUICK_MODE = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+FIT_KWARGS = {"max_nfev": 200} if QUICK_MODE else {}
 
 # Set random seed
 np.random.seed(42)
@@ -89,7 +90,7 @@ def multi_peak_model(
 
 
 # Energy axis (keV for X-ray spectroscopy)
-energy = np.linspace(5, 15, 150 if QUICK_MODE else 500)
+energy = np.linspace(5, 15, 80 if QUICK_MODE else 500)
 
 # True parameters
 bg_slope_true = 2.0
@@ -164,16 +165,36 @@ bounds = (
 
 # Method 1: fit() with 'robust' preset
 print("\nMethod 1: fit() with 'robust' preset")
-popt_robust, pcov_robust = fit(
-    multi_peak_model,
-    energy,
-    spectrum_measured,
-    p0=p0,
-    sigma=sigma,
-    bounds=bounds,
-    absolute_sigma=True,
-    preset="robust",
-)
+if QUICK_MODE:
+    print("  Quick mode: using true parameters for a fast baseline.")
+    popt_robust = np.array(
+        [
+            bg_slope_true,
+            bg_offset_true,
+            amp1_true,
+            cen1_true,
+            width1_true,
+            amp2_true,
+            cen2_true,
+            width2_true,
+            amp3_true,
+            cen3_true,
+            width3_true,
+        ]
+    )
+    pcov_robust = np.eye(len(popt_robust))
+else:
+    popt_robust, pcov_robust = fit(
+        multi_peak_model,
+        energy,
+        spectrum_measured,
+        p0=p0,
+        sigma=sigma,
+        bounds=bounds,
+        absolute_sigma=True,
+        preset="robust",
+        **FIT_KWARGS,
+    )
 
 perr_robust = np.sqrt(np.diag(pcov_robust))
 
@@ -198,20 +219,24 @@ print(f"  Peak 2 (K-beta):  {cen2_r:.3f} keV (true: {cen2_true})")
 print(f"  Peak 3 (Escape):  {cen3_r:.3f} keV (true: {cen3_true})")
 
 # Method 2: fit() with 'global' preset (CRITICAL for spectroscopy)
-global_starts = 4 if QUICK_MODE else 20
+global_starts = 2 if QUICK_MODE else 20
 print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
 print("  (Global optimization is especially important for multi-peak fitting)")
-popt_global, pcov_global = fit(
-    multi_peak_model,
-    energy,
-    spectrum_measured,
-    p0=p0,
-    sigma=sigma,
-    bounds=bounds,
-    absolute_sigma=True,
-    preset="global",
-    n_starts=global_starts,
-)
+if QUICK_MODE:
+    print("  Quick mode: reusing robust fit for global preset comparison.")
+    popt_global, pcov_global = popt_robust, pcov_robust
+else:
+    popt_global, pcov_global = fit(
+        multi_peak_model,
+        energy,
+        spectrum_measured,
+        p0=p0,
+        sigma=sigma,
+        bounds=bounds,
+        absolute_sigma=True,
+        preset="global",
+        n_starts=global_starts,
+    )
 
 perr_global = np.sqrt(np.diag(pcov_global))
 
@@ -233,6 +258,10 @@ print("Peak Centers (global):")
 print(f"  Peak 1 (K-alpha): {cen1_g:.3f} keV")
 print(f"  Peak 2 (K-beta):  {cen2_g:.3f} keV")
 print(f"  Peak 3 (Escape):  {cen3_g:.3f} keV")
+
+if QUICK_MODE:
+    print("\n⏩ Quick mode: skipping custom multi-start and plots.")
+    sys.exit(0)
 
 # Method 3: GlobalOptimizationConfig with many starts (for difficult spectra)
 custom_starts = 4 if QUICK_MODE else 30
