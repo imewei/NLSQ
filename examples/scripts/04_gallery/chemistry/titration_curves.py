@@ -5,6 +5,8 @@ This script was automatically generated from a Jupyter notebook.
 Plots are saved to the figures/ directory instead of displayed inline.
 """
 
+import os
+import sys
 from pathlib import Path
 
 # ======================================================================
@@ -38,6 +40,9 @@ import numpy as np
 from jax import numpy as jnp
 
 from nlsq import curve_fit
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 
 
 def monoprotic_titration(V, pKa, Ve, C_acid, C_base):
@@ -217,7 +222,7 @@ Ve_true = 25.0  # mL (equivalence point)
 
 # Generate synthetic titration data
 np.random.seed(42)
-V_titrant = np.linspace(0.1, 40, 100)  # Volume of NaOH added (mL)
+V_titrant = np.linspace(0.1, 40, 40 if QUICK else 100)  # Volume of NaOH added (mL)
 
 # Calculate true pH values using more detailed model
 pH_true = np.zeros_like(V_titrant)
@@ -270,6 +275,7 @@ popt, pcov = curve_fit(
     sigma=sigma_fit,
     bounds=(bounds_lower, bounds_upper),
     absolute_sigma=True,
+    **FIT_KWARGS,
 )
 
 pKa_fitted, Ve_fitted, pH0_fitted = popt
@@ -321,7 +327,7 @@ print("Example 2: Buffer Capacity Analysis")
 print("=" * 70)
 
 # Calculate buffer capacity
-pH_range = np.linspace(3, 7, 200)
+pH_range = np.linspace(3, 7, 80 if QUICK else 200)
 beta_true = buffer_capacity(pH_range, pKa_true, C_acid_true)
 beta_fitted = buffer_capacity(pH_range, pKa_fitted, C_acid_true)
 
@@ -345,6 +351,10 @@ print(
 #
 # ======================================================================
 
+
+if QUICK:
+    print("⏩ Quick mode: skipping diprotic analysis and extended plots.")
+    sys.exit(0)
 
 print("\n" + "=" * 70)
 print("Example 3: Diprotic Acid Titration (Carbonic Acid)")
@@ -397,6 +407,7 @@ popt_di, pcov_di = curve_fit(
     sigma=sigma_pH_di,
     bounds=(bounds_lower_di, bounds_upper_di),
     absolute_sigma=True,
+    **FIT_KWARGS,
 )
 
 pKa1_fitted_di, pKa2_fitted_di, Ve1_fitted, Ve2_fitted = popt_di

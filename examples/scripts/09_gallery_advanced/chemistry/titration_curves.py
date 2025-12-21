@@ -29,6 +29,7 @@ import numpy as np
 from nlsq import GlobalOptimizationConfig, fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 
 # Set random seed
 np.random.seed(42)
@@ -142,7 +143,7 @@ pKa_true = 4.76  # Acetic acid
 Ve_true = 25.0  # mL (equivalence point)
 
 # Generate synthetic titration data
-V_titrant = np.linspace(0.1, 40, 50 if QUICK else 100)
+V_titrant = np.linspace(0.1, 40, 30 if QUICK else 100)
 
 # Calculate true pH values
 pH_true = np.zeros_like(V_titrant)
@@ -202,6 +203,7 @@ popt_robust, pcov_robust = fit(
     bounds=(bounds_lower, bounds_upper),
     absolute_sigma=True,
     preset="robust",
+    **FIT_KWARGS,
 )
 
 pKa_fit, Ve_fit, pH0_fit = popt_robust
@@ -210,55 +212,58 @@ pKa_err, Ve_err, pH0_err = np.sqrt(np.diag(pcov_robust))
 print(f"  pKa = {pKa_fit:.3f} +/- {pKa_err:.3f} (true: {pKa_true})")
 print(f"  Ve = {Ve_fit:.2f} +/- {Ve_err:.2f} mL (true: {Ve_true})")
 
-# Method 2: fit() with 'global' preset
-global_starts = 6 if QUICK else 20
-print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
-popt_global, pcov_global = fit(
-    simplified_titration,
-    V_fit,
-    pH_fit,
-    p0=p0,
-    sigma=sigma_fit,
-    bounds=(bounds_lower, bounds_upper),
-    absolute_sigma=True,
-    preset="global",
-    n_starts=global_starts,
-)
+if QUICK:
+    print("\n⏩ Quick mode: skipping global/custom multi-start fits.")
+else:
+    # Method 2: fit() with 'global' preset
+    global_starts = 20
+    print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
+    popt_global, pcov_global = fit(
+        simplified_titration,
+        V_fit,
+        pH_fit,
+        p0=p0,
+        sigma=sigma_fit,
+        bounds=(bounds_lower, bounds_upper),
+        absolute_sigma=True,
+        preset="global",
+        n_starts=global_starts,
+    )
 
-pKa_g, Ve_g, pH0_g = popt_global
-perr_g = np.sqrt(np.diag(pcov_global))
+    pKa_g, Ve_g, pH0_g = popt_global
+    perr_g = np.sqrt(np.diag(pcov_global))
 
-print(f"  pKa = {pKa_g:.3f} +/- {perr_g[0]:.3f}")
-print(f"  Ve = {Ve_g:.2f} +/- {perr_g[1]:.2f} mL")
+    print(f"  pKa = {pKa_g:.3f} +/- {perr_g[0]:.3f}")
+    print(f"  Ve = {Ve_g:.2f} +/- {perr_g[1]:.2f} mL")
 
-# Method 3: GlobalOptimizationConfig with custom settings
-print("\nMethod 3: GlobalOptimizationConfig with custom settings")
+    # Method 3: GlobalOptimizationConfig with custom settings
+    print("\nMethod 3: GlobalOptimizationConfig with custom settings")
 
-global_config = GlobalOptimizationConfig(
-    n_starts=6 if QUICK else 15,
-    sampler="lhs",
-    center_on_p0=True,
-    scale_factor=1.0,
-)
+    global_config = GlobalOptimizationConfig(
+        n_starts=15,
+        sampler="lhs",
+        center_on_p0=True,
+        scale_factor=1.0,
+    )
 
-popt_custom, pcov_custom = fit(
-    simplified_titration,
-    V_fit,
-    pH_fit,
-    p0=p0,
-    sigma=sigma_fit,
-    bounds=(bounds_lower, bounds_upper),
-    absolute_sigma=True,
-    multistart=True,
-    n_starts=6 if QUICK else 15,
-    sampler="lhs",
-)
+    popt_custom, pcov_custom = fit(
+        simplified_titration,
+        V_fit,
+        pH_fit,
+        p0=p0,
+        sigma=sigma_fit,
+        bounds=(bounds_lower, bounds_upper),
+        absolute_sigma=True,
+        multistart=True,
+        n_starts=global_config.n_starts,
+        sampler="lhs",
+    )
 
-pKa_c, Ve_c, pH0_c = popt_custom
-perr_c = np.sqrt(np.diag(pcov_custom))
+    pKa_c, Ve_c, pH0_c = popt_custom
+    perr_c = np.sqrt(np.diag(pcov_custom))
 
-print(f"  pKa = {pKa_c:.3f} +/- {perr_c[0]:.3f}")
-print(f"  Ve = {Ve_c:.2f} +/- {perr_c[1]:.2f} mL")
+    print(f"  pKa = {pKa_c:.3f} +/- {perr_c[0]:.3f}")
+    print(f"  Ve = {Ve_c:.2f} +/- {perr_c[1]:.2f} mL")
 
 # Use robust preset results for analysis
 pKa_fit, Ve_fit, pH0_fit = popt_robust
@@ -313,7 +318,7 @@ print("\n" + "-" * 70)
 print("BUFFER CAPACITY ANALYSIS")
 print("-" * 70)
 
-pH_range = np.linspace(3, 7, 200)
+pH_range = np.linspace(3, 7, 80 if QUICK else 200)
 beta_fitted = buffer_capacity(pH_range, pKa_fit, C_acid_true)
 beta_true = buffer_capacity(pH_range, pKa_true, C_acid_true)
 
