@@ -75,9 +75,7 @@ Stop optimization when improvement plateaus:
 
    from nlsq.callbacks import EarlyStopping
 
-   early_stop = EarlyStopping(
-       patience=10, min_delta=0.001, mode="relative"
-   )
+   early_stop = EarlyStopping(patience=10, min_delta=0.001, mode="relative")
 
    popt, pcov = curve_fit(exponential, x, y, p0=[2, 1], callback=early_stop)
 

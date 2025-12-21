@@ -31,6 +31,7 @@ FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
 
+
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 

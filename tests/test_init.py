@@ -315,13 +315,8 @@ class TestCurveFitLargeMemory(unittest.TestCase):
         self.assertIsInstance(popt, np.ndarray)
 
 
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-class TestCurveFitLargeSampling(unittest.TestCase):
-    """Tests for sampling configuration in curve_fit_large.
-
-    Note: Uses deprecated sampling parameters to verify backward compatibility.
-    Warnings are suppressed since test_deprecation_warnings.py properly tests them.
-    """
+class TestCurveFitLargeSamplingRemoved(unittest.TestCase):
+    """Tests that removed sampling parameters raise TypeError."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -331,37 +326,37 @@ class TestCurveFitLargeSampling(unittest.TestCase):
 
         self.linear_func = linear
 
-    def test_sampling_enabled(self):
-        """Test with sampling enabled."""
-        xdata = np.linspace(0, 10, 15000)  # Large dataset
+    def test_sampling_params_rejected(self):
+        """Test that removed sampling parameters raise TypeError."""
+        xdata = np.linspace(0, 10, 15000)
         ydata = 2.0 * xdata + 1.0
 
-        popt, _pcov = curve_fit_large(
-            self.linear_func,
-            xdata,
-            ydata,
-            enable_sampling=True,
-            sampling_threshold=50,  # Low threshold to trigger sampling
-            max_sampled_size=30,
-            size_threshold=10,
-        )
+        with self.assertRaises(TypeError):
+            curve_fit_large(
+                self.linear_func,
+                xdata,
+                ydata,
+                enable_sampling=True,  # Removed parameter
+                size_threshold=10,
+            )
 
-        self.assertIsInstance(popt, np.ndarray)
+        with self.assertRaises(TypeError):
+            curve_fit_large(
+                self.linear_func,
+                xdata,
+                ydata,
+                sampling_threshold=50,  # Removed parameter
+                size_threshold=10,
+            )
 
-    def test_sampling_disabled(self):
-        """Test with sampling disabled."""
-        xdata = np.linspace(0, 10, 15000)  # Large dataset
-        ydata = 2.0 * xdata + 1.0
-
-        popt, _pcov = curve_fit_large(
-            self.linear_func,
-            xdata,
-            ydata,
-            enable_sampling=False,
-            size_threshold=10,
-        )
-
-        self.assertIsInstance(popt, np.ndarray)
+        with self.assertRaises(TypeError):
+            curve_fit_large(
+                self.linear_func,
+                xdata,
+                ydata,
+                max_sampled_size=30,  # Removed parameter
+                size_threshold=10,
+            )
 
 
 class TestCurveFitLargeOptionalParameters(unittest.TestCase):

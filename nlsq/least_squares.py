@@ -23,7 +23,7 @@ from nlsq.memory_manager import get_memory_manager
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.trf import TrustRegionReflective
 from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction, MethodLiteral
-from nlsq.unified_cache import cached_jit, get_global_cache
+from nlsq.unified_cache import get_global_cache
 
 
 def jacobian_mode_selector(

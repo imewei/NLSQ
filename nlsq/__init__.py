@@ -616,10 +616,6 @@ def curve_fit_large(
     sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
-    # Deprecated parameters (v0.2.0)
-    enable_sampling: bool | None = None,
-    sampling_threshold: int | None = None,
-    max_sampled_size: int | None = None,
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray] | OptimizeResult:
     """Curve fitting with automatic memory management for large datasets.
@@ -671,13 +667,6 @@ def curve_fit_large(
         Center multi-start samples around p0. Default: True.
     scale_factor : float, optional
         Scale factor for exploration region. Default: 1.0.
-    enable_sampling : bool, optional
-        **Deprecated in v0.2.0**. This parameter is ignored. Use streaming
-        optimization instead. See MIGRATION_V0.2.0.md for details.
-    sampling_threshold : int, optional
-        **Deprecated in v0.2.0**. This parameter is ignored.
-    max_sampled_size : int, optional
-        **Deprecated in v0.2.0**. This parameter is ignored.
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
 
@@ -690,9 +679,7 @@ def curve_fit_large(
 
     Notes
     -----
-    As of v0.2.0, subsampling has been completely removed. All large datasets
-    now use streaming optimization for zero accuracy loss. The enable_sampling,
-    sampling_threshold, and max_sampled_size parameters are deprecated and ignored.
+    All large datasets use streaming optimization for 100% data utilization.
 
     Important: Model Function Requirements for Chunking
     ----------------------------------------------------
@@ -748,6 +735,15 @@ def curve_fit_large(
     if global_search:
         multistart = True
         n_starts = 20
+
+    # Reject removed sampling parameters
+    removed_params = {"enable_sampling", "sampling_threshold", "max_sampled_size"}
+    for param in removed_params:
+        if param in kwargs:
+            raise TypeError(
+                f"curve_fit_large() got an unexpected keyword argument '{param}'. "
+                "This parameter was removed in v0.2.0. Use streaming instead."
+            )
 
     # Input validation
     xdata = np.asarray(xdata)
@@ -867,32 +863,6 @@ def curve_fit_large(
             memory_limit_gb = min(8.0, available_gb * 0.7)  # Use 70% of available
         except ImportError:
             memory_limit_gb = 8.0  # Conservative default
-
-    # Emit deprecation warnings for removed sampling parameters
-    if enable_sampling is not None:
-        warnings.warn(
-            "The 'enable_sampling' parameter is deprecated and will be removed in a future version. "
-            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    if sampling_threshold is not None:
-        warnings.warn(
-            "The 'sampling_threshold' parameter is deprecated and will be removed in a future version. "
-            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    if max_sampled_size is not None:
-        warnings.warn(
-            "The 'max_sampled_size' parameter is deprecated and will be removed in a future version. "
-            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
 
     # Create memory configuration
     memory_config = MemoryConfig(

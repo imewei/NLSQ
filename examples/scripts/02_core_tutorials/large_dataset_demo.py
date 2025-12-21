@@ -19,10 +19,8 @@ Plots are saved to the figures/ directory instead of displayed inline.
 #
 # - **Removed**: Subsampling (which caused data loss)
 # - **Added**: Streaming optimization (processes 100% of data)
-# - **Deprecated**: `enable_sampling`, `sampling_threshold`, `max_sampled_size` parameters emit warnings
-# - **Note**: Deprecated parameters still work with warnings
 #
-# All large datasets now use streaming optimization for zero accuracy loss.
+# All large datasets now use streaming optimization for 100% data utilization.
 #
 # ---
 #

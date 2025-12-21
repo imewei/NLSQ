@@ -48,6 +48,7 @@ MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
 
+
 print(f"✅ Python {sys.version_info.major}.{sys.version_info.minor} meets requirements")
 
 # Import core NLSQ

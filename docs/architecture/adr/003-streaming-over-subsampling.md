@@ -26,17 +26,17 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 
 ### Key Changes
 1. Removed ~250 lines of subsampling code from `large_dataset.py`
-2. Deprecated parameters: `enable_sampling`, `sampling_threshold`, `max_sampled_size`
-   - Parameters still accepted but emit DeprecationWarning
-   - Will be removed in a future major version
-3. Integrated streaming optimizer for datasets that don't fit in memory
-4. Maintained backward compatibility with deprecation warnings
+2. Removed parameters: `enable_sampling`, `sampling_threshold`, `max_sampled_size`
+   - Previously deprecated, now fully removed
+3. Removed multi-start subsampling (`multistart_subsample_size` parameter)
+   - Multi-start exploration now uses 100% of data
+4. Integrated streaming optimizer for datasets that don't fit in memory
 5. Updated `LargeDatasetFitter` to use streaming by default
 
 ### Migration Path
-- Deprecation warnings guide users to remove old parameters
-- Old code still works (with warnings) to ease transition
-- Simply remove the deprecated parameters from your code
+- Remove any usage of `enable_sampling`, `sampling_threshold`, `max_sampled_size`, `multistart_subsample_size`
+- These parameters are no longer accepted and will raise `TypeError`
+- Streaming optimization is now the only strategy for large datasets
 
 ## Consequences
 
@@ -49,8 +49,8 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 ✅ **Clear API**: Fewer confusing parameters
 
 ### Negative
-⚠️ **Deprecation**: Old parameters emit warnings (backward compatible)
-  - **Mitigation**: Clear warning messages guide migration
+❌ **Breaking Change**: Old parameters now raise `TypeError`
+  - **Mitigation**: Clear migration path documented above
 ❌ **Slightly Slower**: Processing 100% of data takes longer than sampling 85%
   - **Mitigation**: Minimal impact due to efficient streaming implementation
 ❌ **Requires h5py**: Now a required dependency instead of optional
@@ -71,4 +71,5 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 
 - **2025-10-17**: Accepted and parameters deprecated
 - **2025-10-18**: Verified with 1241 tests passing, 100% success rate
-- **Note**: Full removal deferred to future major version (backward compatibility maintained)
+- **2025-12-21**: Multi-start subsampling (`multistart_subsample_size`) removed
+- **2025-12-21**: Deprecated `enable_sampling`, `sampling_threshold`, `max_sampled_size` fully removed

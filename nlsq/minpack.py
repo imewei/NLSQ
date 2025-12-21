@@ -242,9 +242,7 @@ def fit(
     # Import workflow module components
     from nlsq.workflow import (
         OptimizationGoal,
-        WorkflowTier,
         auto_select_workflow,
-        calculate_adaptive_tolerances,
     )
 
     # Convert data to arrays for size calculations
@@ -389,7 +387,7 @@ def _fit_with_config(
     from nlsq.global_optimization import GlobalOptimizationConfig
     from nlsq.hybrid_streaming_config import HybridStreamingConfig
     from nlsq.large_dataset import LargeDatasetFitter, LDMemoryConfig
-    from nlsq.workflow import OptimizationGoal, calculate_adaptive_tolerances
+    from nlsq.workflow import calculate_adaptive_tolerances
 
     n_points = len(ydata)
 

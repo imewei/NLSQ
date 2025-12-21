@@ -191,7 +191,9 @@ def main():
         start_time = time.time()
 
         effective_n_starts = (
-            min(config.n_starts, 5) if QUICK and config.n_starts > 0 else config.n_starts
+            min(config.n_starts, 5)
+            if QUICK and config.n_starts > 0
+            else config.n_starts
         )
         if effective_n_starts > 0:
             popt, pcov = curve_fit(

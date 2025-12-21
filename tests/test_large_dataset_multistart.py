@@ -3,7 +3,7 @@ Tests for LargeDatasetFitter Multi-Start Integration
 =====================================================
 
 Tests for multi-start optimization integration with LargeDatasetFitter,
-which uses subsample exploration for medium-sized datasets (1M-100M points).
+which uses full data exploration for medium-sized datasets (1M-100M points).
 """
 
 import jax.numpy as jnp
@@ -20,8 +20,8 @@ from nlsq.large_dataset import (
 class TestLargeDatasetMultiStart:
     """Test LargeDatasetFitter multi-start integration."""
 
-    def test_subsample_multistart_uses_100k_points_for_exploration(self):
-        """Test subsample multi-start uses 100K points for exploration."""
+    def test_multistart_uses_full_data_for_exploration(self):
+        """Test multi-start uses full data for exploration."""
 
         def exponential(x, a, b, c):
             return a * jnp.exp(-b * x) + c
@@ -34,8 +34,7 @@ class TestLargeDatasetMultiStart:
         y = true_params[0] * np.exp(-true_params[1] * x) + true_params[2]
         y = y + np.random.normal(0, 0.1, len(y))
 
-        # Create fitter with multi-start enabled and small subsample for testing
-        # Using smaller subsample_size for faster test
+        # Create fitter with multi-start enabled
         config = LDMemoryConfig(
             memory_limit_gb=0.1,  # Force chunking
             min_chunk_size=10000,
@@ -46,7 +45,6 @@ class TestLargeDatasetMultiStart:
             multistart=True,
             n_starts=5,
             sampler="lhs",
-            multistart_subsample_size=50_000,  # Smaller for testing
         )
 
         result = fitter.fit(
@@ -68,12 +66,12 @@ class TestLargeDatasetMultiStart:
         )
         diagnostics = result.get("multistart_diagnostics", {})
 
-        # Verify subsample was used for exploration
-        if "subsample_size" in diagnostics:
-            assert diagnostics["subsample_size"] <= 50_000
+        # Verify full dataset was used for exploration
+        if "dataset_size" in diagnostics:
+            assert diagnostics["dataset_size"] == n_points
 
-    def test_best_starting_point_from_subsample_used_for_chunked_fit(self):
-        """Test best starting point from subsample is used for chunked fit."""
+    def test_best_starting_point_used_for_chunked_fit(self):
+        """Test best starting point from exploration is used for chunked fit."""
 
         def quadratic(x, a, b, c):
             return a * x**2 + b * x + c
@@ -95,7 +93,6 @@ class TestLargeDatasetMultiStart:
             multistart=True,
             n_starts=5,
             sampler="lhs",
-            multistart_subsample_size=30_000,
         )
 
         result = fitter.fit(
@@ -162,8 +159,8 @@ class TestLargeDatasetMultiStart:
                 or diagnostics.get("n_starts_evaluated", 0) == 0
             )
 
-    def test_multistart_respects_memory_limits_for_subsample(self):
-        """Test multi-start respects memory limits when generating subsample."""
+    def test_multistart_works_with_limited_memory(self):
+        """Test multi-start works with limited memory configuration."""
 
         def sine_model(x, amp, freq, phase, offset):
             return amp * jnp.sin(freq * x + phase) + offset
@@ -178,7 +175,7 @@ class TestLargeDatasetMultiStart:
         )
         y = y + np.random.normal(0, 0.15, len(y))
 
-        # Create fitter with very limited memory to test subsample respects limits
+        # Create fitter with very limited memory
         config = LDMemoryConfig(
             memory_limit_gb=0.05,  # Very limited memory
             min_chunk_size=5000,
@@ -189,7 +186,6 @@ class TestLargeDatasetMultiStart:
             multistart=True,
             n_starts=3,
             sampler="sobol",  # Use Sobol for determinism
-            multistart_subsample_size=20_000,  # Request smaller subsample
         )
 
         # This should not crash due to memory issues
@@ -228,7 +224,6 @@ class TestLargeDatasetMultiStart:
             multistart=True,
             n_starts=5,
             sampler="halton",  # Use Halton sequence
-            multistart_subsample_size=25_000,
         )
 
         result = fitter.fit(
@@ -291,7 +286,6 @@ class TestFitLargeDatasetMultiStart:
             multistart=True,
             n_starts=3,
             sampler="lhs",
-            multistart_subsample_size=20_000,
         )
 
         # Verify fit succeeded

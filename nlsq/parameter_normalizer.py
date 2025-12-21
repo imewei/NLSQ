@@ -16,7 +16,6 @@ in normalized parameter space while maintaining JAX JIT compatibility.
 from __future__ import annotations
 
 import jax.numpy as jnp
-from jax import jit
 
 __all__ = ["NormalizedModelWrapper", "ParameterNormalizer"]
 

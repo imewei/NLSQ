@@ -250,18 +250,11 @@ class TestInitModule(unittest.TestCase):
         # For 10k points and 5 params, should be small
         self.assertLess(dataset_stats.total_memory_estimate_gb, 1.0)
 
-    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
     def test_configure_for_large_datasets(self):
-        """Test large dataset configuration helper.
-
-        Note: Uses deprecated enable_sampling parameter to verify backward compatibility.
-        Warning suppressed since test_deprecation_warnings.py properly tests it.
-        """
+        """Test large dataset configuration helper."""
         from nlsq import configure_for_large_datasets, get_large_dataset_config
 
-        configure_for_large_datasets(
-            memory_limit_gb=8.0, enable_sampling=True, enable_chunking=True
-        )
+        configure_for_large_datasets(memory_limit_gb=8.0, enable_chunking=True)
 
         config = get_large_dataset_config()
         # Should have configured appropriately

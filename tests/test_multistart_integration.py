@@ -108,7 +108,7 @@ class TestEndToEndWorkflows:
         """End-to-end: curve_fit_large() with multistart=True on 2M point dataset.
 
         This test verifies that multi-start optimization works correctly with
-        large datasets, using subsample exploration before full chunked fitting.
+        large datasets, using full data exploration before chunked fitting.
         """
         # Generate 2M point dataset
         n_points = 2_000_000

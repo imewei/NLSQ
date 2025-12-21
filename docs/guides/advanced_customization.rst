@@ -24,6 +24,7 @@ Create custom callbacks by defining a function with signature:
    x = np.linspace(0, 5, 100)
    y = 2.5 * np.exp(-1.3 * x) + 0.1 * np.random.randn(100)
 
+
    def custom_callback(iteration, cost, params, info):
        """
        Parameters
@@ -138,8 +139,7 @@ significant speedups.
    import scipy.sparse as sp
 
 
-   def complex_model(x, *params):
-       ...
+   def complex_model(x, *params): ...
 
 
    sparsity = sp.lil_matrix((len(x), len(p0)))

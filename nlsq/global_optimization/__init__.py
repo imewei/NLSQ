@@ -50,7 +50,7 @@ Notes
 Multi-start optimization is integrated with the existing NLSQ infrastructure:
 
 - For small datasets (<1M points): Full multi-start on complete data
-- For medium datasets (1M-100M): Subsample multi-start, then chunked fit
+- For medium datasets (1M-100M): Full multi-start, then chunked fit
 - For large datasets (>100M): Tournament selection during streaming warmup
 
 See Also

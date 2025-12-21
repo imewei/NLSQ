@@ -31,9 +31,7 @@ import optax
 
 from .global_optimization.config import GlobalOptimizationConfig
 from .global_optimization.sampling import (
-    center_samples_around_p0,
     get_sampler,
-    scale_samples_to_bounds,
 )
 from .global_optimization.tournament import TournamentSelector
 from .hybrid_streaming_config import HybridStreamingConfig
@@ -1323,7 +1321,7 @@ class AdaptiveHybridStreamingOptimizer:
                     # Success
                     break
 
-                except Exception as e:
+                except Exception:
                     if retry_attempt < max_retries:
                         # Retry with reduced trust region
                         trust_radius *= 0.5

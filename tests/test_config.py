@@ -507,9 +507,7 @@ class TestMemoryConfigFunctions(unittest.TestCase):
         self.assertFalse(hasattr(config, "enable_sampling"))
 
     def test_configure_for_large_datasets(self):
-        """Test configure_for_large_datasets function (v0.2.0: sampling params emit warnings)."""
-        import warnings
-
+        """Test configure_for_large_datasets function."""
         from nlsq.config import (
             JAXConfig,
             configure_for_large_datasets,
@@ -521,31 +519,17 @@ class TestMemoryConfigFunctions(unittest.TestCase):
         original_mem_config = get_memory_config()
 
         try:
-            # v0.2.0: enable_sampling should emit deprecation warning
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always", DeprecationWarning)
-
-                configure_for_large_datasets(
-                    memory_limit_gb=16.0,
-                    enable_sampling=True,  # Should emit warning
-                    enable_chunking=False,
-                    progress_reporting=True,
-                    mixed_precision_fallback=False,
-                )
-
-                # Check that deprecation warning was issued
-                self.assertTrue(len(w) >= 1)
-                self.assertTrue(
-                    any(
-                        issubclass(warning.category, DeprecationWarning)
-                        for warning in w
-                    )
-                )
+            configure_for_large_datasets(
+                memory_limit_gb=16.0,
+                enable_chunking=False,
+                progress_reporting=True,
+                mixed_precision_fallback=False,
+            )
 
             ld_config = get_large_dataset_config()
             mem_config = get_memory_config()
 
-            # Check large dataset config (v0.2.0: no more enable_sampling)
+            # Check large dataset config
             self.assertTrue(ld_config.enable_automatic_solver_selection)
             self.assertFalse(hasattr(ld_config, "enable_sampling"))
 
@@ -556,6 +540,19 @@ class TestMemoryConfigFunctions(unittest.TestCase):
         finally:
             JAXConfig.set_large_dataset_config(original_ld_config)
             JAXConfig.set_memory_config(original_mem_config)
+
+    def test_configure_for_large_datasets_rejects_sampling(self):
+        """Test that configure_for_large_datasets rejects removed enable_sampling."""
+        from nlsq.config import configure_for_large_datasets
+
+        with self.assertRaises(TypeError) as ctx:
+            configure_for_large_datasets(
+                memory_limit_gb=16.0,
+                enable_sampling=True,  # Removed parameter
+            )
+
+        self.assertIn("unexpected keyword argument", str(ctx.exception))
+        self.assertIn("enable_sampling", str(ctx.exception))
 
 
 class TestMemoryContextManager(unittest.TestCase):

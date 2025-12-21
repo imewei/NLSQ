@@ -53,7 +53,7 @@ from typing import Any
 import numpy as np
 
 from nlsq.bound_inference import infer_bounds_for_multistart
-from nlsq.global_optimization.config import PRESETS, GlobalOptimizationConfig
+from nlsq.global_optimization.config import GlobalOptimizationConfig
 from nlsq.global_optimization.sampling import (
     center_samples_around_p0,
     get_sampler,

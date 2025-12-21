@@ -808,7 +808,6 @@ def configure_for_large_datasets(
     enable_chunking: bool = True,
     progress_reporting: bool = True,
     mixed_precision_fallback: bool = True,
-    enable_sampling: bool | None = None,  # Deprecated in v0.2.0
 ):
     """Configure NLSQ for optimal large dataset performance.
 
@@ -825,14 +824,10 @@ def configure_for_large_datasets(
         Enable progress reporting for long operations (default: True)
     mixed_precision_fallback : bool, optional
         Enable mixed precision fallback (default: True)
-    enable_sampling : bool, optional
-        **Deprecated in v0.2.0**. This parameter is ignored. Use streaming
-        optimization instead. See MIGRATION_V0.2.0.md for details.
 
     Notes
     -----
-    As of v0.2.0, subsampling has been removed. All large datasets now use
-    streaming optimization for zero accuracy loss.
+    All large datasets use streaming optimization for 100% data utilization.
 
     Examples
     --------
@@ -843,16 +838,6 @@ def configure_for_large_datasets(
     ...     progress_reporting=True
     ... )
     """
-    # Emit deprecation warning if enable_sampling is used
-    if enable_sampling is not None:
-        warnings.warn(
-            "The 'enable_sampling' parameter is deprecated and will be removed in a future version. "
-            "Subsampling has been replaced with streaming optimization for zero accuracy loss. "
-            "This parameter is now ignored.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
     # Configure memory settings
     memory_config = MemoryConfig(
         memory_limit_gb=memory_limit_gb,
@@ -924,9 +909,9 @@ def large_dataset_context(large_dataset_config: LargeDatasetConfig):
     Examples
     --------
     >>> from nlsq.config import large_dataset_context, LargeDatasetConfig
-    >>> temp_config = LargeDatasetConfig(enable_sampling=False)
+    >>> temp_config = LargeDatasetConfig(enable_automatic_solver_selection=True)
     >>> with large_dataset_context(temp_config):
-    ...     # Code here runs without sampling
+    ...     # Code here uses automatic solver selection
     ...     result = fit_large_dataset(func, x, y)
     """
     return JAXConfig.large_dataset_context(large_dataset_config)
