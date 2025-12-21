@@ -492,6 +492,7 @@ addopts = [
     # Performance optimizations
     "--tb=short",  # Shorter traceback format for faster output
     "--no-header",  # Skip header for cleaner output
+    "--benchmark-disable",  # Avoid pytest-benchmark warnings under xdist
 ]
 # Console output width for better readability
 console_output_style = "progress"
