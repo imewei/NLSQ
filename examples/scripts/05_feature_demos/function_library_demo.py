@@ -25,10 +25,16 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
 
+import os
+import tempfile
+
 import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import curve_fit, functions
+
+# Use NLSQ_EXAMPLES_TMPDIR if set, otherwise system temp
+TMPDIR = os.environ.get("NLSQ_EXAMPLES_TMPDIR", tempfile.gettempdir())
 
 
 def demo_linear():
@@ -102,10 +108,11 @@ def demo_exponential_decay():
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig("/tmp/nlsq_demo_1.png", dpi=100)
+    outfile = os.path.join(TMPDIR, "nlsq_demo_1.png")
+    plt.savefig(outfile, dpi=100)
     plt.close()
 
-    print("  Plot saved to /tmp/nlsq_demo_1.png\n")
+    print(f"  Plot saved to {outfile}\n")
 
 
 def demo_gaussian():
@@ -193,10 +200,11 @@ def demo_sigmoid():
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig("/tmp/nlsq_demo_2.png", dpi=100)
+    outfile = os.path.join(TMPDIR, "nlsq_demo_2.png")
+    plt.savefig(outfile, dpi=100)
     plt.close()
 
-    print("  Plot saved to /tmp/nlsq_demo_2.png\n")
+    print(f"  Plot saved to {outfile}\n")
 
 
 def demo_power_law():
@@ -275,10 +283,11 @@ def demo_polynomial():
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig("/tmp/nlsq_demo_3.png", dpi=100)
+    outfile = os.path.join(TMPDIR, "nlsq_demo_3.png")
+    plt.savefig(outfile, dpi=100)
     plt.close()
 
-    print("  Plot saved to /tmp/nlsq_demo_3.png\n")
+    print(f"  Plot saved to {outfile}\n")
 
 
 def demo_comparison():
