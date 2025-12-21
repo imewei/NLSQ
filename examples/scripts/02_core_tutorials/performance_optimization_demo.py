@@ -31,6 +31,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # !pip install nlsq  # Uncomment to install in notebook environment
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
+import os
 import sys
 import time
 from pathlib import Path
@@ -39,6 +40,13 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
+MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
+
+
+def cap_samples(n: int) -> int:
+    return min(n, MAX_SAMPLES) if QUICK else n
 
 print(f"✅ Python {sys.version_info.major}.{sys.version_info.minor} meets requirements")
 
@@ -148,8 +156,8 @@ def benchmark_memory_pool_performance():
     print("MEMORY POOL PERFORMANCE COMPARISON")
     print("=" * 70)
 
-    shape = (10000, 50)
-    n_iterations = 100
+    shape = (1000, 10) if QUICK else (10000, 50)
+    n_iterations = 10 if QUICK else 100
 
     # Without pool - create new arrays each time
     print(f"\nWithout MemoryPool ({n_iterations} iterations)...")
@@ -218,7 +226,7 @@ def demo_memory_pool_context_manager():
     with MemoryPool(max_pool_size=10, enable_stats=True) as pool:
         # Allocate some arrays
         arrays = []
-        for i in range(5):
+        for i in range(3 if QUICK else 5):
             arr = pool.allocate((100, 10))
             arrays.append(arr)
 
@@ -289,7 +297,7 @@ def demo_sparse_jacobian_basics():
 
     # Generate test data
     np.random.seed(42)
-    n_points = 1000
+    n_points = cap_samples(1000)
     x_data = np.linspace(0, 1, n_points)
     true_params = [2.0, 1.0, -1.0, 2.0]  # a1, b1, a2, b2
 
@@ -298,7 +306,7 @@ def demo_sparse_jacobian_basics():
     sparse_computer = SparseJacobianComputer(sparsity_threshold=0.01)
 
     pattern, sparsity = sparse_computer.detect_sparsity_pattern(
-        piecewise_linear, np.array(true_params), x_data, n_samples=100
+        piecewise_linear, np.array(true_params), x_data, n_samples=30 if QUICK else 100
     )
 
     print(f"Detected sparsity: {sparsity:.1%} zero elements")
@@ -429,7 +437,7 @@ def demo_sparse_jacobian_fitting():
 
     # Generate data with 5 Gaussians
     np.random.seed(123)
-    n_points = 5000
+    n_points = cap_samples(5000)
     x_data = np.linspace(0, 10, n_points)
 
     # True parameters: 5 Gaussians at different locations
@@ -457,7 +465,7 @@ def demo_sparse_jacobian_fitting():
     print("\n--- Analyzing Sparsity ---")
     sparse_computer = SparseJacobianComputer(sparsity_threshold=0.001)
     pattern, sparsity = sparse_computer.detect_sparsity_pattern(
-        multi_gaussian, np.array(true_params), x_data, n_samples=200
+        multi_gaussian, np.array(true_params), x_data, n_samples=50 if QUICK else 200
     )
 
     print(f"Detected sparsity: {sparsity:.1%}")
@@ -602,7 +610,7 @@ def demo_streaming_optimizer_basics():
     StreamingOptimizer(config)
 
     # Simulate large dataset
-    total_data_size = 50_000  # 50K points, but processed in batches
+    total_data_size = cap_samples(50_000)  # processed in batches
     true_params = [5.0, 1.2, 0.5]
 
     print(f"Total dataset size: {total_data_size:,} points")
@@ -661,7 +669,7 @@ def demo_hdf5_streaming():
     try:
         # Generate large dataset and save to HDF5
         print("\n--- Creating HDF5 dataset ---")
-        n_total = 100_000
+        n_total = cap_samples(100_000)
 
         # Use create_hdf5_dataset utility
         def data_generator_func(n_points):
@@ -683,7 +691,7 @@ def demo_hdf5_streaming():
 
         # Read in batches
         print("\n--- Reading in batches ---")
-        batch_size = 5000
+        batch_size = min(5000, max(50, n_total // 4))
         n_batches = (n_total + batch_size - 1) // batch_size
 
         batch_means = []
@@ -753,8 +761,8 @@ def demo_combined_optimization():
         return result
 
     # Problem size
-    n_points = 50_000
-    n_peaks = 10
+    n_points = cap_samples(50_000)
+    n_peaks = 4 if QUICK else 10
     n_params = n_peaks * 3  # 30 parameters
 
     print("\nProblem size:")
@@ -782,7 +790,10 @@ def demo_combined_optimization():
     print("\n--- Step 1: Sparsity Analysis ---")
     sparse_comp = SparseJacobianComputer(sparsity_threshold=0.001)
     pattern, sparsity = sparse_comp.detect_sparsity_pattern(
-        multi_peak_model, np.array(true_params), x_data, n_samples=500
+        multi_peak_model,
+        np.array(true_params),
+        x_data,
+        n_samples=100 if QUICK else 500,
     )
 
     print(f"Sparsity: {sparsity:.1%}")
@@ -798,13 +809,14 @@ def demo_combined_optimization():
     pool = MemoryPool(max_pool_size=20, enable_stats=True)
 
     # Simulate multiple optimization iterations with pooled memory
-    n_iters = 10
+    n_iters = 3 if QUICK else 10
     print(f"Running {n_iters} simulated iterations with memory pool...")
 
     for i in range(n_iters):
         # Allocate temporary arrays from pool
-        jacobian_chunk = pool.allocate((5000, n_params))
-        residuals = pool.allocate((5000,))
+        chunk_size = min(1000 if QUICK else 5000, n_points)
+        jacobian_chunk = pool.allocate((chunk_size, n_params))
+        residuals = pool.allocate((chunk_size,))
 
         # Simulate computation
         _ = jacobian_chunk * 2.0
