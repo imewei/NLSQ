@@ -12,7 +12,7 @@ import numbers
 import os
 import random
 import sys
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def _get_max_samples() -> int:
@@ -22,7 +22,9 @@ def _get_max_samples() -> int:
         return 5000
 
 
-def _cap_size(size: int | Iterable[int] | None, max_samples: int) -> int | tuple[int, ...] | None:
+def _cap_size(
+    size: int | Iterable[int] | None, max_samples: int
+) -> int | tuple[int, ...] | None:
     if size is None:
         return None
     if isinstance(size, numbers.Integral):
