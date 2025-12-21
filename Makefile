@@ -298,6 +298,8 @@ test-all-parallel:
 	$(RUN_CMD) $(PYTEST) -n auto
 	@echo "$(BOLD)$(GREEN)✓ All tests passed!$(RESET)"
 
+test-all-parallell: test-all-parallel
+
 test-coverage:
 	@echo "$(BOLD)$(BLUE)Running tests with coverage report...$(RESET)"
 	$(RUN_CMD) $(PYTEST) --cov=$(PACKAGE_NAME) --cov-report=term-missing --cov-report=html --cov-report=xml
