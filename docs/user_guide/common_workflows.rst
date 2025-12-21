@@ -110,6 +110,38 @@ Use this when you want a single command to launch a workflow run.
 
    nlsq fit --config ./configs/experiment_01.yaml
 
+Domain-Specific Examples
+------------------------
+
+Interactive notebooks organized by scientific domain:
+
+**Biology:**
+
+- `Dose-Response Curves <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/biology/dose_response.ipynb>`_ - EC50, Hill slopes
+- `Enzyme Kinetics <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/biology/enzyme_kinetics.ipynb>`_ - Michaelis-Menten kinetics
+- `Growth Curves <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/biology/growth_curves.ipynb>`_ - Logistic growth models
+
+**Chemistry:**
+
+- `Reaction Kinetics <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/chemistry/reaction_kinetics.ipynb>`_ - Rate laws and kinetics
+- `Titration Curves <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/chemistry/titration_curves.ipynb>`_ - pH curves
+
+**Physics:**
+
+- `Damped Oscillation <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/physics/damped_oscillation.ipynb>`_ - Pendulums and resonance
+- `Radioactive Decay <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/physics/radioactive_decay.ipynb>`_ - Half-lives
+- `Spectroscopy Peaks <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/physics/spectroscopy_peaks.ipynb>`_ - Peak fitting
+
+**Engineering:**
+
+- `Sensor Calibration <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/engineering/sensor_calibration.ipynb>`_ - Calibration curves
+- `Materials Characterization <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/engineering/materials_characterization.ipynb>`_ - Materials science
+- `System Identification <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/04_gallery/engineering/system_identification.ipynb>`_ - System ID
+
+**Learning Map:**
+
+- `Learning Map <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/00_learning_map.ipynb>`_ - Find the right tutorial for your needs
+
 Next steps
 ----------
 

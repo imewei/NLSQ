@@ -7,7 +7,6 @@ Complete API documentation for NLSQ modules and functions.
    :maxdepth: 2
 
    modules
-   large_datasets_api
    notebook_utils
 
 Core API

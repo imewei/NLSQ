@@ -244,13 +244,25 @@ Now that you've mastered the basics, explore:
 3. :doc:`../api/large_datasets_api` - Advanced fitting and parameter constraints
 4. :doc:`../api/performance_benchmarks` - Performance analysis and benchmarks
 
-Interactive Examples
+Interactive Notebooks
 ---------------------
 
-Try these examples in Google Colab:
+Hands-on Jupyter notebooks to practice curve fitting:
 
-- `Basic Fitting Examples <https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ%20Quickstart.ipynb>`_
-- `Large Dataset Demo <https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb>`_
+**Getting Started:**
+
+- `NLSQ Quickstart <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/01_getting_started/nlsq_quickstart.ipynb>`_ (10-15 min) - Your first curve fit in 5 minutes
+- `Interactive Tutorial <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/01_getting_started/nlsq_interactive_tutorial.ipynb>`_ (30-45 min) - Comprehensive hands-on guide with exercises
+
+**Core Tutorials:**
+
+- `Large Dataset Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_core_tutorials/large_dataset_demo.ipynb>`_ - Handle millions of data points
+- `Performance Optimization <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_core_tutorials/performance_optimization_demo.ipynb>`_ - Maximize fitting speed
+- `2D Gaussian Fitting <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_core_tutorials/nlsq_2d_gaussian_demo.ipynb>`_ - Image analysis and peak detection
+
+**Learning Map:**
+
+- `Learning Map <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/00_learning_map.ipynb>`_ - Find the right tutorial for your needs
 
 Troubleshooting
 ---------------

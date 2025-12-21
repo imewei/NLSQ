@@ -3,17 +3,6 @@ User Guides
 
 Comprehensive guides for using NLSQ effectively in your projects.
 
-.. toctree::
-   :maxdepth: 2
-
-   migration_scipy
-   workflow_options
-   advanced_customization
-   stability
-   performance_guide
-   large_datasets
-   troubleshooting
-
 Guide Overview
 --------------
 

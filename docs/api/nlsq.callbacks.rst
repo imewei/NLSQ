@@ -144,6 +144,11 @@ All callbacks inherit from ``OptimizationCallback`` and can override these metho
 - ``on_iteration_end(iteration, params, cost, gradient_norm)``: Called after each iteration
 - ``on_optimization_end(result)``: Called after optimization completes
 
+Interactive Notebooks
+---------------------
+
+- `Callbacks Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/05_feature_demos/callbacks_demo.ipynb>`_ (15 min) - Progress monitoring, early stopping, and custom callbacks
+
 See Also
 --------
 

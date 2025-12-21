@@ -891,6 +891,26 @@ Related Documentation
 
 --------------
 
+Interactive Notebooks
+---------------------
+
+Hands-on tutorials for performance optimization:
+
+**Performance Fundamentals:**
+
+- `Performance Optimization Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_core_tutorials/performance_optimization_demo.ipynb>`_ (25-35 min) - Speed optimization, GPU setup, migration checklist
+
+**Advanced Performance:**
+
+- `GPU Optimization Deep Dive <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/03_advanced/gpu_optimization_deep_dive.ipynb>`_ (40 min) - Maximize GPU utilization, memory optimization, performance profiling
+- `Custom Algorithms <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/03_advanced/custom_algorithms_advanced.ipynb>`_ (40 min) - Implement custom optimizers, algorithm selection
+
+**Large Dataset Performance:**
+
+- `Large Dataset Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_core_tutorials/large_dataset_demo.ipynb>`_ (25 min) - Chunking, streaming, memory management
+
+--------------
+
 Benchmarking Results
 --------------------
 

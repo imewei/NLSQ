@@ -20,12 +20,10 @@ Advanced Concepts
 API Reference
 -------------
 
-.. toctree::
-   :maxdepth: 2
+See the :doc:`../api/index` for complete API documentation:
 
-   ../api/index
-   ../api/modules
-   ../api/large_datasets_api
+- :doc:`../api/modules` - Full module reference
+- :doc:`../api/large_datasets_api` - Large dataset API
 
 Custom Pipelines
 ----------------
@@ -43,8 +41,6 @@ Extending the System
 Developer Guide
 ---------------
 
-.. toctree::
-   :maxdepth: 2
+See :doc:`../developer/index` for developer documentation:
 
-   ../developer/index
-   ../developer/ci_cd/index
+- :doc:`../developer/ci_cd/index` - CI/CD documentation

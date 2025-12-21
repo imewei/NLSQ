@@ -532,6 +532,27 @@ Troubleshooting Large Dataset Issues
     compiled_func = jax.jit(func)
     test_result = compiled_func(x[:100], *p0)  # Should not raise errors
 
+Interactive Notebooks
+---------------------
+
+Hands-on tutorials for large dataset handling:
+
+**Core Tutorials:**
+
+- `Large Dataset Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_core_tutorials/large_dataset_demo.ipynb>`_ - Handle millions of data points with automatic chunking
+
+**Streaming and Fault Tolerance:**
+
+- `Basic Fault Tolerance <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/01_basic_fault_tolerance.ipynb>`_ - Error handling for streaming fits
+- `Checkpoint and Resume <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/02_checkpoint_resume.ipynb>`_ - Save and restore optimization state
+- `Custom Retry Settings <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/03_custom_retry_settings.ipynb>`_ - Configure retry behavior
+- `Interpreting Diagnostics <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/04_interpreting_diagnostics.ipynb>`_ - Understanding streaming results
+- `Hybrid Streaming API <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb>`_ - Parameter normalization and Adam warmup
+
+**HPC and Cluster Computing:**
+
+- `HPC and Checkpointing <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/07_hpc_and_checkpointing.ipynb>`_ - PBS Pro, fault tolerance, and cluster computing
+
 Next Steps
 ----------
 

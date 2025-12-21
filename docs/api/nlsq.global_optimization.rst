@@ -196,6 +196,17 @@ Tournament selection for streaming
 
    best_candidates = selector.run_tournament(data_generator(), model, top_m=1)
 
+Interactive Notebooks
+---------------------
+
+Hands-on tutorials for global optimization:
+
+- `Multistart Basics <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/07_global_optimization/01_multistart_basics.ipynb>`_ - Local minima traps and multi-start solutions
+- `Sampling Strategies <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/07_global_optimization/02_sampling_strategies.ipynb>`_ - LHS, Sobol, Halton comparison
+- `Presets and Config <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/07_global_optimization/03_presets_and_config.ipynb>`_ - Using built-in presets
+- `Tournament Selection <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/07_global_optimization/04_tournament_selection.ipynb>`_ - Memory-efficient selection for streaming
+- `Multistart Integration <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/07_global_optimization/05_multistart_integration.ipynb>`_ - Integration with curve_fit workflows
+
 See Also
 --------
 

@@ -184,6 +184,11 @@ Each function has well-defined parameters with physical meaning:
     - ``k``: Growth rate
     - ``x0``: Midpoint (inflection point)
 
+Interactive Notebooks
+---------------------
+
+- `Function Library Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/05_feature_demos/function_library_demo.ipynb>`_ (20 min) - Pre-built models and automatic parameter estimation
+
 See Also
 --------
 
