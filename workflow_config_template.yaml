@@ -1,0 +1,358 @@
+# Workflow System Configuration Template
+# - Copy this file and edit values as needed.
+# - All sections include guidance on intent, safe defaults, and pitfalls.
+# - Keep comments when sharing internally; remove only if required by tooling.
+
+metadata:
+  # Human-friendly name used in logs/reports; no runtime effect.
+  # Recommended: short, unique, stable across reruns for comparability.
+  workflow_name: "example_workflow"
+  # Brief description of the workflow purpose and dataset scope.
+  description: "Template configuration for workflow system runs."
+  # Configuration schema or template version; update when fields change.
+  version: "1.0"
+  # Optional contact for ownership and review.
+  author: ""
+  contact: ""
+
+# Workflow System (NLSQ internal schema)
+# - These top-level keys match nlsq.workflow YAML loading.
+# - If you only use the internal workflow system, these keys are sufficient.
+# - Pitfall: workflow names are case-sensitive when referenced by name.
+default_workflow: "standard"  # Preset or custom workflow name.
+# Memory budget used by workflow auto-selection; set to null to auto-detect.
+# Performance: lower limits may force streaming/chunked tiers.
+memory_limit_gb: 16.0
+# Custom workflow definitions; each entry maps to WorkflowConfig.from_dict.
+workflows:
+  # Example custom workflow (safe defaults).
+  example_custom:
+    tier: "STANDARD"  # STANDARD | CHUNKED | STREAMING | STREAMING_CHECKPOINT
+    goal: "ROBUST"    # FAST | ROBUST | GLOBAL | MEMORY_EFFICIENT | QUALITY
+    gtol: 1.0e-8
+    ftol: 1.0e-8
+    xtol: 1.0e-8
+    enable_multistart: false
+    n_starts: 10
+    sampler: "default"  # "default" or "lhs"
+    enable_checkpoints: false
+    checkpoint_dir: "checkpoints"
+    chunk_size: null  # Only for CHUNKED tier
+
+paths:
+  # Base directory for relative paths; set explicitly for portability.
+  # Pitfall: leaving blank may resolve relative paths to unexpected CWDs.
+  project_root: "/path/to/project"
+  # Input data location; can be absolute or relative to project_root.
+  input_dir: "data/input"
+  # Primary outputs (results, reports); ensure write permissions.
+  output_dir: "data/output"
+  # Logs and trace files; keep separate for easier cleanup.
+  logs_dir: "logs"
+  # Cache location (compiled artifacts, intermediates); can be cleared safely.
+  cache_dir: "cache"
+  # Temporary scratch space; should be on fast local storage if possible.
+  temp_dir: "tmp"
+
+runtime:
+  # Device selection: "cpu" or "gpu". Default CPU for safety and parity.
+  # Determinism: CPU tends to be more reproducible than GPU.
+  device: "cpu"
+  # Threads/workers used by parallel sections. Keep modest to avoid oversubscription.
+  # Performance: set to <= physical cores; too high can slow I/O.
+  threads: 4
+  workers: 2
+  # Numeric precision/dtype; float64 improves accuracy but can be slower.
+  # Pitfall: mixed dtypes can lead to subtle discrepancies.
+  precision: "float64"
+  dtype: "float64"
+  # Fixed seed for reproducible sampling/initialization.
+  # Determinism: change only when you want different stochastic results.
+  random_seed: 0
+  # Verbosity and logging; higher = more detail and overhead.
+  verbosity: 1
+  log_level: "INFO"
+
+logging:
+  # Log file path; relative to logs_dir or absolute.
+  log_file: "workflow.log"
+  # Console logging on/off. Disable for quiet batch runs.
+  console: true
+  # Structured logging for ingestion by external tools.
+  # Performance: slight overhead when enabled.
+  structured:
+    enabled: false
+    format: "json"  # "json" or "yaml"; keep "json" for tooling.
+  # Log rotation to prevent unbounded growth.
+  rotation:
+    enabled: true
+    max_bytes: 10485760  # 10 MB
+    backup_count: 5
+  # Timestamp settings; disable only if your platform adds its own.
+  timestamps:
+    enabled: true
+    timezone: "UTC"
+
+data:
+  # Dataset identifier used in reports/exports; not used to locate files.
+  dataset_id: "dataset_001"
+  # File discovery patterns under input_dir.
+  # Pitfall: overly broad patterns can include unintended files.
+  file_patterns:
+    - "*.csv"
+    - "*.parquet"
+  # Expected file formats; used by parsers/validators.
+  file_formats:
+    - "csv"
+    - "parquet"
+  # Parsing options; keep strict to avoid silent type coercion.
+  parsing:
+    delimiter: ","
+    encoding: "utf-8"
+    header: true
+    missing_values:
+      - ""
+      - "NA"
+      - "null"
+  # Validation rules for columns and ranges.
+  # Determinism: strict validation improves reproducibility.
+  validation:
+    required_columns:
+      - "x"
+      - "y"
+    units:
+      x: "unitless"
+      y: "unitless"
+    ranges:
+      x:
+        min: null
+        max: null
+      y:
+        min: null
+        max: null
+
+preprocessing:
+  # Normalization/scaling applied before fitting.
+  # Pitfall: changing preprocessing changes parameter meaning.
+  normalization:
+    enabled: false
+    method: "standard"  # "standard", "minmax", "robust", "none"
+  # Filtering/masking of data points (e.g., outliers, ranges).
+  filtering:
+    enabled: false
+    method: "none"  # "none", "iqr", "zscore", "custom"
+    threshold: 3.0
+  # Downsampling for speed; disabled by default to preserve accuracy.
+  # Performance: enabling improves speed but reduces fidelity.
+  downsampling:
+    enabled: false
+    method: "uniform"  # "uniform", "random"
+    max_points: 10000
+    seed: 0
+
+model:
+  # Model identifier used by the workflow system to select a function.
+  model_name: "my_model"
+  model_id: "model_v1"
+  # Parameter definitions; keep bounds tight to improve convergence.
+  # Pitfall: overly tight bounds can bias solutions.
+  parameters:
+    - name: "param_a"
+      initial: 1.0
+      bounds: [0.0, 10.0]
+      fixed: false
+      transform: "none"  # "none", "log", "logit", "exp"
+    - name: "param_b"
+      initial: 0.1
+      bounds: [0.0, 1.0]
+      fixed: false
+      transform: "none"
+  # Optional constraints between parameters.
+  # Determinism: constraints reduce solution variability.
+  constraints:
+    enabled: false
+    expressions:
+      - "param_a > param_b"
+
+fitting:
+  # Method selection; keep safe defaults.
+  # Example values: "nlsq", "nuts", "hybrid".
+  method: "nlsq"
+  # Objective options; robust losses can stabilize outliers but add cost.
+  objective:
+    weights: null  # null or array/column reference
+    robust_loss: "none"  # "none", "huber", "soft_l1"
+  # Convergence/termination; tighter tolerances improve accuracy but cost time.
+  termination:
+    ftol: 1.0e-8  # NLSQ naming matches internal WorkflowConfig
+    xtol: 1.0e-8
+    gtol: 1.0e-8
+    max_iterations: 200
+    max_function_evals: 2000
+  # Jacobian options; analytic is fastest if correct.
+  # Pitfall: incorrect analytic Jacobian can break convergence.
+  jacobian:
+    mode: "auto"  # "auto", "analytic", "finite_diff"
+    finite_diff_step: 1.0e-6
+  # Multi-start settings; disabled by default to avoid extra cost.
+  multistart:
+    # These keys map to internal names enable_multistart / n_starts / sampler.
+    enabled: false
+    num_starts: 10
+    method: "default"  # "default" or "lhs"
+    seed: 0
+
+optimization:
+  # Step-size/solver tuning; keep defaults unless you see instability.
+  # Determinism: changing these can alter convergence paths.
+  step_size:
+    initial: 1.0
+    min: 1.0e-6
+    max: 10.0
+  # Damping/trust-region parameters (if supported by the solver).
+  trust_region:
+    enabled: true
+    initial_radius: 1.0
+    max_radius: 100.0
+    min_radius: 1.0e-6
+  damping:
+    lambda_init: 1.0
+    lambda_min: 1.0e-6
+    lambda_max: 1.0e6
+
+workflow_steps:
+  # Ordered steps; disable steps you do not need.
+  # Pitfall: skipping validation can hide data issues.
+  - name: "load_data"
+    enabled: true
+    inputs: []
+    outputs: ["raw_dataset"]
+  - name: "validate_data"
+    enabled: true
+    inputs: ["raw_dataset"]
+    outputs: ["validated_dataset"]
+  - name: "preprocess"
+    enabled: true
+    inputs: ["validated_dataset"]
+    outputs: ["processed_dataset"]
+  - name: "fit_model"
+    enabled: true
+    inputs: ["processed_dataset"]
+    outputs: ["fit_result"]
+  - name: "postprocess"
+    enabled: true
+    inputs: ["fit_result"]
+    outputs: ["final_result"]
+
+validation_and_qc:
+  # Sanity checks for outputs; keep enabled for CI/stability.
+  sanity_checks:
+    enabled: true
+    checks:
+      - "finite_parameters"
+      - "nonnegative_variances"
+  # Numerical parity checks between methods or devices.
+  # Performance: disable for large runs if not needed.
+  numerical_parity:
+    enabled: false
+    tolerance: 1.0e-6
+  # Acceptance thresholds for final fit quality.
+  acceptance:
+    max_rmse: null
+    max_mae: null
+    min_r2: null
+
+reporting:
+  # Summary outputs; disable heavy plots for quick runs.
+  summary:
+    enabled: true
+    include_tables: true
+    include_plots: false
+  # Export formats; keep minimal for speed.
+  formats:
+    - "json"
+    - "csv"
+
+export:
+  # Bundle artifacts for reproducibility and sharing.
+  artifact_bundle:
+    enabled: true
+    include_data_snapshot: false
+    include_logs: true
+  # Include a frozen config snapshot in outputs.
+  config_snapshot:
+    enabled: true
+    filename: "config_snapshot.yaml"
+
+advanced:
+  # Memory settings; keep conservative to avoid OOM.
+  memory:
+    adaptive_fraction: 0.5
+    max_gb: null
+  # Timeouts for long-running stages (seconds).
+  timeouts:
+    per_step: 120
+    total: 3600
+  # Checkpointing for long runs; safe default off.
+  checkpointing:
+    enabled: false
+    interval_steps: 50
+    directory: "checkpoints"
+  # Debug flags; keep off unless troubleshooting.
+  debug:
+    enabled: false
+    trace: false
+    save_intermediate_arrays: false
+
+# -----------------------------------------------------------------------------
+# Example profiles (copy and edit). Keep these commented out in the template.
+# -----------------------------------------------------------------------------
+
+# precision_first_cpu:
+#   runtime:
+#     device: "cpu"
+#     precision: "float64"
+#     dtype: "float64"
+#     threads: 2
+#     workers: 1
+#   fitting:
+#     termination:
+#       ftol: 1.0e-10
+#       xtol: 1.0e-10
+#       gtol: 1.0e-10
+#       max_iterations: 500
+#       max_function_evals: 5000
+#   validation_and_qc:
+#     sanity_checks:
+#       enabled: true
+#     numerical_parity:
+#       enabled: true
+#       tolerance: 1.0e-8
+
+# fast_dev:
+#   runtime:
+#     device: "cpu"
+#     threads: 4
+#     workers: 2
+#     precision: "float32"
+#     dtype: "float32"
+#   preprocessing:
+#     downsampling:
+#       enabled: true
+#       method: "uniform"
+#       max_points: 2000
+#   fitting:
+#     termination:
+#       max_iterations: 50
+#       max_function_evals: 300
+#   reporting:
+#     summary:
+#       include_plots: false
+
+# multistart_lhs:
+#   fitting:
+#     multistart:
+#       enabled: true
+#       num_starts: 25
+#       method: "lhs"
+#       seed: 42
