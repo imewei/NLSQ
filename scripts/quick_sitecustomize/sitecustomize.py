@@ -67,13 +67,68 @@ def _patch_numpy(max_samples: int) -> None:
 
     def linspace_patched(start, stop, num=50, *args, **kwargs):
         caller_mod = sys._getframe(1).f_globals.get("__name__", "")
-        if caller_mod.startswith("matplotlib"):
+        if caller_mod.startswith(("matplotlib", "scipy")):
             capped_num = int(num)
         else:
             capped_num = min(int(num), max_samples)
         return linspace_orig(start, stop, capped_num, *args, **kwargs)
 
     np.linspace = linspace_patched
+
+    logspace_orig = np.logspace
+
+    def logspace_patched(start, stop, num=50, *args, **kwargs):
+        caller_mod = sys._getframe(1).f_globals.get("__name__", "")
+        if caller_mod.startswith(("matplotlib", "scipy")):
+            capped_num = int(num)
+        else:
+            capped_num = min(int(num), max_samples)
+        return logspace_orig(start, stop, capped_num, *args, **kwargs)
+
+    np.logspace = logspace_patched
+
+    geomspace_orig = np.geomspace
+
+    def geomspace_patched(start, stop, num=50, *args, **kwargs):
+        caller_mod = sys._getframe(1).f_globals.get("__name__", "")
+        if caller_mod.startswith(("matplotlib", "scipy")):
+            capped_num = int(num)
+        else:
+            capped_num = min(int(num), max_samples)
+        return geomspace_orig(start, stop, capped_num, *args, **kwargs)
+
+    np.geomspace = geomspace_patched
+
+
+def _patch_jax(max_samples: int) -> None:
+    try:
+        import jax.numpy as jnp
+    except Exception:
+        return
+
+    linspace_orig = jnp.linspace
+
+    def linspace_patched(start, stop, num=50, *args, **kwargs):
+        capped_num = min(int(num), max_samples)
+        return linspace_orig(start, stop, capped_num, *args, **kwargs)
+
+    jnp.linspace = linspace_patched
+
+    logspace_orig = jnp.logspace
+
+    def logspace_patched(start, stop, num=50, *args, **kwargs):
+        capped_num = min(int(num), max_samples)
+        return logspace_orig(start, stop, capped_num, *args, **kwargs)
+
+    jnp.logspace = logspace_patched
+
+    geomspace_orig = jnp.geomspace
+
+    def geomspace_patched(start, stop, num=50, *args, **kwargs):
+        capped_num = min(int(num), max_samples)
+        return geomspace_orig(start, stop, capped_num, *args, **kwargs)
+
+    jnp.geomspace = geomspace_patched
 
 
 def _configure_matplotlib(tmp_dir: str | None) -> None:
@@ -91,4 +146,5 @@ if os.environ.get("NLSQ_EXAMPLES_QUICK"):
     os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
     os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
     _patch_numpy(max_samples)
+    _patch_jax(max_samples)
     _configure_matplotlib(os.environ.get("NLSQ_EXAMPLES_TMPDIR"))
