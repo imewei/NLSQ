@@ -58,12 +58,14 @@ def test_example_script_runs(
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",  # Fix Windows cp1252 encoding issues with emoji
+        errors="replace",  # Replace undecodable bytes instead of failing
         timeout=60,
     )
 
     if result.returncode != 0:
-        stdout_snip = result.stdout[-800:]
-        stderr_snip = result.stderr[-800:]
+        stdout_snip = (result.stdout or "")[-800:]
+        stderr_snip = (result.stderr or "")[-800:]
         pytest.fail(
             f"{script_path} failed with code {result.returncode}\n"
             f"stdout:\n{stdout_snip}\n\nstderr:\n{stderr_snip}"
