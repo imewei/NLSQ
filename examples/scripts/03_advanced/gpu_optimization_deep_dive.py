@@ -211,19 +211,21 @@ _ = cf_gpu.curve_fit(
     x_large[:100],
     y_large[:100],
     p0=[3, 0.5, 2, 1],
-    maxiter=50,
-    max_nfev=1000,
+    maxiter=20 if QUICK else 50,
+    max_nfev=200 if QUICK else 1000,
 )
 
-# Benchmark: 10 fits
-n_runs = 10
+# Benchmark: 10 fits (reduced in quick mode)
+n_runs = 3 if QUICK else 10
 times = []
 
 for i in range(n_runs):
     # Slightly vary initial guess to avoid trivial caching
     p0 = [3.0 + i * 0.1, 0.5, 2.0, 1.0]
     start = time.time()
-    popt, _ = cf_gpu.curve_fit(complex_model, x_large, y_large, p0=p0, maxiter=50)
+    popt, _ = cf_gpu.curve_fit(
+        complex_model, x_large, y_large, p0=p0, maxiter=20 if QUICK else 50
+    )
     times.append((time.time() - start) * 1000)
 
 mean_time = np.mean(times)
@@ -255,8 +257,8 @@ print("Batch Processing Benchmark:")
 print("=" * 60)
 
 # Generate batch of datasets
-n_datasets = max(10, cap_samples(1000))
-n_points_per_dataset = 50
+n_datasets = min(20, cap_samples(200)) if QUICK else max(10, cap_samples(1000))
+n_points_per_dataset = 30 if QUICK else 50
 
 x_batch_data = jnp.linspace(0, 5, n_points_per_dataset)
 
@@ -282,7 +284,8 @@ print("Method 1: Sequential fitting (baseline)")
 start = time.time()
 results_sequential = []
 cf_seq = CurveFit()
-for i in range(min(100, n_datasets)):  # Only fit first 100 for speed
+sequential_runs = min(20 if QUICK else 100, n_datasets)
+for i in range(sequential_runs):  # Only fit a subset for speed
     popt, _ = cf_seq.curve_fit(
         exponential_model, x_batch_data, y_batch_data[i], p0=[3.0, 0.5], maxiter=30
     )
@@ -290,9 +293,12 @@ for i in range(min(100, n_datasets)):  # Only fit first 100 for speed
 time_sequential = time.time() - start
 
 print(
-    f"  Time for 100 datasets: {time_sequential * 1000:.0f} ms ({time_sequential * 1000 / 100:.1f} ms/fit)"
+    f"  Time for {sequential_runs} datasets: {time_sequential * 1000:.0f} ms "
+    f"({time_sequential * 1000 / sequential_runs:.1f} ms/fit)"
 )
-print(f"  Estimated time for {n_datasets}: {time_sequential * n_datasets / 100:.1f} s")
+print(
+    f"  Estimated time for {n_datasets}: {time_sequential * n_datasets / sequential_runs:.1f} s"
+)
 print()
 
 # Method 2: Vectorized with vmap (fast)
@@ -307,8 +313,8 @@ def fit_one_dataset(y_single):
     def loss(p):
         return jnp.sum((y_single - exponential_model(x_batch_data, *p)) ** 2)
 
-    # 20 gradient descent steps
-    for _ in range(20):
+    # A few gradient descent steps for demonstration
+    for _ in range(5 if QUICK else 20):
         g = jax.grad(loss)(params)
         params = params - 0.05 * g
     return params
@@ -318,7 +324,8 @@ def fit_one_dataset(y_single):
 fit_batch = jit(vmap(fit_one_dataset))
 
 # Warm up JIT
-_ = fit_batch(y_batch_data[:10])
+warmup_size = min(10, n_datasets)
+_ = fit_batch(y_batch_data[:warmup_size])
 
 # Benchmark
 start = time.time()
@@ -334,7 +341,7 @@ print(f"  Throughput: {n_datasets / time_batch:.0f} fits/second")
 print()
 
 # Speedup
-estimated_sequential_time = time_sequential * n_datasets / 100
+estimated_sequential_time = time_sequential * n_datasets / sequential_runs
 speedup = estimated_sequential_time / time_batch
 
 print(f"Speedup: {speedup:.0f}x faster with vmap + JIT ✓")
@@ -453,12 +460,13 @@ def benchmark_nlsq(n_points_list, n_params=2, n_runs=5):
 
 
 print("Running comprehensive benchmark...")
-print("(This may take 30-60 seconds)")
+print("(This may take 30-60 seconds in full mode)")
 print()
 
 # Test different problem sizes
-sizes = [cap_samples(s) for s in [100, 500, 1000, 5000, 10000]]
-bench_results = benchmark_nlsq(sizes, n_runs=5)
+size_candidates = [50, 100, 200] if QUICK else [100, 500, 1000, 5000, 10000]
+sizes = sorted({cap_samples(s) for s in size_candidates})
+bench_results = benchmark_nlsq(sizes, n_runs=2 if QUICK else 5)
 
 # Display results
 print("Benchmark Results:")
