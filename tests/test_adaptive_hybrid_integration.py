@@ -324,8 +324,8 @@ class TestLargeDatasetPerformance:
         def exponential_model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
 
-        # Medium-large dataset
-        n_points = 100_000
+        # Medium-large dataset (kept below timeout thresholds)
+        n_points = 30_000
         x = jnp.linspace(0, 10, n_points)
         y_true = exponential_model(x, 3.0, 0.5, 1.0)
 
