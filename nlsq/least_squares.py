@@ -693,11 +693,21 @@ class LeastSquares:
             J0_fixed, issues = self.stability_guard.check_and_fix_jacobian(J0)
             if issues:
                 # Only warn if there's an actual problem, not just SVD skipped for performance
-                has_problem = issues.get("has_nan") or issues.get("has_inf") or issues.get("is_ill_conditioned") or issues.get("regularized")
+                has_problem = (
+                    issues.get("has_nan")
+                    or issues.get("has_inf")
+                    or issues.get("is_ill_conditioned")
+                    or issues.get("regularized")
+                )
                 if has_problem:
-                    self.logger.warning("Jacobian issues detected and fixed", issues=issues)
+                    self.logger.warning(
+                        "Jacobian issues detected and fixed", issues=issues
+                    )
                 elif issues.get("svd_skipped"):
-                    self.logger.debug("SVD skipped for large Jacobian (expected for datasets > 10M points)", issues=issues)
+                    self.logger.debug(
+                        "SVD skipped for large Jacobian (expected for datasets > 10M points)",
+                        issues=issues,
+                    )
                 J0 = J0_fixed
 
         if J0 is not None and J0.shape != (m, n):
