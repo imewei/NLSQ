@@ -46,7 +46,7 @@ A manual pre-commit hook is available for local validation:
 pre-commit run --hook-stage manual docs-build --all-files
 
 # Or for specific files
-pre-commit run --hook-stage manual docs-build --files docs/guides/advanced_features.rst
+pre-commit run --hook-stage manual docs-build --files docs/guides/workflow_options.rst docs/guides/advanced_customization.rst
 ```
 
 **Configuration:** See `.pre-commit-config.yaml`

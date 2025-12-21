@@ -147,6 +147,6 @@ All callbacks inherit from ``OptimizationCallback`` and can override these metho
 See Also
 --------
 
-- :doc:`../guides/advanced_features` : Advanced features guide
+- :doc:`../guides/workflow_options` : Workflow options guide
 - :doc:`nlsq.minpack` : Main curve fitting API
 - :doc:`nlsq.diagnostics` : Diagnostics and monitoring

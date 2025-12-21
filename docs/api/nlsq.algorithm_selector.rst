@@ -110,4 +110,4 @@ See Also
 
 - :doc:`nlsq.trf` - Trust Region Reflective algorithm
 - :doc:`nlsq.least_squares` - Least squares solver
-- :doc:`../guides/advanced_features` - Advanced features guide
+- :doc:`../guides/workflow_options` - Workflow options guide

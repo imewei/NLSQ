@@ -12,9 +12,9 @@ NLSQ is a JAX-powered library that brings GPU/TPU acceleration to nonlinear leas
 It provides a drop-in replacement for SciPy's ``curve_fit`` with massive speedups on modern hardware.
 
 .. note::
-   **New to NLSQ?** Start with :doc:`getting_started/index` → :doc:`getting_started/quickstart`
+   **Quick Start / Most Users:** Start with :doc:`user_guide/index` for workflow-first usage
 
-   **Migrating from SciPy?** See :doc:`guides/migration_scipy`
+   **Advanced Usage / Developers:** See :doc:`advanced/index` for API customization and internals
 
 Key Features
 ------------
@@ -69,25 +69,17 @@ Documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: Getting Started
+   :caption: User Guide (Workflow-Based)
 
-   getting_started/index
-   getting_started/installation
-   getting_started/quickstart
+   user_guide/index
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guides
+   :caption: Advanced / Developer Guide
 
-   guides/index
-   guides/migration_scipy
-   guides/advanced_features
-   guides/stability
-   guides/performance_guide
-   guides/large_datasets
-   guides/troubleshooting
-   migration/streaming_fault_tolerance
-   migration/curve_fit_to_fit
+   advanced/index
+   developer/index
+   architecture/index
 
 .. toctree::
    :maxdepth: 2

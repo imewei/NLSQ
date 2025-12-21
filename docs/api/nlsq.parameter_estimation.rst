@@ -71,4 +71,4 @@ See Also
 
 - :doc:`nlsq.bound_inference` - Bound inference utilities
 - :doc:`nlsq.algorithm_selector` - Algorithm selection
-- :doc:`../guides/advanced_features` - Advanced features guide
+- :doc:`../guides/workflow_options` - Workflow options guide

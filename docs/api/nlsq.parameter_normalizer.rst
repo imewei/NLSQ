@@ -263,4 +263,4 @@ See Also
 
 - :doc:`nlsq.adaptive_hybrid_streaming` : Uses this for Phase 0 normalization
 - :doc:`nlsq.hybrid_streaming_config` : Configuration with normalization_strategy
-- :doc:`../guides/advanced_features` : Advanced optimization features
+- :doc:`../guides/advanced_customization` : Advanced optimization features

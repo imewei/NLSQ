@@ -813,7 +813,8 @@ If this guide doesn’t resolve your issue:
 1. **Check documentation:**
 
    -  :doc:`../api/index`
-   -  :doc:`advanced_features`
+   -  :doc:`workflow_options`
+   -  :doc:`advanced_customization`
    -  :doc:`performance_guide`
 
 2. **Search GitHub issues:**

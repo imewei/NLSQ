@@ -578,4 +578,4 @@ See Also
 - :doc:`nlsq.trf` : Trust Region Reflective algorithm integration
 - :doc:`nlsq.memory_manager` : Memory management for large datasets
 - :doc:`../guides/performance_guide` : Performance optimization guide
-- :doc:`../guides/advanced_features` : Advanced usage patterns
+- :doc:`../guides/advanced_customization` : Advanced usage patterns

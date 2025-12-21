@@ -962,5 +962,5 @@ Additional Resources
 -  `NLSQ Documentation <https://nlsq.readthedocs.io>`__
 -  `JAX Documentation <https://docs.jax.dev/en/latest/>`__
 -  :doc:`Performance Optimization Guide <performance_guide>`
--  :doc:`Advanced Features Guide <advanced_features>`
+-  :doc:`Workflow Options Guide <workflow_options>`
 -  :doc:`Troubleshooting Guide <troubleshooting>`

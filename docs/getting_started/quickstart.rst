@@ -239,7 +239,7 @@ Next Steps
 
 Now that you've mastered the basics, explore:
 
-1. :doc:`../guides/advanced_features` - Learn about different algorithms and options
+1. :doc:`../guides/workflow_options` - Learn about different algorithms and options
 2. :doc:`../guides/large_datasets` - Handle massive datasets efficiently
 3. :doc:`../api/large_datasets_api` - Advanced fitting and parameter constraints
 4. :doc:`../api/performance_benchmarks` - Performance analysis and benchmarks

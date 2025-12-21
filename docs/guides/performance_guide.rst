@@ -883,7 +883,8 @@ Troubleshooting
 Related Documentation
 ---------------------
 
--  :doc:`advanced_features` - Callbacks, robust fitting, diagnostics
+-  :doc:`workflow_options` - Callbacks, robust fitting, solver choices
+-  :doc:`advanced_customization` - Diagnostics and advanced extensions
 -  :doc:`migration_scipy` - Migrating from SciPy
 -  :doc:`troubleshooting` - Common issues and solutions
 -  :doc:`../api/index` - Complete API documentation

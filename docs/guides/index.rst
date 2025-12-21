@@ -7,7 +7,8 @@ Comprehensive guides for using NLSQ effectively in your projects.
    :maxdepth: 2
 
    migration_scipy
-   advanced_features
+   workflow_options
+   advanced_customization
    stability
    performance_guide
    large_datasets
@@ -29,18 +30,29 @@ Complete guide for transitioning from ``scipy.optimize.curve_fit`` to NLSQ:
 - Performance considerations
 - Troubleshooting migration issues
 
-Advanced Features
-~~~~~~~~~~~~~~~~~
+Workflow Options
+~~~~~~~~~~~~~~~~
 
-:doc:`advanced_features`
+:doc:`workflow_options`
 
-Unlock NLSQ's full potential:
+Common configuration choices for workflow-driven usage:
 
-- Automatic fallback strategies
-- Smart parameter bounds
-- Numerical stability enhancements
-- Memory management for large datasets
-- Custom loss functions and robust fitting
+- Callbacks and progress monitoring
+- Robust loss functions
+- Solver and algorithm selection
+- Memory management
+
+Advanced Customization
+~~~~~~~~~~~~~~~~~~~~~~
+
+:doc:`advanced_customization`
+
+API-level customization and extension points:
+
+- Custom callbacks
+- Mixed precision control
+- Diagnostics and sparse Jacobians
+- Streaming and online optimization
 
 Numerical Stability
 ~~~~~~~~~~~~~~~~~~~

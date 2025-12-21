@@ -44,6 +44,6 @@ Next Steps
 
 After completing the getting started guide:
 
-1. Explore :doc:`../guides/advanced_features` for production use
+1. Explore :doc:`../guides/workflow_options` for production use
 2. Read :doc:`../guides/performance_guide` to optimize your fits
 3. Check :doc:`../api/modules` for detailed API documentation
