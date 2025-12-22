@@ -1276,8 +1276,17 @@ class AdaptiveHybridStreamingOptimizer:
         final_JTr = jnp.zeros(n_params)
         final_residual_sum_sq = 0.0
 
-        # Compute initial JTJ
-        for i in range(0, n_points, chunk_size):
+        # Get verbosity from config or default to 1 for progress output
+        verbose = getattr(self.config, "verbose", 1)
+        log_frequency = getattr(self.config, "log_frequency", 1)  # Log every N iterations
+
+        # Compute initial JTJ with progress reporting
+        n_chunks = (n_points + chunk_size - 1) // chunk_size
+        init_start_time = time.time()
+        if verbose >= 1:
+            print(f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)...")
+
+        for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
             x_chunk = x_data[i : i + chunk_size]
             y_chunk = y_data[i : i + chunk_size]
 
@@ -1286,8 +1295,24 @@ class AdaptiveHybridStreamingOptimizer:
             )
             final_residual_sum_sq += res_sq
 
+            # Progress for initial JTJ computation (every 10% or every 50 chunks)
+            if verbose >= 1 and ((chunk_idx + 1) % max(1, n_chunks // 10) == 0 or (chunk_idx + 1) == n_chunks):
+                elapsed = time.time() - init_start_time
+                pct = (chunk_idx + 1) / n_chunks * 100
+                print(
+                    f"  Initial JTJ: {chunk_idx + 1}/{n_chunks} chunks "
+                    f"({pct:.0f}%), elapsed={elapsed:.1f}s"
+                )
+
+        if verbose >= 1:
+            init_elapsed = time.time() - init_start_time
+            print(f"  Initial JTJ complete: cost={final_residual_sum_sq:.6e}, time={init_elapsed:.1f}s")
+
         # Gauss-Newton loop
+
         for iteration in range(self.config.gauss_newton_max_iterations):
+            iter_start_time = time.time()
+
             # Perform one Gauss-Newton iteration with retry logic
             max_retries = getattr(self.config, "max_retries_per_batch", 0)
             retry_attempt = 0
@@ -1351,6 +1376,16 @@ class AdaptiveHybridStreamingOptimizer:
             gradient_norm = iter_result["gradient_norm"]
             actual_reduction = iter_result["actual_reduction"]
             trust_radius = iter_result["trust_radius"]
+            iter_time = time.time() - iter_start_time
+
+            # Progress logging for Phase 2 iterations
+            if verbose >= 1 and (iteration + 1) % log_frequency == 0:
+                print(
+                    f"  GN iter {iteration + 1}/{self.config.gauss_newton_max_iterations}: "
+                    f"cost={new_cost:.6e}, grad_norm={gradient_norm:.6e}, "
+                    f"reduction={actual_reduction:.6e}, Δ={trust_radius:.4f}, "
+                    f"time={iter_time:.1f}s"
+                )
 
             # Update best parameters
             if new_cost < best_cost:

@@ -239,6 +239,8 @@ class HybridStreamingConfig:
 
     # Progress monitoring
     callback_frequency: int = 10
+    verbose: int = 1  # Verbosity level: 0=silent, 1=progress, 2=debug
+    log_frequency: int = 1  # Log every N iterations in Phase 2
 
     # Multi-start optimization with tournament selection
     enable_multistart: bool = False
