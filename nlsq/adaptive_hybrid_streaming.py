@@ -1278,13 +1278,17 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Get verbosity from config or default to 1 for progress output
         verbose = getattr(self.config, "verbose", 1)
-        log_frequency = getattr(self.config, "log_frequency", 1)  # Log every N iterations
+        log_frequency = getattr(
+            self.config, "log_frequency", 1
+        )  # Log every N iterations
 
         # Compute initial JTJ with progress reporting
         n_chunks = (n_points + chunk_size - 1) // chunk_size
         init_start_time = time.time()
         if verbose >= 1:
-            print(f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)...")
+            print(
+                f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)..."
+            )
 
         for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
             x_chunk = x_data[i : i + chunk_size]
@@ -1296,7 +1300,10 @@ class AdaptiveHybridStreamingOptimizer:
             final_residual_sum_sq += res_sq
 
             # Progress for initial JTJ computation (every 10% or every 50 chunks)
-            if verbose >= 1 and ((chunk_idx + 1) % max(1, n_chunks // 10) == 0 or (chunk_idx + 1) == n_chunks):
+            if verbose >= 1 and (
+                (chunk_idx + 1) % max(1, n_chunks // 10) == 0
+                or (chunk_idx + 1) == n_chunks
+            ):
                 elapsed = time.time() - init_start_time
                 pct = (chunk_idx + 1) / n_chunks * 100
                 print(
@@ -1306,7 +1313,9 @@ class AdaptiveHybridStreamingOptimizer:
 
         if verbose >= 1:
             init_elapsed = time.time() - init_start_time
-            print(f"  Initial JTJ complete: cost={final_residual_sum_sq:.6e}, time={init_elapsed:.1f}s")
+            print(
+                f"  Initial JTJ complete: cost={final_residual_sum_sq:.6e}, time={init_elapsed:.1f}s"
+            )
 
         # Gauss-Newton loop
 
