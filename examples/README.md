@@ -2,9 +2,9 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
-[![NLSQ Version](https://img.shields.io/badge/nlsq-0.3.4+-orange.svg)](https://github.com/imewei/NLSQ)
+[![NLSQ Version](https://img.shields.io/badge/nlsq-0.3.5+-orange.svg)](https://github.com/imewei/NLSQ)
 
-> **v0.3.4 Update**: Added unified `fit()` API with automatic workflow selection, global optimization with multi-start, and advanced gallery examples. See [CHANGELOG.md](../CHANGELOG.md) for details.
+> **v0.3.5 Update**: Randomized SVD was removed in favor of deterministic SVD for stability. See [CHANGELOG.md](../CHANGELOG.md) for details.
 
 Welcome to the NLSQ examples repository! This collection provides comprehensive, interactive tutorials for learning and mastering GPU-accelerated nonlinear least squares curve fitting with JAX.
 
@@ -644,5 +644,5 @@ If you use NLSQ in your research, please cite:
 ---
 
 <p align="center">
-<i>Last updated: 2025-12-19 | NLSQ v0.3.4</i>
+<i>Last updated: 2025-12-20 | NLSQ v0.3.5</i>
 </p>
