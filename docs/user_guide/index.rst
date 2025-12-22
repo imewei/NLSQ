@@ -27,7 +27,9 @@ Workflow-Based Analysis
 
    workflow_overview
    common_workflows
+   ../guides/practical_workflows
    ../guides/large_datasets
+   ../guides/streaming_optimizer_comparison
 
 Configuration Guide
 -------------------

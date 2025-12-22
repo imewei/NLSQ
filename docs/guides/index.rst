@@ -81,6 +81,32 @@ Handle datasets with millions of points:
 - Memory-efficient processing
 - Parallel fitting strategies
 
+Streaming Optimizer Comparison
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:doc:`streaming_optimizer_comparison`
+
+Choose the right streaming optimizer for your use case:
+
+- StreamingOptimizer vs AdaptiveHybridStreamingOptimizer
+- Feature comparison and decision guide
+- Parameter normalization and multi-scale problems
+- Multi-start optimization and exact covariance
+
+Practical Workflows
+~~~~~~~~~~~~~~~~~~~
+
+:doc:`practical_workflows`
+
+Ready-to-use workflows for scientific applications:
+
+- Spectroscopy (peak fitting, fluorescence lifetime)
+- X-ray scattering (SAXS, WAXS, XPCS)
+- Kinetics and binding (Michaelis-Menten, isotherms)
+- Imaging (2D Gaussian, PSF fitting)
+- Materials science (stress-strain, thermal)
+- Hardware-specific configurations (CPU, GPU, HPC)
+
 Troubleshooting
 ~~~~~~~~~~~~~~~
 

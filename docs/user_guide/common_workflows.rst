@@ -101,14 +101,40 @@ Use this when you want each input file to write to its own output folder.
      solver: auto
      max_nfev: 150
 
-CLI run
--------
+Python Script Run
+-----------------
 
-Use this when you want a single command to launch a workflow run.
+Use this when you want to run a workflow from a Python script using YAML configuration.
 
-.. code-block:: bash
+.. code-block:: python
 
-   nlsq fit --config ./configs/experiment_01.yaml
+   from nlsq import fit
+   from nlsq.workflow import load_yaml_config
+
+   # Load configuration from YAML file
+   config = load_yaml_config("./configs/experiment_01.yaml")
+
+   # Use the configuration
+   popt, pcov = fit(
+       model_func,
+       xdata,
+       ydata,
+       p0=config.get("model", {}).get("parameters", {}).get("p0"),
+       workflow=config.get("default_workflow", "standard"),
+   )
+
+Or use a preset directly:
+
+.. code-block:: python
+
+   from nlsq import fit
+
+   # Using built-in presets (no YAML needed)
+   popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], preset="robust")
+
+   # Scientific application presets
+   popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], preset="spectroscopy")
+   popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], preset="kinetics")
 
 Domain-Specific Examples
 ------------------------
