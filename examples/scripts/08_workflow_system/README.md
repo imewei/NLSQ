@@ -293,5 +293,5 @@ checkpoint_dir = create_checkpoint_directory(base_dir="./checkpoints")
 ---
 
 <p align="center">
-<i>NLSQ v0.3.5+ | Last updated: 2025-12-20</i>
+<i>NLSQ v0.3.6+ | Last updated: 2025-12-23</i>
 </p>
