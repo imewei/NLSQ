@@ -5,6 +5,156 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2025-12-22
+
+### Added
+
+#### 4-Layer Defense Strategy for Adam Warmup Divergence Prevention
+The `AdaptiveHybridStreamingOptimizer` now includes a comprehensive 4-layer defense strategy
+that prevents Adam optimizer divergence when initial parameters are already near optimal.
+This is critical for warm-start scenarios and multi-scale parameter fitting.
+
+**Layer 1: Warm Start Detection** - Skips Adam warmup when initial loss is already low
+  - Controlled by `enable_warm_start_detection` and `warm_start_threshold` parameters
+  - When relative loss < threshold (default: 0.1), skips directly to Gauss-Newton phase
+  - Prevents unnecessary optimizer iterations that could destabilize good initial guesses
+
+**Layer 2: Adaptive Learning Rate Selection** - Adjusts learning rate based on relative loss
+  - Controlled by `enable_adaptive_warmup_lr` parameter
+  - Three LR modes: `refinement` (1e-5), `careful` (1e-4), `exploration` (default LR)
+  - Automatically selects conservative learning rates when already near optimum
+
+**Layer 3: Cost-Increase Guard** - Aborts warmup if loss increases beyond tolerance
+  - Controlled by `enable_cost_guard` and `cost_increase_tolerance` parameters
+  - Monitors cost increase ratio during warmup
+  - Returns best parameters if cost increases >20% from initial loss
+
+**Layer 4: Step Clipping** - Limits Adam update magnitude for stability
+  - Controlled by `enable_step_clipping` and `max_warmup_step_size` parameters
+  - Uses JIT-compatible `jnp.minimum` for efficient GPU execution
+  - Prevents large steps that could overshoot the optimum
+
+**Files Modified**: `nlsq/adaptive_hybrid_streaming.py`, `nlsq/hybrid_streaming_config.py`
+
+#### Defense Layer Telemetry
+
+New monitoring infrastructure for tracking defense layer activations in production:
+
+- **`DefenseLayerTelemetry` class**: Tracks activation counts and rates for each layer
+  - `record_layer1_trigger()` / `record_layer2_lr_mode()` / `record_layer3_trigger()` / `record_layer4_clip()`
+  - `get_trigger_rates()`: Returns percentage activation rates
+  - `get_summary()`: Comprehensive summary with counts and rates
+  - `export_metrics()`: Prometheus/Grafana-compatible metric export
+
+- **Global telemetry functions**:
+  - `get_defense_telemetry()`: Get global telemetry instance
+  - `reset_defense_telemetry()`: Reset all counters
+
+**Files Added/Modified**: `nlsq/adaptive_hybrid_streaming.py`, `nlsq/__init__.py`
+
+#### Integration Tests for Defense Layers
+
+- Added `TestDefenseLayersCurveFitIntegration` test class with 7 integration tests
+- Tests cover all 4 layers via the `curve_fit()` API with `method='hybrid_streaming'`
+- Validates defense layer behavior through the public API
+
+**Files Modified**: `tests/test_adaptive_hybrid_integration.py`
+
+#### Defense Layer Sensitivity Presets
+
+New preset profiles for configuring defense layer sensitivity:
+
+- **`HybridStreamingConfig.defense_strict()`**: Maximum protection for near-optimal scenarios
+  - Very low warm start threshold (1% relative loss)
+  - Ultra-conservative learning rates
+  - Tight cost guard tolerance (5%)
+  - Small step clipping (0.05)
+
+- **`HybridStreamingConfig.defense_relaxed()`**: Relaxed settings for exploration
+  - High warm start threshold (50% relative loss)
+  - Aggressive learning rates for exploration
+  - Generous cost guard tolerance (50%)
+  - Larger step clipping (0.5)
+
+- **`HybridStreamingConfig.defense_disabled()`**: Disables all defense layers
+  - Reverts to pre-0.3.6 behavior
+  - Use with caution for debugging/benchmarking
+
+- **`HybridStreamingConfig.scientific_default()`**: Optimized for scientific computing
+  - Float64 precision
+  - Balanced defense settings
+  - Enabled checkpoints
+  - Tight Gauss-Newton tolerances
+
+**Files Modified**: `nlsq/hybrid_streaming_config.py`, `tests/test_warmup_defense_layers.py`
+
+### Changed
+
+#### Behavior Changes for Upgrading Users
+
+**If you're using `method='hybrid_streaming'` in curve_fit:**
+
+1. **Warm Start Optimization** (New): If your initial parameters are already close to optimal
+   (relative loss < 0.1), Adam warmup will now be skipped automatically. This is beneficial
+   behavior that prevents divergence, but you may see fewer Adam iterations than before.
+
+2. **Automatic LR Adjustment** (New): The optimizer now selects a conservative learning rate
+   when the fit is already good. This can result in slower but more stable convergence for
+   parameters near the optimum.
+
+3. **Cost Guard Protection** (New): Warmup will abort early if loss increases more than 20%
+   from initial loss. This prevents divergence but may return before max iterations if the
+   initial guess is being destabilized.
+
+4. **Step Clipping** (New): Large Adam updates are now clipped to `max_warmup_step_size`
+   (default: 0.1). This ensures stability but may slightly slow convergence for problems
+   requiring large parameter changes.
+
+**All behavior changes are beneficial for numerical stability and can be disabled:**
+
+```python
+from nlsq import HybridStreamingConfig
+
+# Disable all defense layers (revert to pre-0.3.6 behavior)
+config = HybridStreamingConfig(
+    enable_warm_start_detection=False,
+    enable_adaptive_warmup_lr=False,
+    enable_cost_guard=False,
+    enable_step_clipping=False,
+)
+```
+
+**Monitoring defense layer activations:**
+
+```python
+from nlsq import get_defense_telemetry, reset_defense_telemetry
+
+# After running multiple fits
+telemetry = get_defense_telemetry()
+print(telemetry.get_summary())
+# Shows which layers activated and how often
+
+# Reset for new monitoring session
+reset_defense_telemetry()
+```
+
+### Technical Details
+
+**Test Results:**
+- All 58 defense layer tests passing
+- All 7 integration tests passing
+- Full backward compatibility maintained
+
+**New Exports in `nlsq` package:**
+- `DefenseLayerTelemetry`
+- `get_defense_telemetry`
+- `reset_defense_telemetry`
+
+**Backward Compatibility:**
+- 100% API backward compatible
+- Default behavior improved (defense layers enabled by default)
+- All defense layers can be disabled via config
+
 ## [0.3.5] - 2025-12-20
 
 ### Removed

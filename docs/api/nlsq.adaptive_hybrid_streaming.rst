@@ -23,11 +23,14 @@ Key Features
 
 - **Four-phase optimization**: Automatic phase transitions for optimal convergence
 - **Parameter normalization**: Address gradient signal weakness from scale imbalance
-- **Adam warmup**: First-order optimization for robust initial convergence
+- **Adam warmup**: First-order optimization with 4-layer divergence protection
 - **Streaming Gauss-Newton**: Second-order convergence with streaming J^T J
 - **Exact covariance**: Production-quality uncertainty estimates
 - **Fault tolerance**: Checkpointing, validation, and automatic recovery
 - **Multi-device support**: GPU/TPU parallelism for large datasets
+- **Defense telemetry**: Production monitoring of warmup protection layers
+
+**New in version 0.3.6**: 4-Layer Defense Strategy for Adam warmup divergence prevention.
 
 Optimization Phases
 -------------------
@@ -43,16 +46,27 @@ Sets up parameter normalization to address gradient signal weakness:
 - Transforms bounds to normalized space
 - Stores normalization Jacobian for Phase 3
 
-Phase 1: Adam Warmup
-~~~~~~~~~~~~~~~~~~~~
+Phase 1: Adam Warmup with 4-Layer Defense
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-First-order optimization with adaptive switching:
+First-order optimization with adaptive switching and divergence protection:
 
 - Uses Optax Adam optimizer with configurable learning rate
 - Optional learning rate schedule with warmup and decay
+- **4-Layer Defense Strategy** (new in 0.3.6):
+
+  1. **Warm Start Detection**: Skip warmup if initial loss already low
+  2. **Adaptive Learning Rate**: Scale LR based on initial loss quality
+  3. **Cost-Increase Guard**: Abort if loss increases beyond tolerance
+  4. **Step Clipping**: Limit update magnitude for stability
+
 - Monitors loss plateau and gradient norm for switch criteria
 - Builds momentum and explores parameter space
 - Switches to Phase 2 when ready for fine-tuning
+
+.. seealso::
+
+   :doc:`../guides/defense_layers` for complete defense strategy documentation.
 
 Phase 2: Streaming Gauss-Newton
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,11 +96,33 @@ Classes
    :template: class.rst
 
    AdaptiveHybridStreamingOptimizer
+   DefenseLayerTelemetry
 
 .. autoclass:: AdaptiveHybridStreamingOptimizer
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
+
+.. autoclass:: DefenseLayerTelemetry
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :noindex:
+
+Functions
+---------
+
+.. autosummary::
+   :toctree: generated/
+
+   get_defense_telemetry
+   reset_defense_telemetry
+
+.. autofunction:: get_defense_telemetry
+   :noindex:
+
+.. autofunction:: reset_defense_telemetry
    :noindex:
 
 Usage Examples
@@ -238,6 +274,55 @@ Monitor optimization progress:
 
     # Each entry in phase_history:
     # {'phase': 0, 'start_time': 1234567890.0, 'duration': 0.5}
+
+Defense Layer Telemetry
+~~~~~~~~~~~~~~~~~~~~~~~
+
+**New in version 0.3.6**: Monitor defense layer activations.
+
+Track when defense layers trigger across multiple fits:
+
+.. code-block:: python
+
+    from nlsq import get_defense_telemetry, reset_defense_telemetry
+
+    # Reset telemetry counters
+    reset_defense_telemetry()
+
+    # Run multiple fits
+    for dataset in datasets:
+        result = optimizer.fit(model, x_data, y_data, p0)
+
+    # Get telemetry summary
+    telemetry = get_defense_telemetry()
+    print(telemetry.get_summary())
+
+    # Get activation rates
+    rates = telemetry.get_trigger_rates()
+    print(f"Warm start rate: {rates['layer1_warm_start_rate']:.1f}%")
+    print(f"Cost guard rate: {rates['layer3_cost_guard_rate']:.1f}%")
+
+    # Export for Prometheus/Grafana
+    metrics = telemetry.export_metrics()
+
+Defense Layer Presets
+~~~~~~~~~~~~~~~~~~~~~
+
+**New in version 0.3.6**: Sensitivity presets for defense layers.
+
+.. code-block:: python
+
+    # Strict defense for near-optimal scenarios
+    config = HybridStreamingConfig.defense_strict()
+
+    # Relaxed defense for exploration
+    config = HybridStreamingConfig.defense_relaxed()
+
+    # Disable all defense layers
+    config = HybridStreamingConfig.defense_disabled()
+
+    # Scientific computing optimized
+    config = HybridStreamingConfig.scientific_default()
 
 Architecture
 ------------

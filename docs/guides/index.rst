@@ -56,6 +56,20 @@ Prevent optimization divergence:
 - Rescale data options
 - Condition number monitoring
 
+4-Layer Defense Strategy
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:doc:`defense_layers`
+
+**New in version 0.3.6**: Prevent Adam warmup divergence:
+
+- Layer 1: Warm start detection (skip warmup when near optimal)
+- Layer 2: Adaptive learning rate selection
+- Layer 3: Cost-increase guard (abort on divergence)
+- Layer 4: Step clipping (limit update magnitude)
+- Defense telemetry and monitoring
+- Sensitivity presets (strict, relaxed, disabled, scientific)
+
 Performance Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -124,6 +138,9 @@ Migration Guides
 ~~~~~~~~~~~~~~~~
 
 Guides for upgrading to newer NLSQ versions and APIs:
+
+:doc:`/migration/v0.3.6_defense_layers`
+    **New in v0.3.6**: Understand the 4-layer defense strategy and behavioral changes.
 
 :doc:`/migration/curve_fit_to_fit`
     Transition from ``curve_fit()`` to the unified ``fit()`` function with preset-based configuration.

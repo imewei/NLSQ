@@ -212,6 +212,25 @@ class HybridStreamingConfig:
         None  # None = no clipping, e.g., 1.0 for clipping
     )
 
+    # 4-Layer Defense Strategy for Adam Warmup Divergence Prevention
+    # Layer 1: Warm Start Detection - skip warmup if already near optimum
+    enable_warm_start_detection: bool = True
+    warm_start_threshold: float = 0.01  # Skip if relative_loss < this
+
+    # Layer 2: Adaptive Learning Rate - scale LR based on initial loss quality
+    enable_adaptive_warmup_lr: bool = True
+    warmup_lr_refinement: float = 1e-6  # For relative_loss < 0.1 (excellent)
+    warmup_lr_careful: float = 1e-5  # For relative_loss < 1.0 (good)
+    # warmup_learning_rate (0.001) used for relative_loss >= 1.0 (poor)
+
+    # Layer 3: Cost-Increase Guard - abort if loss increases during warmup
+    enable_cost_guard: bool = True
+    cost_increase_tolerance: float = 0.05  # Abort if loss > initial * 1.05
+
+    # Layer 4: Trust Region Constraint - clip Adam update magnitude
+    enable_step_clipping: bool = True
+    max_warmup_step_size: float = 0.1  # Max L2 norm of parameter update
+
     # Phase 2: Gauss-Newton
     gauss_newton_max_iterations: int = 100
     gauss_newton_tol: float = 1e-8
@@ -253,84 +272,136 @@ class HybridStreamingConfig:
     scale_factor: float = 1.0
 
     def __post_init__(self):
-        """Validate configuration after initialization."""
+        """Validate configuration after initialization.
+
+        Note: All validation uses explicit if/raise rather than assert to ensure
+        validation works correctly even when Python is run with -O (optimized mode),
+        which strips assert statements.
+        """
         # Set default for mutable default (list)
         if self.active_switching_criteria is None:
             self.active_switching_criteria = ["plateau", "gradient", "max_iter"]
 
         # Validate normalization strategy
         valid_strategies = ("auto", "bounds", "p0", "none")
-        assert self.normalization_strategy in valid_strategies, (
-            f"normalization_strategy must be one of: {valid_strategies}, "
-            f"got: {self.normalization_strategy}"
-        )
+        if self.normalization_strategy not in valid_strategies:
+            raise ValueError(
+                f"normalization_strategy must be one of: {valid_strategies}, "
+                f"got: {self.normalization_strategy}"
+            )
 
         # Validate precision
         valid_precisions = ("float32", "float64", "auto")
-        assert self.precision in valid_precisions, (
-            f"precision must be one of: {valid_precisions}, got: {self.precision}"
-        )
+        if self.precision not in valid_precisions:
+            raise ValueError(
+                f"precision must be one of: {valid_precisions}, got: {self.precision}"
+            )
 
         # Validate warmup iterations constraint
-        assert self.warmup_iterations <= self.max_warmup_iterations, (
-            f"warmup_iterations ({self.warmup_iterations}) must be <= "
-            f"max_warmup_iterations ({self.max_warmup_iterations})"
-        )
+        if self.warmup_iterations > self.max_warmup_iterations:
+            raise ValueError(
+                f"warmup_iterations ({self.warmup_iterations}) must be <= "
+                f"max_warmup_iterations ({self.max_warmup_iterations})"
+            )
 
         # Validate positive values
-        assert self.warmup_iterations >= 0, "warmup_iterations must be non-negative"
-        assert self.max_warmup_iterations > 0, "max_warmup_iterations must be positive"
-        assert self.warmup_learning_rate > 0, "warmup_learning_rate must be positive"
-        assert self.loss_plateau_threshold > 0, (
-            "loss_plateau_threshold must be positive"
-        )
-        assert self.gradient_norm_threshold > 0, (
-            "gradient_norm_threshold must be positive"
-        )
-        assert self.gauss_newton_max_iterations > 0, (
-            "gauss_newton_max_iterations must be positive"
-        )
-        assert self.gauss_newton_tol > 0, "gauss_newton_tol must be positive"
-        assert self.trust_region_initial > 0, "trust_region_initial must be positive"
-        assert self.regularization_factor >= 0, (
-            "regularization_factor must be non-negative"
-        )
-        assert self.chunk_size > 0, "chunk_size must be positive"
-        assert self.checkpoint_frequency > 0, "checkpoint_frequency must be positive"
-        assert self.callback_frequency > 0, "callback_frequency must be positive"
+        if self.warmup_iterations < 0:
+            raise ValueError("warmup_iterations must be non-negative")
+        if self.max_warmup_iterations <= 0:
+            raise ValueError("max_warmup_iterations must be positive")
+        if self.warmup_learning_rate <= 0:
+            raise ValueError("warmup_learning_rate must be positive")
+        if self.loss_plateau_threshold <= 0:
+            raise ValueError("loss_plateau_threshold must be positive")
+        if self.gradient_norm_threshold <= 0:
+            raise ValueError("gradient_norm_threshold must be positive")
+        if self.gauss_newton_max_iterations <= 0:
+            raise ValueError("gauss_newton_max_iterations must be positive")
+        if self.gauss_newton_tol <= 0:
+            raise ValueError("gauss_newton_tol must be positive")
+        if self.trust_region_initial <= 0:
+            raise ValueError("trust_region_initial must be positive")
+        if self.regularization_factor < 0:
+            raise ValueError("regularization_factor must be non-negative")
+        if self.chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        if self.checkpoint_frequency <= 0:
+            raise ValueError("checkpoint_frequency must be positive")
+        if self.callback_frequency <= 0:
+            raise ValueError("callback_frequency must be positive")
 
         # Validate Optax enhancement parameters
         if self.use_learning_rate_schedule:
-            assert self.lr_schedule_warmup_steps >= 0, (
-                "lr_schedule_warmup_steps must be non-negative"
-            )
-            assert self.lr_schedule_decay_steps > 0, (
-                "lr_schedule_decay_steps must be positive"
-            )
-            assert self.lr_schedule_end_value > 0, (
-                "lr_schedule_end_value must be positive"
-            )
+            if self.lr_schedule_warmup_steps < 0:
+                raise ValueError("lr_schedule_warmup_steps must be non-negative")
+            if self.lr_schedule_decay_steps <= 0:
+                raise ValueError("lr_schedule_decay_steps must be positive")
+            if self.lr_schedule_end_value <= 0:
+                raise ValueError("lr_schedule_end_value must be positive")
 
         if self.gradient_clip_value is not None:
-            assert self.gradient_clip_value > 0, "gradient_clip_value must be positive"
+            if self.gradient_clip_value <= 0:
+                raise ValueError("gradient_clip_value must be positive")
+
+        # Validate 4-layer defense strategy parameters
+        # Layer 1: Warm start detection
+        if self.enable_warm_start_detection:
+            if not (0 < self.warm_start_threshold < 1.0):
+                raise ValueError(
+                    f"warm_start_threshold must be in (0, 1), "
+                    f"got {self.warm_start_threshold}"
+                )
+
+        # Layer 2: Adaptive learning rate ordering
+        if self.enable_adaptive_warmup_lr:
+            if self.warmup_lr_refinement <= 0:
+                raise ValueError("warmup_lr_refinement must be positive")
+            if self.warmup_lr_careful <= 0:
+                raise ValueError("warmup_lr_careful must be positive")
+            if self.warmup_lr_refinement > self.warmup_lr_careful:
+                raise ValueError(
+                    f"warmup_lr_refinement ({self.warmup_lr_refinement}) must be <= "
+                    f"warmup_lr_careful ({self.warmup_lr_careful})"
+                )
+            if self.warmup_lr_careful > self.warmup_learning_rate:
+                raise ValueError(
+                    f"warmup_lr_careful ({self.warmup_lr_careful}) must be <= "
+                    f"warmup_learning_rate ({self.warmup_learning_rate})"
+                )
+
+        # Layer 3: Cost-increase guard
+        if self.enable_cost_guard:
+            if not (0.0 <= self.cost_increase_tolerance <= 1.0):
+                raise ValueError(
+                    f"cost_increase_tolerance must be in [0, 1], "
+                    f"got {self.cost_increase_tolerance}"
+                )
+
+        # Layer 4: Step clipping
+        if self.enable_step_clipping:
+            if self.max_warmup_step_size <= 0:
+                raise ValueError("max_warmup_step_size must be positive")
 
         # Validate multi-start parameters
         if self.enable_multistart:
-            assert self.n_starts >= 1, (
-                "n_starts must be >= 1 when enable_multistart=True"
-            )
-            assert self.multistart_sampler in ("lhs", "sobol", "halton"), (
-                f"multistart_sampler must be 'lhs', 'sobol', or 'halton', "
-                f"got: {self.multistart_sampler}"
-            )
-            assert 0 < self.elimination_fraction < 1, (
-                f"elimination_fraction must be in (0, 1), got: {self.elimination_fraction}"
-            )
-            assert self.elimination_rounds >= 0, (
-                "elimination_rounds must be non-negative"
-            )
-            assert self.batches_per_round > 0, "batches_per_round must be positive"
-            assert self.scale_factor > 0, "scale_factor must be positive"
+            if self.n_starts < 1:
+                raise ValueError("n_starts must be >= 1 when enable_multistart=True")
+            if self.multistart_sampler not in ("lhs", "sobol", "halton"):
+                raise ValueError(
+                    f"multistart_sampler must be 'lhs', 'sobol', or 'halton', "
+                    f"got: {self.multistart_sampler}"
+                )
+            if not (0 < self.elimination_fraction < 1):
+                raise ValueError(
+                    f"elimination_fraction must be in (0, 1), "
+                    f"got: {self.elimination_fraction}"
+                )
+            if self.elimination_rounds < 0:
+                raise ValueError("elimination_rounds must be non-negative")
+            if self.batches_per_round <= 0:
+                raise ValueError("batches_per_round must be positive")
+            if self.scale_factor <= 0:
+                raise ValueError("scale_factor must be positive")
 
     @classmethod
     def aggressive(cls):
@@ -474,4 +545,194 @@ class HybridStreamingConfig:
             enable_multistart=True,
             n_starts=n_starts,
             **kwargs,
+        )
+
+    # =========================================================================
+    # Defense Layer Sensitivity Presets
+    # =========================================================================
+
+    @classmethod
+    def defense_strict(cls):
+        """Create strict defense layer profile for near-optimal scenarios.
+
+        This preset maximizes protection against divergence when initial
+        parameters are expected to be close to optimal (warm starts, refinement):
+        - Very low warm start threshold (triggers at 1% relative loss)
+        - Ultra-conservative learning rates for refinement
+        - Very tight cost guard tolerance (5% increase aborts)
+        - Very small step clipping for stability
+
+        Use this when:
+        - Continuing optimization from a previous fit
+        - Refining parameters that are already close to optimal
+        - Dealing with ill-conditioned problems
+        - Prioritizing stability over speed
+
+        Returns
+        -------
+        HybridStreamingConfig
+            Configuration with strict defense layer settings.
+
+        Examples
+        --------
+        >>> config = HybridStreamingConfig.defense_strict()
+        >>> config.warm_start_threshold
+        0.01
+        >>> config.cost_increase_tolerance
+        0.05
+        """
+        return cls(
+            # All defense layers enabled
+            enable_warm_start_detection=True,
+            enable_adaptive_warmup_lr=True,
+            enable_cost_guard=True,
+            enable_step_clipping=True,
+            # Layer 1: Very low threshold (1% relative loss triggers warm start)
+            warm_start_threshold=0.01,
+            # Layer 2: Ultra-conservative LR progression
+            warmup_lr_refinement=1e-7,
+            warmup_lr_careful=1e-6,
+            warmup_learning_rate=0.0005,
+            # Layer 3: Very tight cost guard (5% increase aborts)
+            cost_increase_tolerance=0.05,
+            # Layer 4: Very small steps
+            max_warmup_step_size=0.05,
+            # Conservative base settings
+            warmup_iterations=100,
+            max_warmup_iterations=300,
+        )
+
+    @classmethod
+    def defense_relaxed(cls):
+        """Create relaxed defense layer profile for exploration-heavy scenarios.
+
+        This preset reduces defense layer sensitivity for problems where
+        significant parameter exploration is needed:
+        - Higher warm start threshold (50% relative loss needed to skip)
+        - More aggressive learning rates for exploration
+        - Generous cost guard tolerance (50% increase allowed)
+        - Larger step clipping for faster exploration
+
+        Use this when:
+        - Starting from a rough initial guess
+        - Exploring a wide parameter space
+        - Problems with multiple local minima
+        - Speed is more important than robustness
+
+        Returns
+        -------
+        HybridStreamingConfig
+            Configuration with relaxed defense layer settings.
+
+        Examples
+        --------
+        >>> config = HybridStreamingConfig.defense_relaxed()
+        >>> config.warm_start_threshold
+        0.5
+        >>> config.cost_increase_tolerance
+        0.5
+        """
+        return cls(
+            # All defense layers enabled but relaxed
+            enable_warm_start_detection=True,
+            enable_adaptive_warmup_lr=True,
+            enable_cost_guard=True,
+            enable_step_clipping=True,
+            # Layer 1: High threshold (50% relative loss triggers warm start)
+            warm_start_threshold=0.5,
+            # Layer 2: Aggressive LR progression
+            warmup_lr_refinement=1e-5,
+            warmup_lr_careful=1e-4,
+            warmup_learning_rate=0.003,
+            # Layer 3: Generous cost guard (50% increase allowed)
+            cost_increase_tolerance=0.5,
+            # Layer 4: Larger steps for exploration
+            max_warmup_step_size=0.5,
+            # Aggressive base settings
+            warmup_iterations=300,
+            max_warmup_iterations=600,
+        )
+
+    @classmethod
+    def defense_disabled(cls):
+        """Create profile with all defense layers disabled.
+
+        This preset completely disables the 4-layer defense strategy,
+        reverting to pre-0.3.6 behavior. Use with caution as this
+        removes protection against Adam warmup divergence.
+
+        Use this when:
+        - Debugging to isolate defense layer effects
+        - Benchmarking without defense overhead
+        - Backward compatibility with older code is required
+
+        Returns
+        -------
+        HybridStreamingConfig
+            Configuration with all defense layers disabled.
+
+        Examples
+        --------
+        >>> config = HybridStreamingConfig.defense_disabled()
+        >>> config.enable_warm_start_detection
+        False
+        """
+        return cls(
+            enable_warm_start_detection=False,
+            enable_adaptive_warmup_lr=False,
+            enable_cost_guard=False,
+            enable_step_clipping=False,
+        )
+
+    @classmethod
+    def scientific_default(cls):
+        """Create profile optimized for scientific computing workflows.
+
+        This preset is tuned for scientific fitting scenarios like XPCS,
+        scattering, spectroscopy, and other physics-based models:
+        - Balanced defense layers that protect without being too aggressive
+        - Float64 precision for numerical accuracy
+        - Moderate warmup with tight tolerances
+        - Enabled checkpoints for long-running fits
+
+        Use this when:
+        - Fitting physics-based models (XPCS, scattering, decay curves)
+        - Numerical precision is important
+        - Parameters may have multiple scales
+        - Reproducibility is required
+
+        Returns
+        -------
+        HybridStreamingConfig
+            Configuration optimized for scientific computing.
+
+        Examples
+        --------
+        >>> config = HybridStreamingConfig.scientific_default()
+        >>> config.precision
+        'float64'
+        """
+        return cls(
+            # All defense layers enabled with balanced settings
+            enable_warm_start_detection=True,
+            enable_adaptive_warmup_lr=True,
+            enable_cost_guard=True,
+            enable_step_clipping=True,
+            # Layer 1: Moderate threshold
+            warm_start_threshold=0.05,
+            # Layer 2: Balanced LR progression
+            warmup_lr_refinement=1e-6,
+            warmup_lr_careful=1e-5,
+            warmup_learning_rate=0.001,
+            # Layer 3: Moderate cost guard
+            cost_increase_tolerance=0.2,
+            # Layer 4: Moderate step clipping
+            max_warmup_step_size=0.1,
+            # Scientific computing settings
+            precision="float64",
+            gauss_newton_tol=1e-10,
+            gauss_newton_max_iterations=200,
+            # Enable checkpoints for long jobs
+            enable_checkpoints=True,
+            checkpoint_frequency=100,
         )

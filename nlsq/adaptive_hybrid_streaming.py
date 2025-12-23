@@ -35,10 +35,289 @@ from .global_optimization.sampling import (
 )
 from .global_optimization.tournament import TournamentSelector
 from .hybrid_streaming_config import HybridStreamingConfig
+from .logging import get_logger
 from .parameter_normalizer import NormalizedModelWrapper, ParameterNormalizer
 from .stability import NumericalStabilityGuard
 
-__all__ = ["AdaptiveHybridStreamingOptimizer"]
+# Module-level logger for warmup defense diagnostics
+_logger = get_logger("adaptive_hybrid_streaming")
+
+__all__ = [
+    "AdaptiveHybridStreamingOptimizer",
+    "DefenseLayerTelemetry",
+    "get_defense_telemetry",
+    "reset_defense_telemetry",
+]
+
+
+class DefenseLayerTelemetry:
+    """Telemetry for monitoring 4-layer defense strategy activations.
+
+    Tracks when each defense layer is triggered during Adam warmup to help
+    with production monitoring and tuning. This class maintains thread-safe
+    statistics that can be queried or exported for monitoring dashboards.
+
+    The 4 layers tracked are:
+        - Layer 1: Warm start detection (skips Adam warmup)
+        - Layer 2: Adaptive learning rate selection (refinement/careful/exploration)
+        - Layer 3: Cost-increase guard (aborts warmup if loss increases)
+        - Layer 4: Step clipping (limits update magnitude)
+
+    Attributes
+    ----------
+    layer1_warm_start_triggers : int
+        Count of warm start detection activations (Adam skipped)
+    layer2_lr_mode_counts : dict[str, int]
+        Counts per LR mode: {"refinement": n, "careful": m, "exploration": k}
+    layer3_cost_guard_triggers : int
+        Count of cost-increase guard aborts
+    layer4_clip_triggers : int
+        Count of step clipping activations
+    total_warmup_calls : int
+        Total number of warmup phase executions
+    """
+
+    def __init__(self) -> None:
+        """Initialize telemetry with zeroed counters."""
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset all telemetry counters to zero."""
+        self.layer1_warm_start_triggers: int = 0
+        self.layer2_lr_mode_counts: dict[str, int] = {
+            "refinement": 0,
+            "careful": 0,
+            "exploration": 0,
+            "fixed": 0,
+        }
+        self.layer3_cost_guard_triggers: int = 0
+        self.layer4_clip_triggers: int = 0
+        self.total_warmup_calls: int = 0
+
+        # Detailed event log (last N events)
+        self._event_log: list[dict] = []
+        self._max_events: int = 1000
+
+    def record_warmup_start(self) -> None:
+        """Record start of a warmup phase."""
+        self.total_warmup_calls += 1
+
+    def record_layer1_trigger(self, relative_loss: float, threshold: float) -> None:
+        """Record Layer 1 warm start detection trigger.
+
+        Parameters
+        ----------
+        relative_loss : float
+            Relative loss that triggered warm start
+        threshold : float
+            Threshold value that was exceeded
+        """
+        self.layer1_warm_start_triggers += 1
+        self._log_event(
+            "layer1_warm_start",
+            {"relative_loss": relative_loss, "threshold": threshold},
+        )
+
+    def record_layer2_lr_mode(self, mode: str, relative_loss: float) -> None:
+        """Record Layer 2 adaptive LR mode selection.
+
+        Parameters
+        ----------
+        mode : str
+            Selected LR mode: "refinement", "careful", "exploration", or "fixed"
+        relative_loss : float
+            Relative loss that determined the mode
+        """
+        if mode in self.layer2_lr_mode_counts:
+            self.layer2_lr_mode_counts[mode] += 1
+        self._log_event("layer2_lr_mode", {"mode": mode, "relative_loss": relative_loss})
+
+    def record_layer3_trigger(
+        self, cost_ratio: float, tolerance: float, iteration: int
+    ) -> None:
+        """Record Layer 3 cost-increase guard trigger.
+
+        Parameters
+        ----------
+        cost_ratio : float
+            Cost increase ratio that triggered the guard
+        tolerance : float
+            Tolerance threshold that was exceeded
+        iteration : int
+            Iteration number when triggered
+        """
+        self.layer3_cost_guard_triggers += 1
+        self._log_event(
+            "layer3_cost_guard",
+            {"cost_ratio": cost_ratio, "tolerance": tolerance, "iteration": iteration},
+        )
+
+    def record_layer4_clip(self, original_norm: float, max_norm: float) -> None:
+        """Record Layer 4 step clipping activation.
+
+        Parameters
+        ----------
+        original_norm : float
+            Original update norm before clipping
+        max_norm : float
+            Maximum allowed norm (clipping threshold)
+        """
+        self.layer4_clip_triggers += 1
+        self._log_event(
+            "layer4_clip", {"original_norm": original_norm, "max_norm": max_norm}
+        )
+
+    def _log_event(self, event_type: str, data: dict) -> None:
+        """Log an event with timestamp.
+
+        Parameters
+        ----------
+        event_type : str
+            Type of event
+        data : dict
+            Event data
+        """
+        import time
+
+        event = {"type": event_type, "timestamp": time.time(), "data": data}
+        self._event_log.append(event)
+
+        # Trim if over limit
+        if len(self._event_log) > self._max_events:
+            self._event_log = self._event_log[-self._max_events :]
+
+    def get_trigger_rates(self) -> dict[str, float]:
+        """Get trigger rates as percentage of total warmup calls.
+
+        Returns
+        -------
+        dict[str, float]
+            Trigger rates for each layer as percentages (0-100)
+        """
+        if self.total_warmup_calls == 0:
+            return {
+                "layer1_warm_start_rate": 0.0,
+                "layer2_refinement_rate": 0.0,
+                "layer2_careful_rate": 0.0,
+                "layer2_exploration_rate": 0.0,
+                "layer3_cost_guard_rate": 0.0,
+                "layer4_clip_rate": 0.0,
+            }
+
+        total = self.total_warmup_calls
+        return {
+            "layer1_warm_start_rate": 100.0 * self.layer1_warm_start_triggers / total,
+            "layer2_refinement_rate": 100.0
+            * self.layer2_lr_mode_counts["refinement"]
+            / total,
+            "layer2_careful_rate": 100.0
+            * self.layer2_lr_mode_counts["careful"]
+            / total,
+            "layer2_exploration_rate": 100.0
+            * self.layer2_lr_mode_counts["exploration"]
+            / total,
+            "layer3_cost_guard_rate": 100.0 * self.layer3_cost_guard_triggers / total,
+            "layer4_clip_rate": 100.0 * self.layer4_clip_triggers / total,
+        }
+
+    def get_summary(self) -> dict:
+        """Get summary statistics for all defense layers.
+
+        Returns
+        -------
+        dict
+            Summary with counts and rates for each layer
+        """
+        rates = self.get_trigger_rates()
+        return {
+            "total_warmup_calls": self.total_warmup_calls,
+            "layer1": {
+                "name": "warm_start_detection",
+                "triggers": self.layer1_warm_start_triggers,
+                "rate_pct": rates["layer1_warm_start_rate"],
+            },
+            "layer2": {
+                "name": "adaptive_lr_selection",
+                "mode_counts": self.layer2_lr_mode_counts.copy(),
+                "rates_pct": {
+                    "refinement": rates["layer2_refinement_rate"],
+                    "careful": rates["layer2_careful_rate"],
+                    "exploration": rates["layer2_exploration_rate"],
+                },
+            },
+            "layer3": {
+                "name": "cost_increase_guard",
+                "triggers": self.layer3_cost_guard_triggers,
+                "rate_pct": rates["layer3_cost_guard_rate"],
+            },
+            "layer4": {
+                "name": "step_clipping",
+                "triggers": self.layer4_clip_triggers,
+                "rate_pct": rates["layer4_clip_rate"],
+            },
+        }
+
+    def get_recent_events(self, n: int = 10) -> list[dict]:
+        """Get most recent N events.
+
+        Parameters
+        ----------
+        n : int
+            Number of recent events to return
+
+        Returns
+        -------
+        list[dict]
+            Most recent events
+        """
+        return self._event_log[-n:]
+
+    def export_metrics(self) -> dict:
+        """Export metrics in a format suitable for monitoring systems.
+
+        Returns
+        -------
+        dict
+            Metrics with consistent naming for Prometheus/Grafana/etc.
+        """
+        return {
+            "nlsq_defense_warmup_calls_total": self.total_warmup_calls,
+            "nlsq_defense_layer1_triggers_total": self.layer1_warm_start_triggers,
+            "nlsq_defense_layer2_refinement_total": self.layer2_lr_mode_counts[
+                "refinement"
+            ],
+            "nlsq_defense_layer2_careful_total": self.layer2_lr_mode_counts["careful"],
+            "nlsq_defense_layer2_exploration_total": self.layer2_lr_mode_counts[
+                "exploration"
+            ],
+            "nlsq_defense_layer3_triggers_total": self.layer3_cost_guard_triggers,
+            "nlsq_defense_layer4_triggers_total": self.layer4_clip_triggers,
+        }
+
+
+# Global telemetry instance for monitoring
+_defense_telemetry: DefenseLayerTelemetry | None = None
+
+
+def get_defense_telemetry() -> DefenseLayerTelemetry:
+    """Get global defense layer telemetry instance.
+
+    Returns
+    -------
+    DefenseLayerTelemetry
+        Global telemetry instance (created on first call)
+    """
+    global _defense_telemetry  # noqa: PLW0603
+    if _defense_telemetry is None:
+        _defense_telemetry = DefenseLayerTelemetry()
+    return _defense_telemetry
+
+
+def reset_defense_telemetry() -> None:
+    """Reset global defense layer telemetry."""
+    global _defense_telemetry  # noqa: PLW0603
+    if _defense_telemetry is not None:
+        _defense_telemetry.reset()
 
 
 class AdaptiveHybridStreamingOptimizer:
@@ -177,6 +456,12 @@ class AdaptiveHybridStreamingOptimizer:
         self.tournament_selector = None
         self.multistart_best_candidate: jnp.ndarray | None = None
         self.multistart_diagnostics: dict[str, Any] | None = None
+
+        # 4-Layer Defense Strategy state for warmup divergence prevention
+        self._warmup_initial_loss: float | None = None
+        self._warmup_relative_loss: float | None = None
+        self._warmup_lr_mode: str | None = None
+        self._warmup_clip_count: int = 0
 
     def _setup_normalization(
         self,
@@ -433,6 +718,7 @@ class AdaptiveHybridStreamingOptimizer:
     def _create_adam_optimizer(
         self,
         params: jnp.ndarray,
+        learning_rate_override: float | None = None,
     ) -> tuple[optax.GradientTransformation, optax.OptState]:
         """Create Adam optimizer with optax, optionally with learning rate schedule and gradient clipping.
 
@@ -440,6 +726,9 @@ class AdaptiveHybridStreamingOptimizer:
         ----------
         params : array_like
             Initial parameters in normalized space
+        learning_rate_override : float, optional
+            Override base learning rate for adaptive warmup (Layer 2 of 4-layer
+            defense strategy). If None, uses config.warmup_learning_rate.
 
         Returns
         -------
@@ -450,7 +739,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         Notes
         -----
-        Uses learning rate from config.warmup_learning_rate.
+        Uses learning rate from config.warmup_learning_rate (or learning_rate_override if provided).
         If config.use_learning_rate_schedule is True, uses optax.warmup_cosine_decay_schedule.
         If config.gradient_clip_value is not None, chains optax.clip_by_global_norm with Adam.
 
@@ -475,20 +764,30 @@ class AdaptiveHybridStreamingOptimizer:
         >>> config = HybridStreamingConfig(gradient_clip_value=1.0)
         >>> optimizer = AdaptiveHybridStreamingOptimizer(config)
         >>> opt, state = optimizer._create_adam_optimizer(params)
+
+        Adam with adaptive learning rate (Layer 2):
+        >>> opt, state = optimizer._create_adam_optimizer(params, learning_rate_override=1e-6)
         """
+        # Determine base learning rate (allow override for adaptive warmup)
+        base_lr = (
+            learning_rate_override
+            if learning_rate_override is not None
+            else self.config.warmup_learning_rate
+        )
+
         # Determine learning rate (fixed or schedule)
         if self.config.use_learning_rate_schedule:
-            # Use warmup + cosine decay schedule
+            # Use warmup + cosine decay schedule with base_lr as peak
             learning_rate = optax.warmup_cosine_decay_schedule(
                 init_value=0.0,
-                peak_value=self.config.warmup_learning_rate,
+                peak_value=base_lr,
                 warmup_steps=self.config.lr_schedule_warmup_steps,
                 decay_steps=self.config.lr_schedule_decay_steps,
                 end_value=self.config.lr_schedule_end_value,
             )
         else:
             # Use fixed learning rate
-            learning_rate = self.config.warmup_learning_rate
+            learning_rate = base_lr
 
         # Build optimizer chain
         optimizer_components = []
@@ -560,6 +859,37 @@ class AdaptiveHybridStreamingOptimizer:
 
         return loss_fn
 
+    @staticmethod
+    def _clip_update_norm(updates: jnp.ndarray, max_norm: float) -> jnp.ndarray:
+        """Clip parameter update vector to maximum L2 norm (JIT-compatible).
+
+        This is Layer 4 of the 4-layer defense strategy for warmup divergence
+        prevention. It limits the magnitude of Adam updates to prevent large
+        steps that could destabilize optimization when near an optimum.
+
+        Parameters
+        ----------
+        updates : array_like
+            Parameter updates from optimizer
+        max_norm : float
+            Maximum allowed L2 norm for the update vector
+
+        Returns
+        -------
+        clipped_updates : array_like
+            Updates with L2 norm <= max_norm. If original norm <= max_norm,
+            returns updates unchanged. Otherwise scales updates to have
+            exactly max_norm.
+
+        Notes
+        -----
+        Uses jnp.minimum for JIT compatibility - no Python conditionals.
+        Small epsilon (1e-10) added to denominator to prevent division by zero.
+        """
+        update_norm = jnp.linalg.norm(updates)
+        scale = jnp.minimum(1.0, max_norm / (update_norm + 1e-10))
+        return updates * scale
+
     def _adam_step(
         self,
         params: jnp.ndarray,
@@ -627,6 +957,22 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Apply optimizer updates
         updates, new_opt_state = optimizer.update(grads, opt_state)
+
+        # Layer 4: Trust Region Constraint - clip update magnitude (JIT-compatible)
+        if self.config.enable_step_clipping:
+            # Track original norm for telemetry before clipping
+            original_update_norm = float(jnp.linalg.norm(updates))
+            max_norm = self.config.max_warmup_step_size
+
+            updates = self._clip_update_norm(updates, max_norm)
+
+            # Record Layer 4 telemetry if clipping occurred
+            if original_update_norm > max_norm:
+                telemetry = get_defense_telemetry()
+                telemetry.record_layer4_clip(
+                    original_norm=original_update_norm, max_norm=max_norm
+                )
+
         new_params = optax.apply_updates(params, updates)
 
         # Validate updated parameters
@@ -767,18 +1113,123 @@ class AdaptiveHybridStreamingOptimizer:
         else:
             current_params = self.normalized_params
 
-        # Create Adam optimizer
-        optimizer, opt_state = self._create_adam_optimizer(current_params)
-
-        # Create loss function
+        # Create loss function FIRST (needed for warm start detection)
         loss_fn = self._create_warmup_loss_fn()
+
+        # Record telemetry for warmup start
+        telemetry = get_defense_telemetry()
+        telemetry.record_warmup_start()
+
+        # =====================================================
+        # LAYER 1: Warm Start Detection
+        # =====================================================
+        initial_loss = float(loss_fn(current_params, x_data, y_data))
+        y_variance = float(jnp.var(y_data))
+        relative_loss = initial_loss / (y_variance + 1e-10)
+
+        # Store for Layer 3 cost-increase guard
+        self._warmup_initial_loss = initial_loss
+        self._warmup_relative_loss = relative_loss
+
+        # Log diagnostic info
+        if self.config.verbose >= 2:
+            _logger.debug(
+                f"Phase 1 initial assessment: loss={initial_loss:.6e}, "
+                f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}"
+            )
+
+        # Check warm start threshold
+        if (
+            self.config.enable_warm_start_detection
+            and relative_loss < self.config.warm_start_threshold
+        ):
+            # Record Layer 1 telemetry
+            telemetry.record_layer1_trigger(
+                relative_loss=relative_loss, threshold=self.config.warm_start_threshold
+            )
+
+            phase_record = {
+                "phase": 1,
+                "name": "adam_warmup",
+                "iterations": 0,
+                "final_loss": initial_loss,
+                "best_loss": initial_loss,
+                "switch_reason": (
+                    f"Warm start detected (relative_loss={relative_loss:.4e} "
+                    f"< {self.config.warm_start_threshold})"
+                ),
+                "timestamp": time.time(),
+                "skipped": True,
+                "warm_start": True,
+                "relative_loss": relative_loss,
+            }
+            self.phase_history.append(phase_record)
+
+            if self.config.verbose >= 1:
+                _logger.info(
+                    f"Phase 1: Skipping Adam warmup - warm start detected "
+                    f"(relative_loss={relative_loss:.4e})"
+                )
+
+            return {
+                "final_params": current_params,
+                "best_params": current_params,
+                "best_loss": initial_loss,
+                "final_loss": initial_loss,
+                "iterations": 0,
+                "switch_reason": "Warm start detected - skipping Adam warmup",
+                "warm_start": True,
+                "relative_loss": relative_loss,
+            }
+
+        # =====================================================
+        # LAYER 2: Adaptive Learning Rate Selection
+        # =====================================================
+        if self.config.enable_adaptive_warmup_lr:
+            if relative_loss < 0.1:
+                effective_lr = self.config.warmup_lr_refinement
+                lr_mode = "refinement"
+            elif relative_loss < 1.0:
+                effective_lr = self.config.warmup_lr_careful
+                lr_mode = "careful"
+            else:
+                effective_lr = self.config.warmup_learning_rate
+                lr_mode = "exploration"
+
+            self._warmup_lr_mode = lr_mode
+
+            # Record Layer 2 telemetry
+            telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
+
+            if self.config.verbose >= 2:
+                _logger.debug(
+                    f"Phase 1 adaptive LR: mode={lr_mode}, lr={effective_lr:.2e}, "
+                    f"relative_loss={relative_loss:.4e}"
+                )
+        else:
+            effective_lr = self.config.warmup_learning_rate
+            lr_mode = "fixed"
+            self._warmup_lr_mode = lr_mode
+            # Record fixed mode telemetry
+            telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
+
+        # Create Adam optimizer with selected learning rate
+        optimizer, opt_state = self._create_adam_optimizer(
+            current_params,
+            learning_rate_override=(
+                effective_lr if self.config.enable_adaptive_warmup_lr else None
+            ),
+        )
 
         # Best parameter tracking
         best_params = current_params
-        best_loss = float("inf")
+        best_loss = initial_loss  # Initialize with computed initial loss
 
         # Initialize previous loss
-        prev_loss = float("inf")
+        prev_loss = initial_loss
+
+        # Reset clip counter for diagnostics
+        self._warmup_clip_count = 0
 
         # Warmup loop
         for iteration in range(self.config.max_warmup_iterations):
@@ -796,6 +1247,60 @@ class AdaptiveHybridStreamingOptimizer:
             if loss_value < best_loss:
                 best_loss = loss_value
                 best_params = current_params
+
+            # =====================================================
+            # LAYER 3: Cost-Increase Guard
+            # =====================================================
+            if self.config.enable_cost_guard and iteration > 0:
+                cost_increase_ratio = loss_value / self._warmup_initial_loss
+                cost_threshold = 1.0 + self.config.cost_increase_tolerance
+
+                if cost_increase_ratio > cost_threshold:
+                    # Record Layer 3 telemetry
+                    telemetry.record_layer3_trigger(
+                        cost_ratio=cost_increase_ratio,
+                        tolerance=self.config.cost_increase_tolerance,
+                        iteration=iteration,
+                    )
+
+                    # Loss increased beyond tolerance - abort and return best
+                    if self.config.verbose >= 1:
+                        _logger.warning(
+                            f"Phase 1: Cost increase guard triggered at iteration "
+                            f"{iteration + 1}. Loss {loss_value:.6e} > "
+                            f"{self._warmup_initial_loss:.6e} * {cost_threshold:.2f}. "
+                            f"Reverting to best params (loss={best_loss:.6e})."
+                        )
+
+                    phase_record = {
+                        "phase": 1,
+                        "name": "adam_warmup",
+                        "iterations": iteration + 1,
+                        "final_loss": loss_value,
+                        "best_loss": best_loss,
+                        "switch_reason": (
+                            f"Cost increase guard triggered "
+                            f"(ratio={cost_increase_ratio:.4f})"
+                        ),
+                        "timestamp": time.time(),
+                        "cost_guard_triggered": True,
+                        "lr_mode": lr_mode,
+                        "relative_loss": relative_loss,
+                    }
+                    self.phase_history.append(phase_record)
+
+                    return {
+                        "final_params": best_params,  # Return BEST, not current
+                        "best_params": best_params,
+                        "best_loss": best_loss,
+                        "final_loss": loss_value,
+                        "iterations": iteration + 1,
+                        "switch_reason": "Cost increase guard triggered",
+                        "cost_guard_triggered": True,
+                        "cost_increase_ratio": cost_increase_ratio,
+                        "lr_mode": lr_mode,
+                        "relative_loss": relative_loss,
+                    }
 
             # Check for precision upgrade if NaN/Inf detected
             self._upgrade_precision_if_needed(
@@ -842,6 +1347,8 @@ class AdaptiveHybridStreamingOptimizer:
                         "best_loss": best_loss,
                         "switch_reason": reason,
                         "timestamp": time.time(),
+                        "lr_mode": lr_mode,
+                        "relative_loss": relative_loss,
                     }
                     self.phase_history.append(phase_record)
 
@@ -852,6 +1359,8 @@ class AdaptiveHybridStreamingOptimizer:
                         "final_loss": loss_value,
                         "iterations": iteration + 1,
                         "switch_reason": reason,
+                        "lr_mode": lr_mode,
+                        "relative_loss": relative_loss,
                     }
 
             # Update previous loss
@@ -866,6 +1375,8 @@ class AdaptiveHybridStreamingOptimizer:
             "best_loss": best_loss,
             "switch_reason": "Maximum iterations reached",
             "timestamp": time.time(),
+            "lr_mode": lr_mode,
+            "relative_loss": relative_loss,
         }
         self.phase_history.append(phase_record)
 
@@ -876,6 +1387,8 @@ class AdaptiveHybridStreamingOptimizer:
             "final_loss": loss_value,
             "iterations": self.config.max_warmup_iterations,
             "switch_reason": "Maximum iterations reached",
+            "lr_mode": lr_mode,
+            "relative_loss": relative_loss,
         }
 
     def _compute_jacobian_chunk(
@@ -1043,11 +1556,17 @@ class AdaptiveHybridStreamingOptimizer:
         U, s, Vt = jnp.linalg.svd(JTJ_reg, full_matrices=False)
 
         # Solve for Gauss-Newton step using SVD
-        # (U S V^T) p = -J^T r
-        # p = V S^-1 U^T (-J^T r)
+        # The Gauss-Newton step minimizes the linearized problem:
+        # Cost: C = 0.5 * ||r||^2 where r = y - f(x, p)
+        # Gradient: g = -J^T r (since ∂r/∂p = -J)
+        # The GN step solves: J^T J δ = J^T r
+        # Therefore: δ = (J^T J)^{-1} J^T r  [NO negative sign!]
+        #
+        # Using SVD: J^T J = U S V^T, we have:
+        # δ = V S^{-1} U^T (J^T r)
 
-        # Compute U^T @ (-JTr)
-        UTb = U.T @ (-JTr)
+        # Compute U^T @ JTr (positive, not negative!)
+        UTb = U.T @ JTr
 
         # Solve diagonal system with regularization
         # Filter out small singular values
@@ -1065,9 +1584,11 @@ class AdaptiveHybridStreamingOptimizer:
             # Scale step to trust region boundary
             step = step * (trust_radius / step_norm)
 
-        # Compute predicted reduction: -g^T p - 0.5 p^T H p
-        # where g = J^T r and H = J^T J
-        predicted_reduction = -jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step)
+        # Compute predicted reduction: -g^T δ - 0.5 δ^T H δ
+        # where g = -J^T r (gradient) and H = J^T J (Hessian approx)
+        # Since g = -JTr, we have: -g^T δ = JTr^T δ
+        # predicted_reduction = JTr^T δ - 0.5 δ^T (J^T J) δ
+        predicted_reduction = jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step)
         predicted_reduction = float(jnp.maximum(predicted_reduction, 0.0))
 
         return step, predicted_reduction
@@ -1179,6 +1700,11 @@ class AdaptiveHybridStreamingOptimizer:
         # Apply step to get new parameters
         new_params = current_params + step
 
+        # Clip to bounds if available (important for constrained optimization)
+        if self.normalized_bounds is not None:
+            lb, ub = self.normalized_bounds
+            new_params = jnp.clip(new_params, lb, ub)
+
         # Evaluate cost at new parameters
         new_cost = 0.0
         for i in range(0, n_points, chunk_size):
@@ -1198,16 +1724,32 @@ class AdaptiveHybridStreamingOptimizer:
         else:
             reduction_ratio = 0.0
 
-        # Trust region update logic (from trf.py patterns)
+        # Trust region update logic with recovery mechanism
+        # Minimum and maximum trust radius bounds
+        min_trust_radius = getattr(self.config, "min_trust_radius", 1e-8)
+        max_trust_radius = getattr(self.config, "max_trust_radius", 1000.0)
+
+        step_norm = float(jnp.linalg.norm(step))
+
         if reduction_ratio < 0.25:
-            # Poor agreement: shrink trust region
-            new_trust_radius = trust_radius * 0.25
-        elif reduction_ratio > 0.75 and jnp.linalg.norm(step) >= 0.9 * trust_radius:
+            # Poor agreement: shrink trust region (use 0.5 instead of 0.25 for
+            # less aggressive shrinkage)
+            new_trust_radius = trust_radius * 0.5
+
+            # Recovery mechanism: if trust radius is very small but gradient is
+            # large, the optimizer may be stuck. Reset to allow exploration.
+            if new_trust_radius < min_trust_radius and gradient_norm > 1e-4:
+                # Reset to gradient-scaled value for recovery
+                new_trust_radius = min(0.1 * gradient_norm / max(1.0, gradient_norm), 1.0)
+        elif reduction_ratio > 0.75 and step_norm >= 0.9 * trust_radius:
             # Good agreement and step at boundary: expand trust region
-            new_trust_radius = min(trust_radius * 2.0, 1000.0)
+            new_trust_radius = min(trust_radius * 2.0, max_trust_radius)
         else:
             # Acceptable agreement: keep trust region
             new_trust_radius = trust_radius
+
+        # Enforce minimum trust radius to prevent complete collapse
+        new_trust_radius = max(new_trust_radius, min_trust_radius)
 
         return {
             "new_params": new_params,
@@ -1318,6 +1860,8 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
         # Gauss-Newton loop
+        # Initialize stall detection counter
+        self._consecutive_rejections = 0
 
         for iteration in range(self.config.gauss_newton_max_iterations):
             iter_start_time = time.time()
@@ -1433,9 +1977,17 @@ class AdaptiveHybridStreamingOptimizer:
                     self._save_checkpoint(checkpoint_path)
 
             # Accept step if cost decreased
+            # Save cost before step for convergence check
+            cost_before_step = prev_cost if jnp.isfinite(prev_cost) else new_cost
+
             if actual_reduction > 0:
                 current_params = new_params
+                # Update prev_cost AFTER saving for convergence check
+                cost_before_step = (
+                    prev_cost if jnp.isfinite(prev_cost) else new_cost + actual_reduction
+                )
                 prev_cost = new_cost
+                consecutive_rejections = 0  # Reset rejection counter on success
 
                 # Recompute J^T J at new params for Phase 3
                 # This ensures we have J^T J at the final parameters
@@ -1460,8 +2012,24 @@ class AdaptiveHybridStreamingOptimizer:
                 final_JTJ = JTJ
                 final_residual_sum_sq = residual_sum_sq
             else:
-                # Reject step, shrink trust region
-                trust_radius *= 0.25
+                # Step rejected - trust radius is already updated in
+                # _gauss_newton_iteration, no need to shrink again here.
+                # Track consecutive rejections for stall detection.
+                consecutive_rejections = getattr(
+                    self, "_consecutive_rejections", 0
+                ) + 1
+                self._consecutive_rejections = consecutive_rejections
+
+                # Stall detection: if many consecutive rejections with large
+                # gradient, the optimizer is stuck. Reset trust radius.
+                if consecutive_rejections >= 10 and gradient_norm > 1e-4:
+                    trust_radius = self.config.trust_region_initial
+                    self._consecutive_rejections = 0
+                    if verbose >= 1:
+                        print(
+                            f"  Stall detected: resetting trust radius to "
+                            f"{trust_radius:.4f}"
+                        )
 
             # Check convergence: gradient norm
             if gradient_norm < self.config.gauss_newton_tol:
@@ -1490,9 +2058,9 @@ class AdaptiveHybridStreamingOptimizer:
                     "residual_sum_sq": final_residual_sum_sq,
                 }
 
-            # Check convergence: cost change
-            cost_change = abs(prev_cost - new_cost)
-            relative_change = cost_change / (abs(prev_cost) + 1e-10)
+            # Check convergence: cost change (compare to cost before this step)
+            cost_change = abs(cost_before_step - new_cost)
+            relative_change = cost_change / (abs(cost_before_step) + 1e-10)
 
             if relative_change < self.config.gauss_newton_tol:
                 phase_record = {

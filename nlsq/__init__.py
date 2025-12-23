@@ -45,7 +45,12 @@ from nlsq import callbacks, functions
 from nlsq._optimize import OptimizeResult, OptimizeWarning
 
 # Adaptive Hybrid Streaming Optimizer (Task Group 12)
-from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+from nlsq.adaptive_hybrid_streaming import (
+    AdaptiveHybridStreamingOptimizer,
+    DefenseLayerTelemetry,
+    get_defense_telemetry,
+    reset_defense_telemetry,
+)
 from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
 # Bounds inference (Phase 3 - Day 17)
@@ -184,6 +189,8 @@ __all__ = [
     "WORKFLOW_PRESETS",
     # Adaptive Hybrid Streaming Optimizer (Task Group 12)
     "AdaptiveHybridStreamingOptimizer",
+    # Defense Layer Telemetry (4-layer defense strategy monitoring)
+    "DefenseLayerTelemetry",
     # Stability and optimization modules
     "AlgorithmSelector",
     # Bounds inference (Phase 3)
@@ -280,6 +287,7 @@ __all__ = [
     "get_global_cache",
     "get_global_compilation_cache",
     "get_global_pool",
+    "get_defense_telemetry",
     "get_global_profiler",
     "get_jit_cache",
     "get_large_dataset_config",
@@ -290,6 +298,7 @@ __all__ = [
     "large_dataset_context",
     "memory_context",
     "merge_bounds",
+    "reset_defense_telemetry",
     "robust_decomp",
     "set_memory_limits",
 ]

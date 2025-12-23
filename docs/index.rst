@@ -29,6 +29,7 @@ Key Features
 - **Adaptive Hybrid Streaming** (v0.3.0): 4-phase optimizer with parameter normalization
 - **Global Optimization** (v0.3.3): Multi-start with LHS, Sobol, Halton samplers
 - **Workflow System** (v0.3.4): Unified ``fit()`` with auto-selection, presets, YAML config
+- **4-Layer Defense Strategy** (v0.3.6): Adam warmup divergence prevention with telemetry
 
 Quick Example
 -------------
