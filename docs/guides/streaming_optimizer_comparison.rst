@@ -67,8 +67,10 @@ comprehensive fault tolerance features.
     from nlsq import StreamingOptimizer, StreamingConfig
     import jax.numpy as jnp
 
+
     def model(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
 
     config = StreamingConfig(
         batch_size=50000,
@@ -121,6 +123,7 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
        # StreamingOptimizer: Gradients dominated by amplitude
        # AdaptiveHybrid: All parameters contribute equally
 
+
        def model(x, amplitude, decay, offset):
            return amplitude * jnp.exp(-decay * x) + offset
 
@@ -157,10 +160,10 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
 
        config = HybridStreamingConfig(
            enable_multistart=True,
-           n_starts=10,                    # 10 starting points
-           multistart_sampler='lhs',       # Latin Hypercube Sampling
-           elimination_rounds=3,           # Tournament rounds
-           elimination_fraction=0.5,       # Eliminate half each round
+           n_starts=10,  # 10 starting points
+           multistart_sampler="lhs",  # Latin Hypercube Sampling
+           elimination_rounds=3,  # Tournament rounds
+           elimination_fraction=0.5,  # Eliminate half each round
        )
 
 5. **Mixed Precision Strategy**
@@ -170,7 +173,7 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
 
    .. code-block:: python
 
-       config = HybridStreamingConfig(precision='auto')
+       config = HybridStreamingConfig(precision="auto")
        # Phase 1: float32 (fast, memory-efficient)
        # Phase 2+: float64 (numerical stability)
 
@@ -190,12 +193,14 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
     from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
     import jax.numpy as jnp
 
+
     def model(x, amplitude, decay, offset):
         return amplitude * jnp.exp(-decay * x) + offset
 
+
     config = HybridStreamingConfig(
         normalize=True,
-        normalization_strategy='auto',
+        normalization_strategy="auto",
         warmup_iterations=200,
         warmup_learning_rate=0.001,
         gauss_newton_tol=1e-8,
@@ -207,10 +212,8 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
 
     # Or via curve_fit interface:
     from nlsq import curve_fit
-    popt, pcov = curve_fit(
-        model, x, y, p0=[1000, 0.001, 1],
-        method='hybrid_streaming'
-    )
+
+    popt, pcov = curve_fit(model, x, y, p0=[1000, 0.001, 1], method="hybrid_streaming")
 
 When to Use Which
 -----------------
@@ -293,31 +296,27 @@ Configuration Defaults
     HybridStreamingConfig(
         # Phase 0: Normalization
         normalize=True,
-        normalization_strategy='auto',
-
+        normalization_strategy="auto",
         # Phase 1: Adam warmup
         warmup_iterations=200,
         max_warmup_iterations=500,
         warmup_learning_rate=0.001,
         loss_plateau_threshold=1e-4,
         gradient_norm_threshold=1e-3,
-
         # Phase 2: Gauss-Newton
         gauss_newton_max_iterations=100,
         gauss_newton_tol=1e-8,
         trust_region_initial=1.0,
         regularization_factor=1e-10,
         chunk_size=10000,
-
         # Fault tolerance
         enable_checkpoints=True,
         checkpoint_frequency=100,
         validate_numerics=True,
-
         # Multi-start (disabled by default)
         enable_multistart=False,
         n_starts=10,
-        multistart_sampler='lhs',
+        multistart_sampler="lhs",
     )
 
 **Pre-built Profiles:**
@@ -370,6 +369,7 @@ This example demonstrates where ``AdaptiveHybridStreamingOptimizer`` excels:
         HybridStreamingConfig,
     )
 
+
     # Model with multi-scale parameters
     def multi_scale_model(x, amplitude, decay, offset):
         """
@@ -379,6 +379,7 @@ This example demonstrates where ``AdaptiveHybridStreamingOptimizer`` excels:
         - offset: ~1
         """
         return amplitude * jnp.exp(-decay * x) + offset
+
 
     # Generate data
     np.random.seed(42)
@@ -398,7 +399,7 @@ This example demonstrates where ``AdaptiveHybridStreamingOptimizer`` excels:
     # AdaptiveHybridStreamingOptimizer: Handles multi-scale automatically
     hybrid_config = HybridStreamingConfig(
         normalize=True,
-        normalization_strategy='auto',
+        normalization_strategy="auto",
         warmup_iterations=100,
         gauss_newton_tol=1e-10,
     )

@@ -64,8 +64,10 @@ Small Datasets (< 10,000 points)
     import jax.numpy as jnp
     from nlsq import fit, curve_fit
 
+
     def model(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
 
     # Option 1: Simple fit (auto-selects STANDARD tier)
     popt, pcov = fit(model, x, y, p0=[1, 0.5, 0])
@@ -92,9 +94,7 @@ Medium Datasets (10,000 - 1,000,000 points)
     popt, pcov = fit(model, x, y, p0=p0, preset="large_robust")
 
     # Memory-constrained environment
-    popt, pcov = fit(model, x, y, p0=p0,
-                     preset="memory_efficient",
-                     memory_limit_gb=4.0)
+    popt, pcov = fit(model, x, y, p0=p0, preset="memory_efficient", memory_limit_gb=4.0)
 
 Large Datasets (1,000,000 - 100,000,000 points)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -121,7 +121,10 @@ Large Datasets (1,000,000 - 100,000,000 points)
 
     # Option 3: curve_fit_large for explicit control
     popt, pcov = curve_fit_large(
-        model, x, y, p0=p0,
+        model,
+        x,
+        y,
+        p0=p0,
         memory_limit_gb=8.0,
         show_progress=True,
     )
@@ -168,31 +171,44 @@ Spectroscopy
     import jax.numpy as jnp
     from nlsq import fit
 
+
     def gaussian_peak(x, amplitude, center, sigma, baseline):
         """Single Gaussian peak with baseline."""
-        return amplitude * jnp.exp(-0.5 * ((x - center) / sigma)**2) + baseline
+        return amplitude * jnp.exp(-0.5 * ((x - center) / sigma) ** 2) + baseline
+
 
     def lorentzian_peak(x, amplitude, center, gamma, baseline):
         """Single Lorentzian peak with baseline."""
-        return amplitude * gamma**2 / ((x - center)**2 + gamma**2) + baseline
+        return amplitude * gamma**2 / ((x - center) ** 2 + gamma**2) + baseline
+
 
     def voigt_approx(x, amplitude, center, sigma, gamma, baseline):
         """Pseudo-Voigt approximation (weighted sum)."""
         eta = gamma / (sigma + gamma + 1e-10)  # Mixing parameter
-        G = jnp.exp(-0.5 * ((x - center) / sigma)**2)
-        L = gamma**2 / ((x - center)**2 + gamma**2)
+        G = jnp.exp(-0.5 * ((x - center) / sigma) ** 2)
+        L = gamma**2 / ((x - center) ** 2 + gamma**2)
         return amplitude * (eta * L + (1 - eta) * G) + baseline
 
+
     # For well-resolved peaks
-    popt, pcov = fit(gaussian_peak, wavelength, intensity,
-                     p0=[1000, 500, 10, 100],
-                     bounds=([0, 400, 1, 0], [10000, 600, 50, 500]))
+    popt, pcov = fit(
+        gaussian_peak,
+        wavelength,
+        intensity,
+        p0=[1000, 500, 10, 100],
+        bounds=([0, 400, 1, 0], [10000, 600, 50, 500]),
+    )
 
     # For overlapping peaks (multi-start recommended)
-    popt, pcov = fit(gaussian_peak, wavelength, intensity,
-                     p0=[1000, 500, 10, 100],
-                     preset="robust",
-                     multistart=True, n_starts=10)
+    popt, pcov = fit(
+        gaussian_peak,
+        wavelength,
+        intensity,
+        p0=[1000, 500, 10, 100],
+        preset="robust",
+        multistart=True,
+        n_starts=10,
+    )
 
 **Multi-Peak Fitting**
 
@@ -203,20 +219,29 @@ Spectroscopy
         n_peaks = (len(params) - 1) // 3
         result = jnp.zeros_like(x)
         for i in range(n_peaks):
-            a, c, s = params[3*i], params[3*i+1], params[3*i+2]
-            result += a * jnp.exp(-0.5 * ((x - c) / s)**2)
+            a, c, s = params[3 * i], params[3 * i + 1], params[3 * i + 2]
+            result += a * jnp.exp(-0.5 * ((x - c) / s) ** 2)
         return result + params[-1]  # baseline
 
+
     # 3 peaks + baseline = 10 parameters
-    p0 = [100, 450, 10,   # Peak 1
-          200, 500, 15,   # Peak 2
-          150, 550, 12,   # Peak 3
-          50]             # Baseline
+    p0 = [
+        100,
+        450,
+        10,  # Peak 1
+        200,
+        500,
+        15,  # Peak 2
+        150,
+        550,
+        12,  # Peak 3
+        50,
+    ]  # Baseline
 
     # Use global optimization for multi-peak (many local minima)
-    popt, pcov = fit(multi_gaussian, x, y, p0=p0,
-                     preset="robust",
-                     multistart=True, n_starts=20)
+    popt, pcov = fit(
+        multi_gaussian, x, y, p0=p0, preset="robust", multistart=True, n_starts=20
+    )
 
 **Exponential Decay (Fluorescence Lifetime)**
 
@@ -226,20 +251,26 @@ Spectroscopy
         """Single exponential decay."""
         return amplitude * jnp.exp(-x / tau) + offset
 
+
     def biexponential(x, a1, tau1, a2, tau2, offset):
         """Bi-exponential decay (two components)."""
         return a1 * jnp.exp(-x / tau1) + a2 * jnp.exp(-x / tau2) + offset
 
+
     def stretched_exponential(x, amplitude, tau, beta, offset):
         """Stretched exponential (Kohlrausch-Williams-Watts)."""
-        return amplitude * jnp.exp(-(x / tau)**beta) + offset
+        return amplitude * jnp.exp(-((x / tau) ** beta)) + offset
+
 
     # Fluorescence lifetime (high precision)
-    popt, pcov = fit(biexponential, time_ns, counts,
-                     p0=[1000, 2.5, 500, 8.0, 10],
-                     bounds=([0, 0.1, 0, 0.1, 0],
-                             [10000, 100, 10000, 100, 1000]),
-                     preset="quality")
+    popt, pcov = fit(
+        biexponential,
+        time_ns,
+        counts,
+        p0=[1000, 2.5, 500, 8.0, 10],
+        bounds=([0, 0.1, 0, 0.1, 0], [10000, 100, 10000, 100, 1000]),
+        preset="quality",
+    )
 
 X-ray Scattering (SAXS/WAXS/XPCS)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -253,22 +284,29 @@ X-ray Scattering (SAXS/WAXS/XPCS)
         qr = q * radius
         # Avoid division by zero
         qr = jnp.where(qr < 1e-10, 1e-10, qr)
-        P_q = (3 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3)**2
+        P_q = (3 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3) ** 2
         return scale * P_q + background
+
 
     def guinier(q, I0, Rg, background):
         """Guinier approximation for low-q region."""
-        return I0 * jnp.exp(-q**2 * Rg**2 / 3) + background
+        return I0 * jnp.exp(-(q**2) * Rg**2 / 3) + background
+
 
     def power_law(q, scale, exponent, background):
         """Power law for high-q region."""
-        return scale * q**(-exponent) + background
+        return scale * q ** (-exponent) + background
+
 
     # SAXS fitting (often noisy, use robust)
-    popt, pcov = fit(sphere_form_factor, q, I_q,
-                     p0=[1.0, 50.0, 0.01],
-                     bounds=([0, 1, 0], [1000, 500, 1]),
-                     preset="robust")
+    popt, pcov = fit(
+        sphere_form_factor,
+        q,
+        I_q,
+        p0=[1.0, 50.0, 0.01],
+        bounds=([0, 1, 0], [1000, 500, 1]),
+        preset="robust",
+    )
 
 **XPCS Correlation Functions**
 
@@ -278,20 +316,27 @@ X-ray Scattering (SAXS/WAXS/XPCS)
         """g2 correlation function with single relaxation."""
         return baseline + beta * jnp.exp(-2 * t / tau)
 
+
     def stretched_g2(t, beta, tau, gamma, baseline):
         """Stretched exponential g2 (heterogeneous dynamics)."""
-        return baseline + beta * jnp.exp(-2 * (t / tau)**gamma)
+        return baseline + beta * jnp.exp(-2 * (t / tau) ** gamma)
+
 
     def double_exponential_g2(t, beta1, tau1, beta2, tau2, baseline):
         """Two-relaxation g2 function."""
         return baseline + beta1 * jnp.exp(-2 * t / tau1) + beta2 * jnp.exp(-2 * t / tau2)
 
+
     # XPCS with multi-scale parameters (use hybrid streaming)
     # tau can be ~1e-6 to 1e3, beta ~0.1 to 1
-    popt, pcov = fit(stretched_g2, lag_time, g2_data,
-                     p0=[0.3, 1.0, 1.0, 1.0],
-                     bounds=([0, 1e-6, 0.1, 0.9], [1, 1e6, 2.0, 1.1]),
-                     method="hybrid_streaming")  # Handles scale differences
+    popt, pcov = fit(
+        stretched_g2,
+        lag_time,
+        g2_data,
+        p0=[0.3, 1.0, 1.0, 1.0],
+        bounds=([0, 1e-6, 0.1, 0.9], [1, 1e6, 2.0, 1.1]),
+        method="hybrid_streaming",
+    )  # Handles scale differences
 
 Kinetics and Reaction Dynamics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -304,18 +349,25 @@ Kinetics and Reaction Dynamics
         """Michaelis-Menten enzyme kinetics."""
         return Vmax * S / (Km + S)
 
+
     def hill_equation(S, Vmax, K, n):
         """Hill equation (cooperative binding)."""
         return Vmax * S**n / (K**n + S**n)
+
 
     def substrate_inhibition(S, Vmax, Km, Ki):
         """Substrate inhibition model."""
         return Vmax * S / (Km + S * (1 + S / Ki))
 
+
     # Enzyme kinetics (well-behaved, standard fit)
-    popt, pcov = fit(michaelis_menten, substrate_conc, velocity,
-                     p0=[100, 10],
-                     bounds=([0, 0], [1000, 1000]))
+    popt, pcov = fit(
+        michaelis_menten,
+        substrate_conc,
+        velocity,
+        p0=[100, 10],
+        bounds=([0, 0], [1000, 1000]),
+    )
 
 **Chemical Kinetics (Rate Equations)**
 
@@ -325,19 +377,26 @@ Kinetics and Reaction Dynamics
         """First-order reaction: A → products."""
         return A0 * jnp.exp(-k * t) + offset
 
+
     def second_order_equal(t, A0, k):
         """Second-order reaction with equal concentrations."""
         return A0 / (1 + k * A0 * t)
+
 
     def consecutive_reactions(t, A0, k1, k2):
         """A → B → C consecutive first-order reactions.
         Returns concentration of B."""
         return A0 * k1 / (k2 - k1) * (jnp.exp(-k1 * t) - jnp.exp(-k2 * t))
 
+
     # For fast kinetics (many data points)
-    popt, pcov = fit(first_order_decay, time, concentration,
-                     p0=[1.0, 0.1, 0.0],
-                     preset="large_robust" if len(time) > 100000 else "robust")
+    popt, pcov = fit(
+        first_order_decay,
+        time,
+        concentration,
+        p0=[1.0, 0.1, 0.0],
+        preset="large_robust" if len(time) > 100000 else "robust",
+    )
 
 Binding and Adsorption
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -350,23 +409,31 @@ Binding and Adsorption
         """Langmuir binding isotherm."""
         return Qmax * C / (Kd + C)
 
+
     def freundlich(C, Kf, n):
         """Freundlich isotherm (heterogeneous surfaces)."""
-        return Kf * C**(1/n)
+        return Kf * C ** (1 / n)
+
 
     def langmuir_freundlich(C, Qmax, K, n):
         """Langmuir-Freundlich (Sips) isotherm."""
-        return Qmax * (K * C)**n / (1 + (K * C)**n)
+        return Qmax * (K * C) ** n / (1 + (K * C) ** n)
+
 
     def two_site_langmuir(C, Q1, K1, Q2, K2):
         """Two-site Langmuir (heterogeneous binding)."""
         return Q1 * C / (K1 + C) + Q2 * C / (K2 + C)
 
+
     # Binding curve fitting
-    popt, pcov = fit(langmuir, concentration, binding,
-                     p0=[100, 10],
-                     bounds=([0, 0], [1000, 1000]),
-                     preset="robust")
+    popt, pcov = fit(
+        langmuir,
+        concentration,
+        binding,
+        p0=[100, 10],
+        bounds=([0, 0], [1000, 1000]),
+        preset="robust",
+    )
 
 **Dose-Response Curves**
 
@@ -374,17 +441,23 @@ Binding and Adsorption
 
     def four_parameter_logistic(x, bottom, top, EC50, hill):
         """4PL dose-response curve."""
-        return bottom + (top - bottom) / (1 + (EC50 / x)**hill)
+        return bottom + (top - bottom) / (1 + (EC50 / x) ** hill)
+
 
     def five_parameter_logistic(x, bottom, top, EC50, hill, asymmetry):
         """5PL asymmetric dose-response."""
-        return bottom + (top - bottom) / (1 + (EC50 / x)**hill)**asymmetry
+        return bottom + (top - bottom) / (1 + (EC50 / x) ** hill) ** asymmetry
+
 
     # IC50/EC50 determination
-    popt, pcov = fit(four_parameter_logistic, dose, response,
-                     p0=[0, 100, 10, 1],
-                     bounds=([0, 0, 0.001, 0.1], [50, 200, 1000, 10]),
-                     preset="quality")  # Important for pharmacology
+    popt, pcov = fit(
+        four_parameter_logistic,
+        dose,
+        response,
+        p0=[0, 100, 10, 1],
+        bounds=([0, 0, 0.001, 0.1], [50, 200, 1000, 10]),
+        preset="quality",
+    )  # Important for pharmacology
 
 Image Analysis
 ~~~~~~~~~~~~~~
@@ -396,10 +469,13 @@ Image Analysis
     def gaussian_2d(xy, amplitude, x0, y0, sigma_x, sigma_y, theta, offset):
         """2D Gaussian with rotation."""
         x, y = xy
-        a = jnp.cos(theta)**2 / (2*sigma_x**2) + jnp.sin(theta)**2 / (2*sigma_y**2)
-        b = -jnp.sin(2*theta) / (4*sigma_x**2) + jnp.sin(2*theta) / (4*sigma_y**2)
-        c = jnp.sin(theta)**2 / (2*sigma_x**2) + jnp.cos(theta)**2 / (2*sigma_y**2)
-        return offset + amplitude * jnp.exp(-(a*(x-x0)**2 + 2*b*(x-x0)*(y-y0) + c*(y-y0)**2))
+        a = jnp.cos(theta) ** 2 / (2 * sigma_x**2) + jnp.sin(theta) ** 2 / (2 * sigma_y**2)
+        b = -jnp.sin(2 * theta) / (4 * sigma_x**2) + jnp.sin(2 * theta) / (4 * sigma_y**2)
+        c = jnp.sin(theta) ** 2 / (2 * sigma_x**2) + jnp.cos(theta) ** 2 / (2 * sigma_y**2)
+        return offset + amplitude * jnp.exp(
+            -(a * (x - x0) ** 2 + 2 * b * (x - x0) * (y - y0) + c * (y - y0) ** 2)
+        )
+
 
     # Prepare data for 2D fitting
     x = np.arange(image.shape[1])
@@ -414,10 +490,13 @@ Image Analysis
     else:
         preset = "robust"
 
-    popt, pcov = fit(gaussian_2d, xy_data, z_data,
-                     p0=[image.max(), image.shape[1]//2, image.shape[0]//2,
-                         5, 5, 0, image.min()],
-                     preset=preset)
+    popt, pcov = fit(
+        gaussian_2d,
+        xy_data,
+        z_data,
+        p0=[image.max(), image.shape[1] // 2, image.shape[0] // 2, 5, 5, 0, image.min()],
+        preset=preset,
+    )
 
 **FRAP Recovery Curves**
 
@@ -427,17 +506,23 @@ Image Analysis
         """Single-component FRAP recovery."""
         return Finf - (Finf - F0) * jnp.exp(-t / tau)
 
+
     def frap_double_diffusion(t, F0, Finf, f_fast, tau_fast, tau_slow):
         """Two-component FRAP (fast + slow diffusion)."""
         recovery_fast = f_fast * (1 - jnp.exp(-t / tau_fast))
         recovery_slow = (1 - f_fast) * (1 - jnp.exp(-t / tau_slow))
         return F0 + (Finf - F0) * (recovery_fast + recovery_slow)
 
+
     # FRAP fitting
-    popt, pcov = fit(frap_single_diffusion, time, fluorescence,
-                     p0=[0.2, 1.0, 5.0],
-                     bounds=([0, 0, 0.1], [1, 2, 1000]),
-                     preset="robust")
+    popt, pcov = fit(
+        frap_single_diffusion,
+        time,
+        fluorescence,
+        p0=[0.2, 1.0, 5.0],
+        bounds=([0, 0, 0.1], [1, 2, 1000]),
+        preset="robust",
+    )
 
 Materials Science
 ~~~~~~~~~~~~~~~~~
@@ -452,19 +537,26 @@ Materials Science
         # Forward form requires numerical solution, so we fit inverse
         return strain  # placeholder - use appropriate formulation
 
+
     def power_law_hardening(strain, K, n):
         """Power law strain hardening: sigma = K * epsilon^n."""
         return K * strain**n
+
 
     def voce_hardening(strain, sigma_y, sigma_sat, theta):
         """Voce hardening law."""
         return sigma_sat - (sigma_sat - sigma_y) * jnp.exp(-theta * strain / sigma_sat)
 
+
     # Stress-strain fitting
-    popt, pcov = fit(power_law_hardening, strain_data, stress_data,
-                     p0=[500, 0.2],
-                     bounds=([0, 0], [2000, 1]),
-                     preset="robust")
+    popt, pcov = fit(
+        power_law_hardening,
+        strain_data,
+        stress_data,
+        p0=[500, 0.2],
+        bounds=([0, 0], [2000, 1]),
+        preset="robust",
+    )
 
 **Thermal Analysis (DSC/TGA)**
 
@@ -475,6 +567,7 @@ Materials Science
         R = 8.314  # J/(mol·K)
         return A * jnp.exp(-Ea / (R * T))
 
+
     def kissinger_peak(T, Tm, Ea, A):
         """Kissinger peak shape for DSC."""
         R = 8.314
@@ -482,11 +575,16 @@ Materials Science
         xm = Ea / (R * Tm)
         return A * jnp.exp(xm - x - jnp.exp(xm - x))
 
+
     # Thermal decomposition fitting
-    popt, pcov = fit(arrhenius, temperature_K, rate_constant,
-                     p0=[1e13, 100000],
-                     bounds=([1e8, 10000], [1e20, 500000]),
-                     preset="quality")
+    popt, pcov = fit(
+        arrhenius,
+        temperature_K,
+        rate_constant,
+        p0=[1e13, 100000],
+        bounds=([1e8, 10000], [1e20, 500000]),
+        preset="quality",
+    )
 
 Physics and Signal Processing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -499,15 +597,22 @@ Physics and Signal Processing
         """Damped harmonic oscillator."""
         return A * jnp.exp(-gamma * t) * jnp.cos(omega * t + phi) + offset
 
+
     def critically_damped(t, A, gamma, offset):
         """Critically damped oscillator."""
         return A * (1 + gamma * t) * jnp.exp(-gamma * t) + offset
 
+
     # Oscillation fitting (phase can cause local minima)
-    popt, pcov = fit(damped_oscillation, time, amplitude,
-                     p0=[1.0, 0.1, 10.0, 0.0, 0.0],
-                     preset="robust",
-                     multistart=True, n_starts=10)
+    popt, pcov = fit(
+        damped_oscillation,
+        time,
+        amplitude,
+        p0=[1.0, 0.1, 10.0, 0.0, 0.0],
+        preset="robust",
+        multistart=True,
+        n_starts=10,
+    )
 
 **Power Spectrum Fitting**
 
@@ -515,16 +620,22 @@ Physics and Signal Processing
 
     def lorentzian_spectrum(f, A, f0, gamma, background):
         """Lorentzian power spectrum."""
-        return A * gamma**2 / ((f - f0)**2 + gamma**2) + background
+        return A * gamma**2 / ((f - f0) ** 2 + gamma**2) + background
+
 
     def pink_noise(f, A, alpha, background):
         """1/f^alpha noise spectrum."""
         return A / (f**alpha + 1e-10) + background
 
+
     # Power spectrum (often many points)
-    popt, pcov = fit(lorentzian_spectrum, frequency, power,
-                     p0=[1.0, 100.0, 10.0, 0.001],
-                     preset="large_robust" if len(frequency) > 100000 else "robust")
+    popt, pcov = fit(
+        lorentzian_spectrum,
+        frequency,
+        power,
+        p0=[1.0, 100.0, 10.0, 0.001],
+        preset="large_robust" if len(frequency) > 100000 else "robust",
+    )
 
 ---
 
@@ -542,9 +653,7 @@ Single CPU (Laptop/Workstation)
     popt, pcov = fit(model, x, y, p0=p0)
 
     # Memory-limited laptop
-    popt, pcov = fit(model, x, y, p0=p0,
-                     preset="memory_efficient",
-                     memory_limit_gb=4.0)
+    popt, pcov = fit(model, x, y, p0=p0, preset="memory_efficient", memory_limit_gb=4.0)
 
 Single GPU
 ~~~~~~~~~~
@@ -552,6 +661,7 @@ Single GPU
 .. code-block:: python
 
     import os
+
     # Ensure JAX sees the GPU
     # (automatic if JAX GPU is installed)
 
@@ -561,9 +671,9 @@ Single GPU
     popt, pcov = fit(model, x, y, p0=p0)
 
     # For large datasets on GPU (limited VRAM)
-    popt, pcov = fit(model, x, y, p0=p0,
-                     preset="streaming",
-                     memory_limit_gb=8.0)  # Match GPU VRAM
+    popt, pcov = fit(
+        model, x, y, p0=p0, preset="streaming", memory_limit_gb=8.0
+    )  # Match GPU VRAM
 
 Multi-GPU Workstation
 ~~~~~~~~~~~~~~~~~~~~~
@@ -594,17 +704,17 @@ HPC Cluster (PBS/SLURM)
     cluster_info = detector.detect()
 
     if cluster_info:
-        print(f"Running on {cluster_info.node_count} nodes, "
-              f"{cluster_info.total_gpus} GPUs")
+        print(
+            f"Running on {cluster_info.node_count} nodes, "
+            f"{cluster_info.total_gpus} GPUs"
+        )
         config = create_distributed_config(cluster_info)
     else:
         # Fallback for local runs
         config = None
 
     # Use HPC preset with checkpointing
-    popt, pcov = fit(model, x, y, p0=p0,
-                     preset="hpc_distributed",
-                     workflow=config)
+    popt, pcov = fit(model, x, y, p0=p0, preset="hpc_distributed", workflow=config)
 
 **PBS Job Script Example:**
 
@@ -653,10 +763,7 @@ Characteristics:
 .. code-block:: python
 
     # Multi-start is essential
-    popt, pcov = fit(model, x, y, p0=p0,
-                     preset="robust",
-                     multistart=True,
-                     n_starts=20)
+    popt, pcov = fit(model, x, y, p0=p0, preset="robust", multistart=True, n_starts=20)
 
     # Or use global preset
     popt, pcov = fit(model, x, y, p0=p0, preset="global")
@@ -675,7 +782,7 @@ Characteristics:
 
     config = HybridStreamingConfig(
         normalize=True,
-        normalization_strategy='auto',  # or 'bounds' if bounds provided
+        normalization_strategy="auto",  # or 'bounds' if bounds provided
     )
 
     popt, pcov = fit(model, x, y, p0=p0, method="hybrid_streaming")
@@ -693,13 +800,11 @@ Characteristics:
     from nlsq import fit
 
     # Use tight tolerances and quality validation
-    popt, pcov = fit(model, x, y, p0=p0,
-                     preset="quality",
-                     multistart=True,
-                     n_starts=20)
+    popt, pcov = fit(model, x, y, p0=p0, preset="quality", multistart=True, n_starts=20)
 
     # Check condition number
     import numpy as np
+
     cond = np.linalg.cond(pcov)
     if cond > 1e10:
         print(f"Warning: Ill-conditioned covariance (cond={cond:.2e})")
@@ -715,9 +820,10 @@ Characteristics:
 .. code-block:: python
 
     # Use bounds to enforce constraints
-    popt, pcov = fit(model, x, y, p0=p0,
-                     bounds=([0, 0, 0], [np.inf, 100, 10]),
-                     preset="robust")
+    popt, pcov = fit(
+        model, x, y, p0=p0, bounds=([0, 0, 0], [np.inf, 100, 10]), preset="robust"
+    )
+
 
     # For complex constraints, reparameterize:
     def constrained_model(x, log_a, b_fraction):
@@ -874,6 +980,7 @@ Pattern 2: Batch Processing Pipeline
     from nlsq import fit
     import numpy as np
 
+
     def process_dataset(data_files, model, initial_p0):
         """Process multiple datasets with consistent settings."""
         results = []
@@ -884,18 +991,11 @@ Pattern 2: Batch Processing Pipeline
             try:
                 popt, pcov = fit(model, x, y, p0=initial_p0, preset="robust")
                 perr = np.sqrt(np.diag(pcov))
-                results.append({
-                    'file': filepath,
-                    'params': popt,
-                    'errors': perr,
-                    'success': True
-                })
+                results.append(
+                    {"file": filepath, "params": popt, "errors": perr, "success": True}
+                )
             except Exception as e:
-                results.append({
-                    'file': filepath,
-                    'error': str(e),
-                    'success': False
-                })
+                results.append({"file": filepath, "error": str(e), "success": False})
 
         return results
 
@@ -906,17 +1006,14 @@ Pattern 3: Adaptive Workflow Selection
 
     from nlsq import fit, auto_select_workflow, OptimizationGoal
 
+
     def smart_fit(model, x, y, p0, goal=OptimizationGoal.ROBUST):
         """Automatically select best workflow based on data characteristics."""
         n_points = len(x)
         n_params = len(p0)
 
         # Get recommended configuration
-        config = auto_select_workflow(
-            n_points=n_points,
-            n_params=n_params,
-            goal=goal
-        )
+        config = auto_select_workflow(n_points=n_points, n_params=n_params, goal=goal)
 
         print(f"Auto-selected: {config}")
 
@@ -935,9 +1032,9 @@ Pattern 4: Checkpoint and Resume
     print(f"Checkpoints: {checkpoint_dir}")
 
     # Long-running fit with checkpoints
-    popt, pcov = fit(model, x, y, p0=p0,
-                     preset="hpc_distributed",
-                     checkpoint_dir=checkpoint_dir)
+    popt, pcov = fit(
+        model, x, y, p0=p0, preset="hpc_distributed", checkpoint_dir=checkpoint_dir
+    )
 
     # If interrupted, resume:
     # popt, pcov = fit(model, x, y, p0=p0,
