@@ -38,9 +38,7 @@ def exponential_decay(x, a, b, c):
 def main():
     """Run the defense layers demonstration."""
     if os.environ.get("NLSQ_EXAMPLES_QUICK"):
-        print(
-            "Quick mode: skipping defense layers demo (uses hybrid_streaming)."
-        )
+        print("Quick mode: skipping defense layers demo (uses hybrid_streaming).")
         return
 
     np.random.seed(42)

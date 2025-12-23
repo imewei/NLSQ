@@ -9,9 +9,8 @@ import sys
 from pathlib import Path
 
 import nbformat
+from jupyter_client import localinterfaces
 from nbclient import NotebookClient
-
-import jupyter_client.localinterfaces as localinterfaces
 
 
 def _patch_localinterfaces() -> None:
@@ -25,9 +24,7 @@ def _kernel_env() -> dict[str, str]:
     env = os.environ.copy()
     sitecustomize_dir = Path(__file__).parent / "notebook_sitecustomize"
     env["PYTHONPATH"] = (
-        f"{sitecustomize_dir}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(
-            os.pathsep
-        )
+        f"{sitecustomize_dir}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(os.pathsep)
     )
     env["PYTHONWARNINGS"] = "error"
     return env
