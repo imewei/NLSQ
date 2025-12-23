@@ -1,5 +1,5 @@
 # MANIFEST.in for NLSQ package distribution
-# Updated: 2025-12-22
+# Updated: 2025-12-23
 # Includes: Adaptive Hybrid Streaming Optimizer modules (v0.3.0+)
 
 include LICENSE.txt
