@@ -2,7 +2,7 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
-[![NLSQ Version](https://img.shields.io/badge/nlsq-0.3.6+-orange.svg)](https://github.com/imewei/NLSQ)
+[![NLSQ Version](https://img.shields.io/badge/nlsq-0.3.7+-orange.svg)](https://github.com/imewei/NLSQ)
 
 > **v0.3.6 Update**: Added 4-layer defense strategy for Adam warmup divergence prevention. See [CHANGELOG.md](../CHANGELOG.md) for details.
 
@@ -646,5 +646,5 @@ If you use NLSQ in your research, please cite:
 ---
 
 <p align="center">
-<i>Last updated: 2025-12-23 | NLSQ v0.3.6</i>
+<i>Last updated: 2025-12-23 | NLSQ v0.3.7</i>
 </p>
