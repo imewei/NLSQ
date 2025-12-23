@@ -8,17 +8,23 @@ curve_fit() and curve_fit_large() functions.
 The hybrid streaming optimizer provides:
 - Parameter normalization for better gradient signals
 - Adam warmup for robust initial convergence
+- 4-layer defense strategy for warmup divergence prevention (v0.3.6+)
 - Streaming Gauss-Newton for exact covariance computation
 - Automatic memory management for large datasets
 """
 
 import os
-import sys
 
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq import curve_fit, curve_fit_large
+from nlsq import (
+    curve_fit,
+    curve_fit_large,
+    HybridStreamingConfig,
+    get_defense_telemetry,
+    reset_defense_telemetry,
+)
 
 
 def exponential_decay(x, a, b, c):
@@ -154,11 +160,119 @@ def main():
         diag = result["streaming_diagnostics"]
         print("\nStreaming diagnostics available:")
         print(f"  Keys: {list(diag.keys())}")
+    print()
+
+    # =========================================================================
+    # Example 6: Defense Layers (v0.3.6+)
+    # =========================================================================
+    print("Example 6: 4-Layer Defense Strategy (v0.3.6+)")
+    print("-" * 70)
+
+    # Reset telemetry for this demo
+    reset_defense_telemetry()
+
+    # Near-optimal initial guess - defense layers should trigger
+    near_optimal_p0 = true_params * np.array([1.01, 0.99, 1.005])
+    print(f"Near-optimal p0: {near_optimal_p0}")
+
+    popt, pcov = curve_fit(
+        exponential_decay,
+        x, y,
+        p0=near_optimal_p0,
+        method="hybrid_streaming",
+        verbose=0,
+    )
+
+    telemetry = get_defense_telemetry()
+    summary = telemetry.get_summary()
+    rates = telemetry.get_trigger_rates()
+
+    print(f"Fitted params: {popt}")
+    print("\nDefense Layer Telemetry:")
+    print(f"  Layer 1 (warm start) rate: {rates.get('layer1_warm_start_rate', 0):.1f}%")
+    print(f"  Layer 2 LR modes: {summary['layer2_lr_mode_counts']}")
+    print(f"  Layer 3 (cost guard) triggers: {summary['layer3_cost_guard_triggers']}")
+    print(f"  Layer 4 (step clip) triggers: {summary['layer4_clip_triggers']}")
+    print()
+
+    # =========================================================================
+    # Example 7: Defense Layer Presets
+    # =========================================================================
+    print("Example 7: Defense Layer Presets")
+    print("-" * 70)
+
+    presets = {
+        "Default": HybridStreamingConfig(),
+        "defense_strict()": HybridStreamingConfig.defense_strict(),
+        "defense_relaxed()": HybridStreamingConfig.defense_relaxed(),
+        "defense_disabled()": HybridStreamingConfig.defense_disabled(),
+        "scientific_default()": HybridStreamingConfig.scientific_default(),
+    }
+
+    print(f"{'Preset':<25} {'L1':<5} {'L2':<5} {'L3':<5} {'L4':<5}")
+    print("-" * 50)
+
+    for name, config in presets.items():
+        print(f"{name:<25} {'ON' if config.enable_warm_start_detection else 'OFF':<5} "
+              f"{'ON' if config.enable_adaptive_warmup_lr else 'OFF':<5} "
+              f"{'ON' if config.enable_cost_guard else 'OFF':<5} "
+              f"{'ON' if config.enable_step_clipping else 'OFF':<5}")
+
+    # Use strict preset for warm start refinement
+    config = HybridStreamingConfig.defense_strict()
+    popt, pcov = curve_fit(
+        exponential_decay,
+        x, y,
+        p0=near_optimal_p0,
+        method="hybrid_streaming",
+        config=config,
+        verbose=0,
+    )
+    print(f"\nFitted with defense_strict(): {popt}")
+    print()
+
+    # =========================================================================
+    # Example 8: Production Monitoring with Telemetry
+    # =========================================================================
+    print("Example 8: Production Monitoring with Telemetry")
+    print("-" * 70)
+
+    reset_defense_telemetry()
+
+    # Simulate batch of fits with varying quality
+    for i in range(10):
+        noise = 0.01 if i < 3 else (0.3 if i < 7 else 1.0)
+        p0 = true_params * (1 + np.random.uniform(-noise, noise, 3))
+
+        curve_fit(
+            exponential_decay, x, y, p0=p0,
+            method="hybrid_streaming",
+            verbose=0,
+        )
+
+    telemetry = get_defense_telemetry()
+    rates = telemetry.get_trigger_rates()
+
+    print("After 10 fits with varying starting points:")
+    print(f"  Layer 1 (warm start):     {rates.get('layer1_warm_start_rate', 0):.1f}%")
+    print(f"  Layer 2 (refinement LR):  {rates.get('layer2_refinement_rate', 0):.1f}%")
+    print(f"  Layer 2 (careful LR):     {rates.get('layer2_careful_rate', 0):.1f}%")
+    print(f"  Layer 2 (exploration LR): {rates.get('layer2_exploration_rate', 0):.1f}%")
+    print(f"  Layer 3 (cost guard):     {rates.get('layer3_cost_guard_rate', 0):.1f}%")
+    print(f"  Layer 4 (step clipping):  {rates.get('layer4_clip_rate', 0):.1f}%")
+
+    print("\nPrometheus-Compatible Metrics:")
+    for name, value in telemetry.export_metrics().items():
+        print(f"  {name}: {value}")
 
     print()
     print("=" * 70)
     print("Demo complete!")
     print("=" * 70)
+    print("\nSee also:")
+    print("  - examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb")
+    print("  - examples/notebooks/05_feature_demos/defense_layers_demo.ipynb")
+    print("  - docs/migration/v0.3.6_defense_layers.rst")
 
 
 if __name__ == "__main__":
