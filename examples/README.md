@@ -22,8 +22,8 @@ examples/
 │   ├── 02_core_tutorials/           # 4 intermediate tutorials
 │   ├── 03_advanced/                 # 7 advanced topics
 │   ├── 04_gallery/                  # 11 domain-specific examples
-│   ├── 05_feature_demos/            # 4 feature demonstrations
-│   ├── 06_streaming/                # 4 streaming examples
+│   ├── 05_feature_demos/            # 5 feature demonstrations
+│   ├── 06_streaming/                # 5 streaming examples
 │   ├── 07_global_optimization/      # 5 multi-start tutorials (NEW v0.3.3)
 │   ├── 08_workflow_system/          # 7 unified fit() tutorials (NEW v0.3.4)
 │   └── 09_gallery_advanced/         # 11 advanced gallery with fit() API (NEW v0.3.4)
@@ -33,7 +33,7 @@ examples/
 └── README.md           # This file
 ```
 
-**Total**: 110 files (55 notebooks + 55 scripts)
+**Total**: 114 files (57 notebooks + 57 scripts)
 
 ---
 
@@ -255,6 +255,7 @@ Your complete navigation guide:
 2. **Enhanced Error Messages** - Actionable diagnostics
 3. **Function Library** - Pre-built models, auto p0 estimation
 4. **Result Enhancements** - `.plot()`, `.summary()`, statistics
+5. **Defense Layers** ⭐ NEW v0.3.6 - 4-layer defense strategy for warmup divergence prevention
 
 **Time**: 1-2 hours | **Level**: ●●○ Intermediate
 
@@ -269,6 +270,7 @@ Your complete navigation guide:
 2. **Checkpoint & Resume** - Save and resume optimization state
 3. **Custom Retry Settings** - Custom retry strategies
 4. **Interpreting Diagnostics** - Performance metrics analysis
+5. **Hybrid Streaming API** - 4-phase optimizer with defense layers (v0.3.6+)
 
 **Time**: 2-3 hours | **Level**: ●●● Advanced
 

@@ -420,6 +420,79 @@ result = optimizer.fit(
 - Need production-quality uncertainty estimates
 - Standard optimizers converge slowly near optimum
 
+### 4-Layer Defense Strategy (v0.3.6+)
+
+The hybrid streaming optimizer includes a **4-layer defense strategy** that prevents Adam warmup divergence when initial parameters are already near optimal:
+
+```python
+from nlsq import (
+    curve_fit,
+    HybridStreamingConfig,
+    get_defense_telemetry,
+    reset_defense_telemetry,
+)
+import jax.numpy as jnp
+
+
+def model(x, a, b, c):
+    return a * jnp.exp(-b * x) + c
+
+
+# Defense layers are enabled by default
+popt, pcov = curve_fit(
+    model, x, y,
+    p0=[2.0, 0.5, 1.0],
+    method='hybrid_streaming',
+)
+
+# Monitor defense layer activations
+telemetry = get_defense_telemetry()
+print(telemetry.get_summary())
+print(telemetry.get_trigger_rates())
+```
+
+**The 4 Defense Layers:**
+
+| Layer | Name | Description |
+|-------|------|-------------|
+| 1 | Warm Start Detection | Skips warmup if initial loss < 1% of data variance |
+| 2 | Adaptive Learning Rate | Scales LR based on initial fit quality (1e-6 to 0.001) |
+| 3 | Cost-Increase Guard | Aborts if loss increases > 5% from initial |
+| 4 | Step Clipping | Limits parameter update magnitude (max norm 0.1) |
+
+**Defense Presets:**
+
+```python
+# For warm-start refinement (stricter thresholds)
+config = HybridStreamingConfig.defense_strict()
+
+# For exploration from poor initial guess
+config = HybridStreamingConfig.defense_relaxed()
+
+# For regression testing (pre-0.3.6 behavior)
+config = HybridStreamingConfig.defense_disabled()
+
+# For scientific computing
+config = HybridStreamingConfig.scientific_default()
+
+popt, pcov = curve_fit(model, x, y, method='hybrid_streaming', config=config)
+```
+
+**Production Monitoring:**
+
+```python
+# Reset telemetry before batch processing
+reset_defense_telemetry()
+
+for dataset in datasets:
+    curve_fit(model, x, y, method='hybrid_streaming')
+
+# Export Prometheus-compatible metrics
+metrics = get_defense_telemetry().export_metrics()
+```
+
+See the [Defense Layers Guide](https://nlsq.readthedocs.io/en/latest/guides/defense_layers.html) for detailed documentation.
+
 ### Key Features for Large Datasets:
 
 - **Automatic Size Detection**: `curve_fit_large` automatically switches between standard and chunked fitting

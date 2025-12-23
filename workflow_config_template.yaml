@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 2.0 (Updated for NLSQ v0.2.0+)
+# Version: 2.1 (Updated for NLSQ v0.3.6+ with Defense Layers)
 #
 # This template provides comprehensive configuration options for NLSQ curve
 # fitting workflows. Copy this file to your project and customize as needed.
@@ -82,6 +82,7 @@
 # │   - Fast initial convergence from any starting point                        │
 # │   - Adaptive switching based on plateau/gradient criteria                   │
 # │   - Default: 200-500 iterations                                             │
+# │   - Protected by 4-Layer Defense Strategy (v0.3.6+)                         │
 # │                                                                             │
 # │ Phase 2: Streaming Gauss-Newton                                             │
 # │   - Exact J^T J accumulation across data chunks                             │
@@ -91,6 +92,40 @@
 # │ Phase 3: Covariance & Denormalization                                       │
 # │   - Compute exact covariance matrix                                         │
 # │   - Transform back to original parameter space                              │
+# └─────────────────────────────────────────────────────────────────────────────┘
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ 4-LAYER DEFENSE STRATEGY (v0.3.6+)                                          │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Prevents Adam warmup divergence when initial parameters are near optimal:   │
+# │                                                                             │
+# │ Layer 1: Warm Start Detection                                               │
+# │   - Skips warmup if initial loss < warm_start_threshold (default: 1%)       │
+# │   - Prevents pushing away from good initial guesses                         │
+# │   - Use Case: Refinement workflows, iterative fitting                       │
+# │                                                                             │
+# │ Layer 2: Adaptive Learning Rate                                             │
+# │   - Refinement mode (< 10% variance): LR = 1e-6 (ultra-conservative)        │
+# │   - Careful mode (10-100% variance): LR = 1e-5 (conservative)               │
+# │   - Exploration mode (≥ 100% variance): LR = 0.001 (standard)               │
+# │   - Use Case: Multi-scale parameters, varying initial guess quality         │
+# │                                                                             │
+# │ Layer 3: Cost-Increase Guard                                                │
+# │   - Aborts warmup if loss increases > cost_increase_tolerance (default: 5%) │
+# │   - Returns best parameters found during warmup                             │
+# │   - Use Case: Detecting divergence early, protecting expensive iterations   │
+# │                                                                             │
+# │ Layer 4: Step Clipping                                                      │
+# │   - Limits parameter update magnitude to max_warmup_step_size (default: 0.1)│
+# │   - Prevents large jumps that could overshoot optimum                       │
+# │   - Use Case: Ill-conditioned problems, multi-scale parameters              │
+# │                                                                             │
+# │ Defense Presets:                                                            │
+# │   - default:           All layers ON (recommended)                          │
+# │   - defense_strict:    Lower thresholds for warm-start refinement           │
+# │   - defense_relaxed:   Higher thresholds for exploration                    │
+# │   - defense_disabled:  Pre-0.3.6 behavior (no protection)                   │
+# │   - scientific_default: Tuned for physics/scientific computing              │
 # └─────────────────────────────────────────────────────────────────────────────┘
 #
 # ==============================================================================
@@ -152,6 +187,41 @@
 #   fitting:
 #     termination:
 #       max_iterations: 50
+#
+# Pattern 6: Warm Start Refinement (v0.3.6+)
+# ──────────────────────────────────────────
+# Use when refining parameters from a previous fit.
+#   default_workflow: "streaming"
+#   hybrid_streaming:
+#     defense_layers:
+#       preset: "strict"  # Or configure layers individually:
+#       layer1_warm_start:
+#         enabled: true
+#         threshold: 0.005  # 0.5% - stricter than default 1%
+#       layer2_adaptive_lr:
+#         enabled: true
+#         lr_refinement: 1.0e-7  # More conservative
+#       layer3_cost_guard:
+#         enabled: true
+#         tolerance: 0.02  # 2% - tighter than default 5%
+#
+# Pattern 7: Production Monitoring with Telemetry (v0.3.6+)
+# ─────────────────────────────────────────────────────────
+# For batch processing with defense layer monitoring.
+#   default_workflow: "streaming"
+#   hybrid_streaming:
+#     defense_layers:
+#       preset: null  # Use defaults
+#     telemetry:
+#       enabled: true
+#       export_format: "prometheus"
+#   # In code:
+#   #   from nlsq import get_defense_telemetry, reset_defense_telemetry
+#   #   reset_defense_telemetry()
+#   #   for dataset in datasets:
+#   #       curve_fit(model, x, y, method="hybrid_streaming")
+#   #   telemetry = get_defense_telemetry()
+#   #   push_to_prometheus(telemetry.export_metrics())
 #
 # ==============================================================================
 
@@ -449,7 +519,7 @@ hybrid_streaming:
   # Phase 1: Adam Warmup
   warmup_iterations: 200        # Initial iterations before switch check
   max_warmup_iterations: 500    # Force switch to Phase 2
-  warmup_learning_rate: 0.001   # Adam learning rate
+  warmup_learning_rate: 0.001   # Adam learning rate (overridden by adaptive LR)
   loss_plateau_threshold: 1.0e-4   # Plateau detection threshold
   gradient_norm_threshold: 1.0e-3  # Early switch if gradient small
 
@@ -459,6 +529,62 @@ hybrid_streaming:
   lr_schedule_decay_steps: 450
   lr_schedule_end_value: 0.0001
   gradient_clip_value: null  # Set to 1.0 for gradient clipping
+
+  # ==========================================================================
+  # 4-LAYER DEFENSE STRATEGY (v0.3.6+)
+  # ==========================================================================
+  # Prevents Adam warmup divergence when initial parameters are near optimal.
+  # All layers are enabled by default for improved stability.
+  #
+  # Presets available in code:
+  #   - HybridStreamingConfig()                  # Default (all ON)
+  #   - HybridStreamingConfig.defense_strict()  # Lower thresholds
+  #   - HybridStreamingConfig.defense_relaxed() # Higher thresholds
+  #   - HybridStreamingConfig.defense_disabled() # Pre-0.3.6 behavior
+  #   - HybridStreamingConfig.scientific_default() # Physics/scientific
+  #
+  # Telemetry API for monitoring:
+  #   from nlsq import get_defense_telemetry, reset_defense_telemetry
+  #   telemetry = get_defense_telemetry()
+  #   print(telemetry.get_summary())
+  #   print(telemetry.get_trigger_rates())
+  #   print(telemetry.export_metrics())  # Prometheus-compatible
+  # ==========================================================================
+
+  defense_layers:
+    # Defense preset: "default", "strict", "relaxed", "disabled", "scientific"
+    # Set to null to use individual layer settings below.
+    preset: null
+
+    # Layer 1: Warm Start Detection
+    # Skips warmup if initial loss < threshold * data_variance
+    # Use Case: Refinement workflows, warm starts from previous fits
+    layer1_warm_start:
+      enabled: true
+      threshold: 0.01  # 1% of data variance (strict: 0.005, relaxed: 0.02)
+
+    # Layer 2: Adaptive Learning Rate
+    # Automatically selects LR based on initial fit quality
+    # Use Case: Multi-scale parameters, varying initial guess quality
+    layer2_adaptive_lr:
+      enabled: true
+      lr_refinement: 1.0e-6    # < 10% variance (ultra-conservative)
+      lr_careful: 1.0e-5       # 10-100% variance (conservative)
+      lr_exploration: 0.001    # >= 100% variance (standard Adam LR)
+
+    # Layer 3: Cost-Increase Guard
+    # Aborts warmup if loss increases beyond tolerance from initial
+    # Use Case: Early divergence detection, protecting expensive iterations
+    layer3_cost_guard:
+      enabled: true
+      tolerance: 0.05  # 5% increase allowed (strict: 0.02, relaxed: 0.10)
+
+    # Layer 4: Step Clipping
+    # Limits maximum parameter update magnitude per iteration
+    # Use Case: Ill-conditioned problems, preventing overshooting
+    layer4_step_clipping:
+      enabled: true
+      max_step_size: 0.1  # Max L2 norm (strict: 0.05, relaxed: 0.2)
 
   # Phase 2: Gauss-Newton
   gauss_newton_max_iterations: 100
@@ -487,6 +613,12 @@ hybrid_streaming:
 
   # Progress monitoring
   callback_frequency: 10
+
+  # Telemetry for production monitoring (v0.3.6+)
+  # Tracks defense layer activation rates across fits
+  telemetry:
+    enabled: true
+    export_format: "prometheus"  # "prometheus", "json", "none"
 
   # Tournament selection for multi-start streaming
   enable_multistart: false
@@ -731,3 +863,75 @@ advanced:
 #     memory:
 #       adaptive_fraction: 0.3
 #       max_gb: 4.0
+
+# warm_start_refinement:
+#   # Optimized for refining parameters from previous fits (v0.3.6+)
+#   # Uses strict defense layers to prevent divergence
+#   runtime:
+#     device: "cpu"
+#     precision: "float64"
+#   hybrid_streaming:
+#     warmup_iterations: 100  # Shorter warmup (may be skipped anyway)
+#     defense_layers:
+#       preset: "strict"
+#       # Strict preset uses:
+#       # - warm_start_threshold: 0.005 (0.5%)
+#       # - cost_increase_tolerance: 0.02 (2%)
+#       # - max_step_size: 0.05
+#     telemetry:
+#       enabled: true
+#       export_format: "json"
+
+# exploration_from_poor_guess:
+#   # When starting from potentially poor initial parameters (v0.3.6+)
+#   # Uses relaxed defense to allow more exploration
+#   runtime:
+#     device: "gpu"
+#     precision: "float64"
+#   hybrid_streaming:
+#     warmup_iterations: 500  # Longer warmup for exploration
+#     defense_layers:
+#       preset: "relaxed"
+#       # Relaxed preset uses:
+#       # - warm_start_threshold: 0.02 (2%)
+#       # - cost_increase_tolerance: 0.10 (10%)
+#       # - max_step_size: 0.2
+#     telemetry:
+#       enabled: true
+#       export_format: "prometheus"
+
+# regression_testing:
+#   # For comparing against pre-0.3.6 results (v0.3.6+)
+#   # Disables all defense layers for exact behavior match
+#   runtime:
+#     device: "cpu"
+#     precision: "float64"
+#     random_seed: 42
+#   hybrid_streaming:
+#     defense_layers:
+#       preset: "disabled"
+#       # All layers OFF - pre-0.3.6 behavior
+#     telemetry:
+#       enabled: false
+
+# scientific_computing:
+#   # Tuned for physics/scientific models (v0.3.6+)
+#   # Uses scientific_default preset with production monitoring
+#   runtime:
+#     device: "cpu"
+#     precision: "float64"
+#   hybrid_streaming:
+#     normalization_strategy: "bounds"  # Better for multi-scale physics
+#     defense_layers:
+#       preset: "scientific"
+#       # Scientific preset: balanced for physics models
+#     telemetry:
+#       enabled: true
+#       export_format: "prometheus"
+#   validation_and_qc:
+#     sanity_checks:
+#       enabled: true
+#       checks:
+#         - "finite_parameters"
+#         - "nonnegative_variances"
+#         - "positive_definite_covariance"
