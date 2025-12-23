@@ -1066,13 +1066,16 @@ class TestCheckpointDirectoryCreation:
             assert len(dir_name) == 15  # YYYYMMDD_HHMMSS
             assert dir_name[8] == "_"  # Separator between date and time
         finally:
-            # Cleanup
-            if os.path.exists(checkpoint_dir):
-                shutil.rmtree(checkpoint_dir)
-            # Also clean up parent if empty
-            parent = os.path.dirname(checkpoint_dir)
-            if os.path.exists(parent) and not os.listdir(parent):
-                os.rmdir(parent)
+            # Cleanup (guard against race conditions in parallel tests)
+            try:
+                if os.path.exists(checkpoint_dir):
+                    shutil.rmtree(checkpoint_dir)
+                # Also clean up parent if empty
+                parent = os.path.dirname(checkpoint_dir)
+                if os.path.exists(parent) and not os.listdir(parent):
+                    os.rmdir(parent)
+            except (FileNotFoundError, OSError):
+                pass  # Directory already removed by another test or process
 
     def test_checkpoint_directory_path_format(self):
         """Test checkpoint directory path format (./nlsq_checkpoints/YYYYMMDD_HHMMSS/)."""
@@ -1095,12 +1098,15 @@ class TestCheckpointDirectoryCreation:
             time_part = dir_name[9:]
             assert time_part.isdigit()
         finally:
-            # Cleanup
-            if os.path.exists(checkpoint_dir):
-                shutil.rmtree(checkpoint_dir)
-            parent = os.path.dirname(checkpoint_dir)
-            if os.path.exists(parent) and not os.listdir(parent):
-                os.rmdir(parent)
+            # Cleanup (guard against race conditions in parallel tests)
+            try:
+                if os.path.exists(checkpoint_dir):
+                    shutil.rmtree(checkpoint_dir)
+                parent = os.path.dirname(checkpoint_dir)
+                if os.path.exists(parent) and not os.listdir(parent):
+                    os.rmdir(parent)
+            except (FileNotFoundError, OSError):
+                pass  # Directory already removed by another test or process
 
 
 class TestQualityGoalMultiStart:

@@ -1392,7 +1392,7 @@ class TestPropertyBased:
         ),
         max_norm=st.floats(min_value=1e-6, max_value=10.0),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=500)  # 500ms deadline for JIT warmup
     def test_clip_update_norm_always_clips(self, updates, max_norm):
         """Property: clipped update norm is always <= max_norm."""
         updates = jnp.array(updates)

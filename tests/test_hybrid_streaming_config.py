@@ -108,28 +108,28 @@ class TestHybridStreamingConfigValidation:
 
     def test_invalid_normalization_strategy(self):
         """Test that invalid normalization strategy raises error."""
-        with pytest.raises(AssertionError, match="normalization_strategy"):
+        with pytest.raises(ValueError, match="normalization_strategy"):
             HybridStreamingConfig(normalization_strategy="invalid")
 
     def test_invalid_precision(self):
         """Test that invalid precision raises error."""
-        with pytest.raises(AssertionError, match="precision"):
+        with pytest.raises(ValueError, match="precision"):
             HybridStreamingConfig(precision="float16")
 
     def test_warmup_iterations_constraint(self):
         """Test that warmup_iterations must be <= max_warmup_iterations."""
-        with pytest.raises(AssertionError, match="warmup_iterations"):
+        with pytest.raises(ValueError, match="warmup_iterations"):
             HybridStreamingConfig(warmup_iterations=600, max_warmup_iterations=500)
 
     def test_negative_values_rejected(self):
         """Test that negative values for positive parameters are rejected."""
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             HybridStreamingConfig(warmup_iterations=-10)
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             HybridStreamingConfig(chunk_size=-100)
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             HybridStreamingConfig(gauss_newton_max_iterations=-5)
 
 
@@ -138,29 +138,29 @@ class TestHybridStreamingConfigParameterRanges:
 
     def test_learning_rate_positive(self):
         """Test that learning rate must be positive."""
-        with pytest.raises(AssertionError, match="warmup_learning_rate"):
+        with pytest.raises(ValueError, match="warmup_learning_rate"):
             HybridStreamingConfig(warmup_learning_rate=0.0)
 
-        with pytest.raises(AssertionError, match="warmup_learning_rate"):
+        with pytest.raises(ValueError, match="warmup_learning_rate"):
             HybridStreamingConfig(warmup_learning_rate=-0.001)
 
     def test_thresholds_positive(self):
         """Test that thresholds must be positive."""
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             HybridStreamingConfig(loss_plateau_threshold=0.0)
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             HybridStreamingConfig(gradient_norm_threshold=-1e-3)
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             HybridStreamingConfig(gauss_newton_tol=0.0)
 
     def test_trust_region_positive(self):
         """Test that trust region initial value must be positive."""
-        with pytest.raises(AssertionError, match="trust_region_initial"):
+        with pytest.raises(ValueError, match="trust_region_initial"):
             HybridStreamingConfig(trust_region_initial=0.0)
 
-        with pytest.raises(AssertionError, match="trust_region_initial"):
+        with pytest.raises(ValueError, match="trust_region_initial"):
             HybridStreamingConfig(trust_region_initial=-1.0)
 
     def test_valid_custom_config(self):
