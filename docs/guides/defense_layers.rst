@@ -797,8 +797,7 @@ Problem: Cost Guard Aborts Prematurely
 See Also
 --------
 
-- :doc:`nlsq.adaptive_hybrid_streaming` : Main optimizer implementation
-- :doc:`nlsq.hybrid_streaming_config` : Full configuration reference
-- :doc:`../api/nlsq.adaptive_hybrid_streaming` : API documentation
+- :doc:`../api/nlsq.adaptive_hybrid_streaming` : Main optimizer implementation
+- :doc:`../api/nlsq.hybrid_streaming_config` : Full configuration reference
 - :doc:`practical_workflows` : Real-world usage patterns
 - :doc:`troubleshooting` : General troubleshooting guide
