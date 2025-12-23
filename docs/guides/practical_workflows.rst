@@ -1097,6 +1097,7 @@ Export defense telemetry for production monitoring systems.
 
     from nlsq import fit, get_defense_telemetry, reset_defense_telemetry
 
+
     def fit_with_monitoring(model, x, y, p0, run_id):
         """Production fit with defense telemetry export."""
         reset_defense_telemetry()

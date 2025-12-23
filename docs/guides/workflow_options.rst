@@ -342,15 +342,12 @@ Fine-tune individual layer thresholds:
    config = HybridStreamingConfig(
        # Layer 1: Warm start detection
        warm_start_threshold=0.01,  # 1% of data variance
-
        # Layer 2: Adaptive learning rate
-       lr_refinement=1e-6,   # LR when near optimal
-       lr_careful=1e-5,      # LR when close to optimal
-       lr_exploration=0.001, # LR when far from optimal
-
+       lr_refinement=1e-6,  # LR when near optimal
+       lr_careful=1e-5,  # LR when close to optimal
+       lr_exploration=0.001,  # LR when far from optimal
        # Layer 3: Cost-increase guard
        cost_increase_tolerance=0.05,  # 5% increase allowed
-
        # Layer 4: Step clipping
        max_step_norm=0.1,  # Maximum step magnitude
    )

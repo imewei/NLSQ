@@ -147,6 +147,7 @@ Or configure programmatically:
 
    # Monitor defense layer activations
    from nlsq import get_defense_telemetry
+
    telemetry = get_defense_telemetry()
    print(telemetry.get_summary())
 

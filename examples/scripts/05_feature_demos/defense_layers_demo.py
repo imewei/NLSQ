@@ -17,12 +17,12 @@ Usage:
     python defense_layers_demo.py
 """
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 
 from nlsq import (
-    curve_fit,
     HybridStreamingConfig,
+    curve_fit,
     get_defense_telemetry,
     reset_defense_telemetry,
 )
@@ -47,7 +47,9 @@ def main():
     print("4-Layer Defense Strategy Demo")
     print("=" * 70)
     print(f"\nDataset: {len(x)} samples")
-    print(f"True parameters: a={true_params[0]}, b={true_params[1]}, c={true_params[2]}")
+    print(
+        f"True parameters: a={true_params[0]}, b={true_params[1]}, c={true_params[2]}"
+    )
 
     # =========================================================================
     # Demo 1: Near-optimal starting point (Layer 1 should trigger)
@@ -63,9 +65,10 @@ def main():
 
     popt, pcov = curve_fit(
         exponential_decay,
-        x, y,
+        x,
+        y,
         p0=near_optimal_p0,
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         verbose=0,
     )
 
@@ -74,11 +77,11 @@ def main():
     rates = telemetry.get_trigger_rates()
 
     print(f"Fitted params: {popt}")
-    print(f"\nTelemetry:")
+    print("\nTelemetry:")
     print(f"  Layer 1 (warm start) triggers: {summary['layer1_warm_start_triggers']}")
     print(f"  Layer 1 rate: {rates.get('layer1_warm_start_rate', 0):.1f}%")
 
-    if summary['layer1_warm_start_triggers'] > 0:
+    if summary["layer1_warm_start_triggers"] > 0:
         print("  -> Layer 1 detected near-optimal start and skipped warmup")
 
     # =========================================================================
@@ -95,9 +98,10 @@ def main():
 
     popt, pcov = curve_fit(
         exponential_decay,
-        x, y,
+        x,
+        y,
         p0=poor_p0,
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         verbose=0,
     )
 
@@ -105,7 +109,7 @@ def main():
     summary = telemetry.get_summary()
 
     print(f"Fitted params: {popt}")
-    print(f"\nTelemetry:")
+    print("\nTelemetry:")
     print(f"  Layer 2 LR modes: {summary['layer2_lr_mode_counts']}")
 
     # =========================================================================
@@ -127,10 +131,12 @@ def main():
     print("-" * 50)
 
     for name, config in presets.items():
-        print(f"{name:<25} {'ON' if config.enable_warm_start_detection else 'OFF':<5} "
-              f"{'ON' if config.enable_adaptive_warmup_lr else 'OFF':<5} "
-              f"{'ON' if config.enable_cost_guard else 'OFF':<5} "
-              f"{'ON' if config.enable_step_clipping else 'OFF':<5}")
+        print(
+            f"{name:<25} {'ON' if config.enable_warm_start_detection else 'OFF':<5} "
+            f"{'ON' if config.enable_adaptive_warmup_lr else 'OFF':<5} "
+            f"{'ON' if config.enable_cost_guard else 'OFF':<5} "
+            f"{'ON' if config.enable_step_clipping else 'OFF':<5}"
+        )
 
     # =========================================================================
     # Demo 4: Batch monitoring with telemetry
@@ -148,8 +154,11 @@ def main():
         p0 = true_params * (1 + np.random.uniform(-noise, noise, 3))
 
         curve_fit(
-            exponential_decay, x, y, p0=p0,
-            method='hybrid_streaming',
+            exponential_decay,
+            x,
+            y,
+            p0=p0,
+            method="hybrid_streaming",
             verbose=0,
         )
 
@@ -180,16 +189,13 @@ def main():
         # Layer 1: Stricter warm start threshold
         enable_warm_start_detection=True,
         warm_start_threshold=0.005,  # 0.5% instead of 1%
-
         # Layer 2: More conservative learning rates
         enable_adaptive_warmup_lr=True,
         warmup_lr_refinement=1e-7,
         warmup_lr_careful=1e-6,
-
         # Layer 3: Tighter cost tolerance
         enable_cost_guard=True,
         cost_increase_tolerance=0.02,  # 2% instead of 5%
-
         # Layer 4: Smaller step limit
         enable_step_clipping=True,
         max_warmup_step_size=0.05,
@@ -205,9 +211,10 @@ def main():
 
     popt, pcov = curve_fit(
         exponential_decay,
-        x, y,
+        x,
+        y,
         p0=np.array([4.5, 0.45, 1.1]),
-        method='hybrid_streaming',
+        method="hybrid_streaming",
         config=custom_config,
         verbose=0,
     )

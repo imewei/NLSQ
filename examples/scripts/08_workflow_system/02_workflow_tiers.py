@@ -416,7 +416,9 @@ def main():
     print("9. Defense Layers for Streaming Tiers (v0.3.6+)")
     print("-" * 50)
     print()
-    print("STREAMING and STREAMING_CHECKPOINT tiers use AdaptiveHybridStreamingOptimizer,")
+    print(
+        "STREAMING and STREAMING_CHECKPOINT tiers use AdaptiveHybridStreamingOptimizer,"
+    )
     print("which includes a 4-layer defense strategy against Adam warmup divergence:")
     print()
     print("  Layer 1 (Warm Start Detection):")

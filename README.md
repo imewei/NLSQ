@@ -440,9 +440,11 @@ def model(x, a, b, c):
 
 # Defense layers are enabled by default
 popt, pcov = curve_fit(
-    model, x, y,
+    model,
+    x,
+    y,
     p0=[2.0, 0.5, 1.0],
-    method='hybrid_streaming',
+    method="hybrid_streaming",
 )
 
 # Monitor defense layer activations
@@ -475,7 +477,7 @@ config = HybridStreamingConfig.defense_disabled()
 # For scientific computing
 config = HybridStreamingConfig.scientific_default()
 
-popt, pcov = curve_fit(model, x, y, method='hybrid_streaming', config=config)
+popt, pcov = curve_fit(model, x, y, method="hybrid_streaming", config=config)
 ```
 
 **Production Monitoring:**
@@ -485,7 +487,7 @@ popt, pcov = curve_fit(model, x, y, method='hybrid_streaming', config=config)
 reset_defense_telemetry()
 
 for dataset in datasets:
-    curve_fit(model, x, y, method='hybrid_streaming')
+    curve_fit(model, x, y, method="hybrid_streaming")
 
 # Export Prometheus-compatible metrics
 metrics = get_defense_telemetry().export_metrics()

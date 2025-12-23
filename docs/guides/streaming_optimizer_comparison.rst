@@ -208,10 +208,10 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
    .. code-block:: python
 
        # Defense presets for common scenarios
-       config = HybridStreamingConfig.defense_strict()     # Warm-start refinement
-       config = HybridStreamingConfig.defense_relaxed()    # Exploration
-       config = HybridStreamingConfig.scientific_default() # Production scientific
-       config = HybridStreamingConfig.defense_disabled()   # Pre-0.3.6 behavior
+       config = HybridStreamingConfig.defense_strict()  # Warm-start refinement
+       config = HybridStreamingConfig.defense_relaxed()  # Exploration
+       config = HybridStreamingConfig.scientific_default()  # Production scientific
+       config = HybridStreamingConfig.defense_disabled()  # Pre-0.3.6 behavior
 
 **Example:**
 

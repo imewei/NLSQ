@@ -19,9 +19,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import (
+    HybridStreamingConfig,
     curve_fit,
     curve_fit_large,
-    HybridStreamingConfig,
     get_defense_telemetry,
     reset_defense_telemetry,
 )
@@ -177,7 +177,8 @@ def main():
 
     popt, pcov = curve_fit(
         exponential_decay,
-        x, y,
+        x,
+        y,
         p0=near_optimal_p0,
         method="hybrid_streaming",
         verbose=0,
@@ -213,16 +214,19 @@ def main():
     print("-" * 50)
 
     for name, config in presets.items():
-        print(f"{name:<25} {'ON' if config.enable_warm_start_detection else 'OFF':<5} "
-              f"{'ON' if config.enable_adaptive_warmup_lr else 'OFF':<5} "
-              f"{'ON' if config.enable_cost_guard else 'OFF':<5} "
-              f"{'ON' if config.enable_step_clipping else 'OFF':<5}")
+        print(
+            f"{name:<25} {'ON' if config.enable_warm_start_detection else 'OFF':<5} "
+            f"{'ON' if config.enable_adaptive_warmup_lr else 'OFF':<5} "
+            f"{'ON' if config.enable_cost_guard else 'OFF':<5} "
+            f"{'ON' if config.enable_step_clipping else 'OFF':<5}"
+        )
 
     # Use strict preset for warm start refinement
     config = HybridStreamingConfig.defense_strict()
     popt, pcov = curve_fit(
         exponential_decay,
-        x, y,
+        x,
+        y,
         p0=near_optimal_p0,
         method="hybrid_streaming",
         config=config,
@@ -245,7 +249,10 @@ def main():
         p0 = true_params * (1 + np.random.uniform(-noise, noise, 3))
 
         curve_fit(
-            exponential_decay, x, y, p0=p0,
+            exponential_decay,
+            x,
+            y,
+            p0=p0,
             method="hybrid_streaming",
             verbose=0,
         )
