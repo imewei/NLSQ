@@ -130,7 +130,9 @@ class DefenseLayerTelemetry:
         """
         if mode in self.layer2_lr_mode_counts:
             self.layer2_lr_mode_counts[mode] += 1
-        self._log_event("layer2_lr_mode", {"mode": mode, "relative_loss": relative_loss})
+        self._log_event(
+            "layer2_lr_mode", {"mode": mode, "relative_loss": relative_loss}
+        )
 
     def record_layer3_trigger(
         self, cost_ratio: float, tolerance: float, iteration: int
@@ -315,7 +317,7 @@ def get_defense_telemetry() -> DefenseLayerTelemetry:
 
 def reset_defense_telemetry() -> None:
     """Reset global defense layer telemetry."""
-    global _defense_telemetry  # noqa: PLW0603
+    global _defense_telemetry  # noqa: PLW0602
     if _defense_telemetry is not None:
         _defense_telemetry.reset()
 
@@ -1740,7 +1742,9 @@ class AdaptiveHybridStreamingOptimizer:
             # large, the optimizer may be stuck. Reset to allow exploration.
             if new_trust_radius < min_trust_radius and gradient_norm > 1e-4:
                 # Reset to gradient-scaled value for recovery
-                new_trust_radius = min(0.1 * gradient_norm / max(1.0, gradient_norm), 1.0)
+                new_trust_radius = min(
+                    0.1 * gradient_norm / max(1.0, gradient_norm), 1.0
+                )
         elif reduction_ratio > 0.75 and step_norm >= 0.9 * trust_radius:
             # Good agreement and step at boundary: expand trust region
             new_trust_radius = min(trust_radius * 2.0, max_trust_radius)
@@ -1984,7 +1988,9 @@ class AdaptiveHybridStreamingOptimizer:
                 current_params = new_params
                 # Update prev_cost AFTER saving for convergence check
                 cost_before_step = (
-                    prev_cost if jnp.isfinite(prev_cost) else new_cost + actual_reduction
+                    prev_cost
+                    if jnp.isfinite(prev_cost)
+                    else new_cost + actual_reduction
                 )
                 prev_cost = new_cost
                 consecutive_rejections = 0  # Reset rejection counter on success
@@ -2015,9 +2021,7 @@ class AdaptiveHybridStreamingOptimizer:
                 # Step rejected - trust radius is already updated in
                 # _gauss_newton_iteration, no need to shrink again here.
                 # Track consecutive rejections for stall detection.
-                consecutive_rejections = getattr(
-                    self, "_consecutive_rejections", 0
-                ) + 1
+                consecutive_rejections = getattr(self, "_consecutive_rejections", 0) + 1
                 self._consecutive_rejections = consecutive_rejections
 
                 # Stall detection: if many consecutive rejections with large

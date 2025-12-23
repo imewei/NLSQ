@@ -92,10 +92,7 @@ No Changes Required (Default)
     from nlsq import curve_fit
 
     # This continues to work exactly as before
-    popt, pcov = curve_fit(
-        model, x, y, p0=initial_guess,
-        method='hybrid_streaming'
-    )
+    popt, pcov = curve_fit(model, x, y, p0=initial_guess, method="hybrid_streaming")
 
     # Defense layers are automatically enabled for better stability
 
@@ -112,9 +109,7 @@ If you need the pre-0.3.6 behavior (e.g., for regression testing):
     config = HybridStreamingConfig.defense_disabled()
 
     popt, pcov = curve_fit(
-        model, x, y, p0=initial_guess,
-        method='hybrid_streaming',
-        config=config
+        model, x, y, p0=initial_guess, method="hybrid_streaming", config=config
     )
 
 Customize Defense Sensitivity
@@ -127,27 +122,24 @@ Fine-tune defense layers for your use case:
     from nlsq import HybridStreamingConfig
 
     # Option 1: Use preset for your scenario
-    config = HybridStreamingConfig.defense_strict()     # Near-optimal
-    config = HybridStreamingConfig.defense_relaxed()    # Exploration
-    config = HybridStreamingConfig.scientific_default() # Physics models
+    config = HybridStreamingConfig.defense_strict()  # Near-optimal
+    config = HybridStreamingConfig.defense_relaxed()  # Exploration
+    config = HybridStreamingConfig.scientific_default()  # Physics models
 
     # Option 2: Customize individual layers
     config = HybridStreamingConfig(
         # Layer 1: Relax warm start threshold
         warm_start_threshold=0.001,  # Trigger less often
-
         # Layer 2: Increase learning rates
         warmup_lr_refinement=1e-5,
         warmup_lr_careful=1e-4,
-
         # Layer 3: Allow more cost increase
         cost_increase_tolerance=0.2,  # 20% instead of 5%
-
         # Layer 4: Allow larger steps
         max_warmup_step_size=0.5,
     )
 
-    popt, pcov = curve_fit(model, x, y, method='hybrid_streaming', config=config)
+    popt, pcov = curve_fit(model, x, y, method="hybrid_streaming", config=config)
 
 Monitor Defense Layer Activations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -163,10 +155,7 @@ Track which layers are triggering in production:
 
     # Run batch of fits
     for dataset in datasets:
-        popt, pcov = curve_fit(
-            model, x, y, p0=guess,
-            method='hybrid_streaming'
-        )
+        popt, pcov = curve_fit(model, x, y, p0=guess, method="hybrid_streaming")
 
     # Get telemetry report
     telemetry = get_defense_telemetry()
@@ -174,7 +163,7 @@ Track which layers are triggering in production:
 
     # Check activation rates
     rates = telemetry.get_trigger_rates()
-    if rates['layer1_warm_start_rate'] > 80:
+    if rates["layer1_warm_start_rate"] > 80:
         print("Warning: Warm start triggering frequently")
         print("Consider lowering warm_start_threshold")
 
@@ -197,9 +186,7 @@ Scenario 1: Warm Start Refinement
 
     # Refinement with new data (0.3.6 automatically uses strict defense)
     popt_v2, pcov = curve_fit(
-        model, x2, y2,
-        p0=popt_v1,  # Good initial guess
-        method='hybrid_streaming'
+        model, x2, y2, p0=popt_v1, method="hybrid_streaming"  # Good initial guess
     )
 
     # Layer 1 will skip warmup since popt_v1 is already near optimal
@@ -225,14 +212,17 @@ Scenario 2: Multi-Scale Parameters
         # amplitude ~ 1e6, decay_rate ~ 1e-6, offset ~ 100
         return amplitude * jnp.exp(-decay_rate * x) + offset
 
+
     # With bounds to help normalization
     bounds = ([1e5, 1e-7, 0], [1e7, 1e-5, 1000])
 
     popt, pcov = curve_fit(
-        multi_scale_model, x, y,
+        multi_scale_model,
+        x,
+        y,
         p0=[1e6, 1e-6, 100],
         bounds=bounds,
-        method='hybrid_streaming'
+        method="hybrid_streaming",
     )
 
     # Layer 2 will use conservative LR
@@ -257,9 +247,11 @@ Scenario 3: Production Monitoring
     for sample_id, (x, y) in enumerate(data_stream):
         try:
             popt, pcov = curve_fit(
-                model, x, y,
-                method='hybrid_streaming',
-                config=HybridStreamingConfig.scientific_default()
+                model,
+                x,
+                y,
+                method="hybrid_streaming",
+                config=HybridStreamingConfig.scientific_default(),
             )
             save_results(sample_id, popt, pcov)
         except Exception as e:
@@ -295,9 +287,9 @@ Problem: Results Changed After Upgrade
     telemetry = get_defense_telemetry()
     rates = telemetry.get_trigger_rates()
 
-    if rates['layer1_warm_start_rate'] > 0:
+    if rates["layer1_warm_start_rate"] > 0:
         print("Warm start detected - warmup was skipped")
-    if rates['layer3_cost_guard_rate'] > 0:
+    if rates["layer3_cost_guard_rate"] > 0:
         print("Cost guard triggered - divergence prevented")
 
 **Resolution**:
@@ -316,7 +308,7 @@ Problem: Warmup Always Skipped
 .. code-block:: python
 
     telemetry = get_defense_telemetry()
-    if telemetry.get_trigger_rates()['layer1_warm_start_rate'] == 100.0:
+    if telemetry.get_trigger_rates()["layer1_warm_start_rate"] == 100.0:
         print("Warm start threshold too high")
 
 **Resolution**:
@@ -344,7 +336,7 @@ Problem: Convergence Too Slow
 .. code-block:: python
 
     rates = telemetry.get_trigger_rates()
-    if rates['layer2_refinement_rate'] > 50:
+    if rates["layer2_refinement_rate"] > 50:
         print("Using ultra-conservative LR frequently")
 
 **Resolution**:
@@ -354,7 +346,7 @@ Problem: Convergence Too Slow
     # Increase refinement/careful LRs
     config = HybridStreamingConfig(
         warmup_lr_refinement=1e-5,  # Increase from 1e-6
-        warmup_lr_careful=1e-4,     # Increase from 1e-5
+        warmup_lr_careful=1e-4,  # Increase from 1e-5
     )
 
     # Or use relaxed preset
@@ -369,7 +361,7 @@ Problem: Cost Guard Aborts Too Early
 
 .. code-block:: python
 
-    if telemetry.get_trigger_rates()['layer3_cost_guard_rate'] > 20:
+    if telemetry.get_trigger_rates()["layer3_cost_guard_rate"] > 20:
         print("Cost guard very active - may be protecting from divergence")
 
 **Resolution**:
@@ -397,14 +389,12 @@ Add tests to verify behavior with defense layers:
     import pytest
     from nlsq import curve_fit, HybridStreamingConfig, reset_defense_telemetry
 
+
     def test_defense_layers_enabled_by_default():
         """Verify defense layers are active by default."""
         reset_defense_telemetry()
 
-        popt, pcov = curve_fit(
-            model, x, y,
-            method='hybrid_streaming'
-        )
+        popt, pcov = curve_fit(model, x, y, method="hybrid_streaming")
 
         # Defense layers should be enabled
         config = HybridStreamingConfig()
@@ -412,6 +402,7 @@ Add tests to verify behavior with defense layers:
         assert config.enable_adaptive_warmup_lr is True
         assert config.enable_cost_guard is True
         assert config.enable_step_clipping is True
+
 
     def test_defense_disabled_preset():
         """Verify defense_disabled() reverts to pre-0.3.6 behavior."""
@@ -422,6 +413,7 @@ Add tests to verify behavior with defense layers:
         assert config.enable_cost_guard is False
         assert config.enable_step_clipping is False
 
+
     def test_warm_start_triggers_correctly():
         """Verify Layer 1 skips warmup for near-optimal guess."""
         from nlsq import get_defense_telemetry
@@ -430,16 +422,14 @@ Add tests to verify behavior with defense layers:
 
         # Fit with very good initial guess
         popt, pcov = curve_fit(
-            model, x, y,
-            p0=near_optimal_params,
-            method='hybrid_streaming'
+            model, x, y, p0=near_optimal_params, method="hybrid_streaming"
         )
 
         telemetry = get_defense_telemetry()
         rates = telemetry.get_trigger_rates()
 
         # Warm start should have triggered
-        assert rates['layer1_warm_start_rate'] > 0
+        assert rates["layer1_warm_start_rate"] > 0
 
 Benchmark Comparison
 ~~~~~~~~~~~~~~~~~~~~
@@ -451,22 +441,19 @@ Compare performance before/after:
     import time
     from nlsq import curve_fit, HybridStreamingConfig
 
+
     def benchmark_defense_layers():
         """Compare defense enabled vs disabled."""
 
         # With defense (0.3.6 default)
         start = time.time()
-        popt_def, _ = curve_fit(model, x, y, method='hybrid_streaming')
+        popt_def, _ = curve_fit(model, x, y, method="hybrid_streaming")
         time_defense = time.time() - start
 
         # Without defense (pre-0.3.6 behavior)
         config_old = HybridStreamingConfig.defense_disabled()
         start = time.time()
-        popt_old, _ = curve_fit(
-            model, x, y,
-            method='hybrid_streaming',
-            config=config_old
-        )
+        popt_old, _ = curve_fit(model, x, y, method="hybrid_streaming", config=config_old)
         time_no_defense = time.time() - start
 
         print(f"Defense enabled:  {time_defense:.3f}s")

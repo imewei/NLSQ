@@ -272,9 +272,7 @@ class TestLayer1WarmStartDetection:
         assert isinstance(result["relative_loss"], float)
         assert result["relative_loss"] >= 0
 
-    def test_warm_start_records_in_phase_history(
-        self, simple_model, near_optimal_data
-    ):
+    def test_warm_start_records_in_phase_history(self, simple_model, near_optimal_data):
         """Verify warm start is recorded in phase_history."""
         x, y, p0, _ = near_optimal_data
 
@@ -1586,9 +1584,7 @@ class TestPresetIntegration:
 
         assert "iterations" in result
 
-    def test_memory_optimized_preset_with_layers(
-        self, simple_model, poor_initial_data
-    ):
+    def test_memory_optimized_preset_with_layers(self, simple_model, poor_initial_data):
         """Test memory_optimized preset with defense layers."""
         x, y, p0, _ = poor_initial_data
 

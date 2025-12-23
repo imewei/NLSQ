@@ -185,91 +185,64 @@ from nlsq.validators import InputValidator
 
 # Public API - only expose main user-facing functions
 __all__ = [
-    # Workflow presets dictionary (Task Group 8)
     "WORKFLOW_PRESETS",
-    # Adaptive Hybrid Streaming Optimizer (Task Group 12)
     "AdaptiveHybridStreamingOptimizer",
-    # Defense Layer Telemetry (4-layer defense strategy monitoring)
-    "DefenseLayerTelemetry",
-    # Stability and optimization modules
     "AlgorithmSelector",
-    # Bounds inference (Phase 3)
     "BoundsInference",
-    # Performance optimization (Sprint 2)
     "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
-    # Workflow system enums and tiers (Task Group 8)
     "DatasetSizeTier",
-    # Fallback strategies (Phase 3)
+    "DefenseLayerTelemetry",
     "FallbackOrchestrator",
     "FallbackResult",
     "FallbackStrategy",
-    # Global optimization (Task Group 5)
     "GlobalOptimizationConfig",
     "HybridStreamingConfig",
     "InputValidator",
     "LargeDatasetConfig",
     "LargeDatasetFitter",
-    # Advanced API
     "LeastSquares",
-    # Configuration classes
     "MemoryConfig",
     "MemoryManager",
     "MemoryPool",
-    # Workflow memory tier classification (Task Group 8)
     "MemoryTier",
     "MultiStartOrchestrator",
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
-    # Workflow optimization goal enum (Task Group 8)
     "OptimizationGoal",
     "OptimizationRecovery",
-    # Result types
     "OptimizeResult",
     "OptimizeWarning",
     "ParameterNormalizer",
-    # Performance profiling (Days 20-21)
     "PerformanceProfiler",
     "ProfileMetrics",
-    # Performance profiling visualization (Days 22-23)
     "ProfilerVisualization",
     "ProfilingDashboard",
     "RobustDecomposition",
     "SmartCache",
-    # Sparse Jacobian support
     "SparseJacobianComputer",
     "SparseOptimizer",
     "TRFMemoryPool",
     "TournamentSelector",
-    # Workflow configuration class (Task Group 8)
     "WorkflowConfig",
-    # Workflow selector class (Task Group 8)
     "WorkflowSelector",
-    # Workflow tier enum (Task Group 8)
     "WorkflowTier",
-    # Version
     "__version__",
     "apply_automatic_fixes",
     "auto_select_algorithm",
-    # Workflow auto-select function (Task Group 8)
     "auto_select_workflow",
-    # Caching support
     "cached_function",
     "cached_jacobian",
     "cached_jit",
-    # Progress callbacks (Day 3)
     "callbacks",
-    # Stability checks (Phase 3)
     "check_problem_stability",
     "clear_all_caches",
     "clear_compilation_cache",
     "clear_global_pool",
     "clear_memory_pool",
     "clear_profiling_data",
-    # Configuration functions
     "configure_for_large_datasets",
-    # Main curve fitting API
     "curve_fit",
     "curve_fit_large",
     "detect_collinearity",
@@ -278,16 +251,13 @@ __all__ = [
     "enable_mixed_precision_fallback",
     "estimate_condition_number",
     "estimate_memory_requirements",
-    # Unified fit function (Task Group 8) - primary entry point
     "fit",
-    # Large dataset utilities
     "fit_large_dataset",
-    # Common functions library
     "functions",
+    "get_defense_telemetry",
     "get_global_cache",
     "get_global_compilation_cache",
     "get_global_pool",
-    "get_defense_telemetry",
     "get_global_profiler",
     "get_jit_cache",
     "get_large_dataset_config",

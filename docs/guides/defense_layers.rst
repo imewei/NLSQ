@@ -68,8 +68,7 @@ Layer 1: Warm Start Detection
     )
 
     popt, pcov = curve_fit(
-        model, x, y, p0=near_optimal_guess,
-        method='hybrid_streaming', config=config
+        model, x, y, p0=near_optimal_guess, method="hybrid_streaming", config=config
     )
 
 **When Layer 1 Triggers**:
@@ -409,7 +408,7 @@ Tracks when each layer is triggered:
 
     # Run multiple fits
     for dataset in datasets:
-        popt, pcov = curve_fit(model, x, y, method='hybrid_streaming')
+        popt, pcov = curve_fit(model, x, y, method="hybrid_streaming")
 
     # Get telemetry summary
     telemetry = get_defense_telemetry()
@@ -497,8 +496,10 @@ Refine parameters from a previous fit:
     from nlsq import curve_fit, HybridStreamingConfig
     import jax.numpy as jnp
 
+
     def xpcs_model(x, g2_inf, beta, tau):
         return g2_inf + beta * jnp.exp(-2 * x / tau)
+
 
     # Initial fit
     popt_initial, _ = curve_fit(xpcs_model, t, g2_data, p0=[1.0, 0.5, 100.0])
@@ -507,10 +508,12 @@ Refine parameters from a previous fit:
     config = HybridStreamingConfig.defense_strict()
 
     popt_refined, pcov = curve_fit(
-        xpcs_model, t_new, g2_new_data,
+        xpcs_model,
+        t_new,
+        g2_new_data,
         p0=popt_initial,  # Warm start
-        method='hybrid_streaming',
-        config=config
+        method="hybrid_streaming",
+        config=config,
     )
 
     # Layer 1 will likely skip Adam warmup since p0 is already good
@@ -526,15 +529,18 @@ Fit model with parameters spanning many orders of magnitude:
         # amplitude ~ 1e6, rate ~ 1e-6, offset ~ 100
         return amplitude * jnp.exp(-rate * x) + offset
 
+
     # Use scientific default with balanced defense
     config = HybridStreamingConfig.scientific_default()
 
     popt, pcov = curve_fit(
-        multi_scale_model, x, y,
+        multi_scale_model,
+        x,
+        y,
         p0=[1e6, 1e-6, 100],
         bounds=([1e5, 1e-7, 0], [1e7, 1e-5, 1000]),
-        method='hybrid_streaming',
-        config=config
+        method="hybrid_streaming",
+        config=config,
     )
 
 Example 3: Monitoring Production Workloads
@@ -555,9 +561,11 @@ Monitor defense layer activation in production:
     for sample_id, (x, y) in enumerate(streaming_data):
         try:
             popt, pcov = curve_fit(
-                model, x, y,
-                method='hybrid_streaming',
-                config=HybridStreamingConfig.scientific_default()
+                model,
+                x,
+                y,
+                method="hybrid_streaming",
+                config=HybridStreamingConfig.scientific_default(),
             )
             save_results(sample_id, popt, pcov)
         except Exception as e:
@@ -624,10 +632,7 @@ From Pre-0.3.6 Code
 
     from nlsq import curve_fit
 
-    popt, pcov = curve_fit(
-        model, x, y, p0=initial_guess,
-        method='hybrid_streaming'
-    )
+    popt, pcov = curve_fit(model, x, y, p0=initial_guess, method="hybrid_streaming")
 
 **New behavior** (0.3.6+):
 
@@ -641,11 +646,11 @@ Defense layers are **enabled by default**. No code changes required.
 
     # Option 1: Disable all defense layers
     config = HybridStreamingConfig.defense_disabled()
-    popt, pcov = curve_fit(model, x, y, method='hybrid_streaming', config=config)
+    popt, pcov = curve_fit(model, x, y, method="hybrid_streaming", config=config)
 
     # Option 2: Use relaxed defense
     config = HybridStreamingConfig.defense_relaxed()
-    popt, pcov = curve_fit(model, x, y, method='hybrid_streaming', config=config)
+    popt, pcov = curve_fit(model, x, y, method="hybrid_streaming", config=config)
 
 Tuning Defense Sensitivity
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -666,7 +671,7 @@ Tuning Defense Sensitivity
     config = HybridStreamingConfig(
         enable_adaptive_warmup_lr=True,
         warmup_lr_refinement=1e-5,  # Increase from 1e-6
-        warmup_lr_careful=1e-4,     # Increase from 1e-5
+        warmup_lr_careful=1e-4,  # Increase from 1e-5
     )
 
 **If cost guard aborts too early** (Layer 3):
@@ -770,7 +775,7 @@ Problem: Cost Guard Aborts Prematurely
 .. code-block:: python
 
     rates = telemetry.get_trigger_rates()
-    if rates['layer3_cost_guard_rate'] > 20:
+    if rates["layer3_cost_guard_rate"] > 20:
         print("Cost guard triggering frequently")
 
 **Solutions**:

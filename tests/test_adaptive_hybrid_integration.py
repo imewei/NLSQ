@@ -599,7 +599,7 @@ class TestDefenseLayersCurveFitIntegration:
         # Start with exact parameters - should trigger warm start
         p0 = true_params
 
-        popt, pcov = curve_fit(
+        popt, _ = curve_fit(
             exponential_model,
             x,
             y,
@@ -628,7 +628,7 @@ class TestDefenseLayersCurveFitIntegration:
         # Start with reasonable initial guess
         p0 = jnp.array([1.5, 0.5])
 
-        popt, pcov = curve_fit(
+        popt, _ = curve_fit(
             linear_model,
             x,
             y,
@@ -657,7 +657,7 @@ class TestDefenseLayersCurveFitIntegration:
         # Near-optimal start with cost guard enabled
         p0 = jnp.array([5.01, 0.301])
 
-        popt, pcov = curve_fit(
+        popt, _ = curve_fit(
             simple_model,
             x,
             y,
@@ -688,7 +688,7 @@ class TestDefenseLayersCurveFitIntegration:
         # Start closer to optimal for more reliable convergence
         p0 = jnp.array([0.8, 1.8, 2.8])
 
-        popt, pcov = curve_fit(
+        popt, _ = curve_fit(
             quadratic_model,
             x,
             y,
@@ -719,7 +719,7 @@ class TestDefenseLayersCurveFitIntegration:
 
         p0 = jnp.array([8.0, 0.2, 1.2])
 
-        popt, pcov = curve_fit(
+        popt, _ = curve_fit(
             gaussian_model,
             x,
             y,
@@ -759,7 +759,7 @@ class TestDefenseLayersCurveFitIntegration:
         # Start closer to optimal
         p0 = jnp.array([2.8, 0.8])
 
-        popt, pcov = curve_fit(
+        popt, _ = curve_fit(
             simple_model,
             x,
             y,
@@ -795,7 +795,7 @@ class TestDefenseLayersCurveFitIntegration:
         p0 = jnp.array([4.8, 1.8])
 
         # Test with aggressive preset values
-        popt, pcov = curve_fit(
+        popt, _ = curve_fit(
             decay_model,
             x,
             y,
