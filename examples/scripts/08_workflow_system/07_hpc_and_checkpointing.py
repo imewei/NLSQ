@@ -226,6 +226,10 @@ def main():
         print("Checkpointing:")
         print("  - WorkflowTier.STREAMING_CHECKPOINT for fault tolerance")
         print("  - enable_checkpoints=True, checkpoint_dir='./checkpoints'")
+        print()
+        print("Defense Layers for Checkpoint Resume (v0.3.6+):")
+        print("  - Use HybridStreamingConfig.defense_strict() for resume protection")
+        print("  - 4-layer defense prevents Adam warmup from diverging")
         return
 
     # =========================================================================
@@ -374,6 +378,44 @@ echo "========================================"
         print(f"  {key}: {value}")
 
     # =========================================================================
+    # 8. Defense Layers for Checkpoint Resume (v0.3.6+)
+    # =========================================================================
+    print()
+    print("8. Defense Layers for Checkpoint Resume (v0.3.6+):")
+    print("-" * 70)
+    print()
+    print("When resuming from checkpoints, your initial parameters are near-optimal.")
+    print("This is a classic warm-start scenario where defense layers are critical.")
+    print()
+    print("Without defense layers, Adam warmup can DIVERGE from your checkpoint:")
+    print("  - Momentum builds up from large initial gradients")
+    print("  - Parameters overshoot and loss increases")
+    print("  - All progress from previous run is lost")
+    print()
+    print("With 4-layer defense, checkpoint resume is protected:")
+    print("  Layer 1: Detects you're starting near-optimal -> may skip warmup")
+    print("  Layer 2: Scales learning rate based on initial fit quality")
+    print("  Layer 3: Aborts warmup if loss increases > 5%")
+    print("  Layer 4: Clips step magnitudes to prevent overshooting")
+    print()
+    print("Recommended configuration for checkpoint resume:")
+    print()
+    print("  from nlsq import HybridStreamingConfig")
+    print()
+    print("  # Use defense_strict for checkpoint resume scenarios")
+    print("  config = HybridStreamingConfig.defense_strict()")
+    print("  config = config.with_overrides(")
+    print("      enable_checkpoints=True,")
+    print("      checkpoint_dir='./checkpoints',")
+    print("  )")
+    print()
+    print("Defense presets comparison:")
+    print("  defense_strict()     - Best for checkpoint resume (LR: 1e-6 to 1e-4)")
+    print("  defense_relaxed()    - For fresh starts (LR: 1e-4 to 0.01)")
+    print("  scientific_default() - Balanced for production")
+    print("  defense_disabled()   - Pre-0.3.6 behavior (no protection)")
+
+    # =========================================================================
     # Cleanup
     # =========================================================================
     print()
@@ -415,6 +457,12 @@ echo "========================================"
     print("  - #PBS -l select=N:ncpus=C:ngpus=G:mem=Mgb")
     print("  - Environment variables: NLSQ_WORKFLOW_GOAL, NLSQ_MEMORY_LIMIT_GB")
     print("  - Checkpoint directory: NLSQ_CHECKPOINT_DIR")
+    print()
+    print("Defense Layers for Checkpoint Resume (v0.3.6+):")
+    print("  - Checkpoint resume = warm-start scenario (parameters near optimal)")
+    print("  - Use HybridStreamingConfig.defense_strict() for resume protection")
+    print("  - 4-layer defense prevents Adam warmup from diverging")
+    print("  - See docs/guides/defense_layers.rst for full configuration")
 
 
 if __name__ == "__main__":

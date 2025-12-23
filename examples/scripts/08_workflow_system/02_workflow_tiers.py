@@ -76,21 +76,25 @@ def main():
             "description": "Standard curve_fit() for small datasets",
             "dataset_size": "< 10K points",
             "memory": "O(N) - loads all data into memory",
+            "defense_layers": "N/A",
         },
         WorkflowTier.CHUNKED: {
             "description": "LargeDatasetFitter with automatic chunking",
             "dataset_size": "10K - 10M points",
             "memory": "O(chunk_size) - processes data in chunks",
+            "defense_layers": "N/A",
         },
         WorkflowTier.STREAMING: {
             "description": "AdaptiveHybridStreamingOptimizer for huge datasets",
             "dataset_size": "10M - 100M points",
             "memory": "O(batch_size) - mini-batch gradient descent",
+            "defense_layers": "4-layer defense enabled (v0.3.6+)",
         },
         WorkflowTier.STREAMING_CHECKPOINT: {
             "description": "Streaming with automatic checkpointing",
             "dataset_size": "> 100M points",
             "memory": "O(batch_size) + checkpoint storage",
+            "defense_layers": "4-layer defense enabled (v0.3.6+)",
         },
     }
 
@@ -99,6 +103,7 @@ def main():
         print(f"  Description: {info['description']}")
         print(f"  Dataset Size: {info['dataset_size']}")
         print(f"  Memory: {info['memory']}")
+        print(f"  Defense Layers: {info['defense_layers']}")
 
     # =========================================================================
     # 2. Dataset Size Tiers
@@ -404,6 +409,39 @@ def main():
     print(f"  Saved: {FIG_DIR / '02_memory_comparison.png'}")
 
     # =========================================================================
+    # 9. Defense Layers for Streaming Tiers (v0.3.6+)
+    # =========================================================================
+    print()
+    print()
+    print("9. Defense Layers for Streaming Tiers (v0.3.6+)")
+    print("-" * 50)
+    print()
+    print("STREAMING and STREAMING_CHECKPOINT tiers use AdaptiveHybridStreamingOptimizer,")
+    print("which includes a 4-layer defense strategy against Adam warmup divergence:")
+    print()
+    print("  Layer 1 (Warm Start Detection):")
+    print("    - Skips warmup if initial loss < 1% of data variance")
+    print("    - Prevents overshooting when starting near the optimum")
+    print()
+    print("  Layer 2 (Adaptive Learning Rate):")
+    print("    - Scales LR based on fit quality (1e-6 to 0.001)")
+    print("    - lr_refinement=1e-6, lr_careful=1e-5, lr_exploration=0.001")
+    print()
+    print("  Layer 3 (Cost-Increase Guard):")
+    print("    - Aborts warmup if loss increases > 5%")
+    print("    - Triggers early switch to Gauss-Newton phase")
+    print()
+    print("  Layer 4 (Step Clipping):")
+    print("    - Limits parameter update magnitude (max norm 0.1)")
+    print("    - Prevents catastrophic parameter jumps")
+    print()
+    print("Defense Presets:")
+    print("  - HybridStreamingConfig.defense_strict()     # Warm-start refinement")
+    print("  - HybridStreamingConfig.defense_relaxed()    # Exploration")
+    print("  - HybridStreamingConfig.scientific_default() # Production scientific")
+    print("  - HybridStreamingConfig.defense_disabled()   # Pre-0.3.6 behavior")
+
+    # =========================================================================
     # Summary
     # =========================================================================
     print()
@@ -415,8 +453,8 @@ def main():
     print("Workflow Tiers:")
     print("  STANDARD:             < 10K points, full precision")
     print("  CHUNKED:              10K - 10M points, memory-managed")
-    print("  STREAMING:            10M - 100M points, mini-batch")
-    print("  STREAMING_CHECKPOINT: > 100M points, fault-tolerant")
+    print("  STREAMING:            10M - 100M points, mini-batch + defense layers")
+    print("  STREAMING_CHECKPOINT: > 100M points, fault-tolerant + defense layers")
     print()
     print("Override syntax:")
     print("  config = WorkflowConfig(tier=WorkflowTier.CHUNKED)")
@@ -427,6 +465,7 @@ def main():
     print("  - Automatic tier selection based on dataset size and memory")
     print("  - Override for specific memory constraints")
     print("  - STREAMING provides O(batch_size) memory for unlimited data")
+    print("  - STREAMING tiers include 4-layer defense against warmup divergence")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import WORKFLOW_PRESETS, WorkflowConfig, fit
+from nlsq import WORKFLOW_PRESETS, HybridStreamingConfig, WorkflowConfig, fit
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -238,10 +238,59 @@ def main():
         print(f"    Tradeoffs:  {doc['tradeoffs']}")
 
     # =========================================================================
-    # 8. Visualization
+    # 8. Defense Layer Presets (v0.3.6+)
     # =========================================================================
     print()
-    print("8. Saving visualizations...")
+    print()
+    print("8. Defense Layer Presets (v0.3.6+):")
+    print("-" * 70)
+    print()
+    print("For streaming workflows, HybridStreamingConfig provides defense presets")
+    print("that protect against Adam warmup divergence when starting near optimal:")
+    print()
+
+    defense_presets = {
+        "defense_strict": {
+            "method": "HybridStreamingConfig.defense_strict()",
+            "use_case": "Warm-start refinement (previous fit as p0)",
+            "lr_range": "1e-6 to 1e-4",
+        },
+        "defense_relaxed": {
+            "method": "HybridStreamingConfig.defense_relaxed()",
+            "use_case": "Exploration (rough initial guesses)",
+            "lr_range": "1e-4 to 0.01",
+        },
+        "scientific_default": {
+            "method": "HybridStreamingConfig.scientific_default()",
+            "use_case": "Production scientific computing",
+            "lr_range": "1e-6 to 0.001 (balanced)",
+        },
+        "defense_disabled": {
+            "method": "HybridStreamingConfig.defense_disabled()",
+            "use_case": "Pre-0.3.6 behavior (no protection)",
+            "lr_range": "Fixed at warmup_learning_rate",
+        },
+    }
+
+    for name, info in defense_presets.items():
+        print(f"  {name.upper()}:")
+        print(f"    Method:   {info['method']}")
+        print(f"    Use case: {info['use_case']}")
+        print(f"    LR range: {info['lr_range']}")
+        print()
+
+    print("The 4-layer defense strategy:")
+    print("  Layer 1: Warm Start Detection - Skip warmup if near optimal")
+    print("  Layer 2: Adaptive Learning Rate - Scale LR based on fit quality")
+    print("  Layer 3: Cost-Increase Guard - Abort if loss increases > 5%")
+    print("  Layer 4: Step Clipping - Limit parameter update magnitude")
+
+    # =========================================================================
+    # 9. Visualization
+    # =========================================================================
+    print()
+    print()
+    print("9. Saving visualizations...")
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
@@ -322,6 +371,12 @@ def main():
     print("  fit(model, x, y, preset='quality')")
     print("  WorkflowConfig.from_preset('quality')")
     print("  config.with_overrides(n_starts=30)")
+    print()
+    print("Defense presets for streaming (v0.3.6+):")
+    print("  HybridStreamingConfig.defense_strict()     # Warm-start refinement")
+    print("  HybridStreamingConfig.defense_relaxed()    # Exploration")
+    print("  HybridStreamingConfig.scientific_default() # Production scientific")
+    print("  HybridStreamingConfig.defense_disabled()   # Pre-0.3.6 behavior")
 
 
 if __name__ == "__main__":

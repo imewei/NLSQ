@@ -73,6 +73,7 @@ def main():
     print("Legend:")
     print("  ms = multi-start enabled")
     print("  ckpt = checkpointing enabled")
+    print("  streaming/stream+ckpt = 4-layer defense enabled (v0.3.6+)")
 
     # =========================================================================
     # 2. Dataset Size Tiers
@@ -274,11 +275,46 @@ def main():
         )
 
     # =========================================================================
-    # 8. Visualization
+    # 8. Defense Layer Awareness (v0.3.6+)
     # =========================================================================
     print()
     print()
-    print("8. Saving selection algorithm visualization...")
+    print("8. Defense Layer Awareness (v0.3.6+)")
+    print("-" * 70)
+    print()
+    print("When WorkflowSelector chooses STREAMING or STREAMING_CHECKPOINT tiers,")
+    print("the returned HybridStreamingConfig automatically includes 4-layer defense.")
+    print()
+    print("Defense presets for streaming workflows:")
+    print("  defense_strict()     - Warm-start refinement (previous fit as p0)")
+    print("  defense_relaxed()    - Exploration (rough initial guesses)")
+    print("  scientific_default() - Production scientific computing (default)")
+    print("  defense_disabled()   - Pre-0.3.6 behavior (no protection)")
+    print()
+    print("The 4-layer defense strategy protects against Adam warmup divergence:")
+    print("  Layer 1: Warm Start Detection - Skip warmup if near optimal")
+    print("  Layer 2: Adaptive Learning Rate - Scale LR based on fit quality")
+    print("  Layer 3: Cost-Increase Guard - Abort if loss increases > 5%")
+    print("  Layer 4: Step Clipping - Limit parameter update magnitude")
+    print()
+    print("To use defense presets with auto_select_workflow:")
+    print()
+    print("  from nlsq import HybridStreamingConfig")
+    print()
+    print("  # Get the auto-selected config")
+    print("  config = auto_select_workflow(n_points=50_000_000, n_params=5)")
+    print()
+    print("  # If it's a streaming config, apply defense preset")
+    print("  if isinstance(config, HybridStreamingConfig):")
+    print("      # For warm-start refinement scenarios")
+    print("      config = HybridStreamingConfig.defense_strict()")
+
+    # =========================================================================
+    # 9. Visualization
+    # =========================================================================
+    print()
+    print()
+    print("9. Saving selection algorithm visualization...")
 
     fig, ax = plt.subplots(figsize=(16, 12))
     ax.set_xlim(0, 16)
@@ -539,6 +575,13 @@ def main():
     print("  - Memory is re-evaluated on each call (no caching)")
     print("  - auto_select_workflow() provides a simple convenience API")
     print("  - Override with memory_limit_gb for reproducible behavior")
+    print("  - Streaming configs include 4-layer defense by default (v0.3.6+)")
+    print()
+    print("Defense presets for streaming (v0.3.6+):")
+    print("  HybridStreamingConfig.defense_strict()     # Warm-start refinement")
+    print("  HybridStreamingConfig.defense_relaxed()    # Exploration")
+    print("  HybridStreamingConfig.scientific_default() # Production scientific")
+    print("  HybridStreamingConfig.defense_disabled()   # Pre-0.3.6 behavior")
 
 
 if __name__ == "__main__":
