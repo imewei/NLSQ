@@ -435,11 +435,41 @@ benchmark-large:
 # ===================
 clean-build:
 	@echo "$(BOLD)$(BLUE)Removing build artifacts...$(RESET)"
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info
-	rm -rf .benchmarks/
-	rm -rf nlsq_checkpoints/
+	find . -type d -name "build" \
+		-not -path "./.venv/*" \
+		-not -path "./venv/*" \
+		-not -path "./.claude/*" \
+		-not -path "./.specify/*" \
+		-not -path "./agent-os/*" \
+		-exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "_build" \
+		-not -path "./.venv/*" \
+		-not -path "./venv/*" \
+		-not -path "./.claude/*" \
+		-not -path "./.specify/*" \
+		-not -path "./agent-os/*" \
+		-exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "dist" \
+		-not -path "./.venv/*" \
+		-not -path "./venv/*" \
+		-not -path "./.claude/*" \
+		-not -path "./.specify/*" \
+		-not -path "./agent-os/*" \
+		-exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".benchmarks" \
+		-not -path "./.venv/*" \
+		-not -path "./venv/*" \
+		-not -path "./.claude/*" \
+		-not -path "./.specify/*" \
+		-not -path "./agent-os/*" \
+		-exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "nlsq_checkpoints" \
+		-not -path "./.venv/*" \
+		-not -path "./venv/*" \
+		-not -path "./.claude/*" \
+		-not -path "./.specify/*" \
+		-not -path "./agent-os/*" \
+		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" \
 		-not -path "./.venv/*" \
 		-not -path "./venv/*" \

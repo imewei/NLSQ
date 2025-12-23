@@ -17,6 +17,8 @@ Usage:
     python defense_layers_demo.py
 """
 
+import os
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -35,11 +37,17 @@ def exponential_decay(x, a, b, c):
 
 def main():
     """Run the defense layers demonstration."""
+    if os.environ.get("NLSQ_EXAMPLES_QUICK"):
+        print(
+            "Quick mode: skipping defense layers demo (uses hybrid_streaming)."
+        )
+        return
+
     np.random.seed(42)
 
     # Generate synthetic data
     true_params = np.array([5.0, 0.5, 1.0])
-    x = np.linspace(0, 10, 1000)
+    x = np.linspace(0, 10, 500)  # Reduced for faster demo
     y_true = exponential_decay(x, *true_params)
     y = y_true + np.random.normal(0, 0.1, len(x))
 
@@ -78,10 +86,10 @@ def main():
 
     print(f"Fitted params: {popt}")
     print("\nTelemetry:")
-    print(f"  Layer 1 (warm start) triggers: {summary['layer1_warm_start_triggers']}")
+    print(f"  Layer 1 (warm start) triggers: {summary['layer1']['triggers']}")
     print(f"  Layer 1 rate: {rates.get('layer1_warm_start_rate', 0):.1f}%")
 
-    if summary["layer1_warm_start_triggers"] > 0:
+    if summary["layer1"]["triggers"] > 0:
         print("  -> Layer 1 detected near-optimal start and skipped warmup")
 
     # =========================================================================
@@ -110,7 +118,7 @@ def main():
 
     print(f"Fitted params: {popt}")
     print("\nTelemetry:")
-    print(f"  Layer 2 LR modes: {summary['layer2_lr_mode_counts']}")
+    print(f"  Layer 2 LR modes: {summary['layer2']['mode_counts']}")
 
     # =========================================================================
     # Demo 3: Using defense layer presets
@@ -148,9 +156,9 @@ def main():
     reset_defense_telemetry()
 
     # Simulate batch of fits with varying starting point quality
-    n_fits = 10
+    n_fits = 5  # Reduced for faster demo
     for i in range(n_fits):
-        noise = 0.01 if i < 3 else (0.3 if i < 7 else 1.0)
+        noise = 0.01 if i < 2 else (0.3 if i < 4 else 1.0)
         p0 = true_params * (1 + np.random.uniform(-noise, noise, 3))
 
         curve_fit(
