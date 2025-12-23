@@ -110,6 +110,7 @@ Large Datasets (1,000,000 - 100,000,000 points)
     popt, pcov = fit(model, x, y, p0=p0, preset="streaming")
 
     # Option 2: Explicit streaming with custom config
+    # Note: Defense layers are enabled by default (v0.3.6+)
     config = HybridStreamingConfig(
         normalize=True,
         warmup_iterations=300,
@@ -128,6 +129,10 @@ Large Datasets (1,000,000 - 100,000,000 points)
         memory_limit_gb=8.0,
         show_progress=True,
     )
+
+    # Option 4: For warm-start refinement (v0.3.6+)
+    config = HybridStreamingConfig.defense_strict()
+    popt, pcov = fit(model, x, y, p0=previous_popt, method="hybrid_streaming")
 
 Massive Datasets (> 100,000,000 points)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -329,6 +334,10 @@ X-ray Scattering (SAXS/WAXS/XPCS)
 
     # XPCS with multi-scale parameters (use hybrid streaming)
     # tau can be ~1e-6 to 1e3, beta ~0.1 to 1
+    # Defense layers (v0.3.6+) protect against warm-start divergence
+    from nlsq import HybridStreamingConfig
+
+    config = HybridStreamingConfig.scientific_default()  # Recommended for XPCS
     popt, pcov = fit(
         stretched_g2,
         lag_time,
@@ -336,7 +345,7 @@ X-ray Scattering (SAXS/WAXS/XPCS)
         p0=[0.3, 1.0, 1.0, 1.0],
         bounds=([0, 1e-6, 0.1, 0.9], [1, 1e6, 2.0, 1.1]),
         method="hybrid_streaming",
-    )  # Handles scale differences
+    )  # Handles scale differences + defense layers
 
 Kinetics and Reaction Dynamics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1042,12 +1051,83 @@ Pattern 4: Checkpoint and Resume
     #                  checkpoint_dir=checkpoint_dir,
     #                  resume=True)
 
+Pattern 5: Warm-Start Refinement (v0.3.6+)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use when refining parameters from a previous fit or when starting near the optimum.
+The 4-Layer Defense Strategy prevents Adam warmup from diverging.
+
+.. code-block:: python
+
+    from nlsq import fit, HybridStreamingConfig
+    from nlsq import get_defense_telemetry, reset_defense_telemetry
+
+    # Previous fit gave us a good starting point
+    previous_popt = [2.5, 0.5, 1.0]
+
+    # Use strict defense preset for warm-start refinement
+    config = HybridStreamingConfig.defense_strict()
+
+    # Reset telemetry to track this specific fit
+    reset_defense_telemetry()
+
+    # Refined fit with defense layers active
+    popt, pcov = fit(
+        model,
+        x,
+        y,
+        p0=previous_popt,
+        method="hybrid_streaming",
+    )
+
+    # Check defense layer activations
+    telemetry = get_defense_telemetry()
+    print(telemetry.get_summary())
+
+    # If Layer 1 (Warm Start) activated, the optimizer detected
+    # that the initial parameters were already near optimal and
+    # skipped the warmup phase to avoid overshooting
+
+Pattern 6: Production Monitoring
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Export defense telemetry for production monitoring systems.
+
+.. code-block:: python
+
+    from nlsq import fit, get_defense_telemetry, reset_defense_telemetry
+
+    def fit_with_monitoring(model, x, y, p0, run_id):
+        """Production fit with defense telemetry export."""
+        reset_defense_telemetry()
+
+        popt, pcov = fit(model, x, y, p0=p0, method="hybrid_streaming")
+
+        # Export telemetry for monitoring
+        telemetry = get_defense_telemetry()
+        metrics = telemetry.export_metrics()
+
+        # Log to your monitoring system (Prometheus, DataDog, etc.)
+        log_metrics(
+            {
+                "run_id": run_id,
+                "warm_start_triggered": metrics["layer1_count"],
+                "adaptive_lr_triggered": metrics["layer2_count"],
+                "cost_guard_triggered": metrics["layer3_count"],
+                "step_clipping_triggered": metrics["layer4_count"],
+                "trigger_rates": telemetry.get_trigger_rates(),
+            }
+        )
+
+        return popt, pcov
+
 ---
 
 See Also
 --------
 
 - :doc:`streaming_optimizer_comparison` - StreamingOptimizer vs AdaptiveHybridStreamingOptimizer
+- :doc:`defense_layers` - 4-Layer Defense Strategy guide
 - :doc:`large_datasets` - Large dataset handling tutorial
 - :doc:`/api/nlsq.workflow` - Workflow API reference
 - :doc:`/user_guide/yaml_configuration` - YAML configuration guide

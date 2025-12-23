@@ -244,9 +244,123 @@ Large datasets
 
 For large datasets or streaming data, see :doc:`large_datasets`.
 
+Defense Layers (v0.3.6+)
+------------------------
+
+When using ``hybrid_streaming`` or ``AdaptiveHybridStreamingOptimizer``, the
+4-Layer Defense Strategy prevents Adam warmup divergence. This is critical for
+**warm-start refinement** where initial parameters are already near optimal.
+
+The 4-layer defense system
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 25 65
+
+   * - Layer
+     - Name
+     - Function
+   * - 1
+     - Warm Start Detection
+     - Skips warmup if initial loss < 1% of data variance
+   * - 2
+     - Adaptive Learning Rate
+     - Scales LR based on fit quality (1e-6 to 0.001)
+   * - 3
+     - Cost-Increase Guard
+     - Aborts if loss increases > 5%
+   * - 4
+     - Step Clipping
+     - Limits parameter update magnitude (max norm 0.1)
+
+Using defense presets
+~~~~~~~~~~~~~~~~~~~~~
+
+NLSQ provides four defense presets for common scenarios:
+
+.. code-block:: python
+
+   from nlsq import HybridStreamingConfig
+
+   # For warm-start refinement (strictest protection)
+   config = HybridStreamingConfig.defense_strict()
+
+   # For exploration (more aggressive learning)
+   config = HybridStreamingConfig.defense_relaxed()
+
+   # For production scientific computing (balanced)
+   config = HybridStreamingConfig.scientific_default()
+
+   # To disable (pre-0.3.6 behavior)
+   config = HybridStreamingConfig.defense_disabled()
+
+Monitoring defense activations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Track defense layer activations via the telemetry API:
+
+.. code-block:: python
+
+   from nlsq import curve_fit, get_defense_telemetry, reset_defense_telemetry
+   import jax.numpy as jnp
+
+
+   def model(x, a, b, c):
+       return a * jnp.exp(-b * x) + c
+
+
+   # Reset telemetry before fitting
+   reset_defense_telemetry()
+
+   # Run fit with defense layers active
+   popt, pcov = curve_fit(model, x, y, p0=p0, method="hybrid_streaming")
+
+   # Check what happened
+   telemetry = get_defense_telemetry()
+   print(telemetry.get_summary())
+   # Example output:
+   # Defense Layer Activations:
+   #   Layer 1 (Warm Start): 1 activation
+   #   Layer 2 (Adaptive LR): 3 activations
+   #   Layer 3 (Cost Guard): 0 activations
+   #   Layer 4 (Step Clip): 5 activations
+
+   # Get trigger rates
+   print(telemetry.get_trigger_rates())
+   # {'warm_start': 0.1, 'adaptive_lr': 0.3, 'cost_guard': 0.0, 'step_clip': 0.5}
+
+Custom defense configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fine-tune individual layer thresholds:
+
+.. code-block:: python
+
+   from nlsq import HybridStreamingConfig
+
+   config = HybridStreamingConfig(
+       # Layer 1: Warm start detection
+       warm_start_threshold=0.01,  # 1% of data variance
+
+       # Layer 2: Adaptive learning rate
+       lr_refinement=1e-6,   # LR when near optimal
+       lr_careful=1e-5,      # LR when close to optimal
+       lr_exploration=0.001, # LR when far from optimal
+
+       # Layer 3: Cost-increase guard
+       cost_increase_tolerance=0.05,  # 5% increase allowed
+
+       # Layer 4: Step clipping
+       max_step_norm=0.1,  # Maximum step magnitude
+   )
+
+See :doc:`defense_layers` for the complete guide.
+
 Related documentation
 ---------------------
 
+- :doc:`defense_layers` - Complete defense layer guide
 - :doc:`performance_guide` - GPU acceleration and JIT hints
 - :doc:`troubleshooting` - Common issues and solutions
 - :doc:`../api/index` - Complete API documentation

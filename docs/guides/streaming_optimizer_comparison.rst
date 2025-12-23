@@ -38,6 +38,9 @@ in batches. However, they use fundamentally different optimization strategies:
    * - **Multi-device**
      - No
      - Yes (JAX pmap support)
+   * - **Defense Layers (v0.3.6+)**
+     - No
+     - Yes (4-layer warmup protection)
 
 StreamingOptimizer
 ------------------
@@ -186,6 +189,30 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
        config = HybridStreamingConfig(enable_multi_device=True)
        # Uses JAX pmap for data-parallel computation
 
+7. **4-Layer Defense Strategy (v0.3.6+)**
+
+   Prevents Adam warmup divergence when initial parameters are near optimal.
+   This is critical for warm-start refinement scenarios where a previous fit
+   provides the starting point.
+
+   The four layers:
+
+   - **Layer 1 (Warm Start Detection)**: Skips warmup if initial loss < 1% of
+     data variance
+   - **Layer 2 (Adaptive Learning Rate)**: Scales LR based on fit quality
+     (1e-6 to 0.001)
+   - **Layer 3 (Cost-Increase Guard)**: Aborts if loss increases > 5%
+   - **Layer 4 (Step Clipping)**: Limits parameter update magnitude (max
+     norm 0.1)
+
+   .. code-block:: python
+
+       # Defense presets for common scenarios
+       config = HybridStreamingConfig.defense_strict()     # Warm-start refinement
+       config = HybridStreamingConfig.defense_relaxed()    # Exploration
+       config = HybridStreamingConfig.scientific_default() # Production scientific
+       config = HybridStreamingConfig.defense_disabled()   # Pre-0.3.6 behavior
+
 **Example:**
 
 .. code-block:: python
@@ -249,25 +276,33 @@ When to Use Which
    * - Checkpoint/resume
      - **Full support**
      - Full support
+   * - Warm-start refinement (v0.3.6+)
+     - No protection
+     - **4-layer defense**
 
 **Decision Flowchart:**
 
-1. **Are parameters on vastly different scales?**
+1. **Are you refining parameters from a previous fit (warm-start)?**
+
+   - Yes → Use ``AdaptiveHybridStreamingOptimizer`` with ``defense_strict()``
+   - No → Continue
+
+2. **Are parameters on vastly different scales?**
 
    - Yes → Use ``AdaptiveHybridStreamingOptimizer``
    - No → Continue
 
-2. **Do you need accurate parameter uncertainties?**
+3. **Do you need accurate parameter uncertainties?**
 
    - Yes → Use ``AdaptiveHybridStreamingOptimizer``
    - No → Continue
 
-3. **Is there risk of local minima?**
+4. **Is there risk of local minima?**
 
    - Yes → Use ``AdaptiveHybridStreamingOptimizer`` with multi-start
    - No → Continue
 
-4. **Do you have multiple GPUs/TPUs?**
+5. **Do you have multiple GPUs/TPUs?**
 
    - Yes → Use ``AdaptiveHybridStreamingOptimizer``
    - No → Use ``StreamingOptimizer`` for maximum speed
@@ -331,6 +366,22 @@ Configuration Defaults
 
     # Balanced: Middle ground
     config = HybridStreamingConfig.balanced()
+
+**Defense Presets (v0.3.6+):**
+
+.. code-block:: python
+
+    # Strictest protection for warm-start refinement
+    config = HybridStreamingConfig.defense_strict()
+
+    # More aggressive learning for exploration
+    config = HybridStreamingConfig.defense_relaxed()
+
+    # Balanced for production scientific computing
+    config = HybridStreamingConfig.scientific_default()
+
+    # Disable defense layers (pre-0.3.6 behavior)
+    config = HybridStreamingConfig.defense_disabled()
 
 Performance Characteristics
 ---------------------------
@@ -409,6 +460,7 @@ This example demonstrates where ``AdaptiveHybridStreamingOptimizer`` excels:
 See Also
 --------
 
+- :doc:`defense_layers` - 4-Layer Defense Strategy guide
 - :doc:`large_datasets` - Comprehensive large dataset tutorial
 - :doc:`/api/nlsq.streaming_optimizer` - StreamingOptimizer API reference
 - :doc:`/api/nlsq.adaptive_hybrid_streaming` - AdaptiveHybridStreamingOptimizer API reference

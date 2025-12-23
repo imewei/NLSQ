@@ -134,6 +134,32 @@ Solutions to common issues:
 - Performance problems
 - Installation issues
 
+Guide Index
+-----------
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Core Guides
+
+   migration_scipy
+   workflow_options
+   advanced_customization
+   stability
+   defense_layers
+   performance_guide
+   large_datasets
+   streaming_optimizer_comparison
+   practical_workflows
+   troubleshooting
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Migration Guides
+
+   /migration/v0.3.6_defense_layers
+   /migration/curve_fit_to_fit
+   /migration/streaming_fault_tolerance
+
 Migration Guides
 ~~~~~~~~~~~~~~~~
 

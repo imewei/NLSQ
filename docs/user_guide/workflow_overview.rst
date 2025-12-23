@@ -15,6 +15,7 @@ Why use the workflow system?
 - Consistent defaults across team members and machines
 - Clear separation of data, model, fitting, and outputs
 - Minimal glue code for batch or automated execution
+- **Built-in numerical safeguards** via the 4-Layer Defense Strategy (v0.3.6+)
 
 Typical workflow lifecycle
 --------------------------
@@ -24,12 +25,49 @@ Typical workflow lifecycle
 3. Inspect logs and result artifacts.
 4. Iterate on configuration parameters as needed.
 
+4-Layer Defense Strategy
+------------------------
+
+Starting in v0.3.6, all workflows using ``hybrid_streaming`` or
+``AdaptiveHybridStreamingOptimizer`` include a 4-layer defense against Adam
+warmup divergence. This is particularly important for **warm-start refinement**
+scenarios where initial parameters are already near optimal.
+
+The layers activate automatically:
+
+1. **Warm Start Detection**: Skips warmup if initial loss < 1% of data variance
+2. **Adaptive Learning Rate**: Scales LR based on fit quality (1e-6 to 0.001)
+3. **Cost-Increase Guard**: Aborts if loss increases > 5%
+4. **Step Clipping**: Limits parameter update magnitude (max norm 0.1)
+
+Defense presets for common scenarios:
+
+.. code-block:: python
+
+   from nlsq import HybridStreamingConfig
+
+   # For warm-start refinement (strictest)
+   config = HybridStreamingConfig.defense_strict()
+
+   # For exploration (more aggressive learning)
+   config = HybridStreamingConfig.defense_relaxed()
+
+   # For production scientific computing
+   config = HybridStreamingConfig.scientific_default()
+
+   # To disable (pre-0.3.6 behavior)
+   config = HybridStreamingConfig.defense_disabled()
+
+See :doc:`../guides/defense_layers` for detailed configuration options and
+telemetry monitoring.
+
 Where to go next
 ----------------
 
 - Configuration layout and examples: :doc:`yaml_configuration`
 - Practical workflow options: :doc:`../guides/workflow_options`
 - Results and outputs: :doc:`results_outputs`
+- Defense layer configuration: :doc:`../guides/defense_layers`
 
 Interactive Notebooks
 ---------------------
@@ -43,3 +81,4 @@ Hands-on tutorials for the workflow system:
 - `YAML Configuration <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/05_yaml_configuration.ipynb>`_ - Configuration files
 - `Auto Selection <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/06_auto_selection.ipynb>`_ - Automatic workflow selection
 - `HPC and Checkpointing <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/07_hpc_and_checkpointing.ipynb>`_ - Cluster computing and fault tolerance
+- `Defense Layers Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_features/defense_layers_demo.ipynb>`_ - 4-layer defense strategy for warm-start refinement

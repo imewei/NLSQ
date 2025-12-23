@@ -101,6 +101,57 @@ Use this when you want each input file to write to its own output folder.
      solver: auto
      max_nfev: 150
 
+Warm-start refinement (v0.3.6+)
+-------------------------------
+
+Use this when refining parameters from a previous fit. The 4-Layer Defense
+Strategy prevents Adam warmup from overshooting when starting near the optimum.
+
+.. code-block:: yaml
+
+   hybrid_streaming:
+     normalize: true
+     warmup_iterations: 300
+     gauss_newton_tol: 1e-8
+
+     defense_layers:
+       preset: strict  # strictest protection for warm-start
+
+       layer1_warm_start:
+         enabled: true
+         threshold: 0.01  # 1% of data variance
+
+       layer2_adaptive_lr:
+         enabled: true
+         lr_refinement: 1.0e-6  # very conservative
+         lr_careful: 1.0e-5
+         lr_exploration: 0.001
+
+       layer3_cost_guard:
+         enabled: true
+         tolerance: 0.05  # 5% increase allowed
+
+       layer4_step_clipping:
+         enabled: true
+         max_step_size: 0.1
+
+Or configure programmatically:
+
+.. code-block:: python
+
+   from nlsq import fit, HybridStreamingConfig
+
+   # Use the strict defense preset for warm-start refinement
+   config = HybridStreamingConfig.defense_strict()
+   popt, pcov = fit(model, x, y, p0=previous_popt, method="hybrid_streaming")
+
+   # Monitor defense layer activations
+   from nlsq import get_defense_telemetry
+   telemetry = get_defense_telemetry()
+   print(telemetry.get_summary())
+
+See :doc:`../guides/defense_layers` for detailed configuration.
+
 Python Script Run
 -----------------
 
@@ -173,4 +224,5 @@ Next steps
 
 - Full configuration layout: :doc:`yaml_configuration`
 - Workflow overview: :doc:`workflow_overview`
+- Defense layer configuration: :doc:`../guides/defense_layers`
 - Advanced customization: :doc:`../guides/advanced_customization`

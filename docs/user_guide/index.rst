@@ -40,6 +40,7 @@ Configuration Guide
    yaml_configuration
    ../guides/workflow_options
    ../guides/stability
+   ../guides/defense_layers
    ../guides/performance_guide
 
 Results & Outputs
