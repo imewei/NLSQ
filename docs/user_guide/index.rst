@@ -25,6 +25,7 @@ Workflow-Based Analysis
 .. toctree::
    :maxdepth: 2
 
+   cli_reference
    workflow_overview
    common_workflows
    ../guides/practical_workflows

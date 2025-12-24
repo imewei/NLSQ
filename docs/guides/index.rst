@@ -107,6 +107,18 @@ Choose the right streaming optimizer for your use case:
 - Parameter normalization and multi-scale problems
 - Multi-start optimization and exact covariance
 
+Group Variance Regularization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:doc:`group_variance_regularization`
+
+Prevent per-group parameters from absorbing physical signals:
+
+- Mathematical formulation (MSE + lambda * Var penalty)
+- XPCS laminar flow fitting example
+- Choosing regularization strength (L-curve method)
+- Phase 1 (Adam warmup) and Phase 2 (Gauss-Newton) implementation
+
 Practical Workflows
 ~~~~~~~~~~~~~~~~~~~
 
@@ -149,6 +161,7 @@ Guide Index
    performance_guide
    large_datasets
    streaming_optimizer_comparison
+   group_variance_regularization
    practical_workflows
    troubleshooting
 
