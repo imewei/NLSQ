@@ -153,8 +153,8 @@ When ``--summary`` is specified, a JSON file is written with:
         "duration_seconds": 45.2,
         "start_time": "2024-01-15T10:30:00",
         "end_time": "2024-01-15T10:30:45",
-        "successes": [...],
-        "failures": [...]
+        "successes": ["workflow1.yaml", "workflow2.yaml"],
+        "failures": [{"file": "workflow3.yaml", "error": "..."}]
     }
 
 **Exit Codes**

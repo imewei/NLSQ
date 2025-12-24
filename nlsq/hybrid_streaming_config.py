@@ -88,31 +88,29 @@ class HybridStreamingConfig:
         within specified parameter groups. This is essential for preventing
         per-angle parameter absorption in XPCS laminar flow fitting.
 
-        The regularized loss becomes:
-        L = MSE + group_variance_lambda * sum(Var(group_i))
-
-        where each group_i is a slice of parameters defined by group_variance_indices.
+        The regularized loss becomes ``L = MSE + group_variance_lambda *
+        sum(Var(group_i))`` where each group_i is a slice of parameters
+        defined by group_variance_indices.
 
     group_variance_lambda : float, default=0.01
         Regularization strength for group variance penalty. Larger values
-        more strongly penalize variance within parameter groups. Typical values:
-        - 0.001-0.01: Light regularization, allows moderate group variation
-        - 0.1-1.0: Moderate regularization, constrains groups to be similar
-        - 10-1000: Strong regularization, forces groups to be nearly uniform
-
-        For XPCS with per-angle scaling, use lambda ~ 0.1 * n_data / (n_phi * sigma^2)
-        where sigma is the expected experimental variation (~0.05 for 5%).
+        more strongly penalize variance within parameter groups. Use 0.001-0.01
+        for light regularization (allows moderate group variation), 0.1-1.0
+        for moderate regularization (constrains groups to be similar), or
+        10-1000 for strong regularization (forces groups to be nearly uniform).
+        For XPCS with per-angle scaling, use ``lambda ~ 0.1 * n_data /
+        (n_phi * sigma^2)`` where sigma is the expected experimental
+        variation (~0.05 for 5%).
 
     group_variance_indices : list of tuple, default=None
         List of (start, end) tuples defining parameter groups for variance
         regularization. Each tuple specifies a slice [start:end] of the
         parameter vector that should have low internal variance.
 
-        Example for XPCS with 23 angles:
-        - group_variance_indices = [(0, 23), (23, 46)]
-        - This constrains contrast params [0:23] and offset params [23:46]
-          to each have low variance, preventing them from absorbing
-          angle-dependent physical signals.
+        Example for XPCS with 23 angles: ``group_variance_indices = [(0, 23),
+        (23, 46)]`` constrains contrast params [0:23] and offset params [23:46]
+        to each have low variance, preventing them from absorbing
+        angle-dependent physical signals.
 
         If None when enable_group_variance_regularization=True, no groups
         are regularized (effectively disabling the feature).
