@@ -61,13 +61,18 @@ def sample_workflow_yaml(temp_dir, sample_data_file):
     yaml_path = temp_dir / "workflow.yaml"
     output_path = temp_dir / "results.json"
 
+    # Use .as_posix() for cross-platform YAML compatibility (Windows backslashes
+    # are interpreted as escape sequences in YAML double-quoted strings)
+    data_file_posix = sample_data_file.as_posix()
+    output_path_posix = output_path.as_posix()
+
     yaml_content = f"""
 metadata:
   workflow_name: test_workflow
   dataset_id: test_dataset
 
 data:
-  input_file: "{sample_data_file}"
+  input_file: "{data_file_posix}"
   format: ascii
   columns:
     x: 0
@@ -82,7 +87,7 @@ fitting:
   method: trf
 
 export:
-  results_file: "{output_path}"
+  results_file: "{output_path_posix}"
   format: json
 
 visualization:
@@ -198,10 +203,14 @@ def test_batch_command_parallel_execution(temp_dir, sample_data_file):
     workflow_paths = []
     output_paths = []
 
+    # Use .as_posix() for cross-platform YAML compatibility
+    data_file_posix = sample_data_file.as_posix()
+
     for i in range(3):
         yaml_path = temp_dir / f"workflow_{i}.yaml"
         output_path = temp_dir / f"results_{i}.json"
         output_paths.append(output_path)
+        output_path_posix = output_path.as_posix()
 
         yaml_content = f"""
 metadata:
@@ -209,7 +218,7 @@ metadata:
   dataset_id: dataset_{i}
 
 data:
-  input_file: "{sample_data_file}"
+  input_file: "{data_file_posix}"
   format: ascii
   columns:
     x: 0
@@ -223,7 +232,7 @@ fitting:
   p0: [1.0, 0.0]
 
 export:
-  results_file: "{output_path}"
+  results_file: "{output_path_posix}"
   format: json
 
 visualization:
@@ -263,12 +272,16 @@ def test_batch_command_continue_on_error(
     valid_yaml = temp_dir / "valid_workflow.yaml"
     valid_output = temp_dir / "valid_output.json"
 
+    # Use .as_posix() for cross-platform YAML compatibility
+    data_file_posix = sample_data_file.as_posix()
+    valid_output_posix = valid_output.as_posix()
+
     yaml_content = f"""
 metadata:
   workflow_name: valid_workflow
 
 data:
-  input_file: "{sample_data_file}"
+  input_file: "{data_file_posix}"
   format: ascii
   columns:
     x: 0
@@ -282,7 +295,7 @@ fitting:
   p0: [1.0, 0.0]
 
 export:
-  results_file: "{valid_output}"
+  results_file: "{valid_output_posix}"
   format: json
 
 visualization:
