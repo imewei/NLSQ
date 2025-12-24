@@ -79,6 +79,16 @@ and available memory:
 
    nlsq.workflow
 
+Command-Line Interface (v0.4.1+)
+--------------------------------
+
+YAML-based workflow execution from the command line:
+
+.. toctree::
+   :maxdepth: 2
+
+   nlsq.cli
+
 Enhanced Features (v0.1.1)
 --------------------------
 
@@ -193,6 +203,9 @@ Complete Module Listing
 
 **Workflow System Modules** (NEW in v0.3.4+):
 - :doc:`nlsq.workflow` - Unified fit() with auto-selection, presets, YAML config
+
+**Command-Line Interface Modules** (NEW in v0.4.1+):
+- :doc:`nlsq.cli` - CLI commands: ``nlsq fit``, ``nlsq batch``, ``nlsq info``
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management

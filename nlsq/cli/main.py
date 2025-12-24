@@ -1,4 +1,4 @@
-"""CLI entry point for NLSQ workflow commands.
+r"""CLI entry point for NLSQ workflow commands.
 
 This module provides the main command-line interface for NLSQ, supporting:
 - `nlsq fit workflow.yaml` - Execute single curve fit from YAML config
@@ -8,11 +8,12 @@ This module provides the main command-line interface for NLSQ, supporting:
 
 Example Usage
 -------------
-From command line:
+From command line::
+
     $ nlsq fit workflow.yaml
     $ nlsq fit workflow.yaml --output results.json
     $ nlsq fit workflow.yaml --stdout
-    $ nlsq batch configs/*.yaml --workers 4
+    $ nlsq batch configs/\*.yaml --workers 4
     $ nlsq info
     $ nlsq config
     $ nlsq config --workflow

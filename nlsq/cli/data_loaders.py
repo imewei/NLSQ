@@ -79,13 +79,13 @@ class DataLoader:
         - Columns: x, y, sigma (optional)
         - xdata: 1D array of shape (n_points,)
         - ydata: 1D array of shape (n_points,)
-        - Model signature: f(x, *params)
+        - Model signature: ``f(x, *params)``
 
     2D Mode (when z column is specified):
         - Columns: x, y, z, sigma (optional)
         - xdata: 2D array of shape (2, n_points) where xdata[0]=x, xdata[1]=y
         - ydata: 1D array of shape (n_points,) containing z values
-        - Model signature: f(xy, *params) where xy[0]=x, xy[1]=y
+        - Model signature: ``f(xy, *params)`` where xy[0]=x, xy[1]=y
 
     Methods
     -------
@@ -170,10 +170,9 @@ class DataLoader:
         -------
         tuple[ndarray, ndarray, ndarray | None]
             For 1D data: (xdata, ydata, sigma) where xdata/ydata are 1D arrays.
-            For 2D data: (xdata, ydata, sigma) where:
-                - xdata is shape (2, n_points) with xdata[0]=x, xdata[1]=y
-                - ydata is shape (n_points,) containing z values
-            sigma may be None if not provided.
+            For 2D data: (xdata, ydata, sigma) where xdata is shape (2, n_points)
+            with xdata[0]=x, xdata[1]=y and ydata is shape (n_points,) containing
+            z values. sigma may be None if not provided.
 
         Raises
         ------

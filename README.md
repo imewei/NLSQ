@@ -81,6 +81,7 @@ print(f"Uncertainties: {np.sqrt(np.diag(pcov))}")
 | **Multi-start** | Global optimization with LHS/Sobol sampling |
 | **Mixed precision** | Automatic float32→float64 upgrade when needed |
 | **Workflow system** | Auto-selects strategy based on dataset size |
+| **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |
 
 ## Performance
 
@@ -175,6 +176,24 @@ with memory_context(config):
     cf = CurveFit()
     popt, pcov = cf.curve_fit(model, x, y, p0=p0)
 ```
+
+</details>
+
+<details>
+<summary><b>Command-line interface</b></summary>
+
+```bash
+# Single workflow
+nlsq fit experiment.yaml
+
+# Batch processing
+nlsq batch configs/*.yaml --summary results.json
+
+# System info
+nlsq info
+```
+
+See [CLI Reference](https://nlsq.readthedocs.io/en/latest/user_guide/cli_reference.html) for YAML configuration.
 
 </details>
 

@@ -168,7 +168,7 @@ class FitVisualizer:
             - ydata: Dependent variable array
             - sigma: Uncertainties (optional)
         model : callable
-            Model function f(x, *params).
+            Model function ``f(x, *params)``.
         config : dict
             Configuration dictionary with visualization section.
 
@@ -664,7 +664,7 @@ class FitVisualizer:
         Parameters
         ----------
         model : callable
-            Model function f(x, *params).
+            Model function ``f(x, *params)``.
         x : ndarray
             X values for computing the band.
         popt : ndarray

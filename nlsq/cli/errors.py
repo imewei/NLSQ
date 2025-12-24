@@ -9,11 +9,13 @@ This module provides:
 
 Exception Hierarchy
 -------------------
-CLIError (base)
-    |-- ConfigError (YAML configuration issues)
-    |-- DataLoadError (data file loading failures)
-    |-- ModelError (model resolution issues)
-    |-- FitError (curve fitting failures)
+
+- CLIError (base)
+
+  - ConfigError (YAML configuration issues)
+  - DataLoadError (data file loading failures)
+  - ModelError (model resolution issues)
+  - FitError (curve fitting failures)
 
 Logging System
 --------------
