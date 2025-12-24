@@ -1,0 +1,52 @@
+# 2D Surface Fitting Workflow for CLI Testing
+# Fits a 2D Gaussian surface to x, y, z data
+
+metadata:
+  workflow_name: "2D Gaussian Surface Fit"
+  description: "Test 2D surface fitting with NLSQ CLI"
+  version: "1.0.0"
+
+data:
+  dataset_id: "test_surface"
+  input_file: "tests/cli/fixtures/sample_surface.csv"
+  format: "csv"
+
+  # 2D mode: x, y are coordinates, z is the dependent variable
+  columns:
+    x: "x"           # First independent coordinate
+    y: "y"           # Second independent coordinate
+    z: "z"           # Dependent variable (what we're fitting)
+    sigma: "sigma"   # Uncertainties on z
+
+  csv:
+    header: true
+    delimiter: ","
+
+  validation:
+    require_finite: true
+    min_points: 10
+
+model:
+  type: "custom"
+  path: "tests/cli/fixtures/gaussian_2d_model.py"
+  function: "gaussian_2d"
+
+fitting:
+  p0: "auto"  # Use model's estimate_p0 method
+  method: "trf"
+  ftol: 0.0000000001  # 1e-10 as explicit float
+  xtol: 0.0000000001
+  gtol: 0.0000000001
+  max_nfev: 1000
+  absolute_sigma: false
+  check_finite: true
+
+export:
+  results_file: "/tmp/nlsq_2d_test_results.json"
+  format: "json"
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+    convergence_info: true

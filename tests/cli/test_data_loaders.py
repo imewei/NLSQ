@@ -9,6 +9,7 @@ This module tests:
 - Sigma/uncertainty column loading (optional)
 - Data validation (require_finite, NaN/Inf rejection)
 - DataLoadError for malformed data
+- 2D surface data loading (x, y, z, sigma)
 
 Test Categories
 ---------------
@@ -20,6 +21,7 @@ Test Categories
 6. Sigma/uncertainty column handling
 7. Data validation (NaN/Inf, min_points)
 8. DataLoadError for malformed data
+9. 2D surface data loading (x, y, z, sigma) for all formats
 """
 
 from pathlib import Path
@@ -498,3 +500,271 @@ class TestDataLoadErrors:
         # Verify file path is in the error context or message
         error = exc_info.value
         assert "nonexistent_file" in str(error) or "file_path" in error.context
+
+
+# =============================================================================
+# Test 8: 2D Surface Data Loading (x, y, z, sigma)
+# =============================================================================
+
+
+class Test2DSurfaceDataLoading:
+    """Tests for 2D surface data loading (x, y, z, sigma).
+
+    2D mode is enabled when z column/key is specified. In this mode:
+    - x, y are independent coordinate variables
+    - z is the dependent variable (what we're fitting)
+    - xdata is returned as shape (2, n) with xdata[0]=x, xdata[1]=y
+    - ydata is returned as shape (n,) containing z values
+    """
+
+    def test_is_2d_data_detection_columns(self):
+        """Test is_2d_data correctly detects 2D mode from columns config."""
+        loader = DataLoader()
+
+        # 1D config (no z)
+        config_1d = {"columns": {"x": 0, "y": 1, "sigma": 2}}
+        assert loader.is_2d_data(config_1d) is False
+
+        # 2D config (with z)
+        config_2d = {"columns": {"x": 0, "y": 1, "z": 2, "sigma": 3}}
+        assert loader.is_2d_data(config_2d) is True
+
+        # 2D config (z without sigma)
+        config_2d_no_sigma = {"columns": {"x": 0, "y": 1, "z": 2}}
+        assert loader.is_2d_data(config_2d_no_sigma) is True
+
+    def test_is_2d_data_detection_npz(self):
+        """Test is_2d_data correctly detects 2D mode from NPZ config."""
+        loader = DataLoader()
+
+        # 1D NPZ config
+        config_1d = {"npz": {"x_key": "x", "y_key": "y"}}
+        assert loader.is_2d_data(config_1d) is False
+
+        # 2D NPZ config
+        config_2d = {"npz": {"x_key": "x", "y_key": "y", "z_key": "z"}}
+        assert loader.is_2d_data(config_2d) is True
+
+    def test_is_2d_data_detection_hdf5(self):
+        """Test is_2d_data correctly detects 2D mode from HDF5 config."""
+        loader = DataLoader()
+
+        # 1D HDF5 config
+        config_1d = {"hdf5": {"x_path": "/x", "y_path": "/y"}}
+        assert loader.is_2d_data(config_1d) is False
+
+        # 2D HDF5 config
+        config_2d = {"hdf5": {"x_path": "/x", "y_path": "/y", "z_path": "/z"}}
+        assert loader.is_2d_data(config_2d) is True
+
+    def test_ascii_2d_surface_loading(self):
+        """Test loading 2D surface data from ASCII file."""
+        config = {
+            "format": "ascii",
+            "columns": {"x": 0, "y": 1, "z": 2, "sigma": 3},
+            "ascii": {"comment_char": "#"},
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(
+            FIXTURES_DIR / "sample_surface_ascii.txt", config
+        )
+
+        # Check shape: xdata should be (2, n_points)
+        assert xdata.ndim == 2
+        assert xdata.shape[0] == 2  # Two rows: x and y coordinates
+        assert xdata.shape[1] == 25  # 5x5 grid = 25 points
+
+        # Check ydata is 1D with z values
+        assert ydata.ndim == 1
+        assert len(ydata) == 25
+
+        # Check sigma is 1D
+        assert sigma is not None
+        assert sigma.ndim == 1
+        assert len(sigma) == 25
+
+        # Verify data ranges
+        assert xdata[0].min() == pytest.approx(0.0, abs=0.01)
+        assert xdata[0].max() == pytest.approx(1.0, abs=0.01)
+        assert xdata[1].min() == pytest.approx(0.0, abs=0.01)
+        assert xdata[1].max() == pytest.approx(1.0, abs=0.01)
+
+    def test_ascii_2d_surface_loading_without_sigma(self):
+        """Test loading 2D surface data from ASCII file without sigma."""
+        config = {
+            "format": "ascii",
+            "columns": {"x": 0, "y": 1, "z": 2, "sigma": None},
+            "ascii": {"comment_char": "#"},
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(
+            FIXTURES_DIR / "sample_surface_ascii.txt", config
+        )
+
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+        assert sigma is None
+
+    def test_csv_2d_surface_loading(self):
+        """Test loading 2D surface data from CSV file."""
+        config = {
+            "format": "csv",
+            "columns": {"x": "x", "y": "y", "z": "z", "sigma": "sigma"},
+            "csv": {"header": True},
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_surface.csv", config)
+
+        # Check shapes
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+        assert sigma is not None
+        assert len(sigma) == 25
+
+    def test_csv_2d_surface_loading_by_index(self):
+        """Test loading 2D surface data from CSV file using column indices."""
+        config = {
+            "format": "csv",
+            "columns": {"x": 0, "y": 1, "z": 2, "sigma": 3},
+            "csv": {"header": True},
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_surface.csv", config)
+
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+        assert len(sigma) == 25
+
+    def test_npz_2d_surface_loading(self):
+        """Test loading 2D surface data from NPZ file."""
+        config = {
+            "format": "npz",
+            "npz": {
+                "x_key": "x",
+                "y_key": "y",
+                "z_key": "z",
+                "sigma_key": "sigma",
+            },
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_surface.npz", config)
+
+        # Check shapes
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+        assert sigma is not None
+        assert len(sigma) == 25
+
+    def test_npz_2d_surface_loading_without_sigma(self):
+        """Test loading 2D surface data from NPZ file without sigma."""
+        config = {
+            "format": "npz",
+            "npz": {
+                "x_key": "x",
+                "y_key": "y",
+                "z_key": "z",
+                "sigma_key": None,
+            },
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_surface.npz", config)
+
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+        assert sigma is None
+
+    def test_hdf5_2d_surface_loading(self):
+        """Test loading 2D surface data from HDF5 file."""
+        config = {
+            "format": "hdf5",
+            "hdf5": {
+                "x_path": "/surface/x",
+                "y_path": "/surface/y",
+                "z_path": "/surface/z",
+                "sigma_path": "/surface/sigma",
+            },
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_surface.h5", config)
+
+        # Check shapes
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+        assert sigma is not None
+        assert len(sigma) == 25
+
+    def test_hdf5_2d_surface_loading_without_sigma(self):
+        """Test loading 2D surface data from HDF5 file without sigma."""
+        config = {
+            "format": "hdf5",
+            "hdf5": {
+                "x_path": "/surface/x",
+                "y_path": "/surface/y",
+                "z_path": "/surface/z",
+                "sigma_path": None,
+            },
+        }
+        loader = DataLoader()
+        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_surface.h5", config)
+
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+        assert sigma is None
+
+    def test_2d_data_validation(self):
+        """Test that 2D data passes validation correctly."""
+        config = {
+            "format": "csv",
+            "columns": {"x": "x", "y": "y", "z": "z", "sigma": "sigma"},
+            "csv": {"header": True},
+            "validation": {"require_finite": True, "min_points": 10},
+        }
+        loader = DataLoader()
+        xdata, ydata, _sigma = loader.load(FIXTURES_DIR / "sample_surface.csv", config)
+
+        # Should pass validation
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+
+    def test_2d_data_min_points_validation(self):
+        """Test min_points validation works correctly for 2D data."""
+        config = {
+            "format": "csv",
+            "columns": {"x": "x", "y": "y", "z": "z", "sigma": "sigma"},
+            "csv": {"header": True},
+            "validation": {"require_finite": True, "min_points": 100},  # More than 25
+        }
+        loader = DataLoader()
+        with pytest.raises(DataLoadError) as exc_info:
+            loader.load(FIXTURES_DIR / "sample_surface.csv", config)
+        assert "min" in str(exc_info.value).lower() or "points" in str(
+            exc_info.value
+        ).lower()
+
+    def test_auto_detect_format_2d_csv(self):
+        """Test format auto-detection works for 2D CSV data."""
+        config = {
+            "format": "auto",
+            "columns": {"x": "x", "y": "y", "z": "z", "sigma": "sigma"},
+            "csv": {"header": True},
+        }
+        loader = DataLoader()
+        xdata, ydata, _sigma = loader.load(FIXTURES_DIR / "sample_surface.csv", config)
+
+        assert xdata.shape == (2, 25)
+        assert len(ydata) == 25
+
+    def test_backward_compatibility_1d_unchanged(self):
+        """Test that 1D data loading behavior is unchanged."""
+        config = {
+            "format": "csv",
+            "columns": {"x": "x", "y": "y", "sigma": "sigma"},  # No z column
+            "csv": {"header": True},
+        }
+        loader = DataLoader()
+        xdata, ydata, _sigma = loader.load(FIXTURES_DIR / "sample_data.csv", config)
+
+        # 1D data should have 1D xdata
+        assert xdata.ndim == 1
+        assert ydata.ndim == 1
+        assert len(xdata) == len(ydata)
