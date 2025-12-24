@@ -14,7 +14,7 @@ It provides a drop-in replacement for SciPy's ``curve_fit`` with massive speedup
 .. note::
    **Quick Start / Most Users:** Start with :doc:`user_guide/index` for workflow-first usage
 
-   **Advanced Usage / Developers:** See :doc:`advanced/index` for API customization and internals
+   **Advanced Usage / Developers:** See :doc:`developer/index` for API customization and internals
 
 Key Features
 ------------
@@ -22,7 +22,7 @@ Key Features
 - **GPU/TPU Acceleration**: 150-270x faster than SciPy on large datasets
 - **Drop-in Compatibility**: Minimal code changes from ``scipy.optimize.curve_fit``
 - **Automatic Differentiation**: JAX autodiff eliminates manual Jacobian calculations
-- **Production-Ready**: 2,179 tests, 100% pass rate
+- **Production-Ready**: 2,181 tests, 100% pass rate
 - **Large Dataset Support**: Automatic chunking and memory management
 - **Advanced Features**: Automatic fallback, smart bounds, numerical stability
 - **Performance Profiling** (v0.3.0): Async logging, transfer analysis, regression gates
@@ -76,9 +76,9 @@ Documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: Advanced / Developer
+   :caption: Developer Guide
 
-   advanced/index
+   developer/index
 
 .. toctree::
    :maxdepth: 2
@@ -101,7 +101,7 @@ Project Status
 
 - Production-ready for scientific computing
 - Active development and maintenance
-- Comprehensive test suite (2,179 tests, 100% pass rate)
+- Comprehensive test suite (2,181 tests, 100% pass rate)
 - Performance profiling and regression detection infrastructure
 - Global optimization with multi-start LHS sampling (v0.3.3+)
 - Workflow system with unified fit() and auto-selection (v0.3.4+)

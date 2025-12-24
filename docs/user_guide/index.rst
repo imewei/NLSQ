@@ -6,7 +6,7 @@ configuration files with minimal setup. This path emphasizes end-to-end
 runs, practical configuration choices, and reproducible execution.
 
 If you need API-level customization or want to build workflows
-programmatically, go to :doc:`../advanced/index`.
+programmatically, go to :doc:`../developer/index`.
 
 Getting Started
 ---------------

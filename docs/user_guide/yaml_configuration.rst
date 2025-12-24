@@ -94,4 +94,4 @@ Advanced customization
 ----------------------
 
 If you need programmatic workflow construction or custom models, start
-with :doc:`../advanced/index`.
+with :doc:`../developer/index`.
