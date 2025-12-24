@@ -24,6 +24,7 @@ NOTEBOOK_PARAMS = [
 ]
 
 
+@pytest.mark.slow  # Skip in integration tests (-m "not slow"); run in dedicated Validate Notebooks job
 @pytest.mark.parametrize("notebook_path", NOTEBOOK_PARAMS)
 def test_notebook_executes(notebook_path: Path, tmp_path: Path):
     # Set environment variables directly - NotebookClient doesn't use the env param,
