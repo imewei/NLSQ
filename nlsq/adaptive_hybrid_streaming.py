@@ -826,38 +826,93 @@ class AdaptiveHybridStreamingOptimizer:
         Notes
         -----
         The loss function is JIT-compiled for performance.
+
+        When `enable_group_variance_regularization=True`, the loss becomes:
+            L = MSE + group_variance_lambda * sum(Var(group_i))
+        where each group_i is defined by `group_variance_indices`.
+        This prevents per-angle parameters from absorbing angle-dependent physical signals.
         """
         # Use normalized model wrapper
         normalized_model = self.normalized_model
 
-        @jax.jit
-        def loss_fn(
-            params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-        ) -> float:
-            """Compute mean squared residuals in normalized space.
+        # Capture config values for closure
+        enable_var_reg = self.config.enable_group_variance_regularization
+        var_lambda = self.config.group_variance_lambda
+        var_indices = self.config.group_variance_indices
 
-            Parameters
-            ----------
-            params : array_like
-                Parameters in normalized space
-            x_batch : array_like
-                Independent variable batch
-            y_batch : array_like
-                Dependent variable batch
+        if enable_var_reg and var_indices:
+            # Convert indices to JAX-friendly format (static)
+            # Each tuple (start, end) defines a parameter group
+            group_slices = [(start, end) for start, end in var_indices]
 
-            Returns
-            -------
-            loss : float
-                Mean squared residuals
-            """
-            # Predict using normalized model (automatically denormalizes params)
-            predictions = normalized_model(x_batch, *params)
+            @jax.jit
+            def loss_fn(
+                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+            ) -> float:
+                """Compute MSE + group variance regularization.
 
-            # Compute residuals
-            residuals = y_batch - predictions
+                Parameters
+                ----------
+                params : array_like
+                    Parameters in normalized space
+                x_batch : array_like
+                    Independent variable batch
+                y_batch : array_like
+                    Dependent variable batch
 
-            # Return mean squared residuals
-            return jnp.mean(residuals**2)
+                Returns
+                -------
+                loss : float
+                    MSE + lambda * sum(Var(group_i))
+                """
+                # Predict using normalized model (automatically denormalizes params)
+                predictions = normalized_model(x_batch, *params)
+
+                # Compute MSE
+                residuals = y_batch - predictions
+                mse = jnp.mean(residuals**2)
+
+                # Compute group variance penalty
+                # For each group, compute variance of parameters in that group
+                variance_penalty = 0.0
+                for start, end in group_slices:
+                    group_params = params[start:end]
+                    # Variance = E[(x - mean)^2]
+                    group_var = jnp.var(group_params)
+                    variance_penalty = variance_penalty + group_var
+
+                return mse + var_lambda * variance_penalty
+
+        else:
+            # Standard MSE loss (no regularization)
+            @jax.jit
+            def loss_fn(
+                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+            ) -> float:
+                """Compute mean squared residuals in normalized space.
+
+                Parameters
+                ----------
+                params : array_like
+                    Parameters in normalized space
+                x_batch : array_like
+                    Independent variable batch
+                y_batch : array_like
+                    Dependent variable batch
+
+                Returns
+                -------
+                loss : float
+                    Mean squared residuals
+                """
+                # Predict using normalized model (automatically denormalizes params)
+                predictions = normalized_model(x_batch, *params)
+
+                # Compute residuals
+                residuals = y_batch - predictions
+
+                # Return mean squared residuals
+                return jnp.mean(residuals**2)
 
         return loss_fn
 
@@ -1691,6 +1746,40 @@ class AdaptiveHybridStreamingOptimizer:
             )
             total_cost += res_sq
 
+        # Add group variance regularization if enabled
+        # This prevents per-angle parameters from absorbing angle-dependent signals
+        if (
+            self.config.enable_group_variance_regularization
+            and self.config.group_variance_indices
+        ):
+            var_lambda = self.config.group_variance_lambda
+            for start, end in self.config.group_variance_indices:
+                group_params = current_params[start:end]
+                n_group = end - start
+                group_mean = jnp.mean(group_params)
+
+                # Gradient of variance: ∂Var/∂p_i = (2/n) × (p_i - mean)
+                grad_var = (2.0 / n_group) * (group_params - group_mean)
+
+                # Add to JTr (negative gradient direction)
+                # Note: JTr represents -∇f, so we subtract the regularization gradient
+                JTr = JTr.at[start:end].add(-var_lambda * grad_var)
+
+                # Hessian of variance: H = (2/n) × (I - (1/n)×11^T)
+                # This is a dense (n_group × n_group) matrix
+                diag_term = (2.0 / n_group) * jnp.eye(n_group)
+                off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
+                    (n_group, n_group)
+                )
+                H_var = diag_term - off_diag_term
+
+                # Add to JTJ for the group block
+                JTJ = JTJ.at[start:end, start:end].add(var_lambda * H_var)
+
+                # Add variance cost to total
+                group_var = jnp.var(group_params)
+                total_cost += var_lambda * float(group_var) * n_points
+
         # Compute gradient norm for convergence check
         gradient_norm = float(jnp.linalg.norm(JTr))
 
@@ -1716,6 +1805,17 @@ class AdaptiveHybridStreamingOptimizer:
             predictions = self.normalized_model(x_chunk, *new_params)
             residuals = y_chunk - predictions
             new_cost += float(jnp.sum(residuals**2))
+
+        # Add variance regularization cost at new parameters
+        if (
+            self.config.enable_group_variance_regularization
+            and self.config.group_variance_indices
+        ):
+            var_lambda = self.config.group_variance_lambda
+            for start, end in self.config.group_variance_indices:
+                group_params = new_params[start:end]
+                group_var = jnp.var(group_params)
+                new_cost += var_lambda * float(group_var) * n_points
 
         # Compute actual reduction
         actual_reduction = total_cost - new_cost

@@ -1,16 +1,39 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 2.1 (Updated for NLSQ v0.3.6+ with Defense Layers)
+# Version: 3.0 (Updated for NLSQ v0.4.0+ with CLI support)
 #
 # This template provides comprehensive configuration options for NLSQ curve
 # fitting workflows. Copy this file to your project and customize as needed.
 #
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ CLI USAGE                                                                   │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Single fit:    nlsq fit workflow.yaml                                       │
+# │ Batch fits:    nlsq batch w1.yaml w2.yaml w3.yaml                           │
+# │                nlsq batch configs/*.yaml    # Shell glob expansion          │
+# │ System info:   nlsq info                                                    │
+# └─────────────────────────────────────────────────────────────────────────────┘
+#
 # Quick Start:
-#   1. Copy this file: cp workflow_config_template.yaml nlsq.yaml
-#   2. Set project_root in paths section
-#   3. Choose a default_workflow preset or define custom workflows
-#   4. Run: python -c "from nlsq.workflow import load_yaml_config; print(load_yaml_config())"
+#   1. Copy this file: cp workflow_config_template.yaml my_workflow.yaml
+#   2. Configure: data.input_file, data.columns, model.type, model.name
+#   3. Run: nlsq fit my_workflow.yaml
+#
+# Minimal Configuration Example:
+#   data:
+#     input_file: "data/experiment.csv"
+#     columns: { x: 0, y: 1 }
+#   model:
+#     type: "builtin"
+#     name: "exponential_decay"
+#     auto_p0: true
+#   export:
+#     results_file: "results.json"
+#
+# Python API (alternative to CLI):
+#   from nlsq.workflow import load_yaml_config
+#   config = load_yaml_config("my_workflow.yaml")
 #
 # Documentation: https://nlsq.readthedocs.io/en/latest/guides/workflow_options.html
 # ==============================================================================
@@ -231,7 +254,7 @@ metadata:
   # Brief description of workflow purpose.
   description: "NLSQ workflow configuration template with optimized defaults."
   # Configuration version for tracking changes.
-  version: "2.0"
+  version: "2.1"
   # Optional ownership information.
   author: ""
   contact: ""
@@ -379,37 +402,98 @@ logging:
 # ==============================================================================
 # DATA
 # ==============================================================================
-# Dataset configuration and validation rules.
+# Dataset configuration for CLI data loading.
+# Supports: ASCII text (.txt, .dat, .asc), CSV (.csv), NPZ (.npz), HDF5 (.h5, .hdf5)
+#
+# Usage with CLI:
+#   nlsq fit workflow.yaml           # Single fit
+#   nlsq batch w1.yaml w2.yaml ...   # Parallel batch fitting
 
 data:
   # Dataset identifier for reports/exports.
   dataset_id: "dataset_001"
-  # File discovery patterns under input_dir.
-  file_patterns:
-    - "*.csv"
-    - "*.parquet"
-    - "*.h5"       # HDF5 for large datasets
-    - "*.hdf5"
-  # Expected file formats.
-  file_formats:
-    - "csv"
-    - "parquet"
-    - "hdf5"
-  # Parsing options.
-  parsing:
-    delimiter: ","
-    encoding: "utf-8"
-    header: true
-    missing_values:
+
+  # ==========================================================================
+  # INPUT FILE (Required for CLI)
+  # ==========================================================================
+  # Path to the data file (relative to project_root or absolute).
+  input_file: "data/experiment_001.csv"
+
+  # File format: "auto" (detect from extension) or explicit.
+  # Supported: "ascii", "csv", "npz", "hdf5"
+  format: "auto"
+
+  # ==========================================================================
+  # COLUMN SELECTION
+  # ==========================================================================
+  # Specify which columns contain x, y, and optional sigma (uncertainty) data.
+  # Use integer index (0-based) for ASCII/CSV, or key/path names for NPZ/HDF5.
+  columns:
+    x: 0              # Column index (int) or column name (str for CSV with header)
+    y: 1              # Column index (int) or column name (str for CSV with header)
+    sigma: null       # Optional: column for y uncertainties (null = no weights)
+
+  # ==========================================================================
+  # ASCII TEXT FORMAT OPTIONS (.txt, .dat, .asc)
+  # ==========================================================================
+  # For whitespace or tab-delimited text files.
+  ascii:
+    delimiter: null           # null = any whitespace, or explicit: "\t", " ", ","
+    comment_char: "#"         # Lines starting with this are skipped
+    skip_header: 0            # Number of header lines to skip
+    skip_footer: 0            # Number of footer lines to skip
+    usecols: null             # Specific columns to read, e.g., [0, 1] (null = all)
+    dtype: "float64"          # Data type: "float64", "float32"
+
+  # ==========================================================================
+  # CSV FORMAT OPTIONS (.csv)
+  # ==========================================================================
+  csv:
+    delimiter: ","            # Field delimiter
+    header: true              # First row contains column names
+    skip_header: 0            # Additional header lines to skip (after column names)
+    encoding: "utf-8"         # File encoding
+    missing_values:           # Values treated as NaN
       - ""
       - "NA"
       - "null"
       - "NaN"
-  # Validation rules.
+
+  # ==========================================================================
+  # NPZ FORMAT OPTIONS (.npz)
+  # ==========================================================================
+  # NumPy compressed archive format.
+  npz:
+    x_key: "x"                # Array key for x data
+    y_key: "y"                # Array key for y data
+    sigma_key: null           # Optional: array key for sigma (null = no weights)
+
+  # ==========================================================================
+  # HDF5 FORMAT OPTIONS (.h5, .hdf5)
+  # ==========================================================================
+  # Hierarchical Data Format 5 for large datasets.
+  hdf5:
+    x_path: "/data/x"         # Dataset path for x data
+    y_path: "/data/y"         # Dataset path for y data
+    sigma_path: null          # Optional: dataset path for sigma (null = no weights)
+
+  # ==========================================================================
+  # LEGACY: File discovery patterns (for programmatic use)
+  # ==========================================================================
+  file_patterns:
+    - "*.csv"
+    - "*.txt"
+    - "*.dat"
+    - "*.npz"
+    - "*.h5"
+    - "*.hdf5"
+
+  # ==========================================================================
+  # VALIDATION RULES
+  # ==========================================================================
   validation:
-    required_columns:
-      - "x"
-      - "y"
+    require_finite: true      # Reject NaN/Inf values
+    min_points: 2             # Minimum data points required
     units:
       x: "unitless"
       y: "unitless"
@@ -442,20 +526,91 @@ preprocessing:
 # ==============================================================================
 # MODEL
 # ==============================================================================
-# Model function and parameter configuration.
+# Model function configuration for CLI fitting.
+#
+# Three model types are supported:
+#   1. "builtin"    - Use nlsq.functions library (recommended)
+#   2. "custom"     - Load from external Python file
+#   3. "polynomial" - Generate polynomial of specified degree
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ BUILTIN MODELS (nlsq.functions)                                             │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Name               │ Function                    │ Parameters               │
+# │────────────────────│─────────────────────────────│──────────────────────────│
+# │ linear             │ a*x + b                     │ a, b                     │
+# │ exponential_decay  │ a*exp(-b*x) + c             │ a, b, c                  │
+# │ exponential_growth │ a*exp(b*x) + c              │ a, b, c                  │
+# │ gaussian           │ amp*exp(-(x-mu)²/(2σ²))     │ amp, mu, sigma           │
+# │ sigmoid            │ L/(1+exp(-k*(x-x0))) + b    │ L, x0, k, b              │
+# │ power_law          │ a*x^b                       │ a, b                     │
+# │ polynomial         │ Σ(aᵢ*x^i)                   │ a0, a1, ..., an          │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
 model:
-  # Model identifier for workflow system.
-  model_name: "my_model"
-  model_id: "model_v1"
-  # Parameter definitions.
+  # ==========================================================================
+  # MODEL SOURCE TYPE (Required for CLI)
+  # ==========================================================================
+  # Options: "builtin", "custom", "polynomial"
+  type: "builtin"
+
+  # ==========================================================================
+  # BUILTIN MODEL CONFIGURATION
+  # ==========================================================================
+  # When type: "builtin", specify the model name from nlsq.functions.
+  name: "exponential_decay"   # See table above for available models
+
+  # Automatic initial parameter estimation (uses data characteristics).
+  # Each builtin model has a corresponding estimate_p0_<name>() function.
+  auto_p0: true
+
+  # Automatic bounds from builtin model defaults.
+  # Each builtin model has a corresponding bounds_<name>() function.
+  auto_bounds: false
+
+  # ==========================================================================
+  # CUSTOM MODEL CONFIGURATION
+  # ==========================================================================
+  # When type: "custom", load model function from external Python file.
+  # The file must define a function: def model_name(x, *params) -> array
+  #
+  # Example custom model file (models.py):
+  #   import jax.numpy as jnp
+  #   def my_model(x, a, b, c):
+  #       return a * jnp.exp(-b * x) + c
+  #
+  custom:
+    file: "models.py"         # Python file path (relative to project_root)
+    function: "my_model"      # Function name to import
+
+  # ==========================================================================
+  # POLYNOMIAL MODEL CONFIGURATION
+  # ==========================================================================
+  # When type: "polynomial", generate polynomial of specified degree.
+  # f(x) = a0 + a1*x + a2*x² + ... + an*x^n
+  polynomial:
+    degree: 3                 # Polynomial degree (n)
+
+  # ==========================================================================
+  # MODEL IDENTIFIER
+  # ==========================================================================
+  model_id: "model_v1"        # Unique identifier for reports
+
+  # ==========================================================================
+  # PARAMETER DEFINITIONS
+  # ==========================================================================
+  # Manual parameter configuration. Used when:
+  #   - auto_p0: false (provides initial values)
+  #   - auto_bounds: false (provides bounds)
+  #   - type: "custom" (required for custom models)
+  #
   # Bounds should be informed by physical constraints; overly tight bounds bias.
   parameters:
     - name: "amplitude"
       initial: 1.0
       bounds: [0.0, 10.0]
       fixed: false
-      transform: "none"  # "none", "log", "logit", "exp"
+      transform: "none"       # "none", "log", "logit", "exp"
     - name: "decay_rate"
       initial: 0.1
       bounds: [0.001, 1.0]
@@ -466,7 +621,10 @@ model:
       bounds: [-1.0, 1.0]
       fixed: false
       transform: "none"
-  # Optional parameter constraints.
+
+  # ==========================================================================
+  # PARAMETER CONSTRAINTS (Advanced)
+  # ==========================================================================
   constraints:
     enabled: false
     expressions:
@@ -731,10 +889,284 @@ reporting:
     - "csv"
 
 # ==============================================================================
+# VISUALIZATION
+# ==============================================================================
+# Publication-quality figure generation for fit results.
+# Generates: main fit plot, residuals plot, and optional histogram.
+#
+# Output formats: PDF (vector), SVG (vector), PNG (raster), EPS (LaTeX)
+# Style presets: "publication", "presentation", "nature", "science", "minimal"
+
+visualization:
+  # ==========================================================================
+  # MASTER SWITCH
+  # ==========================================================================
+  enabled: true
+
+  # ==========================================================================
+  # OUTPUT SETTINGS
+  # ==========================================================================
+  # Directory for saving figures (relative to project_root).
+  output_dir: "figures"
+
+  # Filename prefix. Generates: {prefix}_combined.pdf, {prefix}_main.pdf, etc.
+  filename_prefix: "fit"
+
+  # Output formats to generate (all will be saved).
+  formats:
+    - "pdf"                       # Vector format, best for publications
+    - "png"                       # Raster format for web/slides
+    # - "svg"                     # Vector format for web
+    # - "eps"                     # Vector format for LaTeX
+
+  # ==========================================================================
+  # PUBLICATION QUALITY SETTINGS
+  # ==========================================================================
+  # Resolution in dots per inch.
+  # 300 DPI: Standard for most journals
+  # 600 DPI: High-resolution print
+  dpi: 300
+
+  # Figure size in inches [width, height].
+  # Single column: [3.5, 2.625] (Nature, Science)
+  # Double column: [7.0, 5.25]
+  # Full page: [7.0, 9.0]
+  figure_size: [6.0, 4.5]
+
+  # ==========================================================================
+  # STYLE PRESETS
+  # ==========================================================================
+  # Preset styles optimized for different contexts:
+  #   "publication"  - Clean serif fonts, 300 DPI, suitable for most journals
+  #   "presentation" - Larger sans-serif fonts, lower DPI for slides
+  #   "nature"       - Nature journal specifications (3.5" width, Arial font)
+  #   "science"      - Science journal specifications
+  #   "minimal"      - No top/right spines, no grid, clean look
+  style: "publication"
+
+  # ==========================================================================
+  # FONT SETTINGS
+  # ==========================================================================
+  font:
+    # Font family: "serif" (Times-like), "sans-serif" (Arial-like), "monospace"
+    family: "serif"
+
+    # Base font size in points (axis labels, legends scale from this)
+    size: 10
+
+    # Math font: "cm" (Computer Modern), "stix", "dejavusans", "dejavuserif"
+    math_fontset: "cm"
+
+  # ==========================================================================
+  # LAYOUT OPTIONS
+  # ==========================================================================
+  # "combined": Main plot + residuals in subplots (single figure)
+  # "separate": Individual files for each plot type
+  layout: "combined"
+
+  # ==========================================================================
+  # MAIN PLOT (Data + Fitted Curve)
+  # ==========================================================================
+  main_plot:
+    # Title (null = no title, or custom string)
+    title: null
+
+    # Axis labels (use LaTeX: "$x$ (units)" for math)
+    x_label: "x"
+    y_label: "y"
+
+    # Grid lines
+    show_grid: true
+    grid_alpha: 0.3
+
+    # --------------------------------------------------------------------------
+    # Raw Data Appearance
+    # --------------------------------------------------------------------------
+    data:
+      marker: "o"                 # Marker style: "o", "s", "^", "D", "x", "+"
+      color: "#1f77b4"            # Color (hex, name, or RGB tuple)
+      size: 20                    # Marker size in points²
+      alpha: 0.7                  # Transparency (0-1)
+      label: "Data"               # Legend label
+
+      # Error bars (if sigma provided in data)
+      show_errorbars: true
+      errorbar_color: null        # null = same as marker color
+      capsize: 2                  # Error bar cap width in points
+
+    # --------------------------------------------------------------------------
+    # Fitted Curve Appearance
+    # --------------------------------------------------------------------------
+    fit:
+      color: "#d62728"            # Line color
+      linewidth: 1.5              # Line width in points
+      linestyle: "-"              # Style: "-", "--", "-.", ":"
+      label: "Fit"                # Legend label
+      n_points: 500               # Number of points for smooth curve
+
+    # --------------------------------------------------------------------------
+    # Confidence Band (requires covariance matrix)
+    # --------------------------------------------------------------------------
+    confidence_band:
+      enabled: false
+      level: 0.95                 # Confidence level (0.95 = 95% CI)
+      color: null                 # null = use fit line color
+      alpha: 0.2                  # Band transparency
+
+    # --------------------------------------------------------------------------
+    # Legend
+    # --------------------------------------------------------------------------
+    legend:
+      enabled: true
+      location: "best"            # "best", "upper right", "upper left", etc.
+      frameon: true               # Show legend frame
+      fontsize: null              # null = use base font size
+
+    # --------------------------------------------------------------------------
+    # Fit Statistics Annotation (optional)
+    # --------------------------------------------------------------------------
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: false
+      show_chi_squared: false
+      location: "upper right"     # Text box location
+      fontsize: 9
+
+  # ==========================================================================
+  # RESIDUALS PLOT
+  # ==========================================================================
+  residuals_plot:
+    enabled: true
+
+    # Plot type: "scatter", "stem", "line"
+    type: "scatter"
+
+    # Labels
+    title: null                   # null = no title
+    x_label: "x"
+    y_label: "Residual"
+
+    # Zero reference line
+    show_zero_line: true
+    zero_line_style: "--"
+    zero_line_color: "gray"
+    zero_line_width: 1.0
+
+    # Marker appearance (for scatter/stem)
+    marker: "o"
+    color: "#2ca02c"              # Green
+    size: 15
+    alpha: 0.7
+
+    # --------------------------------------------------------------------------
+    # Standard Deviation Bands
+    # --------------------------------------------------------------------------
+    # Horizontal bands showing ±1σ, ±2σ regions
+    std_bands:
+      enabled: true
+      levels: [1, 2]              # Show ±1σ and ±2σ bands
+      colors:
+        - "#fff3cd"               # Light yellow for ±1σ
+        - "#ffe69c"               # Darker yellow for ±2σ
+      alpha: 0.4
+
+    # --------------------------------------------------------------------------
+    # Normality Reference (optional)
+    # --------------------------------------------------------------------------
+    # Show expected distribution for normally distributed residuals
+    normality_check:
+      enabled: false
+      show_expected_bounds: true  # Show ±2σ where 95% should fall
+
+  # ==========================================================================
+  # HISTOGRAM OF RESIDUALS (Optional)
+  # ==========================================================================
+  histogram:
+    enabled: false
+
+    # Number of bins: "auto", "sqrt", "sturges", or integer
+    bins: "auto"
+
+    # Overlay normal distribution fit
+    show_normal_fit: true
+    normal_color: "#d62728"
+
+    # Bar appearance
+    color: "#9467bd"              # Purple
+    alpha: 0.7
+    edgecolor: "white"
+
+    # Labels
+    title: "Residual Distribution"
+    x_label: "Residual"
+    y_label: "Frequency"
+
+  # ==========================================================================
+  # COLOR SCHEMES (Predefined palettes)
+  # ==========================================================================
+  # Colorblind-friendly palettes for accessibility
+  color_schemes:
+    # Default scheme
+    default:
+      data: "#1f77b4"             # Blue
+      fit: "#d62728"              # Red
+      residuals: "#2ca02c"        # Green
+      confidence: "#ff7f0e"       # Orange
+
+    # Colorblind-safe (Okabe-Ito palette)
+    colorblind:
+      data: "#0072B2"             # Blue
+      fit: "#D55E00"              # Vermillion
+      residuals: "#009E73"        # Bluish green
+      confidence: "#F0E442"       # Yellow
+
+    # Grayscale for B&W printing
+    grayscale:
+      data: "#404040"
+      fit: "#000000"
+      residuals: "#808080"
+      confidence: "#C0C0C0"
+
+  # Active color scheme (reference above or use "default")
+  active_scheme: "default"
+
+# ==============================================================================
 # EXPORT
 # ==============================================================================
+# Output file configuration for CLI fitting results.
 
 export:
+  # ==========================================================================
+  # RESULTS FILE (Required for CLI)
+  # ==========================================================================
+  # Path for fit results (relative to project_root or absolute).
+  # File extension determines format: .json, .csv, .npz
+  results_file: "output/fit_results.json"
+
+  # ==========================================================================
+  # EXPORT CONTENTS
+  # ==========================================================================
+  include:
+    parameters: true          # popt (fitted parameters)
+    covariance: true          # pcov (covariance matrix)
+    uncertainties: true       # Parameter uncertainties (sqrt of diag(pcov))
+    statistics: true          # r_squared, rmse, chi_squared, etc.
+    residuals: false          # y - y_fit (can be large for big datasets)
+    fitted_values: false      # y_fit values (can be large)
+    convergence_info: true    # Iterations, function evaluations, status
+
+  # ==========================================================================
+  # OUTPUT FORMATS
+  # ==========================================================================
+  # Generate multiple output formats.
+  formats:
+    - "json"                  # Human-readable, includes all metadata
+    - "csv"                   # Tabular parameters and statistics
+
+  # ==========================================================================
+  # ARTIFACT BUNDLE
+  # ==========================================================================
   artifact_bundle:
     enabled: true
     include_data_snapshot: false
@@ -742,6 +1174,37 @@ export:
   config_snapshot:
     enabled: true
     filename: "config_snapshot.yaml"
+
+# ==============================================================================
+# BATCH PROCESSING
+# ==============================================================================
+# Configuration for parallel batch fitting via `nlsq batch` command.
+#
+# Usage:
+#   nlsq batch workflow1.yaml workflow2.yaml workflow3.yaml
+#   nlsq batch configs/*.yaml
+
+batch:
+  # ==========================================================================
+  # PARALLELIZATION
+  # ==========================================================================
+  # Maximum parallel workers. null = auto (min of CPU count and file count).
+  max_workers: null
+
+  # Continue processing remaining files if one fails.
+  continue_on_error: true
+
+  # ==========================================================================
+  # BATCH OUTPUT
+  # ==========================================================================
+  # Aggregate summary file for all batch results.
+  summary_file: "output/batch_summary.json"
+
+  # Summary format: "json", "csv", or "both"
+  summary_format: "json"
+
+  # Include individual result paths in summary.
+  include_result_paths: true
 
 # ==============================================================================
 # ADVANCED

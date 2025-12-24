@@ -82,7 +82,7 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.4.0",           # Requires NumPy 2.x (tested on 2.4.0)
+    "numpy>=2.0.0",           # Requires NumPy 2.x (tested on 2.4.0)
     "scipy>=1.16.3",          # Tested on 1.16.3
 
     # JAX ecosystem (locked to 0.8.0)
@@ -201,6 +201,9 @@ Documentation = "https://nlsq.readthedocs.io"
 Repository = "https://github.com/imewei/NLSQ.git"
 Issues = "https://github.com/imewei/NLSQ/issues"
 Changelog = "https://github.com/imewei/NLSQ/blob/main/CHANGELOG.md"
+
+[project.scripts]
+nlsq = "nlsq.cli.main:main"
 
 [tool.setuptools]
 packages = ["nlsq"]

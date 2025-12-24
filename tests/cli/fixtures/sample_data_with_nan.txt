@@ -1,0 +1,5 @@
+# Data with NaN and Inf values for validation testing
+0.0  1.000  0.05
+0.5  nan    0.04
+1.0  0.368  inf
+1.5  0.223  0.03

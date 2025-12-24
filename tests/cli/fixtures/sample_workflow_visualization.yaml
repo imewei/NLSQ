@@ -1,0 +1,83 @@
+# Sample workflow with visualization enabled for testing
+
+metadata:
+  workflow_name: test_visualization_workflow
+  dataset_id: viz_dataset
+  description: Workflow with visualization for CLI testing
+
+data:
+  input_file: sample_data.csv
+  format: csv
+  columns:
+    x: x
+    y: y
+    sigma: sigma
+  csv:
+    delimiter: ","
+    header: true
+
+model:
+  type: builtin
+  name: exponential_decay
+  auto_p0: true
+
+fitting:
+  method: trf
+  p0: [2.0, 0.5, 0.1]
+
+export:
+  results_file: results_viz.json
+  format: json
+
+visualization:
+  enabled: true
+  output_dir: figures
+  filename_prefix: test_fit
+  formats:
+    - png
+  dpi: 100
+  figure_size: [6.0, 4.5]
+  style: publication
+  layout: combined
+  main_plot:
+    title: null
+    x_label: "x"
+    y_label: "y"
+    show_grid: true
+    data:
+      marker: "o"
+      color: "#1f77b4"
+      size: 20
+      alpha: 0.7
+      show_errorbars: true
+    fit:
+      color: "#d62728"
+      linewidth: 1.5
+      n_points: 100
+    confidence_band:
+      enabled: false
+    legend:
+      enabled: true
+      location: "best"
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: true
+      location: "upper right"
+      fontsize: 9
+  residuals_plot:
+    enabled: true
+    type: scatter
+    show_zero_line: true
+    std_bands:
+      enabled: true
+      levels: [1, 2]
+  histogram:
+    enabled: false
+  color_schemes:
+    default:
+      data: "#1f77b4"
+      fit: "#d62728"
+      residuals: "#2ca02c"
+      confidence: "#ff7f0e"
+  active_scheme: default

@@ -1,0 +1,39 @@
+{
+  "popt": [
+    -0.1014814636445326,
+    0.4092548271558327
+  ],
+  "pcov": [
+    [
+      0.0007887788071950097,
+      -0.0026867480097112523
+    ],
+    [
+      -0.0026867480097112523,
+      0.009881022444757848
+    ]
+  ],
+  "uncertainties": [
+    0.028085206198192842,
+    0.09940333216124018
+  ],
+  "statistics": {
+    "rmse": 5.305919067619392,
+    "chi_squared": 281.52777152127044,
+    "r_squared": -297.0296430542181,
+    "cost": 140.7638857606352
+  },
+  "convergence": {
+    "iterations": 3,
+    "function_evals": 3,
+    "jacobian_evals": 3,
+    "status": "success",
+    "message": "`gtol` termination condition is satisfied.",
+    "final_cost": 140.7638857606352
+  },
+  "metadata": {
+    "workflow_name": "test_sample_workflow",
+    "dataset_id": "sample_dataset",
+    "model_id": "linear"
+  }
+}

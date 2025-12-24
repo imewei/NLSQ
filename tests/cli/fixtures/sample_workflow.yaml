@@ -1,0 +1,35 @@
+# Sample workflow configuration for testing
+# This file is used by integration tests
+
+metadata:
+  workflow_name: test_sample_workflow
+  dataset_id: sample_dataset
+  description: Sample workflow for CLI testing
+
+data:
+  input_file: sample_ascii.txt
+  format: ascii
+  columns:
+    x: 0
+    y: 1
+    sigma: 2
+  ascii:
+    delimiter: null
+    comment_char: "#"
+    skip_header: 0
+
+model:
+  type: builtin
+  name: linear
+  auto_p0: true
+
+fitting:
+  method: trf
+  p0: [1.0, 0.0]
+
+export:
+  results_file: results.json
+  format: json
+
+visualization:
+  enabled: false

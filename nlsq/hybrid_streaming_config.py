@@ -82,6 +82,41 @@ class HybridStreamingConfig:
         Regularization factor for rank-deficient J^T J matrices.
         Added to diagonal: J^T J + regularization_factor * I.
 
+    enable_group_variance_regularization : bool, default=False
+        Enable variance regularization for parameter groups. When enabled,
+        adds a penalty term to the loss function that penalizes variance
+        within specified parameter groups. This is essential for preventing
+        per-angle parameter absorption in XPCS laminar flow fitting.
+
+        The regularized loss becomes:
+        L = MSE + group_variance_lambda * sum(Var(group_i))
+
+        where each group_i is a slice of parameters defined by group_variance_indices.
+
+    group_variance_lambda : float, default=0.01
+        Regularization strength for group variance penalty. Larger values
+        more strongly penalize variance within parameter groups. Typical values:
+        - 0.001-0.01: Light regularization, allows moderate group variation
+        - 0.1-1.0: Moderate regularization, constrains groups to be similar
+        - 10-1000: Strong regularization, forces groups to be nearly uniform
+
+        For XPCS with per-angle scaling, use lambda ~ 0.1 * n_data / (n_phi * sigma^2)
+        where sigma is the expected experimental variation (~0.05 for 5%).
+
+    group_variance_indices : list of tuple, default=None
+        List of (start, end) tuples defining parameter groups for variance
+        regularization. Each tuple specifies a slice [start:end] of the
+        parameter vector that should have low internal variance.
+
+        Example for XPCS with 23 angles:
+        - group_variance_indices = [(0, 23), (23, 46)]
+        - This constrains contrast params [0:23] and offset params [23:46]
+          to each have low variance, preventing them from absorbing
+          angle-dependent physical signals.
+
+        If None when enable_group_variance_regularization=True, no groups
+        are regularized (effectively disabling the feature).
+
     chunk_size : int, default=10000
         Size of data chunks for streaming J^T J accumulation.
         Larger chunks = faster but more memory. Typical: 5000-50000.
@@ -237,6 +272,11 @@ class HybridStreamingConfig:
     trust_region_initial: float = 1.0
     regularization_factor: float = 1e-10
 
+    # Group variance regularization (for per-angle parameter absorption prevention)
+    enable_group_variance_regularization: bool = False
+    group_variance_lambda: float = 0.01
+    group_variance_indices: list[tuple[int, int]] | None = None
+
     # Streaming configuration
     chunk_size: int = 10000
 
@@ -323,6 +363,36 @@ class HybridStreamingConfig:
             raise ValueError("trust_region_initial must be positive")
         if self.regularization_factor < 0:
             raise ValueError("regularization_factor must be non-negative")
+
+        # Validate group variance regularization parameters
+        if self.enable_group_variance_regularization:
+            if self.group_variance_lambda <= 0:
+                raise ValueError("group_variance_lambda must be positive")
+            if self.group_variance_indices is not None:
+                if not isinstance(self.group_variance_indices, list):
+                    raise TypeError(
+                        "group_variance_indices must be a list of (start, end) tuples"
+                    )
+                for idx, item in enumerate(self.group_variance_indices):
+                    if not isinstance(item, (tuple, list)) or len(item) != 2:
+                        raise ValueError(
+                            f"group_variance_indices[{idx}] must be a (start, end) tuple"
+                        )
+                    start, end = item
+                    if not isinstance(start, int) or not isinstance(end, int):
+                        raise TypeError(
+                            f"group_variance_indices[{idx}] start/end must be integers"
+                        )
+                    if start < 0:
+                        raise ValueError(
+                            f"group_variance_indices[{idx}] start must be non-negative"
+                        )
+                    if end <= start:
+                        raise ValueError(
+                            f"group_variance_indices[{idx}] end ({end}) must be > "
+                            f"start ({start})"
+                        )
+
         if self.chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
         if self.checkpoint_frequency <= 0:
