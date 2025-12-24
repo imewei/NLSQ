@@ -1,0 +1,78 @@
+# ==============================================================================
+# Enzyme Kinetics Fitting Workflow (Michaelis-Menten)
+# ==============================================================================
+# This workflow demonstrates fitting enzyme kinetics data to determine
+# Vmax and Km using a custom Michaelis-Menten model.
+#
+# Model: v = Vmax * [S] / (Km + [S])
+#
+# Usage:
+#   nlsq fit workflows/02_enzyme_kinetics.yaml
+# ==============================================================================
+
+metadata:
+  workflow_name: enzyme_kinetics_fit
+  description: Michaelis-Menten enzyme kinetics fitting
+  dataset_id: enzyme_assay_001
+
+# ==============================================================================
+# Data Configuration
+# ==============================================================================
+data:
+  input_file: data/enzyme_kinetics.csv
+  format: csv
+
+  columns:
+    x: substrate      # Substrate concentration [S] in uM
+    y: velocity       # Reaction velocity v in uM/min
+    sigma: sigma      # Measurement uncertainty
+
+  csv:
+    delimiter: ","
+    header: true
+
+# ==============================================================================
+# Model Configuration
+# ==============================================================================
+# Use custom model for Michaelis-Menten kinetics
+model:
+  type: custom
+  path: models/custom_models.py
+  function: michaelis_menten
+
+# ==============================================================================
+# Fitting Configuration
+# ==============================================================================
+fitting:
+  method: trf
+
+  # Initial parameter guess: [Vmax, Km]
+  p0: [120.0, 60.0]
+
+  # Bounds: both parameters must be positive
+  bounds:
+    lower: [0.0, 0.0]
+    upper: [500.0, 1000.0]
+
+  # Convergence tolerances
+  ftol: 1.0e-10
+  xtol: 1.0e-10
+  gtol: 1.0e-10
+
+  absolute_sigma: true
+
+# ==============================================================================
+# Export Configuration
+# ==============================================================================
+export:
+  results_file: output/enzyme_kinetics_results.json
+  format: json
+
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+
+visualization:
+  enabled: false

@@ -1,0 +1,81 @@
+# ==============================================================================
+# First-Order Reaction Kinetics Fitting Workflow
+# ==============================================================================
+# This workflow demonstrates fitting first-order reaction kinetics data
+# to determine the rate constant k and initial concentration C0.
+#
+# Model: C(t) = C0 * exp(-k * t)
+#
+# Note: Uses exponential_decay builtin model: a*exp(-b*x) + c
+#       where a = C0, b = k, c = 0 (no offset)
+#
+# Usage:
+#   nlsq fit workflows/03_reaction_kinetics.yaml
+# ==============================================================================
+
+metadata:
+  workflow_name: reaction_kinetics_fit
+  description: First-order reaction kinetics fitting
+  dataset_id: reaction_001
+
+# ==============================================================================
+# Data Configuration
+# ==============================================================================
+data:
+  input_file: data/reaction_kinetics.csv
+  format: csv
+
+  columns:
+    x: time           # Time in seconds
+    y: concentration  # Concentration in M
+    sigma: sigma      # Measurement uncertainty
+
+  csv:
+    delimiter: ","
+    header: true
+
+# ==============================================================================
+# Model Configuration
+# ==============================================================================
+model:
+  type: builtin
+  name: exponential_decay  # a*exp(-b*x) + c
+
+  # Use auto_p0 for initial parameter estimation
+  auto_p0: true
+
+# ==============================================================================
+# Fitting Configuration
+# ==============================================================================
+fitting:
+  method: trf
+
+  # Parameter bounds for [C0, k, offset]
+  # Offset should be near zero for pure first-order decay
+  bounds:
+    lower: [0.0, 0.0, -0.1]
+    upper: [2.0, 0.1, 0.1]
+
+  # Tight tolerances for high precision
+  ftol: 1.0e-12
+  xtol: 1.0e-12
+  gtol: 1.0e-12
+
+  absolute_sigma: true
+
+# ==============================================================================
+# Export Configuration
+# ==============================================================================
+export:
+  results_file: output/reaction_kinetics_results.json
+  format: json
+
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+    convergence_info: true
+
+visualization:
+  enabled: false
