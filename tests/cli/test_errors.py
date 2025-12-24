@@ -20,9 +20,32 @@ Test Categories
 import json
 import logging
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+
+
+@contextmanager
+def temp_log_dir():
+    """Context manager for temp directory with proper logger cleanup.
+
+    On Windows, file handles must be closed before the temp directory
+    can be deleted. This context manager ensures all logging handlers
+    are properly closed before cleanup.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            yield Path(tmpdir)
+        finally:
+            # Close all handlers on the nlsq.cli logger to release file handles
+            # This is critical on Windows where open file handles prevent deletion
+            nlsq_logger = logging.getLogger("nlsq.cli")
+            handlers = nlsq_logger.handlers[:]
+            for handler in handlers:
+                handler.close()
+                nlsq_logger.removeHandler(handler)
+
 
 from nlsq.cli.errors import (
     CLIError,
@@ -253,8 +276,8 @@ class TestDualLogging:
 
     def test_setup_logging_file_only(self):
         """Test setting up file-only logging."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "test.log"
+        with temp_log_dir() as tmpdir:
+            log_file = tmpdir / "test.log"
             logger = setup_logging(
                 log_file=log_file,
                 console=False,
@@ -265,8 +288,8 @@ class TestDualLogging:
 
     def test_setup_logging_dual(self):
         """Test setting up both file and console logging."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "dual.log"
+        with temp_log_dir() as tmpdir:
+            log_file = tmpdir / "dual.log"
             logger = setup_logging(
                 log_file=log_file,
                 console=True,
@@ -277,8 +300,8 @@ class TestDualLogging:
 
     def test_logging_messages_written_to_file(self):
         """Test that log messages are written to file."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "messages.log"
+        with temp_log_dir() as tmpdir:
+            log_file = tmpdir / "messages.log"
             logger = setup_logging(
                 log_file=log_file,
                 console=False,
@@ -300,8 +323,8 @@ class TestDualLogging:
 
     def test_get_logger_returns_singleton(self):
         """Test that get_logger returns consistent instance after setup."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "singleton.log"
+        with temp_log_dir() as tmpdir:
+            log_file = tmpdir / "singleton.log"
             logger1 = setup_logging(log_file=log_file, console=True)
             logger2 = get_logger()
             # After setup, get_logger should return the configured logger
@@ -336,8 +359,8 @@ class TestStructuredLogging:
 
     def test_structured_logging_file_output(self):
         """Test structured JSON logging to file."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "structured.log"
+        with temp_log_dir() as tmpdir:
+            log_file = tmpdir / "structured.log"
             logger = setup_logging(
                 log_file=log_file,
                 console=False,
@@ -358,8 +381,8 @@ class TestStructuredLogging:
 
     def test_setup_logging_from_config(self):
         """Test setup_logging_from_config with structured logging."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "config.log"
+        with temp_log_dir() as tmpdir:
+            log_file = tmpdir / "config.log"
             config = {
                 "log_file": str(log_file),
                 "console": False,
@@ -388,8 +411,8 @@ class TestLogRotation:
 
     def test_rotation_enabled(self):
         """Test log rotation is configured when enabled."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "rotating.log"
+        with temp_log_dir() as tmpdir:
+            log_file = tmpdir / "rotating.log"
             logger = setup_logging(
                 log_file=log_file,
                 console=False,
