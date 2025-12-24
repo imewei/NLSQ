@@ -26,69 +26,25 @@ NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JA
 NLSQ builds upon JAXFit's foundation, implementing SciPy's nonlinear least squares curve fitting algorithms using [JAX](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) for GPU/TPU acceleration. This fork adds significant optimizations, enhanced testing, improved API design, and advanced features for production use. Fit functions are written in Python without CUDA programming.
 
 NLSQ uses JAX's [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html) to calculate Jacobians automatically, eliminating the need for manual partial derivatives or numerical approximation.
+NLSQ provides a drop-in replacement for SciPy's `curve_fit` with production-focused performance and scale.
 
-
-NLSQ provides a drop-in replacement for SciPy's curve_fit function with advanced features:
-
-## Core Features
-- **GPU/TPU acceleration** via JAX JIT compilation
-- **Automatic differentiation** for Jacobian calculation
-- **Trust Region Reflective** and **Levenberg-Marquardt** algorithms
-- **Bounded optimization** with parameter constraints
-- **Robust loss functions** for outlier handling
-- **Fixed array size optimization** to avoid recompilation
-- **Comprehensive test coverage** (>80%) ensuring reliability
-
-## Large Dataset Support
-- **Automatic dataset handling** for 100M+ points with `curve_fit_large`
-- **Intelligent chunking** with <1% error for well-conditioned problems
-- **Memory estimation** and automatic memory management
-- **Streaming optimizer** for unlimited-size datasets that don't fit in memory
-- **Sparse Jacobian optimization** for problems with sparse structure
-- **Progress reporting** for long-running optimizations
-
-## Advanced Memory Management
-- **Context-based configuration** with temporary memory settings
-- **Automatic memory detection** and chunk sizing
-- **Mixed precision fallback** for memory-constrained environments
-- **Memory leak prevention** with cleanup
-- **Cache management** with eviction policies
-
-## Algorithm Selection
-- **Automatic algorithm selection** based on problem characteristics
-- **Performance optimization** with problem-specific tuning
+## Key Capabilities
+- **Fast fits with JAX**: JIT-compiled kernels and automatic differentiation for Jacobians.
+- **SciPy-compatible APIs**: Trust Region Reflective and Levenberg-Marquardt, plus bounds.
+- **Robustness tools**: robust losses, stability checks, and recovery strategies.
+- **Scale to huge datasets**: chunked and streaming optimizers with progress reporting.
+- **Workflow automation**: `fit()` chooses tiers and presets based on data size/memory.
+- **Caching & memory controls**: JIT cache reuse, mixed precision fallback, and cleanup.
 
 ## Global Optimization (v0.3.3+)
-- **Multi-start optimization** with Latin Hypercube Sampling (LHS)
-- **Quasi-random samplers**: Sobol and Halton sequences for deterministic sampling
-- **Preset configurations**: 'fast', 'robust', 'global', 'thorough', 'streaming'
-- **Tournament selection** for memory-efficient large dataset optimization
-- **Automatic bounds inference** when bounds are not provided
-- **Convergence analysis** and parameter adjustment
-- **Robustness testing** with multiple initialization strategies
+- **Multi-start optimization** with LHS/Sobol/Halton sampling.
+- **Presets**: fast, robust, global, thorough, streaming.
+- **Automatic bounds inference** and convergence analysis.
 
 ## Workflow System (v0.3.4+)
-- **Unified `fit()` entry point** with automatic workflow selection
-- **Workflow tiers**: STANDARD, CHUNKED, STREAMING, STREAMING_CHECKPOINT
-- **Optimization goals**: FAST, ROBUST, GLOBAL, MEMORY_EFFICIENT, QUALITY
-- **Adaptive tolerances** based on dataset size (1e-12 for small to 1e-5 for massive)
-- **Auto-detection** of CPU/GPU memory and PBS Pro HPC clusters
-- **YAML configuration** with environment variable overrides
-- **7 workflow presets**: fast, robust, global, memory_efficient, quality, hpc, streaming
-- **Checkpointing** for long-running optimizations with automatic resume
-
-## Diagnostics & Monitoring
-- **Convergence monitoring** with diagnostics
-- **Optimization recovery** from failed fits with fallback strategies
-- **Numerical stability analysis** with condition number monitoring
-- **Input validation** and error handling
-- **Logging** and debugging capabilities
-
-## Caching System
-- **JIT compilation caching** to avoid recompilation overhead
-- **Function evaluation caching** for repeated calls
-- **Jacobian caching** with automatic invalidation
-- **Memory-aware cache policies** with size limits
+- **Tiers**: STANDARD, CHUNKED, STREAMING, STREAMING_CHECKPOINT.
+- **Goals**: FAST, ROBUST, GLOBAL, MEMORY_EFFICIENT, QUALITY.
+- **Config**: YAML + env overrides, checkpointing, auto-resume.
 
 ## Basic Usage
 
@@ -153,6 +109,7 @@ article for a more in-depth look at JAX specific caveats).
 * [Installation](#installation)
 * [Citing NLSQ](#citing-nlsq)
 * [Reference documentation](#reference-documentation)
+* [Examples Gallery](#examples-gallery)
 
 ## Quickstart: Colab in the Cloud
 The easiest way to test out NLSQ is using a Colab notebook connected to a Google Cloud GPU. JAX comes pre-installed so you'll be able to start fitting right away.
@@ -165,104 +122,33 @@ Tutorial notebooks:
 
 ## Performance Benchmarks
 
-NLSQ delivers massive speedups on GPU hardware compared to SciPy's CPU-based optimization:
+NLSQ is optimized for large datasets and shows increasing speedups as data size grows.
+For full benchmark tables and methodology, see the
+[Performance Guide](https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html).
 
-| Dataset Size | Parameters | SciPy (CPU) | NLSQ (GPU) | Speedup | Hardware |
-|--------------|------------|-------------|------------|---------|----------|
-| 1K points    | 3          | 2.5 ms      | 1.7 ms     | **1.5x** | Tesla V100 |
-| 10K points   | 5          | 25 ms       | 2.0 ms     | **12x** | Tesla V100 |
-| 100K points  | 5          | 450 ms      | 3.2 ms     | **140x** | Tesla V100 |
-| 1M points    | 5          | 40.5 s      | 0.15 s     | **270x** | Tesla V100 |
-| 50M points   | 3          | >30 min     | 1.8 s      | **>1000x** | Tesla V100 |
-
-**Key Observations:**
-- Speedup increases with dataset size due to GPU parallelization
-- JIT compilation overhead on first run (~450-650ms), then 1.7-2.0ms on cached runs
-- Excellent scaling: 50x more data → only 1.2x slower (1M → 50M points)
-- Memory-efficient chunking handles datasets larger than GPU memory
-
-See [Performance Guide](https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html) for detailed benchmarks and optimization strategies.
+**What to expect:**
+- First call includes JIT compilation; subsequent calls are much faster.
+- GPU speedups grow with dataset size (10K+ points show the biggest wins).
+- Chunked/streaming workflows avoid memory blowups for very large datasets.
 
 ## Examples Gallery
 
-📂 **[examples/](examples/)** - Complete collection of 34 notebooks & scripts
+Start with the curated entry points below, or browse the full index in
+[`examples/README.md`](examples/README.md).
 
-### 🌟 Getting Started (6 notebooks)
-Perfect for first-time users learning NLSQ basics:
+**Recommended starters:**
+- [Interactive Tutorial](examples/notebooks/01_getting_started/nlsq_interactive_tutorial.ipynb)
+- [Quickstart](examples/notebooks/01_getting_started/nlsq_quickstart.ipynb)
+- [Large Dataset Demo](examples/notebooks/02_core_tutorials/large_dataset_demo.ipynb)
+- [GPU Optimization Deep Dive](examples/notebooks/03_advanced/gpu_optimization_deep_dive.ipynb)
 
-- [**Interactive Tutorial**](examples/notebooks/01_getting_started/nlsq_interactive_tutorial.ipynb) - Comprehensive beginner-to-advanced guide ⭐
-- [Quick Start](examples/notebooks/01_getting_started/nlsq_quickstart.ipynb) - 5-minute introduction to NLSQ
-- [Basic Curve Fitting](examples/notebooks/01_getting_started/basic_curve_fitting.ipynb) - Fundamental fitting concepts
-- [Parameter Bounds](examples/notebooks/01_getting_started/parameter_bounds.ipynb) - Constrained optimization
-- [Robust Fitting](examples/notebooks/01_getting_started/robust_fitting.ipynb) - Handling outliers with robust loss functions
-- [Uncertainty Estimation](examples/notebooks/01_getting_started/uncertainty_estimation.ipynb) - Parameter confidence intervals
+**Browse by category:**
+- Application gallery (biology, chemistry, engineering, physics)
+- Feature demos (callbacks, diagnostics, result helpers)
+- Streaming & fault tolerance workflows
+- Scripts mirroring every notebook
 
-### 💡 Core Features (7 notebooks)
-Essential NLSQ capabilities for everyday use:
-
-- [GPU vs CPU Performance](examples/notebooks/02_core_tutorials/gpu_vs_cpu.ipynb) - Benchmark GPU acceleration
-- [Large Dataset Demo](examples/notebooks/02_core_tutorials/large_dataset_demo.ipynb) - Fitting 50M+ points
-- [2D Gaussian Fitting](examples/notebooks/02_core_tutorials/nlsq_2d_gaussian_demo.ipynb) - Image fitting
-- [Advanced Features](examples/notebooks/02_core_tutorials/advanced_features_demo.ipynb) - Algorithm selection, caching
-- [Performance Optimization](examples/notebooks/02_core_tutorials/performance_optimization_demo.ipynb) - Maximize speed
-- [Memory Management](examples/notebooks/02_core_tutorials/memory_management.ipynb) - Configure memory limits
-- [Weighted Fitting](examples/notebooks/02_core_tutorials/weighted_fitting.ipynb) - Custom error weights
-
-### 🚀 Advanced Topics (9 notebooks)
-Deep dives into specialized features:
-
-- [Custom Algorithms](examples/notebooks/03_advanced/custom_algorithms_advanced.ipynb) - Implement your own optimizers
-- [GPU Optimization Deep Dive](examples/notebooks/03_advanced/gpu_optimization_deep_dive.ipynb) - Maximize GPU performance
-- [ML Integration](examples/notebooks/03_advanced/ml_integration_tutorial.ipynb) - Combine with JAX ML ecosystem
-- [Time Series Analysis](examples/notebooks/03_advanced/time_series_analysis.ipynb) - Temporal data fitting
-- [Research Workflow](examples/notebooks/03_advanced/research_workflow_case_study.ipynb) - Real-world Raman spectroscopy
-- [Troubleshooting Guide](examples/notebooks/03_advanced/troubleshooting_guide.ipynb) - Debug convergence issues
-- [NLSQ Challenges](examples/notebooks/03_advanced/nlsq_challenges.ipynb) - Difficult optimization problems
-- [Sparse Jacobian](examples/notebooks/03_advanced/sparse_jacobian.ipynb) - Exploit sparsity patterns
-- [Adaptive Algorithms](examples/notebooks/03_advanced/adaptive_algorithms.ipynb) - Auto-tune optimization
-
-### 📚 Application Gallery (12 notebooks)
-Domain-specific examples across sciences:
-
-**Biology** (3):
-- [Dose-Response Curves](examples/notebooks/04_gallery/biology/dose_response.ipynb)
-- [Enzyme Kinetics](examples/notebooks/04_gallery/biology/enzyme_kinetics.ipynb)
-- [Growth Curves](examples/notebooks/04_gallery/biology/growth_curves.ipynb)
-
-**Chemistry** (2):
-- [Reaction Kinetics](examples/notebooks/04_gallery/chemistry/reaction_kinetics.ipynb)
-- [Titration Curves](examples/notebooks/04_gallery/chemistry/titration_curves.ipynb)
-
-**Engineering** (3):
-- [Sensor Calibration](examples/notebooks/04_gallery/engineering/sensor_calibration.ipynb)
-- [Materials Characterization](examples/notebooks/04_gallery/engineering/materials_characterization.ipynb)
-- [System Identification](examples/notebooks/04_gallery/engineering/system_identification.ipynb)
-
-**Physics** (3):
-- [Damped Oscillation](examples/notebooks/04_gallery/physics/damped_oscillation.ipynb)
-- [Radioactive Decay](examples/notebooks/04_gallery/physics/radioactive_decay.ipynb)
-- [Spectroscopy Peaks](examples/notebooks/04_gallery/physics/spectroscopy_peaks.ipynb)
-
-### ⚙️ Feature Demonstrations (4 notebooks)
-In-depth feature showcases:
-
-- [Callbacks System](examples/notebooks/05_feature_demos/callbacks_demo.ipynb) - Monitor optimization progress
-- [Enhanced Error Messages](examples/notebooks/05_feature_demos/enhanced_error_messages_demo.ipynb) - Helpful diagnostics
-- [Function Library](examples/notebooks/05_feature_demos/function_library_demo.ipynb) - Pre-built fitting functions
-- [Result Enhancements](examples/notebooks/05_feature_demos/result_enhancements_demo.ipynb) - Rich result objects
-
-### 🔄 Streaming & Fault Tolerance (5 notebooks)
-Production-ready reliability features:
-
-- [Basic Fault Tolerance](examples/notebooks/06_streaming/01_basic_fault_tolerance.ipynb) - Handle errors gracefully
-- [Checkpoint & Resume](examples/notebooks/06_streaming/02_checkpoint_resume.ipynb) - Save/restore state
-- [Custom Retry Settings](examples/notebooks/06_streaming/03_custom_retry_settings.ipynb) - Configure retries
-- [Diagnostics Interpretation](examples/notebooks/06_streaming/04_interpreting_diagnostics.ipynb) - Understand results
-- [Hybrid Streaming API](examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb) - 4-phase adaptive optimizer (v0.3.0+)
-
-**All examples available as:**
-- 📓 Jupyter notebooks: `examples/notebooks/`
-- 🐍 Python scripts: `examples/scripts/`
+See [`examples/README.md`](examples/README.md) for the full index.
 
 ## Large Dataset Support
 
