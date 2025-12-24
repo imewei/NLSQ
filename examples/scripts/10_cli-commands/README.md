@@ -205,13 +205,16 @@ Define models in Python files with JAX-compatible functions:
 # models/my_model.py
 import jax.numpy as jnp
 
+
 def my_model(x, a, b, c):
     """Custom model function."""
     return a * jnp.exp(-b * x) * jnp.cos(c * x)
 
+
 def estimate_p0(x, y):
     """Optional: automatic initial parameter estimation."""
     return [jnp.max(y), 0.1, 1.0]
+
 
 def bounds():
     """Optional: parameter bounds."""

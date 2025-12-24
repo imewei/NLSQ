@@ -63,7 +63,9 @@ def gaussian_2d(xy, amplitude, x0, y0, sigma_x, sigma_y, offset):
     y = xy[1]
     return (
         amplitude
-        * jnp.exp(-((x - x0) ** 2 / (2 * sigma_x**2) + (y - y0) ** 2 / (2 * sigma_y**2)))
+        * jnp.exp(
+            -((x - x0) ** 2 / (2 * sigma_x**2) + (y - y0) ** 2 / (2 * sigma_y**2))
+        )
         + offset
     )
 
@@ -101,7 +103,10 @@ def gaussian_2d_rotated(xy, amplitude, x0, y0, sigma_x, sigma_y, theta, offset):
     xr = (x - x0) * cos_t + (y - y0) * sin_t
     yr = -(x - x0) * sin_t + (y - y0) * cos_t
 
-    return amplitude * jnp.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2))) + offset
+    return (
+        amplitude * jnp.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2)))
+        + offset
+    )
 
 
 # =============================================================================
@@ -144,7 +149,9 @@ print(f"  Widths:    sigma_x = {sigma_x_true:.2f}, sigma_y = {sigma_y_true:.2f} 
 print(f"  Offset:    {offset_true:.1f} counts")
 
 # Generate true surface
-z_true = gaussian_2d(xdata, amplitude_true, x0_true, y0_true, sigma_x_true, sigma_y_true, offset_true)
+z_true = gaussian_2d(
+    xdata, amplitude_true, x0_true, y0_true, sigma_x_true, sigma_y_true, offset_true
+)
 
 # Add Poisson-like noise (realistic for photon counting)
 noise_scale = np.sqrt(z_true + 10)  # Poisson approximation
@@ -154,7 +161,9 @@ z_measured = z_true + noise
 # Uncertainties
 sigma = noise_scale
 
-print(f"\nData generated with Poisson noise (SNR ~ {amplitude_true / np.mean(noise_scale):.1f})")
+print(
+    f"\nData generated with Poisson noise (SNR ~ {amplitude_true / np.mean(noise_scale):.1f})"
+)
 
 
 # =============================================================================
@@ -201,12 +210,16 @@ perr = np.sqrt(np.diag(pcov))
 amp_err, x0_err, y0_err, sx_err, sy_err, off_err = perr
 
 print("\nFitted Parameters:")
-print(f"  Amplitude: {amplitude_fit:.1f} +/- {amp_err:.1f} counts (true: {amplitude_true:.1f})")
+print(
+    f"  Amplitude: {amplitude_fit:.1f} +/- {amp_err:.1f} counts (true: {amplitude_true:.1f})"
+)
 print(f"  Center x:  {x0_fit:.3f} +/- {x0_err:.3f} mm (true: {x0_true:.2f})")
 print(f"  Center y:  {y0_fit:.3f} +/- {y0_err:.3f} mm (true: {y0_true:.2f})")
 print(f"  Sigma x:   {sigma_x_fit:.3f} +/- {sx_err:.3f} mm (true: {sigma_x_true:.2f})")
 print(f"  Sigma y:   {sigma_y_fit:.3f} +/- {sy_err:.3f} mm (true: {sigma_y_true:.2f})")
-print(f"  Offset:    {offset_fit:.1f} +/- {off_err:.1f} counts (true: {offset_true:.1f})")
+print(
+    f"  Offset:    {offset_fit:.1f} +/- {off_err:.1f} counts (true: {offset_true:.1f})"
+)
 
 # Derived quantities
 fwhm_x = 2.355 * sigma_x_fit  # FWHM = 2.355 * sigma
@@ -229,7 +242,7 @@ chi_squared = np.sum((residuals / sigma) ** 2)
 dof = n_points - len(popt)
 chi_squared_reduced = chi_squared / dof
 
-print(f"\nGoodness of Fit:")
+print("\nGoodness of Fit:")
 print(f"  chi^2/dof = {chi_squared_reduced:.3f} (expect ~1.0)")
 
 

@@ -18,7 +18,6 @@ Usage in workflow YAML:
 import jax.numpy as jnp
 import numpy as np
 
-
 # =============================================================================
 # Damped Oscillator Model
 # =============================================================================
@@ -175,7 +174,9 @@ def gaussian_2d(xy, amplitude, x0, y0, sigma_x, sigma_y, offset):
     y = xy[1]
     return (
         amplitude
-        * jnp.exp(-((x - x0) ** 2 / (2 * sigma_x**2) + (y - y0) ** 2 / (2 * sigma_y**2)))
+        * jnp.exp(
+            -((x - x0) ** 2 / (2 * sigma_x**2) + (y - y0) ** 2 / (2 * sigma_y**2))
+        )
         + offset
     )
 
@@ -212,7 +213,10 @@ def gaussian_2d_rotated(xy, amplitude, x0, y0, sigma_x, sigma_y, theta, offset):
     xr = (x - x0) * cos_t + (y - y0) * sin_t
     yr = -(x - x0) * sin_t + (y - y0) * cos_t
 
-    return amplitude * jnp.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2))) + offset
+    return (
+        amplitude * jnp.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2)))
+        + offset
+    )
 
 
 # =============================================================================

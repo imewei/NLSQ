@@ -105,10 +105,14 @@ def run_config(
 
         print("\nNext steps:")
         if copy_workflow:
-            print("  1. Edit workflow_config.yaml with your data path and model settings")
+            print(
+                "  1. Edit workflow_config.yaml with your data path and model settings"
+            )
             print("  2. Run: nlsq fit workflow_config.yaml")
         if copy_model:
             print("  - Edit custom_model.py to define your model function")
-            print("  - Reference it in your workflow: model.type: custom, model.path: custom_model.py")
+            print(
+                "  - Reference it in your workflow: model.type: custom, model.path: custom_model.py"
+            )
 
     return copied_files

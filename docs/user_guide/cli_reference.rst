@@ -412,13 +412,16 @@ Define custom models in Python files:
     # models/my_model.py
     import jax.numpy as jnp
 
+
     def double_exponential(x, a1, t1, a2, t2, c):
         """Double exponential decay model."""
         return a1 * jnp.exp(-x / t1) + a2 * jnp.exp(-x / t2) + c
 
+
     def estimate_p0(x, y):
         """Optional: Auto-estimate initial parameters."""
         return [y.max() / 2, 1.0, y.max() / 2, 10.0, y.min()]
+
 
     def bounds():
         """Optional: Return default parameter bounds."""

@@ -79,8 +79,10 @@ def main():
         f.write("# Damped oscillation data for NLSQ CLI demonstration\n")
         f.write("# True parameters: A0=15.0, gamma=0.05, omega=pi, phi=0.0\n")
         f.write("time,displacement,sigma\n")
-        for ti, yi, si in zip(t, y_measured, sigma, strict=False):
-            f.write(f"{ti:.6f},{yi:.6f},{si:.6f}\n")
+        f.writelines(
+            f"{ti:.6f},{yi:.6f},{si:.6f}\n"
+            for ti, yi, si in zip(t, y_measured, sigma, strict=False)
+        )
     print(f"   Created: damped_oscillation.csv ({len(t)} points)")
 
     # -------------------------------------------------------------------------
@@ -96,8 +98,10 @@ def main():
 
     with open(OUTPUT_DIR / "exponential_decay.csv", "w") as f:
         f.write("x,y,sigma\n")
-        for xi, yi, si in zip(x, y_measured, sigma, strict=False):
-            f.write(f"{xi:.6f},{yi:.6f},{si:.6f}\n")
+        f.writelines(
+            f"{xi:.6f},{yi:.6f},{si:.6f}\n"
+            for xi, yi, si in zip(x, y_measured, sigma, strict=False)
+        )
     print(f"   Created: exponential_decay.csv ({len(x)} points)")
 
     # -------------------------------------------------------------------------
@@ -114,8 +118,9 @@ def main():
         f.write("# Gaussian peak data (ASCII format)\n")
         f.write("# Columns: x  y\n")
         f.write("# True parameters: amplitude=10.0, mu=0.5, sigma=1.2\n")
-        for xi, yi in zip(x, y_measured, strict=False):
-            f.write(f"{xi:12.6f}  {yi:12.6f}\n")
+        f.writelines(
+            f"{xi:12.6f}  {yi:12.6f}\n" for xi, yi in zip(x, y_measured, strict=False)
+        )
     print(f"   Created: gaussian_peak.txt ({len(x)} points)")
 
     # -------------------------------------------------------------------------
@@ -131,8 +136,10 @@ def main():
 
     with open(OUTPUT_DIR / "enzyme_kinetics.csv", "w") as f:
         f.write("substrate_conc,velocity,sigma\n")
-        for si, vi, sigi in zip(S, v_measured, sigma_v, strict=False):
-            f.write(f"{si:.6f},{vi:.6f},{sigi:.6f}\n")
+        f.writelines(
+            f"{si:.6f},{vi:.6f},{sigi:.6f}\n"
+            for si, vi, sigi in zip(S, v_measured, sigma_v, strict=False)
+        )
     print(f"   Created: enzyme_kinetics.csv ({len(S)} points)")
 
     # -------------------------------------------------------------------------
@@ -177,8 +184,10 @@ def main():
         f.write(
             "# True parameters: amplitude=100, x0=0.3, y0=-0.2, sigma_x=1.0, sigma_y=0.8, offset=10\n"
         )
-        for xi, yi, zi, si in zip(x_flat, y_flat, z_measured, sigma_z, strict=False):
-            f.write(f"{xi:10.6f}  {yi:10.6f}  {zi:12.6f}  {si:10.6f}\n")
+        f.writelines(
+            f"{xi:10.6f}  {yi:10.6f}  {zi:12.6f}  {si:10.6f}\n"
+            for xi, yi, zi, si in zip(x_flat, y_flat, z_measured, sigma_z, strict=False)
+        )
     print(f"   Created: surface_2d.txt ({len(x_flat)} points)")
 
     # -------------------------------------------------------------------------
@@ -220,8 +229,10 @@ def main():
         with open(OUTPUT_DIR / f"batch_data_{i}.csv", "w") as f:
             f.write(f"# Batch dataset {i}: a={a}, b={b}, c={c}\n")
             f.write("x,y,sigma\n")
-            for xi, yi, si in zip(x, y_measured, sigma, strict=False):
-                f.write(f"{xi:.6f},{yi:.6f},{si:.6f}\n")
+            f.writelines(
+                f"{xi:.6f},{yi:.6f},{si:.6f}\n"
+                for xi, yi, si in zip(x, y_measured, sigma, strict=False)
+            )
         print(f"   Created: batch_data_{i}.csv ({len(x)} points)")
 
     # -------------------------------------------------------------------------

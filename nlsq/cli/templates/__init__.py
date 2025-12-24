@@ -52,7 +52,11 @@ def get_template_path(template_name: str) -> Path:
     """
     template_path = TEMPLATES_DIR / template_name
     if not template_path.exists():
-        available = [f.name for f in TEMPLATES_DIR.iterdir() if f.is_file() and not f.name.startswith("_")]
+        available = [
+            f.name
+            for f in TEMPLATES_DIR.iterdir()
+            if f.is_file() and not f.name.startswith("_")
+        ]
         msg = f"Template '{template_name}' not found. Available templates: {available}"
         raise FileNotFoundError(msg)
     return template_path

@@ -67,7 +67,7 @@ During Adam warmup, the loss function directly includes the variance penalty:
 
    def loss_fn(params, x_batch, y_batch):
        predictions = model(x_batch, *params)
-       mse = jnp.mean((y_batch - predictions)**2)
+       mse = jnp.mean((y_batch - predictions) ** 2)
 
        variance_penalty = 0.0
        for start, end in group_slices:
@@ -111,10 +111,8 @@ Group variance regularization is configured through ``HybridStreamingConfig``:
    config = HybridStreamingConfig(
        # Enable the feature
        enable_group_variance_regularization=True,
-
        # Regularization strength
        group_variance_lambda=0.1,
-
        # Define parameter groups as (start, end) slices
        # Example: 23 contrast params [0:23], 23 offset params [23:46]
        group_variance_indices=[(0, 23), (23, 46)],
@@ -168,35 +166,37 @@ For XPCS laminar flow analysis with 23 angular positions:
    #   [23:46]  - offset O_phi for each angle
    #   [46:]    - shared physical parameters (Gamma, etc.)
 
+
    def laminar_flow_model(x, *params):
        n_phi = 23
        contrast = jnp.array(params[:n_phi])
-       offset = jnp.array(params[n_phi:2*n_phi])
-       gamma = params[2*n_phi:]  # Shared physics parameters
+       offset = jnp.array(params[n_phi : 2 * n_phi])
+       gamma = params[2 * n_phi :]  # Shared physics parameters
 
        # Compute g2 correlation function
        # ... physics implementation ...
 
        return contrast * g2_theory + offset
 
+
    # Configure with group variance regularization
    config = HybridStreamingConfig(
        enable_group_variance_regularization=True,
        group_variance_lambda=0.1,
        group_variance_indices=[
-           (0, 23),    # Regularize contrast group
-           (23, 46),   # Regularize offset group
+           (0, 23),  # Regularize contrast group
+           (23, 46),  # Regularize offset group
        ],
        # Other settings
-       precision='float64',
+       precision="float64",
        gauss_newton_tol=1e-10,
    )
 
    # Initial parameters
    p0 = (
-       [0.3] * 23      # Initial contrast (same for all angles)
-       + [0.0] * 23    # Initial offset (zero for all angles)
-       + [1.0, 0.1]    # Initial shared parameters
+       [0.3] * 23  # Initial contrast (same for all angles)
+       + [0.0] * 23  # Initial offset (zero for all angles)
+       + [1.0, 0.1]  # Initial shared parameters
    )
 
    # Fit with regularization
@@ -205,7 +205,7 @@ For XPCS laminar flow analysis with 23 angular positions:
        x_data,
        y_data,
        p0=p0,
-       method='hybrid_streaming',
+       method="hybrid_streaming",
        hybrid_config=config,
    )
 
@@ -249,9 +249,9 @@ Perform fits with varying :math:`\lambda` and plot the L-curve:
            group_variance_indices=[(0, 23), (23, 46)],
        )
 
-       popt, _ = curve_fit(model, x, y, p0=p0,
-                           method='hybrid_streaming',
-                           hybrid_config=config)
+       popt, _ = curve_fit(
+           model, x, y, p0=p0, method="hybrid_streaming", hybrid_config=config
+       )
 
        # Compute unregularized MSE
        residuals = y - model(x, *popt)
@@ -259,17 +259,17 @@ Perform fits with varying :math:`\lambda` and plot the L-curve:
        mse_values.append(mse)
 
        # Compute total group variance
-       var_total = (jnp.var(popt[:23]) + jnp.var(popt[23:46]))
+       var_total = jnp.var(popt[:23]) + jnp.var(popt[23:46])
        variance_values.append(float(var_total))
 
    # Plot L-curve
    plt.figure()
-   plt.loglog(mse_values, variance_values, 'o-')
+   plt.loglog(mse_values, variance_values, "o-")
    for i, lam in enumerate(lambdas):
-       plt.annotate(f'{lam}', (mse_values[i], variance_values[i]))
-   plt.xlabel('MSE (data fidelity)')
-   plt.ylabel('Group variance (regularization)')
-   plt.title('L-curve for lambda selection')
+       plt.annotate(f"{lam}", (mse_values[i], variance_values[i]))
+   plt.xlabel("MSE (data fidelity)")
+   plt.ylabel("Group variance (regularization)")
+   plt.title("L-curve for lambda selection")
    plt.show()
 
 Choose :math:`\lambda` at the "corner" of the L-curve where both MSE
@@ -307,9 +307,9 @@ After fitting, validate the regularization effect:
    config_unreg = HybridStreamingConfig(
        enable_group_variance_regularization=False,
    )
-   popt_unreg, _ = curve_fit(model, x, y, p0=p0,
-                             method='hybrid_streaming',
-                             hybrid_config=config_unreg)
+   popt_unreg, _ = curve_fit(
+       model, x, y, p0=p0, method="hybrid_streaming", hybrid_config=config_unreg
+   )
 
    contrast_std_unreg = jnp.std(popt_unreg[:23])
    print(f"Contrast std (regularized): {contrast_std:.4f}")

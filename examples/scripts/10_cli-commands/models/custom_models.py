@@ -12,7 +12,6 @@ GPU/TPU acceleration and automatic differentiation.
 import jax.numpy as jnp
 import numpy as np
 
-
 # =============================================================================
 # Michaelis-Menten Enzyme Kinetics
 # =============================================================================

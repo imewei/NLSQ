@@ -19,7 +19,6 @@ Usage in workflow YAML:
 import jax.numpy as jnp
 import numpy as np
 
-
 # =============================================================================
 # Michaelis-Menten Enzyme Kinetics
 # =============================================================================

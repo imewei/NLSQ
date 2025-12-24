@@ -737,9 +737,10 @@ class Test2DSurfaceDataLoading:
         loader = DataLoader()
         with pytest.raises(DataLoadError) as exc_info:
             loader.load(FIXTURES_DIR / "sample_surface.csv", config)
-        assert "min" in str(exc_info.value).lower() or "points" in str(
-            exc_info.value
-        ).lower()
+        assert (
+            "min" in str(exc_info.value).lower()
+            or "points" in str(exc_info.value).lower()
+        )
 
     def test_auto_detect_format_2d_csv(self):
         """Test format auto-detection works for 2D CSV data."""

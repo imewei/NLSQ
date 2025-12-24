@@ -295,7 +295,9 @@ class DataLoader:
             For 2D: (xdata, ydata, sigma) where xdata is (2, n), ydata is (n,).
         """
         ascii_config = config.get("ascii", {})
-        columns_config = config.get("columns", {"x": 0, "y": 1, "z": None, "sigma": None})
+        columns_config = config.get(
+            "columns", {"x": 0, "y": 1, "z": None, "sigma": None}
+        )
 
         delimiter = ascii_config.get("delimiter", None)  # None = whitespace
         comment_char = ascii_config.get("comment_char", "#")
@@ -404,7 +406,9 @@ class DataLoader:
             For 2D: (xdata, ydata, sigma) where xdata is (2, n), ydata is (n,).
         """
         csv_config = config.get("csv", {})
-        columns_config = config.get("columns", {"x": 0, "y": 1, "z": None, "sigma": None})
+        columns_config = config.get(
+            "columns", {"x": 0, "y": 1, "z": None, "sigma": None}
+        )
 
         delimiter = csv_config.get("delimiter", ",")
         has_header = csv_config.get("header", True)

@@ -70,7 +70,9 @@ def gaussian_2d(xy, amplitude, x0, y0, sigma_x, sigma_y, offset):
     y = xy[1]
     return (
         amplitude
-        * jnp.exp(-((x - x0) ** 2 / (2 * sigma_x**2) + (y - y0) ** 2 / (2 * sigma_y**2)))
+        * jnp.exp(
+            -((x - x0) ** 2 / (2 * sigma_x**2) + (y - y0) ** 2 / (2 * sigma_y**2))
+        )
         + offset
     )
 
@@ -111,7 +113,10 @@ def gaussian_2d_rotated(xy, amplitude, x0, y0, sigma_x, sigma_y, theta, offset):
     xr = (x - x0) * cos_t + (y - y0) * sin_t
     yr = -(x - x0) * sin_t + (y - y0) * cos_t
 
-    return amplitude * jnp.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2))) + offset
+    return (
+        amplitude * jnp.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2)))
+        + offset
+    )
 
 
 def double_gaussian_2d(
@@ -198,7 +203,7 @@ sigma_y_true = 0.9  # Minor axis (2:1 ellipse)
 theta_true = np.pi / 6  # 30 degree rotation
 offset_true = 50.0
 
-print(f"\nTrue Parameters:")
+print("\nTrue Parameters:")
 print(f"  Amplitude: {amp_true:.1f}")
 print(f"  Center:    ({x0_true:.2f}, {y0_true:.2f})")
 print(f"  Sigmas:    {sigma_x_true:.2f} x {sigma_y_true:.2f}")
@@ -207,7 +212,14 @@ print(f"  Offset:    {offset_true:.1f}")
 
 # Generate data
 z_true = gaussian_2d_rotated(
-    xdata, amp_true, x0_true, y0_true, sigma_x_true, sigma_y_true, theta_true, offset_true
+    xdata,
+    amp_true,
+    x0_true,
+    y0_true,
+    sigma_x_true,
+    sigma_y_true,
+    theta_true,
+    offset_true,
 )
 noise = np.random.normal(0, np.sqrt(z_true + 10))
 z_measured = z_true + noise
@@ -226,7 +238,17 @@ bounds_rotated = (
 print("\nMethod 1: fit() with preset='fast'")
 if QUICK_MODE:
     print("  Quick mode: using simplified fit")
-    popt_fast = np.array([amp_true, x0_true, y0_true, sigma_x_true, sigma_y_true, theta_true, offset_true])
+    popt_fast = np.array(
+        [
+            amp_true,
+            x0_true,
+            y0_true,
+            sigma_x_true,
+            sigma_y_true,
+            theta_true,
+            offset_true,
+        ]
+    )
     pcov_fast = np.eye(7)
 else:
     popt_fast, pcov_fast = fit(
@@ -292,7 +314,9 @@ print(f"  Amplitude: {amp_g:.1f} +/- {perr_g[0]:.1f} (true: {amp_true:.1f})")
 print(f"  Center:    ({x0_g:.3f}, {y0_g:.3f})")
 print(f"  Sigma_x:   {sx_g:.3f} +/- {perr_g[3]:.3f} (true: {sigma_x_true:.2f})")
 print(f"  Sigma_y:   {sy_g:.3f} +/- {perr_g[4]:.3f} (true: {sigma_y_true:.2f})")
-print(f"  Rotation:  {np.degrees(theta_g):.1f} +/- {np.degrees(perr_g[5]):.1f} deg (true: {np.degrees(theta_true):.1f})")
+print(
+    f"  Rotation:  {np.degrees(theta_g):.1f} +/- {np.degrees(perr_g[5]):.1f} deg (true: {np.degrees(theta_true):.1f})"
+)
 
 # Use global result for visualization
 popt = popt_global
@@ -321,9 +345,13 @@ if not QUICK_MODE:
 
     offset2_true = 30.0
 
-    print(f"\nTrue Parameters:")
-    print(f"  Peak 1: amp={amp1_true:.0f}, pos=({x01_true:.1f}, {y01_true:.1f}), sigma={sigma1_true:.1f}")
-    print(f"  Peak 2: amp={amp2_true:.0f}, pos=({x02_true:.1f}, {y02_true:.1f}), sigma={sigma2_true:.1f}")
+    print("\nTrue Parameters:")
+    print(
+        f"  Peak 1: amp={amp1_true:.0f}, pos=({x01_true:.1f}, {y01_true:.1f}), sigma={sigma1_true:.1f}"
+    )
+    print(
+        f"  Peak 2: amp={amp2_true:.0f}, pos=({x02_true:.1f}, {y02_true:.1f}), sigma={sigma2_true:.1f}"
+    )
     print(f"  Offset: {offset2_true:.1f}")
 
     # Generate double-peak data
@@ -366,13 +394,19 @@ if not QUICK_MODE:
     )
 
     perr_double = np.sqrt(np.diag(pcov_double))
-    amp1_fit, x01_fit, y01_fit, s1_fit, amp2_fit, x02_fit, y02_fit, s2_fit, off2_fit = popt_double
+    amp1_fit, x01_fit, y01_fit, s1_fit, amp2_fit, x02_fit, y02_fit, s2_fit, off2_fit = (
+        popt_double
+    )
 
-    print(f"\nFitted Parameters:")
-    print(f"  Peak 1: amp={amp1_fit:.0f}+/-{perr_double[0]:.0f}, "
-          f"pos=({x01_fit:.2f}, {y01_fit:.2f}), sigma={s1_fit:.2f}")
-    print(f"  Peak 2: amp={amp2_fit:.0f}+/-{perr_double[4]:.0f}, "
-          f"pos=({x02_fit:.2f}, {y02_fit:.2f}), sigma={s2_fit:.2f}")
+    print("\nFitted Parameters:")
+    print(
+        f"  Peak 1: amp={amp1_fit:.0f}+/-{perr_double[0]:.0f}, "
+        f"pos=({x01_fit:.2f}, {y01_fit:.2f}), sigma={s1_fit:.2f}"
+    )
+    print(
+        f"  Peak 2: amp={amp2_fit:.0f}+/-{perr_double[4]:.0f}, "
+        f"pos=({x02_fit:.2f}, {y02_fit:.2f}), sigma={s2_fit:.2f}"
+    )
     print(f"  Offset: {off2_fit:.1f}")
 
     # Separation
@@ -413,6 +447,7 @@ ax1.contour(X, Y, Z_measured, levels=5, colors="white", alpha=0.5, linewidths=0.
 
 # Draw ellipse showing fitted orientation
 from matplotlib.patches import Ellipse
+
 ellipse = Ellipse(
     (x0_g, y0_g),
     width=2 * sx_g,
@@ -545,7 +580,9 @@ print("SUMMARY")
 print("=" * 70)
 
 print("\nExample 1: Rotated Elliptical Gaussian")
-print(f"  Fitted rotation angle: {np.degrees(theta_g):.1f} +/- {np.degrees(perr_g[5]):.1f} deg")
+print(
+    f"  Fitted rotation angle: {np.degrees(theta_g):.1f} +/- {np.degrees(perr_g[5]):.1f} deg"
+)
 print(f"  True rotation angle:   {np.degrees(theta_true):.1f} deg")
 print(f"  Axis ratio: {sx_g / sy_g:.2f} (true: {sigma_x_true / sigma_y_true:.2f})")
 

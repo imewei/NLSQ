@@ -19,7 +19,6 @@ Usage in workflow YAML:
 import jax.numpy as jnp
 import numpy as np
 
-
 # =============================================================================
 # Sensor Calibration (Linear with Offset)
 # =============================================================================
@@ -267,7 +266,5 @@ def rlc_resonance(omega, A, omega0, Q):
         Response amplitude
     """
     omega_ratio = omega / omega0
-    denominator = jnp.sqrt(
-        (1 - omega_ratio**2) ** 2 + (omega_ratio / Q) ** 2
-    )
+    denominator = jnp.sqrt((1 - omega_ratio**2) ** 2 + (omega_ratio / Q) ** 2)
     return A / denominator
