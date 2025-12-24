@@ -298,11 +298,12 @@ class WorkflowRunner:
         if method:
             fit_kwargs["method"] = method
 
-        # Tolerances
+        # Tolerances (convert strings to float to handle scientific notation)
         for tol_key in ["ftol", "xtol", "gtol"]:
             tol_val = fitting_config.get(tol_key)
             if tol_val is not None:
-                fit_kwargs[tol_key] = tol_val
+                # YAML may parse scientific notation as strings (e.g., '1e-10')
+                fit_kwargs[tol_key] = float(tol_val)
 
         # Max iterations
         max_nfev = fitting_config.get("max_nfev")
@@ -339,11 +340,11 @@ class WorkflowRunner:
         Parameters
         ----------
         model : callable
-            Model function f(x, *params).
+            Model function. For 1D: f(x, *params). For 2D: f(xy, *params).
         xdata : ndarray
-            Independent variable data.
+            Independent variable data. For 1D: shape (n,). For 2D: shape (2, n).
         ydata : ndarray
-            Dependent variable data.
+            Dependent variable data. Shape (n,) for both 1D and 2D.
         p0 : ndarray or None
             Initial parameter guess.
         sigma : ndarray or None
@@ -364,6 +365,12 @@ class WorkflowRunner:
             If curve fitting fails.
         """
         import nlsq
+
+        # Determine number of data points (accounting for 2D xdata)
+        if xdata.ndim == 2:
+            n_points = xdata.shape[1]
+        else:
+            n_points = len(xdata)
 
         try:
             # Build curve_fit arguments
@@ -431,7 +438,7 @@ class WorkflowRunner:
             ):
                 raise FitError(
                     "Curve fitting failed: insufficient data points for number of parameters",
-                    context={"n_points": len(xdata), "error": error_msg},
+                    context={"n_points": n_points, "error": error_msg},
                     suggestion="Provide more data points or use a simpler model with fewer parameters",
                 ) from e
 

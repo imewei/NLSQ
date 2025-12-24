@@ -4,6 +4,7 @@ This module provides the main command-line interface for NLSQ, supporting:
 - `nlsq fit workflow.yaml` - Execute single curve fit from YAML config
 - `nlsq batch w1.yaml w2.yaml ...` - Execute parallel batch fitting
 - `nlsq info` - Display system and environment information
+- `nlsq config` - Copy configuration templates to current directory
 
 Example Usage
 -------------
@@ -13,6 +14,9 @@ From command line:
     $ nlsq fit workflow.yaml --stdout
     $ nlsq batch configs/*.yaml --workers 4
     $ nlsq info
+    $ nlsq config
+    $ nlsq config --workflow
+    $ nlsq config --model -o my_model.py
     $ nlsq --version
     $ nlsq --verbose fit workflow.yaml
 """
@@ -125,6 +129,36 @@ def create_parser() -> argparse.ArgumentParser:
         description="Show NLSQ version, Python, JAX backend, GPU info, and builtin models",
     )
 
+    # --- nlsq config ---
+    config_parser = subparsers.add_parser(
+        "config",
+        help="Copy configuration templates to current directory",
+        description="Copy workflow and/or custom model templates to start a new project",
+    )
+    config_parser.add_argument(
+        "--workflow",
+        action="store_true",
+        help="Copy only the workflow configuration template (workflow_config.yaml)",
+    )
+    config_parser.add_argument(
+        "--model",
+        action="store_true",
+        help="Copy only the custom model template (custom_model.py)",
+    )
+    config_parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default=None,
+        help="Custom output filename (only valid with --workflow or --model)",
+    )
+    config_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite existing files without prompting",
+    )
+
     return parser
 
 
@@ -229,6 +263,39 @@ def handle_info(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_config(args: argparse.Namespace) -> int:
+    """Handle the 'config' subcommand.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for failure).
+    """
+    from nlsq.cli.commands import config
+
+    try:
+        config.run_config(
+            workflow=args.workflow,
+            model=args.model,
+            output=args.output,
+            force=args.force,
+            verbose=args.verbose if hasattr(args, "verbose") else False,
+        )
+        return 0
+
+    except FileExistsError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
+
+
 def _print_error(error_type: str, error: CLIError) -> None:
     """Print a formatted error message to stderr.
 
@@ -283,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
         "fit": handle_fit,
         "batch": handle_batch,
         "info": handle_info,
+        "config": handle_config,
     }
 
     handler = handlers.get(args.command)
