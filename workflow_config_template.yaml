@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 3.0 (Updated for NLSQ v0.4.0+ with CLI support)
+# Version: 3.1 (Updated for NLSQ v0.4.1+ with 2D surface fitting)
 #
 # This template provides comprehensive configuration options for NLSQ curve
 # fitting workflows. Copy this file to your project and customize as needed.

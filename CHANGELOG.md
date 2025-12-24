@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-12-24
+
+### Added
+
+- **CLI command-line interface**: YAML-based workflow execution with `nlsq fit` and `nlsq batch` commands
+- **2D surface fitting**: New data loader for 2D grid data in CLI workflows
+- **Gallery examples**: 2D surface fitting notebooks with Gaussian and physics-based models
+- **CLI templates**: Custom model template with damped oscillator example
+- **Documentation**: CLI reference guide and group variance regularization documentation
+
+### Fixed
+
+- fix(examples): Handle quick mode array reshaping in 2D surface fitting notebooks
+- fix(deps): Pin numpy to <2.4 for JAX 0.8.0 compatibility
+- fix: Use constrained layout to eliminate matplotlib tight_layout warnings
+- docs: Fix Sphinx docutils indentation warnings in docstrings
+
+### Changed
+
+- docs: Update test count to 2,340 tests (100% pass rate)
+- chore: Reorganize CLI demo scripts and add output directory to .gitignore
+
 ## [0.4.0] - 2025-12-24
 
 ### Changed

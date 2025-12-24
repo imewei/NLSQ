@@ -192,7 +192,7 @@ Verbose with model docstrings::
 
 .. code-block:: text
 
-    NLSQ Version: 0.4.0
+    NLSQ Version: 0.4.1
 
     Python Version: 3.12.0
 

@@ -2,9 +2,9 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
-[![NLSQ Version](https://img.shields.io/badge/nlsq-0.4.0+-orange.svg)](https://github.com/imewei/NLSQ)
+[![NLSQ Version](https://img.shields.io/badge/nlsq-0.4.1+-orange.svg)](https://github.com/imewei/NLSQ)
 
-> **v0.4.0**: PyPI logo fix, README optimization. See [CHANGELOG.md](../CHANGELOG.md) for details.
+> **v0.4.1**: CLI interface, 2D surface fitting, gallery examples. See [CHANGELOG.md](../CHANGELOG.md) for details.
 
 Welcome to the NLSQ examples repository! This collection provides comprehensive, interactive tutorials for learning and mastering GPU-accelerated nonlinear least squares curve fitting with JAX.
 
@@ -646,5 +646,5 @@ If you use NLSQ in your research, please cite:
 ---
 
 <p align="center">
-<i>Last updated: 2025-12-24 | NLSQ v0.4.0</i>
+<i>Last updated: 2025-12-24 | NLSQ v0.4.1</i>
 </p>

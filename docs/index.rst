@@ -97,11 +97,11 @@ Resources
 Project Status
 --------------
 
-**Current Release**: v0.4.0
+**Current Release**: v0.4.1
 
 - Production-ready for scientific computing
 - Active development and maintenance
-- Comprehensive test suite (2,181 tests, 100% pass rate)
+- Comprehensive test suite (2,340 tests, 100% pass rate)
 - Performance profiling and regression detection infrastructure
 - Global optimization with multi-start LHS sampling (v0.3.3+)
 - Workflow system with unified fit() and auto-selection (v0.3.4+)
