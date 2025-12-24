@@ -309,15 +309,17 @@ class FitVisualizer:
 
         if show_residuals:
             # Create figure with 2 subplots (3:1 height ratio)
+            # Use constrained layout for better handling of shared axes
             fig, (ax_main, ax_residuals) = plt.subplots(
                 2,
                 1,
                 figsize=figure_size,
                 gridspec_kw={"height_ratios": [3, 1], "hspace": 0.1},
                 sharex=True,
+                layout="constrained",
             )
         else:
-            fig, ax_main = plt.subplots(figsize=figure_size)
+            fig, ax_main = plt.subplots(figsize=figure_size, layout="constrained")
             ax_residuals = None
 
         # Get color scheme
@@ -354,7 +356,6 @@ class FitVisualizer:
             if ax_residuals is not None and spine in ax_residuals.spines:
                 ax_residuals.spines[spine].set_visible(visible)
 
-        fig.tight_layout()
         return fig
 
     def _plot_main(
@@ -600,7 +601,7 @@ class FitVisualizer:
         preset = STYLE_PRESETS.get(style_name, STYLE_PRESETS["publication"])
         figure_size = config.get("figure_size", preset.get("figure_size", [6.0, 4.5]))
 
-        fig, ax = plt.subplots(figsize=figure_size)
+        fig, ax = plt.subplots(figsize=figure_size, layout="constrained")
 
         histogram_config = config.get("histogram", {})
 
@@ -645,7 +646,6 @@ class FitVisualizer:
         if histogram_config.get("title"):
             ax.set_title(histogram_config["title"])
 
-        fig.tight_layout()
         return fig
 
     def _calculate_confidence_band(
