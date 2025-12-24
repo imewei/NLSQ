@@ -12,6 +12,7 @@ Documentation for NLSQ developers and contributors.
    pypi_setup
    notebook_utilities
    ci_cd/index
+   adr/README
 
 Overview
 --------
@@ -22,7 +23,7 @@ This section contains technical documentation for developers working on NLSQ:
 - CI/CD pipeline documentation
 - Release and publishing guides
 - Development best practices
-- Notebook configuration utilities
+- Architecture Decision Records (ADRs)
 
 Performance & Optimization
 --------------------------
@@ -34,7 +35,7 @@ Optimization Case Study
 
 Comprehensive analysis of NLSQ's performance optimization journey:
 
-- NumPy↔JAX conversion reduction (8% improvement)
+- NumPy<->JAX conversion reduction (8% improvement)
 - Profiling methodology and tools
 - Decision-making process for deferred optimizations
 - Lessons learned and best practices
@@ -52,11 +53,19 @@ Deep technical guide for performance optimization:
 - GPU/TPU utilization
 - Benchmarking methodologies
 
+Architecture Decision Records
+-----------------------------
+
+:doc:`adr/README`
+
+Documented architectural decisions for NLSQ:
+
+- :doc:`adr/003-streaming-over-subsampling` - Streaming optimization over subsampling
+- :doc:`adr/004-parameter-unpacking-simplification` - Parameter unpacking simplification
+- :doc:`adr/005-jax-autodiff-gradients` - JAX autodiff for gradient computation
+
 Notebook Utilities
 ------------------
-
-Notebook Configuration Utilities
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :doc:`notebook_utilities`
 
@@ -66,14 +75,9 @@ Modern framework for transforming Jupyter notebooks:
 - IPython.display import injection
 - plt.show() replacement with display/close pattern
 - Incremental processing with checksum tracking
-- Parallel execution for large repositories
-- Pipeline composition with rollback support
 
 Documentation Quality
 ---------------------
-
-Documentation Quality Assurance
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :doc:`documentation_quality`
 
@@ -82,15 +86,10 @@ Comprehensive guide for maintaining high-quality documentation:
 - Zero warnings policy and enforcement
 - Automated CI/CD checks
 - Pre-commit hooks for local validation
-- Common documentation issues and solutions
 - RST formatting best practices
-- Troubleshooting build failures
 
 Release Management
 ------------------
-
-PyPI Publishing
-~~~~~~~~~~~~~~~
 
 :doc:`pypi_setup`
 
@@ -100,16 +99,14 @@ Complete guide for publishing NLSQ to PyPI:
 - Version management
 - Build and distribution
 - Testing releases
-- Documentation deployment
 
 CI/CD Pipeline
 --------------
 
-See :doc:`ci_cd/index` for comprehensive CI/CD documentation:
+See :doc:`ci_cd/index` for CI/CD documentation:
 
-- GitHub Actions workflows
-- CodeQL security scanning
-- Automated testing
+- GitHub Actions workflows (main.yml, release.yml)
+- Automated testing and coverage
 - Pre-commit hooks
 - Quality gates
 
