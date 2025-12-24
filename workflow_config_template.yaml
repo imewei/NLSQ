@@ -82,7 +82,7 @@
 # │   - Fast initial convergence from any starting point                        │
 # │   - Adaptive switching based on plateau/gradient criteria                   │
 # │   - Default: 200-500 iterations                                             │
-# │   - Protected by 4-Layer Defense Strategy (v0.3.6+)                         │
+# │   - Protected by 4-Layer Defense Strategy                        │
 # │                                                                             │
 # │ Phase 2: Streaming Gauss-Newton                                             │
 # │   - Exact J^T J accumulation across data chunks                             │
@@ -95,7 +95,7 @@
 # └─────────────────────────────────────────────────────────────────────────────┘
 #
 # ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ 4-LAYER DEFENSE STRATEGY (v0.3.6+)                                          │
+# │ 4-LAYER DEFENSE STRATEGY                                          │
 # ├─────────────────────────────────────────────────────────────────────────────┤
 # │ Prevents Adam warmup divergence when initial parameters are near optimal:   │
 # │                                                                             │
@@ -188,7 +188,7 @@
 #     termination:
 #       max_iterations: 50
 #
-# Pattern 6: Warm Start Refinement (v0.3.6+)
+# Pattern 6: Warm Start Refinement
 # ──────────────────────────────────────────
 # Use when refining parameters from a previous fit.
 #   default_workflow: "streaming"
@@ -205,7 +205,7 @@
 #         enabled: true
 #         tolerance: 0.02  # 2% - tighter than default 5%
 #
-# Pattern 7: Production Monitoring with Telemetry (v0.3.6+)
+# Pattern 7: Production Monitoring with Telemetry
 # ─────────────────────────────────────────────────────────
 # For batch processing with defense layer monitoring.
 #   default_workflow: "streaming"
@@ -531,7 +531,7 @@ hybrid_streaming:
   gradient_clip_value: null  # Set to 1.0 for gradient clipping
 
   # ==========================================================================
-  # 4-LAYER DEFENSE STRATEGY (v0.3.6+)
+  # 4-LAYER DEFENSE STRATEGY
   # ==========================================================================
   # Prevents Adam warmup divergence when initial parameters are near optimal.
   # All layers are enabled by default for improved stability.
@@ -614,7 +614,7 @@ hybrid_streaming:
   # Progress monitoring
   callback_frequency: 10
 
-  # Telemetry for production monitoring (v0.3.6+)
+  # Telemetry for production monitoring
   # Tracks defense layer activation rates across fits
   telemetry:
     enabled: true
@@ -865,7 +865,7 @@ advanced:
 #       max_gb: 4.0
 
 # warm_start_refinement:
-#   # Optimized for refining parameters from previous fits (v0.3.6+)
+#   # Optimized for refining parameters from previous fits
 #   # Uses strict defense layers to prevent divergence
 #   runtime:
 #     device: "cpu"
@@ -883,7 +883,7 @@ advanced:
 #       export_format: "json"
 
 # exploration_from_poor_guess:
-#   # When starting from potentially poor initial parameters (v0.3.6+)
+#   # When starting from potentially poor initial parameters
 #   # Uses relaxed defense to allow more exploration
 #   runtime:
 #     device: "gpu"
@@ -901,7 +901,7 @@ advanced:
 #       export_format: "prometheus"
 
 # regression_testing:
-#   # For comparing against pre-0.3.6 results (v0.3.6+)
+#   # For comparing against pre-0.3.6 results
 #   # Disables all defense layers for exact behavior match
 #   runtime:
 #     device: "cpu"
@@ -915,7 +915,7 @@ advanced:
 #       enabled: false
 
 # scientific_computing:
-#   # Tuned for physics/scientific models (v0.3.6+)
+#   # Tuned for physics/scientific models
 #   # Uses scientific_default preset with production monitoring
 #   runtime:
 #     device: "cpu"
