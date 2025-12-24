@@ -1390,7 +1390,9 @@ class TestPropertyBased:
         ),
         max_norm=st.floats(min_value=1e-6, max_value=10.0),
     )
-    @settings(max_examples=100, deadline=500)  # 500ms deadline for JIT warmup
+    @settings(
+        max_examples=100, deadline=2000
+    )  # 2s deadline for JIT warmup on slower platforms (macOS)
     def test_clip_update_norm_always_clips(self, updates, max_norm):
         """Property: clipped update norm is always <= max_norm."""
         updates = jnp.array(updates)
@@ -1407,7 +1409,9 @@ class TestPropertyBased:
         ),
         max_norm=st.floats(min_value=1e-6, max_value=10.0),
     )
-    @settings(max_examples=100, deadline=500)  # 500ms deadline for JIT warmup
+    @settings(
+        max_examples=100, deadline=2000
+    )  # 2s deadline for JIT warmup on slower platforms (macOS)
     def test_clip_preserves_direction(self, updates, max_norm):
         """Property: clipping preserves update direction."""
         updates = jnp.array(updates)
