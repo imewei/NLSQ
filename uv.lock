@@ -1990,7 +1990,7 @@ requires-dist = [
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=4.0.1" },
     { name = "notebook", marker = "extra == 'all'", specifier = ">=7.5.1" },
     { name = "notebook", marker = "extra == 'jupyter'", specifier = ">=7.5.1" },
-    { name = "numpy", specifier = ">=2.4.0" },
+    { name = "numpy", specifier = ">=2.0.0" },
     { name = "optax", specifier = ">=0.2.6" },
     { name = "pre-commit", marker = "extra == 'all'", specifier = ">=4.5.1" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.5.1" },
