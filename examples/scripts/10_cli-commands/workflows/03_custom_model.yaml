@@ -1,0 +1,181 @@
+# ==============================================================================
+# 03_custom_model.yaml - Using Custom Models
+# ==============================================================================
+# Demonstrates fitting with custom model functions from external Python files.
+#
+# Usage:
+#   nlsq fit workflows/03_custom_model.yaml
+#
+# Custom models must be defined in a Python file with:
+#   1. A model function: def model_name(x, param1, param2, ...): ...
+#   2. (Optional) estimate_p0(xdata, ydata) -> list for auto initial params
+#   3. (Optional) bounds() -> (lower, upper) for auto bounds
+#
+# Use `nlsq config --model` to generate a template for custom models.
+# ==============================================================================
+
+metadata:
+  workflow_name: "custom_damped_oscillator"
+  description: "Fit damped oscillation using custom physics model"
+  version: "1.0"
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+data:
+  dataset_id: "damped_osc_001"
+  input_file: "data/damped_oscillation.csv"
+  format: "csv"
+
+  columns:
+    x: 0              # time column
+    y: 1              # displacement column
+    sigma: 2          # uncertainty column
+
+  csv:
+    header: true
+    delimiter: ","
+
+# ==============================================================================
+# MODEL CONFIGURATION - CUSTOM MODEL
+# ==============================================================================
+model:
+  # Custom model loaded from external Python file
+  type: "custom"
+
+  # Path to Python file containing model function
+  # (relative to workflow file)
+  path: "models/physics_models.py"
+
+  # Function name to use from the file
+  function: "damped_oscillator"
+
+  # Since the custom model has estimate_p0() and bounds() functions,
+  # they will be used automatically when auto_p0/auto_bounds are enabled
+  auto_p0: true
+  auto_bounds: true
+
+  # Manual parameter configuration (alternative to auto):
+  # parameters:
+  #   - name: "A0"
+  #     initial: 15.0
+  #     bounds: [0.0, 30.0]
+  #   - name: "gamma"
+  #     initial: 0.05
+  #     bounds: [0.0, 1.0]
+  #   - name: "omega"
+  #     initial: 3.14
+  #     bounds: [0.0, 10.0]
+  #   - name: "phi"
+  #     initial: 0.0
+  #     bounds: [-3.14159, 3.14159]
+
+# ==============================================================================
+# FITTING CONFIGURATION
+# ==============================================================================
+fitting:
+  termination:
+    ftol: 1.0e-8
+    xtol: 1.0e-8
+    gtol: 1.0e-8
+    max_iterations: 200
+
+# ==============================================================================
+# EXPORT CONFIGURATION
+# ==============================================================================
+export:
+  results_file: "output/03_custom_model_results.json"
+
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+    convergence_info: true
+
+# ==============================================================================
+# VISUALIZATION CONFIGURATION
+# ==============================================================================
+# Style: "science" - Science journal specifications.
+# Shows damped oscillation with confidence bands and full statistics.
+
+visualization:
+  enabled: true
+  output_dir: "output/figures"
+  filename_prefix: "03_damped_oscillator"
+  formats: ["png", "pdf"]
+  dpi: 300
+  figure_size: [5.0, 4.0]
+  style: "science"
+  layout: "combined"
+
+  font:
+    family: "sans-serif"
+    size: 9
+    math_fontset: "stix"
+
+  main_plot:
+    title: null
+    x_label: "$t$ (s)"
+    y_label: "$x(t)$ (cm)"
+    show_grid: true
+    grid_alpha: 0.25
+
+    data:
+      marker: "o"
+      size: 18
+      alpha: 0.6
+      label: "Measurement"
+      show_errorbars: true
+      capsize: 2
+
+    fit:
+      linewidth: 1.5
+      linestyle: "-"
+      label: "Damped Oscillator Fit"
+      n_points: 1000              # High resolution for oscillation
+
+    confidence_band:
+      enabled: true
+      level: 0.95
+      alpha: 0.15
+
+    legend:
+      enabled: true
+      location: "upper right"
+      frameon: true
+
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: true
+      show_chi_squared: true
+      location: "lower right"
+      fontsize: 8
+      box_alpha: 0.8
+
+  residuals_plot:
+    enabled: true
+    type: "scatter"
+    x_label: "$t$ (s)"
+    y_label: "Residual (cm)"
+    show_zero_line: true
+    marker: "o"
+    size: 12
+    alpha: 0.6
+
+    std_bands:
+      enabled: true
+      levels: [1, 2]
+      colors: ["#e8f4e8", "#d4e9d4"]
+      alpha: 0.5
+
+  histogram:
+    enabled: true
+    bins: 20
+    show_normal_fit: true
+    alpha: 0.7
+    edgecolor: "white"
+    title: "Residual Distribution"
+
+  active_scheme: "science"

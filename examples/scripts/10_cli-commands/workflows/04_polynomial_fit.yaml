@@ -1,0 +1,156 @@
+# ==============================================================================
+# 04_polynomial_fit.yaml - Polynomial Model Fitting
+# ==============================================================================
+# Demonstrates fitting with automatically generated polynomial models.
+#
+# Usage:
+#   nlsq fit workflows/04_polynomial_fit.yaml
+#
+# Polynomial model: f(x) = a0 + a1*x + a2*x^2 + ... + an*x^n
+# The degree parameter controls the polynomial order.
+# ==============================================================================
+
+metadata:
+  workflow_name: "polynomial_fit_degree3"
+  description: "Fit cubic polynomial to data"
+  version: "1.0"
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+data:
+  dataset_id: "polynomial_001"
+  input_file: "data/polynomial_data.npz"
+  format: "npz"
+
+  # NPZ format: specify array keys
+  npz:
+    x_key: "x"        # Array key for x data
+    y_key: "y"        # Array key for y data
+    sigma_key: "sigma"  # Array key for uncertainties
+
+# ==============================================================================
+# MODEL CONFIGURATION - POLYNOMIAL
+# ==============================================================================
+model:
+  # Polynomial model type generates p(x) = sum(ai * x^i)
+  type: "polynomial"
+
+  # Polynomial degree (number of terms = degree + 1)
+  # degree=3 means: a0 + a1*x + a2*x^2 + a3*x^3
+  degree: 3
+
+  # Model ID for tracking
+  model_id: "poly_deg3"
+
+# ==============================================================================
+# FITTING CONFIGURATION
+# ==============================================================================
+fitting:
+  termination:
+    ftol: 1.0e-10
+    xtol: 1.0e-10
+    gtol: 1.0e-10
+    max_iterations: 100
+
+# ==============================================================================
+# EXPORT CONFIGURATION
+# ==============================================================================
+export:
+  results_file: "output/04_polynomial_fit_results.json"
+
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+
+# ==============================================================================
+# VISUALIZATION CONFIGURATION
+# ==============================================================================
+# Style: "minimal" - Clean look with no top/right spines, no grid.
+# Demonstrates high-contrast palette for presentations.
+
+visualization:
+  enabled: true
+  output_dir: "output/figures"
+  filename_prefix: "04_polynomial"
+  formats: ["png", "pdf"]
+  dpi: 300
+  figure_size: [6.0, 4.5]
+  style: "minimal"
+  layout: "combined"
+
+  font:
+    family: "sans-serif"
+    size: 11
+    math_fontset: "dejavusans"
+
+  main_plot:
+    title: null
+    x_label: "$x$"
+    y_label: "$y = a_0 + a_1 x + a_2 x^2 + a_3 x^3$"
+    show_grid: false              # Minimal style - no grid
+    grid_alpha: 0.0
+
+    data:
+      marker: "s"                 # Square markers
+      size: 25
+      alpha: 0.8
+      label: "Data"
+      show_errorbars: true
+      capsize: 3
+
+    fit:
+      linewidth: 2.0
+      linestyle: "-"
+      label: "Cubic Polynomial"
+      n_points: 500
+
+    confidence_band:
+      enabled: true
+      level: 0.95
+      alpha: 0.2
+
+    legend:
+      enabled: true
+      location: "best"
+      frameon: false              # No frame for minimal style
+
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: true
+      show_chi_squared: false
+      location: "upper left"
+      fontsize: 10
+      box_alpha: 0.9
+
+  residuals_plot:
+    enabled: true
+    type: "scatter"
+    x_label: "$x$"
+    y_label: "Residual"
+    show_zero_line: true
+    zero_line_style: "-"
+    zero_line_color: "black"
+    zero_line_width: 0.5
+    marker: "s"
+    size: 15
+    alpha: 0.8
+
+    std_bands:
+      enabled: true
+      levels: [1, 2]
+      colors: ["#f0f0f0", "#e0e0e0"]
+      alpha: 0.6
+
+  histogram:
+    enabled: true
+    bins: "auto"
+    show_normal_fit: true
+    alpha: 0.8
+    edgecolor: "black"
+    title: "Residual Distribution"
+
+  active_scheme: "high_contrast"

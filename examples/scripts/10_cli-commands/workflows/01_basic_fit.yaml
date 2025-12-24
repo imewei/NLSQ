@@ -1,0 +1,175 @@
+# ==============================================================================
+# 01_basic_fit.yaml - Basic NLSQ CLI Fit Example
+# ==============================================================================
+# Demonstrates the simplest usage of `nlsq fit` command.
+#
+# Usage:
+#   nlsq fit workflows/01_basic_fit.yaml
+#   nlsq fit workflows/01_basic_fit.yaml --output custom_results.json
+#   nlsq fit workflows/01_basic_fit.yaml --stdout | jq .
+#
+# This example fits exponential decay data using the builtin model.
+# ==============================================================================
+
+metadata:
+  workflow_name: "basic_fit_example"
+  description: "Basic curve fitting demonstration with exponential decay"
+  version: "1.0"
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+data:
+  dataset_id: "exp_decay_001"
+
+  # Path to data file (relative to workflow file location)
+  input_file: "data/exponential_decay.csv"
+
+  # File format (auto-detected from extension, or explicit)
+  format: "csv"
+
+  # Column mapping
+  columns:
+    x: 0              # First column (x values)
+    y: 1              # Second column (y values)
+    sigma: 2          # Third column (uncertainties)
+
+  # CSV options
+  csv:
+    header: true      # First row contains column names
+    delimiter: ","
+
+# ==============================================================================
+# MODEL CONFIGURATION
+# ==============================================================================
+model:
+  # Use builtin exponential_decay model from nlsq.functions
+  type: "builtin"
+  name: "exponential_decay"
+
+  # Enable automatic initial parameter estimation
+  auto_p0: true
+
+  # Enable automatic bounds from model defaults
+  auto_bounds: false
+
+# ==============================================================================
+# FITTING CONFIGURATION
+# ==============================================================================
+fitting:
+  method: "trf"
+
+  termination:
+    ftol: 1.0e-8
+    xtol: 1.0e-8
+    gtol: 1.0e-8
+    max_iterations: 100
+
+# ==============================================================================
+# EXPORT CONFIGURATION
+# ==============================================================================
+export:
+  results_file: "output/01_basic_fit_results.json"
+
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+    convergence_info: true
+
+# ==============================================================================
+# VISUALIZATION CONFIGURATION
+# ==============================================================================
+# Comprehensive visualization with all features enabled for demonstration.
+# Style: "publication" - Clean serif fonts, 300 DPI, suitable for journals.
+
+visualization:
+  enabled: true
+  output_dir: "output/figures"
+  filename_prefix: "01_basic_fit"
+  formats: ["png", "pdf"]
+  dpi: 300
+  figure_size: [6.0, 4.5]
+  style: "publication"
+  layout: "combined"
+
+  # Font settings
+  font:
+    family: "serif"
+    size: 10
+    math_fontset: "cm"
+
+  # Main plot (Data + Fitted Curve)
+  main_plot:
+    title: null
+    x_label: "Time (s)"
+    y_label: "Signal (a.u.)"
+    show_grid: true
+    grid_alpha: 0.3
+
+    data:
+      marker: "o"
+      size: 20
+      alpha: 0.7
+      label: "Data"
+      show_errorbars: true
+      capsize: 2
+
+    fit:
+      linewidth: 1.5
+      linestyle: "-"
+      label: "Fit"
+      n_points: 500
+
+    # Confidence band from covariance matrix error propagation
+    confidence_band:
+      enabled: true
+      level: 0.95
+      alpha: 0.2
+
+    legend:
+      enabled: true
+      location: "best"
+      frameon: true
+
+    # Fit statistics annotation (R², RMSE)
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: true
+      show_chi_squared: true
+      location: "upper right"
+      fontsize: 9
+      box_alpha: 0.8
+
+  # Residuals plot
+  residuals_plot:
+    enabled: true
+    type: "scatter"
+    x_label: "Time (s)"
+    y_label: "Residual"
+    show_zero_line: true
+    marker: "o"
+    size: 15
+    alpha: 0.7
+
+    std_bands:
+      enabled: true
+      levels: [1, 2]
+      colors: ["#e8f4e8", "#d4e9d4"]
+      alpha: 0.5
+
+  # Histogram of residuals
+  histogram:
+    enabled: true
+    bins: "auto"
+    show_normal_fit: true
+    alpha: 0.7
+    edgecolor: "white"
+    title: "Residual Distribution"
+    x_label: "Residual"
+    y_label: "Frequency"
+
+  # Colorblind-safe palette support
+  active_scheme: "default"

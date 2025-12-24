@@ -1,0 +1,172 @@
+# ==============================================================================
+# 05_weighted_fit.yaml - Weighted Fitting with Uncertainties
+# ==============================================================================
+# Demonstrates weighted least squares fitting using measurement uncertainties.
+#
+# Usage:
+#   nlsq fit workflows/05_weighted_fit.yaml
+#
+# Weighted fitting minimizes: sum((y - f(x))^2 / sigma^2)
+# This gives more weight to precise measurements and less to noisy ones.
+# ==============================================================================
+
+metadata:
+  workflow_name: "weighted_enzyme_kinetics"
+  description: "Michaelis-Menten fitting with measurement uncertainties"
+  version: "1.0"
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+data:
+  dataset_id: "enzyme_001"
+  input_file: "data/enzyme_kinetics.csv"
+  format: "csv"
+
+  columns:
+    x: 0              # substrate_conc column
+    y: 1              # velocity column
+    sigma: 2          # sigma column (measurement uncertainties)
+
+  csv:
+    header: true
+    delimiter: ","
+
+  # Data validation
+  validation:
+    require_finite: true
+    min_points: 5
+
+# ==============================================================================
+# MODEL CONFIGURATION
+# ==============================================================================
+model:
+  type: "custom"
+  path: "models/biology_models.py"
+  function: "michaelis_menten"
+
+  auto_p0: true
+  auto_bounds: true
+
+  model_id: "michaelis_menten_v1"
+
+# ==============================================================================
+# FITTING CONFIGURATION
+# ==============================================================================
+fitting:
+  method: "trf"
+
+  # Weighted fitting uses sigma from data
+  # absolute_sigma=True uses sigma as actual measurement uncertainties
+  # absolute_sigma=False uses sigma as relative weights
+  objective:
+    weights: null     # Will use sigma column from data
+
+  termination:
+    ftol: 1.0e-8
+    xtol: 1.0e-8
+    gtol: 1.0e-8
+    max_iterations: 200
+
+# ==============================================================================
+# EXPORT CONFIGURATION
+# ==============================================================================
+export:
+  results_file: "output/05_weighted_fit_results.json"
+
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+    convergence_info: true
+
+# ==============================================================================
+# VISUALIZATION CONFIGURATION
+# ==============================================================================
+# Style: "presentation" - Larger fonts optimized for slides.
+# Shows weighted fit with error bars and confidence bands.
+
+visualization:
+  enabled: true
+  output_dir: "output/figures"
+  filename_prefix: "05_enzyme_kinetics"
+  formats: ["png", "pdf"]
+  dpi: 150                        # Lower DPI for slides
+  figure_size: [10.0, 5.625]      # 16:9 aspect ratio for slides
+  style: "presentation"
+  layout: "combined"
+
+  font:
+    family: "sans-serif"
+    size: 14                      # Larger font for presentations
+    math_fontset: "dejavusans"
+
+  main_plot:
+    title: "Michaelis-Menten Enzyme Kinetics"
+    x_label: "Substrate Concentration [S] (μM)"
+    y_label: "Reaction Velocity $v$ (μM/min)"
+    show_grid: true
+    grid_alpha: 0.3
+
+    data:
+      marker: "o"
+      size: 60                    # Larger markers for visibility
+      alpha: 0.8
+      label: "Experimental Data"
+      show_errorbars: true
+      capsize: 4
+
+    fit:
+      linewidth: 2.5
+      linestyle: "-"
+      label: "$v = V_{max}[S] / (K_m + [S])$"
+      n_points: 500
+
+    confidence_band:
+      enabled: true
+      level: 0.95
+      alpha: 0.25
+
+    legend:
+      enabled: true
+      location: "lower right"
+      frameon: true
+      fontsize: 12
+
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: true
+      show_chi_squared: true
+      location: "upper left"
+      fontsize: 11
+      box_alpha: 0.85
+
+  residuals_plot:
+    enabled: true
+    type: "scatter"
+    x_label: "[S] (μM)"
+    y_label: "Residual"
+    show_zero_line: true
+    marker: "o"
+    size: 40
+    alpha: 0.8
+
+    std_bands:
+      enabled: true
+      levels: [1, 2]
+      colors: ["#e8f4e8", "#d4e9d4"]
+      alpha: 0.5
+
+    show_weighted: true           # Show weighted residuals
+
+  histogram:
+    enabled: true
+    bins: "auto"
+    show_normal_fit: true
+    alpha: 0.7
+    edgecolor: "white"
+    title: "Weighted Residual Distribution"
+
+  active_scheme: "default"

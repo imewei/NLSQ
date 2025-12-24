@@ -1,0 +1,193 @@
+# ==============================================================================
+# 06_global_optimization.yaml - Multi-Start Global Optimization
+# ==============================================================================
+# Demonstrates multi-start optimization for robust parameter estimation.
+#
+# Usage:
+#   nlsq fit workflows/06_global_optimization.yaml
+#
+# Multi-start optimization helps:
+#   - Find global optimum instead of local minima
+#   - Handle poor initial guesses
+#   - Improve reliability for complex models
+#
+# Samplers available: "lhs" (Latin Hypercube), "sobol", "halton"
+# ==============================================================================
+
+metadata:
+  workflow_name: "global_optimization_demo"
+  description: "Multi-start optimization for damped oscillator"
+  version: "1.0"
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+data:
+  dataset_id: "damped_osc_global"
+  input_file: "data/damped_oscillation.csv"
+  format: "csv"
+
+  columns:
+    x: 0
+    y: 1
+    sigma: 2
+
+  csv:
+    header: true
+    delimiter: ","
+
+# ==============================================================================
+# MODEL CONFIGURATION
+# ==============================================================================
+model:
+  type: "custom"
+  path: "models/physics_models.py"
+  function: "damped_oscillator"
+
+  # Provide explicit initial guess and bounds for multi-start
+  auto_p0: false
+  auto_bounds: false
+
+  parameters:
+    - name: "A0"
+      initial: 10.0     # Intentionally off from true value (15.0)
+      bounds: [0.0, 30.0]
+    - name: "gamma"
+      initial: 0.1      # Intentionally off from true value (0.05)
+      bounds: [0.001, 0.5]
+    - name: "omega"
+      initial: 2.0      # Intentionally off from true value (pi)
+      bounds: [0.1, 10.0]
+    - name: "phi"
+      initial: 0.5      # Intentionally off from true value (0.0)
+      bounds: [-3.14159, 3.14159]
+
+# ==============================================================================
+# FITTING CONFIGURATION - MULTI-START
+# ==============================================================================
+fitting:
+  termination:
+    ftol: 1.0e-8
+    xtol: 1.0e-8
+    gtol: 1.0e-8
+    max_iterations: 200
+
+  # Multi-start optimization configuration
+  multistart:
+    enabled: true
+    num_starts: 15          # Number of starting points
+    sampler: "lhs"          # Latin Hypercube Sampling (most uniform)
+    center_on_p0: true      # Center samples around initial guess
+    scale_factor: 1.0       # Exploration region scale
+    seed: 42                # Random seed for reproducibility
+
+# ==============================================================================
+# GLOBAL OPTIMIZATION SETTINGS
+# ==============================================================================
+# Alternative way to configure global optimization:
+global_optimization:
+  n_starts: 15
+  sampler: "lhs"
+  center_on_p0: true
+  scale_factor: 1.0
+
+# ==============================================================================
+# EXPORT CONFIGURATION
+# ==============================================================================
+export:
+  results_file: "output/06_global_optimization_results.json"
+
+  include:
+    parameters: true
+    covariance: true
+    uncertainties: true
+    statistics: true
+    convergence_info: true
+
+# ==============================================================================
+# VISUALIZATION CONFIGURATION
+# ==============================================================================
+# Style: "publication" - Standard journal format.
+# Demonstrates grayscale palette for B&W printing compatibility.
+
+visualization:
+  enabled: true
+  output_dir: "output/figures"
+  filename_prefix: "06_global_opt"
+  formats: ["png", "pdf"]
+  dpi: 300
+  figure_size: [6.0, 4.5]
+  style: "publication"
+  layout: "combined"
+
+  font:
+    family: "serif"
+    size: 10
+    math_fontset: "cm"
+
+  main_plot:
+    title: null
+    x_label: "Time $t$ (s)"
+    y_label: "Displacement $x(t)$"
+    show_grid: true
+    grid_alpha: 0.3
+
+    data:
+      marker: "o"
+      size: 20
+      alpha: 0.7
+      label: "Data"
+      show_errorbars: true
+      capsize: 2
+
+    fit:
+      linewidth: 1.5
+      linestyle: "-"
+      label: "Global Optimum Fit"
+      n_points: 1000
+
+    confidence_band:
+      enabled: true
+      level: 0.95
+      alpha: 0.2
+
+    legend:
+      enabled: true
+      location: "upper right"
+      frameon: true
+
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: true
+      show_chi_squared: true
+      location: "lower right"
+      fontsize: 9
+      box_alpha: 0.8
+
+  residuals_plot:
+    enabled: true
+    type: "scatter"
+    x_label: "Time $t$ (s)"
+    y_label: "Residual"
+    show_zero_line: true
+    marker: "o"
+    size: 15
+    alpha: 0.7
+
+    std_bands:
+      enabled: true
+      levels: [1, 2]
+      colors: ["#e8e8e8", "#d0d0d0"]
+      alpha: 0.6
+
+  histogram:
+    enabled: true
+    bins: "auto"
+    show_normal_fit: true
+    alpha: 0.7
+    edgecolor: "white"
+    title: "Residual Distribution"
+
+  # Grayscale palette for B&W printing
+  active_scheme: "grayscale"
