@@ -589,5 +589,5 @@ See `../LICENSE` for details.
 ---
 
 **Last Updated**: 2025-12-21
-**Test Suite Version**: 4.0 (2,181 tests across 100 test files)
+**Test Suite Version**: 4.0 (2,315 tests across 100 test files)
 **Maintainer**: NLSQ Development Team
