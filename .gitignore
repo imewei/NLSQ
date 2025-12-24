@@ -176,6 +176,11 @@ nlsq/_version.py
 *.npy
 *.npz
 
+# Exception: test fixture files (required for CI)
+!tests/cli/fixtures/*.npz
+!tests/cli/fixtures/*.h5
+!tests/cli/fixtures/*.hdf5
+
 # Generated plots/images (from examples)
 curve_fit_result*.png
 radioactive_decay.png
