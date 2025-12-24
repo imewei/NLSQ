@@ -1,5 +1,5 @@
 <div align="center">
-<img src="docs/images/NLSQ_logo.png" alt="NLSQ logo">
+<img src="https://raw.githubusercontent.com/imewei/NLSQ/main/docs/images/NLSQ_logo.png" alt="NLSQ logo" width="400">
 
 # NLSQ: GPU-Accelerated Curve Fitting
 
