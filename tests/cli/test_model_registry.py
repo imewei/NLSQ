@@ -54,7 +54,14 @@ class TestModelRegistryBuiltinRetrieval:
 
     @pytest.mark.parametrize(
         "model_name",
-        ["linear", "exponential_decay", "exponential_growth", "gaussian", "sigmoid", "power_law"],
+        [
+            "linear",
+            "exponential_decay",
+            "exponential_growth",
+            "gaussian",
+            "sigmoid",
+            "power_law",
+        ],
     )
     def test_get_builtin_model_by_name(self, model_name: str):
         """Test that builtin models can be retrieved by name."""
@@ -115,13 +122,15 @@ class TestModelRegistryCustomModels:
         """Test loading a custom model from an external Python file."""
         # Create a custom model file
         model_file = tmp_path / "custom_model.py"
-        model_file.write_text(textwrap.dedent("""
+        model_file.write_text(
+            textwrap.dedent("""
             import jax.numpy as jnp
 
             def my_model(x, a, b, c):
                 \"\"\"Custom model: y = a * sin(b * x) + c\"\"\"
                 return a * jnp.sin(b * x) + c
-        """))
+        """)
+        )
 
         registry = ModelRegistry()
         config = {
@@ -141,7 +150,8 @@ class TestModelRegistryCustomModels:
     def test_custom_model_with_estimate_p0(self, tmp_path: Path):
         """Test that custom models can have optional estimate_p0 method."""
         model_file = tmp_path / "custom_with_estimate.py"
-        model_file.write_text(textwrap.dedent("""
+        model_file.write_text(
+            textwrap.dedent("""
             import jax.numpy as jnp
             import numpy as np
 
@@ -152,7 +162,8 @@ class TestModelRegistryCustomModels:
             def estimate_p0(xdata, ydata):
                 \"\"\"Estimate initial parameters.\"\"\"
                 return [float(np.max(ydata)), 0.1]
-        """))
+        """)
+        )
 
         registry = ModelRegistry()
         config = {
@@ -172,7 +183,8 @@ class TestModelRegistryCustomModels:
     def test_custom_model_with_bounds(self, tmp_path: Path):
         """Test that custom models can have optional bounds method."""
         model_file = tmp_path / "custom_with_bounds.py"
-        model_file.write_text(textwrap.dedent("""
+        model_file.write_text(
+            textwrap.dedent("""
             import jax.numpy as jnp
 
             def bounded_model(x, a, b):
@@ -182,7 +194,8 @@ class TestModelRegistryCustomModels:
             def bounds():
                 \"\"\"Return parameter bounds.\"\"\"
                 return ([0.0, -10.0], [10.0, 10.0])
-        """))
+        """)
+        )
 
         registry = ModelRegistry()
         config = {
@@ -209,15 +222,20 @@ class TestModelRegistryCustomModels:
         with pytest.raises(ModelError) as exc_info:
             registry.get_model("/nonexistent/path/model.py", config)
 
-        assert "not found" in str(exc_info.value).lower() or "does not exist" in str(exc_info.value).lower()
+        assert (
+            "not found" in str(exc_info.value).lower()
+            or "does not exist" in str(exc_info.value).lower()
+        )
 
     def test_custom_model_function_not_found_raises_model_error(self, tmp_path: Path):
         """Test that missing function in custom model file raises ModelError."""
         model_file = tmp_path / "missing_func.py"
-        model_file.write_text(textwrap.dedent("""
+        model_file.write_text(
+            textwrap.dedent("""
             def other_function(x):
                 return x
-        """))
+        """)
+        )
 
         registry = ModelRegistry()
         config = {
@@ -296,7 +314,10 @@ class TestModelRegistryModelError:
         with pytest.raises(ModelError) as exc_info:
             registry.get_model("some_model", config)
 
-        assert "unknown" in str(exc_info.value).lower() or "type" in str(exc_info.value).lower()
+        assert (
+            "unknown" in str(exc_info.value).lower()
+            or "type" in str(exc_info.value).lower()
+        )
 
     def test_model_error_includes_available_models_suggestion(self):
         """Test that ModelError for builtin includes list of available models."""

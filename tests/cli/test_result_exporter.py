@@ -19,11 +19,13 @@ class TestResultExporter:
         """Create a sample fit result for testing."""
         return {
             "popt": np.array([1.5, 0.3, 2.0]),
-            "pcov": np.array([
-                [0.01, 0.001, 0.002],
-                [0.001, 0.02, 0.003],
-                [0.002, 0.003, 0.03],
-            ]),
+            "pcov": np.array(
+                [
+                    [0.01, 0.001, 0.002],
+                    [0.001, 0.02, 0.003],
+                    [0.002, 0.003, 0.03],
+                ]
+            ),
             "success": True,
             "message": "Optimization converged",
             "nfev": 42,
@@ -49,7 +51,9 @@ class TestResultExporter:
             },
         }
 
-    def test_json_export_with_full_metadata(self, sample_result, sample_config, tmp_path):
+    def test_json_export_with_full_metadata(
+        self, sample_result, sample_config, tmp_path
+    ):
         """Test JSON export includes all required metadata."""
         from nlsq.cli.result_exporter import ResultExporter
 
@@ -77,7 +81,9 @@ class TestResultExporter:
         # Verify uncertainties are calculated
         assert "uncertainties" in exported
         expected_uncertainties = np.sqrt(np.diag(sample_result["pcov"]))
-        assert exported["uncertainties"] == pytest.approx(expected_uncertainties.tolist(), rel=1e-6)
+        assert exported["uncertainties"] == pytest.approx(
+            expected_uncertainties.tolist(), rel=1e-6
+        )
 
         # Verify statistics are present
         assert "statistics" in exported
@@ -98,7 +104,9 @@ class TestResultExporter:
         assert metadata["dataset_id"] == "dataset_001"
         assert metadata["model_id"] == "exponential_decay"
 
-    def test_csv_export_with_flattened_rows(self, sample_result, sample_config, tmp_path):
+    def test_csv_export_with_flattened_rows(
+        self, sample_result, sample_config, tmp_path
+    ):
         """Test CSV export with flattened parameter name/value/uncertainty rows."""
         from nlsq.cli.result_exporter import ResultExporter
 
@@ -150,7 +158,9 @@ class TestResultExporter:
         assert "popt" in parsed
         assert parsed["popt"] == pytest.approx([1.5, 0.3, 2.0], rel=1e-6)
 
-    def test_numpy_arrays_converted_to_lists(self, sample_result, sample_config, tmp_path):
+    def test_numpy_arrays_converted_to_lists(
+        self, sample_result, sample_config, tmp_path
+    ):
         """Test that numpy arrays are properly converted to lists in JSON."""
         from nlsq.cli.result_exporter import ResultExporter
 
@@ -172,7 +182,9 @@ class TestResultExporter:
         assert isinstance(exported["pcov"], list)
         assert isinstance(exported["pcov"][0], list)
 
-    def test_stdout_mode_skips_file_writing(self, sample_result, sample_config, tmp_path, capsys):
+    def test_stdout_mode_skips_file_writing(
+        self, sample_result, sample_config, tmp_path, capsys
+    ):
         """Test that stdout mode skips file writing when file path is also provided."""
         from nlsq.cli.result_exporter import ResultExporter
 
@@ -235,7 +247,9 @@ class TestWorkflowRunner:
             },
         }
 
-    def test_workflow_execution_with_builtin_model(self, builtin_model_config, tmp_path):
+    def test_workflow_execution_with_builtin_model(
+        self, builtin_model_config, tmp_path
+    ):
         """Test complete workflow execution with a builtin model."""
         from nlsq.cli.workflow_runner import WorkflowRunner
 
@@ -324,7 +338,9 @@ def bounds():
         assert 1.8 < result["popt"][0] < 2.2  # slope
         assert 0.5 < result["popt"][1] < 1.5  # intercept
 
-    def test_workflow_execution_with_bounds_and_p0_from_config(self, sample_ascii_data, tmp_path):
+    def test_workflow_execution_with_bounds_and_p0_from_config(
+        self, sample_ascii_data, tmp_path
+    ):
         """Test workflow execution with explicit bounds and p0 from config."""
         from nlsq.cli.workflow_runner import WorkflowRunner
 

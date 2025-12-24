@@ -140,10 +140,7 @@ def run_batch(
         )
 
     # Validate all paths exist before starting
-    missing_files = []
-    for path in workflow_paths:
-        if not Path(path).exists():
-            missing_files.append(path)
+    missing_files = [path for path in workflow_paths if not Path(path).exists()]
 
     if missing_files and not continue_on_error:
         raise CLIError(
@@ -195,17 +192,19 @@ def run_batch(
 
             except Exception as e:
                 # Handle executor-level errors
-                results.append({
-                    "status": "failed",
-                    "workflow_path": workflow_path,
-                    "result": None,
-                    "error": {
-                        "type": "ExecutorError",
-                        "message": str(e),
-                        "context": {},
-                        "suggestion": None,
-                    },
-                })
+                results.append(
+                    {
+                        "status": "failed",
+                        "workflow_path": workflow_path,
+                        "result": None,
+                        "error": {
+                            "type": "ExecutorError",
+                            "message": str(e),
+                            "context": {},
+                            "suggestion": None,
+                        },
+                    }
+                )
                 logger.warning(f"FAILED: {workflow_path} - Executor error: {e}")
 
     end_time = datetime.now()
@@ -252,17 +251,19 @@ def run_batch(
             logger.info(f"Summary written to: {summary_file}")
 
     # Log final summary
-    print(f"\nBatch Summary:")
+    print("\nBatch Summary:")
     print(f"  Total: {n_workflows}")
     print(f"  Succeeded: {succeeded}")
     print(f"  Failed: {failed}")
     print(f"  Duration: {duration:.2f}s")
 
     if failed > 0:
-        print(f"\nFailed workflows:")
+        print("\nFailed workflows:")
         for r in results:
             if r["status"] == "failed":
                 error_info = r.get("error", {})
-                print(f"  - {r['workflow_path']}: {error_info.get('message', 'Unknown error')}")
+                print(
+                    f"  - {r['workflow_path']}: {error_info.get('message', 'Unknown error')}"
+                )
 
     return results

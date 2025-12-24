@@ -1117,7 +1117,7 @@ visualization:
     # Colorblind-safe (Okabe-Ito palette)
     colorblind:
       data: "#0072B2"             # Blue
-      fit: "#D55E00"              # Vermillion
+      fit: "#D55E00"              # Vermilion
       residuals: "#009E73"        # Bluish green
       confidence: "#F0E442"       # Yellow
 

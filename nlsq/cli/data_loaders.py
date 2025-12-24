@@ -32,7 +32,6 @@ from numpy.typing import NDArray
 
 from nlsq.cli.errors import DataLoadError
 
-
 # =============================================================================
 # Format Extension Mappings
 # =============================================================================
@@ -260,14 +259,19 @@ class DataLoader:
         try:
             xdata = data[:, x_col].astype(np.float64)
             ydata = data[:, y_col].astype(np.float64)
-            sigma = data[:, sigma_col].astype(np.float64) if sigma_col is not None else None
+            sigma = (
+                data[:, sigma_col].astype(np.float64) if sigma_col is not None else None
+            )
         except IndexError as e:
             max_col = max(x_col, y_col, sigma_col or 0)
             raise DataLoadError(
                 f"Column index {max_col} out of range (file has {data.shape[1]} columns)",
                 file_path=file_path,
                 file_format="ascii",
-                context={"num_columns": data.shape[1], "requested_columns": [x_col, y_col, sigma_col]},
+                context={
+                    "num_columns": data.shape[1],
+                    "requested_columns": [x_col, y_col, sigma_col],
+                },
                 suggestion="Check that column indices are correct (0-based indexing).",
             ) from e
 
@@ -364,10 +368,12 @@ class DataLoader:
         try:
             xdata = data[:, x_idx].astype(np.float64)
             ydata = data[:, y_idx].astype(np.float64)
-            sigma = data[:, sigma_idx].astype(np.float64) if sigma_idx is not None else None
+            sigma = (
+                data[:, sigma_idx].astype(np.float64) if sigma_idx is not None else None
+            )
         except IndexError as e:
             raise DataLoadError(
-                f"Column index out of range",
+                "Column index out of range",
                 file_path=file_path,
                 file_format="csv",
                 context={"num_columns": data.shape[1] if data.ndim > 1 else 1},
@@ -535,7 +541,7 @@ class DataLoader:
             Loaded data arrays.
         """
         try:
-            import h5py
+            import h5py  # type: ignore[import-not-found]
         except ImportError:
             raise DataLoadError(
                 "h5py package required for HDF5 file loading",

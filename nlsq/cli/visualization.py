@@ -21,8 +21,9 @@ Example Usage
 >>> output_paths = visualizer.generate(result, data, model, config)
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import matplotlib
 
@@ -31,7 +32,6 @@ matplotlib.use("Agg")  # Non-interactive backend for CLI use
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
-
 
 # =============================================================================
 # Style Presets Dictionary
@@ -71,7 +71,12 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
         "figure_size": [3.5, 2.625],  # Single column width, 4:3 aspect
         "grid": False,
         "grid_alpha": 0.0,
-        "spine_visibility": {"top": False, "right": False, "bottom": True, "left": True},
+        "spine_visibility": {
+            "top": False,
+            "right": False,
+            "bottom": True,
+            "left": True,
+        },
         "linewidth": 1.0,
     },
     "science": {
@@ -83,7 +88,12 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
         "figure_size": [3.5, 2.625],
         "grid": False,
         "grid_alpha": 0.0,
-        "spine_visibility": {"top": False, "right": False, "bottom": True, "left": True},
+        "spine_visibility": {
+            "top": False,
+            "right": False,
+            "bottom": True,
+            "left": True,
+        },
         "linewidth": 1.0,
     },
     "minimal": {
@@ -95,7 +105,12 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
         "figure_size": [6.0, 4.5],
         "grid": False,
         "grid_alpha": 0.0,
-        "spine_visibility": {"top": False, "right": False, "bottom": True, "left": True},
+        "spine_visibility": {
+            "top": False,
+            "right": False,
+            "bottom": True,
+            "left": True,
+        },
         "linewidth": 1.5,
     },
 }
@@ -192,7 +207,11 @@ class FitVisualizer:
             if residuals is not None:
                 fig_hist = self._create_histogram_figure(residuals, vis_config)
                 hist_paths = self._save_figure(
-                    fig_hist, output_dir, f"{filename_prefix}_histogram", formats, vis_config
+                    fig_hist,
+                    output_dir,
+                    f"{filename_prefix}_histogram",
+                    formats,
+                    vis_config,
                 )
                 output_paths.extend(hist_paths)
                 plt.close(fig_hist)
@@ -291,7 +310,8 @@ class FitVisualizer:
         if show_residuals:
             # Create figure with 2 subplots (3:1 height ratio)
             fig, (ax_main, ax_residuals) = plt.subplots(
-                2, 1,
+                2,
+                1,
                 figsize=figure_size,
                 gridspec_kw={"height_ratios": [3, 1], "hspace": 0.1},
                 sharex=True,
@@ -316,7 +336,9 @@ class FitVisualizer:
             pcov = np.asarray(pcov)
 
         # Plot main figure
-        self._plot_main(ax_main, xdata, ydata, sigma, popt, pcov, model, config, colors, result)
+        self._plot_main(
+            ax_main, xdata, ydata, sigma, popt, pcov, model, config, colors, result
+        )
 
         # Plot residuals if enabled
         if ax_residuals is not None:
@@ -390,7 +412,8 @@ class FitVisualizer:
 
         if sigma is not None and data_config.get("show_errorbars", True):
             ax.errorbar(
-                xdata, ydata,
+                xdata,
+                ydata,
                 yerr=sigma,
                 fmt=marker,
                 color=data_color,
@@ -401,7 +424,8 @@ class FitVisualizer:
             )
         else:
             ax.scatter(
-                xdata, ydata,
+                xdata,
+                ydata,
                 marker=marker,
                 s=size,
                 c=data_color,
@@ -419,22 +443,27 @@ class FitVisualizer:
             # Plot confidence band if enabled
             if confidence_config.get("enabled", False) and pcov is not None:
                 confidence_level = confidence_config.get("level", 0.95)
-                confidence_color = confidence_config.get("color", colors.get("confidence", fit_color))
+                confidence_color = confidence_config.get(
+                    "color", colors.get("confidence", fit_color)
+                )
                 confidence_alpha = confidence_config.get("alpha", 0.2)
 
                 lower, upper = self._calculate_confidence_band(
                     model, x_fit, popt, pcov, confidence_level
                 )
                 ax.fill_between(
-                    x_fit, lower, upper,
+                    x_fit,
+                    lower,
+                    upper,
                     color=confidence_color,
                     alpha=confidence_alpha,
-                    label=f"{confidence_level*100:.0f}% CI",
+                    label=f"{confidence_level * 100:.0f}% CI",
                 )
 
             # Plot fit curve
             ax.plot(
-                x_fit, y_fit,
+                x_fit,
+                y_fit,
                 color=fit_color,
                 linewidth=fit_config.get("linewidth", 1.5),
                 linestyle=fit_config.get("linestyle", "-"),
@@ -492,7 +521,9 @@ class FitVisualizer:
         residuals_config = config.get("residuals_plot", {})
 
         # Get color from config or scheme
-        residual_color = residuals_config.get("color", colors.get("residuals", "#2ca02c"))
+        residual_color = residuals_config.get(
+            "color", colors.get("residuals", "#2ca02c")
+        )
 
         # Plot residuals
         plot_type = residuals_config.get("type", "scatter")
@@ -501,7 +532,9 @@ class FitVisualizer:
         alpha = residuals_config.get("alpha", 0.7)
 
         if plot_type == "scatter":
-            ax.scatter(xdata, residuals, marker=marker, s=size, c=residual_color, alpha=alpha)
+            ax.scatter(
+                xdata, residuals, marker=marker, s=size, c=residual_color, alpha=alpha
+            )
         elif plot_type == "stem":
             markerline, stemlines, baseline = ax.stem(xdata, residuals)
             plt.setp(markerline, color=residual_color, markersize=np.sqrt(size))
@@ -529,8 +562,13 @@ class FitVisualizer:
 
             for i, level in enumerate(reversed(levels)):
                 color = band_colors[min(i, len(band_colors) - 1)]
-                ax.axhspan(-level * std_residual, level * std_residual,
-                          color=color, alpha=band_alpha, zorder=0)
+                ax.axhspan(
+                    -level * std_residual,
+                    level * std_residual,
+                    color=color,
+                    alpha=band_alpha,
+                    zorder=0,
+                )
 
         # Labels
         ax.set_xlabel(residuals_config.get("x_label", "x"))
@@ -580,7 +618,7 @@ class FitVisualizer:
         edgecolor = histogram_config.get("edgecolor", "white")
 
         # Plot histogram
-        n, bin_edges, patches = ax.hist(
+        _n, _bin_edges, _patches = ax.hist(
             residuals,
             bins=bins,
             color=bar_color,
@@ -595,7 +633,9 @@ class FitVisualizer:
             x_norm = np.linspace(residuals.min(), residuals.max(), 100)
             y_norm = stats.norm.pdf(x_norm, mu, std)
 
-            normal_color = histogram_config.get("normal_color", colors.get("fit", "#d62728"))
+            normal_color = histogram_config.get(
+                "normal_color", colors.get("fit", "#d62728")
+            )
             ax.plot(x_norm, y_norm, color=normal_color, linewidth=2, label="Normal fit")
             ax.legend()
 
@@ -777,12 +817,14 @@ class FitVisualizer:
         va = "top" if coords[1] > 0.5 else "bottom"
 
         ax.text(
-            coords[0], coords[1], text,
+            coords[0],
+            coords[1],
+            text,
             transform=ax.transAxes,
             fontsize=fontsize,
             verticalalignment=va,
             horizontalalignment=ha,
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.8},
         )
 
     def _save_figure(

@@ -91,11 +91,11 @@ def _print_jax_info(verbose: bool) -> None:
 
         # Print backend summary
         if "gpu" in backends or "cuda" in backends:
-            print(f"  Backend: GPU (CUDA)")
+            print("  Backend: GPU (CUDA)")
         elif "tpu" in backends:
-            print(f"  Backend: TPU")
+            print("  Backend: TPU")
         else:
-            print(f"  Backend: CPU")
+            print("  Backend: CPU")
 
         # Print device details
         print(f"  Devices: {len(devices)}")
@@ -232,7 +232,7 @@ def get_info_dict() -> dict[str, Any]:
         ]
 
         # Determine backend
-        backends = set(d.get("platform") for d in info["jax_devices"])
+        backends = {d.get("platform") for d in info["jax_devices"]}
         if "gpu" in backends or "cuda" in backends:
             info["jax_backend"] = "gpu"
         elif "tpu" in backends:

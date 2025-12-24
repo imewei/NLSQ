@@ -50,7 +50,7 @@ class NumpyJSONEncoder(json.JSONEncoder):
             return obj.tolist()
         if isinstance(obj, (np.integer, np.int_)):
             return int(obj)
-        if isinstance(obj, (np.floating, np.float_)):
+        if isinstance(obj, (np.floating, np.float64)):
             return float(obj)
         if isinstance(obj, np.bool_):
             return bool(obj)
@@ -202,7 +202,9 @@ class ResultExporter:
         }
 
         if "cost" in result:
-            convergence["final_cost"] = float(result["cost"]) if result["cost"] is not None else None
+            convergence["final_cost"] = (
+                float(result["cost"]) if result["cost"] is not None else None
+            )
 
         # Extract metadata from config
         metadata_config = config.get("metadata", {})
@@ -211,7 +213,9 @@ class ResultExporter:
         metadata = {
             "workflow_name": metadata_config.get("workflow_name", "unknown"),
             "dataset_id": metadata_config.get("dataset_id", "unknown"),
-            "model_id": model_config.get("name", model_config.get("function", "custom")),
+            "model_id": model_config.get(
+                "name", model_config.get("function", "custom")
+            ),
         }
 
         # Build export data
@@ -262,7 +266,7 @@ class ResultExporter:
             if ydata is not None:
                 y = np.asarray(ydata)
                 ss_res = np.sum(residuals**2)
-                ss_tot = np.sum((y - np.mean(y))**2)
+                ss_tot = np.sum((y - np.mean(y)) ** 2)
                 if ss_tot > 0:
                     statistics["r_squared"] = float(1 - ss_res / ss_tot)
 

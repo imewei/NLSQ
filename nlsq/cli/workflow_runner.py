@@ -171,7 +171,9 @@ class WorkflowRunner:
         data_config_with_validation = {**data_config, "validation": validation_config}
 
         try:
-            xdata, ydata, sigma = self.data_loader.load(input_file, data_config_with_validation)
+            xdata, ydata, sigma = self.data_loader.load(
+                input_file, data_config_with_validation
+            )
             return xdata, ydata, sigma
         except DataLoadError:
             raise
@@ -400,7 +402,9 @@ class WorkflowRunner:
                 # CurveFitResult object
                 result_dict = {
                     "popt": np.asarray(result.popt).tolist(),
-                    "pcov": np.asarray(result.pcov).tolist() if result.pcov is not None else [],
+                    "pcov": np.asarray(result.pcov).tolist()
+                    if result.pcov is not None
+                    else [],
                     "success": getattr(result, "success", True),
                     "message": getattr(result, "message", "Optimization converged"),
                     "nfev": getattr(result, "nfev", 0),
@@ -421,9 +425,12 @@ class WorkflowRunner:
             error_msg = str(e)
 
             # Check for underdetermined system
-            if "underdetermined" in error_msg.lower() or "fewer data points" in error_msg.lower():
+            if (
+                "underdetermined" in error_msg.lower()
+                or "fewer data points" in error_msg.lower()
+            ):
                 raise FitError(
-                    f"Curve fitting failed: insufficient data points for number of parameters",
+                    "Curve fitting failed: insufficient data points for number of parameters",
                     context={"n_points": len(xdata), "error": error_msg},
                     suggestion="Provide more data points or use a simpler model with fewer parameters",
                 ) from e
@@ -431,7 +438,7 @@ class WorkflowRunner:
             # Check for convergence failure
             if "covariance" in error_msg.lower() or "singular" in error_msg.lower():
                 raise FitError(
-                    f"Curve fitting failed: could not estimate covariance",
+                    "Curve fitting failed: could not estimate covariance",
                     context={"error": error_msg},
                     suggestion="Try different initial parameters or check that the model is appropriate for the data",
                 ) from e
@@ -446,7 +453,7 @@ class WorkflowRunner:
 
             if "maxfev" in error_msg.lower() or "max" in error_msg.lower():
                 raise FitError(
-                    f"Curve fitting failed: maximum function evaluations exceeded",
+                    "Curve fitting failed: maximum function evaluations exceeded",
                     context={"error": error_msg},
                     suggestion="Increase max_nfev or improve initial parameter guess",
                 ) from e

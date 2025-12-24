@@ -63,8 +63,7 @@ def linear_data_file(temp_workspace):
     # Write with header comment
     with open(data_path, "w") as f:
         f.write("# x y sigma\n")
-        for i in range(len(x)):
-            f.write(f"{x[i]:.6f} {y[i]:.6f} {sigma[i]:.6f}\n")
+        f.writelines(f"{x[i]:.6f} {y[i]:.6f} {sigma[i]:.6f}\n" for i in range(len(x)))
 
     return data_path
 
@@ -84,8 +83,7 @@ def exponential_csv_data(temp_workspace):
     # Write CSV with header
     with open(data_path, "w") as f:
         f.write("x,y,sigma\n")
-        for i in range(len(x)):
-            f.write(f"{x[i]:.6f},{y[i]:.6f},{sigma[i]:.6f}\n")
+        f.writelines(f"{x[i]:.6f},{y[i]:.6f},{sigma[i]:.6f}\n" for i in range(len(x)))
 
     return data_path
 
@@ -183,7 +181,7 @@ class TestEndToEndCSVVisualization:
         from nlsq.cli.commands.fit import run_fit
 
         # Use the custom model from fixtures
-        custom_model_path = FIXTURES_DIR / "custom_model.py"
+        custom_model_path = FIXTURES_DIR / "sample_custom_model.py"
 
         # Create workflow config with visualization
         output_file = temp_workspace / "output" / "results_custom.json"
@@ -224,11 +222,23 @@ class TestEndToEndCSVVisualization:
                 "layout": "combined",
                 "main_plot": {
                     "show_grid": True,
-                    "data": {"marker": "o", "color": "#1f77b4", "size": 20, "alpha": 0.7, "show_errorbars": True},
+                    "data": {
+                        "marker": "o",
+                        "color": "#1f77b4",
+                        "size": 20,
+                        "alpha": 0.7,
+                        "show_errorbars": True,
+                    },
                     "fit": {"color": "#d62728", "linewidth": 1.5, "n_points": 100},
                     "confidence_band": {"enabled": False},
                     "legend": {"enabled": True, "location": "best"},
-                    "annotation": {"enabled": True, "show_r_squared": True, "show_rmse": True, "location": "upper right", "fontsize": 9},
+                    "annotation": {
+                        "enabled": True,
+                        "show_r_squared": True,
+                        "show_rmse": True,
+                        "location": "upper right",
+                        "fontsize": 9,
+                    },
                 },
                 "residuals_plot": {
                     "enabled": True,
@@ -238,7 +248,12 @@ class TestEndToEndCSVVisualization:
                 },
                 "histogram": {"enabled": False},
                 "color_schemes": {
-                    "default": {"data": "#1f77b4", "fit": "#d62728", "residuals": "#2ca02c", "confidence": "#ff7f0e"},
+                    "default": {
+                        "data": "#1f77b4",
+                        "fit": "#d62728",
+                        "residuals": "#2ca02c",
+                        "confidence": "#ff7f0e",
+                    },
                 },
                 "active_scheme": "default",
             },
@@ -278,8 +293,9 @@ class TestEndToEndBatchProcessing:
         self, temp_workspace, linear_data_file
     ):
         """Test batch processing multiple workflows with summary generation."""
-        from nlsq.cli.commands.batch import run_batch
         import yaml
+
+        from nlsq.cli.commands.batch import run_batch
 
         # Create multiple workflow configs
         workflow_paths = []
@@ -357,9 +373,10 @@ class TestErrorHandlingIntegration:
 
     def test_data_load_error_propagates_to_cli(self, temp_workspace):
         """Test that DataLoadError from data loader propagates correctly."""
+        import yaml
+
         from nlsq.cli.commands.fit import run_fit
         from nlsq.cli.errors import DataLoadError
-        import yaml
 
         # Create config with non-existent file
         config = {
@@ -382,13 +399,17 @@ class TestErrorHandlingIntegration:
         with pytest.raises(DataLoadError) as exc_info:
             run_fit(str(config_path))
 
-        assert "not found" in str(exc_info.value).lower() or "nonexistent" in str(exc_info.value).lower()
+        assert (
+            "not found" in str(exc_info.value).lower()
+            or "nonexistent" in str(exc_info.value).lower()
+        )
 
     def test_model_error_propagates_to_cli(self, temp_workspace, linear_data_file):
         """Test that ModelError from model registry propagates correctly."""
+        import yaml
+
         from nlsq.cli.commands.fit import run_fit
         from nlsq.cli.errors import ModelError
-        import yaml
 
         # Create config with non-existent model
         config = {
@@ -425,9 +446,10 @@ class TestYAMLConfigEdgeCases:
 
     def test_missing_required_data_section(self, temp_workspace):
         """Test that missing required 'data' section raises CLIError."""
+        import yaml
+
         from nlsq.cli.commands.fit import run_fit
         from nlsq.cli.errors import CLIError, ConfigError
-        import yaml
 
         # Create config without required 'data' section
         config = {
@@ -446,9 +468,10 @@ class TestYAMLConfigEdgeCases:
 
     def test_missing_required_model_section(self, temp_workspace, linear_data_file):
         """Test that missing required 'model' section raises CLIError."""
+        import yaml
+
         from nlsq.cli.commands.fit import run_fit
         from nlsq.cli.errors import CLIError, ConfigError
-        import yaml
 
         # Create config without required 'model' section
         config = {
@@ -471,9 +494,10 @@ class TestYAMLConfigEdgeCases:
 
     def test_invalid_yaml_syntax(self, temp_workspace):
         """Test that invalid YAML syntax raises appropriate error."""
+        import yaml
+
         from nlsq.cli.commands.fit import run_fit
         from nlsq.cli.errors import ConfigError
-        import yaml
 
         # Write invalid YAML
         config_path = temp_workspace / "invalid.yaml"
@@ -494,8 +518,9 @@ class TestWorkflowWithBounds:
 
     def test_workflow_with_explicit_bounds(self, temp_workspace, linear_data_file):
         """Test workflow with explicit parameter bounds."""
-        from nlsq.cli.workflow_runner import WorkflowRunner
         import yaml
+
+        from nlsq.cli.workflow_runner import WorkflowRunner
 
         config = {
             "metadata": {"workflow_name": "bounds_test"},
@@ -568,6 +593,7 @@ class TestCLISubprocessInvocation:
         # Run via subprocess
         result = subprocess.run(
             [sys.executable, "-m", "nlsq.cli.main", "fit", str(config_path)],
+            check=False,
             capture_output=True,
             text=True,
             timeout=60,
@@ -583,6 +609,7 @@ class TestCLISubprocessInvocation:
         """Test invoking 'nlsq info' via subprocess."""
         result = subprocess.run(
             [sys.executable, "-m", "nlsq.cli.main", "info"],
+            check=False,
             capture_output=True,
             text=True,
             timeout=30,
@@ -609,8 +636,9 @@ class TestBatchMixedResults:
         self, temp_workspace, linear_data_file
     ):
         """Test that batch continues after errors and collects all failures."""
-        from nlsq.cli.commands.batch import run_batch
         import yaml
+
+        from nlsq.cli.commands.batch import run_batch
 
         workflow_paths = []
 

@@ -42,15 +42,15 @@ from nlsq.cli.workflow_runner import WorkflowRunner
 __all__ = [
     "CLIError",
     "ConfigError",
-    "DataLoader",
     "DataLoadError",
+    "DataLoader",
     "FitError",
     "FitVisualizer",
-    "main",
     "ModelError",
     "ModelRegistry",
     "ResultExporter",
     "WorkflowRunner",
     "get_logger",
+    "main",
     "setup_logging",
 ]

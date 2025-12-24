@@ -102,7 +102,8 @@ def damped_oscillator(
     - Half-life of amplitude: t_half = ln(2) / decay
     - At x=0: y = amplitude * cos(phase)
     """
-    return amplitude * jnp.exp(-decay * x) * jnp.cos(frequency * x + phase)
+    # JAX arrays are duck-type compatible with numpy arrays
+    return amplitude * jnp.exp(-decay * x) * jnp.cos(frequency * x + phase)  # type: ignore[return-value]
 
 
 # =============================================================================

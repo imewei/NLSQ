@@ -75,7 +75,9 @@ class TestASCIIFormatLoading:
             },
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_tab_delimited.dat", config)
+        xdata, ydata, _sigma = loader.load(
+            FIXTURES_DIR / "sample_tab_delimited.dat", config
+        )
 
         assert len(xdata) == 5
         np.testing.assert_allclose(xdata[0], 0.0)
@@ -139,7 +141,7 @@ class TestCSVFormatLoading:
             },
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_data.csv", config)
+        xdata, _ydata, _sigma = loader.load(FIXTURES_DIR / "sample_data.csv", config)
 
         assert len(xdata) == 10
         np.testing.assert_allclose(xdata[0], 0.0)
@@ -157,7 +159,9 @@ class TestCSVFormatLoading:
             "validation": {"require_finite": False},  # Allow NaN for this test
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_data_missing.csv", config)
+        xdata, ydata, _sigma = loader.load(
+            FIXTURES_DIR / "sample_data_missing.csv", config
+        )
 
         # Should load successfully even with missing values
         assert len(xdata) == 6
@@ -202,7 +206,9 @@ class TestNPZFormatLoading:
             },
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_custom_keys.npz", config)
+        xdata, ydata, sigma = loader.load(
+            FIXTURES_DIR / "sample_custom_keys.npz", config
+        )
 
         assert len(xdata) == 10
         assert len(ydata) == 10
@@ -219,7 +225,7 @@ class TestNPZFormatLoading:
             },
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_data.npz", config)
+        xdata, _ydata, sigma = loader.load(FIXTURES_DIR / "sample_data.npz", config)
 
         assert len(xdata) == 10
         assert sigma is None
@@ -277,7 +283,7 @@ class TestHDF5FormatLoading:
             },
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_flat.hdf5", config)
+        xdata, _ydata, sigma = loader.load(FIXTURES_DIR / "sample_flat.hdf5", config)
 
         assert len(xdata) == 10
         assert sigma is None
@@ -314,7 +320,7 @@ class TestFormatAutoDetection:
             "ascii": {"comment_char": "#"},
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_ascii.txt", config)
+        xdata, _ydata, _sigma = loader.load(FIXTURES_DIR / "sample_ascii.txt", config)
 
         assert len(xdata) == 10
 
@@ -326,7 +332,9 @@ class TestFormatAutoDetection:
             "ascii": {"comment_char": "#"},
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_tab_delimited.dat", config)
+        xdata, _ydata, _sigma = loader.load(
+            FIXTURES_DIR / "sample_tab_delimited.dat", config
+        )
 
         assert len(xdata) == 5
 
@@ -338,7 +346,7 @@ class TestFormatAutoDetection:
             "csv": {"header": True},
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_data.csv", config)
+        xdata, _ydata, _sigma = loader.load(FIXTURES_DIR / "sample_data.csv", config)
 
         assert len(xdata) == 10
 
@@ -349,7 +357,7 @@ class TestFormatAutoDetection:
             "npz": {"x_key": "x", "y_key": "y", "sigma_key": "sigma"},
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_data.npz", config)
+        xdata, _ydata, _sigma = loader.load(FIXTURES_DIR / "sample_data.npz", config)
 
         assert len(xdata) == 10
 
@@ -364,7 +372,7 @@ class TestFormatAutoDetection:
             },
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_data.h5", config)
+        xdata, _ydata, _sigma = loader.load(FIXTURES_DIR / "sample_data.h5", config)
 
         assert len(xdata) == 10
 
@@ -375,7 +383,7 @@ class TestFormatAutoDetection:
             "hdf5": {"x_path": "/x", "y_path": "/y", "sigma_path": None},
         }
         loader = DataLoader()
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_flat.hdf5", config)
+        xdata, _ydata, _sigma = loader.load(FIXTURES_DIR / "sample_flat.hdf5", config)
 
         assert len(xdata) == 10
 
@@ -412,7 +420,9 @@ class TestDataValidation:
         }
         loader = DataLoader()
         # Should not raise
-        xdata, ydata, sigma = loader.load(FIXTURES_DIR / "sample_data_with_nan.txt", config)
+        xdata, _ydata, _sigma = loader.load(
+            FIXTURES_DIR / "sample_data_with_nan.txt", config
+        )
         assert len(xdata) == 4
 
     def test_min_points_validation(self):
@@ -426,7 +436,10 @@ class TestDataValidation:
         loader = DataLoader()
         with pytest.raises(DataLoadError) as exc_info:
             loader.load(FIXTURES_DIR / "sample_ascii.txt", config)
-        assert "min" in str(exc_info.value).lower() or "points" in str(exc_info.value).lower()
+        assert (
+            "min" in str(exc_info.value).lower()
+            or "points" in str(exc_info.value).lower()
+        )
 
 
 # =============================================================================
@@ -443,7 +456,10 @@ class TestDataLoadErrors:
         loader = DataLoader()
         with pytest.raises(DataLoadError) as exc_info:
             loader.load(FIXTURES_DIR / "nonexistent_file.txt", config)
-        assert "not found" in str(exc_info.value).lower() or "exist" in str(exc_info.value).lower()
+        assert (
+            "not found" in str(exc_info.value).lower()
+            or "exist" in str(exc_info.value).lower()
+        )
 
     def test_unknown_format_raises_error(self):
         """Test unknown format raises DataLoadError."""
@@ -466,7 +482,10 @@ class TestDataLoadErrors:
         try:
             with pytest.raises(DataLoadError) as exc_info:
                 loader.load(Path(temp_path), config)
-            assert "extension" in str(exc_info.value).lower() or "format" in str(exc_info.value).lower()
+            assert (
+                "extension" in str(exc_info.value).lower()
+                or "format" in str(exc_info.value).lower()
+            )
         finally:
             Path(temp_path).unlink()
 

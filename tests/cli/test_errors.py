@@ -38,7 +38,6 @@ from nlsq.cli.errors import (
     setup_logging_from_config,
 )
 
-
 # =============================================================================
 # Test 1: ConfigError for Invalid YAML Configuration Scenarios
 # =============================================================================

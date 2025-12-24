@@ -34,16 +34,15 @@ Verbosity Levels
 import json
 import logging
 import sys
-from datetime import datetime
-from datetime import timezone
+from datetime import UTC, datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
-
+from typing import Any, ClassVar
 
 # =============================================================================
 # ANSI Color Codes for Console Output
 # =============================================================================
+
 
 class Colors:
     """ANSI color codes for console output."""
@@ -350,7 +349,7 @@ class JsonFormatter(logging.Formatter):
             JSON-formatted log line.
         """
         log_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -375,7 +374,7 @@ class ColoredConsoleFormatter(logging.Formatter):
     visibility in terminal output.
     """
 
-    LEVEL_COLORS = {
+    LEVEL_COLORS: ClassVar[dict[int, str]] = {
         logging.DEBUG: Colors.CYAN,
         logging.INFO: Colors.GREEN,
         logging.WARNING: Colors.YELLOW,

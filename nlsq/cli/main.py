@@ -47,7 +47,8 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable verbose output",
     )
@@ -72,7 +73,8 @@ def create_parser() -> argparse.ArgumentParser:
         help="Path to workflow YAML configuration file",
     )
     fit_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         default=None,
         help="Override export.results_file path",
@@ -96,13 +98,15 @@ def create_parser() -> argparse.ArgumentParser:
         help="Paths to workflow YAML configuration files",
     )
     batch_parser.add_argument(
-        "-s", "--summary",
+        "-s",
+        "--summary",
         type=str,
         default=None,
         help="Path for aggregate summary file",
     )
     batch_parser.add_argument(
-        "-w", "--workers",
+        "-w",
+        "--workers",
         type=int,
         default=None,
         help="Maximum number of parallel workers (default: auto-detect)",

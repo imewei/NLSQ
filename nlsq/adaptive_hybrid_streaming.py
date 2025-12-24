@@ -1758,15 +1758,15 @@ class AdaptiveHybridStreamingOptimizer:
                 n_group = end - start
                 group_mean = jnp.mean(group_params)
 
-                # Gradient of variance: ∂Var/∂p_i = (2/n) × (p_i - mean)
+                # Gradient of variance: ∂Var/∂p_i = (2/n) * (p_i - mean)
                 grad_var = (2.0 / n_group) * (group_params - group_mean)
 
                 # Add to JTr (negative gradient direction)
                 # Note: JTr represents -∇f, so we subtract the regularization gradient
                 JTr = JTr.at[start:end].add(-var_lambda * grad_var)
 
-                # Hessian of variance: H = (2/n) × (I - (1/n)×11^T)
-                # This is a dense (n_group × n_group) matrix
+                # Hessian of variance: H = (2/n) * (I - (1/n)*11^T)
+                # This is a dense (n_group x n_group) matrix
                 diag_term = (2.0 / n_group) * jnp.eye(n_group)
                 off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
                     (n_group, n_group)

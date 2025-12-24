@@ -26,12 +26,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from nlsq.cli.commands import batch as batch_command
+
 # Import CLI modules for direct testing
 from nlsq.cli.commands import fit as fit_command
-from nlsq.cli.commands import batch as batch_command
 from nlsq.cli.commands import info as info_command
-from nlsq.cli.main import main, create_parser
-
+from nlsq.cli.main import create_parser, main
 
 # =============================================================================
 # Fixtures
@@ -155,10 +155,7 @@ def test_fit_command_output_override(sample_workflow_yaml, temp_dir):
     override_output = temp_dir / "custom_output.json"
 
     # Execute with output override
-    result = fit_command.run_fit(
-        str(yaml_path),
-        output_override=str(override_output)
-    )
+    result = fit_command.run_fit(str(yaml_path), output_override=str(override_output))
 
     assert result is not None
 
@@ -238,9 +235,7 @@ visualization:
     # Execute batch command
     summary_path = temp_dir / "batch_summary.json"
     results = batch_command.run_batch(
-        workflow_paths,
-        summary_file=str(summary_path),
-        max_workers=2
+        workflow_paths, summary_file=str(summary_path), max_workers=2
     )
 
     # Verify all workflows executed
@@ -260,7 +255,9 @@ visualization:
     assert summary["succeeded"] == 3
 
 
-def test_batch_command_continue_on_error(temp_dir, sample_data_file, sample_failing_workflow_yaml):
+def test_batch_command_continue_on_error(
+    temp_dir, sample_data_file, sample_failing_workflow_yaml
+):
     """Test that batch continues on error and collects failures at end."""
     # Create one valid workflow
     valid_yaml = temp_dir / "valid_workflow.yaml"
@@ -301,7 +298,7 @@ visualization:
         workflow_paths,
         summary_file=str(summary_path),
         continue_on_error=True,
-        max_workers=1
+        max_workers=1,
     )
 
     # Verify batch completed (did not abort on error)

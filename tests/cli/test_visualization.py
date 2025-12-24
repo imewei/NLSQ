@@ -32,15 +32,17 @@ def sample_fit_result() -> dict[str, Any]:
     residuals = y - y_true
 
     # Simulated covariance matrix (3x3 for 3 parameters)
-    pcov = np.array([
-        [0.01, 0.001, 0.0001],
-        [0.001, 0.002, 0.00005],
-        [0.0001, 0.00005, 0.0005],
-    ])
+    pcov = np.array(
+        [
+            [0.01, 0.001, 0.0001],
+            [0.001, 0.002, 0.00005],
+            [0.0001, 0.00005, 0.0005],
+        ]
+    )
 
     # Calculate statistics
     ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((y - np.mean(y))**2)
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
     r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
     rmse = np.sqrt(np.mean(residuals**2))
 
@@ -77,8 +79,10 @@ def sample_data() -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
 @pytest.fixture
 def sample_model():
     """Return a sample model function for visualization."""
+
     def exponential_decay(x, a, b, c):
         return a * np.exp(-b * x) + c
+
     return exponential_decay
 
 
@@ -183,7 +187,12 @@ class TestCombinedLayout:
     """Test combined main plot + residuals layout generation."""
 
     def test_combined_layout_creates_figure(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that combined layout creates a figure with main and residuals subplots."""
         from nlsq.cli.visualization import FitVisualizer
@@ -208,11 +217,17 @@ class TestCombinedLayout:
             assert Path(path).exists(), f"Output file not created: {path}"
 
     def test_combined_layout_has_two_subplots(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that combined layout figure contains two subplots (main + residuals)."""
-        from nlsq.cli.visualization import FitVisualizer
         import matplotlib.pyplot as plt
+
+        from nlsq.cli.visualization import FitVisualizer
 
         config = base_visualization_config.copy()
         config["visualization"]["output_dir"] = str(tmp_path)
@@ -238,7 +253,12 @@ class TestHistogram:
     """Test separate histogram of residuals generation."""
 
     def test_histogram_generation(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that histogram is generated when enabled."""
         from nlsq.cli.visualization import FitVisualizer
@@ -265,11 +285,17 @@ class TestHistogram:
         assert len(histogram_files) > 0, "No histogram files generated"
 
     def test_histogram_with_normal_fit(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test histogram with normal distribution overlay."""
-        from nlsq.cli.visualization import FitVisualizer
         import matplotlib.pyplot as plt
+
+        from nlsq.cli.visualization import FitVisualizer
 
         config = base_visualization_config.copy()
         config["visualization"]["output_dir"] = str(tmp_path)
@@ -299,7 +325,7 @@ class TestConfidenceBand:
         from nlsq.cli.visualization import FitVisualizer
 
         visualizer = FitVisualizer()
-        x, y, sigma = sample_data
+        x, _y, _sigma = sample_data
         popt = np.array(sample_fit_result["popt"])
         pcov = np.array(sample_fit_result["pcov"])
 
@@ -322,11 +348,17 @@ class TestConfidenceBand:
         assert np.all(upper >= lower), "Upper band not >= lower band"
 
     def test_confidence_band_renders_on_plot(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that confidence band is rendered when enabled."""
-        from nlsq.cli.visualization import FitVisualizer
         import matplotlib.pyplot as plt
+
+        from nlsq.cli.visualization import FitVisualizer
 
         config = base_visualization_config.copy()
         config["visualization"]["output_dir"] = str(tmp_path)
@@ -354,9 +386,17 @@ class TestConfidenceBand:
 class TestStylePresets:
     """Test style preset application."""
 
-    @pytest.mark.parametrize("style", ["publication", "presentation", "nature", "science", "minimal"])
+    @pytest.mark.parametrize(
+        "style", ["publication", "presentation", "nature", "science", "minimal"]
+    )
     def test_style_preset_application(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path, style
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
+        style,
     ):
         """Test that each style preset applies without errors."""
         from nlsq.cli.visualization import FitVisualizer
@@ -385,7 +425,13 @@ class TestStylePresets:
         """Test that STYLE_PRESETS dictionary is defined with all required presets."""
         from nlsq.cli.visualization import STYLE_PRESETS
 
-        required_presets = ["publication", "presentation", "nature", "science", "minimal"]
+        required_presets = [
+            "publication",
+            "presentation",
+            "nature",
+            "science",
+            "minimal",
+        ]
         for preset in required_presets:
             assert preset in STYLE_PRESETS, f"Missing style preset: {preset}"
 
@@ -400,7 +446,12 @@ class TestOutputFormats:
     """Test PDF and PNG output format generation."""
 
     def test_pdf_output_generation(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test PDF vector format output."""
         from nlsq.cli.visualization import FitVisualizer
@@ -427,7 +478,12 @@ class TestOutputFormats:
             assert Path(pdf_path).stat().st_size > 0, f"PDF file is empty: {pdf_path}"
 
     def test_png_output_generation(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test PNG raster format output."""
         from nlsq.cli.visualization import FitVisualizer
@@ -454,7 +510,12 @@ class TestOutputFormats:
             assert Path(png_path).stat().st_size > 0, f"PNG file is empty: {png_path}"
 
     def test_multi_format_output(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test simultaneous PDF and PNG output."""
         from nlsq.cli.visualization import FitVisualizer
@@ -485,11 +546,17 @@ class TestFitStatisticsAnnotation:
     """Test fit statistics annotation (R-squared, RMSE)."""
 
     def test_annotation_with_r_squared(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that R-squared annotation is added when enabled."""
-        from nlsq.cli.visualization import FitVisualizer
         import matplotlib.pyplot as plt
+
+        from nlsq.cli.visualization import FitVisualizer
 
         config = base_visualization_config.copy()
         config["visualization"]["output_dir"] = str(tmp_path)
@@ -513,15 +580,23 @@ class TestFitStatisticsAnnotation:
         main_ax = fig.axes[0]
         texts = [t.get_text() for t in main_ax.texts]
         r_squared_found = any("R" in t or "r" in t.lower() for t in texts)
-        assert r_squared_found or len(main_ax.texts) > 0, "No R-squared annotation found"
+        assert r_squared_found or len(main_ax.texts) > 0, (
+            "No R-squared annotation found"
+        )
         plt.close(fig)
 
     def test_annotation_with_rmse(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that RMSE annotation is added when enabled."""
-        from nlsq.cli.visualization import FitVisualizer
         import matplotlib.pyplot as plt
+
+        from nlsq.cli.visualization import FitVisualizer
 
         config = base_visualization_config.copy()
         config["visualization"]["output_dir"] = str(tmp_path)
@@ -543,7 +618,9 @@ class TestFitStatisticsAnnotation:
 
         # Check that some annotation text exists
         main_ax = fig.axes[0]
-        assert len(main_ax.texts) > 0 or len(main_ax.get_legend().get_texts()) > 0 or True
+        assert (
+            len(main_ax.texts) > 0 or len(main_ax.get_legend().get_texts()) > 0 or True
+        )
         plt.close(fig)
 
 
@@ -551,7 +628,12 @@ class TestColorblindPalette:
     """Test colorblind-safe palette application."""
 
     def test_colorblind_scheme_application(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that colorblind scheme applies Okabe-Ito palette."""
         from nlsq.cli.visualization import FitVisualizer
@@ -576,7 +658,12 @@ class TestColorblindPalette:
         assert len(output_paths) > 0, "No outputs with colorblind scheme"
 
     def test_grayscale_scheme_application(
-        self, sample_fit_result, sample_data, sample_model, base_visualization_config, tmp_path
+        self,
+        sample_fit_result,
+        sample_data,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
     ):
         """Test that grayscale scheme applies for B&W printing."""
         from nlsq.cli.visualization import FitVisualizer
