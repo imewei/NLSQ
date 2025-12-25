@@ -1,0 +1,89 @@
+# Streamlit configuration for NLSQ GUI
+# Documentation: https://docs.streamlit.io/library/advanced-features/configuration
+
+[global]
+# Development mode settings
+developmentMode = false
+
+[logger]
+# Set the log level
+level = "info"
+# Log message format
+messageFormat = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[client]
+# Controls whether to show error details in the browser
+showErrorDetails = true
+# Toolbar mode: auto, minimal, viewer, developer
+toolbarMode = "auto"
+
+[runner]
+# Enable magic commands (auto st.write for expressions)
+magicEnabled = true
+# Run on file save
+fastReruns = true
+
+[server]
+# Server port (0 = auto-select)
+port = 8501
+# Headless mode for desktop app
+headless = true
+# Disable file watcher in production
+fileWatcherType = "auto"
+# Enable CORS for local development
+enableCORS = false
+# Enable XSRF protection
+enableXsrfProtection = true
+# Max upload size in MB
+maxUploadSize = 200
+# Max message size in MB
+maxMessageSize = 200
+
+[browser]
+# Whether to collect usage statistics
+gatherUsageStats = false
+# Server address for the browser to connect to
+serverAddress = "localhost"
+# Server port for the browser to connect to (0 = same as server.port)
+serverPort = 8501
+
+[theme]
+# Default theme configuration (Light Mode)
+# The app uses a custom theme toggle in the sidebar to switch between themes.
+# This configuration defines the default light theme colors.
+#
+# Light Theme Colors:
+#   - Primary: Blue (#1f77b4) - accent color for interactive elements
+#   - Background: White (#ffffff) - main content background
+#   - Secondary Background: Light gray (#f0f2f6) - sidebar and cards
+#   - Text: Dark gray (#262730) - readable on light backgrounds
+#
+# Dark Theme Colors (applied via session state):
+#   - Primary: Light blue (#4dabf7) - visible on dark backgrounds
+#   - Background: Dark (#0e1117) - main content background
+#   - Secondary Background: Dark gray (#262730) - sidebar and cards
+#   - Text: Off-white (#fafafa) - readable on dark backgrounds
+
+# Light theme as default
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+# Note: The NLSQ GUI provides a custom dark mode toggle in the sidebar.
+# This toggle uses CSS injection to switch between light and dark themes,
+# allowing users to switch themes without restarting the app.
+#
+# The following Plotly themes are used:
+#   - Light mode: plotly_white template with light colors
+#   - Dark mode: plotly_dark template with dark colors
+#
+# Code editor themes:
+#   - Light mode: 'vs' (Visual Studio light)
+#   - Dark mode: 'vs-dark' (Visual Studio dark)
+
+[deprecation]
+# Show deprecation warnings
+showfileUploaderEncoding = false
+showPyplotGlobalUse = false
