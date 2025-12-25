@@ -22,8 +22,7 @@ from typing import Any, BinaryIO
 import numpy as np
 from numpy.typing import NDArray
 
-from nlsq.cli.data_loaders import DataLoader, EXTENSION_FORMAT_MAP
-
+from nlsq.cli.data_loaders import EXTENSION_FORMAT_MAP, DataLoader
 
 # =============================================================================
 # Data Validation Result
@@ -119,7 +118,10 @@ def load_from_file(
         suffix = Path(filename).suffix
 
         # Detect format from extension if not specified
-        if config.get("format", "auto") == "auto" and suffix.lower() in EXTENSION_FORMAT_MAP:
+        if (
+            config.get("format", "auto") == "auto"
+            and suffix.lower() in EXTENSION_FORMAT_MAP
+        ):
             config = {**config, "format": EXTENSION_FORMAT_MAP[suffix.lower()]}
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -205,16 +207,16 @@ def load_from_clipboard(
     # Parse rows
     rows: list[list[float]] = []
     for line_num, line in enumerate(lines, start=1):
-        line = line.strip()
-        if not line:
+        stripped_line = line.strip()
+        if not stripped_line:
             continue
 
         # Split by delimiter
         if delimiter is None:
             # Whitespace splitting
-            parts = line.split()
+            parts = stripped_line.split()
         else:
-            parts = line.split(delimiter)
+            parts = stripped_line.split(delimiter)
 
         try:
             row = [float(p.strip()) for p in parts if p.strip()]
@@ -222,7 +224,7 @@ def load_from_clipboard(
                 rows.append(row)
         except ValueError as e:
             raise ValueError(
-                f"Cannot parse line {line_num} as numeric data: '{line}'"
+                f"Cannot parse line {line_num} as numeric data: '{stripped_line}'"
             ) from e
 
     if not rows:

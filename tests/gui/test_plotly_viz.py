@@ -5,23 +5,22 @@ fit plots, residuals plots, and histograms.
 """
 
 import numpy as np
-import pytest
 import plotly.graph_objects as go
+import pytest
 
 from nlsq.gui.components.plotly_fit_plot import (
     create_fit_plot,
     create_fit_plot_from_result,
 )
+from nlsq.gui.components.plotly_histogram import (
+    compute_normality_tests,
+    create_histogram_from_result,
+    create_residuals_histogram,
+)
 from nlsq.gui.components.plotly_residuals import (
     create_residuals_plot,
     create_residuals_plot_from_result,
 )
-from nlsq.gui.components.plotly_histogram import (
-    create_residuals_histogram,
-    create_histogram_from_result,
-    compute_normality_tests,
-)
-
 
 # =============================================================================
 # Test Fixtures
@@ -254,7 +253,7 @@ class TestCreateResidualsPlot:
         # Access the annotation text - it might be the first or could be after other annotations
         found_stats = False
         for annotation in fig.layout.annotations:
-            if hasattr(annotation, 'text') and annotation.text:
+            if hasattr(annotation, "text") and annotation.text:
                 if "Mean" in annotation.text and "Std" in annotation.text:
                     found_stats = True
                     break

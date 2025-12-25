@@ -26,7 +26,6 @@ import streamlit as st
 
 from nlsq.gui.state import SessionState
 
-
 # Available transform options
 TRANSFORM_OPTIONS = ["none", "log", "logit", "exp"]
 
@@ -86,9 +85,7 @@ def get_param_names_from_model(model: Callable) -> list[str]:
     return param_names
 
 
-def validate_bounds(
-    lower: float | None, upper: float | None
-) -> tuple[bool, str]:
+def validate_bounds(lower: float | None, upper: float | None) -> tuple[bool, str]:
     """Validate lower and upper bound constraints.
 
     Parameters
@@ -187,7 +184,7 @@ def estimate_p0_for_model(
     >>> len(p0)
     2
     """
-    if not hasattr(model, "estimate_p0") or not callable(getattr(model, "estimate_p0")):
+    if not hasattr(model, "estimate_p0") or not callable(model.estimate_p0):
         return None
 
     try:
@@ -284,9 +281,7 @@ def render_param_config(
 
     # Display auto_p0 status
     if has_auto_p0:
-        st.info(
-            "This model supports automatic initial parameter estimation (auto p0)"
-        )
+        st.info("This model supports automatic initial parameter estimation (auto p0)")
     else:
         st.caption(
             "This model does not have built-in p0 estimation. "
@@ -327,7 +322,9 @@ def render_param_config(
             param_name=param_name,
             index=i,
             state=state,
-            estimated_p0=estimated_p0[i] if estimated_p0 and i < len(estimated_p0) else None,
+            estimated_p0=estimated_p0[i]
+            if estimated_p0 and i < len(estimated_p0)
+            else None,
             use_auto=auto_p0 and has_auto_p0,
         )
 
@@ -493,7 +490,11 @@ def render_param_summary(state: SessionState, param_names: list[str]) -> None:
 
     # Count configured parameters
     n_total = len(param_names)
-    n_p0_set = sum(1 for i in range(n_total) if state.p0 and i < len(state.p0) and state.p0[i] is not None)
+    n_p0_set = sum(
+        1
+        for i in range(n_total)
+        if state.p0 and i < len(state.p0) and state.p0[i] is not None
+    )
     n_bounded = 0
 
     if state.bounds:
@@ -504,8 +505,7 @@ def render_param_summary(state: SessionState, param_names: list[str]) -> None:
                 n_bounded += 1
 
     n_transformed = sum(
-        1 for name in param_names
-        if state.transforms.get(name, "none") != "none"
+        1 for name in param_names if state.transforms.get(name, "none") != "none"
     )
 
     # Display summary

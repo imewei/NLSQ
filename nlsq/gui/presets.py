@@ -235,9 +235,9 @@ def validate_preset_consistency() -> bool:
     assert gui_fast["gtol"] == minpack_fast["gtol"], "Fast gtol mismatch"
     assert gui_fast["ftol"] == minpack_fast["ftol"], "Fast ftol mismatch"
     assert gui_fast["xtol"] == minpack_fast["xtol"], "Fast xtol mismatch"
-    assert (
-        gui_fast["enable_multistart"] == minpack_fast["enable_multistart"]
-    ), "Fast multistart mismatch"
+    assert gui_fast["enable_multistart"] == minpack_fast["enable_multistart"], (
+        "Fast multistart mismatch"
+    )
 
     # Check quality preset
     gui_quality = PRESETS["quality"]
@@ -245,10 +245,12 @@ def validate_preset_consistency() -> bool:
     assert gui_quality["gtol"] == minpack_quality["gtol"], "Quality gtol mismatch"
     assert gui_quality["ftol"] == minpack_quality["ftol"], "Quality ftol mismatch"
     assert gui_quality["xtol"] == minpack_quality["xtol"], "Quality xtol mismatch"
-    assert (
-        gui_quality["enable_multistart"] == minpack_quality["enable_multistart"]
-    ), "Quality multistart mismatch"
-    assert gui_quality["n_starts"] == minpack_quality["n_starts"], "Quality n_starts mismatch"
+    assert gui_quality["enable_multistart"] == minpack_quality["enable_multistart"], (
+        "Quality multistart mismatch"
+    )
+    assert gui_quality["n_starts"] == minpack_quality["n_starts"], (
+        "Quality n_starts mismatch"
+    )
 
     # Check standard preset
     gui_standard = PRESETS["standard"]
@@ -311,9 +313,7 @@ def get_streaming_preset(name: str) -> dict[str, Any]:
     name_lower = name.lower()
     if name_lower not in STREAMING_PRESETS:
         available = ", ".join(STREAMING_PRESETS.keys())
-        raise ValueError(
-            f"Unknown streaming preset '{name}'. Available: {available}"
-        )
+        raise ValueError(f"Unknown streaming preset '{name}'. Available: {available}")
     return STREAMING_PRESETS[name_lower].copy()
 
 

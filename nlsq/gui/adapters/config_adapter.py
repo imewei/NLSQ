@@ -91,8 +91,12 @@ def load_yaml_config(file: TextIO | str) -> SessionState:
                     p0_values.append(param["initial"])
                 if "bounds" in param:
                     bounds = param["bounds"]
-                    lower_bounds.append(bounds[0] if bounds[0] is not None else float("-inf"))
-                    upper_bounds.append(bounds[1] if bounds[1] is not None else float("inf"))
+                    lower_bounds.append(
+                        bounds[0] if bounds[0] is not None else float("-inf")
+                    )
+                    upper_bounds.append(
+                        bounds[1] if bounds[1] is not None else float("inf")
+                    )
                 if "transform" in param and "name" in param:
                     transforms[param["name"]] = param["transform"]
 
@@ -142,7 +146,9 @@ def load_yaml_config(file: TextIO | str) -> SessionState:
             "max_warmup_iterations", state.max_warmup_iterations
         )
         state.chunk_size = hs.get("chunk_size", state.chunk_size)
-        state.enable_checkpoints = hs.get("enable_checkpoints", state.enable_checkpoints)
+        state.enable_checkpoints = hs.get(
+            "enable_checkpoints", state.enable_checkpoints
+        )
         state.checkpoint_dir = hs.get("checkpoint_dir", state.checkpoint_dir)
         state.enable_multi_device = hs.get(
             "enable_multi_device", state.enable_multi_device

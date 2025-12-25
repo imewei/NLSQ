@@ -4,23 +4,22 @@ This module tests the fitting execution adapter which wraps nlsq.minpack.fit()
 for use in the Streamlit GUI.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-import jax.numpy as jnp
 
 from nlsq.gui.adapters.fit_adapter import (
-    execute_fit,
-    ProgressCallback,
     FitConfig,
-    extract_fit_statistics,
-    extract_convergence_info,
-    extract_confidence_intervals,
-    validate_fit_inputs,
+    ProgressCallback,
     create_fit_config_from_state,
+    execute_fit,
+    extract_confidence_intervals,
+    extract_convergence_info,
+    extract_fit_statistics,
+    validate_fit_inputs,
 )
 from nlsq.gui.state import SessionState, initialize_state
 from nlsq.result import CurveFitResult
-
 
 # =============================================================================
 # Test Fixtures
@@ -30,16 +29,20 @@ from nlsq.result import CurveFitResult
 @pytest.fixture
 def simple_model():
     """Create a simple linear model for testing."""
+
     def linear(x, a, b):
         return a * x + b
+
     return linear
 
 
 @pytest.fixture
 def exponential_model():
     """Create an exponential decay model for testing."""
+
     def exponential(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
     return exponential
 
 
@@ -95,7 +98,7 @@ class TestExecuteFit:
         )
 
         assert result is not None
-        assert hasattr(result, 'popt')
+        assert hasattr(result, "popt")
         assert len(result.popt) == 2
         # Check fitted parameters are close to true values (a=2, b=5)
         assert abs(result.popt[0] - 2.0) < 0.5
@@ -117,8 +120,8 @@ class TestExecuteFit:
         )
 
         assert result is not None
-        assert hasattr(result, 'popt')
-        assert hasattr(result, 'pcov')
+        assert hasattr(result, "popt")
+        assert hasattr(result, "pcov")
 
     def test_fit_with_bounds(self, simple_model, simple_data):
         """Test fit execution with parameter bounds."""
@@ -177,18 +180,20 @@ class TestProgressCallback:
 
         class TestCallback:
             def on_iteration(self, iteration: int, cost: float, params: np.ndarray):
-                callback_calls.append({
-                    'iteration': iteration,
-                    'cost': cost,
-                    'params': params.copy(),
-                })
+                callback_calls.append(
+                    {
+                        "iteration": iteration,
+                        "cost": cost,
+                        "params": params.copy(),
+                    }
+                )
 
             def should_abort(self) -> bool:
                 return False
 
         callback = TestCallback()
-        assert hasattr(callback, 'on_iteration')
-        assert hasattr(callback, 'should_abort')
+        assert hasattr(callback, "on_iteration")
+        assert hasattr(callback, "should_abort")
 
     def test_callback_invoked_during_fit(self, simple_model, simple_data):
         """Test that callback is invoked during fitting."""
@@ -197,10 +202,12 @@ class TestProgressCallback:
 
         class RecordingCallback:
             def on_iteration(self, iteration: int, cost: float, params: np.ndarray):
-                callback_calls.append({
-                    'iteration': iteration,
-                    'cost': cost,
-                })
+                callback_calls.append(
+                    {
+                        "iteration": iteration,
+                        "cost": cost,
+                    }
+                )
 
             def should_abort(self) -> bool:
                 return False
@@ -275,12 +282,12 @@ class TestResultExtraction:
 
         stats = extract_fit_statistics(result)
 
-        assert 'r_squared' in stats
-        assert 'rmse' in stats
-        assert 'mae' in stats
-        assert 'aic' in stats
-        assert 'bic' in stats
-        assert stats['r_squared'] > 0.9  # Should be a good fit
+        assert "r_squared" in stats
+        assert "rmse" in stats
+        assert "mae" in stats
+        assert "aic" in stats
+        assert "bic" in stats
+        assert stats["r_squared"] > 0.9  # Should be a good fit
 
     def test_extract_convergence_info(self, simple_model, simple_data):
         """Test extraction of convergence information."""
@@ -298,11 +305,11 @@ class TestResultExtraction:
 
         info = extract_convergence_info(result)
 
-        assert 'success' in info
-        assert 'message' in info
-        assert 'nfev' in info
-        assert 'cost' in info
-        assert info['success'] is True
+        assert "success" in info
+        assert "message" in info
+        assert "nfev" in info
+        assert "cost" in info
+        assert info["success"] is True
 
     def test_extract_confidence_intervals(self, simple_model, simple_data):
         """Test extraction of confidence intervals."""
@@ -363,6 +370,7 @@ class TestErrorHandling:
 
     def test_fit_failure_handling(self):
         """Test handling of fit failure."""
+
         def bad_model(x, a):
             return jnp.where(a > 0, jnp.inf, 0.0)
 

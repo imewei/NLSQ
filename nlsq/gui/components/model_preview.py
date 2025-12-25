@@ -251,10 +251,12 @@ def render_parameter_table(param_names: list[str]) -> None:
         return
 
     # Create DataFrame for display
-    df = pd.DataFrame({
-        "Index": range(len(param_names)),
-        "Parameter": param_names,
-    })
+    df = pd.DataFrame(
+        {
+            "Index": range(len(param_names)),
+            "Parameter": param_names,
+        }
+    )
 
     st.dataframe(df, hide_index=True, width="stretch")
 

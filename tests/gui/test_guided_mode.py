@@ -8,23 +8,23 @@ from io import StringIO
 
 import pytest
 
+from nlsq.gui.adapters.config_adapter import (
+    load_yaml_config,
+    validate_yaml_config,
+)
 from nlsq.gui.presets import (
     PRESETS,
     get_preset,
     get_preset_description,
+    get_preset_n_starts,
     get_preset_names,
     get_preset_tolerances,
     preset_uses_multistart,
-    get_preset_n_starts,
 )
 from nlsq.gui.state import (
     SessionState,
     apply_preset_to_state,
     initialize_state,
-)
-from nlsq.gui.adapters.config_adapter import (
-    load_yaml_config,
-    validate_yaml_config,
 )
 
 

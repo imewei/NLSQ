@@ -26,14 +26,14 @@ create_fit_config_from_state
     Create a FitConfig from SessionState.
 """
 
+import contextlib
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
-from nlsq.minpack import fit, WORKFLOW_PRESETS
+from nlsq.minpack import WORKFLOW_PRESETS, fit
 from nlsq.result import CurveFitResult
-
 
 # =============================================================================
 # Configuration and Protocol Definitions
@@ -233,14 +233,13 @@ class _CallbackWrapper:
 
         # Compute cost (not available directly, pass 0 as placeholder)
         # The actual cost would need to be computed from the residuals
-        try:
+        # Don't let callback errors stop the fit
+        with contextlib.suppress(Exception):
             self.callback.on_iteration(
                 iteration=self.iteration,
                 cost=0.0,  # Placeholder, actual cost not easily available
                 params=np.asarray(xk),
             )
-        except Exception:
-            pass  # Don't let callback errors stop the fit
 
         # Check for abort signal
         try:
@@ -316,14 +315,8 @@ def execute_fit(
     # Prepare bounds - convert None values to ±inf
     bounds = config.bounds
     if bounds is not None:
-        lower = [
-            -float("inf") if v is None else float(v)
-            for v in bounds[0]
-        ]
-        upper = [
-            float("inf") if v is None else float(v)
-            for v in bounds[1]
-        ]
+        lower = [-float("inf") if v is None else float(v) for v in bounds[0]]
+        upper = [float("inf") if v is None else float(v) for v in bounds[1]]
         bounds = (np.asarray(lower), np.asarray(upper))
 
     # Prepare callback wrapper
@@ -379,7 +372,7 @@ def execute_fit(
     # Check for abort
     if callback_wrapper.aborted:
         # Mark result as aborted
-        if hasattr(result, '__setitem__'):
+        if hasattr(result, "__setitem__"):
             result["aborted"] = True
 
     return result
@@ -506,7 +499,7 @@ def extract_confidence_intervals(
         return [(float(low), float(high)) for low, high in intervals]
     except Exception:
         # Return infinite intervals if calculation fails
-        n_params = len(result.popt) if hasattr(result, 'popt') else 0
+        n_params = len(result.popt) if hasattr(result, "popt") else 0
         return [(-float("inf"), float("inf"))] * n_params
 
 
@@ -529,7 +522,7 @@ def extract_parameter_uncertainties(result: CurveFitResult) -> list[float]:
             return [float("nan")] * len(result.popt)
         return [float(np.sqrt(pcov[i, i])) for i in range(len(result.popt))]
     except Exception:
-        n_params = len(result.popt) if hasattr(result, 'popt') else 0
+        n_params = len(result.popt) if hasattr(result, "popt") else 0
         return [float("nan")] * n_params
 
 
@@ -553,7 +546,7 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
     """
     # Determine workflow from state
     workflow = None
-    if hasattr(state, 'preset') and state.preset:
+    if hasattr(state, "preset") and state.preset:
         preset_map = {
             "fast": "fast",
             "robust": "standard",
@@ -568,7 +561,7 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
         ftol=state.ftol,
         xtol=state.xtol,
         max_iterations=state.max_iterations,
-        max_function_evals=getattr(state, 'max_function_evals', 2000),
+        max_function_evals=getattr(state, "max_function_evals", 2000),
         method=state.method,
         loss=state.loss,
         workflow=workflow,
@@ -576,8 +569,8 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
         enable_multistart=state.enable_multistart,
         n_starts=state.n_starts,
         sampler=state.sampler,
-        center_on_p0=getattr(state, 'center_on_p0', True),
-        scale_factor=getattr(state, 'scale_factor', 1.0),
+        center_on_p0=getattr(state, "center_on_p0", True),
+        scale_factor=getattr(state, "scale_factor", 1.0),
         chunk_size=state.chunk_size,
         absolute_sigma=False,
     )

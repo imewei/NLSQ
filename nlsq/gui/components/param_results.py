@@ -13,12 +13,12 @@ render_parameter_results
     Render parameter results in Streamlit.
 """
 
+import contextlib
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from scipy import stats
-
 
 # =============================================================================
 # Parameter Table Formatting
@@ -269,10 +269,8 @@ def render_parameter_results(
     # Get n_data for degrees of freedom
     n_data = None
     if hasattr(result, "ydata"):
-        try:
+        with contextlib.suppress(TypeError, AttributeError):
             n_data = len(result.ydata)
-        except (TypeError, AttributeError):
-            pass
 
     # Format parameter table
     df = format_parameter_table(popt, pcov, param_names)
@@ -305,7 +303,7 @@ def render_parameter_results(
         names = param_names or [f"p{i}" for i in range(len(popt))]
         perr = np.sqrt(np.diag(pcov)) if pcov is not None else [None] * len(popt)
 
-        for i, (col, name) in enumerate(zip(cols, names)):
+        for i, (col, name) in enumerate(zip(cols, names, strict=False)):
             with col:
                 value = popt[i]
                 err = perr[i] if perr[i] is not None and np.isfinite(perr[i]) else None

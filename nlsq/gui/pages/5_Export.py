@@ -14,16 +14,15 @@ from typing import Any
 
 import streamlit as st
 
-from nlsq.gui.state import SessionState, initialize_state
-from nlsq.gui.utils.theme import apply_dark_theme_css
 from nlsq.gui.adapters.export_adapter import (
-    export_json,
-    export_csv,
     create_session_bundle,
+    export_csv,
+    export_json,
 )
-from nlsq.gui.utils.code_generator import generate_fit_script
 from nlsq.gui.components.param_config import get_param_names_from_model
-
+from nlsq.gui.state import SessionState, initialize_state
+from nlsq.gui.utils.code_generator import generate_fit_script
+from nlsq.gui.utils.theme import apply_dark_theme_css
 
 # =============================================================================
 # Page Configuration
@@ -76,10 +75,7 @@ def has_valid_result() -> bool:
         return False
 
     # Check for required attributes
-    if not hasattr(result, "popt"):
-        return False
-
-    return True
+    return hasattr(result, "popt")
 
 
 # =============================================================================
@@ -110,7 +106,7 @@ def render_session_bundle_section() -> None:
 
         if figures:
             st.markdown("- **Visualizations:**")
-            for name in figures.keys():
+            for name in figures:
                 st.markdown(f"  - {name}.html")
 
     # Generate and provide download
@@ -208,7 +204,7 @@ def render_python_code_section() -> None:
         st.code(code, language="python", line_numbers=True)
 
         # Download button for the script
-        col1, col2 = st.columns([1, 3])
+        col1, _col2 = st.columns([1, 3])
 
         with col1:
             st.download_button(

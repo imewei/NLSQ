@@ -32,7 +32,6 @@ from typing import Any
 
 import plotly.graph_objects as go
 
-
 # =============================================================================
 # Theme Color Definitions
 # =============================================================================
@@ -449,28 +448,28 @@ def apply_dark_theme_css() -> None:
     <style>
     /* Dark mode CSS overrides */
     .stApp {{
-        background-color: {colors['background']};
-        color: {colors['text']};
+        background-color: {colors["background"]};
+        color: {colors["text"]};
     }}
 
     /* Sidebar */
     [data-testid="stSidebar"] {{
-        background-color: {colors['secondary_background']};
+        background-color: {colors["secondary_background"]};
     }}
 
     /* Main content area */
     .main .block-container {{
-        background-color: {colors['background']};
+        background-color: {colors["background"]};
     }}
 
     /* Text elements */
     .stMarkdown, .stText, p, span, label {{
-        color: {colors['text']} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Headers */
     h1, h2, h3, h4, h5, h6 {{
-        color: {colors['text']} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Widgets and inputs */
@@ -478,64 +477,64 @@ def apply_dark_theme_css() -> None:
     .stTextArea > div > div > textarea,
     .stSelectbox > div > div > div,
     .stNumberInput > div > div > input {{
-        background-color: {colors['secondary_background']} !important;
-        color: {colors['text']} !important;
+        background-color: {colors["secondary_background"]} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Buttons */
     .stButton > button {{
-        background-color: {colors['primary']} !important;
-        color: {colors['text']} !important;
+        background-color: {colors["primary"]} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Metrics and info boxes */
     [data-testid="stMetricValue"] {{
-        color: {colors['text']} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Expanders */
     .streamlit-expanderHeader {{
-        background-color: {colors['secondary_background']} !important;
-        color: {colors['text']} !important;
+        background-color: {colors["secondary_background"]} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Tables */
     .stDataFrame {{
-        background-color: {colors['secondary_background']} !important;
+        background-color: {colors["secondary_background"]} !important;
     }}
 
     /* Code blocks */
     .stCodeBlock {{
-        background-color: {colors['secondary_background']} !important;
+        background-color: {colors["secondary_background"]} !important;
     }}
 
     /* Dividers */
     hr {{
-        border-color: {colors['grid']} !important;
+        border-color: {colors["grid"]} !important;
     }}
 
     /* Status messages */
     .stSuccess, .stInfo, .stWarning, .stError {{
-        background-color: {colors['secondary_background']} !important;
+        background-color: {colors["secondary_background"]} !important;
     }}
 
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {{
-        background-color: {colors['secondary_background']};
+        background-color: {colors["secondary_background"]};
     }}
 
     .stTabs [data-baseweb="tab"] {{
-        color: {colors['text']} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Radio buttons and checkboxes */
     .stRadio > div, .stCheckbox > div {{
-        color: {colors['text']} !important;
+        color: {colors["text"]} !important;
     }}
 
     /* Sliders */
     .stSlider > div {{
-        color: {colors['text']} !important;
+        color: {colors["text"]} !important;
     }}
     </style>
     """

@@ -6,26 +6,26 @@ including tabs for Fitting, Multi-start, Streaming, HPC, and Batch options.
 
 import pytest
 
-from nlsq.gui.state import SessionState, initialize_state
-from nlsq.gui.presets import (
-    STREAMING_PRESETS,
-    get_streaming_preset,
-    get_streaming_preset_names,
-)
 from nlsq.gui.components.advanced_options import (
     FITTING_METHODS,
     LOSS_FUNCTIONS,
     SAMPLERS,
     SUMMARY_FORMATS,
+    get_batch_tab_config,
     get_fitting_tab_config,
+    get_hpc_tab_config,
     get_multistart_tab_config,
     get_streaming_tab_config,
-    get_hpc_tab_config,
-    get_batch_tab_config,
-    validate_max_iterations,
     validate_chunk_size,
+    validate_max_iterations,
     validate_n_starts,
 )
+from nlsq.gui.presets import (
+    STREAMING_PRESETS,
+    get_streaming_preset,
+    get_streaming_preset_names,
+)
+from nlsq.gui.state import SessionState, initialize_state
 
 
 class TestTabsRenderCorrectly:

@@ -36,14 +36,13 @@ from typing import Any
 
 from nlsq.cli.model_registry import ModelRegistry
 
-
 # Global registry instance for caching
 _registry: ModelRegistry | None = None
 
 
 def _get_registry() -> ModelRegistry:
     """Get or create the global ModelRegistry instance."""
-    global _registry
+    global _registry  # noqa: PLW0603  # Intentional singleton pattern
     if _registry is None:
         _registry = ModelRegistry()
     return _registry
@@ -87,13 +86,15 @@ def list_builtin_models() -> list[dict[str, Any]]:
 
         # Handle polynomial factory specially
         if name == "polynomial":
-            result.append({
-                "name": name,
-                "n_params": -1,  # Variable, depends on degree
-                "has_estimate_p0": True,  # Generated polynomials have estimate_p0
-                "has_bounds": True,  # Generated polynomials have bounds
-                "is_factory": True,
-            })
+            result.append(
+                {
+                    "name": name,
+                    "n_params": -1,  # Variable, depends on degree
+                    "has_estimate_p0": True,  # Generated polynomials have estimate_p0
+                    "has_bounds": True,  # Generated polynomials have bounds
+                    "is_factory": True,
+                }
+            )
             continue
 
         # Get parameter count from signature
@@ -113,13 +114,15 @@ def list_builtin_models() -> list[dict[str, Any]]:
             getattr(model_func, "bounds", None)
         )
 
-        result.append({
-            "name": name,
-            "n_params": n_params,
-            "has_estimate_p0": has_estimate_p0,
-            "has_bounds": has_bounds,
-            "is_factory": False,
-        })
+        result.append(
+            {
+                "name": name,
+                "n_params": n_params,
+                "has_estimate_p0": has_estimate_p0,
+                "has_bounds": has_bounds,
+                "is_factory": False,
+            }
+        )
 
     return result
 
@@ -156,8 +159,7 @@ def get_model(model_type: str, config: dict[str, Any]) -> Callable:
 
     if model_type == "builtin":
         return registry.get_model(
-            config.get("name", ""),
-            {"type": "builtin", "name": config.get("name", "")}
+            config.get("name", ""), {"type": "builtin", "name": config.get("name", "")}
         )
     elif model_type == "polynomial":
         degree = config.get("degree", 1)
@@ -166,10 +168,16 @@ def get_model(model_type: str, config: dict[str, Any]) -> Callable:
         if "path" in config:
             return registry.get_model(
                 config["path"],
-                {"type": "custom", "path": config["path"], "function": config.get("function", "")}
+                {
+                    "type": "custom",
+                    "path": config["path"],
+                    "function": config.get("function", ""),
+                },
             )
         elif "code" in config:
-            func, _ = parse_custom_model_string(config["code"], config.get("function", "model"))
+            func, _ = parse_custom_model_string(
+                config["code"], config.get("function", "model")
+            )
             return func
         else:
             raise ValueError("Custom model requires 'path' or 'code' in config")
@@ -243,9 +251,7 @@ def get_model_info(model: Callable) -> dict[str, Any]:
     has_estimate_p0 = hasattr(model, "estimate_p0") and callable(
         getattr(model, "estimate_p0", None)
     )
-    has_bounds = hasattr(model, "bounds") and callable(
-        getattr(model, "bounds", None)
-    )
+    has_bounds = hasattr(model, "bounds") and callable(getattr(model, "bounds", None))
 
     # Try to get LaTeX equation from model name
     equation = None
@@ -276,9 +282,7 @@ def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
     """
     # Use importlib to load the code as a module
     # This avoids using exec() directly while providing the same functionality
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", delete=False
-    ) as tmp_file:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp_file:
         tmp_file.write(code)
         tmp_path = tmp_file.name
 
@@ -301,7 +305,9 @@ def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
         sys.modules.pop("_custom_model_temp", None)
 
 
-def parse_custom_model_string(code: str, function_name: str) -> tuple[Callable, list[str]]:
+def parse_custom_model_string(
+    code: str, function_name: str
+) -> tuple[Callable, list[str]]:
     """Parse inline Python code to create a model function.
 
     Compiles the provided Python code and extracts the specified function.
@@ -435,11 +441,9 @@ def list_functions_in_module(code: str) -> list[str]:
     except SyntaxError:
         return []
 
-    functions = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            # Include public functions (not starting with _)
-            functions.append(node.name)
+    functions = [
+        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    ]
 
     return functions
 
@@ -504,11 +508,8 @@ def validate_jit_compatibility(code: str) -> bool:
         return True
 
     # If using plain numpy without jax, that's potentially bad
-    if has_plain_numpy and not has_jax_numpy:
-        return False
-
-    # Simple code without explicit numpy usage is likely fine
-    return True
+    # Otherwise, simple code without explicit numpy usage is likely fine
+    return not has_plain_numpy
 
 
 def get_latex_equation(model_name: str) -> str:

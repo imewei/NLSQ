@@ -130,6 +130,7 @@ Write your own model function in Python:
 ```python
 import jax.numpy as jnp
 
+
 def my_model(x, a, b, c):
     return a * jnp.exp(-b * x) * jnp.cos(c * x)
 ```

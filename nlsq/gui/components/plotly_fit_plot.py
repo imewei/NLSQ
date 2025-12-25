@@ -26,7 +26,6 @@ from nlsq.gui.utils.theme import (
     get_plotly_template,
 )
 
-
 # =============================================================================
 # Plot Creation
 # =============================================================================
@@ -120,7 +119,7 @@ def create_fit_plot(
                 y=np.concatenate([upper_band, lower_band[::-1]]),
                 fill="toself",
                 fillcolor=colors["confidence"],
-                line=dict(color="rgba(255, 255, 255, 0)"),
+                line={"color": "rgba(255, 255, 255, 0)"},
                 name="95% CI",
                 showlegend=show_legend,
                 hoverinfo="skip",
@@ -137,19 +136,19 @@ def create_fit_plot(
                 y=y_sorted,
                 mode="markers",
                 name="Data",
-                marker=dict(
-                    color=data_color,
-                    size=8,
-                    opacity=0.7,
-                ),
-                error_y=dict(
-                    type="data",
-                    array=sigma_sorted,
-                    visible=True,
-                    color=colors["grid"],
-                    thickness=1,
-                    width=3,
-                ),
+                marker={
+                    "color": data_color,
+                    "size": 8,
+                    "opacity": 0.7,
+                },
+                error_y={
+                    "type": "data",
+                    "array": sigma_sorted,
+                    "visible": True,
+                    "color": colors["grid"],
+                    "thickness": 1,
+                    "width": 3,
+                },
                 hovertemplate="x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
                 showlegend=show_legend,
             )
@@ -161,11 +160,11 @@ def create_fit_plot(
                 y=y_sorted,
                 mode="markers",
                 name="Data",
-                marker=dict(
-                    color=data_color,
-                    size=8,
-                    opacity=0.7,
-                ),
+                marker={
+                    "color": data_color,
+                    "size": 8,
+                    "opacity": 0.7,
+                },
                 hovertemplate="x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
                 showlegend=show_legend,
             )
@@ -187,7 +186,7 @@ def create_fit_plot(
                 y=y_fit_sorted,
                 mode="lines",
                 name="Fit",
-                line=dict(color=fit_color, width=2),
+                line={"color": fit_color, "width": 2},
                 hovertemplate="x: %{x:.4g}<br>y_fit: %{y:.4g}<extra></extra>",
                 showlegend=show_legend,
             )
@@ -197,34 +196,34 @@ def create_fit_plot(
     layout_updates = get_plotly_layout_updates(theme)
 
     fig.update_layout(
-        title=dict(
-            text=title,
-            font=dict(size=16),
-        ),
-        xaxis=dict(
-            title=x_label,
-            showgrid=True,
-            gridcolor=colors["grid"],
-        ),
-        yaxis=dict(
-            title=y_label,
-            showgrid=True,
-            gridcolor=colors["grid"],
-        ),
+        title={
+            "text": title,
+            "font": {"size": 16},
+        },
+        xaxis={
+            "title": x_label,
+            "showgrid": True,
+            "gridcolor": colors["grid"],
+        },
+        yaxis={
+            "title": y_label,
+            "showgrid": True,
+            "gridcolor": colors["grid"],
+        },
         template=get_plotly_template(theme),
         paper_bgcolor=colors["background"],
         plot_bgcolor=colors["background"],
-        margin=dict(l=60, r=20, t=50, b=50),
+        margin={"l": 60, "r": 20, "t": 50, "b": 50},
         height=400,
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="right",
-            x=0.99,
-            bgcolor=colors["legend_bg"],
-        ),
+        legend={
+            "yanchor": "top",
+            "y": 0.99,
+            "xanchor": "right",
+            "x": 0.99,
+            "bgcolor": colors["legend_bg"],
+        },
         hovermode="closest",
-        font=dict(color=colors["text"]),
+        font={"color": colors["text"]},
     )
 
     return fig

@@ -10,10 +10,10 @@ import numpy as np
 import pytest
 
 from nlsq.gui.components.column_selector import (
+    compute_data_preview_stats,
+    create_column_assignments,
     get_column_color,
     get_role_display_name,
-    create_column_assignments,
-    compute_data_preview_stats,
     validate_column_selections,
 )
 
@@ -80,7 +80,11 @@ class TestRoleDisplayName:
     def test_get_role_display_name_sigma(self) -> None:
         """Test display name for sigma role."""
         name = get_role_display_name("sigma")
-        assert "sigma" in name.lower() or "error" in name.lower() or "uncertainty" in name.lower()
+        assert (
+            "sigma" in name.lower()
+            or "error" in name.lower()
+            or "uncertainty" in name.lower()
+        )
 
 
 class TestColumnAssignments:
@@ -128,13 +132,15 @@ class TestDataPreviewStats:
 
     def test_compute_data_preview_stats_basic(self) -> None:
         """Test basic statistics computation."""
-        data = np.array([
-            [1.0, 2.0],
-            [2.0, 4.0],
-            [3.0, 6.0],
-            [4.0, 8.0],
-            [5.0, 10.0],
-        ])
+        data = np.array(
+            [
+                [1.0, 2.0],
+                [2.0, 4.0],
+                [3.0, 6.0],
+                [4.0, 8.0],
+                [5.0, 10.0],
+            ]
+        )
 
         stats = compute_data_preview_stats(data)
 
@@ -143,11 +149,13 @@ class TestDataPreviewStats:
 
     def test_compute_data_preview_stats_with_nan(self) -> None:
         """Test statistics with NaN values present."""
-        data = np.array([
-            [1.0, 2.0],
-            [np.nan, 4.0],
-            [3.0, 6.0],
-        ])
+        data = np.array(
+            [
+                [1.0, 2.0],
+                [np.nan, 4.0],
+                [3.0, 6.0],
+            ]
+        )
 
         stats = compute_data_preview_stats(data)
 
@@ -156,11 +164,13 @@ class TestDataPreviewStats:
 
     def test_compute_data_preview_stats_column_ranges(self) -> None:
         """Test that column ranges are computed correctly."""
-        data = np.array([
-            [0.0, 100.0],
-            [5.0, 200.0],
-            [10.0, 300.0],
-        ])
+        data = np.array(
+            [
+                [0.0, 100.0],
+                [5.0, 200.0],
+                [10.0, 300.0],
+            ]
+        )
 
         stats = compute_data_preview_stats(data)
 
@@ -211,7 +221,9 @@ class TestColumnValidation:
         result = validate_column_selections(columns, num_columns, mode="1d")
 
         assert result["is_valid"] is False
-        assert "y" in result["message"].lower() or "required" in result["message"].lower()
+        assert (
+            "y" in result["message"].lower() or "required" in result["message"].lower()
+        )
 
     def test_validate_column_selections_missing_z_in_2d(self) -> None:
         """Test validation fails when z column missing in 2D mode."""
@@ -221,7 +233,9 @@ class TestColumnValidation:
         result = validate_column_selections(columns, num_columns, mode="2d")
 
         assert result["is_valid"] is False
-        assert "z" in result["message"].lower() or "required" in result["message"].lower()
+        assert (
+            "z" in result["message"].lower() or "required" in result["message"].lower()
+        )
 
     def test_validate_column_selections_out_of_range(self) -> None:
         """Test validation fails when column index is out of range."""
@@ -231,7 +245,10 @@ class TestColumnValidation:
         result = validate_column_selections(columns, num_columns, mode="1d")
 
         assert result["is_valid"] is False
-        assert "range" in result["message"].lower() or "invalid" in result["message"].lower()
+        assert (
+            "range" in result["message"].lower()
+            or "invalid" in result["message"].lower()
+        )
 
     def test_validate_column_selections_duplicate_assignment(self) -> None:
         """Test validation fails when same column assigned to multiple roles."""
@@ -241,7 +258,10 @@ class TestColumnValidation:
         result = validate_column_selections(columns, num_columns, mode="1d")
 
         assert result["is_valid"] is False
-        assert "duplicate" in result["message"].lower() or "same" in result["message"].lower()
+        assert (
+            "duplicate" in result["message"].lower()
+            or "same" in result["message"].lower()
+        )
 
 
 class TestModeHandling:

@@ -14,13 +14,12 @@ import numpy as np
 import pytest
 
 from nlsq.gui.adapters.export_adapter import (
-    export_json,
-    export_csv,
     create_session_bundle,
+    export_csv,
+    export_json,
     export_plotly_html,
 )
 from nlsq.gui.state import SessionState, initialize_state
-
 
 # =============================================================================
 # Test Fixtures
@@ -32,11 +31,13 @@ def mock_result() -> MagicMock:
     """Create a mock CurveFitResult for testing."""
     result = MagicMock()
     result.popt = np.array([2.0, 0.5, 1.0])
-    result.pcov = np.array([
-        [0.01, 0.0, 0.0],
-        [0.0, 0.001, 0.0],
-        [0.0, 0.0, 0.02],
-    ])
+    result.pcov = np.array(
+        [
+            [0.01, 0.0, 0.0],
+            [0.0, 0.001, 0.0],
+            [0.0, 0.0, 0.02],
+        ]
+    )
     result.success = True
     result.message = "Optimization converged"
     result.nfev = 42
@@ -265,7 +266,9 @@ class TestCreateSessionBundle:
         with zipfile.ZipFile(zip_buffer, "r") as zf:
             names = zf.namelist()
             # Should have a config file
-            assert any("config" in name.lower() or name.endswith(".yaml") for name in names)
+            assert any(
+                "config" in name.lower() or name.endswith(".yaml") for name in names
+            )
 
     def test_create_session_bundle_contains_results(
         self,
@@ -281,7 +284,9 @@ class TestCreateSessionBundle:
         with zipfile.ZipFile(zip_buffer, "r") as zf:
             names = zf.namelist()
             # Should have a results file
-            assert any("result" in name.lower() or name.endswith(".json") for name in names)
+            assert any(
+                "result" in name.lower() or name.endswith(".json") for name in names
+            )
 
     def test_create_session_bundle_with_figures(
         self,
@@ -314,7 +319,11 @@ class TestExportPlotlyHTML:
         html = export_plotly_html(mock_figure)
 
         assert isinstance(html, str)
-        assert "<html>" in html.lower() or "<!doctype" in html.lower() or "<body>" in html.lower()
+        assert (
+            "<html>" in html.lower()
+            or "<!doctype" in html.lower()
+            or "<body>" in html.lower()
+        )
 
     def test_export_plotly_html_calls_to_html(self, mock_figure: MagicMock) -> None:
         """Test that export calls figure.to_html()."""

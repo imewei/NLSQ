@@ -32,7 +32,6 @@ from nlsq.gui.utils.theme import (
     get_plotly_template,
 )
 
-
 # =============================================================================
 # Cost History Management
 # =============================================================================
@@ -166,36 +165,38 @@ def create_cost_plot_figure(
             y=costs,
             mode="lines+markers",
             name="Cost",
-            line=dict(color=colors["cost_line"], width=2),
-            marker=dict(size=4),
+            line={"color": colors["cost_line"], "width": 2},
+            marker={"size": 4},
             hovertemplate="Iteration: %{x}<br>Cost: %{y:.6e}<extra></extra>",
         )
     )
 
     # Configure layout with theme
     fig.update_layout(
-        title=dict(
-            text=title,
-            font=dict(size=16),
-        ),
-        xaxis=dict(
-            title="Iteration",
-            showgrid=True,
-            gridcolor=colors["grid"],
-        ),
-        yaxis=dict(
-            title="Cost",
-            type="log" if log_scale and len(costs) > 0 and min(costs) > 0 else "linear",
-            showgrid=True,
-            gridcolor=colors["grid"],
-        ),
+        title={
+            "text": title,
+            "font": {"size": 16},
+        },
+        xaxis={
+            "title": "Iteration",
+            "showgrid": True,
+            "gridcolor": colors["grid"],
+        },
+        yaxis={
+            "title": "Cost",
+            "type": "log"
+            if log_scale and len(costs) > 0 and min(costs) > 0
+            else "linear",
+            "showgrid": True,
+            "gridcolor": colors["grid"],
+        },
         template=get_plotly_template(theme),
         paper_bgcolor=colors["background"],
         plot_bgcolor=colors["background"],
-        margin=dict(l=60, r=20, t=40, b=40),
+        margin={"l": 60, "r": 20, "t": 40, "b": 40},
         height=300,
         showlegend=False,
-        font=dict(color=colors["text"]),
+        font={"color": colors["text"]},
     )
 
     # Add annotation for current cost if data exists
@@ -208,7 +209,7 @@ def create_cost_plot_figure(
             yref="paper",
             text=f"Current: {current_cost:.6e}",
             showarrow=False,
-            font=dict(size=12, color=colors["text"]),
+            font={"size": 12, "color": colors["text"]},
             align="right",
             xanchor="right",
             yanchor="top",
@@ -249,16 +250,16 @@ def create_empty_cost_plot(theme: str | None = None) -> go.Figure:
         yref="paper",
         text="Cost plot will appear during fitting",
         showarrow=False,
-        font=dict(size=14, color=colors["text"]),
+        font={"size": 14, "color": colors["text"]},
     )
 
     fig.update_layout(
-        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+        xaxis={"showgrid": False, "showticklabels": False, "zeroline": False},
+        yaxis={"showgrid": False, "showticklabels": False, "zeroline": False},
         template=get_plotly_template(theme),
         paper_bgcolor=colors["background"],
         plot_bgcolor=colors["background"],
-        margin=dict(l=20, r=20, t=20, b=20),
+        margin={"l": 20, "r": 20, "t": 20, "b": 20},
         height=300,
     )
 

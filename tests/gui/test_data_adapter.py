@@ -78,7 +78,7 @@ class TestCSVLoading:
             "csv": {"header": True, "delimiter": ","},
         }
 
-        xdata, ydata, sigma = load_from_file(str(csv_file), config)
+        xdata, ydata, _sigma = load_from_file(str(csv_file), config)
 
         assert len(xdata) == 2
         np.testing.assert_array_almost_equal(xdata, [0.0, 1.0])
@@ -100,7 +100,7 @@ class TestASCIILoading:
             "ascii": {"comment_char": "#", "delimiter": None},
         }
 
-        xdata, ydata, sigma = load_from_file(str(ascii_file), config)
+        xdata, ydata, _sigma = load_from_file(str(ascii_file), config)
 
         assert len(xdata) == 3
         assert len(ydata) == 3
@@ -139,7 +139,7 @@ class TestClipboardParsing:
             "columns": {"x": 0, "y": 1, "sigma": None},
         }
 
-        xdata, ydata, sigma = load_from_clipboard(clipboard_text, config)
+        xdata, ydata, _sigma = load_from_clipboard(clipboard_text, config)
 
         assert len(xdata) == 3
         assert len(ydata) == 3
@@ -154,7 +154,7 @@ class TestClipboardParsing:
             "columns": {"x": 0, "y": 1, "sigma": None},
         }
 
-        xdata, ydata, sigma = load_from_clipboard(clipboard_text, config)
+        xdata, ydata, _sigma = load_from_clipboard(clipboard_text, config)
 
         assert len(xdata) == 3
         assert len(ydata) == 3
@@ -169,7 +169,7 @@ class TestClipboardParsing:
             "has_header": True,
         }
 
-        xdata, ydata, sigma = load_from_clipboard(clipboard_text, config)
+        xdata, _ydata, _sigma = load_from_clipboard(clipboard_text, config)
 
         assert len(xdata) == 2
         np.testing.assert_array_almost_equal(xdata, [1.0, 2.0])
@@ -229,7 +229,7 @@ class TestSurfaceDataMode:
             "csv": {"header": True, "delimiter": ","},
         }
 
-        xdata, ydata, sigma = load_from_file(str(csv_file), config)
+        xdata, ydata, _sigma = load_from_file(str(csv_file), config)
 
         # For 2D data, xdata should have shape (2, n_points)
         assert xdata.shape == (2, 4)
@@ -293,7 +293,10 @@ class TestDataValidation:
         result = validate_data(xdata, ydata, sigma=None, min_points=2)
 
         assert result.is_valid is False
-        assert "minimum" in result.message.lower() or "insufficient" in result.message.lower()
+        assert (
+            "minimum" in result.message.lower()
+            or "insufficient" in result.message.lower()
+        )
 
 
 class TestColumnDetection:

@@ -101,7 +101,7 @@ class TestThemeStateManagement:
 
     def test_theme_colors_dict_structure(self) -> None:
         """Test that theme color dictionaries have consistent structure."""
-        from nlsq.gui.utils.theme import LIGHT_COLORS, DARK_COLORS
+        from nlsq.gui.utils.theme import DARK_COLORS, LIGHT_COLORS
 
         # Both should have the same keys
         assert set(LIGHT_COLORS.keys()) == set(DARK_COLORS.keys())

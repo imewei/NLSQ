@@ -24,7 +24,6 @@ from nlsq.gui.utils.theme import (
     get_sigma_band_colors,
 )
 
-
 # =============================================================================
 # Plot Creation
 # =============================================================================
@@ -113,7 +112,7 @@ def create_residuals_plot(
                 ),
                 fill="toself",
                 fillcolor=sigma_colors["sigma_3"],
-                line=dict(color="rgba(255, 0, 0, 0)"),
+                line={"color": "rgba(255, 0, 0, 0)"},
                 name="3 sigma",
                 showlegend=True,
                 hoverinfo="skip",
@@ -132,7 +131,7 @@ def create_residuals_plot(
                 ),
                 fill="toself",
                 fillcolor=sigma_colors["sigma_2"],
-                line=dict(color="rgba(255, 165, 0, 0)"),
+                line={"color": "rgba(255, 165, 0, 0)"},
                 name="2 sigma",
                 showlegend=True,
                 hoverinfo="skip",
@@ -151,7 +150,7 @@ def create_residuals_plot(
                 ),
                 fill="toself",
                 fillcolor=sigma_colors["sigma_1"],
-                line=dict(color="rgba(0, 128, 0, 0)"),
+                line={"color": "rgba(0, 128, 0, 0)"},
                 name="1 sigma",
                 showlegend=True,
                 hoverinfo="skip",
@@ -178,13 +177,13 @@ def create_residuals_plot(
             y=res_sorted,
             mode="markers",
             name="Residuals",
-            marker=dict(
-                color=point_colors,
-                colorscale="RdYlGn_r",
-                size=8,
-                opacity=0.7,
-                showscale=False,
-            ),
+            marker={
+                "color": point_colors,
+                "colorscale": "RdYlGn_r",
+                "size": 8,
+                "opacity": 0.7,
+                "showscale": False,
+            },
             hovertemplate="x: %{x:.4g}<br>residual: %{y:.4g}<extra></extra>",
             showlegend=True,
         )
@@ -192,38 +191,38 @@ def create_residuals_plot(
 
     # Configure layout with theme
     fig.update_layout(
-        title=dict(
-            text=title,
-            font=dict(size=16),
-        ),
-        xaxis=dict(
-            title=x_label,
-            showgrid=True,
-            gridcolor=colors["grid"],
-        ),
-        yaxis=dict(
-            title=y_label,
-            showgrid=True,
-            gridcolor=colors["grid"],
-            zeroline=True,
-            zerolinecolor=colors["zero_line"],
-            zerolinewidth=1,
-        ),
+        title={
+            "text": title,
+            "font": {"size": 16},
+        },
+        xaxis={
+            "title": x_label,
+            "showgrid": True,
+            "gridcolor": colors["grid"],
+        },
+        yaxis={
+            "title": y_label,
+            "showgrid": True,
+            "gridcolor": colors["grid"],
+            "zeroline": True,
+            "zerolinecolor": colors["zero_line"],
+            "zerolinewidth": 1,
+        },
         template=get_plotly_template(theme),
         paper_bgcolor=colors["background"],
         plot_bgcolor=colors["background"],
-        margin=dict(l=60, r=20, t=50, b=50),
+        margin={"l": 60, "r": 20, "t": 50, "b": 50},
         height=300,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            bgcolor=colors["legend_bg"],
-        ),
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "right",
+            "x": 1,
+            "bgcolor": colors["legend_bg"],
+        },
         hovermode="closest",
-        font=dict(color=colors["text"]),
+        font={"color": colors["text"]},
     )
 
     # Add statistics annotation
@@ -234,7 +233,7 @@ def create_residuals_plot(
         yref="paper",
         text=f"Mean: {mean_res:.4g}<br>Std: {std_res:.4g}",
         showarrow=False,
-        font=dict(size=10, color=colors["text"]),
+        font={"size": 10, "color": colors["text"]},
         align="right",
         xanchor="right",
         yanchor="top",

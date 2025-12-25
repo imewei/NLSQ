@@ -165,7 +165,7 @@ import jax.numpy as jnp
 def exp_model(x, a, tau):
     return a * jnp.exp(-x / tau)
 """
-        is_valid, error = validate_code_syntax(code)
+        is_valid, _error = validate_code_syntax(code)
 
         assert is_valid is True
 

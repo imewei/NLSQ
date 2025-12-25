@@ -8,17 +8,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from nlsq.gui.components.param_results import (
-    format_parameter_table,
-    compute_confidence_intervals,
-    format_confidence_intervals,
-)
 from nlsq.gui.components.fit_statistics import (
-    format_statistics,
     format_convergence_info,
+    format_statistics,
     get_fit_quality_label,
 )
-
+from nlsq.gui.components.param_results import (
+    compute_confidence_intervals,
+    format_confidence_intervals,
+    format_parameter_table,
+)
 
 # =============================================================================
 # Test Fixtures
@@ -295,7 +294,7 @@ class TestFormatStatistics:
     def test_values_are_strings(self, simple_result):
         """All values should be formatted strings."""
         stats = format_statistics(simple_result)
-        for key, value in stats.items():
+        for value in stats.values():
             assert isinstance(value, str)
 
     def test_formats_valid_values(self, simple_result):

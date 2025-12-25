@@ -200,7 +200,7 @@ def complex_model(x, amplitude, frequency, phase, offset):
     import jax.numpy as jnp
     return amplitude * jnp.sin(frequency * x + phase) + offset
 """
-        func, param_names = parse_custom_model_string(code, "complex_model")
+        _func, param_names = parse_custom_model_string(code, "complex_model")
 
         assert param_names == ["amplitude", "frequency", "phase", "offset"]
 
@@ -382,7 +382,9 @@ def custom_exponential(x, a, tau):
     return a * jnp.exp(-x / tau)
 """)
 
-        func, param_names = load_custom_model_file(str(model_file), "custom_exponential")
+        func, param_names = load_custom_model_file(
+            str(model_file), "custom_exponential"
+        )
 
         assert callable(func)
         assert param_names == ["a", "tau"]

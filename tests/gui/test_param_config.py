@@ -12,12 +12,12 @@ import pytest
 
 from nlsq.gui.components.param_config import (
     TRANSFORM_OPTIONS,
-    get_param_names_from_model,
-    validate_bounds,
-    get_default_p0_value,
     create_param_config_dict,
     estimate_p0_for_model,
     format_p0_display,
+    get_default_p0_value,
+    get_param_names_from_model,
+    validate_bounds,
     validate_p0_input,
 )
 from nlsq.gui.state import SessionState, initialize_state
@@ -77,12 +77,12 @@ class TestValidateBounds:
 
     def test_equal_bounds_valid(self) -> None:
         """Equal bounds should be valid (fixed parameter)."""
-        is_valid, message = validate_bounds(5.0, 5.0)
+        is_valid, _message = validate_bounds(5.0, 5.0)
         assert is_valid is True
 
     def test_none_bounds_valid(self) -> None:
         """None bounds (no constraint) should be valid."""
-        is_valid, message = validate_bounds(None, None)
+        is_valid, _message = validate_bounds(None, None)
         assert is_valid is True
 
     def test_partial_bounds_valid(self) -> None:
@@ -94,7 +94,7 @@ class TestValidateBounds:
 
     def test_infinite_bounds_valid(self) -> None:
         """Infinite bounds should be valid."""
-        is_valid, message = validate_bounds(float("-inf"), float("inf"))
+        is_valid, _message = validate_bounds(float("-inf"), float("inf"))
         assert is_valid is True
 
 
@@ -103,8 +103,9 @@ class TestAutoP0Estimation:
 
     def test_estimate_p0_with_gaussian(self) -> None:
         """Gaussian model should provide p0 estimation."""
-        from nlsq.gui.adapters.model_adapter import get_model
         import numpy as np
+
+        from nlsq.gui.adapters.model_adapter import get_model
 
         model = get_model("builtin", {"name": "gaussian"})
         xdata = np.linspace(-5, 5, 50)
@@ -118,8 +119,9 @@ class TestAutoP0Estimation:
 
     def test_estimate_p0_with_linear(self) -> None:
         """Linear model should provide p0 estimation."""
-        from nlsq.gui.adapters.model_adapter import get_model
         import numpy as np
+
+        from nlsq.gui.adapters.model_adapter import get_model
 
         model = get_model("builtin", {"name": "linear"})
         xdata = np.array([0, 1, 2, 3, 4])
@@ -232,7 +234,7 @@ class TestValidateP0Input:
 
     def test_valid_scientific(self) -> None:
         """Scientific notation should be valid."""
-        is_valid, value, message = validate_p0_input("1e-5")
+        is_valid, value, _message = validate_p0_input("1e-5")
         assert is_valid is True
         assert value == 1e-5
 
@@ -245,7 +247,7 @@ class TestValidateP0Input:
 
     def test_empty_string(self) -> None:
         """Empty string should return None (auto mode)."""
-        is_valid, value, message = validate_p0_input("")
+        is_valid, value, _message = validate_p0_input("")
         assert is_valid is True
         assert value is None
 

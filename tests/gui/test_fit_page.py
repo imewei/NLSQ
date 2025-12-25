@@ -4,26 +4,26 @@ This module tests the UI components for fitting execution including
 the Run Fit button, progress bar, abort button, and result transitions.
 """
 
-import numpy as np
-import pytest
 from unittest.mock import MagicMock, patch
 
-from nlsq.gui.state import SessionState, initialize_state
+import numpy as np
+import pytest
+
 from nlsq.functions import exponential_decay, linear
-from nlsq.gui.components.live_cost_plot import (
-    create_cost_history,
-    update_cost_history,
-    create_cost_plot_figure,
-    get_plot_config,
-)
 from nlsq.gui.components.iteration_table import (
     create_iteration_history,
-    update_iteration_history,
     format_iteration_table,
     get_table_display_config,
     limit_history_size,
+    update_iteration_history,
 )
-
+from nlsq.gui.components.live_cost_plot import (
+    create_cost_history,
+    create_cost_plot_figure,
+    get_plot_config,
+    update_cost_history,
+)
+from nlsq.gui.state import SessionState, initialize_state
 
 # =============================================================================
 # Test Fixtures
@@ -43,8 +43,10 @@ def session_state():
 @pytest.fixture
 def mock_model():
     """Create a mock model function."""
+
     def model(x, a, b):
         return a * x + b
+
     return model
 
 
@@ -62,9 +64,7 @@ class TestRunFitButtonState:
         # No xdata/ydata set
 
         is_ready = (
-            state.xdata is not None
-            and state.ydata is not None
-            and state.p0 is not None
+            state.xdata is not None and state.ydata is not None and state.p0 is not None
         )
 
         assert is_ready is False
@@ -416,7 +416,9 @@ class TestIsReadyToFitRegression:
             all_none = all(v is None for v in state.p0)
             is_ready = not all_none or (state.auto_p0 and has_auto_p0)
 
-        assert is_ready is False, "p0=[None,None,None] without auto_p0 should not be ready"
+        assert is_ready is False, (
+            "p0=[None,None,None] without auto_p0 should not be ready"
+        )
 
     def test_p0_all_none_with_auto_p0_is_ready(self, state_with_data):
         """Test: p0=[None, None, None] with auto_p0=True should be ready.

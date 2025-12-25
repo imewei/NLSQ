@@ -28,7 +28,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-
 # =============================================================================
 # Iteration History Management
 # =============================================================================
@@ -211,8 +210,7 @@ def format_iteration_table(
     # Add parameter columns
     for i, name in enumerate(names):
         data[name] = [
-            round(p[i], precision) if i < len(p) else None
-            for p in history["params"]
+            round(p[i], precision) if i < len(p) else None for p in history["params"]
         ]
 
     # Add cost column if available
@@ -381,7 +379,7 @@ def render_convergence_summary(
     st.markdown("**Parameter Changes**")
 
     cols = st.columns(len(names))
-    for i, (col, name) in enumerate(zip(cols, names)):
+    for i, (col, name) in enumerate(zip(cols, names, strict=False)):
         stats = format_parameter_change(history, i)
         with col:
             st.metric(

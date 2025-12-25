@@ -11,12 +11,6 @@ from typing import Any
 import pytest
 import yaml
 
-from nlsq.gui.state import (
-    SessionState,
-    get_current_config,
-    initialize_state,
-    reset_state,
-)
 from nlsq.gui.adapters.config_adapter import (
     export_yaml_config,
     load_yaml_config,
@@ -25,6 +19,12 @@ from nlsq.gui.presets import (
     PRESETS,
     get_preset,
     get_preset_names,
+)
+from nlsq.gui.state import (
+    SessionState,
+    get_current_config,
+    initialize_state,
+    reset_state,
 )
 
 

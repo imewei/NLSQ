@@ -12,11 +12,11 @@ Features:
 - Real-time cost plot and iteration table
 """
 
-from io import StringIO
-from typing import Any
 import logging
 import threading
 import time
+from io import StringIO
+from typing import Any
 
 import numpy as np
 import streamlit as st
@@ -24,16 +24,6 @@ import streamlit as st
 # Configure logging for GUI fitting operations
 logger = logging.getLogger("nlsq.gui.fitting")
 
-from nlsq.gui.state import SessionState, apply_preset_to_state, initialize_state
-from nlsq.gui.utils.theme import apply_dark_theme_css
-from nlsq.gui.presets import (
-    get_preset,
-    get_preset_description,
-    get_preset_names,
-    get_preset_tolerances,
-    preset_uses_multistart,
-    get_preset_n_starts,
-)
 from nlsq.gui.adapters.config_adapter import (
     load_yaml_config,
     validate_yaml_config,
@@ -43,29 +33,38 @@ from nlsq.gui.adapters.fit_adapter import (
     ProgressCallback,
     create_fit_config_from_state,
     execute_fit,
-    extract_fit_statistics,
-    extract_convergence_info,
     extract_confidence_intervals,
+    extract_convergence_info,
+    extract_fit_statistics,
     is_large_dataset,
+)
+from nlsq.gui.components.advanced_options import render_advanced_options
+from nlsq.gui.components.iteration_table import (
+    create_iteration_history,
+    render_convergence_summary,
+    render_iteration_table,
+    update_iteration_history,
+)
+from nlsq.gui.components.live_cost_plot import (
+    create_cost_history,
+    get_cost_plot_summary,
+    render_live_cost_plot,
+    update_cost_history,
 )
 from nlsq.gui.components.param_config import (
     get_param_names_from_model,
     render_param_config,
 )
-from nlsq.gui.components.advanced_options import render_advanced_options
-from nlsq.gui.components.live_cost_plot import (
-    create_cost_history,
-    update_cost_history,
-    render_live_cost_plot,
-    get_cost_plot_summary,
+from nlsq.gui.presets import (
+    get_preset,
+    get_preset_description,
+    get_preset_n_starts,
+    get_preset_names,
+    get_preset_tolerances,
+    preset_uses_multistart,
 )
-from nlsq.gui.components.iteration_table import (
-    create_iteration_history,
-    update_iteration_history,
-    render_iteration_table,
-    render_convergence_summary,
-)
-
+from nlsq.gui.state import SessionState, apply_preset_to_state, initialize_state
+from nlsq.gui.utils.theme import apply_dark_theme_css
 
 # =============================================================================
 # Page Configuration
@@ -165,7 +164,9 @@ def render_guided_mode(state: SessionState) -> None:
         "Preset",
         options=preset_names,
         format_func=lambda x: preset_labels.get(x, x.capitalize()),
-        index=preset_names.index(current_preset) if current_preset in preset_names else 1,
+        index=preset_names.index(current_preset)
+        if current_preset in preset_names
+        else 1,
         key="preset_selector",
     )
 
@@ -349,7 +350,10 @@ def render_parameter_section(state: SessionState) -> None:
         The current session state.
     """
     # Check if model is loaded
-    if "current_model" not in st.session_state or st.session_state.current_model is None:
+    if (
+        "current_model" not in st.session_state
+        or st.session_state.current_model is None
+    ):
         st.warning(
             "No model selected. Please select a model on the Model Selection page first."
         )
@@ -382,7 +386,9 @@ class GUIProgressCallback:
         self.state = state
         self.iteration = 0
         self.cost_history = st.session_state.get("cost_history", create_cost_history())
-        self.iteration_history = st.session_state.get("iteration_history", create_iteration_history())
+        self.iteration_history = st.session_state.get(
+            "iteration_history", create_iteration_history()
+        )
 
     def on_iteration(self, iteration: int, cost: float, params: np.ndarray) -> None:
         """Handle iteration update."""
@@ -411,7 +417,10 @@ def is_ready_to_fit(state: SessionState) -> tuple[bool, str]:
     if state.xdata is None or state.ydata is None:
         return False, "Data not loaded. Go to Data Loading page."
 
-    if "current_model" not in st.session_state or st.session_state.current_model is None:
+    if (
+        "current_model" not in st.session_state
+        or st.session_state.current_model is None
+    ):
         return False, "Model not selected. Go to Model Selection page."
 
     # Check p0 - either auto_p0 must be enabled with a model that supports it,
@@ -494,11 +503,10 @@ def run_fit(state: SessionState) -> str | None:
             error_message = f"Auto p0 estimation failed: {e}"
             state.fit_running = False
             return error_message
+    elif state.p0 is not None:
+        logger.info("Manual p0 used | p0=%s", state.p0)
     else:
-        if state.p0 is not None:
-            logger.info("Manual p0 used | p0=%s", state.p0)
-        else:
-            logger.warning("No p0 available and auto_p0 disabled")
+        logger.warning("No p0 available and auto_p0 disabled")
 
     # Ensure p0 has no None values
     if state.p0 is None or any(v is None for v in state.p0):
@@ -621,10 +629,14 @@ def render_fit_progress(state: SessionState) -> None:
 
     with col2:
         st.markdown("**Parameter Values**")
-        iteration_history = st.session_state.get("iteration_history", create_iteration_history())
+        iteration_history = st.session_state.get(
+            "iteration_history", create_iteration_history()
+        )
         model = st.session_state.get("current_model")
         param_names = get_param_names_from_model(model) if model else None
-        render_iteration_table(iteration_history, param_names=param_names, key="fitting_params_table")
+        render_iteration_table(
+            iteration_history, param_names=param_names, key="fitting_params_table"
+        )
 
     # Streaming/checkpoint indicator for large datasets
     if state.xdata is not None and is_large_dataset(state.xdata):
@@ -662,7 +674,7 @@ def render_fit_summary(state: SessionState) -> None:
         st.metric("BIC", f"{stats['bic']:.2f}")
 
     with col3:
-        st.metric("Function Evaluations", info['nfev'])
+        st.metric("Function Evaluations", info["nfev"])
         st.metric("Final Cost", f"{info['cost']:.6e}")
 
     # Fitted parameters
@@ -670,16 +682,16 @@ def render_fit_summary(state: SessionState) -> None:
     model = st.session_state.get("current_model")
     param_names = get_param_names_from_model(model) if model else None
 
-    if param_names and hasattr(result, 'popt'):
+    if param_names and hasattr(result, "popt"):
         ci = extract_confidence_intervals(result, alpha=0.95)
         cols = st.columns(len(result.popt))
-        for i, (col, popt) in enumerate(zip(cols, result.popt)):
+        for i, (col, popt) in enumerate(zip(cols, result.popt, strict=False)):
             name = param_names[i] if i < len(param_names) else f"p{i}"
             with col:
                 st.metric(
                     label=name,
                     value=f"{popt:.6g}",
-                    help=f"95% CI: [{ci[i][0]:.4g}, {ci[i][1]:.4g}]"
+                    help=f"95% CI: [{ci[i][0]:.4g}, {ci[i][1]:.4g}]",
                 )
 
     # Link to results page
@@ -719,7 +731,10 @@ def render_sidebar_status(state: SessionState) -> None:
         st.sidebar.info("Multi-start: Off")
 
     # Model status
-    if "current_model" in st.session_state and st.session_state.current_model is not None:
+    if (
+        "current_model" in st.session_state
+        and st.session_state.current_model is not None
+    ):
         model = st.session_state.current_model
         param_names = get_param_names_from_model(model)
         st.sidebar.markdown(f"**Parameters:** {len(param_names)}")

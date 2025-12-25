@@ -13,8 +13,6 @@ from typing import Any
 
 import streamlit as st
 
-from nlsq.gui.state import SessionState, initialize_state
-from nlsq.gui.utils.theme import apply_dark_theme_css
 from nlsq.gui.adapters.model_adapter import (
     get_model,
     get_model_info,
@@ -24,18 +22,19 @@ from nlsq.gui.adapters.model_adapter import (
 )
 from nlsq.gui.components.code_editor import (
     get_default_model_template,
+    get_uploaded_file_content,
     render_code_editor,
     render_file_upload,
-    get_uploaded_file_content,
     validate_code_syntax,
 )
 from nlsq.gui.components.model_preview import (
-    render_model_preview,
-    render_equation_display,
     format_parameter_list,
     get_model_summary,
+    render_equation_display,
+    render_model_preview,
 )
-
+from nlsq.gui.state import SessionState, initialize_state
+from nlsq.gui.utils.theme import apply_dark_theme_css
 
 # =============================================================================
 # Page Configuration
@@ -232,7 +231,9 @@ def render_polynomial_selector() -> None:
     state.polynomial_degree = degree
 
     # Show degree explanation
-    st.caption(f"A degree-{degree} polynomial has {degree + 1} parameters (coefficients)")
+    st.caption(
+        f"A degree-{degree} polynomial has {degree + 1} parameters (coefficients)"
+    )
 
     # Load and display model
     try:
@@ -387,7 +388,9 @@ def render_custom_file_upload(state: SessionState) -> None:
                         state.custom_code = content
                         state.custom_function_name = selected_func
                         state.custom_file_path = uploaded_file.name
-                        st.success(f"Model '{selected_func}' loaded from {uploaded_file.name}")
+                        st.success(
+                            f"Model '{selected_func}' loaded from {uploaded_file.name}"
+                        )
 
                         # Show model info
                         info = get_model_info(model)
@@ -419,13 +422,13 @@ def render_model_summary_sidebar() -> None:
     st.sidebar.subheader("Current Model")
 
     if state.model_type == "builtin":
-        st.sidebar.markdown(f"**Type:** Built-in")
+        st.sidebar.markdown("**Type:** Built-in")
         st.sidebar.markdown(f"**Name:** {state.model_name}")
     elif state.model_type == "polynomial":
-        st.sidebar.markdown(f"**Type:** Polynomial")
+        st.sidebar.markdown("**Type:** Polynomial")
         st.sidebar.markdown(f"**Degree:** {state.polynomial_degree}")
     else:
-        st.sidebar.markdown(f"**Type:** Custom")
+        st.sidebar.markdown("**Type:** Custom")
         st.sidebar.markdown(f"**Function:** {state.custom_function_name}")
 
     summary = get_model_summary(model)

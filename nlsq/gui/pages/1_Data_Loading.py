@@ -18,8 +18,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from nlsq.gui.state import SessionState, initialize_state
-from nlsq.gui.utils.theme import apply_dark_theme_css
 from nlsq.gui.adapters.data_adapter import (
     compute_statistics,
     detect_columns,
@@ -36,7 +34,8 @@ from nlsq.gui.components.column_selector import (
     get_role_display_name,
     validate_column_selections,
 )
-
+from nlsq.gui.state import SessionState, initialize_state
+from nlsq.gui.utils.theme import apply_dark_theme_css
 
 # =============================================================================
 # Page Configuration
@@ -280,7 +279,9 @@ def render_mode_selector() -> None:
     mode = st.radio(
         "Select data dimensionality",
         options=["1d", "2d"],
-        format_func=lambda x: "1D Curve (x, y)" if x == "1d" else "2D Surface (x, y, z)",
+        format_func=lambda x: "1D Curve (x, y)"
+        if x == "1d"
+        else "2D Surface (x, y, z)",
         horizontal=True,
         index=0 if state.data_mode == "1d" else 1,
         help="1D: Standard curve fitting. 2D: Surface fitting with two independent variables.",
@@ -327,7 +328,7 @@ def render_column_selector() -> None:
                 st.markdown(
                     f'<span style="display: inline-block; width: 12px; height: 12px; '
                     f'background-color: {color}; border-radius: 2px; margin-right: 5px;"></span>'
-                    f'<strong>{label}</strong>',
+                    f"<strong>{label}</strong>",
                     unsafe_allow_html=True,
                 )
             else:
@@ -340,15 +341,19 @@ def render_column_selector() -> None:
                 selected_idx = st.selectbox(
                     "Column",
                     options=list(range(num_columns)),
-                    index=current_value if current_value is not None and current_value < num_columns else i,
-                    format_func=lambda x: f"{x}: {column_names[x]}" if x < len(column_names) else str(x),
+                    index=current_value
+                    if current_value is not None and current_value < num_columns
+                    else i,
+                    format_func=lambda x: f"{x}: {column_names[x]}"
+                    if x < len(column_names)
+                    else str(x),
                     key=f"col_{role}",
                     label_visibility="collapsed",
                 )
                 updated_assignments[role] = selected_idx
             else:
                 # Optional column - allow None
-                options_list: list[int | None] = [None] + list(range(num_columns))
+                options_list: list[int | None] = [None, *list(range(num_columns))]
                 current_idx = 0
                 if current_value is not None and current_value < num_columns:
                     current_idx = current_value + 1
@@ -357,7 +362,11 @@ def render_column_selector() -> None:
                     "Column",
                     options=options_list,
                     index=current_idx,
-                    format_func=lambda x: "Not assigned" if x is None else f"{x}: {column_names[x]}" if x < len(column_names) else str(x),
+                    format_func=lambda x: "Not assigned"
+                    if x is None
+                    else f"{x}: {column_names[x]}"
+                    if x < len(column_names)
+                    else str(x),
                     key=f"col_{role}",
                     label_visibility="collapsed",
                 )
@@ -462,7 +471,9 @@ def render_statistics() -> None:
     # Show sigma statistics if present
     if stats.get("has_sigma"):
         with st.expander("Uncertainty (Sigma) Statistics"):
-            st.write(f"Sigma Range: [{stats['sigma_min']:.4g}, {stats['sigma_max']:.4g}]")
+            st.write(
+                f"Sigma Range: [{stats['sigma_min']:.4g}, {stats['sigma_max']:.4g}]"
+            )
             st.write(f"Sigma Mean: {stats['sigma_mean']:.4g}")
 
 

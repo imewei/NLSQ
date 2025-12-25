@@ -21,13 +21,13 @@ from nlsq.gui.utils.theme import (
 )
 
 __all__ = [
-    # Code generator
-    "generate_fit_script",
     # Theme constants
     "DARK_COLORS",
     "LIGHT_COLORS",
     # Theme functions
     "apply_theme_to_figure",
+    # Code generator
+    "generate_fit_script",
     "get_annotation_style",
     "get_code_editor_theme",
     "get_confidence_band_color",

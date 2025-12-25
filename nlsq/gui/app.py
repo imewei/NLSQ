@@ -97,8 +97,7 @@ def get_page_status(state: SessionState) -> dict[str, Any]:
 
     # Check model status
     model_selected = bool(state.model_type) and (
-        state.model_type == "builtin"
-        or state.model_type == "polynomial"
+        state.model_type in {"builtin", "polynomial"}
         or (state.model_type == "custom" and state.custom_code)
     )
     model_status = {
@@ -153,9 +152,7 @@ def can_access_page(page: str, state: SessionState) -> bool:
         return status["data"]["loaded"]
     elif page == "fitting":
         return status["data"]["loaded"] and status["model"]["selected"]
-    elif page == "results":
-        return status["fit"]["complete"]
-    elif page == "export":
+    elif page in {"results", "export"}:
         return status["fit"]["complete"]
     else:
         return True
@@ -230,6 +227,7 @@ def get_version_info() -> dict[str, str]:
     """
     try:
         from nlsq import __version__
+
         version = __version__
     except ImportError:
         version = "unknown"

@@ -23,13 +23,12 @@ from typing import Any
 
 import streamlit as st
 
-from nlsq.gui.state import SessionState
 from nlsq.gui.presets import (
     STREAMING_PRESETS,
     get_streaming_preset,
     get_streaming_preset_names,
 )
-
+from nlsq.gui.state import SessionState
 
 # Available options for dropdowns
 FITTING_METHODS = ["trf", "lm", "dogbox"]
@@ -204,13 +203,15 @@ def render_advanced_options(state: SessionState) -> None:
     """
     st.subheader("Advanced Options")
 
-    tabs = st.tabs([
-        "Fitting",
-        "Multi-start",
-        "Streaming",
-        "HPC",
-        "Batch",
-    ])
+    tabs = st.tabs(
+        [
+            "Fitting",
+            "Multi-start",
+            "Streaming",
+            "HPC",
+            "Batch",
+        ]
+    )
 
     with tabs[0]:
         render_fitting_tab(state)
@@ -245,7 +246,9 @@ def render_fitting_tab(state: SessionState) -> None:
         method = st.selectbox(
             "Optimization Method",
             options=FITTING_METHODS,
-            index=FITTING_METHODS.index(state.method) if state.method in FITTING_METHODS else 0,
+            index=FITTING_METHODS.index(state.method)
+            if state.method in FITTING_METHODS
+            else 0,
             help=(
                 "trf: Trust Region Reflective (supports bounds)\n"
                 "lm: Levenberg-Marquardt (no bounds, faster)\n"
@@ -258,7 +261,9 @@ def render_fitting_tab(state: SessionState) -> None:
         loss = st.selectbox(
             "Loss Function",
             options=LOSS_FUNCTIONS,
-            index=LOSS_FUNCTIONS.index(state.loss) if state.loss in LOSS_FUNCTIONS else 0,
+            index=LOSS_FUNCTIONS.index(state.loss)
+            if state.loss in LOSS_FUNCTIONS
+            else 0,
             help=(
                 "linear: Standard least squares\n"
                 "soft_l1, huber, cauchy, arctan: Robust to outliers"
@@ -298,10 +303,10 @@ def render_fitting_tab(state: SessionState) -> None:
             "gtol (10^x)",
             min_value=-15,
             max_value=-1,
-            value=int(round(import_math_log10(state.gtol))) if state.gtol > 0 else -8,
+            value=round(import_math_log10(state.gtol)) if state.gtol > 0 else -8,
             help="Gradient tolerance for convergence",
         )
-        state.gtol = 10 ** gtol_exp
+        state.gtol = 10**gtol_exp
         st.caption(f"gtol = {state.gtol:.0e}")
 
     with col2:
@@ -309,10 +314,10 @@ def render_fitting_tab(state: SessionState) -> None:
             "ftol (10^x)",
             min_value=-15,
             max_value=-1,
-            value=int(round(import_math_log10(state.ftol))) if state.ftol > 0 else -8,
+            value=round(import_math_log10(state.ftol)) if state.ftol > 0 else -8,
             help="Function tolerance for convergence",
         )
-        state.ftol = 10 ** ftol_exp
+        state.ftol = 10**ftol_exp
         st.caption(f"ftol = {state.ftol:.0e}")
 
     with col3:
@@ -320,10 +325,10 @@ def render_fitting_tab(state: SessionState) -> None:
             "xtol (10^x)",
             min_value=-15,
             max_value=-1,
-            value=int(round(import_math_log10(state.xtol))) if state.xtol > 0 else -8,
+            value=round(import_math_log10(state.xtol)) if state.xtol > 0 else -8,
             help="Parameter tolerance for convergence",
         )
-        state.xtol = 10 ** xtol_exp
+        state.xtol = 10**xtol_exp
         st.caption(f"xtol = {state.xtol:.0e}")
 
 
@@ -341,6 +346,7 @@ def import_math_log10(value: float) -> float:
         log10 of value.
     """
     import math
+
     return math.log10(value) if value > 0 else -8
 
 
@@ -413,7 +419,9 @@ def render_multistart_tab(state: SessionState) -> None:
             f"Multi-start will run {n_starts} optimizations using {sampler} sampling"
         )
     else:
-        st.caption("Enable multi-start to run optimization from multiple starting points")
+        st.caption(
+            "Enable multi-start to run optimization from multiple starting points"
+        )
 
 
 def render_streaming_tab(state: SessionState) -> None:
@@ -430,7 +438,7 @@ def render_streaming_tab(state: SessionState) -> None:
     # Streaming preset selector
     st.markdown("##### Quick Presets")
     preset_names = get_streaming_preset_names()
-    preset_options = ["Custom"] + preset_names
+    preset_options = ["Custom", *preset_names]
 
     selected_preset = st.selectbox(
         "Streaming Preset",

@@ -41,29 +41,29 @@ from nlsq.gui.state import (
 )
 
 __all__ = [
-    # Main entry points
-    "main",
-    "run_desktop",
     # Desktop configuration
     "DEFAULT_CONFIG",
-    "DesktopConfig",
-    "get_app_path",
-    "get_assets_path",
-    "get_desktop_config",
-    "get_streamlit_config_dict",
-    "get_webview_options",
     # Presets
     "PRESETS",
+    "DesktopConfig",
+    # Session state
+    "SessionState",
+    "apply_preset_to_state",
+    "get_app_path",
+    "get_assets_path",
+    "get_current_config",
+    "get_desktop_config",
     "get_preset",
     "get_preset_description",
     "get_preset_names",
     "get_preset_tolerances",
-    # Session state
-    "SessionState",
-    "apply_preset_to_state",
-    "get_current_config",
+    "get_streamlit_config_dict",
+    "get_webview_options",
     "initialize_state",
+    # Main entry points
+    "main",
     "reset_state",
+    "run_desktop",
 ]
 
 

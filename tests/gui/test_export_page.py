@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -21,11 +20,13 @@ def mock_result() -> MagicMock:
     """Create a mock CurveFitResult for testing."""
     result = MagicMock()
     result.popt = np.array([2.0, 0.5, 1.0])
-    result.pcov = np.array([
-        [0.01, 0.0, 0.0],
-        [0.0, 0.001, 0.0],
-        [0.0, 0.0, 0.02],
-    ])
+    result.pcov = np.array(
+        [
+            [0.01, 0.0, 0.0],
+            [0.0, 0.001, 0.0],
+            [0.0, 0.0, 0.02],
+        ]
+    )
     result.success = True
     result.message = "Optimization converged"
     result.nfev = 42
@@ -67,7 +68,7 @@ class TestExportPageRendering:
         # We can't fully test Streamlit pages without running Streamlit
         try:
             # Import should work even without Streamlit context
-            import nlsq.gui.pages  # noqa: F401
+            import nlsq.gui.pages
         except Exception as e:
             # Streamlit-specific errors are expected when not in Streamlit context
             assert "streamlit" in str(e).lower() or "session" in str(e).lower()
@@ -86,6 +87,7 @@ class TestDownloadButtonGeneration:
         assert len(json_data) > 0
         # Should be valid JSON
         import json
+
         parsed = json.loads(json_data)
         assert "popt" in parsed
 
@@ -188,6 +190,7 @@ class TestSessionBundleExport:
         """Test that session bundle includes all expected components."""
         import io
         import zipfile
+
         from nlsq.gui.adapters.export_adapter import create_session_bundle
 
         zip_data = create_session_bundle(mock_session_state, mock_result, {})
@@ -199,9 +202,13 @@ class TestSessionBundleExport:
             # Should have data file
             has_data = any("data" in n.lower() for n in names)
             # Should have config file
-            has_config = any("config" in n.lower() or n.endswith(".yaml") for n in names)
+            has_config = any(
+                "config" in n.lower() or n.endswith(".yaml") for n in names
+            )
             # Should have results file
-            has_results = any("result" in n.lower() or n.endswith(".json") for n in names)
+            has_results = any(
+                "result" in n.lower() or n.endswith(".json") for n in names
+            )
 
             assert has_data or has_config or has_results, f"Bundle contents: {names}"
 

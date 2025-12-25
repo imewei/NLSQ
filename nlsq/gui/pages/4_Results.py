@@ -15,33 +15,32 @@ from typing import Any
 import numpy as np
 import streamlit as st
 
-from nlsq.gui.state import SessionState, initialize_state
-from nlsq.gui.utils.theme import apply_dark_theme_css
-from nlsq.gui.components.param_results import (
-    render_parameter_results,
-    format_parameter_table,
-    compute_confidence_intervals,
-)
 from nlsq.gui.components.fit_statistics import (
-    render_fit_statistics,
-    format_statistics,
     format_convergence_info,
-)
-from nlsq.gui.components.plotly_fit_plot import (
-    render_fit_plot,
-    create_fit_plot_from_result,
-)
-from nlsq.gui.components.plotly_residuals import (
-    render_residuals_plot,
-    create_residuals_plot_from_result,
-)
-from nlsq.gui.components.plotly_histogram import (
-    render_residuals_histogram,
-    create_histogram_from_result,
-    compute_normality_tests,
+    format_statistics,
+    render_fit_statistics,
 )
 from nlsq.gui.components.param_config import get_param_names_from_model
-
+from nlsq.gui.components.param_results import (
+    compute_confidence_intervals,
+    format_parameter_table,
+    render_parameter_results,
+)
+from nlsq.gui.components.plotly_fit_plot import (
+    create_fit_plot_from_result,
+    render_fit_plot,
+)
+from nlsq.gui.components.plotly_histogram import (
+    compute_normality_tests,
+    create_histogram_from_result,
+    render_residuals_histogram,
+)
+from nlsq.gui.components.plotly_residuals import (
+    create_residuals_plot_from_result,
+    render_residuals_plot,
+)
+from nlsq.gui.state import SessionState, initialize_state
+from nlsq.gui.utils.theme import apply_dark_theme_css
 
 # =============================================================================
 # Page Configuration
@@ -89,10 +88,7 @@ def has_valid_result() -> bool:
         return False
 
     # Check for required attributes
-    if not hasattr(result, "popt"):
-        return False
-
-    return True
+    return hasattr(result, "popt")
 
 
 # =============================================================================
@@ -310,26 +306,45 @@ def render_export_section() -> None:
             # Create statistics dict for export
             export_stats = {
                 "Metric": list(stats.keys()) + list(info.keys()),
-                "Value": list(stats.values()) + [
-                    str(v) for v in info.values()
-                    if not k.endswith("_str") for k, v in info.items()
+                "Value": list(stats.values())
+                + [
+                    str(v)
+                    for v in info.values()
+                    if not k.endswith("_str")
+                    for k, v in info.items()
                 ],
             }
 
             import pandas as pd
-            df_stats = pd.DataFrame({
-                "Metric": [
-                    "R-squared", "Adj. R-squared", "RMSE", "MAE", "AIC", "BIC",
-                    "Success", "Message", "Function Evaluations", "Final Cost",
-                ],
-                "Value": [
-                    stats["r_squared"], stats["adj_r_squared"],
-                    stats["rmse"], stats["mae"],
-                    stats["aic"], stats["bic"],
-                    info["success_str"], info["message"],
-                    info["nfev_str"], info["cost_str"],
-                ],
-            })
+
+            df_stats = pd.DataFrame(
+                {
+                    "Metric": [
+                        "R-squared",
+                        "Adj. R-squared",
+                        "RMSE",
+                        "MAE",
+                        "AIC",
+                        "BIC",
+                        "Success",
+                        "Message",
+                        "Function Evaluations",
+                        "Final Cost",
+                    ],
+                    "Value": [
+                        stats["r_squared"],
+                        stats["adj_r_squared"],
+                        stats["rmse"],
+                        stats["mae"],
+                        stats["aic"],
+                        stats["bic"],
+                        info["success_str"],
+                        info["message"],
+                        info["nfev_str"],
+                        info["cost_str"],
+                    ],
+                }
+            )
 
             csv_stats = df_stats.to_csv(index=False)
             st.download_button(
@@ -360,29 +375,31 @@ def render_export_section() -> None:
             names = param_names or [f"p{i}" for i in range(len(popt))]
             perr = np.sqrt(np.diag(pcov)) if pcov is not None else [np.nan] * len(popt)
 
-            for name, val, err in zip(names, popt, perr):
+            for name, val, err in zip(names, popt, perr, strict=False):
                 if np.isfinite(err):
                     report_lines.append(f"  {name}: {val:.6g} +/- {err:.6g}")
                 else:
                     report_lines.append(f"  {name}: {val:.6g}")
 
-            report_lines.extend([
-                "",
-                "Fit Statistics:",
-                "-" * 30,
-                f"  R-squared: {stats['r_squared']}",
-                f"  RMSE: {stats['rmse']}",
-                f"  MAE: {stats['mae']}",
-                f"  AIC: {stats['aic']}",
-                f"  BIC: {stats['bic']}",
-                "",
-                "Convergence:",
-                "-" * 30,
-                f"  Success: {info['success_str']}",
-                f"  Message: {info['message']}",
-                f"  Function Evaluations: {info['nfev_str']}",
-                f"  Final Cost: {info['cost_str']}",
-            ])
+            report_lines.extend(
+                [
+                    "",
+                    "Fit Statistics:",
+                    "-" * 30,
+                    f"  R-squared: {stats['r_squared']}",
+                    f"  RMSE: {stats['rmse']}",
+                    f"  MAE: {stats['mae']}",
+                    f"  AIC: {stats['aic']}",
+                    f"  BIC: {stats['bic']}",
+                    "",
+                    "Convergence:",
+                    "-" * 30,
+                    f"  Success: {info['success_str']}",
+                    f"  Message: {info['message']}",
+                    f"  Function Evaluations: {info['nfev_str']}",
+                    f"  Final Cost: {info['cost_str']}",
+                ]
+            )
 
             report_text = "\n".join(report_lines)
 

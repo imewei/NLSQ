@@ -12,16 +12,15 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-
 # =============================================================================
 # Column Role Colors
 # =============================================================================
 
 # Color scheme for column roles (colorblind-friendly)
 ROLE_COLORS: dict[str, str] = {
-    "x": "#1f77b4",      # Blue - X axis / independent variable
-    "y": "#2ca02c",      # Green - Y axis / dependent variable (1D)
-    "z": "#ff7f0e",      # Orange - Z axis / dependent variable (2D)
+    "x": "#1f77b4",  # Blue - X axis / independent variable
+    "y": "#2ca02c",  # Green - Y axis / dependent variable (1D)
+    "z": "#ff7f0e",  # Orange - Z axis / dependent variable (2D)
     "sigma": "#9467bd",  # Purple - uncertainty/error
 }
 
@@ -324,7 +323,9 @@ def validate_column_selections(
         if col_idx is not None:
             if col_idx < 0 or col_idx >= num_columns:
                 result["is_valid"] = False
-                result["message"] = f"Column index {col_idx} for {role.upper()} is out of range (0-{num_columns - 1})"
+                result["message"] = (
+                    f"Column index {col_idx} for {role.upper()} is out of range (0-{num_columns - 1})"
+                )
                 return result
 
     # Check for duplicate assignments
@@ -338,7 +339,9 @@ def validate_column_selections(
     for col_idx, roles in assigned_indices.items():
         if len(roles) > 1:
             result["is_valid"] = False
-            result["message"] = f"Column {col_idx} is assigned to multiple roles: {', '.join(r.upper() for r in roles)}. Each column should have a unique role (duplicate assignment)."
+            result["message"] = (
+                f"Column {col_idx} is assigned to multiple roles: {', '.join(r.upper() for r in roles)}. Each column should have a unique role (duplicate assignment)."
+            )
             return result
 
     return result
@@ -423,7 +426,7 @@ def render_column_selector(
                 updated_columns[role] = selected
             else:
                 # Optional columns can be None
-                options_with_none = [None] + column_options
+                options_with_none = [None, *column_options]
                 current_index = 0
                 if current_value is not None:
                     current_index = column_options.index(current_value) + 1
@@ -432,7 +435,9 @@ def render_column_selector(
                     label,
                     options=options_with_none,
                     index=current_index,
-                    format_func=lambda x: "Not assigned" if x is None else f"Column {x}",
+                    format_func=lambda x: "Not assigned"
+                    if x is None
+                    else f"Column {x}",
                     key=f"col_select_{role}",
                 )
                 updated_columns[role] = selected

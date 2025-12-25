@@ -214,7 +214,9 @@ def handle_gui(args: argparse.Namespace) -> int:
         app_path = gui_module_path / "app.py"
 
         if not app_path.exists():
-            print("Error: GUI app.py not found. Please reinstall NLSQ.", file=sys.stderr)
+            print(
+                "Error: GUI app.py not found. Please reinstall NLSQ.", file=sys.stderr
+            )
             return 1
 
         # Determine whether to open browser
@@ -242,7 +244,7 @@ def handle_gui(args: argparse.Namespace) -> int:
             print(f"Access the GUI at http://localhost:{args.port}")
 
         # Run streamlit
-        result = subprocess.run(cmd)
+        result = subprocess.run(cmd, check=False)
         return result.returncode
 
     except ImportError as e:
@@ -255,8 +257,7 @@ def handle_gui(args: argparse.Namespace) -> int:
         return 1
     except FileNotFoundError:
         print(
-            "\nError: Streamlit not found.\n"
-            "Install with: pip install streamlit",
+            "\nError: Streamlit not found.\nInstall with: pip install streamlit",
             file=sys.stderr,
         )
         return 1

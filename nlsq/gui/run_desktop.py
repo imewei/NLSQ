@@ -65,7 +65,9 @@ def find_free_port(start_port: int = 8501, max_attempts: int = 100) -> int:
                 return port
             except OSError:
                 continue
-    raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_attempts}")
+    raise RuntimeError(
+        f"No available port found in range {start_port}-{start_port + max_attempts}"
+    )
 
 
 def wait_for_server(port: int, timeout: float = 30.0, interval: float = 0.5) -> bool:
@@ -308,7 +310,11 @@ def run_with_webview(
     from nlsq.gui.desktop_config import get_desktop_config
 
     config = get_desktop_config()
-    icon_path = str(config.icon_path) if config.icon_path and config.icon_path.exists() else None
+    icon_path = (
+        str(config.icon_path)
+        if config.icon_path and config.icon_path.exists()
+        else None
+    )
 
     # Create and run the webview window
     logger.info("Opening desktop window")

@@ -10,40 +10,44 @@ Focus areas:
 4. Integration points between pages
 """
 
-from typing import Any
 from io import StringIO
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-from nlsq.gui.state import SessionState, initialize_state, reset_state, get_current_config
+from nlsq.cli.errors import DataLoadError
 from nlsq.gui.adapters.config_adapter import export_yaml_config, load_yaml_config
 from nlsq.gui.adapters.data_adapter import (
-    load_from_file,
-    load_from_clipboard,
-    validate_data,
     compute_statistics,
-)
-from nlsq.gui.adapters.model_adapter import (
-    list_builtin_models,
-    get_model,
-    get_model_info,
+    load_from_clipboard,
+    load_from_file,
+    validate_data,
 )
 from nlsq.gui.adapters.export_adapter import (
-    export_json,
-    export_csv,
     create_session_bundle,
+    export_csv,
+    export_json,
 )
-from nlsq.gui.utils.code_generator import generate_fit_script
+from nlsq.gui.adapters.model_adapter import (
+    get_model,
+    get_model_info,
+    list_builtin_models,
+)
 from nlsq.gui.app import (
     can_access_page,
     get_page_status,
     get_workflow_step_message,
 )
-from nlsq.cli.errors import DataLoadError
-
+from nlsq.gui.state import (
+    SessionState,
+    get_current_config,
+    initialize_state,
+    reset_state,
+)
+from nlsq.gui.utils.code_generator import generate_fit_script
 
 # =============================================================================
 # Test Complete Workflow Scenarios
@@ -127,7 +131,9 @@ class TestCompleteWorkflowIntegration:
         x = np.linspace(0, 5, 20)
         y = 2.0 * x**2 - 3.0 * x + 1.0 + np.random.normal(0, 0.1, 20)
 
-        csv_content = "x,y\n" + "\n".join(f"{xi},{yi}" for xi, yi in zip(x, y))
+        csv_content = "x,y\n" + "\n".join(
+            f"{xi},{yi}" for xi, yi in zip(x, y, strict=False)
+        )
         csv_file = tmp_path / "poly_data.csv"
         csv_file.write_text(csv_content)
 
@@ -138,7 +144,7 @@ class TestCompleteWorkflowIntegration:
             "columns": {"x": 0, "y": 1, "sigma": None},
             "csv": {"header": True, "delimiter": ","},
         }
-        xdata, ydata, sigma = load_from_file(str(csv_file), config)
+        xdata, ydata, _sigma = load_from_file(str(csv_file), config)
         state.xdata = xdata
         state.ydata = ydata
 
@@ -281,7 +287,7 @@ class TestDataFormatEdgeCases:
             "columns": {"x": 0, "y": 1, "sigma": None},
         }
 
-        xdata, ydata, sigma = load_from_clipboard(clipboard_text, config)
+        xdata, _ydata, _sigma = load_from_clipboard(clipboard_text, config)
 
         assert len(xdata) == 3
         np.testing.assert_array_almost_equal(xdata, [1.0, 2.0, 3.0])
@@ -298,7 +304,7 @@ class TestDataFormatEdgeCases:
             "csv": {"header": True, "delimiter": ","},
         }
 
-        xdata, ydata, sigma = load_from_file(str(csv_file), config)
+        xdata, _ydata, _sigma = load_from_file(str(csv_file), config)
 
         assert len(xdata) == 2
         np.testing.assert_array_almost_equal(xdata, [1.0, 2.0])
@@ -315,7 +321,7 @@ class TestDataFormatEdgeCases:
             "csv": {"header": True, "delimiter": ","},
         }
 
-        xdata, ydata, sigma = load_from_file(str(csv_file), config)
+        xdata, ydata, _sigma = load_from_file(str(csv_file), config)
 
         assert len(xdata) == 3
         np.testing.assert_array_almost_equal(xdata, [0.001, 0.01, 0.1])
@@ -450,7 +456,11 @@ class TestPageIntegration:
         # Step 4: Fit complete
         state.fit_result = MagicMock()
         msg = get_workflow_step_message(state)
-        assert "complete" in msg.lower() or "result" in msg.lower() or "export" in msg.lower()
+        assert (
+            "complete" in msg.lower()
+            or "result" in msg.lower()
+            or "export" in msg.lower()
+        )
 
 
 # =============================================================================

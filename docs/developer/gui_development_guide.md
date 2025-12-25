@@ -227,6 +227,7 @@ Use structured logging with the `nlsq.gui.*` namespace:
 
 ```python
 import logging
+
 logger = logging.getLogger("nlsq.gui.fitting")
 
 logger.info("Auto p0 applied | p0=%s", p0)
@@ -286,14 +287,12 @@ def test_p0_all_none_without_auto_p0_not_ready(self):
 
 ### Test Naming Convention
 
-```python
-test_<component>_<scenario>_<expected_behavior>
+Pattern: `test_<component>_<scenario>_<expected_behavior>`
 
-# Examples:
-test_p0_all_none_without_auto_p0_not_ready
-test_auto_p0_fills_none_values
-test_bounds_conversion_handles_none
-```
+Examples:
+- `test_p0_all_none_without_auto_p0_not_ready`
+- `test_auto_p0_fills_none_values`
+- `test_bounds_conversion_handles_none`
 
 ---
 
@@ -333,7 +332,7 @@ def is_ready_to_fit(state: SessionState) -> tuple[bool, str]:
 def main() -> None:
     """Page entry point."""
     apply_dark_theme_css()  # Apply theme first
-    init_page_state()       # Initialize page-specific state
+    init_page_state()  # Initialize page-specific state
 
     st.title("Page Title")
     # ... rest of page
