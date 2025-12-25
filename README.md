@@ -25,6 +25,7 @@ NLSQ is a nonlinear least squares curve fitting library built on [JAX](https://g
 - **GPU/TPU acceleration** - JIT-compiled kernels via XLA
 - **Automatic differentiation** - No manual Jacobian calculations needed
 - **Large dataset support** - Handles 100M+ data points with streaming optimization
+- **Interactive GUI** - Streamlit-based graphical interface for no-code curve fitting
 
 ## Installation
 
@@ -35,6 +36,9 @@ pip install nlsq
 # GPU (Linux with CUDA 12.1+)
 pip install nlsq
 pip install "jax[cuda12-local]==0.8.0"
+
+# With GUI support
+pip install nlsq[gui]
 ```
 
 <details>
@@ -71,6 +75,24 @@ print(f"Parameters: a={popt[0]:.3f}, b={popt[1]:.3f}, c={popt[2]:.3f}")
 print(f"Uncertainties: {np.sqrt(np.diag(pcov))}")
 ```
 
+## Graphical User Interface
+
+NLSQ includes an interactive GUI for curve fitting without writing code:
+
+```bash
+# Launch the GUI
+nlsq gui
+```
+
+The GUI provides:
+- **Data Loading**: Import CSV, ASCII, NPZ, or HDF5 files, or paste from clipboard
+- **Model Selection**: Choose from 7 built-in models, polynomials, or custom Python functions
+- **Fitting Options**: Guided presets (Fast/Robust/Quality) or advanced parameter control
+- **Interactive Results**: Plotly-based visualizations with confidence bands and residuals
+- **Export**: Session bundles (ZIP), JSON/CSV results, and reproducible Python code
+
+See the [GUI User Guide](docs/gui_user_guide.md) for detailed documentation.
+
 ## Key Features
 
 | Feature | Description |
@@ -82,6 +104,7 @@ print(f"Uncertainties: {np.sqrt(np.diag(pcov))}")
 | **Mixed precision** | Automatic float32→float64 upgrade when needed |
 | **Workflow system** | Auto-selects strategy based on dataset size |
 | **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |
+| **Interactive GUI** | No-code curve fitting with Streamlit interface |
 
 ## Performance
 
@@ -183,6 +206,9 @@ with memory_context(config):
 <summary><b>Command-line interface</b></summary>
 
 ```bash
+# Launch GUI
+nlsq gui
+
 # Single workflow
 nlsq fit experiment.yaml
 
@@ -218,6 +244,8 @@ See [examples/README.md](examples/README.md) for the full index.
 - NumPy 2.0+
 - SciPy 1.14.0+
 
+**GUI requirements**: Streamlit 1.41+, Plotly 5.24+
+
 **GPU support** (Linux only): CUDA 12.1-12.9, NVIDIA driver >= 525
 
 ## Citation
@@ -242,7 +270,7 @@ If you use NLSQ in your research, please cite:
 
 ## Acknowledgments
 
-NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit) by Lucas R. Hofer, Milan Krstajić, and Robert P. Smith. We gratefully acknowledge their foundational work.
+NLSQ is an enhanced fork of [JAXFit](https://github.com/Dipolar-Quantum-Gases/JAXFit) by Lucas R. Hofer, Milan Krstajic, and Robert P. Smith. We gratefully acknowledge their foundational work.
 
 ## License
 
