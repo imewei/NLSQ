@@ -386,7 +386,8 @@ jobs:
           source .venv/bin/activate || . .venv/Scripts/activate
           pytest tests/ -v -n auto \
             -m "not slow" \
-            --ignore=tests/unit/
+            --ignore=tests/unit/ \
+            --ignore=tests/gui/  # GUI tests require streamlit (optional dependency)
 
       - name: Verify installation
         shell: bash
