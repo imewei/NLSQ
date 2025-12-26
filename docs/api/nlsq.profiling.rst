@@ -88,4 +88,4 @@ See Also
 
 - :doc:`nlsq.trf` - Trust Region Reflective algorithm
 - :doc:`nlsq.diagnostics` - General optimization diagnostics
-- :doc:`../guides/performance_guide` - Performance optimization guide
+- :doc:`../howto/optimize_performance` - Performance optimization guide

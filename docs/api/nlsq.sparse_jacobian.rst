@@ -93,4 +93,4 @@ See Also
 
 - :doc:`nlsq.trf` - Trust Region Reflective algorithm
 - :doc:`nlsq.least_squares` - Least squares solver
-- :doc:`../guides/performance_guide` - Performance optimization guide
+- :doc:`../howto/optimize_performance` - Performance optimization guide

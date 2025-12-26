@@ -321,6 +321,6 @@ See Also
 --------
 
 - :doc:`nlsq.config` : Configuration management
-- :doc:`../getting_started/installation` : Installation guide with GPU setup
-- :doc:`../guides/performance_guide` : Performance optimization guide
+- :doc:`../tutorials/01_first_fit` : Getting started with GPU setup
+- :doc:`../howto/optimize_performance` : Performance optimization guide
 - `JAX Installation Guide <https://jax.readthedocs.io/en/latest/installation.html>`_ : JAX GPU setup

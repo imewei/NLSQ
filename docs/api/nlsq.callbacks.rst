@@ -152,6 +152,6 @@ Interactive Notebooks
 See Also
 --------
 
-- :doc:`../guides/workflow_options` : Workflow options guide
+- :doc:`../reference/configuration` : Configuration reference
 - :doc:`nlsq.minpack` : Main curve fitting API
 - :doc:`nlsq.diagnostics` : Diagnostics and monitoring

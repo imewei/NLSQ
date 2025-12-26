@@ -32,6 +32,7 @@ nlsq.parameter_estimation : Automatic parameter estimation
 nlsq.minpack.curve_fit : Main curve fitting function
 """
 
+import warnings
 from collections.abc import Callable
 from typing import Union
 
@@ -671,7 +672,9 @@ def polynomial(degree: int) -> Callable:
         ydata = np.asarray(ydata)
 
         try:
-            coeffs = np.polyfit(xdata, ydata, degree)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", np.exceptions.RankWarning)
+                coeffs = np.polyfit(xdata, ydata, degree)
             return [float(c) for c in coeffs]
         except (np.linalg.LinAlgError, ValueError):
             # Fallback to zeros except constant term

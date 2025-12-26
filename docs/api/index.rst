@@ -20,7 +20,7 @@ Main Functions
 - :func:`nlsq.fit` - **Unified curve fitting with preset-based configuration** (recommended)
 - :func:`nlsq.curve_fit` - High-level curve fitting interface (SciPy-compatible)
 - :func:`nlsq.curve_fit_large` - Automatic chunking for large datasets
-- :func:`nlsq.least_squares` - Low-level least squares solver
+- :class:`nlsq.LeastSquares` - Low-level least squares solver class
 - :class:`nlsq.CurveFit` - Reusable curve fitting class (JIT-compiled)
 
 See :doc:`modules` for complete module documentation.
@@ -81,6 +81,15 @@ Utilities
 - ``nlsq.loss_functions`` - Loss function library
 - ``nlsq.config`` - Configuration management
 - ``nlsq.logging`` - Logging utilities
+
+GUI Module
+~~~~~~~~~~
+
+- ``nlsq.gui`` - Interactive Streamlit-based GUI for curve fitting
+- ``nlsq.gui.adapters`` - Bridge between GUI and core fitting engine
+- ``nlsq.gui.components`` - Reusable UI components
+
+See :doc:`nlsq.gui` for complete GUI API documentation.
 
 See :doc:`modules` for complete documentation of all modules.
 

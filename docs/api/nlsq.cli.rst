@@ -42,8 +42,8 @@ Commands
 See Also
 --------
 
-- :doc:`/user_guide/cli_reference` - Complete CLI reference documentation
-- :doc:`/user_guide/yaml_configuration` - YAML file format details
+- :doc:`/reference/cli` - Complete CLI reference documentation
+- :doc:`/reference/configuration` - Configuration and YAML file format
 
 Module Structure
 ----------------

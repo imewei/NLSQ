@@ -302,6 +302,6 @@ See Also
 --------
 
 - :doc:`../index` - Main NLSQ documentation
-- :doc:`../guides/large_datasets` - Detailed guide for large datasets
+- :doc:`../howto/handle_large_data` - Detailed guide for large datasets
 - :doc:`modules` - Complete API reference
 - `Examples notebook <https://github.com/imewei/NLSQ/blob/main/examples/large_dataset_demo.ipynb>`_

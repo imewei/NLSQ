@@ -209,8 +209,9 @@ def create_residuals_histogram(
     )
 
     # Add statistics annotation
-    skew = stats.skew(residuals) if len(residuals) >= 3 else np.nan
-    kurt = stats.kurtosis(residuals) if len(residuals) >= 4 else np.nan
+    # Skip skew/kurtosis for constant residuals (std=0) to avoid precision warnings
+    skew = stats.skew(residuals) if len(residuals) >= 3 and std_res > 0 else np.nan
+    kurt = stats.kurtosis(residuals) if len(residuals) >= 4 and std_res > 0 else np.nan
 
     stats_text = f"Mean: {mean_res:.4g}<br>Std: {std_res:.4g}"
     if np.isfinite(skew):

@@ -280,7 +280,7 @@ def execute_fit(
     sigma : np.ndarray | None
         Optional uncertainties in ydata.
     model : callable
-        Model function f(x, *params) -> y.
+        Model function ``f(x, *params) -> y``.
     config : FitConfig
         Fitting configuration parameters.
     progress_callback : ProgressCallback | None

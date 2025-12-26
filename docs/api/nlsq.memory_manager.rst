@@ -371,5 +371,5 @@ See Also
 
 - :doc:`nlsq.large_dataset` : Large dataset handling with automatic chunking
 - :doc:`nlsq.streaming_optimizer` : Streaming optimization for unlimited data
-- :doc:`../guides/large_datasets` : Large dataset user guide
-- :doc:`../guides/performance_guide` : Performance optimization guide
+- :doc:`../howto/handle_large_data` : Large dataset guide
+- :doc:`../howto/optimize_performance` : Performance optimization guide

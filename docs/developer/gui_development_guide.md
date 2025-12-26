@@ -13,6 +13,7 @@ This guide covers best practices, common pitfalls, and code review checklists fo
 
 ---
 
+(architecture-overview)=
 ## Architecture Overview
 
 The GUI follows a layered architecture:
@@ -57,6 +58,7 @@ nlsq/gui/
 
 ---
 
+(code-review-checklist)=
 ## Code Review Checklist
 
 ### State Management
@@ -135,6 +137,7 @@ nlsq/gui/
 
 ---
 
+(streamlit-gotchas)=
 ## Streamlit Gotchas
 
 ### 1. `st.rerun()` Clears Displayed Messages
@@ -189,6 +192,7 @@ if uploaded_file is not None:
 
 ---
 
+(state-management)=
 ## State Management
 
 ### SessionState Design
@@ -219,6 +223,7 @@ if state.auto_p0 and has_auto_p0:
 
 ---
 
+(error-handling)=
 ## Error Handling
 
 ### Logging Configuration

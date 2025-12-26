@@ -577,5 +577,5 @@ See Also
 - :doc:`nlsq.config` : Configuration management and mixed precision setup
 - :doc:`nlsq.trf` : Trust Region Reflective algorithm integration
 - :doc:`nlsq.memory_manager` : Memory management for large datasets
-- :doc:`../guides/performance_guide` : Performance optimization guide
-- :doc:`../guides/advanced_customization` : Advanced usage patterns
+- :doc:`../howto/optimize_performance` : Performance optimization guide
+- :doc:`../howto/advanced_api` : Advanced usage patterns

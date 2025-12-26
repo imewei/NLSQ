@@ -65,7 +65,7 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 
 - [Large Dataset Implementation](../../../nlsq/large_dataset.py)
 - [Streaming Optimizer](../../../nlsq/streaming_optimizer.py)
-- [Large Dataset Guide](../../guides/large_datasets.rst)
+- [Large Dataset Guide](../../howto/handle_large_data.rst)
 
 ## Status Updates
 

@@ -143,6 +143,6 @@ For problems with sparse structure:
 See Also
 --------
 
-- :doc:`../guides/large_datasets` : Large dataset user guide
+- :doc:`../howto/handle_large_data` : Large dataset guide
 - :doc:`nlsq.memory_manager` : Memory management utilities
 - :doc:`nlsq.streaming_optimizer` : Streaming optimization details

@@ -278,6 +278,12 @@ class HybridStreamingConfig:
     # Streaming configuration
     chunk_size: int = 10000
 
+    # Loop strategy for chunk accumulation
+    # 'auto': Use scan on GPU/TPU (better fusion), Python loops on CPU (lower overhead)
+    # 'scan': Always use JAX lax.scan (best for GPU/TPU)
+    # 'loop': Always use Python loops (best for CPU)
+    loop_strategy: Literal["auto", "scan", "loop"] = "auto"
+
     # Fault tolerance
     enable_checkpoints: bool = True
     checkpoint_frequency: int = 100
@@ -333,6 +339,14 @@ class HybridStreamingConfig:
         if self.precision not in valid_precisions:
             raise ValueError(
                 f"precision must be one of: {valid_precisions}, got: {self.precision}"
+            )
+
+        # Validate loop strategy
+        valid_loop_strategies = ("auto", "scan", "loop")
+        if self.loop_strategy not in valid_loop_strategies:
+            raise ValueError(
+                f"loop_strategy must be one of: {valid_loop_strategies}, "
+                f"got: {self.loop_strategy}"
             )
 
         # Validate warmup iterations constraint

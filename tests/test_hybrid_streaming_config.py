@@ -116,6 +116,17 @@ class TestHybridStreamingConfigValidation:
         with pytest.raises(ValueError, match="precision"):
             HybridStreamingConfig(precision="float16")
 
+    def test_invalid_loop_strategy(self):
+        """Test that invalid loop_strategy raises error."""
+        with pytest.raises(ValueError, match="loop_strategy"):
+            HybridStreamingConfig(loop_strategy="invalid")
+
+    def test_valid_loop_strategies(self):
+        """Test that valid loop_strategy values are accepted."""
+        for strategy in ("auto", "scan", "loop"):
+            config = HybridStreamingConfig(loop_strategy=strategy)
+            assert config.loop_strategy == strategy
+
     def test_warmup_iterations_constraint(self):
         """Test that warmup_iterations must be <= max_warmup_iterations."""
         with pytest.raises(ValueError, match="warmup_iterations"):

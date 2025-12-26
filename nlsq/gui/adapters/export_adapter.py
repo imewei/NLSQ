@@ -157,7 +157,7 @@ def create_session_bundle(
     - data.csv: Data snapshot
     - config.yaml: Workflow configuration
     - results.json: Full fit results
-    - *.html: Interactive Plotly figures (if provided)
+    - ``*.html``: Interactive Plotly figures (if provided)
 
     Parameters
     ----------

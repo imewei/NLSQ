@@ -265,4 +265,4 @@ See Also
 - :doc:`nlsq.fallback` : High-level fallback strategies
 - :doc:`nlsq.stability` : Numerical stability analysis
 - :doc:`nlsq.diagnostics` : Optimization diagnostics
-- :doc:`../guides/troubleshooting` : Troubleshooting guide
+- :doc:`../howto/troubleshooting` : Troubleshooting guide

@@ -71,4 +71,4 @@ See Also
 
 - :doc:`nlsq.bound_inference` - Bound inference utilities
 - :doc:`nlsq.algorithm_selector` - Algorithm selection
-- :doc:`../guides/workflow_options` - Workflow options guide
+- :doc:`../reference/configuration` - Configuration reference

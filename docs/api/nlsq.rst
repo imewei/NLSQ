@@ -13,7 +13,7 @@ Key Features:
 * **GPU/TPU Acceleration**: JAX JIT compilation to XLA for massive speedups
 * **Automatic Differentiation**: No manual Jacobian calculations required
 * **Large Dataset Support**: Automatic chunking and memory management for 100M+ points
-* **Production-Ready**: 2,181 tests, 100% pass rate
+* **Production-Ready**: 2,780 tests, 100% pass rate
 * **Drop-in Compatibility**: Minimal code changes from ``scipy.optimize.curve_fit``
 
 Quick Start Example
@@ -59,10 +59,10 @@ Large dataset with automatic chunking::
 See Also
 --------
 
-* :doc:`/getting_started/quickstart` - Complete tutorial
-* :doc:`/guides/large_datasets` - Large dataset handling guide
-* :doc:`/guides/performance_guide` - Performance optimization
-* :doc:`/guides/migration_scipy` - Migrating from SciPy
+* :doc:`/tutorials/01_first_fit` - Getting started tutorial
+* :doc:`/howto/handle_large_data` - Large dataset handling guide
+* :doc:`/howto/optimize_performance` - Performance optimization
+* :doc:`/howto/migrate_from_scipy` - Migrating from SciPy
 
 Submodules
 ----------

@@ -244,7 +244,7 @@ See [examples/README.md](examples/README.md) for the full index.
 - NumPy 2.0+
 - SciPy 1.14.0+
 
-**GUI requirements**: Streamlit 1.41+, Plotly 5.24+
+**GUI requirements**: Streamlit 1.52+, Plotly 6.5+
 
 **GPU support** (Linux only): CUDA 12.1-12.9, NVIDIA driver >= 525
 

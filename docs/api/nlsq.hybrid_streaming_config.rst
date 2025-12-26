@@ -371,7 +371,7 @@ Phase 1: Adam Warmup
 
 .. seealso::
 
-   :doc:`../guides/defense_layers` for complete defense strategy documentation.
+   :doc:`../explanation/how_fitting_works` for complete optimization strategy documentation.
 
 Phase 2: Gauss-Newton
 ~~~~~~~~~~~~~~~~~~~~~
@@ -402,4 +402,4 @@ See Also
 - :doc:`nlsq.adaptive_hybrid_streaming` : Main optimizer class
 - :doc:`nlsq.parameter_normalizer` : Parameter normalization implementation
 - :doc:`nlsq.streaming_optimizer` : Original streaming optimizer
-- :doc:`../guides/large_datasets` : Large dataset user guide
+- :doc:`../howto/handle_large_data` : Large dataset guide

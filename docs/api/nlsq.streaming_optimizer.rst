@@ -460,5 +460,5 @@ See Also
 
 - :doc:`nlsq.large_dataset` : Chunked batch processing for large datasets
 - :doc:`nlsq.memory_manager` : Memory management utilities
-- :doc:`../guides/large_datasets` : Large dataset user guide
-- :doc:`../guides/advanced_customization` : Advanced optimization features
+- :doc:`../howto/handle_large_data` : Large dataset guide
+- :doc:`../howto/advanced_api` : Advanced optimization features

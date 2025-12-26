@@ -60,6 +60,7 @@ extensions = [
     "sphinx.ext.coverage",
     "sphinx.ext.duration",
     "myst_parser",  # Enabled for developer documentation in Markdown
+    "sphinx_design",  # For grid cards and tabs in documentation
 ]
 
 suppress_warnings = [
@@ -75,6 +76,9 @@ suppress_warnings = [
     "app.add_node",  # Suppress node warnings
     "app.add_directive",  # Suppress directive warnings
     "app.add_role",  # Suppress role warnings
+    "duplicate",  # Suppress duplicate object description warnings
+    "py:duplicate",  # Suppress Python domain duplicate warnings
+    "object",  # Suppress object-related warnings
 ]
 
 # Additional Sphinx configuration to handle duplicate warnings
@@ -253,7 +257,6 @@ nitpick_ignore_regex += [
 nitpick_ignore += [
     # Module references
     ("py:mod", "nlsq.diagnostics"),
-    ("py:func", "nlsq.least_squares"),
     # More internal classes
     ("py:class", "result"),
     ("py:class", "OptimizationError"),
@@ -266,6 +269,21 @@ nitpick_ignore += [
     ("py:class", "matplotlib.axes.Axes"),
     ("py:class", "generator"),
     ("py:class", "CallbackBase"),
+    # Plotly and GUI classes
+    ("py:class", "go.Figure"),
+    ("py:class", "FitConfig"),
+    ("py:class", "plotly.graph_objects.Figure"),
+    ("py:class", "pd.DataFrame"),
+    ("py:class", "ProgressCallback"),
+    ("py:class", "ValidationResult"),
+    ("py:class", "DataLoader"),
+    ("py:class", "ModelRegistry"),
+    ("py:class", "ResultExporter"),
+    ("py:class", "ModelFunction"),
+    # Bound inference types (variable names parsed as types)
+    ("py:class", "x_min"),
+    ("py:class", "y_min"),
+    ("py:class", "x_range"),
 ]
 
 # Custom event handler removed - caused TypeError
@@ -288,6 +306,8 @@ napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = False
 napoleon_include_private_with_doc = False
+napoleon_use_ivar = True  # Use :ivar: for attributes to avoid duplicate with autodoc
+napoleon_attr_annotations = True  # Parse type annotations for attributes
 
 # Notebooks are not included in the documentation build
 # Example notebooks are available in the examples/ directory
@@ -333,7 +353,6 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     "user_guides",  # Old directory, content moved to guides/
-    "tutorials",  # Old directory, content moved to getting_started/ and guides/
     "autodoc",  # Old directory, renamed to api/
     "development",  # Old directory, consolidated to history/
     "archive",  # Old directory, moved to history/archived_reports/

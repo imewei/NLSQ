@@ -620,4 +620,4 @@ See Also
 
 - :doc:`nlsq.minpack` : Main curve fitting API
 - :doc:`nlsq.least_squares` : Least squares solver
-- :doc:`../guides/troubleshooting` : Troubleshooting guide
+- :doc:`../howto/troubleshooting` : Troubleshooting guide

@@ -57,4 +57,4 @@ See Also
 --------
 
 - :doc:`nlsq.validators` - Input validation
-- :doc:`../guides/troubleshooting` - Troubleshooting guide
+- :doc:`../howto/troubleshooting` - Troubleshooting guide

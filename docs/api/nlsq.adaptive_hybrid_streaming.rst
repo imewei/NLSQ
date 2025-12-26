@@ -66,7 +66,7 @@ First-order optimization with adaptive switching and divergence protection:
 
 .. seealso::
 
-   :doc:`../guides/defense_layers` for complete defense strategy documentation.
+   :doc:`../explanation/how_fitting_works` for complete optimization strategy documentation.
 
 Phase 2: Streaming Gauss-Newton
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -445,4 +445,4 @@ See Also
 - :doc:`nlsq.parameter_normalizer` : Parameter normalization
 - :doc:`nlsq.streaming_optimizer` : Original streaming optimizer
 - :doc:`nlsq.stability` : Numerical stability utilities
-- :doc:`../guides/large_datasets` : Large dataset user guide
+- :doc:`../howto/handle_large_data` : Large dataset guide

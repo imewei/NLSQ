@@ -246,6 +246,6 @@ Configure stability checking behavior:
 See Also
 --------
 
-- :doc:`../guides/troubleshooting` : Troubleshooting guide
+- :doc:`../howto/troubleshooting` : Troubleshooting guide
 - :doc:`nlsq.validators` : Input validation
 - :doc:`nlsq.fallback` : Fallback strategies

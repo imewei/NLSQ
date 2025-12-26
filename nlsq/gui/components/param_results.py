@@ -72,7 +72,9 @@ def format_parameter_table(
     # Compute standard errors
     if pcov is not None:
         pcov = np.asarray(pcov)
-        perr = np.sqrt(np.diag(pcov))
+        diag = np.diag(pcov)
+        # Handle negative diagonals (numerical artifacts) by setting to NaN
+        perr = np.where(diag >= 0, np.sqrt(np.maximum(diag, 0)), np.nan)
     else:
         perr = np.full(n_params, np.nan)
 

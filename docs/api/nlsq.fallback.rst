@@ -229,6 +229,6 @@ The improvement is most significant for:
 See Also
 --------
 
-- :doc:`../guides/troubleshooting` : Troubleshooting guide
+- :doc:`../howto/troubleshooting` : Troubleshooting guide
 - :doc:`nlsq.stability` : Numerical stability
 - :doc:`nlsq.recovery` : Optimization recovery

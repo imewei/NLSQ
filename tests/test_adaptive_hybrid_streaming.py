@@ -1523,6 +1523,96 @@ class TestMultiDeviceSupport:
         assert jnp.all(jnp.isfinite(J))
 
 
+class TestLoopStrategyDispatch:
+    """Test loop_strategy config and backend-aware dispatch."""
+
+    def test_loop_strategy_forced_loop(self):
+        """Test loop_strategy='loop' always uses Python loops."""
+        config = HybridStreamingConfig(loop_strategy="loop")
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Define model
+        def model(x, a, b):
+            return a * x + b
+
+        p0 = jnp.array([1.0, 1.0])
+        optimizer._setup_normalization(model, p0, None)
+
+        # Should always return False for Python loops
+        assert optimizer._use_scan_for_accumulation() is False
+
+    def test_loop_strategy_forced_scan(self):
+        """Test loop_strategy='scan' always uses JAX scan."""
+        config = HybridStreamingConfig(loop_strategy="scan")
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Define model
+        def model(x, a, b):
+            return a * x + b
+
+        p0 = jnp.array([1.0, 1.0])
+        optimizer._setup_normalization(model, p0, None)
+
+        # Should always return True for JAX scan
+        assert optimizer._use_scan_for_accumulation() is True
+
+    def test_loop_strategy_auto_dispatches_based_on_backend(self):
+        """Test loop_strategy='auto' dispatches based on backend."""
+        config = HybridStreamingConfig(loop_strategy="auto")
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Define model
+        def model(x, a, b):
+            return a * x + b
+
+        p0 = jnp.array([1.0, 1.0])
+        optimizer._setup_normalization(model, p0, None)
+
+        # Get the dispatch decision
+        use_scan = optimizer._use_scan_for_accumulation()
+
+        # Verify it's based on backend
+        devices = jax.devices()
+        if devices:
+            platform = devices[0].platform
+            expected = platform in ("gpu", "cuda", "rocm", "tpu")
+            assert use_scan == expected
+        else:
+            assert use_scan is False
+
+    def test_scan_based_accumulation_produces_correct_results(self):
+        """Test scan-based accumulation produces same results as loop-based."""
+        # Define model
+        def model(x, a, b):
+            return a * x + b
+
+        p0 = jnp.array([2.0, 1.0])
+        x_data = jnp.linspace(0, 10, 1000)
+        y_data = model(x_data, 2.5, 0.8) + 0.01 * jax.random.normal(
+            jax.random.PRNGKey(0), (1000,)
+        )
+
+        # Create optimizer with loop strategy
+        config_loop = HybridStreamingConfig(loop_strategy="loop", chunk_size=100)
+        optimizer_loop = AdaptiveHybridStreamingOptimizer(config_loop)
+        optimizer_loop._setup_normalization(model, p0, None)
+
+        # Create optimizer with scan strategy
+        config_scan = HybridStreamingConfig(loop_strategy="scan", chunk_size=100)
+        optimizer_scan = AdaptiveHybridStreamingOptimizer(config_scan)
+        optimizer_scan._setup_normalization(model, p0, None)
+
+        # Get normalized params
+        params = optimizer_loop.normalized_params
+
+        # Compute cost with both strategies
+        cost_loop = optimizer_loop._compute_cost_only(params, x_data, y_data)
+        cost_scan = optimizer_scan._compute_cost_only(params, x_data, y_data)
+
+        # Results should be nearly identical (within numerical precision)
+        assert jnp.abs(cost_loop - cost_scan) < 1e-6
+
+
 class TestMixedPrecisionSupport:
     """Test Task Group 10: Mixed Precision Support.
 

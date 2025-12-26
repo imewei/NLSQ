@@ -83,7 +83,7 @@ See Also
 
 * :mod:`nlsq.profiling` - Performance profiling infrastructure
 * :mod:`nlsq.diagnostics` - Optimization diagnostics and monitoring
-* :doc:`/guides/performance_guide` - Complete performance optimization guide
+* :doc:`/howto/optimize_performance` - Complete performance optimization guide
 
 Version History
 ---------------
