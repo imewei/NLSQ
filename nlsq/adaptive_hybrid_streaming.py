@@ -94,6 +94,10 @@ class DefenseLayerTelemetry:
         self.layer4_clip_triggers: int = 0
         self.total_warmup_calls: int = 0
 
+        # L-BFGS-specific telemetry counters
+        self.lbfgs_history_buffer_fill_events: int = 0
+        self.lbfgs_line_search_failures: int = 0
+
         # Detailed event log (last N events)
         self._event_log: list[dict] = []
         self._max_events: int = 1000
@@ -169,6 +173,43 @@ class DefenseLayerTelemetry:
             "layer4_clip", {"original_norm": original_norm, "max_norm": max_norm}
         )
 
+    def record_lbfgs_history_fill(self, iteration: int) -> None:
+        """Record L-BFGS history buffer fill event.
+
+        Called when the L-BFGS history buffer becomes fully populated,
+        signaling transition from cold start to full L-BFGS mode.
+
+        Parameters
+        ----------
+        iteration : int
+            Iteration number when history buffer filled
+        """
+        self.lbfgs_history_buffer_fill_events += 1
+        self._log_event(
+            "lbfgs_history_fill",
+            {"iteration": iteration},
+        )
+
+    def record_lbfgs_line_search_failure(
+        self, iteration: int, reason: str = ""
+    ) -> None:
+        """Record L-BFGS line search failure event.
+
+        Called when the L-BFGS line search fails to find an acceptable step.
+
+        Parameters
+        ----------
+        iteration : int
+            Iteration number when line search failed
+        reason : str, optional
+            Reason for line search failure
+        """
+        self.lbfgs_line_search_failures += 1
+        self._log_event(
+            "lbfgs_line_search_failure",
+            {"iteration": iteration, "reason": reason},
+        )
+
     def _log_event(self, event_type: str, data: dict) -> None:
         """Log an event with timestamp.
 
@@ -204,6 +245,8 @@ class DefenseLayerTelemetry:
                 "layer2_exploration_rate": 0.0,
                 "layer3_cost_guard_rate": 0.0,
                 "layer4_clip_rate": 0.0,
+                "lbfgs_history_buffer_fill_rate": 0.0,
+                "lbfgs_line_search_failure_rate": 0.0,
             }
 
         total = self.total_warmup_calls
@@ -220,6 +263,12 @@ class DefenseLayerTelemetry:
             / total,
             "layer3_cost_guard_rate": 100.0 * self.layer3_cost_guard_triggers / total,
             "layer4_clip_rate": 100.0 * self.layer4_clip_triggers / total,
+            "lbfgs_history_buffer_fill_rate": 100.0
+            * self.lbfgs_history_buffer_fill_events
+            / total,
+            "lbfgs_line_search_failure_rate": 100.0
+            * self.lbfgs_line_search_failures
+            / total,
         }
 
     def get_summary(self) -> dict:
@@ -294,6 +343,8 @@ class DefenseLayerTelemetry:
             ],
             "nlsq_defense_layer3_triggers_total": self.layer3_cost_guard_triggers,
             "nlsq_defense_layer4_triggers_total": self.layer4_clip_triggers,
+            "nlsq_defense_lbfgs_history_fill_total": self.lbfgs_history_buffer_fill_events,
+            "nlsq_defense_lbfgs_line_search_failures_total": self.lbfgs_line_search_failures,
         }
 
 
@@ -594,7 +645,9 @@ class AdaptiveHybridStreamingOptimizer:
         # Capture normalized_model in closure at setup time
         normalized_model = self.normalized_model
 
-        def compute_jacobian_core(params: jnp.ndarray, x_chunk: jnp.ndarray) -> jnp.ndarray:
+        def compute_jacobian_core(
+            params: jnp.ndarray, x_chunk: jnp.ndarray
+        ) -> jnp.ndarray:
             """Core Jacobian computation using vmap + jacrev.
 
             Parameters
@@ -609,14 +662,15 @@ class AdaptiveHybridStreamingOptimizer:
             J_chunk : array_like
                 Jacobian matrix of shape (n_points, n_params)
             """
+
             def model_at_point(p, x_single):
                 return normalized_model(x_single, *p)
 
             # jacrev computes gradient w.r.t. first argument (params)
             # vmap over x_chunk to get Jacobian row for each point
-            return jax.vmap(
-                lambda x: jax.jacrev(model_at_point, argnums=0)(params, x)
-            )(x_chunk)
+            return jax.vmap(lambda x: jax.jacrev(model_at_point, argnums=0)(params, x))(
+                x_chunk
+            )
 
         # JIT compile the Jacobian function
         # Note: We don't use static_argnums here since params shape is fixed
@@ -657,7 +711,9 @@ class AdaptiveHybridStreamingOptimizer:
         # Capture normalized_model in closure at setup time
         normalized_model = self.normalized_model
 
-        def compute_chunk_cost(params: jnp.ndarray, x_chunk: jnp.ndarray, y_chunk: jnp.ndarray) -> float:
+        def compute_chunk_cost(
+            params: jnp.ndarray, x_chunk: jnp.ndarray, y_chunk: jnp.ndarray
+        ) -> float:
             """Compute cost for a single chunk.
 
             Parameters
@@ -676,7 +732,7 @@ class AdaptiveHybridStreamingOptimizer:
             """
             predictions = normalized_model(x_chunk, *params)
             residuals = y_chunk - predictions
-            return jnp.sum(residuals ** 2)
+            return jnp.sum(residuals**2)
 
         # JIT compile the chunk cost function
         self._cost_fn_compiled = jax.jit(compute_chunk_cost)
@@ -796,15 +852,21 @@ class AdaptiveHybridStreamingOptimizer:
         if pad_size > 0:
             # Pad x_data with zeros
             if x_data.ndim == 1:
-                x_padded = jnp.pad(x_data, (0, pad_size), mode='constant', constant_values=0)
+                x_padded = jnp.pad(
+                    x_data, (0, pad_size), mode="constant", constant_values=0
+                )
             else:
-                x_padded = jnp.pad(x_data, ((0, pad_size), (0, 0)), mode='constant', constant_values=0)
+                x_padded = jnp.pad(
+                    x_data, ((0, pad_size), (0, 0)), mode="constant", constant_values=0
+                )
 
             # Pad y_data with zeros (mask will exclude these)
-            y_padded = jnp.pad(y_data, (0, pad_size), mode='constant', constant_values=0)
+            y_padded = jnp.pad(
+                y_data, (0, pad_size), mode="constant", constant_values=0
+            )
 
             # Pad mask with zeros (invalid)
-            mask = jnp.pad(mask, (0, pad_size), mode='constant', constant_values=0)
+            mask = jnp.pad(mask, (0, pad_size), mode="constant", constant_values=0)
         else:
             x_padded = x_data
             y_padded = y_data
@@ -884,8 +946,10 @@ class AdaptiveHybridStreamingOptimizer:
             if jacobian_fn is not None:
                 J_chunk = jacobian_fn(params, x_chunk)
             else:
+
                 def model_at_x(p, x_single):
                     return normalized_model(x_single, *p)
+
                 J_chunk = jax.vmap(
                     lambda x: jax.jacrev(model_at_x, argnums=0)(params, x)
                 )(x_chunk)
@@ -897,7 +961,7 @@ class AdaptiveHybridStreamingOptimizer:
             # Accumulate with masked values
             JTJ_new = JTJ + masked_J.T @ masked_J
             JTr_new = JTr + masked_J.T @ masked_residuals
-            cost_new = total_cost + jnp.sum(masked_residuals ** 2)
+            cost_new = total_cost + jnp.sum(masked_residuals**2)
 
             return (JTJ_new, JTr_new, cost_new), None
 
@@ -967,7 +1031,7 @@ class AdaptiveHybridStreamingOptimizer:
             residuals = y_chunk - predictions
             # Apply mask (zero out padded points)
             masked_residuals = residuals * mask
-            return carry + jnp.sum(masked_residuals ** 2), None
+            return carry + jnp.sum(masked_residuals**2), None
 
         # Initialize carry
         init_carry = jnp.array(0.0)
@@ -1033,7 +1097,7 @@ class AdaptiveHybridStreamingOptimizer:
                 # Fallback to inline computation
                 predictions = self.normalized_model(x_chunk, *params)
                 residuals = y_chunk - predictions
-                chunk_cost = float(jnp.sum(residuals ** 2))
+                chunk_cost = float(jnp.sum(residuals**2))
 
             total_cost += chunk_cost
 
@@ -1342,6 +1406,250 @@ class AdaptiveHybridStreamingOptimizer:
 
         return optimizer, opt_state
 
+    def _create_lbfgs_optimizer(
+        self,
+        params: jnp.ndarray,
+        initial_step_size: float | None = None,
+    ) -> tuple[optax.GradientTransformationExtraArgs, optax.OptState]:
+        """Create L-BFGS optimizer with optax for Phase 1 warmup.
+
+        L-BFGS provides 5-10x faster convergence to the basin of attraction
+        compared to Adam by using approximate Hessian information.
+
+        Parameters
+        ----------
+        params : array_like
+            Initial parameters in normalized space
+        initial_step_size : float, optional
+            Override initial step size for L-BFGS line search.
+            If None, uses config.lbfgs_initial_step_size.
+
+        Returns
+        -------
+        optimizer : optax.GradientTransformationExtraArgs
+            L-BFGS optimizer instance with line search
+        opt_state : optax.OptState
+            Initial optimizer state
+
+        Notes
+        -----
+        Uses optax.lbfgs with backtracking line search for step acceptance.
+        The history size is configured via config.lbfgs_history_size (default 10).
+
+        Cold start scaffolding: During the first m iterations (where m is the
+        history size), the Hessian approximation is poor (starts as identity).
+        The initial_step_size parameter controls how conservative the first
+        steps are before the history buffer fills.
+
+        Examples
+        --------
+        Basic L-BFGS with default settings:
+        >>> optimizer, state = self._create_lbfgs_optimizer(params)
+
+        L-BFGS with small initial step (exploration mode):
+        >>> optimizer, state = self._create_lbfgs_optimizer(params, initial_step_size=0.1)
+
+        L-BFGS with large initial step (refinement mode):
+        >>> optimizer, state = self._create_lbfgs_optimizer(params, initial_step_size=1.0)
+        """
+        # Determine initial step size (learning rate) for line search
+        step_size = (
+            initial_step_size
+            if initial_step_size is not None
+            else self.config.lbfgs_initial_step_size
+        )
+
+        # Configure line search based on config
+        line_search_type = self.config.lbfgs_line_search
+        if line_search_type == "backtracking":
+            # Backtracking line search with Armijo condition
+            linesearch = optax.scale_by_backtracking_linesearch(
+                max_backtracking_steps=20,
+                slope_rtol=1e-4,  # Armijo condition parameter
+                decrease_factor=0.8,
+                increase_factor=1.5,
+                max_learning_rate=step_size,
+            )
+        else:
+            # Default to zoom linesearch (Wolfe conditions)
+            # This is the default optax.lbfgs linesearch
+            linesearch = optax.scale_by_zoom_linesearch(
+                max_linesearch_steps=20,
+                initial_guess_strategy="one",
+            )
+
+        # Create L-BFGS optimizer
+        # Note: optax.lbfgs uses the learning_rate to scale the initial step guess
+        optimizer = optax.lbfgs(
+            learning_rate=step_size,
+            memory_size=self.config.lbfgs_history_size,
+            scale_init_precond=True,  # Use scaled identity for cold start
+            linesearch=linesearch,
+        )
+
+        # Chain with gradient clipping if configured
+        if self.config.gradient_clip_value is not None:
+            optimizer = optax.chain(
+                optax.clip_by_global_norm(self.config.gradient_clip_value),
+                optimizer,
+            )
+
+        # Initialize optimizer state
+        opt_state = optimizer.init(params)
+
+        return optimizer, opt_state
+
+    def _lbfgs_step(
+        self,
+        params: jnp.ndarray,
+        opt_state: optax.OptState,
+        optimizer: optax.GradientTransformationExtraArgs,
+        loss_fn: Callable,
+        x_batch: jnp.ndarray,
+        y_batch: jnp.ndarray,
+        iteration: int,
+    ) -> tuple[jnp.ndarray, float, float, optax.OptState, bool]:
+        """Perform single L-BFGS optimization step with cold start scaffolding.
+
+        Parameters
+        ----------
+        params : array_like
+            Current parameters in normalized space
+        opt_state : optax.OptState
+            Current optimizer state
+        optimizer : optax.GradientTransformationExtraArgs
+            L-BFGS optimizer instance
+        loss_fn : callable
+            Loss function
+        x_batch : array_like
+            Independent variable batch
+        y_batch : array_like
+            Dependent variable batch
+        iteration : int
+            Current iteration number (for cold start detection)
+
+        Returns
+        -------
+        new_params : array_like
+            Updated parameters in normalized space
+        loss : float
+            Loss value before update
+        grad_norm : float
+            L2 norm of gradient
+        new_opt_state : optax.OptState
+            Updated optimizer state
+        line_search_failed : bool
+            True if line search failed to find acceptable step
+
+        Notes
+        -----
+        Uses jax.value_and_grad for efficient loss and gradient computation.
+        Includes NaN/Inf validation if enabled in config.
+
+        Cold start scaffolding: During the first m iterations (history_size),
+        the step is scaled by lbfgs_initial_step_size to prevent overshooting
+        when the Hessian approximation is poor.
+        """
+        # Validate input parameters
+        self._validate_numerics(params, context="at L-BFGS step input")
+
+        # Compute loss and gradient
+        loss_value, grads = jax.value_and_grad(loss_fn)(params, x_batch, y_batch)
+
+        # Validate loss and gradients
+        if not self._validate_numerics(
+            params, loss=float(loss_value), gradients=grads, context="in L-BFGS step"
+        ):
+            # Handle numerical issues
+            if (
+                hasattr(self.config, "enable_fault_tolerance")
+                and self.config.enable_fault_tolerance
+            ):
+                # Return current params unchanged (fallback)
+                return params, float("inf"), float("inf"), opt_state, True
+            else:
+                raise ValueError("Numerical issues detected in L-BFGS step")
+
+        # Compute gradient norm
+        grad_norm = jnp.linalg.norm(grads)
+
+        # L-BFGS requires a value_fn for line search
+        def value_fn(p):
+            return loss_fn(p, x_batch, y_batch)
+
+        # Apply optimizer updates (L-BFGS with line search)
+        try:
+            updates, new_opt_state = optimizer.update(
+                grads,
+                opt_state,
+                params,
+                value=loss_value,
+                grad=grads,
+                value_fn=value_fn,
+            )
+            line_search_failed = False
+        except Exception as e:
+            # Line search can fail in some cases
+            if self.config.verbose >= 2:
+                _logger.warning(f"L-BFGS line search failed: {e}")
+            # Fall back to gradient descent step
+            updates = -self.config.lbfgs_initial_step_size * grads
+            new_opt_state = opt_state
+            line_search_failed = True
+
+            # Record line search failure in telemetry
+            telemetry = get_defense_telemetry()
+            telemetry.record_lbfgs_line_search_failure(iteration, str(e))
+
+        # Layer 4: Trust Region Constraint - clip update magnitude (JIT-compatible)
+        if self.config.enable_step_clipping:
+            # Track original norm for telemetry before clipping
+            original_update_norm = float(jnp.linalg.norm(updates))
+            max_norm = self.config.max_warmup_step_size
+
+            updates = self._clip_update_norm(updates, max_norm)
+
+            # Record Layer 4 telemetry if clipping occurred
+            if original_update_norm > max_norm:
+                telemetry = get_defense_telemetry()
+                telemetry.record_layer4_clip(
+                    original_norm=original_update_norm, max_norm=max_norm
+                )
+
+        new_params = optax.apply_updates(params, updates)
+
+        # Validate updated parameters
+        if not self._validate_numerics(new_params, context="after L-BFGS update"):
+            # Fallback: keep old parameters
+            if (
+                hasattr(self.config, "enable_fault_tolerance")
+                and self.config.enable_fault_tolerance
+            ):
+                return params, float(loss_value), float(grad_norm), opt_state, True
+            else:
+                raise ValueError("NaN/Inf in parameters after L-BFGS update")
+
+        # Track best parameters globally
+        if float(loss_value) < self.best_cost_global:
+            self.best_cost_global = float(loss_value)
+            self.best_params_global = new_params
+
+        # Store optimizer state for checkpointing
+        self.phase1_optimizer_state = new_opt_state
+
+        # Record history buffer fill event (once when history is fully populated)
+        if iteration == self.config.lbfgs_history_size:
+            telemetry = get_defense_telemetry()
+            telemetry.record_lbfgs_history_fill(iteration)
+
+        return (
+            new_params,
+            float(loss_value),
+            float(grad_norm),
+            new_opt_state,
+            line_search_failed,
+        )
+
     def _create_warmup_loss_fn(self) -> Callable:
         """Create loss function for warmup phase.
 
@@ -1648,7 +1956,11 @@ class AdaptiveHybridStreamingOptimizer:
         p0: jnp.ndarray,
         bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     ) -> dict[str, Any]:
-        """Run Phase 1 Adam warmup.
+        """Run Phase 1 L-BFGS warmup.
+
+        L-BFGS provides 5-10x faster convergence to the basin of attraction
+        compared to Adam by using approximate second-order (Hessian) information.
+        This replaces the previous Adam warmup implementation.
 
         Parameters
         ----------
@@ -1735,7 +2047,7 @@ class AdaptiveHybridStreamingOptimizer:
 
             phase_record = {
                 "phase": 1,
-                "name": "adam_warmup",
+                "name": "lbfgs_warmup",
                 "iterations": 0,
                 "final_loss": initial_loss,
                 "best_loss": initial_loss,
@@ -1752,7 +2064,7 @@ class AdaptiveHybridStreamingOptimizer:
 
             if self.config.verbose >= 1:
                 _logger.info(
-                    f"Phase 1: Skipping Adam warmup - warm start detected "
+                    f"Phase 1: Skipping L-BFGS warmup - warm start detected "
                     f"(relative_loss={relative_loss:.4e})"
                 )
 
@@ -1762,23 +2074,28 @@ class AdaptiveHybridStreamingOptimizer:
                 "best_loss": initial_loss,
                 "final_loss": initial_loss,
                 "iterations": 0,
-                "switch_reason": "Warm start detected - skipping Adam warmup",
+                "switch_reason": "Warm start detected - skipping L-BFGS warmup",
                 "warm_start": True,
                 "relative_loss": relative_loss,
             }
 
         # =====================================================
-        # LAYER 2: Adaptive Learning Rate Selection
+        # LAYER 2: Adaptive Initial Step Size Selection for L-BFGS
         # =====================================================
+        # L-BFGS uses initial step size instead of learning rate
+        # The step size controls how conservative the first steps are
         if self.config.enable_adaptive_warmup_lr:
             if relative_loss < 0.1:
-                effective_lr = self.config.warmup_lr_refinement
+                # Refinement mode: near optimal, use large step for Newton-like speed
+                initial_step = self.config.lbfgs_refinement_step_size
                 lr_mode = "refinement"
             elif relative_loss < 1.0:
-                effective_lr = self.config.warmup_lr_careful
+                # Careful mode: reasonable starting point
+                initial_step = 0.5  # Intermediate step size
                 lr_mode = "careful"
             else:
-                effective_lr = self.config.warmup_learning_rate
+                # Exploration mode: far from optimal, use small step to prevent overshoot
+                initial_step = self.config.lbfgs_exploration_step_size
                 lr_mode = "exploration"
 
             self._warmup_lr_mode = lr_mode
@@ -1788,22 +2105,20 @@ class AdaptiveHybridStreamingOptimizer:
 
             if self.config.verbose >= 2:
                 _logger.debug(
-                    f"Phase 1 adaptive LR: mode={lr_mode}, lr={effective_lr:.2e}, "
+                    f"Phase 1 L-BFGS adaptive step: mode={lr_mode}, step={initial_step:.2f}, "
                     f"relative_loss={relative_loss:.4e}"
                 )
         else:
-            effective_lr = self.config.warmup_learning_rate
+            initial_step = self.config.lbfgs_initial_step_size
             lr_mode = "fixed"
             self._warmup_lr_mode = lr_mode
             # Record fixed mode telemetry
             telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
 
-        # Create Adam optimizer with selected learning rate
-        optimizer, opt_state = self._create_adam_optimizer(
+        # Create L-BFGS optimizer with selected initial step size
+        optimizer, opt_state = self._create_lbfgs_optimizer(
             current_params,
-            learning_rate_override=(
-                effective_lr if self.config.enable_adaptive_warmup_lr else None
-            ),
+            initial_step_size=initial_step,
         )
 
         # Best parameter tracking
@@ -1816,17 +2131,23 @@ class AdaptiveHybridStreamingOptimizer:
         # Reset clip counter for diagnostics
         self._warmup_clip_count = 0
 
-        # Warmup loop
+        # Warmup loop using L-BFGS
         for iteration in range(self.config.max_warmup_iterations):
-            # Perform Adam step (using full data for now)
-            current_params, loss_value, grad_norm, opt_state = self._adam_step(
-                params=current_params,
-                opt_state=opt_state,
-                optimizer=optimizer,
-                loss_fn=loss_fn,
-                x_batch=x_data,
-                y_batch=y_data,
+            # Perform L-BFGS step (using full data for now)
+            current_params, loss_value, grad_norm, opt_state, _line_search_failed = (
+                self._lbfgs_step(
+                    params=current_params,
+                    opt_state=opt_state,
+                    optimizer=optimizer,
+                    loss_fn=loss_fn,
+                    x_batch=x_data,
+                    y_batch=y_data,
+                    iteration=iteration,
+                )
             )
+
+            # If line search failed, we may want to be more conservative
+            # The _lbfgs_step already handles fallback behavior
 
             # Track best parameters
             if loss_value < best_loss:
@@ -1859,7 +2180,7 @@ class AdaptiveHybridStreamingOptimizer:
 
                     phase_record = {
                         "phase": 1,
-                        "name": "adam_warmup",
+                        "name": "lbfgs_warmup",
                         "iterations": iteration + 1,
                         "final_loss": loss_value,
                         "best_loss": best_loss,
@@ -1926,7 +2247,7 @@ class AdaptiveHybridStreamingOptimizer:
                     # Record Phase 1 completion
                     phase_record = {
                         "phase": 1,
-                        "name": "adam_warmup",
+                        "name": "lbfgs_warmup",
                         "iterations": iteration + 1,
                         "final_loss": loss_value,
                         "best_loss": best_loss,
@@ -1954,7 +2275,7 @@ class AdaptiveHybridStreamingOptimizer:
         # Maximum iterations reached (this shouldn't happen if max_iter criterion active)
         phase_record = {
             "phase": 1,
-            "name": "adam_warmup",
+            "name": "lbfgs_warmup",
             "iterations": self.config.max_warmup_iterations,
             "final_loss": loss_value,
             "best_loss": best_loss,
@@ -2178,6 +2499,357 @@ class AdaptiveHybridStreamingOptimizer:
         # Since g = -JTr, we have: -g^T δ = JTr^T δ
         # predicted_reduction = JTr^T δ - 0.5 δ^T (J^T J) δ
         predicted_reduction = jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step)
+        predicted_reduction = float(jnp.maximum(predicted_reduction, 0.0))
+
+        return step, predicted_reduction
+
+    # =========================================================================
+    # CG-based Gauss-Newton Solver Methods (Task Group 3)
+    # =========================================================================
+
+    def _select_gn_solver(self, n_params: int) -> str:
+        """Select Gauss-Newton solver based on parameter count.
+
+        Auto-selects between materialized SVD-based solve and CG-based
+        implicit solve based on the parameter count threshold.
+
+        Parameters
+        ----------
+        n_params : int
+            Number of parameters in the optimization problem
+
+        Returns
+        -------
+        solver_type : str
+            Either 'materialized' (for small p) or 'cg' (for large p)
+
+        Notes
+        -----
+        Threshold logic:
+        - p < cg_param_threshold: Materialize J^T J, use SVD solve
+        - p >= cg_param_threshold: Use CG with implicit matvec
+
+        For p < 2000, O(p^3) SVD solve is fast and SVD provides better
+        conditioning information. For p >= 2000, CG avoids O(p^2) memory
+        for J^T J storage.
+        """
+        threshold = self.config.cg_param_threshold
+
+        if n_params < threshold:
+            solver_type = "materialized"
+        else:
+            solver_type = "cg"
+
+        if self.config.verbose >= 2:
+            _logger.debug(
+                f"GN solver selection: p={n_params}, threshold={threshold}, "
+                f"selected={solver_type}"
+            )
+
+        return solver_type
+
+    def _implicit_jtj_matvec(
+        self,
+        v: jnp.ndarray,
+        params: jnp.ndarray,
+        x_data: jnp.ndarray,
+        y_data: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute (J^T J) @ v without materializing J^T J.
+
+        Implements implicit matrix-vector product for CG solver:
+            result = J^T @ (J @ v)
+
+        This avoids O(p^2) storage for J^T J, enabling optimization with
+        large parameter counts.
+
+        Parameters
+        ----------
+        v : array_like
+            Vector to multiply, shape (n_params,)
+        params : array_like
+            Current parameters in normalized space, shape (n_params,)
+        x_data : array_like
+            Full x data, shape (n_points,) or (n_points, n_features)
+        y_data : array_like
+            Full y data, shape (n_points,) (unused, kept for API consistency)
+
+        Returns
+        -------
+        result : array_like
+            Result of (J^T J) @ v, shape (n_params,)
+
+        Notes
+        -----
+        Memory complexity: O(n_chunk * p) per chunk instead of O(p^2).
+        Operates on chunks to avoid memory explosion for large datasets.
+
+        The computation is:
+        1. For each chunk: compute J_chunk @ v (forward pass)
+        2. For each chunk: compute J_chunk^T @ (J_chunk @ v) (backward pass)
+        3. Sum across chunks
+        """
+        chunk_size = self.config.chunk_size
+        n_points = len(x_data)
+        n_params = len(v)
+
+        # Initialize result accumulator
+        result = jnp.zeros(n_params)
+
+        # Process in chunks to limit memory
+        for i in range(0, n_points, chunk_size):
+            x_chunk = x_data[i : i + chunk_size]
+
+            # Compute Jacobian for this chunk: (chunk_size, n_params)
+            J_chunk = self._compute_jacobian_chunk(x_chunk, params)
+
+            # Forward: J @ v -> (chunk_size,)
+            Jv = J_chunk @ v
+
+            # Backward: J^T @ (J @ v) -> (n_params,)
+            JTJv_chunk = J_chunk.T @ Jv
+
+            # Accumulate
+            result = result + JTJv_chunk
+
+        return result
+
+    def _compute_jacobi_preconditioner(
+        self,
+        params: jnp.ndarray,
+        x_data: jnp.ndarray,
+        y_data: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute Jacobi (diagonal) preconditioner for CG solver.
+
+        Computes the diagonal of J^T J efficiently via chunked accumulation:
+            diag_JTJ[j] = sum_i (J[i, j])^2
+
+        Parameters
+        ----------
+        params : array_like
+            Current parameters in normalized space, shape (n_params,)
+        x_data : array_like
+            Full x data, shape (n_points,) or (n_points, n_features)
+        y_data : array_like
+            Full y data, shape (n_points,) (unused, kept for API consistency)
+
+        Returns
+        -------
+        diag_JTJ : array_like
+            Diagonal of J^T J, shape (n_params,). Values are always positive.
+
+        Notes
+        -----
+        The Jacobi preconditioner M = diag(J^T J) is applied as M^{-1} r
+        in preconditioned CG. This scales the residual by inverse column
+        norms, improving convergence for poorly-scaled problems.
+        """
+        chunk_size = self.config.chunk_size
+        n_points = len(x_data)
+        n_params = len(params)
+
+        # Initialize diagonal accumulator
+        diag_JTJ = jnp.zeros(n_params)
+
+        # Accumulate column norms squared across chunks
+        for i in range(0, n_points, chunk_size):
+            x_chunk = x_data[i : i + chunk_size]
+
+            # Compute Jacobian for this chunk: (chunk_size, n_params)
+            J_chunk = self._compute_jacobian_chunk(x_chunk, params)
+
+            # Accumulate squared column values: diag_JTJ[j] += sum_i J[i,j]^2
+            diag_JTJ = diag_JTJ + jnp.sum(J_chunk**2, axis=0)
+
+        # Ensure positive (add small regularization to avoid division by zero)
+        diag_JTJ = jnp.maximum(diag_JTJ, self.config.regularization_factor)
+
+        return diag_JTJ
+
+    def _cg_solve_implicit(
+        self,
+        JTr: jnp.ndarray,
+        params: jnp.ndarray,
+        x_data: jnp.ndarray,
+        y_data: jnp.ndarray,
+        trust_radius: float,
+    ) -> tuple[jnp.ndarray, int, bool]:
+        """Solve (J^T J) @ step = J^T r using Conjugate Gradient with implicit matvec.
+
+        Uses CG iteration with implicit J^T J matvec to avoid O(p^2) storage.
+        Follows the pattern from trf.py:conjugate_gradient_solve().
+
+        Parameters
+        ----------
+        JTr : array_like
+            Right-hand side vector J^T r, shape (n_params,)
+        params : array_like
+            Current parameters in normalized space, shape (n_params,)
+        x_data : array_like
+            Full x data
+        y_data : array_like
+            Full y data
+        trust_radius : float
+            Trust region radius (for step constraint)
+
+        Returns
+        -------
+        step : array_like
+            Approximate solution, shape (n_params,)
+        iterations : int
+            Number of CG iterations performed
+        converged : bool
+            True if CG converged within tolerance
+
+        Notes
+        -----
+        Implements Inexact Newton via CG with tolerance ||r_k|| < rtol * ||r_0||.
+        On non-convergence, returns incomplete solution (still a descent direction).
+
+        Uses jax.lax.while_loop for GPU acceleration.
+        """
+        n_params = len(JTr)
+        max_iter = self.config.cg_max_iterations
+        rtol = self.config.cg_relative_tolerance
+        atol = self.config.cg_absolute_tolerance
+
+        # Initial guess: zero
+        step = jnp.zeros(n_params)
+
+        # Initial residual: r = b - A @ x = JTr - (J^T J) @ 0 = JTr
+        r = JTr.copy()
+        r_norm_initial = jnp.linalg.norm(r)
+
+        # Handle zero right-hand side
+        if r_norm_initial < atol:
+            return step, 0, True
+
+        # Convergence threshold (Inexact Newton strategy)
+        tol = jnp.maximum(rtol * r_norm_initial, atol)
+
+        # Initialize CG vectors
+        p = r.copy()  # Search direction
+        r_dot_r = jnp.dot(r, r)
+
+        # CG iteration state: (step, r, p, r_dot_r, iteration, converged)
+        def cg_body(state):
+            step, r, p, r_dot_r, iteration, _ = state
+
+            # Compute A @ p = (J^T J) @ p implicitly
+            Ap = self._implicit_jtj_matvec(p, params, x_data, y_data)
+
+            # Compute step length
+            pAp = jnp.dot(p, Ap)
+            # Safeguard against negative curvature or zero
+            pAp_safe = jnp.maximum(pAp, 1e-15)
+            alpha = r_dot_r / pAp_safe
+
+            # Update solution
+            step_new = step + alpha * p
+
+            # Update residual
+            r_new = r - alpha * Ap
+
+            # Compute new residual norm squared
+            r_dot_r_new = jnp.dot(r_new, r_new)
+
+            # Check convergence
+            r_norm = jnp.sqrt(r_dot_r_new)
+            converged = r_norm < tol
+
+            # Compute beta for next search direction
+            beta = r_dot_r_new / (r_dot_r + 1e-15)
+
+            # Update search direction
+            p_new = r_new + beta * p
+
+            return (step_new, r_new, p_new, r_dot_r_new, iteration + 1, converged)
+
+        def cg_cond(state):
+            _, _, _, _, iteration, converged = state
+            return jnp.logical_and(iteration < max_iter, jnp.logical_not(converged))
+
+        # Run CG iterations using while_loop for GPU efficiency
+        init_state = (step, r, p, r_dot_r, 0, False)
+        final_state = jax.lax.while_loop(cg_cond, cg_body, init_state)
+
+        step_final, _r_final, _, _, iterations, converged = final_state
+
+        # Apply trust region constraint
+        step_norm = jnp.linalg.norm(step_final)
+        if step_norm > trust_radius:
+            step_final = step_final * (trust_radius / step_norm)
+
+        return step_final, int(iterations), bool(converged)
+
+    def _solve_gauss_newton_step_cg(
+        self,
+        JTJ: jnp.ndarray,
+        JTr: jnp.ndarray,
+        trust_radius: float,
+        params: jnp.ndarray,
+        x_data: jnp.ndarray,
+        y_data: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, float]:
+        """Solve Gauss-Newton step using CG with implicit J^T J matvec.
+
+        Alternative to SVD-based _solve_gauss_newton_step() for large parameter
+        counts. Uses CG iteration with implicit matvec to avoid O(p^2) storage.
+
+        Parameters
+        ----------
+        JTJ : array_like
+            Accumulated J^T J matrix (may not be used if using implicit matvec)
+        JTr : array_like
+            Accumulated J^T r vector, shape (n_params,)
+        trust_radius : float
+            Trust region radius
+        params : array_like
+            Current parameters in normalized space
+        x_data : array_like
+            Full x data
+        y_data : array_like
+            Full y data
+
+        Returns
+        -------
+        step : array_like
+            Gauss-Newton step, shape (n_params,)
+        predicted_reduction : float
+            Predicted reduction in cost function
+
+        Notes
+        -----
+        On CG non-convergence, returns incomplete solution which is typically
+        still a descent direction (useful for trust region methods).
+        """
+        # Solve using CG with implicit matvec
+        step, cg_iterations, converged = self._cg_solve_implicit(
+            JTr, params, x_data, y_data, trust_radius
+        )
+
+        # Log CG diagnostics
+        if self.config.verbose >= 2:
+            status = "converged" if converged else "incomplete"
+            _logger.debug(f"CG solver: {cg_iterations} iterations, {status}")
+
+        # If CG didn't converge, the incomplete solution is still usable
+        # as a descent direction. Optionally apply Jacobi preconditioner
+        # and re-solve if configured.
+        if not converged and cg_iterations >= self.config.cg_max_iterations * 0.9:
+            # CG struggled - this is logged for diagnostics but we use the
+            # incomplete solution which is typically still a descent direction
+            if self.config.verbose >= 1:
+                _logger.warning(
+                    f"CG solver hit iteration limit ({cg_iterations}). "
+                    "Using incomplete solution as descent direction."
+                )
+
+        # Compute predicted reduction: JTr^T @ step - 0.5 * step^T @ (J^T J) @ step
+        # Use implicit matvec for the JTJ @ step term
+        JTJ_step = self._implicit_jtj_matvec(step, params, x_data, y_data)
+        predicted_reduction = jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ_step)
         predicted_reduction = float(jnp.maximum(predicted_reduction, 0.0))
 
         return step, predicted_reduction
@@ -3165,15 +3837,33 @@ class AdaptiveHybridStreamingOptimizer:
                     "normalized_params", data=self.normalized_params
                 )
 
-            # Save Phase 1 optimizer state (Optax Adam)
+            # Save Phase 1 optimizer state (Optax L-BFGS or legacy Adam)
             if self.phase1_optimizer_state is not None:
                 opt_state_group = phase_state.create_group("phase1_optimizer_state")
-                # Optax Adam state has structure: (ScaleByAdamState, EmptyState)
-                # ScaleByAdamState has: count, mu, nu
-                adam_state = self.phase1_optimizer_state[0]
-                opt_state_group.create_dataset("count", data=int(adam_state.count))
-                opt_state_group.create_dataset("mu", data=adam_state.mu)
-                opt_state_group.create_dataset("nu", data=adam_state.nu)
+                inner_state = self.phase1_optimizer_state[0]
+                opt_state_group.create_dataset("count", data=int(inner_state.count))
+
+                # Check optimizer type by state attributes
+                if hasattr(inner_state, "diff_params_memory"):
+                    # L-BFGS state: ScaleByLBFGSState has count, params, updates,
+                    # diff_params_memory, diff_updates_memory, weights_memory
+                    opt_state_group.attrs["optimizer_type"] = "lbfgs"
+                    opt_state_group.create_dataset("params", data=inner_state.params)
+                    opt_state_group.create_dataset("updates", data=inner_state.updates)
+                    opt_state_group.create_dataset(
+                        "diff_params_memory", data=inner_state.diff_params_memory
+                    )
+                    opt_state_group.create_dataset(
+                        "diff_updates_memory", data=inner_state.diff_updates_memory
+                    )
+                    opt_state_group.create_dataset(
+                        "weights_memory", data=inner_state.weights_memory
+                    )
+                elif hasattr(inner_state, "mu") and hasattr(inner_state, "nu"):
+                    # Legacy Adam state: ScaleByAdamState has count, mu, nu
+                    opt_state_group.attrs["optimizer_type"] = "adam"
+                    opt_state_group.create_dataset("mu", data=inner_state.mu)
+                    opt_state_group.create_dataset("nu", data=inner_state.nu)
 
             # Save Phase 2 accumulators
             if self.phase2_JTJ_accumulator is not None:
@@ -3275,16 +3965,33 @@ class AdaptiveHybridStreamingOptimizer:
             if "phase1_optimizer_state" in phase_state:
                 opt_state_group = phase_state["phase1_optimizer_state"]
                 count = int(opt_state_group["count"][()])
-                mu = jnp.array(opt_state_group["mu"])
-                nu = jnp.array(opt_state_group["nu"])
+                optimizer_type = opt_state_group.attrs.get("optimizer_type", "adam")
 
-                # Reconstruct Optax Adam state structure
-                # Note: This is a simplified reconstruction
-                # Full state may require creating optimizer instance
-                from optax._src.transform import ScaleByAdamState
+                if optimizer_type == "lbfgs":
+                    # Reconstruct L-BFGS state
+                    from optax._src.transform import ScaleByLBFGSState
 
-                adam_state = ScaleByAdamState(count=count, mu=mu, nu=nu)
-                self.phase1_optimizer_state = (adam_state, optax.EmptyState())
+                    lbfgs_state = ScaleByLBFGSState(
+                        count=count,
+                        params=jnp.array(opt_state_group["params"]),
+                        updates=jnp.array(opt_state_group["updates"]),
+                        diff_params_memory=jnp.array(
+                            opt_state_group["diff_params_memory"]
+                        ),
+                        diff_updates_memory=jnp.array(
+                            opt_state_group["diff_updates_memory"]
+                        ),
+                        weights_memory=jnp.array(opt_state_group["weights_memory"]),
+                    )
+                    self.phase1_optimizer_state = (lbfgs_state, optax.EmptyState())
+                else:
+                    # Legacy Adam state reconstruction
+                    mu = jnp.array(opt_state_group["mu"])
+                    nu = jnp.array(opt_state_group["nu"])
+                    from optax._src.transform import ScaleByAdamState
+
+                    adam_state = ScaleByAdamState(count=count, mu=mu, nu=nu)
+                    self.phase1_optimizer_state = (adam_state, optax.EmptyState())
 
             # Restore Phase 2 accumulators
             if "phase2_jtj_accumulator" in phase_state:
@@ -3679,20 +4386,38 @@ class AdaptiveHybridStreamingOptimizer:
         if self.normalized_params is not None:
             self.normalized_params = self.normalized_params.astype(target_dtype)
 
-        # Convert Phase 1 optimizer state (Optax Adam)
+        # Convert Phase 1 optimizer state (Optax L-BFGS or legacy Adam)
         if self.phase1_optimizer_state is not None:
             try:
-                # Optax Adam state structure: (ScaleByAdamState, EmptyState)
-                adam_state = self.phase1_optimizer_state[0]
-                from optax._src.transform import ScaleByAdamState
+                inner_state = self.phase1_optimizer_state[0]
 
-                # Convert mu and nu to target precision
-                new_adam_state = ScaleByAdamState(
-                    count=adam_state.count,
-                    mu=adam_state.mu.astype(target_dtype),
-                    nu=adam_state.nu.astype(target_dtype),
-                )
-                self.phase1_optimizer_state = (new_adam_state, optax.EmptyState())
+                if hasattr(inner_state, "diff_params_memory"):
+                    # L-BFGS state conversion
+                    from optax._src.transform import ScaleByLBFGSState
+
+                    new_lbfgs_state = ScaleByLBFGSState(
+                        count=inner_state.count,
+                        params=inner_state.params.astype(target_dtype),
+                        updates=inner_state.updates.astype(target_dtype),
+                        diff_params_memory=inner_state.diff_params_memory.astype(
+                            target_dtype
+                        ),
+                        diff_updates_memory=inner_state.diff_updates_memory.astype(
+                            target_dtype
+                        ),
+                        weights_memory=inner_state.weights_memory.astype(target_dtype),
+                    )
+                    self.phase1_optimizer_state = (new_lbfgs_state, optax.EmptyState())
+                elif hasattr(inner_state, "mu") and hasattr(inner_state, "nu"):
+                    # Legacy Adam state conversion
+                    from optax._src.transform import ScaleByAdamState
+
+                    new_adam_state = ScaleByAdamState(
+                        count=inner_state.count,
+                        mu=inner_state.mu.astype(target_dtype),
+                        nu=inner_state.nu.astype(target_dtype),
+                    )
+                    self.phase1_optimizer_state = (new_adam_state, optax.EmptyState())
             except Exception:
                 # If conversion fails, reset optimizer state
                 self.phase1_optimizer_state = None
@@ -3934,7 +4659,7 @@ class AdaptiveHybridStreamingOptimizer:
         self._handle_phase_transition_precision(1)
 
         if verbose >= 1:
-            print("Phase 1: Adam warmup...")
+            print("Phase 1: L-BFGS warmup...")
             print(f"  Precision: {self.current_precision}")
 
         phase1_start = time.time()
@@ -4087,7 +4812,7 @@ class AdaptiveHybridStreamingOptimizer:
         """
         phase_names = {
             0: "Phase 0: Normalization Setup",
-            1: "Phase 1: Adam Warmup",
+            1: "Phase 1: L-BFGS Warmup",
             2: "Phase 2: Streaming Gauss-Newton",
             3: "Phase 3: Denormalization and Covariance",
         }

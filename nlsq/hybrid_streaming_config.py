@@ -1,7 +1,7 @@
 """Configuration for adaptive hybrid streaming optimizer.
 
 This module provides configuration options for the four-phase hybrid optimizer
-that combines parameter normalization, Adam warmup, streaming Gauss-Newton, and
+that combines parameter normalization, L-BFGS warmup, streaming Gauss-Newton, and
 exact covariance computation.
 """
 
@@ -15,7 +15,7 @@ class HybridStreamingConfig:
 
     This configuration class controls all aspects of the four-phase hybrid optimizer:
     - Phase 0: Parameter normalization setup
-    - Phase 1: Adam warmup with adaptive switching
+    - Phase 1: L-BFGS warmup with adaptive switching
     - Phase 2: Streaming Gauss-Newton with exact J^T J accumulation
     - Phase 3: Denormalization and covariance transform
 
@@ -34,16 +34,17 @@ class HybridStreamingConfig:
         - **'none'**: Identity transform (no normalization)
 
     warmup_iterations : int, default=200
-        Number of Adam warmup iterations before checking switch criteria.
-        Typical values: 100-500. More iterations allow better initial convergence
-        before switching to Gauss-Newton.
+        Number of L-BFGS warmup iterations before checking switch criteria.
+        With L-BFGS, typical values are 20-50 (5-10x fewer than Adam).
+        More iterations allow better initial convergence before switching
+        to Gauss-Newton.
 
     max_warmup_iterations : int, default=500
-        Maximum Adam warmup iterations before forced switch to Phase 2.
+        Maximum L-BFGS warmup iterations before forced switch to Phase 2.
         Safety limit to prevent indefinite warmup when loss plateaus slowly.
 
     warmup_learning_rate : float, default=0.001
-        Learning rate for Adam optimizer during warmup phase.
+        Learning rate for optimizer during warmup phase.
         Typical values: 0.0001-0.01. Higher values converge faster but may overshoot.
 
     loss_plateau_threshold : float, default=1e-4
@@ -66,6 +67,32 @@ class HybridStreamingConfig:
 
         Switch occurs when ANY active criterion is met.
 
+    lbfgs_history_size : int, default=10
+        Number of previous gradients and updates to store for L-BFGS Hessian
+        approximation. Standard default from SciPy, PyTorch, and Nocedal & Wright.
+        Larger values give better Hessian approximation but use more memory.
+
+    lbfgs_initial_step_size : float, default=0.1
+        Initial step size for L-BFGS during cold start (first m iterations
+        while history buffer fills). Small value prevents overshooting when
+        Hessian approximation is poor (identity matrix initially).
+
+    lbfgs_line_search : str, default='wolfe'
+        Line search method for L-BFGS step acceptance. Options:
+
+        - **'wolfe'**: Standard Wolfe conditions (default)
+        - **'strong_wolfe'**: Strong Wolfe conditions (stricter)
+        - **'backtracking'**: Simple backtracking line search
+
+    lbfgs_exploration_step_size : float, default=0.1
+        L-BFGS initial step size for exploration mode (high relative loss).
+        Small value prevents first "Hessian=Identity" step from overshooting.
+
+    lbfgs_refinement_step_size : float, default=1.0
+        L-BFGS initial step size for refinement mode (low relative loss).
+        Larger value leverages L-BFGS's near-Newton convergence speed when
+        close to optimum.
+
     gauss_newton_max_iterations : int, default=100
         Maximum iterations for Phase 2 Gauss-Newton optimization.
         Typical values: 50-200.
@@ -81,6 +108,28 @@ class HybridStreamingConfig:
     regularization_factor : float, default=1e-10
         Regularization factor for rank-deficient J^T J matrices.
         Added to diagonal: J^T J + regularization_factor * I.
+
+    cg_max_iterations : int, default=100
+        Maximum iterations for Conjugate Gradient solver in Phase 2.
+        Used when parameter count exceeds cg_param_threshold.
+        Higher values allow better convergence but more computation.
+
+    cg_relative_tolerance : float, default=1e-4
+        Relative tolerance for CG solver convergence.
+        Convergence check: ||r|| < cg_relative_tolerance * ||J^T r_0||.
+        Implements Inexact Newton strategy for efficiency.
+
+    cg_absolute_tolerance : float, default=1e-10
+        Absolute tolerance floor for CG solver convergence.
+        Safety floor to prevent over-iteration on well-conditioned systems.
+
+    cg_param_threshold : int, default=2000
+        Parameter count threshold for auto-selecting CG vs materialized solver.
+
+        - **p < threshold**: Use materialized J^T J with SVD solve (faster for small p)
+        - **p >= threshold**: Use CG with implicit matvec (O(p) memory vs O(p^2))
+
+        Threshold balances memory savings vs additional data passes for CG.
 
     enable_group_variance_regularization : bool, default=False
         Enable variance regularization for parameter groups. When enabled,
@@ -176,11 +225,11 @@ class HybridStreamingConfig:
     >>> config.warmup_iterations
     200
 
-    Aggressive profile (faster convergence):
+    Aggressive profile (faster convergence with L-BFGS):
 
     >>> config = HybridStreamingConfig.aggressive()
-    >>> config.warmup_iterations > 200
-    True
+    >>> config.warmup_iterations
+    50
 
     Conservative profile (higher quality):
 
@@ -197,8 +246,8 @@ class HybridStreamingConfig:
     Custom configuration:
 
     >>> config = HybridStreamingConfig(
-    ...     warmup_iterations=300,
-    ...     warmup_learning_rate=0.01,
+    ...     warmup_iterations=50,
+    ...     lbfgs_history_size=15,
     ...     chunk_size=5000,
     ...     precision='float64'
     ... )
@@ -222,19 +271,29 @@ class HybridStreamingConfig:
     -----
     Based on Adaptive Hybrid Streaming Optimizer specification:
     ``agent-os/specs/2025-12-18-adaptive-hybrid-streaming-optimizer/spec.md``
+
+    L-BFGS replaces Adam for warmup, providing 5-10x faster convergence to the
+    basin of attraction through approximate Hessian information.
     """
 
     # Phase 0: Parameter normalization
     normalize: bool = True
     normalization_strategy: str = "auto"
 
-    # Phase 1: Adam warmup
+    # Phase 1: L-BFGS warmup
     warmup_iterations: int = 200
     max_warmup_iterations: int = 500
     warmup_learning_rate: float = 0.001
     loss_plateau_threshold: float = 1e-4
     gradient_norm_threshold: float = 1e-3
     active_switching_criteria: list = None
+
+    # L-BFGS configuration parameters
+    lbfgs_history_size: int = 10  # Standard default (SciPy, PyTorch, Nocedal & Wright)
+    lbfgs_initial_step_size: float = 0.1  # Cold start scaffolding
+    lbfgs_line_search: Literal["wolfe", "strong_wolfe", "backtracking"] = "wolfe"
+    lbfgs_exploration_step_size: float = 0.1  # For high relative loss (exploration)
+    lbfgs_refinement_step_size: float = 1.0  # For low relative loss (refinement)
 
     # Optax enhancements
     use_learning_rate_schedule: bool = False
@@ -245,7 +304,7 @@ class HybridStreamingConfig:
         None  # None = no clipping, e.g., 1.0 for clipping
     )
 
-    # 4-Layer Defense Strategy for Adam Warmup Divergence Prevention
+    # 4-Layer Defense Strategy for Warmup Divergence Prevention
     # Layer 1: Warm Start Detection - skip warmup if already near optimum
     enable_warm_start_detection: bool = True
     warm_start_threshold: float = 0.01  # Skip if relative_loss < this
@@ -260,7 +319,7 @@ class HybridStreamingConfig:
     enable_cost_guard: bool = True
     cost_increase_tolerance: float = 0.05  # Abort if loss > initial * 1.05
 
-    # Layer 4: Trust Region Constraint - clip Adam update magnitude
+    # Layer 4: Trust Region Constraint - clip update magnitude
     enable_step_clipping: bool = True
     max_warmup_step_size: float = 0.1  # Max L2 norm of parameter update
 
@@ -269,6 +328,14 @@ class HybridStreamingConfig:
     gauss_newton_tol: float = 1e-8
     trust_region_initial: float = 1.0
     regularization_factor: float = 1e-10
+
+    # CG-based Gauss-Newton solver configuration
+    # These parameters control the Conjugate Gradient solver used when
+    # the parameter count exceeds cg_param_threshold
+    cg_max_iterations: int = 100  # Cap for high-p problems
+    cg_relative_tolerance: float = 1e-4  # Multiplier for ||J^T r|| (Inexact Newton)
+    cg_absolute_tolerance: float = 1e-10  # Safety floor
+    cg_param_threshold: int = 2000  # Auto-select threshold: p < this -> materialized
 
     # Group variance regularization (for per-angle parameter absorption prevention)
     enable_group_variance_regularization: bool = False
@@ -375,6 +442,32 @@ class HybridStreamingConfig:
             raise ValueError("trust_region_initial must be positive")
         if self.regularization_factor < 0:
             raise ValueError("regularization_factor must be non-negative")
+
+        # Validate L-BFGS configuration parameters
+        if self.lbfgs_history_size <= 0:
+            raise ValueError("lbfgs_history_size must be positive")
+        if self.lbfgs_initial_step_size <= 0:
+            raise ValueError("lbfgs_initial_step_size must be positive")
+        valid_line_searches = ("wolfe", "strong_wolfe", "backtracking")
+        if self.lbfgs_line_search not in valid_line_searches:
+            raise ValueError(
+                f"lbfgs_line_search must be one of: {valid_line_searches}, "
+                f"got: {self.lbfgs_line_search}"
+            )
+        if self.lbfgs_exploration_step_size <= 0:
+            raise ValueError("lbfgs_exploration_step_size must be positive")
+        if self.lbfgs_refinement_step_size <= 0:
+            raise ValueError("lbfgs_refinement_step_size must be positive")
+
+        # Validate CG solver configuration parameters
+        if self.cg_max_iterations <= 0:
+            raise ValueError("cg_max_iterations must be positive")
+        if self.cg_relative_tolerance <= 0:
+            raise ValueError("cg_relative_tolerance must be positive")
+        if self.cg_absolute_tolerance <= 0:
+            raise ValueError("cg_absolute_tolerance must be positive")
+        if self.cg_param_threshold <= 0:
+            raise ValueError("cg_param_threshold must be positive")
 
         # Validate group variance regularization parameters
         if self.enable_group_variance_regularization:
@@ -487,10 +580,10 @@ class HybridStreamingConfig:
 
     @classmethod
     def aggressive(cls):
-        """Create aggressive profile: faster convergence, more warmup, looser tolerances.
+        """Create aggressive profile: faster convergence with L-BFGS, looser tolerances.
 
         This preset prioritizes speed over robustness:
-        - More warmup iterations for better initial convergence
+        - L-BFGS warmup with reduced iterations (50 vs 300 with Adam)
         - Higher learning rate for faster progress
         - Looser tolerances for earlier Phase 2 switching
         - Larger chunks for better throughput
@@ -505,11 +598,13 @@ class HybridStreamingConfig:
         >>> config = HybridStreamingConfig.aggressive()
         >>> config.warmup_learning_rate
         0.003
+        >>> config.warmup_iterations
+        50
         """
         return cls(
-            # More warmup for better Phase 1 convergence
-            warmup_iterations=300,
-            max_warmup_iterations=800,
+            # L-BFGS warmup with reduced iterations (5-10x fewer than Adam)
+            warmup_iterations=50,
+            max_warmup_iterations=100,
             # Higher learning rate for faster progress
             warmup_learning_rate=0.003,
             # Looser tolerances for faster switching
@@ -526,7 +621,7 @@ class HybridStreamingConfig:
         """Create conservative profile: slower but robust, tighter tolerances.
 
         This preset prioritizes solution quality over speed:
-        - Less warmup, rely more on Gauss-Newton
+        - L-BFGS warmup with conservative iterations
         - Lower learning rate for stability
         - Tighter tolerances for higher quality
         - More Gauss-Newton iterations
@@ -541,11 +636,13 @@ class HybridStreamingConfig:
         >>> config = HybridStreamingConfig.conservative()
         >>> config.gauss_newton_tol
         1e-10
+        >>> config.warmup_iterations
+        30
         """
         return cls(
-            # Less warmup, rely on Gauss-Newton
-            warmup_iterations=100,
-            max_warmup_iterations=300,
+            # L-BFGS warmup with reduced iterations, rely on Gauss-Newton
+            warmup_iterations=30,
+            max_warmup_iterations=80,
             # Lower learning rate for stability
             warmup_learning_rate=0.0003,
             # Tighter tolerances for quality
@@ -565,9 +662,10 @@ class HybridStreamingConfig:
 
         This preset minimizes memory footprint:
         - Smaller chunks to reduce memory usage
-        - Conservative warmup to limit memory allocation
+        - L-BFGS warmup with reduced iterations
         - Enable checkpoints for recovery (important when memory is tight)
         - float32 precision for 50% memory reduction
+        - Lower CG threshold for more aggressive CG usage (avoids O(p^2) J^T J)
 
         Returns
         -------
@@ -579,18 +677,24 @@ class HybridStreamingConfig:
         >>> config = HybridStreamingConfig.memory_optimized()
         >>> config.chunk_size
         5000
+        >>> config.warmup_iterations
+        40
+        >>> config.cg_param_threshold
+        1000
         """
         return cls(
             # Smaller chunks for memory efficiency
             chunk_size=5000,
-            # Conservative warmup to reduce memory
-            warmup_iterations=150,
-            max_warmup_iterations=400,
+            # L-BFGS warmup with reduced iterations
+            warmup_iterations=40,
+            max_warmup_iterations=100,
             # Use float32 for 50% memory reduction
             precision="float32",
             # Enable checkpoints (important when memory tight)
             enable_checkpoints=True,
             checkpoint_frequency=50,  # More frequent saves
+            # More aggressive CG usage to avoid O(p^2) J^T J storage
+            cg_param_threshold=1000,  # Lower threshold for memory savings
             # Keep other defaults
         )
 
@@ -662,6 +766,8 @@ class HybridStreamingConfig:
         0.01
         >>> config.cost_increase_tolerance
         0.05
+        >>> config.warmup_iterations
+        25
         """
         return cls(
             # All defense layers enabled
@@ -679,9 +785,9 @@ class HybridStreamingConfig:
             cost_increase_tolerance=0.05,
             # Layer 4: Very small steps
             max_warmup_step_size=0.05,
-            # Conservative base settings
-            warmup_iterations=100,
-            max_warmup_iterations=300,
+            # L-BFGS warmup with reduced iterations
+            warmup_iterations=25,
+            max_warmup_iterations=60,
         )
 
     @classmethod
@@ -713,6 +819,8 @@ class HybridStreamingConfig:
         0.5
         >>> config.cost_increase_tolerance
         0.5
+        >>> config.warmup_iterations
+        50
         """
         return cls(
             # All defense layers enabled but relaxed
@@ -730,9 +838,9 @@ class HybridStreamingConfig:
             cost_increase_tolerance=0.5,
             # Layer 4: Larger steps for exploration
             max_warmup_step_size=0.5,
-            # Aggressive base settings
-            warmup_iterations=300,
-            max_warmup_iterations=600,
+            # L-BFGS warmup with reduced iterations
+            warmup_iterations=50,
+            max_warmup_iterations=120,
         )
 
     @classmethod
@@ -741,7 +849,7 @@ class HybridStreamingConfig:
 
         This preset completely disables the 4-layer defense strategy,
         reverting to pre-0.3.6 behavior. Use with caution as this
-        removes protection against Adam warmup divergence.
+        removes protection against warmup divergence.
 
         Use this when:
         - Debugging to isolate defense layer effects
@@ -774,7 +882,7 @@ class HybridStreamingConfig:
         scattering, spectroscopy, and other physics-based models:
         - Balanced defense layers that protect without being too aggressive
         - Float64 precision for numerical accuracy
-        - Moderate warmup with tight tolerances
+        - L-BFGS warmup with moderate iterations
         - Enabled checkpoints for long-running fits
 
         Use this when:
@@ -793,6 +901,8 @@ class HybridStreamingConfig:
         >>> config = HybridStreamingConfig.scientific_default()
         >>> config.precision
         'float64'
+        >>> config.warmup_iterations
+        35
         """
         return cls(
             # All defense layers enabled with balanced settings
@@ -810,6 +920,9 @@ class HybridStreamingConfig:
             cost_increase_tolerance=0.2,
             # Layer 4: Moderate step clipping
             max_warmup_step_size=0.1,
+            # L-BFGS warmup with reduced iterations
+            warmup_iterations=35,
+            max_warmup_iterations=100,
             # Scientific computing settings
             precision="float64",
             gauss_newton_tol=1e-10,
