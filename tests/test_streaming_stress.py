@@ -183,6 +183,7 @@ class TestLargeDatasetStress:
     """Stress tests with very large datasets."""
 
     @pytest.mark.slow
+    @pytest.mark.serial  # Memory-intensive: 100K data points
     def test_very_large_dataset(self):
         """Test with very large dataset (100K points, 1000 batches).
 

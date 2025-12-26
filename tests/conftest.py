@@ -55,6 +55,66 @@ def configure_jax_for_tests():
 
 
 # ============================================================================
+# JAX Memory Cleanup Fixture (OOM Prevention)
+# ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def cleanup_jax_memory():
+    """
+    Clean up JAX memory after each test to prevent OOM crashes.
+
+    Root Cause Analysis (2025-12-26):
+    - Parallel test execution with many workers accumulates JAX state
+    - AdaptiveHybridStreamingOptimizer holds O(p²) accumulators
+    - JIT compilation caches grow unbounded across tests
+    - Without cleanup, cumulative memory can exceed 60GB on large test suites
+
+    This fixture runs after EVERY test to:
+    1. Force Python garbage collection
+    2. Clear JAX compilation caches
+    3. Release XLA device memory
+
+    Impact: Prevents OOM killer (exit code 137) during full test suite runs.
+    """
+    # Let the test run
+    yield
+
+    # Cleanup after test completes
+    import gc
+
+    # Force garbage collection to release Python objects
+    gc.collect()
+
+    # Clear JAX compilation caches to free XLA memory
+    # This is safe because tests should not depend on cached compilations
+    jax.clear_caches()
+
+
+# ============================================================================
+# pytest-xdist Serial Test Grouping (OOM Prevention)
+# ============================================================================
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    Group tests marked with @pytest.mark.serial to run on the same worker.
+
+    This ensures memory-intensive tests don't run in parallel with each other,
+    preventing OOM crashes. Tests with the 'serial' marker are assigned to the
+    same xdist group, so they execute sequentially on a single worker.
+
+    Note: This hook runs during test collection, before any tests execute.
+    """
+    for item in items:
+        # Check if test has the serial marker
+        if item.get_closest_marker("serial"):
+            # Assign all serial tests to the same xdist group
+            # This ensures they run on the same worker, one at a time
+            item.add_marker(pytest.mark.xdist_group("serial_memory_tests"))
+
+
+# ============================================================================
 # Session-Scoped Compiled Model Fixtures (Phase 2 Optimization)
 # ============================================================================
 

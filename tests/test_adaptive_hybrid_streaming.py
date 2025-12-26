@@ -1237,7 +1237,7 @@ class TestAPIIntegration:
         # Verify each phase has correct structure
         phase_names = [
             "normalization_setup",
-            "adam_warmup",
+            "lbfgs_warmup",
             "gauss_newton",
             "denormalization_covariance",
         ]
@@ -1582,6 +1582,7 @@ class TestLoopStrategyDispatch:
 
     def test_scan_based_accumulation_produces_correct_results(self):
         """Test scan-based accumulation produces same results as loop-based."""
+
         # Define model
         def model(x, a, b):
             return a * x + b

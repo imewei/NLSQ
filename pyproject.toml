@@ -82,7 +82,7 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.0,<2.4",           # Requires NumPy 2.x (tested on 2.3.5)
+    "numpy>=2.0",           # Requires NumPy 2.x (tested on 2.3.5)
     "scipy>=1.16.3",          # Tested on 1.16.3
 
     # JAX ecosystem (locked to 0.8.0)
@@ -519,9 +519,12 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     # Parallel execution optimizations (Phase 1: Test Suite Performance Optimization)
-    # Expected impact: 15-20% reduction (40-83 seconds from 268s baseline)
-    "-n", "auto",  # Parallel execution with auto-detected CPU count
-    "--dist", "loadgroup",  # Group tests by module for better JAX compilation cache hits
+    # NOTE: Using fixed worker count to prevent OOM crashes on systems with many cores.
+    # With -n auto on 20-core systems, 20 workers × JAX overhead (~500MB each) = 10GB+
+    # baseline before tests run. Large-p tests (5000 params) can push total > 60GB.
+    # Using 4 workers: 4 × 2GB = 8GB max, leaving headroom for large tests.
+    "-n", "4",  # Fixed 4 workers to prevent memory exhaustion (was: auto)
+    "--dist", "loadscope",  # Group by test scope for better isolation (was: loadgroup)
     # Coverage disabled for faster CI (enable locally with pytest --cov)
     # Test suite: 1,563 tests (as of 2025-11-16)
     # Current coverage: 82.15% (exceeds 80% target)

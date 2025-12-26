@@ -72,10 +72,16 @@ class TestFaultToleranceCheckpoints:
                 assert "normalized_params" in f["phase_state"]
 
                 # Check Phase 1 optimizer state (if saved during Phase 1)
-                # Phase 1 uses Optax Adam optimizer
+                # Phase 1 uses Optax L-BFGS optimizer (or legacy Adam)
                 if "phase1_optimizer_state" in f["phase_state"]:
-                    assert "mu" in f["phase_state/phase1_optimizer_state"]
-                    assert "nu" in f["phase_state/phase1_optimizer_state"]
+                    opt_group = f["phase_state/phase1_optimizer_state"]
+                    opt_type = opt_group.attrs.get("optimizer_type", "adam")
+                    if opt_type == "lbfgs":
+                        assert "params" in opt_group
+                        assert "diff_params_memory" in opt_group
+                    else:  # legacy adam
+                        assert "mu" in opt_group
+                        assert "nu" in opt_group
 
                 # Check Phase 2 accumulators (if saved during/after Phase 2)
                 if "phase2_jtj_accumulator" in f["phase_state"]:

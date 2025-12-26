@@ -20,13 +20,18 @@ class TestHybridStreamingConfigDefaults:
         assert config.normalize is True
         assert config.normalization_strategy == "auto"
 
-        # Phase 1: Adam warmup defaults
+        # Phase 1: L-BFGS warmup defaults
         assert config.warmup_iterations == 200
         assert config.max_warmup_iterations == 500
         assert config.warmup_learning_rate == 0.001
         assert config.loss_plateau_threshold == 1e-4
         assert config.gradient_norm_threshold == 1e-3
         assert config.active_switching_criteria == ["plateau", "gradient", "max_iter"]
+
+        # L-BFGS configuration defaults
+        assert config.lbfgs_history_size == 10
+        assert config.lbfgs_initial_step_size == 0.1
+        assert config.lbfgs_line_search == "wolfe"
 
         # Phase 2: Gauss-Newton defaults
         assert config.gauss_newton_max_iterations == 100
@@ -56,12 +61,17 @@ class TestHybridStreamingConfigPresets:
     """Test preset profile class methods."""
 
     def test_aggressive_preset(self):
-        """Test aggressive profile: faster convergence, more warmup, looser tolerances."""
+        """Test aggressive profile: faster convergence with L-BFGS, looser tolerances.
+
+        Note: With L-BFGS, fewer warmup iterations are needed compared to Adam
+        (5-10x faster convergence), so aggressive now means reduced warmup_iterations.
+        """
         config = HybridStreamingConfig.aggressive()
 
-        # More warmup for faster initial convergence
-        assert config.warmup_iterations > 200
-        assert config.max_warmup_iterations > 500
+        # L-BFGS achieves faster convergence with fewer iterations
+        # 50 iterations with L-BFGS vs 300 iterations with Adam
+        assert config.warmup_iterations == 50
+        assert config.max_warmup_iterations == 100
 
         # Higher learning rate for faster progress
         assert config.warmup_learning_rate > 0.001
@@ -75,7 +85,7 @@ class TestHybridStreamingConfigPresets:
         """Test conservative profile: slower but robust, tighter tolerances."""
         config = HybridStreamingConfig.conservative()
 
-        # Less warmup, rely more on Gauss-Newton
+        # Less warmup, rely more on Gauss-Newton (L-BFGS enables fewer iterations)
         assert config.warmup_iterations <= 200
 
         # Lower learning rate for stability
