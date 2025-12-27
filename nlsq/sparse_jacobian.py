@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 import numpy as np
-from scipy.sparse import csr_matrix, lil_matrix
+from scipy.sparse import coo_matrix, csr_matrix, lil_matrix
 
 from nlsq.constants import FINITE_DIFF_REL_STEP
 from nlsq.logging import get_logger
@@ -132,11 +132,13 @@ class SparseJacobianComputer:
         n_params = len(x)
         n_chunks = (n_data + chunk_size - 1) // chunk_size
 
-        # Use LIL format for efficient construction
-        J_sparse = lil_matrix((n_data, n_params))
-
         if data_mask is None:
             data_mask = np.ones(n_data, dtype=bool)
+
+        # Accumulate COO format data across chunks for fully vectorized construction
+        all_rows: list[np.ndarray] = []
+        all_cols: list[np.ndarray] = []
+        all_values: list[np.ndarray] = []
 
         # Process in chunks to manage memory
         for chunk_idx in range(n_chunks):
@@ -168,11 +170,29 @@ class SparseJacobianComputer:
             if hasattr(J_chunk, "block_until_ready"):
                 J_chunk = np.array(J_chunk)
 
-            # Apply sparsity threshold and store
-            for i in range(J_chunk.shape[0]):
-                for j in range(J_chunk.shape[1]):
-                    if np.abs(J_chunk[i, j]) > self.sparsity_threshold:
-                        J_sparse[start + i, j] = J_chunk[i, j]
+            # Vectorized sparse extraction: O(nnz) instead of O(nm)
+            # Find elements above threshold using NumPy vectorization
+            mask = np.abs(J_chunk) > self.sparsity_threshold
+            chunk_rows, chunk_cols = np.where(mask)
+            chunk_values = J_chunk[chunk_rows, chunk_cols]
+
+            # Adjust row indices for the full matrix offset
+            chunk_rows = chunk_rows + start
+
+            # Accumulate for batch construction
+            all_rows.append(chunk_rows)
+            all_cols.append(chunk_cols)
+            all_values.append(chunk_values)
+
+        # Build sparse matrix in one vectorized operation using COO format
+        if all_rows:
+            rows = np.concatenate(all_rows)
+            cols = np.concatenate(all_cols)
+            values = np.concatenate(all_values)
+            J_sparse = coo_matrix((values, (rows, cols)), shape=(n_data, n_params))
+        else:
+            # Empty matrix case
+            J_sparse = coo_matrix((n_data, n_params))
 
         # Convert to CSR format for efficient operations
         return J_sparse.tocsr()
