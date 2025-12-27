@@ -1,3 +1,20 @@
+"""
+Tests for Jupyter notebook execution.
+
+These tests spawn Jupyter kernels via nbclient to validate example notebooks.
+They are marked for serial execution to prevent resource contention when
+running with pytest-xdist parallel execution.
+
+Root Cause Analysis (2025-12-27):
+- Each notebook spawns a Jupyter kernel that initializes JAX (~620ms + 500MB memory)
+- With -n 4 workers × 60 notebooks = potential for 240+ parallel kernel spawns
+- Kernel lifecycle races cause nbclient AssertionError in _async_check_alive()
+- JAX compilation cache locking causes deadlocks between kernels
+- Serial execution prevents resource contention and system freezes
+
+Impact: Without serial marker, full test suite hangs indefinitely with -n 4.
+"""
+
 from __future__ import annotations
 
 import os
@@ -24,7 +41,8 @@ NOTEBOOK_PARAMS = [
 ]
 
 
-@pytest.mark.slow  # Skip in integration tests (-m "not slow"); run in dedicated Validate Notebooks job
+@pytest.mark.slow  # Skip in fast tests (-m "not slow")
+@pytest.mark.serial  # Run on single xdist worker to prevent resource contention
 @pytest.mark.parametrize("notebook_path", NOTEBOOK_PARAMS)
 def test_notebook_executes(notebook_path: Path, tmp_path: Path):
     # Set environment variables directly - NotebookClient doesn't use the env param,

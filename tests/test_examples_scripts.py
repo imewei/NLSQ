@@ -1,3 +1,19 @@
+"""
+Tests for example scripts execution.
+
+These tests spawn external Python processes to validate example scripts.
+They are marked for serial execution to prevent resource contention when
+running with pytest-xdist parallel execution.
+
+Root Cause Analysis (2025-12-27):
+- Each script spawns a subprocess that initializes JAX (~620ms + 500MB memory)
+- With -n 4 workers × 65 scripts = potential for 260+ parallel JAX initializations
+- JAX compilation cache locking causes deadlocks between processes
+- Serial execution prevents resource contention and system freezes
+
+Impact: Without serial marker, full test suite hangs indefinitely with -n 4.
+"""
+
 from __future__ import annotations
 
 import os
@@ -22,6 +38,8 @@ SCRIPT_PARAMS = [
 ]
 
 
+@pytest.mark.slow  # Skip in fast tests (-m "not slow")
+@pytest.mark.serial  # Run on single xdist worker to prevent resource contention
 @pytest.mark.parametrize("script_path", SCRIPT_PARAMS)
 def test_example_script_runs(
     script_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
