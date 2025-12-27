@@ -141,6 +141,173 @@ class TestCompilationCache(unittest.TestCase):
             self.assertTrue(jnp.allclose(result, jnp.array([4.0])))
 
 
+class TestClearCompilationCache(unittest.TestCase):
+    """Tests for clear_compilation_cache functionality (Task Group 5)."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.cache = CompilationCache(enable_stats=True)
+
+    def tearDown(self):
+        """Clean up after tests."""
+        clear_compilation_cache()
+
+    def test_clear_clears_cache_dict(self):
+        """Test that clear() clears self.cache dict."""
+
+        def func1(x):
+            return x + 1
+
+        def func2(x):
+            return x * 2
+
+        # Populate cache
+        self.cache.compile(func1)
+        self.cache.compile(func2)
+        self.assertGreater(len(self.cache.cache), 0)
+
+        # Clear cache
+        self.cache.clear()
+
+        # Verify cache is empty
+        self.assertEqual(len(self.cache.cache), 0)
+
+    def test_clear_clears_func_hash_cache(self):
+        """Test that clear() clears self._func_hash_cache dict."""
+
+        def func1(x):
+            return x + 1
+
+        def func2(x):
+            return x * 2
+
+        # Populate func hash cache by compiling functions
+        self.cache.compile(func1)
+        self.cache.compile(func2)
+        self.assertGreater(len(self.cache._func_hash_cache), 0)
+
+        # Clear cache
+        self.cache.clear()
+
+        # Verify func hash cache is empty
+        self.assertEqual(len(self.cache._func_hash_cache), 0)
+
+    def test_clear_resets_stats_counters(self):
+        """Test that clear() resets stats counters to zero."""
+
+        def func1(x):
+            return x + 1
+
+        def func2(x):
+            return x * 2
+
+        # Generate some stats
+        self.cache.compile(func1)
+        self.cache.compile(func2)
+        self.cache.compile(func1)  # Cache hit
+
+        # Verify stats are non-zero before clearing
+        self.assertGreater(self.cache.stats["hits"], 0)
+        self.assertGreater(self.cache.stats["misses"], 0)
+        self.assertGreater(self.cache.stats["compilations"], 0)
+        self.assertGreater(self.cache.stats["cache_size"], 0)
+
+        # Clear cache
+        self.cache.clear()
+
+        # Verify ALL stats counters are reset to zero
+        self.assertEqual(self.cache.stats["hits"], 0)
+        self.assertEqual(self.cache.stats["misses"], 0)
+        self.assertEqual(self.cache.stats["compilations"], 0)
+        self.assertEqual(self.cache.stats["cache_size"], 0)
+
+
+class TestClearCompilationCacheModuleLevel(unittest.TestCase):
+    """Tests for module-level clear_compilation_cache() function."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        # Ensure we start with a clean global cache
+        clear_compilation_cache()
+
+    def tearDown(self):
+        """Clean up after tests."""
+        clear_compilation_cache()
+
+    def test_module_level_clear_clears_global_cache(self):
+        """Test that module-level clear_compilation_cache() clears global cache."""
+        cache = get_global_compilation_cache()
+
+        def test_func(x):
+            return x * 2
+
+        # Populate global cache
+        cache.compile(test_func)
+        self.assertGreater(len(cache.cache), 0)
+
+        # Clear using module-level function
+        clear_compilation_cache()
+
+        # Verify global cache is empty
+        self.assertEqual(len(cache.cache), 0)
+
+    def test_module_level_clear_resets_global_stats(self):
+        """Test that module-level clear_compilation_cache() resets global stats."""
+        cache = get_global_compilation_cache()
+
+        def func1(x):
+            return x + 1
+
+        def func2(x):
+            return x * 2
+
+        # Generate stats in global cache
+        cache.compile(func1)
+        cache.compile(func2)
+        cache.compile(func1)  # Cache hit
+
+        # Verify stats are non-zero
+        self.assertGreater(cache.stats["hits"], 0)
+        self.assertGreater(cache.stats["compilations"], 0)
+
+        # Clear using module-level function
+        clear_compilation_cache()
+
+        # Verify stats are reset
+        self.assertEqual(cache.stats["hits"], 0)
+        self.assertEqual(cache.stats["misses"], 0)
+        self.assertEqual(cache.stats["compilations"], 0)
+        self.assertEqual(cache.stats["cache_size"], 0)
+
+    def test_clear_allows_accurate_tracking_after(self):
+        """Test that stats are accurately tracked after clearing cache."""
+        cache = get_global_compilation_cache()
+
+        def func1(x):
+            return x + 1
+
+        # First round: generate some stats
+        cache.compile(func1)
+        cache.compile(func1)  # hit
+        self.assertEqual(cache.stats["compilations"], 1)
+        self.assertEqual(cache.stats["hits"], 1)
+
+        # Clear cache
+        clear_compilation_cache()
+
+        # Second round: verify fresh tracking
+        def func2(x):
+            return x * 2
+
+        cache.compile(func2)
+        cache.compile(func2)  # hit
+
+        # Should have fresh stats from second round only
+        self.assertEqual(cache.stats["compilations"], 1)
+        self.assertEqual(cache.stats["hits"], 1)
+        self.assertEqual(cache.stats["misses"], 1)
+
+
 class TestCachedJITDecorator(unittest.TestCase):
     """Tests for cached_jit decorator."""
 
