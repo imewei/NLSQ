@@ -14,8 +14,10 @@ on modern hardware.
    from nlsq import curve_fit
    import jax.numpy as jnp
 
+
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5, 0.0])
 
@@ -94,9 +96,11 @@ Quick Start
    from nlsq import curve_fit
    import jax.numpy as jnp
 
+
    # Define your model (use jax.numpy for GPU acceleration)
    def exponential(x, a, tau, c):
        return a * jnp.exp(-x / tau) + c
+
 
    # Generate example data
    x = np.linspace(0, 10, 10000)
@@ -106,8 +110,8 @@ Quick Start
    popt, pcov = curve_fit(exponential, x, y, p0=[1.0, 1.0, 0.0])
 
    print(f"amplitude = {popt[0]:.3f}")  # ~2.5
-   print(f"tau = {popt[1]:.3f}")        # ~3.0
-   print(f"offset = {popt[2]:.3f}")     # ~0.5
+   print(f"tau = {popt[1]:.3f}")  # ~3.0
+   print(f"offset = {popt[2]:.3f}")  # ~0.5
 
 **Next step**: :doc:`tutorials/01_first_fit`
 

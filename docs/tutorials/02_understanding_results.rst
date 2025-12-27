@@ -46,9 +46,11 @@ its variance:
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    # Define model
    def exponential_decay(x, A, k):
        return A * jnp.exp(-k * x)
+
 
    # Generate data
    np.random.seed(42)
@@ -184,34 +186,33 @@ random, normally distributed residuals.
 
    # Plot 1: Data and fit
    ax1 = axes[0, 0]
-   ax1.scatter(x, y, alpha=0.7, label='Data')
+   ax1.scatter(x, y, alpha=0.7, label="Data")
    x_smooth = np.linspace(x.min(), x.max(), 200)
-   ax1.plot(x_smooth, exponential_decay(x_smooth, *popt), 'r-',
-            label='Fit', linewidth=2)
-   ax1.set_xlabel('x')
-   ax1.set_ylabel('y')
-   ax1.set_title('Data and Fit')
+   ax1.plot(x_smooth, exponential_decay(x_smooth, *popt), "r-", label="Fit", linewidth=2)
+   ax1.set_xlabel("x")
+   ax1.set_ylabel("y")
+   ax1.set_title("Data and Fit")
    ax1.legend()
 
    # Plot 2: Residuals vs x
    ax2 = axes[0, 1]
    ax2.scatter(x, residuals, alpha=0.7)
-   ax2.axhline(y=0, color='r', linestyle='--')
-   ax2.set_xlabel('x')
-   ax2.set_ylabel('Residuals')
-   ax2.set_title('Residuals vs x')
+   ax2.axhline(y=0, color="r", linestyle="--")
+   ax2.set_xlabel("x")
+   ax2.set_ylabel("Residuals")
+   ax2.set_title("Residuals vs x")
 
    # Plot 3: Residual histogram
    ax3 = axes[1, 0]
-   ax3.hist(residuals, bins=15, edgecolor='black', alpha=0.7)
-   ax3.set_xlabel('Residual value')
-   ax3.set_ylabel('Frequency')
-   ax3.set_title('Residual Distribution')
+   ax3.hist(residuals, bins=15, edgecolor="black", alpha=0.7)
+   ax3.set_xlabel("Residual value")
+   ax3.set_ylabel("Frequency")
+   ax3.set_title("Residual Distribution")
 
    # Plot 4: Q-Q plot
    ax4 = axes[1, 1]
    stats.probplot(residuals, dist="norm", plot=ax4)
-   ax4.set_title('Q-Q Plot')
+   ax4.set_title("Q-Q Plot")
 
    plt.tight_layout()
    plt.show()
@@ -255,9 +256,11 @@ Complete Example
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    # Model
    def exponential_decay(x, A, k):
        return A * jnp.exp(-k * x)
+
 
    # Data
    np.random.seed(42)

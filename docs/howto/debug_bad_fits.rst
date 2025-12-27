@@ -51,7 +51,8 @@ Error: "Optimal parameters not found"
    .. code-block:: python
 
       from nlsq import fit
-      popt, pcov = fit(model, x, y, preset='global')
+
+      popt, pcov = fit(model, x, y, preset="global")
 
 3. Check data quality:
 
@@ -112,7 +113,7 @@ Parameters Have Large Uncertainties
 
    perr = np.sqrt(np.diag(pcov))
    for i, (p, e) in enumerate(zip(popt, perr)):
-       relative_error = abs(e / p) if p != 0 else float('inf')
+       relative_error = abs(e / p) if p != 0 else float("inf")
        print(f"p{i}: {p:.4f} ± {e:.4f} ({relative_error*100:.1f}%)")
 
 **Solutions**:
@@ -154,8 +155,8 @@ Highly Correlated Parameters
    correlation = pcov / np.outer(perr, perr)
 
    for i in range(len(popt)):
-       for j in range(i+1, len(popt)):
-           if abs(correlation[i,j]) > 0.9:
+       for j in range(i + 1, len(popt)):
+           if abs(correlation[i, j]) > 0.9:
                print(f"High correlation: p{i} and p{j}: {correlation[i,j]:.3f}")
 
 **Solutions**:
@@ -179,8 +180,8 @@ Low R² Value
    .. code-block:: python
 
       # Visualize data and model
-      plt.scatter(x, y, alpha=0.5, label='Data')
-      plt.plot(x, model(x, *popt), 'r-', label='Fit')
+      plt.scatter(x, y, alpha=0.5, label="Data")
+      plt.plot(x, model(x, *popt), "r-", label="Fit")
       plt.legend()
       plt.show()
 
@@ -195,7 +196,7 @@ Low R² Value
       outliers = np.abs(z_scores) > 3
 
       if np.any(outliers):
-           print(f"Found {np.sum(outliers)} potential outliers")
+          print(f"Found {np.sum(outliers)} potential outliers")
 
 High RMSE
 ~~~~~~~~~
@@ -230,23 +231,23 @@ Systematic Patterns in Residuals
 
    plt.subplot(1, 3, 1)
    plt.scatter(x, residuals, alpha=0.5)
-   plt.axhline(0, color='r', linestyle='--')
-   plt.xlabel('x')
-   plt.ylabel('Residuals')
-   plt.title('Residuals vs x')
+   plt.axhline(0, color="r", linestyle="--")
+   plt.xlabel("x")
+   plt.ylabel("Residuals")
+   plt.title("Residuals vs x")
 
    plt.subplot(1, 3, 2)
    plt.scatter(model(x, *popt), residuals, alpha=0.5)
-   plt.axhline(0, color='r', linestyle='--')
-   plt.xlabel('Predicted y')
-   plt.ylabel('Residuals')
-   plt.title('Residuals vs Predicted')
+   plt.axhline(0, color="r", linestyle="--")
+   plt.xlabel("Predicted y")
+   plt.ylabel("Residuals")
+   plt.title("Residuals vs Predicted")
 
    plt.subplot(1, 3, 3)
    plt.hist(residuals, bins=20)
-   plt.xlabel('Residual value')
-   plt.ylabel('Count')
-   plt.title('Residual Distribution')
+   plt.xlabel("Residual value")
+   plt.ylabel("Count")
+   plt.title("Residual Distribution")
 
    plt.tight_layout()
    plt.show()
@@ -298,6 +299,7 @@ Complete Debugging Example
    from nlsq import curve_fit
    import matplotlib.pyplot as plt
 
+
    def debug_fit(model, x, y, p0, bounds=None):
        """Comprehensive fit debugging."""
 
@@ -328,7 +330,7 @@ Complete Debugging Example
        print("\n3. PARAMETERS")
        perr = np.sqrt(np.diag(pcov))
        for i, (p, e) in enumerate(zip(popt, perr)):
-           rel_err = abs(e/p)*100 if p != 0 else float('inf')
+           rel_err = abs(e / p) * 100 if p != 0 else float("inf")
            status = "OK" if rel_err < 50 else "HIGH UNCERTAINTY"
            print(f"   p{i}: {p:10.4g} ± {e:10.4g} ({rel_err:5.1f}%) - {status}")
 
@@ -337,9 +339,9 @@ Complete Debugging Example
        corr = pcov / np.outer(perr, perr)
        high_corr = []
        for i in range(len(popt)):
-           for j in range(i+1, len(popt)):
-               if abs(corr[i,j]) > 0.9:
-                   high_corr.append((i, j, corr[i,j]))
+           for j in range(i + 1, len(popt)):
+               if abs(corr[i, j]) > 0.9:
+                   high_corr.append((i, j, corr[i, j]))
        if high_corr:
            for i, j, c in high_corr:
                print(f"   WARNING: p{i}-p{j} correlation = {c:.3f}")
@@ -351,8 +353,8 @@ Complete Debugging Example
        y_pred = model(x, *popt)
        residuals = y - y_pred
        ss_res = np.sum(residuals**2)
-       ss_tot = np.sum((y - np.mean(y))**2)
-       r2 = 1 - ss_res/ss_tot
+       ss_tot = np.sum((y - np.mean(y)) ** 2)
+       r2 = 1 - ss_res / ss_tot
        rmse = np.sqrt(np.mean(residuals**2))
 
        print(f"   R² = {r2:.4f}")
@@ -363,9 +365,11 @@ Complete Debugging Example
 
        return popt, pcov
 
+
    # Example usage
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    np.random.seed(42)
    x = np.linspace(0, 10, 100)

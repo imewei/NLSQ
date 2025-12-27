@@ -38,8 +38,10 @@ Standard Fitting vs Large Dataset Fitting
    from nlsq import curve_fit, curve_fit_large
    import time
 
+
    def exponential(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    # Generate a large dataset
    np.random.seed(42)
@@ -57,11 +59,7 @@ Standard Fitting vs Large Dataset Fitting
    # curve_fit_large - automatic handling
    print("\ncurve_fit_large:")
    start = time.time()
-   popt, pcov = curve_fit_large(
-       exponential, x, y,
-       p0=[2.0, 0.5, 0.3],
-       show_progress=True
-   )
+   popt, pcov = curve_fit_large(exponential, x, y, p0=[2.0, 0.5, 0.3], show_progress=True)
    print(f"  Time: {time.time() - start:.2f}s")
    print(f"  Parameters: {popt}")
 
@@ -80,8 +78,8 @@ applies appropriate strategies:
        x_data,
        y_data,
        p0=initial_guess,
-       show_progress=True,      # Show progress bar
-       memory_limit_gb=4.0,     # Memory limit (default: auto-detect)
+       show_progress=True,  # Show progress bar
+       memory_limit_gb=4.0,  # Memory limit (default: auto-detect)
    )
 
 Automatic Strategies
@@ -103,7 +101,9 @@ For long-running fits, enable progress monitoring:
    from nlsq import curve_fit_large
 
    popt, pcov = curve_fit_large(
-       model, x, y,
+       model,
+       x,
+       y,
        p0=p0,
        show_progress=True,  # Shows progress bar
    )
@@ -132,12 +132,7 @@ For datasets too large to fit in memory, use streaming optimization:
    )
 
    # Fit streaming data
-   result = optimizer.fit(
-       x_data,
-       y_data,
-       p0=[2.0, 0.5, 0.3],
-       show_progress=True
-   )
+   result = optimizer.fit(x_data, y_data, p0=[2.0, 0.5, 0.3], show_progress=True)
 
    print(f"Parameters: {result.popt}")
    print(f"Covariance: {result.pcov}")
@@ -178,18 +173,10 @@ Control memory usage with memory limits:
    from nlsq import curve_fit_large
 
    # Limit to 2GB of RAM
-   popt, pcov = curve_fit_large(
-       model, x, y,
-       p0=p0,
-       memory_limit_gb=2.0
-   )
+   popt, pcov = curve_fit_large(model, x, y, p0=p0, memory_limit_gb=2.0)
 
    # For systems with limited memory
-   popt, pcov = curve_fit_large(
-       model, x, y,
-       p0=p0,
-       memory_limit_gb=0.5  # Only 500MB
-   )
+   popt, pcov = curve_fit_large(model, x, y, p0=p0, memory_limit_gb=0.5)  # Only 500MB
 
 Checkpointing for Very Long Fits
 --------------------------------
@@ -221,9 +208,7 @@ The unified ``fit()`` function has a ``large`` preset:
 
    # Automatic large dataset handling
    popt, pcov = fit(
-       model, x, y,
-       p0=p0,
-       preset='large'  # Auto-detect and use best strategy
+       model, x, y, p0=p0, preset="large"  # Auto-detect and use best strategy
    )
 
 Complete Example: Fitting 10 Million Points
@@ -236,9 +221,11 @@ Complete Example: Fitting 10 Million Points
    from nlsq import curve_fit_large
    import time
 
+
    def model(x, a, b, c, d):
        """Damped exponential with offset."""
        return a * jnp.exp(-b * x) * jnp.cos(c * x) + d
+
 
    # Generate 10 million points
    print("Generating 10M data points...")
@@ -255,10 +242,7 @@ Complete Example: Fitting 10 Million Points
    start = time.time()
 
    popt, pcov = curve_fit_large(
-       model, x, y,
-       p0=[2.0, 0.05, 0.5, 1.0],
-       show_progress=True,
-       memory_limit_gb=4.0
+       model, x, y, p0=[2.0, 0.05, 0.5, 1.0], show_progress=True, memory_limit_gb=4.0
    )
 
    elapsed = time.time() - start

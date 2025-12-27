@@ -199,6 +199,7 @@ curve_fit_large : High-level interface for large datasets
 LargeDatasetFitter : Alternative for datasets that fit in memory but need chunking
 """
 
+import contextlib
 import copy
 import logging
 import os
@@ -717,7 +718,11 @@ class StreamingOptimizer:
 
         # Task Group 10: Performance Instrumentation
         # Check if profiling is enabled via NLSQ_PROFILE=1 environment variable
-        self._profiling_enabled = os.environ.get("NLSQ_PROFILE", "").lower() in ("1", "true", "yes")
+        self._profiling_enabled = os.environ.get("NLSQ_PROFILE", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
         # Task 10.2: JIT recompilation counter
         # Increments when JIT recompilation is detected (e.g., shape changes)
@@ -749,7 +754,10 @@ class StreamingOptimizer:
         Sends a sentinel value (None) to the queue to signal the worker
         thread to exit, then waits for the thread to finish with a timeout.
         """
-        if hasattr(self, "_checkpoint_worker_shutdown") and self._checkpoint_worker_shutdown:
+        if (
+            hasattr(self, "_checkpoint_worker_shutdown")
+            and self._checkpoint_worker_shutdown
+        ):
             # Already shut down
             return
 
@@ -757,15 +765,17 @@ class StreamingOptimizer:
 
         # Send sentinel value to signal shutdown (only if queue exists)
         if hasattr(self, "_checkpoint_queue") and self._checkpoint_queue is not None:
-            try:
-                # Use put with timeout to avoid blocking forever
+            # Use put with timeout to avoid blocking forever
+            # Queue may be full, but shutdown flag is set so worker will exit
+            with contextlib.suppress(queue.Full):
                 self._checkpoint_queue.put(None, timeout=1.0)
-            except queue.Full:
-                # Queue is full, but shutdown flag is set so worker will exit
-                pass
 
         # Wait for thread to finish (only if thread exists and is alive)
-        if hasattr(self, "_checkpoint_thread") and self._checkpoint_thread is not None and self._checkpoint_thread.is_alive():
+        if (
+            hasattr(self, "_checkpoint_thread")
+            and self._checkpoint_thread is not None
+            and self._checkpoint_thread.is_alive()
+        ):
             self._checkpoint_thread.join(timeout=2.0)
 
     def _checkpoint_worker(self):
@@ -783,7 +793,10 @@ class StreamingOptimizer:
         while True:
             try:
                 # Check for pause flag (used in testing)
-                while self._checkpoint_worker_pause and not self._checkpoint_worker_shutdown:
+                while (
+                    self._checkpoint_worker_pause
+                    and not self._checkpoint_worker_shutdown
+                ):
                     time.sleep(0.01)
 
                 # Check shutdown flag
@@ -820,11 +833,9 @@ class StreamingOptimizer:
             except Exception as e:
                 # Log error but continue processing
                 logger.error(f"Error in checkpoint worker: {e}")
-                try:
+                # task_done may raise if called too many times
+                with contextlib.suppress(ValueError):
                     self._checkpoint_queue.task_done()
-                except ValueError:
-                    # task_done called too many times
-                    pass
 
     def reset_state(self):
         """Reset optimizer state."""
@@ -1083,12 +1094,16 @@ class StreamingOptimizer:
                 # Compute loss and gradient (with mask if padded batch)
                 # Task Group 7 (4.3a): Use JIT-compiled validation if enabled
                 if self.config.validate_numerics:
-                    loss, grad, is_valid = self._compute_loss_and_gradient_with_validation(
-                        func, params, x_batch, y_batch, mask
+                    loss, grad, is_valid = (
+                        self._compute_loss_and_gradient_with_validation(
+                            func, params, x_batch, y_batch, mask
+                        )
                     )
                     # Check validity flag and raise error if invalid
                     if not is_valid:
-                        raise FloatingPointError("NaN or Inf detected in loss or gradients")
+                        raise FloatingPointError(
+                            "NaN or Inf detected in loss or gradients"
+                        )
                 else:
                     loss, grad = self._compute_loss_and_gradient(
                         func, params, x_batch, y_batch, mask
@@ -1956,8 +1971,12 @@ class StreamingOptimizer:
                 sorted_times = sorted(save_times)
                 p50_idx = len(sorted_times) // 2
                 p99_idx = min(int(len(sorted_times) * 0.99), len(sorted_times) - 1)
-                instrumentation_info["checkpoint_save_duration_ms"]["p50"] = float(sorted_times[p50_idx])
-                instrumentation_info["checkpoint_save_duration_ms"]["p99"] = float(sorted_times[p99_idx])
+                instrumentation_info["checkpoint_save_duration_ms"]["p50"] = float(
+                    sorted_times[p50_idx]
+                )
+                instrumentation_info["checkpoint_save_duration_ms"]["p99"] = float(
+                    sorted_times[p99_idx]
+                )
 
         diagnostics = {
             "failed_batches": self.failed_batch_indices.copy(),
@@ -2141,7 +2160,9 @@ class StreamingOptimizer:
 
         return self._loss_and_grad_cache[cache_key]
 
-    def _get_loss_and_grad_fn_with_validation(self, func: Callable, use_mask: bool = False):
+    def _get_loss_and_grad_fn_with_validation(
+        self, func: Callable, use_mask: bool = False
+    ):
         """Get or create JIT-compiled loss and gradient function with NaN/Inf validation.
 
         Task Group 7 (4.3a): This method creates a JIT-compiled function that
@@ -2326,7 +2347,9 @@ class StreamingOptimizer:
         """
         # Get JIT-compiled loss and gradient function with validation
         use_mask = mask is not None
-        loss_and_grad_fn = self._get_loss_and_grad_fn_with_validation(func, use_mask=use_mask)
+        loss_and_grad_fn = self._get_loss_and_grad_fn_with_validation(
+            func, use_mask=use_mask
+        )
 
         # Convert to JAX arrays
         params_jax = jnp.array(params)
@@ -2340,7 +2363,9 @@ class StreamingOptimizer:
                 params_jax, x_batch_jax, y_batch_jax, mask_jax
             )
         else:
-            loss, grad, is_valid = loss_and_grad_fn(params_jax, x_batch_jax, y_batch_jax)
+            loss, grad, is_valid = loss_and_grad_fn(
+                params_jax, x_batch_jax, y_batch_jax
+            )
 
         # Convert back to NumPy/Python types
         loss = float(loss)
@@ -2447,7 +2472,9 @@ class StreamingOptimizer:
         # the background thread writes to disk
         checkpoint_data = {
             "params": params.copy(),
-            "best_params": self.best_params.copy() if self.best_params is not None else params.copy(),
+            "best_params": self.best_params.copy()
+            if self.best_params is not None
+            else params.copy(),
             "best_loss": self.best_loss,
             "iteration": self.iteration,
             "epoch": self.epoch,
@@ -2464,7 +2491,9 @@ class StreamingOptimizer:
             checkpoint_data["m"] = self.m.copy() if self.m is not None else None
             checkpoint_data["v"] = self.v.copy() if self.v is not None else None
         else:
-            checkpoint_data["velocity"] = self.velocity.copy() if self.velocity is not None else None
+            checkpoint_data["velocity"] = (
+                self.velocity.copy() if self.velocity is not None else None
+            )
 
         # Try to enqueue checkpoint data (non-blocking)
         try:
@@ -2525,9 +2554,8 @@ class StreamingOptimizer:
                         f["optimizer_state/m"] = checkpoint_data["m"]
                     if checkpoint_data["v"] is not None:
                         f["optimizer_state/v"] = checkpoint_data["v"]
-                else:
-                    if checkpoint_data["velocity"] is not None:
-                        f["optimizer_state/velocity"] = checkpoint_data["velocity"]
+                elif checkpoint_data["velocity"] is not None:
+                    f["optimizer_state/velocity"] = checkpoint_data["velocity"]
 
                 # Save progress
                 f.create_group("progress")
@@ -2541,7 +2569,9 @@ class StreamingOptimizer:
 
                 # Save failed batch indices
                 if checkpoint_data["failed_batch_indices"]:
-                    f["diagnostics/failed_batch_indices"] = checkpoint_data["failed_batch_indices"]
+                    f["diagnostics/failed_batch_indices"] = checkpoint_data[
+                        "failed_batch_indices"
+                    ]
 
                 # Save retry counts
                 if checkpoint_data["retry_counts"]:
@@ -2569,18 +2599,20 @@ class StreamingOptimizer:
 
             # Update profiling metrics if enabled
             if self._profiling_enabled:
-                self._profiling_metrics["checkpoint_save_durations_ms"].append(save_duration_ms)
+                self._profiling_metrics["checkpoint_save_durations_ms"].append(
+                    save_duration_ms
+                )
 
-            logger.debug(f"Saved checkpoint to {checkpoint_path} ({save_duration_ms:.1f}ms)")
+            logger.debug(
+                f"Saved checkpoint to {checkpoint_path} ({save_duration_ms:.1f}ms)"
+            )
 
         except Exception as e:
             logger.warning(f"Failed to save checkpoint: {e}")
             # Clean up temp file if it exists
             if temp_path.exists():
-                try:
+                with contextlib.suppress(Exception):
                     temp_path.unlink()
-                except Exception:
-                    pass
 
 
 def create_hdf5_dataset(

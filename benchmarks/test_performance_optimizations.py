@@ -40,6 +40,7 @@ print(f'{(end - start) * 1000:.1f}')
 """
         result = subprocess.run(
             [sys.executable, "-c", code],
+            check=False,
             capture_output=True,
             text=True,
             timeout=60,
@@ -67,7 +68,9 @@ class TestSparseJacobianPerformance:
         return J, threshold
 
     def test_sparse_construction_vectorized(
-        self, sparse_jacobian_data: tuple[np.ndarray, float], benchmark: pytest_benchmark.fixture.BenchmarkFixture
+        self,
+        sparse_jacobian_data: tuple[np.ndarray, float],
+        benchmark: pytest_benchmark.fixture.BenchmarkFixture,
     ) -> None:
         """Benchmark vectorized sparse Jacobian construction."""
         J, threshold = sparse_jacobian_data
@@ -93,7 +96,9 @@ class TestConditionEstimationPerformance:
         return A @ A.T  # Symmetric positive definite
 
     def test_svd_condition(
-        self, test_matrix: np.ndarray, benchmark: pytest_benchmark.fixture.BenchmarkFixture
+        self,
+        test_matrix: np.ndarray,
+        benchmark: pytest_benchmark.fixture.BenchmarkFixture,
     ) -> None:
         """Benchmark SVD-based condition number."""
 
@@ -105,7 +110,9 @@ class TestConditionEstimationPerformance:
         assert result > 0
 
     def test_1norm_condition(
-        self, test_matrix: np.ndarray, benchmark: pytest_benchmark.fixture.BenchmarkFixture
+        self,
+        test_matrix: np.ndarray,
+        benchmark: pytest_benchmark.fixture.BenchmarkFixture,
     ) -> None:
         """Benchmark 1-norm condition estimation."""
 
@@ -131,7 +138,9 @@ class TestGradientPerformance:
         return J, f
 
     def test_gradient_dot(
-        self, gradient_data: tuple[np.ndarray, np.ndarray], benchmark: pytest_benchmark.fixture.BenchmarkFixture
+        self,
+        gradient_data: tuple[np.ndarray, np.ndarray],
+        benchmark: pytest_benchmark.fixture.BenchmarkFixture,
     ) -> None:
         """Benchmark f.dot(J) gradient computation."""
         J, f = gradient_data
@@ -143,7 +152,9 @@ class TestGradientPerformance:
         assert result.shape == (50,)
 
     def test_gradient_matmul(
-        self, gradient_data: tuple[np.ndarray, np.ndarray], benchmark: pytest_benchmark.fixture.BenchmarkFixture
+        self,
+        gradient_data: tuple[np.ndarray, np.ndarray],
+        benchmark: pytest_benchmark.fixture.BenchmarkFixture,
     ) -> None:
         """Benchmark J.T @ f gradient computation."""
         J, f = gradient_data

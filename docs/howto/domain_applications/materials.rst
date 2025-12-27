@@ -14,9 +14,11 @@ Power Law Hardening
    import jax.numpy as jnp
    from nlsq import fit
 
+
    def power_law_hardening(strain, K, n):
        """Power law strain hardening: sigma = K * epsilon^n."""
        return K * strain**n
+
 
    # Fit
    popt, pcov = fit(
@@ -58,6 +60,7 @@ Arrhenius Rate
        R = 8.314  # J/(mol·K)
        return A * jnp.exp(-Ea / (R * T))
 
+
    # Thermal decomposition fitting
    popt, pcov = fit(
        arrhenius,
@@ -98,7 +101,7 @@ Kohlrausch-Williams-Watts
 
    def kww_relaxation(t, amplitude, tau, beta):
        """Stretched exponential relaxation."""
-       return amplitude * jnp.exp(-(t / tau)**beta)
+       return amplitude * jnp.exp(-((t / tau) ** beta))
 
 Cole-Cole
 ~~~~~~~~~
@@ -108,7 +111,7 @@ Cole-Cole
    def cole_cole(omega, eps_s, eps_inf, tau, alpha):
        """Cole-Cole dielectric relaxation.
        Returns complex permittivity (real part)."""
-       denom = 1 + (1j * omega * tau)**(1 - alpha)
+       denom = 1 + (1j * omega * tau) ** (1 - alpha)
        eps = eps_inf + (eps_s - eps_inf) / denom
        return jnp.real(eps)
 
@@ -119,7 +122,7 @@ Havriliak-Negami
 
    def havriliak_negami(omega, eps_s, eps_inf, tau, alpha, beta):
        """Havriliak-Negami dielectric relaxation."""
-       denom = (1 + (1j * omega * tau)**(1 - alpha))**beta
+       denom = (1 + (1j * omega * tau) ** (1 - alpha)) ** beta
        eps = eps_inf + (eps_s - eps_inf) / denom
        return jnp.real(eps)
 

@@ -35,7 +35,9 @@ def streaming_test_data():
     n_samples = 5000  # Moderate size for benchmark
     x_data = np.linspace(0, 10, n_samples)
     true_params = [2.5, 0.3]
-    y_data = true_params[0] * np.exp(-true_params[1] * x_data) + 0.1 * np.random.randn(n_samples)
+    y_data = true_params[0] * np.exp(-true_params[1] * x_data) + 0.1 * np.random.randn(
+        n_samples
+    )
     p0 = np.array([1.0, 0.1])
     return x_data, y_data, p0
 
@@ -131,7 +133,9 @@ class TestStreamingBatchSizeVariation:
     """Benchmark throughput with varying batch sizes to measure JIT impact."""
 
     @pytest.mark.benchmark(group="batch_size_variation")
-    def test_static_padding_with_last_batch_variation(self, benchmark, streaming_test_data):
+    def test_static_padding_with_last_batch_variation(
+        self, benchmark, streaming_test_data
+    ):
         """Benchmark static mode with intentional last-batch size variation.
 
         Uses a batch size that does not evenly divide the data, creating
@@ -157,7 +161,9 @@ class TestStreamingBatchSizeVariation:
         assert result["success"], "Optimization should succeed"
 
     @pytest.mark.benchmark(group="batch_size_variation")
-    def test_dynamic_mode_with_last_batch_variation(self, benchmark, streaming_test_data):
+    def test_dynamic_mode_with_last_batch_variation(
+        self, benchmark, streaming_test_data
+    ):
         """Benchmark dynamic mode with last-batch size variation (baseline).
 
         Without padding, the smaller last batch may cause JIT recompilation
@@ -442,12 +448,20 @@ class TestPhase2StreamingOptimizations:
 
         n_samples = len(x_data)
         batch_size = baseline_config.batch_size
-        n_batches = (n_samples + batch_size - 1) // batch_size * baseline_config.max_epochs
+        n_batches = (
+            (n_samples + batch_size - 1) // batch_size * baseline_config.max_epochs
+        )
 
-        print(f"\n[Phase 2 Cumulative Throughput]")
-        print(f"  Baseline (dynamic):      {baseline_time:.3f}s ({n_batches/baseline_time:.1f} batches/sec)")
-        print(f"  Phase 1 (static):        {phase1_time:.3f}s ({n_batches/phase1_time:.1f} batches/sec)")
-        print(f"  Phase 1+2 (w/ validation): {phase1_2_time:.3f}s ({n_batches/phase1_2_time:.1f} batches/sec)")
+        print("\n[Phase 2 Cumulative Throughput]")
+        print(
+            f"  Baseline (dynamic):      {baseline_time:.3f}s ({n_batches / baseline_time:.1f} batches/sec)"
+        )
+        print(
+            f"  Phase 1 (static):        {phase1_time:.3f}s ({n_batches / phase1_time:.1f} batches/sec)"
+        )
+        print(
+            f"  Phase 1+2 (w/ validation): {phase1_2_time:.3f}s ({n_batches / phase1_2_time:.1f} batches/sec)"
+        )
         print(f"  Phase 1 improvement:     {phase1_improvement:.1f}%")
         print(f"  Phase 1+2 vs baseline:   {phase1_2_vs_baseline:.1f}%")
         print(f"  Validation overhead:     {validation_overhead:.1f}%")
@@ -482,7 +496,9 @@ class TestPhase2StreamingOptimizations:
             result = optimizer.fit((x_data, y_data), model_func, p0=p0, verbose=0)
             elapsed = time.perf_counter() - start
 
-            assert result["success"], f"Optimization should succeed for batch_size={batch_size}"
+            assert result["success"], (
+                f"Optimization should succeed for batch_size={batch_size}"
+            )
 
             n_batches = (len(x_data) + batch_size - 1) // batch_size * config.max_epochs
             throughput = n_batches / elapsed
@@ -493,9 +509,11 @@ class TestPhase2StreamingOptimizations:
                 "throughput": throughput,
             }
 
-        print(f"\n[Batch Size Performance Scaling]")
+        print("\n[Batch Size Performance Scaling]")
         for batch_size, metrics in results.items():
-            print(f"  batch_size={batch_size}: {metrics['time']:.3f}s, {metrics['throughput']:.1f} batches/sec")
+            print(
+                f"  batch_size={batch_size}: {metrics['time']:.3f}s, {metrics['throughput']:.1f} batches/sec"
+            )
 
         # Larger batch sizes should generally be more efficient (fewer batches to process)
         assert len(results) == len(batch_sizes), "All batch sizes should complete"

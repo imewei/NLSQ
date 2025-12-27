@@ -24,15 +24,17 @@ Enable checkpointing with the adaptive hybrid streaming optimizer:
    from nlsq import AdaptiveHybridStreamingOptimizer
    import jax.numpy as jnp
 
+
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    # Create optimizer with checkpointing
    optimizer = AdaptiveHybridStreamingOptimizer(
        model,
        n_params=3,
-       checkpoint_dir="./checkpoints",     # Where to save
-       checkpoint_interval=60,              # Save every 60 seconds
+       checkpoint_dir="./checkpoints",  # Where to save
+       checkpoint_interval=60,  # Save every 60 seconds
    )
 
    # Start fit
@@ -87,10 +89,13 @@ Listing Checkpoints
    import json
 
    checkpoint_dir = "./checkpoints"
-   checkpoints = sorted([
-       f for f in os.listdir(checkpoint_dir)
-       if f.startswith("checkpoint_") and f.endswith(".json")
-   ])
+   checkpoints = sorted(
+       [
+           f
+           for f in os.listdir(checkpoint_dir)
+           if f.startswith("checkpoint_") and f.endswith(".json")
+       ]
+   )
 
    for cp in checkpoints:
        with open(os.path.join(checkpoint_dir, cp)) as f:
@@ -104,10 +109,13 @@ Cleaning Old Checkpoints
 
    # Keep only the 5 most recent checkpoints
    max_checkpoints = 5
-   checkpoints = sorted([
-       f for f in os.listdir(checkpoint_dir)
-       if f.startswith("checkpoint_") and f != "checkpoint_latest.json"
-   ])
+   checkpoints = sorted(
+       [
+           f
+           for f in os.listdir(checkpoint_dir)
+           if f.startswith("checkpoint_") and f != "checkpoint_latest.json"
+       ]
+   )
 
    for old_cp in checkpoints[:-max_checkpoints]:
        os.remove(os.path.join(checkpoint_dir, old_cp))
@@ -121,12 +129,11 @@ Configuration Options
    optimizer = AdaptiveHybridStreamingOptimizer(
        model,
        n_params=3,
-
        # Checkpoint settings
-       checkpoint_dir="./checkpoints",      # Directory for checkpoints
-       checkpoint_interval=120,             # Seconds between saves (default: 60)
-       max_checkpoints=10,                  # Max files to keep (default: 5)
-       checkpoint_compression=True,         # Compress checkpoint files
+       checkpoint_dir="./checkpoints",  # Directory for checkpoints
+       checkpoint_interval=120,  # Seconds between saves (default: 60)
+       max_checkpoints=10,  # Max files to keep (default: 5)
+       checkpoint_compression=True,  # Compress checkpoint files
    )
 
 Best Practices
@@ -137,6 +144,7 @@ Best Practices
    .. code-block:: python
 
       import os
+
       checkpoint_dir = os.path.abspath("./checkpoints")
 
 2. **Test Resume Before Long Runs**
@@ -157,6 +165,7 @@ Best Practices
    .. code-block:: python
 
       import logging
+
       logging.basicConfig(level=logging.INFO)
 
       # Now you'll see checkpoint saves in logs
@@ -177,8 +186,10 @@ Complete Example
    import os
    import time
 
+
    def model(x, a, b, c, d):
        return a * jnp.exp(-b * x) * jnp.sin(c * x) + d
+
 
    # Generate large dataset
    np.random.seed(42)
@@ -209,10 +220,7 @@ Complete Example
 
    start = time.time()
    result = optimizer.fit(
-       x, y,
-       p0=[2.0, 0.02, 0.5, 1.0],
-       show_progress=True,
-       resume=resume
+       x, y, p0=[2.0, 0.02, 0.5, 1.0], show_progress=True, resume=resume
    )
    elapsed = time.time() - start
 
@@ -235,6 +243,7 @@ Troubleshooting
 
    # Check if checkpoint exists
    import os
+
    cp_file = "./checkpoints/checkpoint_latest.json"
    if not os.path.exists(cp_file):
        print("No checkpoint found, starting fresh")
@@ -256,6 +265,7 @@ If these change, delete old checkpoints and start fresh:
 .. code-block:: python
 
    import shutil
+
    shutil.rmtree("./checkpoints", ignore_errors=True)
 
 See Also

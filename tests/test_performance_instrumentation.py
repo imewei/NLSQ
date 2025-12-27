@@ -69,7 +69,9 @@ class TestJITRecompilationCounter(unittest.TestCase):
         def model(x, a):
             return a * x
 
-        result = self.optimizer.fit((x_data, y_data), model, p0=np.array([1.0]), verbose=0)
+        result = self.optimizer.fit(
+            (x_data, y_data), model, p0=np.array([1.0]), verbose=0
+        )
 
         # Check diagnostics include recompilation count
         self.assertIn("streaming_diagnostics", result)
@@ -194,10 +196,10 @@ class TestCheckpointSaveDurationTracking(unittest.TestCase):
 
     def test_checkpoint_save_times_tracked(self):
         """Test that checkpoint save times are tracked."""
+        import tempfile
+
         from nlsq.streaming_config import StreamingConfig
         from nlsq.streaming_optimizer import StreamingOptimizer
-
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = StreamingConfig(
@@ -219,10 +221,10 @@ class TestCheckpointSaveDurationTracking(unittest.TestCase):
 
     def test_checkpoint_duration_histogram_in_diagnostics(self):
         """Test that checkpoint duration histogram is in diagnostics when checkpoints are saved."""
+        import tempfile
+
         from nlsq.streaming_config import StreamingConfig
         from nlsq.streaming_optimizer import StreamingOptimizer
-
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = StreamingConfig(
@@ -244,7 +246,9 @@ class TestCheckpointSaveDurationTracking(unittest.TestCase):
                 def model(x, a):
                     return a * x
 
-                result = optimizer.fit((x_data, y_data), model, p0=np.array([1.0]), verbose=0)
+                result = optimizer.fit(
+                    (x_data, y_data), model, p0=np.array([1.0]), verbose=0
+                )
 
                 # Wait for async checkpoints to complete
                 time.sleep(0.5)
@@ -333,7 +337,9 @@ class TestProfilingEnvironmentVariable(unittest.TestCase):
             optimizer = StreamingOptimizer(config)
             try:
                 start = time.perf_counter()
-                result = optimizer.fit((x_data, y_data), model, p0=np.array([1.0]), verbose=0)
+                result = optimizer.fit(
+                    (x_data, y_data), model, p0=np.array([1.0]), verbose=0
+                )
                 elapsed = time.perf_counter() - start
 
                 # Should complete successfully
@@ -376,7 +382,9 @@ class TestProfilingMetricsIntegration(unittest.TestCase):
 
             optimizer = StreamingOptimizer(config)
             try:
-                result = optimizer.fit((x_data, y_data), model, p0=np.array([1.0]), verbose=0)
+                result = optimizer.fit(
+                    (x_data, y_data), model, p0=np.array([1.0]), verbose=0
+                )
 
                 # Check that metrics were collected
                 self.assertTrue(hasattr(optimizer, "_profiling_metrics"))

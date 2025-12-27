@@ -96,6 +96,7 @@ automatic differentiation - no manual derivatives needed!
    def model(x, a, b):
        return a * jnp.exp(-b * x)
 
+
    # NLSQ automatically computes ∂f/∂a and ∂f/∂b
 
 Trust Region Method

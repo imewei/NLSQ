@@ -111,10 +111,7 @@ GPU memory is limited (16-80 GB typical). NLSQ handles this with:
    from nlsq import curve_fit_large
 
    # Automatically chunks if data exceeds GPU memory
-   popt, pcov = curve_fit_large(
-       model, x, y,
-       memory_limit_gb=8.0  # Match your GPU
-   )
+   popt, pcov = curve_fit_large(model, x, y, memory_limit_gb=8.0)  # Match your GPU
 
 **Streaming optimization**:
 
@@ -142,7 +139,8 @@ For systems with multiple GPUs:
    # NLSQ uses the default device
    # To select a specific GPU:
    import os
-   os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Use GPU 0 only
+
+   os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Use GPU 0 only
 
 Data Transfer Overhead
 ----------------------

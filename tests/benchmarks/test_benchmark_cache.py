@@ -16,8 +16,7 @@ Uses pytest-benchmark for consistent measurement methodology.
 """
 
 from collections import OrderedDict
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -117,13 +116,13 @@ class TestMemoryPoolEfficiency:
             # Simulate workload with repeated shapes
             shapes = [
                 (100, 10),  # Shape A
-                (200, 5),   # Shape B
+                (200, 5),  # Shape B
                 (100, 10),  # Shape A again (hit)
-                (300, 3),   # Shape C
+                (300, 3),  # Shape C
                 (100, 10),  # Shape A again (hit)
-                (200, 5),   # Shape B again (hit)
+                (200, 5),  # Shape B again (hit)
                 (100, 10),  # Shape A again (hit)
-                (400, 2),   # Shape D
+                (400, 2),  # Shape D
                 (100, 10),  # Shape A again (hit)
             ]
 
@@ -140,11 +139,11 @@ class TestMemoryPoolEfficiency:
             hit_rate = hits / total if total > 0 else 0
 
             print(f"\n[LRU Pool Hit Rate] Hits: {hits}, Misses: {misses}")
-            print(f"[LRU Pool Hit Rate] Hit rate: {hit_rate*100:.1f}%")
+            print(f"[LRU Pool Hit Rate] Hit rate: {hit_rate * 100:.1f}%")
 
             # With repeated shapes, we should have some hits
             assert hits > 0, "Should have cache hits for repeated shapes"
-            assert hit_rate > 0.3, f"Expected >30% hit rate, got {hit_rate*100:.1f}%"
+            assert hit_rate > 0.3, f"Expected >30% hit rate, got {hit_rate * 100:.1f}%"
 
     def test_lru_vs_fifo_simulation(self):
         """Compare LRU vs FIFO eviction behavior.
@@ -169,9 +168,9 @@ class TestMemoryPoolEfficiency:
             (400, 2),
             (500, 1),
             (100, 10),  # Hot shape accessed again
-            (600, 1),   # New shape (triggers eviction)
+            (600, 1),  # New shape (triggers eviction)
             (100, 10),  # Hot shape accessed again
-            (700, 1),   # New shape (triggers eviction)
+            (700, 1),  # New shape (triggers eviction)
             (100, 10),  # Hot shape accessed again
         ]
 
@@ -209,13 +208,17 @@ class TestMemoryPoolEfficiency:
         lru_hit_rate = lru_hits / (lru_hits + lru_misses)
         fifo_hit_rate = fifo_hits / (fifo_hits + fifo_misses)
 
-        print(f"\n[LRU vs FIFO] LRU hits: {lru_hits}, misses: {lru_misses}, rate: {lru_hit_rate*100:.1f}%")
-        print(f"[LRU vs FIFO] FIFO hits: {fifo_hits}, misses: {fifo_misses}, rate: {fifo_hit_rate*100:.1f}%")
+        print(
+            f"\n[LRU vs FIFO] LRU hits: {lru_hits}, misses: {lru_misses}, rate: {lru_hit_rate * 100:.1f}%"
+        )
+        print(
+            f"[LRU vs FIFO] FIFO hits: {fifo_hits}, misses: {fifo_misses}, rate: {fifo_hit_rate * 100:.1f}%"
+        )
 
         # LRU should be at least as good as FIFO for this workload
         # (and typically better for workloads with hot items)
         assert lru_hit_rate >= fifo_hit_rate, (
-            f"LRU hit rate ({lru_hit_rate*100:.1f}%) should be >= FIFO ({fifo_hit_rate*100:.1f}%)"
+            f"LRU hit rate ({lru_hit_rate * 100:.1f}%) should be >= FIFO ({fifo_hit_rate * 100:.1f}%)"
         )
 
     def test_pool_efficiency_metric(self):
@@ -246,8 +249,10 @@ class TestMemoryPoolEfficiency:
             total = hits + new_allocations
             efficiency = hits / total if total > 0 else 0
 
-            print(f"\n[Pool Efficiency] Hits: {hits}, New allocations: {new_allocations}")
-            print(f"[Pool Efficiency] Efficiency: {efficiency*100:.1f}%")
+            print(
+                f"\n[Pool Efficiency] Hits: {hits}, New allocations: {new_allocations}"
+            )
+            print(f"[Pool Efficiency] Efficiency: {efficiency * 100:.1f}%")
 
             # First iteration should all be misses (4 shapes),
             # subsequent 9 iterations should all be hits (36 hits)
@@ -259,7 +264,9 @@ class TestMemoryPoolEfficiency:
                 f"Expected {expected_new} new allocations, got {new_allocations}"
             )
             assert hits == expected_hits, f"Expected {expected_hits} hits, got {hits}"
-            assert efficiency > 0.8, f"Expected >80% efficiency, got {efficiency*100:.1f}%"
+            assert efficiency > 0.8, (
+                f"Expected >80% efficiency, got {efficiency * 100:.1f}%"
+            )
 
 
 class TestLRUEvictionPatterns:
@@ -301,7 +308,9 @@ class TestLRUEvictionPatterns:
                 f"Pool should have 3 arrays after eviction, has {len(manager.memory_pool)}"
             )
 
-            print(f"\n[LRU Preservation] Pool contains: {list(manager.memory_pool.keys())}")
+            print(
+                f"\n[LRU Preservation] Pool contains: {list(manager.memory_pool.keys())}"
+            )
 
     def test_lru_order_tracking(self):
         """Verify that LRU order is correctly tracked with move_to_end.
@@ -369,6 +378,7 @@ class TestPoolBenchmarkSuite:
         manager = MemoryManager(adaptive_ttl=True)
 
         with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+
             def setup_and_evict():
                 # Add many arrays
                 for i in range(100):

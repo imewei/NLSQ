@@ -43,7 +43,9 @@ def checkpoint_test_setup():
     n_samples = 1000
     x_data = np.linspace(0, 5, n_samples)
     true_params = [2.5, 0.3]
-    y_data = true_params[0] * np.exp(-true_params[1] * x_data) + 0.1 * np.random.randn(n_samples)
+    y_data = true_params[0] * np.exp(-true_params[1] * x_data) + 0.1 * np.random.randn(
+        n_samples
+    )
     p0 = np.array([1.0, 0.1])
 
     yield {
@@ -161,12 +163,12 @@ class TestAsyncCheckpointLatency:
         mean_latency = np.mean(latencies)
         max_latency = np.max(latencies)
 
-        print(f"\n[Async Checkpoint] Mean call latency: {mean_latency*1000:.2f}ms")
-        print(f"[Async Checkpoint] Max call latency: {max_latency*1000:.2f}ms")
+        print(f"\n[Async Checkpoint] Mean call latency: {mean_latency * 1000:.2f}ms")
+        print(f"[Async Checkpoint] Max call latency: {max_latency * 1000:.2f}ms")
 
         # Verify non-blocking behavior
         assert max_latency < 0.1, (
-            f"Async save should return in <100ms, got {max_latency*1000:.2f}ms"
+            f"Async save should return in <100ms, got {max_latency * 1000:.2f}ms"
         )
 
         # Verify checkpoints were actually created
@@ -196,7 +198,7 @@ class TestCheckpointDuringOptimization:
                 (setup["x_data"], setup["y_data"]),
                 model_func,
                 p0=setup["p0"],
-                verbose=0
+                verbose=0,
             )
             return result
 
@@ -224,7 +226,7 @@ class TestCheckpointDuringOptimization:
                 (setup["x_data"], setup["y_data"]),
                 model_func,
                 p0=setup["p0"],
-                verbose=0
+                verbose=0,
             )
             return result
 
@@ -256,23 +258,27 @@ class TestCheckpointBlockingTime:
         # Track time spent in checkpoint saves during optimization
         start_time = time.perf_counter()
         result = optimizer.fit(
-            (setup["x_data"], setup["y_data"]),
-            model_func,
-            p0=setup["p0"],
-            verbose=0
+            (setup["x_data"], setup["y_data"]), model_func, p0=setup["p0"], verbose=0
         )
         total_time = time.perf_counter() - start_time
 
         # Get checkpoint save times from optimizer (if tracked)
-        if hasattr(optimizer, "checkpoint_save_times") and optimizer.checkpoint_save_times:
+        if (
+            hasattr(optimizer, "checkpoint_save_times")
+            and optimizer.checkpoint_save_times
+        ):
             total_checkpoint_time = sum(optimizer.checkpoint_save_times)
             checkpoint_percentage = (total_checkpoint_time / total_time) * 100
-            print(f"\n[Async] Total checkpoint blocking time: {total_checkpoint_time*1000:.2f}ms")
-            print(f"[Async] Checkpoint overhead: {checkpoint_percentage:.1f}% of total time")
+            print(
+                f"\n[Async] Total checkpoint blocking time: {total_checkpoint_time * 1000:.2f}ms"
+            )
+            print(
+                f"[Async] Checkpoint overhead: {checkpoint_percentage:.1f}% of total time"
+            )
         else:
             print("\n[Async] Checkpoint timing not tracked in this run")
 
-        print(f"[Async] Total optimization time: {total_time*1000:.2f}ms")
+        print(f"[Async] Total optimization time: {total_time * 1000:.2f}ms")
         assert result["success"], "Optimization should succeed"
 
 
@@ -330,12 +336,14 @@ class TestCheckpointQueueBehavior:
 
         # All calls should return quickly (non-blocking)
         max_latency = max(latencies)
-        print(f"\n[Queue Full Test] Max call latency: {max_latency*1000:.2f}ms")
-        print(f"[Queue Full Test] All latencies: {[f'{l*1000:.2f}ms' for l in latencies]}")
+        print(f"\n[Queue Full Test] Max call latency: {max_latency * 1000:.2f}ms")
+        print(
+            f"[Queue Full Test] All latencies: {[f'{l * 1000:.2f}ms' for l in latencies]}"
+        )
 
         # Even when queue is full, calls should not block
         assert max_latency < 0.5, (
-            f"All save calls should return quickly, got {max_latency*1000:.2f}ms"
+            f"All save calls should return quickly, got {max_latency * 1000:.2f}ms"
         )
 
     def test_queue_thread_shutdown(self, checkpoint_test_setup):
@@ -352,7 +360,9 @@ class TestCheckpointQueueBehavior:
         optimizer = StreamingOptimizer(config)
 
         # Verify thread is running
-        assert optimizer._checkpoint_thread.is_alive(), "Worker thread should be running"
+        assert optimizer._checkpoint_thread.is_alive(), (
+            "Worker thread should be running"
+        )
 
         # Trigger shutdown
         optimizer._shutdown_checkpoint_worker()
@@ -413,15 +423,18 @@ class TestCheckpointFileIntegrity:
         with h5py.File(checkpoint_path, "r") as f:
             # Verify required fields exist (version 2.0 format)
             assert "parameters" in f, "Checkpoint should contain parameters group"
-            assert "parameters/current" in f, "Checkpoint should contain parameters/current"
+            assert "parameters/current" in f, (
+                "Checkpoint should contain parameters/current"
+            )
             assert "parameters/best" in f, "Checkpoint should contain parameters/best"
             assert "progress" in f, "Checkpoint should contain progress group"
-            assert "progress/iteration" in f, "Checkpoint should contain progress/iteration"
+            assert "progress/iteration" in f, (
+                "Checkpoint should contain progress/iteration"
+            )
             assert "progress/epoch" in f, "Checkpoint should contain progress/epoch"
 
             # Verify values
             saved_params = f["parameters/current"][:]
             np.testing.assert_array_almost_equal(
-                saved_params, test_params,
-                err_msg="Saved params should match"
+                saved_params, test_params, err_msg="Saved params should match"
             )

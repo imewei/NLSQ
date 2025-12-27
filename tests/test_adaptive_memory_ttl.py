@@ -13,8 +13,7 @@ Tests that:
 
 import time
 import unittest
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from nlsq.memory_manager import MemoryManager
 
@@ -60,9 +59,10 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
             # The difference should be 0 or very small (cache should be used)
             # Since all calls happened quickly, they should use cached value
             self.assertEqual(
-                final_psutil_calls - initial_psutil_calls, 0,
+                final_psutil_calls - initial_psutil_calls,
+                0,
                 f"Expected 0 additional psutil calls with high-frequency adaptive TTL, "
-                f"got {final_psutil_calls - initial_psutil_calls}"
+                f"got {final_psutil_calls - initial_psutil_calls}",
             )
 
     def test_medium_frequency_callers_get_5s_effective_ttl(self):
@@ -106,8 +106,9 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
             # With 5s TTL, should not trigger new psutil calls
             final_calls = mock_psutil.virtual_memory.call_count
             self.assertEqual(
-                final_calls - initial_calls, 0,
-                "Medium frequency calls should use cached values"
+                final_calls - initial_calls,
+                0,
+                "Medium frequency calls should use cached values",
             )
 
     def test_low_frequency_callers_use_default_ttl(self):
@@ -173,8 +174,9 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
 
             # Should have made a new psutil call after TTL expired
             self.assertGreater(
-                mock_psutil.virtual_memory.call_count, initial_count,
-                "With adaptive_ttl=False, should use default TTL and call psutil after 1s"
+                mock_psutil.virtual_memory.call_count,
+                initial_count,
+                "With adaptive_ttl=False, should use default TTL and call psutil after 1s",
             )
 
     def test_adaptive_ttl_default_is_true(self):

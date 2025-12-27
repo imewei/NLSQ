@@ -50,9 +50,7 @@ Automatically chunks data to fit within GPU memory.
    y = 2.5 * jnp.exp(-0.1 * x) + 0.5 + noise
 
    popt, pcov = curve_fit_large(
-       model, x, y,
-       p0=[1.0, 0.1, 0.0],
-       memory_limit_gb=8.0  # Limit to 8 GB
+       model, x, y, p0=[1.0, 0.1, 0.0], memory_limit_gb=8.0  # Limit to 8 GB
    )
 
 LargeDatasetFitter
@@ -72,8 +70,7 @@ Class-based interface for large dataset fitting with more control.
    from nlsq import LargeDatasetFitter
 
    fitter = LargeDatasetFitter(
-       memory_limit_gb=8.0,
-       chunk_overlap=0.1  # 10% overlap between chunks
+       memory_limit_gb=8.0, chunk_overlap=0.1  # 10% overlap between chunks
    )
 
    result = fitter.fit(model, x, y, p0=p0)
@@ -101,24 +98,19 @@ Stream data from disk for datasets that cannot fit in memory at all.
 
    from nlsq import StreamingOptimizer
 
-   optimizer = StreamingOptimizer(
-       model=exponential,
-       n_params=3,
-       chunk_size=100_000
-   )
+   optimizer = StreamingOptimizer(model=exponential, n_params=3, chunk_size=100_000)
 
    # From HDF5 file
    result = optimizer.fit_from_hdf5(
-       "large_data.h5",
-       x_dataset="x",
-       y_dataset="y",
-       p0=[1.0, 0.1, 0.0]
+       "large_data.h5", x_dataset="x", y_dataset="y", p0=[1.0, 0.1, 0.0]
    )
+
 
    # Or from generator
    def data_generator():
        for chunk in load_chunks("data/*.npy"):
-           yield chunk['x'], chunk['y']
+           yield chunk["x"], chunk["y"]
+
 
    result = optimizer.fit_from_generator(data_generator(), p0=p0)
 
@@ -146,10 +138,7 @@ Production-grade optimizer with four-phase optimization:
 
    config = HybridStreamingConfig.from_preset("production")
 
-   optimizer = AdaptiveHybridStreamingOptimizer(
-       model=model,
-       config=config
-   )
+   optimizer = AdaptiveHybridStreamingOptimizer(model=model, config=config)
 
    result = optimizer.fit(x, y, p0=p0)
 
@@ -183,7 +172,7 @@ Configuration for the hybrid streaming optimizer.
        adam_warmup_epochs=5,
        gauss_newton_iterations=20,
        chunk_size=50_000,
-       checkpoint_interval=10
+       checkpoint_interval=10,
    )
 
 Memory Estimation
@@ -198,11 +187,7 @@ Estimate memory requirements before fitting:
 
    from nlsq import estimate_memory_requirements
 
-   mem = estimate_memory_requirements(
-       n_points=10_000_000,
-       n_params=5,
-       dtype="float64"
-   )
+   mem = estimate_memory_requirements(n_points=10_000_000, n_params=5, dtype="float64")
 
    print(f"Estimated GPU memory: {mem['gpu_memory_gb']:.2f} GB")
    print(f"Recommended chunk size: {mem['chunk_size']}")
@@ -215,10 +200,7 @@ StreamingOptimizer supports checkpointing for long-running fits:
 .. code-block:: python
 
    optimizer = StreamingOptimizer(
-       model=model,
-       n_params=3,
-       checkpoint_dir="./checkpoints",
-       checkpoint_interval=100
+       model=model, n_params=3, checkpoint_dir="./checkpoints", checkpoint_interval=100
    )
 
    # If interrupted, resume from checkpoint
@@ -233,10 +215,7 @@ For multi-GPU systems:
 
    from nlsq import ParallelFitter
 
-   fitter = ParallelFitter(
-       n_gpus=4,
-       memory_per_gpu_gb=16.0
-   )
+   fitter = ParallelFitter(n_gpus=4, memory_per_gpu_gb=16.0)
 
    result = fitter.fit(model, x, y, p0=p0)
 

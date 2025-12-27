@@ -177,18 +177,14 @@ class SmartCache:
                         sample_hash = hashlib.blake2b(
                             sample.tobytes(), digest_size=16
                         ).hexdigest()
-                        key_parts.append(
-                            f"array_{arg.shape}_{arg.dtype}_{sample_hash}"
-                        )
+                        key_parts.append(f"array_{arg.shape}_{arg.dtype}_{sample_hash}")
                     else:
                         # Small/medium array: hash full array directly (no sampling overhead)
                         # This is the optimized path - removes redundant sampling
                         full_hash = hashlib.blake2b(
                             arr_flat.tobytes(), digest_size=16
                         ).hexdigest()
-                        key_parts.append(
-                            f"array_{arg.shape}_{arg.dtype}_{full_hash}"
-                        )
+                        key_parts.append(f"array_{arg.shape}_{arg.dtype}_{full_hash}")
             elif callable(arg):
                 # For functions, use their name and module
                 key_parts.append(f"func_{arg.__module__}_{arg.__name__}")

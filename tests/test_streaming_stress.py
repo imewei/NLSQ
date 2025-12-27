@@ -381,7 +381,9 @@ class TestMemoryStress:
 
         finally:
             # Shutdown optimizer threads before cleanup
-            if optimizer is not None and hasattr(optimizer, "_shutdown_checkpoint_worker"):
+            if optimizer is not None and hasattr(
+                optimizer, "_shutdown_checkpoint_worker"
+            ):
                 optimizer._shutdown_checkpoint_worker()
 
             # Cleanup

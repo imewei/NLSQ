@@ -123,7 +123,8 @@ def cleanup_streaming_optimizer_threads():
 
     # Get list of all threads to identify checkpoint workers
     checkpoint_threads = [
-        t for t in threading.enumerate()
+        t
+        for t in threading.enumerate()
         if t.name == "checkpoint-worker" and t.is_alive()
     ]
 
@@ -134,7 +135,8 @@ def cleanup_streaming_optimizer_threads():
     # optimizers that weren't properly cleaned up. The daemon flag should
     # handle these when the process exits, but we log for debugging.
     remaining_threads = [
-        t for t in threading.enumerate()
+        t
+        for t in threading.enumerate()
         if t.name == "checkpoint-worker" and t.is_alive()
     ]
 

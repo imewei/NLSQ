@@ -33,7 +33,9 @@ class TestConditionEstimationBenchmarks:
         return rng.standard_normal((500, 500))
 
     def test_svd_condition(
-        self, test_matrix: np.ndarray, benchmark: pytest_benchmark.fixture.BenchmarkFixture
+        self,
+        test_matrix: np.ndarray,
+        benchmark: pytest_benchmark.fixture.BenchmarkFixture,
     ) -> None:
         """Benchmark full SVD condition number computation."""
 
@@ -45,7 +47,9 @@ class TestConditionEstimationBenchmarks:
         assert result > 0
 
     def test_1norm_condition(
-        self, test_matrix: np.ndarray, benchmark: pytest_benchmark.fixture.BenchmarkFixture
+        self,
+        test_matrix: np.ndarray,
+        benchmark: pytest_benchmark.fixture.BenchmarkFixture,
     ) -> None:
         """Benchmark 1-norm condition estimation."""
 
@@ -78,10 +82,10 @@ class TestConditionEstimationBenchmarks:
             _ = norm_A * norm_A_inv
         norm1_time = (time.perf_counter() - start) / 5
 
-        print(f"\n--- Condition Estimation Speedup ---")
+        print("\n--- Condition Estimation Speedup ---")
         print(f"Matrix size: {A.shape}")
-        print(f"SVD condition: {svd_time*1000:.2f}ms")
-        print(f"1-norm estimation: {norm1_time*1000:.2f}ms")
+        print(f"SVD condition: {svd_time * 1000:.2f}ms")
+        print(f"1-norm estimation: {norm1_time * 1000:.2f}ms")
 
         # Note: pinv still uses SVD internally, so speedup may be limited
         # The real benefit is for approximate estimation using power iteration

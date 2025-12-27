@@ -49,7 +49,9 @@ class TestNaNInfValidation:
         p0 = np.array([0.1, -2.0])
 
         data_source = (x_data.reshape(-1, 1), y_data)
-        result = optimizer.fit_streaming(data_source, model_with_nan_gradient, p0, verbose=0)
+        result = optimizer.fit_streaming(
+            data_source, model_with_nan_gradient, p0, verbose=0
+        )
 
         # The optimization should handle NaN gracefully
         assert "streaming_diagnostics" in result
@@ -92,7 +94,9 @@ class TestNaNInfValidation:
         p0 = np.array([1.0, 0.4])
 
         data_source = (x_data.reshape(-1, 1), y_data)
-        result = optimizer.fit_streaming(data_source, model_with_inf_gradient, p0, verbose=0)
+        result = optimizer.fit_streaming(
+            data_source, model_with_inf_gradient, p0, verbose=0
+        )
 
         # The optimization should handle Inf gracefully
         assert "streaming_diagnostics" in result
@@ -164,7 +168,9 @@ class TestNaNInfValidation:
         np.random.seed(42)
         x_data = np.linspace(-2, 5, 150)
         # Target with valid values (positive argument to sqrt)
-        y_data = np.sqrt(np.maximum(2.0 * x_data + 1.0, 0.01)) + 0.01 * np.random.randn(150)
+        y_data = np.sqrt(np.maximum(2.0 * x_data + 1.0, 0.01)) + 0.01 * np.random.randn(
+            150
+        )
 
         config = StreamingConfig(
             batch_size=50,
@@ -181,7 +187,9 @@ class TestNaNInfValidation:
         p0 = np.array([0.5, -1.0])
 
         data_source = (x_data.reshape(-1, 1), y_data)
-        result = optimizer.fit_streaming(data_source, model_with_nan_loss, p0, verbose=0)
+        result = optimizer.fit_streaming(
+            data_source, model_with_nan_loss, p0, verbose=0
+        )
 
         # The optimization should handle NaN loss gracefully
         assert "streaming_diagnostics" in result
@@ -241,14 +249,20 @@ class TestNaNInfValidation:
         # Generate test data - mostly safe but with some problematic regions
         np.random.seed(42)
         # Mix: mostly positive x that will work, some edge cases
-        x_data = np.concatenate([
-            np.linspace(1, 5, 150),     # Safe region (a*x + b > 0 for reasonable params)
-            np.linspace(-0.5, 0.5, 50),  # Edge region that might cause issues
-        ])
+        x_data = np.concatenate(
+            [
+                np.linspace(
+                    1, 5, 150
+                ),  # Safe region (a*x + b > 0 for reasonable params)
+                np.linspace(-0.5, 0.5, 50),  # Edge region that might cause issues
+            ]
+        )
         np.random.shuffle(x_data)
 
         # Target values using safe parameters (a=2, b=1)
-        y_data = np.log(np.maximum(2.0 * x_data + 1.0, 0.01)) + 0.01 * np.random.randn(200)
+        y_data = np.log(np.maximum(2.0 * x_data + 1.0, 0.01)) + 0.01 * np.random.randn(
+            200
+        )
 
         config = StreamingConfig(
             batch_size=50,
@@ -265,7 +279,9 @@ class TestNaNInfValidation:
         p0 = np.array([1.5, 0.5])
 
         data_source = (x_data.reshape(-1, 1), y_data)
-        result = optimizer.fit_streaming(data_source, mixed_problematic_model, p0, verbose=0)
+        result = optimizer.fit_streaming(
+            data_source, mixed_problematic_model, p0, verbose=0
+        )
 
         # The optimization should handle NaN gracefully
         assert "streaming_diagnostics" in result

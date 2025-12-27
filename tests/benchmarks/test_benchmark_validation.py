@@ -17,8 +17,7 @@ Uses pytest-benchmark for consistent measurement methodology.
 """
 
 import time
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import jax
 import jax.numpy as jnp
@@ -40,7 +39,9 @@ class TestValidationCachingBenchmark:
         n_samples = 10000
         x_data = np.linspace(0, 10, n_samples)
         true_params = [2.5, 0.3]
-        y_data = true_params[0] * np.exp(-true_params[1] * x_data) + 0.1 * np.random.randn(n_samples)
+        y_data = true_params[0] * np.exp(
+            -true_params[1] * x_data
+        ) + 0.1 * np.random.randn(n_samples)
         p0 = np.array([1.0, 0.1])
         return x_data, y_data, p0
 
@@ -85,10 +86,16 @@ class TestValidationCachingBenchmark:
 
         # Cached calls should be much faster
         avg_cached_time = sum(validation_times[1:]) / len(validation_times[1:])
-        speedup = first_validation_time / avg_cached_time if avg_cached_time > 0 else float('inf')
+        speedup = (
+            first_validation_time / avg_cached_time
+            if avg_cached_time > 0
+            else float("inf")
+        )
 
-        print(f"\n[Validation Caching] First validation: {first_validation_time*1000:.3f}ms")
-        print(f"[Validation Caching] Avg cached time: {avg_cached_time*1000:.3f}ms")
+        print(
+            f"\n[Validation Caching] First validation: {first_validation_time * 1000:.3f}ms"
+        )
+        print(f"[Validation Caching] Avg cached time: {avg_cached_time * 1000:.3f}ms")
         print(f"[Validation Caching] Speedup: {speedup:.1f}x")
 
         # Cached validation should be significantly faster
@@ -127,7 +134,9 @@ class TestValidationCachingBenchmark:
             "Both functions should be in validation cache"
         )
 
-        print(f"\n[Validation Cache] Cached functions: {len(fitter._validated_functions)}")
+        print(
+            f"\n[Validation Cache] Cached functions: {len(fitter._validated_functions)}"
+        )
 
     @pytest.mark.benchmark(group="validation_overhead")
     def test_validation_overhead_benchmark(self, benchmark, validation_test_data):
@@ -156,7 +165,9 @@ class TestJITCompiledValidation:
         n_samples = 5000
         x_data = np.linspace(0, 10, n_samples)
         true_params = [2.5, 0.3]
-        y_data = true_params[0] * np.exp(-true_params[1] * x_data) + 0.1 * np.random.randn(n_samples)
+        y_data = true_params[0] * np.exp(
+            -true_params[1] * x_data
+        ) + 0.1 * np.random.randn(n_samples)
         p0 = np.array([1.0, 0.1])
         return x_data, y_data, p0
 
@@ -188,7 +199,7 @@ class TestJITCompiledValidation:
         result = optimizer.fit((x_data, y_data), model, p0=p0, verbose=0)
 
         assert result["success"], "Optimization should succeed with valid data"
-        print(f"\n[JIT Validation] Optimization completed successfully")
+        print("\n[JIT Validation] Optimization completed successfully")
 
     def test_jit_validation_detects_nan(self, streaming_test_data):
         """Test that JIT validation detects NaN in gradients.
@@ -196,7 +207,7 @@ class TestJITCompiledValidation:
         When the model produces NaN values, the JIT-compiled validation
         should detect this and signal invalid results.
         """
-        x_data, y_data, p0 = streaming_test_data
+        x_data, y_data, _p0 = streaming_test_data
 
         def nan_model(x, a, b):
             # This will produce NaN for negative values of b
@@ -215,7 +226,7 @@ class TestJITCompiledValidation:
             (x_data, y_data),
             nan_model,
             p0=np.array([1.0, 0.1]),  # b=0.1 < 10, will produce NaN
-            verbose=0
+            verbose=0,
         )
 
         # With fault tolerance, should still complete (but may not converge)
@@ -258,7 +269,9 @@ class TestValidationOverheadComparison:
         n_samples = 10000
         x_data = np.linspace(0, 10, n_samples)
         true_params = [2.5, 0.3]
-        y_data = true_params[0] * np.exp(-true_params[1] * x_data) + 0.1 * np.random.randn(n_samples)
+        y_data = true_params[0] * np.exp(
+            -true_params[1] * x_data
+        ) + 0.1 * np.random.randn(n_samples)
         p0 = np.array([1.0, 0.1])
         return x_data, y_data, p0
 
@@ -300,13 +313,13 @@ class TestValidationOverheadComparison:
         total_cached = sum(cached_times) * 1000
         savings = total_uncached - total_cached
 
-        print(f"\n[Validation Overhead per Chunk]")
+        print("\n[Validation Overhead per Chunk]")
         print(f"  Number of chunks: {n_chunks}")
         print(f"  Avg uncached: {avg_uncached:.3f}ms")
         print(f"  Avg cached: {avg_cached:.3f}ms")
         print(f"  Total uncached: {total_uncached:.3f}ms")
         print(f"  Total cached: {total_cached:.3f}ms")
-        print(f"  Savings: {savings:.3f}ms ({savings/total_uncached*100:.1f}%)")
+        print(f"  Savings: {savings:.3f}ms ({savings / total_uncached * 100:.1f}%)")
 
         # Cached validation should have lower average time
         assert avg_cached <= avg_uncached, (
@@ -343,16 +356,20 @@ class TestValidationOverheadComparison:
         time_cached = time.perf_counter() - start
 
         # Calculate improvement
-        improvement = (time_uncached - time_cached) / time_uncached * 100 if time_uncached > 0 else 0
+        improvement = (
+            (time_uncached - time_cached) / time_uncached * 100
+            if time_uncached > 0
+            else 0
+        )
 
-        print(f"\n[Validation Caching Improvement]")
-        print(f"  Time uncached: {time_uncached*1000:.3f}ms")
-        print(f"  Time cached: {time_cached*1000:.3f}ms")
+        print("\n[Validation Caching Improvement]")
+        print(f"  Time uncached: {time_uncached * 1000:.3f}ms")
+        print(f"  Time cached: {time_cached * 1000:.3f}ms")
         print(f"  Improvement: {improvement:.1f}%")
 
         # Should see improvement (though exact amount depends on overhead)
         assert time_cached <= time_uncached, (
-            f"Cached time ({time_cached*1000:.3f}ms) should be <= uncached ({time_uncached*1000:.3f}ms)"
+            f"Cached time ({time_cached * 1000:.3f}ms) should be <= uncached ({time_uncached * 1000:.3f}ms)"
         )
 
 
@@ -392,7 +409,9 @@ class TestIsFiniteValidation:
         avg_time = elapsed / n_iterations * 1000
 
         print(f"\n[JIT isfinite] Avg validation time: {avg_time:.4f}ms")
-        print(f"[JIT isfinite] Total for {n_iterations} iterations: {elapsed*1000:.3f}ms")
+        print(
+            f"[JIT isfinite] Total for {n_iterations} iterations: {elapsed * 1000:.3f}ms"
+        )
 
         assert avg_time < 1.0, f"JIT validation should be <1ms, got {avg_time:.4f}ms"
 

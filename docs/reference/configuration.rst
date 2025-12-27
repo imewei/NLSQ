@@ -195,16 +195,11 @@ Override configuration in code:
    from nlsq import curve_fit, Config
 
    # Method 1: Pass directly to functions
-   popt, pcov = curve_fit(
-       model, x, y,
-       gtol=1e-10,
-       max_nfev=1000
-   )
+   popt, pcov = curve_fit(model, x, y, gtol=1e-10, max_nfev=1000)
 
    # Method 2: Use Config object
    config = Config(
-       optimization={"gtol": 1e-10, "max_nfev": 1000},
-       memory={"limit_gb": 16.0}
+       optimization={"gtol": 1e-10, "max_nfev": 1000}, memory={"limit_gb": 16.0}
    )
    popt, pcov = curve_fit(model, x, y, config=config)
 

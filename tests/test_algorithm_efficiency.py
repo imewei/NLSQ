@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import time
 import tracemalloc
-from typing import Callable
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -161,7 +161,7 @@ class TestIterationCountRegression:
         Quadratic problems are ideal for L-BFGS since the Hessian is constant.
         L-BFGS should converge quickly due to accurate curvature estimation.
         """
-        model, x, y, p0, true_params = simple_quadratic_problem
+        model, x, y, p0, _true_params = simple_quadratic_problem
 
         config = HybridStreamingConfig(
             warmup_iterations=5,  # Start checking switch after 5 iters
@@ -199,7 +199,7 @@ class TestIterationCountRegression:
 
         This test verifies L-BFGS performs well on nonlinear problems.
         """
-        model, x, y, p0, true_params = exponential_decay_problem
+        model, x, y, p0, _true_params = exponential_decay_problem
 
         config = HybridStreamingConfig(
             warmup_iterations=5,
@@ -240,7 +240,7 @@ class TestIterationCountRegression:
         With 50 parameters, this is a more challenging problem.
         L-BFGS should still converge within reasonable iteration count.
         """
-        model, x, y, p0, true_params = exponential_decay_large_scale
+        model, x, y, p0, _true_params = exponential_decay_large_scale
 
         config = HybridStreamingConfig(
             warmup_iterations=10,  # Start checking switch after 10 iters
@@ -299,9 +299,9 @@ class TestIterationCountRegression:
             iteration_counts.append(result["iterations"])
 
         # All runs should have identical iteration counts
-        assert all(
-            ic == iteration_counts[0] for ic in iteration_counts
-        ), f"Iteration counts should be deterministic: {iteration_counts}"
+        assert all(ic == iteration_counts[0] for ic in iteration_counts), (
+            f"Iteration counts should be deterministic: {iteration_counts}"
+        )
 
     def test_lbfgs_vs_adam_baseline_fewer_iterations(self, exponential_decay_problem):
         """Compare against Adam baseline (should be significantly fewer iterations).
@@ -417,7 +417,7 @@ class TestMemoryCeiling:
         _ = float(jnp.sum(result))
 
         # Get peak memory
-        current, peak = tracemalloc.get_traced_memory()
+        _current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
         peak_mb = peak / (1024 * 1024)
@@ -444,10 +444,10 @@ class TestMemoryCeiling:
             n_points = 100
 
             # Simple polynomial model
-            def model(x, *params):
+            def model(x, *params, _n_params=n_params):
                 params = jnp.asarray(params)
                 result = jnp.zeros_like(x)
-                for i in range(min(n_params, 20)):
+                for i in range(min(_n_params, 20)):
                     result = result + params[i] * (x ** (i % 5))
                 return result
 
@@ -488,7 +488,9 @@ class TestMemoryCeiling:
 
         # Between n=100 and n=1000 (10x params), memory should scale < 100x
         # For O(p), we expect ~10x. For O(p^2), we'd expect ~100x.
-        memory_ratio = peak_memories[-1] / peak_memories[0] if peak_memories[0] > 0 else 0
+        memory_ratio = (
+            peak_memories[-1] / peak_memories[0] if peak_memories[0] > 0 else 0
+        )
         param_ratio = param_counts[-1] / param_counts[0]
 
         # Allow some overhead, but should be closer to linear than quadratic
@@ -610,10 +612,10 @@ class TestImplicitVsMaterializedScaling:
 
         for n_params in param_counts:
             # Simple model
-            def model(x, *params):
+            def model(x, *params, _n_params=n_params):
                 params = jnp.asarray(params)
                 result = jnp.zeros_like(x)
-                for i in range(min(n_params, 20)):
+                for i in range(min(_n_params, 20)):
                     result = result + params[i] * (x ** (i % 5))
                 return result
 
@@ -669,7 +671,7 @@ class TestImplicitVsMaterializedScaling:
                 optimizer2._setup_normalization(model, p0, bounds=None)
 
                 # For materialized, we compute JTJ
-                JTJ, JTr, _ = optimizer2._accumulate_jtj_jtr(
+                JTJ, _JTr, _ = optimizer2._accumulate_jtj_jtr(
                     x, y, p0, jnp.zeros((n_params, n_params)), jnp.zeros(n_params)
                 )
                 result_mat = JTJ @ v
@@ -700,8 +702,10 @@ class TestImplicitVsMaterializedScaling:
         # At p=2000 (default threshold), implicit should definitely be better
         idx_2000 = param_counts.index(2000) if 2000 in param_counts else -1
         if idx_2000 >= 0 and idx_2000 < len(implicit_memories):
-            assert implicit_memories[idx_2000] < materialized_memories[idx_2000] or materialized_memories[idx_2000] == float("inf"), (
-                f"At p=2000 (threshold), implicit should use less memory than materialized"
+            assert implicit_memories[idx_2000] < materialized_memories[
+                idx_2000
+            ] or materialized_memories[idx_2000] == float("inf"), (
+                "At p=2000 (threshold), implicit should use less memory than materialized"
             )
 
 
@@ -723,6 +727,7 @@ class TestHandoffStability:
         Measure Layer 3 trigger rate immediately after transition.
         Should be low (< 50%) for well-behaved problems.
         """
+
         # Simple well-behaved problem
         def model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
@@ -779,6 +784,7 @@ class TestHandoffStability:
 
     def test_transition_preserves_convergence(self):
         """Verify that transition from L-BFGS to GN preserves convergence quality."""
+
         def model(x, a, b):
             return a * x + b
 
@@ -815,8 +821,10 @@ class TestHandoffStability:
         # Should converge to near true params
         popt = result["x"]
         np.testing.assert_allclose(
-            np.array(popt), np.array(true_params), rtol=0.1,
-            err_msg="Should converge to true parameters after L-BFGS + GN"
+            np.array(popt),
+            np.array(true_params),
+            rtol=0.1,
+            err_msg="Should converge to true parameters after L-BFGS + GN",
         )
 
         # Covariance should be well-conditioned
@@ -838,6 +846,7 @@ class TestEndToEndIntegration:
 
     def test_full_fit_lbfgs_to_cg_gn_small_params(self):
         """Test full fit workflow with L-BFGS warmup -> CG-GN for small p."""
+
         def model(x, a, b, c):
             return a * jnp.sin(b * x) + c
 
@@ -874,8 +883,10 @@ class TestEndToEndIntegration:
 
         popt = result["x"]
         np.testing.assert_allclose(
-            np.array(popt), np.array(true_params), rtol=0.2,
-            err_msg="Should recover true parameters"
+            np.array(popt),
+            np.array(true_params),
+            rtol=0.2,
+            err_msg="Should recover true parameters",
         )
 
     def test_full_fit_with_cg_solver_large_params(self):
@@ -931,6 +942,7 @@ class TestEndToEndIntegration:
 
     def test_integration_with_bounds(self):
         """Test integration with parameter bounds."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
 
@@ -974,11 +986,16 @@ class TestEndToEndIntegration:
 
     def test_diagnostics_contain_all_phases(self):
         """Test that streaming diagnostics contain all phase information."""
+
         def model(x, a, b):
             return a * x + b
 
         x = jnp.linspace(0, 10, 100)
-        y = 2.0 * x + 1.0 + jax.random.normal(jax.random.PRNGKey(42), shape=(100,)) * 0.1
+        y = (
+            2.0 * x
+            + 1.0
+            + jax.random.normal(jax.random.PRNGKey(42), shape=(100,)) * 0.1
+        )
         p0 = jnp.array([1.5, 0.5])
 
         config = HybridStreamingConfig(
@@ -1013,6 +1030,7 @@ class TestEndToEndIntegration:
 
     def test_defense_layers_tracked_in_full_fit(self):
         """Test that all defense layer telemetry is tracked during full fit."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
 
@@ -1064,6 +1082,7 @@ class TestFullFeatureSuite:
 
     def test_complete_optimization_workflow(self):
         """Run complete optimization workflow with all features enabled."""
+
         def model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
 
@@ -1079,17 +1098,13 @@ class TestFullFeatureSuite:
         y = y_clean + noise
 
         p0 = jnp.array([4.0, 0.25, 0.8])
-        bounds = (
-            jnp.array([1.0, 0.1, 0.1]),
-            jnp.array([10.0, 1.0, 5.0])
-        )
+        bounds = (jnp.array([1.0, 0.1, 0.1]), jnp.array([10.0, 1.0, 5.0]))
 
         config = HybridStreamingConfig(
             # L-BFGS warmup
             warmup_iterations=20,
             max_warmup_iterations=40,
             lbfgs_history_size=10,
-
             # Defense layers
             enable_warm_start_detection=True,
             warm_start_threshold=0.01,
@@ -1098,19 +1113,15 @@ class TestFullFeatureSuite:
             cost_increase_tolerance=0.2,
             enable_step_clipping=True,
             max_warmup_step_size=0.5,
-
             # Gauss-Newton
             gauss_newton_max_iterations=30,
             gauss_newton_tol=1e-8,
-
             # CG configuration
             cg_param_threshold=100,  # Materialized for small p
             cg_max_iterations=50,
-
             # Normalization
             normalize=True,
             normalization_strategy="bounds",
-
             verbose=0,
         )
 
@@ -1139,8 +1150,10 @@ class TestFullFeatureSuite:
 
         # Should be reasonably close to true params (with wider tolerance)
         np.testing.assert_allclose(
-            np.array(popt), np.array(true_params), rtol=0.5,
-            err_msg="Should recover true parameters"
+            np.array(popt),
+            np.array(true_params),
+            rtol=0.5,
+            err_msg="Should recover true parameters",
         )
 
     def test_no_regressions_basic_functionality(self):
@@ -1157,7 +1170,10 @@ class TestFullFeatureSuite:
 
         # Use hybrid_streaming method
         popt, pcov = curve_fit(
-            model, x, y, p0=p0,
+            model,
+            x,
+            y,
+            p0=p0,
             method="hybrid_streaming",
             verbose=0,
         )

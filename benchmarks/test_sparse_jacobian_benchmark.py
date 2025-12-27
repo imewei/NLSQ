@@ -115,10 +115,10 @@ class TestSparseJacobianBenchmarks:
         # Calculate speedup
         speedup = original_time / vectorized_time
 
-        print(f"\n--- Sparse Jacobian Construction Speedup ---")
+        print("\n--- Sparse Jacobian Construction Speedup ---")
         print(f"Matrix size: {n_data}×{n_params}")
-        print(f"Original (nested loop): {original_time*1000:.2f}ms")
-        print(f"Vectorized (NumPy): {vectorized_time*1000:.2f}ms")
+        print(f"Original (nested loop): {original_time * 1000:.2f}ms")
+        print(f"Vectorized (NumPy): {vectorized_time * 1000:.2f}ms")
         print(f"Speedup: {speedup:.1f}x")
 
         # Verify numerical equivalence
@@ -128,7 +128,7 @@ class TestSparseJacobianBenchmarks:
 
         # Target: 100x speedup (SC-002)
         # Note: The actual speedup depends on matrix size and sparsity
-        # For 10k×50 with 50% sparsity, expect 50-200x speedup
+        # For 10kx50 with 50% sparsity, expect 50-200x speedup
         assert speedup > 10, f"Speedup {speedup:.1f}x below minimum threshold"
 
 
@@ -160,8 +160,8 @@ class TestSparseJacobianScaling:
         _ = coo_matrix((values, (rows, cols)), shape=(m, n)).tocsr()
         elapsed = time.perf_counter() - start
 
-        print(f"\n{m}×{n} matrix: {elapsed*1000:.2f}ms")
+        print(f"\n{m}×{n} matrix: {elapsed * 1000:.2f}ms")
 
-        # 100k×50 should complete in <200ms (system-dependent, allows variance)
+        # 100kx50 should complete in <200ms (system-dependent, allows variance)
         if m == 100_000:
-            assert elapsed < 0.2, f"100k×50 took {elapsed*1000:.1f}ms, target <200ms"
+            assert elapsed < 0.2, f"100k×50 took {elapsed * 1000:.1f}ms, target <200ms"

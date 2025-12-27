@@ -64,7 +64,7 @@ Peak Models
 .. code-block:: python
 
    def gaussian(x, A, mu, sigma, offset):
-       return A * jnp.exp(-((x - mu) ** 2) / (2 * sigma ** 2)) + offset
+       return A * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2)) + offset
 
 Use when:
 - Spectral peaks
@@ -76,7 +76,7 @@ Use when:
 .. code-block:: python
 
    def lorentzian(x, A, x0, gamma, offset):
-       return A * gamma**2 / ((x - x0)**2 + gamma**2) + offset
+       return A * gamma**2 / ((x - x0) ** 2 + gamma**2) + offset
 
 Use when:
 - Resonance phenomena
@@ -88,6 +88,7 @@ Use when:
 .. code-block:: python
 
    from scipy.special import voigt_profile
+
 
    def voigt(x, A, x0, sigma, gamma, offset):
        return A * voigt_profile(x - x0, sigma, gamma) + offset
@@ -176,7 +177,7 @@ Higher is better, but can be misleading with many parameters.
 
 .. code-block:: python
 
-   AIC = n * log(RSS/n) + 2*k
+   AIC = n * log(RSS / n) + 2 * k
 
 Lower is better. Penalizes extra parameters.
 
@@ -184,7 +185,7 @@ Lower is better. Penalizes extra parameters.
 
 .. code-block:: python
 
-   BIC = n * log(RSS/n) + k * log(n)
+   BIC = n * log(RSS / n) + k * log(n)
 
 Lower is better. Stronger penalty for parameters than AIC.
 
@@ -213,10 +214,10 @@ Good models have:
 
    # Check for patterns
    plt.scatter(x, residuals)
-   plt.axhline(0, color='r', linestyle='--')
-   plt.xlabel('x')
-   plt.ylabel('Residuals')
-   plt.title('Residual Plot')
+   plt.axhline(0, color="r", linestyle="--")
+   plt.xlabel("x")
+   plt.ylabel("Residuals")
+   plt.title("Residual Plot")
 
 4. Parameter Identifiability
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -259,13 +260,16 @@ Example: Choosing Between Models
    y_true = 3.0 * np.exp(-0.8 * x) + 1.0 * np.exp(-0.1 * x)
    y = y_true + 0.1 * np.random.randn(len(x))
 
+
    # Model 1: Single exponential
    def single_exp(x, A, k, offset):
        return A * jnp.exp(-k * x) + offset
 
+
    # Model 2: Bi-exponential
    def bi_exp(x, A1, k1, A2, k2, offset):
        return A1 * jnp.exp(-k1 * x) + A2 * jnp.exp(-k2 * x) + offset
+
 
    # Fit both
    result1 = curve_fit(single_exp, x, y, p0=[3, 0.5, 0.5])

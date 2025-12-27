@@ -142,7 +142,7 @@ class TestLbfgsConvergence:
 
     def test_lbfgs_converges_on_quadratic(self, simple_quadratic_model, quadratic_data):
         """Test L-BFGS converges on simple quadratic problem."""
-        x, y, p0, true_params = quadratic_data
+        x, y, p0, _true_params = quadratic_data
 
         config = HybridStreamingConfig(
             warmup_iterations=30,
@@ -169,7 +169,7 @@ class TestLbfgsConvergence:
         self, exponential_decay_model, exponential_data
     ):
         """Test L-BFGS converges on exponential decay problem."""
-        x, y, p0, true_params = exponential_data
+        x, y, p0, _true_params = exponential_data
 
         config = HybridStreamingConfig(
             warmup_iterations=40,

@@ -34,6 +34,7 @@ Verify the installation:
 .. code-block:: python
 
    import nlsq
+
    print(f"NLSQ version: {nlsq.__version__}")
 
 Step 2: Understand the Problem
@@ -90,6 +91,7 @@ It must:
 
    import jax.numpy as jnp
 
+
    def exponential_decay(x, A, k):
        """Exponential decay model: y = A * exp(-k * x)"""
        return A * jnp.exp(-k * x)
@@ -142,20 +144,20 @@ Let's plot the data and the fitted curve:
    plt.figure(figsize=(10, 6))
 
    # Plot data points
-   plt.scatter(x, y, label='Data', alpha=0.7)
+   plt.scatter(x, y, label="Data", alpha=0.7)
 
    # Plot fitted curve
    x_smooth = np.linspace(0, 10, 200)
    y_fit = exponential_decay(x_smooth, *popt)
-   plt.plot(x_smooth, y_fit, 'r-', label='Fitted curve', linewidth=2)
+   plt.plot(x_smooth, y_fit, "r-", label="Fitted curve", linewidth=2)
 
    # Plot true curve for comparison
    y_true_smooth = A_true * np.exp(-k_true * x_smooth)
-   plt.plot(x_smooth, y_true_smooth, 'g--', label='True curve', linewidth=2)
+   plt.plot(x_smooth, y_true_smooth, "g--", label="True curve", linewidth=2)
 
-   plt.xlabel('x')
-   plt.ylabel('y')
-   plt.title('Exponential Decay Fit')
+   plt.xlabel("x")
+   plt.ylabel("y")
+   plt.title("Exponential Decay Fit")
    plt.legend()
    plt.grid(True, alpha=0.3)
    plt.show()
@@ -171,9 +173,11 @@ Here's the complete code in one block:
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    # 1. Define model function
    def exponential_decay(x, A, k):
        return A * jnp.exp(-k * x)
+
 
    # 2. Generate sample data
    np.random.seed(42)
@@ -205,6 +209,7 @@ Common Mistakes to Avoid
    # Wrong - will cause errors
    def model(x, a, b):
        return a * np.exp(-b * x)
+
 
    # Correct
    def model(x, a, b):

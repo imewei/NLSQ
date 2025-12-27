@@ -23,6 +23,7 @@ Or from Python:
 .. code-block:: python
 
    from nlsq.gui import launch_gui
+
    launch_gui()
 
 Features

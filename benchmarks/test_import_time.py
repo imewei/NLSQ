@@ -34,6 +34,7 @@ print(f'{(end - start) * 1000:.1f}')
 """
         result = subprocess.run(
             [sys.executable, "-c", code],
+            check=False,
             capture_output=True,
             text=True,
             timeout=120,
@@ -59,7 +60,7 @@ print(f'{(end - start) * 1000:.1f}')
         This should be very fast (<1ms) since the module is already loaded.
         """
         # First import to warm up
-        import nlsq  # noqa: F401
+        import nlsq
 
         # Measure reimport time
         start = time.perf_counter()
@@ -89,6 +90,7 @@ print(f'{(end - start) * 1000:.1f}')
 """
         result = subprocess.run(
             [sys.executable, "-c", code],
+            check=False,
             capture_output=True,
             text=True,
             timeout=120,
@@ -123,6 +125,7 @@ print(f'{(end - start) * 1000:.1f}')
 """
         result = subprocess.run(
             [sys.executable, "-c", code],
+            check=False,
             capture_output=True,
             text=True,
             timeout=120,
@@ -158,6 +161,7 @@ print(f'{(end - start) * 1000:.1f}')
 """
         result = subprocess.run(
             [sys.executable, "-c", code],
+            check=False,
             capture_output=True,
             text=True,
             timeout=120,
@@ -174,16 +178,20 @@ print(f'{(end - start) * 1000:.1f}')
 
         reduction_pct = (1 - import_time_ms / self.BASELINE_MS) * 100
 
-        print(f"\n--- Import Time Report ---")
+        print("\n--- Import Time Report ---")
         print(f"Baseline: {self.BASELINE_MS:.1f}ms")
         print(f"Current:  {import_time_ms:.1f}ms")
         print(f"Target:   {self.TARGET_MS:.1f}ms")
         print(f"Reduction: {reduction_pct:.1f}%")
 
         if import_time_ms <= self.TARGET_MS:
-            print(f"✓ SC-001 PASSED: Import time {import_time_ms:.1f}ms <= {self.TARGET_MS}ms target")
+            print(
+                f"✓ SC-001 PASSED: Import time {import_time_ms:.1f}ms <= {self.TARGET_MS}ms target"
+            )
         else:
-            print(f"⚠ SC-001 NOT MET: Import time {import_time_ms:.1f}ms > {self.TARGET_MS}ms target")
+            print(
+                f"⚠ SC-001 NOT MET: Import time {import_time_ms:.1f}ms > {self.TARGET_MS}ms target"
+            )
 
         # Don't fail - this is informational until lazy imports are implemented
         assert import_time_ms > 0

@@ -13,11 +13,11 @@ Expected gains:
 - DataChunker Padding: 10-20% memory allocation reduction
 """
 
-import numpy as np
-import pytest
 from collections import OrderedDict
 
 import jax.numpy as jnp
+import numpy as np
+import pytest
 
 
 class TestLRUMemoryPool:
@@ -204,7 +204,7 @@ class TestJITCompiledValidation:
 
     def test_jit_compiled_validation_returns_tuple(self):
         """Test that JIT-compiled gradient function returns (loss, grad, is_valid) tuple."""
-        from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+        from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
         config = StreamingConfig(
             batch_size=32,
@@ -232,14 +232,14 @@ class TestJITCompiledValidation:
         assert len(result) == 3, (
             f"Expected (loss, grad, is_valid) tuple, got {len(result)} elements"
         )
-        loss, grad, is_valid = result
+        _loss, _grad, is_valid = result
         assert isinstance(float(loss), float)
         assert grad.shape == params.shape
         assert isinstance(bool(is_valid), bool)
 
     def test_jit_validation_detects_nan_in_loss(self):
         """Test that JIT-compiled validation detects NaN in loss."""
-        from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+        from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
         config = StreamingConfig(
             batch_size=32,
@@ -259,14 +259,14 @@ class TestJITCompiledValidation:
         y_batch = jnp.ones(32)
         params = jnp.array([1.0, 0.1])
 
-        loss, grad, is_valid = loss_and_grad_fn(params, x_batch, y_batch)
+        _loss, _grad, is_valid = loss_and_grad_fn(params, x_batch, y_batch)
 
         # Should detect invalid values
         assert not bool(is_valid), "is_valid should be False for NaN loss"
 
     def test_jit_validation_detects_inf_in_gradient(self):
         """Test that JIT-compiled validation detects Inf in gradient."""
-        from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+        from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
 
         config = StreamingConfig(
             batch_size=32,
@@ -286,7 +286,7 @@ class TestJITCompiledValidation:
         y_batch = jnp.ones(32)
         params = jnp.array([1.0, 1.0])
 
-        loss, grad, is_valid = loss_and_grad_fn(params, x_batch, y_batch)
+        _loss, _grad, is_valid = loss_and_grad_fn(params, x_batch, y_batch)
 
         # Should detect invalid gradient values
         # Note: The specific behavior depends on JAX's handling of overflow
@@ -309,11 +309,11 @@ class TestDataChunkerPaddingOptimization:
         chunks = list(DataChunker.create_chunks(x, y, chunk_size))
 
         # First chunk should be full size
-        x_chunk1, y_chunk1, idx1 = chunks[0]
+        x_chunk1, _y_chunk1, _idx1 = chunks[0]
         assert len(x_chunk1) == chunk_size
 
         # Last chunk is padded
-        x_chunk2, y_chunk2, idx2 = chunks[1]
+        x_chunk2, _y_chunk2, _idx2 = chunks[1]
         assert len(x_chunk2) == chunk_size, (
             f"Last chunk should be padded to {chunk_size}, got {len(x_chunk2)}"
         )
@@ -330,7 +330,7 @@ class TestDataChunkerPaddingOptimization:
         chunks = list(DataChunker.create_chunks(x, y, chunk_size))
 
         # Only one chunk, which needs padding
-        x_chunk, y_chunk, idx = chunks[0]
+        x_chunk, _y_chunk, _idx = chunks[0]
 
         # Check cyclic repetition pattern
         # With np.resize, the pattern repeats cyclically
@@ -355,7 +355,7 @@ class TestDataChunkerPaddingOptimization:
         chunks = list(DataChunker.create_chunks(x, y, chunk_size))
 
         # Only one chunk
-        x_chunk, y_chunk, idx = chunks[0]
+        x_chunk, y_chunk, _idx = chunks[0]
 
         # Check that chunk is exactly chunk_size (no over-allocation)
         assert x_chunk.nbytes == chunk_size * x.itemsize, (
@@ -378,7 +378,7 @@ class TestDataChunkerPaddingOptimization:
 
         # Should be exactly one chunk
         assert len(chunks) == 1
-        x_chunk, y_chunk, idx = chunks[0]
+        x_chunk, _y_chunk, _idx = chunks[0]
         assert len(x_chunk) == chunk_size
 
 

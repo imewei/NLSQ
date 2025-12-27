@@ -13,6 +13,7 @@ Import from ``nlsq.functions`` or directly from ``nlsq``:
 .. code-block:: python
 
    from nlsq.functions import gaussian, exponential_decay
+
    # or
    from nlsq import gaussian, exponential_decay
 
@@ -113,9 +114,11 @@ Single exponential decay.
    from nlsq.functions import exponential_decay
 
    popt, pcov = fit(
-       exponential_decay, time, signal,
+       exponential_decay,
+       time,
+       signal,
        p0=[1.0, 10.0, 0.0],
-       bounds=([0, 0, -0.1], [10, 100, 0.1])
+       bounds=([0, 0, -0.1], [10, 100, 0.1]),
    )
    amplitude, tau, offset = popt
 
@@ -238,6 +241,7 @@ Polynomial function of arbitrary degree.
 
    from nlsq.functions import polynomial
 
+
    # Quadratic: a + b*x + c*x^2
    def quadratic(x, a, b, c):
        return polynomial(x, a, b, c)
@@ -284,14 +288,16 @@ Custom model functions must use JAX operations:
 
    import jax.numpy as jnp
 
+
    def custom_model(x, a, b, c, d):
        """Custom model combining exponential and oscillation."""
        decay = a * jnp.exp(-b * x)
        oscillation = c * jnp.sin(d * x)
        return decay * oscillation
 
+
    # Use like any built-in function
-   popt, pcov = fit(custom_model, x, y, p0=[1, 0.1, 1, 2*jnp.pi])
+   popt, pcov = fit(custom_model, x, y, p0=[1, 0.1, 1, 2 * jnp.pi])
 
 **Rules for custom functions:**
 

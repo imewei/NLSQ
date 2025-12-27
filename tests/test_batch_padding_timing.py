@@ -169,6 +169,7 @@ class TestLastBatchPaddingFromFirstIteration:
 
         def linear_model(x, a, b):
             import jax.numpy as jnp
+
             return a * x + b
 
         # Run optimization - should not cause JIT recompilation
@@ -218,6 +219,7 @@ class TestLastBatchPaddingFromFirstIteration:
 
         def linear_model(x, a, b):
             import jax.numpy as jnp
+
             return a * x + b
 
         result = optimizer.fit(

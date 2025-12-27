@@ -145,11 +145,13 @@ NLSQ exposes TRF tuning via tolerances:
 .. code-block:: python
 
    popt, pcov = curve_fit(
-       model, x, y,
-       gtol=1e-8,    # Gradient tolerance
-       ftol=1e-8,    # Function tolerance
-       xtol=1e-8,    # Step tolerance
-       max_nfev=500  # Max function evaluations
+       model,
+       x,
+       y,
+       gtol=1e-8,  # Gradient tolerance
+       ftol=1e-8,  # Function tolerance
+       xtol=1e-8,  # Step tolerance
+       max_nfev=500,  # Max function evaluations
    )
 
 **Guidelines**:

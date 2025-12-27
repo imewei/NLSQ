@@ -27,7 +27,7 @@ Analysis of 5 core performance modules reveals **12 critical bottlenecks** and *
 **Location:** Lines 147-168, 181-208, 221-242
 **Impact:** High (20-30% overhead in tight loops)
 
-```python
+```py
 # PROBLEM: psutil calls every 1 second even in microsecond-granularity operations
 def get_available_memory(self) -> float:
     now = time.time()
@@ -48,7 +48,7 @@ def get_available_memory(self) -> float:
 - Current 1s TTL helps but still allows 1 call/sec baseline
 
 **Optimization 1.1a: Adaptive TTL Based on Call Frequency**
-```python
+```py
 # RECOMMENDATION: Context-aware TTL
 def __init__(self, memory_cache_ttl: float = 1.0, adaptive_ttl: bool = True):
     self._adaptive_ttl = adaptive_ttl
@@ -88,7 +88,7 @@ def get_available_memory(self) -> float:
 **Location:** Lines 256-267
 **Impact:** Medium (poor cache utilization)
 
-```python
+```py
 # PROBLEM: FIFO eviction - removes oldest inserted, not least recently used
 if len(self.memory_cache) >= self.max_memory_items:
     if self.memory_cache:
@@ -99,7 +99,7 @@ if len(self.memory_cache) >= self.max_memory_items:
 **Issue:** Python dicts maintain insertion order (3.7+) but don't track access patterns.
 
 **Optimization 1.2a: Use collections.OrderedDict for True LRU**
-```python
+```py
 from collections import OrderedDict
 
 def __init__(self, ...):
@@ -128,7 +128,7 @@ def allocate_array(self, shape, dtype, zero=True):
 **Location:** Lines 428-436
 **Impact:** Medium (memory leak over long runs)
 
-```python
+```py
 # PROBLEM: Unbounded list growth
 self._safety_telemetry.append({
     "bytes_predicted": bytes_predicted,
@@ -138,7 +138,7 @@ self._safety_telemetry.append({
 ```
 
 **Optimization 1.3a: Circular Buffer with Fixed Size**
-```python
+```py
 from collections import deque
 
 def __init__(self, ...):
@@ -156,7 +156,7 @@ def __init__(self, ...):
 **Location:** Lines 70-85
 **Impact:** High (correctness risk in interactive environments)
 
-```python
+```py
 # PROBLEM: Caching by id(func) assumes function identity doesn't change
 func_id = id(func)
 if func_id in self._func_hash_cache:
@@ -164,7 +164,7 @@ if func_id in self._func_hash_cache:
 ```
 
 **Correctness risk:** Function redefinition in notebooks/REPL:
-```python
+```py
 def model(x, a, b):
     return a * x + b
 
@@ -176,7 +176,7 @@ def model(x, a, b):  # Different implementation, possibly same id()
 Python may reuse the same memory address (`id()`), causing hash collision and cache poisoning.
 
 **Optimization 2.1a: Include Code Object Identity**
-```python
+```py
 def _get_function_code_hash(self, func: Callable) -> str:
     func_id = id(func)
     code_obj = func.__code__ if hasattr(func, "__code__") else None
@@ -211,14 +211,14 @@ def _get_function_code_hash(self, func: Callable) -> str:
 **Location:** Lines 40-44, 184-189
 **Impact:** Medium (memory growth over time)
 
-```python
+```py
 # PROBLEM: No LRU eviction on compilation cache
 self.cache: dict[str, Callable] = {}
 # ... grows indefinitely with unique function signatures
 ```
 
 **Optimization 2.2a: LRU Eviction with Configurable Limit**
-```python
+```py
 from collections import OrderedDict
 
 class CompilationCache:
@@ -259,7 +259,7 @@ class CompilationCache:
 **Location:** Line 169
 **Impact:** High (adversarial data vulnerability)
 
-```python
+```py
 # PROBLEM: MD5 is cryptographically broken
 return hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
 ```
@@ -270,7 +270,7 @@ While `usedforsecurity=False` flag acknowledges non-cryptographic use, MD5 colli
 3. Cause silent optimization failures
 
 **Optimization 3.1a: Use BLAKE2 (or xxhash already available)**
-```python
+```py
 # RECOMMENDATION: Consistent use of xxhash everywhere
 if HAS_XXHASH:
     return xxhash.xxh64(key_str.encode()).hexdigest()
@@ -287,7 +287,7 @@ return hashlib.blake2b(key_str.encode(), digest_size=16).hexdigest()
 **Location:** Lines 140-153
 **Impact:** Medium (20% overhead when xxhash unavailable)
 
-```python
+```py
 # PROBLEM: Sampling + full hash is redundant work
 if len(arr_flat) > 100:
     sample_indices = np.linspace(0, len(arr_flat) - 1, 100, dtype=int)
@@ -296,7 +296,7 @@ if len(arr_flat) > 100:
 ```
 
 **Optimization 3.2a: Drop Sampling if Computing Full Hash**
-```python
+```py
 # If xxhash unavailable, choose one strategy based on array size
 arr_flat = arr.flatten()
 if len(arr_flat) > 10000:  # Only sample for very large arrays
@@ -334,7 +334,7 @@ The codebase correctly avoids unsafe serialization formats and uses:
 **Location:** Lines 1511-1544, 1802-1867
 **Impact:** **CRITICAL** (2-3x slowdown from JIT recompilation)
 
-```python
+```py
 # PROBLEM: Padding only applies AFTER warmup (lines 1520-1530)
 if self._warmup_phase and self.iteration <= self.config.warmup_steps:
     self._update_max_batch_shape(len(x_batch))
@@ -350,7 +350,7 @@ if self._warmup_phase and self.iteration <= self.config.warmup_steps:
 - With padding: ~1% memory overhead, 30-50% throughput gain
 
 **Optimization 4.1a: Pad From First Batch (Skip Warmup)**
-```python
+```py
 # RECOMMENDATION: Set static shape from config, pad immediately
 def __init__(self, config):
     # Use batch_size as max shape from the start (known upfront)
@@ -377,7 +377,7 @@ if self._max_batch_shape and len(x_batch) < self._max_batch_shape:
 **Location:** Lines 2088-2157 (HDF5 saves)
 **Impact:** High (blocks for 50-500ms per checkpoint)
 
-```python
+```py
 # PROBLEM: Synchronous HDF5 write blocks optimization thread
 def _save_checkpoint(self, params, losses):
     with h5py.File(checkpoint_path, "w") as f:  # Blocks here
@@ -386,7 +386,7 @@ def _save_checkpoint(self, params, losses):
 ```
 
 **Optimization 4.2a: Async Checkpoint Queue**
-```python
+```py
 import threading
 import queue
 
@@ -438,7 +438,7 @@ class StreamingOptimizer:
 **Location:** Lines 936-957
 **Impact:** Medium (5-10% overhead when enabled)
 
-```python
+```py
 # PROBLEM: np.all() + np.isfinite() scans full array on CPU
 if self.config.validate_numerics:
     if not np.all(np.isfinite(grad)):  # CPU scan
@@ -448,7 +448,7 @@ if self.config.validate_numerics:
 ```
 
 **Optimization 4.3a: Move Validation Into JIT-Compiled Function**
-```python
+```py
 # Move validation into GPU-accelerated gradient function
 @jit
 def loss_and_grad_with_validation(params, x, y):
@@ -478,7 +478,7 @@ if not is_valid:
 **Location:** Lines 941-1076, called at line 2082
 **Impact:** High (10-100x redundant validation)
 
-```python
+```py
 # PROBLEM: Validates model on EVERY chunk (100 chunks = 100 validations)
 def _fit_chunked(self, f, xdata, ydata, p0, ...):
     self._validate_model_function(f, xdata, ydata, p0)  # Line 2082
@@ -489,7 +489,7 @@ def _fit_chunked(self, f, xdata, ydata, p0, ...):
 ```
 
 **Optimization 5.1a: Validate Once, Cache Result by Function Identity**
-```python
+```py
 def __init__(self, ...):
     self._validated_functions = {}  # Map id(func) -> validation timestamp
 
@@ -513,7 +513,7 @@ def _fit_chunked(self, f, xdata, ydata, p0, ...):
 **Location:** Lines 566-574
 **Impact:** Medium (10-20% allocation overhead)
 
-```python
+```py
 # PROBLEM: np.tile creates full array, then slices
 pad_size = chunk_size - current_chunk_size
 pad_indices = np.tile(
@@ -523,7 +523,7 @@ chunk_indices = np.concatenate([chunk_indices, pad_indices])
 ```
 
 **Optimization 5.2a: Use np.resize (Efficient Repeat)**
-```python
+```py
 # Directly create right-sized array with repetition
 if current_chunk_size < chunk_size:
     pad_size = chunk_size - current_chunk_size
@@ -541,14 +541,14 @@ if current_chunk_size < chunk_size:
 **Location:** Lines 1944-1951
 **Impact:** Low (cosmetic)
 
-```python
+```py
 # CURRENT: Works fine, but could be clearer
 param_variations = np.array(param_history[-min(10, len(param_history)):])
 pcov = np.cov(param_variations.T)
 ```
 
 **Optimization 5.3a: Use Fixed-Size History Buffer**
-```python
+```py
 # In __init__:
 from collections import deque
 self._param_history = deque(maxlen=10)  # Auto-limits to last 10
@@ -572,7 +572,7 @@ else:
 
 **Location:** Multiple files import and initialize separately
 
-```python
+```py
 # memory_manager.py, large_dataset.py, streaming_optimizer.py, etc.
 from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
@@ -581,7 +581,7 @@ _jax_config = JAXConfig()
 **Issue:** Each import creates separate config instance (lightweight but redundant).
 
 **Optimization 6.1a: Singleton Pattern**
-```python
+```py
 # In config.py
 class JAXConfig:
     _instance = None
@@ -641,31 +641,31 @@ class JAXConfig:
 To validate these optimizations, create targeted benchmarks:
 
 ### 8.1 Streaming Throughput
-```python
+```py
 # Measure batches/sec with different padding strategies
 python -m pytest tests/benchmark_streaming.py -k "test_padding_impact"
 ```
 
 ### 8.2 Memory Overhead
-```python
+```py
 # Profile psutil call frequency vs TTL setting
 python -m pytest tests/benchmark_memory.py -k "test_ttl_overhead"
 ```
 
 ### 8.3 Cache Hit Rates
-```python
+```py
 # Measure before/after LRU eviction
 python -m pytest tests/benchmark_cache.py -k "test_lru_efficiency"
 ```
 
 ### 8.4 Checkpoint Latency
-```python
+```py
 # Compare sync vs async I/O
 python -m pytest tests/benchmark_checkpoints.py -k "test_async_saves"
 ```
 
 ### 8.5 Validation Overhead
-```python
+```py
 # Time spent in _validate_model_function
 python -m pytest tests/benchmark_validation.py -k "test_redundant_calls"
 ```
@@ -691,7 +691,7 @@ Current codebase lacks performance observability:
    - Add: `checkpoint_save_duration_ms` histogram
 
 **Recommendation:** Add optional profiling mode:
-```python
+```py
 # Environment variable to enable profiling
 export NLSQ_PROFILE=1
 

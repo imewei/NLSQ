@@ -67,6 +67,7 @@ First, check what JAX backend is currently active:
 .. code-block:: python
 
    import jax
+
    print(f"JAX version: {jax.__version__}")
    print(f"Available devices: {jax.devices()}")
    print(f"Default backend: {jax.default_backend()}")
@@ -106,9 +107,11 @@ NLSQ automatically uses GPU if available:
    # Check device
    print(f"NLSQ will use: {jax.default_backend()}")
 
+
    # Simple test
    def model(x, a, b):
        return a * jnp.exp(-b * x)
+
 
    x = np.linspace(0, 10, 100000)
    y = 2.5 * np.exp(-0.5 * x) + 0.1 * np.random.randn(len(x))
@@ -127,10 +130,10 @@ You can explicitly control the backend:
    import os
 
    # Force CPU (before importing JAX)
-   os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+   os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
    # Or force GPU
-   os.environ['JAX_PLATFORM_NAME'] = 'cuda'
+   os.environ["JAX_PLATFORM_NAME"] = "cuda"
 
    # Now import JAX and NLSQ
    import jax
@@ -155,8 +158,10 @@ Compare performance on your system:
    from nlsq import curve_fit
    import time
 
+
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    def benchmark(n_points, n_runs=5):
        """Benchmark fitting speed."""
@@ -176,8 +181,10 @@ Compare performance on your system:
 
        return np.mean(times), np.std(times)
 
+
    # Test different sizes
    import jax
+
    print(f"Backend: {jax.default_backend()}")
    print("-" * 50)
 
@@ -202,7 +209,8 @@ For systems with multiple GPUs:
    # NLSQ uses the default device
    # To use a specific GPU:
    import os
-   os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Use only GPU 0
+
+   os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Use only GPU 0
 
 Memory Management on GPU
 ------------------------
@@ -216,17 +224,14 @@ GPU memory is limited. For very large datasets:
 
    # Get device memory stats (JAX 0.4.20+)
    for device in jax.devices():
-       if hasattr(device, 'memory_stats'):
+       if hasattr(device, "memory_stats"):
            stats = device.memory_stats()
            print(f"{device}: {stats}")
 
    # For large datasets, use streaming (automatically manages memory)
    from nlsq import curve_fit_large
 
-   popt, pcov = curve_fit_large(
-       model, x, y,
-       memory_limit_gb=8.0  # Limit GPU memory usage
-   )
+   popt, pcov = curve_fit_large(model, x, y, memory_limit_gb=8.0)  # Limit GPU memory usage
 
 TPU Acceleration
 ----------------
@@ -237,10 +242,12 @@ NLSQ also supports Google TPUs:
 
    # On Google Colab with TPU runtime
    import jax
+
    print(f"TPU devices: {jax.devices()}")
 
    # Use normally - NLSQ auto-detects TPU
    from nlsq import curve_fit
+
    popt, pcov = curve_fit(model, x, y)
 
 Common Issues and Solutions
@@ -253,11 +260,13 @@ Issue: "No GPU found"
 
    # Check CUDA installation
    import subprocess
-   result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+
+   result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
    print(result.stdout)
 
    # Check JAX can see GPU
    import jax
+
    print(jax.devices())
 
 If no GPU appears:
@@ -273,10 +282,12 @@ Issue: Out of GPU Memory
 
    # Reduce batch size
    from nlsq import curve_fit_large
+
    popt, pcov = curve_fit_large(model, x, y, memory_limit_gb=2.0)
 
    # Or use streaming
    from nlsq import StreamingOptimizer
+
    optimizer = StreamingOptimizer(model, n_params=3, chunk_size=50000)
 
 Issue: GPU is Slower Than Expected
@@ -321,9 +332,11 @@ Complete Example: GPU Performance Comparison
    from nlsq import curve_fit
    import time
 
+
    def complex_model(x, a, b, c, d, e):
        """Complex model to benefit from GPU."""
-       return (a * jnp.exp(-b * x) * jnp.sin(c * x + d) + e)
+       return a * jnp.exp(-b * x) * jnp.sin(c * x + d) + e
+
 
    # Generate large dataset
    np.random.seed(42)
@@ -345,10 +358,7 @@ Complete Example: GPU Performance Comparison
 
    for i in range(n_trials):
        start = time.time()
-       popt, pcov = curve_fit(
-           complex_model, x, y,
-           p0=[2, 0.1, 1.5, 0.3, 0.5]
-       )
+       popt, pcov = curve_fit(complex_model, x, y, p0=[2, 0.1, 1.5, 0.3, 0.5])
        elapsed = time.time() - start
        times.append(elapsed)
        print(f"Trial {i+1}: {elapsed:.3f}s")

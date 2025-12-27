@@ -277,6 +277,7 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
 
     def test_func_hash_cache_uses_composite_key(self):
         """Test that _func_hash_cache uses composite key (id(func), id(func.__code__))."""
+
         # Define a function
         def test_func(x):
             return x + 1
@@ -295,6 +296,7 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
 
     def test_redefined_function_gets_different_hash(self):
         """Test that redefined function with same name gets different cache entry."""
+
         # Define first version of function
         def my_function(x):
             return x + 1
@@ -303,7 +305,7 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
         code1_id = id(my_function.__code__)
 
         # Redefine function with same name but different code
-        def my_function(x):  # noqa: F811
+        def my_function(x):
             return x * 2
 
         hash2 = self.cache._get_function_code_hash(my_function)
@@ -317,6 +319,7 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
 
     def test_same_function_returns_cached_hash(self):
         """Test that same function returns cached hash."""
+
         def test_func(x):
             return x + 1
 
@@ -342,7 +345,7 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
         result1 = compiled1(jnp.array([1.0]))
 
         # Second "cell" redefines function
-        def model(x):  # noqa: F811
+        def model(x):
             return x * 10
 
         # This should NOT return the cached version of the old function

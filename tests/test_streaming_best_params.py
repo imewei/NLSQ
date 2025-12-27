@@ -190,6 +190,7 @@ class TestBatchErrorIsolation:
         Verifies that the streaming optimizer handles batches correctly
         without mocking internal APIs.
         """
+
         # Simple model
         def model(x, a, b):
             return a * x + b
@@ -275,6 +276,7 @@ class TestBatchErrorIsolation:
 
         Verifies the diagnostics infrastructure without mocking internal APIs.
         """
+
         # Simple linear model
         def model(x, a, b):
             return a * x + b

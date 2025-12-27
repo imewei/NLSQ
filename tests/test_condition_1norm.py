@@ -118,7 +118,7 @@ class TestCondition1NormIntegration:
         J = rng.standard_normal((100, 10))
 
         # Should not raise and should provide condition info
-        J_checked, issues = guard.check_and_fix_jacobian(J)
+        _J_checked, issues = guard.check_and_fix_jacobian(J)
 
         assert "condition_number" in issues
         assert issues["condition_number"] is not None
@@ -137,6 +137,6 @@ class TestCondition1NormIntegration:
         s = 10.0 ** np.linspace(0, -14, 10)
         J = jnp.array(U @ np.diag(s))  # Convert to JAX array
 
-        J_checked, issues = guard.check_and_fix_jacobian(J)
+        _J_checked, issues = guard.check_and_fix_jacobian(J)
 
         assert issues["is_ill_conditioned"], "Failed to detect ill-conditioning"

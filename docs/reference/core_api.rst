@@ -41,8 +41,10 @@ interface with preset-based configuration.
    from nlsq import fit
    import jax.numpy as jnp
 
+
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
+
 
    popt, pcov = fit(model, x_data, y_data, p0=[1.0, 0.5, 0.0])
 
@@ -73,13 +75,13 @@ from SciPy or when you need precise control over optimization parameters.
    from nlsq import curve_fit
    import jax.numpy as jnp
 
+
    def exponential(x, a, tau, c):
        return a * jnp.exp(-x / tau) + c
 
+
    popt, pcov = curve_fit(
-       exponential, x_data, y_data,
-       p0=[1.0, 10.0, 0.0],
-       bounds=([0, 0, -1], [10, 100, 1])
+       exponential, x_data, y_data, p0=[1.0, 10.0, 0.0], bounds=([0, 0, -1], [10, 100, 1])
    )
 
 curve_fit_large()
@@ -103,11 +105,7 @@ Handles datasets that exceed GPU memory through automatic chunking.
    from nlsq import curve_fit_large
 
    # Fit 10 million points with automatic chunking
-   popt, pcov = curve_fit_large(
-       model, x_large, y_large,
-       p0=p0,
-       memory_limit_gb=8.0
-   )
+   popt, pcov = curve_fit_large(model, x_large, y_large, p0=p0, memory_limit_gb=8.0)
 
 LeastSquares
 ~~~~~~~~~~~~

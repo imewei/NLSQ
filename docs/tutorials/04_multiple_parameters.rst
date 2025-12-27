@@ -39,6 +39,7 @@ A damped oscillation has 5 parameters:
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    def damped_oscillation(t, A, omega, gamma, phi, offset):
        """
        Damped harmonic oscillator.
@@ -52,6 +53,7 @@ A damped oscillation has 5 parameters:
        """
        return A * jnp.exp(-gamma * t) * jnp.cos(omega * t + phi) + offset
 
+
    # Generate data
    np.random.seed(42)
    t = np.linspace(0, 10, 200)
@@ -59,8 +61,9 @@ A damped oscillation has 5 parameters:
    # True parameters
    A_true, omega_true, gamma_true, phi_true, offset_true = 3.0, 5.0, 0.3, 0.5, 1.0
 
-   y_true = (A_true * np.exp(-gamma_true * t) *
-             np.cos(omega_true * t + phi_true) + offset_true)
+   y_true = (
+       A_true * np.exp(-gamma_true * t) * np.cos(omega_true * t + phi_true) + offset_true
+   )
    y = y_true + 0.2 * np.random.normal(size=len(t))
 
 Estimating Initial Guesses
@@ -76,6 +79,7 @@ Good initial guesses are crucial. Estimate from data characteristics:
 
    # Estimate frequency from zero crossings or FFT
    from scipy.signal import find_peaks
+
    peaks, _ = find_peaks(y)
    if len(peaks) > 1:
        period = np.mean(np.diff(t[peaks]))
@@ -84,7 +88,7 @@ Good initial guesses are crucial. Estimate from data characteristics:
        omega_guess = 3.0  # Fallback
 
    gamma_guess = 0.2  # Reasonable starting point
-   phi_guess = 0.0    # Start at zero phase
+   phi_guess = 0.0  # Start at zero phase
 
    p0 = [A_guess, omega_guess, gamma_guess, phi_guess, offset_guess]
    print(f"Initial guesses: {p0}")
@@ -98,25 +102,22 @@ Add physical constraints:
 
    # Physical bounds
    bounds = (
-       [0, 0, 0, -np.pi, -10],          # Lower bounds
-       [10, 20, 2, np.pi, 10]           # Upper bounds
+       [0, 0, 0, -np.pi, -10],  # Lower bounds
+       [10, 20, 2, np.pi, 10],  # Upper bounds
    )
 
    # Fit
-   popt, pcov = curve_fit(
-       damped_oscillation, t, y,
-       p0=p0,
-       bounds=bounds
-   )
+   popt, pcov = curve_fit(damped_oscillation, t, y, p0=p0, bounds=bounds)
 
    # Results
-   param_names = ['Amplitude', 'Omega', 'Gamma', 'Phi', 'Offset']
+   param_names = ["Amplitude", "Omega", "Gamma", "Phi", "Offset"]
    perr = np.sqrt(np.diag(pcov))
 
    print("\nFitted Parameters:")
    print("-" * 50)
-   for name, val, err, true_val in zip(param_names, popt, perr,
-       [A_true, omega_true, gamma_true, phi_true, offset_true]):
+   for name, val, err, true_val in zip(
+       param_names, popt, perr, [A_true, omega_true, gamma_true, phi_true, offset_true]
+   ):
        print(f"{name:12}: {val:8.4f} ± {err:.4f} (true: {true_val})")
 
 Understanding Parameter Correlations
@@ -150,6 +151,7 @@ Fitting multiple Gaussian peaks:
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    def multi_gaussian(x, *params):
        """
        Sum of Gaussian peaks.
@@ -160,12 +162,13 @@ Fitting multiple Gaussian peaks:
        result = params[-1]  # baseline
 
        for i in range(n_peaks):
-           A = params[3*i]
-           mu = params[3*i + 1]
-           sigma = params[3*i + 2]
-           result = result + A * jnp.exp(-((x - mu)**2) / (2 * sigma**2))
+           A = params[3 * i]
+           mu = params[3 * i + 1]
+           sigma = params[3 * i + 2]
+           result = result + A * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
        return result
+
 
    # Generate data with 3 peaks
    np.random.seed(42)
@@ -177,14 +180,22 @@ Fitting multiple Gaussian peaks:
 
    y_true = baseline_true
    for A, mu, sigma in peaks_true:
-       y_true = y_true + A * np.exp(-((x - mu)**2) / (2 * sigma**2))
+       y_true = y_true + A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
    y = y_true + 0.2 * np.random.normal(size=len(x))
 
    # Initial guesses for 3 peaks + baseline
-   p0 = [2.5, 2.0, 0.6,   # Peak 1
-         4.0, 5.0, 0.7,   # Peak 2
-         1.5, 8.0, 0.5,   # Peak 3
-         0.3]             # Baseline
+   p0 = [
+       2.5,
+       2.0,
+       0.6,  # Peak 1
+       4.0,
+       5.0,
+       0.7,  # Peak 2
+       1.5,
+       8.0,
+       0.5,  # Peak 3
+       0.3,
+   ]  # Baseline
 
    # Bounds
    lower = [0, 0, 0.1, 0, 3, 0.1, 0, 6, 0.1, -1]
@@ -198,7 +209,7 @@ Fitting multiple Gaussian peaks:
    print("Multi-Peak Fit Results:")
    print("-" * 50)
    for i in range(3):
-       A, mu, sigma = popt[3*i:3*i+3]
+       A, mu, sigma = popt[3 * i : 3 * i + 3]
        print(f"Peak {i+1}: A={A:.3f}, center={mu:.3f}, width={sigma:.3f}")
    print(f"Baseline: {popt[-1]:.3f}")
 
@@ -213,10 +224,12 @@ For challenging multi-parameter fits, use the ``robust`` or ``global`` preset:
 
    # Global optimization with multiple starts
    popt, pcov = fit(
-       damped_oscillation, t, y,
+       damped_oscillation,
+       t,
+       y,
        p0=p0,
        bounds=bounds,
-       preset='global'  # Multi-start optimization
+       preset="global",  # Multi-start optimization
    )
 
    print("Global optimization result:")
@@ -260,7 +273,8 @@ Tips for Multi-Parameter Fitting
    .. code-block:: python
 
       from nlsq import fit
-      popt, pcov = fit(model, x, y, preset='global')
+
+      popt, pcov = fit(model, x, y, preset="global")
 
 5. **Check the Fit Visually**
 
@@ -271,8 +285,8 @@ Tips for Multi-Parameter Fitting
       import matplotlib.pyplot as plt
 
       plt.figure(figsize=(10, 6))
-      plt.scatter(x, y, alpha=0.5, label='Data')
-      plt.plot(x, model(x, *popt), 'r-', linewidth=2, label='Fit')
+      plt.scatter(x, y, alpha=0.5, label="Data")
+      plt.plot(x, model(x, *popt), "r-", linewidth=2, label="Fit")
       plt.legend()
       plt.show()
 
@@ -286,11 +300,13 @@ Complete Example
    from nlsq import curve_fit
    import matplotlib.pyplot as plt
 
+
    # Complex model: sum of exponential and oscillation
    def complex_model(t, A_exp, k, A_osc, omega, phi, offset):
        exponential = A_exp * jnp.exp(-k * t)
        oscillation = A_osc * jnp.cos(omega * t + phi)
        return exponential + oscillation + offset
+
 
    # Generate data
    np.random.seed(42)
@@ -302,17 +318,14 @@ Complete Example
    p0 = [2.0, 0.5, 1.0, 3.0, 0.0, 0.5]
 
    # Bounds
-   bounds = (
-       [0, 0, 0, 0, -np.pi, -2],
-       [10, 5, 5, 10, np.pi, 2]
-   )
+   bounds = ([0, 0, 0, 0, -np.pi, -2], [10, 5, 5, 10, np.pi, 2])
 
    # Fit
    popt, pcov = curve_fit(complex_model, t, y, p0=p0, bounds=bounds)
    perr = np.sqrt(np.diag(pcov))
 
    # Print results
-   names = ['A_exp', 'k', 'A_osc', 'omega', 'phi', 'offset']
+   names = ["A_exp", "k", "A_osc", "omega", "phi", "offset"]
    true_vals = [2.0, 0.3, 1.0, 3.0, 0.5, 0.5]
 
    print("Complex Model Fit Results:")
@@ -322,12 +335,12 @@ Complete Example
 
    # Plot
    plt.figure(figsize=(10, 6))
-   plt.scatter(t, y, alpha=0.5, s=20, label='Data')
-   plt.plot(t, complex_model(t, *popt), 'r-', linewidth=2, label='Fit')
-   plt.xlabel('Time')
-   plt.ylabel('Signal')
+   plt.scatter(t, y, alpha=0.5, s=20, label="Data")
+   plt.plot(t, complex_model(t, *popt), "r-", linewidth=2, label="Fit")
+   plt.xlabel("Time")
+   plt.ylabel("Signal")
    plt.legend()
-   plt.title('Complex Model Fit')
+   plt.title("Complex Model Fit")
    plt.show()
 
 Key Takeaways

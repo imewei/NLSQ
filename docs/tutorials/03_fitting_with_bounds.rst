@@ -45,8 +45,10 @@ Bounds are specified as a tuple of two arrays: ``(lower_bounds, upper_bounds)``
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    def exponential_decay(x, A, k):
        return A * jnp.exp(-k * x)
+
 
    # Data
    np.random.seed(42)
@@ -55,8 +57,8 @@ Bounds are specified as a tuple of two arrays: ``(lower_bounds, upper_bounds)``
 
    # Define bounds: A > 0, k > 0
    bounds = (
-       [0, 0],           # Lower bounds: [A_min, k_min]
-       [np.inf, np.inf]  # Upper bounds: [A_max, k_max]
+       [0, 0],  # Lower bounds: [A_min, k_min]
+       [np.inf, np.inf],  # Upper bounds: [A_max, k_max]
    )
 
    popt, pcov = curve_fit(exponential_decay, x, y, bounds=bounds)
@@ -71,10 +73,7 @@ Use ``-np.inf`` and ``np.inf`` for unbounded parameters:
 
    # A: between 0 and 10
    # k: positive (no upper limit)
-   bounds = (
-       [0, 0],          # Lower bounds
-       [10, np.inf]     # Upper bounds
-   )
+   bounds = ([0, 0], [10, np.inf])  # Lower bounds  # Upper bounds
 
 Example: Gaussian Peak Fitting
 ------------------------------
@@ -87,20 +86,22 @@ Fitting a Gaussian peak with physically meaningful constraints:
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    def gaussian(x, amplitude, center, sigma, baseline):
        """Gaussian peak with baseline offset."""
-       return amplitude * jnp.exp(-((x - center) ** 2) / (2 * sigma ** 2)) + baseline
+       return amplitude * jnp.exp(-((x - center) ** 2) / (2 * sigma**2)) + baseline
+
 
    # Generate data
    np.random.seed(42)
    x = np.linspace(0, 10, 100)
-   y_true = 5.0 * np.exp(-((x - 5.0) ** 2) / (2 * 1.0 ** 2)) + 0.5
+   y_true = 5.0 * np.exp(-((x - 5.0) ** 2) / (2 * 1.0**2)) + 0.5
    y = y_true + 0.2 * np.random.normal(size=len(x))
 
    # Define bounds
    bounds = (
-       [0, 0, 0.1, -np.inf],     # Lower: amp>0, center>0, sigma>0.1, baseline any
-       [np.inf, 10, 5, np.inf]   # Upper: amp any, center<10, sigma<5, baseline any
+       [0, 0, 0.1, -np.inf],  # Lower: amp>0, center>0, sigma>0.1, baseline any
+       [np.inf, 10, 5, np.inf],  # Upper: amp any, center<10, sigma<5, baseline any
    )
 
    # Initial guess
@@ -217,7 +218,7 @@ Best Practices
       x_peak = x[np.argmax(y)]
 
       p0 = [A_guess, x_peak, 1.0, np.min(y)]
-      bounds = ([0, 0, 0.1, -10], [2*A_guess, 10, 5, 10])
+      bounds = ([0, 0, 0.1, -10], [2 * A_guess, 10, 5, 10])
 
       popt, pcov = curve_fit(model, x, y, p0=p0, bounds=bounds)
 
@@ -241,9 +242,11 @@ Fitting a sum of two exponentials (common in fluorescence lifetime):
    import jax.numpy as jnp
    from nlsq import curve_fit
 
+
    def biexponential(x, A1, k1, A2, k2, offset):
        """Sum of two exponential decays."""
        return A1 * jnp.exp(-k1 * x) + A2 * jnp.exp(-k2 * x) + offset
+
 
    # Generate data
    np.random.seed(42)
@@ -254,8 +257,8 @@ Fitting a sum of two exponentials (common in fluorescence lifetime):
    # Bounds: all amplitudes positive, rates positive,
    # and k1 > k2 (fast component first)
    bounds = (
-       [0, 0.5, 0, 0, -1],      # Lower bounds
-       [10, 10, 10, 0.5, 1]     # Upper bounds (k2 < 0.5 to ensure k1 > k2)
+       [0, 0.5, 0, 0, -1],  # Lower bounds
+       [10, 10, 10, 0.5, 1],  # Upper bounds (k2 < 0.5 to ensure k1 > k2)
    )
 
    # Initial guess
@@ -267,8 +270,12 @@ Fitting a sum of two exponentials (common in fluorescence lifetime):
 
    print("Bi-exponential Fit Results:")
    print("-" * 40)
-   print(f"Fast component:  A1={popt[0]:.3f}±{perr[0]:.3f}, k1={popt[1]:.3f}±{perr[1]:.3f}")
-   print(f"Slow component:  A2={popt[2]:.3f}±{perr[2]:.3f}, k2={popt[3]:.3f}±{perr[3]:.3f}")
+   print(
+       f"Fast component:  A1={popt[0]:.3f}±{perr[0]:.3f}, k1={popt[1]:.3f}±{perr[1]:.3f}"
+   )
+   print(
+       f"Slow component:  A2={popt[2]:.3f}±{perr[2]:.3f}, k2={popt[3]:.3f}±{perr[3]:.3f}"
+   )
    print(f"Offset:          {popt[4]:.3f}±{perr[4]:.3f}")
 
 Key Takeaways

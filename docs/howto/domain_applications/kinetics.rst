@@ -14,9 +14,11 @@ Michaelis-Menten
    import jax.numpy as jnp
    from nlsq import fit
 
+
    def michaelis_menten(S, Vmax, Km):
        """Michaelis-Menten enzyme kinetics."""
        return Vmax * S / (Km + S)
+
 
    # Fit
    popt, pcov = fit(
@@ -87,6 +89,7 @@ Dose-Response
        """4PL dose-response curve."""
        return bottom + (top - bottom) / (1 + (EC50 / x) ** hill)
 
+
    # IC50/EC50 determination
    popt, pcov = fit(
        four_parameter_logistic,
@@ -94,7 +97,7 @@ Dose-Response
        response,
        p0=[0, 100, 10, 1],
        bounds=([0, 0, 0.001, 0.1], [50, 200, 1000, 10]),
-       preset='quality',
+       preset="quality",
    )
 
 5-Parameter Logistic

@@ -20,8 +20,7 @@ Uses pytest-benchmark for consistent measurement methodology.
 
 import time
 from collections import OrderedDict
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -121,11 +120,17 @@ class TestPsutilCallFrequency:
             calls_without_adaptive = mock_psutil.virtual_memory.call_count
 
         # Calculate reduction
-        print(f"\n[High Frequency] psutil calls with adaptive TTL: {calls_with_adaptive}")
-        print(f"[High Frequency] psutil calls without adaptive TTL: {calls_without_adaptive}")
+        print(
+            f"\n[High Frequency] psutil calls with adaptive TTL: {calls_with_adaptive}"
+        )
+        print(
+            f"[High Frequency] psutil calls without adaptive TTL: {calls_without_adaptive}"
+        )
 
         if calls_without_adaptive > 0:
-            reduction = ((calls_without_adaptive - calls_with_adaptive) / calls_without_adaptive) * 100
+            reduction = (
+                (calls_without_adaptive - calls_with_adaptive) / calls_without_adaptive
+            ) * 100
             print(f"[High Frequency] Reduction: {reduction:.1f}%")
 
         # With high-frequency calls all happening quickly, we should have
@@ -186,12 +191,14 @@ class TestPsutilCallFrequency:
             print(f"\n[Streaming Simulation] Total memory checks: {total_checks}")
             print(f"[Streaming Simulation] Actual psutil calls: {psutil_calls}")
             print(f"[Streaming Simulation] Calls per second: {calls_per_sec:.0f}")
-            print(f"[Streaming Simulation] Cache hit rate: {(1 - psutil_calls/total_checks)*100:.1f}%")
+            print(
+                f"[Streaming Simulation] Cache hit rate: {(1 - psutil_calls / total_checks) * 100:.1f}%"
+            )
 
             # With adaptive TTL, we should have a very high cache hit rate
             cache_hit_rate = 1 - (psutil_calls / total_checks)
             assert cache_hit_rate > 0.9, (
-                f"Expected >90% cache hit rate, got {cache_hit_rate*100:.1f}%"
+                f"Expected >90% cache hit rate, got {cache_hit_rate * 100:.1f}%"
             )
 
 
@@ -401,13 +408,13 @@ class TestPhase2LRUMemoryPool:
             # Workload with repeated shapes
             shapes = [
                 (100, 10),  # A - miss
-                (200, 5),   # B - miss
+                (200, 5),  # B - miss
                 (100, 10),  # A - hit
-                (300, 3),   # C - miss
+                (300, 3),  # C - miss
                 (100, 10),  # A - hit
-                (200, 5),   # B - hit
+                (200, 5),  # B - hit
                 (100, 10),  # A - hit
-                (400, 2),   # D - miss
+                (400, 2),  # D - miss
                 (100, 10),  # A - hit
             ]
 
@@ -423,11 +430,11 @@ class TestPhase2LRUMemoryPool:
             hit_rate = hits / total if total > 0 else 0
 
             print(f"\n[LRU Pool Hit Rate] Hits: {hits}, Misses: {misses}")
-            print(f"[LRU Pool Hit Rate] Hit rate: {hit_rate*100:.1f}%")
+            print(f"[LRU Pool Hit Rate] Hit rate: {hit_rate * 100:.1f}%")
 
             # Should have good hit rate for repeated shapes
             assert hits > 0, "Should have cache hits for repeated shapes"
-            assert hit_rate > 0.3, f"Expected >30% hit rate, got {hit_rate*100:.1f}%"
+            assert hit_rate > 0.3, f"Expected >30% hit rate, got {hit_rate * 100:.1f}%"
 
     def test_lru_eviction_preserves_hot_arrays(self):
         """Verify LRU eviction preserves frequently accessed arrays.
@@ -464,7 +471,9 @@ class TestPhase2LRUMemoryPool:
                 f"Pool should have 3 arrays, has {len(manager.memory_pool)}"
             )
 
-            print(f"\n[LRU Preservation] Pool contains {len(manager.memory_pool)} arrays")
+            print(
+                f"\n[LRU Preservation] Pool contains {len(manager.memory_pool)} arrays"
+            )
 
     def test_pool_efficiency_metric(self):
         """Calculate memory pool efficiency: hits / (hits + new_allocations).
@@ -494,14 +503,18 @@ class TestPhase2LRUMemoryPool:
             total = hits + new_allocations
             efficiency = hits / total if total > 0 else 0
 
-            print(f"\n[Pool Efficiency] Hits: {hits}, New allocations: {new_allocations}")
-            print(f"[Pool Efficiency] Efficiency: {efficiency*100:.1f}%")
+            print(
+                f"\n[Pool Efficiency] Hits: {hits}, New allocations: {new_allocations}"
+            )
+            print(f"[Pool Efficiency] Efficiency: {efficiency * 100:.1f}%")
 
             # First iteration: all misses (4 shapes)
             # Subsequent 9 iterations: all hits (36 hits)
             expected_efficiency = 36 / (36 + 4)
 
-            assert efficiency > 0.8, f"Expected >80% efficiency, got {efficiency*100:.1f}%"
+            assert efficiency > 0.8, (
+                f"Expected >80% efficiency, got {efficiency * 100:.1f}%"
+            )
 
     def test_lru_vs_fifo_comparison(self):
         """Compare LRU vs FIFO eviction behavior.
@@ -525,9 +538,9 @@ class TestPhase2LRUMemoryPool:
             (400, 2),
             (500, 1),
             (100, 10),  # Hot accessed again
-            (600, 1),   # New (triggers eviction)
+            (600, 1),  # New (triggers eviction)
             (100, 10),  # Hot accessed again
-            (700, 1),   # New (triggers eviction)
+            (700, 1),  # New (triggers eviction)
             (100, 10),  # Hot accessed again
         ]
 
@@ -559,12 +572,12 @@ class TestPhase2LRUMemoryPool:
         lru_hit_rate = lru_hits / len(workload)
         fifo_hit_rate = fifo_hits / len(workload)
 
-        print(f"\n[LRU vs FIFO] LRU hit rate: {lru_hit_rate*100:.1f}%")
-        print(f"[LRU vs FIFO] FIFO hit rate: {fifo_hit_rate*100:.1f}%")
+        print(f"\n[LRU vs FIFO] LRU hit rate: {lru_hit_rate * 100:.1f}%")
+        print(f"[LRU vs FIFO] FIFO hit rate: {fifo_hit_rate * 100:.1f}%")
 
         # LRU should be at least as good as FIFO
         assert lru_hit_rate >= fifo_hit_rate, (
-            f"LRU ({lru_hit_rate*100:.1f}%) should be >= FIFO ({fifo_hit_rate*100:.1f}%)"
+            f"LRU ({lru_hit_rate * 100:.1f}%) should be >= FIFO ({fifo_hit_rate * 100:.1f}%)"
         )
 
 
@@ -607,13 +620,13 @@ class TestPhase2CumulativeImprovements:
             # Calculate metrics
             pool_efficiency = pool_hits / (pool_hits + pool_misses)
 
-            print(f"\n[Combined Phase 1+2 Efficiency]")
+            print("\n[Combined Phase 1+2 Efficiency]")
             print(f"  Total batches: {n_batches}")
             print(f"  Time elapsed: {elapsed:.3f}s")
             print(f"  Pool hits: {pool_hits}, misses: {pool_misses}")
-            print(f"  Pool efficiency: {pool_efficiency*100:.1f}%")
+            print(f"  Pool efficiency: {pool_efficiency * 100:.1f}%")
 
             # Pool efficiency should be high
             assert pool_efficiency > 0.9, (
-                f"Pool efficiency should be >90%, got {pool_efficiency*100:.1f}%"
+                f"Pool efficiency should be >90%, got {pool_efficiency * 100:.1f}%"
             )

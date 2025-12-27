@@ -37,6 +37,7 @@ Why JAX for Curve Fitting?
    def model(x, a, b, c):
        return a * jnp.exp(-b * x) + c
 
+
    # JAX automatically computes
    # ∂f/∂a = exp(-b * x)
    # ∂f/∂b = -a * x * exp(-b * x)
@@ -88,6 +89,7 @@ JAX's Just-In-Time compiler transforms Python to optimized XLA code:
    def model(x, a, b):
        return a * jnp.exp(-b * x)
 
+
    # First call: compile (slower)
    y1 = model(x, 1.0, 0.5)
 
@@ -111,9 +113,11 @@ JAX operations must be traced to enable AD and JIT:
    import numpy as np
    import jax.numpy as jnp
 
+
    # This WON'T work with JAX
    def bad_model(x, a, b):
        return a * np.exp(-b * x)  # NumPy exp can't be traced
+
 
    # This WORKS with JAX
    def good_model(x, a, b):
@@ -150,10 +154,13 @@ JAX requires **pure functions** - no side effects:
 
    # BAD: Side effects
    counter = 0
+
+
    def bad_model(x, a, b):
        global counter
        counter += 1  # Side effect!
        return a * jnp.exp(-b * x)
+
 
    # GOOD: Pure function
    def good_model(x, a, b):
@@ -177,6 +184,7 @@ Common Gotchas
               return x[:10]
           return x
 
+
       # GOOD: Use jnp.where for conditionals
       def good(x, a):
           return jnp.where(a > 0, x * 2, x)
@@ -190,6 +198,7 @@ Common Gotchas
           x[0] = 0  # JAX arrays are immutable!
           return x
 
+
       # GOOD: Create new array
       def good(x):
           return x.at[0].set(0)
@@ -201,6 +210,7 @@ Common Gotchas
       # BAD: NumPy random
       def bad():
           return np.random.randn()  # Not reproducible in JAX
+
 
       # GOOD: JAX random with key
       def good(key):

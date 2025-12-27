@@ -143,7 +143,9 @@ class TestAsyncCheckpointQueue(TestCase):
 
         # Verify checkpoint was actually saved
         checkpoint_files = list(self.checkpoint_dir.glob("checkpoint_iter_*.h5"))
-        self.assertGreater(len(checkpoint_files), 0, "Checkpoint file should be created")
+        self.assertGreater(
+            len(checkpoint_files), 0, "Checkpoint file should be created"
+        )
 
     def test_atomic_file_replacement(self):
         """Test atomic file replacement (write to .tmp, then os.replace()).
@@ -271,7 +273,8 @@ class TestAsyncCheckpointQueue(TestCase):
 
             # Check that a warning about queue full was logged
             queue_full_logged = any(
-                "queue" in msg.lower() and ("full" in msg.lower() or "skip" in msg.lower())
+                "queue" in msg.lower()
+                and ("full" in msg.lower() or "skip" in msg.lower())
                 for msg in log_capture.output
             )
 

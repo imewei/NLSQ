@@ -122,23 +122,23 @@ class TestSparseJacobianNumericalEquivalence:
 
         from scipy.sparse import coo_matrix
 
-        J_sparse = coo_matrix(
-            (values, (rows_with_offset, cols)), shape=(1000, 10)
-        )
+        J_sparse = coo_matrix((values, (rows_with_offset, cols)), shape=(1000, 10))
 
         # Verify offset is applied correctly
         # Find where values appear in the sparse matrix
         actual_rows = J_sparse.tocsr().indices  # This is columns for CSR
         # Check that values are placed after row 500
-        assert J_sparse.tocsr()[offset:offset + 100, :].nnz > 0
+        assert J_sparse.tocsr()[offset : offset + 100, :].nnz > 0
 
     def test_threshold_boundary(self) -> None:
         """Test values exactly at threshold boundary."""
         # Create Jacobian with values exactly at threshold
-        J = np.array([
-            [0.01, 0.011, 0.009],  # boundary, above, below
-            [0.0, 0.02, 0.001],
-        ])
+        J = np.array(
+            [
+                [0.01, 0.011, 0.009],  # boundary, above, below
+                [0.0, 0.02, 0.001],
+            ]
+        )
         threshold = 0.01
 
         J_sparse = self._vectorized_sparse_construction(J, threshold)
@@ -167,7 +167,7 @@ class TestSparseJacobianIntegration:
         x0 = np.array([1.0, 1.0])
 
         # Detect sparsity
-        pattern, sparsity = computer.detect_sparsity_pattern(model, x0, xdata)
+        pattern, _sparsity = computer.detect_sparsity_pattern(model, x0, xdata)
 
         # For linear model, all elements should be non-zero
         # (each data point depends on both a and b)

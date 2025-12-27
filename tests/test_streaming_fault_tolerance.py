@@ -135,7 +135,9 @@ class TestFaultToleranceIntegration:
 
         finally:
             # Shutdown optimizer threads before cleanup
-            if optimizer is not None and hasattr(optimizer, "_shutdown_checkpoint_worker"):
+            if optimizer is not None and hasattr(
+                optimizer, "_shutdown_checkpoint_worker"
+            ):
                 optimizer._shutdown_checkpoint_worker()
 
             # Cleanup
@@ -242,7 +244,9 @@ class TestFaultToleranceIntegration:
 
         # Run optimization - starting params may cause NaN for some batches
         p0 = np.array([1.0, -0.5])
-        result = optimizer.fit_streaming((x_data, y_data), model_with_nan, p0, verbose=0)
+        result = optimizer.fit_streaming(
+            (x_data, y_data), model_with_nan, p0, verbose=0
+        )
 
         # Verify optimization completed
         assert result is not None

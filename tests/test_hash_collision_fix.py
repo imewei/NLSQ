@@ -91,9 +91,7 @@ class TestHashAlgorithmChange:
         key2 = cache.cache_key(*args, **kwargs)
         key3 = cache.cache_key(*args, **kwargs)
 
-        assert key1 == key2 == key3, (
-            "Cache keys should be identical for same inputs"
-        )
+        assert key1 == key2 == key3, "Cache keys should be identical for same inputs"
 
         # Test with arrays
         arr = np.array([1.0, 2.0, 3.0])
@@ -133,9 +131,7 @@ class TestNoMD5Usage:
         key_str = "test_key_string"
 
         # Compute expected BLAKE2b hash
-        expected_hash = hashlib.blake2b(
-            key_str.encode(), digest_size=16
-        ).hexdigest()
+        expected_hash = hashlib.blake2b(key_str.encode(), digest_size=16).hexdigest()
 
         # Verify BLAKE2b produces 32-char hex string (16 bytes = 32 hex chars)
         assert len(expected_hash) == 32

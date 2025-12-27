@@ -14,9 +14,11 @@ Gaussian Peaks
    import jax.numpy as jnp
    from nlsq import fit
 
+
    def gaussian_peak(x, amplitude, center, sigma, baseline):
        """Single Gaussian peak with baseline."""
        return amplitude * jnp.exp(-0.5 * ((x - center) / sigma) ** 2) + baseline
+
 
    # Fit
    popt, pcov = fit(
@@ -34,7 +36,7 @@ Lorentzian Peaks
 
    def lorentzian_peak(x, amplitude, center, gamma, baseline):
        """Single Lorentzian peak with baseline."""
-       return amplitude * gamma**2 / ((x - center)**2 + gamma**2) + baseline
+       return amplitude * gamma**2 / ((x - center) ** 2 + gamma**2) + baseline
 
 Voigt Profile
 ~~~~~~~~~~~~~
@@ -45,7 +47,7 @@ Voigt Profile
        """Pseudo-Voigt approximation (weighted sum)."""
        eta = gamma / (sigma + gamma + 1e-10)
        G = jnp.exp(-0.5 * ((x - center) / sigma) ** 2)
-       L = gamma**2 / ((x - center)**2 + gamma**2)
+       L = gamma**2 / ((x - center) ** 2 + gamma**2)
        return amplitude * (eta * L + (1 - eta) * G) + baseline
 
 Multi-Peak Fitting
@@ -58,15 +60,18 @@ Multi-Peak Fitting
        n_peaks = (len(params) - 1) // 3
        result = jnp.zeros_like(x)
        for i in range(n_peaks):
-           a, c, s = params[3*i], params[3*i + 1], params[3*i + 2]
+           a, c, s = params[3 * i], params[3 * i + 1], params[3 * i + 2]
            result += a * jnp.exp(-0.5 * ((x - c) / s) ** 2)
        return result + params[-1]
 
+
    # Use global optimization for multi-peak (many local minima)
    popt, pcov = fit(
-       multi_gaussian, x, y,
+       multi_gaussian,
+       x,
+       y,
        p0=initial_guesses,
-       preset='robust',
+       preset="robust",
    )
 
 Fluorescence Lifetime
@@ -90,6 +95,7 @@ Bi-Exponential
        """Bi-exponential decay (two components)."""
        return a1 * jnp.exp(-t / tau1) + a2 * jnp.exp(-t / tau2) + offset
 
+
    # Fluorescence lifetime (high precision)
    popt, pcov = fit(
        biexponential,
@@ -97,7 +103,7 @@ Bi-Exponential
        counts,
        p0=[1000, 2.5, 500, 8.0, 10],
        bounds=([0, 0.1, 0, 0.1, 0], [10000, 100, 10000, 100, 1000]),
-       preset='quality',
+       preset="quality",
    )
 
 Stretched Exponential
@@ -130,7 +136,7 @@ Tips for Spectroscopy Fitting
 
    .. code-block:: python
 
-      popt, pcov = fit(model, x, y, p0=p0, preset='global')
+      popt, pcov = fit(model, x, y, p0=p0, preset="global")
 
 4. **Check residuals** for systematic patterns indicating missing peaks
 
