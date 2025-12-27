@@ -382,6 +382,7 @@ def test_checkpoint_load_time(benchmark):
     """
     # Create a checkpoint first
     temp_dir = tempfile.mkdtemp()
+    optimizers = []
 
     try:
         np.random.seed(42)
@@ -397,6 +398,7 @@ def test_checkpoint_load_time(benchmark):
             checkpoint_dir=temp_dir,
         )
         optimizer = StreamingOptimizer(config)
+        optimizers.append(optimizer)
         optimizer.fit_streaming((x, y), linear_model, p0, verbose=0)
 
         # Find checkpoint
@@ -410,7 +412,9 @@ def test_checkpoint_load_time(benchmark):
                     batch_size=100,
                     resume_from_checkpoint=checkpoint_path,
                 )
-                return StreamingOptimizer(config_resume)
+                opt = StreamingOptimizer(config_resume)
+                optimizers.append(opt)
+                return opt
 
             # Benchmark loading
             optimizer_loaded = benchmark(load_checkpoint)
@@ -420,6 +424,11 @@ def test_checkpoint_load_time(benchmark):
 
     finally:
         import shutil
+
+        # Shutdown all optimizer threads before cleanup
+        for opt in optimizers:
+            if hasattr(opt, "_shutdown_checkpoint_worker"):
+                opt._shutdown_checkpoint_worker()
 
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)

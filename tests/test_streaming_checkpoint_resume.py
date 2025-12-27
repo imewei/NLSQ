@@ -1,7 +1,9 @@
 """Tests for streaming optimizer checkpoint save and resume functionality."""
 
 import os
+import shutil
 import tempfile
+import time
 from pathlib import Path
 from unittest import TestCase
 
@@ -35,12 +37,28 @@ class TestCheckpointSaveResume(TestCase):
         # Initial parameters
         self.p0 = np.array([1.0, 1.0, 1.0])
 
-    def tearDown(self):
-        """Clean up test files."""
-        import shutil
+        # Track optimizers created for cleanup
+        self._optimizers = []
 
+    def _create_optimizer(self, config):
+        """Create optimizer and track it for cleanup."""
+        optimizer = StreamingOptimizer(config)
+        self._optimizers.append(optimizer)
+        return optimizer
+
+    def tearDown(self):
+        """Clean up test files and shutdown optimizer threads."""
+        # Shutdown all optimizer checkpoint threads first
+        for optimizer in self._optimizers:
+            if hasattr(optimizer, "_shutdown_checkpoint_worker"):
+                optimizer._shutdown_checkpoint_worker()
+
+        # Give threads time to finish
+        time.sleep(0.1)
+
+        # Now clean up temp directory
         if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_checkpoint_file_creation(self):
         """Test that checkpoint file is created with correct structure."""
@@ -51,12 +69,15 @@ class TestCheckpointSaveResume(TestCase):
             checkpoint_dir=self.temp_dir,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Run for a few batches to trigger checkpoint
         result = optimizer.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Check checkpoint files were created
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -94,12 +115,15 @@ class TestCheckpointSaveResume(TestCase):
             use_adam=True,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Run for a few batches
         result = optimizer.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Load checkpoint and verify Adam state
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -114,16 +138,25 @@ class TestCheckpointSaveResume(TestCase):
             self.assertEqual(len(v), len(self.p0))
 
         # Test with SGD optimizer
-        config.use_adam = False
-        optimizer = StreamingOptimizer(config)
+        config_sgd = StreamingConfig(
+            batch_size=100,
+            max_epochs=1,
+            checkpoint_interval=2,
+            checkpoint_dir=self.temp_dir,
+            use_adam=False,
+        )
+        optimizer_sgd = self._create_optimizer(config_sgd)
 
         # Clear previous checkpoints
         for f in checkpoint_files:
             f.unlink()
 
-        result = optimizer.fit(
+        result = optimizer_sgd.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Load checkpoint and verify SGD state
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -141,12 +174,15 @@ class TestCheckpointSaveResume(TestCase):
             checkpoint_dir=self.temp_dir,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Run first part of optimization
         result1 = optimizer.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Get the latest checkpoint
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -161,7 +197,7 @@ class TestCheckpointSaveResume(TestCase):
             resume_from_checkpoint=str(latest_checkpoint),
         )
 
-        optimizer2 = StreamingOptimizer(config_resume)
+        optimizer2 = self._create_optimizer(config_resume)
 
         # Continue optimization
         result2 = optimizer2.fit(
@@ -189,12 +225,15 @@ class TestCheckpointSaveResume(TestCase):
             checkpoint_dir=self.temp_dir,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Run optimization with frequent checkpoints
         result = optimizer.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoints to complete
+        time.sleep(0.5)
 
         # Get all checkpoints
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -218,7 +257,7 @@ class TestCheckpointSaveResume(TestCase):
                 resume_from_checkpoint=str(checkpoint),
             )
 
-            optimizer_resume = StreamingOptimizer(config_resume)
+            optimizer_resume = self._create_optimizer(config_resume)
 
             # Run a dummy fit to trigger loading
             # This loads the checkpoint state
@@ -245,7 +284,7 @@ class TestCheckpointSaveResume(TestCase):
 
         config = StreamingConfig(resume_from_checkpoint=str(self.checkpoint_path))
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Should handle old version gracefully (log warning but continue)
         # This depends on implementation - adjust test based on actual behavior
@@ -271,12 +310,15 @@ class TestCheckpointSaveResume(TestCase):
             checkpoint_dir=self.temp_dir,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Run first optimization
         result1 = optimizer.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Create config with auto-detection
         config_auto = StreamingConfig(
@@ -287,7 +329,7 @@ class TestCheckpointSaveResume(TestCase):
             resume_from_checkpoint=True,  # Auto-detect latest
         )
 
-        optimizer2 = StreamingOptimizer(config_auto)
+        optimizer2 = self._create_optimizer(config_auto)
 
         # Should automatically find and load latest checkpoint
         result2 = optimizer2.fit(
@@ -305,7 +347,7 @@ class TestCheckpointSaveResume(TestCase):
 
         config = StreamingConfig(resume_from_checkpoint=str(self.checkpoint_path))
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Should handle corrupt checkpoint gracefully
         with self.assertLogs(level="WARNING") as log:
@@ -344,11 +386,14 @@ class TestCheckpointSaveResume(TestCase):
             checkpoint_dir=self.temp_dir,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         result = optimizer.fit(
             (x_data_with_nans, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Load checkpoint and check failed batch tracking
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -378,11 +423,14 @@ class TestCheckpointSaveResume(TestCase):
             checkpoint_dir=self.temp_dir,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         result = optimizer.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Load checkpoint and verify best params are saved
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -405,12 +453,15 @@ class TestCheckpointSaveResume(TestCase):
             checkpoint_dir=self.temp_dir,
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = self._create_optimizer(config)
 
         # Run partial optimization
         result1 = optimizer.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
+
+        # Wait for async checkpoint to complete
+        time.sleep(0.2)
 
         # Get checkpoint info
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -427,7 +478,7 @@ class TestCheckpointSaveResume(TestCase):
             resume_from_checkpoint=True,
         )
 
-        optimizer2 = StreamingOptimizer(config_resume)
+        optimizer2 = self._create_optimizer(config_resume)
         result2 = optimizer2.fit(
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
