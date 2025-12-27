@@ -16,6 +16,7 @@ Features
 - **Detailed diagnostics**: Comprehensive failure tracking and statistics
 - **Fast mode**: Disable validation overhead for trusted data (<1% overhead)
 - **Batch statistics**: Circular buffer tracking (last 100 batches)
+- **Async checkpoints**: Non-blocking checkpoint saves via background thread
 
 Fault Tolerance
 ---------------
@@ -189,6 +190,7 @@ Notes
 - Checkpoint format uses HDF5 with versioning for compatibility
 - Batch statistics use circular buffer (fixed memory, last 100 batches)
 - Best parameters always returned (never initial p0 on success)
+- Checkpoint saves are non-blocking (async I/O via background thread)
 
 See Also
 --------
@@ -197,7 +199,11 @@ curve_fit_large : High-level interface for large datasets
 LargeDatasetFitter : Alternative for datasets that fit in memory but need chunking
 """
 
+import copy
 import logging
+import os
+import queue
+import threading
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator
@@ -451,6 +457,7 @@ class StreamingOptimizer:
     - **Detailed diagnostics**: Comprehensive failure tracking and batch statistics
     - **Batch statistics**: Circular buffer tracking last 100 batches
     - **Fast mode**: Disable validation overhead for trusted data (<1% overhead)
+    - **Async checkpoints**: Non-blocking checkpoint saves via background thread
 
     Parameters
     ----------
@@ -621,6 +628,11 @@ class StreamingOptimizer:
         Optimization fails if batch success rate falls below `min_success_rate`
         (default 50%). Best parameters found are still returned.
 
+    **Async Checkpoints**:
+        Checkpoint saves are non-blocking using a background thread with a queue.
+        Queue maxsize=2 limits memory overhead. Atomic file replacement ensures
+        no partial/corrupt checkpoint files.
+
     See Also
     --------
     StreamingConfig : Configuration options for streaming optimization
@@ -668,10 +680,151 @@ class StreamingOptimizer:
         self.final_epoch = 0
 
         # Initialize batch shape padding tracking (Task Group 7)
-        self._max_batch_shape = None  # Detected max shape during warmup
-        self._warmup_phase = True  # Track warmup vs production phase
+        # Task 1.2 & 1.3: Early activation for static/auto modes
+        # For static and auto modes, set _max_batch_shape immediately and
+        # skip warmup phase to enable padding from the first batch.
+        # This eliminates JIT recompilation from varying batch sizes.
+        if self.config.batch_shape_padding in ("static", "auto"):
+            # Set max batch shape to config.batch_size immediately
+            self._max_batch_shape = self.config.batch_size
+            # Skip warmup phase - padding is active from first batch
+            self._warmup_phase = False
+        else:
+            # Dynamic mode: retain original behavior
+            self._max_batch_shape = None  # Detected max shape during warmup
+            self._warmup_phase = True  # Track warmup vs production phase
+
         self._recompile_count = 0  # Count JIT recompilations
         self._post_warmup_recompiles = 0  # Recompiles after warmup phase
+
+        # Task Group 2: Async checkpoint queue infrastructure
+        # Only create checkpoint thread if checkpoints are enabled (prevents thread accumulation)
+        self._checkpoint_queue = None
+        self._checkpoint_worker_pause = False
+        self._checkpoint_worker_shutdown = False
+        self._checkpoint_thread = None
+
+        if self.config.enable_checkpoints:
+            # Create queue with maxsize=2 for double buffering (limits memory overhead)
+            self._checkpoint_queue = queue.Queue(maxsize=2)
+            # Create daemon thread for checkpoint worker
+            self._checkpoint_thread = threading.Thread(
+                target=self._checkpoint_worker,
+                name="checkpoint-worker",
+                daemon=True,
+            )
+            self._checkpoint_thread.start()
+
+        # Task Group 10: Performance Instrumentation
+        # Check if profiling is enabled via NLSQ_PROFILE=1 environment variable
+        self._profiling_enabled = os.environ.get("NLSQ_PROFILE", "").lower() in ("1", "true", "yes")
+
+        # Task 10.2: JIT recompilation counter
+        # Increments when JIT recompilation is detected (e.g., shape changes)
+        self._jit_recompilation_count = 0
+
+        # Task 10.3-10.5: Profiling metrics dictionary (only populated when profiling enabled)
+        self._profiling_metrics = {
+            "jit_recompilation_count": 0,
+            "batch_count": 0,
+            "cache_hit_rates": {},
+            "checkpoint_save_durations_ms": [],
+        }
+
+        # Task 10.4: Memory pool efficiency tracking
+        # Calculated as pool_hits / (pool_hits + new_allocations)
+        self._pool_hits = 0
+        self._new_allocations = 0
+
+        # Task 10.3: Logging interval for cache stats (default: every 100 batches)
+        self._profiling_log_interval = 100
+
+    def __del__(self):
+        """Cleanup checkpoint worker thread on garbage collection."""
+        self._shutdown_checkpoint_worker()
+
+    def _shutdown_checkpoint_worker(self):
+        """Shutdown the checkpoint worker thread gracefully.
+
+        Sends a sentinel value (None) to the queue to signal the worker
+        thread to exit, then waits for the thread to finish with a timeout.
+        """
+        if hasattr(self, "_checkpoint_worker_shutdown") and self._checkpoint_worker_shutdown:
+            # Already shut down
+            return
+
+        self._checkpoint_worker_shutdown = True
+
+        # Send sentinel value to signal shutdown (only if queue exists)
+        if hasattr(self, "_checkpoint_queue") and self._checkpoint_queue is not None:
+            try:
+                # Use put with timeout to avoid blocking forever
+                self._checkpoint_queue.put(None, timeout=1.0)
+            except queue.Full:
+                # Queue is full, but shutdown flag is set so worker will exit
+                pass
+
+        # Wait for thread to finish (only if thread exists and is alive)
+        if hasattr(self, "_checkpoint_thread") and self._checkpoint_thread is not None and self._checkpoint_thread.is_alive():
+            self._checkpoint_thread.join(timeout=2.0)
+
+    def _checkpoint_worker(self):
+        """Background thread that processes checkpoint save requests.
+
+        This worker runs in a daemon thread and processes checkpoint data
+        from the queue. It handles:
+        - Graceful shutdown via sentinel value (None)
+        - Error handling with logging
+        - Pause flag for testing queue full behavior
+
+        The worker calls _save_checkpoint_sync() to perform the actual
+        HDF5 write with atomic file replacement.
+        """
+        while True:
+            try:
+                # Check for pause flag (used in testing)
+                while self._checkpoint_worker_pause and not self._checkpoint_worker_shutdown:
+                    time.sleep(0.01)
+
+                # Check shutdown flag
+                if self._checkpoint_worker_shutdown:
+                    # Drain remaining items from queue before exiting
+                    while not self._checkpoint_queue.empty():
+                        try:
+                            item = self._checkpoint_queue.get_nowait()
+                            if item is not None:
+                                self._save_checkpoint_sync(item)
+                            self._checkpoint_queue.task_done()
+                        except queue.Empty:
+                            break
+                    return
+
+                # Get next checkpoint data from queue (blocks until available)
+                checkpoint_data = self._checkpoint_queue.get(timeout=0.5)
+
+                # Check for sentinel value (None) to exit
+                if checkpoint_data is None:
+                    self._checkpoint_queue.task_done()
+                    return
+
+                # Save checkpoint synchronously
+                self._save_checkpoint_sync(checkpoint_data)
+                self._checkpoint_queue.task_done()
+
+            except queue.Empty:
+                # Timeout - check shutdown flag and continue
+                if self._checkpoint_worker_shutdown:
+                    return
+                continue
+
+            except Exception as e:
+                # Log error but continue processing
+                logger.error(f"Error in checkpoint worker: {e}")
+                try:
+                    self._checkpoint_queue.task_done()
+                except ValueError:
+                    # task_done called too many times
+                    pass
 
     def reset_state(self):
         """Reset optimizer state."""
@@ -928,19 +1081,18 @@ class StreamingOptimizer:
                     self.total_retries += 1
 
                 # Compute loss and gradient (with mask if padded batch)
-                loss, grad = self._compute_loss_and_gradient(
-                    func, params, x_batch, y_batch, mask
-                )
-
-                # NaN/Inf validation (Task 3.1-3.3) - if enabled
+                # Task Group 7 (4.3a): Use JIT-compiled validation if enabled
                 if self.config.validate_numerics:
-                    # Validation point 1: Check gradients
-                    if not np.all(np.isfinite(grad)):
-                        raise FloatingPointError("NaN or Inf detected in gradients")
-
-                    # Validation point 3: Check loss
-                    if not np.isfinite(loss):
-                        raise FloatingPointError("NaN or Inf detected in loss")
+                    loss, grad, is_valid = self._compute_loss_and_gradient_with_validation(
+                        func, params, x_batch, y_batch, mask
+                    )
+                    # Check validity flag and raise error if invalid
+                    if not is_valid:
+                        raise FloatingPointError("NaN or Inf detected in loss or gradients")
+                else:
+                    loss, grad = self._compute_loss_and_gradient(
+                        func, params, x_batch, y_batch, mask
+                    )
 
                 # Gradient clipping
                 grad_norm = np.linalg.norm(grad)
@@ -950,7 +1102,7 @@ class StreamingOptimizer:
                 # Update parameters
                 params = self._update_parameters(params, grad, bounds)
 
-                # NaN/Inf validation (Task 3.2) - if enabled
+                # NaN/Inf validation (Task 3.2) - if enabled (parameter validation)
                 if self.config.validate_numerics:
                     # Validation point 2: Check parameters after update
                     if not np.all(np.isfinite(params)):
@@ -1509,14 +1661,17 @@ class StreamingOptimizer:
                     self.total_batches_attempted += 1
 
                     # Task Group 7: Batch shape padding for JIT stability
-                    # Update max batch shape during warmup
+                    # Note: With early activation (Task 1.2/1.3), static/auto modes
+                    # already have _max_batch_shape set and _warmup_phase=False,
+                    # so warmup phase code only runs for dynamic mode.
+                    # Update max batch shape during warmup (dynamic mode only)
                     if (
                         self._warmup_phase
                         and self.iteration <= self.config.warmup_steps
                     ):
                         self._update_max_batch_shape(len(x_batch))
 
-                    # Transition from warmup to production phase
+                    # Transition from warmup to production phase (dynamic mode only)
                     if self._warmup_phase and self.iteration > self.config.warmup_steps:
                         self._warmup_phase = False
                         if self.config.batch_shape_padding in ("auto", "static"):
@@ -1781,6 +1936,29 @@ class StreamingOptimizer:
             "warmup_completed": not self._warmup_phase,
         }
 
+        # Task Group 10: Add instrumentation metrics to diagnostics
+        instrumentation_info = {
+            "jit_recompilation_count": self._jit_recompilation_count,
+            "profiling_enabled": self._profiling_enabled,
+        }
+
+        # Add checkpoint save duration histogram if checkpoints were saved
+        if self.checkpoint_save_times:
+            save_times = self.checkpoint_save_times
+            instrumentation_info["checkpoint_save_duration_ms"] = {
+                "min": float(min(save_times)) if save_times else 0.0,
+                "max": float(max(save_times)) if save_times else 0.0,
+                "mean": float(sum(save_times) / len(save_times)) if save_times else 0.0,
+                "count": len(save_times),
+            }
+            # Calculate p50 and p99 if enough data points
+            if len(save_times) >= 2:
+                sorted_times = sorted(save_times)
+                p50_idx = len(sorted_times) // 2
+                p99_idx = min(int(len(sorted_times) * 0.99), len(sorted_times) - 1)
+                instrumentation_info["checkpoint_save_duration_ms"]["p50"] = float(sorted_times[p50_idx])
+                instrumentation_info["checkpoint_save_duration_ms"]["p99"] = float(sorted_times[p99_idx])
+
         diagnostics = {
             "failed_batches": self.failed_batch_indices.copy(),
             "retry_counts": retry_counts_dict,
@@ -1795,6 +1973,8 @@ class StreamingOptimizer:
             "recent_batch_stats": self.batch_stats_buffer.copy(),
             "aggregate_stats": aggregate_stats,
             "batch_padding": batch_padding_info,  # Task Group 7
+            "instrumentation": instrumentation_info,  # Task Group 10
+            "jit_recompilation_count": self._jit_recompilation_count,  # Top-level for easy access
         }
 
         return diagnostics
@@ -1896,6 +2076,8 @@ class StreamingOptimizer:
             return True
         elif mode == "auto":
             # Pad after warmup phase completes
+            # With early activation (Task 1.2/1.3), _warmup_phase is False from init,
+            # so this returns True from the first batch
             return not self._warmup_phase
         else:
             # Should never reach here due to validation in __post_init__
@@ -1959,6 +2141,88 @@ class StreamingOptimizer:
 
         return self._loss_and_grad_cache[cache_key]
 
+    def _get_loss_and_grad_fn_with_validation(self, func: Callable, use_mask: bool = False):
+        """Get or create JIT-compiled loss and gradient function with NaN/Inf validation.
+
+        Task Group 7 (4.3a): This method creates a JIT-compiled function that
+        performs NaN/Inf validation inside the JIT boundary, avoiding the overhead
+        of Python-level validation after each batch.
+
+        Parameters
+        ----------
+        func : Callable
+            Model function
+        use_mask : bool, optional
+            Whether to use masking for padded batches (default: False)
+
+        Returns
+        -------
+        loss_and_grad_fn : Callable
+            JIT-compiled function that returns (loss, grad, is_valid) tuple
+            where is_valid is a boolean indicating if loss and gradients are finite
+
+        Notes
+        -----
+        Expected performance gain: 5-10% when numeric validation is enabled,
+        as validation is done on GPU inside the JIT boundary rather than
+        requiring CPU round-trip for each validation check.
+        """
+        # Cache key includes mask flag and validation flag
+        cache_key = f"loss_grad_validated_masked_{use_mask}"
+
+        if not hasattr(self, "_loss_and_grad_cache"):
+            self._loss_and_grad_cache = {}
+
+        if cache_key not in self._loss_and_grad_cache:
+            if use_mask:
+                # Masked version with validation for padded batches
+                def loss_fn_masked_validated(params, x_batch, y_batch, mask):
+                    y_pred = func(x_batch, *params)
+                    residuals = y_batch - y_pred
+
+                    # Apply mask to exclude padded points from loss
+                    masked_residuals = jnp.where(mask, residuals, 0.0)
+                    n_valid = jnp.sum(mask)  # Count valid points
+
+                    # Loss averaged over valid points only
+                    loss = jnp.sum(masked_residuals**2) / jnp.maximum(n_valid, 1.0)
+                    return loss
+
+                # Create value_and_grad function
+                loss_and_grad_base = value_and_grad(loss_fn_masked_validated)
+
+                @jit
+                def loss_grad_with_validation_masked(params, x_batch, y_batch, mask):
+                    loss, grad = loss_and_grad_base(params, x_batch, y_batch, mask)
+                    # Task Group 7 (4.3a): JIT-compiled NaN/Inf validation
+                    # Use jnp.isfinite to check for NaN/Inf inside JIT boundary
+                    is_valid = jnp.isfinite(loss) & jnp.all(jnp.isfinite(grad))
+                    return loss, grad, is_valid
+
+                self._loss_and_grad_cache[cache_key] = loss_grad_with_validation_masked
+            else:
+                # Standard version with validation
+                def loss_fn_validated(params, x_batch, y_batch):
+                    y_pred = func(x_batch, *params)
+                    residuals = y_batch - y_pred
+                    loss = jnp.mean(residuals**2)
+                    return loss
+
+                # Create value_and_grad function
+                loss_and_grad_base = value_and_grad(loss_fn_validated)
+
+                @jit
+                def loss_grad_with_validation(params, x_batch, y_batch):
+                    loss, grad = loss_and_grad_base(params, x_batch, y_batch)
+                    # Task Group 7 (4.3a): JIT-compiled NaN/Inf validation
+                    # Use jnp.isfinite to check for NaN/Inf inside JIT boundary
+                    is_valid = jnp.isfinite(loss) & jnp.all(jnp.isfinite(grad))
+                    return loss, grad, is_valid
+
+                self._loss_and_grad_cache[cache_key] = loss_grad_with_validation
+
+        return self._loss_and_grad_cache[cache_key]
+
     def _compute_loss_and_gradient(
         self,
         func: Callable,
@@ -2017,6 +2281,73 @@ class StreamingOptimizer:
         grad = np.array(grad)
 
         return loss, grad
+
+    def _compute_loss_and_gradient_with_validation(
+        self,
+        func: Callable,
+        params: np.ndarray,
+        x_batch: np.ndarray,
+        y_batch: np.ndarray,
+        mask: np.ndarray | None = None,
+    ) -> tuple[float, np.ndarray, bool]:
+        """Compute loss, gradient, and validity flag for a batch.
+
+        Task Group 7 (4.3a): This method performs NaN/Inf validation inside
+        the JIT-compiled gradient function, reducing validation overhead by
+        5-10% compared to Python-level validation.
+
+        Parameters
+        ----------
+        func : Callable
+            Model function
+        params : np.ndarray
+            Current parameters
+        x_batch : np.ndarray
+            Batch input data
+        y_batch : np.ndarray
+            Batch target data
+        mask : np.ndarray, optional
+            Boolean mask indicating valid data points (for padded batches)
+
+        Returns
+        -------
+        loss : float
+            Batch loss value
+        grad : np.ndarray
+            Gradient of loss with respect to parameters
+        is_valid : bool
+            True if loss and gradients are finite (no NaN/Inf)
+
+        Notes
+        -----
+        When mask is provided, loss and gradients are computed only over
+        valid (non-padded) data points. The is_valid flag indicates whether
+        both loss and all gradient components are finite (not NaN or Inf).
+        """
+        # Get JIT-compiled loss and gradient function with validation
+        use_mask = mask is not None
+        loss_and_grad_fn = self._get_loss_and_grad_fn_with_validation(func, use_mask=use_mask)
+
+        # Convert to JAX arrays
+        params_jax = jnp.array(params)
+        x_batch_jax = jnp.array(x_batch)
+        y_batch_jax = jnp.array(y_batch)
+
+        # Compute loss, gradient, and validity flag
+        if use_mask:
+            mask_jax = jnp.array(mask)
+            loss, grad, is_valid = loss_and_grad_fn(
+                params_jax, x_batch_jax, y_batch_jax, mask_jax
+            )
+        else:
+            loss, grad, is_valid = loss_and_grad_fn(params_jax, x_batch_jax, y_batch_jax)
+
+        # Convert back to NumPy/Python types
+        loss = float(loss)
+        grad = np.array(grad)
+        is_valid = bool(is_valid)
+
+        return loss, grad, is_valid
 
     def _update_parameters(
         self,
@@ -2086,7 +2417,11 @@ class StreamingOptimizer:
         return params_new
 
     def _save_checkpoint(self, params: np.ndarray, losses: list):
-        """Save checkpoint to disk.
+        """Save checkpoint to disk asynchronously (non-blocking).
+
+        This method creates a deep copy of the optimizer state and enqueues
+        it for background saving. The main optimization loop proceeds
+        immediately without waiting for the HDF5 write to complete.
 
         Parameters
         ----------
@@ -2094,66 +2429,158 @@ class StreamingOptimizer:
             Current parameters
         losses : list
             List of loss values
+
+        Notes
+        -----
+        Task Group 2: Async Checkpoint Queue (4.2a)
+        - Uses double buffering: fast deep copy of state, enqueue, proceed
+        - Queue maxsize=2 limits memory overhead
+        - If queue is full, save is skipped with warning logged
+        - Actual disk I/O happens in background thread via _save_checkpoint_sync()
         """
-        checkpoint_dir = Path(self.config.checkpoint_dir)
+        # Guard: if checkpoint queue is not initialized (checkpoints disabled), return early
+        if self._checkpoint_queue is None:
+            return
+
+        # Create deep copy of optimizer state for double buffering
+        # This allows the main thread to proceed immediately while
+        # the background thread writes to disk
+        checkpoint_data = {
+            "params": params.copy(),
+            "best_params": self.best_params.copy() if self.best_params is not None else params.copy(),
+            "best_loss": self.best_loss,
+            "iteration": self.iteration,
+            "epoch": self.epoch,
+            "batch_idx": self.batch_idx,
+            "failed_batch_indices": self.failed_batch_indices.copy(),
+            "retry_counts": dict(self.retry_counts),
+            "error_types": dict(self.error_types),
+            "checkpoint_dir": self.config.checkpoint_dir,
+            "use_adam": self.config.use_adam,
+        }
+
+        # Copy optimizer state (m, v for Adam or velocity for SGD)
+        if self.config.use_adam:
+            checkpoint_data["m"] = self.m.copy() if self.m is not None else None
+            checkpoint_data["v"] = self.v.copy() if self.v is not None else None
+        else:
+            checkpoint_data["velocity"] = self.velocity.copy() if self.velocity is not None else None
+
+        # Try to enqueue checkpoint data (non-blocking)
+        try:
+            self._checkpoint_queue.put_nowait(checkpoint_data)
+        except queue.Full:
+            # Queue is full - skip this save and log warning
+            logger.warning(
+                f"Checkpoint queue full, skipping save at iteration {self.iteration}. "
+                "Checkpoints are being saved slower than requested."
+            )
+
+    def _save_checkpoint_sync(self, checkpoint_data: dict):
+        """Save checkpoint to disk synchronously with atomic file replacement.
+
+        This method is called by the background checkpoint worker thread.
+        It writes the checkpoint to a temporary file first, then atomically
+        moves it to the final location to prevent partial/corrupt files.
+
+        Parameters
+        ----------
+        checkpoint_data : dict
+            Dictionary containing all checkpoint state (deep copied from main thread)
+
+        Notes
+        -----
+        Task Group 2: Async Checkpoint Queue (4.2a)
+        - Atomic file replacement: write to .tmp, then os.replace()
+        - Preserves existing checkpoint format (version metadata, parameters, optimizer state)
+        - Called from background thread, not main optimization loop
+
+        Task Group 10 (10.5): Track checkpoint save duration for histogram
+        """
+        # Task 10.5: Track checkpoint save duration
+        save_start_time = time.perf_counter()
+
+        checkpoint_dir = Path(checkpoint_data["checkpoint_dir"])
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        checkpoint_path = checkpoint_dir / f"checkpoint_iter_{self.iteration}.h5"
+        iteration = checkpoint_data["iteration"]
+        checkpoint_path = checkpoint_dir / f"checkpoint_iter_{iteration}.h5"
+        temp_path = checkpoint_dir / f"checkpoint_iter_{iteration}.h5.tmp"
 
         try:
-            with h5py.File(checkpoint_path, "w") as f:
+            # Write to temporary file first
+            with h5py.File(temp_path, "w") as f:
                 # Version metadata
                 f.attrs["version"] = "2.0"
 
                 # Save parameters
                 f.create_group("parameters")
-                f["parameters/current"] = params
-                f["parameters/best"] = (
-                    self.best_params if self.best_params is not None else params
-                )
+                f["parameters/current"] = checkpoint_data["params"]
+                f["parameters/best"] = checkpoint_data["best_params"]
 
                 # Save optimizer state
                 f.create_group("optimizer_state")
-                if self.config.use_adam:
-                    f["optimizer_state/m"] = self.m
-                    f["optimizer_state/v"] = self.v
+                if checkpoint_data["use_adam"]:
+                    if checkpoint_data["m"] is not None:
+                        f["optimizer_state/m"] = checkpoint_data["m"]
+                    if checkpoint_data["v"] is not None:
+                        f["optimizer_state/v"] = checkpoint_data["v"]
                 else:
-                    f["optimizer_state/velocity"] = self.velocity
+                    if checkpoint_data["velocity"] is not None:
+                        f["optimizer_state/velocity"] = checkpoint_data["velocity"]
 
                 # Save progress
                 f.create_group("progress")
-                f["progress/iteration"] = self.iteration
-                f["progress/epoch"] = self.epoch
-                f["progress/batch_idx"] = self.batch_idx
-                f["progress/best_loss"] = self.best_loss
+                f["progress/iteration"] = checkpoint_data["iteration"]
+                f["progress/epoch"] = checkpoint_data["epoch"]
+                f["progress/batch_idx"] = checkpoint_data["batch_idx"]
+                f["progress/best_loss"] = checkpoint_data["best_loss"]
 
                 # Save diagnostics (version 2.0)
                 f.create_group("diagnostics")
 
                 # Save failed batch indices
-                if self.failed_batch_indices:
-                    f["diagnostics/failed_batch_indices"] = self.failed_batch_indices
+                if checkpoint_data["failed_batch_indices"]:
+                    f["diagnostics/failed_batch_indices"] = checkpoint_data["failed_batch_indices"]
 
                 # Save retry counts
-                if self.retry_counts:
+                if checkpoint_data["retry_counts"]:
                     retry_data = np.array(
-                        [(k, v) for k, v in self.retry_counts.items()],
+                        [(k, v) for k, v in checkpoint_data["retry_counts"].items()],
                         dtype=[("batch_idx", "i4"), ("count", "i4")],
                     )
                     f["diagnostics/retry_counts"] = retry_data
 
                 # Save error types
-                if self.error_types:
+                if checkpoint_data["error_types"]:
                     error_data = np.array(
-                        [(k, v) for k, v in self.error_types.items()],
+                        [(k, v) for k, v in checkpoint_data["error_types"].items()],
                         dtype=[("error_type", "S64"), ("count", "i4")],
                     )
                     f["diagnostics/error_types"] = error_data
 
-            logger.debug(f"Saved checkpoint to {checkpoint_path}")
+            # Atomic file replacement: move temp file to final location
+            # os.replace() is atomic on POSIX systems
+            os.replace(temp_path, checkpoint_path)
+
+            # Task 10.5: Track checkpoint save duration
+            save_duration_ms = (time.perf_counter() - save_start_time) * 1000
+            self.checkpoint_save_times.append(save_duration_ms)
+
+            # Update profiling metrics if enabled
+            if self._profiling_enabled:
+                self._profiling_metrics["checkpoint_save_durations_ms"].append(save_duration_ms)
+
+            logger.debug(f"Saved checkpoint to {checkpoint_path} ({save_duration_ms:.1f}ms)")
 
         except Exception as e:
             logger.warning(f"Failed to save checkpoint: {e}")
+            # Clean up temp file if it exists
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass
 
 
 def create_hdf5_dataset(

@@ -182,6 +182,10 @@ def main():
     print("  - Comprehensive diagnostics for analysis")
     print("  - Checkpoints saved automatically for recovery")
 
+    # Cleanup checkpoint worker thread to prevent memory corruption on exit
+    if hasattr(optimizer, "_shutdown_checkpoint_worker"):
+        optimizer._shutdown_checkpoint_worker()
+
 
 if __name__ == "__main__":
     main()

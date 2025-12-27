@@ -151,6 +151,7 @@ def main():
 
     # Find a specific checkpoint (e.g., iteration 4)
     specific_checkpoint = checkpoint_dir / "checkpoint_iter_4.h5"
+    optimizer3 = None
     if specific_checkpoint.exists():
         print(f"Resuming from specific checkpoint: {specific_checkpoint.name}")
         print()
@@ -210,6 +211,11 @@ def main():
     print("  - Seamless resume from any interruption point")
     print("  - No duplicate batch processing on resume")
     print(f"\nCheckpoints saved in: {checkpoint_dir.absolute()}")
+
+    # Cleanup checkpoint worker threads to prevent memory corruption on exit
+    for opt in [optimizer, optimizer2, optimizer3]:
+        if opt is not None and hasattr(opt, "_shutdown_checkpoint_worker"):
+            opt._shutdown_checkpoint_worker()
 
 
 if __name__ == "__main__":

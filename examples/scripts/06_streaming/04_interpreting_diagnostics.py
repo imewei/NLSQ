@@ -300,6 +300,10 @@ def main():
     print("  - Error analysis helps diagnose issues")
     print("  - Diagnostics can be exported to JSON for further analysis")
 
+    # Cleanup checkpoint worker thread to prevent memory corruption on exit
+    if hasattr(optimizer, "_shutdown_checkpoint_worker"):
+        optimizer._shutdown_checkpoint_worker()
+
 
 if __name__ == "__main__":
     main()

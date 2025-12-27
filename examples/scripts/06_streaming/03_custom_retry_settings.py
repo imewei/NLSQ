@@ -211,6 +211,11 @@ def main():
     print("  - Best parameters returned even when success rate fails")
     print("  - Error type distribution helps diagnose data issues")
 
+    # Cleanup checkpoint worker threads to prevent memory corruption on exit
+    for opt in [optimizer1, optimizer2]:
+        if hasattr(opt, "_shutdown_checkpoint_worker"):
+            opt._shutdown_checkpoint_worker()
+
 
 if __name__ == "__main__":
     main()
