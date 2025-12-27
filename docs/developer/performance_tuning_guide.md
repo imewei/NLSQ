@@ -1,7 +1,55 @@
 # NLSQ Performance Tuning Guide
 
 **For Users**: How to get the best performance from NLSQ
-**Last Updated**: October 2025
+**Last Updated**: December 2025
+
+---
+
+## Recent Optimizations (v0.4.2+)
+
+NLSQ has received significant performance improvements:
+
+### Lazy Imports (43% Faster Cold Start)
+
+Specialty modules are now lazily imported, reducing initial import time from ~1084ms to ~620ms:
+
+```python
+# These modules only load when first accessed:
+# - nlsq.global_optimization
+# - nlsq.streaming_optimizer
+# - nlsq.profiler_visualization
+# - nlsq.gui
+
+import nlsq  # Fast (~620ms)
+nlsq.curve_fit(...)  # Core functionality loads immediately
+
+# Streaming loads only when needed
+nlsq.StreamingOptimizer(...)  # Lazy load happens here
+```
+
+### Vectorized Sparse Jacobian (37-50x Speedup)
+
+Sparse Jacobian construction now uses vectorized NumPy operations:
+
+```python
+# Old: O(nm) nested loop - slow for large matrices
+# New: O(nnz) COO sparse construction - much faster
+
+# 100k x 50 matrix: ~200ms → ~5ms (40x speedup)
+```
+
+### LRU Memory Pool
+
+Memory pool now uses LRU eviction with adaptive TTL:
+
+```python
+from nlsq.memory_manager import MemoryManager
+
+manager = MemoryManager()
+# Arrays are cached and reused
+# LRU eviction when pool exceeds max_arrays
+manager.optimize_memory_pool(max_arrays=10)
+```
 
 ---
 
@@ -491,4 +539,4 @@ print(f"Expected: First ~400ms, Second ~30ms")
 - Benchmark suite: `benchmarks/test_performance_regression.py`
 - Examples: `examples/` directory
 
-**Last Updated**: October 2025
+**Last Updated**: December 2025

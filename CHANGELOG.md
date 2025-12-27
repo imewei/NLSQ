@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Performance benchmark suite**: New `benchmarks/` directory with pytest-benchmark tests for sparse Jacobian, memory pool, and algorithm efficiency
+- **LRU memory pool eviction**: Memory pool now uses LRU eviction policy with `OrderedDict.move_to_end()` for optimal cache hit rates
+- **Model validation caching**: `LargeDatasetFitter` caches model validation by function identity to avoid redundant validation across chunks
+- **JIT-compiled numeric validation**: Streaming optimizer includes JIT-compiled NaN/Inf validation for `validate_numerics=True` mode
+- **Adaptive TTL for memory pool**: Memory pool entries now have adaptive time-to-live based on access patterns
+
+### Changed
+
+- **Lazy imports for specialty modules** (43% faster import time): Global optimization, streaming optimizer, profiling, and GUI modules are now lazily imported, reducing cold-start time from ~1084ms to ~620ms
+- **Vectorized sparse Jacobian construction** (37-50x speedup): Replaced O(nm) nested loop with O(nnz) NumPy vectorized operations using COO sparse matrix construction
+- **Consolidated benchmark directories**: Merged `benchmark/` into `benchmarks/` for cleaner project structure
+- **DataChunker padding optimization**: Uses `np.resize()` for cyclic repetition padding, reducing memory allocation overhead by 10-20%
+
+### Fixed
+
+- fix(tests): Rename benchmark files to match pytest naming convention (`test_benchmark_*.py`)
+- fix(streaming): Replace try-except-pass blocks with `contextlib.suppress()` per SIM105 rule
+- fix(tests): Prefix unused variables with underscore to satisfy RUF059 linting rule
+- fix(tests): Bind loop variables in lambda closures to fix B023 linting warnings
+
 ## [0.4.1] - 2025-12-24
 
 ### Added
