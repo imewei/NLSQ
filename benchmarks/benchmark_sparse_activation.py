@@ -4,7 +4,7 @@ This script benchmarks the performance improvements from sparse solver activatio
 - Target: 3-10x speed improvement on sparse problems
 - Target: 5-50x memory reduction on sparse problems
 
-Stores baseline results in benchmark/baselines/sparse_activation.json
+Stores baseline results in benchmarks/baselines/sparse_activation.json
 """
 
 import json

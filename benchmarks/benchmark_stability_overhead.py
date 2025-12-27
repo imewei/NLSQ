@@ -5,7 +5,7 @@ This benchmark validates the performance analysis claims:
 2. Init-only checks are much faster than per-iteration checks
 3. rescale_data impact is negligible
 
-Run with: python benchmark/benchmark_stability_overhead.py
+Run with: python benchmarks/benchmark_stability_overhead.py
 """
 
 from __future__ import annotations

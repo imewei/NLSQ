@@ -204,16 +204,16 @@ Reproducing Benchmarks
 Run the benchmark suite::
 
     # Standard benchmarks
-    python benchmark/benchmark.py
+    python benchmarks/benchmark.py
 
     # Large dataset benchmarks
-    python benchmark/benchmark.py --large-datasets
+    python benchmarks/benchmark.py --large-datasets
 
     # Memory profiling
-    python -m memory_profiler benchmark/benchmark.py
+    python -m memory_profiler benchmarks/benchmark.py
 
     # GPU benchmarks (requires CUDA)
-    JAX_PLATFORMS=gpu python benchmark/benchmark.py
+    JAX_PLATFORMS=gpu python benchmarks/benchmark.py
 
 Individual benchmark scripts::
 

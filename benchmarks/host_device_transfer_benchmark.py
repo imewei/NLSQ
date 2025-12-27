@@ -9,9 +9,9 @@ Target Metrics (Task Group 2):
 - GPU iteration time: 5-15% reduction
 
 Usage:
-    python benchmark/host_device_transfer_benchmark.py [--gpu] [--save-baseline]
+    python benchmarks/host_device_transfer_benchmark.py [--gpu] [--save-baseline]
 
-Results are saved to: benchmark/baselines/host_device_transfers.json
+Results are saved to: benchmarks/baselines/host_device_transfers.json
 """
 
 import argparse
@@ -322,7 +322,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="benchmark/baselines/host_device_transfers.json",
+        default="benchmarks/baselines/host_device_transfers.json",
         help="Output path for baseline JSON",
     )
     parser.add_argument(

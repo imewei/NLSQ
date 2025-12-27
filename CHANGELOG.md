@@ -599,7 +599,7 @@ nlsq/global_optimization/
 - **Stability Performance Benchmarks**: Benchmark and visualization scripts
   - `benchmark_stability_overhead.py`: Measure SVD skip, init-only checks overhead
   - `visualize_stability_performance.py`: Generate performance plots
-  - **Files Added**: `benchmark/benchmark_stability_overhead.py`, `scripts/visualize_stability_performance.py`
+  - **Files Added**: `benchmarks/benchmark_stability_overhead.py`, `scripts/visualize_stability_performance.py`
 
 ## [0.3.0] - 2025-11-19
 
@@ -626,7 +626,7 @@ nlsq/global_optimization/
   - Baseline generation script measures cold JIT and hot path performance
   - Platform-specific baselines stored in JSON format
   - CI/CD regression gates prevent >10% performance degradation
-  - **Files Added**: `benchmark/baselines/create_baseline.py`, `benchmark/baselines/v0.3.0-beta.3-linux.json`
+  - **Files Added**: `benchmarks/baselines/create_baseline.py`, `benchmarks/baselines/v0.3.0-beta.3-linux.json`
   - **Files Added**: `tests/test_performance_regression.py`
 
 #### Comprehensive Test Coverage
@@ -663,11 +663,11 @@ nlsq/global_optimization/
   - Documented ~90 NumPy operations across both files (not in hot path)
   - Impact assessment: <1% of optimization time (operations execute once or via async callbacks)
   - Recommendation: Defer JAX conversion to Phase 2 (no performance benefit expected)
-  - **Files Added**: `benchmark/numpy_operations_audit.md`
+  - **Files Added**: `benchmarks/numpy_operations_audit.md`
 - **Coverage Report**: Detailed test coverage metrics for v0.3.0-beta.3
   - 100% function coverage on new modules (profiling, async_logger)
   - 95%+ line coverage on new code
-  - **Files Added**: `benchmark/coverage_report_beta3.md`
+  - **Files Added**: `benchmarks/coverage_report_beta3.md`
 
 ### Technical Details
 

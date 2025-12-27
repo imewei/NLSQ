@@ -87,7 +87,7 @@ def create_baseline():
 if __name__ == "__main__":
     baseline = create_baseline()
 
-    output_file = f"benchmark/baselines/v0.3.0-beta.3-{platform.system().lower()}.json"
+    output_file = f"benchmarks/baselines/v0.3.0-beta.3-{platform.system().lower()}.json"
     with open(output_file, "w") as f:
         json.dump(baseline, f, indent=2)
 

@@ -7,16 +7,16 @@ across different optimization phases.
 
 Usage:
     # Run all benchmarks
-    pytest benchmark/test_performance_regression.py --benchmark-only
+    pytest benchmarks/test_performance_regression.py --benchmark-only
 
     # Save baseline
-    pytest benchmark/test_performance_regression.py --benchmark-save=baseline
+    pytest benchmarks/test_performance_regression.py --benchmark-save=baseline
 
     # Compare against baseline
-    pytest benchmark/test_performance_regression.py --benchmark-compare=baseline
+    pytest benchmarks/test_performance_regression.py --benchmark-compare=baseline
 
     # Generate JSON report for CI
-    pytest benchmark/test_performance_regression.py --benchmark-json=report.json
+    pytest benchmarks/test_performance_regression.py --benchmark-json=report.json
 
 CI/CD Regression Gates:
     - Cold JIT: >10% slowdown → FAIL

@@ -13,7 +13,7 @@ Target Performance Metrics:
 - Warm JIT time: <2ms (cached compilation)
 
 Usage:
-    python benchmark/benchmark_cache_unification.py
+    python benchmarks/benchmark_cache_unification.py
 """
 
 import json

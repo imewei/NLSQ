@@ -10,7 +10,7 @@ Expected results:
 - 5x increase in pool reuse rate through bucketing
 - Adaptive safety factor stabilizes at ~1.05 after warmup
 
-Results are stored in benchmark/baselines/memory_reuse.json
+Results are stored in benchmarks/baselines/memory_reuse.json
 """
 
 import json

@@ -488,7 +488,7 @@ print(f"Expected: First ~400ms, Second ~30ms")
 
 **For More Information**:
 - Optimization case study: `docs/optimization_case_study.md`
-- Benchmark suite: `benchmark/test_performance_regression.py`
+- Benchmark suite: `benchmarks/test_performance_regression.py`
 - Examples: `examples/` directory
 
 **Last Updated**: October 2025

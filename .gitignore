@@ -194,11 +194,11 @@ radioactive_decay.png
 # Benchmark Results
 # ----------------------------------------------------------------------------
 benchmark_results/
-benchmark/results/*.json
-benchmark/results/*.csv
-benchmark/results/*.png
-benchmark/*.prof
-benchmark/benchmark_results/
+benchmarks/results/*.json
+benchmarks/results/*.csv
+benchmarks/results/*.png
+benchmarks/*.prof
+benchmarks/benchmark_results/
 benchmark_results.json
 .notebook_transforms.json
 

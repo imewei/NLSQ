@@ -6,22 +6,22 @@ Comprehensive benchmarking and performance analysis tools for NLSQ (Nonlinear Le
 
 ```bash
 # Run standard benchmarks (exponential, gaussian, polynomial, sinusoidal)
-python benchmark/run_benchmarks.py
+python benchmarks/run_benchmarks.py
 
 # Quick benchmarks (smaller sizes, fewer repeats)
-python benchmark/run_benchmarks.py --quick
+python benchmarks/run_benchmarks.py --quick
 
 # Benchmark specific problems
-python benchmark/run_benchmarks.py --problems exponential gaussian --sizes 100 1000
+python benchmarks/run_benchmarks.py --problems exponential gaussian --sizes 100 1000
 
 # Skip SciPy comparison (faster)
-python benchmark/run_benchmarks.py --no-scipy
+python benchmarks/run_benchmarks.py --no-scipy
 
 # Custom output directory
-python benchmark/run_benchmarks.py --output ./my_results
+python benchmarks/run_benchmarks.py --output ./my_results
 
 # View help
-python benchmark/run_benchmarks.py --help
+python benchmarks/run_benchmarks.py --help
 ```
 
 **Output**: Text reports, CSV data, HTML dashboard with visualizations
@@ -74,7 +74,7 @@ results = runner.run_all_benchmarks()
 
 **Usage**:
 ```bash
-python benchmark/profile_trf.py
+python benchmarks/profile_trf.py
 ```
 
 **Output**: Timing breakdown, recommendations for optimization
@@ -91,16 +91,16 @@ python benchmark/profile_trf.py
 **Usage**:
 ```bash
 # Run all regression tests
-pytest benchmark/test_performance_regression.py --benchmark-only
+pytest benchmarks/test_performance_regression.py --benchmark-only
 
 # Save baseline
-pytest benchmark/test_performance_regression.py --benchmark-save=baseline
+pytest benchmarks/test_performance_regression.py --benchmark-save=baseline
 
 # Compare against baseline
-pytest benchmark/test_performance_regression.py --benchmark-compare=baseline
+pytest benchmarks/test_performance_regression.py --benchmark-compare=baseline
 
 # Generate CI report
-pytest benchmark/test_performance_regression.py --benchmark-json=report.json
+pytest benchmarks/test_performance_regression.py --benchmark-json=report.json
 ```
 
 ---
@@ -108,7 +108,7 @@ pytest benchmark/test_performance_regression.py --benchmark-json=report.json
 ## Directory Structure
 
 ```
-benchmark/
+benchmarks/
 ├── README.md                          # This file
 ├── run_benchmarks.py                  # Primary CLI ⭐
 ├── benchmark_suite.py                 # Comprehensive suite
@@ -164,36 +164,36 @@ benchmark/
 
 **Quick benchmarks**:
 ```bash
-python benchmark/run_benchmarks.py --quick
+python benchmarks/run_benchmarks.py --quick
 ```
 
 **Profile before optimizing**:
 ```bash
-python benchmark/profile_trf.py
+python benchmarks/profile_trf.py
 ```
 
 **Run regression tests**:
 ```bash
-pytest benchmark/test_performance_regression.py --benchmark-only
+pytest benchmarks/test_performance_regression.py --benchmark-only
 ```
 
 ### For Production
 
 **Full comparison**:
 ```bash
-python benchmark/run_benchmarks.py --sizes 100 1000 10000 --repeats 10
+python benchmarks/run_benchmarks.py --sizes 100 1000 10000 --repeats 10
 ```
 
 **Save baseline for future comparison**:
 ```bash
-pytest benchmark/test_performance_regression.py --benchmark-save=production
+pytest benchmarks/test_performance_regression.py --benchmark-save=production
 ```
 
 ### For Research
 
 **Custom configuration**:
 ```bash
-python benchmark/run_benchmarks.py \
+python benchmarks/run_benchmarks.py \
   --problems exponential gaussian \
   --sizes 100 500 1000 5000 10000 \
   --repeats 10 \

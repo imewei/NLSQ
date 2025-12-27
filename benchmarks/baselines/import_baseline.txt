@@ -1,0 +1,10 @@
+# NLSQ Import Time Baseline
+# Date: 2025-12-26
+# Target: <400ms (SC-001)
+
+Cold import time: 1084.4ms
+
+# Note: This includes JAX initialization overhead.
+# The spec target of 400ms is based on the analysis report's
+# measurement of 793ms, suggesting different baseline conditions.
+# Our optimization goal remains: reduce import time by 50%+

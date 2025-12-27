@@ -2628,7 +2628,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         This function records timing for each operation and returns them in the
         `all_times` field of the result. Used exclusively for performance analysis
-        in benchmark/profile_trf.py.
+        in benchmarks/profile_trf.py.
 
         Parameters
         ----------
