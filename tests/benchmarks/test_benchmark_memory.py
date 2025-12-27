@@ -157,9 +157,9 @@ class TestPsutilCallFrequency:
             effective_ttl = manager._get_effective_ttl()
             print(f"\n[Threshold Test] High frequency effective TTL: {effective_ttl}s")
 
-            # Should be 10s for high frequency
-            assert effective_ttl == 10.0, (
-                f"Expected 10s TTL for high frequency, got {effective_ttl}s"
+            # Should be 15s for high frequency (>100 calls/sec)
+            assert effective_ttl == 15.0, (
+                f"Expected 15s TTL for high frequency, got {effective_ttl}s"
             )
 
     def test_adaptive_ttl_streaming_simulation(self):

@@ -159,6 +159,7 @@ checkpoints/
 checkpoints_*/
 checkpoint_iter_*.npz
 checkpoint_iter_*.h5
+test_checkpoints_fast_mode/
 
 # Streaming diagnostics
 streaming_diagnostics_example.json

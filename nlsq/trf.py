@@ -118,7 +118,7 @@ initialize_gpu_safely()
 
 from nlsq._optimize import OptimizeResult
 from nlsq.callbacks import StopOptimization
-from nlsq.common_jax import CommonJIT
+from nlsq.common_jax import CommonJIT, solve_lsq_trust_region_jax
 from nlsq.common_scipy import (
     CL_scaling_vector,
     check_termination,
@@ -155,6 +155,49 @@ from nlsq.mixed_precision import (
 from nlsq.optimizer_base import TrustRegionOptimizerBase
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.unified_cache import get_global_cache
+
+# Import dataclasses for SVDCache
+from dataclasses import dataclass
+from typing import NamedTuple
+
+
+class SVDCache(NamedTuple):
+    """Cache SVD decomposition across inner loop iterations when Jacobian unchanged.
+
+    This cache stores the SVD components (U, s, V) along with the scaled Jacobian
+    J_h to avoid redundant SVD computations during inner loop iterations where
+    the step is rejected and parameters remain unchanged.
+
+    Attributes
+    ----------
+    U : jnp.ndarray
+        Left singular vectors (m × k), where m is residuals and k = min(m, n).
+    s : jnp.ndarray
+        Singular values (k,).
+    V : jnp.ndarray
+        Right singular vectors (n × k), where n is parameters.
+    J_h : jnp.ndarray
+        Scaled Jacobian in "hat" space (m × n).
+    x_hash : int
+        Hash of parameter vector for cache validation. Cache is valid only
+        when the current parameter hash matches this value.
+
+    Notes
+    -----
+    The cache is valid only when `x_hash` matches the current parameter vector's hash.
+    When a step is rejected (actual_reduction <= 0), the parameters don't change,
+    so the SVD can be reused. When a step is accepted, the cache must be invalidated.
+
+    The expected speedup from SVD caching is 20-40% on problems with frequent step
+    rejections, as SVD computation is O(mn²) and dominates iteration time.
+    """
+
+    U: jnp.ndarray
+    s: jnp.ndarray
+    V: jnp.ndarray
+    J_h: jnp.ndarray
+    x_hash: int
+
 
 # Algorithm constants
 # Trust region parameters
@@ -1386,7 +1429,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
                 _n_iter = 1  # Dummy value for compatibility
             else:
-                step_h, alpha, _n_iter = solve_lsq_trust_region(
+                step_h, alpha, _n_iter = solve_lsq_trust_region_jax(
                     n, m, uf, s, V, Delta, initial_alpha=alpha
                 )
 
@@ -2333,8 +2376,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         )
                     _n_iter = 1  # Dummy value for compatibility
                 else:
-                    # SVD path: use exact solver
-                    p_h, alpha, _n_iter = solve_lsq_trust_region(
+                    # SVD path: use exact solver (JAX version for pure JAX execution)
+                    p_h, alpha, _n_iter = solve_lsq_trust_region_jax(
                         n, m, uf, s, V, Delta, initial_alpha=alpha
                     )
 
@@ -2864,8 +2907,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         # No explicit sync needed - JAX async handles it
                     _n_iter = 1  # Dummy value for compatibility
                 else:
-                    # SVD path: use exact solver
-                    step_h, alpha, _n_iter = solve_lsq_trust_region(
+                    # SVD path: use exact solver (JAX version for pure JAX execution)
+                    step_h, alpha, _n_iter = solve_lsq_trust_region_jax(
                         n, m, uf, s, V, Delta, initial_alpha=alpha
                     )
 

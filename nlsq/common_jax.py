@@ -12,9 +12,261 @@ from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
 
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, lax
 
 EPS = np.finfo(float).eps
+
+
+@jit
+def phi_and_derivative_jax(
+    alpha: float, suf: jnp.ndarray, s: jnp.ndarray, Delta: float
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """JAX-compiled phi function for trust region subproblem.
+
+    This function computes the value and derivative of the secular equation
+    used to find the optimal Levenberg-Marquardt parameter. It is defined as
+    "norm of regularized (by alpha) least-squares solution minus Delta".
+
+    The function is used iteratively to find the root, which gives the optimal
+    regularization parameter for the trust region subproblem.
+
+    Parameters
+    ----------
+    alpha : float
+        Current regularization parameter (Levenberg-Marquardt lambda)
+    suf : jnp.ndarray
+        Product of singular values and U^T @ f (s * uf)
+    s : jnp.ndarray
+        Singular values of the Jacobian
+    Delta : float
+        Trust region radius
+
+    Returns
+    -------
+    phi : jnp.ndarray
+        Value of the secular equation: ||p|| - Delta
+    phi_prime : jnp.ndarray
+        Derivative of phi with respect to alpha
+
+    Notes
+    -----
+    This is a JAX-jitted version of the function in common_scipy.py.
+    Using JAX enables GPU acceleration and avoids NumPy-JAX data transfers
+    when used with other JAX operations.
+
+    The computation follows [12] Branch, M.A., Coleman, T.F., Li, Y.,
+    "A Subspace, Interior, and Conjugate Gradient Method for Large-Scale
+    Bound-Constrained Minimization Problems", SIAM Journal on Scientific
+    Computing, Vol. 21, Number 1, pp 1-23, 1999.
+    """
+    denom = s**2 + alpha
+    p_norm = jnp.linalg.norm(suf / denom)
+    phi = p_norm - Delta
+    phi_prime = -jnp.sum(suf**2 / denom**3) / p_norm
+    return phi, phi_prime
+
+
+def _solve_lsq_trust_region_jax_impl(
+    n: int,
+    m: int,
+    uf: jnp.ndarray,
+    s: jnp.ndarray,
+    V: jnp.ndarray,
+    Delta: float,
+    initial_alpha: float,
+    has_initial_alpha: bool,
+    rtol: float,
+    max_iter: int,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Internal implementation for solve_lsq_trust_region_jax."""
+    suf = s * uf
+
+    # Check if J has full rank
+    threshold = EPS * m * s[0]
+    full_rank = lax.cond(
+        m >= n,
+        lambda: s[-1] > threshold,
+        lambda: False,
+    )
+
+    # Gauss-Newton step (if full rank)
+    p_gn = -V @ (uf / s)
+    p_gn_norm = jnp.linalg.norm(p_gn)
+    use_gauss_newton = full_rank & (p_gn_norm <= Delta)
+
+    # Compute alpha bounds
+    alpha_upper = jnp.linalg.norm(suf) / Delta
+
+    # Compute alpha_lower based on full_rank
+    def compute_alpha_lower_full_rank():
+        phi_val, phi_prime_val = phi_and_derivative_jax(0.0, suf, s, Delta)
+        return -phi_val / phi_prime_val
+
+    alpha_lower = lax.cond(
+        full_rank,
+        compute_alpha_lower_full_rank,
+        lambda: 0.0,
+    )
+
+    # Compute default alpha
+    default_alpha = jnp.maximum(
+        0.001 * alpha_upper, jnp.sqrt(alpha_lower * alpha_upper)
+    )
+
+    # Use provided initial_alpha only if valid
+    # Invalid if: no initial_alpha provided, OR (not full_rank AND initial_alpha == 0)
+    use_provided = has_initial_alpha & ~(~full_rank & (initial_alpha == 0.0))
+    alpha_start = lax.cond(
+        use_provided,
+        lambda: initial_alpha,
+        lambda: default_alpha,
+    )
+
+    # State for while_loop: (alpha, alpha_lower, alpha_upper, iteration, converged)
+    def loop_cond(state):
+        alpha, alpha_lower, alpha_upper, iteration, converged = state
+        return (iteration < max_iter) & ~converged
+
+    def loop_body(state):
+        alpha, alpha_lower, alpha_upper, iteration, _ = state
+
+        # Reset alpha if out of bounds
+        alpha = lax.cond(
+            (alpha < alpha_lower) | (alpha > alpha_upper),
+            lambda: jnp.maximum(
+                0.001 * alpha_upper, jnp.sqrt(alpha_lower * alpha_upper)
+            ),
+            lambda: alpha,
+        )
+
+        phi_val, phi_prime_val = phi_and_derivative_jax(alpha, suf, s, Delta)
+
+        # Update alpha_upper if phi < 0
+        alpha_upper_new = lax.cond(
+            phi_val < 0,
+            lambda: alpha,
+            lambda: alpha_upper,
+        )
+
+        # Update alpha using Newton step
+        ratio = phi_val / phi_prime_val
+        alpha_lower_new = jnp.maximum(alpha_lower, alpha - ratio)
+        alpha_new = alpha - (phi_val + Delta) * ratio / Delta
+
+        # Check convergence
+        converged = jnp.abs(phi_val) < rtol * Delta
+
+        return (alpha_new, alpha_lower_new, alpha_upper_new, iteration + 1, converged)
+
+    # Run the while loop
+    init_state = (alpha_start, alpha_lower, alpha_upper, jnp.array(0), False)
+    final_alpha, _, _, n_iter_final, _ = lax.while_loop(
+        loop_cond, loop_body, init_state
+    )
+
+    # Compute final solution p
+    p_iterative = -V @ (suf / (s**2 + final_alpha))
+
+    # Normalize p to exactly Delta to prevent numerical drift
+    p_iterative_norm = jnp.linalg.norm(p_iterative)
+    p_iterative_normalized = p_iterative * (Delta / p_iterative_norm)
+
+    # Select between Gauss-Newton and iterative solution
+    p_final = lax.cond(
+        use_gauss_newton,
+        lambda: p_gn,
+        lambda: p_iterative_normalized,
+    )
+
+    alpha_final = lax.cond(
+        use_gauss_newton,
+        lambda: jnp.array(0.0),
+        lambda: final_alpha,
+    )
+
+    n_iter_out = lax.cond(
+        use_gauss_newton,
+        lambda: jnp.array(0),
+        lambda: n_iter_final,
+    )
+
+    return p_final, alpha_final, n_iter_out
+
+
+# Create a JIT-compiled version of the implementation
+_solve_lsq_trust_region_jax_jit = jit(
+    _solve_lsq_trust_region_jax_impl, static_argnums=(0, 1, 8, 9)
+)
+
+
+def solve_lsq_trust_region_jax(
+    n: int,
+    m: int,
+    uf: jnp.ndarray,
+    s: jnp.ndarray,
+    V: jnp.ndarray,
+    Delta: float,
+    initial_alpha: float | None = None,
+    rtol: float = 0.01,
+    max_iter: int = 10,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """JAX-compiled trust-region problem solver for least-squares minimization.
+
+    This function implements a method described by J. J. More [12] and used
+    in MINPACK, but relies on a single SVD of Jacobian instead of series
+    of Cholesky decompositions. Before running this function, compute:
+    ``U, s, VT = svd(J, full_matrices=False)``.
+
+    This is a pure JAX implementation using lax.while_loop for JIT compilation,
+    avoiding NumPy-JAX data transfers when used in the optimization hot path.
+
+    Parameters
+    ----------
+    n : int
+        Number of variables.
+    m : int
+        Number of residuals.
+    uf : jnp.ndarray
+        Computed as U.T @ f.
+    s : jnp.ndarray
+        Singular values of J.
+    V : jnp.ndarray
+        Transpose of VT (i.e., V = VT.T).
+    Delta : float
+        Radius of a trust region.
+    initial_alpha : float, optional
+        Initial guess for alpha. If None, determined automatically.
+    rtol : float, optional
+        Stopping tolerance for the root-finding procedure.
+    max_iter : int, optional
+        Maximum allowed number of iterations.
+
+    Returns
+    -------
+    p : jnp.ndarray, shape (n,)
+        Found solution of a trust-region problem.
+    alpha : jnp.ndarray
+        Levenberg-Marquardt parameter (scalar as 0-d array).
+    n_iter : jnp.ndarray
+        Number of iterations made (scalar as 0-d array).
+
+    References
+    ----------
+    .. [12] More, J. J., "The Levenberg-Marquardt Algorithm: Implementation
+           and Theory," Numerical Analysis, ed. G. A. Watson, Lecture Notes
+           in Mathematics 630, Springer Verlag, pp. 105-116, 1977.
+    """
+    # Handle None initial_alpha
+    if initial_alpha is None:
+        init_alpha_val = 0.0
+        has_initial_alpha = False
+    else:
+        init_alpha_val = initial_alpha
+        has_initial_alpha = True
+
+    return _solve_lsq_trust_region_jax_jit(
+        n, m, uf, s, V, Delta, init_alpha_val, has_initial_alpha, rtol, max_iter
+    )
 
 
 class CommonJIT:
@@ -207,8 +459,7 @@ class CommonJIT:
         """
 
         s_jnp = jnp.array(s)
-        v_jnp = self.js_dot(J, s_jnp)
-        v = v_jnp.copy()
+        v = self.js_dot(J, s_jnp)
 
         a = np.dot(v, v)
         if diag is not None:
@@ -219,8 +470,7 @@ class CommonJIT:
 
         if s0 is not None:
             s0_jnp = jnp.array(s0)
-            u_jnp = self.js0_dot(J, s0_jnp)
-            u = u_jnp.copy()
+            u = self.js0_dot(J, s0_jnp)
 
             b += np.dot(u, v)
             c = 0.5 * np.dot(u, u) + np.dot(g, s0)

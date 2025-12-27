@@ -206,7 +206,7 @@ import os
 import queue
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Generator
 from pathlib import Path
 
@@ -486,8 +486,8 @@ class StreamingOptimizer:
         Number of retry attempts per batch index
     error_types : dict
         Count of each error type encountered
-    batch_stats_buffer : list
-        Circular buffer of recent batch statistics (last 100)
+    batch_stats_buffer : deque
+        Circular buffer of recent batch statistics (uses deque for O(1) eviction)
 
     Examples
     --------
@@ -671,7 +671,10 @@ class StreamingOptimizer:
         self.rng_key = random.PRNGKey(42)
 
         # Initialize batch statistics tracking (Task 6.3-6.6)
-        self.batch_stats_buffer = []  # Circular buffer for recent batch stats
+        # Use deque with maxlen for O(1) eviction instead of list.pop(0) which is O(n)
+        self.batch_stats_buffer: deque[dict] = deque(
+            maxlen=self.config.batch_stats_buffer_size
+        )
         self.batch_times = []  # Track timing for each batch
         self.gradient_norms = []  # Track gradient norms
         self.checkpoint_save_times = []  # Track checkpoint save durations
@@ -852,7 +855,7 @@ class StreamingOptimizer:
         self.error_types = defaultdict(int)
 
         # Reset batch statistics
-        self.batch_stats_buffer = []
+        self.batch_stats_buffer = deque(maxlen=self.config.batch_stats_buffer_size)
         self.batch_times = []
         self.gradient_norms = []
         self.checkpoint_save_times = []
@@ -1224,12 +1227,8 @@ class StreamingOptimizer:
         if error_type:
             stats["error_type"] = error_type
 
-        # Add to circular buffer
+        # Add to circular buffer (deque auto-evicts when maxlen reached)
         self.batch_stats_buffer.append(stats)
-
-        # Maintain buffer size limit
-        if len(self.batch_stats_buffer) > self.config.batch_stats_buffer_size:
-            self.batch_stats_buffer.pop(0)
 
     def _load_checkpoint(self, checkpoint_path: str | Path) -> bool:
         """Load optimizer state from checkpoint.

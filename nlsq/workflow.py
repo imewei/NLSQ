@@ -60,6 +60,7 @@ Cluster detection for HPC environments:
 """
 
 import os
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
@@ -1566,8 +1567,6 @@ def get_env_overrides() -> dict[str, Any]:
         if goal_upper in valid_goals:
             overrides["goal"] = goal_upper
         else:
-            import warnings
-
             warnings.warn(
                 f"Invalid NLSQ_WORKFLOW_GOAL '{goal_env}'. "
                 f"Valid values: {valid_goals}. Ignoring.",
@@ -1582,15 +1581,11 @@ def get_env_overrides() -> dict[str, Any]:
             if memory_limit > 0:
                 overrides["memory_limit_gb"] = memory_limit
             else:
-                import warnings
-
                 warnings.warn(
                     f"Invalid NLSQ_MEMORY_LIMIT_GB '{memory_env}'. Must be positive. Ignoring.",
                     stacklevel=2,
                 )
         except ValueError:
-            import warnings
-
             warnings.warn(
                 f"Invalid NLSQ_MEMORY_LIMIT_GB '{memory_env}'. Must be a number. Ignoring.",
                 stacklevel=2,
@@ -1696,8 +1691,6 @@ def get_custom_workflow(
         object.__setattr__(config, "_preset", f"custom:{workflow_name}")
         return config
     except (ValueError, KeyError) as e:
-        import warnings
-
         warnings.warn(
             f"Invalid custom workflow '{workflow_name}': {e}. Ignoring.",
             stacklevel=2,

@@ -44,12 +44,12 @@ class TestCompilationCacheLRUEviction(unittest.TestCase):
         cache_small = CompilationCache(max_cache_size=10)
         self.assertEqual(cache_small.max_cache_size, 10)
 
-    def test_default_max_cache_size_is_256(self):
-        """Test that default max_cache_size is 256."""
+    def test_default_max_cache_size_is_512(self):
+        """Test that default max_cache_size is 512."""
         from nlsq.compilation_cache import CompilationCache
 
         cache = CompilationCache()
-        self.assertEqual(cache.max_cache_size, 256)
+        self.assertEqual(cache.max_cache_size, 512)
 
     def test_lru_eviction_at_capacity(self):
         """Test that oldest entry is evicted when at capacity."""

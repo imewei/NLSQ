@@ -477,6 +477,13 @@ clean-build:
 		-not -path "./.specify/*" \
 		-not -path "./agent-os/*" \
 		-exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "test_checkpoints_fast_mode" \
+		-not -path "./.venv/*" \
+		-not -path "./venv/*" \
+		-not -path "./.claude/*" \
+		-not -path "./.specify/*" \
+		-not -path "./agent-os/*" \
+		-exec rm -rf {} + 2>/dev/null || true
 
 clean-pyc:
 	@echo "$(BOLD)$(BLUE)Removing Python file artifacts...$(RESET)"

@@ -232,7 +232,7 @@ class TestJITCompiledValidation:
         assert len(result) == 3, (
             f"Expected (loss, grad, is_valid) tuple, got {len(result)} elements"
         )
-        _loss, _grad, is_valid = result
+        loss, grad, is_valid = result
         assert isinstance(float(loss), float)
         assert grad.shape == params.shape
         assert isinstance(bool(is_valid), bool)
@@ -295,11 +295,16 @@ class TestJITCompiledValidation:
 
 
 class TestDataChunkerPaddingOptimization:
-    """Test np.resize padding in DataChunker."""
+    """Test bucket padding in DataChunker.
 
-    def test_resize_padding_no_over_allocation(self):
-        """Test that np.resize is used for padding without over-allocation."""
-        from nlsq.large_dataset import DataChunker
+    Note: DataChunker now uses power-of-2 bucket sizes for JIT stability.
+    Chunks are padded to the nearest bucket size (1024, 2048, 4096, etc.)
+    not to the requested chunk_size.
+    """
+
+    def test_bucket_padding_applied(self):
+        """Test that bucket padding is applied for JIT stability."""
+        from nlsq.large_dataset import DataChunker, get_bucket_size
 
         # Create test data
         x = np.arange(1050)
@@ -308,19 +313,20 @@ class TestDataChunkerPaddingOptimization:
 
         chunks = list(DataChunker.create_chunks(x, y, chunk_size))
 
-        # First chunk should be full size
-        x_chunk1, _y_chunk1, _idx1 = chunks[0]
-        assert len(x_chunk1) == chunk_size
+        # First chunk should be padded to bucket size
+        x_chunk1, _y_chunk1, _idx1, valid_len1 = chunks[0]
+        expected_bucket = get_bucket_size(chunk_size)
+        assert len(x_chunk1) == expected_bucket
+        assert valid_len1 == chunk_size  # Valid length should be the actual chunk size
 
-        # Last chunk is padded
-        x_chunk2, _y_chunk2, _idx2 = chunks[1]
-        assert len(x_chunk2) == chunk_size, (
-            f"Last chunk should be padded to {chunk_size}, got {len(x_chunk2)}"
-        )
+        # Last chunk is also padded to bucket size
+        x_chunk2, _y_chunk2, _idx2, valid_len2 = chunks[1]
+        assert len(x_chunk2) == get_bucket_size(50)  # 50 points padded to bucket
+        assert valid_len2 == 50  # Valid length is the actual points count
 
     def test_resize_cyclic_repetition(self):
         """Test that padding uses cyclic repetition (np.resize behavior)."""
-        from nlsq.large_dataset import DataChunker
+        from nlsq.large_dataset import DataChunker, get_bucket_size
 
         # Create test data with 50 points, chunk_size 100
         x = np.arange(50)
@@ -330,22 +336,22 @@ class TestDataChunkerPaddingOptimization:
         chunks = list(DataChunker.create_chunks(x, y, chunk_size))
 
         # Only one chunk, which needs padding
-        x_chunk, _y_chunk, _idx = chunks[0]
+        x_chunk, _y_chunk, _idx, valid_len = chunks[0]
 
-        # Check cyclic repetition pattern
-        # With np.resize, the pattern repeats cyclically
-        # First 50 values should be 0-49
-        # Next 50 values should be 0-49 again (cyclic)
-        assert len(x_chunk) == chunk_size
+        # Check bucket padding applied
+        expected_bucket = get_bucket_size(50)
+        assert len(x_chunk) == expected_bucket
+        assert valid_len == 50
+
         # Verify cyclic pattern in the padded portion
         for i in range(50):
-            assert x_chunk[50 + i] == x_chunk[i], (
+            assert x_chunk[50 + i] == x_chunk[i % 50], (
                 f"Expected cyclic repetition at index {50 + i}"
             )
 
-    def test_resize_memory_efficiency(self):
-        """Test that np.resize doesn't over-allocate memory."""
-        from nlsq.large_dataset import DataChunker
+    def test_bucket_padding_memory_allocation(self):
+        """Test that bucket padding allocates to power-of-2 sizes."""
+        from nlsq.large_dataset import DataChunker, get_bucket_size
 
         # Create test data
         x = np.arange(950)
@@ -355,19 +361,17 @@ class TestDataChunkerPaddingOptimization:
         chunks = list(DataChunker.create_chunks(x, y, chunk_size))
 
         # Only one chunk
-        x_chunk, y_chunk, _idx = chunks[0]
+        x_chunk, y_chunk, _idx, valid_len = chunks[0]
 
-        # Check that chunk is exactly chunk_size (no over-allocation)
-        assert x_chunk.nbytes == chunk_size * x.itemsize, (
-            "Chunk should have exactly chunk_size elements"
-        )
-        assert y_chunk.nbytes == chunk_size * y.itemsize, (
-            "Chunk should have exactly chunk_size elements"
-        )
+        # Check that chunk is padded to bucket size
+        expected_bucket = get_bucket_size(950)
+        assert len(x_chunk) == expected_bucket
+        assert len(y_chunk) == expected_bucket
+        assert valid_len == 950
 
-    def test_no_padding_needed_for_exact_fit(self):
-        """Test that no padding occurs when data fits exactly."""
-        from nlsq.large_dataset import DataChunker
+    def test_valid_length_tracks_actual_data(self):
+        """Test that valid_length correctly tracks actual data size."""
+        from nlsq.large_dataset import DataChunker, get_bucket_size
 
         # Data size is exact multiple of chunk_size
         x = np.arange(1000)
@@ -378,8 +382,11 @@ class TestDataChunkerPaddingOptimization:
 
         # Should be exactly one chunk
         assert len(chunks) == 1
-        x_chunk, _y_chunk, _idx = chunks[0]
-        assert len(x_chunk) == chunk_size
+        x_chunk, _y_chunk, _idx, valid_len = chunks[0]
+        # Chunk is padded to bucket size
+        assert len(x_chunk) == get_bucket_size(1000)
+        # But valid_len tracks actual data
+        assert valid_len == 1000
 
 
 class TestIntegration:

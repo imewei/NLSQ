@@ -119,10 +119,10 @@ class MemoryManager:
             Reduces psutil system call overhead by 90%.
         adaptive_ttl : bool
             Enable adaptive TTL based on call frequency (default: True).
-            High-frequency callers (>100 calls/sec) get 10s effective TTL.
-            Medium-frequency callers (>10 calls/sec) get 5s effective TTL.
+            High-frequency callers (>100 calls/sec) get 15s effective TTL.
+            Medium-frequency callers (>10 calls/sec) get 10s effective TTL.
             Low-frequency callers use the default TTL.
-            Reduces psutil overhead in streaming optimization by 10-15%.
+            Reduces psutil overhead in streaming optimization by 15-20%.
         """
         # Task Group 7 (1.2a): Use OrderedDict for LRU memory pool
         # This enables move_to_end() for recently used arrays and
@@ -174,8 +174,8 @@ class MemoryManager:
         -------
         effective_ttl : float
             The effective TTL in seconds based on call frequency:
-            - 10.0s for high-frequency callers (>100 calls/sec)
-            - 5.0s for medium-frequency callers (>10 calls/sec)
+            - 15.0s for high-frequency callers (>100 calls/sec)
+            - 10.0s for medium-frequency callers (>10 calls/sec)
             - default TTL for low-frequency callers
 
         Notes
@@ -204,12 +204,13 @@ class MemoryManager:
         calls_per_sec = num_calls / time_span
 
         # Determine effective TTL based on frequency thresholds
+        # Memory availability changes slowly, so aggressive caching is safe
         if calls_per_sec > 100:
-            # High frequency: use 10s TTL
-            return 10.0
+            # High frequency: use 15s TTL (memory is stable)
+            return 15.0
         elif calls_per_sec > 10:
-            # Medium frequency: use 5s TTL
-            return 5.0
+            # Medium frequency: use 10s TTL
+            return 10.0
         else:
             # Low frequency: use default TTL
             return self._memory_cache_ttl

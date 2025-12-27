@@ -37,7 +37,7 @@ class CompilationCache:
         OrderedDict mapping function signatures to compiled functions
         (enables LRU eviction)
     max_cache_size : int
-        Maximum number of compiled functions to cache (default 256)
+        Maximum number of compiled functions to cache (default 512)
     stats : dict
         Compilation cache statistics
     _func_hash_cache : dict
@@ -45,7 +45,7 @@ class CompilationCache:
         (id(func), id(func.__code__)) for correctness in notebooks
     """
 
-    def __init__(self, enable_stats: bool = True, max_cache_size: int = 256):
+    def __init__(self, enable_stats: bool = True, max_cache_size: int = 512):
         """Initialize compilation cache.
 
         Parameters
@@ -53,8 +53,9 @@ class CompilationCache:
         enable_stats : bool
             Track cache statistics
         max_cache_size : int
-            Maximum number of compiled functions to cache (default 256).
-            Caps memory usage at approximately 2GB for 256 cached functions.
+            Maximum number of compiled functions to cache (default 512).
+            Increased from 256 to reduce recompilation frequency.
+            Caps memory usage at approximately 4GB for 512 cached functions.
         """
         # Task 9.2: Use OrderedDict for LRU eviction
         self.cache: OrderedDict[str, Callable] = OrderedDict()

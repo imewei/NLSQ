@@ -332,7 +332,8 @@ class TestAggregateStatisticsComputation:
         # Recent batch stats should match internal buffer
         recent_stats = diagnostics["recent_batch_stats"]
         assert len(recent_stats) == len(optimizer.batch_stats_buffer)
-        assert recent_stats == optimizer.batch_stats_buffer[-100:]
+        # deque doesn't support slicing, compare full deques
+        assert list(recent_stats) == list(optimizer.batch_stats_buffer)
 
     def test_aggregate_stats_with_all_successful_batches(self):
         """Test aggregate statistics when all batches succeed."""

@@ -67,8 +67,9 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
+import jax
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, lax
 
 # Module-level cached constants (avoid repeated np.finfo lookups)
 _FLOAT64_INFO = np.finfo(np.float64)
@@ -83,8 +84,71 @@ __all__ = [
     "detect_collinearity",
     "detect_parameter_scale_mismatch",
     "estimate_condition_number",
+    "solve_with_cholesky_fallback",
     "stability_guard",
 ]
+
+
+def solve_with_cholesky_fallback(
+    A: jnp.ndarray, b: jnp.ndarray
+) -> tuple[jnp.ndarray, bool]:
+    """Solve linear system Ax = b using Cholesky with eigenvalue fallback.
+
+    This function attempts Cholesky decomposition first (O(n³/3)) and falls back
+    to eigenvalue decomposition (O(n³)) only if Cholesky fails. The fallback
+    is detected via NaN check, making this function JAX JIT-compatible.
+
+    Parameters
+    ----------
+    A : jnp.ndarray
+        Symmetric matrix (n × n). Should be positive definite for Cholesky to succeed.
+    b : jnp.ndarray
+        Right-hand side vector (n,).
+
+    Returns
+    -------
+    x : jnp.ndarray
+        Solution vector (n,).
+    used_cholesky : bool
+        True if Cholesky was used, False if eigenvalue fallback was needed.
+
+    Notes
+    -----
+    For positive definite matrices (e.g., J^T J + λI with λ > 0), Cholesky is
+    approximately 3x faster than eigenvalue decomposition. The JAX-compatible
+    fallback pattern uses NaN detection instead of Python try/except.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> A = jnp.array([[4.0, 2.0], [2.0, 3.0]])  # Positive definite
+    >>> b = jnp.array([1.0, 2.0])
+    >>> x, used_cholesky = solve_with_cholesky_fallback(A, b)
+    >>> used_cholesky
+    True
+    """
+    # Ensure symmetry
+    A = 0.5 * (A + A.T)
+
+    # Try Cholesky decomposition
+    L = jnp.linalg.cholesky(A)
+    x_chol = jax.scipy.linalg.cho_solve((L, True), b)
+
+    # Check if Cholesky succeeded (no NaNs)
+    cholesky_valid = jnp.all(jnp.isfinite(x_chol))
+
+    # Eigenvalue fallback
+    def eigenvalue_solve():
+        eigvals, eigvecs = jnp.linalg.eigh(A)
+        # Regularize small/negative eigenvalues
+        eps = jnp.finfo(A.dtype).eps * jnp.max(jnp.abs(eigvals))
+        eigvals_safe = jnp.maximum(eigvals, eps)
+        return eigvecs @ (eigvecs.T @ b / eigvals_safe)
+
+    # Use lax.cond for JIT-compatible conditional
+    x = lax.cond(cholesky_valid, lambda: x_chol, eigenvalue_solve)
+
+    return x, cholesky_valid
 
 
 class NumericalStabilityGuard:

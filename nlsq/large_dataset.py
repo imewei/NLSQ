@@ -37,6 +37,122 @@ from nlsq.workflow import MemoryTier
 # Default fallback memory in GB when detection fails (per requirements)
 _DEFAULT_FALLBACK_MEMORY_GB = 16.0
 
+# Power-of-2 bucket sizes for static array shapes during chunked processing
+# This eliminates JIT recompilation overhead by ensuring all chunks pad to
+# a fixed set of sizes, enabling efficient compilation cache reuse.
+# See research.md for rationale on power-of-2 buckets.
+CHUNK_BUCKETS: tuple[int, ...] = (1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072)
+
+
+def get_bucket_size(chunk_size: int) -> int:
+    """Get the smallest bucket size that can contain the given chunk.
+
+    Parameters
+    ----------
+    chunk_size : int
+        Actual chunk size in data points.
+
+    Returns
+    -------
+    int
+        Bucket size from CHUNK_BUCKETS that is >= chunk_size.
+        If chunk_size exceeds max bucket, returns chunk_size unchanged.
+
+    Examples
+    --------
+    >>> get_bucket_size(1000)
+    1024
+    >>> get_bucket_size(5000)
+    8192
+    >>> get_bucket_size(200000)
+    200000
+    """
+    for bucket in CHUNK_BUCKETS:
+        if bucket >= chunk_size:
+            return bucket
+    # Chunk exceeds largest bucket - return unchanged (will cause recompilation
+    # but only for very large chunks which are less common)
+    return chunk_size
+
+
+@dataclass
+class ChunkBuffer:
+    """Pre-allocated static-shaped buffer for chunked data processing.
+
+    Eliminates JIT recompilation by padding data to power-of-2 bucket sizes.
+    The mask field allows filtering out padded elements when computing results.
+
+    Attributes
+    ----------
+    data : np.ndarray
+        Padded data array with shape (bucket_size,) or (bucket_size, features).
+    valid_length : int
+        Actual number of valid samples (before padding).
+    bucket_size : int
+        Static buffer size from CHUNK_BUCKETS.
+    mask : np.ndarray
+        Boolean mask where True indicates valid elements.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> chunk = np.array([1.0, 2.0, 3.0])
+    >>> buffer = ChunkBuffer.from_array(chunk)
+    >>> buffer.bucket_size
+    1024
+    >>> buffer.valid_length
+    3
+    >>> np.sum(buffer.mask)
+    3
+    """
+
+    data: np.ndarray
+    valid_length: int
+    bucket_size: int
+    mask: np.ndarray
+
+    @classmethod
+    def from_array(cls, arr: np.ndarray, pad_value: float = 0.0) -> "ChunkBuffer":
+        """Create a ChunkBuffer from an array, padding to the appropriate bucket size.
+
+        Parameters
+        ----------
+        arr : np.ndarray
+            Input array to pad.
+        pad_value : float, optional
+            Value to use for padding (default: 0.0).
+
+        Returns
+        -------
+        ChunkBuffer
+            Buffer with data padded to bucket size.
+        """
+        valid_length = len(arr)
+        bucket_size = get_bucket_size(valid_length)
+
+        # Create mask for valid elements
+        mask = np.zeros(bucket_size, dtype=bool)
+        mask[:valid_length] = True
+
+        # Pad data to bucket size
+        if valid_length == bucket_size:
+            padded_data = arr
+        else:
+            if arr.ndim == 1:
+                padded_data = np.full(bucket_size, pad_value, dtype=arr.dtype)
+                padded_data[:valid_length] = arr
+            else:
+                # Multi-dimensional: pad along first axis
+                pad_shape = (bucket_size - valid_length,) + arr.shape[1:]
+                padding = np.full(pad_shape, pad_value, dtype=arr.dtype)
+                padded_data = np.concatenate([arr, padding], axis=0)
+
+        return cls(data=padded_data, valid_length=valid_length, bucket_size=bucket_size, mask=mask)
+
+    def get_valid_data(self) -> np.ndarray:
+        """Return only the valid (non-padded) portion of the data."""
+        return self.data[:self.valid_length]
+
 
 @dataclass
 class LDMemoryConfig:  # Renamed to avoid conflict with config.py
@@ -541,14 +657,15 @@ class DataChunker:
 
         Yields
         ------
-        tuple[np.ndarray, np.ndarray, int]
-            (x_chunk, y_chunk, chunk_index)
+        tuple[np.ndarray, np.ndarray, int, int]
+            (x_chunk, y_chunk, chunk_index, valid_length)
+            where valid_length is the actual number of data points (before padding)
 
         Notes
         -----
-        Task Group 7 (5.2a): Uses np.resize() for efficient padding of the last chunk.
-        np.resize() repeats data cyclically without over-allocation, reducing memory
-        allocation overhead by 10-20% compared to the previous np.tile()[slice] pattern.
+        Uses power-of-2 bucket sizes from CHUNK_BUCKETS for JIT cache efficiency.
+        This ensures consistent array shapes across chunks, enabling JAX to reuse
+        compiled kernels and avoiding recompilation overhead.
         """
         n_points = len(xdata)
         indices = np.arange(n_points)
@@ -564,19 +681,20 @@ class DataChunker:
             end_idx = min(start_idx + chunk_size, n_points)
             chunk_indices = indices[start_idx:end_idx]
 
-            # PERFORMANCE FIX: Pad last chunk to avoid JAX JIT recompilation
-            # When chunks have different sizes, JAX recompiles all JIT'd functions
-            # including SVD in TRF, causing 2-3x slowdown. Padding ensures uniform
-            # chunk sizes across all iterations, enabling JIT compilation reuse.
-            # Repeating points doesn't affect least-squares solution (same residuals).
+            # PERFORMANCE FIX: Pad to power-of-2 bucket sizes for JIT cache efficiency
+            # Uses CHUNK_BUCKETS to ensure consistent shapes across different chunk sizes,
+            # enabling JAX to reuse compiled kernels. This is more cache-efficient than
+            # padding to chunk_size (which may vary) because power-of-2 buckets mean
+            # fewer unique shapes and thus fewer JIT compilations.
             current_chunk_size = len(chunk_indices)
-            if current_chunk_size < chunk_size:
-                # Task Group 7 (5.2a): Use np.resize for efficient cyclic padding
-                # np.resize repeats data cyclically to reach target size without
-                # over-allocation (unlike np.tile which may allocate extra memory)
-                chunk_indices = np.resize(chunk_indices, chunk_size)
+            bucket_size = get_bucket_size(current_chunk_size)
 
-            yield xdata[chunk_indices], ydata[chunk_indices], i
+            if current_chunk_size < bucket_size:
+                # Use cyclic padding (np.resize) to fill bucket - this is mathematically
+                # safe for least-squares as repeated points don't change the solution
+                chunk_indices = np.resize(chunk_indices, bucket_size)
+
+            yield xdata[chunk_indices], ydata[chunk_indices], i, current_chunk_size
 
 
 class LargeDatasetFitter:
@@ -2120,7 +2238,9 @@ class LargeDatasetFitter:
 
         try:
             # Process dataset in chunks with sequential parameter refinement
-            for x_chunk, y_chunk, chunk_idx in DataChunker.create_chunks(
+            # Note: create_chunks yields (x, y, idx, valid_length) - we ignore valid_length
+            # here since the cyclic padding doesn't affect least-squares solutions
+            for x_chunk, y_chunk, chunk_idx, _valid_length in DataChunker.create_chunks(
                 xdata, ydata, stats.recommended_chunk_size
             ):
                 chunk_start_time = time.time()

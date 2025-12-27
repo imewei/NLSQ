@@ -263,16 +263,18 @@ class TestDataChunker(unittest.TestCase):
 
         self.assertEqual(len(chunks), 5)  # 5000 / 1000 = 5 chunks
 
-        # Check first chunk
-        x_chunk, y_chunk, _idx = chunks[0]  # Returns 3 values
-        self.assertEqual(len(x_chunk), 1000)
-        self.assertEqual(len(y_chunk), 1000)
-        np.testing.assert_array_equal(x_chunk, np.arange(1000))
+        # Check first chunk - now returns 4 values including valid_length
+        x_chunk, y_chunk, _idx, valid_length = chunks[0]
+        self.assertEqual(len(x_chunk), 1024)  # Padded to power-of-2 bucket
+        self.assertEqual(len(y_chunk), 1024)
+        self.assertEqual(valid_length, 1000)  # Original length
+        np.testing.assert_array_equal(x_chunk[:1000], np.arange(1000))
 
         # Check last chunk
-        x_chunk, y_chunk, _idx = chunks[-1]  # Returns 3 values
-        self.assertEqual(len(x_chunk), 1000)
-        np.testing.assert_array_equal(x_chunk, np.arange(4000, 5000))
+        x_chunk, y_chunk, _idx, valid_length = chunks[-1]
+        self.assertEqual(len(x_chunk), 1024)  # Padded to power-of-2 bucket
+        self.assertEqual(valid_length, 1000)
+        np.testing.assert_array_equal(x_chunk[:1000], np.arange(4000, 5000))
 
     def test_chunk_processing_uneven(self):
         """Test processing data that doesn't divide evenly.
@@ -290,18 +292,20 @@ class TestDataChunker(unittest.TestCase):
         self.assertEqual(len(chunks), 6)  # 5 full + 1 partial
 
         # Check all chunks have uniform size (padding fix for JIT recompilation)
-        x_chunk, y_chunk, _idx = chunks[-1]  # Returns 3 values
-        self.assertEqual(len(x_chunk), 1000)  # Padded to full chunk_size
+        # Now returns 4 values: x, y, idx, valid_length
+        x_chunk, y_chunk, _idx, valid_length = chunks[-1]
+        self.assertEqual(len(x_chunk), 1024)  # Padded to power-of-2 bucket (1024 >= 500)
+        self.assertEqual(valid_length, 500)  # Original 500 points
 
-        # Verify padding: first 500 are original data, next 500 are repeated
-        # Original data: x[5000:5500], padded with x[5000:5500] repeated
+        # Verify padding: first 500 are original data, rest are cyclic repeat
+        # Original data: x[5000:5500], padded with cyclic repeat to 1024
         expected_x_original = np.arange(5000, 5500)
-        expected_x_padded = np.tile(expected_x_original, 2)[:1000]  # Repeat and trim
+        expected_x_padded = np.resize(expected_x_original, 1024)
         np.testing.assert_array_equal(x_chunk, expected_x_padded)
 
         # Verify y-data padding matches x-data pattern
         expected_y_original = np.arange(5000, 5500) * 2
-        expected_y_padded = np.tile(expected_y_original, 2)[:1000]
+        expected_y_padded = np.resize(expected_y_original, 1024)
         np.testing.assert_array_equal(y_chunk, expected_y_padded)
 
 

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Model validation caching**: `LargeDatasetFitter` caches model validation by function identity to avoid redundant validation across chunks
 - **JIT-compiled numeric validation**: Streaming optimizer includes JIT-compiled NaN/Inf validation for `validate_numerics=True` mode
 - **Adaptive TTL for memory pool**: Memory pool entries now have adaptive time-to-live based on access patterns
+- **Pure JAX trust region solver** (`solve_lsq_trust_region_jax`): JAX-compiled implementation using `lax.while_loop` for pure JAX execution in optimization hot path, enabling GPU/TPU acceleration and XLA kernel fusion
+- **JAX phi function** (`phi_and_derivative_jax`): JIT-compiled secular equation solver for Levenberg-Marquardt parameter estimation
 
 ### Changed
 
@@ -21,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vectorized sparse Jacobian construction** (37-50x speedup): Replaced O(nm) nested loop with O(nnz) NumPy vectorized operations using COO sparse matrix construction
 - **Consolidated benchmark directories**: Merged `benchmark/` into `benchmarks/` for cleaner project structure
 - **DataChunker padding optimization**: Uses `np.resize()` for cyclic repetition padding, reducing memory allocation overhead by 10-20%
+- **TRF uses JAX trust region solver**: All 3 call sites in `trf.py` now use `solve_lsq_trust_region_jax` instead of NumPy version, eliminating device-to-host transfers in optimization loop
+- **Bucket-based padding for static shapes**: Large dataset chunker uses power-of-2 buckets (128 to 262144) for consistent JIT compilation, eliminating recompilation on final chunks
+- **Memory manager TTL optimization**: Increased psutil TTL cache from 1s to 5s, reducing memory management overhead for high-frequency operations
 
 ### Fixed
 
