@@ -25,6 +25,7 @@ class CompilationCache:
     to avoid repeated JIT compilation overhead.
 
     Phase 3 Optimizations (2.2a, 2.1a):
+
     - Uses OrderedDict for LRU tracking with move_to_end() on hits
     - Evicts oldest entry with popitem(last=False) when at capacity
     - Uses composite key (id(func), id(func.__code__)) to prevent

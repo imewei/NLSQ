@@ -51,12 +51,14 @@ class SmartCache:
     """Intelligent caching system for optimization computations.
 
     This class provides:
+
     - Memory and disk caching with LRU eviction
     - Automatic cache key generation from function arguments
     - Cache persistence across sessions
     - Cache invalidation and warming strategies
 
     Phase 3 Optimizations (3.2a):
+
     - Array hash optimization: uses stride-based sampling only for
       arrays with >10000 elements when xxhash is unavailable
     - For smaller arrays, hashes full array directly without redundant

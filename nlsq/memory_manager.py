@@ -16,6 +16,7 @@ This enables:
 See :class:`MixedPrecisionManager` for more details on mixed precision optimization.
 
 Phase 3 Optimizations (Task Group 9):
+
 - Telemetry Circular Buffer (1.3a): Uses deque(maxlen=1000) for _safety_telemetry
   to prevent memory leak in multi-day optimization runs
 """
