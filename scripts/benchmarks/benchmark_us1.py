@@ -11,7 +11,7 @@ bucket padding, the final chunk should be padded to a bucket that was already
 compiled, avoiding recompilation.
 
 Usage:
-    python scripts/benchmark_us1.py
+    python scripts/benchmarks/benchmark_us1.py
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ This script measures baseline performance metrics before any optimizations
 are applied. Results are saved to specs/002-performance-optimizations/baseline.json.
 
 Usage:
-    python scripts/benchmark_baseline.py
+    python scripts/benchmarks/benchmark_baseline.py
 """
 
 from __future__ import annotations

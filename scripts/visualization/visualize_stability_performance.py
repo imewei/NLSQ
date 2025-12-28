@@ -6,7 +6,7 @@ This script generates plots to understand:
 3. rescale_data impact on convergence
 
 Requires: matplotlib, numpy
-Run with: python scripts/visualize_stability_performance.py
+Run with: python scripts/visualization/visualize_stability_performance.py
 """
 
 from __future__ import annotations
