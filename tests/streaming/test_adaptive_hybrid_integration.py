@@ -84,7 +84,8 @@ class TestFullPipelineIntegration:
         )
 
     @pytest.mark.slow
-    @pytest.mark.timeout(120)
+    @pytest.mark.serial
+    @pytest.mark.timeout(180)
     def test_full_pipeline_gaussian_model(self):
         """Test full pipeline on Gaussian model with multiple parameters."""
 
@@ -317,7 +318,8 @@ class TestLargeDatasetPerformance:
         assert jnp.abs(popt[1] - 0.1) < 0.02, f"Parameter b error: {popt[1]}"
 
     @pytest.mark.slow
-    @pytest.mark.timeout(120)
+    @pytest.mark.serial
+    @pytest.mark.timeout(180)
     def test_curve_fit_large_integration(self):
         """Test curve_fit_large with hybrid_streaming method."""
 

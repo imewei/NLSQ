@@ -263,8 +263,15 @@ class TestAsyncCheckpointQueue(TestCase):
         # We do this by setting a flag that causes the worker to sleep
         optimizer._checkpoint_worker_pause = True
 
-        # Capture log output
-        with self.assertLogs(level="WARNING") as log_capture:
+        # Wait for worker to enter pause state (worker checks pause at loop start,
+        # but may be blocked on queue.get() for up to 0.5s before it can loop)
+        time.sleep(0.6)
+
+        # Capture log output - use the specific logger name since warnings
+        # are logged to nlsq.streaming.optimizer, not the root logger
+        with self.assertLogs(
+            logger="nlsq.streaming.optimizer", level="WARNING"
+        ) as log_capture:
             # Try to queue more checkpoints than maxsize allows
             # Queue has maxsize=2, so 5 saves should overflow
             for i in range(5):
