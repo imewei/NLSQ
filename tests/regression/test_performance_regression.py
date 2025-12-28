@@ -22,7 +22,7 @@ RUNNING_IN_PARALLEL = hasattr(os.environ.get("PYTEST_XDIST_WORKER", ""), "__len_
 
 def load_baseline():
     """Load performance baseline for current platform."""
-    baseline_dir = Path(__file__).parent.parent / "benchmark" / "baselines"
+    baseline_dir = Path(__file__).parents[2] / "benchmarks" / "baselines"
     baseline_file = baseline_dir / f"v0.3.0-beta.3-{platform.system().lower()}.json"
 
     if not baseline_file.exists():

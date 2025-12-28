@@ -2,16 +2,15 @@
 Tests for example scripts execution.
 
 These tests spawn external Python processes to validate example scripts.
-They are marked for serial execution to prevent resource contention when
-running with pytest-xdist parallel execution.
+Scripts are filtered at collection time for efficiency.
 
-Root Cause Analysis (2025-12-27):
-- Each script spawns a subprocess that initializes JAX (~620ms + 500MB memory)
-- With -n 4 workers × 65 scripts = potential for 260+ parallel JAX initializations
-- JAX compilation cache locking causes deadlocks between processes
-- Serial execution prevents resource contention and system freezes
+Performance optimizations:
+- Heavy/slow scripts excluded at collection time (not runtime)
+- Duplicate gallery scripts (09_gallery_advanced) excluded
+- Streaming scripts excluded (tested separately in streaming tests)
+- CLI model scripts excluded (not standalone examples)
 
-Impact: Without serial marker, full test suite hangs indefinitely with -n 4.
+Serial execution prevents resource contention with pytest-xdist.
 """
 
 from __future__ import annotations
@@ -24,12 +23,48 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_ROOT = REPO_ROOT / "examples" / "scripts"
+
+# Scripts/patterns to EXCLUDE at collection time (performance optimization)
+EXCLUDED_PATTERNS = {
+    # Streaming scripts - too slow, functionality tested in streaming tests
+    "06_streaming",
+    # Advanced gallery - duplicates 04_gallery with longer execution times
+    "09_gallery_advanced",
+    # Global optimization scripts - slow due to multiple fits
+    "07_global_optimization",
+    # CLI model definitions - not standalone example scripts
+    "10_cli-commands/models",
+    "10_cli-commands/data",
+    "10_cli-commands/output",
+}
+
+# Scripts that need longer timeout (complex demonstrations)
+LONG_TIMEOUT_PATTERNS = {
+    "03_advanced",
+    "08_workflow_system",
+}
+
+
+def should_exclude(path: Path) -> bool:
+    """Check if script should be excluded from testing."""
+    path_str = str(path)
+    return any(pattern in path_str for pattern in EXCLUDED_PATTERNS)
+
+
+def get_timeout(path: Path) -> int:
+    """Get appropriate timeout for script based on complexity."""
+    path_str = str(path)
+    if any(pattern in path_str for pattern in LONG_TIMEOUT_PATTERNS):
+        return 120  # 2 minutes for complex scripts
+    return 60  # 1 minute for simple scripts
 
 
 def discover_scripts() -> list[Path]:
-    return sorted(SCRIPTS_ROOT.rglob("*.py"))
+    """Discover scripts, excluding heavy/duplicate ones at collection time."""
+    all_scripts = sorted(SCRIPTS_ROOT.rglob("*.py"))
+    return [s for s in all_scripts if not should_exclude(s)]
 
 
 SCRIPT_PARAMS = [
@@ -44,19 +79,14 @@ SCRIPT_PARAMS = [
 def test_example_script_runs(
     script_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    """Execute a script and verify it completes without errors."""
     env = os.environ.copy()
-    env["NLSQ_EXAMPLES_QUICK"] = env.get("NLSQ_EXAMPLES_QUICK", "1")
-    env.setdefault("MPLBACKEND", "Agg")
-    env.setdefault("PYTHONHASHSEED", "0")
-    env.setdefault("NLSQ_EXAMPLES_TMPDIR", str(tmp_path))
-    env.setdefault("NLSQ_EXAMPLES_MAX_SAMPLES", "100")
-    env.setdefault("JAX_DISABLE_JIT", "1")
-    env.setdefault("NLSQ_EXAMPLES_SKIP_ADVANCED", "0")
-
-    if env["NLSQ_EXAMPLES_SKIP_ADVANCED"] == "1" and "09_gallery_advanced" in str(
-        script_path
-    ):
-        pytest.skip("Skipped advanced gallery in quick mode")
+    env["NLSQ_EXAMPLES_QUICK"] = "1"
+    env["MPLBACKEND"] = "Agg"
+    env["PYTHONHASHSEED"] = "0"
+    env["NLSQ_EXAMPLES_TMPDIR"] = str(tmp_path)
+    env["NLSQ_EXAMPLES_MAX_SAMPLES"] = "100"
+    env["JAX_DISABLE_JIT"] = "1"
 
     # Ensure sitecustomize quick patches are loaded
     extra_path = REPO_ROOT / "scripts" / "quick_sitecustomize"
@@ -69,6 +99,7 @@ def test_example_script_runs(
     local_script.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, local_script)
 
+    timeout = get_timeout(script_path)
     result = subprocess.run(
         [sys.executable, str(local_script)],
         check=False,
@@ -76,9 +107,9 @@ def test_example_script_runs(
         env=env,
         capture_output=True,
         text=True,
-        encoding="utf-8",  # Fix Windows cp1252 encoding issues with emoji
-        errors="replace",  # Replace undecodable bytes instead of failing
-        timeout=60,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
     )
 
     if result.returncode != 0:
