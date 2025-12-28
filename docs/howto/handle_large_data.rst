@@ -121,7 +121,7 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
 .. code-block:: python
 
     from nlsq import LargeDatasetFitter
-    from nlsq.large_dataset import LDMemoryConfig
+    from nlsq.streaming.large_dataset import LDMemoryConfig
 
     # Create custom configuration
     config = LDMemoryConfig(
@@ -287,7 +287,7 @@ For datasets that cannot fit in memory or are generated on-the-fly, use streamin
 .. code-block:: python
 
     from nlsq import StreamingOptimizer, StreamingConfig
-    from nlsq.streaming_optimizer import create_hdf5_dataset
+    from nlsq.streaming.optimizer import create_hdf5_dataset
 
 
     # First, create a large HDF5 dataset on disk

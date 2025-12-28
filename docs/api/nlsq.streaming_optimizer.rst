@@ -61,7 +61,7 @@ Fit a model to data stored in HDF5 file:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import fit_unlimited_data, StreamingConfig
+    from nlsq.streaming.optimizer import fit_unlimited_data, StreamingConfig
     import numpy as np
     import jax.numpy as jnp
 
@@ -96,7 +96,7 @@ Process data generated on-the-fly:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+    from nlsq.streaming.optimizer import StreamingOptimizer, StreamingConfig
     import numpy as np
     import jax.numpy as jnp
 
@@ -136,7 +136,7 @@ Process large NumPy arrays without loading into memory:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import fit_unlimited_data
+    from nlsq.streaming.optimizer import fit_unlimited_data
     import numpy as np
 
     # Create memory-mapped file
@@ -173,7 +173,7 @@ Fine-tune optimizer settings:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+    from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
     # Custom configuration
     config = StreamingConfig(
@@ -208,7 +208,7 @@ Generate test datasets in HDF5 format:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import create_hdf5_dataset
+    from nlsq.streaming.optimizer import create_hdf5_dataset
     import numpy as np
     import jax.numpy as jnp
 
@@ -248,7 +248,7 @@ Monitor optimization progress:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+    from nlsq.streaming.optimizer import StreamingOptimizer, StreamingConfig
 
     # Track progress
     loss_history = []
@@ -284,7 +284,7 @@ Apply parameter bounds during streaming:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import fit_unlimited_data, StreamingConfig
+    from nlsq.streaming.optimizer import fit_unlimited_data, StreamingConfig
     import numpy as np
     import jax.numpy as jnp
 
@@ -313,7 +313,7 @@ Reset and reuse optimizer:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+    from nlsq.streaming.optimizer import StreamingOptimizer, StreamingConfig
 
     config = StreamingConfig(batch_size=10000, use_adam=True)
     optimizer = StreamingOptimizer(config)
@@ -334,7 +334,7 @@ Compare optimization algorithms:
 
 .. code-block:: python
 
-    from nlsq.streaming_optimizer import StreamingOptimizer, StreamingConfig
+    from nlsq.streaming.optimizer import StreamingOptimizer, StreamingConfig
 
     # SGD with momentum
     sgd_config = StreamingConfig(

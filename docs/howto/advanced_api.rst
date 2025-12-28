@@ -155,7 +155,7 @@ For online learning or real-time fitting scenarios.
 
 .. code:: python
 
-   from nlsq.streaming_optimizer import OnlineOptimizer
+   from nlsq.streaming.optimizer import OnlineOptimizer
 
    optimizer = OnlineOptimizer(
        model=exponential, p0=[2, 0.5], learning_rate=0.01, momentum=0.9

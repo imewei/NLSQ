@@ -117,7 +117,7 @@ For known model types, inference uses domain knowledge:
 
 .. code-block:: python
 
-    from nlsq.functions import gaussian
+    from nlsq.core.functions import gaussian
     from nlsq.bound_inference import infer_bounds
 
     # For Gaussian, inference knows:

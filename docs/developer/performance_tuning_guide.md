@@ -44,7 +44,7 @@ Sparse Jacobian construction now uses vectorized NumPy operations:
 Memory pool now uses LRU eviction with adaptive TTL:
 
 ```python
-from nlsq.memory_manager import MemoryManager
+from nlsq.caching.memory_manager import MemoryManager
 
 manager = MemoryManager()
 # Arrays are cached and reused
@@ -153,7 +153,7 @@ for i in range(n_curves):
     results.append(popt)
 
 # BEST: Use large_dataset module for very large batches
-from nlsq.large_dataset import LargeDatasetFitter
+from nlsq.streaming.large_dataset import LargeDatasetFitter
 
 fitter = LargeDatasetFitter()
 results = fitter.fit_multiple(model, x_data, y_data, p0_list)
@@ -355,7 +355,7 @@ def fast_model(x, a, b, c):
 **Solution**: Use large dataset optimization features
 
 ```python
-from nlsq.large_dataset import LargeDatasetFitter
+from nlsq.streaming.large_dataset import LargeDatasetFitter
 
 fitter = LargeDatasetFitter(
     chunk_size=10000, enable_streaming=True  # Process in chunks

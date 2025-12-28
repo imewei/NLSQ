@@ -161,7 +161,7 @@ Use this when you want to run a workflow from a Python script using YAML configu
 .. code-block:: python
 
    from nlsq import fit
-   from nlsq.workflow import load_yaml_config
+   from nlsq.core.workflow import load_yaml_config
 
    # Load configuration from YAML file
    config = load_yaml_config("./configs/experiment_01.yaml")

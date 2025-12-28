@@ -159,7 +159,7 @@ Issue: GPU out of memory (OOM)
 
 .. code:: python
 
-   from nlsq.large_dataset import fit_large_dataset
+   from nlsq.streaming.large_dataset import fit_large_dataset
 
    popt, pcov, info = fit_large_dataset(
        model,
@@ -500,7 +500,7 @@ Issue: Memory usage keeps growing
 
 .. code:: python
 
-   from nlsq.large_dataset import fit_large_dataset
+   from nlsq.streaming.large_dataset import fit_large_dataset
 
    popt, pcov, info = fit_large_dataset(model, x_large, y_large, memory_limit_gb=4.0)
 
@@ -518,7 +518,7 @@ Issue: ``MemoryError`` during fit
 
 .. code:: python
 
-   from nlsq.large_dataset import fit_large_dataset
+   from nlsq.streaming.large_dataset import fit_large_dataset
 
    popt, pcov, info = fit_large_dataset(
        model,

@@ -74,7 +74,7 @@ Apply all transformations to notebooks in a directory:
 
 .. code-block:: bash
 
-   python scripts/configure_notebooks.py
+   python scripts/notebooks/configure_notebooks.py
 
 Custom Options
 ~~~~~~~~~~~~~~
@@ -82,25 +82,25 @@ Custom Options
 .. code-block:: bash
 
    # Specify directory
-   python scripts/configure_notebooks.py --dir examples/notebooks/04_gallery
+   python scripts/notebooks/configure_notebooks.py --dir examples/notebooks/04_gallery
 
    # Apply specific transformations only
-   python scripts/configure_notebooks.py --transform matplotlib --transform imports
+   python scripts/notebooks/configure_notebooks.py --transform matplotlib --transform imports
 
    # Dry run to preview changes
-   python scripts/configure_notebooks.py --dry-run
+   python scripts/notebooks/configure_notebooks.py --dry-run
 
    # Enable parallel processing
-   python scripts/configure_notebooks.py --parallel --workers 8
+   python scripts/notebooks/configure_notebooks.py --parallel --workers 8
 
    # Incremental mode (only process changed notebooks)
-   python scripts/configure_notebooks.py --incremental
+   python scripts/notebooks/configure_notebooks.py --incremental
 
    # Create backup files
-   python scripts/configure_notebooks.py --backup
+   python scripts/notebooks/configure_notebooks.py --backup
 
    # Verbose logging
-   python scripts/configure_notebooks.py --verbose
+   python scripts/notebooks/configure_notebooks.py --verbose
 
 CLI Options Reference
 ~~~~~~~~~~~~~~~~~~~~~
@@ -265,15 +265,15 @@ Usage Example
 .. code-block:: bash
 
    # First run - processes all 50 notebooks
-   python scripts/configure_notebooks.py --incremental
+   python scripts/notebooks/configure_notebooks.py --incremental
    # Output: Successfully configured 50 notebook(s)!
 
    # Second run - skips unchanged notebooks
-   python scripts/configure_notebooks.py --incremental
+   python scripts/notebooks/configure_notebooks.py --incremental
    # Output: All notebooks already up-to-date!
 
    # After editing one notebook
-   python scripts/configure_notebooks.py --incremental
+   python scripts/notebooks/configure_notebooks.py --incremental
    # Output: Incremental mode: Skipping 49 unchanged notebook(s)
    #         Successfully configured 1 notebook(s)!
 
@@ -332,13 +332,13 @@ Usage
 .. code-block:: bash
 
    # Use 4 workers (default)
-   python scripts/configure_notebooks.py --parallel
+   python scripts/notebooks/configure_notebooks.py --parallel
 
    # Use 8 workers for faster processing
-   python scripts/configure_notebooks.py --parallel --workers 8
+   python scripts/notebooks/configure_notebooks.py --parallel --workers 8
 
    # Combine with incremental mode
-   python scripts/configure_notebooks.py --parallel --incremental
+   python scripts/notebooks/configure_notebooks.py --parallel --incremental
 
 **Note**: Parallel processing provides ~3× speedup on multi-core systems. Workers are automatically limited to the number of notebooks to avoid overhead.
 
@@ -381,7 +381,7 @@ Always test transformations with ``--dry-run`` first:
 .. code-block:: bash
 
    # Preview changes
-   python scripts/configure_notebooks.py --dry-run
+   python scripts/notebooks/configure_notebooks.py --dry-run
 
    # Output shows which notebooks would be modified
    # No files are actually changed
@@ -465,7 +465,7 @@ Use ``--backup`` to create ``.bak`` files:
 
 .. code-block:: bash
 
-   python scripts/configure_notebooks.py --backup
+   python scripts/notebooks/configure_notebooks.py --backup
 
    # Creates:
    # notebook.ipynb      (modified)
@@ -478,19 +478,19 @@ Best Practices
 
    .. code-block:: bash
 
-      python scripts/configure_notebooks.py --dry-run
+      python scripts/notebooks/configure_notebooks.py --dry-run
 
 2. **Enable Incremental Mode**: For large repositories, use ``--incremental`` to skip unchanged notebooks
 
    .. code-block:: bash
 
-      python scripts/configure_notebooks.py --incremental
+      python scripts/notebooks/configure_notebooks.py --incremental
 
 3. **Parallel Processing**: For 10+ notebooks, use ``--parallel`` for 3× speedup
 
    .. code-block:: bash
 
-      python scripts/configure_notebooks.py --parallel --workers 8
+      python scripts/notebooks/configure_notebooks.py --parallel --workers 8
 
 4. **Version Control**: Commit ``.notebook_transforms.json`` to share state across team
 
@@ -498,14 +498,14 @@ Best Practices
 
    .. code-block:: bash
 
-      python scripts/configure_notebooks.py --backup
+      python scripts/notebooks/configure_notebooks.py --backup
 
 6. **Selective Transformations**: Use ``--transform`` to apply only needed transformations
 
    .. code-block:: bash
 
       # Only add matplotlib magic, skip other transformations
-      python scripts/configure_notebooks.py --transform matplotlib
+      python scripts/notebooks/configure_notebooks.py --transform matplotlib
 
 Pre-commit Hook Integration
 ----------------------------
@@ -562,7 +562,7 @@ To enable automatic validation on commit, modify ``.pre-commit-config.yaml``:
 
    - id: validate-notebooks
      name: Validate Jupyter notebooks configuration
-     entry: python scripts/configure_notebooks.py --dry-run
+     entry: python scripts/notebooks/configure_notebooks.py --dry-run
      language: system
      files: ^examples/notebooks/.*\.ipynb$
      pass_filenames: false
@@ -596,7 +596,7 @@ Common Issues
 
    # Default pattern is *.ipynb
    # For custom patterns:
-   python scripts/configure_notebooks.py --pattern "*.ipynb"
+   python scripts/notebooks/configure_notebooks.py --pattern "*.ipynb"
 
 **Issue**: Incremental mode not detecting changes
 
@@ -608,7 +608,7 @@ Common Issues
    rm .notebook_transforms.json
 
    # Reprocess all notebooks
-   python scripts/configure_notebooks.py
+   python scripts/notebooks/configure_notebooks.py
 
 **Issue**: Parallel processing errors
 
@@ -617,7 +617,7 @@ Common Issues
 .. code-block:: bash
 
    # Use sequential processing
-   python scripts/configure_notebooks.py --sequential
+   python scripts/notebooks/configure_notebooks.py --sequential
 
 **Issue**: Transformation not applied
 
@@ -625,7 +625,7 @@ Common Issues
 
 .. code-block:: bash
 
-   python scripts/configure_notebooks.py --verbose
+   python scripts/notebooks/configure_notebooks.py --verbose
 
 See Also
 --------

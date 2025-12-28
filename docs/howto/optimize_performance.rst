@@ -320,7 +320,7 @@ Large Dataset Memory Management
 
 .. code:: python
 
-   from nlsq.large_dataset import fit_large_dataset
+   from nlsq.streaming.large_dataset import fit_large_dataset
 
    # 50 million points
    x_huge = np.linspace(0, 100, 50_000_000)
@@ -346,7 +346,7 @@ Memory Profiling
 
 .. code:: python
 
-   from nlsq.memory_manager import MemoryProfiler
+   from nlsq.caching.memory_manager import MemoryProfiler
 
    profiler = MemoryProfiler()
 
@@ -573,7 +573,7 @@ Issue 3: Out of Memory (OOM)
 
 .. code:: python
 
-   from nlsq.large_dataset import fit_large_dataset
+   from nlsq.streaming.large_dataset import fit_large_dataset
 
    popt, pcov, info = fit_large_dataset(model, x, y, memory_limit_gb=4.0)
 

@@ -197,7 +197,7 @@ For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` i
 Example::
 
     from nlsq import LargeDatasetFitter
-    from nlsq.large_dataset import LDMemoryConfig
+    from nlsq.streaming.large_dataset import LDMemoryConfig
 
     # Custom configuration
     config = LDMemoryConfig(
@@ -222,7 +222,7 @@ Returns:
 
 Example::
 
-    from nlsq.large_dataset import DataChunker
+    from nlsq.streaming.large_dataset import DataChunker
 
     chunker = DataChunker(chunk_size=100000)
 

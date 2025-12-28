@@ -53,7 +53,7 @@ Monitor and manage memory during optimization:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
     import numpy as np
 
     # Create memory manager
@@ -83,7 +83,7 @@ Use context managers to ensure memory availability:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
     import numpy as np
 
     mm = MemoryManager()
@@ -114,7 +114,7 @@ Reuse arrays to reduce allocation overhead:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
     import numpy as np
 
     mm = MemoryManager()
@@ -141,7 +141,7 @@ Use context manager for temporary arrays:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
 
     mm = MemoryManager()
 
@@ -160,7 +160,7 @@ Estimate optimal chunk sizes for large datasets:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
 
     mm = MemoryManager()
 
@@ -188,7 +188,7 @@ Use the global memory manager instance:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import get_memory_manager, get_memory_stats, clear_memory_pool
+    from nlsq.caching.memory_manager import get_memory_manager, get_memory_stats, clear_memory_pool
 
     # Get global instance
     mm = get_memory_manager()
@@ -214,7 +214,7 @@ Memory manager integrates with large dataset tools:
 .. code-block:: python
 
     from nlsq import curve_fit_large
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
     import jax.numpy as jnp
     import numpy as np
 
@@ -254,7 +254,7 @@ Track memory usage over time:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
 
     mm = MemoryManager()
 
@@ -291,7 +291,7 @@ Compare memory requirements across algorithms:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
 
     mm = MemoryManager()
 
@@ -315,7 +315,7 @@ Memory manager can be configured at initialization:
 
 .. code-block:: python
 
-    from nlsq.memory_manager import MemoryManager
+    from nlsq.caching.memory_manager import MemoryManager
 
     # Conservative settings (more GC, larger safety margin)
     conservative_mm = MemoryManager(gc_threshold=0.7, safety_factor=1.5)

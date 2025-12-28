@@ -12,7 +12,7 @@ Import from ``nlsq.functions`` or directly from ``nlsq``:
 
 .. code-block:: python
 
-   from nlsq.functions import gaussian, exponential_decay
+   from nlsq.core.functions import gaussian, exponential_decay
 
    # or
    from nlsq import gaussian, exponential_decay
@@ -48,7 +48,7 @@ Gaussian peak function.
 .. code-block:: python
 
    from nlsq import fit
-   from nlsq.functions import gaussian
+   from nlsq.core.functions import gaussian
 
    popt, pcov = fit(gaussian, x, y, p0=[1.0, 0.0, 1.0])
    amplitude, center, width = popt
@@ -111,7 +111,7 @@ Single exponential decay.
 .. code-block:: python
 
    from nlsq import fit
-   from nlsq.functions import exponential_decay
+   from nlsq.core.functions import exponential_decay
 
    popt, pcov = fit(
        exponential_decay,
@@ -179,7 +179,7 @@ Logistic sigmoid function.
 .. code-block:: python
 
    from nlsq import fit
-   from nlsq.functions import sigmoid
+   from nlsq.core.functions import sigmoid
 
    popt, pcov = fit(sigmoid, x, y, p0=[1.0, 1.0, 0.0])
    maximum, steepness, midpoint = popt
@@ -239,7 +239,7 @@ Polynomial function of arbitrary degree.
 
 .. code-block:: python
 
-   from nlsq.functions import polynomial
+   from nlsq.core.functions import polynomial
 
 
    # Quadratic: a + b*x + c*x^2

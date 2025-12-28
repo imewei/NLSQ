@@ -156,7 +156,7 @@ print(WORKFLOW_PRESETS["quality"])
 ### Auto Selection
 
 ```python
-from nlsq.workflow import auto_select_workflow, WorkflowSelector
+from nlsq.core.workflow import auto_select_workflow, WorkflowSelector
 
 # Convenience function
 config = auto_select_workflow(
@@ -192,7 +192,7 @@ environment:
 Load and use:
 
 ```python
-from nlsq.workflow import load_yaml_config, get_custom_workflow
+from nlsq.core.workflow import load_yaml_config, get_custom_workflow
 
 config = load_yaml_config("nlsq.yaml")
 workflow = get_custom_workflow("my_workflow", "nlsq.yaml")
@@ -207,7 +207,7 @@ Environment variable overrides:
 ### HPC / Cluster Support
 
 ```python
-from nlsq.workflow import ClusterDetector, create_checkpoint_directory
+from nlsq.core.workflow import ClusterDetector, create_checkpoint_directory
 
 # Detect PBS Pro cluster
 detector = ClusterDetector()

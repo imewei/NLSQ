@@ -619,7 +619,7 @@ Pattern 4: Large Datasets
 
 .. code:: python
 
-   from nlsq.large_dataset import fit_large_dataset
+   from nlsq.streaming.large_dataset import fit_large_dataset
 
    x_large = np.linspace(0, 100, 10_000_000)
    y_large = model(x_large, 2.5, 1.3) + np.random.randn(10_000_000) * 0.01

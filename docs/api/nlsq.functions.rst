@@ -49,7 +49,7 @@ Fit a Gaussian (normal distribution) to data:
 .. code-block:: python
 
     from nlsq import curve_fit
-    from nlsq.functions import gaussian
+    from nlsq.core.functions import gaussian
     import numpy as np
 
     # Generate synthetic data
@@ -71,7 +71,7 @@ Fit an exponential decay curve:
 
 .. code-block:: python
 
-    from nlsq.functions import exponential_decay
+    from nlsq.core.functions import exponential_decay
 
     # Generate decay data
     x = np.linspace(0, 10, 100)
@@ -92,7 +92,7 @@ Fit a sigmoid (logistic) curve:
 
 .. code-block:: python
 
-    from nlsq.functions import sigmoid
+    from nlsq.core.functions import sigmoid
 
     # Generate sigmoid data
     x = np.linspace(-10, 10, 100)
@@ -113,7 +113,7 @@ Fit a power law relationship:
 
 .. code-block:: python
 
-    from nlsq.functions import power_law
+    from nlsq.core.functions import power_law
 
     # Generate power law data
     x = np.linspace(1, 100, 50)
@@ -133,7 +133,7 @@ Fit a sinusoidal (periodic) function:
 
 .. code-block:: python
 
-    from nlsq.functions import sinusoidal
+    from nlsq.core.functions import sinusoidal
 
     # Generate periodic data
     x = np.linspace(0, 4 * np.pi, 100)
@@ -155,7 +155,7 @@ All functions in this module include intelligent parameter estimation:
 
 .. code-block:: python
 
-    from nlsq.functions import gaussian
+    from nlsq.core.functions import gaussian
 
     # Fit without providing initial parameters
     # The function automatically estimates reasonable starting values
