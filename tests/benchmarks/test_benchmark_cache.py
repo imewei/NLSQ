@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from nlsq.memory_manager import MemoryManager
+from nlsq.caching.memory_manager import MemoryManager
 
 
 def create_psutil_mock():
@@ -67,7 +67,7 @@ class TestLRUMemoryPoolBenchmark:
             for shape in shapes:
                 manager.allocate_array(shape, dtype=np.float64)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             benchmark(allocate_arrays)
 
     @pytest.mark.benchmark(group="lru_memory_pool")
@@ -93,7 +93,7 @@ class TestLRUMemoryPoolBenchmark:
             # Trigger eviction
             manager.optimize_memory_pool(max_arrays=20)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             benchmark(eviction_test)
 
 
@@ -108,7 +108,7 @@ class TestMemoryPoolEfficiency:
         """
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             # Track hits and misses
             hits = 0
             misses = 0
@@ -229,7 +229,7 @@ class TestMemoryPoolEfficiency:
         """
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             hits = 0
             new_allocations = 0
 
@@ -280,7 +280,7 @@ class TestLRUEvictionPatterns:
         """
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             hot_shapes = [(100, 10), (200, 5)]
             cold_shapes = [(300, 3), (400, 2), (500, 1)]
 
@@ -320,7 +320,7 @@ class TestLRUEvictionPatterns:
         """
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             # Add arrays in order
             shapes = [(100, 10), (200, 5), (300, 3)]
             for shape in shapes:
@@ -355,7 +355,7 @@ class TestPoolBenchmarkSuite:
 
         shape = (1000, 10)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             # Warm up - first allocation
             manager.allocate_array(shape, dtype=np.float64)
 
@@ -367,7 +367,7 @@ class TestPoolBenchmarkSuite:
         """Benchmark free_array performance (returning to pool)."""
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             arr = np.zeros((1000, 10), dtype=np.float64)
 
             benchmark(lambda: manager.free_array(arr))
@@ -377,7 +377,7 @@ class TestPoolBenchmarkSuite:
         """Benchmark optimize_memory_pool (LRU eviction) performance."""
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
 
             def setup_and_evict():
                 # Add many arrays

@@ -19,9 +19,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.minpack import curve_fit, fit
-from nlsq.result import CurveFitResult
-from nlsq.workflow import (
+from nlsq.core.minpack import curve_fit, fit
+from nlsq.core.workflow import (
     WORKFLOW_PRESETS,
     MemoryTier,
     OptimizationGoal,
@@ -33,6 +32,7 @@ from nlsq.workflow import (
     get_env_overrides,
     load_yaml_config,
 )
+from nlsq.result import CurveFitResult
 
 
 # Test model functions
@@ -417,7 +417,7 @@ class TestPackageExports:
 
     def test_workflow_components_importable(self):
         """Test workflow components can be imported."""
-        from nlsq.workflow import (
+        from nlsq.core.workflow import (
             WORKFLOW_PRESETS,
             OptimizationGoal,
             WorkflowConfig,
@@ -434,7 +434,7 @@ class TestPackageExports:
     def test_curve_fit_still_available(self):
         """Test that curve_fit is still available after fit() addition."""
         from nlsq import curve_fit as cf
-        from nlsq.minpack import curve_fit as cf_minpack
+        from nlsq.core.minpack import curve_fit as cf_minpack
 
         assert callable(cf)
         assert callable(cf_minpack)

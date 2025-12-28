@@ -253,7 +253,7 @@ class TestPresets:
 
     def test_presets_consistent_with_workflow_presets(self) -> None:
         """Test that GUI presets are consistent with WORKFLOW_PRESETS in minpack.py."""
-        from nlsq.minpack import WORKFLOW_PRESETS
+        from nlsq.core.minpack import WORKFLOW_PRESETS
 
         # Fast preset should match
         gui_fast = get_preset("fast")

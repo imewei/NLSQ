@@ -8,25 +8,25 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.algorithm_selector import AlgorithmSelector
-from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
-from nlsq.memory_manager import (
+from nlsq.caching.memory_manager import (
     MemoryManager,
     clear_memory_pool,
     get_memory_manager,
     get_memory_stats,
 )
-from nlsq.recovery import OptimizationRecovery
-from nlsq.robust_decomposition import RobustDecomposition
-from nlsq.smart_cache import (
+from nlsq.caching.smart_cache import (
     SmartCache,
     cached_function,
     clear_all_caches,
     get_global_cache,
     get_jit_cache,
 )
-from nlsq.stability import NumericalStabilityGuard
-from nlsq.validators import InputValidator
+from nlsq.precision.algorithm_selector import AlgorithmSelector
+from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.stability.recovery import OptimizationRecovery
+from nlsq.stability.robust_decomposition import RobustDecomposition
+from nlsq.utils.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
+from nlsq.utils.validators import InputValidator
 
 
 class TestStabilityExtended(unittest.TestCase):
@@ -405,7 +405,7 @@ class TestRobustDecompositionExtended(unittest.TestCase):
 
     def test_robust_decomp_function(self):
         """Test the convenience function."""
-        from nlsq.robust_decomposition import RobustDecomposition
+        from nlsq.stability.robust_decomposition import RobustDecomposition
 
         decomp = RobustDecomposition()
         A = jnp.array([[1.0, 0.5], [0.5, 1.0]])

@@ -11,8 +11,8 @@ import unittest
 
 import jax.numpy as jnp
 
-from nlsq.memory_manager import MemoryManager, get_memory_manager
-from nlsq.memory_pool import MemoryPool, clear_global_pool, get_global_pool
+from nlsq.caching.memory_manager import MemoryManager, get_memory_manager
+from nlsq.caching.memory_pool import MemoryPool, clear_global_pool, get_global_pool
 
 
 class TestAdaptiveSafetyFactor(unittest.TestCase):

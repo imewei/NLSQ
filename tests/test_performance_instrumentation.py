@@ -25,8 +25,8 @@ class TestJITRecompilationCounter(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from nlsq.streaming_config import StreamingConfig
-        from nlsq.streaming_optimizer import StreamingOptimizer
+        from nlsq.streaming.config import StreamingConfig
+        from nlsq.streaming.optimizer import StreamingOptimizer
 
         self.config = StreamingConfig(
             batch_size=50,
@@ -49,8 +49,8 @@ class TestJITRecompilationCounter(unittest.TestCase):
 
     def test_recompilation_counter_initializes_to_zero(self):
         """Test that recompilation counter starts at zero."""
-        from nlsq.streaming_config import StreamingConfig
-        from nlsq.streaming_optimizer import StreamingOptimizer
+        from nlsq.streaming.config import StreamingConfig
+        from nlsq.streaming.optimizer import StreamingOptimizer
 
         config = StreamingConfig(batch_size=100, max_epochs=1)
         optimizer = StreamingOptimizer(config)
@@ -84,7 +84,7 @@ class TestCacheHitRateLogging(unittest.TestCase):
 
     def test_cache_stats_available_for_logging(self):
         """Test that SmartCache provides stats suitable for logging."""
-        from nlsq.smart_cache import SmartCache
+        from nlsq.caching.smart_cache import SmartCache
 
         cache = SmartCache(enable_stats=True)
 
@@ -107,7 +107,7 @@ class TestCacheHitRateLogging(unittest.TestCase):
 
     def test_compilation_cache_stats_available(self):
         """Test that CompilationCache provides stats for logging."""
-        from nlsq.compilation_cache import CompilationCache
+        from nlsq.caching.compilation_cache import CompilationCache
 
         cache = CompilationCache(enable_stats=True)
 
@@ -126,8 +126,8 @@ class TestCacheHitRateLogging(unittest.TestCase):
 
     def test_profiling_logs_cache_stats_when_enabled(self):
         """Test that cache stats are logged when NLSQ_PROFILE=1."""
-        from nlsq.streaming_config import StreamingConfig
-        from nlsq.streaming_optimizer import StreamingOptimizer
+        from nlsq.streaming.config import StreamingConfig
+        from nlsq.streaming.optimizer import StreamingOptimizer
 
         # Create optimizer with profiling config
         config = StreamingConfig(
@@ -150,7 +150,7 @@ class TestMemoryPoolEfficiencyMetric(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from nlsq.memory_manager import MemoryManager
+        from nlsq.caching.memory_manager import MemoryManager
 
         self.manager = MemoryManager()
 
@@ -198,8 +198,8 @@ class TestCheckpointSaveDurationTracking(unittest.TestCase):
         """Test that checkpoint save times are tracked."""
         import tempfile
 
-        from nlsq.streaming_config import StreamingConfig
-        from nlsq.streaming_optimizer import StreamingOptimizer
+        from nlsq.streaming.config import StreamingConfig
+        from nlsq.streaming.optimizer import StreamingOptimizer
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = StreamingConfig(
@@ -223,8 +223,8 @@ class TestCheckpointSaveDurationTracking(unittest.TestCase):
         """Test that checkpoint duration histogram is in diagnostics when checkpoints are saved."""
         import tempfile
 
-        from nlsq.streaming_config import StreamingConfig
-        from nlsq.streaming_optimizer import StreamingOptimizer
+        from nlsq.streaming.config import StreamingConfig
+        from nlsq.streaming.optimizer import StreamingOptimizer
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = StreamingConfig(
@@ -270,8 +270,8 @@ class TestProfilingEnvironmentVariable(unittest.TestCase):
         old_value = os.environ.pop("NLSQ_PROFILE", None)
 
         try:
-            from nlsq.streaming_config import StreamingConfig
-            from nlsq.streaming_optimizer import StreamingOptimizer
+            from nlsq.streaming.config import StreamingConfig
+            from nlsq.streaming.optimizer import StreamingOptimizer
 
             config = StreamingConfig(batch_size=50, max_epochs=1)
             optimizer = StreamingOptimizer(config)
@@ -293,8 +293,8 @@ class TestProfilingEnvironmentVariable(unittest.TestCase):
 
         try:
             # Need to reimport to pick up env var
-            from nlsq.streaming_config import StreamingConfig
-            from nlsq.streaming_optimizer import StreamingOptimizer
+            from nlsq.streaming.config import StreamingConfig
+            from nlsq.streaming.optimizer import StreamingOptimizer
 
             config = StreamingConfig(batch_size=50, max_epochs=1)
             optimizer = StreamingOptimizer(config)
@@ -316,8 +316,8 @@ class TestProfilingEnvironmentVariable(unittest.TestCase):
         old_value = os.environ.pop("NLSQ_PROFILE", None)
 
         try:
-            from nlsq.streaming_config import StreamingConfig
-            from nlsq.streaming_optimizer import StreamingOptimizer
+            from nlsq.streaming.config import StreamingConfig
+            from nlsq.streaming.optimizer import StreamingOptimizer
 
             config = StreamingConfig(
                 batch_size=50,
@@ -363,8 +363,8 @@ class TestProfilingMetricsIntegration(unittest.TestCase):
         os.environ["NLSQ_PROFILE"] = "1"
 
         try:
-            from nlsq.streaming_config import StreamingConfig
-            from nlsq.streaming_optimizer import StreamingOptimizer
+            from nlsq.streaming.config import StreamingConfig
+            from nlsq.streaming.optimizer import StreamingOptimizer
 
             config = StreamingConfig(
                 batch_size=25,

@@ -30,7 +30,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import LargeDatasetFitter
-from nlsq.large_dataset import LDMemoryConfig
+from nlsq.streaming.large_dataset import LDMemoryConfig
 
 
 class TestFailureDiagnostics(unittest.TestCase):
@@ -437,7 +437,7 @@ class TestLoggerIntegration(unittest.TestCase):
 class TestErrorRateLimiting(unittest.TestCase):
     """Test LRU cache for error rate limiting."""
 
-    @patch("nlsq.large_dataset.lru_cache")
+    @patch("nlsq.streaming.large_dataset.lru_cache")
     def test_error_rate_limiting_cache(self, mock_lru):
         """Test that error rate limiting uses LRU cache."""
 

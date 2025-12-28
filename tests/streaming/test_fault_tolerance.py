@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestFaultToleranceIntegration:

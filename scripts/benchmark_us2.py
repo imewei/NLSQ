@@ -171,7 +171,7 @@ def verify_svdvals_in_stability_guard() -> dict[str, Any]:
     print("=" * 60)
 
     # Check that the stability guard uses svdvals
-    from nlsq.stability import NumericalStabilityGuard
+    from nlsq.stability.guard import NumericalStabilityGuard
 
     # Create a guard and check Jacobian
     guard = NumericalStabilityGuard()

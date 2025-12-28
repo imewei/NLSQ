@@ -19,9 +19,13 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
-from nlsq.async_logger import is_jax_array, log_convergence_async, log_iteration_async
-from nlsq.least_squares import LeastSquares
-from nlsq.profiling import (
+from nlsq.core.least_squares import LeastSquares
+from nlsq.utils.async_logger import (
+    is_jax_array,
+    log_convergence_async,
+    log_iteration_async,
+)
+from nlsq.utils.profiling import (
     PerformanceMetrics,
     analyze_source_transfers,
     compare_transfer_reduction,
@@ -47,7 +51,7 @@ class TestAsyncLogging:
     def test_log_iteration_async_basic(self):
         """Test basic async logging functionality."""
         # Mock the logger to capture calls
-        with mock.patch("nlsq.async_logger.logger") as mock_logger:
+        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
             log_iteration_async(
                 iteration=10,
                 cost=1.5e-6,
@@ -65,7 +69,7 @@ class TestAsyncLogging:
 
     def test_log_iteration_async_jax_arrays(self):
         """Test async logging with JAX arrays."""
-        with mock.patch("nlsq.async_logger.logger") as mock_logger:
+        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
             log_iteration_async(
                 iteration=jnp.array(5),
                 cost=jnp.array(2.3e-5),
@@ -81,7 +85,7 @@ class TestAsyncLogging:
 
     def test_log_iteration_async_verbosity_levels(self):
         """Test verbosity control."""
-        with mock.patch("nlsq.async_logger.logger") as mock_logger:
+        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
             # verbose=0: No logging
             log_iteration_async(1, 1.0, 1.0, verbose=0)
             assert not mock_logger.info.called
@@ -105,7 +109,7 @@ class TestAsyncLogging:
 
     def test_log_convergence_async(self):
         """Test convergence logging."""
-        with mock.patch("nlsq.async_logger.logger") as mock_logger:
+        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
             log_convergence_async(
                 reason="`gtol` termination condition is satisfied.",
                 iterations=42,

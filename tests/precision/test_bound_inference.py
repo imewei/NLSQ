@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
-from nlsq.bound_inference import (
+from nlsq.precision.bound_inference import (
     BoundsInference,
     analyze_bounds_quality,
     infer_bounds,

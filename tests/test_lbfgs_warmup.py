@@ -16,13 +16,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.adaptive_hybrid_streaming import (
+from nlsq.streaming.adaptive_hybrid import (
     AdaptiveHybridStreamingOptimizer,
     DefenseLayerTelemetry,
     get_defense_telemetry,
     reset_defense_telemetry,
 )
-from nlsq.hybrid_streaming_config import HybridStreamingConfig
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 # =============================================================================
 # Test Fixtures

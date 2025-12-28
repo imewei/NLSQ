@@ -16,7 +16,7 @@ import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from nlsq.memory_manager import (
+from nlsq.caching.memory_manager import (
     MemoryManager,
     clear_memory_pool,
     get_memory_manager,
@@ -345,7 +345,7 @@ class TestMemoryGuard(unittest.TestCase):
         # Peak should be updated
         self.assertGreaterEqual(self.manager._peak_memory, initial_peak)
 
-    @patch("nlsq.memory_manager.gc.collect")
+    @patch("nlsq.caching.memory_manager.gc.collect")
     def test_memory_guard_triggers_gc(self, mock_gc):
         """Test that memory guard triggers GC when threshold exceeded."""
         # Set low threshold
@@ -742,7 +742,10 @@ class TestMixedPrecisionIntegration(unittest.TestCase):
     def test_get_current_precision_memory_multiplier_with_manager_float32(self):
         """Test memory multiplier with mixed precision manager in float32."""
 
-        from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
+        from nlsq.precision.mixed_precision import (
+            MixedPrecisionConfig,
+            MixedPrecisionManager,
+        )
 
         # Create manager starting in float32
         mp_manager = MixedPrecisionManager(MixedPrecisionConfig())
@@ -755,7 +758,10 @@ class TestMixedPrecisionIntegration(unittest.TestCase):
         """Test memory multiplier with mixed precision manager in float64."""
         import jax.numpy as jnp
 
-        from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
+        from nlsq.precision.mixed_precision import (
+            MixedPrecisionConfig,
+            MixedPrecisionManager,
+        )
 
         # Create manager and manually set it to float64
         # (simulating after upgrade)

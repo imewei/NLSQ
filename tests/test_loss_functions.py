@@ -15,7 +15,7 @@ import numpy as np
 from jax import grad, jit
 from numpy.testing import assert_allclose
 
-from nlsq.loss_functions import LossFunctionsJIT
+from nlsq.core.loss_functions import LossFunctionsJIT
 
 # Property-based testing
 try:

@@ -154,7 +154,7 @@ class TestSparseJacobianIntegration:
 
     def test_compute_sparse_jacobian_vectorized(self) -> None:
         """Test that SparseJacobianComputer produces correct sparse matrix."""
-        from nlsq.sparse_jacobian import SparseJacobianComputer
+        from nlsq.core.sparse_jacobian import SparseJacobianComputer
 
         computer = SparseJacobianComputer(sparsity_threshold=0.1)
 

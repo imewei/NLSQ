@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.fallback import (
+from nlsq.stability.fallback import (
     AddParameterBoundsStrategy,
     AdjustTolerancesStrategy,
     FallbackOrchestrator,

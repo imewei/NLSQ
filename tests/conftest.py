@@ -715,7 +715,7 @@ def cleanup_jax_cache():
 @pytest.fixture
 def temp_array_pool():
     """Provide a temporary array pool that's cleaned up after test"""
-    from nlsq.memory_manager import get_memory_manager
+    from nlsq.caching.memory_manager import get_memory_manager
 
     manager = get_memory_manager()
     len(manager.memory_pool)
@@ -746,7 +746,7 @@ def optimizer_factory():
     worker threads are shut down after the test completes, preventing thread
     accumulation in parallel test execution.
     """
-    from nlsq.streaming_optimizer import StreamingOptimizer
+    from nlsq.streaming.optimizer import StreamingOptimizer
 
     created_optimizers = []
 

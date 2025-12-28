@@ -10,8 +10,8 @@ import time
 
 import pytest
 
-from nlsq.profiler import PerformanceProfiler, get_global_profiler
-from nlsq.profiler_visualization import (
+from nlsq.utils.profiler import PerformanceProfiler, get_global_profiler
+from nlsq.utils.profiler_visualization import (
     HAS_MATPLOTLIB,
     ProfilerVisualization,
     ProfilingDashboard,

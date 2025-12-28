@@ -18,7 +18,7 @@ import pytest
 # Skip all tests in this module if h5py is not available
 h5py = pytest.importorskip("h5py")
 
-from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestStreamingConfig(unittest.TestCase):

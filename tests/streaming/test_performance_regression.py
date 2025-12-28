@@ -31,7 +31,7 @@ import numpy as np
 import pytest
 
 try:
-    from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+    from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 except ImportError:
     pytest.skip("Streaming optimizer not available", allow_module_level=True)
 

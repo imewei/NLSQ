@@ -22,14 +22,14 @@ _jax_config = JAXConfig()
 
 import jax.numpy as jnp
 
-from nlsq.algorithm_selector import AlgorithmSelector
-from nlsq.diagnostics import ConvergenceMonitor
-from nlsq.memory_manager import MemoryManager
-from nlsq.recovery import OptimizationRecovery
-from nlsq.robust_decomposition import RobustDecomposition
-from nlsq.smart_cache import SmartCache, cached_function
-from nlsq.stability import NumericalStabilityGuard
-from nlsq.validators import InputValidator
+from nlsq.caching.memory_manager import MemoryManager
+from nlsq.caching.smart_cache import SmartCache, cached_function
+from nlsq.precision.algorithm_selector import AlgorithmSelector
+from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.stability.recovery import OptimizationRecovery
+from nlsq.stability.robust_decomposition import RobustDecomposition
+from nlsq.utils.diagnostics import ConvergenceMonitor
+from nlsq.utils.validators import InputValidator
 
 
 class TestNumericalStability(unittest.TestCase):

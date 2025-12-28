@@ -10,7 +10,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.parameter_normalizer import NormalizedModelWrapper, ParameterNormalizer
+from nlsq.precision.parameter_normalizer import (
+    NormalizedModelWrapper,
+    ParameterNormalizer,
+)
 
 
 class TestParameterNormalizer:

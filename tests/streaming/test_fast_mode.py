@@ -8,7 +8,7 @@ import time
 
 import numpy as np
 
-from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestFastModeConfiguration:

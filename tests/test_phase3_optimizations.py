@@ -21,7 +21,7 @@ class TestCompilationCacheLRUEviction(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from nlsq.compilation_cache import CompilationCache
+        from nlsq.caching.compilation_cache import CompilationCache
 
         # Create cache with small max size for testing
         self.cache = CompilationCache(enable_stats=True, max_cache_size=5)
@@ -36,7 +36,7 @@ class TestCompilationCacheLRUEviction(unittest.TestCase):
 
     def test_max_cache_size_parameter(self):
         """Test that max_cache_size parameter is accepted and stored."""
-        from nlsq.compilation_cache import CompilationCache
+        from nlsq.caching.compilation_cache import CompilationCache
 
         cache = CompilationCache(max_cache_size=256)
         self.assertEqual(cache.max_cache_size, 256)
@@ -46,7 +46,7 @@ class TestCompilationCacheLRUEviction(unittest.TestCase):
 
     def test_default_max_cache_size_is_512(self):
         """Test that default max_cache_size is 512."""
-        from nlsq.compilation_cache import CompilationCache
+        from nlsq.caching.compilation_cache import CompilationCache
 
         cache = CompilationCache()
         self.assertEqual(cache.max_cache_size, 512)
@@ -54,7 +54,7 @@ class TestCompilationCacheLRUEviction(unittest.TestCase):
     def test_lru_eviction_at_capacity(self):
         """Test that oldest entry is evicted when at capacity."""
         # Create cache with max size of 3
-        from nlsq.compilation_cache import CompilationCache
+        from nlsq.caching.compilation_cache import CompilationCache
 
         cache = CompilationCache(enable_stats=True, max_cache_size=3)
 
@@ -90,7 +90,7 @@ class TestCompilationCacheLRUEviction(unittest.TestCase):
 
     def test_move_to_end_on_cache_hit(self):
         """Test that accessed entries are moved to end (most recently used)."""
-        from nlsq.compilation_cache import CompilationCache
+        from nlsq.caching.compilation_cache import CompilationCache
 
         cache = CompilationCache(enable_stats=True, max_cache_size=3)
 
@@ -127,7 +127,7 @@ class TestArrayHashOptimization(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from nlsq.smart_cache import SmartCache
+        from nlsq.caching.smart_cache import SmartCache
 
         self.cache = SmartCache()
 
@@ -146,7 +146,7 @@ class TestArrayHashOptimization(unittest.TestCase):
 
     def test_large_array_uses_stride_sampling(self):
         """Test that arrays > 10000 elements use stride-based sampling when xxhash unavailable."""
-        from nlsq.smart_cache import HAS_XXHASH
+        from nlsq.caching.smart_cache import HAS_XXHASH
 
         # Create large array (> 10000 elements)
         large_arr = np.random.randn(200, 100)  # 20000 elements
@@ -178,7 +178,7 @@ class TestArrayHashOptimization(unittest.TestCase):
 
     def test_cache_key_includes_version_prefix(self):
         """Test that cache keys include CACHE_VERSION prefix."""
-        from nlsq.smart_cache import CACHE_VERSION
+        from nlsq.caching.smart_cache import CACHE_VERSION
 
         arr = np.array([1.0, 2.0, 3.0])
         key = self.cache.cache_key(arr)
@@ -188,7 +188,7 @@ class TestArrayHashOptimization(unittest.TestCase):
     def test_no_redundant_sampling_in_fallback(self):
         """Test that fallback path does not use redundant sampling for small arrays."""
         # This test verifies the optimization works correctly
-        from nlsq.smart_cache import HAS_XXHASH
+        from nlsq.caching.smart_cache import HAS_XXHASH
 
         # Small array should hash directly without sampling
         small_arr = np.random.randn(50)  # 50 elements
@@ -206,7 +206,7 @@ class TestTelemetryCircularBuffer(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from nlsq.memory_manager import MemoryManager
+        from nlsq.caching.memory_manager import MemoryManager
 
         self.manager = MemoryManager(enable_adaptive_safety=True)
 
@@ -267,7 +267,7 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from nlsq.compilation_cache import CompilationCache
+        from nlsq.caching.compilation_cache import CompilationCache
 
         self.cache = CompilationCache(enable_stats=True)
 
@@ -362,9 +362,9 @@ class TestPhase3Integration(unittest.TestCase):
 
     def test_all_optimizations_coexist(self):
         """Test that all Phase 3 optimizations work together."""
-        from nlsq.compilation_cache import CompilationCache
-        from nlsq.memory_manager import MemoryManager
-        from nlsq.smart_cache import SmartCache
+        from nlsq.caching.compilation_cache import CompilationCache
+        from nlsq.caching.memory_manager import MemoryManager
+        from nlsq.caching.smart_cache import SmartCache
 
         # Create instances with Phase 3 optimizations
         compilation_cache = CompilationCache(max_cache_size=256)
@@ -380,7 +380,7 @@ class TestPhase3Integration(unittest.TestCase):
         self.assertEqual(memory_manager._safety_telemetry.maxlen, 1000)
 
         # 3. Smart cache includes version prefix
-        from nlsq.smart_cache import CACHE_VERSION
+        from nlsq.caching.smart_cache import CACHE_VERSION
 
         key = smart_cache.cache_key(np.array([1.0]))
         self.assertTrue(key.startswith(CACHE_VERSION))

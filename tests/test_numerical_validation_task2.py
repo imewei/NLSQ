@@ -18,7 +18,7 @@ import pytest
 from jax import config
 
 from nlsq import curve_fit
-from nlsq.least_squares import LeastSquares
+from nlsq.core.least_squares import LeastSquares
 
 # Ensure float64 precision
 config.update("jax_enable_x64", True)

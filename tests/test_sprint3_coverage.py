@@ -21,12 +21,12 @@ import unittest
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq.recovery import OptimizationRecovery
-from nlsq.sparse_jacobian import (
+from nlsq.core.sparse_jacobian import (
     detect_jacobian_sparsity,
 )
-from nlsq.stability import NumericalStabilityGuard
-from nlsq.svd_fallback import (
+from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.stability.recovery import OptimizationRecovery
+from nlsq.stability.svd_fallback import (
     compute_svd_with_fallback,
     initialize_gpu_safely,
 )
@@ -164,7 +164,7 @@ class TestSVDFallbackCoverage(unittest.TestCase):
 
     def test_safe_svd_function(self):
         """Test safe_svd function with decorator."""
-        from nlsq.svd_fallback import safe_svd
+        from nlsq.stability.svd_fallback import safe_svd
 
         A = jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
         U, s, Vt = safe_svd(A, full_matrices=False)
@@ -440,7 +440,7 @@ class TestRecoveryCoverage(unittest.TestCase):
         recovery = OptimizationRecovery()
 
         # Create a mock result
-        from nlsq._optimize import OptimizeResult
+        from nlsq.core._optimize import OptimizeResult
 
         result = OptimizeResult(
             x=jnp.array([1.0, 2.0]),

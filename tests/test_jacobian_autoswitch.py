@@ -41,7 +41,7 @@ class TestJacobianModeSelector:
 
     def test_jacrev_for_tall_jacobian(self):
         """Test jacrev selection when n_params > n_residuals (tall Jacobian)."""
-        from nlsq.least_squares import jacobian_mode_selector
+        from nlsq.core.least_squares import jacobian_mode_selector
 
         n_params = 500
         n_residuals = 100
@@ -57,7 +57,7 @@ class TestJacobianModeSelector:
 
     def test_jacfwd_for_wide_jacobian(self):
         """Test jacfwd selection when n_params <= n_residuals (wide Jacobian)."""
-        from nlsq.least_squares import jacobian_mode_selector
+        from nlsq.core.least_squares import jacobian_mode_selector
 
         n_params = 100
         n_residuals = 500
@@ -73,7 +73,7 @@ class TestJacobianModeSelector:
 
     def test_manual_override_fwd(self):
         """Test manual override to force jacfwd mode."""
-        from nlsq.least_squares import jacobian_mode_selector
+        from nlsq.core.least_squares import jacobian_mode_selector
 
         n_params = 1000
         n_residuals = 100
@@ -85,7 +85,7 @@ class TestJacobianModeSelector:
 
     def test_manual_override_rev(self):
         """Test manual override to force jacrev mode."""
-        from nlsq.least_squares import jacobian_mode_selector
+        from nlsq.core.least_squares import jacobian_mode_selector
 
         n_params = 100
         n_residuals = 1000
@@ -97,7 +97,7 @@ class TestJacobianModeSelector:
 
     def test_invalid_mode_raises_error(self):
         """Test that invalid mode raises ValueError."""
-        from nlsq.least_squares import jacobian_mode_selector
+        from nlsq.core.least_squares import jacobian_mode_selector
 
         with pytest.raises(ValueError, match="Invalid jacobian_mode"):
             jacobian_mode_selector(100, 100, mode="invalid")
@@ -176,7 +176,7 @@ class TestDebugLogging:
         """Test that mode selection is logged in debug mode."""
         import logging
 
-        from nlsq.least_squares import jacobian_mode_selector
+        from nlsq.core.least_squares import jacobian_mode_selector
 
         caplog.set_level(logging.DEBUG)
 

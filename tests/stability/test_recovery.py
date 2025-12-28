@@ -8,7 +8,7 @@ Goal: 10-12 tests covering failure types, recovery strategies, and error paths.
 import numpy as np
 import pytest
 
-from nlsq.recovery import OptimizationRecovery
+from nlsq.stability.recovery import OptimizationRecovery
 
 
 class TestRecoveryBasics:

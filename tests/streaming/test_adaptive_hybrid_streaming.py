@@ -12,9 +12,12 @@ import jax.numpy as jnp
 import optax
 import pytest
 
-from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
-from nlsq.hybrid_streaming_config import HybridStreamingConfig
-from nlsq.parameter_normalizer import NormalizedModelWrapper, ParameterNormalizer
+from nlsq.precision.parameter_normalizer import (
+    NormalizedModelWrapper,
+    ParameterNormalizer,
+)
+from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 
 class TestPhase0NormalizationSetup:

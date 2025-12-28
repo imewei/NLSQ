@@ -246,7 +246,7 @@ def test_algorithm_selection():
     print("\nTesting Algorithm Selection example...")
     np.random.seed(42)  # Ensure deterministic test results
     from nlsq import curve_fit
-    from nlsq.algorithm_selector import auto_select_algorithm
+    from nlsq.precision.algorithm_selector import auto_select_algorithm
 
     # Sample data
     x = np.linspace(0, 10, 100)
@@ -275,7 +275,7 @@ def test_diagnostics_monitoring():
     print("\nTesting Diagnostics & Monitoring example...")
     np.random.seed(42)  # Ensure deterministic test results
     from nlsq import ConvergenceMonitor, CurveFit
-    from nlsq.diagnostics import OptimizationDiagnostics
+    from nlsq.utils.diagnostics import OptimizationDiagnostics
 
     # Sample data
     x = np.linspace(0, 10, 100)

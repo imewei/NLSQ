@@ -17,7 +17,7 @@ from nlsq import (
     estimate_memory_requirements,
     fit_large_dataset,
 )
-from nlsq.large_dataset import (
+from nlsq.streaming.large_dataset import (
     DataChunker,
     DatasetStats,
     LDMemoryConfig,
@@ -353,7 +353,7 @@ class TestMemoryEstimator(unittest.TestCase):
         self.assertGreater(stats.n_chunks, 1)
         self.assertEqual(chunk_size, stats.recommended_chunk_size)
 
-    @patch("nlsq.large_dataset.psutil")
+    @patch("nlsq.streaming.large_dataset.psutil")
     def test_available_memory_detection(self, mock_psutil):
         """Test detecting available system memory."""
         # Mock psutil to return specific memory info

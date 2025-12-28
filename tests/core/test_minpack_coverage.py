@@ -6,7 +6,7 @@ import unittest
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq.minpack import CurveFit, curve_fit
+from nlsq.core.minpack import CurveFit, curve_fit
 
 try:
     from nlsq import fit_large_dataset

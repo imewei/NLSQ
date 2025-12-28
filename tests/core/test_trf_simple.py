@@ -7,8 +7,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.least_squares import LeastSquares
-from nlsq.minpack import curve_fit
+from nlsq.core.least_squares import LeastSquares
+from nlsq.core.minpack import curve_fit
 
 
 class TestTRFBasic(unittest.TestCase):

@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 
 from nlsq import LeastSquares
-from nlsq.svd_fallback import compute_svd_adaptive, compute_svd_with_fallback
+from nlsq.stability.svd_fallback import compute_svd_adaptive, compute_svd_with_fallback
 
 
 class TestNoRandomizedSVD:
@@ -32,7 +32,7 @@ class TestNoRandomizedSVD:
 
     def test_no_randomized_svd_function(self):
         """Verify randomized_svd function no longer exists."""
-        from nlsq import svd_fallback
+        from nlsq.stability import svd_fallback
 
         assert not hasattr(svd_fallback, "randomized_svd"), (
             "randomized_svd function should be removed from svd_fallback module"
@@ -40,7 +40,7 @@ class TestNoRandomizedSVD:
 
     def test_no_randomized_svd_threshold(self):
         """Verify RANDOMIZED_SVD_THRESHOLD constant no longer exists."""
-        from nlsq import svd_fallback
+        from nlsq.stability import svd_fallback
 
         assert not hasattr(svd_fallback, "RANDOMIZED_SVD_THRESHOLD"), (
             "RANDOMIZED_SVD_THRESHOLD should be removed from svd_fallback module"
@@ -50,7 +50,7 @@ class TestNoRandomizedSVD:
         """Verify jax.random is not imported in svd_fallback."""
         import inspect
 
-        from nlsq import svd_fallback
+        from nlsq.stability import svd_fallback
 
         source = inspect.getsource(svd_fallback)
         assert "from jax import random" not in source, (

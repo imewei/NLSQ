@@ -4,7 +4,7 @@ import unittest
 
 import jax.numpy as jnp
 
-from nlsq.memory_pool import (
+from nlsq.caching.memory_pool import (
     MemoryPool,
     TRFMemoryPool,
     clear_global_pool,

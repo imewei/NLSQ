@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from nlsq.workflow import (
+from nlsq.core.workflow import (
     WORKFLOW_PRESETS,
     ClusterDetector,
     ClusterInfo,
@@ -313,7 +313,7 @@ class TestClusterDetectorEdgeCases:
             detector = ClusterDetector()
             # Directly test _detect_interconnect
             # Need to mock the Path check
-            with patch("nlsq.workflow.Path") as mock_path:
+            with patch("nlsq.core.workflow.Path") as mock_path:
                 mock_path_instance = MagicMock()
                 mock_path_instance.exists.return_value = True
                 mock_path.return_value = mock_path_instance

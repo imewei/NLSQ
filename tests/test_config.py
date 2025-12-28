@@ -804,7 +804,7 @@ class TestMixedPrecisionConfig(unittest.TestCase):
     def test_get_mixed_precision_config(self):
         """Test get_mixed_precision_config function with default values."""
         from nlsq.config import get_mixed_precision_config
-        from nlsq.mixed_precision import MixedPrecisionConfig
+        from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
         # Force fresh initialization from clean environment to get default values
         self._force_reinit_from_env()
@@ -968,7 +968,7 @@ class TestMixedPrecisionConfig(unittest.TestCase):
     def test_set_mixed_precision_config(self):
         """Test set_mixed_precision_config function."""
         from nlsq.config import get_mixed_precision_config, set_mixed_precision_config
-        from nlsq.mixed_precision import MixedPrecisionConfig
+        from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
         original = get_mixed_precision_config()
 
@@ -1032,7 +1032,7 @@ class TestMixedPrecisionConfig(unittest.TestCase):
     def test_mixed_precision_context_manager(self):
         """Test mixed_precision_context context manager."""
         from nlsq.config import get_mixed_precision_config, mixed_precision_context
-        from nlsq.mixed_precision import MixedPrecisionConfig
+        from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
         original = get_mixed_precision_config()
 
@@ -1060,7 +1060,7 @@ class TestMixedPrecisionConfig(unittest.TestCase):
     def test_mixed_precision_context_nested(self):
         """Test nested mixed_precision_context managers."""
         from nlsq.config import get_mixed_precision_config, mixed_precision_context
-        from nlsq.mixed_precision import MixedPrecisionConfig
+        from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
         original = get_mixed_precision_config()
 
@@ -1087,7 +1087,7 @@ class TestMixedPrecisionConfig(unittest.TestCase):
     def test_mixed_precision_context_with_exception(self):
         """Test that context manager restores config even with exception."""
         from nlsq.config import get_mixed_precision_config, mixed_precision_context
-        from nlsq.mixed_precision import MixedPrecisionConfig
+        from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
         original = get_mixed_precision_config()
 

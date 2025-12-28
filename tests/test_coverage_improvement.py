@@ -6,10 +6,10 @@ import unittest
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq.loss_functions import LossFunctionsJIT
-from nlsq.svd_fallback import compute_svd_with_fallback, safe_svd
-from nlsq.trf import TrustRegionReflective
-from nlsq.validators import InputValidator
+from nlsq.core.loss_functions import LossFunctionsJIT
+from nlsq.core.trf import TrustRegionReflective
+from nlsq.stability.svd_fallback import compute_svd_with_fallback, safe_svd
+from nlsq.utils.validators import InputValidator
 
 
 class TestValidatorsCoverage(unittest.TestCase):
@@ -134,7 +134,7 @@ class TestTRFCoverage(unittest.TestCase):
     def test_trf_with_linear_loss(self):
         """Test TRF with linear loss function."""
         # Test that TRF class exists and can be imported
-        from nlsq.trf import TrustRegionReflective
+        from nlsq.core.trf import TrustRegionReflective
 
         self.assertIsNotNone(TrustRegionReflective)
 
@@ -155,7 +155,7 @@ class TestTRFCoverage(unittest.TestCase):
         x = np.array([1, 2, 3, 4, 5])
         y = np.array([2, 4, 6, 8, 10])
 
-        from nlsq.minpack import curve_fit
+        from nlsq.core.minpack import curve_fit
 
         popt, _pcov = curve_fit(model, x, y, method="trf", maxfev=10)
         self.assertAlmostEqual(popt[0], 2.0, places=2)

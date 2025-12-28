@@ -6,7 +6,7 @@ adaptive hybrid streaming optimizer.
 
 import pytest
 
-from nlsq.hybrid_streaming_config import HybridStreamingConfig
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 
 class TestHybridStreamingConfigDefaults:

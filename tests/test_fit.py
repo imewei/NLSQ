@@ -17,9 +17,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.minpack import CurveFit, curve_fit, fit
+from nlsq.core.minpack import CurveFit, curve_fit, fit
+from nlsq.core.workflow import OptimizationGoal
 from nlsq.result import CurveFitResult
-from nlsq.workflow import OptimizationGoal
 
 
 # Test model function
@@ -118,7 +118,7 @@ class TestFitWithCustomConfigObject:
 
     def test_fit_with_ldmemoryconfig(self, sample_data):
         """Test fit() accepts LDMemoryConfig object."""
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         x, y = sample_data
         config = LDMemoryConfig(
@@ -133,7 +133,7 @@ class TestFitWithCustomConfigObject:
 
     def test_fit_with_hybridstreamingconfig(self, sample_data):
         """Test fit() accepts HybridStreamingConfig object."""
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         x, y = sample_data
         config = HybridStreamingConfig(

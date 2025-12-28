@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 
 from nlsq import CurveFit, curve_fit, curve_fit_large
-from nlsq.least_squares import LeastSquares
-from nlsq.profiling import analyze_source_transfers, profile_optimization
+from nlsq.core.least_squares import LeastSquares
+from nlsq.utils.profiling import analyze_source_transfers, profile_optimization
 
 
 class TestAdaptiveMemoryReuse:

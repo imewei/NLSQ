@@ -25,7 +25,7 @@ class TestLRUMemoryPool:
 
     def test_memory_pool_uses_ordered_dict(self):
         """Test that memory_pool uses OrderedDict for LRU tracking."""
-        from nlsq.memory_manager import MemoryManager
+        from nlsq.caching.memory_manager import MemoryManager
 
         manager = MemoryManager()
         # Memory pool should be OrderedDict (or compatible) for LRU
@@ -35,7 +35,7 @@ class TestLRUMemoryPool:
 
     def test_move_to_end_on_array_reuse(self):
         """Test that move_to_end is called when array is reused from pool."""
-        from nlsq.memory_manager import MemoryManager
+        from nlsq.caching.memory_manager import MemoryManager
 
         manager = MemoryManager()
 
@@ -63,7 +63,7 @@ class TestLRUMemoryPool:
 
     def test_lru_eviction_with_popitem(self):
         """Test LRU eviction uses popitem(last=False) when at capacity."""
-        from nlsq.memory_manager import MemoryManager
+        from nlsq.caching.memory_manager import MemoryManager
 
         manager = MemoryManager()
 
@@ -87,7 +87,7 @@ class TestLRUMemoryPool:
 
     def test_lru_prioritizes_recently_used_arrays(self):
         """Test that LRU eviction correctly prioritizes recently used arrays."""
-        from nlsq.memory_manager import MemoryManager
+        from nlsq.caching.memory_manager import MemoryManager
 
         manager = MemoryManager()
 
@@ -114,7 +114,7 @@ class TestModelValidationCaching:
 
     def test_validated_functions_attribute_exists(self):
         """Test that LargeDatasetFitter has _validated_functions dict."""
-        from nlsq.large_dataset import LargeDatasetFitter
+        from nlsq.streaming.large_dataset import LargeDatasetFitter
 
         fitter = LargeDatasetFitter()
         assert hasattr(fitter, "_validated_functions"), (
@@ -124,7 +124,7 @@ class TestModelValidationCaching:
 
     def test_validation_cache_uses_composite_key(self):
         """Test that validation caching uses (id(func), id(func.__code__)) key."""
-        from nlsq.large_dataset import LargeDatasetFitter
+        from nlsq.streaming.large_dataset import LargeDatasetFitter
 
         fitter = LargeDatasetFitter()
 
@@ -146,7 +146,7 @@ class TestModelValidationCaching:
 
     def test_validation_skipped_for_same_function(self):
         """Test that validation is skipped on subsequent calls with same function."""
-        from nlsq.large_dataset import LargeDatasetFitter
+        from nlsq.streaming.large_dataset import LargeDatasetFitter
 
         fitter = LargeDatasetFitter()
 
@@ -172,7 +172,7 @@ class TestModelValidationCaching:
 
     def test_validation_runs_for_different_function(self):
         """Test that validation runs for different functions."""
-        from nlsq.large_dataset import LargeDatasetFitter
+        from nlsq.streaming.large_dataset import LargeDatasetFitter
 
         fitter = LargeDatasetFitter()
 
@@ -204,7 +204,7 @@ class TestJITCompiledValidation:
 
     def test_jit_compiled_validation_returns_tuple(self):
         """Test that JIT-compiled gradient function returns (loss, grad, is_valid) tuple."""
-        from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+        from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
         config = StreamingConfig(
             batch_size=32,
@@ -239,7 +239,7 @@ class TestJITCompiledValidation:
 
     def test_jit_validation_detects_nan_in_loss(self):
         """Test that JIT-compiled validation detects NaN in loss."""
-        from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+        from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
         config = StreamingConfig(
             batch_size=32,
@@ -266,7 +266,7 @@ class TestJITCompiledValidation:
 
     def test_jit_validation_detects_inf_in_gradient(self):
         """Test that JIT-compiled validation detects Inf in gradient."""
-        from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+        from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
         config = StreamingConfig(
             batch_size=32,
@@ -304,7 +304,7 @@ class TestDataChunkerPaddingOptimization:
 
     def test_bucket_padding_applied(self):
         """Test that bucket padding is applied for JIT stability."""
-        from nlsq.large_dataset import DataChunker, get_bucket_size
+        from nlsq.streaming.large_dataset import DataChunker, get_bucket_size
 
         # Create test data
         x = np.arange(1050)
@@ -326,7 +326,7 @@ class TestDataChunkerPaddingOptimization:
 
     def test_resize_cyclic_repetition(self):
         """Test that padding uses cyclic repetition (np.resize behavior)."""
-        from nlsq.large_dataset import DataChunker, get_bucket_size
+        from nlsq.streaming.large_dataset import DataChunker, get_bucket_size
 
         # Create test data with 50 points, chunk_size 100
         x = np.arange(50)
@@ -351,7 +351,7 @@ class TestDataChunkerPaddingOptimization:
 
     def test_bucket_padding_memory_allocation(self):
         """Test that bucket padding allocates to power-of-2 sizes."""
-        from nlsq.large_dataset import DataChunker, get_bucket_size
+        from nlsq.streaming.large_dataset import DataChunker, get_bucket_size
 
         # Create test data
         x = np.arange(950)
@@ -371,7 +371,7 @@ class TestDataChunkerPaddingOptimization:
 
     def test_valid_length_tracks_actual_data(self):
         """Test that valid_length correctly tracks actual data size."""
-        from nlsq.large_dataset import DataChunker, get_bucket_size
+        from nlsq.streaming.large_dataset import DataChunker, get_bucket_size
 
         # Data size is exact multiple of chunk_size
         x = np.arange(1000)
@@ -394,7 +394,7 @@ class TestIntegration:
 
     def test_lru_pool_with_repeated_allocations(self):
         """Test LRU pool behavior with repeated allocations pattern."""
-        from nlsq.memory_manager import MemoryManager
+        from nlsq.caching.memory_manager import MemoryManager
 
         manager = MemoryManager()
 
@@ -418,7 +418,7 @@ class TestIntegration:
         redundant validation across chunks. This test directly verifies
         the caching behavior via _validate_model_function.
         """
-        from nlsq.large_dataset import LargeDatasetFitter
+        from nlsq.streaming.large_dataset import LargeDatasetFitter
 
         fitter = LargeDatasetFitter(memory_limit_gb=1.0)
 

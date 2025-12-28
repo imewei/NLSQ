@@ -6,9 +6,9 @@ import unittest
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq.least_squares import LeastSquares
-from nlsq.loss_functions import LossFunctionsJIT
-from nlsq.minpack import CurveFit, curve_fit
+from nlsq.core.least_squares import LeastSquares
+from nlsq.core.loss_functions import LossFunctionsJIT
+from nlsq.core.minpack import CurveFit, curve_fit
 
 
 class TestAdditionalCoverage(unittest.TestCase):

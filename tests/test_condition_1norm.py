@@ -110,7 +110,7 @@ class TestCondition1NormIntegration:
 
     def test_stability_guard_uses_estimation(self) -> None:
         """Test that NumericalStabilityGuard uses condition estimation."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         guard = NumericalStabilityGuard()
 
@@ -127,7 +127,7 @@ class TestCondition1NormIntegration:
         """Test that ill-conditioning is correctly detected."""
         import jax.numpy as jnp
 
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         guard = NumericalStabilityGuard()
 

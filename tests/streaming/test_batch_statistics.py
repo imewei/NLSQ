@@ -8,8 +8,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.streaming_config import StreamingConfig
-from nlsq.streaming_optimizer import StreamingOptimizer
+from nlsq.streaming.config import StreamingConfig
+from nlsq.streaming.optimizer import StreamingOptimizer
 
 
 def exponential_model(x, a, b):

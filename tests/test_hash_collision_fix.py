@@ -19,7 +19,7 @@ class TestHashAlgorithmChange:
 
     def test_xxhash_used_as_primary_when_available(self):
         """Cache keys should use xxhash when HAS_XXHASH=True."""
-        from nlsq import smart_cache
+        from nlsq.caching import smart_cache
 
         if not smart_cache.HAS_XXHASH:
             pytest.skip("xxhash not available")
@@ -37,7 +37,7 @@ class TestHashAlgorithmChange:
 
     def test_blake2b_used_as_fallback_not_md5(self):
         """Cache keys should use BLAKE2b as fallback when xxhash unavailable."""
-        from nlsq import smart_cache
+        from nlsq.caching import smart_cache
 
         # Temporarily disable xxhash
         with patch.object(smart_cache, "HAS_XXHASH", False):
@@ -60,7 +60,7 @@ class TestHashAlgorithmChange:
 
     def test_cache_keys_include_version_prefix(self):
         """All cache keys should include CACHE_VERSION prefix."""
-        from nlsq import smart_cache
+        from nlsq.caching import smart_cache
 
         cache = smart_cache.SmartCache()
 
@@ -79,7 +79,7 @@ class TestHashAlgorithmChange:
 
     def test_cache_keys_are_deterministic_for_same_inputs(self):
         """Cache keys should be deterministic for identical inputs."""
-        from nlsq import smart_cache
+        from nlsq.caching import smart_cache
 
         cache = smart_cache.SmartCache()
 
@@ -108,14 +108,14 @@ class TestCacheVersionConstant:
 
     def test_cache_version_exists_at_module_level(self):
         """CACHE_VERSION constant should be defined at module level."""
-        from nlsq import smart_cache
+        from nlsq.caching import smart_cache
 
         assert hasattr(smart_cache, "CACHE_VERSION")
         assert isinstance(smart_cache.CACHE_VERSION, str)
 
     def test_cache_version_is_v2(self):
         """CACHE_VERSION should be 'v2'."""
-        from nlsq import smart_cache
+        from nlsq.caching import smart_cache
 
         assert smart_cache.CACHE_VERSION == "v2"
 
@@ -125,7 +125,7 @@ class TestNoMD5Usage:
 
     def test_cache_key_without_xxhash_uses_blake2b(self):
         """Without xxhash, cache_key should use BLAKE2b for hashing."""
-        from nlsq import smart_cache
+        from nlsq.caching import smart_cache
 
         # Create a test key string
         key_str = "test_key_string"

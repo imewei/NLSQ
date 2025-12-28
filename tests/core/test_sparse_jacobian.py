@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.sparse_jacobian import (
+from nlsq.core.sparse_jacobian import (
     SparseJacobianComputer,
     SparseOptimizer,
     detect_jacobian_sparsity,

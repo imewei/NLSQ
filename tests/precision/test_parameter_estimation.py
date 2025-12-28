@@ -21,7 +21,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.parameter_estimation import (
+from nlsq.precision.parameter_estimation import (
     detect_function_pattern,
     estimate_initial_parameters,
     estimate_p0_for_pattern,

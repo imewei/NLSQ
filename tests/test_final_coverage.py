@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import __version__
-from nlsq.minpack import curve_fit
+from nlsq.core.minpack import curve_fit
 
 
 class TestFinalCoverage(unittest.TestCase):

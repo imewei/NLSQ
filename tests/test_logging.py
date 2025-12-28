@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from nlsq.logging import (
+from nlsq.utils.logging import (
     LogLevel,
     NLSQLogger,
     enable_debug_mode,

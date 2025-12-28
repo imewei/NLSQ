@@ -4,7 +4,7 @@ import unittest
 
 import jax.numpy as jnp
 
-from nlsq.caching import (
+from nlsq.caching.core import (
     FunctionCache,
     cached_jit,
     clear_cache,

@@ -424,7 +424,7 @@ class TestMaxJacobianElementsForSVD:
 
     def test_svd_skipped_for_large_jacobian(self):
         """Verify SVD is skipped for Jacobians exceeding max_jacobian_elements_for_svd."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         np.random.seed(42)
         # Create Jacobian > default threshold (10M elements)
@@ -442,7 +442,7 @@ class TestMaxJacobianElementsForSVD:
 
     def test_svd_computed_for_medium_jacobian(self):
         """Verify SVD is computed for Jacobians below threshold."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         np.random.seed(42)
         # Create Jacobian < threshold (8M elements: 2000 x 4000 = 8M)
@@ -458,7 +458,7 @@ class TestMaxJacobianElementsForSVD:
 
     def test_svd_threshold_boundary_above(self):
         """Test that SVD is skipped when exactly at or above threshold."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         np.random.seed(42)
         # Set threshold to 10000
@@ -476,7 +476,7 @@ class TestMaxJacobianElementsForSVD:
 
     def test_svd_threshold_boundary_below(self):
         """Test that SVD is computed when just below threshold."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         np.random.seed(42)
         guard = NumericalStabilityGuard(max_jacobian_elements_for_svd=10001)
@@ -492,7 +492,7 @@ class TestMaxJacobianElementsForSVD:
 
     def test_svd_threshold_custom_value(self):
         """Test that custom threshold values are respected."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         np.random.seed(42)
         # Set very low threshold (1000 elements)
@@ -592,7 +592,7 @@ class TestExceptionHandling:
 
     def test_svd_failure_graceful_handling(self):
         """Test graceful handling when SVD computation might fail."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         guard = NumericalStabilityGuard()
 
@@ -610,7 +610,7 @@ class TestExceptionHandling:
 
     def test_nan_inf_in_jacobian_handled(self):
         """Test that NaN/Inf values in Jacobian are handled correctly."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         guard = NumericalStabilityGuard()
 
@@ -630,7 +630,7 @@ class TestExceptionHandling:
 
     def test_all_zeros_jacobian_handled(self):
         """Test that all-zeros Jacobian is handled gracefully."""
-        from nlsq.stability import NumericalStabilityGuard
+        from nlsq.stability.guard import NumericalStabilityGuard
 
         guard = NumericalStabilityGuard()
 

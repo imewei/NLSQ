@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.large_dataset import (
+from nlsq.streaming.large_dataset import (
     LargeDatasetFitter,
     LDMemoryConfig,
     fit_large_dataset,

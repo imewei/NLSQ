@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 
 from nlsq.config import JAXConfig
-from nlsq.minpack import CurveFit, curve_fit
-from nlsq.validators import InputValidator
+from nlsq.core.minpack import CurveFit, curve_fit
+from nlsq.utils.validators import InputValidator
 
 
 class TestTargetCoverage(unittest.TestCase):
@@ -138,7 +138,7 @@ class TestTargetCoverage(unittest.TestCase):
 
     def test_loss_function_edge_cases(self):
         """Test loss functions with edge cases."""
-        from nlsq.loss_functions import LossFunctionsJIT
+        from nlsq.core.loss_functions import LossFunctionsJIT
 
         loss = LossFunctionsJIT()
 

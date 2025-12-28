@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from nlsq.functions import exponential_decay, linear
+from nlsq.core.functions import exponential_decay, linear
 from nlsq.gui.components.iteration_table import (
     create_iteration_history,
     format_iteration_table,

@@ -14,7 +14,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from nlsq.diagnostics import (
+from nlsq.utils.diagnostics import (
     ConvergenceMonitor,
     OptimizationDiagnostics,
     get_diagnostics,

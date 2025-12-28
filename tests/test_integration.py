@@ -17,7 +17,7 @@ from nlsq import (
     curve_fit_large,
     estimate_memory_requirements,
 )
-from nlsq.large_dataset import LDMemoryConfig
+from nlsq.streaming.large_dataset import LDMemoryConfig
 
 
 class TestJAXTracingCompatibility(unittest.TestCase):
@@ -320,7 +320,7 @@ class TestEndToEndValidation(unittest.TestCase):
         # 3. LargeDatasetFitter (returns OptimizeResult)
         fitter = LargeDatasetFitter()
         result3 = fitter.fit(quadratic, x_small, y_small, p0=[1, 1, 1])
-        from nlsq._optimize import OptimizeResult
+        from nlsq.core._optimize import OptimizeResult
 
         self.assertIsInstance(result3, OptimizeResult)
         self.assertTrue(hasattr(result3, "x"))

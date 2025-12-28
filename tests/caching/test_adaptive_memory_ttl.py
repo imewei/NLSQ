@@ -15,7 +15,7 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-from nlsq.memory_manager import MemoryManager
+from nlsq.caching.memory_manager import MemoryManager
 
 
 class TestAdaptiveMemoryTTL(unittest.TestCase):
@@ -33,7 +33,7 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         psutil_call_count = 0
         original_available = None
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             # Set up mock
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3  # 8 GB
@@ -73,7 +73,7 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         """
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -119,7 +119,7 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         """
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -154,7 +154,7 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         # Check that adaptive TTL is disabled
         self.assertFalse(manager._adaptive_ttl)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem

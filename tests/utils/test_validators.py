@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.validators import InputValidator, validate_inputs
+from nlsq.utils.validators import InputValidator, validate_inputs
 
 
 class TestInputValidatorInit(unittest.TestCase):

@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal
 
-from nlsq.trf import TrustRegionReflective
+from nlsq.core.trf import TrustRegionReflective
 
 
 class TestInitializeTRFState:

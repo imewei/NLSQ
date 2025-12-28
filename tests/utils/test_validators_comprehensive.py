@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.validators import InputValidator
+from nlsq.utils.validators import InputValidator
 
 
 class TestValidateCurveFitInputs:

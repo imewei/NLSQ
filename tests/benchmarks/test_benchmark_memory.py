@@ -25,7 +25,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from nlsq.memory_manager import MemoryManager
+from nlsq.caching.memory_manager import MemoryManager
 
 
 def create_psutil_mock():
@@ -63,7 +63,7 @@ class TestAdaptiveTTLBenchmark:
             for _ in range(500):
                 manager.get_available_memory()
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             benchmark(high_frequency_queries)
 
     @pytest.mark.benchmark(group="memory_ttl")
@@ -79,7 +79,7 @@ class TestAdaptiveTTLBenchmark:
             for _ in range(500):
                 manager.get_available_memory()
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             benchmark(high_frequency_queries)
 
 
@@ -95,7 +95,7 @@ class TestPsutilCallFrequency:
         # Test with adaptive TTL enabled
         manager_adaptive = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -109,7 +109,7 @@ class TestPsutilCallFrequency:
         # Test without adaptive TTL
         manager_non_adaptive = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=False)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -144,7 +144,7 @@ class TestPsutilCallFrequency:
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
         # Test high frequency (>100 calls/sec) -> 10s TTL
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -170,7 +170,7 @@ class TestPsutilCallFrequency:
         """
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -210,7 +210,7 @@ class TestMemoryManagerOverhead:
         """Benchmark get_available_memory call overhead."""
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             # Warm up the cache
             manager.get_available_memory()
 
@@ -222,7 +222,7 @@ class TestMemoryManagerOverhead:
         """Benchmark get_memory_usage_bytes call overhead."""
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             # Warm up the cache
             manager.get_memory_usage_bytes()
 
@@ -237,7 +237,7 @@ class TestCallFrequencyTracker:
         """Verify call frequency is tracked accurately."""
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -265,7 +265,7 @@ class TestCallFrequencyTracker:
         """Verify frequency tracker respects maxlen."""
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -297,7 +297,7 @@ class TestTTLConfigurationComparison:
         for name, ttl in ttl_configs:
             manager = MemoryManager(memory_cache_ttl=ttl, adaptive_ttl=False)
 
-            with patch("nlsq.memory_manager.psutil") as mock_psutil:
+            with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
                 mock_mem = MagicMock()
                 mock_mem.available = 8 * 1024**3
                 mock_psutil.virtual_memory.return_value = mock_mem
@@ -322,7 +322,7 @@ class TestTTLConfigurationComparison:
         # Adaptive TTL
         manager_adaptive = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -335,7 +335,7 @@ class TestTTLConfigurationComparison:
         # Static 10s TTL (same as adaptive high-frequency)
         manager_static = MemoryManager(memory_cache_ttl=10.0, adaptive_ttl=False)
 
-        with patch("nlsq.memory_manager.psutil") as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -389,7 +389,7 @@ class TestPhase2LRUMemoryPool:
             for shape in shapes:
                 manager.allocate_array(shape, dtype=np.float64)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             benchmark(allocate_arrays)
 
     def test_lru_pool_hit_rate(self):
@@ -400,7 +400,7 @@ class TestPhase2LRUMemoryPool:
         """
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             # Track hits and misses
             hits = 0
             misses = 0
@@ -444,7 +444,7 @@ class TestPhase2LRUMemoryPool:
         """
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             hot_shapes = [(100, 10), (200, 5)]
             cold_shapes = [(300, 3), (400, 2), (500, 1)]
 
@@ -483,7 +483,7 @@ class TestPhase2LRUMemoryPool:
         """
         manager = MemoryManager(adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()):
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             hits = 0
             new_allocations = 0
 
@@ -593,7 +593,7 @@ class TestPhase2CumulativeImprovements:
         """
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.memory_manager.psutil", create_psutil_mock()) as mock_psutil:
+        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()) as mock_psutil:
             # Simulate typical streaming optimization workload
             common_shapes = [(1000, 5), (5, 5), (1000,)]
             n_batches = 100

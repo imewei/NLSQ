@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
-from nlsq.sparse_jacobian import detect_jacobian_sparsity
+from nlsq.core.sparse_jacobian import detect_jacobian_sparsity
 
 
 def sparse_parameter_selection_model(x, *params):

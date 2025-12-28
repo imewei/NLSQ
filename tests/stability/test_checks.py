@@ -9,7 +9,7 @@ numerical issues before optimization.
 import numpy as np
 import pytest
 
-from nlsq.stability import (
+from nlsq.stability.guard import (
     apply_automatic_fixes,
     check_problem_stability,
     detect_collinearity,

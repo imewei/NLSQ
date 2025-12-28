@@ -6,8 +6,8 @@ import unittest
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq.least_squares import LeastSquares
-from nlsq.minpack import CurveFit, curve_fit
+from nlsq.core.least_squares import LeastSquares
+from nlsq.core.minpack import CurveFit, curve_fit
 
 
 class TestComprehensiveCoverage(unittest.TestCase):

@@ -36,7 +36,7 @@ import warnings
 
 import pytest
 
-from nlsq.workflow import (
+from nlsq.core.workflow import (
     WORKFLOW_PRESETS,
     DatasetSizeTier,
     MemoryTier,
@@ -405,7 +405,7 @@ class TestWorkflowSelectorSmallDatasetLowMemory:
         Per the workflow matrix:
         | Small (<10K) | Low Memory (<16GB) -> standard
         """
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         # Use explicit memory limit to simulate low memory
         selector = WorkflowSelector(memory_limit_gb=8.0)
@@ -424,7 +424,7 @@ class TestWorkflowSelectorLargeDatasetLowMemory:
         Per the workflow matrix:
         | Large (1M-10M) | Low Memory (<16GB) -> streaming
         """
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         # Use explicit memory limit to simulate low memory
         selector = WorkflowSelector(memory_limit_gb=8.0)
@@ -443,7 +443,7 @@ class TestWorkflowSelectorMassiveDataset:
         Per the workflow matrix:
         | Massive (>100M) | Low/Medium Memory -> streaming+ckpt
         """
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         # Use explicit memory limit to simulate low/medium memory
         selector = WorkflowSelector(memory_limit_gb=32.0)
@@ -489,7 +489,7 @@ class TestWorkflowSelectorFastGoal:
         - "fast": Local optimization only, skip multi-start
         """
         from nlsq.global_optimization import GlobalOptimizationConfig
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         # Even with high memory, FAST goal should skip multi-start
         selector = WorkflowSelector(memory_limit_gb=200.0)  # Very high memory
@@ -514,7 +514,7 @@ class TestWorkflowSelectorMemoryEfficientGoal:
         Per requirements:
         - "memory_efficient": Minimize memory usage, prioritize streaming/chunking
         """
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         # Medium dataset with high memory but memory_efficient goal
         # should still use CHUNKED (not STANDARD)
@@ -538,7 +538,7 @@ class TestWorkflowSelectorMatrixCombinations:
         Per the workflow matrix:
         | Medium (10K-1M) | Medium (16-64GB) -> standard
         """
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         selector = WorkflowSelector(memory_limit_gb=32.0)  # Medium memory
         config = selector.select(n_points=100_000, n_params=5)
@@ -552,7 +552,7 @@ class TestWorkflowSelectorMatrixCombinations:
         Per the workflow matrix:
         | Huge (10M-100M) | High (64-128GB) -> chunked
         """
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         selector = WorkflowSelector(memory_limit_gb=100.0)  # High memory
         config = selector.select(n_points=50_000_000, n_params=5)
@@ -566,7 +566,7 @@ class TestWorkflowSelectorMatrixCombinations:
         Per the workflow matrix:
         | Large (1M-10M) | Very High (>128GB) -> chunked+multistart
         """
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         selector = WorkflowSelector(memory_limit_gb=200.0)  # Very high memory
         config = selector.select(n_points=5_000_000, n_params=5)
@@ -581,7 +581,7 @@ class TestWorkflowSelectorReturnTypes:
 
     def test_return_type_ldmemoryconfig_for_chunked(self):
         """Test that CHUNKED tier returns LDMemoryConfig."""
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         selector = WorkflowSelector(memory_limit_gb=8.0)  # Low memory
         config = selector.select(
@@ -593,7 +593,7 @@ class TestWorkflowSelectorReturnTypes:
 
     def test_return_type_hybridstreamingconfig_for_streaming(self):
         """Test that STREAMING tier returns HybridStreamingConfig."""
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         selector = WorkflowSelector(memory_limit_gb=8.0)  # Low memory
         config = selector.select(
@@ -643,7 +643,7 @@ class TestAutoSelectWorkflow:
 
     def test_auto_select_workflow_with_memory_limit(self):
         """Test auto_select_workflow with memory_limit_gb parameter."""
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         config = auto_select_workflow(
             n_points=50_000_000,
@@ -1049,7 +1049,7 @@ class TestCheckpointDirectoryCreation:
 
     def test_create_checkpoint_directory_creates_timestamped_dir(self):
         """Test automatic checkpoint directory creation with timestamp format."""
-        from nlsq.workflow import create_checkpoint_directory
+        from nlsq.core.workflow import create_checkpoint_directory
 
         # Create checkpoint directory
         checkpoint_dir = create_checkpoint_directory()
@@ -1079,7 +1079,7 @@ class TestCheckpointDirectoryCreation:
 
     def test_checkpoint_directory_path_format(self):
         """Test checkpoint directory path format (./nlsq_checkpoints/YYYYMMDD_HHMMSS/)."""
-        from nlsq.workflow import create_checkpoint_directory
+        from nlsq.core.workflow import create_checkpoint_directory
 
         checkpoint_dir = create_checkpoint_directory()
 
@@ -1130,7 +1130,7 @@ class TestQualityGoalMultiStart:
 
     def test_quality_goal_configures_n_starts_based_on_dataset_size(self):
         """Test quality goal configures n_starts based on dataset size."""
-        from nlsq.workflow import get_quality_n_starts
+        from nlsq.core.workflow import get_quality_n_starts
 
         # Smaller datasets can afford more starts
         small_n_starts = get_quality_n_starts(n_points=5_000)
@@ -1147,7 +1147,7 @@ class TestValidationPasses:
 
     def test_quality_goal_runs_validation_passes(self):
         """Test quality goal runs validation passes (perturbed parameters)."""
-        from nlsq.workflow import generate_perturbed_parameters
+        from nlsq.core.workflow import generate_perturbed_parameters
 
         # Initial parameters
         p0 = [1.0, 2.0, 3.0]
@@ -1166,7 +1166,7 @@ class TestValidationPasses:
 
     def test_validation_pass_compares_results(self):
         """Test validation pass compares results and warns on divergence."""
-        from nlsq.workflow import compare_validation_results
+        from nlsq.core.workflow import compare_validation_results
 
         # Converging results (similar parameters)
         results_converging = [
@@ -1195,7 +1195,7 @@ class TestValidationPasses:
 
     def test_validation_warns_on_divergence(self):
         """Test validation pass warns when solutions diverge significantly (>10%)."""
-        from nlsq.workflow import compare_validation_results
+        from nlsq.core.workflow import compare_validation_results
 
         # Results that diverge by more than 10%
         results = [
@@ -1215,7 +1215,7 @@ class TestPrecisionAutoIntegration:
 
     def test_precision_auto_integration_for_quality(self):
         """Test precision='auto' integration for float32->float64 upgrade."""
-        from nlsq.workflow import get_quality_precision_config
+        from nlsq.core.workflow import get_quality_precision_config
 
         # Quality goal should recommend auto precision
         precision_config = get_quality_precision_config()

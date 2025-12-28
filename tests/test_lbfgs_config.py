@@ -8,7 +8,7 @@ Task 1.1: Write 4-6 focused tests for L-BFGS configuration.
 
 import pytest
 
-from nlsq.hybrid_streaming_config import HybridStreamingConfig
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 
 class TestLbfgsHistorySizeValidation:

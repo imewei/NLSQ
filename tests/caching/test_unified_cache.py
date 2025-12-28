@@ -21,7 +21,7 @@ class TestUnifiedCacheKeyGeneration:
         This allows cache hits across different array sizes with same dtype and rank,
         reducing compilation overhead by 2-5x.
         """
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache()
 
@@ -44,7 +44,7 @@ class TestUnifiedCacheKeyGeneration:
 
     def test_cache_key_differs_for_different_dtypes(self):
         """Cache keys should differ when dtypes change."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache()
 
@@ -63,7 +63,7 @@ class TestUnifiedCacheKeyGeneration:
 
     def test_cache_key_differs_for_different_ranks(self):
         """Cache keys should differ when array ranks change."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache()
 
@@ -80,7 +80,7 @@ class TestUnifiedCacheKeyGeneration:
 
     def test_cache_key_includes_static_argnums(self):
         """Cache keys should include static argument tracking."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache()
 
@@ -102,7 +102,7 @@ class TestUnifiedCacheStatistics:
 
     def test_cache_tracks_hits_and_misses(self):
         """Cache should track hit/miss counts accurately."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache(enable_stats=True)
 
@@ -128,7 +128,7 @@ class TestUnifiedCacheStatistics:
 
     def test_cache_tracks_compile_time_ms(self):
         """Cache should track compilation time in milliseconds per cache key."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache(enable_stats=True)
 
@@ -158,7 +158,7 @@ class TestUnifiedCacheStatistics:
 
     def test_cache_hit_rate_calculation(self):
         """Cache should correctly calculate hit rate."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache(enable_stats=True)
 
@@ -191,7 +191,7 @@ class TestUnifiedCacheBehavior:
         Simulates typical batch processing: fitting same model to
         varying data sizes (shape-relaxed keys enable reuse).
         """
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache(enable_stats=True)
 
@@ -217,7 +217,7 @@ class TestUnifiedCacheBehavior:
 
     def test_cache_handles_collision_detection(self):
         """Cache should detect and log hash collisions."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache(enable_stats=True)
 
@@ -248,7 +248,7 @@ class TestUnifiedCacheIntegration:
 
     def test_cache_reduces_compilation_overhead(self):
         """Unified cache should reduce cold-start compile time by caching compilations."""
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache(enable_stats=True)
 
@@ -289,7 +289,7 @@ class TestUnifiedCacheIntegration:
         This is preparation for Task 1.7 where cache_stats will be
         added to curve_fit full_output result.
         """
-        from nlsq.unified_cache import UnifiedCache
+        from nlsq.caching.unified_cache import UnifiedCache
 
         cache = UnifiedCache(enable_stats=True)
 
@@ -323,7 +323,7 @@ def benchmark_cache_performance():
     results : dict
         Benchmark results including timings and hit rates
     """
-    from nlsq.unified_cache import UnifiedCache
+    from nlsq.caching.unified_cache import UnifiedCache
 
     cache = UnifiedCache(enable_stats=True)
 

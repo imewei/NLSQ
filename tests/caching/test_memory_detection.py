@@ -17,13 +17,13 @@ from unittest.mock import MagicMock, patch
 import jax
 import pytest
 
-from nlsq.large_dataset import (
+from nlsq.core.workflow import MemoryTier
+from nlsq.streaming.large_dataset import (
     GPUMemoryEstimator,
     MemoryEstimator,
     cleanup_memory,
     get_memory_tier,
 )
-from nlsq.workflow import MemoryTier
 
 
 class TestCPUMemoryDetection:

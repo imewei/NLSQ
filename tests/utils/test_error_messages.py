@@ -5,7 +5,11 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
-from nlsq.error_messages import OptimizationError, analyze_failure, format_error_message
+from nlsq.utils.error_messages import (
+    OptimizationError,
+    analyze_failure,
+    format_error_message,
+)
 
 
 class TestEnhancedErrorMessages:

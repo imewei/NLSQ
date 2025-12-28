@@ -15,7 +15,7 @@ import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from nlsq.algorithm_selector import AlgorithmSelector, auto_select_algorithm
+from nlsq.precision.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
 
 class TestAlgorithmSelectorBasic(unittest.TestCase):

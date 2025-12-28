@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from nlsq.profiler import (
+from nlsq.utils.profiler import (
     PerformanceProfiler,
     ProfileMetrics,
     clear_profiling_data,

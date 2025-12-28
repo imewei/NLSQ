@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
-from nlsq.functions import (
+from nlsq.core.functions import (
     exponential_decay,
     exponential_growth,
     gaussian,

@@ -39,7 +39,7 @@ def test_chunked_processing() -> dict[str, Any]:
     to 1024 (a pre-compiled bucket), no recompilation occurs.
     """
     import nlsq
-    from nlsq.large_dataset import CHUNK_BUCKETS, get_bucket_size
+    from nlsq.streaming.large_dataset import CHUNK_BUCKETS, get_bucket_size
 
     rng = np.random.default_rng(42)
 
@@ -120,7 +120,7 @@ def test_bucket_consistency() -> dict[str, Any]:
     consistent timing (no recompilation).
     """
     import nlsq
-    from nlsq.large_dataset import CHUNK_BUCKETS
+    from nlsq.streaming.large_dataset import CHUNK_BUCKETS
 
     def model(x: jax.Array, a: float, b: float) -> jax.Array:
         return a * jnp.exp(-b * x)

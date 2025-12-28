@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from nlsq.streaming_optimizer import (
+from nlsq.streaming.optimizer import (
     StreamingConfig,
     StreamingDataGenerator,
     StreamingOptimizer,

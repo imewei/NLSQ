@@ -17,9 +17,9 @@ import pytest
 from scipy.optimize import curve_fit as scipy_curve_fit
 
 from nlsq import curve_fit, curve_fit_large
-from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
-from nlsq.hybrid_streaming_config import HybridStreamingConfig
-from nlsq.streaming_optimizer import StreamingOptimizer
+from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
+from nlsq.streaming.optimizer import StreamingOptimizer
 
 
 class TestFullPipelineIntegration:
@@ -472,7 +472,7 @@ class TestBackwardCompatibility:
         p0 = jnp.array([2.5, 0.4])
 
         # Original StreamingOptimizer should still work
-        from nlsq.streaming_config import StreamingConfig
+        from nlsq.streaming.config import StreamingConfig
 
         config = StreamingConfig(batch_size=100, max_epochs=10)
 

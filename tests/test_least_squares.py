@@ -9,7 +9,7 @@ from pytest import raises as assert_raises
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import aslinearoperator
 
-from nlsq.least_squares import LeastSquares
+from nlsq.core.least_squares import LeastSquares
 
 lsqs = LeastSquares()
 least_squares = lsqs.least_squares

@@ -5,7 +5,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 
 
 class TestSuccessRateValidation:
@@ -90,7 +90,7 @@ class TestSuccessRateValidation:
                 yield x_batch, y_batch
 
         # Fit the model
-        with patch("nlsq.streaming_optimizer.logger") as mock_logger:
+        with patch("nlsq.streaming.optimizer.logger") as mock_logger:
             result = optimizer.fit_streaming(
                 data_generator(),
                 model,
