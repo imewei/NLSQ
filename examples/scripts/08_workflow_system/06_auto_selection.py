@@ -20,8 +20,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq.large_dataset import GPUMemoryEstimator, MemoryEstimator, get_memory_tier
-from nlsq.workflow import (
+from nlsq.streaming.large_dataset import GPUMemoryEstimator, MemoryEstimator, get_memory_tier
+from nlsq.core.workflow import (
     DatasetSizeTier,
     MemoryTier,
     OptimizationGoal,

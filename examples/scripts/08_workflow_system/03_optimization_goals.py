@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import OptimizationGoal, WorkflowConfig, WorkflowTier, fit
-from nlsq.workflow import DatasetSizeTier, calculate_adaptive_tolerances
+from nlsq.core.workflow import DatasetSizeTier, calculate_adaptive_tolerances
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)

@@ -28,7 +28,7 @@ except ImportError:
 from nlsq import curve_fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
-from nlsq.workflow import (
+from nlsq.core.workflow import (
     WorkflowConfig,
     get_custom_workflow,
     get_env_overrides,

@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import curve_fit
-from nlsq.error_messages import OptimizationError
+from nlsq.utils.error_messages import OptimizationError
 
 
 def example_1_max_iterations():

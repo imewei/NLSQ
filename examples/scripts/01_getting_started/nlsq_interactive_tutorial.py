@@ -307,7 +307,7 @@ y_true = a_true * np.exp(-((x - mu_true) ** 2) / (2 * sigma_true**2))
 y = y_true + np.random.normal(0, 0.5, size=len(x))
 
 # Fit using built-in gaussian function
-from nlsq.functions import gaussian
+from nlsq.core.functions import gaussian
 
 popt, pcov = curve_fit(gaussian, x, y, p0=[10, 0, 1])
 a_fit, mu_fit, sigma_fit = popt
@@ -346,7 +346,7 @@ y_true = L_true / (1 + np.exp(-k_true * (x - x0_true))) + b_true
 y = y_true + np.random.normal(0, 0.5, size=len(x))
 
 # Fit using built-in sigmoid function
-from nlsq.functions import sigmoid
+from nlsq.core.functions import sigmoid
 
 popt, pcov = curve_fit(sigmoid, x, y, p0=[10, 5, 1, 0])
 L_fit, x0_fit, k_fit, b_fit = popt
@@ -387,7 +387,7 @@ y_true = a_true * x**b_true
 y = y_true + np.random.normal(0, 2, size=len(x))
 
 # Fit using built-in power_law function
-from nlsq.functions import power_law
+from nlsq.core.functions import power_law
 
 popt, pcov = curve_fit(power_law, x, y, p0=[2, 1.5])
 a_fit, b_fit = popt
@@ -441,7 +441,7 @@ y_true = np.polyval(coeffs_true, x)
 y = y_true + np.random.normal(0, 1, size=len(x))
 
 # Fit using built-in polynomial function
-from nlsq.functions import polynomial
+from nlsq.core.functions import polynomial
 
 # Create polynomial function for degree 3
 poly3 = polynomial(3)
@@ -789,7 +789,7 @@ x = np.linspace(0, 10, 100)
 y = 5.0 * np.exp(-0.3 * x) + 1.0 + np.random.normal(0, 0.2, size=len(x))
 
 # Auto-estimate p0 using function method
-from nlsq.functions import exponential_decay
+from nlsq.core.functions import exponential_decay
 
 p0_auto = exponential_decay.estimate_p0(x, y)
 print(f"Auto-estimated p0: {p0_auto}")

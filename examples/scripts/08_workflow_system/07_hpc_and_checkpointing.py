@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-from nlsq.workflow import (
+from nlsq.core.workflow import (
     WORKFLOW_PRESETS,
     ClusterDetector,
     ClusterInfo,
