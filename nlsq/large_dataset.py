@@ -137,21 +137,25 @@ class ChunkBuffer:
         # Pad data to bucket size
         if valid_length == bucket_size:
             padded_data = arr
+        elif arr.ndim == 1:
+            padded_data = np.full(bucket_size, pad_value, dtype=arr.dtype)
+            padded_data[:valid_length] = arr
         else:
-            if arr.ndim == 1:
-                padded_data = np.full(bucket_size, pad_value, dtype=arr.dtype)
-                padded_data[:valid_length] = arr
-            else:
-                # Multi-dimensional: pad along first axis
-                pad_shape = (bucket_size - valid_length,) + arr.shape[1:]
-                padding = np.full(pad_shape, pad_value, dtype=arr.dtype)
-                padded_data = np.concatenate([arr, padding], axis=0)
+            # Multi-dimensional: pad along first axis
+            pad_shape = (bucket_size - valid_length, *arr.shape[1:])
+            padding = np.full(pad_shape, pad_value, dtype=arr.dtype)
+            padded_data = np.concatenate([arr, padding], axis=0)
 
-        return cls(data=padded_data, valid_length=valid_length, bucket_size=bucket_size, mask=mask)
+        return cls(
+            data=padded_data,
+            valid_length=valid_length,
+            bucket_size=bucket_size,
+            mask=mask,
+        )
 
     def get_valid_data(self) -> np.ndarray:
         """Return only the valid (non-padded) portion of the data."""
-        return self.data[:self.valid_length]
+        return self.data[: self.valid_length]
 
 
 @dataclass

@@ -116,6 +116,10 @@ logger = get_logger("trf")
 # Initialize GPU settings safely
 initialize_gpu_safely()
 
+# Import dataclasses for SVDCache
+from dataclasses import dataclass
+from typing import NamedTuple
+
 from nlsq._optimize import OptimizeResult
 from nlsq.callbacks import StopOptimization
 from nlsq.common_jax import CommonJIT, solve_lsq_trust_region_jax
@@ -155,10 +159,6 @@ from nlsq.mixed_precision import (
 from nlsq.optimizer_base import TrustRegionOptimizerBase
 from nlsq.stability import NumericalStabilityGuard
 from nlsq.unified_cache import get_global_cache
-
-# Import dataclasses for SVDCache
-from dataclasses import dataclass
-from typing import NamedTuple
 
 
 class SVDCache(NamedTuple):

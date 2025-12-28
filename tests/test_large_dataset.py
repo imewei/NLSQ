@@ -294,7 +294,9 @@ class TestDataChunker(unittest.TestCase):
         # Check all chunks have uniform size (padding fix for JIT recompilation)
         # Now returns 4 values: x, y, idx, valid_length
         x_chunk, y_chunk, _idx, valid_length = chunks[-1]
-        self.assertEqual(len(x_chunk), 1024)  # Padded to power-of-2 bucket (1024 >= 500)
+        self.assertEqual(
+            len(x_chunk), 1024
+        )  # Padded to power-of-2 bucket (1024 >= 500)
         self.assertEqual(valid_length, 500)  # Original 500 points
 
         # Verify padding: first 500 are original data, rest are cyclic repeat

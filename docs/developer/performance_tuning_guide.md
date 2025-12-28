@@ -21,6 +21,7 @@ Specialty modules are now lazily imported, reducing initial import time from ~10
 # - nlsq.gui
 
 import nlsq  # Fast (~620ms)
+
 nlsq.curve_fit(...)  # Core functionality loads immediately
 
 # Streaming loads only when needed

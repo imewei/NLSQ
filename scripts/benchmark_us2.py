@@ -56,13 +56,15 @@ def benchmark_svdvals_vs_full_svd() -> dict[str, Any]:
         # Benchmark full SVD
         t0 = time.perf_counter()
         for _ in range(n_trials):
-            U, s, Vt = jnp.linalg.svd(J_jax, full_matrices=False)
+            _U, s, _Vt = jnp.linalg.svd(J_jax, full_matrices=False)
             jax.block_until_ready(s)
         t_full_svd = (time.perf_counter() - t0) / n_trials
 
         speedup = t_full_svd / t_svdvals
 
-        print(f"  {m}x{n}: svdvals={t_svdvals*1000:.2f}ms, full_svd={t_full_svd*1000:.2f}ms, speedup={speedup:.1f}x")
+        print(
+            f"  {m}x{n}: svdvals={t_svdvals * 1000:.2f}ms, full_svd={t_full_svd * 1000:.2f}ms, speedup={speedup:.1f}x"
+        )
 
         results["matrix_sizes"].append(f"{m}x{n}")
         results["speedups"].append(speedup)
@@ -72,7 +74,9 @@ def benchmark_svdvals_vs_full_svd() -> dict[str, Any]:
 
     # SC-006: Target is 3x speedup
     passed = avg_speedup >= 3.0
-    print(f"\n  SC-006 {'PASSED' if passed else 'FAILED'}: {avg_speedup:.2f}x >= 3.0x required")
+    print(
+        f"\n  SC-006 {'PASSED' if passed else 'FAILED'}: {avg_speedup:.2f}x >= 3.0x required"
+    )
 
     return {
         "sc_006": {
@@ -117,7 +121,7 @@ def benchmark_svd_caching_pattern() -> dict[str, Any]:
     for _ in range(n_outer_iters):
         for _ in range(n_inner_iters_per_outer):
             # No caching: compute SVD every inner iteration
-            U, s, Vt = jnp.linalg.svd(J_jax, full_matrices=False)
+            _U, s, _Vt = jnp.linalg.svd(J_jax, full_matrices=False)
             uf = U.T @ f_jax
             # Simulate trust-region solve (just matrix ops)
             _ = Vt.T @ (uf / (s + 1e-8))
@@ -139,13 +143,15 @@ def benchmark_svd_caching_pattern() -> dict[str, Any]:
 
     improvement = (t_no_cache - t_with_cache) / t_no_cache * 100
 
-    print(f"  Without caching: {t_no_cache*1000:.2f}ms")
-    print(f"  With caching:    {t_with_cache*1000:.2f}ms")
+    print(f"  Without caching: {t_no_cache * 1000:.2f}ms")
+    print(f"  With caching:    {t_with_cache * 1000:.2f}ms")
     print(f"  Improvement:     {improvement:.1f}%")
 
     # SC-002: Target is 20-40% improvement
     passed = improvement >= 20.0
-    print(f"\n  SC-002 {'PASSED' if passed else 'FAILED'}: {improvement:.1f}% >= 20% required")
+    print(
+        f"\n  SC-002 {'PASSED' if passed else 'FAILED'}: {improvement:.1f}% >= 20% required"
+    )
 
     return {
         "sc_002": {
@@ -182,7 +188,9 @@ def verify_svdvals_in_stability_guard() -> dict[str, Any]:
 
     # The implementation uses svdvals - verified by code inspection
     verified = True
-    print(f"\n  Verification: {'PASSED' if verified else 'FAILED'} - check_and_fix_jacobian uses jnp.linalg.svdvals")
+    print(
+        f"\n  Verification: {'PASSED' if verified else 'FAILED'} - check_and_fix_jacobian uses jnp.linalg.svdvals"
+    )
 
     return {
         "svdvals_verification": {
@@ -234,7 +242,12 @@ def main() -> None:
             return obj
 
         json.dump(
-            {k: {kk: convert(vv) for kk, vv in v.items()} if isinstance(v, dict) else convert(v) for k, v in results.items()},
+            {
+                k: {kk: convert(vv) for kk, vv in v.items()}
+                if isinstance(v, dict)
+                else convert(v)
+                for k, v in results.items()
+            },
             f,
             indent=2,
         )

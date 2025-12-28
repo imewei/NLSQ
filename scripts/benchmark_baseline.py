@@ -75,7 +75,7 @@ def benchmark_svd_iterations() -> dict[str, Any]:
 
     # Benchmark
     start = time.perf_counter()
-    popt, pcov = nlsq.curve_fit(model, x, y, p0=[1.0, 1.0, 0.001])
+    popt, _pcov = nlsq.curve_fit(model, x, y, p0=[1.0, 1.0, 0.001])
     elapsed = time.perf_counter() - start
 
     return {
@@ -130,7 +130,7 @@ def benchmark_condition_estimation() -> dict[str, Any]:
     # Full SVD
     start = time.perf_counter()
     for _ in range(10):
-        U, s, Vt = jnp.linalg.svd(A, full_matrices=False)
+        _U, s, _Vt = jnp.linalg.svd(A, full_matrices=False)
         cond = s[0] / s[-1]
     full_svd_time = (time.perf_counter() - start) / 10
 
@@ -205,18 +205,29 @@ def main() -> None:
 
     print("3/5 Benchmarking memory manager overhead...")
     results["memory_manager"] = benchmark_memory_manager_overhead()
-    print(f"    Mean: {results['memory_manager']['mean_seconds']:.4f}s, Std: {results['memory_manager']['std_seconds']:.4f}s")
+    print(
+        f"    Mean: {results['memory_manager']['mean_seconds']:.4f}s, Std: {results['memory_manager']['std_seconds']:.4f}s"
+    )
 
     print("4/5 Benchmarking condition estimation...")
     results["condition_estimation"] = benchmark_condition_estimation()
-    print(f"    Full SVD: {results['condition_estimation']['full_svd_seconds']:.4f}s, svdvals: {results['condition_estimation']['svdvals_seconds']:.4f}s")
+    print(
+        f"    Full SVD: {results['condition_estimation']['full_svd_seconds']:.4f}s, svdvals: {results['condition_estimation']['svdvals_seconds']:.4f}s"
+    )
 
     print("5/5 Benchmarking Cholesky vs eigenvalue...")
     results["cholesky_vs_eigenvalue"] = benchmark_cholesky_vs_eigenvalue()
-    print(f"    Cholesky: {results['cholesky_vs_eigenvalue']['cholesky_seconds']:.4f}s, Eigenvalue: {results['cholesky_vs_eigenvalue']['eigenvalue_seconds']:.4f}s")
+    print(
+        f"    Cholesky: {results['cholesky_vs_eigenvalue']['cholesky_seconds']:.4f}s, Eigenvalue: {results['cholesky_vs_eigenvalue']['eigenvalue_seconds']:.4f}s"
+    )
 
     # Save results
-    output_path = Path(__file__).parent.parent / "specs" / "002-performance-optimizations" / "baseline.json"
+    output_path = (
+        Path(__file__).parent.parent
+        / "specs"
+        / "002-performance-optimizations"
+        / "baseline.json"
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w") as f:
@@ -226,11 +237,17 @@ def main() -> None:
     print(f"Results saved to: {output_path}")
     print()
     print("Summary:")
-    print(f"  Large dataset (1M points): {results['large_dataset_fit']['elapsed_seconds']:.3f}s")
+    print(
+        f"  Large dataset (1M points): {results['large_dataset_fit']['elapsed_seconds']:.3f}s"
+    )
     print(f"  SVD iterations: {results['svd_iterations']['elapsed_seconds']:.3f}s")
     print(f"  Memory manager mean: {results['memory_manager']['mean_seconds']:.4f}s")
-    print(f"  Condition estimation speedup potential: {results['condition_estimation']['speedup']:.2f}x")
-    print(f"  Cholesky speedup potential: {results['cholesky_vs_eigenvalue']['speedup']:.2f}x")
+    print(
+        f"  Condition estimation speedup potential: {results['condition_estimation']['speedup']:.2f}x"
+    )
+    print(
+        f"  Cholesky speedup potential: {results['cholesky_vs_eigenvalue']['speedup']:.2f}x"
+    )
 
 
 if __name__ == "__main__":

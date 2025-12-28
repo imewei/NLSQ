@@ -60,7 +60,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: ['--skip=*.ipynb,*.html', '--ignore-words-list=nd,coo,assertIn']
+        args: ['--skip=*.ipynb,*.html', '--ignore-words-list=nd,coo,assertIn,deques']
 
   - repo: https://github.com/adamchainz/blacken-docs
     rev: 1.20.0

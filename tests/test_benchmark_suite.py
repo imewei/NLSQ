@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
 from benchmarks.benchmark_suite import (
     BenchmarkConfig,
     BenchmarkResult,

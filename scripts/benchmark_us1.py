@@ -38,8 +38,8 @@ def test_chunked_processing() -> dict[str, Any]:
     a fresh JIT compilation because that shape wasn't seen before. With padding
     to 1024 (a pre-compiled bucket), no recompilation occurs.
     """
-    from nlsq.large_dataset import CHUNK_BUCKETS, get_bucket_size
     import nlsq
+    from nlsq.large_dataset import CHUNK_BUCKETS, get_bucket_size
 
     rng = np.random.default_rng(42)
 
@@ -119,8 +119,8 @@ def test_bucket_consistency() -> dict[str, Any]:
     After warmup, repeated calls with the same bucket size should have
     consistent timing (no recompilation).
     """
-    from nlsq.large_dataset import CHUNK_BUCKETS
     import nlsq
+    from nlsq.large_dataset import CHUNK_BUCKETS
 
     def model(x: jax.Array, a: float, b: float) -> jax.Array:
         return a * jnp.exp(-b * x)
@@ -162,7 +162,12 @@ def test_bucket_consistency() -> dict[str, Any]:
 
 def compare_with_baseline() -> dict[str, Any]:
     """Compare current LargeDatasetFitter performance with baseline."""
-    baseline_path = Path(__file__).parent.parent / "specs" / "002-performance-optimizations" / "baseline.json"
+    baseline_path = (
+        Path(__file__).parent.parent
+        / "specs"
+        / "002-performance-optimizations"
+        / "baseline.json"
+    )
 
     if not baseline_path.exists():
         return {"error": f"Baseline not found at {baseline_path}"}
@@ -205,7 +210,9 @@ def main() -> None:
 
     cp = results["chunked_processing"]
     print(f"    Unpadded ({cp['odd_size']} pts): {cp['unpadded_time']:.4f}s")
-    print(f"    Padded ({cp['odd_size']} -> {cp['bucket_size']}): {cp['padded_time']:.4f}s")
+    print(
+        f"    Padded ({cp['odd_size']} -> {cp['bucket_size']}): {cp['padded_time']:.4f}s"
+    )
     print(f"    Speedup (unpadded/padded): {cp['speedup']:.2f}x")
     print(f"    Bucket 1024 CV: {cp['bucket_1024_cv']:.2f}")
 
@@ -226,7 +233,12 @@ def main() -> None:
         print(f"    Original baseline: {results['baseline']['baseline_seconds']:.3f}s")
 
     # Save results
-    output_path = Path(__file__).parent.parent / "specs" / "002-performance-optimizations" / "us1_benchmark.json"
+    output_path = (
+        Path(__file__).parent.parent
+        / "specs"
+        / "002-performance-optimizations"
+        / "us1_benchmark.json"
+    )
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
 
@@ -240,7 +252,9 @@ def main() -> None:
     print("=" * 60)
     sc_001 = cp["sc_001_passed"]
     sc_005 = cp["sc_005_passed"]
-    print(f"SC-001 (No recompilation on final chunk): {'PASSED' if sc_001 else 'FAILED'}")
+    print(
+        f"SC-001 (No recompilation on final chunk): {'PASSED' if sc_001 else 'FAILED'}"
+    )
     print(f"SC-005 (Final chunk 2-3x faster): {'PASSED' if sc_005 else 'FAILED'}")
 
     if sc_001 and sc_005:

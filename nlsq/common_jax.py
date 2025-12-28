@@ -124,7 +124,7 @@ def _solve_lsq_trust_region_jax_impl(
 
     # State for while_loop: (alpha, alpha_lower, alpha_upper, iteration, converged)
     def loop_cond(state):
-        alpha, alpha_lower, alpha_upper, iteration, converged = state
+        _alpha, _alpha_lower, _alpha_upper, iteration, converged = state
         return (iteration < max_iter) & ~converged
 
     def loop_body(state):
