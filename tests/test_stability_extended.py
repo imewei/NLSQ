@@ -6,6 +6,7 @@ import unittest
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from nlsq.algorithm_selector import AlgorithmSelector
 from nlsq.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
@@ -177,8 +178,14 @@ class TestValidatorsExtended(unittest.TestCase):
 class TestAlgorithmSelectorExtended(unittest.TestCase):
     """Extended tests for AlgorithmSelector."""
 
+    @pytest.mark.slow  # Large dataset test (1M points)
+    @pytest.mark.serial  # Memory-intensive: runs without parallelism to prevent OOM
     def test_memory_constraints(self):
-        """Test algorithm selection with memory constraints."""
+        """Test algorithm selection with memory constraints.
+
+        Uses 1M data points to test memory-constrained algorithm selection.
+        Marked serial to prevent parallel memory exhaustion.
+        """
         selector = AlgorithmSelector()
 
         def model(x, a, b):

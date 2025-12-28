@@ -372,7 +372,11 @@ class TestFeatureInteraction:
 
         Verifies no conflicts between checkpointing and error handling.
         """
+        import shutil
+        import time
+
         temp_dir = tempfile.mkdtemp()
+        optimizer = None
 
         try:
             np.random.seed(42)
@@ -411,10 +415,15 @@ class TestFeatureInteraction:
             assert result is not None
 
         finally:
-            import shutil
+            # Shutdown checkpoint worker before cleanup to avoid race conditions
+            if optimizer is not None:
+                optimizer._shutdown_checkpoint_worker()
+                # Brief delay to let background thread finish
+                time.sleep(0.1)
 
             if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
+                # Use ignore_errors=True as fallback for any remaining race conditions
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     def test_fault_tolerance_with_callback(self):
         """Test fault tolerance works with user callbacks.

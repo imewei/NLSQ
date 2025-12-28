@@ -563,8 +563,20 @@ class TestWorkflowWithBounds:
 # =============================================================================
 
 
+@pytest.mark.slow  # Skip in fast tests (-m "not slow")
+@pytest.mark.serial  # Run on single xdist worker to prevent resource contention
 class TestCLISubprocessInvocation:
-    """Integration test: Complete CLI invocation via subprocess."""
+    """Integration test: Complete CLI invocation via subprocess.
+
+    These tests spawn external Python processes that initialize JAX.
+    They are marked for serial execution to prevent resource contention
+    when running with pytest-xdist parallel execution.
+
+    Root Cause Analysis (2025-12-27):
+    - Each subprocess spawns a process that initializes JAX (~620ms + 500MB memory)
+    - With -n 4 workers, parallel JAX initializations cause compilation cache deadlocks
+    - Serial execution prevents resource contention and system freezes
+    """
 
     def test_cli_fit_command_via_subprocess(self, temp_workspace, linear_data_file):
         """Test invoking 'nlsq fit' via subprocess."""
