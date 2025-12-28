@@ -98,7 +98,7 @@ repos:
 
       - id: validate-notebooks
         name: Validate Jupyter notebooks configuration
-        entry: python scripts/configure_notebooks.py --dry-run
+        entry: python scripts/notebooks/configure_notebooks.py --dry-run
         language: system
         files: ^examples/notebooks/.*\.ipynb$
         pass_filenames: false
@@ -108,7 +108,7 @@ repos:
 
       - id: configure-notebooks
         name: Configure Jupyter notebooks (auto-fix)
-        entry: python scripts/configure_notebooks.py --incremental
+        entry: python scripts/notebooks/configure_notebooks.py --incremental
         language: system
         files: ^examples/notebooks/.*\.ipynb$
         pass_filenames: false
