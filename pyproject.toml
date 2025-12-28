@@ -57,7 +57,7 @@ requires-python = ">=3.12"
 #
 #   Manual install:
 #     pip uninstall -y jax jaxlib
-#     pip install 'jax[cuda12]>=0.6.0'  # Use cuda12-local for system CUDA
+#     pip install 'jax[cuda12-local]>=0.8.0'  # Uses system CUDA
 #
 #   Verify GPU detection:
 #     python -c "import jax; print(jax.devices())"
@@ -82,18 +82,18 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.0",           # Requires NumPy 2.x (tested on 2.3.5)
+    "numpy>=2.2",           # Requires NumPy 2.x (tested on 2.4.0)
     "scipy>=1.16.3",          # Tested on 1.16.3
 
-    # JAX ecosystem (locked to 0.8.0)
+    # JAX ecosystem (>=0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
-    "jax==0.8.0",             # JAX 0.8.0 (locked version)
-    "jaxlib==0.8.0",          # JAXlib 0.8.0 (locked version)
+    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.8.0)
+    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.8.0)
                                # Platform-specific extras installed separately:
-                               #   Linux CPU:  pip install "jax[cpu]==0.8.0"
+                               #   Linux CPU:  pip install "jax[cpu]>=0.8.0"
                                #   Linux GPU:  make install-jax-gpu (recommended)
-                               #   macOS:      pip install "jax[cpu]==0.8.0" (CPU only)
-                               #   Windows:    pip install "jax[cpu]==0.8.0" (CPU only)
+                               #   macOS:      pip install "jax[cpu]>=0.8.0" (CPU only)
+                               #   Windows:    pip install "jax[cpu]>=0.8.0" (CPU only)
     "optax>=0.2.6",           # Gradient transformations for Adam warmup (tested on 0.2.6)
 
     # Visualization and monitoring

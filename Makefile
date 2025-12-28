@@ -66,7 +66,7 @@ endif
 
 # GPU installation command (platform-specific)
 ifeq ($(PLATFORM),linux)
-    JAX_GPU_PKG := jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+    JAX_GPU_PKG := jax[cuda12-local]>=0.8.0
 else
     JAX_GPU_PKG :=
 endif
@@ -188,8 +188,8 @@ ifeq ($(PLATFORM),linux)
 	@echo "  ✓ CPU JAX uninstalled"
 	@echo ""
 	@echo "$(BOLD)Step 2/4:$(RESET) Installing GPU-enabled JAX (CUDA 12.1-12.9)..."
-	@echo "  Command: $(INSTALL_CMD) $(JAX_GPU_PKG)"
-	@$(INSTALL_CMD) $(JAX_GPU_PKG)
+	@echo '  Command: $(INSTALL_CMD) "$(JAX_GPU_PKG)"'
+	@$(INSTALL_CMD) '$(JAX_GPU_PKG)'
 	@echo "  ✓ GPU JAX installed"
 	@echo ""
 	@echo "$(BOLD)Step 3/4:$(RESET) Verifying GPU detection..."
@@ -200,7 +200,7 @@ ifeq ($(PLATFORM),linux)
 	@echo ""
 	@echo "$(BOLD)Summary:$(RESET)"
 	@echo "  Package manager: $(PKG_MANAGER)"
-	@echo "  JAX version: 0.8.0 with CUDA 12 support"
+	@echo "  JAX version: >=0.8.0 with CUDA 12 support"
 	@echo "  Performance Impact: 150-270x speedup for large datasets (1M+ points)"
 else
 	@echo "$(BOLD)$(RED)✗ GPU acceleration only available on Linux with CUDA 12+$(RESET)"
