@@ -9,7 +9,7 @@ Start with the template
 
 The repository ships a full template:
 
-- `workflow_config_template.yaml <https://github.com/imewei/nlsq/blob/main/workflow_config_template.yaml>`_
+- `workflow_config_template.yaml <https://github.com/imewei/nlsq/blob/main/templates/workflow_config_template.yaml>`_
 
 Copy the template and edit only the fields you need for your run.
 

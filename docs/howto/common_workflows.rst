@@ -2,7 +2,7 @@ Common Workflows
 ================
 
 This page provides runnable, end-to-end YAML patterns built from the
-`workflow_config_template.yaml <https://github.com/imewei/nlsq/blob/main/workflow_config_template.yaml>`_.
+`workflow_config_template.yaml <https://github.com/imewei/nlsq/blob/main/templates/workflow_config_template.yaml>`_.
 
 Start by copying the template, then replace the sections shown here. Each
 example focuses on a small set of fields so you can compose them easily.

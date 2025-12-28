@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Template files reorganized**: Moved `custom_model_template.py` and `workflow_config_template.yaml` to dedicated `templates/` directory
 - **Lazy imports for specialty modules** (43% faster import time): Global optimization, streaming optimizer, profiling, and GUI modules are now lazily imported, reducing cold-start time from ~1084ms to ~620ms
 - **Vectorized sparse Jacobian construction** (37-50x speedup): Replaced O(nm) nested loop with O(nnz) NumPy vectorized operations using COO sparse matrix construction
 - **Consolidated benchmark directories**: Merged `benchmark/` into `benchmarks/` for cleaner project structure
@@ -33,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix(streaming): Replace try-except-pass blocks with `contextlib.suppress()` per SIM105 rule
 - fix(tests): Prefix unused variables with underscore to satisfy RUF059 linting rule
 - fix(tests): Bind loop variables in lambda closures to fix B023 linting warnings
+- fix(examples): Convert deque to list before slicing in streaming examples (deque doesn't support slice indexing)
+- fix(tests): Mark subprocess-spawning and memory-intensive tests as serial to prevent xdist resource contention
+- fix(tests): Fix checkpoint worker race condition in cleanup
 
 ## [0.4.1] - 2025-12-24
 

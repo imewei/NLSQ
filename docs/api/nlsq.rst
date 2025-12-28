@@ -13,7 +13,7 @@ Key Features:
 * **GPU/TPU Acceleration**: JAX JIT compilation to XLA for massive speedups
 * **Automatic Differentiation**: No manual Jacobian calculations required
 * **Large Dataset Support**: Automatic chunking and memory management for 100M+ points
-* **Production-Ready**: 2,780 tests, 100% pass rate
+* **Production-Ready**: 3,027 tests, 100% pass rate
 * **Drop-in Compatibility**: Minimal code changes from ``scipy.optimize.curve_fit``
 
 Quick Start Example

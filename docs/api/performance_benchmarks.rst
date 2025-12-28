@@ -204,16 +204,16 @@ Reproducing Benchmarks
 Run the benchmark suite::
 
     # Standard benchmarks
-    python benchmarks/benchmark.py
+    python benchmarks/run_benchmarks.py
 
-    # Large dataset benchmarks
-    python benchmarks/benchmark.py --large-datasets
+    # Individual benchmark scripts
+    python benchmarks/benchmark_suite.py
 
     # Memory profiling
-    python -m memory_profiler benchmarks/benchmark.py
+    python -m memory_profiler benchmarks/benchmark_memory_reuse.py
 
     # GPU benchmarks (requires CUDA)
-    JAX_PLATFORMS=gpu python benchmarks/benchmark.py
+    JAX_PLATFORMS=gpu python benchmarks/run_benchmarks.py
 
 Individual benchmark scripts::
 
@@ -306,4 +306,4 @@ For detailed implementation, see:
 
 - :doc:`../howto/handle_large_data` - Implementation guide
 - :doc:`large_datasets_api` - API reference
-- `Benchmark code <https://github.com/imewei/NLSQ/tree/main/benchmark>`_
+- `Benchmark code <https://github.com/imewei/NLSQ/tree/main/benchmarks>`_

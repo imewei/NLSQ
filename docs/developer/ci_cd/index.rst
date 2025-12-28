@@ -13,7 +13,7 @@ Overview
 
 NLSQ uses GitHub Actions for automated testing, code quality checks, and deployments:
 
-- **Test Suite**: Automated testing on multiple Python versions (2,780 tests, 100% pass rate)
+- **Test Suite**: Automated testing on multiple Python versions (3,027 tests, 100% pass rate)
 - **Code Quality**: Pre-commit hooks, ruff, mypy
 - **Coverage**: Automated coverage reporting (target: 80%)
 
