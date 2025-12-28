@@ -366,11 +366,11 @@ def test_checkpoint_save_overhead(benchmark, small_streaming_data):
         # May or may not have checkpoints depending on implementation
 
     finally:
-        # Cleanup
+        # Cleanup - use ignore_errors to handle race conditions with async checkpoint saves
         import shutil
 
         if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @pytest.mark.benchmark(group="checkpoint-io")

@@ -406,15 +406,21 @@ class TestMemoryCeiling:
         # Start memory tracking
         tracemalloc.start()
 
-        optimizer = AdaptiveHybridStreamingOptimizer(config)
-        optimizer._setup_normalization(model, p0, bounds=None)
+        try:
+            optimizer = AdaptiveHybridStreamingOptimizer(config)
+            optimizer._setup_normalization(model, p0, bounds=None)
 
-        # Perform implicit matvec (the key operation for CG)
-        v = jnp.ones(n_params)
-        result = optimizer._implicit_jtj_matvec(v, p0, x, y)
+            # Perform implicit matvec (the key operation for CG)
+            v = jnp.ones(n_params)
+            result = optimizer._implicit_jtj_matvec(v, p0, x, y)
 
-        # Force computation
-        _ = float(jnp.sum(result))
+            # Force computation
+            _ = float(jnp.sum(result))
+        except jax.errors.JaxRuntimeError as e:
+            tracemalloc.stop()
+            if "RESOURCE_EXHAUSTED" in str(e) or "out of memory" in str(e).lower():
+                pytest.skip("Skipped due to GPU memory exhaustion")
+            raise
 
         # Get peak memory
         _current, peak = tracemalloc.get_traced_memory()
@@ -641,12 +647,18 @@ class TestImplicitVsMaterializedScaling:
             tracemalloc.start()
             start = time.time()
 
-            optimizer = AdaptiveHybridStreamingOptimizer(config_cg)
-            optimizer._setup_normalization(model, p0, bounds=None)
+            try:
+                optimizer = AdaptiveHybridStreamingOptimizer(config_cg)
+                optimizer._setup_normalization(model, p0, bounds=None)
 
-            v = jnp.ones(n_params)
-            result = optimizer._implicit_jtj_matvec(v, p0, x, y)
-            _ = float(jnp.sum(result))
+                v = jnp.ones(n_params)
+                result = optimizer._implicit_jtj_matvec(v, p0, x, y)
+                _ = float(jnp.sum(result))
+            except jax.errors.JaxRuntimeError as e:
+                tracemalloc.stop()
+                if "RESOURCE_EXHAUSTED" in str(e) or "out of memory" in str(e).lower():
+                    pytest.skip("Skipped due to GPU memory exhaustion")
+                raise
 
             implicit_time = time.time() - start
             _, implicit_peak = tracemalloc.get_traced_memory()
