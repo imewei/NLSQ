@@ -32,7 +32,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
-from nlsq.minpack import WORKFLOW_PRESETS, fit
+from nlsq.core.minpack import WORKFLOW_PRESETS, fit
 from nlsq.result import CurveFitResult
 
 # =============================================================================

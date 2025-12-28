@@ -102,14 +102,14 @@ from jax import debug, jit, lax
 from jax.numpy.linalg import norm as jnorm
 from jax.tree_util import tree_flatten
 
-# Setup logging
-from nlsq.logging import get_logger
-
 # Import safe SVD with fallback (full deterministic SVD only)
-from nlsq.svd_fallback import (
+from nlsq.stability.svd_fallback import (
     compute_svd_with_fallback,
     initialize_gpu_safely,
 )
+
+# Setup logging
+from nlsq.utils.logging import get_logger
 
 logger = get_logger("trf")
 
@@ -120,7 +120,7 @@ initialize_gpu_safely()
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from nlsq._optimize import OptimizeResult
+from nlsq.caching.unified_cache import get_global_cache
 from nlsq.callbacks import StopOptimization
 from nlsq.common_jax import CommonJIT, solve_lsq_trust_region_jax
 from nlsq.common_scipy import (
@@ -143,22 +143,22 @@ from nlsq.constants import (
     MAX_TRUST_RADIUS,
     MIN_TRUST_RADIUS,
 )
-from nlsq.diagnostics import OptimizationDiagnostics
+from nlsq.core._optimize import OptimizeResult
+
+# Logging support
+# Optimizer base class
+from nlsq.core.optimizer_base import TrustRegionOptimizerBase
 
 # Mixed precision support
-from nlsq.mixed_precision import (
+from nlsq.precision.mixed_precision import (
     ConvergenceMetrics,
     MixedPrecisionConfig,
     MixedPrecisionManager,
     OptimizationState,
     PrecisionState,
 )
-
-# Logging support
-# Optimizer base class
-from nlsq.optimizer_base import TrustRegionOptimizerBase
-from nlsq.stability import NumericalStabilityGuard
-from nlsq.unified_cache import get_global_cache
+from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.utils.diagnostics import OptimizationDiagnostics
 
 
 class SVDCache(NamedTuple):

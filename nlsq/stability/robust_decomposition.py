@@ -12,7 +12,7 @@ from jax.scipy.linalg import qr as jax_qr
 from jax.scipy.linalg import svd as jax_svd
 
 # Use NLSQ logging system
-from nlsq.logging import get_logger
+from nlsq.utils.logging import get_logger
 
 # Import the existing SVD fallback utilities
 
@@ -47,7 +47,7 @@ class RobustDecomposition:
         """
         self.logger = get_logger("robust_decomposition")
         if enable_logging:
-            from nlsq.logging import LogLevel
+            from nlsq.utils.logging import LogLevel
 
             self.logger.logger.setLevel(LogLevel.DEBUG)
 

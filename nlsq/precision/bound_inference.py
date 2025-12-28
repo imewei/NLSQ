@@ -12,7 +12,7 @@ Key Features:
 - Support for user-provided partial bounds
 
 Example:
-    >>> from nlsq.bound_inference import infer_bounds
+    >>> from nlsq.precision.bound_inference import infer_bounds
     >>>
     >>> bounds = infer_bounds(xdata, ydata, p0=[1, 0.5, 0.1])
     >>> print(f"Lower bounds: {bounds[0]}")

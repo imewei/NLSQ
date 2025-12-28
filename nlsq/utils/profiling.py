@@ -5,7 +5,7 @@ performance and validating improvements without heavy dependencies.
 
 Examples
 --------
->>> from nlsq.profiling import profile_optimization
+>>> from nlsq.utils.profiling import profile_optimization
 >>> from nlsq import least_squares
 >>> import jax.numpy as jnp
 >>>
@@ -140,7 +140,7 @@ def analyze_source_transfers(source_code: str) -> dict:
 
     Examples
     --------
-    >>> from nlsq.profiling import analyze_source_transfers
+    >>> from nlsq.utils.profiling import analyze_source_transfers
     >>>
     >>> code = '''
     ... def my_function(x):
@@ -273,7 +273,7 @@ def profile_transfers_runtime(
 
     Examples
     --------
-    >>> from nlsq.profiling import profile_transfers_runtime
+    >>> from nlsq.utils.profiling import profile_transfers_runtime
     >>> import jax.numpy as jnp
     >>>
     >>> def my_computation(x):

@@ -14,16 +14,16 @@ import jax.numpy as jnp
 from jax import jacfwd, jacrev, jit
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
 
+from nlsq.caching.memory_manager import get_memory_manager
+from nlsq.caching.unified_cache import get_global_cache
 from nlsq.common_scipy import EPS, in_bounds, make_strictly_feasible
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
-from nlsq.diagnostics import OptimizationDiagnostics
-from nlsq.logging import get_logger
-from nlsq.loss_functions import LossFunctionsJIT
-from nlsq.memory_manager import get_memory_manager
-from nlsq.stability import NumericalStabilityGuard
-from nlsq.trf import TrustRegionReflective
+from nlsq.core.loss_functions import LossFunctionsJIT
+from nlsq.core.trf import TrustRegionReflective
+from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction, MethodLiteral
-from nlsq.unified_cache import get_global_cache
+from nlsq.utils.diagnostics import OptimizationDiagnostics
+from nlsq.utils.logging import get_logger
 
 
 def jacobian_mode_selector(
@@ -77,7 +77,7 @@ def jacobian_mode_selector(
 
     Examples
     --------
-    >>> from nlsq.least_squares import jacobian_mode_selector
+    >>> from nlsq.core.least_squares import jacobian_mode_selector
     >>> # Tall Jacobian (many parameters, few residuals)
     >>> mode, rationale = jacobian_mode_selector(1000, 100, mode='auto')
     >>> print(mode, rationale)
@@ -1163,7 +1163,7 @@ class LeastSquares:
 
         if xdata is not None and ydata is not None and fun is not None:
             # Import sparsity detection function
-            from nlsq.sparse_jacobian import detect_sparsity_at_p0
+            from nlsq.core.sparse_jacobian import detect_sparsity_at_p0
 
             # Detect sparsity at p0 (uses sampling for efficiency)
             try:

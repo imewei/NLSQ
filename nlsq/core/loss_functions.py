@@ -110,7 +110,7 @@ class LossFunctionsJIT:
     -------------
     ::
 
-        from nlsq.loss_functions import LossFunctionsJIT
+        from nlsq.core.loss_functions import LossFunctionsJIT
 
         # Initialize loss function handler
         loss_jit = LossFunctionsJIT()

@@ -24,15 +24,15 @@ from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
 
 
-from nlsq._optimize import OptimizeResult
-from nlsq.logging import get_logger
-from nlsq.minpack import CurveFit
-
-# Import streaming optimizer (required dependency as of v0.2.0)
-from nlsq.streaming_optimizer import StreamingConfig, StreamingOptimizer
+from nlsq.core._optimize import OptimizeResult
+from nlsq.core.minpack import CurveFit
 
 # Import MemoryTier for convenience function
-from nlsq.workflow import MemoryTier
+from nlsq.core.workflow import MemoryTier
+
+# Import streaming optimizer (required dependency as of v0.2.0)
+from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
+from nlsq.utils.logging import get_logger
 
 # Default fallback memory in GB when detection fails (per requirements)
 _DEFAULT_FALLBACK_MEMORY_GB = 16.0
@@ -234,7 +234,7 @@ class GPUMemoryEstimator:
 
     Examples
     --------
-    >>> from nlsq.large_dataset import GPUMemoryEstimator
+    >>> from nlsq.streaming.large_dataset import GPUMemoryEstimator
     >>> estimator = GPUMemoryEstimator()
     >>> available_gb = estimator.get_available_gpu_memory_gb()
     >>> print(f"Available GPU memory: {available_gb:.2f} GB")
@@ -539,7 +539,7 @@ def cleanup_memory() -> None:
 
     Examples
     --------
-    >>> from nlsq.large_dataset import cleanup_memory
+    >>> from nlsq.streaming.large_dataset import cleanup_memory
     >>> # After completing a workflow phase
     >>> cleanup_memory()
     """
@@ -576,7 +576,7 @@ def get_memory_tier(available_memory_gb: float) -> MemoryTier:
 
     Examples
     --------
-    >>> from nlsq.large_dataset import get_memory_tier
+    >>> from nlsq.streaming.large_dataset import get_memory_tier
     >>> tier = get_memory_tier(32.0)
     >>> tier
     <MemoryTier.MEDIUM: (64.0, 'Standard memory (16-64GB)')>
@@ -1525,7 +1525,10 @@ class LargeDatasetFitter:
         # Create mixed precision manager if enabled
         mixed_precision_manager = None
         if enable_mp:
-            from nlsq.mixed_precision import MixedPrecisionConfig, MixedPrecisionManager
+            from nlsq.precision.mixed_precision import (
+                MixedPrecisionConfig,
+                MixedPrecisionManager,
+            )
 
             mp_config = self.mixed_precision_config
             if mp_config is None:
@@ -2459,7 +2462,7 @@ def fit_large_dataset(
 
     Examples
     --------
-    >>> from nlsq.large_dataset import fit_large_dataset
+    >>> from nlsq.streaming.large_dataset import fit_large_dataset
     >>> import numpy as np
     >>> import jax.numpy as jnp
     >>>
@@ -2527,7 +2530,7 @@ def estimate_memory_requirements(n_points: int, n_params: int) -> DatasetStats:
 
     Examples
     --------
-    >>> from nlsq.large_dataset import estimate_memory_requirements
+    >>> from nlsq.streaming.large_dataset import estimate_memory_requirements
     >>>
     >>> # Estimate requirements for 50M points, 3 parameters
     >>> stats = estimate_memory_requirements(50_000_000, 3)

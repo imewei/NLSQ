@@ -63,7 +63,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq.global_optimization.config import GlobalOptimizationConfig
-from nlsq.logging import get_logger
+from nlsq.utils.logging import get_logger
 
 __all__ = ["TournamentSelector"]
 

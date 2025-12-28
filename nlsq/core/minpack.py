@@ -55,21 +55,21 @@ from jax import jit
 from jax.scipy.linalg import cholesky as jax_cholesky
 from jax.scipy.linalg import svd as jax_svd
 
-from nlsq._optimize import OptimizeWarning
-from nlsq.algorithm_selector import auto_select_algorithm
+from nlsq.caching.memory_manager import get_memory_manager
+from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.common_scipy import EPS
-from nlsq.diagnostics import OptimizationDiagnostics
-from nlsq.error_messages import OptimizationError
-from nlsq.least_squares import LeastSquares, prepare_bounds
-from nlsq.logging import get_logger
-from nlsq.memory_manager import get_memory_manager
-from nlsq.parameter_estimation import estimate_initial_parameters
-from nlsq.recovery import OptimizationRecovery
+from nlsq.core._optimize import OptimizeWarning
+from nlsq.core.least_squares import LeastSquares, prepare_bounds
+from nlsq.precision.algorithm_selector import auto_select_algorithm
+from nlsq.precision.parameter_estimation import estimate_initial_parameters
 from nlsq.result import CurveFitResult
-from nlsq.stability import NumericalStabilityGuard
+from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.stability.recovery import OptimizationRecovery
 from nlsq.types import ArrayLike, ModelFunction
-from nlsq.unified_cache import UnifiedCache, get_global_cache
-from nlsq.validators import InputValidator
+from nlsq.utils.diagnostics import OptimizationDiagnostics
+from nlsq.utils.error_messages import OptimizationError
+from nlsq.utils.logging import get_logger
+from nlsq.utils.validators import InputValidator
 
 __all__ = ["WORKFLOW_PRESETS", "CurveFit", "curve_fit", "fit"]
 
@@ -228,7 +228,7 @@ def fit(
 
     Using a custom config object:
 
-    >>> from nlsq.large_dataset import LDMemoryConfig
+    >>> from nlsq.streaming.large_dataset import LDMemoryConfig
     >>> config = LDMemoryConfig(memory_limit_gb=8.0)
     >>> result = fit(model, xdata, ydata, p0=[1, 2], workflow=config)
 
@@ -240,7 +240,7 @@ def fit(
     WORKFLOW_PRESETS : Available workflow presets
     """
     # Import workflow module components
-    from nlsq.workflow import (
+    from nlsq.core.workflow import (
         OptimizationGoal,
         auto_select_workflow,
     )
@@ -293,8 +293,8 @@ def fit(
     # Process workflow parameter
     # Import config classes for isinstance checks
     from nlsq.global_optimization import GlobalOptimizationConfig
-    from nlsq.hybrid_streaming_config import HybridStreamingConfig
-    from nlsq.large_dataset import LDMemoryConfig
+    from nlsq.streaming.hybrid_config import HybridStreamingConfig
+    from nlsq.streaming.large_dataset import LDMemoryConfig
 
     if isinstance(
         workflow, (LDMemoryConfig, HybridStreamingConfig, GlobalOptimizationConfig)
@@ -384,10 +384,10 @@ def _fit_with_config(
     **kwargs: Any,
 ) -> CurveFitResult:
     """Route fit to appropriate backend based on config type."""
+    from nlsq.core.workflow import calculate_adaptive_tolerances
     from nlsq.global_optimization import GlobalOptimizationConfig
-    from nlsq.hybrid_streaming_config import HybridStreamingConfig
-    from nlsq.large_dataset import LargeDatasetFitter, LDMemoryConfig
-    from nlsq.workflow import calculate_adaptive_tolerances
+    from nlsq.streaming.hybrid_config import HybridStreamingConfig
+    from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
     n_points = len(ydata)
 
@@ -419,7 +419,7 @@ def _fit_with_config(
 
     elif isinstance(config, HybridStreamingConfig):
         # Streaming optimization path
-        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
+        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 
         # Prepare p0
         if p0 is None:
@@ -536,7 +536,7 @@ def _fit_with_preset(
     **kwargs: Any,
 ) -> CurveFitResult:
     """Apply a named workflow preset and route to appropriate backend."""
-    from nlsq.workflow import WorkflowTier, calculate_adaptive_tolerances
+    from nlsq.core.workflow import WorkflowTier, calculate_adaptive_tolerances
 
     tier_str = preset.get("tier", "STANDARD")
     tier = WorkflowTier[tier_str]
@@ -591,7 +591,7 @@ def _fit_with_preset(
 
     elif tier == WorkflowTier.CHUNKED:
         # Large dataset with chunking
-        from nlsq.large_dataset import LargeDatasetFitter, LDMemoryConfig
+        from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
         config = LDMemoryConfig(
             memory_limit_gb=8.0,  # Default, can be overridden
@@ -642,8 +642,8 @@ def _fit_with_preset(
 
     elif tier in (WorkflowTier.STREAMING, WorkflowTier.STREAMING_CHECKPOINT):
         # Streaming optimization path
-        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         # Prepare p0
         if p0 is None:
@@ -961,7 +961,7 @@ def curve_fit(
 
     # Handle automatic bounds inference
     if auto_bounds:
-        from nlsq.bound_inference import infer_bounds, merge_bounds
+        from nlsq.precision.bound_inference import infer_bounds, merge_bounds
 
         # Extract p0 from args or kwargs
         p0 = None
@@ -987,7 +987,7 @@ def curve_fit(
 
     # Handle numerical stability checks and fixes
     if stability:
-        from nlsq.stability import apply_automatic_fixes, check_problem_stability
+        from nlsq.stability.guard import apply_automatic_fixes, check_problem_stability
 
         logger = get_logger("minpack")
 
@@ -1097,7 +1097,7 @@ def curve_fit(
 
     # Use fallback orchestrator if requested
     if fallback:
-        from nlsq.fallback import FallbackOrchestrator
+        from nlsq.stability.fallback import FallbackOrchestrator
 
         orchestrator = FallbackOrchestrator(
             max_attempts=max_fallback_attempts, verbose=fallback_verbose
@@ -2199,8 +2199,8 @@ class CurveFit:
         result : CurveFitResult
             Optimization result compatible with scipy.optimize.curve_fit
         """
-        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         # Convert inputs to arrays
         if check_finite:

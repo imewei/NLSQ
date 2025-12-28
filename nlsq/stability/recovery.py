@@ -15,8 +15,8 @@ _jax_config = JAXConfig()
 
 import jax.numpy as jnp
 
-from nlsq.diagnostics import OptimizationDiagnostics
-from nlsq.stability import NumericalStabilityGuard
+from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.utils.diagnostics import OptimizationDiagnostics
 
 
 class OptimizationRecovery:

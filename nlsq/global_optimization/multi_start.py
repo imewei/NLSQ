@@ -52,17 +52,17 @@ from typing import Any
 
 import numpy as np
 
-from nlsq.bound_inference import infer_bounds_for_multistart
+from nlsq.core.minpack import CurveFit
 from nlsq.global_optimization.config import GlobalOptimizationConfig
 from nlsq.global_optimization.sampling import (
     center_samples_around_p0,
     get_sampler,
     scale_samples_to_bounds,
 )
-from nlsq.logging import get_logger
-from nlsq.minpack import CurveFit
-from nlsq.parameter_estimation import estimate_initial_parameters
+from nlsq.precision.bound_inference import infer_bounds_for_multistart
+from nlsq.precision.parameter_estimation import estimate_initial_parameters
 from nlsq.result import CurveFitResult
+from nlsq.utils.logging import get_logger
 
 __all__ = ["MultiStartOrchestrator"]
 

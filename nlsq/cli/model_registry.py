@@ -84,9 +84,9 @@ class ModelRegistry:
         >>> print("linear" in models)
         True
         """
-        import nlsq.functions
+        import nlsq.core.functions
 
-        return list(nlsq.functions.__all__)
+        return list(nlsq.core.functions.__all__)
 
     def get_model(self, name_or_path: str, config: dict[str, Any]) -> ModelFunction:
         """Get a model function by name or path.
@@ -189,10 +189,10 @@ class ModelRegistry:
                 suggestion=suggestion,
             )
 
-        # Import the model from nlsq.functions
-        import nlsq.functions
+        # Import the model from nlsq.core.functions
+        import nlsq.core.functions
 
-        model = getattr(nlsq.functions, model_name)
+        model = getattr(nlsq.core.functions, model_name)
 
         # For polynomial factory, just return it as-is
         # The polynomial function returns a callable when invoked with degree
@@ -403,10 +403,10 @@ class ModelRegistry:
                 suggestion="Use a non-negative integer for degree (0, 1, 2, ...)",
             )
 
-        # Use nlsq.functions.polynomial factory
-        import nlsq.functions
+        # Use nlsq.core.functions.polynomial factory
+        import nlsq.core.functions
 
-        model = nlsq.functions.polynomial(degree)
+        model = nlsq.core.functions.polynomial(degree)
 
         return model
 

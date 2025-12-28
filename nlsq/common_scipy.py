@@ -7,7 +7,7 @@ import numpy as np
 from numpy.linalg import norm
 from scipy.linalg import LinAlgError, cho_factor, cho_solve
 
-from nlsq.logging import get_logger
+from nlsq.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -19,7 +19,7 @@ import sys
 from typing import Any
 
 import nlsq
-import nlsq.functions
+import nlsq.core.functions
 
 
 def run_info(verbose: bool = False) -> None:
@@ -162,10 +162,10 @@ def _print_builtin_models(verbose: bool) -> None:
     print("Builtin Models:")
     print("-" * 40)
 
-    # Get all models from nlsq.functions.__all__
+    # Get all models from nlsq.core.functions.__all__
     models = []
-    for name in nlsq.functions.__all__:
-        func = getattr(nlsq.functions, name, None)
+    for name in nlsq.core.functions.__all__:
+        func = getattr(nlsq.core.functions, name, None)
         if func is not None and callable(func):
             models.append((name, func))
 

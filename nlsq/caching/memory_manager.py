@@ -864,8 +864,8 @@ class MemoryManager:
 
         Examples
         --------
-        >>> from nlsq.memory_manager import MemoryManager
-        >>> from nlsq.mixed_precision import MixedPrecisionManager, MixedPrecisionConfig
+        >>> from nlsq.caching.memory_manager import MemoryManager
+        >>> from nlsq.precision.mixed_precision import MixedPrecisionManager, MixedPrecisionConfig
         >>> manager = MemoryManager()
         >>> # Without mixed precision (defaults to float64)
         >>> manager.get_current_precision_memory_multiplier()

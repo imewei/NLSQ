@@ -14,7 +14,7 @@ Key Features:
 - Problem rescaling for numerical stability
 
 Example:
-    >>> from nlsq.fallback import FallbackOrchestrator
+    >>> from nlsq.stability.fallback import FallbackOrchestrator
     >>>
     >>> orchestrator = FallbackOrchestrator(verbose=True)
     >>> result = orchestrator.fit_with_fallback(
@@ -29,7 +29,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-from nlsq.logging import get_logger
+from nlsq.utils.logging import get_logger
 
 __all__ = [
     "FallbackOrchestrator",
@@ -324,7 +324,7 @@ class FallbackOrchestrator:
 
     Examples
     --------
-    >>> from nlsq.fallback import FallbackOrchestrator
+    >>> from nlsq.stability.fallback import FallbackOrchestrator
     >>> import numpy as np
     >>>
     >>> def model(x, a, b):

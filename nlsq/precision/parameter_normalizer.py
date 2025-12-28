@@ -68,7 +68,7 @@ class ParameterNormalizer:
     Bounds-based normalization:
 
     >>> import jax.numpy as jnp
-    >>> from nlsq.parameter_normalizer import ParameterNormalizer
+    >>> from nlsq.precision.parameter_normalizer import ParameterNormalizer
     >>> p0 = jnp.array([50.0, 0.5])
     >>> bounds = (jnp.array([10.0, 0.0]), jnp.array([100.0, 1.0]))
     >>> normalizer = ParameterNormalizer(p0, bounds, strategy='bounds')
@@ -278,7 +278,7 @@ class ParameterNormalizer:
         Examples
         --------
         >>> import jax.numpy as jnp
-        >>> from nlsq.parameter_normalizer import ParameterNormalizer
+        >>> from nlsq.precision.parameter_normalizer import ParameterNormalizer
         >>> p0 = jnp.array([50.0])
         >>> bounds = (jnp.array([10.0]), jnp.array([100.0]))
         >>> normalizer = ParameterNormalizer(p0, bounds, strategy='bounds')
@@ -320,7 +320,7 @@ class NormalizedModelWrapper:
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from nlsq.parameter_normalizer import ParameterNormalizer, NormalizedModelWrapper
+    >>> from nlsq.precision.parameter_normalizer import ParameterNormalizer, NormalizedModelWrapper
     >>> def model(x, a, b):
     ...     return a * x + b
     >>> p0 = jnp.array([5.0, 10.0])

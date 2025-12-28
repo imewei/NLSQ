@@ -13,7 +13,7 @@ Examples
 Basic usage with automatic parameter estimation:
 
 >>> from nlsq import curve_fit
->>> from nlsq.functions import exponential_decay
+>>> from nlsq.core.functions import exponential_decay
 >>> import numpy as np
 >>>
 >>> # Generate data
@@ -70,7 +70,7 @@ def linear(x: ArrayLike, a: float, b: float) -> ArrayLike:
     Examples
     --------
     >>> from nlsq import curve_fit
-    >>> from nlsq.functions import linear
+    >>> from nlsq.core.functions import linear
     >>> import numpy as np
     >>>
     >>> x = np.array([1, 2, 3, 4, 5])
@@ -163,7 +163,7 @@ def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     Examples
     --------
     >>> from nlsq import curve_fit
-    >>> from nlsq.functions import exponential_decay
+    >>> from nlsq.core.functions import exponential_decay
     >>> import numpy as np
     >>>
     >>> # Radioactive decay with half-life = ln(2)/0.5 ≈ 1.4
@@ -275,7 +275,7 @@ def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     Examples
     --------
     >>> from nlsq import curve_fit
-    >>> from nlsq.functions import exponential_growth
+    >>> from nlsq.core.functions import exponential_growth
     >>> import numpy as np
     >>>
     >>> # Bacterial growth with doubling time = ln(2)/0.3 ≈ 2.3
@@ -371,7 +371,7 @@ def gaussian(x: ArrayLike, amp: float, mu: float, sigma: float) -> ArrayLike:
     Examples
     --------
     >>> from nlsq import curve_fit
-    >>> from nlsq.functions import gaussian
+    >>> from nlsq.core.functions import gaussian
     >>> import numpy as np
     >>>
     >>> # Spectral peak at x=5 with FWHM ≈ 2.355
@@ -472,7 +472,7 @@ def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayLike:
     Examples
     --------
     >>> from nlsq import curve_fit
-    >>> from nlsq.functions import sigmoid
+    >>> from nlsq.core.functions import sigmoid
     >>> import numpy as np
     >>>
     >>> # Dose-response curve
@@ -567,7 +567,7 @@ def power_law(x: ArrayLike, a: float, b: float) -> ArrayLike:
     Examples
     --------
     >>> from nlsq import curve_fit
-    >>> from nlsq.functions import power_law
+    >>> from nlsq.core.functions import power_law
     >>> import numpy as np
     >>>
     >>> # Allometric scaling: metabolic rate ∝ mass^0.75
@@ -649,7 +649,7 @@ def polynomial(degree: int) -> Callable:
     Examples
     --------
     >>> from nlsq import curve_fit
-    >>> from nlsq.functions import polynomial
+    >>> from nlsq.core.functions import polynomial
     >>> import numpy as np
     >>>
     >>> # Fit quadratic: y = ax² + bx + c

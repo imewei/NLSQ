@@ -218,7 +218,7 @@ import numpy as np
 from jax import config as jax_config
 from jax import jit, random, value_and_grad
 
-from .streaming_config import StreamingConfig
+from nlsq.streaming.config import StreamingConfig
 
 jax_config.update("jax_enable_x64", True)
 

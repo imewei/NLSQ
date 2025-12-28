@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from nlsq.mixed_precision import MixedPrecisionConfig
+    from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
 
 @dataclass
@@ -334,7 +334,7 @@ class JAXConfig:
             return
 
         # Import here to avoid circular imports
-        from nlsq.mixed_precision import MixedPrecisionConfig
+        from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
         # Load defaults
         mp_config = MixedPrecisionConfig()
@@ -651,7 +651,7 @@ class JAXConfig:
         Examples
         --------
         >>> from nlsq.config import JAXConfig
-        >>> from nlsq.mixed_precision import MixedPrecisionConfig
+        >>> from nlsq.precision.mixed_precision import MixedPrecisionConfig
         >>> temp_config = MixedPrecisionConfig(verbose=True, max_degradation_iterations=2)
         >>> with JAXConfig.mixed_precision_context(temp_config):
         ...     # Code here runs with custom mixed precision settings
@@ -947,7 +947,7 @@ def set_mixed_precision_config(config):
     Examples
     --------
     >>> from nlsq.config import set_mixed_precision_config
-    >>> from nlsq.mixed_precision import MixedPrecisionConfig
+    >>> from nlsq.precision.mixed_precision import MixedPrecisionConfig
     >>> config = MixedPrecisionConfig(verbose=True, max_degradation_iterations=10)
     >>> set_mixed_precision_config(config)
     """
@@ -1020,7 +1020,7 @@ def configure_mixed_precision(
     - NLSQ_TOLERANCE_RELAXATION_FACTOR=5.0
     - NLSQ_DISABLE_MIXED_PRECISION=1
     """
-    from nlsq.mixed_precision import MixedPrecisionConfig
+    from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
     config = MixedPrecisionConfig(
         enable_mixed_precision_fallback=enable,
@@ -1059,7 +1059,7 @@ def mixed_precision_context(mixed_precision_config):
     Examples
     --------
     >>> from nlsq.config import mixed_precision_context
-    >>> from nlsq.mixed_precision import MixedPrecisionConfig
+    >>> from nlsq.precision.mixed_precision import MixedPrecisionConfig
     >>> temp_config = MixedPrecisionConfig(verbose=True, max_degradation_iterations=2)
     >>> with mixed_precision_context(temp_config):
     ...     # Code here runs with custom mixed precision settings

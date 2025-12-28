@@ -230,7 +230,7 @@ class OptimizationError(RuntimeError):
     The error is raised automatically by curve_fit when optimization fails:
 
     >>> from nlsq import curve_fit
-    >>> from nlsq.error_messages import OptimizationError
+    >>> from nlsq.utils.error_messages import OptimizationError
     >>> import jax.numpy as jnp
     >>> import numpy as np
     >>>

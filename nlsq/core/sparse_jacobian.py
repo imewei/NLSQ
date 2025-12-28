@@ -11,7 +11,7 @@ import numpy as np
 from scipy.sparse import coo_matrix, csr_matrix, lil_matrix
 
 from nlsq.constants import FINITE_DIFF_REL_STEP
-from nlsq.logging import get_logger
+from nlsq.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

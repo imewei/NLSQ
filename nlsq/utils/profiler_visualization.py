@@ -23,7 +23,7 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
-from nlsq.profiler import PerformanceProfiler
+from nlsq.utils.profiler import PerformanceProfiler
 
 
 class ProfilerVisualization:
@@ -32,8 +32,8 @@ class ProfilerVisualization:
 
     Examples
     --------
-    >>> from nlsq.profiler import get_global_profiler
-    >>> from nlsq.profiler_visualization import ProfilerVisualization
+    >>> from nlsq.utils.profiler import get_global_profiler
+    >>> from nlsq.utils.profiler_visualization import ProfilerVisualization
     >>> profiler = get_global_profiler()
     >>> viz = ProfilerVisualization(profiler)
     >>> fig = viz.plot_timing_comparison(["test1", "test2"])
@@ -456,8 +456,8 @@ class ProfilingDashboard:
 
     Examples
     --------
-    >>> from nlsq.profiler import get_global_profiler
-    >>> from nlsq.profiler_visualization import ProfilingDashboard
+    >>> from nlsq.utils.profiler import get_global_profiler
+    >>> from nlsq.utils.profiler_visualization import ProfilingDashboard
     >>> profiler = get_global_profiler()
     >>> dashboard = ProfilingDashboard(profiler)
     >>> dashboard.add_profile("test1")

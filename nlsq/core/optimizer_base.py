@@ -10,8 +10,8 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
-from nlsq._optimize import OptimizeResult
-from nlsq.logging import get_logger
+from nlsq.core._optimize import OptimizeResult
+from nlsq.utils.logging import get_logger
 
 
 class OptimizerBase(ABC):

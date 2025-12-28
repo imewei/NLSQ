@@ -73,14 +73,14 @@ def list_builtin_models() -> list[dict[str, Any]]:
     exponential_decay: 3 params
     ...
     """
-    import nlsq.functions
+    import nlsq.core.functions
 
     registry = _get_registry()
     model_names = registry.list_builtin_models()
 
     result = []
     for name in model_names:
-        model_func = getattr(nlsq.functions, name, None)
+        model_func = getattr(nlsq.core.functions, name, None)
         if model_func is None:
             continue
 
@@ -209,7 +209,7 @@ def get_model_info(model: Callable) -> dict[str, Any]:
 
     Examples
     --------
-    >>> from nlsq.functions import gaussian
+    >>> from nlsq.core.functions import gaussian
     >>> info = get_model_info(gaussian)
     >>> print(info['param_names'])
     ['amp', 'mu', 'sigma']

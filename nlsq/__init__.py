@@ -42,10 +42,11 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 
 # Core API - always needed for basic functionality
-from nlsq import callbacks, functions
-from nlsq._optimize import OptimizeResult, OptimizeWarning
-from nlsq.least_squares import LeastSquares
-from nlsq.minpack import CurveFit, curve_fit
+from nlsq import callbacks
+from nlsq.core import functions
+from nlsq.core._optimize import OptimizeResult, OptimizeWarning
+from nlsq.core.least_squares import LeastSquares
+from nlsq.core.minpack import CurveFit, curve_fit
 from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
 
 # =============================================================================
@@ -57,80 +58,80 @@ from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
 # Mapping of lazy export names to their source modules
 _LAZY_MODULES: dict[str, str] = {
     # Streaming & Large Dataset (h5py dependency, specialty use case)
-    "AdaptiveHybridStreamingOptimizer": "nlsq.adaptive_hybrid_streaming",
-    "DefenseLayerTelemetry": "nlsq.adaptive_hybrid_streaming",
-    "get_defense_telemetry": "nlsq.adaptive_hybrid_streaming",
-    "reset_defense_telemetry": "nlsq.adaptive_hybrid_streaming",
-    "HybridStreamingConfig": "nlsq.hybrid_streaming_config",
-    "LargeDatasetFitter": "nlsq.large_dataset",
-    "LDMemoryConfig": "nlsq.large_dataset",
-    "estimate_memory_requirements": "nlsq.large_dataset",
-    "fit_large_dataset": "nlsq.large_dataset",
-    "StreamingOptimizer": "nlsq.streaming_optimizer",
-    "StreamingConfig": "nlsq.streaming_optimizer",
-    "DataGenerator": "nlsq.streaming_optimizer",
-    "create_hdf5_dataset": "nlsq.streaming_optimizer",
-    "fit_unlimited_data": "nlsq.streaming_optimizer",
+    "AdaptiveHybridStreamingOptimizer": "nlsq.streaming.adaptive_hybrid",
+    "DefenseLayerTelemetry": "nlsq.streaming.adaptive_hybrid",
+    "get_defense_telemetry": "nlsq.streaming.adaptive_hybrid",
+    "reset_defense_telemetry": "nlsq.streaming.adaptive_hybrid",
+    "HybridStreamingConfig": "nlsq.streaming.hybrid_config",
+    "LargeDatasetFitter": "nlsq.streaming.large_dataset",
+    "LDMemoryConfig": "nlsq.streaming.large_dataset",
+    "estimate_memory_requirements": "nlsq.streaming.large_dataset",
+    "fit_large_dataset": "nlsq.streaming.large_dataset",
+    "StreamingOptimizer": "nlsq.streaming.optimizer",
+    "StreamingConfig": "nlsq.streaming.optimizer",
+    "DataGenerator": "nlsq.streaming.optimizer",
+    "create_hdf5_dataset": "nlsq.streaming.optimizer",
+    "fit_unlimited_data": "nlsq.streaming.optimizer",
     # Global Optimization
     "GlobalOptimizationConfig": "nlsq.global_optimization",
     "MultiStartOrchestrator": "nlsq.global_optimization",
     "TournamentSelector": "nlsq.global_optimization",
     # Profiling & Visualization
-    "PerformanceProfiler": "nlsq.profiler",
-    "ProfileMetrics": "nlsq.profiler",
-    "clear_profiling_data": "nlsq.profiler",
-    "get_global_profiler": "nlsq.profiler",
-    "ProfilerVisualization": "nlsq.profiler_visualization",
-    "ProfilingDashboard": "nlsq.profiler_visualization",
+    "PerformanceProfiler": "nlsq.utils.profiler",
+    "ProfileMetrics": "nlsq.utils.profiler",
+    "clear_profiling_data": "nlsq.utils.profiler",
+    "get_global_profiler": "nlsq.utils.profiler",
+    "ProfilerVisualization": "nlsq.utils.profiler_visualization",
+    "ProfilingDashboard": "nlsq.utils.profiler_visualization",
     # Diagnostics
-    "ConvergenceMonitor": "nlsq.diagnostics",
-    "OptimizationDiagnostics": "nlsq.diagnostics",
+    "ConvergenceMonitor": "nlsq.utils.diagnostics",
+    "OptimizationDiagnostics": "nlsq.utils.diagnostics",
     # Memory Management
-    "MemoryManager": "nlsq.memory_manager",
-    "clear_memory_pool": "nlsq.memory_manager",
-    "get_memory_manager": "nlsq.memory_manager",
-    "get_memory_stats": "nlsq.memory_manager",
-    "MemoryPool": "nlsq.memory_pool",
-    "TRFMemoryPool": "nlsq.memory_pool",
-    "clear_global_pool": "nlsq.memory_pool",
-    "get_global_pool": "nlsq.memory_pool",
+    "MemoryManager": "nlsq.caching.memory_manager",
+    "clear_memory_pool": "nlsq.caching.memory_manager",
+    "get_memory_manager": "nlsq.caching.memory_manager",
+    "get_memory_stats": "nlsq.caching.memory_manager",
+    "MemoryPool": "nlsq.caching.memory_pool",
+    "TRFMemoryPool": "nlsq.caching.memory_pool",
+    "clear_global_pool": "nlsq.caching.memory_pool",
+    "get_global_pool": "nlsq.caching.memory_pool",
     # Fallback & Recovery
-    "FallbackOrchestrator": "nlsq.fallback",
-    "FallbackResult": "nlsq.fallback",
-    "FallbackStrategy": "nlsq.fallback",
-    "OptimizationRecovery": "nlsq.recovery",
+    "FallbackOrchestrator": "nlsq.stability.fallback",
+    "FallbackResult": "nlsq.stability.fallback",
+    "FallbackStrategy": "nlsq.stability.fallback",
+    "OptimizationRecovery": "nlsq.stability.recovery",
     # Sparse Jacobian
-    "SparseJacobianComputer": "nlsq.sparse_jacobian",
-    "SparseOptimizer": "nlsq.sparse_jacobian",
-    "detect_jacobian_sparsity": "nlsq.sparse_jacobian",
+    "SparseJacobianComputer": "nlsq.core.sparse_jacobian",
+    "SparseOptimizer": "nlsq.core.sparse_jacobian",
+    "detect_jacobian_sparsity": "nlsq.core.sparse_jacobian",
     # Workflow System
-    "WORKFLOW_PRESETS": "nlsq.workflow",
-    "DatasetSizeTier": "nlsq.workflow",
-    "MemoryTier": "nlsq.workflow",
-    "OptimizationGoal": "nlsq.workflow",
-    "WorkflowConfig": "nlsq.workflow",
-    "WorkflowSelector": "nlsq.workflow",
-    "WorkflowTier": "nlsq.workflow",
-    "auto_select_workflow": "nlsq.workflow",
+    "WORKFLOW_PRESETS": "nlsq.core.workflow",
+    "DatasetSizeTier": "nlsq.core.workflow",
+    "MemoryTier": "nlsq.core.workflow",
+    "OptimizationGoal": "nlsq.core.workflow",
+    "WorkflowConfig": "nlsq.core.workflow",
+    "WorkflowSelector": "nlsq.core.workflow",
+    "WorkflowTier": "nlsq.core.workflow",
+    "auto_select_workflow": "nlsq.core.workflow",
     # Algorithm Selection
-    "AlgorithmSelector": "nlsq.algorithm_selector",
-    "auto_select_algorithm": "nlsq.algorithm_selector",
+    "AlgorithmSelector": "nlsq.precision.algorithm_selector",
+    "auto_select_algorithm": "nlsq.precision.algorithm_selector",
     # Bounds Inference
-    "BoundsInference": "nlsq.bound_inference",
-    "infer_bounds": "nlsq.bound_inference",
-    "merge_bounds": "nlsq.bound_inference",
+    "BoundsInference": "nlsq.precision.bound_inference",
+    "infer_bounds": "nlsq.precision.bound_inference",
+    "merge_bounds": "nlsq.precision.bound_inference",
     # Robust Decomposition
-    "RobustDecomposition": "nlsq.robust_decomposition",
-    "robust_decomp": "nlsq.robust_decomposition",
+    "RobustDecomposition": "nlsq.stability.robust_decomposition",
+    "robust_decomp": "nlsq.stability.robust_decomposition",
     # Parameter Normalizer
-    "ParameterNormalizer": "nlsq.parameter_normalizer",
+    "ParameterNormalizer": "nlsq.precision.parameter_normalizer",
     # Stability
-    "NumericalStabilityGuard": "nlsq.stability",
-    "apply_automatic_fixes": "nlsq.stability",
-    "check_problem_stability": "nlsq.stability",
-    "detect_collinearity": "nlsq.stability",
-    "detect_parameter_scale_mismatch": "nlsq.stability",
-    "estimate_condition_number": "nlsq.stability",
+    "NumericalStabilityGuard": "nlsq.stability.guard",
+    "apply_automatic_fixes": "nlsq.stability.guard",
+    "check_problem_stability": "nlsq.stability.guard",
+    "detect_collinearity": "nlsq.stability.guard",
+    "detect_parameter_scale_mismatch": "nlsq.stability.guard",
+    "estimate_condition_number": "nlsq.stability.guard",
     # Configuration
     "LargeDatasetConfig": "nlsq.config",
     "MemoryConfig": "nlsq.config",
@@ -142,19 +143,19 @@ _LAZY_MODULES: dict[str, str] = {
     "memory_context": "nlsq.config",
     "set_memory_limits": "nlsq.config",
     # Caching
-    "SmartCache": "nlsq.smart_cache",
-    "cached_function": "nlsq.smart_cache",
-    "cached_jacobian": "nlsq.smart_cache",
-    "clear_all_caches": "nlsq.smart_cache",
-    "get_global_cache": "nlsq.smart_cache",
-    "get_jit_cache": "nlsq.smart_cache",
+    "SmartCache": "nlsq.caching.smart_cache",
+    "cached_function": "nlsq.caching.smart_cache",
+    "cached_jacobian": "nlsq.caching.smart_cache",
+    "clear_all_caches": "nlsq.caching.smart_cache",
+    "get_global_cache": "nlsq.caching.smart_cache",
+    "get_jit_cache": "nlsq.caching.smart_cache",
     # Compilation Cache
-    "CompilationCache": "nlsq.compilation_cache",
-    "cached_jit": "nlsq.compilation_cache",
-    "clear_compilation_cache": "nlsq.compilation_cache",
-    "get_global_compilation_cache": "nlsq.compilation_cache",
+    "CompilationCache": "nlsq.caching.compilation_cache",
+    "cached_jit": "nlsq.caching.compilation_cache",
+    "clear_compilation_cache": "nlsq.caching.compilation_cache",
+    "get_global_compilation_cache": "nlsq.caching.compilation_cache",
     # Validators
-    "InputValidator": "nlsq.validators",
+    "InputValidator": "nlsq.utils.validators",
 }
 
 # Cache for lazily-loaded attributes
@@ -494,8 +495,8 @@ def fit(
     # Determine which backend to use
     if use_streaming or preset == "streaming":
         # Use AdaptiveHybridStreaming for streaming preset
-        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         # Prepare p0
         if p0 is None:
@@ -510,7 +511,7 @@ def fit(
         p0 = np.atleast_1d(p0)
 
         # Prepare bounds
-        from nlsq.least_squares import prepare_bounds
+        from nlsq.core.least_squares import prepare_bounds
 
         lb, ub = prepare_bounds(bounds, len(p0))
         bounds_tuple = (
@@ -774,8 +775,8 @@ def curve_fit_large(
 
     # Handle hybrid_streaming method specially
     if method == "hybrid_streaming":
-        from nlsq.adaptive_hybrid_streaming import AdaptiveHybridStreamingOptimizer
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
+        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         # Extract verbosity from kwargs
         verbose = kwargs.pop("verbose", 1)
@@ -804,7 +805,7 @@ def curve_fit_large(
             p0 = np.ones(n_params)
 
         p0 = np.atleast_1d(p0)
-        from nlsq.least_squares import prepare_bounds
+        from nlsq.core.least_squares import prepare_bounds
 
         lb, ub = prepare_bounds(bounds, len(p0))
         bounds_tuple = (
@@ -869,7 +870,7 @@ def curve_fit_large(
         large_dataset_context,
         memory_context,
     )
-    from nlsq.large_dataset import LargeDatasetFitter, LDMemoryConfig
+    from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
     # Configure memory settings if provided
     if memory_limit_gb is None:
@@ -977,8 +978,8 @@ def curve_fit_large(
 
 # Optional: Provide convenience access to submodules for advanced users
 # Users can still access internal functions via:
-# from nlsq.loss_functions import LossFunctionsJIT
-# from nlsq.trf import TrustRegionReflective
+# from nlsq.core.loss_functions import LossFunctionsJIT
+# from nlsq.core.trf import TrustRegionReflective
 # etc.
 
 # Check GPU availability on import (non-intrusive warning)

@@ -5,7 +5,7 @@ logging asynchronously on the host, preventing blocking device computation.
 
 Examples
 --------
->>> from nlsq.async_logger import log_iteration_async
+>>> from nlsq.utils.async_logger import log_iteration_async
 >>> import jax.numpy as jnp
 >>>
 >>> # Inside optimization loop
@@ -84,7 +84,7 @@ def log_iteration_async(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from nlsq.async_logger import log_iteration_async
+    >>> from nlsq.utils.async_logger import log_iteration_async
     >>>
     >>> # In optimization loop
     >>> for nit in range(100):

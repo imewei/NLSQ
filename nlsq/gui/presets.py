@@ -227,7 +227,7 @@ def validate_preset_consistency() -> bool:
     AssertionError
         If any preset is inconsistent.
     """
-    from nlsq.minpack import WORKFLOW_PRESETS
+    from nlsq.core.minpack import WORKFLOW_PRESETS
 
     # Check fast preset
     gui_fast = PRESETS["fast"]

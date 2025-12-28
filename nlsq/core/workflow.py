@@ -11,40 +11,40 @@ Examples
 --------
 Basic usage with enums:
 
->>> from nlsq.workflow import WorkflowTier, OptimizationGoal, DatasetSizeTier
+>>> from nlsq.core.workflow import WorkflowTier, OptimizationGoal, DatasetSizeTier
 >>> tier = WorkflowTier.STREAMING
 >>> goal = OptimizationGoal.QUALITY
 >>> size_tier = DatasetSizeTier.LARGE
 
 Adaptive tolerance calculation:
 
->>> from nlsq.workflow import calculate_adaptive_tolerances
+>>> from nlsq.core.workflow import calculate_adaptive_tolerances
 >>> tols = calculate_adaptive_tolerances(n_points=5_000_000, goal=OptimizationGoal.QUALITY)
 >>> tols['gtol']  # Returns appropriate tolerance for dataset size and goal
 1e-08
 
 WorkflowConfig dataclass:
 
->>> from nlsq.workflow import WorkflowConfig
+>>> from nlsq.core.workflow import WorkflowConfig
 >>> config = WorkflowConfig(tier=WorkflowTier.CHUNKED, goal=OptimizationGoal.ROBUST)
 >>> config_dict = config.to_dict()
 >>> restored = WorkflowConfig.from_dict(config_dict)
 
 Using workflow presets:
 
->>> from nlsq.workflow import WorkflowConfig, WORKFLOW_PRESETS
+>>> from nlsq.core.workflow import WorkflowConfig, WORKFLOW_PRESETS
 >>> config = WorkflowConfig.from_preset("quality")
 >>> config.enable_multistart
 True
 
 Loading YAML configuration:
 
->>> from nlsq.workflow import load_yaml_config
+>>> from nlsq.core.workflow import load_yaml_config
 >>> config = load_yaml_config()  # Loads from ./nlsq.yaml if it exists
 
 WorkflowSelector for automatic workflow selection:
 
->>> from nlsq.workflow import WorkflowSelector, auto_select_workflow
+>>> from nlsq.core.workflow import WorkflowSelector, auto_select_workflow
 >>> selector = WorkflowSelector()
 >>> config = selector.select(n_points=5_000_000, n_params=5, goal=OptimizationGoal.QUALITY)
 >>> # Or use the convenience function:
@@ -52,7 +52,7 @@ WorkflowSelector for automatic workflow selection:
 
 Cluster detection for HPC environments:
 
->>> from nlsq.workflow import ClusterDetector
+>>> from nlsq.core.workflow import ClusterDetector
 >>> detector = ClusterDetector()
 >>> cluster_info = detector.detect()
 >>> if cluster_info:
@@ -69,8 +69,8 @@ from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
     from nlsq.global_optimization import GlobalOptimizationConfig
-    from nlsq.hybrid_streaming_config import HybridStreamingConfig
-    from nlsq.large_dataset import LDMemoryConfig
+    from nlsq.streaming.hybrid_config import HybridStreamingConfig
+    from nlsq.streaming.large_dataset import LDMemoryConfig
 
 
 class WorkflowTier(Enum):
@@ -1797,7 +1797,7 @@ class WorkflowSelector:
             return self._memory_limit_gb
 
         # Import here to avoid circular imports
-        from nlsq.large_dataset import MemoryEstimator
+        from nlsq.streaming.large_dataset import MemoryEstimator
 
         return MemoryEstimator.get_available_memory_gb()
 
@@ -2018,8 +2018,8 @@ class WorkflowSelector:
         """
         # Import config classes (avoid circular imports)
         from nlsq.global_optimization import GlobalOptimizationConfig
-        from nlsq.hybrid_streaming_config import HybridStreamingConfig
-        from nlsq.large_dataset import LDMemoryConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
 
         # Normalize goal for multi-start settings
         normalized_goal = OptimizationGoal.normalize(goal) if goal else None

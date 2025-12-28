@@ -29,15 +29,18 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from .global_optimization.config import GlobalOptimizationConfig
-from .global_optimization.sampling import (
+from nlsq.global_optimization.config import GlobalOptimizationConfig
+from nlsq.global_optimization.sampling import (
     get_sampler,
 )
-from .global_optimization.tournament import TournamentSelector
-from .hybrid_streaming_config import HybridStreamingConfig
-from .logging import get_logger
-from .parameter_normalizer import NormalizedModelWrapper, ParameterNormalizer
-from .stability import NumericalStabilityGuard
+from nlsq.global_optimization.tournament import TournamentSelector
+from nlsq.precision.parameter_normalizer import (
+    NormalizedModelWrapper,
+    ParameterNormalizer,
+)
+from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
+from nlsq.utils.logging import get_logger
 
 # Module-level logger for warmup defense diagnostics
 _logger = get_logger("adaptive_hybrid_streaming")

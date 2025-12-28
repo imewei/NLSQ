@@ -421,7 +421,7 @@ def clear_compilation_cache():
     In a Jupyter notebook, after redefining a model function:
 
     >>> import jax.numpy as jnp
-    >>> from nlsq.compilation_cache import clear_compilation_cache
+    >>> from nlsq.caching.compilation_cache import clear_compilation_cache
     >>> from nlsq import curve_fit
     >>>
     >>> # Initial model definition

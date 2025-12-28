@@ -45,7 +45,7 @@ def get_param_names_from_model(model: Callable) -> list[str]:
 
     Examples
     --------
-    >>> from nlsq.functions import gaussian
+    >>> from nlsq.core.functions import gaussian
     >>> names = get_param_names_from_model(gaussian)
     >>> print(names)
     ['amp', 'mu', 'sigma']
@@ -179,7 +179,7 @@ def estimate_p0_for_model(
 
     Examples
     --------
-    >>> from nlsq.functions import linear
+    >>> from nlsq.core.functions import linear
     >>> p0 = estimate_p0_for_model(linear, [0, 1, 2], [1, 3, 5])
     >>> len(p0)
     2

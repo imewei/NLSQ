@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 
-from nlsq._optimize import OptimizeResult
+from nlsq.core._optimize import OptimizeResult
 
 
 class CurveFitResult(OptimizeResult):
