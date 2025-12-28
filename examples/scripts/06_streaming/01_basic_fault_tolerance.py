@@ -149,8 +149,9 @@ def main():
     recent_stats = diagnostics["recent_batch_stats"]
     if recent_stats:
         print(f"Recent batch statistics (last {len(recent_stats)} batches):")
-        # Show last 5 batches
-        for i, stats in enumerate(recent_stats[-5:], 1):
+        # Show last 5 batches (convert deque to list for slicing)
+        recent_list = list(recent_stats)[-5:]
+        for i, stats in enumerate(recent_list, 1):
             status = "SUCCESS" if stats["success"] else "FAILED"
             retry_info = (
                 f" (retries: {stats['retry_count']})"

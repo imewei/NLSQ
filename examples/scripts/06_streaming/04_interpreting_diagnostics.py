@@ -141,8 +141,8 @@ def analyze_recent_batches(diagnostics, n_recent=10):
         print()
         return
 
-    # Show last N batches
-    last_n = recent_stats[-n_recent:]
+    # Show last N batches (convert deque to list for slicing)
+    last_n = list(recent_stats)[-n_recent:]
     print(f"Showing {len(last_n)} most recent batches:")
     print()
 
@@ -201,13 +201,29 @@ def analyze_checkpoint_info(diagnostics):
     print()
 
 
+def _make_serializable(obj):
+    """Recursively convert objects to JSON-serializable types."""
+    from collections import deque
+
+    if isinstance(obj, dict):
+        return {k: _make_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, deque)):
+        return [_make_serializable(item) for item in obj]
+    elif isinstance(obj, (int, float, str, bool, type(None))):
+        return obj
+    elif hasattr(obj, "tolist"):  # numpy arrays
+        return obj.tolist()
+    else:
+        return str(obj)
+
+
 def export_diagnostics_json(diagnostics, filename="diagnostics.json"):
     """Export diagnostics to JSON for further analysis"""
     print("EXPORT DIAGNOSTICS")
     print("=" * 70)
 
-    # Create serializable copy (handle non-serializable types)
-    diagnostics_copy = diagnostics.copy()
+    # Create serializable copy (handle non-serializable types like deques)
+    diagnostics_copy = _make_serializable(diagnostics)
 
     # Write to JSON file
     with open(filename, "w") as f:
