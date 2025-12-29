@@ -18,16 +18,22 @@ CacheProtocol
     Protocol for caching mechanisms.
 """
 
-from nlsq.interfaces.cache_protocol import CacheProtocol
+from nlsq.interfaces.cache_protocol import (
+    BoundedCacheProtocol,
+    CacheProtocol,
+    DictCache,
+)
 from nlsq.interfaces.data_source_protocol import DataSourceProtocol
 from nlsq.interfaces.jacobian_protocol import JacobianProtocol
 from nlsq.interfaces.optimizer_protocol import OptimizerProtocol
 from nlsq.interfaces.result_protocol import ResultProtocol
 
 __all__ = [
-    "OptimizerProtocol",
-    "DataSourceProtocol",
-    "ResultProtocol",
-    "JacobianProtocol",
+    "BoundedCacheProtocol",
     "CacheProtocol",
+    "DataSourceProtocol",
+    "DictCache",
+    "JacobianProtocol",
+    "OptimizerProtocol",
+    "ResultProtocol",
 ]
