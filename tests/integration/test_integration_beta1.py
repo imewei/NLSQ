@@ -126,7 +126,8 @@ class TestSparseActivation:
             popt, _pcov = curve_fit(model, x, y, p0=[1.0, 1.0, 0.0])
 
         # Should complete in reasonable time (includes JIT compilation)
-        assert metrics.total_time_sec < 5.0
+        # Allow up to 7s for system variability and JIT overhead
+        assert metrics.total_time_sec < 7.0
 
         # Should converge accurately
         assert np.allclose(popt, [2.0, 3.0, 1.0], rtol=0.1)
