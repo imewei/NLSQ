@@ -1,0 +1,31 @@
+digraph StreamingFlow {
+  rankdir=TB;
+  node [shape=box, style=filled, fontname="Arial"];
+  edge [fontname="Arial", fontsize=10];
+
+  hdf5 [label="HDF5 Dataset\n100M points", shape=cylinder, fillcolor=lightblue];
+
+  generator [label="StreamingDataGenerator\nchunk_size=100K", fillcolor=lightyellow];
+
+  strategy [label="AdaptiveHybridOptimizer\nselect strategy", fillcolor=lightcyan];
+
+  batch [label="BatchStrategy\n100K-10M points", fillcolor=lightgreen];
+  online [label="OnlineStrategy\n>100M points", fillcolor=lightpink];
+
+  optimizer [label="LeastSquares\nper-chunk fit", fillcolor=lightyellow];
+
+  checkpoint [label="Checkpoint Storage\nHDF5", shape=cylinder, fillcolor=lightgray];
+
+  result [label="CurveFitResult", shape=ellipse, fillcolor=lightgreen];
+
+  hdf5 -> generator [label="read chunks"];
+  generator -> strategy [label="yield batches"];
+  strategy -> batch [label="if 100K-10M"];
+  strategy -> online [label="if >100M"];
+  batch -> optimizer [label="full batch"];
+  online -> optimizer [label="mini-batch"];
+  optimizer -> checkpoint [label="save every 10 iter", style=dashed];
+  checkpoint -> optimizer [label="resume", style=dashed];
+  optimizer -> result [label="final params"];
+
+}

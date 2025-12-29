@@ -1,0 +1,115 @@
+digraph NLSQ {
+  rankdir=TB;
+  node [shape=box, style=filled, fontname="Arial"];
+  edge [fontname="Arial", fontsize=10];
+
+  subgraph cluster_core {
+    label="CORE";
+    style=filled;
+    color="#FFE6E6";
+    core_minpack [label="minpack"];
+    core_least_squares [label="least_squares"];
+    core_trf [label="trf"];
+  }
+
+  subgraph cluster_streaming {
+    label="STREAMING";
+    style=filled;
+    color="#E6F3FF";
+    streaming_optimizer [label="optimizer"];
+    streaming_adaptive_hybrid [label="adaptive_hybrid"];
+    streaming_large_dataset [label="large_dataset"];
+  }
+
+  subgraph cluster_stability {
+    label="STABILITY";
+    style=filled;
+    color="#E6FFE6";
+    stability_guard [label="guard"];
+    stability_svd_fallback [label="svd_fallback"];
+  }
+
+  subgraph cluster_caching {
+    label="CACHING";
+    style=filled;
+    color="#FFF9E6";
+    caching_unified_cache [label="unified_cache"];
+    caching_smart_cache [label="smart_cache"];
+    caching_memory_manager [label="memory_manager"];
+  }
+
+  subgraph cluster_utils {
+    label="UTILS";
+    style=filled;
+    color="#F0E6FF";
+    utils_diagnostics [label="diagnostics"];
+    utils_logging [label="logging"];
+    utils_validators [label="validators"];
+  }
+
+  subgraph cluster_precision {
+    label="PRECISION";
+    style=filled;
+    color="#FFE6F9";
+    precision_algorithm_selector [label="algorithm_selector"];
+    precision_parameter_estimation [label="parameter_estimation"];
+  }
+
+  subgraph cluster_global {
+    label="GLOBAL";
+    style=filled;
+    color="#E6FFFF";
+    global_optimization_multi_start [label="global_optimization.multi_start"];
+  }
+
+  subgraph cluster_config {
+    label="CONFIG";
+    style=filled;
+    color="#F5F5F5";
+    config [label="config"];
+    result [label="result"];
+  }
+
+  // Dependencies
+  utils_diagnostics -> config;
+  utils_validators -> config;
+  global_optimization_multi_start -> core_minpack;
+  global_optimization_multi_start -> result;
+  global_optimization_multi_start -> precision_parameter_estimation;
+  global_optimization_multi_start -> utils_logging;
+  stability_guard -> config;
+  caching_smart_cache -> config;
+  streaming_adaptive_hybrid -> stability_guard;
+  streaming_adaptive_hybrid -> utils_logging;
+  streaming_large_dataset -> core_minpack;
+  streaming_large_dataset -> config;
+  streaming_large_dataset -> streaming_optimizer;
+  streaming_large_dataset -> utils_logging;
+  core_trf -> config;
+  core_trf -> stability_guard;
+  core_trf -> caching_unified_cache;
+  core_trf -> stability_svd_fallback;
+  core_trf -> utils_logging;
+  core_trf -> utils_diagnostics;
+  core_minpack -> streaming_large_dataset;
+  core_minpack -> stability_guard;
+  core_minpack -> result;
+  core_minpack -> utils_logging;
+  core_minpack -> utils_diagnostics;
+  core_minpack -> config;
+  core_minpack -> precision_algorithm_selector;
+  core_minpack -> utils_validators;
+  core_minpack -> caching_unified_cache;
+  core_minpack -> streaming_adaptive_hybrid;
+  core_minpack -> caching_memory_manager;
+  core_minpack -> precision_parameter_estimation;
+  core_minpack -> core_least_squares;
+  core_least_squares -> config;
+  core_least_squares -> stability_guard;
+  core_least_squares -> core_trf;
+  core_least_squares -> caching_unified_cache;
+  core_least_squares -> caching_memory_manager;
+  core_least_squares -> utils_logging;
+  core_least_squares -> utils_diagnostics;
+  precision_algorithm_selector -> config;
+}

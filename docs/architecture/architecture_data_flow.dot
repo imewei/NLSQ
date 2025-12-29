@@ -1,0 +1,43 @@
+digraph DataFlow {
+  rankdir=TB;
+  node [shape=box, style=filled, fontname="Arial"];
+  edge [fontname="Arial", fontsize=10];
+
+  // Entry point
+  user [label="User\ncurve_fit()", shape=ellipse, fillcolor=lightblue];
+
+  // Validation
+  validator [label="InputValidator\nvalidate inputs", fillcolor=lightyellow];
+
+  // Workflow selection
+  workflow [label="WorkflowSelector\nauto_select_workflow()", fillcolor=lightyellow];
+
+  // Stability checks
+  stability [label="StabilityGuard\ncheck Jacobian", fillcolor=lightgreen];
+
+  // Compilation
+  jacobian [label="AutoDiffJacobian\nJIT compile", fillcolor=lightcyan];
+
+  // Optimization
+  optimizer [label="TrustRegionReflective\noptimization loop", fillcolor=lightpink];
+
+  // Covariance
+  covariance [label="CovarianceEstimator\ncompute pcov", fillcolor=lightyellow];
+
+  // Result
+  result [label="CurveFitResult\npopt, pcov", shape=ellipse, fillcolor=lightgreen];
+
+  // Data flow
+  user -> validator [label="xdata, ydata, p0"];
+  validator -> workflow [label="validated inputs"];
+  workflow -> stability [label="select strategy"];
+  stability -> jacobian [label="safe inputs"];
+  jacobian -> optimizer [label="compiled funcs"];
+  optimizer -> covariance [label="optimal params"];
+  covariance -> result [label="popt, pcov"];
+
+  cache [label="UnifiedCache", shape=cylinder, fillcolor=lightyellow];
+  jacobian -> cache [style=dashed, label="cache JIT"];
+  optimizer -> cache [style=dashed, label="check cache"];
+
+}
