@@ -188,7 +188,11 @@ Use the global memory manager instance:
 
 .. code-block:: python
 
-    from nlsq.caching.memory_manager import get_memory_manager, get_memory_stats, clear_memory_pool
+    from nlsq.caching.memory_manager import (
+        get_memory_manager,
+        get_memory_stats,
+        clear_memory_pool,
+    )
 
     # Get global instance
     mm = get_memory_manager()
