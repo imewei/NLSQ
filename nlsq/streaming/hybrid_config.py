@@ -8,6 +8,22 @@ exact covariance computation.
 from dataclasses import dataclass
 from typing import Literal
 
+from nlsq.streaming.validators import (
+    validate_cg_config,
+    validate_defense_layer_config,
+    validate_gauss_newton_config,
+    validate_gradient_clip,
+    validate_group_variance_config,
+    validate_lbfgs_config,
+    validate_loop_strategy,
+    validate_lr_schedule_config,
+    validate_multistart_config,
+    validate_normalization_strategy,
+    validate_precision,
+    validate_streaming_config,
+    validate_warmup_config,
+)
+
 
 @dataclass(slots=True)
 class HybridStreamingConfig:
@@ -385,198 +401,109 @@ class HybridStreamingConfig:
     def __post_init__(self):
         """Validate configuration after initialization.
 
-        Note: All validation uses explicit if/raise rather than assert to ensure
-        validation works correctly even when Python is run with -O (optimized mode),
-        which strips assert statements.
+        Delegates to specialized validator functions for each configuration group.
+        ConfigValidationError from validators is re-raised as ValueError for
+        backwards compatibility.
         """
+        from nlsq.streaming.validators import ConfigValidationError
+
         # Set default for mutable default (list)
         if self.active_switching_criteria is None:
             self.active_switching_criteria = ["plateau", "gradient", "max_iter"]
 
-        # Validate normalization strategy
-        valid_strategies = ("auto", "bounds", "p0", "none")
-        if self.normalization_strategy not in valid_strategies:
-            raise ValueError(
-                f"normalization_strategy must be one of: {valid_strategies}, "
-                f"got: {self.normalization_strategy}"
+        try:
+            # Validate enum-like parameters
+            validate_normalization_strategy(self.normalization_strategy)
+            validate_precision(self.precision)
+            validate_loop_strategy(self.loop_strategy)
+
+            # Validate Phase 1 warmup configuration
+            validate_warmup_config(
+                warmup_iterations=self.warmup_iterations,
+                max_warmup_iterations=self.max_warmup_iterations,
+                warmup_learning_rate=self.warmup_learning_rate,
+                loss_plateau_threshold=self.loss_plateau_threshold,
+                gradient_norm_threshold=self.gradient_norm_threshold,
             )
 
-        # Validate precision
-        valid_precisions = ("float32", "float64", "auto")
-        if self.precision not in valid_precisions:
-            raise ValueError(
-                f"precision must be one of: {valid_precisions}, got: {self.precision}"
+            # Validate L-BFGS configuration
+            validate_lbfgs_config(
+                history_size=self.lbfgs_history_size,
+                initial_step_size=self.lbfgs_initial_step_size,
+                line_search=self.lbfgs_line_search,
+                exploration_step_size=self.lbfgs_exploration_step_size,
+                refinement_step_size=self.lbfgs_refinement_step_size,
             )
 
-        # Validate loop strategy
-        valid_loop_strategies = ("auto", "scan", "loop")
-        if self.loop_strategy not in valid_loop_strategies:
-            raise ValueError(
-                f"loop_strategy must be one of: {valid_loop_strategies}, "
-                f"got: {self.loop_strategy}"
+            # Validate Phase 2 Gauss-Newton configuration
+            validate_gauss_newton_config(
+                max_iterations=self.gauss_newton_max_iterations,
+                tol=self.gauss_newton_tol,
+                trust_region_initial=self.trust_region_initial,
+                regularization_factor=self.regularization_factor,
             )
 
-        # Validate warmup iterations constraint
-        if self.warmup_iterations > self.max_warmup_iterations:
-            raise ValueError(
-                f"warmup_iterations ({self.warmup_iterations}) must be <= "
-                f"max_warmup_iterations ({self.max_warmup_iterations})"
+            # Validate CG solver configuration
+            validate_cg_config(
+                max_iterations=self.cg_max_iterations,
+                relative_tolerance=self.cg_relative_tolerance,
+                absolute_tolerance=self.cg_absolute_tolerance,
+                param_threshold=self.cg_param_threshold,
             )
 
-        # Validate positive values
-        if self.warmup_iterations < 0:
-            raise ValueError("warmup_iterations must be non-negative")
-        if self.max_warmup_iterations <= 0:
-            raise ValueError("max_warmup_iterations must be positive")
-        if self.warmup_learning_rate <= 0:
-            raise ValueError("warmup_learning_rate must be positive")
-        if self.loss_plateau_threshold <= 0:
-            raise ValueError("loss_plateau_threshold must be positive")
-        if self.gradient_norm_threshold <= 0:
-            raise ValueError("gradient_norm_threshold must be positive")
-        if self.gauss_newton_max_iterations <= 0:
-            raise ValueError("gauss_newton_max_iterations must be positive")
-        if self.gauss_newton_tol <= 0:
-            raise ValueError("gauss_newton_tol must be positive")
-        if self.trust_region_initial <= 0:
-            raise ValueError("trust_region_initial must be positive")
-        if self.regularization_factor < 0:
-            raise ValueError("regularization_factor must be non-negative")
-
-        # Validate L-BFGS configuration parameters
-        if self.lbfgs_history_size <= 0:
-            raise ValueError("lbfgs_history_size must be positive")
-        if self.lbfgs_initial_step_size <= 0:
-            raise ValueError("lbfgs_initial_step_size must be positive")
-        valid_line_searches = ("wolfe", "strong_wolfe", "backtracking")
-        if self.lbfgs_line_search not in valid_line_searches:
-            raise ValueError(
-                f"lbfgs_line_search must be one of: {valid_line_searches}, "
-                f"got: {self.lbfgs_line_search}"
+            # Validate group variance regularization
+            validate_group_variance_config(
+                enabled=self.enable_group_variance_regularization,
+                lambda_val=self.group_variance_lambda,
+                indices=self.group_variance_indices,
             )
-        if self.lbfgs_exploration_step_size <= 0:
-            raise ValueError("lbfgs_exploration_step_size must be positive")
-        if self.lbfgs_refinement_step_size <= 0:
-            raise ValueError("lbfgs_refinement_step_size must be positive")
 
-        # Validate CG solver configuration parameters
-        if self.cg_max_iterations <= 0:
-            raise ValueError("cg_max_iterations must be positive")
-        if self.cg_relative_tolerance <= 0:
-            raise ValueError("cg_relative_tolerance must be positive")
-        if self.cg_absolute_tolerance <= 0:
-            raise ValueError("cg_absolute_tolerance must be positive")
-        if self.cg_param_threshold <= 0:
-            raise ValueError("cg_param_threshold must be positive")
+            # Validate streaming configuration
+            validate_streaming_config(
+                chunk_size=self.chunk_size,
+                checkpoint_frequency=self.checkpoint_frequency,
+                callback_frequency=self.callback_frequency,
+            )
 
-        # Validate group variance regularization parameters
-        if self.enable_group_variance_regularization:
-            if self.group_variance_lambda <= 0:
-                raise ValueError("group_variance_lambda must be positive")
-            if self.group_variance_indices is not None:
-                if not isinstance(self.group_variance_indices, list):
-                    raise TypeError(
-                        "group_variance_indices must be a list of (start, end) tuples"
-                    )
-                for idx, item in enumerate(self.group_variance_indices):
-                    if not isinstance(item, (tuple, list)) or len(item) != 2:
-                        raise ValueError(
-                            f"group_variance_indices[{idx}] must be a (start, end) tuple"
-                        )
-                    start, end = item
-                    if not isinstance(start, int) or not isinstance(end, int):
-                        raise TypeError(
-                            f"group_variance_indices[{idx}] start/end must be integers"
-                        )
-                    if start < 0:
-                        raise ValueError(
-                            f"group_variance_indices[{idx}] start must be non-negative"
-                        )
-                    if end <= start:
-                        raise ValueError(
-                            f"group_variance_indices[{idx}] end ({end}) must be > "
-                            f"start ({start})"
-                        )
+            # Validate learning rate schedule
+            validate_lr_schedule_config(
+                enabled=self.use_learning_rate_schedule,
+                warmup_steps=self.lr_schedule_warmup_steps,
+                decay_steps=self.lr_schedule_decay_steps,
+                end_value=self.lr_schedule_end_value,
+            )
 
-        if self.chunk_size <= 0:
-            raise ValueError("chunk_size must be positive")
-        if self.checkpoint_frequency <= 0:
-            raise ValueError("checkpoint_frequency must be positive")
-        if self.callback_frequency <= 0:
-            raise ValueError("callback_frequency must be positive")
+            # Validate gradient clipping
+            validate_gradient_clip(self.gradient_clip_value)
 
-        # Validate Optax enhancement parameters
-        if self.use_learning_rate_schedule:
-            if self.lr_schedule_warmup_steps < 0:
-                raise ValueError("lr_schedule_warmup_steps must be non-negative")
-            if self.lr_schedule_decay_steps <= 0:
-                raise ValueError("lr_schedule_decay_steps must be positive")
-            if self.lr_schedule_end_value <= 0:
-                raise ValueError("lr_schedule_end_value must be positive")
+            # Validate 4-layer defense strategy
+            validate_defense_layer_config(
+                enable_warm_start=self.enable_warm_start_detection,
+                warm_start_threshold=self.warm_start_threshold,
+                enable_adaptive_lr=self.enable_adaptive_warmup_lr,
+                lr_refinement=self.warmup_lr_refinement,
+                lr_careful=self.warmup_lr_careful,
+                lr_default=self.warmup_learning_rate,
+                enable_cost_guard=self.enable_cost_guard,
+                cost_tolerance=self.cost_increase_tolerance,
+                enable_step_clipping=self.enable_step_clipping,
+                max_step_size=self.max_warmup_step_size,
+            )
 
-        if self.gradient_clip_value is not None:
-            if self.gradient_clip_value <= 0:
-                raise ValueError("gradient_clip_value must be positive")
+            # Validate multi-start configuration
+            validate_multistart_config(
+                enabled=self.enable_multistart,
+                n_starts=self.n_starts,
+                sampler=self.multistart_sampler,
+                elimination_fraction=self.elimination_fraction,
+                elimination_rounds=self.elimination_rounds,
+                batches_per_round=self.batches_per_round,
+                scale_factor=self.scale_factor,
+            )
 
-        # Validate 4-layer defense strategy parameters
-        # Layer 1: Warm start detection
-        if self.enable_warm_start_detection:
-            if not (0 < self.warm_start_threshold < 1.0):
-                raise ValueError(
-                    f"warm_start_threshold must be in (0, 1), "
-                    f"got {self.warm_start_threshold}"
-                )
-
-        # Layer 2: Adaptive learning rate ordering
-        if self.enable_adaptive_warmup_lr:
-            if self.warmup_lr_refinement <= 0:
-                raise ValueError("warmup_lr_refinement must be positive")
-            if self.warmup_lr_careful <= 0:
-                raise ValueError("warmup_lr_careful must be positive")
-            if self.warmup_lr_refinement > self.warmup_lr_careful:
-                raise ValueError(
-                    f"warmup_lr_refinement ({self.warmup_lr_refinement}) must be <= "
-                    f"warmup_lr_careful ({self.warmup_lr_careful})"
-                )
-            if self.warmup_lr_careful > self.warmup_learning_rate:
-                raise ValueError(
-                    f"warmup_lr_careful ({self.warmup_lr_careful}) must be <= "
-                    f"warmup_learning_rate ({self.warmup_learning_rate})"
-                )
-
-        # Layer 3: Cost-increase guard
-        if self.enable_cost_guard:
-            if not (0.0 <= self.cost_increase_tolerance <= 1.0):
-                raise ValueError(
-                    f"cost_increase_tolerance must be in [0, 1], "
-                    f"got {self.cost_increase_tolerance}"
-                )
-
-        # Layer 4: Step clipping
-        if self.enable_step_clipping:
-            if self.max_warmup_step_size <= 0:
-                raise ValueError("max_warmup_step_size must be positive")
-
-        # Validate multi-start parameters
-        if self.enable_multistart:
-            if self.n_starts < 1:
-                raise ValueError("n_starts must be >= 1 when enable_multistart=True")
-            if self.multistart_sampler not in ("lhs", "sobol", "halton"):
-                raise ValueError(
-                    f"multistart_sampler must be 'lhs', 'sobol', or 'halton', "
-                    f"got: {self.multistart_sampler}"
-                )
-            if not (0 < self.elimination_fraction < 1):
-                raise ValueError(
-                    f"elimination_fraction must be in (0, 1), "
-                    f"got: {self.elimination_fraction}"
-                )
-            if self.elimination_rounds < 0:
-                raise ValueError("elimination_rounds must be non-negative")
-            if self.batches_per_round <= 0:
-                raise ValueError("batches_per_round must be positive")
-            if self.scale_factor <= 0:
-                raise ValueError("scale_factor must be positive")
+        except ConfigValidationError as e:
+            # Re-raise as ValueError for backwards compatibility
+            raise ValueError(str(e)) from e
 
     @classmethod
     def aggressive(cls):
