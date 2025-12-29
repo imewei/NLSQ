@@ -20,7 +20,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq.streaming.large_dataset import GPUMemoryEstimator, MemoryEstimator, get_memory_tier
 from nlsq.core.workflow import (
     DatasetSizeTier,
     MemoryTier,
@@ -29,6 +28,11 @@ from nlsq.core.workflow import (
     WorkflowTier,
     auto_select_workflow,
     calculate_adaptive_tolerances,
+)
+from nlsq.streaming.large_dataset import (
+    GPUMemoryEstimator,
+    MemoryEstimator,
+    get_memory_tier,
 )
 
 FIG_DIR = Path(__file__).parent / "figures"

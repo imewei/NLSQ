@@ -21,12 +21,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import OptimizationGoal, WorkflowConfig, WorkflowTier, fit
-from nlsq.streaming.large_dataset import MemoryEstimator, get_memory_tier
 from nlsq.core.workflow import (
     DatasetSizeTier,
     MemoryTier,
     auto_select_workflow,
 )
+from nlsq.streaming.large_dataset import MemoryEstimator, get_memory_tier
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
