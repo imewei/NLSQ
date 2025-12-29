@@ -23,6 +23,11 @@ get_latex_equation
     Get LaTeX equation string for a built-in model.
 get_polynomial_latex
     Get LaTeX equation for a polynomial of given degree.
+
+Exceptions
+----------
+SecurityError
+    Raised when unsafe code is detected in custom model definitions.
 """
 
 import ast
@@ -267,6 +272,147 @@ def get_model_info(model: Callable) -> dict[str, Any]:
     }
 
 
+class _SafeASTValidator(ast.NodeVisitor):
+    """AST visitor that validates code for safety.
+
+    Blocks dangerous operations like:
+    - Importing dangerous modules (os, subprocess, sys, etc.)
+    - File I/O operations (open, file operations)
+    - Network operations (socket, urllib, requests)
+    - System calls and process spawning
+    - Dynamic code execution (eval, exec, compile)
+
+    Allows:
+    - Math operations (numpy, jax.numpy, math)
+    - Function definitions
+    - Variable assignments
+    - Arithmetic and logical operations
+    """
+
+    # Modules that are safe to import for curve fitting
+    SAFE_MODULES = frozenset({
+        "math",
+        "numpy",
+        "np",
+        "jax",
+        "jax.numpy",
+        "jnp",
+        "scipy",
+        "scipy.special",
+    })
+
+    # Modules that are explicitly dangerous
+    DANGEROUS_MODULES = frozenset({
+        "os",
+        "subprocess",
+        "sys",
+        "shutil",
+        "pathlib",
+        "socket",
+        "urllib",
+        "requests",
+        "http",
+        "ftplib",
+        "smtplib",
+        "marshal",
+        "shelve",
+        "builtins",
+        "__builtins__",
+        "importlib",
+        "runpy",
+        "code",
+        "codeop",
+        "ctypes",
+        "multiprocessing",
+        "threading",
+        "concurrent",
+        "asyncio",
+    })
+
+    # Built-in functions that are dangerous
+    DANGEROUS_BUILTINS = frozenset({
+        "eval",
+        "exec",
+        "compile",
+        "open",
+        "input",
+        "__import__",
+        "globals",
+        "locals",
+        "vars",
+        "dir",
+        "getattr",
+        "setattr",
+        "delattr",
+        "breakpoint",
+    })
+
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Check import statements for dangerous modules."""
+        for alias in node.names:
+            module_name = alias.name.split(".")[0]
+            if module_name in self.DANGEROUS_MODULES:
+                self.errors.append(
+                    f"Import of dangerous module '{alias.name}' is not allowed"
+                )
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Check from ... import statements for dangerous modules."""
+        if node.module:
+            module_name = node.module.split(".")[0]
+            if module_name in self.DANGEROUS_MODULES:
+                self.errors.append(
+                    f"Import from dangerous module '{node.module}' is not allowed"
+                )
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Check function calls for dangerous built-ins."""
+        if isinstance(node.func, ast.Name):
+            if node.func.id in self.DANGEROUS_BUILTINS:
+                self.errors.append(
+                    f"Call to dangerous built-in '{node.func.id}' is not allowed"
+                )
+        elif isinstance(node.func, ast.Attribute):
+            # Check for dangerous method calls on blocked modules
+            if isinstance(node.func.value, ast.Name):
+                if node.func.value.id in self.DANGEROUS_MODULES:
+                    self.errors.append(
+                        f"Call to '{node.func.value.id}.{node.func.attr}' is not allowed"
+                    )
+        self.generic_visit(node)
+
+    def validate(self, code: str) -> None:
+        """Validate code and raise SecurityError if unsafe.
+
+        Parameters
+        ----------
+        code : str
+            Python source code to validate.
+
+        Raises
+        ------
+        SecurityError
+            If the code contains dangerous operations.
+        """
+        tree = ast.parse(code)
+        self.visit(tree)
+        if self.errors:
+            raise SecurityError(
+                f"Unsafe code detected: {'; '.join(self.errors)}"
+            )
+
+
+class SecurityError(Exception):
+    """Exception raised when unsafe code is detected."""
+
+    pass
+
+
 def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
     """Execute Python code in the given namespace.
 
@@ -330,6 +476,8 @@ def parse_custom_model_string(
     ------
     SyntaxError
         If the code contains syntax errors.
+    SecurityError
+        If the code contains dangerous operations (imports, system calls, etc.).
     ValueError
         If the function is not found in the code.
 
@@ -345,6 +493,10 @@ def parse_custom_model_string(
     """
     # First validate syntax
     ast.parse(code)
+
+    # Security validation - block dangerous operations
+    validator = _SafeASTValidator()
+    validator.validate(code)
 
     # Execute the code in a namespace
     namespace: dict[str, Any] = {}
@@ -391,6 +543,8 @@ def load_custom_model_file(path: str, function_name: str) -> tuple[Callable, lis
     ------
     FileNotFoundError
         If the file does not exist.
+    SecurityError
+        If the code contains dangerous operations (imports, system calls, etc.).
     ValueError
         If the function is not found in the file.
 

@@ -13,7 +13,6 @@ The adapter handles:
 - Basic data statistics computation
 """
 
-import io
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,7 +28,7 @@ from nlsq.cli.data_loaders import EXTENSION_FORMAT_MAP, DataLoader
 # =============================================================================
 
 
-@dataclass
+@dataclass(slots=True)
 class ValidationResult:
     """Result of data validation.
 

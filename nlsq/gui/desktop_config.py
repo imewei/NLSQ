@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class DesktopConfig:
     """Configuration for the NLSQ desktop application.
 

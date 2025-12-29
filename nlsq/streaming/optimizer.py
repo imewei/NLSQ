@@ -202,7 +202,6 @@ LargeDatasetFitter : Alternative for datasets that fit in memory but need chunki
 # mypy: ignore-errors
 
 import contextlib
-import copy
 import logging
 import os
 import queue

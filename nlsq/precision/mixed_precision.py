@@ -95,7 +95,7 @@ class PrecisionState(Enum):
     RELAXED_FLOAT32_FALLBACK = auto()
 
 
-@dataclass
+@dataclass(slots=True)
 class MixedPrecisionConfig:
     """Configuration for automatic mixed precision fallback.
 
@@ -176,7 +176,7 @@ class MixedPrecisionConfig:
     verbose: bool = False
 
 
-@dataclass
+@dataclass(slots=True)
 class ConvergenceMetrics:
     """Metrics reported by optimization algorithm for monitoring.
 
@@ -232,7 +232,7 @@ class ConvergenceMetrics:
     has_nan_inf: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class OptimizationState:
     """Complete optimization state for precision upgrade.
 

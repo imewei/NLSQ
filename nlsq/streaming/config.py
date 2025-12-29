@@ -7,7 +7,7 @@ comprehensive fault tolerance features for production-ready optimizations.
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(slots=True)
 class StreamingConfig:
     """Configuration for streaming optimization with fault tolerance.
 

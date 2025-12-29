@@ -29,6 +29,7 @@ from typing import Any
 import h5py
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 from nlsq.global_optimization.config import GlobalOptimizationConfig

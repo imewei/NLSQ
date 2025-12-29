@@ -18,19 +18,14 @@ from nlsq.gui.adapters.model_adapter import (
     get_model_info,
     list_builtin_models,
     list_functions_in_module,
-    parse_custom_model_string,
 )
 from nlsq.gui.components.code_editor import (
     get_default_model_template,
-    get_uploaded_file_content,
-    render_code_editor,
-    render_file_upload,
     validate_code_syntax,
 )
 from nlsq.gui.components.model_preview import (
     format_parameter_list,
     get_model_summary,
-    render_equation_display,
     render_model_preview,
 )
 from nlsq.gui.state import SessionState, initialize_state

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-@dataclass
+@dataclass(slots=True)
 class HybridStreamingConfig:
     """Configuration for adaptive hybrid streaming optimizer.
 

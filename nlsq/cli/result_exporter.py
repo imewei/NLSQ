@@ -21,7 +21,6 @@ Example Usage
 
 import csv
 import json
-import sys
 from pathlib import Path
 from typing import Any
 

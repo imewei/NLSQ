@@ -417,7 +417,7 @@ def calculate_adaptive_tolerances(
 # =============================================================================
 
 
-@dataclass
+@dataclass(slots=True)
 class ClusterInfo:
     """Information about detected cluster environment.
 
@@ -720,7 +720,7 @@ class ClusterDetector:
         return None
 
 
-@dataclass
+@dataclass(slots=True)
 class MultiGPUConfig:
     """Configuration for multi-GPU data parallelism.
 
@@ -1112,7 +1112,7 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
-@dataclass
+@dataclass(slots=True)
 class WorkflowConfig:
     """Configuration dataclass for workflow selection and execution.
 

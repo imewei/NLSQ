@@ -13,10 +13,7 @@ Features:
 """
 
 import logging
-import threading
-import time
 from io import StringIO
-from typing import Any
 
 import numpy as np
 import streamlit as st
@@ -29,8 +26,6 @@ from nlsq.gui.adapters.config_adapter import (
     validate_yaml_config,
 )
 from nlsq.gui.adapters.fit_adapter import (
-    FitConfig,
-    ProgressCallback,
     create_fit_config_from_state,
     execute_fit,
     extract_confidence_intervals,
@@ -41,13 +36,11 @@ from nlsq.gui.adapters.fit_adapter import (
 from nlsq.gui.components.advanced_options import render_advanced_options
 from nlsq.gui.components.iteration_table import (
     create_iteration_history,
-    render_convergence_summary,
     render_iteration_table,
     update_iteration_history,
 )
 from nlsq.gui.components.live_cost_plot import (
     create_cost_history,
-    get_cost_plot_summary,
     render_live_cost_plot,
     update_cost_history,
 )
@@ -56,12 +49,7 @@ from nlsq.gui.components.param_config import (
     render_param_config,
 )
 from nlsq.gui.presets import (
-    get_preset,
     get_preset_description,
-    get_preset_n_starts,
-    get_preset_names,
-    get_preset_tolerances,
-    preset_uses_multistart,
 )
 from nlsq.gui.state import SessionState, apply_preset_to_state, initialize_state
 from nlsq.gui.utils.theme import apply_dark_theme_css

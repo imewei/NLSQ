@@ -22,7 +22,7 @@ from typing import Any
 
 import yaml
 
-from nlsq.cli.errors import CLIError, ConfigError, get_logger, setup_logging
+from nlsq.cli.errors import ConfigError, setup_logging
 from nlsq.cli.visualization import FitVisualizer
 from nlsq.cli.workflow_runner import WorkflowRunner
 

@@ -77,7 +77,7 @@ def get_bucket_size(chunk_size: int) -> int:
     return chunk_size
 
 
-@dataclass
+@dataclass(slots=True)
 class ChunkBuffer:
     """Pre-allocated static-shaped buffer for chunked data processing.
 
@@ -160,7 +160,7 @@ class ChunkBuffer:
         return self.data[: self.valid_length]
 
 
-@dataclass
+@dataclass(slots=True)
 class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     """Configuration for memory management in large dataset fitting.
 
@@ -200,7 +200,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     save_diagnostics: bool = False
 
 
-@dataclass
+@dataclass(slots=True)
 class DatasetStats:
     """Statistics and information about a dataset.
 

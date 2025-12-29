@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
 
-@dataclass
+@dataclass(slots=True)
 class MemoryConfig:
     """Configuration for memory management and GPU settings.
 
@@ -80,7 +80,7 @@ class MemoryConfig:
             )
 
 
-@dataclass
+@dataclass(slots=True)
 class LargeDatasetConfig:
     """Configuration for large dataset processing.
 

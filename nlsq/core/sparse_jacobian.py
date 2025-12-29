@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 import numpy as np
-from scipy.sparse import coo_matrix, csr_matrix, lil_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 
 from nlsq.constants import FINITE_DIFF_REL_STEP
 from nlsq.utils.logging import get_logger

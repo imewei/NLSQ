@@ -20,14 +20,11 @@ import streamlit as st
 
 from nlsq.gui.adapters.data_adapter import (
     compute_statistics,
-    detect_columns,
     load_from_clipboard,
     load_from_file,
     validate_data,
 )
 from nlsq.gui.components.column_selector import (
-    compute_data_preview_stats,
-    create_column_assignments,
     get_available_roles,
     get_column_color,
     get_required_roles,

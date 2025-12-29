@@ -119,7 +119,6 @@ logger = get_logger("trf")
 initialize_gpu_safely()
 
 # Import dataclasses for SVDCache
-from dataclasses import dataclass
 from typing import NamedTuple
 
 from nlsq.caching.unified_cache import get_global_cache
@@ -135,7 +134,6 @@ from nlsq.common_scipy import (
     minimize_quadratic_1d,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    solve_lsq_trust_region,
     step_size_to_bound,
     update_tr_radius,
 )

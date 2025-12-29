@@ -19,7 +19,6 @@ Example Usage
 >>> print(result["popt"])
 """
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np

@@ -7,8 +7,7 @@ The adapter maps all fields from workflow_config_template.yaml to SessionState
 fields and vice versa.
 """
 
-from io import StringIO
-from typing import Any, TextIO
+from typing import TextIO
 
 import yaml
 

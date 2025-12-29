@@ -22,21 +22,16 @@ from nlsq.gui.components.fit_statistics import (
 )
 from nlsq.gui.components.param_config import get_param_names_from_model
 from nlsq.gui.components.param_results import (
-    compute_confidence_intervals,
     format_parameter_table,
     render_parameter_results,
 )
 from nlsq.gui.components.plotly_fit_plot import (
-    create_fit_plot_from_result,
     render_fit_plot,
 )
 from nlsq.gui.components.plotly_histogram import (
-    compute_normality_tests,
-    create_histogram_from_result,
     render_residuals_histogram,
 )
 from nlsq.gui.components.plotly_residuals import (
-    create_residuals_plot_from_result,
     render_residuals_plot,
 )
 from nlsq.gui.state import SessionState, initialize_state
@@ -302,18 +297,6 @@ def render_export_section() -> None:
         try:
             stats = format_statistics(result)
             info = format_convergence_info(result)
-
-            # Create statistics dict for export
-            export_stats = {
-                "Metric": list(stats.keys()) + list(info.keys()),
-                "Value": list(stats.values())
-                + [
-                    str(v)
-                    for v in info.values()
-                    if not k.endswith("_str")
-                    for k, v in info.items()
-                ],
-            }
 
             import pandas as pd
 

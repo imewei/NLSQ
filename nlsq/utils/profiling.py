@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class PerformanceMetrics:
     """Performance metrics for optimization runs.
 

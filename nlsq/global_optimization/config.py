@@ -90,7 +90,7 @@ PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
-@dataclass
+@dataclass(slots=True)
 class GlobalOptimizationConfig:
     """Configuration for multi-start global optimization.
 

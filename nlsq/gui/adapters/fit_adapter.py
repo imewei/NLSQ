@@ -27,12 +27,12 @@ create_fit_config_from_state
 """
 
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
-from nlsq.core.minpack import WORKFLOW_PRESETS, fit
+from nlsq.core.minpack import fit
 from nlsq.result import CurveFitResult
 
 # =============================================================================
@@ -40,7 +40,7 @@ from nlsq.result import CurveFitResult
 # =============================================================================
 
 
-@dataclass
+@dataclass(slots=True)
 class FitConfig:
     """Configuration for curve fitting execution.
 

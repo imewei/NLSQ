@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 
-@dataclass
+@dataclass(slots=True)
 class ProfileMetrics:
     """Container for performance metrics from a single optimization run."""
 

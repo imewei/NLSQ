@@ -24,7 +24,6 @@ from typing import Any
 import streamlit as st
 
 from nlsq.gui.presets import (
-    STREAMING_PRESETS,
     get_streaming_preset,
     get_streaming_preset_names,
 )

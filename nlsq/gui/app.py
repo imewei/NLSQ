@@ -17,7 +17,6 @@ from nlsq.gui.state import SessionState, initialize_state
 from nlsq.gui.utils.theme import (
     apply_dark_theme_css,
     get_current_theme,
-    get_plotly_colors,
     set_theme,
 )
 

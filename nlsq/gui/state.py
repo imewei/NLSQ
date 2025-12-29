@@ -11,10 +11,9 @@ fitting workflow, matching the fields from workflow_config_template.yaml.
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy as np
 
 
-@dataclass
+@dataclass(slots=True)
 class SessionState:
     """Container for all GUI session state fields.
 
