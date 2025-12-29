@@ -160,6 +160,9 @@ from nlsq.precision.mixed_precision import (
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.utils.diagnostics import OptimizationDiagnostics
 
+# Profiling support
+from nlsq.core.profiler import NullProfiler, TRFProfiler
+
 
 class SVDCache(NamedTuple):
     """Cache SVD decomposition across inner loop iterations when Jacobian unchanged.
@@ -666,152 +669,6 @@ class TrustRegionJITFunctions:
             return jnp.all(jnp.isfinite(f_new))
 
         self.check_isfinite = isfinite
-
-
-# ============================================================================
-# TRF Profiling Abstraction
-# ============================================================================
-
-
-class TRFProfiler:
-    """Profiler for timing TRF algorithm operations.
-
-    Records detailed timing information for each operation in the TRF algorithm,
-    including GPU synchronization via block_until_ready() for accurate timings.
-
-    This enables performance analysis without duplicating the entire algorithm.
-    """
-
-    def __init__(self):
-        """Initialize profiler with empty timing arrays."""
-        self.ftimes = []  # Function evaluations
-        self.jtimes = []  # Jacobian evaluations
-        self.svd_times = []  # SVD computations
-        self.ctimes = []  # Cost computations (JAX)
-        self.gtimes = []  # Gradient computations (JAX)
-        self.gtimes2 = []  # Gradient norm computations
-        self.ptimes = []  # Parameter updates
-
-        # Conversion times (JAX → NumPy)
-        self.svd_ctimes = []  # SVD conversion
-        self.g_ctimes = []  # Gradient conversion
-        self.c_ctimes = []  # Cost conversion
-        self.p_ctimes = []  # Parameter conversion
-
-    def time_operation(self, operation: str, jax_result):
-        """Time a JAX operation with GPU synchronization.
-
-        Parameters
-        ----------
-        operation : str
-            Operation name ('fun', 'jac', 'svd', 'cost', 'grad', etc.)
-        jax_result :
-            JAX array result to synchronize
-
-        Returns
-        -------
-        result
-            The synchronized result (same as input)
-        """
-        import time
-
-        st = time.time()
-        result = jax_result.block_until_ready()
-        elapsed = time.time() - st
-
-        # Record timing
-        if operation == "fun":
-            self.ftimes.append(elapsed)
-        elif operation == "jac":
-            self.jtimes.append(elapsed)
-        elif operation == "svd":
-            self.svd_times.append(elapsed)
-        elif operation == "cost":
-            self.ctimes.append(elapsed)
-        elif operation == "grad":
-            self.gtimes.append(elapsed)
-        elif operation == "grad_norm":
-            self.gtimes2.append(elapsed)
-        elif operation == "param_update":
-            self.ptimes.append(elapsed)
-
-        return result
-
-    def time_conversion(self, operation: str, start_time: float):
-        """Record timing for JAX → NumPy conversion.
-
-        Parameters
-        ----------
-        operation : str
-            Conversion operation ('svd_convert', 'grad_convert', 'cost_convert', 'param_convert')
-        start_time : float
-            Start time from time.time()
-        """
-        import time
-
-        elapsed = time.time() - start_time
-
-        if operation == "svd_convert":
-            self.svd_ctimes.append(elapsed)
-        elif operation == "grad_convert":
-            self.g_ctimes.append(elapsed)
-        elif operation == "cost_convert":
-            self.c_ctimes.append(elapsed)
-        elif operation == "param_convert":
-            self.p_ctimes.append(elapsed)
-
-    def get_timing_data(self) -> dict:
-        """Get all recorded timing data.
-
-        Returns
-        -------
-        dict
-            Dictionary containing all timing arrays
-        """
-        return {
-            "ftimes": self.ftimes,
-            "jtimes": self.jtimes,
-            "svd_times": self.svd_times,
-            "ctimes": self.ctimes,
-            "gtimes": self.gtimes,
-            "gtimes2": self.gtimes2,
-            "ptimes": self.ptimes,
-            "svd_ctimes": self.svd_ctimes,
-            "g_ctimes": self.g_ctimes,
-            "c_ctimes": self.c_ctimes,
-            "p_ctimes": self.p_ctimes,
-        }
-
-
-class NullProfiler:
-    """Null object profiler with zero overhead.
-
-    Provides same interface as TRFProfiler but does nothing,
-    enabling profiling to be toggled with no performance impact.
-    """
-
-    def time_operation(self, operation: str, jax_result):
-        """No-op timing - returns result unchanged."""
-        return jax_result
-
-    def time_conversion(self, operation: str, start_time: float):
-        """No-op conversion timing."""
-
-    def get_timing_data(self) -> dict:
-        """Returns empty timing data."""
-        return {
-            "ftimes": [],
-            "jtimes": [],
-            "svd_times": [],
-            "ctimes": [],
-            "gtimes": [],
-            "gtimes2": [],
-            "ptimes": [],
-            "svd_ctimes": [],
-            "g_ctimes": [],
-            "c_ctimes": [],
-            "p_ctimes": [],
-        }
 
 
 class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
