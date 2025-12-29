@@ -1,3 +1,5 @@
+# Damped oscillation data for NLSQ CLI demonstration
+# True parameters: A0=15.0, gamma=0.05, omega=pi, phi=0.0
 time,displacement,sigma
 0.000000,15.099343,0.200000
 0.200669,11.968083,0.200000

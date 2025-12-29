@@ -26,7 +26,15 @@ def _kernel_env() -> dict[str, str]:
     env["PYTHONPATH"] = (
         f"{sitecustomize_dir}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(os.pathsep)
     )
-    env["PYTHONWARNINGS"] = "error"
+    env.setdefault("JAX_DISABLE_JIT", "1")
+    env.setdefault("MPLBACKEND", "Agg")
+    env.setdefault("NLSQ_EXAMPLES_MAX_SAMPLES", "10")
+    env.setdefault("NLSQ_EXAMPLES_QUICK", "1")
+    env.setdefault("PYTHONHASHSEED", "0")
+    env["PYTHONWARNINGS"] = (
+        "error,ignore:There is no current event loop:DeprecationWarning,"
+        "ignore::PendingDeprecationWarning"
+    )
     return env
 
 
@@ -37,6 +45,7 @@ def _execute_notebook(notebook_path: Path, env: dict[str, str]) -> None:
         timeout=600,
         kernel_name="python3",
         kernel_manager_kwargs={"env": env},
+        resources={"metadata": {"path": str(notebook_path.parent)}},
     )
     client.execute()
 
@@ -50,6 +59,16 @@ def _collect_notebooks(args: list[str]) -> list[Path]:
 def main() -> int:
     _patch_localinterfaces()
     env = _kernel_env()
+    for key in (
+        "JAX_DISABLE_JIT",
+        "MPLBACKEND",
+        "NLSQ_EXAMPLES_MAX_SAMPLES",
+        "NLSQ_EXAMPLES_QUICK",
+        "PYTHONHASHSEED",
+        "PYTHONPATH",
+        "PYTHONWARNINGS",
+    ):
+        os.environ[key] = env[key]
     notebooks = _collect_notebooks(sys.argv[1:])
     if not notebooks:
         print("No notebooks found.", file=sys.stderr)

@@ -137,6 +137,7 @@ class TestCondition1NormIntegration:
         s = 10.0 ** np.linspace(0, -14, 10)
         J = jnp.array(U @ np.diag(s))  # Convert to JAX array
 
-        _J_checked, issues = guard.check_and_fix_jacobian(J)
+        with pytest.warns(UserWarning):
+            _J_checked, issues = guard.check_and_fix_jacobian(J)
 
         assert issues["is_ill_conditioned"], "Failed to detect ill-conditioning"

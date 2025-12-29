@@ -52,12 +52,14 @@ def test_compute_svd_with_fallback_numpy_last_resort(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(np.linalg, "svd", _numpy_svd)
 
-    U, s, V = module.compute_svd_with_fallback(jnp.eye(2), full_matrices=False)
+    with pytest.warns(RuntimeWarning) as warning_record:
+        U, s, V = module.compute_svd_with_fallback(jnp.eye(2), full_matrices=False)
 
     assert U.shape == (2, 2)
     assert s.shape == (2,)
     assert V.shape == (2, 2)
     assert numpy_called["hit"] is True
+    assert len(warning_record) >= 1
 
 
 @pytest.mark.stability

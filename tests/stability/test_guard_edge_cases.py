@@ -399,7 +399,9 @@ class TestNumericalStabilityGuardEdgeCases:
         J = jnp.zeros((0, 0))
         # Should handle gracefully or raise informative error
         try:
-            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                J_fixed, issues = self.guard.check_and_fix_jacobian(J)
             # If it works, verify issues dict exists
             assert isinstance(issues, dict)
         except (ValueError, IndexError):
@@ -416,7 +418,9 @@ class TestNumericalStabilityGuardEdgeCases:
     def test_tall_jacobian(self):
         """Test with tall Jacobian (m >> n)."""
         J = jnp.ones((1000, 3))
-        J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
 
         assert J_fixed.shape == (1000, 3)
         assert jnp.isfinite(J_fixed).all()
@@ -424,7 +428,9 @@ class TestNumericalStabilityGuardEdgeCases:
     def test_wide_jacobian(self):
         """Test with wide Jacobian (m << n)."""
         J = jnp.ones((3, 100))
-        J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
 
         assert J_fixed.shape == (3, 100)
         assert jnp.isfinite(J_fixed).all()
@@ -444,7 +450,9 @@ class TestNumericalStabilityGuardEdgeCases:
     def test_subnormal_values(self):
         """Test handling of subnormal (denormalized) numbers."""
         J = jnp.array([[1e-310, 1e-315], [1e-320, 1.0]])
-        J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
 
         # Subnormals should be preserved (they're valid finite numbers)
         assert jnp.isfinite(J_fixed).all()
