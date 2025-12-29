@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from logging import Logger
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import jax
 import numpy as np
@@ -27,14 +27,15 @@ _jax_config = JAXConfig()
 
 
 from nlsq.core._optimize import OptimizeResult
-from nlsq.core.minpack import CurveFit
-
-# Import MemoryTier for convenience function
-from nlsq.core.workflow import MemoryTier
 
 # Import streaming optimizer (required dependency as of v0.2.0)
 from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
 from nlsq.utils.logging import get_logger
+
+# Type-only imports to avoid circular dependencies
+if TYPE_CHECKING:
+    from nlsq.core.minpack import CurveFit
+    from nlsq.core.workflow import MemoryTier
 
 # Default fallback memory in GB when detection fails (per requirements)
 _DEFAULT_FALLBACK_MEMORY_GB = 16.0
@@ -560,7 +561,7 @@ def cleanup_memory() -> None:
         logger.debug(f"jax.clear_caches() failed (non-critical): {e}")
 
 
-def get_memory_tier(available_memory_gb: float) -> MemoryTier:
+def get_memory_tier(available_memory_gb: float) -> "MemoryTier":
     """Classify available memory into a MemoryTier.
 
     Convenience function that wraps MemoryTier.from_available_memory_gb()
@@ -583,6 +584,9 @@ def get_memory_tier(available_memory_gb: float) -> MemoryTier:
     >>> tier
     <MemoryTier.MEDIUM: (64.0, 'Standard memory (16-64GB)')>
     """
+    # Deferred import to avoid circular dependency
+    from nlsq.core.workflow import MemoryTier
+
     return MemoryTier.from_available_memory_gb(available_memory_gb)
 
 
@@ -887,7 +891,7 @@ class LargeDatasetFitter:
         self,
         memory_limit_gb: float = 8.0,
         config: LDMemoryConfig | None = None,
-        curve_fit_class: CurveFit | None = None,
+        curve_fit_class: "CurveFit | None" = None,
         logger: Logger | None = None,
         enable_mixed_precision: bool | None = None,
         mixed_precision_config=None,
@@ -960,6 +964,9 @@ class LargeDatasetFitter:
 
         # Initialize curve fitting backend
         if curve_fit_class is None:
+            # Deferred import to avoid circular dependency
+            from nlsq.core.minpack import CurveFit
+
             self.curve_fit = CurveFit()
         else:
             self.curve_fit = curve_fit_class

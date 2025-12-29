@@ -48,12 +48,15 @@ TournamentSelector : Tournament selection for large datasets (Task Group 4)
 """
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from nlsq.core.minpack import CurveFit
 from nlsq.global_optimization.config import GlobalOptimizationConfig
+
+# Type-only import to avoid circular dependency
+if TYPE_CHECKING:
+    from nlsq.core.minpack import CurveFit
 from nlsq.global_optimization.sampling import (
     center_samples_around_p0,
     get_sampler,
@@ -109,7 +112,7 @@ class MultiStartOrchestrator:
     def __init__(
         self,
         config: GlobalOptimizationConfig | None = None,
-        curve_fit_instance: CurveFit | None = None,
+        curve_fit_instance: "CurveFit | None" = None,
     ):
         """Initialize MultiStartOrchestrator.
 
@@ -121,14 +124,18 @@ class MultiStartOrchestrator:
             Custom CurveFit instance for optimization.
         """
         self.config = config if config is not None else GlobalOptimizationConfig()
-        self.curve_fit = (
-            curve_fit_instance if curve_fit_instance is not None else CurveFit()
-        )
+        if curve_fit_instance is not None:
+            self.curve_fit = curve_fit_instance
+        else:
+            # Deferred import to avoid circular dependency
+            from nlsq.core.minpack import CurveFit
+
+            self.curve_fit = CurveFit()
         self.logger = get_logger("multi_start")
 
     @classmethod
     def from_preset(
-        cls, preset_name: str, curve_fit_instance: CurveFit | None = None
+        cls, preset_name: str, curve_fit_instance: "CurveFit | None" = None
     ) -> "MultiStartOrchestrator":
         """Create orchestrator from a named preset.
 
