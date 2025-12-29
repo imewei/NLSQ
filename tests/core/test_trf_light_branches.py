@@ -28,7 +28,9 @@ def test_trf_dispatches_to_unbounded_variants(monkeypatch: pytest.MonkeyPatch) -
     trf_module = importlib.import_module("nlsq.core.trf")
     optimizer = trf_module.TrustRegionReflective()
 
-    monkeypatch.setattr(optimizer, "trf_no_bounds", lambda *_a, **_k: {"mode": "no_bounds"})
+    monkeypatch.setattr(
+        optimizer, "trf_no_bounds", lambda *_a, **_k: {"mode": "no_bounds"}
+    )
     monkeypatch.setattr(
         optimizer, "trf_no_bounds_timed", lambda *_a, **_k: {"mode": "timed"}
     )

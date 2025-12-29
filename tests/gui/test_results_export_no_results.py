@@ -67,7 +67,9 @@ def streamlit_stub(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureReque
 
 @pytest.mark.gui
 @pytest.mark.unit
-def test_results_page_no_results(streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_results_page_no_results(
+    streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     module = importlib.import_module("nlsq.gui.pages.4_Results")
     monkeypatch.setattr(module, "st", streamlit_stub)
 
@@ -83,7 +85,9 @@ def test_results_page_no_results(streamlit_stub: types.ModuleType, monkeypatch: 
 
 @pytest.mark.gui
 @pytest.mark.unit
-def test_export_page_no_results(streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_export_page_no_results(
+    streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     module = importlib.import_module("nlsq.gui.pages.5_Export")
     monkeypatch.setattr(module, "st", streamlit_stub)
 
@@ -92,6 +96,9 @@ def test_export_page_no_results(streamlit_stub: types.ModuleType, monkeypatch: p
     streamlit_stub.session_state.current_model = object()
 
     module.render_no_results()
-    assert ("warning", "No fitting results available to export.") in streamlit_stub._messages
+    assert (
+        "warning",
+        "No fitting results available to export.",
+    ) in streamlit_stub._messages
     assert ("success", "Data loaded") in streamlit_stub._messages
     assert ("success", "Model selected") in streamlit_stub._messages

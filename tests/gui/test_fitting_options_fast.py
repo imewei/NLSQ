@@ -67,11 +67,17 @@ def _install_streamlit_stub() -> types.ModuleType:
     module.progress = lambda value, **_k: module._progress_calls.append(value)
     module.button = lambda *_a, **_k: bool(_pop(module._button_values, False))
     module.radio = lambda _label, options, **_k: module._radio_value or options[0]
-    module.checkbox = lambda _label, **_k: _pop(module._checkbox_values, _k.get("value", False))
+    module.checkbox = lambda _label, **_k: _pop(
+        module._checkbox_values, _k.get("value", False)
+    )
     module.text_area = lambda *_a, **_k: module._text_area_value
-    module.selectbox = lambda _label, options, **_k: _pop(module._selectbox_values, options[0])
+    module.selectbox = lambda _label, options, **_k: _pop(
+        module._selectbox_values, options[0]
+    )
     module.slider = lambda _label, **_k: _pop(module._slider_values, _k.get("value", 0))
-    module.number_input = lambda _label, **_k: _pop(module._number_values, _k.get("value", 0))
+    module.number_input = lambda _label, **_k: _pop(
+        module._number_values, _k.get("value", 0)
+    )
     module.columns = lambda n=1: tuple(
         _ContextManager(module) for _ in range(n if isinstance(n, int) else len(n))
     )
@@ -299,4 +305,6 @@ def test_render_fit_execution_and_summary(streamlit_stub: types.ModuleType) -> N
     streamlit_stub.session_state.current_model = object()
     state.fit_result = SimpleNamespace(popt=np.array([1.0]))
     module.render_fit_summary(state)
-    assert any("View detailed results" in (msg or "") for _, msg in streamlit_stub._messages)
+    assert any(
+        "View detailed results" in (msg or "") for _, msg in streamlit_stub._messages
+    )

@@ -8,7 +8,12 @@ import jax.numpy as jnp
 import pytest
 
 from nlsq.caching import unified_cache
-from nlsq.caching.unified_cache import UnifiedCache, cached_jit, clear_cache, get_global_cache
+from nlsq.caching.unified_cache import (
+    UnifiedCache,
+    cached_jit,
+    clear_cache,
+    get_global_cache,
+)
 
 
 @pytest.mark.cache

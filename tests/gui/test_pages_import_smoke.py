@@ -27,7 +27,9 @@ def _install_streamlit_stub() -> types.ModuleType:
 
 
 @pytest.mark.gui
-def test_gui_pages_import_with_stubbed_streamlit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gui_pages_import_with_stubbed_streamlit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """GUI page modules should import without real Streamlit present."""
     stub = _install_streamlit_stub()
     monkeypatch.setitem(sys.modules, "streamlit", stub)

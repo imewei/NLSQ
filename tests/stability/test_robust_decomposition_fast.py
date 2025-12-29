@@ -27,7 +27,9 @@ def test_solve_least_squares_fallback_to_qr(monkeypatch: pytest.MonkeyPatch) -> 
     module = importlib.import_module("nlsq.stability.robust_decomposition")
     rd = module.RobustDecomposition()
 
-    monkeypatch.setattr(rd, "svd", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        rd, "svd", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
     monkeypatch.setattr(rd, "qr", lambda A: (jnp.eye(2), jnp.eye(2)))
 
     A = jnp.eye(2)

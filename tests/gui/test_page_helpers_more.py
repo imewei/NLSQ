@@ -113,7 +113,9 @@ def test_data_loading_file_upload_error(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.gui
 @pytest.mark.unit
-def test_data_loading_file_upload_fallback_dataframe(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_data_loading_file_upload_fallback_dataframe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     stub = _install_streamlit_stub()
     monkeypatch.setitem(sys.modules, "streamlit", stub)
 
@@ -154,7 +156,9 @@ def test_model_selection_custom_code_editor_error_and_success(
 
     stub.session_state.custom_code = ""
     stub._text_area_value = "def model(x):\n    return x"
-    monkeypatch.setattr(module, "validate_code_syntax", lambda *_a, **_k: (False, "bad"))
+    monkeypatch.setattr(
+        module, "validate_code_syntax", lambda *_a, **_k: (False, "bad")
+    )
 
     module.render_custom_code_editor(state)
     assert ("error", "Syntax error: bad") in stub._messages
@@ -198,7 +202,9 @@ def test_fitting_options_yaml_import_invalid_and_valid(
     monkeypatch.setattr(module, "get_session_state", lambda: state)
 
     stub._file_value = _Upload(b"bad: [", name="config.yml")
-    monkeypatch.setattr(module, "validate_yaml_config", lambda *_a, **_k: (False, "oops"))
+    monkeypatch.setattr(
+        module, "validate_yaml_config", lambda *_a, **_k: (False, "oops")
+    )
 
     module.render_yaml_import()
     assert ("error", "Invalid YAML: oops") in stub._messages
@@ -219,7 +225,9 @@ def test_fitting_options_yaml_import_invalid_and_valid(
 
 @pytest.mark.gui
 @pytest.mark.unit
-def test_fitting_options_guided_mode_applies_preset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fitting_options_guided_mode_applies_preset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     stub = _install_streamlit_stub()
     monkeypatch.setitem(sys.modules, "streamlit", stub)
 
@@ -233,7 +241,9 @@ def test_fitting_options_guided_mode_applies_preset(monkeypatch: pytest.MonkeyPa
     stub.radio = lambda *_a, **_k: "fast"
 
     applied: list[str] = []
-    monkeypatch.setattr(module, "apply_preset_to_state", lambda _s, name: applied.append(name))
+    monkeypatch.setattr(
+        module, "apply_preset_to_state", lambda _s, name: applied.append(name)
+    )
 
     module.render_guided_mode(state)
     assert applied == ["fast"]

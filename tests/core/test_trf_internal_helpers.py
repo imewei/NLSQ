@@ -14,11 +14,16 @@ def _make_optimizer() -> SimpleNamespace:
     trf_module = importlib.import_module("nlsq.core.trf")
 
     opt = SimpleNamespace()
-    opt.logger = SimpleNamespace(debug=lambda *_a, **_k: None, warning=lambda *_a, **_k: None)
+    opt.logger = SimpleNamespace(
+        debug=lambda *_a, **_k: None, warning=lambda *_a, **_k: None
+    )
     opt.cJIT = SimpleNamespace(
         evaluate_quadratic=lambda *_a, **_k: -1.0,
         scale_for_robust_loss_function=lambda J, f, rho: (J, f),
-        compute_jac_scale=lambda J, scale_inv=None: (jnp.ones(J.shape[1]), jnp.ones(J.shape[1])),
+        compute_jac_scale=lambda J, scale_inv=None: (
+            jnp.ones(J.shape[1]),
+            jnp.ones(J.shape[1]),
+        ),
     )
     opt.default_loss_func = lambda f: 0.5 * jnp.dot(f, f)
     opt.compute_grad = lambda J, f: f.dot(J)
@@ -28,9 +33,7 @@ def _make_optimizer() -> SimpleNamespace:
 
     # Bind methods from class for direct calls
     cls = trf_module.TrustRegionReflective
-    opt._check_convergence_criteria = cls._check_convergence_criteria.__get__(
-        opt, cls
-    )
+    opt._check_convergence_criteria = cls._check_convergence_criteria.__get__(opt, cls)
     opt._solve_trust_region_subproblem = cls._solve_trust_region_subproblem.__get__(
         opt, cls
     )

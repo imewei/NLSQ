@@ -35,7 +35,9 @@ def test_handle_fit_error_paths(
 
     monkeypatch.setattr(fit_module, "run_fit", _raise)
 
-    args = types.SimpleNamespace(workflow="w.yaml", output=None, stdout=False, verbose=False)
+    args = types.SimpleNamespace(
+        workflow="w.yaml", output=None, stdout=False, verbose=False
+    )
     exit_code = cli_main.handle_fit(args)
 
     assert exit_code == 1
@@ -51,11 +53,15 @@ def test_handle_fit_result_none(monkeypatch: pytest.MonkeyPatch) -> None:
     from nlsq.cli.commands import fit as fit_module
 
     monkeypatch.setattr(fit_module, "run_fit", lambda **_k: None)
-    args = types.SimpleNamespace(workflow="w.yaml", output=None, stdout=False, verbose=False)
+    args = types.SimpleNamespace(
+        workflow="w.yaml", output=None, stdout=False, verbose=False
+    )
     assert cli_main.handle_fit(args) == 1
 
 
-def test_handle_batch_failure(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_handle_batch_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """handle_batch should return 1 when any workflow failed."""
     from nlsq.cli.commands import batch as batch_module
 
@@ -108,7 +114,9 @@ def test_handle_info_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert called["ok"] is True
 
 
-def test_handle_config_file_exists(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_handle_config_file_exists(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """handle_config should return 1 on FileExistsError."""
     from nlsq.cli.commands import config as config_module
 
@@ -127,7 +135,9 @@ def test_handle_config_file_exists(monkeypatch: pytest.MonkeyPatch, capsys: pyte
     assert "exists" in capsys.readouterr().err
 
 
-def test_handle_gui_missing_app(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_handle_gui_missing_app(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """handle_gui should return 1 if app.py is missing."""
     from pathlib import Path
 

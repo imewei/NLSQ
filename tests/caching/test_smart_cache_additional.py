@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-
 from pathlib import Path
 
 import numpy as np
@@ -126,7 +125,11 @@ def test_invalidate_warns_on_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
     """invalidate should warn if disk cache cannot be cleared."""
     cache = SmartCache(disk_cache_enabled=True)
 
-    monkeypatch.setattr(smart_cache.os, "listdir", lambda *_a, **_k: (_ for _ in ()).throw(OSError("nope")))
+    monkeypatch.setattr(
+        smart_cache.os,
+        "listdir",
+        lambda *_a, **_k: (_ for _ in ()).throw(OSError("nope")),
+    )
 
     with pytest.warns(UserWarning, match="Could not clear disk cache"):
         cache.invalidate()

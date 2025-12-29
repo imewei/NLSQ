@@ -427,11 +427,13 @@ class TestVmapCompatibility:
         batched_linear = vmap(lambda a: linear(x, a, 0.0))
         results = batched_linear(slopes)
 
-        expected = jnp.array([
-            x * 1.0,
-            x * 2.0,
-            x * 3.0,
-        ])
+        expected = jnp.array(
+            [
+                x * 1.0,
+                x * 2.0,
+                x * 3.0,
+            ]
+        )
         assert_allclose(np.asarray(results), np.asarray(expected), rtol=1e-12)
 
     def test_exponential_decay_vmap(self):

@@ -10,7 +10,9 @@ import pytest
 
 
 def _make_optimizer(monkeypatch: pytest.MonkeyPatch, trf_module):
-    monkeypatch.setattr(trf_module.TrustRegionJITFunctions, "__init__", lambda self: None)
+    monkeypatch.setattr(
+        trf_module.TrustRegionJITFunctions, "__init__", lambda self: None
+    )
 
     class DummyCjit:
         def evaluate_quadratic(self, *_a, **_k):
@@ -71,7 +73,9 @@ def test_select_step_reflection_branch(monkeypatch: pytest.MonkeyPatch) -> None:
         return 0.2, np.array([False, False])
 
     monkeypatch.setattr(trf_module, "step_size_to_bound", _step_size_to_bound)
-    monkeypatch.setattr(trf_module, "intersect_trust_region", lambda *_a, **_k: (0.0, 0.6))
+    monkeypatch.setattr(
+        trf_module, "intersect_trust_region", lambda *_a, **_k: (0.0, 0.6)
+    )
 
     def _minimize_quadratic_1d(_a, _b, _l, _u, c=None):
         if c is not None:

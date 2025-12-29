@@ -593,7 +593,9 @@ class TestPhase2CumulativeImprovements:
         """
         manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
-        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()) as mock_psutil:
+        with patch(
+            "nlsq.caching.memory_manager.psutil", create_psutil_mock()
+        ) as mock_psutil:
             # Simulate typical streaming optimization workload
             common_shapes = [(1000, 5), (5, 5), (1000,)]
             n_batches = 100

@@ -29,9 +29,14 @@ def test_get_info_dict_without_jax_or_psutil(monkeypatch: pytest.MonkeyPatch) ->
     assert info["memory"] is None
 
 
-def test_print_jax_info_gpu_backend(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_jax_info_gpu_backend(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """_print_jax_info should report GPU backend when devices indicate GPU."""
-    dummy = types.SimpleNamespace(__version__="0", devices=lambda: [types.SimpleNamespace(platform="gpu", device_kind="test")])
+    dummy = types.SimpleNamespace(
+        __version__="0",
+        devices=lambda: [types.SimpleNamespace(platform="gpu", device_kind="test")],
+    )
     monkeypatch.setitem(sys.modules, "jax", dummy)
 
     info_module._print_jax_info(verbose=False)
@@ -39,8 +44,11 @@ def test_print_jax_info_gpu_backend(monkeypatch: pytest.MonkeyPatch, capsys: pyt
     assert "Backend: GPU" in out
 
 
-def test_print_memory_info_error(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_memory_info_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """_print_memory_info should report errors if psutil fails."""
+
     class DummyPsutil:
         def virtual_memory(self):
             raise RuntimeError("boom")

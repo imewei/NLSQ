@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import socket
 import subprocess
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
-import importlib
 import sys
 import types
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -86,7 +85,9 @@ def test_run_in_browser_exits_on_start_failure(monkeypatch: pytest.MonkeyPatch) 
     """run_in_browser should exit when the server fails to start."""
     server = SimpleNamespace(start=lambda: False, stop=lambda: None)
     monkeypatch.setattr(gui_desktop, "StreamlitServer", lambda *_a, **_k: server)
-    monkeypatch.setitem(sys.modules, "webbrowser", SimpleNamespace(open=lambda *_a, **_k: None))
+    monkeypatch.setitem(
+        sys.modules, "webbrowser", SimpleNamespace(open=lambda *_a, **_k: None)
+    )
 
     with pytest.raises(SystemExit) as excinfo:
         gui_desktop.run_in_browser(port=8601)

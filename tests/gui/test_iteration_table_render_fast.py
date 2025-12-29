@@ -82,7 +82,10 @@ def streamlit_stub(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureReque
 def test_render_iteration_table_empty(streamlit_stub: types.ModuleType) -> None:
     module = importlib.import_module("nlsq.gui.components.iteration_table")
     module.render_iteration_table({"iterations": [], "params": [], "costs": []})
-    assert ("caption", "Parameter values will appear during fitting") in streamlit_stub._messages
+    assert (
+        "caption",
+        "Parameter values will appear during fitting",
+    ) in streamlit_stub._messages
 
 
 @pytest.mark.gui

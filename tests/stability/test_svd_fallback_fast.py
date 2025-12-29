@@ -34,7 +34,9 @@ def test_compute_svd_with_fallback_cpu_path(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.stability
 @pytest.mark.unit
-def test_compute_svd_with_fallback_numpy_last_resort(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compute_svd_with_fallback_numpy_last_resort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module = importlib.import_module("nlsq.stability.svd_fallback")
 
     def _raise(*_a, **_k):

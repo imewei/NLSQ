@@ -114,7 +114,7 @@ def test_model_selection_load_custom_fallback(
     monkeypatch: pytest.MonkeyPatch, _streamlit_pages_stub: types.ModuleType
 ) -> None:
     """Custom model loader should return None on adapter errors."""
-    _streamlit_pages_stub
+    assert _streamlit_pages_stub
 
     module = importlib.import_module("nlsq.gui.pages.2_Model_Selection")
 
@@ -172,7 +172,7 @@ def test_results_and_export_validity(
     monkeypatch: pytest.MonkeyPatch, _streamlit_pages_stub: types.ModuleType
 ) -> None:
     """Results/export pages should detect whether a valid result exists."""
-    _streamlit_pages_stub
+    assert _streamlit_pages_stub
 
     results_module = importlib.import_module("nlsq.gui.pages.4_Results")
     export_module = importlib.import_module("nlsq.gui.pages.5_Export")

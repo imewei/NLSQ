@@ -9,7 +9,9 @@ import pytest
 from nlsq.cli import templates
 
 
-def test_get_template_path_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_template_path_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """get_template_path should return the correct file path when present."""
     target = tmp_path / "custom_model_template.py"
     target.write_text("# template")
@@ -18,7 +20,9 @@ def test_get_template_path_success(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert templates.get_template_path("custom_model_template.py") == target
 
 
-def test_get_template_path_error_lists_available(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_template_path_error_lists_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Missing templates should raise with available template names listed."""
     (tmp_path / "workflow_config_template.yaml").write_text("# template")
     (tmp_path / "custom_model_template.py").write_text("# template")
@@ -32,7 +36,9 @@ def test_get_template_path_error_lists_available(tmp_path: Path, monkeypatch: py
     assert "custom_model_template.py" in msg
 
 
-def test_get_custom_and_workflow_templates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_get_custom_and_workflow_templates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """get_custom_model_template/get_workflow_template should delegate to helper."""
     custom = tmp_path / "custom_model_template.py"
     workflow = tmp_path / "workflow_config_template.yaml"

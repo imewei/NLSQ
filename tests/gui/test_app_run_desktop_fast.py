@@ -61,7 +61,9 @@ def _install_streamlit_stub() -> types.ModuleType:
 def streamlit_stub(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
     stub = _install_streamlit_stub()
     module_names = ("nlsq.gui.app",)
-    cached_modules = {name: sys.modules[name] for name in module_names if name in sys.modules}
+    cached_modules = {
+        name: sys.modules[name] for name in module_names if name in sys.modules
+    }
     cached_streamlit = sys.modules.get("streamlit")
     monkeypatch.setitem(sys.modules, "streamlit", stub)
     for name in module_names:
@@ -83,7 +85,9 @@ def streamlit_stub(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureReque
 
 @pytest.mark.gui
 @pytest.mark.unit
-def test_app_helpers(streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_app_helpers(
+    streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     app = importlib.import_module("nlsq.gui.app")
     monkeypatch.setattr(app, "st", streamlit_stub)
 
@@ -169,7 +173,9 @@ def test_run_desktop_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
         "webbrowser",
         types.SimpleNamespace(open=lambda url: opened.setdefault("url", url)),
     )
-    monkeypatch.setattr(module, "time", types.SimpleNamespace(sleep=lambda *_a, **_k: None))
+    monkeypatch.setattr(
+        module, "time", types.SimpleNamespace(sleep=lambda *_a, **_k: None)
+    )
 
     module.run_in_browser(port=1234)
     assert opened["url"] == "http://localhost:1234"

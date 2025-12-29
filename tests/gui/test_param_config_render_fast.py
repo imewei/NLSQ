@@ -104,7 +104,10 @@ def test_render_param_config_warns_without_params(
 
     state = SessionState()
     module.render_param_config(state, model=object())
-    assert ("warning", "Could not determine model parameters") in streamlit_stub._messages
+    assert (
+        "warning",
+        "Could not determine model parameters",
+    ) in streamlit_stub._messages
 
 
 @pytest.mark.gui

@@ -9,7 +9,9 @@ import pytest
 from nlsq.cli.commands import config as config_module
 
 
-def test_run_config_copies_both_templates(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_config_copies_both_templates(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """run_config should copy both templates by default."""
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.chdir(tmp_path)

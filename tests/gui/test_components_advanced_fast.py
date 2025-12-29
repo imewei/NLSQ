@@ -78,12 +78,22 @@ def _install_streamlit_stub() -> types.ModuleType:
     module.tabs = lambda labels: tuple(_ContextManager(module) for _ in labels)
     module.expander = lambda *_a, **_k: _ContextManager(module)
     module.text_area = lambda *_a, **_k: module._text_area_value
-    module.selectbox = lambda _label, options, **_k: _pop(module._selectbox_values, options[0])
+    module.selectbox = lambda _label, options, **_k: _pop(
+        module._selectbox_values, options[0]
+    )
     module.slider = lambda _label, **_k: _pop(module._slider_values, _k.get("value", 0))
-    module.number_input = lambda _label, **_k: _pop(module._number_values, _k.get("value", 0))
-    module.checkbox = lambda _label, **_k: _pop(module._checkbox_values, _k.get("value", False))
-    module.toggle = lambda _label, **_k: _pop(module._toggle_values, _k.get("value", False))
-    module.text_input = lambda _label, **_k: _pop(module._text_input_values, _k.get("value", ""))
+    module.number_input = lambda _label, **_k: _pop(
+        module._number_values, _k.get("value", 0)
+    )
+    module.checkbox = lambda _label, **_k: _pop(
+        module._checkbox_values, _k.get("value", False)
+    )
+    module.toggle = lambda _label, **_k: _pop(
+        module._toggle_values, _k.get("value", False)
+    )
+    module.text_input = lambda _label, **_k: _pop(
+        module._text_input_values, _k.get("value", "")
+    )
     module.file_uploader = lambda *_a, **_k: module._file_uploader_value
     module.button = lambda *_a, **_k: bool(_pop(module._button_values, False))
     module.dataframe = lambda *_a, **_k: None
@@ -101,7 +111,9 @@ def streamlit_stub(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureReque
         "nlsq.gui.components.code_editor",
         "nlsq.gui.components.model_preview",
     )
-    cached_modules = {name: sys.modules[name] for name in module_names if name in sys.modules}
+    cached_modules = {
+        name: sys.modules[name] for name in module_names if name in sys.modules
+    }
     cached_streamlit = sys.modules.get("streamlit")
     monkeypatch.setitem(sys.modules, "streamlit", stub)
     for module_name in module_names:
@@ -195,7 +207,9 @@ def test_multistart_disabled_caption(streamlit_stub: types.ModuleType) -> None:
     state = SessionState()
     streamlit_stub._toggle_values = [False]
     module.render_multistart_tab(state)
-    assert any("Enable multi-start" in (msg or "") for _, msg in streamlit_stub._messages)
+    assert any(
+        "Enable multi-start" in (msg or "") for _, msg in streamlit_stub._messages
+    )
 
 
 @pytest.mark.gui
@@ -214,7 +228,9 @@ def test_batch_tab_auto_workers_caption(streamlit_stub: types.ModuleType) -> Non
 
 @pytest.mark.gui
 @pytest.mark.unit
-def test_code_editor_validation_and_upload(streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_code_editor_validation_and_upload(
+    streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     module = importlib.import_module("nlsq.gui.components.code_editor")
 
     is_valid, msg = module.validate_code_syntax("")
@@ -257,20 +273,26 @@ def test_code_editor_validation_and_upload(streamlit_stub: types.ModuleType, mon
 
 @pytest.mark.gui
 @pytest.mark.unit
-def test_model_preview_rendering(streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_model_preview_rendering(
+    streamlit_stub: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     module = importlib.import_module("nlsq.gui.components.model_preview")
 
     assert module.format_parameter_list([]) == "(none)"
     assert "f(x" in module.get_equation_for_model("custom")
 
-    monkeypatch.setattr(module, "get_model_summary", lambda *_a, **_k: {
-        "param_count": 2,
-        "param_names": ["a", "b"],
-        "param_display": "a, b",
-        "has_auto_p0": True,
-        "has_auto_bounds": False,
-        "equation": "y=ax+b",
-    })
+    monkeypatch.setattr(
+        module,
+        "get_model_summary",
+        lambda *_a, **_k: {
+            "param_count": 2,
+            "param_names": ["a", "b"],
+            "param_display": "a, b",
+            "has_auto_p0": True,
+            "has_auto_bounds": False,
+            "equation": "y=ax+b",
+        },
+    )
     monkeypatch.setattr(module, "render_equation_display", lambda *_a, **_k: None)
 
     module.render_model_preview(object(), "builtin", model_name="linear")
@@ -281,9 +303,13 @@ def test_model_preview_rendering(streamlit_stub: types.ModuleType, monkeypatch: 
     assert ("info", "No parameters to display") in streamlit_stub._messages
 
     streamlit_stub._messages.clear()
-    monkeypatch.setattr(module, "get_model_summary", lambda *_a, **_k: {
-        "has_auto_p0": False,
-        "has_auto_bounds": True,
-    })
+    monkeypatch.setattr(
+        module,
+        "get_model_summary",
+        lambda *_a, **_k: {
+            "has_auto_p0": False,
+            "has_auto_bounds": True,
+        },
+    )
     module.render_model_capabilities(object())
     assert any("Auto p0" in (msg or "") for _, msg in streamlit_stub._messages)

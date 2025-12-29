@@ -15,7 +15,10 @@ def test_param_config_helpers() -> None:
     module = importlib.import_module("nlsq.gui.components.param_config")
 
     assert module.validate_bounds(None, 1.0) == (True, "")
-    assert module.validate_bounds(2.0, 1.0) == (False, "Lower bound must be <= upper bound")
+    assert module.validate_bounds(2.0, 1.0) == (
+        False,
+        "Lower bound must be <= upper bound",
+    )
     assert module.get_default_p0_value() == 1.0
 
     config = module.create_param_config_dict(["a", "b"])
@@ -83,8 +86,12 @@ def test_iteration_history_helpers() -> None:
     module = importlib.import_module("nlsq.gui.components.iteration_table")
 
     history = module.create_iteration_history(["a", "b"])
-    history = module.update_iteration_history(history, 1, np.array([1.0, 2.0]), cost=3.0)
-    history = module.update_iteration_history(history, 2, np.array([1.5, 2.5]), cost=2.0)
+    history = module.update_iteration_history(
+        history, 1, np.array([1.0, 2.0]), cost=3.0
+    )
+    history = module.update_iteration_history(
+        history, 2, np.array([1.5, 2.5]), cost=2.0
+    )
     assert history["iterations"] == [1, 2]
     assert history["costs"] == [3.0, 2.0]
 

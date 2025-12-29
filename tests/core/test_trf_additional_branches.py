@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-
-import jax.numpy as jnp
 
 from nlsq.core.trf import TrustRegionReflective
 
@@ -16,7 +15,9 @@ def test_check_convergence_criteria_hits() -> None:
     assert status == 1
 
 
-def test_solve_trust_region_subproblem_sparse_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_solve_trust_region_subproblem_sparse_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trf = TrustRegionReflective()
 
     def _svd_no_bounds(J: jnp.ndarray, d_jnp: jnp.ndarray, f: jnp.ndarray):

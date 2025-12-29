@@ -9,7 +9,9 @@ import pytest
 from nlsq.compat import get_deprecated_module
 
 
-def test_get_deprecated_module_warns_and_imports(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_deprecated_module_warns_and_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """get_deprecated_module should warn and delegate to importlib."""
     sentinel = types.SimpleNamespace(name="ok")
 

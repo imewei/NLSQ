@@ -106,7 +106,9 @@ def test_render_fit_statistics_and_summary(streamlit_stub: types.ModuleType) -> 
         optimality=1e-6,
     )
 
-    module.render_fit_statistics(result, container=streamlit_stub, show_convergence=True)
+    module.render_fit_statistics(
+        result, container=streamlit_stub, show_convergence=True
+    )
     assert any("Fit Quality" in (msg or "") for kind, msg in streamlit_stub._messages)
     assert ("success", "Fit Quality: Very Good") in streamlit_stub._messages
 

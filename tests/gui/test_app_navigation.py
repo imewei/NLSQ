@@ -88,7 +88,7 @@ def app_with_streamlit_stub(
             sys.modules.pop("nlsq.gui", None)
         elif original_gui is not None:
             if original_gui_app_attr is not None:
-                setattr(original_gui, "app", original_gui_app_attr)
+                original_gui.app = original_gui_app_attr
             elif hasattr(original_gui, "app"):
                 delattr(original_gui, "app")
 
@@ -100,7 +100,7 @@ def app_with_streamlit_stub(
 def test_app_status_and_navigation_messages(
     app_with_streamlit_stub: tuple[types.ModuleType, types.ModuleType],
 ) -> None:
-    app, stub = app_with_streamlit_stub
+    app, _stub = app_with_streamlit_stub
     from nlsq.gui.state import SessionState
 
     state = SessionState()

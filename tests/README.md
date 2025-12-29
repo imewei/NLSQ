@@ -2,7 +2,7 @@
 
 **Comprehensive test coverage for the NLSQ (Nonlinear Least Squares) library**
 
-[![Tests](https://img.shields.io/badge/tests-2780%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-3279%20passing-success)](.)
 [![Coverage](https://img.shields.io/badge/coverage-74%25-green)](.)
 [![Python](https://img.shields.io/badge/python-3.12+-blue)](.)
 
@@ -10,17 +10,17 @@
 
 ## Overview
 
-The NLSQ test suite consists of **2,780 passing tests** achieving **74% code coverage**, providing comprehensive validation of the JAX-accelerated curve fitting library.
+The NLSQ test suite consists of **3279 passing tests** achieving **74% code coverage**, providing comprehensive validation of the JAX-accelerated curve fitting library.
 
 ### Quick Stats
 
 | Metric | Value |
 |--------|-------|
-| **Total Tests** | 2,780 passing |
+| **Total Tests** | 3279 passing |
 | **Test Files** | 100 files |
 | **Code Coverage** | 74% (industry-standard) |
 | **Test Quality** | ⭐⭐⭐⭐⭐ Production-ready |
-| **Pass Rate** | 100% (2,780/2,780) |
+| **Pass Rate** | 100% (3279/3279) |
 
 ---
 
@@ -589,5 +589,5 @@ See `../LICENSE` for details.
 ---
 
 **Last Updated**: 2025-12-21
-**Test Suite Version**: 4.0 (2,315 tests across 100 test files)
+**Test Suite Version**: 4.0 (3279 tests across 100 test files)
 **Maintainer**: NLSQ Development Team

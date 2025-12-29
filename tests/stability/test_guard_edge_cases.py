@@ -37,7 +37,7 @@ class TestSolveWithCholeskyFallback:
         # Indefinite matrix (has negative eigenvalue)
         A = jnp.array([[1.0, 2.0], [2.0, 1.0]])
         b = jnp.array([1.0, 1.0])
-        x, used_cholesky = solve_with_cholesky_fallback(A, b)
+        x, _used_cholesky = solve_with_cholesky_fallback(A, b)
 
         # Solution should still be reasonable
         assert all(np.isfinite(x))
@@ -46,7 +46,7 @@ class TestSolveWithCholeskyFallback:
         """Test with nearly singular matrix."""
         A = jnp.array([[1.0, 1.0], [1.0, 1.0 + 1e-10]])
         b = jnp.array([2.0, 2.0])
-        x, used_cholesky = solve_with_cholesky_fallback(A, b)
+        x, _used_cholesky = solve_with_cholesky_fallback(A, b)
 
         # Should not crash, solution may be regularized
         assert all(np.isfinite(x))
@@ -64,7 +64,7 @@ class TestSolveWithCholeskyFallback:
         """Test with diagonal positive definite matrix."""
         A = jnp.diag(jnp.array([4.0, 9.0, 16.0]))
         b = jnp.array([8.0, 27.0, 64.0])
-        x, used_cholesky = solve_with_cholesky_fallback(A, b)
+        x, _used_cholesky = solve_with_cholesky_fallback(A, b)
 
         expected = jnp.array([2.0, 3.0, 4.0])
         assert_allclose(np.asarray(x), np.asarray(expected), rtol=1e-10)
@@ -97,7 +97,7 @@ class TestSolveWithCholeskyFallback:
         A = jnp.array([[4.0, 2.0], [2.0, 3.0]])
         b = jnp.array([1.0, 2.0])
 
-        x, used_cholesky = jit_solve(A, b)
+        x, _used_cholesky = jit_solve(A, b)
         assert all(np.isfinite(x))
 
 
@@ -279,7 +279,7 @@ class TestNumericalStabilityGuardJacobianCheck:
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
-            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+            J_fixed, _issues = self.guard.check_and_fix_jacobian(J)
 
         # Should add small perturbation (eps ~ 2.22e-16)
         # Use exact comparison since the values should be exactly eps
@@ -291,7 +291,7 @@ class TestNumericalStabilityGuardJacobianCheck:
         guard = NumericalStabilityGuard(max_jacobian_elements_for_svd=100)
         J = jnp.ones((20, 10))  # 200 elements > 100
 
-        J_fixed, issues = guard.check_and_fix_jacobian(J)
+        _J_fixed, issues = guard.check_and_fix_jacobian(J)
 
         assert issues["svd_skipped"] is True
         assert "reason" in issues
@@ -302,7 +302,7 @@ class TestNumericalStabilityGuardJacobianCheck:
         guard = NumericalStabilityGuard(max_jacobian_elements_for_svd=10_000_000)
         J = jnp.array([[1.0, 2.0], [3.0, 4.0]])  # 4 elements
 
-        J_fixed, issues = guard.check_and_fix_jacobian(J)
+        _J_fixed, issues = guard.check_and_fix_jacobian(J)
 
         # SVD should be used
         assert issues.get("svd_skipped", False) is False
@@ -321,7 +321,7 @@ class TestNumericalStabilityGuardGradientCheck:
         max_grad_norm = 100.0
 
         result = self.guard._check_gradient_jit(gradient, max_grad_norm)
-        grad_fixed, has_invalid, needs_clipping, grad_norm = result
+        grad_fixed, has_invalid, needs_clipping, _grad_norm = result
 
         assert_allclose(np.asarray(grad_fixed), np.asarray(gradient), rtol=1e-12)
         assert has_invalid is False or bool(has_invalid) is False
@@ -348,7 +348,9 @@ class TestNumericalStabilityGuardGradientCheck:
         grad_fixed, _, needs_clipping, _ = result
 
         assert needs_clipping is True or bool(needs_clipping) is True
-        assert float(jnp.linalg.norm(grad_fixed)) <= max_grad_norm * 1.01  # Small tolerance
+        assert (
+            float(jnp.linalg.norm(grad_fixed)) <= max_grad_norm * 1.01
+        )  # Small tolerance
 
 
 class TestNumericalStabilityGuardSafeNorm:
@@ -401,7 +403,7 @@ class TestNumericalStabilityGuardEdgeCases:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
-                J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+                _J_fixed, issues = self.guard.check_and_fix_jacobian(J)
             # If it works, verify issues dict exists
             assert isinstance(issues, dict)
         except (ValueError, IndexError):
@@ -411,7 +413,7 @@ class TestNumericalStabilityGuardEdgeCases:
     def test_single_element_jacobian(self):
         """Test with 1x1 Jacobian."""
         J = jnp.array([[5.0]])
-        J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+        J_fixed, _issues = self.guard.check_and_fix_jacobian(J)
 
         assert_allclose(np.asarray(J_fixed), np.asarray(J), rtol=1e-12)
 
@@ -420,7 +422,7 @@ class TestNumericalStabilityGuardEdgeCases:
         J = jnp.ones((1000, 3))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+            J_fixed, _issues = self.guard.check_and_fix_jacobian(J)
 
         assert J_fixed.shape == (1000, 3)
         assert jnp.isfinite(J_fixed).all()
@@ -430,7 +432,7 @@ class TestNumericalStabilityGuardEdgeCases:
         J = jnp.ones((3, 100))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+            J_fixed, _issues = self.guard.check_and_fix_jacobian(J)
 
         assert J_fixed.shape == (3, 100)
         assert jnp.isfinite(J_fixed).all()
@@ -452,7 +454,7 @@ class TestNumericalStabilityGuardEdgeCases:
         J = jnp.array([[1e-310, 1e-315], [1e-320, 1.0]])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            J_fixed, issues = self.guard.check_and_fix_jacobian(J)
+            J_fixed, _issues = self.guard.check_and_fix_jacobian(J)
 
         # Subnormals should be preserved (they're valid finite numbers)
         assert jnp.isfinite(J_fixed).all()

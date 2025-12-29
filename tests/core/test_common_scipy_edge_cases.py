@@ -5,7 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from nlsq.common_scipy import intersect_trust_region, solve_lsq_trust_region, solve_trust_region_2d
+from nlsq.common_scipy import (
+    intersect_trust_region,
+    solve_lsq_trust_region,
+    solve_trust_region_2d,
+)
 
 
 def test_intersect_trust_region_errors() -> None:

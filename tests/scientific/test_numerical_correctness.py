@@ -35,7 +35,7 @@ class TestAnalyticalSolutions:
 
         y = true_a * x + true_b
 
-        popt, pcov = curve_fit(linear, x, y, p0=[1.0, 0.0])
+        popt, _pcov = curve_fit(linear, x, y, p0=[1.0, 0.0])
 
         assert_allclose(popt[0], true_a, rtol=1e-8)
         assert_allclose(popt[1], true_b, rtol=1e-8)
@@ -48,8 +48,12 @@ class TestAnalyticalSolutions:
 
         y = true_a * np.exp(-true_b * x) + true_c
 
-        popt, pcov = curve_fit(
-            exponential_decay, x, y, p0=[5.0, 0.3, 1.0], bounds=([0, 0, -10], [20, 5, 10])
+        popt, _pcov = curve_fit(
+            exponential_decay,
+            x,
+            y,
+            p0=[5.0, 0.3, 1.0],
+            bounds=([0, 0, -10], [20, 5, 10]),
         )
 
         assert_allclose(popt[0], true_a, rtol=1e-6)
@@ -64,8 +68,12 @@ class TestAnalyticalSolutions:
 
         y = true_a * np.exp(true_b * x) + true_c
 
-        popt, pcov = curve_fit(
-            exponential_growth, x, y, p0=[3.0, 0.2, 0.5], bounds=([0, 0, -5], [20, 2, 5])
+        popt, _pcov = curve_fit(
+            exponential_growth,
+            x,
+            y,
+            p0=[3.0, 0.2, 0.5],
+            bounds=([0, 0, -5], [20, 2, 5]),
         )
 
         assert_allclose(popt[0], true_a, rtol=1e-5)
@@ -102,9 +110,13 @@ class TestNoisyDataRecovery:
         true_a, true_b, true_c = 100.0, 0.5, 10.0
         noise_std = 5.0
 
-        y = true_a * np.exp(-true_b * x) + true_c + np.random.normal(0, noise_std, len(x))
+        y = (
+            true_a * np.exp(-true_b * x)
+            + true_c
+            + np.random.normal(0, noise_std, len(x))
+        )
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             exponential_decay,
             x,
             y,
@@ -225,12 +237,11 @@ class TestVmapCorrectness:
         vmapped_results = jax.vmap(linear_batch)(params)
 
         # Using loop
-        loop_results = []
-        for p in params:
-            loop_results.append(linear(x, p[0], p[1]))
-        loop_results = jnp.stack(loop_results)
+        loop_results = jnp.stack([linear(x, p[0], p[1]) for p in params])
 
-        assert_allclose(np.asarray(vmapped_results), np.asarray(loop_results), rtol=1e-12)
+        assert_allclose(
+            np.asarray(vmapped_results), np.asarray(loop_results), rtol=1e-12
+        )
 
     def test_exponential_vmap_over_data(self):
         """Test vmap over multiple datasets."""
@@ -263,7 +274,7 @@ class TestNumericalStabilityEdgeCases:
         x = np.linspace(0, 10, 100)
         y = 2.0 * x + 1.0  # Exact data, no noise
 
-        popt, pcov = curve_fit(linear, x, y, p0=[1.0, 0.0])
+        popt, _pcov = curve_fit(linear, x, y, p0=[1.0, 0.0])
 
         assert_allclose(popt[0], 2.0, rtol=1e-10)
         assert_allclose(popt[1], 1.0, rtol=1e-10)
@@ -276,7 +287,7 @@ class TestNumericalStabilityEdgeCases:
 
         y = true_a * x + true_b + np.random.normal(0, 100, len(x))
 
-        popt, pcov = curve_fit(linear, x, y, p0=[1e5, 1e4])
+        popt, _pcov = curve_fit(linear, x, y, p0=[1e5, 1e4])
 
         assert_allclose(popt[0], true_a, rtol=0.01)
         assert_allclose(popt[1], true_b, rtol=0.1)
@@ -289,7 +300,7 @@ class TestNumericalStabilityEdgeCases:
 
         y = true_a * x + true_b
 
-        popt, pcov = curve_fit(linear, x, y, p0=[1e-7, 1e-6])
+        popt, _pcov = curve_fit(linear, x, y, p0=[1e-7, 1e-6])
 
         assert_allclose(popt[0], true_a, rtol=1e-6)
         assert_allclose(popt[1], true_b, rtol=1e-6)
@@ -302,7 +313,7 @@ class TestNumericalStabilityEdgeCases:
 
         y = true_a * x + true_b
 
-        popt, pcov = curve_fit(linear, x, y, p0=[1e-4, 1e2])
+        popt, _pcov = curve_fit(linear, x, y, p0=[1e-4, 1e2])
 
         assert_allclose(popt[0], true_a, rtol=1e-6)
         assert_allclose(popt[1], true_b, rtol=1e-6)
@@ -315,7 +326,7 @@ class TestNumericalStabilityEdgeCases:
 
         y = true_a * np.exp(-true_b * x) + true_c + np.random.normal(0, 1, len(x))
 
-        popt, pcov = curve_fit(
+        popt, _pcov = curve_fit(
             exponential_decay,
             x,
             y,
@@ -366,7 +377,7 @@ class TestToleranceAssertions:
         noise_std = 0.5
         y = 2.0 * x + 1.0 + np.random.normal(0, noise_std, len(x))
 
-        popt, pcov = curve_fit(linear, x, y, p0=[1.0, 0.0])
+        _popt, pcov = curve_fit(linear, x, y, p0=[1.0, 0.0])
 
         # Standard errors
         perr = np.sqrt(np.diag(pcov))
@@ -416,7 +427,7 @@ class TestNoNaNInfInResults:
         y = 2.0 * x + 1.0 + np.random.normal(0, 0.5, len(x))
 
         # Very poor initial guess
-        popt, pcov = curve_fit(linear, x, y, p0=[100.0, -50.0])
+        popt, _pcov = curve_fit(linear, x, y, p0=[100.0, -50.0])
 
         assert np.all(np.isfinite(popt))
         # Result should still be close to true values
