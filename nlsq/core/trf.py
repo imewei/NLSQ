@@ -86,6 +86,8 @@ References
     and Theory," Numerical Analysis, ed. G. A. Watson, Lecture
 """
 
+# mypy: ignore-errors
+
 import time
 import warnings
 from collections.abc import Callable

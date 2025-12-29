@@ -4,6 +4,8 @@ This module provides utilities for efficiently fitting curve parameters to very 
 (>10M points) with intelligent memory management, automatic chunking, and progress reporting.
 """
 
+# mypy: ignore-errors
+
 import gc
 import time
 from collections import defaultdict

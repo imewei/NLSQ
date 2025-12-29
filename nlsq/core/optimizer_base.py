@@ -41,7 +41,7 @@ class OptimizerBase(ABC):
         fun: Callable,
         x0: np.ndarray,
         jac: Callable | None = None,
-        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        bounds: tuple[np.ndarray, np.ndarray] | tuple[float, float] = (-np.inf, np.inf),
         **kwargs,
     ) -> OptimizeResult:
         """Perform optimization.

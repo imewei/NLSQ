@@ -409,7 +409,7 @@ class ProfileContext:
         """Initialize context."""
         self.profiler = profiler
         self.name = name
-        self.metrics = None
+        self.metrics: ProfileMetrics | None = None
 
     def __enter__(self):
         """Enter context."""

@@ -68,8 +68,7 @@ def get_deprecated_module(old_name: str) -> Any:
 
     new_path = _COMPAT_MAPPING[old_name]
     warnings.warn(
-        f"Importing from 'nlsq.{old_name}' is deprecated. "
-        f"Use '{new_path}' instead.",
+        f"Importing from 'nlsq.{old_name}' is deprecated. Use '{new_path}' instead.",
         DeprecationWarning,
         stacklevel=3,
     )

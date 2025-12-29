@@ -142,7 +142,7 @@ class MemoryManager:
             self._initial_safety_factor = safety_factor
             self.enable_adaptive_safety = enable_adaptive_safety
 
-        self._peak_memory = 0
+        self._peak_memory: float = 0.0
 
         # TTL-based cache for psutil calls (reduces overhead by 90%)
         self._memory_cache_ttl = memory_cache_ttl
@@ -581,7 +581,7 @@ class MemoryManager:
             - p95_safety_needed: 95th percentile of safety factors needed (if data available)
             - safety_factor_history: List of safety factors over time
         """
-        telemetry = {
+        telemetry: dict[str, object] = {
             "current_safety_factor": self.safety_factor,
             "initial_safety_factor": self._initial_safety_factor,
             "min_safety_factor": self._min_safety_factor,
@@ -701,7 +701,7 @@ class MemoryManager:
         pool_memory = sum(arr.nbytes for arr in self.memory_pool.values())
         pool_arrays = len(self.memory_pool)
 
-        stats = {
+        stats: dict[str, object] = {
             "current_usage_gb": current_memory / 1e9,
             "available_gb": available_memory / 1e9,
             "peak_usage_gb": self._peak_memory / 1e9,

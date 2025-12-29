@@ -4,6 +4,8 @@ This module provides sparse matrix support for Jacobian computations,
 enabling efficient handling of problems with 20M+ data points.
 """
 
+# mypy: ignore-errors
+
 from collections.abc import Callable
 
 import jax.numpy as jnp

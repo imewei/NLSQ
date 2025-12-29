@@ -352,9 +352,9 @@ class NLSQLogger:
         filename = save_path / f"optimization_history_{self.name}_{timestamp}.npz"
 
         # Convert history to arrays
-        data = {}
+        data: dict[str, np.ndarray] = {}
         for key in self.optimization_history[0]:
-            values = []
+            values: list[float] = []
             for entry in self.optimization_history:
                 val = entry.get(key, np.nan)
                 # Handle string values
@@ -366,7 +366,7 @@ class NLSQLogger:
                 values.append(val)
             data[key] = np.array(values)
 
-        np.savez(filename, **data)
+        np.savez(file=filename, **data)  # type: ignore[arg-type]
         self.info(f"Saved optimization history to {filename}")
 
 

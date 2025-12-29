@@ -7,6 +7,7 @@ and diagnostic reporting for optimization processes.
 import time
 import warnings
 from collections import deque
+from typing import Any
 
 import numpy as np
 
@@ -49,10 +50,10 @@ class ConvergenceMonitor:
         """
         self.window_size = window_size
         self.sensitivity = sensitivity
-        self.cost_history = deque(maxlen=window_size)
-        self.param_history = deque(maxlen=window_size)
-        self.gradient_history = deque(maxlen=window_size)
-        self.step_size_history = deque(maxlen=window_size)
+        self.cost_history: deque[float] = deque(maxlen=window_size)
+        self.param_history: deque[np.ndarray] = deque(maxlen=window_size)
+        self.gradient_history: deque[float] = deque(maxlen=window_size)
+        self.step_size_history: deque[float] = deque(maxlen=window_size)
 
         # Pattern detection thresholds
         self.oscillation_threshold = 0.7 * sensitivity
@@ -84,7 +85,7 @@ class ConvergenceMonitor:
 
         if gradient is not None:
             grad_norm = np.linalg.norm(gradient)
-            self.gradient_history.append(grad_norm)
+            self.gradient_history.append(float(grad_norm))
 
         if step_size is not None:
             self.step_size_history.append(step_size)
@@ -160,8 +161,8 @@ class ConvergenceMonitor:
             return False, 0.0
 
         recent_costs = list(self.cost_history)[-5:]
-        cost_variance = np.var(recent_costs)
-        cost_mean = np.mean(recent_costs)
+        cost_variance = float(np.var(recent_costs))
+        cost_mean = float(np.mean(recent_costs))
 
         if cost_mean == 0:
             relative_variance = cost_variance
@@ -171,7 +172,9 @@ class ConvergenceMonitor:
         # Check gradient stagnation
         if len(self.gradient_history) >= 3:
             recent_grads = list(self.gradient_history)[-3:]
-            grad_stagnation = np.mean(recent_grads) < self.stagnation_threshold * 10
+            grad_stagnation = (
+                float(np.mean(recent_grads)) < self.stagnation_threshold * 10
+            )
         else:
             grad_stagnation = False
 
@@ -270,31 +273,31 @@ class OptimizationDiagnostics:
             - 1: Normal (cheap 1-norm condition estimate, O(nm))
             - 2: Detailed (full SVD condition number, O(mn²))
         """
-        self.iteration_data = []
+        self.iteration_data: list[dict[str, Any]] = []
         self.convergence_monitor = ConvergenceMonitor()
-        self.start_time = None
+        self.start_time: float | None = None
         self.enable_plotting = enable_plotting
         self.verbosity = verbosity
 
         # Problem detection
-        self.warnings_issued = []
-        self.numerical_issues = []
+        self.warnings_issued: list[str] = []
+        self.numerical_issues: list[str] = []
 
         # Performance metrics
         self.function_eval_count = 0
         self.jacobian_eval_count = 0
 
         # Memory tracking
-        self.peak_memory = 0
-        self.initial_memory = self._get_memory_usage()
+        self.peak_memory: float = 0.0
+        self.initial_memory: float = self._get_memory_usage()
 
         # Problem metadata (initialized by start_optimization)
-        self.n_params = None
-        self.n_data = None
-        self.method = None
-        self.loss = None
-        self.initial_params = None
-        self.problem_name = None
+        self.n_params: int | None = None
+        self.n_data: int | None = None
+        self.method: str | None = None
+        self.loss: str | None = None
+        self.initial_params: np.ndarray | None = None
+        self.problem_name: str | None = None
 
     def start_optimization(
         self,
@@ -450,7 +453,7 @@ class OptimizationDiagnostics:
         current_memory = self._get_memory_usage()
         self.peak_memory = max(self.peak_memory, current_memory)
 
-    def record_event(self, event_type: str, data: dict = None):
+    def record_event(self, event_type: str, data: dict[str, Any] | None = None):
         """Record a special event during optimization.
 
         Parameters

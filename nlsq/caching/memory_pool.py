@@ -139,6 +139,7 @@ class MemoryPool:
 
         # For simplicity, keep same number of dimensions
         # but adjust total size to match bucket
+        bucketed_shape: tuple[int, ...]
         if len(shape) == 1:
             bucketed_shape = (bucketed_elements,)
         else:

@@ -15,6 +15,8 @@ in normalized parameter space while maintaining JAX JIT compatibility.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import jax.numpy as jnp
 
 __all__ = ["NormalizedModelWrapper", "ParameterNormalizer"]
@@ -345,7 +347,9 @@ class NormalizedModelWrapper:
     ParameterNormalizer : Handles parameter normalization
     """
 
-    def __init__(self, model_fn: callable, normalizer: ParameterNormalizer):
+    def __init__(
+        self, model_fn: Callable[..., jnp.ndarray], normalizer: ParameterNormalizer
+    ):
         """Initialize normalized model wrapper.
 
         Parameters

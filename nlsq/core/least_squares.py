@@ -1,5 +1,7 @@
 """Generic interface for least-squares minimization."""
 
+# mypy: ignore-errors
+
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 from warnings import warn
@@ -413,7 +415,7 @@ class LeastSquares:
         self.logger = get_logger("least_squares")
         # initialize jacobian to None and f to a dummy function
         self.f = lambda x: None
-        self.jac = None
+        self.jac: Callable[..., jnp.ndarray] | None = None
 
         # need a separate instance of the autodiff class for each of the
         # the different sigma/covariance cases

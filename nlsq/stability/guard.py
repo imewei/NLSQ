@@ -91,7 +91,7 @@ __all__ = [
 
 def solve_with_cholesky_fallback(
     A: jnp.ndarray, b: jnp.ndarray
-) -> tuple[jnp.ndarray, bool]:
+) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Solve linear system Ax = b using Cholesky with eigenvalue fallback.
 
     This function attempts Cholesky decomposition first (O(n³/3)) and falls back
@@ -109,8 +109,9 @@ def solve_with_cholesky_fallback(
     -------
     x : jnp.ndarray
         Solution vector (n,).
-    used_cholesky : bool
-        True if Cholesky was used, False if eigenvalue fallback was needed.
+    used_cholesky : jnp.ndarray
+        Boolean mask indicating whether Cholesky was used (True) or the
+        eigenvalue fallback was needed (False).
 
     Notes
     -----
@@ -324,7 +325,7 @@ class NumericalStabilityGuard:
                 warnings.warn(
                     "Jacobian contains NaN or Inf values, replacing with zeros"
                 )
-            issues = {
+            issues: dict[str, object] = {
                 "has_nan": bool(has_invalid),
                 "has_inf": bool(has_invalid),
                 "is_ill_conditioned": False,

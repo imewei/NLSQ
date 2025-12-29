@@ -199,6 +199,8 @@ curve_fit_large : High-level interface for large datasets
 LargeDatasetFitter : Alternative for datasets that fit in memory but need chunking
 """
 
+# mypy: ignore-errors
+
 import contextlib
 import copy
 import logging

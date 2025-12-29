@@ -4,6 +4,8 @@ This module extends the SVD fallback to provide comprehensive fallback
 strategies for all matrix decompositions used in optimization.
 """
 
+from typing import Literal, cast
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -187,7 +189,10 @@ class RobustDecomposition:
                 return U, s, Vt
             elif decomp_type == "qr":
                 mode = args[0] if args else "reduced"
-                Q, R = jax_qr(matrix, mode=mode)
+                qr_result = cast(
+                    tuple[jnp.ndarray, jnp.ndarray], jax_qr(matrix, mode=mode)
+                )
+                Q, R = qr_result
                 return Q, R
             elif decomp_type == "cholesky":
                 lower = args[0] if args else True
@@ -211,7 +216,10 @@ class RobustDecomposition:
                 return U, s, Vt
             elif decomp_type == "qr":
                 mode = args[0] if args else "reduced"
-                Q, R = jax_qr(matrix_cpu, mode=mode)
+                qr_result = cast(
+                    tuple[jnp.ndarray, jnp.ndarray], jax_qr(matrix_cpu, mode=mode)
+                )
+                Q, R = qr_result
                 return Q, R
             elif decomp_type == "cholesky":
                 lower = args[0] if args else True
@@ -252,6 +260,7 @@ class RobustDecomposition:
             return jnp.array(U), jnp.array(s), jnp.array(Vt)
         elif decomp_type == "qr":
             mode = args[0] if args else "reduced"
+            mode = cast(Literal["reduced", "complete", "r", "raw"], mode)
             Q, R = np.linalg.qr(matrix_np, mode=mode)
             return jnp.array(Q), jnp.array(R)
         elif decomp_type == "cholesky":
@@ -380,10 +389,10 @@ class RobustDecomposition:
         try:
             U, s, Vt = result
             return (
-                jnp.all(jnp.isfinite(U))
-                and jnp.all(jnp.isfinite(s))
-                and jnp.all(jnp.isfinite(Vt))
-                and jnp.all(s >= 0)  # Singular values must be non-negative
+                bool(jnp.all(jnp.isfinite(U)))
+                and bool(jnp.all(jnp.isfinite(s)))
+                and bool(jnp.all(jnp.isfinite(Vt)))
+                and bool(jnp.all(s >= 0))  # Singular values must be non-negative
             )
         except (ValueError, TypeError, AttributeError):
             return False
@@ -403,7 +412,7 @@ class RobustDecomposition:
         """
         try:
             Q, R = result
-            return jnp.all(jnp.isfinite(Q)) and jnp.all(jnp.isfinite(R))
+            return bool(jnp.all(jnp.isfinite(Q))) and bool(jnp.all(jnp.isfinite(R)))
         except (ValueError, TypeError, AttributeError):
             return False
 

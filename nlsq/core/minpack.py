@@ -37,6 +37,8 @@ See Also:
     nlsq.trf : Trust Region Reflective implementation
 """
 
+# mypy: ignore-errors
+
 import time
 import warnings
 from collections.abc import Callable

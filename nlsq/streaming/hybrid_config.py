@@ -286,7 +286,7 @@ class HybridStreamingConfig:
     warmup_learning_rate: float = 0.001
     loss_plateau_threshold: float = 1e-4
     gradient_norm_threshold: float = 1e-3
-    active_switching_criteria: list = None
+    active_switching_criteria: list[str] | None = None
 
     # L-BFGS configuration parameters
     lbfgs_history_size: int = 10  # Standard default (SciPy, PyTorch, Nocedal & Wright)

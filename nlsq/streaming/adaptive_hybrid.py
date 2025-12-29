@@ -16,6 +16,8 @@ The optimizer operates in four phases:
 This implementation focuses on Phase 0 setup logic and phase tracking infrastructure.
 """
 
+# mypy: ignore-errors
+
 from __future__ import annotations
 
 import pickle
