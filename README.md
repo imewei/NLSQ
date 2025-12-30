@@ -253,10 +253,10 @@ See [examples/README.md](examples/README.md) for the full index.
 If you use NLSQ in your research, please cite:
 
 ```bibtex
-@software{nlsq2024,
+@software{nlsq2025,
   title={NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU},
   author={Chen, Wei and Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
-  year={2024},
+  year={2025},
   url={https://github.com/imewei/NLSQ}
 }
 
