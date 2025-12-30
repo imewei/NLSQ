@@ -137,6 +137,35 @@ For detailed dependency requirements and version management, see [REQUIREMENTS.m
 
 ---
 
+## Known Dependency Vulnerabilities
+
+This section tracks known vulnerabilities in NLSQ's dependencies that cannot be immediately fixed due to lack of upstream patches.
+
+### CVE-2025-53000: nbconvert (Windows only)
+
+| Field | Value |
+|-------|-------|
+| **CVE** | [CVE-2025-53000](https://github.com/advisories/GHSA-xm59-rqc7-hhvf) |
+| **Severity** | HIGH (CVSS 8.5) |
+| **Affected Package** | `nbconvert` (all versions up to 7.16.6) |
+| **Dependency Chain** | `nlsq[jupyter]` → `jupyterlab` → `jupyter_server` → `nbconvert` |
+| **Upstream Issue** | [jupyter/nbconvert#2258](https://github.com/jupyter/nbconvert/issues/2258) |
+| **Fix Available** | No (as of 2025-12-29) |
+
+**Description**: Uncontrolled search path vulnerability on Windows. When running `jupyter nbconvert --to pdf` on notebooks containing SVG output, a malicious `inkscape.bat` file in the current directory could be executed.
+
+**Impact on NLSQ**:
+- Only affects Windows users
+- Only triggers when converting notebooks to PDF with SVG content
+- Does not affect core curve fitting functionality
+- Is in an optional dependency (`jupyter` extra)
+
+**Mitigation**: Avoid running `jupyter nbconvert --to pdf` from untrusted directories on Windows until upstream releases a patch.
+
+**Status**: Waiting for upstream fix. This entry will be removed once `nbconvert` releases a patched version.
+
+---
+
 ## Known Security Considerations
 
 ### 1. Arbitrary Code Execution via Fit Functions
@@ -209,4 +238,4 @@ We appreciate security researchers who help keep NLSQ secure:
 
 ---
 
-**Last Updated**: 2025-10-08
+**Last Updated**: 2025-12-29
