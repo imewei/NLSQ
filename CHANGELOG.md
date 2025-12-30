@@ -7,36 +7,141 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2025-12-29
+
 ### Added
 
-- **Performance benchmark suite**: New `benchmarks/` directory with pytest-benchmark tests for sparse Jacobian, memory pool, and algorithm efficiency
-- **LRU memory pool eviction**: Memory pool now uses LRU eviction policy with `OrderedDict.move_to_end()` for optimal cache hit rates
-- **Model validation caching**: `LargeDatasetFitter` caches model validation by function identity to avoid redundant validation across chunks
-- **JIT-compiled numeric validation**: Streaming optimizer includes JIT-compiled NaN/Inf validation for `validate_numerics=True` mode
-- **Adaptive TTL for memory pool**: Memory pool entries now have adaptive time-to-live based on access patterns
-- **Pure JAX trust region solver** (`solve_lsq_trust_region_jax`): JAX-compiled implementation using `lax.while_loop` for pure JAX execution in optimization hot path, enabling GPU/TPU acceleration and XLA kernel fusion
-- **JAX phi function** (`phi_and_derivative_jax`): JIT-compiled secular equation solver for Levenberg-Marquardt parameter estimation
+#### Interactive Streamlit GUI
+- **`nlsq gui` CLI command**: Launch interactive curve fitting interface
+  - Data import from CSV, Excel, JSON, and HDF5 files
+  - Built-in model library with 15+ common functions
+  - Custom model definition with JAX/NumPy syntax
+  - Real-time parameter adjustment with sliders
+  - Interactive visualization with residual plots
+  - Export fitted parameters and covariance matrix
+  - **Files Added**: `nlsq/gui/` package (pages, components, state management)
+
+- **GUI Developer Guide**: Code review checklist and architecture documentation
+  - **Files Added**: `docs/gui/developer_guide.md`
+
+#### Package Restructure (v0.4.2 Architecture)
+- **Subpackage organization**: Logical grouping of modules
+  ```
+  nlsq/
+  ├── core/           # Core optimization (minpack, least_squares, trf)
+  ├── interfaces/     # Protocol definitions for dependency injection
+  ├── streaming/      # Large dataset handling
+  ├── caching/        # Performance optimization (memory pool, smart cache)
+  ├── stability/      # Numerical stability (guard, SVD fallback)
+  ├── precision/      # Precision controls (mixed precision, normalizer)
+  └── utils/          # Utilities (validators, diagnostics, logging)
+  ```
+
+- **Protocol interfaces package** (`nlsq/interfaces/`): Dependency injection support
+  - `CacheProtocol`, `BoundedCacheProtocol`: Cache implementations
+  - `OptimizerProtocol`, `LeastSquaresOptimizerProtocol`: Optimizer interfaces
+  - `DataSourceProtocol`: Data source abstraction
+  - `JacobianProtocol`: Jacobian computation interface
+  - `ResultProtocol`: Optimization result containers
+  - **Files Added**: `nlsq/interfaces/` (5 protocol modules)
+
+- **Extracted TRF modules** for maintainability:
+  - `nlsq/core/trf_jit.py`: JIT-compiled TRF helper functions (474 lines)
+  - `nlsq/core/profiler.py`: TRFProfiler and NullProfiler classes (181 lines)
+  - **Files Added**: `nlsq/core/trf_jit.py`, `nlsq/core/profiler.py`
+
+- **Extracted streaming modules**:
+  - `nlsq/streaming/telemetry.py`: DefenseLayerTelemetry (336 lines)
+  - `nlsq/streaming/validators.py`: Config validation functions (569 lines)
+  - **Files Added**: `nlsq/streaming/telemetry.py`, `nlsq/streaming/validators.py`
+
+#### Streaming Enhancements
+- **L-BFGS warmup**: Alternative warmup strategy for streaming optimization
+- **CG-based Gauss-Newton solver**: Conjugate gradient solver for large problems
+- **Async checkpoints**: Non-blocking checkpoint saves during streaming
+- **Backend-aware loop dispatch**: Automatic GPU/CPU dispatch selection
+
+#### Performance Benchmark Suite
+- **`benchmarks/` directory**: pytest-benchmark tests for performance tracking
+  - Sparse Jacobian construction benchmarks
+  - Memory pool efficiency benchmarks
+  - Algorithm efficiency benchmarks
+  - **Files Added**: `benchmarks/` directory structure
 
 ### Changed
 
-- **Template files reorganized**: Moved `custom_model_template.py` and `workflow_config_template.yaml` to dedicated `templates/` directory
-- **Lazy imports for specialty modules** (43% faster import time): Global optimization, streaming optimizer, profiling, and GUI modules are now lazily imported, reducing cold-start time from ~1084ms to ~620ms
-- **Vectorized sparse Jacobian construction** (37-50x speedup): Replaced O(nm) nested loop with O(nnz) NumPy vectorized operations using COO sparse matrix construction
-- **Consolidated benchmark directories**: Merged `benchmark/` into `benchmarks/` for cleaner project structure
-- **DataChunker padding optimization**: Uses `np.resize()` for cyclic repetition padding, reducing memory allocation overhead by 10-20%
-- **TRF uses JAX trust region solver**: All 3 call sites in `trf.py` now use `solve_lsq_trust_region_jax` instead of NumPy version, eliminating device-to-host transfers in optimization loop
-- **Bucket-based padding for static shapes**: Large dataset chunker uses power-of-2 buckets (128 to 262144) for consistent JIT compilation, eliminating recompilation on final chunks
-- **Memory manager TTL optimization**: Increased psutil TTL cache from 1s to 5s, reducing memory management overhead for high-frequency operations
+#### Code Modernization
+- **Python 3.12+ type hints**: Updated `Union` → `|`, `Optional[X]` → `X | None`
+- **Dataclass `__slots__`**: Added `slots=True` to dataclasses for memory efficiency
+- **Deferred imports**: Break circular dependencies with lazy imports
+
+#### Performance Optimizations
+- **Lazy imports** (43% faster import): Specialty modules loaded on first access
+  - Import time reduced from ~1084ms to ~620ms
+  - Affected: streaming, global optimization, profiling, GUI modules
+
+- **Vectorized sparse Jacobian** (37-50x speedup): O(nnz) NumPy operations
+  - Replaced O(nm) nested loops with COO sparse matrix construction
+  - Handles 100k×50 matrices in <150ms
+
+- **Memory manager TTL**: Increased psutil cache from 1s to 5s
+
+#### Test Infrastructure
+- **Tests reorganized**: `tests/` subdirectories (core/, streaming/, stability/, etc.)
+- **Scripts reorganized**: `scripts/` subdirectories (demos/, benchmarks/, utils/)
+- **Serial test markers**: `@pytest.mark.serial` for subprocess-spawning tests
+  - Prevents xdist hangs from parallel JAX initialization
+  - Applied to example scripts, notebooks, memory-intensive tests
+
+#### Documentation
+- **RST module paths updated**: 35+ files updated for v0.4.2 subpackage structure
+- **New API reference pages**: interfaces, trf_jit, profiler, telemetry, validators
+- **ADR cross-references fixed**: Updated file paths in architecture decision records
+- **CLAUDE.md**: Comprehensive v0.4.2 module structure documentation
+
+#### Dependencies
+- **JAX constraint**: Updated to `>=0.8.0` for 0.8.2 compatibility
+- **GUI dependencies**: Added Streamlit, Plotly to optional `[gui]` group
 
 ### Fixed
 
-- fix(tests): Rename benchmark files to match pytest naming convention (`test_benchmark_*.py`)
-- fix(streaming): Replace try-except-pass blocks with `contextlib.suppress()` per SIM105 rule
-- fix(tests): Prefix unused variables with underscore to satisfy RUF059 linting rule
-- fix(tests): Bind loop variables in lambda closures to fix B023 linting warnings
-- fix(examples): Convert deque to list before slicing in streaming examples (deque doesn't support slice indexing)
-- fix(tests): Mark subprocess-spawning and memory-intensive tests as serial to prevent xdist resource contention
-- fix(tests): Fix checkpoint worker race condition in cleanup
+- fix(test): Correct session state access in fitting options test (slots compatibility)
+- fix(streaming): Handle GPU OOM gracefully in memory tests
+- fix(tests): Add collection-time filtering for scripts and notebooks
+- fix(tests): Close logging handlers before temp dir cleanup on Windows
+- fix(tests): Use POSIX paths in YAML for Windows compatibility
+- fix(tests): Add missing binary test fixtures to git
+- fix(examples): Convert deque to list before slicing (deque doesn't support slice indexing)
+- fix(cache): Add LRU eviction and fix function hash collisions
+- docs(core): Add docstrings to 13 undocumented functions in LossFunctionsJIT
+- docs(core): Fix RST inline formatting (escape |z| and function signatures)
+
+### Technical Details
+
+**Test Results:**
+- Tests: 2,904+ passing (100% success rate)
+- Coverage: ~82% (exceeds 80% target)
+- Platforms: Ubuntu ✅ | macOS ✅ | Windows ✅
+
+**Module Extraction Summary:**
+| Original File | Extracted To | Lines |
+|---------------|--------------|-------|
+| trf.py (3200) | trf_jit.py | 474 |
+| trf.py | profiler.py | 181 |
+| adaptive_hybrid.py (4850) | telemetry.py | 336 |
+| hybrid_config.py (1138) | validators.py | 569 |
+
+**Import Time Improvement:**
+| Component | Before | After | Reduction |
+|-----------|--------|-------|-----------|
+| Total import | 1084ms | 620ms | 43% |
+| JAX init (unavoidable) | 290ms | 290ms | 0% |
+| Specialty modules | 794ms | 330ms | 58% |
+
+**Backward Compatibility:**
+- 100% API backward compatible
+- All public imports preserved via `__init__.py` re-exports
+- Old import paths work via module aliases in conf.py
 
 ## [0.4.1] - 2025-12-24
 

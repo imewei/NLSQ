@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 sys.path.insert(0, os.path.abspath(".."))
 
 # Module aliases for backward compatibility with documentation
-# The package was reorganized in v1.2.0 but docs still reference old paths
+# The package was reorganized in v0.4.2 but docs still reference old paths
 import importlib
 
 _MODULE_ALIASES = {

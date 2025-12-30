@@ -32,7 +32,7 @@ make env-info               # Show platform/GPU info
 
 ## Architecture
 
-### Package Structure (v1.2.0)
+### Package Structure (v0.4.2)
 
 The `nlsq` package is organized into logical subpackages:
 
@@ -197,7 +197,7 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - N/A (file reorganization only) (004-reorganize-tests-scripts)
 
 ## Recent Changes
-- 004-legacy-modernization: Comprehensive codebase modernization (v1.2.0):
+- 004-legacy-modernization: Comprehensive codebase modernization (v0.4.2):
   - Extracted interfaces/ package with Protocol classes for dependency injection
   - Split trf.py: extracted trf_jit.py (474 lines) and profiler.py (181 lines)
   - Split streaming: extracted telemetry.py (336 lines) and validators.py (569 lines)

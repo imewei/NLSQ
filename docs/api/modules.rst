@@ -116,7 +116,7 @@ New features added in version 0.1.1:
    nlsq.bound_inference
    nlsq.parameter_estimation
 
-Interfaces & Protocols (v1.2.0+)
+Interfaces & Protocols (v0.4.2+)
 ---------------------------------
 
 Protocol definitions for dependency injection:
@@ -197,8 +197,8 @@ Complete Module Listing
 - :doc:`nlsq.minpack` - Main ``curve_fit()`` API
 - :doc:`nlsq.least_squares` - ``least_squares()`` solver
 - :doc:`nlsq.trf` - Trust Region Reflective algorithm
-- :doc:`nlsq.core.trf_jit` - JIT-compiled TRF functions (NEW in v1.2.0)
-- :doc:`nlsq.core.profiler` - TRF performance profiling (NEW in v1.2.0)
+- :doc:`nlsq.core.trf_jit` - JIT-compiled TRF functions (NEW in v0.4.2)
+- :doc:`nlsq.core.profiler` - TRF performance profiling (NEW in v0.4.2)
 
 **Feature Modules**:
 - :doc:`nlsq.functions` - Pre-built fit functions (NEW in v0.1.1)
@@ -223,10 +223,10 @@ Complete Module Listing
 - :doc:`nlsq.adaptive_hybrid_streaming` - Four-phase hybrid optimizer
 - :doc:`nlsq.hybrid_streaming_config` - Configuration with presets
 - :doc:`nlsq.parameter_normalizer` - Parameter normalization for gradient balance
-- :doc:`nlsq.streaming.telemetry` - Defense layer telemetry (NEW in v1.2.0)
-- :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v1.2.0)
+- :doc:`nlsq.streaming.telemetry` - Defense layer telemetry (NEW in v0.4.2)
+- :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v0.4.2)
 
-**Interfaces & Protocols** (NEW in v1.2.0):
+**Interfaces & Protocols** (NEW in v0.4.2):
 - :doc:`nlsq.interfaces` - Protocol definitions for dependency injection
 
 **Global Optimization Modules** (NEW in v0.3.3+):
