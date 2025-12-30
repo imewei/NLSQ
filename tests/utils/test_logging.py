@@ -111,9 +111,9 @@ class TestNLSQLogger(unittest.TestCase):
 
         history = logger.optimization_history[0]
         self.assertEqual(history["iter"], 1)
-        self.assertEqual(history["cost"], "5.000000e-01")
-        self.assertEqual(history["‖∇f‖"], "1.000000e-01")
-        self.assertEqual(history["step"], "1.000000e-02")
+        self.assertEqual(history["cost"], 0.5)
+        self.assertEqual(history["grad_norm"], 0.1)
+        self.assertEqual(history["step"], 0.01)
         self.assertEqual(history["nfev"], 10)
         self.assertIn("timestamp", history)
 
@@ -336,8 +336,8 @@ class TestLoggerIntegration(unittest.TestCase):
         # Should have independent histories
         self.assertEqual(len(logger1.optimization_history), 1)
         self.assertEqual(len(logger2.optimization_history), 1)
-        self.assertEqual(logger1.optimization_history[0]["cost"], "1.000000e+00")
-        self.assertEqual(logger2.optimization_history[0]["cost"], "2.000000e+00")
+        self.assertEqual(logger1.optimization_history[0]["cost"], 1.0)
+        self.assertEqual(logger2.optimization_history[0]["cost"], 2.0)
 
 
 if __name__ == "__main__":

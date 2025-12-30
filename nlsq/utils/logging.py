@@ -1,13 +1,47 @@
-"""Comprehensive logging system for NLSQ package."""
+"""Comprehensive logging system for NLSQ package.
+
+This module provides structured logging for monitoring package operations,
+error tracking, and debugging. Key features:
+
+- Operation tracking with unique IDs for tracing
+- Structured logging with consistent formats
+- Performance metrics and timing
+- Memory usage monitoring
+- Error context with actionable suggestions
+
+Environment Variables
+---------------------
+NLSQ_DEBUG : str
+    Set to "1" to enable debug mode with detailed logging
+NLSQ_VERBOSE : str
+    Set to "1" to enable verbose mode (INFO level)
+NLSQ_LOG_DIR : str
+    Directory for debug log files (default: current directory)
+NLSQ_TRACE_JAX : str
+    Set to "1" to trace JAX compilation events
+NLSQ_SAVE_ITERATIONS : str
+    Directory to save optimization iteration history
+
+Example
+-------
+>>> from nlsq.utils.logging import get_logger
+>>> logger = get_logger("my_module")
+>>> with logger.operation("curve_fit", n_points=1000, n_params=3):
+...     # Your fitting code here
+...     logger.info("Fitting completed successfully")
+"""
 
 import logging
 import os
 import sys
 import time
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from enum import IntEnum
 from pathlib import Path
+from threading import local
+from typing import Any
 
 import numpy as np
 
@@ -23,15 +57,51 @@ class LogLevel(IntEnum):
     CRITICAL = logging.CRITICAL  # 50
 
 
+# Thread-local storage for operation context
+_context = local()
+
+
+def _get_operation_id() -> str | None:
+    """Get current operation ID from thread-local context."""
+    return getattr(_context, "operation_id", None)
+
+
+def _format_kwargs(kwargs: dict[str, Any]) -> str:
+    """Format kwargs for log message, handling special types."""
+    parts = []
+    for k, v in kwargs.items():
+        if isinstance(v, float):
+            if abs(v) < 1e-3 or abs(v) > 1e4:
+                parts.append(f"{k}={v:.4e}")
+            else:
+                parts.append(f"{k}={v:.4f}")
+        elif isinstance(v, (list, tuple)) and len(v) > 5:
+            parts.append(f"{k}=[{len(v)} items]")
+        elif isinstance(v, np.ndarray):
+            parts.append(f"{k}=array{v.shape}")
+        else:
+            parts.append(f"{k}={v}")
+    return " | ".join(parts)
+
+
 class NLSQLogger:
     """Comprehensive logger for NLSQ optimization routines.
 
     Features:
-    - Structured logging with different levels
-    - Performance tracking
-    - Optimization step monitoring
+    - Operation tracking with unique IDs
+    - Structured logging with consistent formats
+    - Performance tracking and timing
+    - Memory usage monitoring
     - JAX compilation event logging
     - Debug mode with detailed tracing
+
+    Examples
+    --------
+    >>> logger = NLSQLogger("curve_fit")
+    >>> with logger.operation("fit", dataset_size=10000):
+    ...     logger.info("Starting optimization")
+    ...     # ... fitting code ...
+    ...     logger.fit_complete(iterations=50, final_cost=1.2e-6)
     """
 
     def __init__(self, name: str, level: int | LogLevel = LogLevel.INFO):
@@ -44,7 +114,7 @@ class NLSQLogger:
         level : int | LogLevel
             Initial logging level
         """
-        self.name = f"nlsq.{name}"
+        self.name = f"nlsq.{name}" if not name.startswith("nlsq.") else name
         self.logger = logging.getLogger(self.name)
 
         # Override level for debug mode
@@ -62,7 +132,7 @@ class NLSQLogger:
         self.timers: dict[str, float] = {}
 
         # Optimization tracking
-        self.optimization_history: list = []
+        self.optimization_history: list[dict[str, Any]] = []
 
         # Register custom log level
         if not hasattr(logging, "PERFORMANCE"):
@@ -80,8 +150,8 @@ class NLSQLogger:
         if debug_mode:
             console_handler.setLevel(logging.DEBUG)
             formatter = logging.Formatter(
-                "%(asctime)s - [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
+                "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
+                datefmt="%H:%M:%S",
             )
         elif verbose_mode:
             console_handler.setLevel(logging.INFO)
@@ -104,49 +174,161 @@ class NLSQLogger:
             file_handler = logging.FileHandler(log_file)
             file_handler.setLevel(logging.DEBUG)
             file_formatter = logging.Formatter(
-                "%(asctime)s - [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
+                "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
             file_handler.setFormatter(file_formatter)
             self.logger.addHandler(file_handler)
 
-            self.logger.info(f"Debug logging enabled. Log file: {log_file}")
+            self.logger.info(f"Debug logging enabled: {log_file}")
+
+    def _format_message(self, message: str, **kwargs) -> str:
+        """Format message with operation context and kwargs."""
+        parts = [message]
+
+        # Add operation ID if present
+        op_id = _get_operation_id()
+        if op_id:
+            parts.insert(0, f"[op:{op_id[:8]}]")
+
+        # Add structured kwargs
+        if kwargs:
+            parts.append(_format_kwargs(kwargs))
+
+        return " ".join(parts)
 
     def debug(self, message: str, **kwargs):
         """Log debug message with optional structured data."""
-        if kwargs:
-            message = f"{message} | {kwargs}"
-        self.logger.debug(message)
+        self.logger.debug(self._format_message(message, **kwargs))
 
     def info(self, message: str, **kwargs):
         """Log info message with optional structured data."""
-        if kwargs:
-            message = f"{message} | {kwargs}"
-        self.logger.info(message)
+        self.logger.info(self._format_message(message, **kwargs))
 
     def warning(self, message: str, **kwargs):
         """Log warning message with optional structured data."""
-        if kwargs:
-            message = f"{message} | {kwargs}"
-        self.logger.warning(message)
+        self.logger.warning(self._format_message(message, **kwargs))
 
     def error(self, message: str, exc_info: bool = False, **kwargs):
         """Log error message with optional exception info."""
-        if kwargs:
-            message = f"{message} | {kwargs}"
-        self.logger.error(message, exc_info=exc_info)
+        self.logger.error(self._format_message(message, **kwargs), exc_info=exc_info)
 
     def critical(self, message: str, exc_info: bool = True, **kwargs):
         """Log critical error with exception info."""
-        if kwargs:
-            message = f"{message} | {kwargs}"
-        self.logger.critical(message, exc_info=exc_info)
+        self.logger.critical(self._format_message(message, **kwargs), exc_info=exc_info)
 
     def performance(self, message: str, **kwargs):
         """Log performance-related message."""
-        if kwargs:
-            message = f"{message} | {kwargs}"
-        self.logger.log(LogLevel.PERFORMANCE, message)
+        self.logger.log(LogLevel.PERFORMANCE, self._format_message(message, **kwargs))
+
+    @contextmanager
+    def operation(self, name: str, **context):
+        """Context manager for tracking operations with unique IDs.
+
+        Provides operation-level context for all log messages within the block,
+        including timing and memory usage tracking.
+
+        Parameters
+        ----------
+        name : str
+            Name of the operation (e.g., "curve_fit", "jacobian")
+        **context
+            Additional context to log (e.g., n_points, n_params)
+
+        Examples
+        --------
+        >>> with logger.operation("curve_fit", n_points=10000, n_params=5):
+        ...     # All logs within this block include operation context
+        ...     logger.info("Starting optimization")
+        """
+        op_id = uuid.uuid4().hex
+        _context.operation_id = op_id
+        start_time = time.perf_counter()
+
+        # Log operation start
+        context_str = _format_kwargs(context) if context else ""
+        self.info(f"START {name} | {context_str}" if context_str else f"START {name}")
+
+        try:
+            yield op_id
+        except Exception as e:
+            elapsed = time.perf_counter() - start_time
+            self.error(
+                f"FAILED {name} after {elapsed:.3f}s: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise
+        finally:
+            elapsed = time.perf_counter() - start_time
+            self.timers[f"{name}_{op_id[:8]}"] = elapsed
+            self.info(f"END {name}", elapsed=f"{elapsed:.3f}s")
+            _context.operation_id = None
+
+    def fit_start(
+        self,
+        n_points: int,
+        n_params: int,
+        method: str = "trf",
+        bounds: str = "none",
+        **kwargs,
+    ):
+        """Log the start of a fitting operation.
+
+        Parameters
+        ----------
+        n_points : int
+            Number of data points
+        n_params : int
+            Number of parameters to fit
+        method : str
+            Optimization method
+        bounds : str
+            Bounds type ("none", "bounded", "semi-bounded")
+        """
+        self.info(
+            "Fit started",
+            n_points=n_points,
+            n_params=n_params,
+            method=method,
+            bounds=bounds,
+            **kwargs,
+        )
+
+    def fit_complete(
+        self,
+        success: bool = True,
+        iterations: int | None = None,
+        final_cost: float | None = None,
+        termination: str | None = None,
+        **kwargs,
+    ):
+        """Log completion of a fitting operation.
+
+        Parameters
+        ----------
+        success : bool
+            Whether the fit converged successfully
+        iterations : int, optional
+            Number of iterations taken
+        final_cost : float, optional
+            Final cost/residual value
+        termination : str, optional
+            Termination reason
+        """
+        status = "SUCCESS" if success else "FAILED"
+        metrics = {"status": status}
+        if iterations is not None:
+            metrics["iterations"] = iterations
+        if final_cost is not None:
+            metrics["final_cost"] = final_cost
+        if termination:
+            metrics["termination"] = termination
+        metrics.update(kwargs)
+
+        if success:
+            self.info("Fit complete", **metrics)
+        else:
+            self.warning("Fit incomplete", **metrics)
 
     def optimization_step(
         self,
@@ -174,16 +356,16 @@ class NLSQLogger:
         **kwargs
             Additional metrics to log
         """
-        metrics = {
+        metrics: dict[str, Any] = {
             "iter": iteration,
-            "cost": f"{cost:.6e}",
+            "cost": cost,
         }
 
         if gradient_norm is not None:
-            metrics["‖∇f‖"] = f"{gradient_norm:.6e}"
+            metrics["grad_norm"] = gradient_norm
 
         if step_size is not None:
-            metrics["step"] = f"{step_size:.6e}"
+            metrics["step"] = step_size
 
         if nfev is not None:
             metrics["nfev"] = nfev
@@ -193,9 +375,8 @@ class NLSQLogger:
         # Store in history
         self.optimization_history.append({"timestamp": time.time(), **metrics})
 
-        # Format message
-        message = " | ".join(f"{k}={v}" for k, v in metrics.items())
-        self.performance(f"Optimization: {message}")
+        # Format and log
+        self.performance("Iteration", **metrics)
 
     def convergence(
         self,
@@ -223,16 +404,55 @@ class NLSQLogger:
         metrics = {
             "reason": reason,
             "iterations": iterations,
-            "final_cost": f"{final_cost:.6e}",
+            "final_cost": final_cost,
         }
 
         if time_elapsed is not None:
-            metrics["time"] = f"{time_elapsed:.3f}s"
+            metrics["elapsed"] = f"{time_elapsed:.3f}s"
 
         metrics.update(kwargs)
+        self.info("Convergence", **metrics)
 
-        message = " | ".join(f"{k}={v}" for k, v in metrics.items())
-        self.info(f"Convergence: {message}")
+    def numerical_issue(
+        self,
+        issue_type: str,
+        details: str,
+        suggestion: str | None = None,
+        **kwargs,
+    ):
+        """Log numerical issues with actionable suggestions.
+
+        Parameters
+        ----------
+        issue_type : str
+            Type of issue (e.g., "ill-conditioned", "overflow", "nan")
+        details : str
+            Description of the issue
+        suggestion : str, optional
+            Suggested fix or action
+        """
+        msg = f"Numerical issue ({issue_type}): {details}"
+        if suggestion:
+            msg += f" | Suggestion: {suggestion}"
+        self.warning(msg, **kwargs)
+
+    def memory_usage(self, label: str = "current"):
+        """Log current memory usage.
+
+        Parameters
+        ----------
+        label : str
+            Label for this memory checkpoint
+        """
+        try:
+            import psutil
+
+            process = psutil.Process()
+            mem_info = process.memory_info()
+            mem_gb = mem_info.rss / (1024**3)
+            self.debug(f"Memory ({label})", rss_gb=mem_gb)
+        except ImportError:
+            pass  # psutil not available
 
     def jax_compilation(
         self,
@@ -266,9 +486,7 @@ class NLSQLogger:
             metrics["time"] = f"{compilation_time:.3f}s"
 
         metrics.update(kwargs)
-
-        message = " | ".join(f"{k}={v}" for k, v in metrics.items())
-        self.debug(f"JAX Compilation: {message}")
+        self.debug("JAX compilation", **metrics)
 
     @contextmanager
     def timer(self, name: str, log_result: bool = True):
@@ -296,7 +514,7 @@ class NLSQLogger:
             self.timers[name] = elapsed
 
             if log_result:
-                self.performance(f"Timer: {name} took {elapsed:.6f}s")
+                self.performance(f"Timer: {name}", elapsed=f"{elapsed:.6f}s")
 
     def matrix_info(
         self, name: str, matrix: np.ndarray, compute_condition: bool = False
@@ -312,23 +530,82 @@ class NLSQLogger:
         compute_condition : bool
             Whether to compute condition number (expensive)
         """
-        info = {
+        info: dict[str, Any] = {
             "shape": matrix.shape,
             "dtype": str(matrix.dtype),
-            "min": f"{np.min(matrix):.6e}",
-            "max": f"{np.max(matrix):.6e}",
-            "mean": f"{np.mean(matrix):.6e}",
+            "range": f"[{np.min(matrix):.2e}, {np.max(matrix):.2e}]",
         }
 
         if compute_condition and matrix.ndim == 2:
             try:
                 cond = np.linalg.cond(matrix)
-                info["condition"] = f"{cond:.2e}"
+                info["condition"] = cond
+                if cond > 1e10:
+                    self.warning(
+                        f"Matrix {name} is ill-conditioned",
+                        condition=cond,
+                        suggestion="Consider rescaling parameters or data",
+                    )
             except (np.linalg.LinAlgError, ValueError):
                 info["condition"] = "failed"
 
-        message = " | ".join(f"{k}={v}" for k, v in info.items())
-        self.debug(f"Matrix {name}: {message}")
+        self.debug(f"Matrix {name}", **info)
+
+    def data_summary(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        sigma: np.ndarray | None = None,
+    ):
+        """Log summary statistics of input data.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Independent variable data
+        y : np.ndarray
+            Dependent variable data
+        sigma : np.ndarray, optional
+            Uncertainty/weights
+        """
+        info = {
+            "n_points": len(x),
+            "x_range": f"[{np.min(x):.4g}, {np.max(x):.4g}]",
+            "y_range": f"[{np.min(y):.4g}, {np.max(y):.4g}]",
+        }
+
+        # Check for potential issues
+        if np.any(~np.isfinite(x)):
+            self.warning("Input x contains non-finite values")
+        if np.any(~np.isfinite(y)):
+            self.warning("Input y contains non-finite values")
+
+        if sigma is not None:
+            info["sigma_range"] = f"[{np.min(sigma):.4g}, {np.max(sigma):.4g}]"
+            if np.any(sigma <= 0):
+                self.warning("Sigma contains non-positive values")
+
+        self.debug("Data summary", **info)
+
+    def parameter_update(
+        self,
+        params: np.ndarray,
+        param_names: list[str] | None = None,
+    ):
+        """Log parameter values during optimization.
+
+        Parameters
+        ----------
+        params : np.ndarray
+            Current parameter values
+        param_names : list[str], optional
+            Names for each parameter
+        """
+        if param_names and len(param_names) == len(params):
+            param_dict = {name: val for name, val in zip(param_names, params)}
+            self.debug("Parameters", **param_dict)
+        else:
+            self.debug("Parameters", values=params.tolist())
 
     def save_iteration_data(self, output_dir: str | None = None):
         """Save optimization history to file.
@@ -380,7 +657,7 @@ def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
     Parameters
     ----------
     name : str
-        Logger name
+        Logger name (will be prefixed with "nlsq." if not already)
     level : int | LogLevel
         Logging level
 
@@ -388,6 +665,11 @@ def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
     -------
     NLSQLogger
         Logger instance
+
+    Examples
+    --------
+    >>> logger = get_logger("my_module")
+    >>> logger.info("Processing started", n_items=100)
     """
     if name not in _loggers:
         _loggers[name] = NLSQLogger(name, level)
@@ -411,7 +693,10 @@ def set_global_level(level: int | LogLevel):
 
 
 def enable_debug_mode():
-    """Enable debug mode with detailed logging."""
+    """Enable debug mode with detailed logging.
+
+    Sets NLSQ_DEBUG=1 and configures all loggers for DEBUG level output.
+    """
     os.environ["NLSQ_DEBUG"] = "1"
     set_global_level(LogLevel.DEBUG)
 
@@ -421,11 +706,20 @@ def enable_debug_mode():
         logger._setup_handlers()
 
 
+def enable_verbose_mode():
+    """Enable verbose mode with INFO level logging.
+
+    Sets NLSQ_VERBOSE=1 for detailed operational messages.
+    """
+    os.environ["NLSQ_VERBOSE"] = "1"
+    set_global_level(LogLevel.INFO)
+
+
 def enable_performance_tracking():
-    """Enable performance tracking mode."""
+    """Enable performance tracking mode.
+
+    Enables JAX tracing and iteration history saving.
+    """
     os.environ["NLSQ_TRACE_JAX"] = "1"
     os.environ["NLSQ_SAVE_ITERATIONS"] = "1"
     set_global_level(LogLevel.PERFORMANCE)
-
-
-# Usage examples - see module docstring for details

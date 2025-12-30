@@ -512,6 +512,7 @@ def reflective_transformation(y, lb, ub):
 
 
 def print_header_nonlinear():
+    """Print column headers for nonlinear optimization progress display."""
     logger.info(
         "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
@@ -527,6 +528,7 @@ def print_header_nonlinear():
 def print_iteration_nonlinear(
     iteration, nfev, cost, cost_reduction, step_norm, optimality
 ):
+    """Print a single iteration row for nonlinear optimization progress."""
     cost_reduction = " " * 15 if cost_reduction is None else f"{cost_reduction:^15.2e}"
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
@@ -537,6 +539,7 @@ def print_iteration_nonlinear(
 
 
 def print_header_linear():
+    """Print column headers for linear optimization progress display."""
     logger.info(
         "{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
@@ -548,6 +551,7 @@ def print_header_linear():
 
 
 def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimality):
+    """Print a single iteration row for linear optimization progress."""
     cost_reduction = " " * 15 if cost_reduction is None else f"{cost_reduction:^15.2e}"
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
