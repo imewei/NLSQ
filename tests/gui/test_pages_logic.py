@@ -155,7 +155,6 @@ def test_fitting_options_is_ready_to_fit(
             return None
 
     stub.session_state.current_model = ModelWithP0()
-    state.current_model = stub.session_state.current_model
     state.auto_p0 = False
     ready, msg = module.is_ready_to_fit(state)
     assert ready is False
