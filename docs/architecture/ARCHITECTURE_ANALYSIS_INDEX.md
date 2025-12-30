@@ -184,7 +184,9 @@ class LargeDatasetOptimizer:
 ```python
 class JacobianAdapter(ABC):
     @abstractmethod
-    def compute_jacobian(self, func, x0, xdata, ydata): pass
+    def compute_jacobian(self, func, x0, xdata, ydata):
+        pass
+
 
 # Concrete adapters:
 # - AutodiffJacobianAdapter
@@ -206,8 +208,12 @@ class JacobianAdapter(ABC):
 **Example:**
 ```python
 class StreamingStrategy(Protocol):
-    def should_use(self, n_points, memory): pass
-    def optimize(self, func, xdata, ydata, p0): pass
+    def should_use(self, n_points, memory):
+        pass
+
+    def optimize(self, func, xdata, ydata, p0):
+        pass
+
 
 # Concrete strategies:
 # - BatchStrategy (100K-10M points)
@@ -294,7 +300,7 @@ class HDF5DataAdapter(DataSourceAdapter):
 **Recommended Adapter:**
 ```python
 class OptaxAdapter(GradientOptimizerAdapter):
-    def __init__(self, optimizer_name='adam', learning_rate=1e-3):
+    def __init__(self, optimizer_name="adam", learning_rate=1e-3):
         self._opt = getattr(optax, optimizer_name)(learning_rate)
 ```
 
@@ -334,9 +340,9 @@ def test_curve_fit_facade():
 ```python
 def test_large_dataset_workflow():
     # End-to-end test with real HDF5 data
-    result = fit(model, xdata_hdf5, ydata_hdf5, workflow='streaming')
+    result = fit(model, xdata_hdf5, ydata_hdf5, workflow="streaming")
     assert result.success
-    assert result.sparsity_detected['solver'] == 'streaming'
+    assert result.sparsity_detected["solver"] == "streaming"
 ```
 
 ### Performance Tests (Benchmarking)

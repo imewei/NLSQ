@@ -290,62 +290,68 @@ class _SafeASTValidator(ast.NodeVisitor):
     """
 
     # Modules that are safe to import for curve fitting
-    SAFE_MODULES = frozenset({
-        "math",
-        "numpy",
-        "np",
-        "jax",
-        "jax.numpy",
-        "jnp",
-        "scipy",
-        "scipy.special",
-    })
+    SAFE_MODULES = frozenset(
+        {
+            "math",
+            "numpy",
+            "np",
+            "jax",
+            "jax.numpy",
+            "jnp",
+            "scipy",
+            "scipy.special",
+        }
+    )
 
     # Modules that are explicitly dangerous
-    DANGEROUS_MODULES = frozenset({
-        "os",
-        "subprocess",
-        "sys",
-        "shutil",
-        "pathlib",
-        "socket",
-        "urllib",
-        "requests",
-        "http",
-        "ftplib",
-        "smtplib",
-        "marshal",
-        "shelve",
-        "builtins",
-        "__builtins__",
-        "importlib",
-        "runpy",
-        "code",
-        "codeop",
-        "ctypes",
-        "multiprocessing",
-        "threading",
-        "concurrent",
-        "asyncio",
-    })
+    DANGEROUS_MODULES = frozenset(
+        {
+            "os",
+            "subprocess",
+            "sys",
+            "shutil",
+            "pathlib",
+            "socket",
+            "urllib",
+            "requests",
+            "http",
+            "ftplib",
+            "smtplib",
+            "marshal",
+            "shelve",
+            "builtins",
+            "__builtins__",
+            "importlib",
+            "runpy",
+            "code",
+            "codeop",
+            "ctypes",
+            "multiprocessing",
+            "threading",
+            "concurrent",
+            "asyncio",
+        }
+    )
 
     # Built-in functions that are dangerous
-    DANGEROUS_BUILTINS = frozenset({
-        "eval",
-        "exec",
-        "compile",
-        "open",
-        "input",
-        "__import__",
-        "globals",
-        "locals",
-        "vars",
-        "dir",
-        "getattr",
-        "setattr",
-        "delattr",
-        "breakpoint",
-    })
+    DANGEROUS_BUILTINS = frozenset(
+        {
+            "eval",
+            "exec",
+            "compile",
+            "open",
+            "input",
+            "__import__",
+            "globals",
+            "locals",
+            "vars",
+            "dir",
+            "getattr",
+            "setattr",
+            "delattr",
+            "breakpoint",
+        }
+    )
 
     def __init__(self) -> None:
         self.errors: list[str] = []
@@ -402,9 +408,7 @@ class _SafeASTValidator(ast.NodeVisitor):
         tree = ast.parse(code)
         self.visit(tree)
         if self.errors:
-            raise SecurityError(
-                f"Unsafe code detected: {'; '.join(self.errors)}"
-            )
+            raise SecurityError(f"Unsafe code detected: {'; '.join(self.errors)}")
 
 
 class SecurityError(Exception):

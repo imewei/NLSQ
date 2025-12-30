@@ -149,6 +149,12 @@ from nlsq.core._optimize import OptimizeResult
 # Optimizer base class
 from nlsq.core.optimizer_base import TrustRegionOptimizerBase
 
+# Profiling support
+from nlsq.core.profiler import NullProfiler, TRFProfiler
+
+# JIT-compiled helper functions (extracted for modularity)
+from nlsq.core.trf_jit import TrustRegionJITFunctions
+
 # Mixed precision support
 from nlsq.precision.mixed_precision import (
     ConvergenceMetrics,
@@ -159,12 +165,6 @@ from nlsq.precision.mixed_precision import (
 )
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.utils.diagnostics import OptimizationDiagnostics
-
-# Profiling support
-from nlsq.core.profiler import NullProfiler, TRFProfiler
-
-# JIT-compiled helper functions (extracted for modularity)
-from nlsq.core.trf_jit import TrustRegionJITFunctions
 
 
 class SVDCache(NamedTuple):

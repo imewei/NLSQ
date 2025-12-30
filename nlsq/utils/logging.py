@@ -316,7 +316,7 @@ class NLSQLogger:
             Termination reason
         """
         status = "SUCCESS" if success else "FAILED"
-        metrics = {"status": status}
+        metrics: dict[str, str | int | float] = {"status": status}
         if iterations is not None:
             metrics["iterations"] = iterations
         if final_cost is not None:
@@ -602,7 +602,7 @@ class NLSQLogger:
             Names for each parameter
         """
         if param_names and len(param_names) == len(params):
-            param_dict = {name: val for name, val in zip(param_names, params)}
+            param_dict = dict(zip(param_names, params, strict=True))
             self.debug("Parameters", **param_dict)
         else:
             self.debug("Parameters", values=params.tolist())

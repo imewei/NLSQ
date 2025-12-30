@@ -194,19 +194,17 @@ import numpy as np
 from nlsq.types import ArrayLike, ModelFunction
 from nlsq.result import CurveFitResult
 
+
 @runtime_checkable
 class OptimizerProtocol(Protocol):
     """Protocol for general optimizers."""
 
     def optimize(
-        self,
-        fun: callable,
-        x0: ArrayLike,
-        bounds: tuple = (-np.inf, np.inf),
-        **kwargs
+        self, fun: callable, x0: ArrayLike, bounds: tuple = (-np.inf, np.inf), **kwargs
     ) -> dict:
         """Run optimization."""
         ...
+
 
 @runtime_checkable
 class CurveFitProtocol(Protocol):
@@ -234,6 +232,7 @@ class CurveFitProtocol(Protocol):
 from typing import Protocol
 import numpy as np
 
+
 class DataSourceProtocol(Protocol):
     """Protocol for reading data in chunks."""
 
@@ -258,6 +257,7 @@ class DataSourceProtocol(Protocol):
 from typing import Protocol
 from nlsq.result import CurveFitResult
 from nlsq.types import ModelFunction, ArrayLike
+
 
 class StreamingStrategyProtocol(Protocol):
     """Protocol for streaming optimization strategies."""
@@ -290,6 +290,7 @@ from nlsq.validators import InputValidator
 from nlsq.estimators import CovarianceEstimator
 from nlsq.result import CurveFitResult
 from nlsq.types import ModelFunction, ArrayLike
+
 
 class CurveFitFacade:
     """Facade hiding complexity of curve_fit() implementation.
@@ -330,7 +331,7 @@ class CurveFitFacade:
         p0: ArrayLike | None = None,
         sigma: ArrayLike | None = None,
         bounds: tuple = (-np.inf, np.inf),
-        **kwargs
+        **kwargs,
     ) -> CurveFitResult:
         """Fit model function to data.
 
@@ -374,27 +375,27 @@ class CurveFitFacade:
 
         # Step 3: Run optimization (delegate to injected optimizer)
         opt_result = self._optimizer.optimize(
-            fun=validated['residual_func'],
-            x0=validated['p0'],
-            bounds=validated['bounds'],
-            **validated['optimizer_kwargs']
+            fun=validated["residual_func"],
+            x0=validated["p0"],
+            bounds=validated["bounds"],
+            **validated["optimizer_kwargs"],
         )
 
         # Step 4: Compute covariance
         pcov = self._covariance.estimate(
-            jacobian=opt_result['jacobian'],
-            cost=opt_result['cost'],
+            jacobian=opt_result["jacobian"],
+            cost=opt_result["cost"],
             sigma=sigma,
-            absolute_sigma=kwargs.get('absolute_sigma', False)
+            absolute_sigma=kwargs.get("absolute_sigma", False),
         )
 
         # Step 5: Construct result
         result = CurveFitResult(
-            popt=opt_result['x'],
+            popt=opt_result["x"],
             pcov=pcov,
             infodict=opt_result,
-            message=opt_result['message'],
-            success=opt_result['success']
+            message=opt_result["message"],
+            success=opt_result["success"],
         )
 
         # Step 6: Cache result
@@ -408,10 +409,9 @@ class CurveFitFacade:
 ```python
 """Factory function for creating CurveFitFacade with default dependencies."""
 
+
 def create_curve_fit_facade(
-    enable_stability: bool = False,
-    enable_diagnostics: bool = False,
-    **kwargs
+    enable_stability: bool = False, enable_diagnostics: bool = False, **kwargs
 ) -> CurveFitFacade:
     """Create CurveFitFacade with default dependencies.
 
@@ -451,8 +451,9 @@ def create_curve_fit_facade(
         optimizer=optimizer,
         validator=validator,
         cache=cache,
-        covariance_estimator=covariance_estimator
+        covariance_estimator=covariance_estimator,
     )
+
 
 # Public API (unchanged from user perspective)
 def curve_fit(f, xdata, ydata, p0=None, sigma=None, **kwargs):
@@ -478,6 +479,7 @@ from abc import ABC, abstractmethod
 import jax.numpy as jnp
 from jax import jacfwd, jacrev
 
+
 class JacobianAdapter(ABC):
     """Abstract base for Jacobian computation strategies."""
 
@@ -493,10 +495,11 @@ class JacobianAdapter(ABC):
         """Compute Jacobian matrix."""
         pass
 
+
 class AutodiffJacobianAdapter(JacobianAdapter):
     """Uses JAX automatic differentiation (jacfwd or jacrev)."""
 
-    def __init__(self, mode: str = 'auto'):
+    def __init__(self, mode: str = "auto"):
         """Initialize autodiff adapter.
 
         Parameters
@@ -517,12 +520,13 @@ class AutodiffJacobianAdapter(JacobianAdapter):
         mode, rationale = jacobian_mode_selector(n_params, n_residuals, self.mode)
 
         # Use jacfwd or jacrev
-        jac_func = jacfwd if mode == 'fwd' else jacrev
+        jac_func = jacfwd if mode == "fwd" else jacrev
 
         # Compute Jacobian
         # ... (implementation details)
 
         return J
+
 
 class AnalyticalJacobianAdapter(JacobianAdapter):
     """Uses user-provided analytical Jacobian function."""
@@ -541,6 +545,7 @@ class AnalyticalJacobianAdapter(JacobianAdapter):
         """Compute Jacobian using analytical function."""
         return self.jac_func(xdata, *x0)
 
+
 class SparseJacobianAdapter(JacobianAdapter):
     """Uses sparse Jacobian computation for large problems."""
 
@@ -558,9 +563,7 @@ class SparseJacobianAdapter(JacobianAdapter):
         """Compute sparse Jacobian."""
         from nlsq.core.sparse_jacobian import compute_sparse_jacobian
 
-        return compute_sparse_jacobian(
-            func, x0, xdata, ydata, threshold=self.threshold
-        )
+        return compute_sparse_jacobian(func, x0, xdata, ydata, threshold=self.threshold)
 ```
 
 ---
@@ -575,6 +578,7 @@ class SparseJacobianAdapter(JacobianAdapter):
 from nlsq.interfaces import StreamingStrategyProtocol
 from nlsq.result import CurveFitResult
 from nlsq.types import ModelFunction, ArrayLike
+
 
 class BatchStrategy:
     """Batch-based processing for 100K-10M data points.
@@ -610,7 +614,7 @@ class BatchStrategy:
         xdata: ArrayLike,
         ydata: ArrayLike,
         p0: ArrayLike,
-        **kwargs
+        **kwargs,
     ) -> CurveFitResult:
         """Run batch-based optimization.
 
@@ -631,6 +635,7 @@ class BatchStrategy:
 
 from nlsq.interfaces import StreamingStrategyProtocol
 from nlsq.result import CurveFitResult
+
 
 class OnlineStrategy:
     """Online learning for >100M data points.
@@ -660,7 +665,7 @@ class OnlineStrategy:
         import optax
 
         # Setup optimizer
-        optimizer = optax.adam(learning_rate=kwargs.get('learning_rate', 1e-3))
+        optimizer = optax.adam(learning_rate=kwargs.get("learning_rate", 1e-3))
         opt_state = optimizer.init(p0)
 
         # Mini-batch loop
@@ -679,6 +684,7 @@ class OnlineStrategy:
 # BEFORE: Creates circular dependency!
 from nlsq.core.minpack import CurveFit
 
+
 class LargeDatasetOptimizer:
     def __init__(self):
         self._fitter = CurveFit()  # Direct import creates cycle
@@ -694,6 +700,7 @@ class LargeDatasetOptimizer:
 # AFTER: No circular dependency!
 from nlsq.interfaces import OptimizerProtocol
 from nlsq.result import CurveFitResult
+
 
 class LargeDatasetOptimizer:
     """Optimizer for large datasets using chunking and delegation.
@@ -717,10 +724,9 @@ class LargeDatasetOptimizer:
         """Optimize using injected optimizer."""
         # Delegate to injected optimizer
         return self._optimizer.optimize(
-            fun=lambda x: func(xdata, *x) - ydata,
-            x0=p0,
-            **kwargs
+            fun=lambda x: func(xdata, *x) - ydata, x0=p0, **kwargs
         )
+
 
 # Factory function for backward compatibility
 def create_large_dataset_optimizer():
@@ -761,17 +767,19 @@ from nlsq.facades import CurveFitFacade
 from nlsq.interfaces import OptimizerProtocol
 import pytest
 
+
 class MockOptimizer:
     """Mock optimizer for testing."""
 
     def optimize(self, fun, x0, **kwargs):
         return {
-            'x': x0,  # Return initial guess
-            'cost': 0.01,
-            'jacobian': np.eye(len(x0)),
-            'message': 'Mock success',
-            'success': True
+            "x": x0,  # Return initial guess
+            "cost": 0.01,
+            "jacobian": np.eye(len(x0)),
+            "message": "Mock success",
+            "success": True,
         }
+
 
 def test_curve_fit_facade():
     # Inject mock dependencies
@@ -786,7 +794,7 @@ def test_curve_fit_facade():
     result = facade.curve_fit(model, xdata, ydata, p0=[1, 0.5])
 
     assert result.success
-    assert cache.get_stats()['hits'] == 0  # First call, no cache hit
+    assert cache.get_stats()["hits"] == 0  # First call, no cache hit
 ```
 
 ---
@@ -801,17 +809,22 @@ def test_curve_fit_facade():
 # Benchmark: Direct call vs. Facade
 import timeit
 
+
 # Direct call (current)
 def direct():
     from nlsq.core.least_squares import LeastSquares
+
     ls = LeastSquares()
     return ls.least_squares(...)
+
 
 # Facade call (proposed)
 def via_facade():
     from nlsq.facades import create_curve_fit_facade
+
     facade = create_curve_fit_facade()
     return facade.curve_fit(...)
+
 
 # Results (10000 iterations):
 # Direct:     0.523s
@@ -878,6 +891,7 @@ result = facade.curve_fit(model, xdata, ydata, p0=[1, 0.5])
 
 # Or continue using old API:
 from nlsq import curve_fit  # Internally uses facade, but API unchanged
+
 result = curve_fit(model, xdata, ydata, p0=[1, 0.5])
 ```
 
@@ -985,7 +999,7 @@ result = curve_fit(model, xdata, ydata, p0=[1, 0.5])
 
 ```python
 # Allow gradual migration
-USE_NEW_FACADE = os.getenv('NLSQ_USE_FACADE', 'true').lower() == 'true'
+USE_NEW_FACADE = os.getenv("NLSQ_USE_FACADE", "true").lower() == "true"
 
 if USE_NEW_FACADE:
     from nlsq.facades import create_curve_fit_facade as _impl

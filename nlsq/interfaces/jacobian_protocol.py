@@ -128,7 +128,7 @@ class AutodiffJacobian:
 
         x_jax = jnp.asarray(x)
 
-        def fun_x(params: jnp.ndarray) -> jnp.ndarray:
+        def fun_x(params: jnp.ndarray):
             return fun(params, *args)
 
         jacobian = jax.jacfwd(fun_x)(x_jax)

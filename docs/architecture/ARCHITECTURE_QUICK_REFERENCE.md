@@ -138,9 +138,9 @@ streaming → global_optimization, precision, stability, utils
 import h5py
 
 # Expected structure:
-with h5py.File('data.h5', 'r') as f:
-    xdata = f['xdata'][:]  # Shape: (n_points, n_features)
-    ydata = f['ydata'][:]  # Shape: (n_points,)
+with h5py.File("data.h5", "r") as f:
+    xdata = f["xdata"][:]  # Shape: (n_points, n_features)
+    ydata = f["ydata"][:]  # Shape: (n_points,)
 ```
 
 **Recommended Adapter:**
@@ -157,6 +157,7 @@ class HDF5DataAdapter(DataSourceAdapter):
 **Integration:**
 ```python
 import optax
+
 optimizer = optax.adam(learning_rate=1e-3)
 opt_state = optimizer.init(params)
 updates, opt_state = optimizer.update(gradients, opt_state)
@@ -209,6 +210,7 @@ updates, opt_state = optimizer.update(gradients, opt_state)
 def test_curve_fit_1():
     result = curve_fit(...)  # Uses global cache
 
+
 def test_curve_fit_2():
     result = curve_fit(...)  # Cache polluted by test_1
 ```
@@ -219,7 +221,7 @@ def test_curve_fit_2():
 def test_curve_fit_1():
     with isolated_cache() as cache:
         result = curve_fit(...)
-        assert cache.get_stats()['hits'] == 0
+        assert cache.get_stats()["hits"] == 0
 ```
 
 ### 🚫 Importing Circular Dependencies
@@ -228,6 +230,7 @@ def test_curve_fit_1():
 ```python
 # In large_dataset.py
 from nlsq.core.minpack import CurveFit  # Creates cycle!
+
 
 class LargeDatasetOptimizer:
     def __init__(self):
@@ -238,6 +241,7 @@ class LargeDatasetOptimizer:
 ```python
 # In large_dataset.py
 from nlsq.interfaces import OptimizerProtocol
+
 
 class LargeDatasetOptimizer:
     def __init__(self, optimizer: OptimizerProtocol):
@@ -271,10 +275,10 @@ for strategy in self._strategies:
 
 ### Core Optimization
 ```python
-from nlsq import curve_fit                      # Public API
-from nlsq.core.minpack import CurveFit          # Class-based
+from nlsq import curve_fit  # Public API
+from nlsq.core.minpack import CurveFit  # Class-based
 from nlsq.core.least_squares import LeastSquares  # Low-level
-from nlsq.core.trf import TrustRegionReflective   # Algorithm
+from nlsq.core.trf import TrustRegionReflective  # Algorithm
 ```
 
 ### Streaming

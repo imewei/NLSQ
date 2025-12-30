@@ -9,8 +9,8 @@ from __future__ import annotations
 import time
 
 __all__ = [
-    "TRFProfiler",
     "NullProfiler",
+    "TRFProfiler",
 ]
 
 
@@ -49,17 +49,17 @@ class TRFProfiler:
     """
 
     __slots__ = (
-        "ftimes",
-        "jtimes",
-        "svd_times",
+        "c_ctimes",
         "ctimes",
+        "ftimes",
+        "g_ctimes",
         "gtimes",
         "gtimes2",
+        "jtimes",
+        "p_ctimes",
         "ptimes",
         "svd_ctimes",
-        "g_ctimes",
-        "c_ctimes",
-        "p_ctimes",
+        "svd_times",
     )
 
     def __init__(self) -> None:

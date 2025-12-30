@@ -250,7 +250,7 @@ class TrustRegionJITFunctions:
             f: jnp.ndarray,
             d: jnp.ndarray,
             alpha: float = 0.0,
-            max_iter: int = None,
+            max_iter: int | None = None,
             tol: float = DEFAULT_TOLERANCE,
         ) -> tuple[jnp.ndarray, jnp.ndarray, int]:
             """Solve the normal equations using conjugate gradient method.
@@ -348,7 +348,7 @@ class TrustRegionJITFunctions:
             d: jnp.ndarray,
             Delta: float,
             alpha: float = 0.0,
-            max_iter: int = None,
+            max_iter: int | None = None,
         ) -> jnp.ndarray:
             """Solve trust region subproblem using conjugate gradient.
 
@@ -388,7 +388,7 @@ class TrustRegionJITFunctions:
             f_zeros: jnp.ndarray,
             Delta: float,
             alpha: float = 0.0,
-            max_iter: int = None,
+            max_iter: int | None = None,
         ) -> jnp.ndarray:
             """Solve trust region subproblem with bounds using conjugate gradient."""
             # Augment the system for bounds
@@ -456,7 +456,7 @@ class TrustRegionJITFunctions:
         """Create the function to check if the evaluated residuals are finite."""
 
         @jit
-        def isfinite(f_new: jnp.ndarray) -> bool:
+        def isfinite(f_new: jnp.ndarray) -> jnp.ndarray:
             """Check if the evaluated residuals are finite.
 
             Parameters
@@ -466,8 +466,8 @@ class TrustRegionJITFunctions:
 
             Returns
             -------
-            bool
-                True if all residuals are finite, False otherwise.
+            jnp.ndarray
+                Scalar array that is True if all residuals are finite, False otherwise.
             """
             return jnp.all(jnp.isfinite(f_new))
 

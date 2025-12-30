@@ -194,19 +194,22 @@ streaming.large_dataset → core.minpack → streaming.large_dataset
 # Create nlsq/core/optimizer_protocol.py
 from typing import Protocol
 
+
 class OptimizerProtocol(Protocol):
-    def curve_fit(self, f, xdata, ydata, p0, **kwargs) -> CurveFitResult:
-        ...
+    def curve_fit(self, f, xdata, ydata, p0, **kwargs) -> CurveFitResult: ...
+
 
 # In large_dataset.py, inject optimizer via constructor:
 class LargeDatasetOptimizer:
     def __init__(self, optimizer: OptimizerProtocol):
         self._optimizer = optimizer
 
+
 # In minpack.py, remove direct import of LargeDatasetOptimizer
 # Use factory function instead:
 def create_large_dataset_optimizer():
     from nlsq.streaming.large_dataset import LargeDatasetOptimizer
+
     return LargeDatasetOptimizer(optimizer=CurveFit())
 ```
 
@@ -224,14 +227,15 @@ core.minpack → global_optimization → global_optimization.multi_start → cor
 # interfaces/optimizer_interface.py
 from typing import Protocol, runtime_checkable
 
+
 @runtime_checkable
 class CurveFitInterface(Protocol):
     """Protocol for curve_fit-like optimizers."""
+
     def curve_fit(
-        self, f, xdata, ydata, p0,
-        sigma=None, bounds=(-np.inf, np.inf), **kwargs
-    ) -> CurveFitResult:
-        ...
+        self, f, xdata, ydata, p0, sigma=None, bounds=(-np.inf, np.inf), **kwargs
+    ) -> CurveFitResult: ...
+
 
 # global_optimization/multi_start.py
 def __init__(self, optimizer: CurveFitInterface):
@@ -277,6 +281,7 @@ from nlsq.interfaces import OptimizerInterface, ValidatorInterface, CacheInterfa
 from nlsq.core.least_squares import LeastSquares
 from nlsq.result import CurveFitResult
 
+
 class CurveFitFacade:
     """Simplified interface for curve_fit() that delegates to subsystems."""
 
@@ -284,7 +289,7 @@ class CurveFitFacade:
         self,
         optimizer: OptimizerInterface,  # Injected dependency
         validator: ValidatorInterface,  # Injected dependency
-        cache: CacheInterface,          # Injected dependency
+        cache: CacheInterface,  # Injected dependency
     ):
         self._optimizer = optimizer
         self._validator = validator
@@ -307,6 +312,7 @@ class CurveFitFacade:
 
         return result
 
+
 # Factory function in minpack.py
 def create_curve_fit_facade() -> CurveFitFacade:
     from nlsq.validators import StandardValidator
@@ -314,10 +320,9 @@ def create_curve_fit_facade() -> CurveFitFacade:
     from nlsq.core.least_squares import LeastSquares
 
     return CurveFitFacade(
-        optimizer=LeastSquares(),
-        validator=StandardValidator(),
-        cache=UnifiedCache()
+        optimizer=LeastSquares(), validator=StandardValidator(), cache=UnifiedCache()
     )
+
 
 # Public API remains unchanged:
 def curve_fit(f, xdata, ydata, p0, **kwargs):
@@ -346,28 +351,36 @@ def curve_fit(f, xdata, ydata, p0, **kwargs):
 # nlsq/adapters/jacobian_adapter.py
 """Adapter for different Jacobian computation strategies."""
 
+
 class JacobianAdapter(ABC):
     @abstractmethod
     def compute_jacobian(self, func, x0, xdata, ydata, **kwargs) -> jnp.ndarray:
         pass
 
+
 class AutodiffJacobianAdapter(JacobianAdapter):
     """Uses JAX autodiff (jacfwd/jacrev)."""
+
     def compute_jacobian(self, func, x0, xdata, ydata, **kwargs):
         # Implementation using jacfwd/jacrev
         ...
 
+
 class AnalyticalJacobianAdapter(JacobianAdapter):
     """Uses user-provided Jacobian function."""
+
     def compute_jacobian(self, func, x0, xdata, ydata, **kwargs):
         # Wrap user's jac function
         ...
 
+
 class SparseJacobianAdapter(JacobianAdapter):
     """Uses sparse Jacobian computation."""
+
     def compute_jacobian(self, func, x0, xdata, ydata, **kwargs):
         # Call core.sparse_jacobian
         ...
+
 
 # In least_squares.py:
 class LeastSquares:
@@ -400,6 +413,7 @@ class LeastSquares:
 # nlsq/streaming/strategies/strategy_interface.py
 from typing import Protocol
 
+
 class StreamingStrategy(Protocol):
     """Protocol for streaming optimization strategies."""
 
@@ -410,6 +424,7 @@ class StreamingStrategy(Protocol):
     def optimize(self, func, xdata, ydata, p0, **kwargs) -> CurveFitResult:
         """Run optimization using this strategy."""
         ...
+
 
 # nlsq/streaming/strategies/batch_strategy.py
 class BatchStrategy:
@@ -422,6 +437,7 @@ class BatchStrategy:
         # Batch processing logic
         ...
 
+
 # nlsq/streaming/strategies/online_strategy.py
 class OnlineStrategy:
     """Online/incremental for >100M points."""
@@ -432,6 +448,7 @@ class OnlineStrategy:
     def optimize(self, func, xdata, ydata, p0, **kwargs):
         # Online learning logic
         ...
+
 
 # nlsq/streaming/adaptive_hybrid.py (simplified)
 class AdaptiveHybridStreamingOptimizer:
@@ -642,6 +659,7 @@ class CurveFit:
     def __init__(self, cache: CacheInterface = None):
         self._cache = cache or get_global_cache()
 
+
 # Option 2: Context Manager
 @contextmanager
 def isolated_cache():
@@ -654,11 +672,12 @@ def isolated_cache():
     finally:
         set_global_cache(old_cache)
 
+
 # Usage in tests:
 def test_curve_fit():
     with isolated_cache() as cache:
         result = curve_fit(...)
-        assert cache.get_stats()['hits'] == 0
+        assert cache.get_stats()["hits"] == 0
 ```
 
 ### 5.2 Configuration (JAXConfig)
@@ -671,6 +690,7 @@ def test_curve_fit():
 ```python
 # Every module does this:
 from nlsq.config import JAXConfig
+
 _jax_config = JAXConfig()
 import jax.numpy as jnp
 ```
@@ -681,17 +701,18 @@ import jax.numpy as jnp
 ```python
 # config/jax_context.py
 @contextmanager
-def jax_backend(backend: str = 'cpu'):
+def jax_backend(backend: str = "cpu"):
     """Temporarily switch JAX backend."""
     old_backend = jax.default_backend()
-    jax.config.update('jax_platform_name', backend)
+    jax.config.update("jax_platform_name", backend)
     try:
         yield
     finally:
-        jax.config.update('jax_platform_name', old_backend)
+        jax.config.update("jax_platform_name", old_backend)
+
 
 # Usage:
-with jax_backend('gpu'):
+with jax_backend("gpu"):
     result = curve_fit(...)  # Runs on GPU
 ```
 
@@ -704,6 +725,7 @@ with jax_backend('gpu'):
 **Current Pattern:**
 ```python
 from nlsq.utils.logging import get_logger
+
 logger = get_logger("core.trf")
 
 # Structured logging:
@@ -731,14 +753,14 @@ logger.convergence(reason="gtol satisfied", final_cost=0.01)
 **Protocol:**
 ```python
 # Expected HDF5 structure:
-with h5py.File('data.h5', 'r') as f:
-    xdata = f['xdata'][:]  # Dataset with shape (n_points, n_features)
-    ydata = f['ydata'][:]  # Dataset with shape (n_points,)
+with h5py.File("data.h5", "r") as f:
+    xdata = f["xdata"][:]  # Dataset with shape (n_points, n_features)
+    ydata = f["ydata"][:]  # Dataset with shape (n_points,)
 
     # Optional: Chunked reading
     for i in range(0, n_points, chunk_size):
-        x_chunk = f['xdata'][i:i+chunk_size]
-        y_chunk = f['ydata'][i:i+chunk_size]
+        x_chunk = f["xdata"][i : i + chunk_size]
+        y_chunk = f["ydata"][i : i + chunk_size]
 ```
 
 **Adapter Recommendation:**
@@ -749,23 +771,28 @@ class DataSourceAdapter(ABC):
     def read_chunk(self, start: int, end: int) -> tuple[np.ndarray, np.ndarray]:
         pass
 
+
 class HDF5DataAdapter(DataSourceAdapter):
-    def __init__(self, filepath: str, xdata_key='xdata', ydata_key='ydata'):
-        self.file = h5py.File(filepath, 'r')
+    def __init__(self, filepath: str, xdata_key="xdata", ydata_key="ydata"):
+        self.file = h5py.File(filepath, "r")
         self.xdata = self.file[xdata_key]
         self.ydata = self.file[ydata_key]
 
     def read_chunk(self, start, end):
         return self.xdata[start:end], self.ydata[start:end]
 
+
 class ParquetDataAdapter(DataSourceAdapter):
     """Adapter for Parquet files (future)."""
+
     def read_chunk(self, start, end):
         # Use pandas/pyarrow
         ...
 
+
 class ZarrDataAdapter(DataSourceAdapter):
     """Adapter for Zarr arrays (future)."""
+
     def read_chunk(self, start, end):
         # Use zarr library
         ...
@@ -794,17 +821,22 @@ params = optax.apply_updates(params, updates)
 ```python
 class GradientOptimizerAdapter(ABC):
     @abstractmethod
-    def init(self, params): pass
+    def init(self, params):
+        pass
 
     @abstractmethod
-    def update(self, gradients, state): pass
+    def update(self, gradients, state):
+        pass
+
 
 class OptaxAdapter(GradientOptimizerAdapter):
-    def __init__(self, optimizer_name='adam', learning_rate=1e-3):
+    def __init__(self, optimizer_name="adam", learning_rate=1e-3):
         self._opt = getattr(optax, optimizer_name)(learning_rate)
+
 
 class PyTorchAdapter(GradientOptimizerAdapter):
     """Future: Support torch.optim optimizers."""
+
     ...
 ```
 
@@ -841,25 +873,30 @@ class PyTorchAdapter(GradientOptimizerAdapter):
 ```python
 # Decompose into focused classes:
 
+
 class InputValidator:
     """Single Responsibility: Validate curve_fit inputs."""
-    def validate(self, f, xdata, ydata, p0, sigma, bounds, **kwargs):
-        ...
+
+    def validate(self, f, xdata, ydata, p0, sigma, bounds, **kwargs): ...
+
 
 class WorkflowSelector:
     """Single Responsibility: Select optimization workflow."""
-    def select(self, n_points, n_params, memory_available, goal):
-        ...
+
+    def select(self, n_points, n_params, memory_available, goal): ...
+
 
 class SigmaTransformer:
     """Single Responsibility: Transform sigma to weight matrix."""
-    def transform(self, sigma, absolute_sigma):
-        ...
+
+    def transform(self, sigma, absolute_sigma): ...
+
 
 class CovarianceEstimator:
     """Single Responsibility: Compute parameter covariance."""
-    def estimate(self, jacobian, cost, residuals_dof):
-        ...
+
+    def estimate(self, jacobian, cost, residuals_dof): ...
+
 
 # New CurveFit becomes coordinator:
 class CurveFit:
@@ -869,7 +906,7 @@ class CurveFit:
         workflow_selector: WorkflowSelector,
         sigma_transformer: SigmaTransformer,
         covariance_estimator: CovarianceEstimator,
-        optimizer: OptimizerInterface
+        optimizer: OptimizerInterface,
     ):
         self._validator = validator
         self._workflow = workflow_selector
@@ -1030,7 +1067,7 @@ class CurveFit:
            "Importing from nlsq.core.minpack is deprecated. "
            "Use nlsq.curve_fit() instead.",
            DeprecationWarning,
-           stacklevel=2
+           stacklevel=2,
        )
        return _curve_fit_impl(*args, **kwargs)
    ```
@@ -1071,7 +1108,7 @@ class CurveFit:
 1. **Feature Flags**
    ```python
    # Enable new facade in config:
-   USE_CURVE_FIT_FACADE = os.getenv('NLSQ_USE_FACADE', 'false').lower() == 'true'
+   USE_CURVE_FIT_FACADE = os.getenv("NLSQ_USE_FACADE", "false").lower() == "true"
 
    if USE_CURVE_FIT_FACADE:
        from nlsq.facades.curve_fit_facade import CurveFitFacade as CurveFit

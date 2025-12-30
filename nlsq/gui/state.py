@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-
 @dataclass(slots=True)
 class SessionState:
     """Container for all GUI session state fields.

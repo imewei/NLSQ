@@ -146,9 +146,7 @@ def validate_less_than_or_equal(
         If value1 > value2.
     """
     if value1 > value2:
-        raise ConfigValidationError(
-            f"{name1} ({value1}) must be <= {name2} ({value2})"
-        )
+        raise ConfigValidationError(f"{name1} ({value1}) must be <= {name2} ({value2})")
 
 
 def validate_normalization_strategy(strategy: str) -> None:
@@ -492,8 +490,12 @@ def validate_defense_layer_config(
     # Layer 1: Warm start detection
     if enable_warm_start:
         validate_range(
-            warm_start_threshold, 0, 1, "warm_start_threshold",
-            inclusive_min=False, inclusive_max=False
+            warm_start_threshold,
+            0,
+            1,
+            "warm_start_threshold",
+            inclusive_min=False,
+            inclusive_max=False,
         )
 
     # Layer 2: Adaptive learning rate
@@ -510,8 +512,12 @@ def validate_defense_layer_config(
     # Layer 3: Cost-increase guard
     if enable_cost_guard:
         validate_range(
-            cost_tolerance, 0, 1, "cost_increase_tolerance",
-            inclusive_min=True, inclusive_max=True
+            cost_tolerance,
+            0,
+            1,
+            "cost_increase_tolerance",
+            inclusive_min=True,
+            inclusive_max=True,
         )
 
     # Layer 4: Step clipping
@@ -560,8 +566,12 @@ def validate_multistart_config(
 
     validate_multistart_sampler(sampler)
     validate_range(
-        elimination_fraction, 0, 1, "elimination_fraction",
-        inclusive_min=False, inclusive_max=False
+        elimination_fraction,
+        0,
+        1,
+        "elimination_fraction",
+        inclusive_min=False,
+        inclusive_max=False,
     )
     validate_non_negative(elimination_rounds, "elimination_rounds")
     validate_positive(batches_per_round, "batches_per_round")

@@ -49,9 +49,7 @@ class DataSourceProtocol(Protocol):
         """Data type of the arrays."""
         ...
 
-    def get_chunk(
-        self, start: int, end: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def get_chunk(self, start: int, end: int) -> tuple[np.ndarray, np.ndarray]:
         """Get a chunk of data.
 
         Parameters
@@ -138,9 +136,7 @@ class ArrayDataSource:
         """Data type of the arrays."""
         return self._ydata.dtype
 
-    def get_chunk(
-        self, start: int, end: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def get_chunk(self, start: int, end: int) -> tuple[np.ndarray, np.ndarray]:
         """Get a chunk of data."""
         return self._xdata[start:end], self._ydata[start:end]
 

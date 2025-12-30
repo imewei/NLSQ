@@ -183,6 +183,7 @@ class LossFunctionsJIT:
         Returns a function that stacks rho0, rho1, rho2 into a (3, n) array
         for efficient loss and derivative computation.
         """
+
         @jit
         def stack_rhos(rho0, rho1, rho2):
             return jnp.stack([rho0, rho1, rho2])
@@ -205,6 +206,7 @@ class LossFunctionsJIT:
         Creates huber1 (rho0 and mask) and huber2 (rho1, rho2 derivatives).
         Huber loss is quadratic for ``|z| <= 1`` and linear for ``|z| > 1``.
         """
+
         @jit
         def huber1(z):
             mask = z <= 1
@@ -235,6 +237,7 @@ class LossFunctionsJIT:
         Creates soft_l1_1 (rho0 and intermediate t) and soft_l1_2 (derivatives).
         Soft L1 is a smooth approximation to L1 loss: rho(z) = 2*(sqrt(1+z) - 1).
         """
+
         @jit
         def soft_l1_1(z):
             t = 1 + z
@@ -264,6 +267,7 @@ class LossFunctionsJIT:
         Creates cauchy1 (rho0) and cauchy2 (derivatives).
         Cauchy loss: rho(z) = ln(1 + z). Very robust to outliers.
         """
+
         @jit
         def cauchy1(z):
             return jnp.log1p(z)
@@ -293,6 +297,7 @@ class LossFunctionsJIT:
         Creates arctan1 (rho0) and arctan2 (derivatives).
         Arctan loss: rho(z) = arctan(z). Bounded loss for extreme outliers.
         """
+
         @jit
         def arctan1(z):
             return jnp.arctan(z)
@@ -319,6 +324,7 @@ class LossFunctionsJIT:
 
         Computes z = (f/f_scale)^2 for robust loss function input.
         """
+
         @jit
         def zscale(f, f_scale):
             return (f / f_scale) ** 2
@@ -330,6 +336,7 @@ class LossFunctionsJIT:
 
         Computes total cost as 0.5 * f_scale^2 * sum(rho0) with masking.
         """
+
         @jit
         def calculate_cost(f_scale, rho, data_mask):
             cost_array = jnp.where(data_mask, rho[0], 0)
@@ -342,6 +349,7 @@ class LossFunctionsJIT:
 
         Applies proper scaling: ``rho0 *= f_scale**2``, ``rho2 /= f_scale**2``.
         """
+
         @jit
         def scale_rhos(rho, f_scale):
             rho0 = rho[0] * f_scale**2
