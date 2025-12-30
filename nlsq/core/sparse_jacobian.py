@@ -43,7 +43,7 @@ class SparseJacobianComputer:
         self,
         func: Callable,
         x0: np.ndarray,
-        xdata_sample: np.ndarray,
+        xdata_sample: np.ndarray | list,
         n_samples: int = 100,
     ) -> tuple[np.ndarray, float]:
         """Detect sparsity pattern of Jacobian from sample evaluations.
@@ -54,8 +54,10 @@ class SparseJacobianComputer:
             Function to evaluate
         x0 : np.ndarray
             Initial parameter values
-        xdata_sample : np.ndarray
-            Sample of x data points
+        xdata_sample : np.ndarray or list
+            Sample of x data points. Can be a single array for 1D problems,
+            a list of arrays [X, Y] for 2D problems, or a 2D array with
+            shape (k, N) for multi-dimensional coordinates.
         n_samples : int
             Number of samples to use for pattern detection
 
@@ -67,19 +69,35 @@ class SparseJacobianComputer:
             Fraction of zero elements
         """
         n_params = len(x0)
-        n_data = min(n_samples, len(xdata_sample))
+        xdata_arr = np.asarray(xdata_sample)
+
+        # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)
+        if isinstance(xdata_sample, list | tuple):
+            # Get number of data points from first coordinate array
+            n_data_points = len(xdata_sample[0])
+            n_data = min(n_samples, n_data_points)
+            # Slice each coordinate array
+            xdata_sliced = [coord[:n_data] for coord in xdata_sample]
+        elif xdata_arr.ndim == 2 and xdata_arr.shape[0] < xdata_arr.shape[1]:
+            # 2D array with shape (k, N) - slice along N dimension
+            n_data_points = xdata_arr.shape[1]
+            n_data = min(n_samples, n_data_points)
+            xdata_sliced = xdata_arr[:, :n_data]
+        else:
+            n_data = min(n_samples, len(xdata_arr))
+            xdata_sliced = xdata_arr[:n_data]
 
         # Sample Jacobian at a few points to detect pattern
         pattern = np.zeros((n_data, n_params), dtype=bool)
 
         # Use finite differences to detect sparsity
         eps = FINITE_DIFF_REL_STEP
-        f0 = func(xdata_sample[:n_data], *x0)
+        f0 = func(xdata_sliced, *x0)
 
         for i in range(n_params):
             x_perturb = x0.copy()
             x_perturb[i] += eps
-            f_perturb = func(xdata_sample[:n_data], *x_perturb)
+            f_perturb = func(xdata_sliced, *x_perturb)
 
             # Compute finite difference
             jac_col = (f_perturb - f0) / eps
@@ -507,7 +525,10 @@ class SparseOptimizer:
 
 
 def detect_jacobian_sparsity(
-    func: Callable, x0: np.ndarray, xdata_sample: np.ndarray, threshold: float = 0.01
+    func: Callable,
+    x0: np.ndarray,
+    xdata_sample: np.ndarray | list,
+    threshold: float = 0.01,
 ) -> tuple[float, dict]:
     """Detect and analyze Jacobian sparsity for a given problem.
 
@@ -517,8 +538,10 @@ def detect_jacobian_sparsity(
         Objective function
     x0 : np.ndarray
         Initial parameters
-    xdata_sample : np.ndarray
-        Sample of x data
+    xdata_sample : np.ndarray or list
+        Sample of x data. Can be a single array for 1D problems,
+        a list of arrays [X, Y] for 2D problems, or a 2D array
+        with shape (k, N) for multi-dimensional coordinates.
     threshold : float
         Threshold for zero elements
 
@@ -529,9 +552,19 @@ def detect_jacobian_sparsity(
     info : dict
         Additional sparsity information
     """
+    # Get number of data points, handling multi-dimensional xdata
+    xdata_arr = np.asarray(xdata_sample)
+    if isinstance(xdata_sample, list | tuple):
+        n_data_points = len(xdata_sample[0])
+    elif xdata_arr.ndim == 2 and xdata_arr.shape[0] < xdata_arr.shape[1]:
+        # 2D array with shape (k, N) - N is number of data points
+        n_data_points = xdata_arr.shape[1]
+    else:
+        n_data_points = len(xdata_arr)
+
     computer = SparseJacobianComputer(threshold)
     pattern, sparsity = computer.detect_sparsity_pattern(
-        func, x0, xdata_sample, min(100, len(xdata_sample))
+        func, x0, xdata_sample, min(100, n_data_points)
     )
 
     # Analyze pattern
@@ -616,13 +649,44 @@ def detect_sparsity_at_p0(
     Sparsity: 50.0%, Is sparse: True
     """
     # Sample data for efficient detection
-    actual_sample_size = min(sample_size, n_residuals, len(xdata))
-    if actual_sample_size < len(xdata):
-        # Sample uniformly across data range
-        sample_indices = np.linspace(0, len(xdata) - 1, actual_sample_size, dtype=int)
-        xdata_sample = xdata[sample_indices]
+    # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)
+    xdata_arr = np.asarray(xdata)
+
+    if isinstance(xdata, list | tuple):
+        # xdata is a list of coordinate arrays (e.g., [X, Y] for 2D problems)
+        # Get the number of data points from the first coordinate array
+        n_data_points = len(xdata[0])
+        actual_sample_size = min(sample_size, n_residuals, n_data_points)
+        if actual_sample_size < n_data_points:
+            sample_indices = np.linspace(
+                0, n_data_points - 1, actual_sample_size, dtype=int
+            )
+            xdata_sample = [coord[sample_indices] for coord in xdata]
+        else:
+            xdata_sample = xdata
+    elif xdata_arr.ndim == 2 and xdata_arr.shape[0] < xdata_arr.shape[1]:
+        # xdata is a 2D array with shape (k, N) where k is number of coords
+        # and N is number of data points (e.g., shape (2, 40000) for X,Y)
+        n_data_points = xdata_arr.shape[1]
+        actual_sample_size = min(sample_size, n_residuals, n_data_points)
+        if actual_sample_size < n_data_points:
+            sample_indices = np.linspace(
+                0, n_data_points - 1, actual_sample_size, dtype=int
+            )
+            xdata_sample = xdata_arr[:, sample_indices]
+        else:
+            xdata_sample = xdata
     else:
-        xdata_sample = xdata
+        # xdata is a single 1D array
+        n_data_points = len(xdata_arr)
+        actual_sample_size = min(sample_size, n_residuals, n_data_points)
+        if actual_sample_size < n_data_points:
+            sample_indices = np.linspace(
+                0, n_data_points - 1, actual_sample_size, dtype=int
+            )
+            xdata_sample = xdata_arr[sample_indices]
+        else:
+            xdata_sample = xdata
 
     # Use existing detection function
     sparsity_ratio, _info = detect_jacobian_sparsity(

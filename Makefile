@@ -700,6 +700,13 @@ clean-test:
 		-not -path "./.specify/*" \
 		-not -path "./agent-os/*" \
 		-exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "figures" \
+		-not -path "./.venv/*" \
+		-not -path "./venv/*" \
+		-not -path "./.claude/*" \
+		-not -path "./.specify/*" \
+		-not -path "./agent-os/*" \
+		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d \( -name checkpoints -o -name checkpoints_example -o -name checkpoints_diagnostics \
 		-o -name benchmark_results \) \
 		-not -path "./.venv/*" \
