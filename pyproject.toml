@@ -601,3 +601,9 @@ exclude_lines = [
 exclude_dirs = ["tests", "examples", "docs", "benchmark", "scripts"]
 # Only fail on MEDIUM and HIGH severity issues
 skips = ["B404", "B603", "B607", "B110", "B101"]
+
+[tool.check-wheel-contents]
+# Ignore W004 for Streamlit multipage app files
+# These use numeric prefixes (1_, 2_, etc.) for page ordering per Streamlit convention
+# They are not importable Python modules by design
+ignore = ["W004"]
