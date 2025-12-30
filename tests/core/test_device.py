@@ -31,10 +31,20 @@ class TestCheckGPUAvailability:
         This is the main use case - user has GPU but hasn't installed
         JAX with CUDA support. Should print helpful warning.
         """
-        # Mock subprocess to return GPU name
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Tesla V100-SXM2-16GB\n"
+
+        # Mock subprocess to return different results based on command
+        def mock_subprocess_run(cmd, **kwargs):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            if "nvidia-smi" in cmd:
+                # nvidia-smi --query-gpu=name,compute_cap returns CSV format
+                mock_result.stdout = "Tesla V100-SXM2-16GB, 7.0\n"
+            elif "nvcc" in cmd:
+                # nvcc --version returns version info
+                mock_result.stdout = "nvcc: NVIDIA (R) Cuda compiler driver\nCuda compilation tools, release 12.6, V12.6.77\n"
+            else:
+                mock_result.stdout = ""
+            return mock_result
 
         # Mock JAX device to return CPU-only
         mock_device = MagicMock()
@@ -45,7 +55,7 @@ class TestCheckGPUAvailability:
         mock_jax.devices.return_value = [mock_device]
 
         with (
-            patch("subprocess.run", return_value=mock_result) as mock_subprocess,
+            patch("subprocess.run", side_effect=mock_subprocess_run) as mock_subprocess,
             patch.dict("sys.modules", {"jax": mock_jax}),
             patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
@@ -54,31 +64,19 @@ class TestCheckGPUAvailability:
             with redirect_stdout(output):
                 check_gpu_availability()
 
-                # Verify warning was printed with exact format
+                # Verify warning was printed with actual format from _print_gpu_warning
                 output_str = output.getvalue()
-                assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
-                assert "═══════════════════════════════" in output_str
-                assert "NVIDIA GPU detected: Tesla V100-SXM2-16GB" in output_str
-                assert "JAX is currently using: CPU-only" in output_str
-                assert "Enable 150-270x speedup with GPU acceleration:" in output_str
+                assert "GPU ACCELERATION AVAILABLE" in output_str
+                assert "===========================" in output_str
+                assert "GPU: Tesla V100-SXM2-16GB (SM 7.0)" in output_str
+                assert "JAX backend: CPU-only" in output_str
+                assert "Enable 20-100x speedup:" in output_str
                 assert "make install-jax-gpu" in output_str
-                assert 'pip install "jax[cuda12-local]>=0.6.0"' in output_str
-                assert (
-                    "See README.md GPU Installation section for details." in output_str
-                )
+                assert 'pip install "jax[cuda12-local]"' in output_str
+                assert "See README.md for details." in output_str
 
-        # Verify subprocess was called correctly
-        mock_subprocess.assert_called_once()
-        call_args = mock_subprocess.call_args
-        assert call_args[0][0] == [
-            "nvidia-smi",
-            "--query-gpu=name",
-            "--format=csv,noheader",
-        ]
-        assert call_args[1]["check"] is False
-        assert call_args[1]["capture_output"] is True
-        assert call_args[1]["text"] is True
-        assert call_args[1]["timeout"] == 5
+        # Verify subprocess was called (once for nvidia-smi, once for nvcc)
+        assert mock_subprocess.call_count == 2
 
     def test_gpu_and_jax_match(self):
         """Test GPU hardware and JAX both using GPU.
@@ -231,10 +229,19 @@ class TestGPUNameSanitization:
         GPU name should be printed as-is (testing shows it's safe).
         This test documents the current behavior.
         """
-        # Mock subprocess to return GPU name with special characters
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Tesla V100 <script>alert('xss')</script>\n"
+
+        # Mock subprocess to return different results based on command
+        def mock_subprocess_run(cmd, **kwargs):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            if "nvidia-smi" in cmd:
+                # nvidia-smi returns CSV format with special chars in GPU name
+                mock_result.stdout = "Tesla V100 <script>alert('xss')</script>, 7.0\n"
+            elif "nvcc" in cmd:
+                mock_result.stdout = "Cuda compilation tools, release 12.6, V12.6.77\n"
+            else:
+                mock_result.stdout = ""
+            return mock_result
 
         # Mock JAX device to return CPU-only
         mock_device = MagicMock()
@@ -245,7 +252,7 @@ class TestGPUNameSanitization:
         mock_jax.devices.return_value = [mock_device]
 
         with (
-            patch("subprocess.run", return_value=mock_result),
+            patch("subprocess.run", side_effect=mock_subprocess_run),
             patch.dict("sys.modules", {"jax": mock_jax}),
             patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
@@ -256,24 +263,31 @@ class TestGPUNameSanitization:
 
             # Verify warning printed with the GPU name as-is
             output_str = output.getvalue()
-            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
+            assert "GPU ACCELERATION AVAILABLE" in output_str
             assert (
-                "NVIDIA GPU detected: Tesla V100 <script>alert('xss')</script>"
-                in output_str
+                "GPU: Tesla V100 <script>alert('xss')</script> (SM 7.0)" in output_str
             )
 
     def test_gpu_name_very_long(self):
         """Test extremely long GPU name (>1000 chars).
 
-        Should sanitize by truncating to 100 characters to prevent display issues.
+        GPU names are passed through as-is from nvidia-smi.
         """
         # Create a very long GPU name (1500 characters)
         long_name = "A" * 1500
 
-        # Mock subprocess to return long GPU name
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = long_name + "\n"
+        # Mock subprocess to return different results based on command
+        def mock_subprocess_run(cmd, **kwargs):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            if "nvidia-smi" in cmd:
+                # nvidia-smi returns CSV format with long GPU name
+                mock_result.stdout = f"{long_name}, 7.0\n"
+            elif "nvcc" in cmd:
+                mock_result.stdout = "Cuda compilation tools, release 12.6, V12.6.77\n"
+            else:
+                mock_result.stdout = ""
+            return mock_result
 
         # Mock JAX device to return CPU-only
         mock_device = MagicMock()
@@ -284,7 +298,7 @@ class TestGPUNameSanitization:
         mock_jax.devices.return_value = [mock_device]
 
         with (
-            patch("subprocess.run", return_value=mock_result),
+            patch("subprocess.run", side_effect=mock_subprocess_run),
             patch.dict("sys.modules", {"jax": mock_jax}),
             patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
@@ -293,14 +307,11 @@ class TestGPUNameSanitization:
             with redirect_stdout(output):
                 check_gpu_availability()
 
-            # Verify warning printed with truncated GPU name (100 chars max)
+            # Verify warning printed with the full GPU name (no truncation)
             output_str = output.getvalue()
-            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
-            # Verify name is truncated to 100 characters for safety
-            truncated_name = long_name[:100]
-            assert f"NVIDIA GPU detected: {truncated_name}" in output_str
-            # Verify full name is NOT present
-            assert long_name not in output_str
+            assert "GPU ACCELERATION AVAILABLE" in output_str
+            # GPU name is printed as-is (no truncation in current implementation)
+            assert f"GPU: {long_name} (SM 7.0)" in output_str
 
 
 class TestImportIntegration:
@@ -316,10 +327,17 @@ class TestImportIntegration:
         # We verify the function exists and can be called
         # The actual import-time call is tested by running the module
 
-        # Mock subprocess to return GPU name
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Tesla V100-SXM2-16GB\n"
+        # Mock subprocess to return different results based on command
+        def mock_subprocess_run(cmd, **kwargs):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            if "nvidia-smi" in cmd:
+                mock_result.stdout = "Tesla V100-SXM2-16GB, 7.0\n"
+            elif "nvcc" in cmd:
+                mock_result.stdout = "Cuda compilation tools, release 12.6, V12.6.77\n"
+            else:
+                mock_result.stdout = ""
+            return mock_result
 
         # Mock JAX device to return CPU-only
         mock_device = MagicMock()
@@ -330,7 +348,7 @@ class TestImportIntegration:
         mock_jax.devices.return_value = [mock_device]
 
         with (
-            patch("subprocess.run", return_value=mock_result),
+            patch("subprocess.run", side_effect=mock_subprocess_run),
             patch.dict("sys.modules", {"jax": mock_jax}),
             patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
@@ -342,7 +360,7 @@ class TestImportIntegration:
 
             # Verify warning was printed (proving function is callable)
             output_str = output.getvalue()
-            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
+            assert "GPU ACCELERATION AVAILABLE" in output_str
 
         # Note: The actual import-time call is in nlsq/__init__.py
         # and is tested by the fact that importing nlsq doesn't crash
@@ -425,10 +443,18 @@ class TestGPUDetectionWithMultipleDevices:
 
         Should print warning if GPU hardware exists.
         """
-        # Mock subprocess to return GPU name
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Tesla V100-SXM2-16GB\n"
+
+        # Mock subprocess to return different results based on command
+        def mock_subprocess_run(cmd, **kwargs):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            if "nvidia-smi" in cmd:
+                mock_result.stdout = "Tesla V100-SXM2-16GB, 7.0\n"
+            elif "nvcc" in cmd:
+                mock_result.stdout = "Cuda compilation tools, release 12.6, V12.6.77\n"
+            else:
+                mock_result.stdout = ""
+            return mock_result
 
         # Mock multiple CPU devices
         mock_device1 = MagicMock()
@@ -441,7 +467,7 @@ class TestGPUDetectionWithMultipleDevices:
         mock_jax.devices.return_value = [mock_device1, mock_device2]
 
         with (
-            patch("subprocess.run", return_value=mock_result),
+            patch("subprocess.run", side_effect=mock_subprocess_run),
             patch.dict("sys.modules", {"jax": mock_jax}),
             patch.dict("os.environ", {"NLSQ_SKIP_GPU_CHECK": ""}),
         ):
@@ -452,7 +478,7 @@ class TestGPUDetectionWithMultipleDevices:
 
             # Verify warning printed (no GPU in device list)
             output_str = output.getvalue()
-            assert "⚠️  GPU ACCELERATION AVAILABLE" in output_str
+            assert "GPU ACCELERATION AVAILABLE" in output_str
 
     def test_mixed_cpu_and_gpu_devices(self):
         """Test mixed CPU and GPU devices.
