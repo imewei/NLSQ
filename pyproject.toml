@@ -43,41 +43,41 @@ classifiers = [
 requires-python = ">=3.12"
 
 # ============================================================================
-# GPU ACCELERATION (150-270x speedup for large datasets)
+# GPU ACCELERATION (20-100x speedup for large datasets)
 # ============================================================================
-# Default installation: CPU-only JAX (works on ALL platforms)
-#   pip install nlsq
+# Default: CPU-only JAX (works on ALL platforms: Linux, macOS, Windows)
 #
-# For GPU acceleration (Linux + CUDA 12.1-12.9 ONLY):
+# For GPU acceleration (Linux + NVIDIA GPU + System CUDA):
+#
+#   Prerequisites:
+#     - System CUDA 12.x or 13.x installed (nvcc in PATH)
+#     - NVIDIA GPU with SM >= 5.2 (Maxwell or newer)
 #
 #   Quick install (from repository):
-#     git clone https://github.com/imewei/NLSQ.git
-#     cd NLSQ
-#     make install-jax-gpu
+#     make install-jax-gpu          # Auto-detect system CUDA version
+#     make install-jax-gpu-cuda13   # Force CUDA 13 (requires system CUDA 13.x)
+#     make install-jax-gpu-cuda12   # Force CUDA 12 (requires system CUDA 12.x)
 #
-#   Manual install:
+#   Manual install (uses system CUDA):
 #     pip uninstall -y jax jaxlib
-#     pip install 'jax[cuda12-local]>=0.8.0'  # Uses system CUDA
+#     pip install "jax[cuda13-local]"  # If system has CUDA 13.x
+#     pip install "jax[cuda12-local]"  # If system has CUDA 12.x
 #
-#   Verify GPU detection:
-#     python -c "import jax; print(jax.devices())"
-#     # Expected: [cuda(id=0)]
+#   GPU Compatibility:
+#     CUDA 13 (SM 7.5+): RTX 20xx/30xx/40xx, T4, A100, H100, L40
+#     CUDA 12 (SM 5.2+): GTX 9xx/10xx, P100, V100, plus all CUDA 13 GPUs
 #
 #   Platform support:
-#     ✅ Linux + NVIDIA GPU + CUDA 12.1-12.9: Full GPU (150-270x speedup)
-#     ❌ macOS: CPU-only (Apple Silicon/Intel, no NVIDIA support)
-#     ❌ Windows: CPU-only (use WSL2 for GPU support)
+#     - Linux + NVIDIA GPU + System CUDA: Full GPU acceleration
+#     - Windows WSL2: Experimental support (Linux wheels)
+#     - macOS: CPU-only (no NVIDIA GPU support)
+#     - Windows native: CPU-only (no pre-built wheels)
 #
-#   Requirements (Linux GPU):
-#     - System CUDA 12.1-12.9 pre-installed
-#     - NVIDIA driver >= 525
-#     - Compatible NVIDIA GPU
+#   Verify your CUDA installation:
+#     nvcc --version        # Should show CUDA 12.x or 13.x
+#     nvidia-smi            # Should show your GPU
 #
-# Troubleshooting:
-#   make env-info    # Check platform, CUDA, GPU hardware
-#   make gpu-check   # Verify JAX GPU detection
-#
-# See README.md GPU Installation section for detailed guide
+# See README.md for detailed GPU installation guide
 # ============================================================================
 
 dependencies = [

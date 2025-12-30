@@ -29,27 +29,117 @@ NLSQ is a nonlinear least squares curve fitting library built on [JAX](https://g
 
 ## Installation
 
+### Basic Installation (CPU-only)
+
 ```bash
-# CPU (all platforms)
 pip install nlsq
-
-# GPU (Linux with CUDA 12.1+)
-pip install nlsq
-pip install "jax[cuda12-local]==0.8.0"
-
-# With GUI support
-pip install nlsq[gui]
 ```
 
+This installs with CPU-only JAX (works on all platforms: Linux, macOS, Windows).
+
+### GPU Installation (Linux + System CUDA)
+
+**Performance Impact:** 20-100x speedup for large datasets (>1M points)
+
+**Prerequisites:**
+- NVIDIA GPU with SM >= 5.2 (Maxwell or newer)
+- System CUDA 12.x or 13.x installed
+- `nvcc` in PATH
+
 <details>
-<summary><b>Verify GPU installation</b></summary>
+<summary><b>Verify Prerequisites</b></summary>
 
 ```bash
-python -c "import jax; print('Devices:', jax.devices())"
-# Expected: [cuda(id=0)] for GPU, [CpuDevice(id=0)] for CPU
+# Check CUDA installation
+nvcc --version
+# Should show: Cuda compilation tools, release 12.x or 13.x
+
+# Check GPU
+nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader
+# Should show: GPU name and SM version (e.g., "8.9" for RTX 4090)
 ```
 
 </details>
+
+#### Option 1: Quick Install via Makefile (Recommended)
+
+```bash
+git clone https://github.com/imewei/NLSQ.git
+cd NLSQ
+
+# Auto-detect system CUDA version and install matching JAX
+make install-jax-gpu
+
+# Or explicitly choose CUDA version:
+make install-jax-gpu-cuda13  # Requires system CUDA 13.x + SM >= 7.5
+make install-jax-gpu-cuda12  # Requires system CUDA 12.x + SM >= 5.2
+```
+
+#### Option 2: Manual Installation
+
+```bash
+# For System CUDA 13.x (Turing and newer GPUs):
+pip uninstall -y jax jaxlib
+pip install "jax[cuda13-local]"
+
+# For System CUDA 12.x (Maxwell and newer GPUs):
+pip uninstall -y jax jaxlib
+pip install "jax[cuda12-local]"
+
+# Verify
+python -c "import jax; print('Backend:', jax.default_backend())"
+# Should show: Backend: gpu
+```
+
+<details>
+<summary><b>GPU Compatibility Guide</b></summary>
+
+| GPU Generation | Example GPUs | SM Version | CUDA 13 | CUDA 12 |
+|----------------|--------------|------------|---------|---------|
+| Blackwell | B100, B200 | 10.0 | Yes | Yes |
+| Hopper | H100, H200 | 9.0 | Yes | Yes |
+| Ada Lovelace | RTX 40xx, L40 | 8.9 | Yes | Yes |
+| Ampere | RTX 30xx, A100 | 8.x | Yes | Yes |
+| Turing | RTX 20xx, T4 | 7.5 | Yes | Yes |
+| Volta | V100, Titan V | 7.0 | No | Yes |
+| Pascal | GTX 10xx, P100 | 6.x | No | Yes |
+| Maxwell | GTX 9xx, Titan X | 5.x | No | Yes |
+| Kepler | GTX 7xx, K80 | 3.x | No | No |
+
+**Recommendation:** SM >= 7.5 (RTX 20xx or newer): Install CUDA 13 for best performance
+
+</details>
+
+<details>
+<summary><b>GPU Troubleshooting</b></summary>
+
+**Issue: "nvcc not found"**
+```bash
+# Option 1: Install CUDA toolkit
+sudo apt install nvidia-cuda-toolkit  # Ubuntu/Debian
+
+# Option 2: Add existing CUDA to PATH
+export PATH=/usr/local/cuda/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+```
+
+**Issue: "CUDA version mismatch"**
+```bash
+# Check your system CUDA version
+nvcc --version
+
+# Reinstall with correct package
+pip uninstall -y jax jaxlib
+pip install "jax[cuda12-local]"  # or cuda13-local
+```
+
+</details>
+
+### With GUI Support
+
+```bash
+pip install nlsq[gui]
+```
 
 ## Quick Start
 
