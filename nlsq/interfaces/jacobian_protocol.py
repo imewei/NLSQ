@@ -35,7 +35,7 @@ class JacobianProtocol(Protocol):
         Parameters
         ----------
         fun : Callable
-            Residual function f(x, *args) -> residuals.
+            Residual function ``f(x, *args) -> residuals``.
         x : np.ndarray
             Point at which to evaluate Jacobian.
         args : tuple

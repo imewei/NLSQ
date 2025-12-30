@@ -178,6 +178,11 @@ class LossFunctionsJIT:
         self.create_scale_rhos()
 
     def create_stack_rhos(self):
+        """Create JIT-compiled function to stack rho values into array.
+
+        Returns a function that stacks rho0, rho1, rho2 into a (3, n) array
+        for efficient loss and derivative computation.
+        """
         @jit
         def stack_rhos(rho0, rho1, rho2):
             return jnp.stack([rho0, rho1, rho2])
@@ -185,12 +190,21 @@ class LossFunctionsJIT:
         return stack_rhos
 
     def get_empty_rhos(self, z):
+        """Return zero arrays for rho1 and rho2 when only cost is needed.
+
+        Used when cost_only=True to avoid computing unnecessary derivatives.
+        """
         dlength = len(z)
         rho1 = jnp.zeros([dlength])
         rho2 = jnp.zeros([dlength])
         return rho1, rho2
 
     def create_huber_funcs(self):
+        """Create JIT-compiled Huber loss functions.
+
+        Creates huber1 (rho0 and mask) and huber2 (rho1, rho2 derivatives).
+        Huber loss is quadratic for ``|z| <= 1`` and linear for ``|z| > 1``.
+        """
         @jit
         def huber1(z):
             mask = z <= 1
@@ -207,6 +221,7 @@ class LossFunctionsJIT:
         self.huber2 = huber2
 
     def huber(self, z, cost_only):
+        """Compute Huber loss rho values."""
         rho0, mask = self.huber1(z)
         if cost_only:
             rho1, rho2 = self.get_empty_rhos(z)
@@ -215,6 +230,11 @@ class LossFunctionsJIT:
         return self.stack_rhos(rho0, rho1, rho2)
 
     def create_soft_l1_funcs(self):
+        """Create JIT-compiled soft L1 loss functions.
+
+        Creates soft_l1_1 (rho0 and intermediate t) and soft_l1_2 (derivatives).
+        Soft L1 is a smooth approximation to L1 loss: rho(z) = 2*(sqrt(1+z) - 1).
+        """
         @jit
         def soft_l1_1(z):
             t = 1 + z
@@ -230,6 +250,7 @@ class LossFunctionsJIT:
         self.soft_l1_2 = soft_l1_2
 
     def soft_l1(self, z, cost_only):
+        """Compute soft L1 loss rho values."""
         rho0, t = self.soft_l1_1(z)
         if cost_only:
             rho1, rho2 = self.get_empty_rhos(z)
@@ -238,6 +259,11 @@ class LossFunctionsJIT:
         return self.stack_rhos(rho0, rho1, rho2)
 
     def create_cauchy_funcs(self):
+        """Create JIT-compiled Cauchy (Lorentzian) loss functions.
+
+        Creates cauchy1 (rho0) and cauchy2 (derivatives).
+        Cauchy loss: rho(z) = ln(1 + z). Very robust to outliers.
+        """
         @jit
         def cauchy1(z):
             return jnp.log1p(z)
@@ -253,6 +279,7 @@ class LossFunctionsJIT:
         self.cauchy2 = cauchy2
 
     def cauchy(self, z, cost_only):
+        """Compute Cauchy loss rho values."""
         rho0 = self.cauchy1(z)
         if cost_only:
             rho1, rho2 = self.get_empty_rhos(z)
@@ -261,6 +288,11 @@ class LossFunctionsJIT:
         return self.stack_rhos(rho0, rho1, rho2)
 
     def create_arctan_funcs(self):
+        """Create JIT-compiled arctan loss functions.
+
+        Creates arctan1 (rho0) and arctan2 (derivatives).
+        Arctan loss: rho(z) = arctan(z). Bounded loss for extreme outliers.
+        """
         @jit
         def arctan1(z):
             return jnp.arctan(z)
@@ -274,6 +306,7 @@ class LossFunctionsJIT:
         self.arctan2 = arctan2
 
     def arctan(self, z, cost_only):
+        """Compute arctan loss rho values."""
         rho0 = self.arctan1(z)
         if cost_only:
             rho1, rho2 = self.get_empty_rhos(z)
@@ -282,6 +315,10 @@ class LossFunctionsJIT:
         return self.stack_rhos(rho0, rho1, rho2)
 
     def create_zscale(self):
+        """Create JIT-compiled function to compute scaled squared residuals.
+
+        Computes z = (f/f_scale)^2 for robust loss function input.
+        """
         @jit
         def zscale(f, f_scale):
             return (f / f_scale) ** 2
@@ -289,6 +326,10 @@ class LossFunctionsJIT:
         self.zscale = zscale
 
     def create_calculate_cost(self):
+        """Create JIT-compiled cost calculation function.
+
+        Computes total cost as 0.5 * f_scale^2 * sum(rho0) with masking.
+        """
         @jit
         def calculate_cost(f_scale, rho, data_mask):
             cost_array = jnp.where(data_mask, rho[0], 0)
@@ -297,6 +338,10 @@ class LossFunctionsJIT:
         self.calculate_cost = calculate_cost
 
     def create_scale_rhos(self):
+        """Create JIT-compiled function to scale rho values by f_scale.
+
+        Applies proper scaling: ``rho0 *= f_scale**2``, ``rho2 /= f_scale**2``.
+        """
         @jit
         def scale_rhos(rho, f_scale):
             rho0 = rho[0] * f_scale**2

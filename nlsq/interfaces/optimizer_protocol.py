@@ -126,7 +126,7 @@ class CurveFitProtocol(Protocol):
         Parameters
         ----------
         f : Callable
-            Model function f(x, *params) -> y.
+            Model function ``f(x, *params) -> y``.
         xdata : np.ndarray
             Independent variable data.
         ydata : np.ndarray
