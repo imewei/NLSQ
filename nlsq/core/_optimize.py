@@ -184,6 +184,19 @@ class OptimizeResult(dict):
 
 
 def _check_unknown_options(unknown_options):
+    """Warn if unknown solver options are provided.
+
+    Parameters
+    ----------
+    unknown_options : dict
+        Dictionary of options that were not recognized by the solver.
+        If non-empty, a warning is issued listing the unknown option names.
+
+    Warns
+    -----
+    OptimizeWarning
+        If any unknown options are present.
+    """
     if unknown_options:
         msg = ", ".join(map(str, unknown_options.keys()))
         # Stack level 4: this is called from _minimize_*, which is
