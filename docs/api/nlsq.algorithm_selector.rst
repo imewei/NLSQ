@@ -1,7 +1,7 @@
 nlsq.algorithm\_selector module
 ================================
 
-.. automodule:: nlsq.algorithm_selector
+.. automodule:: nlsq.precision.algorithm_selector
    :members:
    :noindex:
    :undoc-members:

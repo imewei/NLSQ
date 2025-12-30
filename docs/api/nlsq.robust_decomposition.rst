@@ -1,7 +1,7 @@
 nlsq.robust\_decomposition module
 ==================================
 
-.. automodule:: nlsq.robust_decomposition
+.. automodule:: nlsq.stability.robust_decomposition
    :members:
    :noindex:
    :undoc-members:

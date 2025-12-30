@@ -1,9 +1,9 @@
 nlsq.streaming\_optimizer module
 ==================================
 
-.. currentmodule:: nlsq.streaming_optimizer
+.. currentmodule:: nlsq.streaming.optimizer
 
-.. automodule:: nlsq.streaming_optimizer
+.. automodule:: nlsq.streaming.optimizer
    :noindex:
 
 Overview

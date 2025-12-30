@@ -1,7 +1,7 @@
 nlsq.svd\_fallback module
 ==========================
 
-.. automodule:: nlsq.svd_fallback
+.. automodule:: nlsq.stability.svd_fallback
    :members:
    :noindex:
    :undoc-members:

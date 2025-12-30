@@ -233,7 +233,7 @@ The workflow system uses adaptive tolerances based on dataset size:
 Module Contents
 ---------------
 
-.. automodule:: nlsq.workflow
+.. automodule:: nlsq.core.workflow
    :members:
    :undoc-members:
    :show-inheritance:

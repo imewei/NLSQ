@@ -3,7 +3,7 @@ nlsq.logging module
 
 Debug logging and monitoring utilities.
 
-.. automodule:: nlsq.logging
+.. automodule:: nlsq.utils.logging
    :members:
    :noindex:
    :undoc-members:

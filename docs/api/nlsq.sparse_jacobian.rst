@@ -1,7 +1,7 @@
 nlsq.sparse\_jacobian module
 =============================
 
-.. automodule:: nlsq.sparse_jacobian
+.. automodule:: nlsq.core.sparse_jacobian
    :members:
    :noindex:
    :undoc-members:

@@ -1,7 +1,7 @@
 nlsq.error\_messages module
 ============================
 
-.. automodule:: nlsq.error_messages
+.. automodule:: nlsq.utils.error_messages
    :members:
    :noindex:
    :undoc-members:

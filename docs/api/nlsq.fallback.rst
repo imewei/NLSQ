@@ -1,9 +1,9 @@
 nlsq.fallback module
 =====================
 
-.. currentmodule:: nlsq.fallback
+.. currentmodule:: nlsq.stability.fallback
 
-.. automodule:: nlsq.fallback
+.. automodule:: nlsq.stability.fallback
    :noindex:
 
 Overview

@@ -133,7 +133,7 @@ Why NLSQ?
    * - **Large Datasets**
      - Automatic chunking and streaming for datasets up to 100M+ points.
    * - **Production Ready**
-     - 3279 tests, 100% pass rate, comprehensive error handling, numerical stability.
+     - 3280+ tests, 100% pass rate, comprehensive error handling, numerical stability.
 
 Performance
 ~~~~~~~~~~~

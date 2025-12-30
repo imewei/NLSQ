@@ -1,9 +1,9 @@
 nlsq.parameter\_normalizer module
 ==================================
 
-.. currentmodule:: nlsq.parameter_normalizer
+.. currentmodule:: nlsq.precision.parameter_normalizer
 
-.. automodule:: nlsq.parameter_normalizer
+.. automodule:: nlsq.precision.parameter_normalizer
    :noindex:
    :exclude-members: normalization_jacobian
 

@@ -1,7 +1,7 @@
 nlsq.compilation\_cache module
 ===============================
 
-.. automodule:: nlsq.compilation_cache
+.. automodule:: nlsq.caching.compilation_cache
    :members:
    :noindex:
    :undoc-members:

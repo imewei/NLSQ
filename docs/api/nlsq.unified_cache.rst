@@ -1,7 +1,7 @@
 nlsq.unified\_cache module
 ============================
 
-.. automodule:: nlsq.unified_cache
+.. automodule:: nlsq.caching.unified_cache
    :members:
    :noindex:
    :undoc-members:

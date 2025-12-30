@@ -1,9 +1,9 @@
 nlsq.stability module
 ======================
 
-.. currentmodule:: nlsq.stability
+.. currentmodule:: nlsq.stability.guard
 
-.. automodule:: nlsq.stability
+.. automodule:: nlsq.stability.guard
    :noindex:
    :exclude-members: eps, max_float, min_float, condition_threshold, regularization_factor
 

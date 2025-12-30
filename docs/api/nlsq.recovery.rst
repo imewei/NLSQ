@@ -1,9 +1,9 @@
 nlsq.recovery module
 =====================
 
-.. currentmodule:: nlsq.recovery
+.. currentmodule:: nlsq.stability.recovery
 
-.. automodule:: nlsq.recovery
+.. automodule:: nlsq.stability.recovery
    :noindex:
 
 Overview

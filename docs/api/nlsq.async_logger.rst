@@ -1,7 +1,7 @@
 nlsq.async\_logger module
 ==========================
 
-.. automodule:: nlsq.async_logger
+.. automodule:: nlsq.utils.async_logger
    :members:
    :undoc-members:
    :show-inheritance:

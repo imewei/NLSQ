@@ -1,7 +1,7 @@
 nlsq.profiler\_visualization module
 ====================================
 
-.. automodule:: nlsq.profiler_visualization
+.. automodule:: nlsq.utils.profiler_visualization
    :members:
    :noindex:
    :undoc-members:

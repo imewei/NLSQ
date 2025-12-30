@@ -32,6 +32,56 @@ add_path = os.path.abspath("../..")
 sys.path.insert(0, os.path.abspath("../.."))
 sys.path.insert(0, os.path.abspath(".."))
 
+# Module aliases for backward compatibility with documentation
+# The package was reorganized in v1.2.0 but docs still reference old paths
+import importlib
+
+_MODULE_ALIASES = {
+    "nlsq.adaptive_hybrid_streaming": "nlsq.streaming.adaptive_hybrid",
+    "nlsq.fallback": "nlsq.stability.fallback",
+    "nlsq.bound_inference": "nlsq.precision.bound_inference",
+    "nlsq.streaming_optimizer": "nlsq.streaming.optimizer",
+    "nlsq.least_squares": "nlsq.core.least_squares",
+    "nlsq.async_logger": "nlsq.utils.async_logger",
+    "nlsq.svd_fallback": "nlsq.stability.svd_fallback",
+    "nlsq.loss_functions": "nlsq.core.loss_functions",
+    "nlsq.functions": "nlsq.core.functions",
+    "nlsq.sparse_jacobian": "nlsq.core.sparse_jacobian",
+    "nlsq.memory_manager": "nlsq.caching.memory_manager",
+    "nlsq.error_messages": "nlsq.utils.error_messages",
+    "nlsq.algorithm_selector": "nlsq.precision.algorithm_selector",
+    "nlsq.memory_pool": "nlsq.caching.memory_pool",
+    "nlsq.profiling": "nlsq.utils.profiling",
+    "nlsq.diagnostics": "nlsq.utils.diagnostics",
+    "nlsq.hybrid_streaming_config": "nlsq.streaming.hybrid_config",
+    "nlsq.large_dataset": "nlsq.streaming.large_dataset",
+    "nlsq.optimizer_base": "nlsq.core.optimizer_base",
+    "nlsq.logging": "nlsq.utils.logging",
+    "nlsq.streaming_config": "nlsq.streaming.config",
+    "nlsq.parameter_estimation": "nlsq.precision.parameter_estimation",
+    "nlsq.workflow": "nlsq.core.workflow",
+    "nlsq.recovery": "nlsq.stability.recovery",
+    "nlsq.unified_cache": "nlsq.caching.unified_cache",
+    "nlsq.smart_cache": "nlsq.caching.smart_cache",
+    "nlsq.profiler": "nlsq.utils.profiler",
+    "nlsq.minpack": "nlsq.core.minpack",
+    "nlsq.parameter_normalizer": "nlsq.precision.parameter_normalizer",
+    "nlsq.compilation_cache": "nlsq.caching.compilation_cache",
+    "nlsq.trf": "nlsq.core.trf",
+    "nlsq.robust_decomposition": "nlsq.stability.robust_decomposition",
+    "nlsq.mixed_precision": "nlsq.precision.mixed_precision",
+    "nlsq.profiler_visualization": "nlsq.utils.profiler_visualization",
+    "nlsq.validators": "nlsq.utils.validators",
+    "nlsq.stability": "nlsq.stability.guard",
+}
+
+for alias, real_module in _MODULE_ALIASES.items():
+    try:
+        mod = importlib.import_module(real_module)
+        sys.modules[alias] = mod
+    except ImportError:
+        pass  # Module not available, skip alias
+
 
 # -- Project information -----------------------------------------------------
 

@@ -1,9 +1,9 @@
 nlsq.hybrid\_streaming\_config module
 =====================================
 
-.. currentmodule:: nlsq.hybrid_streaming_config
+.. currentmodule:: nlsq.streaming.hybrid_config
 
-.. automodule:: nlsq.hybrid_streaming_config
+.. automodule:: nlsq.streaming.hybrid_config
    :noindex:
 
 Overview

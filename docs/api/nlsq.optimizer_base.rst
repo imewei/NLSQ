@@ -3,7 +3,7 @@ nlsq.optimizer_base module
 
 Base classes for optimization algorithms.
 
-.. automodule:: nlsq.optimizer_base
+.. automodule:: nlsq.core.optimizer_base
    :members:
    :noindex:
    :undoc-members:

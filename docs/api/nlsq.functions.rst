@@ -1,9 +1,9 @@
 nlsq.functions module
 ======================
 
-.. currentmodule:: nlsq.functions
+.. currentmodule:: nlsq.core.functions
 
-.. automodule:: nlsq.functions
+.. automodule:: nlsq.core.functions
    :noindex:
 
 Overview

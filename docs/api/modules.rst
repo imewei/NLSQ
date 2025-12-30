@@ -56,6 +56,8 @@ streaming Gauss-Newton, and exact covariance computation:
    nlsq.adaptive_hybrid_streaming
    nlsq.hybrid_streaming_config
    nlsq.parameter_normalizer
+   nlsq.streaming.telemetry
+   nlsq.streaming.validators
 
 Global Optimization (v0.3.3+)
 -----------------------------
@@ -114,6 +116,16 @@ New features added in version 0.1.1:
    nlsq.bound_inference
    nlsq.parameter_estimation
 
+Interfaces & Protocols (v1.2.0+)
+---------------------------------
+
+Protocol definitions for dependency injection:
+
+.. toctree::
+   :maxdepth: 2
+
+   nlsq.interfaces
+
 Algorithms & Optimization
 --------------------------
 
@@ -123,6 +135,8 @@ Low-level optimization algorithms:
    :maxdepth: 2
 
    nlsq.trf
+   nlsq.core.trf_jit
+   nlsq.core.profiler
    nlsq.optimizer_base
    nlsq.algorithm_selector
    nlsq.loss_functions
@@ -183,6 +197,8 @@ Complete Module Listing
 - :doc:`nlsq.minpack` - Main ``curve_fit()`` API
 - :doc:`nlsq.least_squares` - ``least_squares()`` solver
 - :doc:`nlsq.trf` - Trust Region Reflective algorithm
+- :doc:`nlsq.core.trf_jit` - JIT-compiled TRF functions (NEW in v1.2.0)
+- :doc:`nlsq.core.profiler` - TRF performance profiling (NEW in v1.2.0)
 
 **Feature Modules**:
 - :doc:`nlsq.functions` - Pre-built fit functions (NEW in v0.1.1)
@@ -207,6 +223,11 @@ Complete Module Listing
 - :doc:`nlsq.adaptive_hybrid_streaming` - Four-phase hybrid optimizer
 - :doc:`nlsq.hybrid_streaming_config` - Configuration with presets
 - :doc:`nlsq.parameter_normalizer` - Parameter normalization for gradient balance
+- :doc:`nlsq.streaming.telemetry` - Defense layer telemetry (NEW in v1.2.0)
+- :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v1.2.0)
+
+**Interfaces & Protocols** (NEW in v1.2.0):
+- :doc:`nlsq.interfaces` - Protocol definitions for dependency injection
 
 **Global Optimization Modules** (NEW in v0.3.3+):
 - :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers

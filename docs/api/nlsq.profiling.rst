@@ -1,7 +1,7 @@
 nlsq.profiling module
 =====================
 
-.. automodule:: nlsq.profiling
+.. automodule:: nlsq.utils.profiling
    :members:
    :noindex:
    :undoc-members:

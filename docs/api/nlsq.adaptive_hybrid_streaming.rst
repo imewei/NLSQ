@@ -1,9 +1,9 @@
 nlsq.adaptive\_hybrid\_streaming module
 =======================================
 
-.. currentmodule:: nlsq.adaptive_hybrid_streaming
+.. currentmodule:: nlsq.streaming.adaptive_hybrid
 
-.. automodule:: nlsq.adaptive_hybrid_streaming
+.. automodule:: nlsq.streaming.adaptive_hybrid
    :noindex:
 
 Overview

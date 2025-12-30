@@ -1,7 +1,7 @@
 nlsq.smart\_cache module
 =========================
 
-.. automodule:: nlsq.smart_cache
+.. automodule:: nlsq.caching.smart_cache
    :members:
    :noindex:
    :undoc-members:

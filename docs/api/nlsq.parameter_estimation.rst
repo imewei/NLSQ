@@ -1,7 +1,7 @@
 nlsq.parameter\_estimation module
 ==================================
 
-.. automodule:: nlsq.parameter_estimation
+.. automodule:: nlsq.precision.parameter_estimation
    :members:
    :noindex:
    :undoc-members:

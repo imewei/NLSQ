@@ -1,9 +1,9 @@
 nlsq.diagnostics module
 ========================
 
-.. currentmodule:: nlsq.diagnostics
+.. currentmodule:: nlsq.utils.diagnostics
 
-.. automodule:: nlsq.diagnostics
+.. automodule:: nlsq.utils.diagnostics
    :noindex:
 
 Overview

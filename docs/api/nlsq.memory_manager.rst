@@ -1,9 +1,9 @@
 nlsq.memory\_manager module
 =============================
 
-.. currentmodule:: nlsq.memory_manager
+.. currentmodule:: nlsq.caching.memory_manager
 
-.. automodule:: nlsq.memory_manager
+.. automodule:: nlsq.caching.memory_manager
    :noindex:
 
 Overview

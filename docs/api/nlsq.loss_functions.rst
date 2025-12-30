@@ -3,7 +3,7 @@ nlsq.loss_functions module
 
 Robust loss functions for outlier handling.
 
-.. automodule:: nlsq.loss_functions
+.. automodule:: nlsq.core.loss_functions
    :members:
    :noindex:
    :undoc-members:

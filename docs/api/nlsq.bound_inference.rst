@@ -1,9 +1,9 @@
 nlsq.bound\_inference module
 ==============================
 
-.. currentmodule:: nlsq.bound_inference
+.. currentmodule:: nlsq.precision.bound_inference
 
-.. automodule:: nlsq.bound_inference
+.. automodule:: nlsq.precision.bound_inference
    :noindex:
 
 Overview

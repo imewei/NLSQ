@@ -1,9 +1,9 @@
 nlsq.validators module
 =======================
 
-.. currentmodule:: nlsq.validators
+.. currentmodule:: nlsq.utils.validators
 
-.. automodule:: nlsq.validators
+.. automodule:: nlsq.utils.validators
    :noindex:
 
 Overview

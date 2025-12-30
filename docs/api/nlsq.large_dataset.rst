@@ -1,9 +1,9 @@
 nlsq.large\_dataset module
 ============================
 
-.. currentmodule:: nlsq.large_dataset
+.. currentmodule:: nlsq.streaming.large_dataset
 
-.. automodule:: nlsq.large_dataset
+.. automodule:: nlsq.streaming.large_dataset
    :noindex:
 
 Overview

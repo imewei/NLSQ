@@ -1,7 +1,7 @@
 nlsq.memory\_pool module
 =========================
 
-.. automodule:: nlsq.memory_pool
+.. automodule:: nlsq.caching.memory_pool
    :members:
    :noindex:
    :undoc-members:

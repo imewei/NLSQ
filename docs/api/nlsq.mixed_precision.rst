@@ -1,9 +1,9 @@
 nlsq.mixed\_precision module
 ==============================
 
-.. currentmodule:: nlsq.mixed_precision
+.. currentmodule:: nlsq.precision.mixed_precision
 
-.. automodule:: nlsq.mixed_precision
+.. automodule:: nlsq.precision.mixed_precision
    :noindex:
 
 Overview
