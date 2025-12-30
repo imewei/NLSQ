@@ -77,7 +77,7 @@ Comprehensive testing validates the change:
 
 ## References
 
-- [least_squares.py Implementation](../../../nlsq/least_squares.py#L1087-L1091)
+- [least_squares.py Implementation](../../../nlsq/core/least_squares.py#L1087-L1091)
 - [JAX 0.8.0 Release Notes](https://github.com/google/jax/releases/tag/jax-v0.8.0)
 - [Commit 574acea](https://github.com/imewei/NLSQ/commit/574acea)
 
