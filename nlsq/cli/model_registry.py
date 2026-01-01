@@ -8,6 +8,14 @@ This module provides model function resolution for curve fitting workflows:
 The ModelRegistry class handles discovery, loading, and validation of
 model functions for use in curve fitting workflows.
 
+Security Features
+-----------------
+Custom models are validated before loading to prevent arbitrary code execution:
+- AST-based pattern detection for dangerous operations
+- Path traversal prevention
+- Resource limits (timeout, memory) for model execution
+- Audit logging for model loading attempts
+
 Example Usage
 -------------
 >>> from nlsq.cli.model_registry import ModelRegistry
@@ -17,7 +25,7 @@ Example Usage
 >>> # Get a builtin model
 >>> linear = registry.get_model("linear", {"type": "builtin", "name": "linear"})
 >>>
->>> # Get a custom model from file
+>>> # Get a custom model from file (with security validation)
 >>> custom = registry.get_model(
 ...     "/path/to/model.py",
 ...     {"type": "custom", "path": "/path/to/model.py", "function": "my_model"}
@@ -29,11 +37,19 @@ Example Usage
 
 import importlib.util
 import inspect
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from nlsq.cli.errors import ModelError
+from nlsq.cli.model_validation import (
+    get_audit_logger,
+    validate_model,
+    validate_path,
+)
+
+logger = logging.getLogger("nlsq.cli.model_registry")
 
 # Type alias for model functions
 ModelFunction = Callable[..., Any]
@@ -214,7 +230,12 @@ class ModelRegistry:
         self._builtin_cache[model_name] = model
         return model
 
-    def _get_custom_model(self, config: dict[str, Any]) -> ModelFunction:
+    def _get_custom_model(
+        self,
+        config: dict[str, Any],
+        *,
+        trusted: bool = False,
+    ) -> ModelFunction:
         """Load a custom model from an external Python file.
 
         Parameters
@@ -223,6 +244,10 @@ class ModelRegistry:
             Configuration with:
             - path: str - Path to the Python file
             - function: str - Name of the model function
+            - trusted: bool - Skip security validation (default: False)
+        trusted : bool, default=False
+            If True, skip security validation. This is a keyword-only
+            argument that overrides config["trusted"].
 
         Returns
         -------
@@ -232,10 +257,12 @@ class ModelRegistry:
         Raises
         ------
         ModelError
-            If the file or function cannot be found, or the function is invalid.
+            If the file or function cannot be found, the function is invalid,
+            or the model fails security validation.
         """
         file_path = config.get("path", "")
         function_name = config.get("function", "")
+        is_trusted = trusted or config.get("trusted", False)
 
         if not file_path:
             raise ModelError(
@@ -270,6 +297,58 @@ class ModelRegistry:
                 model_type="custom",
                 context={"path": file_path},
                 suggestion="Provide a path to a Python file",
+            )
+
+        # Security validation: path traversal prevention
+        if not validate_path(path):
+            audit_logger = get_audit_logger()
+            # Log the blocked attempt with a minimal result
+            from nlsq.cli.model_validation import ModelValidationResult
+
+            result = ModelValidationResult(
+                path=path,
+                is_valid=False,
+                is_trusted=is_trusted,
+                violations=["Path traversal detected"],
+            )
+            audit_logger.log_load_attempt(path, result)
+            raise ModelError(
+                f"Path traversal detected: {file_path}",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": file_path},
+                suggestion="Model files must be within the current working directory",
+            )
+
+        # Security validation: AST-based pattern detection
+        validation_result = validate_model(path, trusted=is_trusted)
+
+        # Log the model loading attempt
+        audit_logger = get_audit_logger()
+        audit_logger.log_load_attempt(path, validation_result)
+
+        if not validation_result.is_valid and not is_trusted:
+            violations_msg = "; ".join(validation_result.violations[:3])
+            if len(validation_result.violations) > 3:
+                violations_msg += f" (and {len(validation_result.violations) - 3} more)"
+
+            raise ModelError(
+                f"Security validation failed for {file_path}: {violations_msg}",
+                model_name=function_name,
+                model_type="custom",
+                context={
+                    "path": file_path,
+                    "violations": validation_result.violations,
+                },
+                suggestion="Remove dangerous patterns or use --trust flag to skip validation",
+            )
+
+        if is_trusted and validation_result.violations:
+            logger.warning(
+                "Loading model %s with --trust flag, bypassing security checks. "
+                "Violations that would have blocked: %s",
+                path,
+                "; ".join(validation_result.violations[:3]),
             )
 
         # Load the module dynamically
