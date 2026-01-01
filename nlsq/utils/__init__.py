@@ -10,6 +10,7 @@ This subpackage contains utility modules:
 - async_logger: Asynchronous logging
 - validators: Input validation
 - error_messages: Error message formatting
+- safe_serialize: Secure JSON-based serialization (replaces pickle)
 """
 
 from nlsq.utils.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
@@ -19,6 +20,11 @@ from nlsq.utils.profiler import (
     clear_profiling_data,
     get_global_profiler,
 )
+from nlsq.utils.safe_serialize import (
+    SafeSerializationError,
+    safe_dumps,
+    safe_loads,
+)
 from nlsq.utils.validators import InputValidator
 
 __all__ = [
@@ -27,6 +33,9 @@ __all__ = [
     "OptimizationDiagnostics",
     "PerformanceProfiler",
     "ProfileMetrics",
+    "SafeSerializationError",
     "clear_profiling_data",
     "get_global_profiler",
+    "safe_dumps",
+    "safe_loads",
 ]
