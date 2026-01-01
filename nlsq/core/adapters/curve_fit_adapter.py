@@ -166,7 +166,5 @@ class CurveFitAdapter:
         return adapter
 
 
-# Verify protocol conformance at module load time
-assert isinstance(CurveFitAdapter(), CurveFitProtocol), (
-    "CurveFitAdapter must implement CurveFitProtocol"
-)
+# Note: Protocol conformance assertion moved to tests/core/adapters/test_curve_fit_adapter.py
+# to avoid import-time overhead (~5-10ms per module load)

@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Performance and Memory Optimizations (007-performance-optimizations)
+
+- **`OptimizeResultV2`: Memory-efficient frozen dataclass**
+  - 47% memory reduction per result instance (152 bytes vs 288 bytes)
+  - ~2x faster attribute access (direct slot vs dict lookup)
+  - Optional Jacobian storage (saves ~400KB for 10k×50 problems)
+  - Backward-compatible `__getitem__` for dict-style access
+  - `to_dict()` method for legacy code compatibility
+  - **Files Added**: `nlsq/result/optimize_result.py` (OptimizeResultV2 class)
+
+- **`OptimizeResultLegacy` alias**
+  - Explicit alias for dict-based OptimizeResult for users who prefer dict behavior
+  - Ensures long-term compatibility during migration period
+
+- **JAX Array Optimizations**
+  - Replaced `.copy()` with direct assignment (JAX arrays are immutable)
+  - Replaced `jnp.array()` with `jnp.asarray()` to avoid redundant copies
+  - Replaced `device_put(arr.astype())` with `lax.convert_element_type()` to avoid host-device round-trips
+  - **Files Modified**: `nlsq/core/trf.py`, `nlsq/core/trf_jit.py`, `nlsq/streaming/adaptive_hybrid.py`, `nlsq/core/sparse_jacobian.py`, `nlsq/precision/mixed_precision.py`
+
+- **Import Time Optimization**
+  - Moved module-level protocol assertion to tests
+  - Import time: ~700ms (target <900ms) ✅
+  - **Files Modified**: `nlsq/core/adapters/curve_fit_adapter.py`
+  - **Files Added**: `tests/core/adapters/test_curve_fit_adapter.py`
+
 #### Legacy Modernization (006-legacy-modernization)
 
 - **Security Hardening for CLI Model Loading**
