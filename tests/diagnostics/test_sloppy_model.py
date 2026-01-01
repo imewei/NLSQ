@@ -772,7 +772,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_2_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test 2-exponential decay model is detected as sloppy."""
-        J, t = multi_exponential_jacobian_2_exp
+        J, _t = multi_exponential_jacobian_2_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 
@@ -784,7 +784,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_2_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test 2-exponential eigenvalue range spans multiple orders of magnitude."""
-        J, t = multi_exponential_jacobian_2_exp
+        J, _t = multi_exponential_jacobian_2_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 
@@ -796,7 +796,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_2_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test 2-exponential generates SLOPPY-001 issue."""
-        J, t = multi_exponential_jacobian_2_exp
+        J, _t = multi_exponential_jacobian_2_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 
@@ -808,7 +808,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_3_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test 3-exponential decay model is detected as sloppy."""
-        J, t = multi_exponential_jacobian_3_exp
+        J, _t = multi_exponential_jacobian_3_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 
@@ -838,7 +838,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_3_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test 3-exponential has low effective dimensionality relative to 6 params."""
-        J, t = multi_exponential_jacobian_3_exp
+        J, _t = multi_exponential_jacobian_3_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 
@@ -850,7 +850,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_3_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test 3-exponential has multiple sloppy directions."""
-        J, t = multi_exponential_jacobian_3_exp
+        J, _t = multi_exponential_jacobian_3_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 
@@ -886,7 +886,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_2_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test sloppy combinations show which parameter mixtures are poorly determined."""
-        J, t = multi_exponential_jacobian_2_exp
+        J, _t = multi_exponential_jacobian_2_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 
@@ -907,7 +907,7 @@ class TestSloppyModelMultiExponential:
         self, multi_exponential_jacobian_2_exp: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """Test stiff directions correspond to well-determined parameter combinations."""
-        J, t = multi_exponential_jacobian_2_exp
+        J, _t = multi_exponential_jacobian_2_exp
         config = DiagnosticsConfig()
         analyzer = SloppyModelAnalyzer(config=config)
 

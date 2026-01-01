@@ -221,7 +221,7 @@ class TestSVDNoBounds:
         f = simple_residuals
         d = scaling_diagonal
 
-        J_h, U, s, V, uf = trf_funcs.svd_no_bounds(J, d, f)
+        J_h, U, s, V, _uf = trf_funcs.svd_no_bounds(J, d, f)
 
         # Check output shapes
         assert J_h.shape == J.shape
@@ -287,7 +287,7 @@ class TestSVDBounds:
         J_diag = jnp.eye(2) * 0.1
         f_zeros = jnp.zeros(2)
 
-        J_h, U, s, V, uf = trf_funcs.svd_bounds(f, J, d, J_diag, f_zeros)
+        J_h, U, _s, _V, _uf = trf_funcs.svd_bounds(f, J, d, J_diag, f_zeros)
 
         # Check output shapes (augmented system: 3+2 = 5 rows)
         assert J_h.shape == J.shape
@@ -301,7 +301,7 @@ class TestSVDBounds:
         J_diag = jnp.array([[0.1, 0.0], [0.0, 0.1]])
         f_zeros = jnp.zeros(2)
 
-        _J_h, U, s, V, uf = trf_funcs.svd_bounds(f, J, d, J_diag, f_zeros)
+        _J_h, _U, _s, _V, uf = trf_funcs.svd_bounds(f, J, d, J_diag, f_zeros)
 
         # Augmented f has 4 elements (f + f_zeros)
         assert uf.shape[0] == min(4, 2)  # min(m, n) for reduced SVD
@@ -335,7 +335,7 @@ class TestConjugateGradientSolve:
         f = random.normal(key2, (20,))
         d = jnp.ones(5)
 
-        p, residual_norm, n_iter = trf_funcs.conjugate_gradient_solve(
+        _p, residual_norm, _n_iter = trf_funcs.conjugate_gradient_solve(
             A, f, d, alpha=0.1, tol=1e-6
         )
 
@@ -530,7 +530,7 @@ class TestNumericalStability:
         d = jnp.ones(20)
 
         # Should not raise or produce NaN
-        _J_h, U, s, V, uf = trf_funcs.svd_no_bounds(J, d, f)
+        _J_h, _U, s, _V, uf = trf_funcs.svd_no_bounds(J, d, f)
 
         assert jnp.all(jnp.isfinite(s))
         assert jnp.all(jnp.isfinite(uf))

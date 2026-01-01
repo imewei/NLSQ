@@ -753,7 +753,7 @@ class TestBackwardCompatibility:
         )
 
         # Tuple unpacking still works
-        popt, pcov = result
+        popt, _pcov = result
         assert len(popt) == 2
 
         # All standard attributes still work

@@ -162,7 +162,7 @@ class TestCurveFitProtocol:
 
         xdata = np.array([1.0, 2.0, 3.0])
         ydata = np.array([2.0, 4.0, 6.0])
-        popt, pcov = fitter.curve_fit(lambda x, a: a * x, xdata, ydata)
+        popt, _pcov = fitter.curve_fit(lambda x, a: a * x, xdata, ydata)
         assert popt.shape == (1,)
 
 
