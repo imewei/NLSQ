@@ -229,7 +229,7 @@ def main():
         print()
         print("Defense Layers for Checkpoint Resume (v0.3.6+):")
         print("  - Use HybridStreamingConfig.defense_strict() for resume protection")
-        print("  - 4-layer defense prevents Adam warmup from diverging")
+        print("  - 4-layer defense prevents L-BFGS warmup from diverging")
         return
 
     # =========================================================================
@@ -387,7 +387,7 @@ echo "========================================"
     print("When resuming from checkpoints, your initial parameters are near-optimal.")
     print("This is a classic warm-start scenario where defense layers are critical.")
     print()
-    print("Without defense layers, Adam warmup can DIVERGE from your checkpoint:")
+    print("Without defense layers, L-BFGS warmup can DIVERGE from your checkpoint:")
     print("  - Momentum builds up from large initial gradients")
     print("  - Parameters overshoot and loss increases")
     print("  - All progress from previous run is lost")
@@ -410,8 +410,12 @@ echo "========================================"
     print("  )")
     print()
     print("Defense presets comparison:")
-    print("  defense_strict()     - Best for checkpoint resume (LR: 1e-6 to 1e-4)")
-    print("  defense_relaxed()    - For fresh starts (LR: 1e-4 to 0.01)")
+    print(
+        "  defense_strict()     - Best for checkpoint resume (step size: 1e-6 to 1e-4)"
+    )
+    print(
+        "  defense_relaxed()    - For fresh starts (step size: 1e-4 to 0.01)"
+    )
     print("  scientific_default() - Balanced for production")
     print("  defense_disabled()   - Pre-0.3.6 behavior (no protection)")
 
@@ -461,7 +465,7 @@ echo "========================================"
     print("Defense Layers for Checkpoint Resume (v0.3.6+):")
     print("  - Checkpoint resume = warm-start scenario (parameters near optimal)")
     print("  - Use HybridStreamingConfig.defense_strict() for resume protection")
-    print("  - 4-layer defense prevents Adam warmup from diverging")
+    print("  - 4-layer defense prevents L-BFGS warmup from diverging")
     print("  - See docs/guides/defense_layers.rst for full configuration")
 
 

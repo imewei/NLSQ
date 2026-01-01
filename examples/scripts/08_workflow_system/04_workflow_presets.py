@@ -246,7 +246,7 @@ def main():
     print("-" * 70)
     print()
     print("For streaming workflows, HybridStreamingConfig provides defense presets")
-    print("that protect against Adam warmup divergence when starting near optimal:")
+    print("that protect against L-BFGS warmup divergence when starting near optimal:")
     print()
 
     defense_presets = {
@@ -276,12 +276,12 @@ def main():
         print(f"  {name.upper()}:")
         print(f"    Method:   {info['method']}")
         print(f"    Use case: {info['use_case']}")
-        print(f"    LR range: {info['lr_range']}")
+        print(f"    Step size range: {info['lr_range']}")
         print()
 
     print("The 4-layer defense strategy:")
     print("  Layer 1: Warm Start Detection - Skip warmup if near optimal")
-    print("  Layer 2: Adaptive Learning Rate - Scale LR based on fit quality")
+    print("  Layer 2: Adaptive Step Size - Scale step size based on fit quality")
     print("  Layer 3: Cost-Increase Guard - Abort if loss increases > 5%")
     print("  Layer 4: Step Clipping - Limit parameter update magnitude")
 

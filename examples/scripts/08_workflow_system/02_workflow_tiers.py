@@ -419,14 +419,14 @@ def main():
     print(
         "STREAMING and STREAMING_CHECKPOINT tiers use AdaptiveHybridStreamingOptimizer,"
     )
-    print("which includes a 4-layer defense strategy against Adam warmup divergence:")
+    print("which includes a 4-layer defense strategy against L-BFGS warmup divergence:")
     print()
     print("  Layer 1 (Warm Start Detection):")
     print("    - Skips warmup if initial loss < 1% of data variance")
     print("    - Prevents overshooting when starting near the optimum")
     print()
-    print("  Layer 2 (Adaptive Learning Rate):")
-    print("    - Scales LR based on fit quality (1e-6 to 0.001)")
+    print("  Layer 2 (Adaptive Step Size):")
+    print("    - Scales step size based on fit quality (1e-6 to 0.001)")
     print("    - lr_refinement=1e-6, lr_careful=1e-5, lr_exploration=0.001")
     print()
     print("  Layer 3 (Cost-Increase Guard):")

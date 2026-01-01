@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 """
-4-Layer Defense Strategy for Adam Warmup Divergence Prevention Demo
+4-Layer Defense Strategy for L-BFGS Warmup Divergence Prevention Demo
 
-This script demonstrates NLSQ's 4-layer defense strategy that prevents Adam optimizer
+This script demonstrates NLSQ's 4-layer defense strategy that prevents L-BFGS
 divergence during the warmup phase when initial parameters are already near optimal.
 
 The 4 Defense Layers:
 1. Warm Start Detection - Skip warmup if initial loss < 1% of data variance
-2. Adaptive Learning Rate - Scale LR based on initial fit quality
+2. Adaptive Step Size - Scale step size based on initial fit quality
 3. Cost-Increase Guard - Abort if loss increases > 5% from initial
 4. Step Clipping - Limit parameter update magnitude (max norm 0.1)
 
@@ -91,10 +91,10 @@ def main():
         print("  -> Layer 1 detected near-optimal start and skipped warmup")
 
     # =========================================================================
-    # Demo 2: Poor starting point (exploration LR should be used)
+    # Demo 2: Poor starting point (exploration step size should be used)
     # =========================================================================
     print("\n" + "-" * 70)
-    print("Demo 2: Poor starting point (Layer 2 adaptive LR)")
+    print("Demo 2: Poor starting point (Layer 2 adaptive step size)")
     print("-" * 70)
 
     reset_defense_telemetry()
@@ -116,7 +116,7 @@ def main():
 
     print(f"Fitted params: {popt}")
     print("\nTelemetry:")
-    print(f"  Layer 2 LR modes: {summary['layer2']['mode_counts']}")
+    print(f"  Layer 2 step size modes: {summary['layer2']['mode_counts']}")
 
     # =========================================================================
     # Demo 3: Using defense layer presets
@@ -173,9 +173,15 @@ def main():
 
     print(f"After {n_fits} fits:")
     print(f"  Layer 1 (warm start):     {rates.get('layer1_warm_start_rate', 0):.1f}%")
-    print(f"  Layer 2 (refinement LR):  {rates.get('layer2_refinement_rate', 0):.1f}%")
-    print(f"  Layer 2 (careful LR):     {rates.get('layer2_careful_rate', 0):.1f}%")
-    print(f"  Layer 2 (exploration LR): {rates.get('layer2_exploration_rate', 0):.1f}%")
+    print(
+        f"  Layer 2 (refinement step):  {rates.get('layer2_refinement_rate', 0):.1f}%"
+    )
+    print(
+        f"  Layer 2 (careful step):     {rates.get('layer2_careful_rate', 0):.1f}%"
+    )
+    print(
+        f"  Layer 2 (exploration step): {rates.get('layer2_exploration_rate', 0):.1f}%"
+    )
     print(f"  Layer 3 (cost guard):     {rates.get('layer3_cost_guard_rate', 0):.1f}%")
     print(f"  Layer 4 (step clipping):  {rates.get('layer4_clip_rate', 0):.1f}%")
 

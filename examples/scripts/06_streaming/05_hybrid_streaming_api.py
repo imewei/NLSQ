@@ -7,7 +7,7 @@ curve_fit() and curve_fit_large() functions.
 
 The hybrid streaming optimizer provides:
 - Parameter normalization for better gradient signals
-- Adam warmup for robust initial convergence
+- L-BFGS warmup for robust initial convergence
 - 4-layer defense strategy for warmup divergence prevention (v0.3.6+)
 - Streaming Gauss-Newton for exact covariance computation
 - Automatic memory management for large datasets
