@@ -524,7 +524,7 @@ test-cache:
 
 test-diagnostics:
 	@echo "$(BOLD)$(BLUE)Running diagnostics tests...$(RESET)"
-	$(RUN_CMD) $(PYTEST) -k "diagnostic" -v
+	$(RUN_CMD) $(PYTEST) tests/diagnostics/ -v
 
 test-recovery:
 	@echo "$(BOLD)$(BLUE)Running recovery tests...$(RESET)"

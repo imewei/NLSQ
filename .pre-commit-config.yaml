@@ -1,5 +1,5 @@
 # Pre-commit configuration
-# Updated: 2025-12-30
+# Updated: 2025-12-31
 # Python 3.13, uv package manager
 # Aligned with pyproject.toml and uv.lock
 #
@@ -7,6 +7,14 @@
 #   - adaptive_hybrid_streaming.py: 4-phase hybrid optimizer
 #   - hybrid_streaming_config.py: Configuration dataclasses
 #   - parameter_normalizer.py: Parameter normalization utilities
+#
+# New subpackage (v0.5.0+):
+#   - nlsq/diagnostics/: Model Health Diagnostics System
+#     - identifiability.py: FIM-based identifiability analysis
+#     - gradient_health.py: Gradient monitoring (vanishing, imbalance)
+#     - sloppy_model.py: Eigenvalue spectrum analysis
+#     - plugin.py: Domain-specific diagnostic extensions
+#     - health_report.py: Unified health report generation
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

@@ -326,6 +326,7 @@ ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PL
 "nlsq/hybrid_streaming_config.py" = ["PLR0913"]
 "nlsq/parameter_normalizer.py" = ["PLR0913", "PLR0912"]
 "nlsq/gui/*" = ["PLR0913", "PLR0912", "PLR0915"]  # GUI modules
+"nlsq/diagnostics/*" = ["PLR0913", "PLR0912", "PLR0915"]  # Model Health Diagnostics System
 
 [tool.ruff.lint.isort]
 known-first-party = ["nlsq"]
@@ -495,8 +496,8 @@ module = "nlsq.stability"
 ignore_errors = true  # Complex dict types require runtime flexibility
 
 [[tool.mypy.overrides]]
-module = "nlsq.diagnostics"
-ignore_errors = true  # Diagnostics and monitoring
+module = "nlsq.diagnostics.*"
+ignore_errors = true  # Model Health Diagnostics System (v0.5.0+)
 
 [[tool.mypy.overrides]]
 module = "tests.*"
