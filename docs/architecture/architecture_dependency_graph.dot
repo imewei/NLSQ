@@ -16,7 +16,6 @@ digraph NLSQ {
     label="STREAMING";
     style=filled;
     color="#E6F3FF";
-    streaming_optimizer [label="optimizer"];
     streaming_adaptive_hybrid [label="adaptive_hybrid"];
     streaming_large_dataset [label="large_dataset"];
   }
@@ -83,7 +82,7 @@ digraph NLSQ {
   streaming_adaptive_hybrid -> utils_logging;
   streaming_large_dataset -> core_minpack;
   streaming_large_dataset -> config;
-  streaming_large_dataset -> streaming_optimizer;
+  streaming_large_dataset -> streaming_adaptive_hybrid;
   streaming_large_dataset -> utils_logging;
   core_trf -> config;
   core_trf -> stability_guard;

@@ -67,11 +67,6 @@ _LAZY_MODULES: dict[str, str] = {
     "LDMemoryConfig": "nlsq.streaming.large_dataset",
     "estimate_memory_requirements": "nlsq.streaming.large_dataset",
     "fit_large_dataset": "nlsq.streaming.large_dataset",
-    "StreamingOptimizer": "nlsq.streaming.optimizer",
-    "StreamingConfig": "nlsq.streaming.optimizer",
-    "DataGenerator": "nlsq.streaming.optimizer",
-    "create_hdf5_dataset": "nlsq.streaming.optimizer",
-    "fit_unlimited_data": "nlsq.streaming.optimizer",
     # Global Optimization
     "GlobalOptimizationConfig": "nlsq.global_optimization",
     "MultiStartOrchestrator": "nlsq.global_optimization",
@@ -320,20 +315,6 @@ __all__ = [
     "robust_decomp",
     "set_memory_limits",
 ]
-
-# Add streaming features to public API
-# Streaming modules are lazily loaded; add them to __all__ unconditionally
-# (the ImportError is raised lazily when accessed if h5py is missing)
-__all__.extend(
-    [
-        "DataGenerator",
-        "StreamingConfig",
-        "StreamingOptimizer",
-        "create_hdf5_dataset",
-        "fit_unlimited_data",
-    ]
-)
-
 
 # Preset configurations for the fit() function
 _FIT_PRESETS = {

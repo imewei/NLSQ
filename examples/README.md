@@ -196,7 +196,7 @@ Your complete navigation guide:
 4. **Performance Optimization** (`performance_optimization_demo.ipynb`)
    - MemoryPool (2-5x speedup)
    - SparseJacobian (10-100x memory reduction)
-   - StreamingOptimizer (unlimited data)
+   - AdaptiveHybridStreamingOptimizer (huge datasets)
    - **Time**: 40-50 min | **Level**: ●●● Advanced
 
 ---
@@ -473,7 +473,7 @@ NLSQ provides advanced features for performance-critical applications:
 |---------|---------|-----------------|------------------|
 | **MemoryPool** | Reuse pre-allocated buffers | 2-5x | 90-99% allocations |
 | **SparseJacobian** | Exploit sparsity patterns | 1-3x | 10-100x memory |
-| **StreamingOptimizer** | Process unlimited data | N/A | Unlimited |
+| **AdaptiveHybridStreamingOptimizer** | Process huge datasets | N/A | Unlimited |
 | **Multi-Start** | Escape local minima | N/A | Finds global optimum |
 | **Workflow System** | Auto-select strategy | Optimal | Optimal |
 

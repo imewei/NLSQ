@@ -115,52 +115,31 @@ You'll see output like:
    Processing: 100%|██████████| 1000000/1000000 [00:15<00:00, 65432.10 pts/s]
    Iterations: 100%|██████████| 25/25 [00:15<00:00, 1.64 it/s]
 
-Streaming Optimization
-----------------------
-
-For datasets too large to fit in memory, use streaming optimization:
-
-.. code-block:: python
-
-   from nlsq import StreamingOptimizer
-
-   # Create optimizer
-   optimizer = StreamingOptimizer(
-       model,
-       n_params=3,
-       chunk_size=100_000,  # Process 100K points at a time
-   )
-
-   # Fit streaming data
-   result = optimizer.fit(x_data, y_data, p0=[2.0, 0.5, 0.3], show_progress=True)
-
-   print(f"Parameters: {result.popt}")
-   print(f"Covariance: {result.pcov}")
-
 Adaptive Hybrid Streaming
 -------------------------
 
-For the best performance on challenging problems, use the adaptive hybrid
-streaming optimizer:
+For datasets too large to fit in memory, use the adaptive hybrid streaming
+optimizer:
 
 .. code-block:: python
 
-   from nlsq import AdaptiveHybridStreamingOptimizer
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-   optimizer = AdaptiveHybridStreamingOptimizer(
-       model,
-       n_params=3,
-       enable_parameter_normalization=True,  # For multi-scale parameters
+   config = HybridStreamingConfig(
+       chunk_size=100_000,  # Process 100K points at a time
+       gauss_newton_max_iterations=50,
    )
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-   result = optimizer.fit(x_data, y_data, p0=p0)
-   print(f"Parameters: {result.popt}")
+   result = optimizer.fit((x_data, y_data), model, p0=p0, verbose=1)
+   print(f"Parameters: {result['x']}")
+   print(f"Covariance: {result['pcov']}")
 
 This optimizer uses a 4-phase approach:
 
-1. **L-BFGS warmup**: Fast initial convergence
-2. **Gauss-Newton refinement**: Precise parameter estimation
-3. **Multi-start verification**: Avoid local minima
+1. **Normalization**: Stable gradients for multi-scale parameters
+2. **L-BFGS warmup**: Fast initial convergence
+3. **Streaming Gauss-Newton**: Precise parameter estimation
 4. **Covariance calculation**: Accurate uncertainties
 
 Memory Management
@@ -185,17 +164,15 @@ For fits that may take hours, enable checkpointing:
 
 .. code-block:: python
 
-   from nlsq import AdaptiveHybridStreamingOptimizer
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-   optimizer = AdaptiveHybridStreamingOptimizer(
-       model,
-       n_params=3,
+   config = HybridStreamingConfig(
        checkpoint_dir="./fit_checkpoints",
-       checkpoint_interval=60,  # Save every 60 seconds
+       checkpoint_frequency=60,  # Save every 60 iterations
    )
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-   # If interrupted, restart from checkpoint
-   result = optimizer.fit(x_data, y_data, p0=p0, resume=True)
+   result = optimizer.fit((x_data, y_data), model, p0=p0, verbose=1)
 
 Using the fit() Function with Presets
 -------------------------------------
@@ -269,7 +246,10 @@ Performance Tips
    .. code-block:: python
 
       # Balance between memory and speed
-      optimizer = StreamingOptimizer(model, n_params=3, chunk_size=500_000)
+      from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
+
+      config = HybridStreamingConfig(chunk_size=500_000)
+      optimizer = AdaptiveHybridStreamingOptimizer(config)
 
 3. **Pre-allocate arrays**
 

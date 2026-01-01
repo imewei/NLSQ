@@ -27,9 +27,8 @@ _jax_config = JAXConfig()
 
 
 from nlsq.result import OptimizeResult
-
-# Import streaming optimizer (required dependency as of v0.2.0)
-from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
+from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.utils.logging import get_logger
 
 # Type-only imports to avoid circular dependencies
@@ -176,12 +175,11 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     max_chunk_size : int
         Maximum chunk size in data points (default: 1000000)
     use_streaming : bool
-        Use streaming optimization for unlimited data (default: True)
-        Streaming is now always available (h5py is a required dependency as of v0.2.0)
+        Use adaptive hybrid streaming optimization for unlimited data (default: True)
     streaming_batch_size : int
-        Batch size for streaming optimization (default: 50000)
+        Chunk size for adaptive hybrid streaming (default: 50000)
     streaming_max_epochs : int
-        Maximum epochs for streaming optimization (default: 10)
+        Maximum Gauss-Newton iterations for adaptive hybrid streaming (default: 10)
     min_success_rate : float
         Minimum success rate for chunked fitting (default: 0.5)
         If success rate falls below this threshold, fitting is considered failed
@@ -194,7 +192,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     safety_factor: float = 0.8
     min_chunk_size: int = 1000
     max_chunk_size: int = 1_000_000
-    use_streaming: bool = True  # Always available (h5py required as of v0.2.0)
+    use_streaming: bool = True
     streaming_batch_size: int = 50000
     streaming_max_epochs: int = 10
     min_success_rate: float = 0.5
@@ -1655,50 +1653,22 @@ class LargeDatasetFitter:
         show_progress: bool,
         **kwargs,
     ) -> OptimizeResult:
-        """Fit very large dataset using streaming optimization (no accuracy loss).
-
-        This method processes unlimited data using mini-batch gradient descent
-        without subsampling, preserving all data for maximum accuracy.
-        """
+        """Fit very large dataset using adaptive hybrid streaming optimization."""
         self.logger.info(
-            f"Using streaming optimization for unlimited data ({len(xdata):,} points). "
-            f"Batch size: {self.config.streaming_batch_size:,}, "
-            f"Max epochs: {self.config.streaming_max_epochs}"
+            "Using adaptive hybrid streaming optimization for unlimited data "
+            f"({len(xdata):,} points). "
+            f"Chunk size: {self.config.streaming_batch_size:,}, "
+            f"Max iterations: {self.config.streaming_max_epochs}"
         )
 
-        # Create streaming config
-        streaming_config = StreamingConfig(
-            batch_size=self.config.streaming_batch_size,
-            max_epochs=self.config.streaming_max_epochs,
-            use_adam=True,  # Adam is more stable for curve fitting
-            learning_rate=0.001,  # Conservative learning rate
-            convergence_tol=1e-6,
+        # Create adaptive hybrid streaming config
+        streaming_config = HybridStreamingConfig(
+            chunk_size=self.config.streaming_batch_size,
+            gauss_newton_max_iterations=self.config.streaming_max_epochs,
         )
 
-        # Initialize streaming optimizer
-        optimizer = StreamingOptimizer(config=streaming_config)
-
-        # Prepare data generator (in-memory for numpy arrays)
-        # For truly unlimited data, users should provide HDF5 files
-        class InMemoryGenerator:
-            """Simple in-memory data generator for streaming."""
-
-            def __init__(self, x, y, batch_size):
-                self.x = x
-                self.y = y
-                self.batch_size = batch_size
-                self.n_points = len(x)
-
-            def __iter__(self):
-                """Generate batches of data."""
-                indices = np.arange(self.n_points)
-                np.random.shuffle(indices)
-
-                for start_idx in range(0, self.n_points, self.batch_size):
-                    end_idx = min(start_idx + self.batch_size, self.n_points)
-                    batch_indices = indices[start_idx:end_idx]
-
-                    yield self.x[batch_indices], self.y[batch_indices]
+        # Initialize adaptive hybrid streaming optimizer
+        optimizer = AdaptiveHybridStreamingOptimizer(config=streaming_config)
 
         # Convert p0 to array if needed
         if p0 is None:
@@ -1708,10 +1678,9 @@ class LargeDatasetFitter:
 
         # Fit using streaming optimization
         try:
-            data_gen = InMemoryGenerator(xdata, ydata, self.config.streaming_batch_size)
-            result_dict = optimizer.fit_streaming(
+            result_dict = optimizer.fit(
+                data_source=(xdata, ydata),
                 func=f,
-                data_source=data_gen,
                 p0=p0,
                 bounds=bounds,
                 verbose=2 if show_progress else 1,
@@ -1719,19 +1688,18 @@ class LargeDatasetFitter:
 
             # Convert to OptimizeResult format
             result = OptimizeResult(
-                x=result_dict["params"],
+                x=result_dict["x"],
                 success=result_dict["success"],
-                message="Streaming optimization completed",
-                nfev=result_dict.get("total_samples", 0) // len(p0),
-                fun=None,  # Not available in streaming mode
+                message=result_dict["message"],
+                nfev=len(xdata),
+                fun=result_dict.get("fun"),
             )
             result["popt"] = result.x
-            result["pcov"] = np.eye(
-                len(result.x)
-            )  # Approximate - streaming doesn't compute covariance
+            result["pcov"] = result_dict.get("pcov", np.eye(len(result.x)))
 
             self.logger.info(
-                f"Streaming fit completed. Final loss: {result_dict.get('final_loss', 'N/A')}"
+                "Streaming fit completed. "
+                f"Final loss: {result_dict.get('streaming_diagnostics', {}).get('gauss_newton_diagnostics', {}).get('final_cost', 'N/A')}"
             )
 
             return result

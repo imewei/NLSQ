@@ -301,7 +301,7 @@ class CurveFitFacade:
     Attributes
     ----------
     _optimizer : OptimizerProtocol
-        Underlying optimizer (e.g., LeastSquares, StreamingOptimizer)
+        Underlying optimizer (e.g., LeastSquares, AdaptiveHybridStreamingOptimizer)
     _validator : InputValidator
         Input validation logic
     _cache : CacheProtocol

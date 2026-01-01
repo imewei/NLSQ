@@ -1,9 +1,9 @@
 """Factory functions for composing curve fitting configurations.
 
 This module provides factory functions that enable runtime composition
-of curve fitting features like streaming, global optimization, and
-diagnostics. These factories follow the Builder pattern to provide
-a clean API for configuring optimization pipelines.
+of curve fitting features like global optimization and diagnostics.
+These factories follow the Builder pattern to provide a clean API for
+configuring optimization pipelines.
 
 The factories decouple feature composition from the core curve_fit
 implementation, reducing the dependency count in minpack.py.
@@ -11,10 +11,6 @@ implementation, reducing the dependency count in minpack.py.
 Examples
 --------
 >>> from nlsq.core.factories import create_optimizer, configure_curve_fit
->>>
->>> # Create a streaming optimizer
->>> optimizer = create_optimizer(streaming=True, chunk_size=10000)
->>> result = optimizer.fit(model, xdata, ydata)
 >>>
 >>> # Configure curve_fit with custom settings
 >>> curve_fit = configure_curve_fit(
@@ -42,36 +38,28 @@ class OptimizerConfig:
 
     Attributes
     ----------
-    enable_streaming : bool
-        Enable streaming optimization for large datasets.
     enable_global : bool
         Enable global optimization with multi-start.
     enable_diagnostics : bool
         Enable diagnostic reporting.
     enable_recovery : bool
         Enable automatic recovery from numerical issues.
-    chunk_size : int | None
-        Chunk size for streaming (auto-detected if None).
     n_starts : int
         Number of starts for global optimization.
     """
 
-    enable_streaming: bool = False
     enable_global: bool = False
     enable_diagnostics: bool = False
     enable_recovery: bool = True
-    chunk_size: int | None = None
     n_starts: int = 10
     extra_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 def create_optimizer(
     *,
-    streaming: bool = False,
     global_optimization: bool = False,
     diagnostics: bool = False,
     recovery: bool = True,
-    chunk_size: int | None = None,
     n_starts: int = 10,
     cache: "UnifiedCache | None" = None,
     stability_guard: "NumericalStabilityGuard | None" = None,
@@ -81,21 +69,17 @@ def create_optimizer(
     """Create a configured optimizer with specified features.
 
     This factory function composes various optimization features
-    (streaming, global optimization, diagnostics) into a single
+    (global optimization, diagnostics) into a single
     optimizer instance.
 
     Parameters
     ----------
-    streaming : bool, default=False
-        Enable streaming optimization for large datasets.
     global_optimization : bool, default=False
         Enable global optimization with multi-start.
     diagnostics : bool, default=False
         Enable diagnostic reporting.
     recovery : bool, default=True
         Enable automatic recovery from numerical issues.
-    chunk_size : int | None, default=None
-        Chunk size for streaming (auto-detected if None).
     n_starts : int, default=10
         Number of starts for global optimization.
     cache : UnifiedCache | None, default=None
@@ -118,18 +102,13 @@ def create_optimizer(
     >>> optimizer = create_optimizer()
     >>> popt, pcov = optimizer.fit(model, xdata, ydata)
     >>>
-    >>> # Streaming optimizer for large data
-    >>> optimizer = create_optimizer(streaming=True, chunk_size=50000)
-    >>>
     >>> # Global optimizer with diagnostics
     >>> optimizer = create_optimizer(global_optimization=True, diagnostics=True)
     """
     config = OptimizerConfig(
-        enable_streaming=streaming,
         enable_global=global_optimization,
         enable_diagnostics=diagnostics,
         enable_recovery=recovery,
-        chunk_size=chunk_size,
         n_starts=n_starts,
         extra_kwargs=kwargs,
     )
@@ -212,10 +191,6 @@ class ConfiguredOptimizer:
         # Merge config kwargs with call kwargs
         merged_kwargs = {**self._config.extra_kwargs, **kwargs}
 
-        # Handle streaming
-        if self._config.enable_streaming:
-            return self._fit_streaming(f, xdata, ydata, p0, sigma, bounds, **merged_kwargs)
-
         # Handle global optimization
         if self._config.enable_global:
             return self._fit_global(f, xdata, ydata, p0, sigma, bounds, **merged_kwargs)
@@ -243,32 +218,6 @@ class ConfiguredOptimizer:
             p0=p0,
             sigma=sigma,
             bounds=bounds,
-            **kwargs,
-        )
-
-    def _fit_streaming(
-        self,
-        f: Callable[..., np.ndarray],
-        xdata: np.ndarray,
-        ydata: np.ndarray,
-        p0: np.ndarray | None,
-        sigma: np.ndarray | None,
-        bounds: tuple[np.ndarray, np.ndarray] | None,
-        **kwargs: Any,
-    ) -> Any:
-        """Perform streaming curve fitting for large datasets."""
-        from nlsq.streaming.config import StreamingConfig
-        from nlsq.streaming.optimizer import StreamingOptimizer
-
-        # Use configured chunk_size or default to 32
-        batch_size = self._config.chunk_size if self._config.chunk_size is not None else 32
-        config = StreamingConfig(batch_size=batch_size)
-        optimizer = StreamingOptimizer(config=config)
-        # StreamingOptimizer.fit() has different signature and returns dict
-        return optimizer.fit(
-            (xdata, ydata),  # Data tuple
-            f,  # Model function
-            p0=p0 if p0 is not None else np.zeros(1),
             **kwargs,
         )
 

@@ -70,8 +70,8 @@ class DiagnosticPlugin(Protocol):
         Unique plugin name. Should be a short, descriptive identifier.
         Convention: lowercase with hyphens (e.g., "optical-scattering").
 
-    Methods
-    -------
+    Protocol
+    --------
     analyze(jacobian, parameters, residuals, **context)
         Run the plugin's analysis and return results.
 
@@ -148,6 +148,10 @@ class DiagnosticPlugin(Protocol):
             Analysis results with any detected issues.
         """
         ...
+
+
+DiagnosticPlugin.__module__ = "nlsq.diagnostics"
+DiagnosticPlugin.analyze.__module__ = "nlsq.diagnostics"
 
 
 class PluginRegistry:

@@ -23,8 +23,12 @@ Usage
 >>> print(recommendation)
 """
 
+class Recommendations(dict[str, str]):
+    """Mapping of issue codes to recommendation text."""
+
+
 # Mapping of issue codes to recommendation text
-RECOMMENDATIONS: dict[str, str] = {
+RECOMMENDATIONS = Recommendations({
     # Identifiability issues
     "IDENT-001": (
         "Structural unidentifiability detected: The Jacobian matrix is rank-deficient, "
@@ -109,7 +113,7 @@ RECOMMENDATIONS: dict[str, str] = {
         "bounds, (2) Checking the model formulation, or (3) Examining the data "
         "for outliers or systematic errors."
     ),
-}
+})
 
 
 def get_recommendation(code: str) -> str:

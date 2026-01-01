@@ -76,11 +76,9 @@ curve_fit()
 ```
 fit(workflow='streaming')
   → auto_select_workflow() (selects STREAMING tier)
-  → LargeDatasetOptimizer
+  → LargeDatasetFitter
   → AdaptiveHybridStreamingOptimizer
-  → StreamingDataGenerator (HDF5 chunking)
-  → OnlineStrategy (mini-batch SGD)
-  → checkpoint every 10 batches
+  → HybridStreamingConfig (chunk_size, checkpoints)
   → CurveFitResult
 ```
 
@@ -284,7 +282,6 @@ from nlsq.core.trf import TrustRegionReflective  # Algorithm
 ### Streaming
 ```python
 from nlsq.streaming import AdaptiveHybridStreamingOptimizer
-from nlsq.streaming import StreamingOptimizer
 from nlsq.streaming.large_dataset import LargeDatasetOptimizer
 ```
 

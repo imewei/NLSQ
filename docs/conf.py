@@ -40,7 +40,6 @@ _MODULE_ALIASES = {
     "nlsq.adaptive_hybrid_streaming": "nlsq.streaming.adaptive_hybrid",
     "nlsq.fallback": "nlsq.stability.fallback",
     "nlsq.bound_inference": "nlsq.precision.bound_inference",
-    "nlsq.streaming_optimizer": "nlsq.streaming.optimizer",
     "nlsq.least_squares": "nlsq.core.least_squares",
     "nlsq.async_logger": "nlsq.utils.async_logger",
     "nlsq.svd_fallback": "nlsq.stability.svd_fallback",
@@ -58,7 +57,6 @@ _MODULE_ALIASES = {
     "nlsq.large_dataset": "nlsq.streaming.large_dataset",
     "nlsq.optimizer_base": "nlsq.core.optimizer_base",
     "nlsq.logging": "nlsq.utils.logging",
-    "nlsq.streaming_config": "nlsq.streaming.config",
     "nlsq.parameter_estimation": "nlsq.precision.parameter_estimation",
     "nlsq.workflow": "nlsq.core.workflow",
     "nlsq.recovery": "nlsq.stability.recovery",
@@ -171,7 +169,6 @@ nitpick_ignore = [
     # Suppress ambiguous cross-reference warnings for classes defined in multiple modules
     ("py:class", "OptimizeResult"),
     ("py:class", "PerformanceProfiler"),
-    ("py:class", "StreamingConfig"),
     # JAX array types (not in intersphinx)
     ("py:class", "jnp.ndarray"),
     ("py:class", "jax.Array"),
@@ -291,7 +288,6 @@ nitpick_ignore += [
     ("py:class", "2-tuple"),
     # py:obj references
     ("py:obj", "AdaptiveHybridStreamingOptimizer"),
-    ("py:obj", "StreamingOptimizer"),
     ("py:obj", "PrecisionState"),
     ("py:obj", "OptimizationState"),
     ("py:obj", "ConvergenceMetrics"),

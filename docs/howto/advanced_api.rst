@@ -148,30 +148,26 @@ significant speedups.
 
    popt, pcov = curve_fit(complex_model, x, y, p0=p0, jac_sparsity=sparsity)
 
-Streaming Optimization
-----------------------
+Adaptive Hybrid Streaming
+-------------------------
 
-For online learning or real-time fitting scenarios.
+For huge datasets that require streaming Gauss-Newton updates:
 
 .. code:: python
 
-   from nlsq.streaming.optimizer import OnlineOptimizer
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-   optimizer = OnlineOptimizer(
-       model=exponential, p0=[2, 0.5], learning_rate=0.01, momentum=0.9
-   )
+   config = HybridStreamingConfig(chunk_size=50000, gauss_newton_max_iterations=20)
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-   for x_batch, y_batch in data_stream:
-       popt = optimizer.update(x_batch, y_batch)
-       print(f"Current estimate: {popt}")
-
-   popt_final = optimizer.get_parameters()
-   pcov_final = optimizer.get_covariance()
+   result = optimizer.fit((x, y), exponential, p0=[2, 0.5], verbose=1)
+   popt_final = result["x"]
+   pcov_final = result["pcov"]
 
 Related documentation
 ---------------------
 
 - :doc:`../reference/configuration` - Configuration reference
 - :doc:`../api/index` - Complete API documentation
-- :doc:`../api/nlsq.streaming_optimizer` - Streaming optimizer API
+- :doc:`../api/nlsq.adaptive_hybrid_streaming` - Streaming optimizer API
 - :doc:`../api/nlsq.mixed_precision` - Mixed precision API

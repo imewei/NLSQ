@@ -26,7 +26,8 @@ class TestLazyImportMechanism:
 
         # These should be in __all__ and visible via __dir__
         lazy_exports = [
-            "StreamingOptimizer",
+            "AdaptiveHybridStreamingOptimizer",
+            "HybridStreamingConfig",
             "LargeDatasetFitter",
             "PerformanceProfiler",
             "MemoryManager",
@@ -91,9 +92,10 @@ class TestLazyImportCategories:
         import nlsq
 
         # These should all be accessible
-        assert hasattr(nlsq, "StreamingOptimizer")
-        assert hasattr(nlsq, "StreamingConfig")
-        assert hasattr(nlsq, "fit_unlimited_data")
+        assert hasattr(nlsq, "AdaptiveHybridStreamingOptimizer")
+        assert hasattr(nlsq, "HybridStreamingConfig")
+        assert hasattr(nlsq, "get_defense_telemetry")
+        assert hasattr(nlsq, "reset_defense_telemetry")
 
     def test_large_dataset_imports(self) -> None:
         """Test large dataset module lazy imports."""

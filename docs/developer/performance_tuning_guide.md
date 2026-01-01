@@ -16,7 +16,7 @@ Specialty modules are now lazily imported, reducing initial import time from ~10
 ```python
 # These modules only load when first accessed:
 # - nlsq.global_optimization
-# - nlsq.streaming_optimizer
+# - nlsq.streaming.adaptive_hybrid
 # - nlsq.profiler_visualization
 # - nlsq.gui
 
@@ -25,7 +25,7 @@ import nlsq  # Fast (~620ms)
 nlsq.curve_fit(...)  # Core functionality loads immediately
 
 # Streaming loads only when needed
-nlsq.StreamingOptimizer(...)  # Lazy load happens here
+nlsq.AdaptiveHybridStreamingOptimizer(...)  # Lazy load happens here
 ```
 
 ### Vectorized Sparse Jacobian (37-50x Speedup)
@@ -358,7 +358,7 @@ def fast_model(x, a, b, c):
 from nlsq.streaming.large_dataset import LargeDatasetFitter
 
 fitter = LargeDatasetFitter(
-    chunk_size=10000, enable_streaming=True  # Process in chunks
+    chunk_size=10000  # Process in chunks
 )
 
 popt, pcov = fitter.fit(model, x, y, p0=p0)

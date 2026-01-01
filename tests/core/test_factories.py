@@ -1,13 +1,16 @@
 """Tests for nlsq.core.factories module.
 
 Characterization tests for the factory functions that enable runtime composition
-of curve fitting features like streaming, global optimization, and diagnostics.
+of curve fitting features like global optimization and diagnostics.
 
 Coverage targets:
 - OptimizerConfig: Configuration dataclass
 - create_optimizer(): Factory function for ConfiguredOptimizer
 - ConfiguredOptimizer: Optimizer wrapper class
 - configure_curve_fit(): Factory for pre-configured curve_fit
+
+Note: Streaming workflows are configured via workflow selectors/minpack configs,
+not via factory flags.
 """
 
 import numpy as np
@@ -67,31 +70,25 @@ class TestOptimizerConfig:
         """Test default configuration values."""
         config = OptimizerConfig()
 
-        assert config.enable_streaming is False
         assert config.enable_global is False
         assert config.enable_diagnostics is False
         assert config.enable_recovery is True
-        assert config.chunk_size is None
         assert config.n_starts == 10
         assert config.extra_kwargs == {}
 
     def test_custom_values(self):
         """Test custom configuration values."""
         config = OptimizerConfig(
-            enable_streaming=True,
             enable_global=True,
             enable_diagnostics=True,
             enable_recovery=False,
-            chunk_size=5000,
             n_starts=20,
             extra_kwargs={"maxfev": 1000},
         )
 
-        assert config.enable_streaming is True
         assert config.enable_global is True
         assert config.enable_diagnostics is True
         assert config.enable_recovery is False
-        assert config.chunk_size == 5000
         assert config.n_starts == 20
         assert config.extra_kwargs == {"maxfev": 1000}
 
@@ -116,15 +113,7 @@ class TestCreateOptimizer:
         optimizer = create_optimizer()
 
         assert isinstance(optimizer, ConfiguredOptimizer)
-        assert optimizer._config.enable_streaming is False
         assert optimizer._config.enable_global is False
-
-    def test_streaming_optimizer(self):
-        """Test creating streaming optimizer."""
-        optimizer = create_optimizer(streaming=True, chunk_size=10000)
-
-        assert optimizer._config.enable_streaming is True
-        assert optimizer._config.chunk_size == 10000
 
     def test_global_optimizer(self):
         """Test creating global optimizer."""
@@ -155,15 +144,11 @@ class TestCreateOptimizer:
     def test_combined_features(self):
         """Test creating optimizer with multiple features."""
         optimizer = create_optimizer(
-            streaming=True,
             diagnostics=True,
-            chunk_size=5000,
             maxfev=1000,
         )
 
-        assert optimizer._config.enable_streaming is True
         assert optimizer._config.enable_diagnostics is True
-        assert optimizer._config.chunk_size == 5000
         assert optimizer._config.extra_kwargs["maxfev"] == 1000
 
 
@@ -211,7 +196,7 @@ class TestConfiguredOptimizer:
         optimizer = create_optimizer()
 
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = optimizer.fit(simple_model, x, y, p0=[1.0, 0.0], bounds=bounds)
+        popt, _pcov = optimizer.fit(simple_model, x, y, p0=[1.0, 0.0], bounds=bounds)
 
         assert popt is not None
         assert len(popt) == 2
@@ -222,7 +207,7 @@ class TestConfiguredOptimizer:
         optimizer = create_optimizer()
 
         bounds = (np.array([0.0, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, _pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
 
         assert popt is not None
         assert popt[0] >= 0.0  # Respect lower bound
@@ -273,7 +258,7 @@ class TestConfigureCurveFit:
         curve_fit = configure_curve_fit(maxfev=500)
 
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, _pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
 
         assert popt is not None
 
@@ -284,7 +269,7 @@ class TestConfigureCurveFit:
 
         # Call with different maxfev
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds, maxfev=500)
+        popt, _pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds, maxfev=500)
 
         assert popt is not None
 
@@ -299,34 +284,6 @@ class TestConfigureCurveFit:
         curve_fit = configure_curve_fit(enable_recovery=False)
 
         assert callable(curve_fit)
-
-
-class TestStreamingOptimizer:
-    """Tests for streaming optimization path."""
-
-    @pytest.mark.slow
-    def test_streaming_fit(self, simple_model, sample_data):
-        """Test streaming fit path."""
-        x, y = sample_data
-        optimizer = create_optimizer(streaming=True, chunk_size=32)
-
-        result = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
-
-        # StreamingOptimizer returns dict, not tuple
-        assert result is not None
-        # Check that result contains expected keys
-        if isinstance(result, dict):
-            assert "params" in result or "popt" in result or "x" in result
-
-    @pytest.mark.slow
-    def test_streaming_default_chunk_size(self, simple_model, sample_data):
-        """Test streaming with default chunk size."""
-        x, y = sample_data
-        optimizer = create_optimizer(streaming=True)  # chunk_size=None -> 32
-
-        result = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
-
-        assert result is not None
 
 
 class TestGlobalOptimizer:
@@ -346,7 +303,7 @@ class TestGlobalOptimizer:
     @pytest.mark.slow
     def test_global_custom_n_starts(self, simple_model, sample_data):
         """Test global optimization with custom n_starts."""
-        x, y = sample_data
+        _x, _y = sample_data
         optimizer = create_optimizer(global_optimization=True, n_starts=5)
 
         assert optimizer._config.n_starts == 5
@@ -384,7 +341,7 @@ class TestEdgeCases:
         )
 
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, _pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
 
         assert popt is not None
 

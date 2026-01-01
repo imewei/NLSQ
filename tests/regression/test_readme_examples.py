@@ -177,33 +177,25 @@ def test_sparse_jacobian():
 )
 def test_streaming_optimizer():
     """Test Streaming Optimizer example."""
-    print("\nTesting Streaming Optimizer example...")
+    print("\nTesting Adaptive Hybrid Streaming Optimizer example...")
     np.random.seed(42)  # Ensure deterministic test results
-    from nlsq import StreamingConfig, StreamingOptimizer
+    from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
     def func(x, a, b):
         return a * jnp.exp(-b * x)
 
-    # Configure streaming optimization
-    config = StreamingConfig(batch_size=1000, max_epochs=10, convergence_tol=1e-6)
+    # Configure adaptive hybrid streaming
+    config = HybridStreamingConfig(chunk_size=1000, gauss_newton_max_iterations=10)
+    optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-    optimizer = StreamingOptimizer(config)
-
-    # Create a simple data generator
-    def data_generator():
-        """Generate batches of data."""
-        for _ in range(5):  # Limited batches for testing
-            batch_size = 1000
-            x_batch = np.random.randn(batch_size) * 10
-            y_batch = 2.0 * np.exp(-0.5 * np.abs(x_batch))
-            yield x_batch, y_batch
-
+    # Create in-memory dataset for the hybrid optimizer
+    x = np.random.randn(5000) * 10
+    y = 2.0 * np.exp(-0.5 * np.abs(x))
     p0 = np.array([2.0, 0.5])
 
-    # Stream data from generator
-    result = optimizer.fit_streaming(data_generator(), func, p0=p0)
-    print(f"Streaming optimization result: {result}")
-    print("✅ Streaming Optimizer example passed")
+    result = optimizer.fit((x, y), func, p0=p0, verbose=0)
+    print(f"Hybrid streaming optimization result: {result['x']}")
+    print("✅ Adaptive Hybrid Streaming Optimizer example passed")
 
 
 def test_memory_management():

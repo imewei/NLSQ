@@ -285,10 +285,11 @@ Issue: Out of GPU Memory
 
    popt, pcov = curve_fit_large(model, x, y, memory_limit_gb=2.0)
 
-   # Or use streaming
-   from nlsq import StreamingOptimizer
+   # Or use adaptive hybrid streaming
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-   optimizer = StreamingOptimizer(model, n_params=3, chunk_size=50000)
+   config = HybridStreamingConfig(chunk_size=50000)
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
 Issue: GPU is Slower Than Expected
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

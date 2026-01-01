@@ -212,7 +212,8 @@ class IdentifiabilityReport(AnalysisResult):
         computation failed.
     highly_correlated_pairs : list[tuple[int, int, float]]
         List of highly correlated parameter pairs as (i, j, correlation).
-        Only includes pairs with |correlation| > correlation_threshold.
+        Only includes pairs with absolute correlation greater than
+        correlation_threshold.
     issues : list[ModelHealthIssue]
         List of detected identifiability issues (IDENT-001, IDENT-002, CORR-001).
     health_status : HealthStatus

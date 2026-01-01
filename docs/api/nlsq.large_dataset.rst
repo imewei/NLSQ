@@ -107,22 +107,19 @@ Advanced Usage with LargeDatasetFitter
     print(f"Fitted parameters: {result.popt}")
     # Note: success_rate and n_chunks only available for multi-chunk fits
 
-Streaming Optimization
-~~~~~~~~~~~~~~~~~~~~~~
+Adaptive Hybrid Streaming
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For datasets that don't fit in memory or are generated on-the-fly:
+For datasets that don't fit in memory, use adaptive hybrid streaming:
 
 .. code-block:: python
 
-    from nlsq import StreamingOptimizer, StreamingConfig
+    from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-    # Configure streaming
-    config = StreamingConfig(batch_size=10000, max_epochs=100, convergence_tol=1e-6)
+    config = HybridStreamingConfig(chunk_size=10000, gauss_newton_max_iterations=100)
+    optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-    optimizer = StreamingOptimizer(config)
-
-    # Stream data from generator
-    result = optimizer.fit_streaming(func, data_generator, p0=p0)
+    result = optimizer.fit((x, y), func, p0=p0)
 
 Sparse Jacobian Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -145,4 +142,4 @@ See Also
 
 - :doc:`../howto/handle_large_data` : Large dataset guide
 - :doc:`nlsq.memory_manager` : Memory management utilities
-- :doc:`nlsq.streaming_optimizer` : Streaming optimization details
+- :doc:`nlsq.adaptive_hybrid_streaming` : Adaptive hybrid streaming details

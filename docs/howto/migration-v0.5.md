@@ -6,10 +6,11 @@ and improved test reliability.
 
 ## Quick Migration Checklist
 
-- [ ] Update deprecated imports (see [Import Path Changes](#import-path-changes))
+- [ ] Update deprecated imports (see {ref}`import-path-changes`)
 - [ ] Review custom model files for security compliance
 - [ ] Update test code that uses `time.sleep()` for condition waiting
 
+(import-path-changes)=
 ## Import Path Changes
 
 ### OptimizeResult and OptimizeWarning

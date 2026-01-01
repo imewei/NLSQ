@@ -504,7 +504,7 @@ test-debug:
 
 test-large:
 	@echo "$(BOLD)$(BLUE)Running large dataset feature tests...$(RESET)"
-	$(RUN_CMD) $(PYTEST) tests/test_large_dataset.py tests/test_sparse_jacobian.py tests/test_streaming_optimizer.py -v
+	$(RUN_CMD) $(PYTEST) tests/streaming/test_large_dataset.py tests/core/test_sparse_jacobian.py tests/streaming/test_adaptive_hybrid_streaming.py -v
 
 test-modules:
 	@echo "$(BOLD)$(BLUE)Running module-specific tests...$(RESET)"

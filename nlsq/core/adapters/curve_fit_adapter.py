@@ -45,7 +45,6 @@ class CurveFitAdapter:
         "_diagnostics_config",
         "_global_config",
         "_stability_guard",
-        "_streaming_optimizer",
     )
 
     def __init__(
@@ -58,7 +57,6 @@ class CurveFitAdapter:
         self._cache = cache
         self._stability_guard = stability_guard
         self._diagnostics_config = diagnostics_config
-        self._streaming_optimizer: Any = None
         self._global_config: Any = None
 
     def curve_fit(
@@ -118,31 +116,6 @@ class CurveFitAdapter:
             bounds=bounds,
             **kwargs,
         )
-
-    @staticmethod
-    def with_streaming(
-        streaming_config: Any | None = None,
-    ) -> "CurveFitAdapter":
-        """Create an adapter configured for streaming optimization.
-
-        Parameters
-        ----------
-        streaming_config : StreamingConfig | None
-            Configuration for streaming optimization.
-
-        Returns
-        -------
-        CurveFitAdapter
-            Adapter configured for streaming.
-        """
-        # Lazy import to avoid circular dependency
-        from nlsq.streaming.optimizer import StreamingOptimizer
-
-        # Create streaming-aware adapter
-        adapter = CurveFitAdapter()
-        if streaming_config is not None:
-            adapter._streaming_optimizer = StreamingOptimizer(config=streaming_config)
-        return adapter
 
     @staticmethod
     def with_global_optimization(

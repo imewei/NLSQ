@@ -117,11 +117,12 @@ GPU memory is limited (16-80 GB typical). NLSQ handles this with:
 
 .. code-block:: python
 
-   from nlsq import StreamingOptimizer
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-   # Process data in chunks, accumulate gradients
-   optimizer = StreamingOptimizer(model, n_params=3)
-   result = optimizer.fit(x, y, p0=p0)
+   # Process data in chunks with bounded memory
+   config = HybridStreamingConfig(chunk_size=50000)
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
+   result = optimizer.fit((x, y), model, p0=p0)
 
 Multi-GPU Usage
 ---------------

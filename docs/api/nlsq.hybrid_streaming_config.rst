@@ -416,5 +416,4 @@ See Also
 
 - :doc:`nlsq.adaptive_hybrid_streaming` : Main optimizer class
 - :doc:`nlsq.parameter_normalizer` : Parameter normalization implementation
-- :doc:`nlsq.streaming_optimizer` : Original streaming optimizer
 - :doc:`../howto/handle_large_data` : Large dataset guide

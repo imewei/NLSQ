@@ -18,11 +18,11 @@ NLSQ provides three approaches for large datasets:
    * - ``curve_fit_large``
      - Datasets up to ~100M points
      - Automatic chunking, fits in memory
-   * - ``StreamingOptimizer``
-     - Unlimited size, disk-based
-     - Streams from disk, constant memory
+   * - ``LargeDatasetFitter``
+     - Fine-grained control over chunking
+     - Automatic memory management
    * - ``AdaptiveHybridStreamingOptimizer``
-     - Production pipelines
+     - Huge datasets and production pipelines
      - Four-phase optimization
 
 curve_fit_large
@@ -75,45 +75,6 @@ Class-based interface for large dataset fitting with more control.
 
    result = fitter.fit(model, x, y, p0=p0)
 
-StreamingOptimizer
-------------------
-
-.. autoclass:: nlsq.StreamingOptimizer
-   :members:
-   :special-members: __init__
-   :no-index:
-
-Stream data from disk for datasets that cannot fit in memory at all.
-
-**Key Parameters:**
-
-- ``model``: The model function
-- ``n_params``: Number of parameters
-- ``chunk_size``: Points to process per iteration
-- ``checkpoint_interval``: How often to save progress
-
-**Example:**
-
-.. code-block:: python
-
-   from nlsq import StreamingOptimizer
-
-   optimizer = StreamingOptimizer(model=exponential, n_params=3, chunk_size=100_000)
-
-   # From HDF5 file
-   result = optimizer.fit_from_hdf5(
-       "large_data.h5", x_dataset="x", y_dataset="y", p0=[1.0, 0.1, 0.0]
-   )
-
-
-   # Or from generator
-   def data_generator():
-       for chunk in load_chunks("data/*.npy"):
-           yield chunk["x"], chunk["y"]
-
-
-   result = optimizer.fit_from_generator(data_generator(), p0=p0)
-
 AdaptiveHybridStreamingOptimizer
 --------------------------------
 
@@ -138,9 +99,9 @@ Production-grade optimizer with four-phase optimization:
 
    config = HybridStreamingConfig.from_preset("production")
 
-   optimizer = AdaptiveHybridStreamingOptimizer(model=model, config=config)
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-   result = optimizer.fit(x, y, p0=p0)
+   result = optimizer.fit((x, y), model, p0=p0)
 
 HybridStreamingConfig
 ---------------------
@@ -169,10 +130,10 @@ Configuration for the hybrid streaming optimizer.
 
    # Custom configuration
    config = HybridStreamingConfig(
-       adam_warmup_epochs=5,
-       gauss_newton_iterations=20,
+       warmup_iterations=50,
+       gauss_newton_max_iterations=20,
        chunk_size=50_000,
-       checkpoint_interval=10,
+       checkpoint_frequency=10,
    )
 
 Memory Estimation
@@ -195,16 +156,20 @@ Estimate memory requirements before fitting:
 Checkpointing
 -------------
 
-StreamingOptimizer supports checkpointing for long-running fits:
+AdaptiveHybridStreamingOptimizer supports checkpointing for long-running fits:
 
 .. code-block:: python
 
-   optimizer = StreamingOptimizer(
-       model=model, n_params=3, checkpoint_dir="./checkpoints", checkpoint_interval=100
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
+
+   config = HybridStreamingConfig(
+       checkpoint_dir="./checkpoints",
+       checkpoint_frequency=100,
    )
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
    # If interrupted, resume from checkpoint
-   result = optimizer.fit(x, y, p0=p0, resume=True)
+   result = optimizer.fit((x, y), model, p0=p0, verbose=1)
 
 Parallel Processing
 -------------------

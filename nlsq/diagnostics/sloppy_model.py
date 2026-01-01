@@ -56,6 +56,7 @@ class SloppyModelAnalyzer:
     Notes
     -----
     Sloppy detection logic:
+
     - A model is considered "sloppy" when its eigenvalue range exceeds
       a threshold derived from the config's sloppy_threshold.
     - The sloppy_threshold (default 1e-6) defines when a direction is

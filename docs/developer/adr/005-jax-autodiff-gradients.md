@@ -8,6 +8,8 @@
 
 ## Context
 
+**Note:** `StreamingOptimizer` was a legacy implementation that has been removed. This ADR is retained for historical context around the original finite-difference approach.
+
 The `StreamingOptimizer` class in `streaming_optimizer.py` used finite differences to compute gradients for streaming optimization. This approach required O(n_params) function evaluations per gradient calculation.
 
 ### Original Implementation (Finite Differences)
@@ -127,7 +129,7 @@ Comprehensive testing validates the change:
 
 ## References
 
-- [streaming_optimizer.py Implementation](../../../nlsq/streaming/optimizer.py#L374-L443)
+- [Adaptive Hybrid Streaming Implementation](../../../nlsq/streaming/adaptive_hybrid.py)
 - [JAX Autodiff Documentation](https://docs.jax.dev/en/latest/automatic-differentiation.html)
 - [Commit 2ed084f](https://github.com/imewei/NLSQ/commit/2ed084f)
 

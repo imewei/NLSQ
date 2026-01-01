@@ -19,7 +19,6 @@ from scipy.optimize import curve_fit as scipy_curve_fit
 from nlsq import curve_fit, curve_fit_large
 from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
-from nlsq.streaming.optimizer import StreamingOptimizer
 
 
 class TestFullPipelineIntegration:
@@ -457,36 +456,6 @@ class TestEdgeCases:
 
 class TestBackwardCompatibility:
     """Verify backward compatibility with existing APIs."""
-
-    def test_existing_streaming_optimizer_unchanged(self):
-        """Verify StreamingOptimizer still works after adding hybrid method."""
-
-        def simple_model(x, a, b):
-            return a * jnp.exp(-b * x)
-
-        x = jnp.linspace(0, 10, 1000)
-        y_true = simple_model(x, 3.0, 0.5)
-
-        key = jax.random.PRNGKey(555)
-        noise = jax.random.normal(key, y_true.shape) * 0.05
-        y_noisy = y_true + noise
-
-        p0 = jnp.array([2.5, 0.4])
-
-        # Original StreamingOptimizer should still work
-        from nlsq.streaming.config import StreamingConfig
-
-        config = StreamingConfig(batch_size=100, max_epochs=10)
-
-        optimizer = StreamingOptimizer(config=config)
-
-        # This should work without errors
-        result = optimizer.fit(
-            data_source=(x, y_noisy), func=simple_model, p0=p0, verbose=0
-        )
-
-        assert "x" in result, "StreamingOptimizer result format changed"
-        assert "success" in result, "StreamingOptimizer result format changed"
 
     def test_curve_fit_default_method_unchanged(self):
         """Verify default curve_fit method still works."""

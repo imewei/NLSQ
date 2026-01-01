@@ -860,7 +860,7 @@ Hands-on tutorials for debugging and troubleshooting:
 
 - `Troubleshooting Guide <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/03_advanced/troubleshooting_guide.ipynb>`_ (25 min) - Debug convergence issues and common problems
 - `NLSQ Challenges <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/03_advanced/nlsq_challenges.ipynb>`_ (45 min) - Difficult optimization problems and solutions
-- `Interpreting Diagnostics <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/04_interpreting_diagnostics.ipynb>`_ - Understanding streaming results and diagnostics
+- `Hybrid Streaming API <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb>`_ - Adaptive hybrid streaming overview
 
 --------------
 

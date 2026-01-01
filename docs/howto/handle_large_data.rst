@@ -161,15 +161,16 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
     print(f"  Fitted parameters: {result.popt}")
     print(f"  Total function evaluations: {result.nfev}")
 
-Streaming Optimization for Unlimited Datasets
---------------------------------------------------------
+Adaptive Hybrid Streaming for Unlimited Datasets
+------------------------------------------------
 
-For datasets too large to fit in memory, NLSQ uses streaming optimization with mini-batch gradient descent.
-**Unlike subsampling (deprecated), streaming processes 100% of data with zero accuracy loss.**
+For datasets too large to fit in memory, NLSQ uses adaptive hybrid streaming with
+L-BFGS warmup and streaming Gauss-Newton updates. This processes 100% of the data
+with bounded memory.
 
 .. code-block:: python
 
-    from nlsq import StreamingOptimizer, StreamingConfig
+    from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
     # Simulate billion-point dataset (or load from HDF5)
     n_huge = 1_000_000_000  # 1 billion points
@@ -185,23 +186,17 @@ For datasets too large to fit in memory, NLSQ uses streaming optimization with m
     x_demo = np.linspace(0, 10, n_demo)
     y_demo = 3.2 * np.exp(-0.4 * x_demo) + 0.8 + np.random.normal(0, 0.1, n_demo)
 
-    # Configure streaming optimization
-    streaming_config = StreamingConfig(
-        batch_size=50000,  # Mini-batch size
-        max_epochs=10,  # Number of passes through data
-        learning_rate=0.01,  # Adaptive learning rate
-    )
-
-    # Use LargeDatasetFitter with streaming enabled
+    # Use LargeDatasetFitter with adaptive hybrid streaming enabled
     config = LDMemoryConfig(
         memory_limit_gb=2.0,
         use_streaming=True,  # Enable streaming for very large datasets
         streaming_batch_size=50000,
+        streaming_max_epochs=10,
     )
 
     fitter = LargeDatasetFitter(config=config)
 
-    print(f"\nFitting {n_demo:,} points with streaming (100% of data)...")
+    print(f"\nFitting {n_demo:,} points with adaptive hybrid streaming...")
     stream_result = fitter.fit_with_progress(
         exponential_model,
         x_demo,
@@ -279,79 +274,38 @@ Many large-scale problems have sparse Jacobian structures. NLSQ can detect and e
     else:
         print("  -> Using dense optimization algorithms")
 
-Streaming Optimization for Unlimited Data
-------------------------------------------
+Adaptive Hybrid Streaming for Unlimited Data
+----------------------------------------------
 
-For datasets that cannot fit in memory or are generated on-the-fly, use streaming optimization:
+For datasets that cannot fit in memory, use adaptive hybrid streaming with
+chunked Gauss-Newton updates:
 
 .. code-block:: python
 
-    from nlsq import StreamingOptimizer, StreamingConfig
-    from nlsq.streaming.optimizer import create_hdf5_dataset
+    from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-
-    # First, create a large HDF5 dataset on disk
-    def create_large_dataset():
-        print("Creating large HDF5 dataset...")
-        create_hdf5_dataset(
-            "large_dataset.h5",
-            exponential_model,
-            [2.8, 0.6, 0.4],  # True parameters
-            n_samples=50_000_000,  # 50 million points
-            chunk_size=10000,  # HDF5 chunk size
-            noise_level=0.08,
-        )
-        print("Dataset created: large_dataset.h5")
-
-
-    # Create the dataset (this may take a few minutes)
-    create_large_dataset()
-
-    # Configure streaming optimizer
-    streaming_config = StreamingConfig(
-        batch_size=50000,  # Points per batch
-        max_epochs=20,  # Maximum training epochs
-        convergence_tol=1e-6,  # Convergence tolerance
-        use_adam=True,  # Use Adam optimizer
-        learning_rate=0.001,  # Initial learning rate
+    # Configure adaptive hybrid streaming
+    config = HybridStreamingConfig(
+        chunk_size=50000,
+        gauss_newton_max_iterations=20,
+        enable_checkpoints=True,
+        checkpoint_frequency=100,
     )
 
-    # Create streaming optimizer
-    stream_optimizer = StreamingOptimizer(streaming_config)
+    optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-    # Fit directly from HDF5 file (file path passed as data source)
-    print("Starting streaming optimization...")
-    stream_result = stream_optimizer.fit_streaming(
-        exponential_model, "large_dataset.h5", p0=np.array([2.5, 0.4, 0.3])
+    # Fit from in-memory arrays (chunked internally)
+    stream_result = optimizer.fit(
+        (x_demo, y_demo),
+        exponential_model,
+        p0=np.array([2.5, 0.4, 0.3]),
+        verbose=1,
     )
 
     print("Streaming Results:")
     print(f"  Converged: {stream_result['success']}")
     print(f"  Final parameters: {stream_result['x']}")
-    print(f"  Epochs used: {stream_result['nit']}")
-    print(f"  Final loss: {stream_result['fun']:.6f}")
-
-
-    # Alternative: Stream from custom generator
-    def data_generator(batch_size=10000):
-        """Generate data batches on-the-fly."""
-        while True:
-            x_batch = np.random.uniform(0, 5, batch_size)
-            x_batch.sort()  # Keep x values sorted
-            y_batch = exponential_model(x_batch, 2.8, 0.6, 0.4)
-            y_batch += 0.08 * np.random.normal(size=batch_size)
-            yield x_batch, y_batch
-
-
-    # Fit using generator (data stream)
-    print("Fitting from data generator...")
-    gen_result = stream_optimizer.fit_streaming(
-        exponential_model, data_generator(batch_size=20000), p0=np.array([2.5, 0.4, 0.3])
-    )
-
-    print("Generator Results:")
-    print(f"  Parameters: {gen_result['x']}")
-    print(f"  Samples processed: {gen_result['total_samples']:,}")
+    print(f"  Final cost: {stream_result['streaming_diagnostics']['gauss_newton_diagnostics']['final_cost']}")
 
 Performance Comparison
 ----------------------
@@ -383,14 +337,14 @@ Let's compare different strategies for the same large dataset:
             ),
         ),
         (
-            "Streaming ()",
+            "Adaptive hybrid streaming",
             lambda: curve_fit_large(
                 exponential_model,
                 x_test,
                 y_test,
                 p0=[1.5, 0.5, 0.1],
-                memory_limit_gb=2.0,  # Use streaming for very large data
-                # Streaming automatically handles unlimited datasets
+                memory_limit_gb=2.0,  # Use adaptive hybrid streaming for huge data
+                # Streaming tiers use AdaptiveHybridStreamingOptimizer
             ),
         ),
     ]
@@ -452,14 +406,14 @@ Always check memory requirements before fitting:
     # Check before processing
     stats = estimate_memory_requirements(len(x), n_parameters)
     if stats.total_memory_estimate_gb > available_memory_gb:
-        print("Consider using chunking or streaming optimization")
+        print("Consider using chunking or adaptive hybrid streaming")
 
 **2. Choose Appropriate Strategies**
 
 - **< 1M points**: Use standard ``curve_fit``
 - **1M - 10M points**: Use ``curve_fit_large`` with default settings
 - **10M - 100M points**: Use chunking with progress monitoring
-- **> 100M points**: Use streaming optimization (, processes 100% of data)
+- **> 100M points**: Use adaptive hybrid streaming (processes 100% of data)
 
 **3. Optimize for Your Hardware**
 
@@ -543,10 +497,6 @@ Hands-on tutorials for large dataset handling:
 
 **Streaming and Fault Tolerance:**
 
-- `Basic Fault Tolerance <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/01_basic_fault_tolerance.ipynb>`_ - Error handling for streaming fits
-- `Checkpoint and Resume <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/02_checkpoint_resume.ipynb>`_ - Save and restore optimization state
-- `Custom Retry Settings <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/03_custom_retry_settings.ipynb>`_ - Configure retry behavior
-- `Interpreting Diagnostics <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/04_interpreting_diagnostics.ipynb>`_ - Understanding streaming results
 - `Hybrid Streaming API <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb>`_ - Parameter normalization and L-BFGS warmup
 
 **HPC and Cluster Computing:**

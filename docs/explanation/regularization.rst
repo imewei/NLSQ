@@ -59,7 +59,7 @@ where:
 The variance penalty is added in two phases:
 
 Phase 1 (L-BFGS Warmup)
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 During L-BFGS warmup, the loss function directly includes the variance penalty:
 

@@ -442,6 +442,5 @@ See Also
 
 - :doc:`nlsq.hybrid_streaming_config` : Configuration options
 - :doc:`nlsq.parameter_normalizer` : Parameter normalization
-- :doc:`nlsq.streaming_optimizer` : Original streaming optimizer
 - :doc:`nlsq.stability` : Numerical stability utilities
 - :doc:`../howto/handle_large_data` : Large dataset guide

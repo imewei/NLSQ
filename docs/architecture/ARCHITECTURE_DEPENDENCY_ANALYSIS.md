@@ -102,32 +102,28 @@
                     │
                     ▼
 ┌────────────────────────────────────────────────────────────────┐
-│            STREAMING OPTIMIZER BASE                             │
-│            (streaming/optimizer.py)                             │
-│                                                                  │
-│  Core classes:                                                   │
-│  - StreamingOptimizer: Base class with HDF5 integration         │
-│  - DataGenerator: Yield-based batch provider                    │
-│  - GeneratorWrapper: Adapts iterators to generators             │
-│                                                                  │
-│  Dependencies (1): streaming.config                             │
+│         ADAPTIVE HYBRID STREAMING OPTIMIZER                    │
+│         (streaming/adaptive_hybrid.py)                         │
+│                                                                │
+│  Core classes:                                                 │
+│  - AdaptiveHybridStreamingOptimizer: 4-phase streaming         │
+│  - HybridStreamingConfig: Presets + validation                 │
+│                                                                │
+│  Dependencies: streaming.hybrid_config, streaming.telemetry    │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**HDF5 Data Flow:**
+**Streaming Data Flow:**
 ```
-External HDF5 → DataGenerator → StreamingOptimizer → LeastSquares
-                     ▲                                      │
-                     └──────── Checkpoint writes ──────────┘
+In-memory arrays → AdaptiveHybridStreamingOptimizer → CurveFitResult
 ```
 
-**Key Integration Point:** `streaming.large_dataset.LargeDatasetOptimizer` bridges:
+**Key Integration Point:** `streaming.large_dataset.LargeDatasetFitter` bridges:
 - `core.minpack.CurveFit` (standard API)
-- `streaming.optimizer.StreamingOptimizer` (chunking logic)
+- `streaming.adaptive_hybrid.AdaptiveHybridStreamingOptimizer` (streaming path)
 - `global_optimization.MultiStartOrchestrator` (multi-start)
 
 ---
-
 ### 1.3 Caching & Stability Subsystems
 
 ```
@@ -632,9 +628,9 @@ class AdaptiveHybridStreamingOptimizer:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Integration:** `streaming.large_dataset.LargeDatasetOptimizer` acts as **coordinator**:
+**Key Integration:** `streaming.large_dataset.LargeDatasetFitter` acts as **coordinator**:
 - Detects dataset size via `core.workflow.estimate_dataset_memory()`
-- Delegates to `StreamingOptimizer` if size > memory threshold
+- Uses adaptive hybrid streaming for streaming tiers
 - Falls back to `CurveFit` for smaller chunks
 
 ---

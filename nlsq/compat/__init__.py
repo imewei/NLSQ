@@ -2,7 +2,7 @@
 """Backwards compatibility shims for deprecated import paths.
 
 This module provides backwards compatibility for the old flat import structure.
-Importing from old paths (e.g., `from nlsq.streaming.optimizer import X`) will
+Importing from old paths (e.g., `from nlsq.streaming.adaptive_hybrid import X`) will
 emit a DeprecationWarning while still working correctly.
 
 The compatibility shims use module-level __getattr__ to lazily redirect imports
@@ -15,8 +15,6 @@ from typing import Any
 # Mapping of old module names to their new locations
 _COMPAT_MAPPING: dict[str, str] = {
     # Streaming modules
-    "streaming_optimizer": "nlsq.streaming.optimizer",
-    "streaming_config": "nlsq.streaming.config",
     "adaptive_hybrid_streaming": "nlsq.streaming.adaptive_hybrid",
     "hybrid_streaming_config": "nlsq.streaming.hybrid_config",
     "large_dataset": "nlsq.streaming.large_dataset",

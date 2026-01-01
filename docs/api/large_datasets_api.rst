@@ -162,22 +162,21 @@ Example::
         print(f"Jacobian is {sparsity:.1%} sparse")
         # NLSQ will automatically use sparse optimization
 
-**Streaming Optimization**
+**Adaptive Hybrid Streaming**
 
-For unlimited-size datasets, use the :doc:`nlsq.streaming_optimizer` module:
+For huge datasets, use the adaptive hybrid streaming optimizer:
 
-- Batch processing from disk or generators
-- SGD and Adam optimizers for online learning
-- HDF5 file integration
-- Real-time data stream processing
+- L-BFGS warmup with defense layers
+- Streaming Gauss-Newton for accurate covariance
+- Chunked processing with bounded memory
 
 Example::
 
-    from nlsq import fit_unlimited_data, StreamingConfig
+    from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-    # Fit to HDF5 dataset or generator
-    config = StreamingConfig(batch_size=10000, max_epochs=10)
-    result = fit_unlimited_data(func, "huge_dataset.h5", p0=p0, config=config)
+    config = HybridStreamingConfig(chunk_size=10000, gauss_newton_max_iterations=10)
+    optimizer = AdaptiveHybridStreamingOptimizer(config)
+    result = optimizer.fit((x, y), func, p0=p0)
 
 Memory Configuration
 --------------------
@@ -241,7 +240,7 @@ Dataset sizes and recommended approaches:
 - **< 1M points**: Use standard ``curve_fit``
 - **1M - 10M points**: Use ``LargeDatasetFitter`` with default settings
 - **10M - 100M points**: Use ``LargeDatasetFitter`` with chunking
-- **100M - 1B points**: Use ``StreamingOptimizer`` with HDF5
+- **100M - 1B points**: Use ``AdaptiveHybridStreamingOptimizer`` with chunked streaming
 - **> 1B points**: Use sampling strategies or distributed computing
 
 Memory Estimation Formula
