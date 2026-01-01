@@ -625,7 +625,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         """
         # Setup scaled variables
         d = scale
-        d_jnp = jnp.array(scale)
+        d_jnp = jnp.asarray(scale)
         g_h_jnp = self.compute_grad_hat(g, d_jnp)
 
         result = {
@@ -1626,7 +1626,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 Optimization, vol. 6, no. 2, pp. 418–445, 1996.
         """
 
-        x = x0.copy()
+        x = x0
         f_true = f
         nfev = 1
         njev = 1
@@ -1655,8 +1655,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         v, dv = CL_scaling_vector(x, g, lb, ub)
 
         # Convert to JAX arrays and use .at[] syntax for immutable array updates
-        v = jnp.array(v)
-        dv = jnp.array(dv)
+        v = jnp.asarray(v)
+        dv = jnp.asarray(dv)
         mask = dv != 0
         v = v.at[mask].set(v[mask] * scale_inv[mask])
         Delta = jnorm(x0 * scale_inv / v**SQRT_EXPONENT)
@@ -1683,8 +1683,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         while True:
             v, dv = CL_scaling_vector(x, g, lb, ub)
             # Convert to JAX arrays for later .at[] operations
-            v = jnp.array(v)
-            dv = jnp.array(dv)
+            v = jnp.asarray(v)
+            dv = jnp.asarray(dv)
 
             # Use JAX norm for gradient norm calculation
             g_norm = jnorm(g * v, ord=jnp.inf)
@@ -1785,7 +1785,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     x, J_h, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta
                 )
 
-                x_new = make_strictly_feasible(x + step.copy(), lb, ub, rstep=0)
+                x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
                 f_new = fun(x_new, xdata, ydata, data_mask, transform)
 
                 nfev += 1
@@ -2154,7 +2154,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         c_ctimes = []
         p_ctimes = []
 
-        x = x0.copy()
+        x = x0
 
         # NOTE: We avoid excessive .block_until_ready() calls to enable JAX async execution.
         # Sync only at critical decision points where Python needs actual values.

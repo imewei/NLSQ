@@ -294,7 +294,7 @@ class TrustRegionJITFunctions:
             # Initialize CG state: (x, r, p, rsold, iteration, converged)
             x0 = jnp.zeros(n)
             r0 = b
-            p0 = r0.copy()
+            p0 = r0
             rsold0 = jnp.dot(r0, r0)
             tol_sq = tol * tol  # Compare squared norms for efficiency
 

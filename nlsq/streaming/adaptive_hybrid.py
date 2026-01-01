@@ -2407,7 +2407,7 @@ class AdaptiveHybridStreamingOptimizer:
         step = jnp.zeros(n_params)
 
         # Initial residual: r = b - A @ x = JTr - (J^T J) @ 0 = JTr
-        r = JTr.copy()
+        r = JTr
         r_norm_initial = jnp.linalg.norm(r)
 
         # Handle zero right-hand side
@@ -2418,7 +2418,7 @@ class AdaptiveHybridStreamingOptimizer:
         tol = jnp.maximum(rtol * r_norm_initial, atol)
 
         # Initialize CG vectors
-        p = r.copy()  # Search direction
+        p = r  # Search direction
         r_dot_r = jnp.dot(r, r)
 
         # CG iteration state: (step, r, p, r_dot_r, iteration, converged)

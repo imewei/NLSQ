@@ -171,7 +171,7 @@ class SparseJacobianComputer:
             mask_chunk = data_mask[start:end]
 
             # Convert to JAX arrays for computation
-            x_jax = jnp.array(x)
+            x_jax = jnp.asarray(x)
 
             # Compute Jacobian for chunk (assuming jac_func returns dense)
             if callable(jac_func):
