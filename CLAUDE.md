@@ -39,17 +39,20 @@ The `nlsq` package is organized into logical subpackages:
 ```
 nlsq/
 ├── core/           # Core optimization algorithms
-│   ├── minpack.py         # SciPy-compatible curve_fit() API
+│   ├── minpack.py         # SciPy-compatible curve_fit() API (<15 deps via lazy imports)
 │   ├── least_squares.py   # LeastSquares orchestrator
 │   ├── trf.py             # Trust Region Reflective optimizer (2544 lines)
 │   ├── trf_jit.py         # JIT-compiled TRF functions (474 lines)
 │   ├── profiler.py        # TRFProfiler/NullProfiler (181 lines)
 │   ├── functions.py       # Built-in model functions
 │   ├── sparse_jacobian.py # Sparse Jacobian computation
-│   └── workflow.py        # Workflow configuration
+│   ├── workflow.py        # Workflow configuration
+│   ├── factories.py       # NEW: create_optimizer(), configure_curve_fit() builders
+│   └── adapters/          # NEW: Protocol adapters for DI
+│       └── curve_fit_adapter.py  # CurveFitProtocol implementation
 ├── interfaces/     # Protocol definitions for dependency injection
 │   ├── cache_protocol.py     # CacheProtocol, BoundedCacheProtocol
-│   ├── optimizer_protocol.py # OptimizerProtocol
+│   ├── optimizer_protocol.py # OptimizerProtocol, CurveFitProtocol
 │   ├── data_source_protocol.py
 │   ├── jacobian_protocol.py
 │   └── result_protocol.py
@@ -75,6 +78,12 @@ nlsq/
 │   ├── validators.py      # Input validation
 │   ├── diagnostics.py     # Convergence monitoring
 │   └── logging.py
+├── cli/            # Command-line interface
+│   ├── model_registry.py  # Model loading with security validation
+│   └── model_validation.py # SECURITY: AST-based model validation
+├── result/         # Result types (consolidated)
+│   ├── optimize_result.py # OptimizeResult (moved from core/_optimize.py)
+│   └── optimize_warning.py # OptimizeWarning (moved from core/_optimize.py)
 └── (root modules)  # Core infrastructure
     ├── callbacks.py, config.py, result.py
     ├── common_jax.py, common_scipy.py
@@ -98,6 +107,8 @@ curve_fit() → CurveFit → LeastSquares → TrustRegionReflective
 
 - **core/trf_jit.py**: JIT-compiled TRF helper functions (gradient, SVD, CG solver)
 - **core/profiler.py**: TRFProfiler for performance timing, NullProfiler for zero-overhead
+- **core/factories.py**: Factory functions for composing optimizer configurations at runtime
+- **core/adapters/**: Protocol adapters enabling dependency injection
 - **interfaces/**: Protocol definitions enabling dependency injection and loose coupling
 - **stability/guard.py**: Numerical stability monitoring (condition numbers, NaN/Inf detection, data rescaling)
 - **utils/validators.py**: Input validation with security constraints (array size limits, bounds checking)
@@ -109,6 +120,7 @@ curve_fit() → CurveFit → LeastSquares → TrustRegionReflective
 - **streaming/large_dataset.py**: Automatic chunking for datasets exceeding memory
 - **streaming/telemetry.py**: DefenseLayerTelemetry for 4-layer defense strategy monitoring
 - **streaming/validators.py**: Extracted config validators (reduce HybridStreamingConfig complexity)
+- **cli/model_validation.py**: Security validation for custom model files (AST inspection, path traversal prevention)
 
 ### JAX Patterns
 
@@ -195,8 +207,24 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - Python ≥3.12 (per pyproject.toml) + JAX 0.8.0, NumPy, SciPy (for reference implementations)
 - Python ≥3.12 + pytest, pytest-xdist (parallel execution) (004-reorganize-tests-scripts)
 - N/A (file reorganization only) (004-reorganize-tests-scripts)
+- Python ≥3.12 + JAX 0.8.0, NumPy, SciPy (006-legacy-modernization)
+- N/A (library, no persistence) (006-legacy-modernization)
 
 ## Recent Changes
+- 006-legacy-modernization: Comprehensive legacy modernization (v0.5.0):
+  - **Architecture**: Zero circular dependencies via lazy imports and TYPE_CHECKING
+  - **God Module Reduction**: core/minpack.py now has <15 direct dependencies
+  - **Security Hardening**: CLI model validation with AST-based pattern detection
+    - Blocks dangerous operations: exec, eval, system calls, network access
+    - Path traversal prevention for file loading
+    - Resource limits (timeout/memory) for model execution
+    - Audit logging with rotation (10MB) and retention (90 days)
+  - **Factory Pattern**: New `nlsq/core/factories.py` with `create_optimizer()` and `configure_curve_fit()`
+  - **Protocol Adapters**: New `nlsq/core/adapters/` with `CurveFitAdapter` implementing `CurveFitProtocol`
+  - **Type Consolidation**: OptimizeResult/OptimizeWarning moved to `nlsq/result/`
+  - **Test Reliability**: Replaced flaky time.sleep() with wait_for() polling utility
+  - **Deprecation**: Old import paths work with deprecation warnings (12-month period)
+  - Spec: `/specs/006-legacy-modernization/`
 - 005-model-health-diagnostics: Model Health Diagnostics System (planned):
   - New `nlsq/diagnostics/` subpackage for post-fit model health analysis
   - Identifiability analysis (FIM condition number, rank, correlations)

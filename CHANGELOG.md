@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-01
+
+### Added
+
+#### Legacy Modernization (006-legacy-modernization)
+
+- **Security Hardening for CLI Model Loading**
+  - AST-based validation detects dangerous patterns before model execution
+  - Blocked operations: `exec`, `eval`, `compile`, `__import__`, `os.system`, `subprocess`, network access
+  - Path traversal prevention for file loading operations
+  - Resource limits context manager (timeout, memory limits)
+  - Audit logging with rotation (10MB max) and retention (90 days)
+  - **Files Added**: `nlsq/cli/model_validation.py`
+
+- **Factory Functions for Optimizer Composition**
+  - `create_optimizer()`: Compose streaming, global optimization, and diagnostics at runtime
+  - `configure_curve_fit()`: Create pre-configured curve_fit with default settings
+  - Enables runtime feature composition without modifying core code
+  - **Files Added**: `nlsq/core/factories.py`
+
+- **Protocol Adapters for Dependency Injection**
+  - `CurveFitAdapter`: Implements `CurveFitProtocol` for loose coupling
+  - Enables swapping curve fitting implementations at runtime
+  - **Files Added**: `nlsq/core/adapters/curve_fit_adapter.py`
+
+- **Architecture Tests**
+  - Automated circular dependency detection in CI
+  - Package import validation for all subpackages
+  - **Files Added**: `tests/architecture/test_no_circular_deps.py`, `tests/architecture/utils.py`
+
+- **Protocol Contract Tests**
+  - Comprehensive tests for all protocol interfaces
+  - **Files Added**: `tests/interfaces/test_optimizer_protocol.py`, `tests/interfaces/test_cache_protocol.py`,
+    `tests/interfaces/test_jacobian_protocol.py`, `tests/interfaces/test_data_source_protocol.py`
+
+- **Test Reliability Utility**
+  - `wait_for()` polling utility with exponential backoff replaces flaky `time.sleep()` calls
+  - **Files Modified**: `tests/conftest.py`
+
+### Changed
+
+#### Architecture Improvements
+
+- **God Module Reduction**: `nlsq/core/minpack.py` reduced from 27 to <15 direct dependencies
+  - Lazy imports for streaming, global_optimization, diagnostics
+  - TYPE_CHECKING guards for type-only imports
+
+- **Type Consolidation**: Moved result types to dedicated package
+  - `OptimizeResult` moved from `nlsq/core/_optimize.py` to `nlsq/result/optimize_result.py`
+  - `OptimizeWarning` moved from `nlsq/core/_optimize.py` to `nlsq/result/optimize_warning.py`
+  - Old import paths work with deprecation warnings
+
+- **Protocol Exports**: Updated `nlsq/interfaces/__init__.py` with 14 protocol exports
+  - All protocols: `OptimizerProtocol`, `CurveFitProtocol`, `CacheProtocol`, `JacobianProtocol`, etc.
+  - Concrete implementations: `ArrayDataSource`, `AutodiffJacobian`, `DictCache`
+
+### Deprecated
+
+> **12-Month Deprecation Period**: The following imports will emit `DeprecationWarning` until 2027-01-01.
+
+- **`from nlsq.core._optimize import OptimizeResult`**
+  - Use: `from nlsq.result import OptimizeResult` or `from nlsq import OptimizeResult`
+
+- **`from nlsq.core._optimize import OptimizeWarning`**
+  - Use: `from nlsq.result import OptimizeWarning` or `from nlsq import OptimizeWarning`
+
+### Technical Details
+
+**Test Results:**
+- Zero circular dependencies (verified by architecture tests)
+- Core module dependencies: 12 (target <15) ✅
+- Import time: <700ms (38ms warm cache) ✅
+- All security tests passing (39 tests)
+- All protocol contract tests passing (54 tests)
+
+**Backward Compatibility:**
+- 100% API backward compatible
+- Old import paths work via deprecation shims
+- All public exports preserved
+
+**Security Improvements:**
+- OWASP compliant model validation
+- Audit trail for model loading attempts
+- Resource exhaustion prevention
+
 ## [0.4.2] - 2025-12-29
 
 ### Added

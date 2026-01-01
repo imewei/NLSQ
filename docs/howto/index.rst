@@ -11,6 +11,7 @@ Getting Started
    :maxdepth: 1
 
    migrate_from_scipy
+   migration-v0.5
    choose_model
 
 Working with Data
@@ -61,6 +62,8 @@ Quick Reference
      - Guide
    * - Migrate from scipy.optimize.curve_fit
      - :doc:`migrate_from_scipy`
+   * - Migrate from v0.4.x to v0.5.0
+     - :doc:`migration-v0.5`
    * - Choose the right model function
      - :doc:`choose_model`
    * - Handle datasets > 100K points
