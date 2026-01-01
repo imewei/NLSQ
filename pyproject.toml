@@ -549,6 +549,13 @@ filterwarnings = [
     "ignore::PendingDeprecationWarning",
     "ignore:jax.*:UserWarning",  # JAX GPU warnings in CPU-only tests
     "ignore:Covariance of the parameters could not be estimated:UserWarning",  # Expected in some tests
+    # Diagnostics system warnings (expected test behavior)
+    "ignore:\\[IDENT-.*\\]:UserWarning",  # Identifiability issues
+    "ignore:\\[GRAD-.*\\]:UserWarning",  # Gradient health issues
+    "ignore:Diagnostic plugin '.*' failed:UserWarning",  # Plugin exception isolation tests
+    # Numpy warnings in edge case tests with inf/nan values
+    "ignore:overflow encountered:RuntimeWarning",
+    "ignore:invalid value encountered:RuntimeWarning",
 ]
 markers = [
     # Performance-based test tiers (Phase 1 categorization)

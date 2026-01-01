@@ -218,8 +218,8 @@ class GradientMonitor:
         # Check for numerical issues
         if np.any(np.isnan(gradient)) or np.any(np.isinf(gradient)):
             self._has_numerical_issues = True
-            # Replace non-finite values for statistics
-            gradient = np.nan_to_num(gradient, nan=0.0, posinf=1e308, neginf=-1e308)
+            # Replace non-finite values with safe large values (avoid overflow in Welford's)
+            gradient = np.nan_to_num(gradient, nan=0.0, posinf=1e100, neginf=-1e100)
 
         self.iteration_count += 1
         n_params = len(gradient)
@@ -249,12 +249,13 @@ class GradientMonitor:
         delta2 = abs_gradient - self._param_means
         self._param_m2 += delta * delta2
 
-        # Track max imbalance ratio
+        # Track max imbalance ratio (with overflow guard)
         min_grad = np.min(abs_gradient[abs_gradient > 0]) if np.any(abs_gradient > 0) else 1.0
         max_grad = np.max(abs_gradient)
-        if min_grad > 0:
+        if min_grad > 0 and np.isfinite(max_grad) and np.isfinite(min_grad):
             imbalance = max_grad / min_grad
-            self._max_imbalance_ratio = max(self._max_imbalance_ratio, imbalance)
+            if np.isfinite(imbalance):
+                self._max_imbalance_ratio = max(self._max_imbalance_ratio, imbalance)
 
     def create_callback(
         self,
