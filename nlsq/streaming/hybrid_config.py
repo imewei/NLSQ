@@ -60,8 +60,8 @@ class HybridStreamingConfig:
         Safety limit to prevent indefinite warmup when loss plateaus slowly.
 
     warmup_learning_rate : float, default=0.001
-        Learning rate for optimizer during warmup phase.
-        Typical values: 0.0001-0.01. Higher values converge faster but may overshoot.
+        Legacy warmup step size retained for backward compatibility.
+        L-BFGS warmup uses ``lbfgs_initial_step_size`` and adaptive step sizes.
 
     loss_plateau_threshold : float, default=1e-4
         Relative loss improvement threshold for plateau detection.
@@ -325,7 +325,7 @@ class HybridStreamingConfig:
     enable_warm_start_detection: bool = True
     warm_start_threshold: float = 0.01  # Skip if relative_loss < this
 
-    # Layer 2: Adaptive Learning Rate - scale LR based on initial loss quality
+    # Layer 2: Adaptive Step Size - scale step size based on initial loss quality
     enable_adaptive_warmup_lr: bool = True
     warmup_lr_refinement: float = 1e-6  # For relative_loss < 0.1 (excellent)
     warmup_lr_careful: float = 1e-5  # For relative_loss < 1.0 (good)

@@ -498,7 +498,7 @@ def validate_defense_layer_config(
             inclusive_max=False,
         )
 
-    # Layer 2: Adaptive learning rate
+    # Layer 2: Adaptive step size
     if enable_adaptive_lr:
         validate_positive(lr_refinement, "warmup_lr_refinement")
         validate_positive(lr_careful, "warmup_lr_careful")

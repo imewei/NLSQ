@@ -24,7 +24,7 @@ class DefenseLayerTelemetry:
 
     The 4 layers tracked are:
         - Layer 1: Warm start detection (skips warmup)
-        - Layer 2: Adaptive learning rate selection (refinement/careful/exploration)
+        - Layer 2: Adaptive step size selection (refinement/careful/exploration)
         - Layer 3: Cost-increase guard (aborts warmup if loss increases)
         - Layer 4: Step clipping (limits update magnitude)
 

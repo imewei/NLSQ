@@ -2200,7 +2200,7 @@ class CurveFit:
         """Handle curve fitting with hybrid_streaming method.
 
         This method delegates to AdaptiveHybridStreamingOptimizer for
-        large-scale optimization with parameter normalization, Adam warmup,
+        large-scale optimization with parameter normalization, L-BFGS warmup,
         and streaming Gauss-Newton.
 
         Parameters

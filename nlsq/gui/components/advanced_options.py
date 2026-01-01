@@ -527,10 +527,10 @@ def render_streaming_tab(state: SessionState) -> None:
             )
             state.layer1_threshold = l1_threshold
 
-        # Layer 2: Adaptive learning rate
-        st.markdown("**Layer 2: Adaptive Learning Rate**")
+        # Layer 2: Adaptive step size
+        st.markdown("**Layer 2: Adaptive Step Size**")
         l2_enabled = st.checkbox(
-            "Enable adaptive learning rate",
+            "Enable adaptive step size",
             value=state.layer2_enabled,
             key="layer2_enable",
             help="Adjust step size based on convergence",
