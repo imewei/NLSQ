@@ -547,7 +547,7 @@ Hands-on tutorials for large dataset handling:
 - `Checkpoint and Resume <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/02_checkpoint_resume.ipynb>`_ - Save and restore optimization state
 - `Custom Retry Settings <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/03_custom_retry_settings.ipynb>`_ - Configure retry behavior
 - `Interpreting Diagnostics <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/04_interpreting_diagnostics.ipynb>`_ - Understanding streaming results
-- `Hybrid Streaming API <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb>`_ - Parameter normalization and Adam warmup
+- `Hybrid Streaming API <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/06_streaming/05_hybrid_streaming_api.ipynb>`_ - Parameter normalization and L-BFGS warmup
 
 **HPC and Cluster Computing:**
 

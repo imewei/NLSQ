@@ -19,7 +19,7 @@ in batches. However, they use fundamentally different optimization strategies:
      - AdaptiveHybridStreamingOptimizer
    * - **Algorithm**
      - Pure Adam (gradient descent)
-     - 4-phase hybrid (Adam → Gauss-Newton)
+     - 4-phase hybrid (L-BFGS → Gauss-Newton)
    * - **Convergence Rate**
      - Linear (slow near optimum)
      - Quadratic (fast near optimum)
@@ -88,7 +88,7 @@ comprehensive fault tolerance features.
 AdaptiveHybridStreamingOptimizer
 --------------------------------
 
-A four-phase hybrid optimizer that combines parameter normalization, Adam
+A four-phase hybrid optimizer that combines parameter normalization, L-BFGS
 warmup, streaming Gauss-Newton, and exact covariance computation.
 
 **The Four Phases:**
@@ -104,7 +104,7 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
      - Setup
      - Parameter normalization and bounds transformation
    * - 1
-     - Adam Warmup
+     - L-BFGS Warmup
      - Fast initial convergence with adaptive switching criteria
    * - 2
      - Gauss-Newton
@@ -132,10 +132,10 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
 
 2. **Hybrid Algorithm (Phase 1 → Phase 2)**
 
-   Combines the global convergence of Adam with the fast local convergence
+   Combines fast initial convergence of L-BFGS with the fast local convergence
    of Gauss-Newton:
 
-   - **Phase 1 (Adam)**: Robust initial approach, handles non-convexity
+   - **Phase 1 (L-BFGS)**: Robust initial approach, handles non-convexity
    - **Phase 2 (Gauss-Newton)**: Quadratic convergence near optimum
 
    Adaptive switching detects when to transition based on:
@@ -191,7 +191,7 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
 
 7. **4-Layer Defense Strategy (v0.3.6+)**
 
-   Prevents Adam warmup divergence when initial parameters are near optimal.
+   Prevents L-BFGS warmup divergence when initial parameters are near optimal.
    This is critical for warm-start refinement scenarios where a previous fit
    provides the starting point.
 
@@ -199,8 +199,8 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
 
    - **Layer 1 (Warm Start Detection)**: Skips warmup if initial loss < 1% of
      data variance
-   - **Layer 2 (Adaptive Learning Rate)**: Scales LR based on fit quality
-     (1e-6 to 0.001)
+   - **Layer 2 (Adaptive Step Size)**: Scales L-BFGS step size based on fit
+     quality (0.1 to 1.0)
    - **Layer 3 (Cost-Increase Guard)**: Aborts if loss increases > 5%
    - **Layer 4 (Step Clipping)**: Limits parameter update magnitude (max
      norm 0.1)
@@ -229,7 +229,7 @@ warmup, streaming Gauss-Newton, and exact covariance computation.
         normalize=True,
         normalization_strategy="auto",
         warmup_iterations=200,
-        warmup_learning_rate=0.001,
+        lbfgs_initial_step_size=0.1,
         gauss_newton_tol=1e-8,
         enable_multistart=True,
         n_starts=5,
@@ -332,10 +332,13 @@ Configuration Defaults
         # Phase 0: Normalization
         normalize=True,
         normalization_strategy="auto",
-        # Phase 1: Adam warmup
+        # Phase 1: L-BFGS warmup
         warmup_iterations=200,
         max_warmup_iterations=500,
-        warmup_learning_rate=0.001,
+        lbfgs_history_size=10,
+        lbfgs_initial_step_size=0.1,
+        lbfgs_exploration_step_size=0.1,
+        lbfgs_refinement_step_size=1.0,
         loss_plateau_threshold=1e-4,
         gradient_norm_threshold=1e-3,
         # Phase 2: Gauss-Newton

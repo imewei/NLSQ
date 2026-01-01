@@ -11,7 +11,7 @@ Overview
 
 The ``nlsq.hybrid_streaming_config`` module provides configuration options for the
 four-phase adaptive hybrid streaming optimizer. This configuration controls all
-aspects of the optimization process including parameter normalization, Adam warmup,
+aspects of the optimization process including parameter normalization, L-BFGS warmup,
 streaming Gauss-Newton, and covariance computation.
 
 **New in version 0.3.0**: Complete configuration for adaptive hybrid streaming.
@@ -20,7 +20,7 @@ Key Features
 ------------
 
 - **Phase 0**: Parameter normalization configuration (bounds-based, p0-based, or none)
-- **Phase 1**: Adam warmup with configurable learning rates and switching criteria
+- **Phase 1**: L-BFGS warmup with configurable step sizes and switching criteria
 - **4-Layer Defense Strategy** (new in 0.3.6): Protection against warmup divergence
 - **Phase 2**: Streaming Gauss-Newton with trust region and regularization control
 - **Phase 3**: Denormalization and covariance transform settings
@@ -59,7 +59,7 @@ Fast convergence, more warmup, looser tolerances:
 
     config = HybridStreamingConfig.aggressive()
     # Larger warmup: 300-800 iterations
-    # Higher learning rate: 0.003
+    # Larger initial step size: 0.5
     # Larger chunks: 20000
     # Looser tolerances
 
@@ -72,7 +72,7 @@ Slower but robust, tighter tolerances:
 
     config = HybridStreamingConfig.conservative()
     # Smaller warmup: 100-300 iterations
-    # Lower learning rate: 0.0003
+    # Smaller initial step size: 0.05
     # Tighter tolerance: 1e-10
     # Smaller trust region: 0.5
 
@@ -102,7 +102,7 @@ Maximum protection for near-optimal scenarios (warm starts, refinement):
 
     config = HybridStreamingConfig.defense_strict()
     # Very low warm start threshold (1%)
-    # Ultra-conservative learning rates
+    # Ultra-conservative step sizes
     # Tight cost guard tolerance (5%)
     # Very small step clipping (0.05)
 
@@ -122,7 +122,7 @@ Relaxed protection for exploration-heavy scenarios:
 
     config = HybridStreamingConfig.defense_relaxed()
     # High warm start threshold (50%)
-    # Aggressive learning rates
+    # Aggressive step sizes
     # Generous cost guard tolerance (50%)
     # Larger step clipping (0.5)
 
@@ -198,10 +198,14 @@ Fine-tune specific parameters:
         # Normalization
         normalize=True,
         normalization_strategy="bounds",  # 'auto', 'bounds', 'p0', 'none'
-        # Phase 1: Adam warmup
+        # Phase 1: L-BFGS warmup
         warmup_iterations=300,
         max_warmup_iterations=800,
-        warmup_learning_rate=0.01,
+        lbfgs_history_size=15,
+        lbfgs_initial_step_size=0.5,
+        lbfgs_line_search="backtracking",
+        lbfgs_exploration_step_size=0.1,
+        lbfgs_refinement_step_size=1.0,
         loss_plateau_threshold=5e-4,
         gradient_norm_threshold=5e-3,
         # Phase 2: Gauss-Newton
@@ -256,20 +260,19 @@ Control when Phase 1 switches to Phase 2:
         max_warmup_iterations=500,
     )
 
-Optax Enhancements
-~~~~~~~~~~~~~~~~~~
+L-BFGS Options
+~~~~~~~~~~~~~~
 
-Enable advanced Adam features:
+Configure L-BFGS behavior and line search:
 
 .. code-block:: python
 
     config = HybridStreamingConfig(
-        # Learning rate schedule with warmup and decay
-        use_learning_rate_schedule=True,
-        lr_schedule_warmup_steps=50,
-        lr_schedule_decay_steps=450,
-        lr_schedule_end_value=0.0001,
-        # Gradient clipping
+        lbfgs_history_size=10,
+        lbfgs_initial_step_size=0.1,
+        lbfgs_line_search="wolfe",  # "wolfe", "strong_wolfe", "backtracking"
+        lbfgs_exploration_step_size=0.1,
+        lbfgs_refinement_step_size=1.0,
         gradient_clip_value=1.0,
     )
 
@@ -293,8 +296,8 @@ Phase 0: Normalization
      - ``'auto'``
      - Strategy: 'auto', 'bounds', 'p0', 'none'
 
-Phase 1: Adam Warmup
-~~~~~~~~~~~~~~~~~~~~
+Phase 1: L-BFGS Warmup
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
    :widths: 25 15 60
@@ -309,9 +312,21 @@ Phase 1: Adam Warmup
    * - ``max_warmup_iterations``
      - 500
      - Maximum warmup before forced switch
-   * - ``warmup_learning_rate``
-     - 0.001
-     - Adam learning rate
+   * - ``lbfgs_history_size``
+     - 10
+     - L-BFGS history size
+   * - ``lbfgs_initial_step_size``
+     - 0.1
+     - Initial step size for L-BFGS line search
+   * - ``lbfgs_line_search``
+     - ``'wolfe'``
+     - Line search strategy ('wolfe', 'strong_wolfe', 'backtracking')
+   * - ``lbfgs_exploration_step_size``
+     - 0.1
+     - Step size for exploration mode
+   * - ``lbfgs_refinement_step_size``
+     - 1.0
+     - Step size for refinement mode
    * - ``loss_plateau_threshold``
      - 1e-4
      - Relative loss improvement for plateau detection
@@ -338,18 +353,18 @@ Phase 1: Adam Warmup
    * - ``warm_start_threshold``
      - 0.01
      - Relative loss threshold (skip if < threshold)
-   * - **Layer 2: Adaptive Learning Rate**
+   * - **Layer 2: Adaptive Step Size**
      -
      -
    * - ``enable_adaptive_warmup_lr``
      - ``True``
-     - Enable/disable adaptive LR selection
+     - Enable/disable adaptive step size selection
    * - ``warmup_lr_refinement``
      - 1e-6
-     - LR for excellent fits (relative_loss < 0.1)
+     - Step size for excellent fits (relative_loss < 0.1)
    * - ``warmup_lr_careful``
      - 1e-5
-     - LR for good fits (0.1 ≤ relative_loss < 1.0)
+     - Step size for good fits (0.1 ≤ relative_loss < 1.0)
    * - **Layer 3: Cost-Increase Guard**
      -
      -

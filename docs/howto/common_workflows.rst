@@ -105,7 +105,7 @@ Warm-start refinement (v0.3.6+)
 -------------------------------
 
 Use this when refining parameters from a previous fit. The 4-Layer Defense
-Strategy prevents Adam warmup from overshooting when starting near the optimum.
+Strategy prevents L-BFGS warmup from overshooting when starting near the optimum.
 
 .. code-block:: yaml
 

@@ -125,7 +125,7 @@ AdaptiveHybridStreamingOptimizer
 Production-grade optimizer with four-phase optimization:
 
 1. **Parameter normalization**: Scales parameters for stability
-2. **Adam warmup**: Fast initial convergence
+2. **L-BFGS warmup**: Fast initial convergence
 3. **Streaming Gauss-Newton**: Precise refinement
 4. **Exact covariance**: Accurate uncertainty estimates
 

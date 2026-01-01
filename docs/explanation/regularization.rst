@@ -58,10 +58,10 @@ where:
 
 The variance penalty is added in two phases:
 
-Phase 1 (Adam Warmup)
+Phase 1 (L-BFGS Warmup)
 ~~~~~~~~~~~~~~~~~~~~~
 
-During Adam warmup, the loss function directly includes the variance penalty:
+During L-BFGS warmup, the loss function directly includes the variance penalty:
 
 .. code-block:: python
 

@@ -29,14 +29,14 @@ Typical workflow lifecycle
 ------------------------
 
 Starting in v0.3.6, all workflows using ``hybrid_streaming`` or
-``AdaptiveHybridStreamingOptimizer`` include a 4-layer defense against Adam
+``AdaptiveHybridStreamingOptimizer`` include a 4-layer defense against L-BFGS
 warmup divergence. This is particularly important for **warm-start refinement**
 scenarios where initial parameters are already near optimal.
 
 The layers activate automatically:
 
 1. **Warm Start Detection**: Skips warmup if initial loss < 1% of data variance
-2. **Adaptive Learning Rate**: Scales LR based on fit quality (1e-6 to 0.001)
+2. **Adaptive Step Size**: Scales step size based on fit quality (1e-6 to 0.001)
 3. **Cost-Increase Guard**: Aborts if loss increases > 5%
 4. **Step Clipping**: Limits parameter update magnitude (max norm 0.1)
 

@@ -47,7 +47,7 @@ Tools for fitting very large datasets (10M+ points):
 Adaptive Hybrid Streaming (v0.3.0+)
 -----------------------------------
 
-Four-phase hybrid optimizer with parameter normalization, Adam warmup,
+Four-phase hybrid optimizer with parameter normalization, L-BFGS warmup,
 streaming Gauss-Newton, and exact covariance computation:
 
 .. toctree::

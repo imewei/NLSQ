@@ -39,7 +39,7 @@ See :doc:`large_datasets_api` for detailed documentation.
 Adaptive Hybrid Streaming API
 -----------------------------
 
-Four-phase hybrid optimizer combining parameter normalization, Adam warmup,
+Four-phase hybrid optimizer combining parameter normalization, L-BFGS warmup,
 streaming Gauss-Newton, and exact covariance computation:
 
 - :class:`nlsq.AdaptiveHybridStreamingOptimizer` - Main optimizer class

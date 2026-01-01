@@ -16,7 +16,7 @@ Defense Layers
 The telemetry system monitors four defense layers:
 
 1. **Layer 1 - Warm Start**: Detects when initial parameters are close to optimal
-2. **Layer 2 - Adaptive Learning Rate**: Monitors learning rate adjustments
+2. **Layer 2 - Adaptive Step Size**: Monitors step size adjustments
 3. **Layer 3 - Cost Guard**: Tracks cost increase rejections
 4. **Layer 4 - Step Clipping**: Records step size limiting events
 

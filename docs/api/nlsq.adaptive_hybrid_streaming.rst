@@ -23,14 +23,14 @@ Key Features
 
 - **Four-phase optimization**: Automatic phase transitions for optimal convergence
 - **Parameter normalization**: Address gradient signal weakness from scale imbalance
-- **Adam warmup**: First-order optimization with 4-layer divergence protection
+- **L-BFGS warmup**: Quasi-Newton optimization with 4-layer divergence protection
 - **Streaming Gauss-Newton**: Second-order convergence with streaming J^T J
 - **Exact covariance**: Production-quality uncertainty estimates
 - **Fault tolerance**: Checkpointing, validation, and automatic recovery
 - **Multi-device support**: GPU/TPU parallelism for large datasets
 - **Defense telemetry**: Production monitoring of warmup protection layers
 
-**New in version 0.3.6**: 4-Layer Defense Strategy for Adam warmup divergence prevention.
+**New in version 0.3.6**: 4-Layer Defense Strategy for warmup divergence prevention.
 
 Optimization Phases
 -------------------
@@ -46,17 +46,16 @@ Sets up parameter normalization to address gradient signal weakness:
 - Transforms bounds to normalized space
 - Stores normalization Jacobian for Phase 3
 
-Phase 1: Adam Warmup with 4-Layer Defense
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 1: L-BFGS Warmup with 4-Layer Defense
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First-order optimization with adaptive switching and divergence protection:
 
-- Uses Optax Adam optimizer with configurable learning rate
-- Optional learning rate schedule with warmup and decay
+- Uses Optax L-BFGS optimizer with line search and configurable step sizes
 - **4-Layer Defense Strategy** (new in 0.3.6):
 
   1. **Warm Start Detection**: Skip warmup if initial loss already low
-  2. **Adaptive Learning Rate**: Scale LR based on initial loss quality
+  2. **Adaptive Step Size**: Scale step size based on initial loss quality
   3. **Cost-Increase Guard**: Abort if loss increases beyond tolerance
   4. **Step Clipping**: Limit update magnitude for stability
 
@@ -345,8 +344,8 @@ Optimization Flow
            │
            ▼
     ┌──────────────────────────────────────┐
-    │  Phase 1: Adam Warmup                │
-    │  - Optax Adam optimizer              │
+    │  Phase 1: L-BFGS Warmup              │
+    │  - Optax L-BFGS optimizer            │
     │  - Monitor loss/gradient             │
     │  - Check switching criteria          │
     └──────────────────────────────────────┘
@@ -402,7 +401,7 @@ Performance Characteristics
 Convergence Speed
 ~~~~~~~~~~~~~~~~~
 
-- **Phase 1 (Adam)**: Linear convergence, robust to initialization
+- **Phase 1 (L-BFGS)**: Superlinear convergence, robust to initialization
 - **Phase 2 (Gauss-Newton)**: Quadratic convergence near optimum
 - **Overall**: Faster than pure first-order or pure second-order
 

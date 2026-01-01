@@ -158,7 +158,7 @@ streaming optimizer:
 
 This optimizer uses a 4-phase approach:
 
-1. **Adam warmup**: Fast initial convergence
+1. **L-BFGS warmup**: Fast initial convergence
 2. **Gauss-Newton refinement**: Precise parameter estimation
 3. **Multi-start verification**: Avoid local minima
 4. **Covariance calculation**: Accurate uncertainties
