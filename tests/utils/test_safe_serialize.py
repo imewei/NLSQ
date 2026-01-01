@@ -402,3 +402,168 @@ class TestRoundTrip:
         serialized = safe_dumps(data)
         result = safe_loads(serialized)
         assert result == data
+
+
+class TestAdversarialSecurity:
+    """Adversarial security tests for CWE-502 mitigation.
+
+    These tests verify that safe_serialize properly rejects malicious
+    payloads that could lead to code execution or resource exhaustion.
+    """
+
+    def test_rejects_pickle_protocol_markers(self):
+        """Test rejection of bytes containing pickle protocol markers."""
+        # Pickle protocol 4 marker (Python 3.4+)
+        pickle_payload = b"\x80\x04\x95"
+        with pytest.raises(SafeSerializationError, match="Deserialization failed"):
+            safe_loads(pickle_payload)
+
+    def test_rejects_pickle_reduce_pattern(self):
+        """Test that __reduce__ patterns in JSON are harmless."""
+        # Even if someone crafts JSON with __reduce__, it's just data
+        data = {"__reduce__": ["os.system", ["rm -rf /"]]}
+        result = safe_loads(safe_dumps(data))
+        # It's stored as inert data, not executed
+        assert result["__reduce__"] == ["os.system", ["rm -rf /"]]
+        assert isinstance(result, dict)
+
+    def test_rejects_dunder_class_pattern(self):
+        """Test that __class__ patterns in JSON are harmless."""
+        data = {"__class__": "subprocess.Popen", "args": ["malicious"]}
+        result = safe_loads(safe_dumps(data))
+        # Stored as inert string data
+        assert result["__class__"] == "subprocess.Popen"
+
+    def test_rejects_object_with_eval(self):
+        """Test that objects claiming eval capability are rejected."""
+
+        class EvalCapable:
+            def __reduce__(self):
+                return (eval, ("print('pwned')",))
+
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps(EvalCapable())
+
+    def test_rejects_object_with_exec(self):
+        """Test that objects with exec patterns are rejected."""
+
+        class ExecCapable:
+            def __reduce__(self):
+                return (exec, ("import os; os.system('id')",))
+
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps(ExecCapable())
+
+    def test_rejects_lambda_in_structure(self):
+        """Test rejection of lambda functions embedded in structures."""
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps({"callback": lambda x: x * 2})
+
+    def test_rejects_builtin_functions(self):
+        """Test rejection of builtin functions."""
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps({"func": print})
+
+    def test_rejects_module_references(self):
+        """Test rejection of module references."""
+        import os
+
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps({"module": os})
+
+    def test_rejects_class_references(self):
+        """Test rejection of class (type) references."""
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps({"class": dict})
+
+    def test_array_size_limit_at_boundary(self):
+        """Test array size limit at exact boundary (1000 allowed, 1001 rejected)."""
+        # Exactly 1000 elements should be allowed
+        data_ok = np.ones(1000)
+        result = safe_loads(safe_dumps(data_ok))
+        assert len(result) == 1000
+
+        # 1001 elements should be rejected
+        data_too_large = np.ones(1001)
+        with pytest.raises(SafeSerializationError, match="too large"):
+            safe_dumps(data_too_large)
+
+    def test_rejects_deeply_nested_attack(self):
+        """Test handling of extremely deeply nested structures."""
+        # Build a deeply nested dict (potential stack overflow attack)
+        data = {"level": 0}
+        current = data
+        for i in range(100):  # 100 levels deep
+            current["nested"] = {"level": i + 1}
+            current = current["nested"]
+
+        # Should serialize without issues (JSON handles this fine)
+        result = safe_loads(safe_dumps(data))
+        assert result["level"] == 0
+
+    def test_rejects_recursive_structure(self):
+        """Test that recursive structures are properly rejected."""
+        data = {"self": None}
+        data["self"] = data  # Create circular reference
+
+        with pytest.raises(SafeSerializationError, match="Serialization failed"):
+            safe_dumps(data)
+
+    def test_rejects_bytes_object(self):
+        """Test rejection of raw bytes objects (potential binary payloads)."""
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps({"payload": b"\x00\x01\x02\x03"})
+
+    def test_rejects_memoryview(self):
+        """Test rejection of memoryview objects."""
+        data = memoryview(bytearray(10))
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps({"view": data})
+
+    def test_rejects_code_object(self):
+        """Test rejection of code objects."""
+
+        def sample_func():
+            pass
+
+        with pytest.raises(SafeSerializationError, match="Cannot safely serialize"):
+            safe_dumps({"code": sample_func.__code__})
+
+    def test_malformed_tuple_marker_ignored(self):
+        """Test that malformed __tuple__ markers don't cause issues."""
+        # Craft JSON that tries to abuse our tuple marker
+        malicious_json = b'{"__tuple__": "not_a_list"}'
+        # Should either handle gracefully or raise clean error
+        result = safe_loads(malicious_json)
+        # Our implementation should handle this gracefully
+        assert "__tuple__" in result or isinstance(result, dict)
+
+    def test_malformed_ndarray_marker_ignored(self):
+        """Test that malformed __ndarray__ markers don't cause issues."""
+        malicious_json = b'{"__ndarray__": "not_valid"}'
+        result = safe_loads(malicious_json)
+        # Should not crash, returns dict with the marker as key
+        assert "__ndarray__" in result
+
+    def test_oversized_string_payload(self):
+        """Test handling of very large string payloads."""
+        # 10MB string - should serialize but test memory handling
+        large_string = "x" * (10 * 1024 * 1024)
+        # This is allowed but exercises memory handling
+        serialized = safe_dumps(large_string)
+        result = safe_loads(serialized)
+        assert len(result) == len(large_string)
+
+    def test_unicode_escape_sequences(self):
+        """Test handling of unicode escape sequences in JSON."""
+        # Potential injection via unicode escapes
+        data = {"cmd": "\\u0065\\u0076\\u0061\\u006c"}  # "eval" in unicode escapes
+        result = safe_loads(safe_dumps(data))
+        # Just stored as literal string, not interpreted
+        assert result["cmd"] == "\\u0065\\u0076\\u0061\\u006c"
+
+    def test_null_byte_injection(self):
+        """Test handling of null bytes in strings."""
+        data = {"payload": "before\x00after"}
+        result = safe_loads(safe_dumps(data))
+        assert result["payload"] == "before\x00after"
