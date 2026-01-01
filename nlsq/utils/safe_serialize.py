@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["safe_dumps", "safe_loads", "SafeSerializationError"]
+__all__ = ["SafeSerializationError", "safe_dumps", "safe_loads"]
 
 
 class SafeSerializationError(Exception):
@@ -199,6 +199,10 @@ def safe_dumps(obj: Any) -> bytes:
     try:
         serializable = _convert_to_serializable(obj)
         return json.dumps(serializable, separators=(",", ":")).encode("utf-8")
+    except RecursionError as e:
+        raise SafeSerializationError(
+            "Serialization failed: circular reference detected"
+        ) from e
     except (TypeError, ValueError) as e:
         raise SafeSerializationError(f"Serialization failed: {e}") from e
 
