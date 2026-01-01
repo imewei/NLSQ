@@ -16,7 +16,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 #
 # - **MemoryPool**: Pre-allocated memory buffers for zero-allocation optimization iterations
 # - **SparseJacobian**: Exploit sparsity patterns for 10-100x memory reduction
-# - **StreamingOptimizer**: Process unlimited dataset sizes with batch streaming
+# - **AdaptiveHybridStreamingOptimizer**: Process huge datasets with streaming
 #
 # These features are essential for:
 # - Very large problems (millions of data points)
@@ -60,20 +60,16 @@ print(f"JAX devices: {jax.devices()}")
 
 # Import advanced performance features
 from nlsq import (
-    DataGenerator,
+    AdaptiveHybridStreamingOptimizer,
+    HybridStreamingConfig,
     # Memory Pool
     MemoryPool,
     # Sparse Jacobian
     SparseJacobianComputer,
     SparseOptimizer,
-    StreamingConfig,
-    # Streaming Optimizer
-    StreamingOptimizer,
     TRFMemoryPool,
     clear_global_pool,
-    create_hdf5_dataset,
     detect_jacobian_sparsity,
-    fit_unlimited_data,
     get_global_pool,
 )
 
@@ -533,205 +529,53 @@ demo_sparse_jacobian_fitting()
 
 
 # ======================================================================
-# ## 3. StreamingOptimizer - Unlimited Dataset Size
+# ## 3. Adaptive Hybrid Streaming - Huge Dataset Size
 #
-# The `StreamingOptimizer` processes data in batches without ever loading the full dataset into memory. This enables:
+# The adaptive hybrid streaming optimizer processes data in chunks while
+# providing L-BFGS warmup and Gauss-Newton refinement.
 #
-# - **Unlimited dataset size**: Process datasets larger than available RAM
-# - **Real-time learning**: Update model as new data arrives
-# - **Incremental fitting**: Add data incrementally without refitting from scratch
-# - **Distributed data**: Data stored across multiple files or databases
-#
-# ### When to Use Streaming
-#
-# - **Very large datasets**: >10GB of data
-# - **Data on disk**: HDF5 files, databases, etc.
-# - **Memory constraints**: Limited RAM relative to data size
-# - **Online learning**: Continuous data streams
+# - **Huge dataset size**: Process datasets larger than RAM with bounded memory
+# - **Accurate covariance**: Exact J^T J accumulation
+# - **Defense layers**: Protects warmup from divergence
 # ======================================================================
 
 
-def demo_streaming_optimizer_basics():
-    """Demonstrate basic streaming optimizer usage."""
+def demo_adaptive_hybrid_streaming():
+    """Demonstrate adaptive hybrid streaming usage."""
     print("=" * 70)
-    print("STREAMING OPTIMIZER BASICS")
+    print("ADAPTIVE HYBRID STREAMING")
     print("=" * 70)
 
-    # Create a data generator that simulates streaming data
-    class SimpleDataGenerator:
-        """Generator that simulates reading data in batches."""
-
-        def __init__(self, total_size, true_params):
-            self.total_size = total_size
-            self.true_params = true_params
-            self.current_pos = 0
-
-        def generate_batches(self, batch_size):
-            """Generate batches of data on the fly."""
-            np.random.seed(42)  # Consistent data
-
-            while self.current_pos < self.total_size:
-                # Determine batch size
-                actual_size = min(batch_size, self.total_size - self.current_pos)
-
-                # Generate batch
-                x_start = self.current_pos / self.total_size * 10
-                x_end = (self.current_pos + actual_size) / self.total_size * 10
-                x_batch = np.linspace(x_start, x_end, actual_size)
-
-                # Model: y = a*exp(-b*x) + c
-                a, b, c = self.true_params
-                y_batch = a * np.exp(-b * x_batch) + c
-                y_batch += np.random.normal(0, 0.05, actual_size)
-
-                self.current_pos += actual_size
-
-                yield x_batch, y_batch
-
-            # Reset for next epoch
-            self.current_pos = 0
-
-        def close(self):
-            """Cleanup (required by interface)."""
-
-    # Define model
     def exponential_model(x, a, b, c):
         return a * np.exp(-b * x) + c
 
-    # Create streaming optimizer
-    print("\n--- Setting up Streaming Optimizer ---")
-    config = StreamingConfig(
-        batch_size=1000,
-        max_epochs=5,
-        learning_rate=0.01,
-        use_adam=True,
-        convergence_tol=1e-6,
-    )
-
-    StreamingOptimizer(config)
-
     # Simulate large dataset
-    total_data_size = cap_samples(50_000)  # processed in batches
+    total_data_size = cap_samples(50_000)
     true_params = [5.0, 1.2, 0.5]
 
-    print(f"Total dataset size: {total_data_size:,} points")
-    print(f"Batch size: {config.batch_size}")
-    print(f"Max epochs: {config.max_epochs}")
-    print(f"Optimizer: {'Adam' if config.use_adam else 'SGD'}")
+    x_data = np.linspace(0, 10, total_data_size)
+    y_data = exponential_model(x_data, *true_params)
+    y_data += np.random.normal(0, 0.05, total_data_size)
 
-    # Create data source
-    SimpleDataGenerator(total_data_size, true_params)
+    config = HybridStreamingConfig(
+        chunk_size=1000,
+        gauss_newton_max_iterations=10,
+    )
+    optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-    # Initial guess
     p0 = np.array([4.0, 1.0, 0.4])
 
-    print(f"\nTrue parameters: {true_params}")
+    result = optimizer.fit((x_data, y_data), exponential_model, p0=p0, verbose=0)
+
+    print(f"Total dataset size: {total_data_size:,} points")
+    print(f"Chunk size: {config.chunk_size}")
     print(f"Initial guess: {list(p0)}")
-
-    # Note: This is a simplified demo. The actual fit_streaming method
-    # expects a DataGenerator object
-    print("\n⚠️  Note: Full streaming optimizer requires proper DataGenerator setup")
-    print("     See documentation for production usage with HDF5 files")
-    print("\n✅ Streaming optimizer configuration demo complete")
+    print(f"Fitted params: {result['x']}")
+    print("\n✅ Adaptive hybrid streaming demo complete")
 
 
 # Run demo
-demo_streaming_optimizer_basics()
-
-
-# ======================================================================
-# ### Creating and Using HDF5 Datasets
-# ======================================================================
-
-
-def demo_hdf5_streaming():
-    """Demonstrate HDF5-based streaming for very large datasets."""
-    print("=" * 70)
-    print("HDF5 STREAMING DEMO")
-    print("=" * 70)
-
-    try:
-        import h5py
-
-        print("✓ h5py available")
-    except ImportError:
-        print("⚠️  h5py not installed. Install with: pip install h5py")
-        print("   Skipping HDF5 demo")
-        return
-
-    # Create temporary HDF5 file with large dataset
-    import os
-    import tempfile
-
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".h5")  # noqa: SIM115
-    hdf5_path = temp_file.name
-    temp_file.close()
-
-    try:
-        # Generate large dataset and save to HDF5
-        print("\n--- Creating HDF5 dataset ---")
-        n_total = cap_samples(100_000)
-
-        # Use create_hdf5_dataset utility
-        def data_generator_func(n_points):
-            """Generate data for HDF5 file."""
-            np.random.seed(42)
-            x = np.linspace(0, 5, n_points)
-            y = 3.0 * np.exp(-1.5 * x) + 0.5 + np.random.normal(0, 0.05, n_points)
-            return x, y
-
-        x_data, y_data = data_generator_func(n_total)
-
-        # Save to HDF5
-        with h5py.File(hdf5_path, "w") as f:
-            f.create_dataset("x", data=x_data, compression="gzip")
-            f.create_dataset("y", data=y_data, compression="gzip")
-
-        file_size_mb = os.path.getsize(hdf5_path) / 1024**2
-        print(f"Created HDF5 file: {n_total:,} points, {file_size_mb:.2f} MB")
-
-        # Read in batches
-        print("\n--- Reading in batches ---")
-        batch_size = min(5000, max(50, n_total // 4))
-        n_batches = (n_total + batch_size - 1) // batch_size
-
-        batch_means = []
-
-        with h5py.File(hdf5_path, "r") as f:
-            x_dset = f["x"]
-            y_dset = f["y"]
-
-            for i in range(min(5, n_batches)):  # Show first 5 batches
-                start = i * batch_size
-                end = min((i + 1) * batch_size, n_total)
-
-                # Read only this batch
-                x_batch = x_dset[start:end]
-                y_batch = y_dset[start:end]
-
-                batch_mean = np.mean(y_batch)
-                batch_means.append(batch_mean)
-
-                print(
-                    f"  Batch {i + 1}: [{start:6,} - {end:6,}], mean={batch_mean:.4f}"
-                )
-
-        print(f"\n✅ Successfully processed {min(5, n_batches)} batches")
-        print(f"   Total batches available: {n_batches}")
-        print("\n💡 Key Benefits:")
-        print(f"   • Only {batch_size:,} points in memory at once")
-        print("   • Can process unlimited dataset size")
-        print("   • Efficient compression with HDF5")
-        print("   • Fast random access to any batch")
-
-    finally:
-        # Clean up temp file
-        if os.path.exists(hdf5_path):
-            os.unlink(hdf5_path)
-
-
-# Run demo
-demo_hdf5_streaming()
+demo_adaptive_hybrid_streaming()
 
 
 # ======================================================================
@@ -964,12 +808,12 @@ demo_combined_optimization()
 # - Small problems (<10K points)
 # - Simple global models
 #
-# #### StreamingOptimizer
+# #### AdaptiveHybridStreamingOptimizer
 # ✅ **Use when:**
 # - Dataset >10GB or doesn't fit in memory
-# - Data in files/databases
-# - Online/incremental learning
-# - Distributed data
+# - Multi-scale parameters need normalization
+# - You need covariance estimates at scale
+# - Long-running jobs need checkpointing
 #
 # ❌ **Don't use when:**
 # - Data fits in memory
@@ -1009,12 +853,12 @@ demo_combined_optimization()
 # # Use sparse-aware optimization
 # ```
 #
-# **Unlimited data:**
+# **Huge datasets:**
 # ```python
-# from nlsq import StreamingOptimizer, StreamingConfig
-# config = StreamingConfig(batch_size=10000)
-# optimizer = StreamingOptimizer(config)
-# result = optimizer.fit_streaming(func, data_source, p0)
+# from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
+# config = HybridStreamingConfig(chunk_size=10000)
+# optimizer = AdaptiveHybridStreamingOptimizer(config)
+# result = optimizer.fit((x, y), func, p0=p0)
 # ```
 # ======================================================================
 
@@ -1034,10 +878,10 @@ demo_combined_optimization()
 # - Memory reduction: 10-100x for sparse problems
 # - Enables problems that wouldn't fit in memory
 #
-# ✅ **StreamingOptimizer**
-# - Process unlimited dataset sizes
-# - Batch-based processing with adaptive learning
-# - Suitable for >10GB datasets or online learning
+# ✅ **AdaptiveHybridStreamingOptimizer**
+# - Process huge dataset sizes with bounded memory
+# - L-BFGS warmup + streaming Gauss-Newton refinement
+# - Suitable for >10GB datasets or long-running pipelines
 #
 # ### Key Takeaways
 #
