@@ -28,7 +28,7 @@ from enum import Enum, auto
 
 import jax.numpy as jnp
 import numpy as np
-from jax import device_put
+from jax import device_put, lax
 
 __all__ = [
     "BestParameterTracker",
@@ -516,12 +516,13 @@ class PrecisionUpgrader:
             self.logger.warning("State already in float64, no upgrade needed")
             return state
 
-        # Zero-copy dtype conversion using JAX device_put
+        # Zero-copy dtype conversion using JAX lax.convert_element_type
+        # (avoids host-device round-trip from device_put + astype)
         upgraded = OptimizationState(
-            x=device_put(state.x.astype(jnp.float64)),
-            f=device_put(state.f.astype(jnp.float64)),
-            J=device_put(state.J.astype(jnp.float64)),
-            g=device_put(state.g.astype(jnp.float64)),
+            x=lax.convert_element_type(state.x, jnp.float64),
+            f=lax.convert_element_type(state.f, jnp.float64),
+            J=lax.convert_element_type(state.J, jnp.float64),
+            g=lax.convert_element_type(state.g, jnp.float64),
             cost=float(state.cost),  # Scalar, no conversion needed
             trust_radius=float(state.trust_radius),
             iteration=state.iteration,  # Preserve iteration count!
@@ -551,11 +552,12 @@ class PrecisionUpgrader:
         if state.dtype == jnp.float32:
             return state
 
+        # Zero-copy dtype conversion using JAX lax.convert_element_type
         downgraded = OptimizationState(
-            x=device_put(state.x.astype(jnp.float32)),
-            f=device_put(state.f.astype(jnp.float32)),
-            J=device_put(state.J.astype(jnp.float32)),
-            g=device_put(state.g.astype(jnp.float32)),
+            x=lax.convert_element_type(state.x, jnp.float32),
+            f=lax.convert_element_type(state.f, jnp.float32),
+            J=lax.convert_element_type(state.J, jnp.float32),
+            g=lax.convert_element_type(state.g, jnp.float32),
             cost=float(state.cost),
             trust_radius=float(state.trust_radius),
             iteration=state.iteration,
