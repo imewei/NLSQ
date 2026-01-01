@@ -58,7 +58,7 @@ Quick Links
 **Utilities**
 
 - :doc:`/api/nlsq.validators` - Input validation
-- :doc:`/api/nlsq.diagnostics` - Convergence monitoring
+- :doc:`/api/nlsq.diagnostics` - Model Health Diagnostics (identifiability, gradient health, sloppy models)
 - :doc:`/api/nlsq.callbacks` - Progress callbacks
 
 Full Module Documentation

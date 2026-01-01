@@ -69,7 +69,7 @@ Advanced Features
 - ``nlsq.memory_manager`` - Memory management
 - ``nlsq.mixed_precision`` - Automatic mixed precision management
 - ``nlsq.smart_cache`` - Intelligent caching
-- ``nlsq.diagnostics`` - Performance monitoring
+- ``nlsq.diagnostics`` - Model Health Diagnostics System (identifiability, gradient health, sloppy model analysis)
 - ``nlsq.adaptive_hybrid_streaming`` - Four-phase hybrid optimizer
 - ``nlsq.hybrid_streaming_config`` - Hybrid streaming configuration
 - ``nlsq.parameter_normalizer`` - Parameter normalization

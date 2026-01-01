@@ -195,6 +195,7 @@ See the [GUI User Guide](docs/gui_user_guide.md) for detailed documentation.
 | **Workflow system** | Auto-selects strategy based on dataset size |
 | **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |
 | **Interactive GUI** | No-code curve fitting with Streamlit interface |
+| **Model Diagnostics** | Identifiability analysis, gradient health monitoring, sloppy model detection |
 
 ## Performance
 
@@ -310,6 +311,51 @@ nlsq info
 ```
 
 See [CLI Reference](https://nlsq.readthedocs.io/en/latest/user_guide/cli_reference.html) for YAML configuration.
+
+</details>
+
+<details>
+<summary><b>Model health diagnostics</b></summary>
+
+```python
+from nlsq.diagnostics import (
+    DiagnosticsConfig,
+    IdentifiabilityAnalyzer,
+    GradientMonitor,
+    SloppyModelAnalyzer,
+    create_health_report,
+)
+
+# Analyze parameter identifiability from Jacobian
+config = DiagnosticsConfig(condition_threshold=1e8, correlation_threshold=0.95)
+analyzer = IdentifiabilityAnalyzer(config)
+report = analyzer.analyze(result.jac)
+
+print(f"Condition number: {report.condition_number:.2e}")
+print(f"Numerical rank: {report.numerical_rank}/{report.n_params}")
+
+# Monitor gradient health during optimization
+monitor = GradientMonitor(config)
+callback = monitor.create_callback()
+result = curve_fit(model, x, y, p0=p0, callback=callback)
+grad_report = monitor.get_report()
+
+# Detect sloppy model behavior
+sloppy_analyzer = SloppyModelAnalyzer(config)
+sloppy_report = sloppy_analyzer.analyze(result.jac)
+print(f"Is sloppy: {sloppy_report.is_sloppy}")
+print(f"Effective dimensionality: {sloppy_report.effective_dimensionality:.1f}")
+
+# Create aggregated health report
+health_report = create_health_report(
+    identifiability=report,
+    gradient_health=grad_report,
+    sloppy_model=sloppy_report,
+)
+print(health_report.summary())
+```
+
+See [Diagnostics API](https://nlsq.readthedocs.io/en/latest/api/nlsq.diagnostics.html) for complete documentation.
 
 </details>
 

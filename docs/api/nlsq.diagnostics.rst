@@ -1,251 +1,440 @@
-nlsq.diagnostics module
-========================
+nlsq.diagnostics package
+=========================
 
-.. currentmodule:: nlsq.utils.diagnostics
+.. currentmodule:: nlsq.diagnostics
 
-.. automodule:: nlsq.utils.diagnostics
+.. automodule:: nlsq.diagnostics
    :noindex:
 
 Overview
 --------
 
-The ``nlsq.diagnostics`` module provides comprehensive optimization monitoring and diagnostic
-reporting. It helps track convergence, detect problems, and analyze optimization performance.
+The ``nlsq.diagnostics`` package provides a comprehensive **Model Health Diagnostics System**
+for nonlinear least squares curve fitting. It helps users understand why a fit may have
+issues and provides actionable recommendations for improving results.
 
-Key Features
+Key Capabilities
+----------------
+
+- **Identifiability Analysis** - Detect structural and practical parameter unidentifiability
+- **Gradient Health Monitoring** - Track gradient behavior during optimization
+- **Sloppy Model Analysis** - Identify stiff vs sloppy parameter directions
+- **Health Reports** - Aggregated diagnostics with severity-based issue categorization
+- **Plugin System** - Extensible architecture for domain-specific diagnostics
+
+Quick Start
+-----------
+
+.. code-block:: python
+
+    from nlsq import curve_fit
+    from nlsq.diagnostics import DiagnosticsConfig
+
+    # Enable diagnostics during fitting
+    result = curve_fit(model, x, y, p0=p0, compute_diagnostics=True)
+
+    # Access the health report
+    if result.diagnostics is not None:
+        print(result.diagnostics.summary())
+
+Enumerations
 ------------
 
-- **Real-time convergence monitoring** with pattern detection
-- **Automatic problem detection** (oscillation, stagnation, divergence)
-- **Performance metrics** tracking (timing, memory, function calls)
-- **Detailed reporting** with summary statistics
-- **Convergence visualization** with matplotlib integration
+.. autosummary::
+   :toctree: generated/
 
-Classes
--------
+   HealthStatus
+   IssueSeverity
+   IssueCategory
+   DiagnosticLevel
+
+Types and Data Classes
+----------------------
 
 .. autosummary::
    :toctree: generated/
    :template: class.rst
 
-   ConvergenceMonitor
-   OptimizationDiagnostics
+   ModelHealthIssue
+   AnalysisResult
+   IdentifiabilityReport
+   GradientHealthReport
+   SloppyModelReport
+   PluginResult
+   DiagnosticsReport
+   DiagnosticsConfig
+   ModelHealthReport
 
-Functions
----------
+Analyzer Classes
+----------------
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   IdentifiabilityAnalyzer
+   GradientMonitor
+   SloppyModelAnalyzer
+
+Plugin System
+-------------
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   DiagnosticPlugin
+   PluginRegistry
 
 .. autosummary::
    :toctree: generated/
 
-   get_diagnostics
-   reset_diagnostics
+   run_plugins
+
+Factory Functions
+-----------------
+
+.. autosummary::
+   :toctree: generated/
+
+   create_health_report
+
+Recommendations
+---------------
+
+.. autosummary::
+   :toctree: generated/
+
+   RECOMMENDATIONS
+   get_recommendation
+
+Issue Codes Reference
+---------------------
+
+The diagnostics system uses structured issue codes to identify specific problems:
+
+**Identifiability Issues (IDENT-xxx)**
+
+.. list-table::
+   :widths: 15 15 70
+   :header-rows: 1
+
+   * - Code
+     - Severity
+     - Description
+   * - IDENT-001
+     - CRITICAL
+     - Structural unidentifiability: FIM is rank-deficient
+   * - IDENT-002
+     - WARNING
+     - Practical unidentifiability: FIM has high condition number
+
+**Correlation Issues (CORR-xxx)**
+
+.. list-table::
+   :widths: 15 15 70
+   :header-rows: 1
+
+   * - Code
+     - Severity
+     - Description
+   * - CORR-001
+     - WARNING
+     - Highly correlated parameters detected
+
+**Gradient Issues (GRAD-xxx)**
+
+.. list-table::
+   :widths: 15 15 70
+   :header-rows: 1
+
+   * - Code
+     - Severity
+     - Description
+   * - GRAD-001
+     - WARNING
+     - Vanishing gradients detected during optimization
+   * - GRAD-002
+     - WARNING
+     - Gradient imbalance across parameters
+   * - GRAD-003
+     - WARNING
+     - Gradient stagnation detected
+
+**Sloppy Model Issues (SLOPPY-xxx)**
+
+.. list-table::
+   :widths: 15 15 70
+   :header-rows: 1
+
+   * - Code
+     - Severity
+     - Description
+   * - SLOPPY-001
+     - WARNING
+     - Sloppy model behavior detected (wide eigenvalue spread)
+   * - SLOPPY-002
+     - INFO
+     - Low effective dimensionality
 
 Usage Examples
 --------------
 
-Basic Diagnostics
-~~~~~~~~~~~~~~~~~
+Identifiability Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use the global diagnostics instance to track optimization:
-
-.. code-block:: python
-
-    from nlsq.diagnostics import get_diagnostics, reset_diagnostics
-    import jax.numpy as jnp
-
-    # Reset diagnostics for new optimization
-    reset_diagnostics()
-    diag = get_diagnostics()
-
-    # Start tracking
-    diag.start_optimization(p0, problem_name="My Optimization")
-
-    # Record iterations (done automatically by curve_fit)
-    # ... optimization happens ...
-
-    # Get summary
-    stats = diag.get_summary_statistics()
-    print(f"Total iterations: {stats['total_iterations']}")
-    print(f"Final cost: {stats['final_cost']:.6e}")
-
-    # Generate report
-    report = diag.generate_report()
-    print(report)
-
-Convergence Monitoring
-~~~~~~~~~~~~~~~~~~~~~~
-
-Monitor convergence patterns during optimization:
+Analyze parameter identifiability from a Jacobian matrix:
 
 .. code-block:: python
 
-    from nlsq.diagnostics import ConvergenceMonitor
+    import numpy as np
+    from nlsq.diagnostics import DiagnosticsConfig, IdentifiabilityAnalyzer
 
-    monitor = ConvergenceMonitor(window_size=10, sensitivity=1.0)
+    # Configure analysis thresholds
+    config = DiagnosticsConfig(
+        condition_threshold=1e8,
+        correlation_threshold=0.95,
+    )
 
-    # Update with each iteration
-    for iteration in range(max_iter):
-        # ... perform optimization step ...
-        monitor.update(cost, params, gradient, step_size)
+    # Create analyzer
+    analyzer = IdentifiabilityAnalyzer(config)
 
-        # Check for problems
-        is_oscillating, osc_score = monitor.detect_oscillation()
-        if is_oscillating:
-            print(f"Warning: Oscillation detected (score={osc_score:.2f})")
+    # Analyze Jacobian (typically from OptimizeResult.jac)
+    jacobian = result.jac  # Shape: (n_data, n_params)
+    report = analyzer.analyze(jacobian)
 
-        is_stagnant, stag_score = monitor.detect_stagnation()
-        if is_stagnant:
-            print(f"Warning: Stagnation detected (score={stag_score:.2f})")
+    print(f"Condition number: {report.condition_number:.2e}")
+    print(f"Numerical rank: {report.numerical_rank}/{report.n_params}")
+    print(f"Health status: {report.health_status.name}")
 
-        is_diverging, div_score = monitor.detect_divergence()
-        if is_diverging:
-            print(f"Warning: Divergence detected (score={div_score:.2f})")
+    # Check for issues
+    for issue in report.issues:
+        print(f"[{issue.severity.name}] {issue.code}: {issue.message}")
+        print(f"  Recommendation: {issue.recommendation}")
 
-Custom Diagnostics
-~~~~~~~~~~~~~~~~~~
-
-Create custom diagnostics instance for detailed tracking:
-
-.. code-block:: python
-
-    from nlsq.diagnostics import OptimizationDiagnostics
-
-    diag = OptimizationDiagnostics(enable_plotting=True)
-    diag.start_optimization(p0, problem_name="Exponential Fit")
-
-    # Record iteration data manually
-    for i in range(n_iterations):
-        diag.record_iteration(
-            iteration=i,
-            x=params,
-            cost=cost_value,
-            gradient=gradient,
-            jacobian=jacobian,
-            step_size=step_size,
-        )
-
-    # Get statistics
-    stats = diag.get_summary_statistics()
-    print(f"Convergence rate: {stats.get('convergence_rate', 'N/A')}")
-    print(f"Peak memory: {stats['peak_memory_mb']:.1f} MB")
-
-    # Generate visualizations
-    diag.plot_convergence(save_path="convergence_plot.png")
-
-Event Recording
-~~~~~~~~~~~~~~~
-
-Record special events during optimization:
-
-.. code-block:: python
-
-    from nlsq.diagnostics import get_diagnostics
-
-    diag = get_diagnostics()
-
-    # Record recovery events
-    diag.record_event("recovery_attempt", {"strategy": "perturbation"})
-    diag.record_event("recovery_success", {"strategy": "perturbation", "cost": 0.005})
-
-    # Record failures
-    diag.record_event("jacobian_error", {"iteration": 42, "error": "singular"})
-
-    # Check warnings
-    stats = diag.get_summary_statistics()
-    if stats["warnings_issued"]:
-        print("Warnings:", stats["warnings_issued"])
-
-Convergence Rate Analysis
+Gradient Health Monitoring
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Analyze convergence rate to assess optimization progress:
+Monitor gradient behavior during optimization using callbacks:
 
 .. code-block:: python
 
-    from nlsq.diagnostics import ConvergenceMonitor
+    from nlsq import curve_fit
+    from nlsq.diagnostics import DiagnosticsConfig, GradientMonitor
 
-    monitor = ConvergenceMonitor()
+    # Create gradient monitor
+    config = DiagnosticsConfig(
+        vanishing_threshold=1e-6,
+        imbalance_threshold=1e6,
+        stagnation_window=10,
+    )
+    monitor = GradientMonitor(config)
 
-    # Update during optimization
-    for i in range(n_iterations):
-        monitor.update(costs[i], params[i])
+    # Create callback for curve_fit
+    callback = monitor.create_callback()
 
-    # Get convergence rate
-    rate = monitor.get_convergence_rate()
-    if rate is not None:
-        if rate > 0:
-            print(f"Converging with rate: {rate:.4f}")
-        else:
-            print(f"Diverging with rate: {rate:.4f}")
+    # Fit with gradient monitoring
+    result = curve_fit(model, x, y, p0=p0, callback=callback)
 
-Performance Analysis
-~~~~~~~~~~~~~~~~~~~~
+    # Get gradient health report
+    grad_report = monitor.get_report()
 
-Analyze optimization performance and resource usage:
+    print(f"Health score: {grad_report.health_score:.2f}")
+    print(f"Iterations monitored: {grad_report.n_iterations}")
+    print(f"Vanishing detected: {grad_report.vanishing_detected}")
+    print(f"Imbalance detected: {grad_report.imbalance_detected}")
+
+Sloppy Model Analysis
+~~~~~~~~~~~~~~~~~~~~~
+
+Analyze eigenvalue spectrum to identify sloppy behavior:
 
 .. code-block:: python
 
-    from nlsq.diagnostics import OptimizationDiagnostics
+    from nlsq.diagnostics import DiagnosticsConfig, DiagnosticLevel, SloppyModelAnalyzer
 
-    diag = OptimizationDiagnostics()
-    diag.start_optimization(p0)
+    # Enable full analysis for sloppy model detection
+    config = DiagnosticsConfig(
+        level=DiagnosticLevel.FULL,
+        sloppy_threshold=1e-6,
+    )
 
-    # ... run optimization ...
+    analyzer = SloppyModelAnalyzer(config)
+    report = analyzer.analyze(jacobian)
 
-    stats = diag.get_summary_statistics()
+    print(f"Is sloppy: {report.is_sloppy}")
+    print(f"Eigenvalue range: {report.eigenvalue_range:.1f} orders of magnitude")
+    print(f"Effective dimensionality: {report.effective_dimensionality:.1f}")
+    print(f"Stiff directions: {report.stiff_indices}")
+    print(f"Sloppy directions: {report.sloppy_indices}")
 
-    print(f"Function evaluations: {stats['function_evaluations']}")
-    print(f"Jacobian evaluations: {stats['jacobian_evaluations']}")
-    print(f"Total time: {stats['total_time_seconds']:.2f}s")
-    print(f"Time per iteration: {stats['time_per_iteration'] * 1000:.1f}ms")
-    print(f"Memory increase: {stats['memory_increase_mb']:.1f} MB")
+Creating Aggregated Health Reports
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Diagnostic Metrics
-------------------
+Combine all analyses into a unified health report:
 
-The diagnostics system tracks these key metrics:
+.. code-block:: python
 
-**Cost Reduction:**
-- Initial and final cost values
-- Absolute and relative cost reduction
-- Min/max cost during optimization
+    from nlsq.diagnostics import (
+        DiagnosticsConfig,
+        IdentifiabilityAnalyzer,
+        GradientMonitor,
+        SloppyModelAnalyzer,
+        create_health_report,
+    )
 
-**Convergence:**
-- Convergence rate estimation
-- Gradient norm progression
-- Oscillation, stagnation, divergence detection
+    config = DiagnosticsConfig(verbose=False, emit_warnings=False)
 
-**Performance:**
-- Total iterations
-- Function and Jacobian evaluation counts
-- Time per iteration
-- Memory usage and peak memory
+    # Run individual analyses
+    ident_analyzer = IdentifiabilityAnalyzer(config)
+    ident_report = ident_analyzer.analyze(jacobian)
 
-**Numerical Stability:**
-- Jacobian condition numbers
-- Gradient finiteness checks
-- Parameter stability tracking
+    sloppy_analyzer = SloppyModelAnalyzer(config)
+    sloppy_report = sloppy_analyzer.analyze(jacobian)
 
-Pattern Detection
+    # Create aggregated report
+    health_report = create_health_report(
+        identifiability=ident_report,
+        gradient_health=grad_report,  # From GradientMonitor
+        sloppy_model=sloppy_report,
+        config=config,
+    )
+
+    # Access aggregated results
+    print(f"Overall status: {health_report.status.name}")
+    print(f"Health score: {health_report.health_score:.2f}")
+    print(f"Total issues: {len(health_report.all_issues)}")
+
+    # Get formatted summary
+    print(health_report.summary())
+
+    # Convert to dictionary for serialization
+    data = health_report.to_dict()
+
+Custom Diagnostic Plugins
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create domain-specific diagnostics that integrate with the health report:
+
+.. code-block:: python
+
+    import numpy as np
+    from nlsq.diagnostics import (
+        DiagnosticPlugin,
+        PluginRegistry,
+        PluginResult,
+        ModelHealthIssue,
+        IssueCategory,
+        IssueSeverity,
+    )
+    from nlsq.diagnostics.recommendations import get_recommendation
+
+    class OpticalScatteringPlugin:
+        """Plugin for optical scattering parameter validation."""
+
+        @property
+        def name(self) -> str:
+            return "optical-scattering"
+
+        def analyze(
+            self,
+            jacobian: np.ndarray,
+            parameters: np.ndarray,
+            residuals: np.ndarray,
+            **context
+        ) -> PluginResult:
+            issues = []
+
+            # Domain-specific validation: scattering coefficients must be positive
+            if any(parameters < 0):
+                issues.append(ModelHealthIssue(
+                    category=IssueCategory.IDENTIFIABILITY,
+                    severity=IssueSeverity.CRITICAL,
+                    code="OPTICAL-001",
+                    message="Negative scattering coefficient detected",
+                    affected_parameters=tuple(np.where(parameters < 0)[0]),
+                    details={"negative_values": parameters[parameters < 0].tolist()},
+                    recommendation="Ensure bounds enforce non-negative coefficients",
+                ))
+
+            return PluginResult(
+                plugin_name=self.name,
+                data={"custom_metric": np.mean(np.abs(parameters))},
+                issues=issues,
+            )
+
+    # Register the plugin
+    PluginRegistry.register(OpticalScatteringPlugin())
+
+    # Plugins are automatically included in health reports
+    from nlsq.diagnostics import run_plugins
+
+    plugin_results = run_plugins(jacobian, parameters, residuals)
+    for name, result in plugin_results.items():
+        print(f"{name}: {len(result.issues)} issues")
+
+Configuration Reference
+-----------------------
+
+The ``DiagnosticsConfig`` dataclass controls all diagnostic thresholds:
+
+.. list-table::
+   :widths: 25 15 60
+   :header-rows: 1
+
+   * - Parameter
+     - Default
+     - Description
+   * - ``level``
+     - BASIC
+     - Diagnostic depth: BASIC or FULL (includes sloppy analysis)
+   * - ``condition_threshold``
+     - 1e8
+     - FIM condition number threshold for practical identifiability
+   * - ``correlation_threshold``
+     - 0.95
+     - Correlation coefficient threshold for high correlation warning
+   * - ``imbalance_threshold``
+     - 1e6
+     - Gradient imbalance ratio threshold
+   * - ``vanishing_threshold``
+     - 1e-6
+     - Relative gradient magnitude threshold for vanishing detection
+   * - ``sloppy_threshold``
+     - 1e-6
+     - Eigenvalue ratio threshold for sloppy classification
+   * - ``gradient_window_size``
+     - 100
+     - Sliding window size for gradient norm history
+   * - ``stagnation_window``
+     - 10
+     - Iterations to check for gradient stagnation
+   * - ``stagnation_tolerance``
+     - 0.01
+     - Relative tolerance for stagnation detection (1%)
+   * - ``verbose``
+     - True
+     - Print diagnostic summary to console
+   * - ``emit_warnings``
+     - True
+     - Emit Python warnings for critical issues
+
+Memory Efficiency
 -----------------
 
-The convergence monitor detects these patterns:
+The diagnostics system is designed for memory efficiency:
 
-**Oscillation:**
-Detected when parameters or cost values alternate up/down frequently.
-Suggests step size is too large or problem is poorly scaled.
+- **GradientMonitor**: Uses bounded memory (<1KB) regardless of iteration count:
+  - Sliding window (deque) for gradient norm history
+  - Welford's online algorithm for running mean/variance per parameter
 
-**Stagnation:**
-Detected when cost barely changes over multiple iterations.
-Suggests convergence has plateaued or is stuck in local minimum.
+- **IdentifiabilityAnalyzer**: Computes SVD once, reuses results
 
-**Divergence:**
-Detected when cost increases over time.
-Suggests initial guess is poor or algorithm is unstable.
+- **SloppyModelAnalyzer**: Uses eigenvalue decomposition from SVD
 
 See Also
 --------
 
-- :doc:`nlsq.callbacks` : Callback functions for monitoring
-- :doc:`nlsq.stability` : Numerical stability analysis
-- :doc:`nlsq.recovery` : Optimization recovery strategies
+- :doc:`nlsq.stability` - Numerical stability analysis (SVD fallback, condition monitoring)
+- :doc:`nlsq.callbacks` - Callback functions for optimization monitoring
+- :func:`nlsq.curve_fit` - Main curve fitting function with ``compute_diagnostics`` option

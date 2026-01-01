@@ -52,7 +52,8 @@ _MODULE_ALIASES = {
     "nlsq.algorithm_selector": "nlsq.precision.algorithm_selector",
     "nlsq.memory_pool": "nlsq.caching.memory_pool",
     "nlsq.profiling": "nlsq.utils.profiling",
-    "nlsq.diagnostics": "nlsq.utils.diagnostics",
+    # Note: nlsq.diagnostics is a real top-level package (Model Health Diagnostics System)
+    # The old nlsq.utils.diagnostics module still exists for optimization monitoring
     "nlsq.hybrid_streaming_config": "nlsq.streaming.hybrid_config",
     "nlsq.large_dataset": "nlsq.streaming.large_dataset",
     "nlsq.optimizer_base": "nlsq.core.optimizer_base",
