@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Audit logging with rotation (10MB max) and retention (90 days)
   - **Files Added**: `nlsq/cli/model_validation.py`
 
+- **Safe Checkpoint Serialization (CWE-502 Fix)**
+  - Replaced pickle with JSON-based serialization for checkpoint data
+  - Addresses deserialization of untrusted data vulnerability (HIGH severity)
+  - `safe_dumps()` / `safe_loads()` in `nlsq/utils/safe_serialize.py`
+  - Handles: basic types, tuples, numpy scalars, small numpy arrays
+  - Performance impact: negligible (+0.03ms per checkpoint, +102 bytes typical)
+  - **Files Added**: `nlsq/utils/safe_serialize.py`
+  - **Files Modified**: `nlsq/streaming/adaptive_hybrid.py` (removed pickle import)
+
 - **Factory Functions for Optimizer Composition**
   - `create_optimizer()`: Compose streaming, global optimization, and diagnostics at runtime
   - `configure_curve_fit()`: Create pre-configured curve_fit with default settings

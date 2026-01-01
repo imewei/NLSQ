@@ -77,6 +77,7 @@ nlsq/
 ├── utils/          # Utilities
 │   ├── validators.py      # Input validation
 │   ├── diagnostics.py     # Convergence monitoring
+│   ├── safe_serialize.py  # Secure JSON serialization (replaces pickle)
 │   └── logging.py
 ├── cli/            # Command-line interface
 │   ├── model_registry.py  # Model loading with security validation
@@ -112,6 +113,7 @@ curve_fit() → CurveFit → LeastSquares → TrustRegionReflective
 - **interfaces/**: Protocol definitions enabling dependency injection and loose coupling
 - **stability/guard.py**: Numerical stability monitoring (condition numbers, NaN/Inf detection, data rescaling)
 - **utils/validators.py**: Input validation with security constraints (array size limits, bounds checking)
+- **utils/safe_serialize.py**: Secure JSON-based serialization for checkpoints (replaces pickle, CWE-502 fix)
 - **caching/memory_manager.py**: Memory pooling with TTL-cached psutil calls
 - **caching/smart_cache.py, compilation_cache.py**: JIT compilation caching (xxhash for speed)
 - **stability/svd_fallback.py**: GPU/CPU fallback SVD with randomized SVD for large matrices
