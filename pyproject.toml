@@ -82,8 +82,8 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.2",           # Requires NumPy 2.x (tested on 2.4.0)
-    "scipy>=1.16.3",          # Tested on 1.16.3
+    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.3.3)
+    "scipy>=1.16.0",          # Tested on 1.16.2
 
     # JAX ecosystem (>=0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
@@ -97,41 +97,41 @@ dependencies = [
     "optax>=0.2.6",           # Gradient transformations for Adam warmup (tested on 0.2.6)
 
     # Visualization and monitoring
-    "matplotlib>=3.10.8",     # Tested on 3.10.8
-    "psutil>=7.2.0",          # For memory monitoring (tested on 7.2.0)
-    "tqdm>=4.67.1",           # For progress bars (tested on 4.67.1)
+    "matplotlib>=3.10.0",     # Tested on 3.10.6
+    "psutil>=7.0.0",          # For memory monitoring (tested on 7.1.3)
+    "tqdm>=4.67.0",           # For progress bars (tested on 4.67.1)
 
     # Large dataset support
-    "h5py>=3.15.1",           # Required for streaming large datasets (tested on 3.15.1)
+    "h5py>=3.15.0",           # Required for streaming large datasets (tested on 3.15.1)
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.2",         # Tested on 9.0.2
+    "pytest>=8.0.0",         # Tested on 8.4.2
     "pytest-cov>=7.0.0",     # Tested on 7.0.0
     "pytest-xdist>=3.8.0",   # Tested on 3.8.0
-    "black>=25.12.0",        # Tested on 25.12.0 (CalVer)
-    "ruff>=0.14.10",         # Tested on 0.14.10
-    "mypy>=1.19.1",          # Tested on 1.19.1
-    "pre-commit>=4.5.1",     # Tested on 4.5.1
-    "ipython>=9.8.0",        # Tested on 9.8.0
-    "bandit>=1.9.2",         # Tested on 1.9.2
-    "pyupgrade>=3.21.2",     # Tested on 3.21.2
+    "black>=25.0.0",         # Tested on 25.9.0 (CalVer)
+    "ruff>=0.13.0",          # Tested on 0.13.1
+    "mypy>=1.18.0",          # Tested on 1.18.2
+    "pre-commit>=4.0.0",     # Tested on 4.3.0
+    "ipython>=8.0.0",        # Tested on 8.20.0
+    "bandit>=1.9.0",         # Tested on 1.9.2
+    "pyupgrade>=3.21.0",     # Tested on 3.21.2
 ]
 docs = [
-    "sphinx>=8.2.3",                    # Tested on 8.2.3
-    "sphinx-rtd-theme>=3.0.2",          # Tested on 3.0.2
-    "sphinx-autodoc-typehints>=3.5.2",  # Tested on 3.5.2
+    "sphinx>=8.0.0",                    # Tested on 8.2.3
+    "sphinx-rtd-theme>=3.0.0",          # Tested on 3.0.2
+    "sphinx-autodoc-typehints>=3.5.0",  # Tested on 3.5.2
     "sphinx-design>=0.6.0",             # For grid cards and tabs in documentation
-    "ipython>=9.8.0",                   # Tested on 9.8.0
-    "myst-parser>=4.0.1",               # Tested on 4.0.1
+    "ipython>=8.0.0",                   # Tested on 8.20.0
+    "myst-parser>=4.0.0",               # Tested on 4.0.1
 ]
 test = [
-    "pytest>=9.0.2",         # Tested on 9.0.2
+    "pytest>=8.0.0",         # Tested on 8.4.2
     "pytest-cov>=7.0.0",     # Tested on 7.0.0
     "pytest-xdist>=3.8.0",   # Tested on 3.8.0
     "pytest-timeout>=2.4.0", # Tested on 2.4.0
-    "hypothesis>=6.148.8",   # Tested on 6.148.8
+    "hypothesis>=6.148.0",   # Tested on 6.148.9
 ]
 benchmark = [
     "pytest-benchmark>=5.2.3", # Tested on 5.2.3
@@ -146,16 +146,16 @@ yaml = [
     "pyyaml>=6.0.3",           # YAML configuration file support (tested on 6.0.3)
 ]
 jupyter = [
-    "jupyterlab>=4.5.1",       # Tested on 4.5.1
-    "ipykernel>=7.1.0",        # Tested on 7.1.0
-    "notebook>=7.5.1",         # Tested on 7.5.1
+    "jupyterlab>=4.0.0",       # Tested on 4.5.1
+    "ipykernel>=6.29.0",       # Tested on 6.29.3
+    "notebook>=6.4.0",         # Tested on 6.4.12
 ]
 build = [
-    "build>=1.3.0",            # Build frontend (tested on 1.3.0)
-    "twine>=6.2.0",            # PyPI upload tool (tested on 6.2.0)
-    "setuptools>=80.9.0",      # Build backend (tested on 80.9.0)
-    "setuptools-scm>=9.2.2",   # Version management (tested on 9.2.2)
-    "wheel>=0.45.1",           # Wheel builder (tested on 0.45.1)
+    "build>=1.0.0",            # Build frontend (tested on 1.3.0)
+    "twine>=6.0.0",            # PyPI upload tool (tested on 6.2.0)
+    "setuptools>=68.0.0",      # Build backend (tested on 68.1.2)
+    "setuptools-scm>=9.0.0",   # Version management (tested on 9.2.2)
+    "wheel>=0.42.0",           # Wheel builder (tested on 0.42.0)
 ]
 gui = [
     # Streamlit GUI dependencies for desktop application
@@ -168,44 +168,44 @@ gui = [
 ]
 all = [
     # Development dependencies
-    "pytest>=9.0.2",
+    "pytest>=8.0.0",
     "pytest-cov>=7.0.0",
     "pytest-xdist>=3.8.0",
-    "black>=25.12.0",
-    "ruff>=0.14.10",
-    "mypy>=1.19.1",
-    "pre-commit>=4.5.1",
-    "ipython>=9.8.0",
-    "bandit>=1.9.2",
-    "pyupgrade>=3.21.2",
+    "black>=25.0.0",
+    "ruff>=0.13.0",
+    "mypy>=1.18.0",
+    "pre-commit>=4.0.0",
+    "ipython>=8.0.0",
+    "bandit>=1.9.0",
+    "pyupgrade>=3.21.0",
     # Documentation dependencies
-    "sphinx>=8.2.3",
-    "sphinx-rtd-theme>=3.0.2",
-    "sphinx-autodoc-typehints>=3.5.2",
+    "sphinx>=8.0.0",
+    "sphinx-rtd-theme>=3.0.0",
+    "sphinx-autodoc-typehints>=3.5.0",
     "sphinx-design>=0.6.0",
-    "myst-parser>=4.0.1",
+    "myst-parser>=4.0.0",
     # Test dependencies
-    "hypothesis>=6.148.8",
+    "hypothesis>=6.148.0",
     "pytest-timeout>=2.4.0",
     # Benchmark dependencies
-    "pytest-benchmark>=5.2.3",
-    "asv>=0.6.5",
+    "pytest-benchmark>=5.2.0",
+    "asv>=0.6.0",
     "memory-profiler>=0.61.0",
-    "psutil>=7.2.0",
+    "psutil>=7.0.0",
     # YAML configuration support
     "pyyaml>=6.0.3",
     # Jupyter dependencies
-    "jupyterlab>=4.5.1",
-    "ipykernel>=7.1.0",
-    "notebook>=7.5.1",
+    "jupyterlab>=4.0.0",
+    "ipykernel>=6.29.0",
+    "notebook>=6.4.0",
     # Build dependencies
-    "build>=1.3.0",
-    "twine>=6.2.0",
-    "setuptools>=80.9.0",
-    "setuptools-scm>=9.2.2",
-    "wheel>=0.45.1",
+    "build>=1.0.0",
+    "twine>=6.0.0",
+    "setuptools>=68.0.0",
+    "setuptools-scm>=9.0.0",
+    "wheel>=0.42.0",
     # GUI dependencies
-    "streamlit>=1.52.2",
+    "streamlit>=1.52.0",
     "plotly>=6.5.0",
     "streamlit-monaco>=0.1.3",
     "streamlit-desktop-app>=0.3.4",
@@ -510,7 +510,7 @@ reportMissingImports = true
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
-minversion = "9.0"  # Updated to match installed version (9.0.2)
+minversion = "8.0"  # Updated to match installed version (8.4.2)
 testpaths = ["tests"]
 pythonpath = ["."]
 # Modern pytest features for better performance
