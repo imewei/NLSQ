@@ -9,7 +9,6 @@ This test module covers Phase 0 of the four-phase hybrid optimizer:
 
 import jax
 import jax.numpy as jnp
-import optax
 import pytest
 
 from nlsq.precision.parameter_normalizer import (
@@ -295,12 +294,14 @@ class TestNormalizedModelWrapper:
         assert jnp.isfinite(output).all()
 
 
-class TestPhase1AdamWarmup:
-    """Tests for Phase 1: Adam Warmup with Optax."""
+class TestPhase1LbfgsWarmup:
+    """Tests for Phase 1: L-BFGS warmup with Optax."""
 
-    def test_adam_optimizer_initialization(self):
-        """Test Adam optimizer initialization with optax."""
-        config = HybridStreamingConfig(warmup_learning_rate=0.01, warmup_iterations=10)
+    def test_lbfgs_optimizer_initialization(self):
+        """Test L-BFGS optimizer initialization with optax."""
+        config = HybridStreamingConfig(
+            lbfgs_initial_step_size=0.2, warmup_iterations=10
+        )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
         # Define test parameters
@@ -314,18 +315,18 @@ class TestPhase1AdamWarmup:
         # Setup normalization
         optimizer._setup_normalization(model, p0, bounds)
 
-        # Create Adam optimizer
-        adam_optimizer, opt_state = optimizer._create_adam_optimizer(
+        # Create L-BFGS optimizer
+        lbfgs_optimizer, opt_state = optimizer._create_lbfgs_optimizer(
             optimizer.normalized_params
         )
 
         # Verify optimizer created
-        assert adam_optimizer is not None
+        assert lbfgs_optimizer is not None
         assert opt_state is not None
 
         # Verify optimizer state structure (optax state is a pytree)
-        # For Adam, state has multiple components
-        assert hasattr(opt_state, "count") or isinstance(opt_state, tuple)
+        inner_state = opt_state[0] if isinstance(opt_state, tuple) else opt_state
+        assert hasattr(inner_state, "diff_params_memory")
 
     def test_loss_plateau_triggers_switch(self):
         """Test that loss plateau detection triggers Phase 2 switch."""
@@ -1826,105 +1827,88 @@ class TestMixedPrecisionSupport:
         assert result["success"]
 
 
-class TestOptaxEnhancements:
-    """Tests for Task Group 11: Optax Integration Enhancements."""
+class TestLbfgsWarmupUtilities:
+    """Tests for L-BFGS warmup utilities."""
 
-    def test_learning_rate_schedule_warmup_and_decay(self):
-        """Test learning rate schedule with warmup and cosine decay."""
+    def test_lbfgs_step_updates_params(self):
+        """Test L-BFGS warmup step updates parameters."""
         config = HybridStreamingConfig(
-            use_learning_rate_schedule=True,
-            warmup_learning_rate=0.001,
-            lr_schedule_warmup_steps=10,
-            lr_schedule_decay_steps=90,
-            lr_schedule_end_value=0.0001,
-            warmup_iterations=50,
-            max_warmup_iterations=100,
+            lbfgs_line_search="backtracking",
+            warmup_iterations=5,
+            max_warmup_iterations=10,
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-        # Define simple model
         def model(x, a, b):
             return a * x + b
 
         p0 = jnp.array([1.5, 0.5])
-        bounds = None
-        optimizer._setup_normalization(model, p0, bounds)
+        optimizer._setup_normalization(model, p0, bounds=None)
 
-        # Create optimizer with schedule
         params = optimizer.normalized_params
-        opt, opt_state = optimizer._create_adam_optimizer(params)
-
-        # Verify optimizer is created successfully
-        assert opt is not None
-        assert opt_state is not None
-
-        # Test that optimizer works (can compute gradients)
+        opt, opt_state = optimizer._create_lbfgs_optimizer(params)
         loss_fn = optimizer._create_warmup_loss_fn()
         x_data = jnp.linspace(0, 5, 50)
         y_data = 2.0 * x_data + 1.0
 
-        # Run multiple steps to see schedule effect
-        # (first step has zero lr during warmup phase)
-        for step in range(20):
-            _loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
-            updates, opt_state = opt.update(grads, opt_state)
-            params = optax.apply_updates(params, updates)
+        for iteration in range(5):
+            params, loss, grad_norm, opt_state, line_search_failed = (
+                optimizer._lbfgs_step(
+                    params=params,
+                    opt_state=opt_state,
+                    optimizer=opt,
+                    loss_fn=loss_fn,
+                    x_batch=x_data,
+                    y_batch=y_data,
+                    iteration=iteration,
+                )
+            )
+            assert jnp.all(jnp.isfinite(params))
+            assert jnp.isfinite(loss)
+            assert jnp.isfinite(grad_norm)
+            assert isinstance(line_search_failed, bool)
 
-        # Verify parameters changed after multiple steps
         assert not jnp.allclose(params, optimizer.normalized_params)
-        assert jnp.all(jnp.isfinite(params))
 
-    def test_gradient_clipping_with_optax(self):
-        """Test gradient clipping prevents exploding gradients."""
+    def test_step_clipping_with_lbfgs(self):
+        """Test step clipping limits L-BFGS update magnitude."""
         config = HybridStreamingConfig(
-            gradient_clip_value=1.0,  # Clip gradients to max norm of 1.0
-            warmup_learning_rate=0.1,  # High learning rate to test clipping
-            warmup_iterations=20,
+            enable_step_clipping=True,
+            max_warmup_step_size=0.05,
+            warmup_iterations=5,
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-        # Define model
         def model(x, a, b):
             return a * x + b
 
         p0 = jnp.array([1.0, 1.0])
-        bounds = None
-        optimizer._setup_normalization(model, p0, bounds)
+        optimizer._setup_normalization(model, p0, bounds=None)
 
-        # Create optimizer with clipping
         params = optimizer.normalized_params
-        opt, opt_state = optimizer._create_adam_optimizer(params)
-
-        # Generate data with large residuals to create large gradients
-        x_data = jnp.linspace(0, 5, 50)
-        y_data = 100.0 * x_data + 50.0  # Large values to create large gradients
-
+        opt, opt_state = optimizer._create_lbfgs_optimizer(params)
         loss_fn = optimizer._create_warmup_loss_fn()
 
-        # Compute gradient (would be large without clipping)
-        _loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
+        x_data = jnp.linspace(0, 5, 50)
+        y_data = 100.0 * x_data + 50.0
 
-        # Verify gradients are large
-        grad_norm = jnp.linalg.norm(grads)
-        assert grad_norm > 1.0  # Gradients before clipping are large
-
-        # Apply optimizer update with clipping
-        updates, _new_opt_state = opt.update(grads, opt_state)
-
-        # Verify clipping worked (updates should be bounded)
-        update_norm = jnp.linalg.norm(
-            jnp.concatenate([jnp.ravel(u) for u in jax.tree_util.tree_leaves(updates)])
+        new_params, _loss, _grad_norm, _opt_state, _line_search_failed = (
+            optimizer._lbfgs_step(
+                params=params,
+                opt_state=opt_state,
+                optimizer=opt,
+                loss_fn=loss_fn,
+                x_batch=x_data,
+                y_batch=y_data,
+                iteration=0,
+            )
         )
-        # Updates are bounded by learning_rate * clip_value
-        # With lr=0.1 and clip=1.0, updates should be reasonable
-        assert jnp.isfinite(update_norm)
 
-        # Apply updates
-        new_params = optax.apply_updates(params, updates)
-        assert jnp.all(jnp.isfinite(new_params))
+        update_norm = jnp.linalg.norm(new_params - params)
+        assert update_norm <= config.max_warmup_step_size + 1e-6
 
     def test_optimizer_state_checkpointing(self):
-        """Test optimizer state can be saved and restored."""
+        """Test L-BFGS optimizer state can be saved and restored."""
         import tempfile
         from pathlib import Path
 
@@ -1934,102 +1918,83 @@ class TestOptaxEnhancements:
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-        # Define model
         def model(x, a, b):
             return a * x + b
 
         p0 = jnp.array([1.5, 0.5])
-        bounds = None
-        optimizer._setup_normalization(model, p0, bounds)
+        optimizer._setup_normalization(model, p0, bounds=None)
 
-        # Create optimizer
         params = optimizer.normalized_params
-        opt, opt_state = optimizer._create_adam_optimizer(params)
-
-        # Run a few steps to change optimizer state
+        opt, opt_state = optimizer._create_lbfgs_optimizer(params)
         loss_fn = optimizer._create_warmup_loss_fn()
         x_data = jnp.linspace(0, 5, 50)
         y_data = 2.0 * x_data + 1.0
 
-        for _ in range(5):
-            _loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
-            updates, opt_state = opt.update(grads, opt_state)
-            params = optax.apply_updates(params, updates)
+        for iteration in range(5):
+            params, _loss, _grad_norm, opt_state, _line_search_failed = (
+                optimizer._lbfgs_step(
+                    params=params,
+                    opt_state=opt_state,
+                    optimizer=opt,
+                    loss_fn=loss_fn,
+                    x_batch=x_data,
+                    y_batch=y_data,
+                    iteration=iteration,
+                )
+            )
 
-        # Store optimizer state
         optimizer.phase1_optimizer_state = opt_state
         optimizer.normalized_params = params
         optimizer.current_phase = 1
 
-        # Save checkpoint
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = Path(tmpdir) / "test_checkpoint.h5"
             optimizer._save_checkpoint(checkpoint_path)
 
-            # Verify checkpoint exists
             assert checkpoint_path.exists()
 
-            # Create new optimizer and load checkpoint
             optimizer2 = AdaptiveHybridStreamingOptimizer(config)
-            optimizer2._setup_normalization(model, p0, bounds)
+            optimizer2._setup_normalization(model, p0, bounds=None)
             optimizer2._load_checkpoint(checkpoint_path)
 
-            # Verify state restored
             assert optimizer2.current_phase == 1
             assert optimizer2.phase1_optimizer_state is not None
             assert jnp.allclose(optimizer2.normalized_params, params)
 
-    def test_combined_schedule_and_clipping(self):
-        """Test learning rate schedule combined with gradient clipping."""
+    def test_lbfgs_backtracking_line_search(self):
+        """Test backtracking line search configuration runs without errors."""
         config = HybridStreamingConfig(
-            use_learning_rate_schedule=True,
-            warmup_learning_rate=0.001,
-            lr_schedule_warmup_steps=5,
-            lr_schedule_decay_steps=45,
-            lr_schedule_end_value=0.0001,
-            gradient_clip_value=1.0,
-            warmup_iterations=30,
+            lbfgs_line_search="backtracking",
+            warmup_iterations=5,
         )
         optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-        # Define model
         def model(x, a, b):
             return a * x + b
 
-        p0 = jnp.array([1.5, 0.5])
-        bounds = None
-        optimizer._setup_normalization(model, p0, bounds)
+        p0 = jnp.array([1.0, 1.0])
+        optimizer._setup_normalization(model, p0, bounds=None)
 
-        # Create optimizer with both schedule and clipping
         params = optimizer.normalized_params
-        opt, opt_state = optimizer._create_adam_optimizer(params)
-
-        # Verify optimizer created
-        assert opt is not None
-        assert opt_state is not None
-
-        # Generate test data
-        x_data = jnp.linspace(0, 5, 50)
-        y_data = 2.0 * x_data + 1.0
-
+        opt, opt_state = optimizer._create_lbfgs_optimizer(params)
         loss_fn = optimizer._create_warmup_loss_fn()
+        x_data = jnp.linspace(0, 5, 50)
+        y_data = 3.0 * x_data + 2.0
 
-        # Run several steps to test schedule + clipping interaction
-        for step in range(10):
-            loss, grads = jax.value_and_grad(loss_fn)(params, x_data, y_data)
-            updates, opt_state = opt.update(grads, opt_state)
-            params = optax.apply_updates(params, updates)
+        params, loss, grad_norm, opt_state, line_search_failed = optimizer._lbfgs_step(
+            params=params,
+            opt_state=opt_state,
+            optimizer=opt,
+            loss_fn=loss_fn,
+            x_batch=x_data,
+            y_batch=y_data,
+            iteration=0,
+        )
 
-            # Verify finite values at each step
-            assert jnp.all(jnp.isfinite(params))
-            assert jnp.isfinite(loss)
-
-        # Verify parameters converged somewhat
-        final_loss, _ = jax.value_and_grad(loss_fn)(params, x_data, y_data)
-        # Loss should decrease over iterations (relaxed tolerance for 10 steps)
-        assert (
-            final_loss < 5.0
-        )  # Should decrease but may not fully converge in 10 steps
+        assert jnp.all(jnp.isfinite(params))
+        assert jnp.isfinite(loss)
+        assert jnp.isfinite(grad_norm)
+        assert isinstance(line_search_failed, bool)
 
 
 if __name__ == "__main__":

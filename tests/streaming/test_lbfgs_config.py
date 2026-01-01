@@ -168,7 +168,7 @@ class TestBackwardCompatibility:
             # Phase 0: Parameter normalization
             normalize=True,
             normalization_strategy="auto",
-            # Phase 1: Adam warmup (existing)
+            # Phase 1: L-BFGS warmup (existing)
             warmup_iterations=200,
             max_warmup_iterations=500,
             warmup_learning_rate=0.001,

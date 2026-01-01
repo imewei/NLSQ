@@ -1,10 +1,10 @@
-"""Enterprise-level tests for 4-Layer Defense Strategy in Adam Warmup.
+"""Enterprise-level tests for 4-Layer Defense Strategy in L-BFGS Warmup.
 
 This comprehensive test module covers the 4-layer defense strategy implemented
-to prevent Adam warmup from diverging from best-fit parameters:
+to prevent warmup from diverging from best-fit parameters:
 
 - **Layer 1: Warm Start Detection** - Skip warmup if initial parameters near optimal
-- **Layer 2: Adaptive Learning Rate** - Scale LR based on initial loss quality
+- **Layer 2: Adaptive Step Size** - Scale step size based on initial loss quality
 - **Layer 3: Cost-Increase Guard** - Abort if loss increases beyond tolerance
 - **Layer 4: Trust Region Constraint** - Clip update magnitude to max L2 norm
 
@@ -17,7 +17,7 @@ Test Categories:
     - Regression tests for specific failure scenarios
 
 References:
-    - Specification: 4-layer defense strategy for Adam warmup divergence prevention
+    - Specification: 4-layer defense strategy for warmup divergence prevention
     - Files: adaptive_hybrid_streaming.py, hybrid_streaming_config.py
 """
 
@@ -115,7 +115,7 @@ def poor_initial_data(simple_model):
 
 @pytest.fixture
 def diverging_scenario_data(simple_model):
-    """Generate data where Adam is likely to overshoot and increase loss."""
+    """Generate data where warmup is likely to overshoot and increase loss."""
     x = jnp.linspace(0, 5, 100)
     true_params = jnp.array([10.0, 0.5])
     y = simple_model(x, *true_params)
@@ -132,7 +132,7 @@ def diverging_scenario_data(simple_model):
 class TestLayer1WarmStartDetection:
     """Tests for Layer 1: Warm Start Detection.
 
-    Layer 1 skips Adam warmup entirely when initial parameters are already
+    Layer 1 skips warmup entirely when initial parameters are already
     near optimal, defined as relative_loss < warm_start_threshold.
     """
 
@@ -342,12 +342,12 @@ class TestLayer1WarmStartDetection:
 
 
 # =============================================================================
-# Layer 2: Adaptive Learning Rate Tests
+# Layer 2: Adaptive Step Size Tests
 # =============================================================================
 
 
 class TestLayer2AdaptiveLearningRate:
-    """Tests for Layer 2: Adaptive Learning Rate.
+    """Tests for Layer 2: Adaptive Step Size.
 
     Layer 2 scales the learning rate based on initial loss quality:
     - relative_loss < 0.1: refinement LR (1e-6)
@@ -743,7 +743,7 @@ class TestLayer3CostIncreaseGuard:
 class TestLayer4StepClipping:
     """Tests for Layer 4: Trust Region Constraint (Step Clipping).
 
-    Layer 4 clips Adam update magnitude to maximum L2 norm:
+    Layer 4 clips warmup update magnitude to maximum L2 norm:
     - Limits step size to prevent large jumps
     - Uses JIT-compatible operations (jnp.minimum)
     - Preserves update direction, only scales magnitude
@@ -825,8 +825,10 @@ class TestLayer4StepClipping:
 
         assert abs(float(clipped[0])) <= max_norm + 1e-6
 
-    def test_step_clipping_enabled_in_adam_step(self, simple_model, poor_initial_data):
-        """Test step clipping is applied during Adam step."""
+    def test_step_clipping_enabled_in_warmup_step(
+        self, simple_model, poor_initial_data
+    ):
+        """Test step clipping is applied during warmup step."""
         x, y, p0, _ = poor_initial_data
 
         config = HybridStreamingConfig(
@@ -850,7 +852,7 @@ class TestLayer4StepClipping:
         assert result["iterations"] > 0
 
     def test_step_clipping_disabled(self, simple_model, poor_initial_data):
-        """Test Adam step without clipping when disabled."""
+        """Test warmup step without clipping when disabled."""
         x, y, p0, _ = poor_initial_data
 
         config = HybridStreamingConfig(
