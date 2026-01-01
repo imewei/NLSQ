@@ -101,7 +101,7 @@
 # │   - Strategies: 'auto', 'bounds', 'p0', 'none'                              │
 # │   - Improves gradient signal quality                                        │
 # │                                                                             │
-# │ Phase 1: Adam Warmup (Mini-batch gradient descent)                          │
+# │ Phase 1: L-BFGS Warmup (Quasi-Newton line search)                           │
 # │   - Fast initial convergence from any starting point                        │
 # │   - Adaptive switching based on plateau/gradient criteria                   │
 # │   - Default: 200-500 iterations                                             │
@@ -120,14 +120,14 @@
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ 4-LAYER DEFENSE STRATEGY                                          │
 # ├─────────────────────────────────────────────────────────────────────────────┤
-# │ Prevents Adam warmup divergence when initial parameters are near optimal:   │
+# │ Prevents L-BFGS warmup divergence when initial parameters are near optimal: │
 # │                                                                             │
 # │ Layer 1: Warm Start Detection                                               │
 # │   - Skips warmup if initial loss < warm_start_threshold (default: 1%)       │
 # │   - Prevents pushing away from good initial guesses                         │
 # │   - Use Case: Refinement workflows, iterative fitting                       │
 # │                                                                             │
-# │ Layer 2: Adaptive Learning Rate                                             │
+# │ Layer 2: Adaptive Step Size                                                 │
 # │   - Refinement mode (< 10% variance): LR = 1e-6 (ultra-conservative)        │
 # │   - Careful mode (10-100% variance): LR = 1e-5 (conservative)               │
 # │   - Exploration mode (≥ 100% variance): LR = 0.001 (standard)               │
@@ -720,10 +720,10 @@ hybrid_streaming:
   normalize: true
   normalization_strategy: "auto"  # "auto", "bounds", "p0", "none"
 
-  # Phase 1: Adam Warmup
+  # Phase 1: L-BFGS Warmup
   warmup_iterations: 200        # Initial iterations before switch check
   max_warmup_iterations: 500    # Force switch to Phase 2
-  warmup_learning_rate: 0.001   # Adam learning rate (overridden by adaptive LR)
+  warmup_learning_rate: 0.001   # Warmup step size (legacy name)
   loss_plateau_threshold: 1.0e-4   # Plateau detection threshold
   gradient_norm_threshold: 1.0e-3  # Early switch if gradient small
 
@@ -737,7 +737,7 @@ hybrid_streaming:
   # ==========================================================================
   # 4-LAYER DEFENSE STRATEGY
   # ==========================================================================
-  # Prevents Adam warmup divergence when initial parameters are near optimal.
+  # Prevents L-BFGS warmup divergence when initial parameters are near optimal.
   # All layers are enabled by default for improved stability.
   #
   # Presets available in code:
@@ -767,14 +767,14 @@ hybrid_streaming:
       enabled: true
       threshold: 0.01  # 1% of data variance (strict: 0.005, relaxed: 0.02)
 
-    # Layer 2: Adaptive Learning Rate
-    # Automatically selects LR based on initial fit quality
+    # Layer 2: Adaptive Step Size
+    # Automatically selects step size based on initial fit quality
     # Use Case: Multi-scale parameters, varying initial guess quality
     layer2_adaptive_lr:
       enabled: true
       lr_refinement: 1.0e-6    # < 10% variance (ultra-conservative)
       lr_careful: 1.0e-5       # 10-100% variance (conservative)
-      lr_exploration: 0.001    # >= 100% variance (standard Adam LR)
+      lr_exploration: 0.001    # >= 100% variance (exploration step size)
 
     # Layer 3: Cost-Increase Guard
     # Aborts warmup if loss increases beyond tolerance from initial
