@@ -143,7 +143,6 @@ from nlsq.constants import (
     MAX_TRUST_RADIUS,
     MIN_TRUST_RADIUS,
 )
-from nlsq.core._optimize import OptimizeResult
 
 # Logging support
 # Optimizer base class
@@ -163,6 +162,7 @@ from nlsq.precision.mixed_precision import (
     OptimizationState,
     PrecisionState,
 )
+from nlsq.result import OptimizeResult
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.utils.diagnostics import OptimizationDiagnostics
 

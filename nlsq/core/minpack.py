@@ -60,21 +60,23 @@ from jax.scipy.linalg import svd as jax_svd
 from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.common_scipy import EPS
-from nlsq.core._optimize import OptimizeWarning
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
 
-# Diagnostics imports (lazy to avoid circular imports)
-from nlsq.diagnostics.types import DiagnosticLevel, DiagnosticsConfig, DiagnosticsReport
-from nlsq.precision.algorithm_selector import auto_select_algorithm
-from nlsq.precision.parameter_estimation import estimate_initial_parameters
-from nlsq.result import CurveFitResult
-from nlsq.stability.guard import NumericalStabilityGuard
-from nlsq.stability.recovery import OptimizationRecovery
+# Diagnostics types are needed at module level for function signatures
+from nlsq.diagnostics.types import DiagnosticLevel, DiagnosticsConfig
+from nlsq.result import CurveFitResult, OptimizeWarning
 from nlsq.types import ArrayLike, ModelFunction
-from nlsq.utils.diagnostics import OptimizationDiagnostics
 from nlsq.utils.error_messages import OptimizationError
 from nlsq.utils.logging import get_logger
 from nlsq.utils.validators import InputValidator
+
+# Lazy imports: these are imported at function level to reduce module dependencies
+# from nlsq.diagnostics.types import DiagnosticsReport
+# from nlsq.precision.algorithm_selector import auto_select_algorithm
+# from nlsq.precision.parameter_estimation import estimate_initial_parameters
+# from nlsq.stability.guard import NumericalStabilityGuard
+# from nlsq.stability.recovery import OptimizationRecovery
+# from nlsq.utils.diagnostics import OptimizationDiagnostics
 
 __all__ = ["WORKFLOW_PRESETS", "CurveFit", "curve_fit", "fit"]
 
@@ -1317,6 +1319,9 @@ class CurveFit:
         self.max_jacobian_elements_for_svd = max_jacobian_elements_for_svd
 
         if enable_stability:
+            # Lazy import to reduce module dependencies
+            from nlsq.stability.guard import NumericalStabilityGuard
+
             self.stability_guard = NumericalStabilityGuard(
                 max_jacobian_elements_for_svd=max_jacobian_elements_for_svd
             )
@@ -1325,6 +1330,10 @@ class CurveFit:
             self.memory_manager = get_memory_manager()
 
         if enable_recovery:
+            # Lazy imports to reduce module dependencies
+            from nlsq.stability.recovery import OptimizationRecovery
+            from nlsq.utils.diagnostics import OptimizationDiagnostics
+
             self.recovery = OptimizationRecovery()
             self.diagnostics = OptimizationDiagnostics()
 
@@ -1678,6 +1687,11 @@ class CurveFit:
             and ydata is not None
         ):
             try:
+                # Lazy import to reduce module dependencies
+                from nlsq.precision.parameter_estimation import (
+                    estimate_initial_parameters,
+                )
+
                 p0_estimated = estimate_initial_parameters(f, xdata, ydata, p0)
                 p0 = np.atleast_1d(p0_estimated)
                 n = p0.size
@@ -1796,6 +1810,9 @@ class CurveFit:
         """
         if method is None:
             if self.enable_stability:
+                # Lazy import to reduce module dependencies
+                from nlsq.precision.algorithm_selector import auto_select_algorithm
+
                 recommendations = auto_select_algorithm(f, xdata, ydata, p0, bounds)
                 method = recommendations["algorithm"]
                 self.logger.info(

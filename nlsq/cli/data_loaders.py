@@ -693,7 +693,7 @@ class DataLoader:
             For 2D: (xdata, ydata, sigma) where xdata is (2, n), ydata is (n,).
         """
         try:
-            import h5py  # type: ignore[import-not-found]
+            import h5py  # type: ignore[import-untyped]
         except ImportError:
             raise DataLoadError(
                 "h5py package required for HDF5 file loading",

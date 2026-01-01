@@ -701,6 +701,75 @@ def benchmark_timer():
 
 
 # ============================================================================
+# Polling Utilities (Test Flakiness Prevention)
+# ============================================================================
+
+
+import time
+from collections.abc import Callable
+
+
+def wait_for(
+    condition: Callable[[], bool],
+    timeout: float = 5.0,
+    poll_interval: float = 0.01,
+    message: str = "Condition not met",
+) -> bool:
+    """Wait for a condition with exponential backoff.
+
+    This utility replaces hard-coded time.sleep() calls in tests, providing
+    more reliable waiting that adapts to the actual time needed rather than
+    using fixed delays.
+
+    Parameters
+    ----------
+    condition : Callable[[], bool]
+        A callable that returns True when the condition is met.
+    timeout : float, default=5.0
+        Maximum time to wait in seconds.
+    poll_interval : float, default=0.01
+        Initial poll interval in seconds. Grows with exponential backoff.
+    message : str, default="Condition not met"
+        Error message if timeout is reached.
+
+    Returns
+    -------
+    bool
+        True if condition was met within timeout.
+
+    Raises
+    ------
+    TimeoutError
+        If condition is not met within timeout.
+
+    Examples
+    --------
+    >>> # Wait for cache entry to expire
+    >>> cache.set("key", "value", ttl=0.1)
+    >>> wait_for(lambda: cache.get("key") is None, timeout=2.0)
+
+    >>> # Wait for file to be created
+    >>> wait_for(lambda: path.exists(), timeout=10.0, message="File not created")
+
+    Notes
+    -----
+    Uses exponential backoff to reduce CPU usage while maintaining responsiveness.
+    The poll interval starts at `poll_interval` and grows by 1.5x each iteration,
+    capped at 0.1 seconds.
+    """
+    start = time.perf_counter()
+    interval = poll_interval
+
+    while time.perf_counter() - start < timeout:
+        if condition():
+            return True
+        time.sleep(interval)
+        interval = min(interval * 1.5, 0.1)  # Exponential backoff, max 100ms
+
+    raise TimeoutError(f"{message} within {timeout}s")
+
+
+# ============================================================================
 # Cleanup Fixtures
 # ============================================================================
 

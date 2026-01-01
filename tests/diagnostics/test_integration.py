@@ -11,9 +11,9 @@ Tests cover:
 import time
 import warnings
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-import jax.numpy as jnp
 
 from nlsq import curve_fit
 from nlsq.diagnostics.types import (

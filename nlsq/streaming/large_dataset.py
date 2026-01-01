@@ -26,7 +26,7 @@ from nlsq.config import JAXConfig
 _jax_config = JAXConfig()
 
 
-from nlsq.core._optimize import OptimizeResult
+from nlsq.result import OptimizeResult
 
 # Import streaming optimizer (required dependency as of v0.2.0)
 from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer

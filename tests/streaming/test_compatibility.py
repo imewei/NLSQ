@@ -13,12 +13,14 @@ Usage:
 """
 
 import os
+import shutil
 import tempfile
 
 import numpy as np
 import pytest
 
 from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
+from tests.conftest import wait_for
 
 
 class TestBackwardCompatibility:
@@ -372,7 +374,6 @@ class TestFeatureInteraction:
 
         Verifies no conflicts between checkpointing and error handling.
         """
-        import shutil
         import time
 
         temp_dir = tempfile.mkdtemp()
@@ -415,11 +416,20 @@ class TestFeatureInteraction:
             assert result is not None
 
         finally:
+            import contextlib
+
             # Shutdown checkpoint worker before cleanup to avoid race conditions
             if optimizer is not None:
                 optimizer._shutdown_checkpoint_worker()
-                # Brief delay to let background thread finish
-                time.sleep(0.1)
+                # Wait for background thread to finish
+                if hasattr(optimizer, "_checkpoint_thread") and optimizer._checkpoint_thread:
+                    with contextlib.suppress(TimeoutError):
+                        wait_for(
+                            lambda: not optimizer._checkpoint_thread.is_alive(),
+                            timeout=2.0,
+                            message="Checkpoint thread did not stop"
+                        )
+                    # Best effort cleanup
 
             if os.path.exists(temp_dir):
                 # Use ignore_errors=True as fallback for any remaining race conditions

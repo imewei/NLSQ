@@ -31,6 +31,7 @@ from nlsq.utils.profiling import (
     compare_transfer_reduction,
     profile_optimization,
 )
+from tests.conftest import wait_for
 
 
 class TestAsyncLogging:
@@ -60,9 +61,9 @@ class TestAsyncLogging:
                 verbose=2,
             )
 
-            # Callback executes asynchronously, wait briefly
+            # Callback executes asynchronously
             jax.effects_barrier()
-            time.sleep(0.01)
+            wait_for(lambda: mock_logger.info.called, timeout=2.0, message="Logger not called")
 
             # Verify logger was called
             assert mock_logger.info.called
@@ -79,7 +80,7 @@ class TestAsyncLogging:
             )
 
             jax.effects_barrier()
-            time.sleep(0.01)
+            wait_for(lambda: mock_logger.info.called, timeout=2.0, message="Logger not called")
 
             assert mock_logger.info.called
 
@@ -96,7 +97,7 @@ class TestAsyncLogging:
 
             log_iteration_async(10, 1.0, 1.0, verbose=1)
             jax.effects_barrier()
-            time.sleep(0.01)
+            wait_for(lambda: mock_logger.info.called, timeout=2.0, message="Logger not called")
             assert mock_logger.info.called
 
             mock_logger.reset_mock()
@@ -104,7 +105,7 @@ class TestAsyncLogging:
             # verbose=2: Log every iteration
             log_iteration_async(1, 1.0, 1.0, verbose=2)
             jax.effects_barrier()
-            time.sleep(0.01)
+            wait_for(lambda: mock_logger.info.called, timeout=2.0, message="Logger not called")
             assert mock_logger.info.called
 
     def test_log_convergence_async(self):
@@ -120,7 +121,7 @@ class TestAsyncLogging:
             )
 
             jax.effects_barrier()
-            time.sleep(0.01)
+            wait_for(lambda: mock_logger.info.called, timeout=2.0, message="Logger not called")
 
             assert mock_logger.info.called
 

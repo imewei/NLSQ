@@ -3,7 +3,6 @@
 import os
 import shutil
 import tempfile
-import time
 from pathlib import Path
 from unittest import TestCase
 
@@ -12,6 +11,9 @@ import numpy as np
 import pytest
 
 from nlsq.streaming.optimizer import StreamingConfig, StreamingOptimizer
+
+# Import wait_for from conftest
+from tests.conftest import wait_for
 
 
 class TestCheckpointSaveResume(TestCase):
@@ -46,15 +48,42 @@ class TestCheckpointSaveResume(TestCase):
         self._optimizers.append(optimizer)
         return optimizer
 
+    def _wait_for_checkpoint(self, pattern: str = "checkpoint_*.h5", timeout: float = 5.0):
+        """Wait for checkpoint file(s) to be created."""
+        import contextlib
+
+        def checkpoint_exists():
+            return len(list(Path(self.temp_dir).glob(pattern))) > 0
+        with contextlib.suppress(TimeoutError):
+            wait_for(checkpoint_exists, timeout=timeout, message=f"Checkpoint {pattern} not created")
+        # Some tests expect no checkpoint, so don't fail here
+
+    def _wait_for_n_checkpoints(self, n: int, timeout: float = 5.0):
+        """Wait for at least n checkpoint files to be created."""
+        def has_n_checkpoints():
+            return len(list(Path(self.temp_dir).glob("checkpoint_*.h5"))) >= n
+        wait_for(has_n_checkpoints, timeout=timeout, message=f"Expected {n} checkpoints")
+
     def tearDown(self):
         """Clean up test files and shutdown optimizer threads."""
+        import contextlib
+
         # Shutdown all optimizer checkpoint threads first
         for optimizer in self._optimizers:
             if hasattr(optimizer, "_shutdown_checkpoint_worker"):
                 optimizer._shutdown_checkpoint_worker()
 
-        # Give threads time to finish
-        time.sleep(0.1)
+        # Wait for all threads to finish (poll for thread completion)
+        def all_threads_stopped():
+            for optimizer in self._optimizers:
+                if hasattr(optimizer, "_checkpoint_thread"):
+                    if optimizer._checkpoint_thread is not None:
+                        if optimizer._checkpoint_thread.is_alive():
+                            return False
+            return True
+        with contextlib.suppress(TimeoutError):
+            wait_for(all_threads_stopped, timeout=2.0, message="Threads did not stop")
+        # Best effort cleanup
 
         # Now clean up temp directory
         if os.path.exists(self.temp_dir):
@@ -77,7 +106,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Check checkpoint files were created
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -123,7 +152,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Load checkpoint and verify Adam state
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -156,7 +185,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Load checkpoint and verify SGD state
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -182,7 +211,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Get the latest checkpoint
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -232,8 +261,8 @@ class TestCheckpointSaveResume(TestCase):
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
-        # Wait for async checkpoints to complete
-        time.sleep(0.5)
+        # Wait for multiple async checkpoints to complete
+        self._wait_for_n_checkpoints(4)
 
         # Get all checkpoints
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -318,7 +347,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Create config with auto-detection
         config_auto = StreamingConfig(
@@ -393,7 +422,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Load checkpoint and check failed batch tracking
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -430,7 +459,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Load checkpoint and verify best params are saved
         checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.h5"))
@@ -461,7 +490,7 @@ class TestCheckpointSaveResume(TestCase):
         )
 
         # Wait for async checkpoint to complete
-        time.sleep(0.2)
+        self._wait_for_checkpoint()
 
         # Get checkpoint info
         checkpoint_files = sorted(Path(self.temp_dir).glob("checkpoint_*.h5"))

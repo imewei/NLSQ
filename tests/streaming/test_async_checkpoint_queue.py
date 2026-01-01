@@ -27,6 +27,7 @@ import pytest
 
 from nlsq.streaming.config import StreamingConfig
 from nlsq.streaming.optimizer import StreamingOptimizer
+from tests.conftest import wait_for
 
 
 class TestAsyncCheckpointQueue(TestCase):
@@ -138,8 +139,10 @@ class TestAsyncCheckpointQueue(TestCase):
             f"_save_checkpoint took {elapsed:.3f}s, expected < 0.05s for non-blocking",
         )
 
-        # Give the background thread time to complete
-        time.sleep(0.5)
+        # Wait for checkpoint file to be created by background thread
+        def checkpoint_created():
+            return len(list(self.checkpoint_dir.glob("checkpoint_iter_*.h5"))) > 0
+        wait_for(checkpoint_created, timeout=5.0, message="Checkpoint file not created")
 
         # Verify checkpoint was actually saved
         checkpoint_files = list(self.checkpoint_dir.glob("checkpoint_iter_*.h5"))
@@ -181,8 +184,10 @@ class TestAsyncCheckpointQueue(TestCase):
         # Save checkpoint
         optimizer._save_checkpoint(self.p0, [1.0])
 
-        # Wait for background save to complete
-        time.sleep(0.5)
+        # Wait for checkpoint file to be created by background thread
+        def checkpoint_created():
+            return len(list(self.checkpoint_dir.glob("checkpoint_iter_*.h5"))) > 0
+        wait_for(checkpoint_created, timeout=5.0, message="Checkpoint file not created")
 
         # Check that no .tmp files remain (they should be renamed)
         tmp_files = list(self.checkpoint_dir.glob("*.tmp"))
@@ -263,9 +268,17 @@ class TestAsyncCheckpointQueue(TestCase):
         # We do this by setting a flag that causes the worker to sleep
         optimizer._checkpoint_worker_pause = True
 
-        # Wait for worker to enter pause state (worker checks pause at loop start,
-        # but may be blocked on queue.get() for up to 0.5s before it can loop)
-        time.sleep(0.6)
+        # Wait for worker to enter pause state (worker checks pause at loop start)
+        # Use a condition-based wait instead of fixed sleep
+        def worker_paused():
+            # The worker is paused if it's either:
+            # 1. Not yet picked up an item (queue empty, worker blocked on get)
+            # 2. In the pause loop sleeping
+            # We can detect this by the flag being set and a short delay
+            return getattr(optimizer, "_checkpoint_worker_pause", False)
+        wait_for(worker_paused, timeout=2.0, message="Worker pause flag not set")
+        # Additional brief wait for worker to enter pause loop
+        time.sleep(0.1)
 
         # Capture log output - use the specific logger name since warnings
         # are logged to nlsq.streaming.optimizer, not the root logger
@@ -360,8 +373,10 @@ class TestAsyncCheckpointIntegration(TestCase):
             (self.x_data, self.y_data), self.model_func, self.p0, verbose=0
         )
 
-        # Wait for any pending checkpoints
-        time.sleep(0.5)
+        # Wait for checkpoint files to be created by background thread
+        def checkpoint_created():
+            return len(list(self.checkpoint_dir.glob("checkpoint_iter_*.h5"))) > 0
+        wait_for(checkpoint_created, timeout=5.0, message="Checkpoint files not created")
 
         # Check checkpoint files
         checkpoint_files = list(self.checkpoint_dir.glob("checkpoint_iter_*.h5"))

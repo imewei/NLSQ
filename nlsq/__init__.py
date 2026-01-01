@@ -44,9 +44,9 @@ import numpy as np
 # Core API - always needed for basic functionality
 from nlsq import callbacks
 from nlsq.core import functions
-from nlsq.core._optimize import OptimizeResult, OptimizeWarning
 from nlsq.core.least_squares import LeastSquares
 from nlsq.core.minpack import CurveFit, curve_fit
+from nlsq.result import OptimizeResult, OptimizeWarning
 from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
 
 # =============================================================================

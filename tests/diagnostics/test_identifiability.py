@@ -16,9 +16,9 @@ from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
 from nlsq.diagnostics.types import (
     DiagnosticsConfig,
     HealthStatus,
+    IdentifiabilityReport,
     IssueCategory,
     IssueSeverity,
-    IdentifiabilityReport,
 )
 
 

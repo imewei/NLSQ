@@ -14,11 +14,11 @@ This subpackage contains the core optimization algorithms:
 """
 
 from nlsq.core import functions
-from nlsq.core._optimize import OptimizeResult, OptimizeWarning
 from nlsq.core.least_squares import LeastSquares
 from nlsq.core.minpack import CurveFit, curve_fit
 from nlsq.core.sparse_jacobian import SparseJacobianComputer, SparseOptimizer
 from nlsq.core.trf import TrustRegionReflective
+from nlsq.result import OptimizeResult, OptimizeWarning
 
 __all__ = [
     "CurveFit",

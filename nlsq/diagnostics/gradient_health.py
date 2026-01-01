@@ -38,9 +38,9 @@ The GradientMonitor can be integrated with the TRF optimizer via callbacks:
 
 from __future__ import annotations
 
+import time
 from collections import deque
 from collections.abc import Callable
-import time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -129,20 +129,20 @@ class GradientMonitor:
     """
 
     __slots__ = (
+        "_cost_history",
+        "_gradient_norm_history",
+        "_has_numerical_issues",
+        "_initial_cost",
+        "_initial_gradient_norm",
+        "_last_gradient_norm",
+        "_last_params",
+        "_max_imbalance_ratio",
+        "_n_params",
+        "_param_count",
+        "_param_m2",
+        "_param_means",
         "config",
         "iteration_count",
-        "_gradient_norm_history",
-        "_cost_history",
-        "_param_means",
-        "_param_m2",
-        "_param_count",
-        "_last_gradient_norm",
-        "_has_numerical_issues",
-        "_n_params",
-        "_max_imbalance_ratio",
-        "_initial_gradient_norm",
-        "_initial_cost",
-        "_last_params",
     )
 
     def __init__(self, config: DiagnosticsConfig) -> None:
@@ -346,14 +346,13 @@ class GradientMonitor:
                     # First iteration or no norm - use uniform gradient
                     n_params = len(params)
                     gradient = np.ones(n_params) * (gradient_norm / np.sqrt(n_params)) if gradient_norm > 0 else np.ones(n_params)
+            # No gradient info - estimate from parameters
+            elif self._last_params is not None:
+                gradient = -(params - self._last_params)
+                if np.linalg.norm(gradient) == 0:
+                    gradient = np.ones_like(params) * 1e-10
             else:
-                # No gradient info - estimate from parameters
-                if self._last_params is not None:
-                    gradient = -(params - self._last_params)
-                    if np.linalg.norm(gradient) == 0:
-                        gradient = np.ones_like(params) * 1e-10
-                else:
-                    gradient = np.ones_like(params)
+                gradient = np.ones_like(params)
 
             # Store current params for next iteration
             self._last_params = params.copy()

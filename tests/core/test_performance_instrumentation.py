@@ -14,10 +14,13 @@ import os
 import time
 import unittest
 from collections import deque
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import jax.numpy as jnp
 import numpy as np
+
+from tests.conftest import wait_for
 
 
 class TestJITRecompilationCounter(unittest.TestCase):
@@ -250,8 +253,14 @@ class TestCheckpointSaveDurationTracking(unittest.TestCase):
                     (x_data, y_data), model, p0=np.array([1.0]), verbose=0
                 )
 
-                # Wait for async checkpoints to complete
-                time.sleep(0.5)
+                # Wait for checkpoint files to be created
+                import contextlib
+
+                def checkpoint_exists():
+                    return len(list(Path(tmpdir).glob("checkpoint_iter_*.h5"))) > 0
+                with contextlib.suppress(TimeoutError):
+                    wait_for(checkpoint_exists, timeout=5.0, message="Checkpoint not created")
+                # May not create checkpoint if optimization is too fast
 
                 # Check diagnostics
                 diagnostics = result["streaming_diagnostics"]
