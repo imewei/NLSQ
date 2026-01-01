@@ -9,7 +9,7 @@ issues in streaming optimization:
 
 The optimizer operates in four phases:
 - **Phase 0**: Parameter normalization setup
-- **Phase 1**: Adam warmup with adaptive switching
+- **Phase 1**: L-BFGS warmup with adaptive switching
 - **Phase 2**: Streaming Gauss-Newton with exact J^T J accumulation
 - **Phase 3**: Denormalization and covariance transform
 
@@ -20,7 +20,6 @@ This implementation focuses on Phase 0 setup logic and phase tracking infrastruc
 
 from __future__ import annotations
 
-import pickle
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -49,6 +48,7 @@ from nlsq.streaming.telemetry import (
     reset_defense_telemetry,
 )
 from nlsq.utils.logging import get_logger
+from nlsq.utils.safe_serialize import safe_dumps, safe_loads
 
 # Module-level logger for warmup defense diagnostics
 _logger = get_logger("adaptive_hybrid_streaming")
@@ -65,7 +65,7 @@ __all__ = [
 class AdaptiveHybridStreamingOptimizer:
     """Adaptive hybrid streaming optimizer with four-phase optimization.
 
-    This optimizer combines parameter normalization, Adam warmup, streaming
+    This optimizer combines parameter normalization, L-BFGS warmup, streaming
     Gauss-Newton, and exact covariance computation to provide:
 
     - Fast convergence for parameters with different scales
@@ -76,7 +76,7 @@ class AdaptiveHybridStreamingOptimizer:
     The optimization proceeds through four phases:
 
     - **Phase 0**: Setup parameter normalization and bounds transformation
-    - **Phase 1**: Adam warmup with adaptive switching to Phase 2
+    - **Phase 1**: L-BFGS warmup with adaptive switching to Phase 2
     - **Phase 2**: Streaming Gauss-Newton with exact J^T J accumulation
     - **Phase 3**: Denormalize parameters and transform covariance matrix
 
@@ -128,7 +128,7 @@ class AdaptiveHybridStreamingOptimizer:
 
     >>> config = HybridStreamingConfig(
     ...     warmup_iterations=300,
-    ...     warmup_learning_rate=0.01,
+    ...     lbfgs_initial_step_size=0.5,
     ...     gauss_newton_tol=1e-10
     ... )
     >>> optimizer = AdaptiveHybridStreamingOptimizer(config)
@@ -998,103 +998,6 @@ class AdaptiveHybridStreamingOptimizer:
             self.multistart_diagnostics = {"error": str(e), "fallback": True}
             return self.normalized_params
 
-    def _create_adam_optimizer(
-        self,
-        params: jnp.ndarray,
-        learning_rate_override: float | None = None,
-    ) -> tuple[optax.GradientTransformation, optax.OptState]:
-        """Create Adam optimizer with optax, optionally with learning rate schedule and gradient clipping.
-
-        Parameters
-        ----------
-        params : array_like
-            Initial parameters in normalized space
-        learning_rate_override : float, optional
-            Override base learning rate for adaptive warmup (Layer 2 of 4-layer
-            defense strategy). If None, uses config.warmup_learning_rate.
-
-        Returns
-        -------
-        optimizer : optax.GradientTransformation
-            Adam optimizer instance (potentially chained with gradient clipping)
-        opt_state : optax.OptState
-            Initial optimizer state
-
-        Notes
-        -----
-        Uses learning rate from config.warmup_learning_rate (or learning_rate_override if provided).
-        If config.use_learning_rate_schedule is True, uses optax.warmup_cosine_decay_schedule.
-        If config.gradient_clip_value is not None, chains optax.clip_by_global_norm with Adam.
-
-        Examples
-        --------
-        Basic Adam (no schedule, no clipping):
-        >>> config = HybridStreamingConfig(warmup_learning_rate=0.001)
-        >>> optimizer = AdaptiveHybridStreamingOptimizer(config)
-        >>> opt, state = optimizer._create_adam_optimizer(params)
-
-        Adam with learning rate schedule:
-        >>> config = HybridStreamingConfig(
-        ...     use_learning_rate_schedule=True,
-        ...     warmup_learning_rate=0.001,
-        ...     lr_schedule_warmup_steps=50,
-        ...     lr_schedule_decay_steps=450
-        ... )
-        >>> optimizer = AdaptiveHybridStreamingOptimizer(config)
-        >>> opt, state = optimizer._create_adam_optimizer(params)
-
-        Adam with gradient clipping:
-        >>> config = HybridStreamingConfig(gradient_clip_value=1.0)
-        >>> optimizer = AdaptiveHybridStreamingOptimizer(config)
-        >>> opt, state = optimizer._create_adam_optimizer(params)
-
-        Adam with adaptive learning rate (Layer 2):
-        >>> opt, state = optimizer._create_adam_optimizer(params, learning_rate_override=1e-6)
-        """
-        # Determine base learning rate (allow override for adaptive warmup)
-        base_lr = (
-            learning_rate_override
-            if learning_rate_override is not None
-            else self.config.warmup_learning_rate
-        )
-
-        # Determine learning rate (fixed or schedule)
-        if self.config.use_learning_rate_schedule:
-            # Use warmup + cosine decay schedule with base_lr as peak
-            learning_rate = optax.warmup_cosine_decay_schedule(
-                init_value=0.0,
-                peak_value=base_lr,
-                warmup_steps=self.config.lr_schedule_warmup_steps,
-                decay_steps=self.config.lr_schedule_decay_steps,
-                end_value=self.config.lr_schedule_end_value,
-            )
-        else:
-            # Use fixed learning rate
-            learning_rate = base_lr
-
-        # Build optimizer chain
-        optimizer_components = []
-
-        # Add gradient clipping if configured
-        if self.config.gradient_clip_value is not None:
-            optimizer_components.append(
-                optax.clip_by_global_norm(self.config.gradient_clip_value)
-            )
-
-        # Add Adam optimizer
-        optimizer_components.append(optax.adam(learning_rate=learning_rate))
-
-        # Chain components if multiple, else use single Adam
-        if len(optimizer_components) > 1:
-            optimizer = optax.chain(*optimizer_components)
-        else:
-            optimizer = optimizer_components[0]
-
-        # Initialize optimizer state
-        opt_state = optimizer.init(params)
-
-        return optimizer, opt_state
-
     def _create_lbfgs_optimizer(
         self,
         params: jnp.ndarray,
@@ -1103,7 +1006,7 @@ class AdaptiveHybridStreamingOptimizer:
         """Create L-BFGS optimizer with optax for Phase 1 warmup.
 
         L-BFGS provides 5-10x faster convergence to the basin of attraction
-        compared to Adam by using approximate Hessian information.
+        compared to first-order warmup by using approximate Hessian information.
 
         Parameters
         ----------
@@ -1446,8 +1349,8 @@ class AdaptiveHybridStreamingOptimizer:
         """Clip parameter update vector to maximum L2 norm (JIT-compatible).
 
         This is Layer 4 of the 4-layer defense strategy for warmup divergence
-        prevention. It limits the magnitude of Adam updates to prevent large
-        steps that could destabilize optimization when near an optimum.
+        prevention. It limits the magnitude of warmup updates to prevent
+        large steps that could destabilize optimization when near an optimum.
 
         Parameters
         ----------
@@ -1471,112 +1374,6 @@ class AdaptiveHybridStreamingOptimizer:
         update_norm = jnp.linalg.norm(updates)
         scale = jnp.minimum(1.0, max_norm / (update_norm + 1e-10))
         return updates * scale
-
-    def _adam_step(
-        self,
-        params: jnp.ndarray,
-        opt_state: optax.OptState,
-        optimizer: optax.GradientTransformation,
-        loss_fn: Callable,
-        x_batch: jnp.ndarray,
-        y_batch: jnp.ndarray,
-    ) -> tuple[jnp.ndarray, float, float, optax.OptState]:
-        """Perform single Adam optimization step with numerical validation.
-
-        Parameters
-        ----------
-        params : array_like
-            Current parameters in normalized space
-        opt_state : optax.OptState
-            Current optimizer state
-        optimizer : optax.GradientTransformation
-            Adam optimizer instance
-        loss_fn : callable
-            Loss function
-        x_batch : array_like
-            Independent variable batch
-        y_batch : array_like
-            Dependent variable batch
-
-        Returns
-        -------
-        new_params : array_like
-            Updated parameters in normalized space
-        loss : float
-            Loss value before update
-        grad_norm : float
-            L2 norm of gradient
-        new_opt_state : optax.OptState
-            Updated optimizer state
-
-        Notes
-        -----
-        Uses jax.value_and_grad for efficient loss and gradient computation.
-        Includes NaN/Inf validation if enabled in config.
-        """
-        # Validate input parameters
-        self._validate_numerics(params, context="at Adam step input")
-
-        # Compute loss and gradient
-        loss_value, grads = jax.value_and_grad(loss_fn)(params, x_batch, y_batch)
-
-        # Validate loss and gradients
-        if not self._validate_numerics(
-            params, loss=float(loss_value), gradients=grads, context="in Adam step"
-        ):
-            # Handle numerical issues
-            if (
-                hasattr(self.config, "enable_fault_tolerance")
-                and self.config.enable_fault_tolerance
-            ):
-                # Return current params unchanged (fallback)
-                return params, float("inf"), float("inf"), opt_state
-            else:
-                raise ValueError("Numerical issues detected in Adam step")
-
-        # Compute gradient norm
-        grad_norm = jnp.linalg.norm(grads)
-
-        # Apply optimizer updates
-        updates, new_opt_state = optimizer.update(grads, opt_state)
-
-        # Layer 4: Trust Region Constraint - clip update magnitude (JIT-compatible)
-        if self.config.enable_step_clipping:
-            # Track original norm for telemetry before clipping
-            original_update_norm = float(jnp.linalg.norm(updates))
-            max_norm = self.config.max_warmup_step_size
-
-            updates = self._clip_update_norm(updates, max_norm)
-
-            # Record Layer 4 telemetry if clipping occurred
-            if original_update_norm > max_norm:
-                telemetry = get_defense_telemetry()
-                telemetry.record_layer4_clip(
-                    original_norm=original_update_norm, max_norm=max_norm
-                )
-
-        new_params = optax.apply_updates(params, updates)
-
-        # Validate updated parameters
-        if not self._validate_numerics(new_params, context="after Adam update"):
-            # Fallback: keep old parameters
-            if (
-                hasattr(self.config, "enable_fault_tolerance")
-                and self.config.enable_fault_tolerance
-            ):
-                return params, float(loss_value), float(grad_norm), opt_state
-            else:
-                raise ValueError("NaN/Inf in parameters after Adam update")
-
-        # Track best parameters globally
-        if float(loss_value) < self.best_cost_global:
-            self.best_cost_global = float(loss_value)
-            self.best_params_global = new_params
-
-        # Store optimizer state for checkpointing
-        self.phase1_optimizer_state = new_opt_state
-
-        return new_params, float(loss_value), float(grad_norm), new_opt_state
 
     def _check_phase1_switch_criteria(
         self,
@@ -1648,8 +1445,8 @@ class AdaptiveHybridStreamingOptimizer:
         """Run Phase 1 L-BFGS warmup.
 
         L-BFGS provides 5-10x faster convergence to the basin of attraction
-        compared to Adam by using approximate second-order (Hessian) information.
-        This replaces the previous Adam warmup implementation.
+        compared to first-order warmup by using approximate second-order
+        (Hessian) information.
 
         Parameters
         ----------
@@ -3501,7 +3298,7 @@ class AdaptiveHybridStreamingOptimizer:
         Checkpoint format version 3.0 includes:
         - current_phase: Current phase number
         - normalized_params: Parameters in normalized space
-        - phase1_optimizer_state: Optax Adam state (mu, nu, count)
+        - phase1_optimizer_state: Optax L-BFGS state (history + params)
         - phase2_jtj_accumulator: Accumulated J^T J matrix
         - phase2_jtr_accumulator: Accumulated J^T r vector
         - best_params_global: Best parameters found globally
@@ -3526,7 +3323,7 @@ class AdaptiveHybridStreamingOptimizer:
                     "normalized_params", data=self.normalized_params
                 )
 
-            # Save Phase 1 optimizer state (Optax L-BFGS or legacy Adam)
+            # Save Phase 1 optimizer state (Optax L-BFGS)
             if self.phase1_optimizer_state is not None:
                 opt_state_group = phase_state.create_group("phase1_optimizer_state")
                 inner_state = self.phase1_optimizer_state[0]
@@ -3548,11 +3345,11 @@ class AdaptiveHybridStreamingOptimizer:
                     opt_state_group.create_dataset(
                         "weights_memory", data=inner_state.weights_memory
                     )
-                elif hasattr(inner_state, "mu") and hasattr(inner_state, "nu"):
-                    # Legacy Adam state: ScaleByAdamState has count, mu, nu
-                    opt_state_group.attrs["optimizer_type"] = "adam"
-                    opt_state_group.create_dataset("mu", data=inner_state.mu)
-                    opt_state_group.create_dataset("nu", data=inner_state.nu)
+                else:
+                    raise ValueError(
+                        "Unsupported Phase 1 optimizer state for checkpointing. "
+                        "Expected L-BFGS (ScaleByLBFGSState)."
+                    )
 
             # Save Phase 2 accumulators
             if self.phase2_JTJ_accumulator is not None:
@@ -3571,11 +3368,11 @@ class AdaptiveHybridStreamingOptimizer:
                 )
             phase_state.create_dataset("best_cost_global", data=self.best_cost_global)
 
-            # Save phase history as pickle (easier for complex structures)
+            # Save phase history using safe JSON serialization
             if self.phase_history:
                 import numpy as np
 
-                phase_history_bytes = pickle.dumps(self.phase_history)
+                phase_history_bytes = safe_dumps(self.phase_history)
                 phase_state.create_dataset(
                     "phase_history", data=np.void(phase_history_bytes)
                 )
@@ -3595,7 +3392,7 @@ class AdaptiveHybridStreamingOptimizer:
                 tournament_checkpoint = self.tournament_selector.to_checkpoint()
                 for key, value in tournament_checkpoint.items():
                     if isinstance(value, (list, dict)):
-                        tournament_bytes = pickle.dumps(value)
+                        tournament_bytes = safe_dumps(value)
                         tournament_group.create_dataset(
                             key, data=np.void(tournament_bytes)
                         )
@@ -3603,7 +3400,7 @@ class AdaptiveHybridStreamingOptimizer:
                         try:
                             tournament_group.create_dataset(key, data=value)
                         except TypeError:
-                            tournament_bytes = pickle.dumps(value)
+                            tournament_bytes = safe_dumps(value)
                             tournament_group.create_dataset(
                                 key, data=np.void(tournament_bytes)
                             )
@@ -3654,33 +3451,27 @@ class AdaptiveHybridStreamingOptimizer:
             if "phase1_optimizer_state" in phase_state:
                 opt_state_group = phase_state["phase1_optimizer_state"]
                 count = int(opt_state_group["count"][()])
-                optimizer_type = opt_state_group.attrs.get("optimizer_type", "adam")
-
-                if optimizer_type == "lbfgs":
-                    # Reconstruct L-BFGS state
-                    from optax._src.transform import ScaleByLBFGSState
-
-                    lbfgs_state = ScaleByLBFGSState(
-                        count=count,
-                        params=jnp.array(opt_state_group["params"]),
-                        updates=jnp.array(opt_state_group["updates"]),
-                        diff_params_memory=jnp.array(
-                            opt_state_group["diff_params_memory"]
-                        ),
-                        diff_updates_memory=jnp.array(
-                            opt_state_group["diff_updates_memory"]
-                        ),
-                        weights_memory=jnp.array(opt_state_group["weights_memory"]),
+                optimizer_type = opt_state_group.attrs.get("optimizer_type", "lbfgs")
+                if optimizer_type != "lbfgs":
+                    raise ValueError(
+                        "Unsupported Phase 1 optimizer state in checkpoint. "
+                        "Expected L-BFGS state."
                     )
-                    self.phase1_optimizer_state = (lbfgs_state, optax.EmptyState())
-                else:
-                    # Legacy Adam state reconstruction
-                    mu = jnp.array(opt_state_group["mu"])
-                    nu = jnp.array(opt_state_group["nu"])
-                    from optax._src.transform import ScaleByAdamState
 
-                    adam_state = ScaleByAdamState(count=count, mu=mu, nu=nu)
-                    self.phase1_optimizer_state = (adam_state, optax.EmptyState())
+                # Reconstruct L-BFGS state
+                from optax._src.transform import ScaleByLBFGSState
+
+                lbfgs_state = ScaleByLBFGSState(
+                    count=count,
+                    params=jnp.array(opt_state_group["params"]),
+                    updates=jnp.array(opt_state_group["updates"]),
+                    diff_params_memory=jnp.array(opt_state_group["diff_params_memory"]),
+                    diff_updates_memory=jnp.array(
+                        opt_state_group["diff_updates_memory"]
+                    ),
+                    weights_memory=jnp.array(opt_state_group["weights_memory"]),
+                )
+                self.phase1_optimizer_state = (lbfgs_state, optax.EmptyState())
 
             # Restore Phase 2 accumulators
             if "phase2_jtj_accumulator" in phase_state:
@@ -3697,10 +3488,10 @@ class AdaptiveHybridStreamingOptimizer:
                 self.best_params_global = jnp.array(phase_state["best_params_global"])
             self.best_cost_global = float(phase_state["best_cost_global"][()])
 
-            # Restore phase history
+            # Restore phase history using safe JSON deserialization
             if "phase_history" in phase_state:
                 phase_history_bytes = bytes(phase_state["phase_history"][()])
-                self.phase_history = pickle.loads(phase_history_bytes)  # nosec B301
+                self.phase_history = safe_loads(phase_history_bytes)
 
             # Restore normalizer state (if exists)
             if "normalizer_state" in phase_state:
@@ -3725,7 +3516,7 @@ class AdaptiveHybridStreamingOptimizer:
                 for key in tournament_group:
                     value = tournament_group[key][()]
                     if isinstance(value, np.void):
-                        tournament_checkpoint[key] = pickle.loads(bytes(value))  # nosec B301
+                        tournament_checkpoint[key] = safe_loads(bytes(value))
                     else:
                         tournament_checkpoint[key] = (
                             np.array(value) if hasattr(value, "__len__") else value
@@ -4005,7 +3796,7 @@ class AdaptiveHybridStreamingOptimizer:
         Notes
         -----
         Phase 0 (normalization) always uses float64 for accuracy.
-        Phase 1 (Adam warmup) can use float32 for memory efficiency with 'auto'.
+        Phase 1 (L-BFGS warmup) can use float32 for memory efficiency with 'auto'.
         Phase 2+ (Gauss-Newton, covariance) use float64 for numerical stability.
 
         Sets self.current_precision and self.phase_precisions.
@@ -4075,7 +3866,7 @@ class AdaptiveHybridStreamingOptimizer:
         if self.normalized_params is not None:
             self.normalized_params = self.normalized_params.astype(target_dtype)
 
-        # Convert Phase 1 optimizer state (Optax L-BFGS or legacy Adam)
+        # Convert Phase 1 optimizer state (Optax L-BFGS)
         if self.phase1_optimizer_state is not None:
             try:
                 inner_state = self.phase1_optimizer_state[0]
@@ -4097,16 +3888,6 @@ class AdaptiveHybridStreamingOptimizer:
                         weights_memory=inner_state.weights_memory.astype(target_dtype),
                     )
                     self.phase1_optimizer_state = (new_lbfgs_state, optax.EmptyState())
-                elif hasattr(inner_state, "mu") and hasattr(inner_state, "nu"):
-                    # Legacy Adam state conversion
-                    from optax._src.transform import ScaleByAdamState
-
-                    new_adam_state = ScaleByAdamState(
-                        count=inner_state.count,
-                        mu=inner_state.mu.astype(target_dtype),
-                        nu=inner_state.nu.astype(target_dtype),
-                    )
-                    self.phase1_optimizer_state = (new_adam_state, optax.EmptyState())
             except Exception:
                 # If conversion fails, reset optimizer state
                 self.phase1_optimizer_state = None
@@ -4251,7 +4032,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         This method orchestrates all four phases:
         - Phase 0: Setup normalization
-        - Phase 1: Adam warmup
+        - Phase 1: L-BFGS warmup
         - Phase 2: Streaming Gauss-Newton
         - Phase 3: Denormalization and covariance
 
@@ -4342,7 +4123,7 @@ class AdaptiveHybridStreamingOptimizer:
             print()
 
         # ============================================================
-        # Phase 1: Adam Warmup
+        # Phase 1: L-BFGS warmup
         # ============================================================
         # Handle precision transition to Phase 1
         self._handle_phase_transition_precision(1)
