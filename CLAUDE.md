@@ -197,6 +197,13 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - N/A (file reorganization only) (004-reorganize-tests-scripts)
 
 ## Recent Changes
+- 005-model-health-diagnostics: Model Health Diagnostics System (planned):
+  - New `nlsq/diagnostics/` subpackage for post-fit model health analysis
+  - Identifiability analysis (FIM condition number, rank, correlations)
+  - Gradient health monitoring (vanishing, imbalance, stagnation detection)
+  - Sloppy model analysis (eigenvalue spectrum, stiff/sloppy directions)
+  - Plugin system for domain-specific diagnostic extensions
+  - Spec: `/specs/005-model-health-diagnostics/`
 - 004-legacy-modernization: Comprehensive codebase modernization (v0.4.2):
   - Extracted interfaces/ package with Protocol classes for dependency injection
   - Split trf.py: extracted trf_jit.py (474 lines) and profiler.py (181 lines)

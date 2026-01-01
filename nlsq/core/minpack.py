@@ -62,6 +62,9 @@ from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.common_scipy import EPS
 from nlsq.core._optimize import OptimizeWarning
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
+
+# Diagnostics imports (lazy to avoid circular imports)
+from nlsq.diagnostics.types import DiagnosticLevel, DiagnosticsConfig, DiagnosticsReport
 from nlsq.precision.algorithm_selector import auto_select_algorithm
 from nlsq.precision.parameter_estimation import estimate_initial_parameters
 from nlsq.result import CurveFitResult
@@ -735,6 +738,10 @@ def curve_fit(
     sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
+    # Diagnostics parameters (User Story 1)
+    compute_diagnostics: bool = False,
+    diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
+    diagnostics_config: DiagnosticsConfig | None = None,
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
     """
@@ -1144,6 +1151,12 @@ def curve_fit(
         cache_config=cache_config,
         max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
     )
+    # Pass diagnostics parameters through kwargs
+    if compute_diagnostics:
+        kwargs["compute_diagnostics"] = True
+        kwargs["diagnostics_level"] = diagnostics_level
+        kwargs["diagnostics_config"] = diagnostics_config
+
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
     # Add empty multi-start diagnostics for consistency
@@ -2458,6 +2471,9 @@ class CurveFit:
         timeit: bool = False,
         return_eval: bool = False,
         callback: Callable | None = None,
+        compute_diagnostics: bool = False,
+        diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
+        diagnostics_config: DiagnosticsConfig | None = None,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -2754,6 +2770,88 @@ class CurveFit:
             result["xdata"] = xdata
             result["ydata"] = ydata
             result["pcov"] = _pcov
+
+            # Compute diagnostics if requested
+            if compute_diagnostics:
+                try:
+                    from nlsq.diagnostics.health_report import create_health_report
+                    from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
+
+                    # Use provided config or create default (with verbose=False to
+                    # avoid double printing - we handle logging separately)
+                    # If diagnostics_level is FULL, we need to include it in the config
+                    if diagnostics_config is not None:
+                        config = diagnostics_config
+                    else:
+                        config = DiagnosticsConfig(
+                            level=diagnostics_level,
+                            verbose=False,
+                            emit_warnings=True,
+                        )
+
+                    # Get Jacobian from result
+                    jacobian = np.asarray(res.jac)
+
+                    # Run identifiability analysis
+                    analyzer = IdentifiabilityAnalyzer(config=config)
+                    ident_report = analyzer.analyze(jacobian)
+
+                    # Get gradient health report if available from optimization
+                    gradient_health_report = res.get("gradient_health_report")
+
+                    # Run sloppy model analysis if diagnostics_level is FULL (User Story 4)
+                    sloppy_model_report = None
+                    if config.level == DiagnosticLevel.FULL:
+                        from nlsq.diagnostics.sloppy_model import SloppyModelAnalyzer
+
+                        sloppy_analyzer = SloppyModelAnalyzer(config=config)
+                        sloppy_model_report = sloppy_analyzer.analyze(jacobian)
+
+                    # Create aggregated health report using factory function
+                    # Note: verbose and emit_warnings are handled by create_health_report
+                    health_report = create_health_report(
+                        identifiability=ident_report,
+                        gradient_health=gradient_health_report,
+                        sloppy_model=sloppy_model_report,
+                        plugin_results=None,  # Plugin system not yet implemented
+                        config=config,
+                    )
+
+                    # Attach to result
+                    result["_diagnostics_report"] = health_report
+
+                    # Log diagnostics summary if user requested verbose
+                    if diagnostics_config and diagnostics_config.verbose:
+                        self.logger.info(
+                            "Diagnostics computed",
+                            health_status=health_report.status.name,
+                            health_score=f"{health_report.health_score:.2f}",
+                            n_issues=len(health_report.all_issues),
+                        )
+
+                except Exception as e:
+                    self.logger.warning(
+                        "Failed to compute diagnostics",
+                        error=str(e),
+                    )
+                    # Create unavailable diagnostics report
+                    from nlsq.diagnostics.health_report import create_health_report
+                    from nlsq.diagnostics.types import (
+                        HealthStatus,
+                        IdentifiabilityReport,
+                    )
+
+                    unavailable_ident = IdentifiabilityReport(
+                        available=False,
+                        error_message=str(e),
+                        n_params=n,
+                        health_status=HealthStatus.CRITICAL,
+                    )
+                    health_report = create_health_report(
+                        identifiability=unavailable_ident,
+                        config=DiagnosticsConfig(verbose=False, emit_warnings=False),
+                    )
+                    result["_diagnostics_report"] = health_report
 
             # Add cache statistics if available
             try:

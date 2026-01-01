@@ -40,6 +40,8 @@ class CurveFitResult(OptimizeResult):
         Fitted parameters (alias for self.x).
     pcov : array_like
         Parameter covariance matrix.
+    diagnostics : DiagnosticsReport | None
+        Model health diagnostics report (if compute_diagnostics=True).
 
     Statistical Properties
     ----------------------
@@ -119,6 +121,12 @@ class CurveFitResult(OptimizeResult):
         # Statistical summary
         result.summary()
 
+    With diagnostics::
+
+        result = curve_fit(exponential, x, y, compute_diagnostics=True)
+        print(result.diagnostics.summary())
+        print(result.diagnostics.identifiability.health_status)
+
     Backward compatibility::
 
         # Tuple unpacking still works
@@ -166,6 +174,41 @@ class CurveFitResult(OptimizeResult):
         if _pcov is not None:
             return np.asarray(_pcov)
         return _pcov
+
+    @property
+    def diagnostics(self):
+        """Model health diagnostics report.
+
+        Returns the health report if compute_diagnostics=True was
+        specified when calling curve_fit(), otherwise returns None.
+
+        Returns
+        -------
+        diagnostics : ModelHealthReport | None
+            Aggregated model health report containing identifiability
+            analysis, gradient health monitoring, and other health metrics.
+            None if diagnostics were not computed.
+
+        Examples
+        --------
+        >>> result = curve_fit(model, x, y, compute_diagnostics=True)
+        >>> if result.diagnostics is not None:
+        ...     print(result.diagnostics.summary())
+        ...     print(result.diagnostics.status)
+        ...     print(result.diagnostics.health_score)
+        ...     if result.diagnostics.identifiability is not None:
+        ...         print(result.diagnostics.identifiability.health_status)
+
+        See Also
+        --------
+        nlsq.diagnostics.ModelHealthReport : Aggregated health report
+        nlsq.diagnostics.IdentifiabilityReport : Identifiability analysis
+        nlsq.diagnostics.GradientHealthReport : Gradient health monitoring
+        """
+        # Access diagnostics directly from dict (set by minpack.py)
+        # Note: Due to OptimizeResult's __setattr__ = dict.__setitem__,
+        # result.diagnostics = value actually stores to result['diagnostics']
+        return self.get("_diagnostics_report")
 
     @property
     def predictions(self):
@@ -611,6 +654,7 @@ class CurveFitResult(OptimizeResult):
         - Goodness of fit metrics (R², RMSE, MAE)
         - Model selection criteria (AIC, BIC)
         - Convergence information
+        - Diagnostics summary (if available)
 
         Examples
         --------
@@ -668,5 +712,22 @@ class CurveFitResult(OptimizeResult):
         print(
             f"Optimality        : {self.optimality if hasattr(self, 'optimality') else 'N/A':.6e}"
         )
+
+        # Diagnostics summary (if available)
+        if self.diagnostics is not None:
+            print("\n" + "=" * 70)
+            print("Model Health Diagnostics:")
+            print("-" * 70)
+            print(f"Overall Status    : {self.diagnostics.status.name}")
+            print(f"Health Score      : {self.diagnostics.health_score:.2f}")
+            if self.diagnostics.all_issues:
+                print(f"Issues            : {len(self.diagnostics.all_issues)}")
+                for issue in self.diagnostics.all_issues[:3]:  # Show first 3
+                    print(f"  - [{issue.severity.name}] {issue.code}: {issue.message}")
+            if self.diagnostics.identifiability is not None:
+                ident = self.diagnostics.identifiability
+                print(f"Identifiability   : {ident.health_status.name}")
+                print(f"  Condition #     : {ident.condition_number:.2e}")
+                print(f"  Numerical Rank  : {ident.numerical_rank}/{ident.n_params}")
 
         print("=" * 70)

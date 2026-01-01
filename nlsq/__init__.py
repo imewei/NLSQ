@@ -156,6 +156,24 @@ _LAZY_MODULES: dict[str, str] = {
     "get_global_compilation_cache": "nlsq.caching.compilation_cache",
     # Validators
     "InputValidator": "nlsq.utils.validators",
+    # Model Health Diagnostics (new in v1.0)
+    "HealthStatus": "nlsq.diagnostics.types",
+    "IssueSeverity": "nlsq.diagnostics.types",
+    "IssueCategory": "nlsq.diagnostics.types",
+    "DiagnosticLevel": "nlsq.diagnostics.types",
+    "ModelHealthIssue": "nlsq.diagnostics.types",
+    "IdentifiabilityReport": "nlsq.diagnostics.types",
+    "GradientHealthReport": "nlsq.diagnostics.types",
+    "SloppyModelReport": "nlsq.diagnostics.types",
+    "ModelHealthReport": "nlsq.diagnostics.types",
+    "DiagnosticsConfig": "nlsq.diagnostics.types",
+    "IdentifiabilityAnalyzer": "nlsq.diagnostics.identifiability",
+    "GradientMonitor": "nlsq.diagnostics.gradient_health",
+    "SloppyModelAnalyzer": "nlsq.diagnostics.sloppy_model",
+    "DiagnosticPlugin": "nlsq.diagnostics.plugin",
+    "PluginRegistry": "nlsq.diagnostics.plugin",
+    "run_plugins": "nlsq.diagnostics.plugin",
+    "create_health_report": "nlsq.diagnostics.health_report",
 }
 
 # Cache for lazily-loaded attributes
