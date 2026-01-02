@@ -20,6 +20,7 @@ from nlsq.streaming.validators import (
     validate_multistart_config,
     validate_normalization_strategy,
     validate_precision,
+    validate_residual_weighting_config,
     validate_streaming_config,
     validate_warmup_config,
 )
@@ -358,6 +359,17 @@ class HybridStreamingConfig:
     group_variance_lambda: float = 0.01
     group_variance_indices: list[tuple[int, int]] | None = None
 
+    # Residual weighting for weighted least squares optimization
+    # When enabled, residuals are weighted during loss computation:
+    #   wMSE = sum(w[group_idx] * residuals^2) / sum(w[group_idx])
+    # This is useful for:
+    # - Heteroscedastic data (varying noise levels across groups)
+    # - Emphasizing certain regions or groups of data
+    # - Domain-specific weighting (e.g., angle-dependent weights in XPCS)
+    # The weights are looked up using the first column of x_data as group index.
+    enable_residual_weighting: bool = False
+    residual_weights: list[float] | None = None  # Per-group weights, shape (n_groups,)
+
     # Streaming configuration
     chunk_size: int = 10000
 
@@ -456,6 +468,12 @@ class HybridStreamingConfig:
                 enabled=self.enable_group_variance_regularization,
                 lambda_val=self.group_variance_lambda,
                 indices=self.group_variance_indices,
+            )
+
+            # Validate residual weighting configuration
+            validate_residual_weighting_config(
+                enabled=self.enable_residual_weighting,
+                weights=self.residual_weights,
             )
 
             # Validate streaming configuration

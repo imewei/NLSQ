@@ -207,6 +207,10 @@ class AdaptiveHybridStreamingOptimizer:
         self._warmup_lr_mode: str | None = None
         self._warmup_clip_count: int = 0
 
+        # Residual weighting state for weighted least squares
+        # Allows domain-specific weighting of residuals during optimization
+        self._residual_weights_jax: jnp.ndarray | None = None  # Per-group weights
+
         # Pre-compiled Jacobian function (set up in _setup_jacobian_fn)
         # This avoids recompilation overhead in _compute_jacobian_chunk
         self._jacobian_fn_compiled: Callable | None = None
@@ -310,6 +314,73 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Pre-compile Jacobian function for Phase 2 performance
         self._setup_jacobian_fn()
+
+        # Initialize residual weights from config if enabled
+        self._setup_residual_weights()
+
+    def _setup_residual_weights(self) -> None:
+        """Initialize residual weights from config.
+
+        This method sets up per-group weights for weighted least squares
+        optimization. When enabled, residuals are weighted during loss
+        computation, allowing users to assign different importance to
+        different groups of data points.
+
+        The weights are stored as JAX arrays for efficient lookup during
+        loss computation.
+
+        Notes
+        -----
+        Residual weighting is useful for:
+        - Heteroscedastic data (varying noise levels)
+        - Emphasizing certain regions of the data
+        - Domain-specific weighting schemes (e.g., XPCS shear-sensitivity)
+        """
+        if not self.config.enable_residual_weighting:
+            return
+
+        if self.config.residual_weights is None:
+            _logger.warning(
+                "Residual weighting enabled but no weights provided. "
+                "Residual weighting will be disabled."
+            )
+            return
+
+        # Convert to JAX arrays for efficient computation
+        self._residual_weights_jax = jnp.asarray(
+            self.config.residual_weights, dtype=jnp.float64
+        )
+
+        _logger.info(
+            f"Residual weighting enabled: n_weights={len(self._residual_weights_jax)}, "
+            f"weight_range=[{float(self._residual_weights_jax.min()):.3f}, "
+            f"{float(self._residual_weights_jax.max()):.3f}]"
+        )
+
+    def set_residual_weights(self, weights: np.ndarray) -> None:
+        """Set residual weights for weighted least squares optimization.
+
+        This method allows updating weights during optimization, for example
+        when weights need to be recomputed based on current parameter estimates.
+
+        Parameters
+        ----------
+        weights : np.ndarray
+            Per-group weights of shape (n_groups,). Higher weights give more
+            importance to residuals in that group. The group index for each
+            data point is determined by the first column of x_data.
+
+        Notes
+        -----
+        Weights must be positive. The weighted MSE is computed as:
+            wMSE = sum(w[group_idx] * residuals^2) / sum(w[group_idx])
+        """
+        self._residual_weights_jax = jnp.asarray(weights, dtype=jnp.float64)
+
+        _logger.debug(
+            f"Updated residual weights: range=[{float(self._residual_weights_jax.min()):.3f}, "
+            f"{float(self._residual_weights_jax.max()):.3f}]"
+        )
 
     def _setup_jacobian_fn(self) -> None:
         """Pre-compile the Jacobian function for efficient Phase 2 computation.
@@ -1261,6 +1332,11 @@ class AdaptiveHybridStreamingOptimizer:
             L = MSE + group_variance_lambda * sum(Var(group_i))
         where each group_i is defined by `group_variance_indices`.
         This prevents per-angle parameters from absorbing angle-dependent physical signals.
+
+        When `enable_residual_weighting=True`, the MSE becomes weighted MSE:
+            wMSE = sum(w[group_idx] * residuals^2) / sum(w[group_idx])
+        where w[group_idx] are per-group weights. The group index is determined
+        by the first column of x_data.
         """
         # Use normalized model wrapper
         normalized_model = self.normalized_model
@@ -1270,9 +1346,66 @@ class AdaptiveHybridStreamingOptimizer:
         var_lambda = self.config.group_variance_lambda
         var_indices = self.config.group_variance_indices
 
-        if enable_var_reg and var_indices:
-            # Convert indices to JAX-friendly format (static)
-            # Each tuple (start, end) defines a parameter group
+        # Capture residual weighting state for closure
+        # Note: We capture the current state; if weights are updated via set_residual_weights,
+        # a new loss function should be created by calling _create_warmup_loss_fn again
+        enable_weighting = (
+            self.config.enable_residual_weighting
+            and self._residual_weights_jax is not None
+        )
+        residual_weights = self._residual_weights_jax
+
+        # Determine which loss function variant to create
+        # There are 4 cases based on (var_reg, weighting) combination
+
+        if enable_var_reg and var_indices and enable_weighting:
+            # Case 1: Both group variance regularization AND residual weighting
+            group_slices = [(start, end) for start, end in var_indices]
+
+            @jax.jit
+            def loss_fn(
+                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+            ) -> float:
+                """Compute weighted MSE + group variance regularization.
+
+                Parameters
+                ----------
+                params : array_like
+                    Parameters in normalized space
+                x_batch : array_like
+                    Independent variable batch. First column contains group indices.
+                y_batch : array_like
+                    Dependent variable batch
+
+                Returns
+                -------
+                loss : float
+                    wMSE + lambda * sum(Var(group_i))
+                """
+                predictions = normalized_model(x_batch, *params)
+                residuals = y_batch - predictions
+
+                # Extract group indices from x_batch (first column contains group index)
+                group_idx = x_batch[:, 0].astype(jnp.int32)
+
+                # Lookup weights for each data point
+                assert residual_weights is not None
+                weights = residual_weights[group_idx]
+
+                # Weighted mean: sum(w * r^2) / sum(w)
+                wmse = jnp.sum(weights * residuals**2) / jnp.sum(weights)
+
+                # Compute group variance penalty
+                variance_penalty = 0.0
+                for start, end in group_slices:
+                    group_params = params[start:end]
+                    group_var = jnp.var(group_params)
+                    variance_penalty = variance_penalty + group_var
+
+                return wmse + var_lambda * variance_penalty
+
+        elif enable_var_reg and var_indices:
+            # Case 2: Only group variance regularization (no residual weighting)
             group_slices = [(start, end) for start, end in var_indices]
 
             @jax.jit
@@ -1295,26 +1428,62 @@ class AdaptiveHybridStreamingOptimizer:
                 loss : float
                     MSE + lambda * sum(Var(group_i))
                 """
-                # Predict using normalized model (automatically denormalizes params)
                 predictions = normalized_model(x_batch, *params)
-
-                # Compute MSE
                 residuals = y_batch - predictions
                 mse = jnp.mean(residuals**2)
 
                 # Compute group variance penalty
-                # For each group, compute variance of parameters in that group
                 variance_penalty = 0.0
                 for start, end in group_slices:
                     group_params = params[start:end]
-                    # Variance = E[(x - mean)^2]
                     group_var = jnp.var(group_params)
                     variance_penalty = variance_penalty + group_var
 
                 return mse + var_lambda * variance_penalty
 
+        elif enable_weighting:
+            # Case 3: Only residual weighting (no group variance regularization)
+            @jax.jit
+            def loss_fn(
+                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+            ) -> float:
+                """Compute weighted mean squared residuals in normalized space.
+
+                This loss function uses per-group weights for weighted least squares.
+                The group index for each data point is determined by the first
+                column of x_batch.
+
+                Parameters
+                ----------
+                params : array_like
+                    Parameters in normalized space
+                x_batch : array_like
+                    Independent variable batch. First column contains group indices.
+                y_batch : array_like
+                    Dependent variable batch
+
+                Returns
+                -------
+                loss : float
+                    Weighted mean squared residuals
+                """
+                predictions = normalized_model(x_batch, *params)
+                residuals = y_batch - predictions
+
+                # Extract group indices from x_batch (first column contains group index)
+                group_idx = x_batch[:, 0].astype(jnp.int32)
+
+                # Lookup weights for each data point
+                assert residual_weights is not None
+                weights = residual_weights[group_idx]
+
+                # Weighted mean: sum(w * r^2) / sum(w)
+                wmse = jnp.sum(weights * residuals**2) / jnp.sum(weights)
+
+                return wmse
+
         else:
-            # Standard MSE loss (no regularization)
+            # Case 4: Standard MSE loss (no regularization, no weighting)
             @jax.jit
             def loss_fn(
                 params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
@@ -1335,13 +1504,8 @@ class AdaptiveHybridStreamingOptimizer:
                 loss : float
                     Mean squared residuals
                 """
-                # Predict using normalized model (automatically denormalizes params)
                 predictions = normalized_model(x_batch, *params)
-
-                # Compute residuals
                 residuals = y_batch - predictions
-
-                # Return mean squared residuals
                 return jnp.mean(residuals**2)
 
         return loss_fn

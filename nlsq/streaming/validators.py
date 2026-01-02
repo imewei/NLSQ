@@ -525,6 +525,62 @@ def validate_defense_layer_config(
         validate_positive(max_step_size, "max_warmup_step_size")
 
 
+def validate_residual_weighting_config(
+    enabled: bool,
+    weights: Any,
+) -> None:
+    """Validate residual weighting configuration.
+
+    Residual weighting allows users to assign different importance to
+    different data points or groups of data points during optimization.
+    This is useful for:
+    - Heteroscedastic data (varying noise levels)
+    - Emphasizing certain regions of the data
+    - Down-weighting outliers
+    - Domain-specific weighting schemes
+
+    Parameters
+    ----------
+    enabled : bool
+        Whether residual weighting is enabled.
+    weights : array-like or None
+        Weight array. Can be either:
+        - Per-group weights of shape (n_groups,) with group_indices provided
+        - Per-point weights of shape (n_data,) for direct weighting
+
+    Raises
+    ------
+    ConfigValidationError
+        If configuration is invalid.
+    """
+    if not enabled:
+        return
+
+    if weights is None:
+        raise ConfigValidationError(
+            "residual_weights must be provided when enable_residual_weighting=True"
+        )
+
+    # Check that weights is array-like with positive values
+    import numpy as np
+
+    try:
+        weights_arr = np.asarray(weights)
+    except (ValueError, TypeError) as e:
+        raise ConfigValidationError(f"residual_weights must be array-like: {e}") from e
+
+    if weights_arr.ndim != 1:
+        raise ConfigValidationError(
+            f"residual_weights must be 1D array, got {weights_arr.ndim}D"
+        )
+
+    if len(weights_arr) == 0:
+        raise ConfigValidationError("residual_weights must not be empty")
+
+    if np.any(weights_arr <= 0):
+        raise ConfigValidationError("residual_weights must all be positive")
+
+
 def validate_multistart_config(
     enabled: bool,
     n_starts: int,
