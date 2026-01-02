@@ -19,7 +19,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nlsq.streaming.phases.checkpoint import CheckpointManager, CheckpointState
     from nlsq.streaming.phases.gauss_newton import GaussNewtonPhase, GNResult
-    from nlsq.streaming.phases.orchestrator import PhaseOrchestrator
+    from nlsq.streaming.phases.orchestrator import (
+        PhaseOrchestrator,
+        PhaseOrchestratorResult,
+    )
     from nlsq.streaming.phases.warmup import WarmupPhase, WarmupResult
 
 # Lazy import mapping for deferred module loading
@@ -32,6 +35,7 @@ _LAZY_IMPORTS: dict[str, str] = {
     "CheckpointManager": "nlsq.streaming.phases.checkpoint",
     "CheckpointState": "nlsq.streaming.phases.checkpoint",
     "PhaseOrchestrator": "nlsq.streaming.phases.orchestrator",
+    "PhaseOrchestratorResult": "nlsq.streaming.phases.orchestrator",
 }
 
 
@@ -58,6 +62,7 @@ __all__ = [
     "GNResult",
     "GaussNewtonPhase",
     "PhaseOrchestrator",
+    "PhaseOrchestratorResult",
     "WarmupPhase",
     "WarmupResult",
 ]
