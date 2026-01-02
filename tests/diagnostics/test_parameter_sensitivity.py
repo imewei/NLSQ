@@ -105,11 +105,13 @@ class TestParameterSensitivityReport:
 
     def test_get_sloppy_combinations_returns_eigenvectors(self) -> None:
         """Test get_sloppy_combinations returns correct eigenvector-eigenvalue pairs."""
-        eigenvectors = np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ])
+        eigenvectors = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
         eigenvalues = np.array([1e6, 1.0, 1e-8])
         report = ParameterSensitivityReport(
             is_sloppy=True,
@@ -146,11 +148,12 @@ class TestParameterSensitivityReport:
         combinations = report.get_sloppy_combinations()
         assert len(combinations) == 2
         # Verify correct eigenvectors are returned
-        indices_returned = []
-        for eigenvec, eigenval in combinations:
-            for idx in [2, 3]:
-                if np.allclose(eigenvec, eigenvectors[:, idx]):
-                    indices_returned.append(idx)
+        indices_returned = [
+            idx
+            for eigenvec, eigenval in combinations
+            for idx in [2, 3]
+            if np.allclose(eigenvec, eigenvectors[:, idx])
+        ]
         assert set(indices_returned) == {2, 3}
 
     def test_get_sloppy_combinations_none_eigenvectors(self) -> None:
@@ -180,7 +183,9 @@ class TestParameterSensitivityAnalyzer:
         return DiagnosticsConfig()
 
     @pytest.fixture
-    def analyzer(self, default_config: DiagnosticsConfig) -> ParameterSensitivityAnalyzer:
+    def analyzer(
+        self, default_config: DiagnosticsConfig
+    ) -> ParameterSensitivityAnalyzer:
         """Create ParameterSensitivityAnalyzer with default configuration."""
         return ParameterSensitivityAnalyzer(config=default_config)
 
@@ -229,7 +234,9 @@ class TestParameterSensitivityAnalyzer:
 
     # Test basic analysis
     def test_analyze_returns_report(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test analyze returns a ParameterSensitivityReport."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -237,7 +244,9 @@ class TestParameterSensitivityAnalyzer:
         assert report.available is True
 
     def test_analyze_eigenvalues_computed(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test eigenvalues are computed correctly."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -246,7 +255,9 @@ class TestParameterSensitivityAnalyzer:
         assert np.all(report.eigenvalues >= -1e-10)
 
     def test_analyze_eigenvectors_computed(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test eigenvectors are computed."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -255,7 +266,9 @@ class TestParameterSensitivityAnalyzer:
         assert report.eigenvectors.shape == (n_params, n_params)
 
     def test_analyze_eigenvectors_orthonormal(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test eigenvectors are orthonormal."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -268,7 +281,9 @@ class TestParameterSensitivityAnalyzer:
 
     # Test sensitivity spread detection
     def test_well_conditioned_not_wide_spread(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test well-conditioned Jacobian returns is_sloppy=False."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -356,7 +371,9 @@ class TestParameterSensitivityAnalyzer:
             assert min_stiff > max_sloppy
 
     def test_all_stiff_when_well_conditioned(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test all directions are classified as stiff for well-conditioned model."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -375,7 +392,9 @@ class TestParameterSensitivityAnalyzer:
         assert 0.0 <= report.effective_dimensionality <= n_params
 
     def test_effective_dimensionality_high_for_well_conditioned(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test effective dimensionality is high for well-conditioned model."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -480,7 +499,9 @@ class TestParameterSensitivityAnalyzer:
             assert sens_002[0].severity == IssueSeverity.INFO
 
     def test_no_issues_for_healthy_model(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test no issues for well-conditioned model."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -489,7 +510,9 @@ class TestParameterSensitivityAnalyzer:
 
     # Test health status
     def test_health_status_healthy(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test HEALTHY status for well-conditioned Jacobian."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -543,7 +566,9 @@ class TestParameterSensitivityAnalyzer:
 
     # Test computation time tracking
     def test_computation_time_tracked(
-        self, analyzer: ParameterSensitivityAnalyzer, well_conditioned_jacobian: np.ndarray
+        self,
+        analyzer: ParameterSensitivityAnalyzer,
+        well_conditioned_jacobian: np.ndarray,
     ) -> None:
         """Test computation time is tracked."""
         report = analyzer.analyze(well_conditioned_jacobian)
@@ -558,7 +583,9 @@ class TestParameterSensitivityAnalyzer:
         assert report.available is True
         assert len(report.eigenvalues) == 3
 
-    def test_analyze_from_fim_wide_spread(self, analyzer: ParameterSensitivityAnalyzer) -> None:
+    def test_analyze_from_fim_wide_spread(
+        self, analyzer: ParameterSensitivityAnalyzer
+    ) -> None:
         """Test analysis from wide spread FIM."""
         # Wide spread FIM with eigenvalues spanning many orders of magnitude
         eigenvalues = np.array([1e8, 1.0, 1e-6])
@@ -921,7 +948,9 @@ class TestMultiExponentialSensitivity:
             stiff_eigenvalues = [report.eigenvalues[i] for i in report.stiff_indices]
             # Stiff eigenvalues should be significantly larger than sloppy
             if len(report.sloppy_indices) > 0:
-                sloppy_eigenvalues = [report.eigenvalues[i] for i in report.sloppy_indices]
+                sloppy_eigenvalues = [
+                    report.eigenvalues[i] for i in report.sloppy_indices
+                ]
                 assert min(stiff_eigenvalues) > max(sloppy_eigenvalues)
 
 
@@ -1026,7 +1055,7 @@ class TestKnownSensitivityPatterns:
 
         # Jacobian
         z = (x - x0) / sigma
-        gauss = np.exp(-z**2 / 2)
+        gauss = np.exp(-(z**2) / 2)
 
         J = np.zeros((len(x), 3))
         J[:, 0] = gauss  # dy/dA
@@ -1056,7 +1085,8 @@ class TestDeprecationWarnings:
 
             # Check that a deprecation warning was raised
             deprecation_warnings = [
-                warning for warning in w
+                warning
+                for warning in w
                 if issubclass(warning.category, DeprecationWarning)
             ]
             assert len(deprecation_warnings) >= 1
@@ -1086,7 +1116,8 @@ class TestDeprecationWarnings:
 
             # Check that a deprecation warning was raised
             deprecation_warnings = [
-                warning for warning in w
+                warning
+                for warning in w
                 if issubclass(warning.category, DeprecationWarning)
             ]
             assert len(deprecation_warnings) >= 1

@@ -305,7 +305,9 @@ chunked Gauss-Newton updates:
     print("Streaming Results:")
     print(f"  Converged: {stream_result['success']}")
     print(f"  Final parameters: {stream_result['x']}")
-    print(f"  Final cost: {stream_result['streaming_diagnostics']['gauss_newton_diagnostics']['final_cost']}")
+    print(
+        f"  Final cost: {stream_result['streaming_diagnostics']['gauss_newton_diagnostics']['final_cost']}"
+    )
 
 Performance Comparison
 ----------------------

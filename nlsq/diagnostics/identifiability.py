@@ -286,9 +286,7 @@ class IdentifiabilityAnalyzer:
             computation_time_ms=computation_time,
         )
 
-    def _compute_svd(
-        self, fim: np.ndarray
-    ) -> tuple[np.ndarray, float, int]:
+    def _compute_svd(self, fim: np.ndarray) -> tuple[np.ndarray, float, int]:
         """Compute SVD of the FIM for condition number and rank.
 
         Uses the existing nlsq.stability.svd_fallback module for robust
@@ -336,9 +334,7 @@ class IdentifiabilityAnalyzer:
 
         return singular_values, condition_number, numerical_rank
 
-    def _compute_correlation_matrix(
-        self, fim: np.ndarray
-    ) -> np.ndarray | None:
+    def _compute_correlation_matrix(self, fim: np.ndarray) -> np.ndarray | None:
         """Compute the correlation matrix from the FIM.
 
         The correlation matrix is derived from the covariance matrix,

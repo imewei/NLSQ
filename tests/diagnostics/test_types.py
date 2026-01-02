@@ -226,7 +226,9 @@ class TestModelHealthIssue:
         )
         assert issue1 == issue2
 
-    def test_model_health_issue_not_hashable(self, sample_issue: ModelHealthIssue) -> None:
+    def test_model_health_issue_not_hashable(
+        self, sample_issue: ModelHealthIssue
+    ) -> None:
         """Test ModelHealthIssue is not hashable due to dict field.
 
         Even though the dataclass is frozen, the details field is a dict

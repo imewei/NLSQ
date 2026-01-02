@@ -25,6 +25,7 @@ class TestDomainAgnosticDocumentation:
 
         result = subprocess.run(
             ["grep", "-n", "-i", "xpcs", str(guard_path)],
+            check=False,
             capture_output=True,
             text=True,
         )
@@ -41,6 +42,7 @@ class TestDomainAgnosticDocumentation:
 
         result = subprocess.run(
             ["grep", "-n", "-i", "xpcs", str(hybrid_config_path)],
+            check=False,
             capture_output=True,
             text=True,
         )
@@ -77,13 +79,16 @@ class TestDomainAgnosticDocumentation:
             for term in domain_terms:
                 result = subprocess.run(
                     ["grep", "-n", "-i", term, str(file_path)],
+                    check=False,
                     capture_output=True,
                     text=True,
                 )
                 if result.returncode == 0:
-                    violations.append(f"{file_path.name}: '{term}' found:\n{result.stdout}")
+                    violations.append(
+                        f"{file_path.name}: '{term}' found:\n{result.stdout}"
+                    )
 
         assert not violations, (
-            f"Found domain-specific terms in core documentation:\n"
+            "Found domain-specific terms in core documentation:\n"
             + "\n".join(violations)
         )

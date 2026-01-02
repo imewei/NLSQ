@@ -214,7 +214,9 @@ def _sort_issues(issues: list[ModelHealthIssue]) -> list[ModelHealthIssue]:
         "INFO": 2,
     }
 
-    return sorted(issues, key=lambda i: (severity_order.get(i.severity.name, 3), i.code))
+    return sorted(
+        issues, key=lambda i: (severity_order.get(i.severity.name, 3), i.code)
+    )
 
 
 def _determine_status(
@@ -452,10 +454,11 @@ def _format_summary(report: ModelHealthReport, verbose: bool = True) -> str:
                 report.identifiability.numerical_rank >= report.identifiability.n_params
             )
             is_practical = (
-                is_structural
-                and report.identifiability.condition_number < 1e8
+                is_structural and report.identifiability.condition_number < 1e8
             )
-            lines.append(f"Structurally identifiable: {'Yes' if is_structural else 'No'}")
+            lines.append(
+                f"Structurally identifiable: {'Yes' if is_structural else 'No'}"
+            )
             lines.append(f"Practically identifiable: {'Yes' if is_practical else 'No'}")
 
             # Format condition number appropriately
@@ -495,15 +498,18 @@ def _format_summary(report: ModelHealthReport, verbose: bool = True) -> str:
 
     # Sloppy Model section (only for FULL level)
     config = report.config or DiagnosticsConfig()
-    if (
-        config.level == DiagnosticLevel.FULL
-        and report.sloppy_model is not None
-    ):
+    if config.level == DiagnosticLevel.FULL and report.sloppy_model is not None:
         lines.append("--- Sloppy Model ---")
         if report.sloppy_model.available:
-            lines.append(f"Is sloppy: {'Yes' if report.sloppy_model.is_sloppy else 'No'}")
-            lines.append(f"Eigenvalue range: {report.sloppy_model.eigenvalue_range:.1f} orders of magnitude")
-            lines.append(f"Effective dimensionality: {report.sloppy_model.effective_dimensionality:.1f}")
+            lines.append(
+                f"Is sloppy: {'Yes' if report.sloppy_model.is_sloppy else 'No'}"
+            )
+            lines.append(
+                f"Eigenvalue range: {report.sloppy_model.eigenvalue_range:.1f} orders of magnitude"
+            )
+            lines.append(
+                f"Effective dimensionality: {report.sloppy_model.effective_dimensionality:.1f}"
+            )
         else:
             lines.append(f"UNAVAILABLE: {report.sloppy_model.error_message}")
         lines.append("")
@@ -577,7 +583,8 @@ def _to_dict(report: ModelHealthReport) -> dict[str, Any]:
             "available": report.identifiability.available,
             "error_message": report.identifiability.error_message,
             "condition_number": (
-                None if math.isinf(report.identifiability.condition_number)
+                None
+                if math.isinf(report.identifiability.condition_number)
                 else report.identifiability.condition_number
             ),
             "numerical_rank": report.identifiability.numerical_rank,

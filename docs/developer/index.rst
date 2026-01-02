@@ -2,12 +2,13 @@ Developer Documentation
 =======================
 
 This section contains technical documentation for developers working on NLSQ,
-including performance optimization guides, CI/CD pipeline documentation,
+including architecture overview, performance optimization guides, CI/CD pipeline documentation,
 release management, development best practices, and Architecture Decision Records (ADRs).
 
 .. toctree::
    :maxdepth: 2
 
+   architecture
    optimization_case_study
    performance_tuning_guide
    documentation_quality

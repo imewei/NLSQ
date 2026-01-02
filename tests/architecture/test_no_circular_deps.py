@@ -62,9 +62,7 @@ class TestCircularDependencyDetection:
 
         # Build a helpful error message if cycles are found
         if cycles:
-            cycle_report = "\n".join(
-                f"  - {a} <-> {b}" for a, b in sorted(cycles)
-            )
+            cycle_report = "\n".join(f"  - {a} <-> {b}" for a, b in sorted(cycles))
             pytest.fail(
                 f"Found {len(cycles)} circular dependency pairs:\n{cycle_report}\n\n"
                 "To fix circular dependencies:\n"

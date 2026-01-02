@@ -30,7 +30,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
+import optax  # type: ignore[import-not-found]
 
 from nlsq.global_optimization.config import GlobalOptimizationConfig
 from nlsq.global_optimization.sampling import (
@@ -3516,6 +3516,7 @@ class AdaptiveHybridStreamingOptimizer:
         if self._checkpoint_manager is None:
             if "CheckpointManager" not in _lazy_imports:
                 from nlsq.streaming.phases.checkpoint import CheckpointManager
+
                 _lazy_imports["CheckpointManager"] = CheckpointManager
             self._checkpoint_manager = _lazy_imports["CheckpointManager"](self.config)
         return self._checkpoint_manager
@@ -3954,7 +3955,9 @@ class AdaptiveHybridStreamingOptimizer:
 
                 if hasattr(inner_state, "diff_params_memory"):
                     # L-BFGS state conversion
-                    from optax._src.transform import ScaleByLBFGSState
+                    from optax._src.transform import (  # type: ignore[import-not-found]
+                        ScaleByLBFGSState,
+                    )
 
                     new_lbfgs_state = ScaleByLBFGSState(
                         count=inner_state.count,

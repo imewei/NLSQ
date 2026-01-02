@@ -140,11 +140,13 @@ def correlation_warning_report() -> IdentifiabilityReport:
         condition_number=1e5,
         numerical_rank=3,
         n_params=3,
-        correlation_matrix=np.array([
-            [1.0, 0.3, 0.97],
-            [0.3, 1.0, 0.2],
-            [0.97, 0.2, 1.0],
-        ]),
+        correlation_matrix=np.array(
+            [
+                [1.0, 0.3, 0.97],
+                [0.3, 1.0, 0.2],
+                [0.97, 0.2, 1.0],
+            ]
+        ),
         highly_correlated_pairs=[(0, 2, 0.97)],
         issues=[issue],
         health_status=HealthStatus.WARNING,
@@ -812,7 +814,9 @@ class TestSummaryFormatHealthy:
         summary = report.summary()
 
         assert "Identifiability" in summary
-        assert "Structurally identifiable" in summary or "identifiable" in summary.lower()
+        assert (
+            "Structurally identifiable" in summary or "identifiable" in summary.lower()
+        )
 
     def test_summary_contains_gradient_section(
         self,
@@ -1248,9 +1252,15 @@ class TestHealthReportEdgeCases:
         severities = [i.severity for i in report.all_issues]
 
         # All CRITICAL should come before WARNING
-        critical_indices = [idx for idx, s in enumerate(severities) if s == IssueSeverity.CRITICAL]
-        warning_indices = [idx for idx, s in enumerate(severities) if s == IssueSeverity.WARNING]
-        info_indices = [idx for idx, s in enumerate(severities) if s == IssueSeverity.INFO]
+        critical_indices = [
+            idx for idx, s in enumerate(severities) if s == IssueSeverity.CRITICAL
+        ]
+        warning_indices = [
+            idx for idx, s in enumerate(severities) if s == IssueSeverity.WARNING
+        ]
+        info_indices = [
+            idx for idx, s in enumerate(severities) if s == IssueSeverity.INFO
+        ]
 
         if critical_indices and warning_indices:
             assert max(critical_indices) < min(warning_indices)

@@ -81,7 +81,7 @@ def detect_circular_deps(package_name: str = "nlsq") -> list[tuple[str, str]]:
             # Skip TYPE_CHECKING blocks
             if isinstance(node, ast.If):
                 # Check if this is "if TYPE_CHECKING:"
-                if (isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING"):
+                if isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING":
                     continue
 
             if isinstance(node, ast.Import):
@@ -102,7 +102,9 @@ def detect_circular_deps(package_name: str = "nlsq") -> list[tuple[str, str]]:
             if module_a == module_b:
                 continue
             # Skip if one is parent of another (e.g., nlsq.core imports nlsq.core.minpack)
-            if module_a.startswith(module_b + ".") or module_b.startswith(module_a + "."):
+            if module_a.startswith(module_b + ".") or module_b.startswith(
+                module_a + "."
+            ):
                 continue
 
             if module_b in imports and module_a in imports[module_b]:

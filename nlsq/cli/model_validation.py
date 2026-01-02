@@ -35,49 +35,53 @@ logger = logging.getLogger("nlsq.cli.security")
 
 # Dangerous patterns that trigger blocking
 # These patterns indicate operations that could lead to arbitrary code execution
-DANGEROUS_PATTERNS: frozenset[str] = frozenset({
-    # Code execution
-    "exec",
-    "eval",
-    "compile",
-    "__import__",
-    # System access
-    "system",
-    "popen",
-    "spawn",
-    "call",
-    "run",
-    "Popen",
-    # Network access
-    "socket",
-    "urlopen",
-    "request",
-    # File operations (write mode detection handled separately)
-    # Memory manipulation
-    "ctypes",
-    "cffi",
-    # Module manipulation
-    "importlib",
-    "__loader__",
-    "__spec__",
-})
+DANGEROUS_PATTERNS: frozenset[str] = frozenset(
+    {
+        # Code execution
+        "exec",
+        "eval",
+        "compile",
+        "__import__",
+        # System access
+        "system",
+        "popen",
+        "spawn",
+        "call",
+        "run",
+        "Popen",
+        # Network access
+        "socket",
+        "urlopen",
+        "request",
+        # File operations (write mode detection handled separately)
+        # Memory manipulation
+        "ctypes",
+        "cffi",
+        # Module manipulation
+        "importlib",
+        "__loader__",
+        "__spec__",
+    }
+)
 
 # Dangerous module prefixes
-DANGEROUS_MODULES: frozenset[str] = frozenset({
-    "os",
-    "subprocess",
-    "shutil",
-    "socket",
-    "urllib",
-    "http",
-    "ftplib",
-    "telnetlib",
-    "smtplib",
-    "ctypes",
-    "cffi",
-    "multiprocessing",
-    "concurrent",
-})
+DANGEROUS_MODULES: frozenset[str] = frozenset(
+    {
+        "os",
+        "subprocess",
+        "shutil",
+        "socket",
+        "urllib",
+        "http",
+        "ftplib",
+        "telnetlib",
+        "smtplib",
+        "ctypes",
+        "cffi",
+        "multiprocessing",
+        "concurrent",
+    }
+)
 
 
 @dataclass
@@ -170,7 +174,9 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         if node.module:
             module_root = node.module.split(".")[0]
             if module_root in DANGEROUS_MODULES:
-                self.violations.append(f"Dangerous import: from {node.module} import ...")
+                self.violations.append(
+                    f"Dangerous import: from {node.module} import ..."
+                )
         self.generic_visit(node)
 
 

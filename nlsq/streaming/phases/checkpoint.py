@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import h5py
+import h5py  # type: ignore[import-not-found]
 import jax.numpy as jnp
 import numpy as np
-import optax
+import optax  # type: ignore[import-not-found]
 
 from nlsq.utils.safe_serialize import safe_dumps, safe_loads
 
@@ -385,7 +385,9 @@ class CheckpointManager:
                 "Expected L-BFGS state."
             )
 
-        from optax._src.transform import ScaleByLBFGSState
+        from optax._src.transform import (  # type: ignore[import-not-found]
+            ScaleByLBFGSState,
+        )
 
         lbfgs_state = ScaleByLBFGSState(
             count=count,
@@ -409,9 +411,7 @@ class CheckpointManager:
             phase2_JTr = jnp.array(phase_state["phase2_jtr_accumulator"])
         return phase2_JTJ, phase2_JTr
 
-    def _read_best_params(
-        self, phase_state: h5py.Group
-    ) -> tuple[Array | None, float]:
+    def _read_best_params(self, phase_state: h5py.Group) -> tuple[Array | None, float]:
         """Read best parameters tracking."""
         best_params = None
         if "best_params_global" in phase_state:

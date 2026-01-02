@@ -413,9 +413,7 @@ echo "========================================"
     print(
         "  defense_strict()     - Best for checkpoint resume (step size: 1e-6 to 1e-4)"
     )
-    print(
-        "  defense_relaxed()    - For fresh starts (step size: 1e-4 to 0.01)"
-    )
+    print("  defense_relaxed()    - For fresh starts (step size: 1e-4 to 0.01)")
     print("  scientific_default() - Balanced for production")
     print("  defense_disabled()   - Pre-0.3.6 behavior (no protection)")
 

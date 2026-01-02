@@ -739,5 +739,3 @@ def temp_array_pool():
 
     # Clean up arrays added during test
     manager.clear_pool()
-
-

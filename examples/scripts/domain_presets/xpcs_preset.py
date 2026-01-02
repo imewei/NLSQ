@@ -50,11 +50,9 @@ def create_xpcs_preset() -> WorkflowConfig:
 
     config = WorkflowConfig.from_preset("precision_standard").with_overrides(
         # XPCS-specific overrides:
-
         # Increase n_starts for stretched exponential fits which can have
         # multiple local minima depending on the stretching exponent
         n_starts=15,
-
         # Use Sobol sampling for better coverage of multi-dimensional
         # parameter spaces (tau, beta, baseline, contrast)
         sampler="sobol",
@@ -120,10 +118,10 @@ def main():
 
     # True parameters
     true_params = {
-        "tau": 0.01,       # 10 ms relaxation time
-        "beta": 0.8,       # Stretched exponential (subdiffusive dynamics)
-        "baseline": 0.0,   # Ideal baseline
-        "contrast": 0.3,   # Typical speckle contrast
+        "tau": 0.01,  # 10 ms relaxation time
+        "beta": 0.8,  # Stretched exponential (subdiffusive dynamics)
+        "baseline": 0.0,  # Ideal baseline
+        "contrast": 0.3,  # Typical speckle contrast
     }
 
     # Generate noisy data
@@ -147,8 +145,8 @@ def main():
     p0 = [0.1, 0.9, 0.0, 0.25]  # [tau, beta, baseline, contrast]
 
     bounds = (
-        [1e-8, 0.1, -0.1, 0.01],   # Lower bounds
-        [1e3, 2.0, 0.1, 1.0],      # Upper bounds
+        [1e-8, 0.1, -0.1, 0.01],  # Lower bounds
+        [1e3, 2.0, 0.1, 1.0],  # Upper bounds
     )
 
     # Fit using the XPCS preset

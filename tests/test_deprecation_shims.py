@@ -166,7 +166,7 @@ class TestWorkflowPresetDeprecationShims:
         """Test that all deprecated domain-specific presets work with warnings."""
         from nlsq.core.workflow import DEPRECATED_PRESET_ALIASES, WorkflowConfig
 
-        for old_preset, new_preset in DEPRECATED_PRESET_ALIASES.items():
+        for old_preset in DEPRECATED_PRESET_ALIASES:
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 config = WorkflowConfig.from_preset(old_preset)

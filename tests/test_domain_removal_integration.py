@@ -52,7 +52,7 @@ class TestPresetWithCurveFitEndToEnd:
 
     def test_precision_high_preset_with_curve_fit(self, synthetic_data):
         """Test that precision_high preset parameters work with curve_fit."""
-        x, y, (true_amp, true_decay) = synthetic_data
+        x, y, _ = synthetic_data
 
         # Get preset configuration
         config = WorkflowConfig.from_preset("precision_high")
@@ -246,7 +246,7 @@ class TestDeprecatedPresetsStillWork:
 
     def test_all_deprecated_presets_produce_valid_configs(self):
         """Test all deprecated presets in DEPRECATED_PRESET_ALIASES work."""
-        for old_preset, new_preset in DEPRECATED_PRESET_ALIASES.items():
+        for old_preset in DEPRECATED_PRESET_ALIASES:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
                 config = WorkflowConfig.from_preset(old_preset)

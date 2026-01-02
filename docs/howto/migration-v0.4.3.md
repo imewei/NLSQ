@@ -36,6 +36,7 @@ from nlsq import OptimizeResult, OptimizeWarning
 **Suppressing Warnings During Migration:**
 ```python
 import warnings
+
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="nlsq")
 ```
 
@@ -120,6 +121,7 @@ v0.4.3 provides a `wait_for()` utility for reliable condition waiting:
 ```python
 import time
 
+
 def test_async_operation():
     start_async_task()
     time.sleep(2.0)  # Flaky: might not be enough time
@@ -129,6 +131,7 @@ def test_async_operation():
 **After (v0.4.3):**
 ```python
 from tests.conftest import wait_for
+
 
 def test_async_operation():
     start_async_task()
@@ -168,22 +171,17 @@ from nlsq.interfaces import (
     OptimizerProtocol,
     LeastSquaresOptimizerProtocol,
     CurveFitProtocol,
-
     # Data protocols
     DataSourceProtocol,
     StreamingDataSourceProtocol,
-
     # Computation protocols
     JacobianProtocol,
     SparseJacobianProtocol,
-
     # Cache protocols
     CacheProtocol,
     BoundedCacheProtocol,
-
     # Result protocol
     ResultProtocol,
-
     # Concrete implementations
     ArrayDataSource,
     AutodiffJacobian,

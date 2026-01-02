@@ -160,9 +160,7 @@ class GradientMonitor:
         self._gradient_norm_history: deque[float] = deque(
             maxlen=config.gradient_window_size
         )
-        self._cost_history: deque[float] = deque(
-            maxlen=config.gradient_window_size
-        )
+        self._cost_history: deque[float] = deque(maxlen=config.gradient_window_size)
 
         # Welford's algorithm state for per-parameter running statistics
         self._param_means: np.ndarray = np.array([])
@@ -250,7 +248,9 @@ class GradientMonitor:
         self._param_m2 += delta * delta2
 
         # Track max imbalance ratio (with overflow guard)
-        min_grad = np.min(abs_gradient[abs_gradient > 0]) if np.any(abs_gradient > 0) else 1.0
+        min_grad = (
+            np.min(abs_gradient[abs_gradient > 0]) if np.any(abs_gradient > 0) else 1.0
+        )
         max_grad = np.max(abs_gradient)
         if min_grad > 0 and np.isfinite(max_grad) and np.isfinite(min_grad):
             imbalance = max_grad / min_grad
@@ -341,11 +341,17 @@ class GradientMonitor:
                     else:
                         # No parameter change - use uniform gradient
                         n_params = len(params)
-                        gradient = np.ones(n_params) * (gradient_norm / np.sqrt(n_params))
+                        gradient = np.ones(n_params) * (
+                            gradient_norm / np.sqrt(n_params)
+                        )
                 else:
                     # First iteration or no norm - use uniform gradient
                     n_params = len(params)
-                    gradient = np.ones(n_params) * (gradient_norm / np.sqrt(n_params)) if gradient_norm > 0 else np.ones(n_params)
+                    gradient = (
+                        np.ones(n_params) * (gradient_norm / np.sqrt(n_params))
+                        if gradient_norm > 0
+                        else np.ones(n_params)
+                    )
             # No gradient info - estimate from parameters
             elif self._last_params is not None:
                 gradient = -(params - self._last_params)
@@ -362,7 +368,9 @@ class GradientMonitor:
 
             # Call user callback if provided
             if user_callback is not None:
-                user_callback(iteration=iteration, cost=cost, params=params, info=info, **kwargs)
+                user_callback(
+                    iteration=iteration, cost=cost, params=params, info=info, **kwargs
+                )
 
         return gradient_monitor_callback
 
@@ -527,8 +535,7 @@ class GradientMonitor:
 
         # Also check if gradient has dropped significantly from initial
         gradient_dropped = (
-            self._initial_gradient_norm > 0
-            and avg_recent_norm < relative_threshold
+            self._initial_gradient_norm > 0 and avg_recent_norm < relative_threshold
         )
 
         return gradient_dropped and cost_significant
@@ -623,9 +630,7 @@ class GradientMonitor:
 
         return max(0.0, score)
 
-    def _determine_health_status(
-        self, issues: list[ModelHealthIssue]
-    ) -> HealthStatus:
+    def _determine_health_status(self, issues: list[ModelHealthIssue]) -> HealthStatus:
         """Determine overall health status from detected issues.
 
         Parameters
@@ -641,15 +646,11 @@ class GradientMonitor:
         if not issues:
             return HealthStatus.HEALTHY
 
-        has_critical = any(
-            issue.severity == IssueSeverity.CRITICAL for issue in issues
-        )
+        has_critical = any(issue.severity == IssueSeverity.CRITICAL for issue in issues)
         if has_critical:
             return HealthStatus.CRITICAL
 
-        has_warning = any(
-            issue.severity == IssueSeverity.WARNING for issue in issues
-        )
+        has_warning = any(issue.severity == IssueSeverity.WARNING for issue in issues)
         if has_warning:
             return HealthStatus.WARNING
 
@@ -674,8 +675,16 @@ class GradientMonitor:
         ModelHealthIssue
             Issue describing vanishing gradients.
         """
-        recent_norm = np.mean(norm_history[-10:]) if len(norm_history) >= 10 else np.mean(norm_history)
-        recent_cost = np.mean(cost_history[-10:]) if len(cost_history) >= 10 else np.mean(cost_history)
+        recent_norm = (
+            np.mean(norm_history[-10:])
+            if len(norm_history) >= 10
+            else np.mean(norm_history)
+        )
+        recent_cost = (
+            np.mean(cost_history[-10:])
+            if len(cost_history) >= 10
+            else np.mean(cost_history)
+        )
 
         return ModelHealthIssue(
             category=IssueCategory.GRADIENT,

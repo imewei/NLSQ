@@ -176,9 +176,7 @@ def main():
     print(
         f"  Layer 2 (refinement step):  {rates.get('layer2_refinement_rate', 0):.1f}%"
     )
-    print(
-        f"  Layer 2 (careful step):     {rates.get('layer2_careful_rate', 0):.1f}%"
-    )
+    print(f"  Layer 2 (careful step):     {rates.get('layer2_careful_rate', 0):.1f}%")
     print(
         f"  Layer 2 (exploration step): {rates.get('layer2_exploration_rate', 0):.1f}%"
     )

@@ -70,7 +70,7 @@ class TestValidateEnumValue:
 
     def test_error_includes_valid_options(self):
         """Test that error message includes valid options."""
-        with pytest.raises(ConfigValidationError, match="a.*b.*c"):
+        with pytest.raises(ConfigValidationError, match=r"a.*b.*c"):
             validate_enum_value("invalid", ("a", "b", "c"), "param")
 
     def test_case_sensitive(self):
@@ -184,12 +184,12 @@ class TestValidateLessThanOrEqual:
 
     def test_greater_than(self):
         """Test value1 > value2 raises error."""
-        with pytest.raises(ConfigValidationError, match="a.*b"):
+        with pytest.raises(ConfigValidationError, match=r"a.*b"):
             validate_less_than_or_equal(3, 2, "a", "b")
 
     def test_error_includes_values(self):
         """Test error message includes actual values."""
-        with pytest.raises(ConfigValidationError, match="10.*5"):
+        with pytest.raises(ConfigValidationError, match=r"10.*5"):
             validate_less_than_or_equal(10, 5, "high", "low")
 
 

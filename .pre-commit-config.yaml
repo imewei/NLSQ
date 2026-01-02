@@ -34,7 +34,7 @@ repos:
       - id: mixed-line-ending
       - id: name-tests-test
         args: ['--pytest-test-first']
-        exclude: ^tests/.*/fixtures/
+        exclude: ^tests/(.*/fixtures/|architecture/utils\.py)
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-symlinks

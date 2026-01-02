@@ -48,17 +48,14 @@ def create_saxs_preset() -> WorkflowConfig:
 
     config = WorkflowConfig.from_preset("precision_standard").with_overrides(
         # SAXS-specific overrides:
-
         # Tighter tolerances for accurate structural parameters
         # Form factor fitting benefits from higher precision
         gtol=1e-9,
         ftol=1e-9,
         xtol=1e-9,
-
         # Moderate n_starts - form factors are usually well-behaved
         # but can have local minima for polydisperse or multi-component systems
         n_starts=12,
-
         # LHS sampling works well for SAXS parameter spaces
         sampler="lhs",
     )
@@ -97,7 +94,7 @@ def sphere_form_factor(q, radius, scale, background):
     form_factor = jnp.where(
         jnp.abs(qr) < 1e-6,
         1.0 - qr**2 / 10.0,
-        3.0 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3
+        3.0 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3,
     )
 
     return scale * form_factor**2 + background
@@ -126,12 +123,13 @@ def core_shell_form_factor(q, r_core, r_shell, scale, background):
     array
         Scattering intensity at each q value
     """
+
     def sphere_amplitude(q_val, r):
         qr = q_val * r
         return jnp.where(
             jnp.abs(qr) < 1e-6,
             1.0 - qr**2 / 10.0,
-            3.0 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3
+            3.0 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3,
         )
 
     # Simplified core-shell with fixed contrast ratio (core=1, shell=0.5)
@@ -144,7 +142,7 @@ def core_shell_form_factor(q, r_core, r_shell, scale, background):
     # Combined amplitude (assuming shell contrast is 0.5 of core)
     f_total = f_core + 0.5 * (f_shell - f_core)
 
-    return scale * (f_total / v_shell)**2 + background
+    return scale * (f_total / v_shell) ** 2 + background
 
 
 def main():
@@ -177,9 +175,9 @@ def main():
 
     # True parameters
     true_params = {
-        "radius": 10.0,         # 10 nm radius
-        "scale": 1e6,           # Intensity scale
-        "background": 10.0,     # Background counts
+        "radius": 10.0,  # 10 nm radius
+        "scale": 1e6,  # Intensity scale
+        "background": 10.0,  # Background counts
     }
 
     # Generate noisy data with realistic Poisson-like noise
@@ -203,8 +201,8 @@ def main():
     p0 = [8.0, 5e5, 5.0]  # [radius, scale, background]
 
     bounds = (
-        [1.0, 1e3, 0.0],      # Lower bounds
-        [50.0, 1e9, 100.0],   # Upper bounds
+        [1.0, 1e3, 0.0],  # Lower bounds
+        [50.0, 1e9, 100.0],  # Upper bounds
     )
 
     # Fit using the SAXS preset

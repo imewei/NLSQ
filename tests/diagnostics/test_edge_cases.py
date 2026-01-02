@@ -208,9 +208,7 @@ class TestNaNInfResiduals:
         assert report.available is True
         assert report.has_numerical_issues is True
 
-    def test_all_nan_gradient_handled(
-        self, default_config: DiagnosticsConfig
-    ) -> None:
+    def test_all_nan_gradient_handled(self, default_config: DiagnosticsConfig) -> None:
         """Test that all-NaN gradient is handled gracefully."""
         monitor = GradientMonitor(config=default_config)
 
@@ -379,18 +377,18 @@ class TestNoCovarianceMatrix:
         assert report.n_params == 3
         assert report.numerical_rank > 0
 
-    def test_analyze_from_singular_fim(
-        self, default_config: DiagnosticsConfig
-    ) -> None:
+    def test_analyze_from_singular_fim(self, default_config: DiagnosticsConfig) -> None:
         """Test analyze_from_fim handles singular FIM gracefully."""
         analyzer = IdentifiabilityAnalyzer(config=default_config)
 
         # Create singular FIM (rank deficient)
-        fim = np.array([
-            [1.0, 0.5, 0.5],
-            [0.5, 1.0, 0.5],
-            [0.5, 0.5, 1.0],
-        ])
+        fim = np.array(
+            [
+                [1.0, 0.5, 0.5],
+                [0.5, 1.0, 0.5],
+                [0.5, 0.5, 1.0],
+            ]
+        )
         # Make it singular by setting last row/col to linear combination
         fim[2, :] = fim[0, :] + fim[1, :]
         fim[:, 2] = fim[:, 0] + fim[:, 1]
@@ -454,8 +452,10 @@ class TestNoCovarianceMatrix:
         # Report should note the limitation
         assert report.identifiability is not None
         assert report.identifiability.available is False
-        assert "infinit" in report.identifiability.error_message.lower() or \
-               "covariance" in report.identifiability.error_message.lower()
+        assert (
+            "infinite" in report.identifiability.error_message.lower()
+            or "covariance" in report.identifiability.error_message.lower()
+        )
 
     def test_correlation_matrix_none_handled_gracefully(
         self, default_config: DiagnosticsConfig
@@ -495,6 +495,7 @@ class TestPluginExceptionHandling:
 
     def test_failing_plugin_does_not_affect_identifiability(self) -> None:
         """Test that failing plugin doesn't prevent identifiability analysis."""
+
         # Register a failing plugin
         class FailingPlugin:
             @property
@@ -524,6 +525,7 @@ class TestPluginExceptionHandling:
 
     def test_failing_plugin_does_not_affect_gradient_health(self) -> None:
         """Test that failing plugin doesn't prevent gradient health monitoring."""
+
         class FailingPlugin:
             @property
             def name(self) -> str:
@@ -553,6 +555,7 @@ class TestPluginExceptionHandling:
 
     def test_failing_plugin_result_shows_unavailable_with_error(self) -> None:
         """Test that failed plugin result shows available=False with error message."""
+
         class ExceptionPlugin:
             @property
             def name(self) -> str:
@@ -583,6 +586,7 @@ class TestPluginExceptionHandling:
 
     def test_multiple_plugins_one_fails_others_succeed(self) -> None:
         """Test that one failing plugin doesn't affect other plugins."""
+
         class GoodPlugin:
             @property
             def name(self) -> str:
@@ -637,6 +641,7 @@ class TestPluginExceptionHandling:
 
     def test_failing_plugin_emits_warning(self) -> None:
         """Test that failing plugin emits a Python warning."""
+
         class WarningPlugin:
             @property
             def name(self) -> str:
@@ -663,13 +668,13 @@ class TestPluginExceptionHandling:
 
             # Should have emitted a warning about the plugin failure
             plugin_warnings = [
-                w for w in caught_warnings
-                if "warning-trigger" in str(w.message)
+                w for w in caught_warnings if "warning-trigger" in str(w.message)
             ]
             assert len(plugin_warnings) >= 1
 
     def test_health_report_includes_failed_plugin_results(self) -> None:
         """Test that health report includes failed plugin results."""
+
         class FailPlugin:
             @property
             def name(self) -> str:
@@ -793,9 +798,7 @@ class TestCombinedEdgeCases:
         assert report.error_message is not None
         assert "empty" in report.error_message.lower()
 
-    def test_1d_jacobian_rejected(
-        self, default_config: DiagnosticsConfig
-    ) -> None:
+    def test_1d_jacobian_rejected(self, default_config: DiagnosticsConfig) -> None:
         """Test that 1D Jacobian is rejected with clear error."""
         analyzer = IdentifiabilityAnalyzer(config=default_config)
 
@@ -817,9 +820,7 @@ class TestCombinedEdgeCases:
 class TestEdgeCaseStress:
     """Stress tests for edge case handling."""
 
-    def test_large_singular_jacobian(
-        self, default_config: DiagnosticsConfig
-    ) -> None:
+    def test_large_singular_jacobian(self, default_config: DiagnosticsConfig) -> None:
         """Test handling of large singular Jacobian."""
         analyzer = IdentifiabilityAnalyzer(config=default_config)
 
@@ -854,6 +855,7 @@ class TestEdgeCaseStress:
 
     def test_repeated_plugin_failures(self) -> None:
         """Test that repeated plugin failures don't cause memory issues."""
+
         class RepeatedFailPlugin:
             def __init__(self, fail_count: int = 0) -> None:
                 self.fail_count = fail_count

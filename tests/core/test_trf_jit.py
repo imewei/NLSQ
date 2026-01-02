@@ -35,11 +35,13 @@ def trf_funcs():
 @pytest.fixture
 def simple_jacobian():
     """Create a simple Jacobian matrix for testing."""
-    return jnp.array([
-        [1.0, 0.0],
-        [0.0, 1.0],
-        [1.0, 1.0],
-    ])
+    return jnp.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ]
+    )
 
 
 @pytest.fixture
@@ -215,7 +217,9 @@ class TestComputeGradHat:
 class TestSVDNoBounds:
     """Tests for SVD without bounds."""
 
-    def test_basic_svd(self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal):
+    def test_basic_svd(
+        self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal
+    ):
         """Test basic SVD computation."""
         J = simple_jacobian
         f = simple_residuals
@@ -279,7 +283,9 @@ class TestSVDNoBounds:
 class TestSVDBounds:
     """Tests for SVD with bounds (augmented system)."""
 
-    def test_basic_svd_bounds(self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal):
+    def test_basic_svd_bounds(
+        self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal
+    ):
         """Test basic SVD with bounds computation."""
         J = simple_jacobian
         f = simple_residuals
@@ -313,11 +319,13 @@ class TestConjugateGradientSolve:
     def test_simple_system(self, trf_funcs):
         """Test CG solver on a simple system."""
         # Create a well-conditioned positive definite system
-        J = jnp.array([
-            [2.0, 0.0],
-            [0.0, 2.0],
-            [1.0, 1.0],
-        ])
+        J = jnp.array(
+            [
+                [2.0, 0.0],
+                [0.0, 2.0],
+                [1.0, 1.0],
+            ]
+        )
         f = jnp.array([1.0, 1.0, 0.0])
         d = jnp.ones(2)
 
@@ -342,7 +350,9 @@ class TestConjugateGradientSolve:
         # Should have converged
         assert residual_norm < 1.0  # Some convergence
 
-    def test_cg_with_regularization(self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal):
+    def test_cg_with_regularization(
+        self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal
+    ):
         """Test CG solver with regularization."""
         J = simple_jacobian
         f = simple_residuals
@@ -368,7 +378,11 @@ class TestConjugateGradientSolve:
         d = jnp.ones(5)
 
         _, _, n_iter = trf_funcs.conjugate_gradient_solve(
-            J, f, d, max_iter=3, tol=1e-20  # Tight tolerance forces max iters
+            J,
+            f,
+            d,
+            max_iter=3,
+            tol=1e-20,  # Tight tolerance forces max iters
         )
 
         assert n_iter <= 3
@@ -381,7 +395,9 @@ class TestSolveTrSubproblemCG:
     JIT-compiled functions.
     """
 
-    def test_within_trust_region(self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal):
+    def test_within_trust_region(
+        self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal
+    ):
         """Test when Gauss-Newton step is within trust region."""
         J = simple_jacobian
         f = simple_residuals
@@ -419,7 +435,9 @@ class TestSolveTrSubproblemCGBounds:
     JIT-compiled functions.
     """
 
-    def test_basic_bounds_solver(self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal):
+    def test_basic_bounds_solver(
+        self, trf_funcs, simple_jacobian, simple_residuals, scaling_diagonal
+    ):
         """Test basic bounds solver operation."""
         J = simple_jacobian
         f = simple_residuals
@@ -428,9 +446,7 @@ class TestSolveTrSubproblemCGBounds:
         f_zeros = jnp.zeros(2)
         Delta = 100.0
 
-        p = trf_funcs.solve_tr_subproblem_cg_bounds(
-            J, f, d, J_diag, f_zeros, Delta
-        )
+        p = trf_funcs.solve_tr_subproblem_cg_bounds(J, f, d, J_diag, f_zeros, Delta)
 
         assert p.shape == (2,)
 
@@ -440,9 +456,11 @@ class TestCalculateCost:
 
     def test_basic_cost(self, trf_funcs):
         """Test basic cost calculation."""
-        rho = jnp.array([
-            [2.0, 4.0, 6.0],  # Values (only first row used as rho[0])
-        ])
+        rho = jnp.array(
+            [
+                [2.0, 4.0, 6.0],  # Values (only first row used as rho[0])
+            ]
+        )
         data_mask = jnp.array([True, True, False])
 
         cost = trf_funcs.calculate_cost(rho, data_mask)
@@ -534,11 +552,13 @@ class TestNumericalStability:
     def test_ill_conditioned_jacobian(self, trf_funcs):
         """Test with ill-conditioned Jacobian."""
         # Create ill-conditioned matrix
-        J = jnp.array([
-            [1.0, 1.0],
-            [1.0, 1.0 + 1e-10],
-            [2.0, 2.0 + 1e-10],
-        ])
+        J = jnp.array(
+            [
+                [1.0, 1.0],
+                [1.0, 1.0 + 1e-10],
+                [2.0, 2.0 + 1e-10],
+            ]
+        )
         f = jnp.array([1.0, 1.0, 2.0])
         d = jnp.ones(2)
 

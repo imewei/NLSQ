@@ -23,6 +23,7 @@ class TestOptimizerProtocolDefinition:
 
     def test_protocol_is_runtime_checkable(self):
         """OptimizerProtocol should be runtime_checkable."""
+
         # The @runtime_checkable decorator allows isinstance() checks
         class MockOptimizer:
             def optimize(self, fun, x0, args=(), **kwargs):

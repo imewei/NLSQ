@@ -333,8 +333,7 @@ class ParameterSensitivityAnalyzer:
         # identifies significant eigenvalue spread (at least 2 orders of magnitude).
         sloppy_threshold_log = -np.log10(self.config.sloppy_threshold)
         sloppy_detection_threshold = max(
-            sloppy_threshold_log / 3.0,
-            self.DEFAULT_SLOPPY_DETECTION_ORDERS
+            sloppy_threshold_log / 3.0, self.DEFAULT_SLOPPY_DETECTION_ORDERS
         )
 
         # Check for wide eigenvalue spread (SENS-001)
@@ -360,9 +359,7 @@ class ParameterSensitivityAnalyzer:
         # Check for low effective dimensionality (SENS-002)
         # Threshold: effective_dim < n_params / 2
         if effective_dimensionality < n_params / 2.0:
-            issue = self._create_sens_002_issue(
-                effective_dimensionality, n_params
-            )
+            issue = self._create_sens_002_issue(effective_dimensionality, n_params)
             issues.append(issue)
             # Keep as INFO since this is informational, not necessarily a problem
             # health_status already set by SENS-001 if applicable
@@ -558,13 +555,13 @@ class ParameterSensitivityAnalyzer:
             return 0.0
 
         sum_eigenvalues = np.sum(positive_eigenvalues)
-        sum_eigenvalues_squared = np.sum(positive_eigenvalues ** 2)
+        sum_eigenvalues_squared = np.sum(positive_eigenvalues**2)
 
         if sum_eigenvalues_squared <= 0:
             return 0.0
 
         # Participation ratio
-        effective_dim = (sum_eigenvalues ** 2) / sum_eigenvalues_squared
+        effective_dim = (sum_eigenvalues**2) / sum_eigenvalues_squared
 
         return float(effective_dim)
 

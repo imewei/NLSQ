@@ -30,15 +30,19 @@ class TestCurveFitDiagnosticsIntegration:
     @pytest.fixture
     def simple_model(self):
         """Simple exponential decay model."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
+
         return model
 
     @pytest.fixture
     def linear_model(self):
         """Simple linear model."""
+
         def model(x, a, b):
             return a * x + b
+
         return model
 
     @pytest.fixture
@@ -76,10 +80,7 @@ class TestCurveFitDiagnosticsIntegration:
     ) -> None:
         """Test curve_fit with basic diagnostics enabled."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         assert result.success
         assert hasattr(result, "diagnostics")
         assert result.diagnostics is not None
@@ -90,9 +91,12 @@ class TestCurveFitDiagnosticsIntegration:
         """Test curve_fit with specific diagnostics level."""
         x, y = well_conditioned_data
         result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
+            simple_model,
+            x,
+            y,
+            p0=[2.0, 0.5],
             compute_diagnostics=True,
-            diagnostics_level=DiagnosticLevel.BASIC
+            diagnostics_level=DiagnosticLevel.BASIC,
         )
         assert result.success
         assert result.diagnostics is not None
@@ -102,10 +106,7 @@ class TestCurveFitDiagnosticsIntegration:
     ) -> None:
         """Test diagnostics property returns identifiability report."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         diag = result.diagnostics
         # Check identifiability analysis is present
         assert hasattr(diag, "identifiability")
@@ -117,10 +118,7 @@ class TestCurveFitDiagnosticsIntegration:
     ) -> None:
         """Test identifiability report has expected fields."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         ident = result.diagnostics.identifiability
         assert hasattr(ident, "condition_number")
         assert hasattr(ident, "numerical_rank")
@@ -135,40 +133,34 @@ class TestCurveFitDiagnosticsIntegration:
     ) -> None:
         """Test well-conditioned fit reports HEALTHY status."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         ident = result.diagnostics.identifiability
         # Well-conditioned problem should be healthy
         assert ident.health_status == HealthStatus.HEALTHY
         # No issues should be detected
         assert len(ident.issues) == 0
 
-    def test_diagnostics_with_bounds(
-        self, simple_model, well_conditioned_data
-    ) -> None:
+    def test_diagnostics_with_bounds(self, simple_model, well_conditioned_data) -> None:
         """Test diagnostics work with parameter bounds."""
         x, y = well_conditioned_data
         result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
+            simple_model,
+            x,
+            y,
+            p0=[2.0, 0.5],
             bounds=([0.0, 0.0], [10.0, 2.0]),
-            compute_diagnostics=True
+            compute_diagnostics=True,
         )
         assert result.success
         assert result.diagnostics is not None
         assert result.diagnostics.identifiability.available
 
-    def test_diagnostics_with_sigma(
-        self, simple_model, well_conditioned_data
-    ) -> None:
+    def test_diagnostics_with_sigma(self, simple_model, well_conditioned_data) -> None:
         """Test diagnostics work with measurement uncertainties."""
         x, y = well_conditioned_data
         sigma = 0.1 * np.ones_like(y)
         result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            sigma=sigma,
-            compute_diagnostics=True
+            simple_model, x, y, p0=[2.0, 0.5], sigma=sigma, compute_diagnostics=True
         )
         assert result.success
         assert result.diagnostics is not None
@@ -180,10 +172,7 @@ class TestCurveFitDiagnosticsIntegration:
     ) -> None:
         """Test ill-conditioned fit reports issues."""
         x, y = ill_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         ident = result.diagnostics.identifiability
         # Should have high condition number
         assert ident.condition_number > 1e4
@@ -191,6 +180,7 @@ class TestCurveFitDiagnosticsIntegration:
     # Test correlation detection
     def test_correlated_parameters_detection(self) -> None:
         """Test detection of correlated parameters."""
+
         # Model with inherently correlated parameters: a*exp(-b*x) + c
         # When x is near 0, a and c are nearly indistinguishable
         def model_correlated(x, a, b, c):
@@ -201,8 +191,7 @@ class TestCurveFitDiagnosticsIntegration:
         y = 2.5 * np.exp(-0.5 * x) + 1.0 + 0.01 * np.random.randn(len(x))
 
         result = curve_fit(
-            model_correlated, x, y, p0=[2.5, 0.5, 1.0],
-            compute_diagnostics=True
+            model_correlated, x, y, p0=[2.5, 0.5, 1.0], compute_diagnostics=True
         )
         ident = result.diagnostics.identifiability
         # Should detect high correlation between parameters
@@ -215,10 +204,7 @@ class TestCurveFitDiagnosticsIntegration:
     ) -> None:
         """Test tuple unpacking still works with diagnostics enabled."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         # Tuple unpacking should still work
         popt, pcov = result
         assert len(popt) == 2
@@ -239,18 +225,13 @@ class TestCurveFitDiagnosticsIntegration:
             pass  # Implementation may vary
 
     # Test different models
-    def test_linear_model_diagnostics(
-        self, linear_model
-    ) -> None:
+    def test_linear_model_diagnostics(self, linear_model) -> None:
         """Test diagnostics with linear model."""
         np.random.seed(42)
         x = np.linspace(0, 10, 100)
         y = 2.0 * x + 3.0 + 0.5 * np.random.randn(len(x))
 
-        result = curve_fit(
-            linear_model, x, y, p0=[1.0, 1.0],
-            compute_diagnostics=True
-        )
+        result = curve_fit(linear_model, x, y, p0=[1.0, 1.0], compute_diagnostics=True)
         assert result.success
         assert result.diagnostics.identifiability.available
         # Linear model should be well-conditioned
@@ -262,10 +243,7 @@ class TestCurveFitDiagnosticsIntegration:
     ) -> None:
         """Test diagnostics computation time is tracked."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         ident = result.diagnostics.identifiability
         assert ident.computation_time_ms >= 0
 
@@ -276,8 +254,10 @@ class TestDiagnosticsReportSummary:
     @pytest.fixture
     def simple_model(self):
         """Simple exponential decay model."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
+
         return model
 
     @pytest.fixture
@@ -293,23 +273,15 @@ class TestDiagnosticsReportSummary:
     ) -> None:
         """Test identifiability report has summary method."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         ident = result.diagnostics.identifiability
         # Should have summary method or __str__
         assert hasattr(ident, "__str__") or hasattr(ident, "summary")
 
-    def test_diagnostics_issue_codes(
-        self, simple_model, well_conditioned_data
-    ) -> None:
+    def test_diagnostics_issue_codes(self, simple_model, well_conditioned_data) -> None:
         """Test diagnostics issue codes are valid."""
         x, y = well_conditioned_data
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         ident = result.diagnostics.identifiability
         for issue in ident.issues:
             # Validate issue code format
@@ -324,8 +296,10 @@ class TestDiagnosticsConfig:
     @pytest.fixture
     def simple_model(self):
         """Simple exponential decay model."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
+
         return model
 
     @pytest.fixture
@@ -342,9 +316,12 @@ class TestDiagnosticsConfig:
         # Very strict threshold
         config = DiagnosticsConfig(condition_threshold=10.0)
         result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
+            simple_model,
+            x,
+            y,
+            p0=[2.0, 0.5],
             compute_diagnostics=True,
-            diagnostics_config=config
+            diagnostics_config=config,
         )
         # With very strict threshold, might trigger warning
         ident = result.diagnostics.identifiability
@@ -356,9 +333,12 @@ class TestDiagnosticsConfig:
         # Very strict correlation threshold
         config = DiagnosticsConfig(correlation_threshold=0.3)
         result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
+            simple_model,
+            x,
+            y,
+            p0=[2.0, 0.5],
             compute_diagnostics=True,
-            diagnostics_config=config
+            diagnostics_config=config,
         )
         ident = result.diagnostics.identifiability
         assert ident.available
@@ -368,9 +348,12 @@ class TestDiagnosticsConfig:
         x, y = data
         config = DiagnosticsConfig(verbose=True)
         result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
+            simple_model,
+            x,
+            y,
+            p0=[2.0, 0.5],
             compute_diagnostics=True,
-            diagnostics_config=config
+            diagnostics_config=config,
         )
         # Should complete without error
         assert result.success
@@ -381,6 +364,7 @@ class TestDiagnosticsEdgeCases:
 
     def test_single_parameter_model(self) -> None:
         """Test diagnostics with single-parameter model."""
+
         def model(x, a):
             return a * x
 
@@ -394,8 +378,9 @@ class TestDiagnosticsEdgeCases:
 
     def test_many_parameters_model(self) -> None:
         """Test diagnostics with many-parameter model."""
+
         def model(x, a, b, c, d, e):
-            return (a * jnp.exp(-b * x) + c * jnp.sin(d * x) + e)
+            return a * jnp.exp(-b * x) + c * jnp.sin(d * x) + e
 
         np.random.seed(42)
         x = np.linspace(0, 10, 200)
@@ -403,14 +388,14 @@ class TestDiagnosticsEdgeCases:
         y = y_true + 0.1 * np.random.randn(len(x))
 
         result = curve_fit(
-            model, x, y, p0=[2.0, 0.3, 1.0, 0.5, 0.5],
-            compute_diagnostics=True
+            model, x, y, p0=[2.0, 0.3, 1.0, 0.5, 0.5], compute_diagnostics=True
         )
         assert result.success
         assert result.diagnostics.identifiability.n_params == 5
 
     def test_small_dataset(self) -> None:
         """Test diagnostics with small dataset."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
 
@@ -423,6 +408,7 @@ class TestDiagnosticsEdgeCases:
 
     def test_diagnostics_with_failed_fit(self) -> None:
         """Test diagnostics when fit fails or has issues."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
 
@@ -432,9 +418,12 @@ class TestDiagnosticsEdgeCases:
         y = np.random.randn(10)  # Random noise, not matching model
 
         result = curve_fit(
-            model, x, y, p0=[1.0, 1.0],
+            model,
+            x,
+            y,
+            p0=[1.0, 1.0],
             compute_diagnostics=True,
-            maxfev=50  # Limit iterations
+            maxfev=50,  # Limit iterations
         )
         # Should still have diagnostics even if fit is poor
         if hasattr(result, "diagnostics") and result.diagnostics is not None:
@@ -454,8 +443,10 @@ class TestBackwardCompatibility:
     @pytest.fixture
     def simple_model(self):
         """Simple exponential decay model."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
+
         return model
 
     @pytest.fixture
@@ -546,7 +537,9 @@ class TestBackwardCompatibility:
 
         # All existing parameters should work as before
         result = curve_fit(
-            simple_model, x, y,
+            simple_model,
+            x,
+            y,
             p0=[2.0, 0.5],
             sigma=sigma,
             absolute_sigma=False,
@@ -596,10 +589,7 @@ class TestBackwardCompatibility:
         # Measure time with diagnostics
         start = time.perf_counter()
         for _ in range(5):
-            _ = curve_fit(
-                simple_model, x, y, p0=[2.0, 0.5],
-                compute_diagnostics=True
-            )
+            _ = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         time_with = (time.perf_counter() - start) / 5
 
         # Without diagnostics should be faster or at most equal
@@ -619,8 +609,7 @@ class TestBackwardCompatibility:
 
         # Filter for diagnostics-related warnings
         diag_warnings = [
-            w for w in caught_warnings
-            if "diagnostic" in str(w.message).lower()
+            w for w in caught_warnings if "diagnostic" in str(w.message).lower()
         ]
 
         # No diagnostics-related warnings should be emitted
@@ -638,8 +627,7 @@ class TestBackwardCompatibility:
 
         # Explicit False
         result_explicit = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=False
+            simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=False
         )
 
         # Both should have None diagnostics
@@ -714,9 +702,7 @@ class TestBackwardCompatibility:
         assert result.success
         assert len(result.popt) == 2
 
-    def test_result_type_unchanged(
-        self, simple_model, well_conditioned_data
-    ) -> None:
+    def test_result_type_unchanged(self, simple_model, well_conditioned_data) -> None:
         """Test result type is still CurveFitResult."""
         from nlsq.result import CurveFitResult
 
@@ -747,10 +733,7 @@ class TestBackwardCompatibility:
         x, y = well_conditioned_data
 
         # Enable diagnostics - should still support all existing patterns
-        result = curve_fit(
-            simple_model, x, y, p0=[2.0, 0.5],
-            compute_diagnostics=True
-        )
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
 
         # Tuple unpacking still works
         popt, _pcov = result
@@ -778,8 +761,10 @@ class TestDiagnosticsPerformance:
     @pytest.fixture
     def exponential_model(self):
         """Exponential decay model for performance testing."""
+
         def model(x, a, b):
             return a * jnp.exp(-b * x)
+
         return model
 
     @pytest.fixture
@@ -813,9 +798,12 @@ class TestDiagnosticsPerformance:
         for _ in range(n_warmup):
             _ = curve_fit(exponential_model, x, y, p0=[2.0, 0.5])
             _ = curve_fit(
-                exponential_model, x, y, p0=[2.0, 0.5],
+                exponential_model,
+                x,
+                y,
+                p0=[2.0, 0.5],
                 compute_diagnostics=True,
-                diagnostics_level=DiagnosticLevel.BASIC
+                diagnostics_level=DiagnosticLevel.BASIC,
             )
 
         # Measure time without diagnostics
@@ -832,9 +820,12 @@ class TestDiagnosticsPerformance:
         for _ in range(n_iterations):
             start = time.perf_counter()
             result = curve_fit(
-                exponential_model, x, y, p0=[2.0, 0.5],
+                exponential_model,
+                x,
+                y,
+                p0=[2.0, 0.5],
                 compute_diagnostics=True,
-                diagnostics_level=DiagnosticLevel.BASIC
+                diagnostics_level=DiagnosticLevel.BASIC,
             )
             end = time.perf_counter()
             assert result.success, "Fit with diagnostics should succeed"
@@ -851,8 +842,8 @@ class TestDiagnosticsPerformance:
         # Assert overhead is under 10% (relaxed from 5% for CI stability)
         assert overhead_percent < 10.0, (
             f"Diagnostics overhead {overhead_percent:.2f}% exceeds 10% limit. "
-            f"Median without: {median_without*1000:.2f}ms, "
-            f"Median with: {median_with*1000:.2f}ms"
+            f"Median without: {median_without * 1000:.2f}ms, "
+            f"Median with: {median_with * 1000:.2f}ms"
         )
 
     def test_diagnostics_overhead_multiple_runs(
@@ -871,8 +862,7 @@ class TestDiagnosticsPerformance:
         for _ in range(n_warmup):
             _ = curve_fit(exponential_model, x, y, p0=[2.0, 0.5])
             _ = curve_fit(
-                exponential_model, x, y, p0=[2.0, 0.5],
-                compute_diagnostics=True
+                exponential_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True
             )
 
         overheads = []
@@ -890,8 +880,7 @@ class TestDiagnosticsPerformance:
             for _ in range(n_iterations_per_run):
                 start = time.perf_counter()
                 _ = curve_fit(
-                    exponential_model, x, y, p0=[2.0, 0.5],
-                    compute_diagnostics=True
+                    exponential_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True
                 )
                 times_with.append(time.perf_counter() - start)
 

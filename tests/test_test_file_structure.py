@@ -60,9 +60,14 @@ class TestTestFileStructure:
         for line_num, line in enumerate(lines, 1):
             # Track if we're in a deprecation test class/method
             stripped = line.strip()
-            if "class TestDeprecation" in stripped or "def test_deprecat" in stripped.lower():
+            if (
+                "class TestDeprecation" in stripped
+                or "def test_deprecat" in stripped.lower()
+            ):
                 in_deprecation_test = True
-            elif stripped.startswith("class Test") or (stripped.startswith("def test_") and not "deprecat" in stripped.lower()):
+            elif stripped.startswith("class Test") or (
+                stripped.startswith("def test_") and "deprecat" not in stripped.lower()
+            ):
                 in_deprecation_test = False
 
             # Skip deprecation tests and comments
@@ -70,7 +75,7 @@ class TestTestFileStructure:
                 continue
             if stripped.startswith("#"):
                 continue
-            if 'docstring' in stripped.lower() or '"""' in stripped:
+            if "docstring" in stripped.lower() or '"""' in stripped:
                 continue
 
             # Check for SLOPPY- in assertions
@@ -78,7 +83,7 @@ class TestTestFileStructure:
                 violations.append(f"Line {line_num}: {line.strip()}")
 
         assert len(violations) == 0, (
-            f"Found SLOPPY- issue codes in main test assertions (should be SENS-):\n"
+            "Found SLOPPY- issue codes in main test assertions (should be SENS-):\n"
             + "\n".join(violations)
         )
 

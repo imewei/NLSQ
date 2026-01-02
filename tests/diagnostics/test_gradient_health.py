@@ -152,9 +152,7 @@ class TestVanishingGradientDetection:
         report = monitor.get_report()
 
         # Should detect vanishing gradients
-        grad_001_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-001"
-        ]
+        grad_001_issues = [issue for issue in report.issues if issue.code == "GRAD-001"]
         assert len(grad_001_issues) > 0
         assert grad_001_issues[0].severity == IssueSeverity.WARNING
 
@@ -186,9 +184,7 @@ class TestVanishingGradientDetection:
         report = monitor.get_report()
 
         # Should detect vanishing gradient issue
-        grad_001_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-001"
-        ]
+        grad_001_issues = [issue for issue in report.issues if issue.code == "GRAD-001"]
         assert len(grad_001_issues) > 0
         assert report.health_status in (HealthStatus.WARNING, HealthStatus.CRITICAL)
 
@@ -207,9 +203,7 @@ class TestVanishingGradientDetection:
         report = monitor.get_report()
 
         # Small gradients with small cost should not be flagged as vanishing
-        grad_001_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-001"
-        ]
+        grad_001_issues = [issue for issue in report.issues if issue.code == "GRAD-001"]
         # At convergence, small gradients are expected
         # The key is that cost is also small
 
@@ -231,9 +225,7 @@ class TestGradientImbalanceDetection:
         report = monitor.get_report()
 
         # Should detect imbalance
-        grad_002_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-002"
-        ]
+        grad_002_issues = [issue for issue in report.issues if issue.code == "GRAD-002"]
         assert len(grad_002_issues) > 0
         assert grad_002_issues[0].category == IssueCategory.GRADIENT
 
@@ -250,9 +242,7 @@ class TestGradientImbalanceDetection:
         report = monitor.get_report()
 
         # Should not detect imbalance
-        grad_002_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-002"
-        ]
+        grad_002_issues = [issue for issue in report.issues if issue.code == "GRAD-002"]
         assert len(grad_002_issues) == 0
 
     def test_imbalance_details_include_affected_parameters(self) -> None:
@@ -267,9 +257,7 @@ class TestGradientImbalanceDetection:
 
         report = monitor.get_report()
 
-        grad_002_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-002"
-        ]
+        grad_002_issues = [issue for issue in report.issues if issue.code == "GRAD-002"]
         if grad_002_issues:
             issue = grad_002_issues[0]
             assert "imbalance_ratio" in issue.details
@@ -292,9 +280,7 @@ class TestGradientStagnationDetection:
         report = monitor.get_report()
 
         # Should detect stagnation
-        grad_003_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-003"
-        ]
+        grad_003_issues = [issue for issue in report.issues if issue.code == "GRAD-003"]
         assert len(grad_003_issues) > 0
 
     def test_varying_gradients_not_stagnation(self) -> None:
@@ -311,9 +297,7 @@ class TestGradientStagnationDetection:
         report = monitor.get_report()
 
         # Should not detect stagnation
-        grad_003_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-003"
-        ]
+        grad_003_issues = [issue for issue in report.issues if issue.code == "GRAD-003"]
         assert len(grad_003_issues) == 0
 
 
@@ -344,8 +328,10 @@ class TestHealthScore:
             # Decreasing but well-balanced gradients with some variation
             factor = 1.0 / (1 + i * 0.1)
             noise = 1.0 + 0.05 * np.random.randn()
-            gradient = np.array([factor * noise, factor * 0.9 * noise, factor * 1.1 * noise])
-            cost = factor ** 2  # Cost decreasing with gradient
+            gradient = np.array(
+                [factor * noise, factor * 0.9 * noise, factor * 1.1 * noise]
+            )
+            cost = factor**2  # Cost decreasing with gradient
             monitor.record_gradient(gradient, cost)
 
         report = monitor.get_report()
@@ -529,9 +515,7 @@ class TestEdgeCases:
         report = monitor.get_report()
         assert report.available is True
         # Single parameter can't have imbalance
-        grad_002_issues = [
-            issue for issue in report.issues if issue.code == "GRAD-002"
-        ]
+        grad_002_issues = [issue for issue in report.issues if issue.code == "GRAD-002"]
         assert len(grad_002_issues) == 0
 
     def test_reset(self) -> None:

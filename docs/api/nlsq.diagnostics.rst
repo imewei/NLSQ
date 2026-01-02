@@ -329,6 +329,7 @@ Create domain-specific diagnostics that integrate with the health report:
     )
     from nlsq.diagnostics.recommendations import get_recommendation
 
+
     class OpticalScatteringPlugin:
         """Plugin for optical scattering parameter validation."""
 
@@ -341,27 +342,30 @@ Create domain-specific diagnostics that integrate with the health report:
             jacobian: np.ndarray,
             parameters: np.ndarray,
             residuals: np.ndarray,
-            **context
+            **context,
         ) -> PluginResult:
             issues = []
 
             # Domain-specific validation: scattering coefficients must be positive
             if any(parameters < 0):
-                issues.append(ModelHealthIssue(
-                    category=IssueCategory.IDENTIFIABILITY,
-                    severity=IssueSeverity.CRITICAL,
-                    code="OPTICAL-001",
-                    message="Negative scattering coefficient detected",
-                    affected_parameters=tuple(np.where(parameters < 0)[0]),
-                    details={"negative_values": parameters[parameters < 0].tolist()},
-                    recommendation="Ensure bounds enforce non-negative coefficients",
-                ))
+                issues.append(
+                    ModelHealthIssue(
+                        category=IssueCategory.IDENTIFIABILITY,
+                        severity=IssueSeverity.CRITICAL,
+                        code="OPTICAL-001",
+                        message="Negative scattering coefficient detected",
+                        affected_parameters=tuple(np.where(parameters < 0)[0]),
+                        details={"negative_values": parameters[parameters < 0].tolist()},
+                        recommendation="Ensure bounds enforce non-negative coefficients",
+                    )
+                )
 
             return PluginResult(
                 plugin_name=self.name,
                 data={"custom_metric": np.mean(np.abs(parameters))},
                 issues=issues,
             )
+
 
     # Register the plugin
     PluginRegistry.register(OpticalScatteringPlugin())

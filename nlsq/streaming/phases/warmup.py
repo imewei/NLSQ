@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
-import optax
+import optax  # type: ignore[import-not-found]
 
 from nlsq.streaming.telemetry import get_defense_telemetry
 from nlsq.utils.logging import get_logger
@@ -235,9 +235,7 @@ class WarmupPhase:
         # =====================================================
         # LAYER 2: Adaptive Initial Step Size Selection
         # =====================================================
-        initial_step, lr_mode = self._select_initial_step_size(
-            relative_loss, telemetry
-        )
+        initial_step, lr_mode = self._select_initial_step_size(relative_loss, telemetry)
         self._lr_mode = lr_mode
 
         # Create L-BFGS optimizer
@@ -387,8 +385,7 @@ class WarmupPhase:
         var_indices = self.config.group_variance_indices
 
         enable_weighting = (
-            self.config.enable_residual_weighting
-            and self._residual_weights is not None
+            self.config.enable_residual_weighting and self._residual_weights is not None
         )
         residual_weights = self._residual_weights
 
@@ -733,10 +730,7 @@ class WarmupPhase:
         if loss is not None and not jnp.isfinite(loss):
             return False
 
-        if gradients is not None and not jnp.all(jnp.isfinite(gradients)):
-            return False
-
-        return True
+        return gradients is None or bool(jnp.all(jnp.isfinite(gradients)))
 
     def _check_switch_criteria(
         self,

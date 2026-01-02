@@ -91,11 +91,13 @@ class TestIdentifiabilityReport:
             condition_number=100.0,
             numerical_rank=3,
             n_params=3,
-            correlation_matrix=np.array([
-                [1.0, 0.98, 0.1],
-                [0.98, 1.0, 0.2],
-                [0.1, 0.2, 1.0],
-            ]),
+            correlation_matrix=np.array(
+                [
+                    [1.0, 0.98, 0.1],
+                    [0.98, 1.0, 0.2],
+                    [0.1, 0.2, 1.0],
+                ]
+            ),
             highly_correlated_pairs=[(0, 1, 0.98)],
             issues=[],
             health_status=HealthStatus.WARNING,
@@ -327,7 +329,7 @@ class TestIdentifiabilityAnalyzer:
     ) -> None:
         """Test IDENT-001 has CRITICAL severity."""
         report = analyzer.analyze(rank_deficient_jacobian)
-        ident_001 = [i for i in report.issues if i.code == "IDENT-001"][0]
+        ident_001 = next(i for i in report.issues if i.code == "IDENT-001")
         assert ident_001.severity == IssueSeverity.CRITICAL
 
     def test_issue_severity_practical(
@@ -335,7 +337,7 @@ class TestIdentifiabilityAnalyzer:
     ) -> None:
         """Test IDENT-002 has WARNING severity."""
         report = analyzer.analyze(ill_conditioned_jacobian)
-        ident_002 = [i for i in report.issues if i.code == "IDENT-002"][0]
+        ident_002 = next(i for i in report.issues if i.code == "IDENT-002")
         assert ident_002.severity == IssueSeverity.WARNING
 
     def test_issue_affected_parameters(
@@ -343,7 +345,7 @@ class TestIdentifiabilityAnalyzer:
     ) -> None:
         """Test affected_parameters is set correctly."""
         report = analyzer.analyze(correlated_jacobian)
-        corr_issue = [i for i in report.issues if i.code == "CORR-001"][0]
+        corr_issue = next(i for i in report.issues if i.code == "CORR-001")
         assert corr_issue.affected_parameters is not None
         assert 0 in corr_issue.affected_parameters
         assert 1 in corr_issue.affected_parameters

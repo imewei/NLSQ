@@ -85,6 +85,7 @@ work with deprecation warnings during the 12-month transition period:
 
    # New (recommended)
    from nlsq.result import OptimizeResult
+
    # or
    from nlsq import OptimizeResult
 

@@ -197,6 +197,53 @@ See the [GUI User Guide](docs/gui_user_guide.md) for detailed documentation.
 | **Interactive GUI** | No-code curve fitting with Streamlit interface |
 | **Model Diagnostics** | Identifiability analysis, gradient health monitoring, sloppy model detection |
 
+## Architecture
+
+NLSQ is organized into well-separated layers (~72,000 lines):
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             USER INTERFACES                                  │
+│  GUI (Streamlit)        CLI (Click)            Python API                   │
+│  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()       │
+│  ├── Plotly components  ├── Security auditing  ├── CurveFit class           │
+│  └── Desktop (webview)  └── Export formats     └── LargeDatasetFitter       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                        OPTIMIZATION ORCHESTRATION                            │
+│  Workflow System         Global Optimization      Streaming Optimizer        │
+│  ├── WorkflowSelector    ├── MultiStartOrch.     ├── AdaptiveHybrid         │
+│  ├── Tier: STANDARD/     ├── TournamentSelect    ├── 4-Phase Pipeline:      │
+│  │   CHUNKED/STREAMING   ├── LHS/Sobol/Halton    │   0: Normalization       │
+│  └── Goal-based config   └── Sampling            │   1: L-BFGS warmup       │
+│                                                   │   2: Gauss-Newton        │
+│                                                   └── 3: Denormalization     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                          CORE OPTIMIZATION ENGINE                            │
+│  curve_fit() ─→ CurveFit ─→ LeastSquares ─→ TrustRegionReflective           │
+│       │              │            │                │                         │
+│       ▼              ▼            ▼                ▼                         │
+│  API Wrapper    Cache+State  Orchestrator+AD   SVD-based TRF                │
+│  (SciPy-compat) (UnifiedCache) (AutoDiffJac)   (JIT-compiled)               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                          SUPPORT SUBSYSTEMS                                  │
+│  stability/           precision/          caching/          diagnostics/    │
+│  ├── NumericalGuard   ├── MixedPrecision  ├── UnifiedCache  ├── Identifiab. │
+│  ├── SVD fallback     ├── AlgorithmSel.   ├── SmartCache    ├── GradientMon │
+│  └── Recovery         └── BoundsInfer.    └── MemoryMgr     └── PluginSys.  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                            INFRASTRUCTURE                                    │
+│  interfaces/ (Protocols)     config.py (Singleton)    Security              │
+│  ├── OptimizerProtocol       ├── JAXConfig            ├── safe_serialize    │
+│  ├── CurveFitProtocol        ├── MemoryConfig         ├── model_validation  │
+│  └── CacheProtocol           └── LargeDatasetConfig   └── resource_limits   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                         JAX RUNTIME (0.8.0)                                  │
+│  x64 enabled │ JIT compilation │ Autodiff │ GPU/TPU backend (optional)      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+See [Architecture Documentation](https://nlsq.readthedocs.io/en/latest/developer/architecture.html) for detailed design.
+
 ## Performance
 
 NLSQ shows increasing speedups as dataset size grows:

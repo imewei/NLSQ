@@ -766,7 +766,9 @@ class LeastSquares:
         self.logger.debug("Computing initial cost", loss_type=loss, f_scale=f_scale)
 
         if callable(loss):
-            assert loss_function is not None, "loss_function must be provided when loss is callable"
+            assert loss_function is not None, (
+                "loss_function must be provided when loss is callable"
+            )
             rho = loss_function(f0, f_scale, data_mask=data_mask)
             if rho.shape != (3, m):
                 raise ValueError("The return value of `loss` callable has wrong shape.")

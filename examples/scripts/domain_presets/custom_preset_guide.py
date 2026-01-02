@@ -139,8 +139,8 @@ def main():
     print("  (for models with multiple local minima)")
     print()
     config_a = WorkflowConfig.from_preset("precision_standard").with_overrides(
-        n_starts=30,           # More starting points
-        sampler="sobol",       # Better space coverage
+        n_starts=30,  # More starting points
+        sampler="sobol",  # Better space coverage
     )
     print(f"    n_starts: {config_a.n_starts}")
     print(f"    sampler:  {config_a.sampler}")
@@ -177,8 +177,8 @@ def main():
     print("  (for systems with limited RAM)")
     print()
     config_d = WorkflowConfig.from_preset("streaming_large").with_overrides(
-        chunk_size=5000,           # Smaller chunks
-        memory_limit_gb=8.0,       # Explicit memory limit
+        chunk_size=5000,  # Smaller chunks
+        memory_limit_gb=8.0,  # Explicit memory limit
     )
     print(f"    chunk_size:      {config_d.chunk_size}")
     print(f"    memory_limit_gb: {config_d.memory_limit_gb}")
@@ -204,8 +204,8 @@ def main():
         """
         base = "precision_high" if high_resolution else "precision_standard"
         return WorkflowConfig.from_preset(base).with_overrides(
-            n_starts=15,           # Multi-peak fits need global search
-            sampler="lhs",         # Good for peak position/width spaces
+            n_starts=15,  # Multi-peak fits need global search
+            sampler="lhs",  # Good for peak position/width spaces
         )
 
     def create_timeseries_preset(n_points: int) -> WorkflowConfig:
@@ -239,7 +239,9 @@ def main():
     # Demonstrate factories
     print("  Examples:")
     spec_config = create_spectroscopy_preset(high_resolution=True)
-    print(f"    Spectroscopy (high-res): gtol={spec_config.gtol}, n_starts={spec_config.n_starts}")
+    print(
+        f"    Spectroscopy (high-res): gtol={spec_config.gtol}, n_starts={spec_config.n_starts}"
+    )
 
     ts_config = create_timeseries_preset(n_points=500_000)
     print(f"    Time series (500K pts):  tier={ts_config.tier.name}")
@@ -264,15 +266,13 @@ def main():
         """
         return WorkflowConfig.from_preset("precision_standard").with_overrides(
             # Tolerance settings
-            gtol=1e-9,     # Tighter for accurate parameters
+            gtol=1e-9,  # Tighter for accurate parameters
             ftol=1e-9,
             xtol=1e-9,
-
             # Multi-start settings
             enable_multistart=True,
             n_starts=15,
-            sampler="sobol",    # Better coverage
-
+            sampler="sobol",  # Better coverage
             # Memory settings (if needed)
             # chunk_size=50000,
             # memory_limit_gb=16.0,
@@ -311,7 +311,7 @@ def main():
     )
 
     print(f"    Fitted parameters: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
-    print(f"    True parameters:   a=2.5000, b=1.3000, c=0.5000")
+    print("    True parameters:   a=2.5000, b=1.3000, c=0.5000")
 
     # =========================================================================
     # 7. Summary: Key Takeaways

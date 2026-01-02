@@ -127,8 +127,7 @@ def __getattr__(name: str):
     if name in _DEPRECATED_NAME_ALIASES:
         new_name, obj = _DEPRECATED_NAME_ALIASES[name]
         warnings.warn(
-            f"{name} is deprecated, use {new_name} instead. "
-            "Will be removed in v0.6.0.",
+            f"{name} is deprecated, use {new_name} instead. Will be removed in v0.6.0.",
             DeprecationWarning,
             stacklevel=2,
         )

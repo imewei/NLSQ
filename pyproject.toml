@@ -339,6 +339,10 @@ max-complexity = 15
 "nlsq/precision/parameter_estimation.py" = ["C901"]  # detect_function_pattern CC=16
 "nlsq/stability/guard.py" = ["C901"]  # check_problem_stability CC=16
 "nlsq/streaming/adaptive_hybrid.py" = ["C901"]  # Multiple functions CC>15 (known tech debt)
+# Example scripts, test utilities, and dev scripts (complexity acceptable for standalone tools)
+"examples/scripts/*" = ["C901"]
+"scripts/*" = ["C901"]
+"tests/architecture/utils.py" = ["C901"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["nlsq"]

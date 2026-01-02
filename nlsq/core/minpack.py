@@ -162,10 +162,10 @@ def fit(
     check_finite: bool = True,
     bounds: tuple = (-float("inf"), float("inf")),
     method: str | None = None,
-    workflow: Union[
-        str, LDMemoryConfig, HybridStreamingConfig, GlobalOptimizationConfig
-    ] = "auto",
-    goal: Union[str, OptimizationGoal, None] = None,
+    workflow: (
+        str | LDMemoryConfig | HybridStreamingConfig | GlobalOptimizationConfig
+    ) = "auto",
+    goal: str | OptimizationGoal | None = None,
     **kwargs: Any,
 ) -> CurveFitResult:
     """Unified curve fitting entry point with automatic workflow selection.
@@ -3059,13 +3059,15 @@ class CurveFit:
                     # Get gradient health report if available from optimization
                     gradient_health_report = res.get("gradient_health_report")
 
-                    # Run sloppy model analysis if diagnostics_level is FULL (User Story 4)
+                    # Run parameter sensitivity analysis if diagnostics_level is FULL (User Story 4)
                     sloppy_model_report = None
                     if config.level == DiagnosticLevel.FULL:
-                        from nlsq.diagnostics.sloppy_model import SloppyModelAnalyzer
+                        from nlsq.diagnostics import ParameterSensitivityAnalyzer
 
-                        sloppy_analyzer = SloppyModelAnalyzer(config=config)
-                        sloppy_model_report = sloppy_analyzer.analyze(jacobian)
+                        sensitivity_analyzer = ParameterSensitivityAnalyzer(
+                            config=config
+                        )
+                        sloppy_model_report = sensitivity_analyzer.analyze(jacobian)
 
                     # Create aggregated health report using factory function
                     # Note: verbose and emit_warnings are handled by create_health_report

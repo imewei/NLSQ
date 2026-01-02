@@ -49,15 +49,12 @@ def create_kinetics_preset() -> WorkflowConfig:
 
     config = WorkflowConfig.from_preset("precision_standard").with_overrides(
         # Kinetics-specific overrides:
-
         # More aggressive multi-start for rate constant fitting
         # Multi-exponential models are notorious for local minima
         n_starts=20,
-
         # Sobol sampling provides better coverage for rate constant
         # parameter spaces which often span many orders of magnitude
         sampler="sobol",
-
         # Standard tolerances are usually sufficient for rate constants
         # since experimental uncertainty dominates
         gtol=1e-8,
@@ -171,9 +168,9 @@ def main():
     t_data = np.linspace(0, 10, 50)  # 0-10 seconds
 
     # True parameters
-    true_k = 0.5       # 0.5 s^-1 (half-life = 1.4 s)
-    true_A0 = 100.0    # Initial concentration
-    true_offset = 10.0 # Baseline
+    true_k = 0.5  # 0.5 s^-1 (half-life = 1.4 s)
+    true_A0 = 100.0  # Initial concentration
+    true_offset = 10.0  # Baseline
 
     # Generate noisy data
     y_true = first_order_decay(t_data, true_k, true_A0, true_offset)
@@ -181,7 +178,7 @@ def main():
     y_data = y_true + noise
 
     print(f"  True rate constant k = {true_k} s^-1")
-    print(f"  True half-life = {np.log(2)/true_k:.3f} s")
+    print(f"  True half-life = {np.log(2) / true_k:.3f} s")
     print()
 
     # Initial guesses (deliberately off)
@@ -205,7 +202,7 @@ def main():
     print(f"  k:      {popt[0]:.4f} s^-1 (true: {true_k})")
     print(f"  A0:     {popt[1]:.2f} (true: {true_A0})")
     print(f"  offset: {popt[2]:.2f} (true: {true_offset})")
-    print(f"  Fitted half-life: {np.log(2)/popt[0]:.3f} s")
+    print(f"  Fitted half-life: {np.log(2) / popt[0]:.3f} s")
 
     if pcov is not None:
         perr = np.sqrt(np.diag(pcov))
@@ -230,26 +227,28 @@ def main():
     t_data2 = np.linspace(0, 20, 100)
 
     # True parameters (well-separated rates)
-    true_k1 = 1.0      # Fast rate (1.0 s^-1)
-    true_k2 = 0.1      # Slow rate (0.1 s^-1)
-    true_A1 = 60.0     # Fast amplitude
-    true_A2 = 40.0     # Slow amplitude
+    true_k1 = 1.0  # Fast rate (1.0 s^-1)
+    true_k2 = 0.1  # Slow rate (0.1 s^-1)
+    true_A1 = 60.0  # Fast amplitude
+    true_A2 = 40.0  # Slow amplitude
     true_offset2 = 5.0
 
     # Generate noisy data
-    y_true2 = biexponential_decay(t_data2, true_k1, true_k2, true_A1, true_A2, true_offset2)
+    y_true2 = biexponential_decay(
+        t_data2, true_k1, true_k2, true_A1, true_A2, true_offset2
+    )
     noise2 = 2.0 * np.random.randn(len(t_data2))
     y_data2 = y_true2 + noise2
 
     print(f"  True fast rate k1 = {true_k1} s^-1")
     print(f"  True slow rate k2 = {true_k2} s^-1")
-    print(f"  Rate ratio k1/k2 = {true_k1/true_k2:.1f}")
+    print(f"  Rate ratio k1/k2 = {true_k1 / true_k2:.1f}")
     print()
 
     # Initial guesses (this is a challenging fit)
     p0_bi = [0.5, 0.05, 50.0, 50.0, 0.0]  # [k1, k2, A1, A2, offset]
     bounds_bi = (
-        [0.01, 0.001, 1.0, 1.0, 0.0],     # Lower bounds
+        [0.01, 0.001, 1.0, 1.0, 0.0],  # Lower bounds
         [10.0, 1.0, 200.0, 200.0, 20.0],  # Upper bounds
     )
 
@@ -289,7 +288,7 @@ def main():
 
     # True parameters
     true_vmax = 100.0  # Maximum velocity (arbitrary units)
-    true_km = 5.0      # Michaelis constant (mM)
+    true_km = 5.0  # Michaelis constant (mM)
 
     # Generate noisy data
     v_true = michaelis_menten(s_data, true_vmax, true_km)

@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-
 # Path to the domain_presets example directory
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples" / "scripts" / "domain_presets"
 
@@ -188,9 +187,7 @@ class TestExampleScriptsImportSuccessfully:
         spec.loader.exec_module(module)
 
         # Verify main function exists
-        assert hasattr(module, "main"), (
-            "custom_preset_guide.py should define main()"
-        )
+        assert hasattr(module, "main"), "custom_preset_guide.py should define main()"
 
 
 class TestDomainPresetPatterns:

@@ -268,9 +268,7 @@ class IdentifiabilityReport(AnalysisResult):
     numerical_rank: int = 0
     n_params: int = 0
     correlation_matrix: np.ndarray | None = None
-    highly_correlated_pairs: list[tuple[int, int, float]] = field(
-        default_factory=list
-    )
+    highly_correlated_pairs: list[tuple[int, int, float]] = field(default_factory=list)
     issues: list[ModelHealthIssue] = field(default_factory=list)
     health_status: HealthStatus = HealthStatus.HEALTHY
 
@@ -289,7 +287,9 @@ class IdentifiabilityReport(AnalysisResult):
         ]
 
         if self.highly_correlated_pairs:
-            lines.append(f"\nHighly Correlated Pairs ({len(self.highly_correlated_pairs)}):")
+            lines.append(
+                f"\nHighly Correlated Pairs ({len(self.highly_correlated_pairs)}):"
+            )
             for i, j, corr in self.highly_correlated_pairs:
                 lines.append(f"  Parameters {i} and {j}: {corr:.4f}")
 
@@ -382,7 +382,9 @@ class GradientHealthReport(AnalysisResult):
     mean_gradient_norm: float = 0.0
     final_gradient_norm: float = 0.0
     mean_gradient_magnitudes: np.ndarray = field(default_factory=lambda: np.array([]))
-    variance_gradient_magnitudes: np.ndarray = field(default_factory=lambda: np.array([]))
+    variance_gradient_magnitudes: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
     max_imbalance_ratio: float = 1.0
     has_numerical_issues: bool = False
     vanishing_detected: bool = False

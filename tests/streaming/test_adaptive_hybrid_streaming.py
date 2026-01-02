@@ -2125,11 +2125,19 @@ class TestResidualWeighting:
         # Create test data with group indices in first column
         # Group 0: indices 0-2, Group 1: indices 3-5, Group 2: indices 6-8
         n_per_group = 3
-        x_data = jnp.array([
-            [0, 1.0], [0, 2.0], [0, 3.0],  # Group 0
-            [1, 1.0], [1, 2.0], [1, 3.0],  # Group 1
-            [2, 1.0], [2, 2.0], [2, 3.0],  # Group 2
-        ])
+        x_data = jnp.array(
+            [
+                [0, 1.0],
+                [0, 2.0],
+                [0, 3.0],  # Group 0
+                [1, 1.0],
+                [1, 2.0],
+                [1, 3.0],  # Group 1
+                [2, 1.0],
+                [2, 2.0],
+                [2, 3.0],  # Group 2
+            ]
+        )
         # True model: y = 2*x + 1
         y_data = 2.0 * x_data[:, 1] + 1.0
 
@@ -2167,24 +2175,36 @@ class TestResidualWeighting:
         loss_fn = optimizer._create_warmup_loss_fn()
 
         # Create test data: error only in group 0 (low weight)
-        x_data_low_weight_error = jnp.array([
-            [0, 0.0], [0, 0.0],  # Group 0
-            [1, 0.0], [1, 0.0],  # Group 1
-        ])
+        x_data_low_weight_error = jnp.array(
+            [
+                [0, 0.0],
+                [0, 0.0],  # Group 0
+                [1, 0.0],
+                [1, 0.0],  # Group 1
+            ]
+        )
         y_data_low_weight_error = jnp.array([10.0, 10.0, 1.0, 1.0])
 
         # Create test data: error only in group 1 (high weight)
-        x_data_high_weight_error = jnp.array([
-            [0, 0.0], [0, 0.0],  # Group 0
-            [1, 0.0], [1, 0.0],  # Group 1
-        ])
+        x_data_high_weight_error = jnp.array(
+            [
+                [0, 0.0],
+                [0, 0.0],  # Group 0
+                [1, 0.0],
+                [1, 0.0],  # Group 1
+            ]
+        )
         y_data_high_weight_error = jnp.array([1.0, 1.0, 10.0, 10.0])
 
         params = optimizer.normalized_params
 
         # Compute losses
-        loss_low_weight_error = loss_fn(params, x_data_low_weight_error, y_data_low_weight_error)
-        loss_high_weight_error = loss_fn(params, x_data_high_weight_error, y_data_high_weight_error)
+        loss_low_weight_error = loss_fn(
+            params, x_data_low_weight_error, y_data_low_weight_error
+        )
+        loss_high_weight_error = loss_fn(
+            params, x_data_high_weight_error, y_data_high_weight_error
+        )
 
         # Error in high-weight group should produce higher loss
         assert loss_high_weight_error > loss_low_weight_error
@@ -2213,10 +2233,14 @@ class TestResidualWeighting:
         loss_fn = optimizer._create_warmup_loss_fn()
 
         # Create test data
-        x_data = jnp.array([
-            [0, 1.0], [0, 2.0],
-            [1, 1.0], [1, 2.0],
-        ])
+        x_data = jnp.array(
+            [
+                [0, 1.0],
+                [0, 2.0],
+                [1, 1.0],
+                [1, 2.0],
+            ]
+        )
         y_data = jnp.array([3.5, 4.5, 3.5, 4.5])
 
         params = optimizer.normalized_params

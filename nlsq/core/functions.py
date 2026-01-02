@@ -278,7 +278,9 @@ def bounds_exponential_decay() -> BoundsTuple:
     return ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
 
 
-_attach_methods(exponential_decay, estimate_p0_exponential_decay, bounds_exponential_decay)
+_attach_methods(
+    exponential_decay, estimate_p0_exponential_decay, bounds_exponential_decay
+)
 
 
 def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayReturn:

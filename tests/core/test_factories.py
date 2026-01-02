@@ -32,6 +32,7 @@ def simple_model():
 
     def model(x, a, b):
         return a * x + b
+
     return model
 
 
@@ -42,6 +43,7 @@ def exponential_model():
 
     def model(x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
     return model
 
 
@@ -158,7 +160,12 @@ class TestConfiguredOptimizer:
     def test_slots_defined(self):
         """Test that __slots__ is defined for memory efficiency."""
         assert hasattr(ConfiguredOptimizer, "__slots__")
-        expected_slots = ("_cache", "_config", "_diagnostics_config", "_stability_guard")
+        expected_slots = (
+            "_cache",
+            "_config",
+            "_diagnostics_config",
+            "_stability_guard",
+        )
         assert set(ConfiguredOptimizer.__slots__) == set(expected_slots)
 
     def test_initialization(self):
@@ -178,7 +185,9 @@ class TestConfiguredOptimizer:
 
         # Pass p0 and bounds to help the fit converge
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, pcov = optimizer.fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds
+        )
 
         # Check that parameters were estimated
         assert popt is not None
@@ -207,7 +216,9 @@ class TestConfiguredOptimizer:
         optimizer = create_optimizer()
 
         bounds = (np.array([0.0, -np.inf]), np.array([np.inf, np.inf]))
-        popt, _pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, _pcov = optimizer.fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds
+        )
 
         assert popt is not None
         assert popt[0] >= 0.0  # Respect lower bound
@@ -219,7 +230,9 @@ class TestConfiguredOptimizer:
         optimizer = create_optimizer()
 
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), sigma=sigma, bounds=bounds)
+        popt, pcov = optimizer.fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), sigma=sigma, bounds=bounds
+        )
 
         assert popt is not None
         assert pcov is not None
@@ -232,7 +245,9 @@ class TestConfiguredOptimizer:
 
         # Call fit with different maxfev - should override
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, _ = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds, maxfev=500)
+        popt, _ = optimizer.fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds, maxfev=500
+        )
 
         assert popt is not None
 
@@ -246,7 +261,9 @@ class TestConfigureCurveFit:
         curve_fit = configure_curve_fit()
 
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, pcov = curve_fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds
+        )
 
         assert popt is not None
         assert len(popt) == 2
@@ -258,7 +275,9 @@ class TestConfigureCurveFit:
         curve_fit = configure_curve_fit(maxfev=500)
 
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, _pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, _pcov = curve_fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds
+        )
 
         assert popt is not None
 
@@ -269,7 +288,9 @@ class TestConfigureCurveFit:
 
         # Call with different maxfev
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, _pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds, maxfev=500)
+        popt, _pcov = curve_fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds, maxfev=500
+        )
 
         assert popt is not None
 
@@ -341,7 +362,9 @@ class TestEdgeCases:
         )
 
         bounds = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt, _pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+        popt, _pcov = optimizer.fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds
+        )
 
         assert popt is not None
 
@@ -349,19 +372,28 @@ class TestEdgeCases:
 class TestIntegration:
     """Integration tests combining multiple features."""
 
-    def test_optimizer_reuse(self, simple_model, sample_data, exponential_model, exponential_data):
+    def test_optimizer_reuse(
+        self, simple_model, sample_data, exponential_model, exponential_data
+    ):
         """Test reusing the same optimizer for multiple fits."""
         optimizer = create_optimizer()
 
         # First fit
         x1, y1 = sample_data
         bounds1 = (np.array([-np.inf, -np.inf]), np.array([np.inf, np.inf]))
-        popt1, _ = optimizer.fit(simple_model, x1, y1, p0=np.array([1.0, 0.0]), bounds=bounds1)
+        popt1, _ = optimizer.fit(
+            simple_model, x1, y1, p0=np.array([1.0, 0.0]), bounds=bounds1
+        )
 
         # Second fit with different model/data
         x2, y2 = exponential_data
-        bounds2 = (np.array([-np.inf, -np.inf, -np.inf]), np.array([np.inf, np.inf, np.inf]))
-        popt2, _ = optimizer.fit(exponential_model, x2, y2, p0=np.array([1.0, 0.1, 0.1]), bounds=bounds2)
+        bounds2 = (
+            np.array([-np.inf, -np.inf, -np.inf]),
+            np.array([np.inf, np.inf, np.inf]),
+        )
+        popt2, _ = optimizer.fit(
+            exponential_model, x2, y2, p0=np.array([1.0, 0.1, 0.1]), bounds=bounds2
+        )
 
         assert len(popt1) == 2
         assert len(popt2) == 3
@@ -373,6 +405,7 @@ class TestIntegration:
         assert callable(curve_fit)
         # Should have proper signature
         import inspect
+
         sig = inspect.signature(curve_fit)
         params = list(sig.parameters.keys())
         assert "f" in params

@@ -357,9 +357,7 @@ def fast_model(x, a, b, c):
 ```python
 from nlsq.streaming.large_dataset import LargeDatasetFitter
 
-fitter = LargeDatasetFitter(
-    chunk_size=10000  # Process in chunks
-)
+fitter = LargeDatasetFitter(chunk_size=10000)  # Process in chunks
 
 popt, pcov = fitter.fit(model, x, y, p0=p0)
 ```

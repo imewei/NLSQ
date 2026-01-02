@@ -586,11 +586,8 @@ class TestPluginRegistryThreadSafety:
             # Register some first
             list(executor.map(register_plugin, range(5)))
             # Then concurrently register and unregister
-            futures = []
-            for i in range(5, 10):
-                futures.append(executor.submit(register_plugin, i))
-            for i in range(5):
-                futures.append(executor.submit(unregister_plugin, i))
+            futures = [executor.submit(register_plugin, i) for i in range(5, 10)]
+            futures.extend(executor.submit(unregister_plugin, i) for i in range(5))
 
             # Wait for all futures
             for f in futures:
@@ -734,10 +731,14 @@ class TestPluginParameterPassing:
         plugin = ContextCapturingPlugin()
         PluginRegistry.register(plugin)
 
-        run_plugins(sample_jacobian, sample_parameters, sample_residuals, **sample_context)
+        run_plugins(
+            sample_jacobian, sample_parameters, sample_residuals, **sample_context
+        )
 
         assert "xdata" in plugin.captured_context
-        np.testing.assert_array_equal(plugin.captured_context["xdata"], sample_context["xdata"])
+        np.testing.assert_array_equal(
+            plugin.captured_context["xdata"], sample_context["xdata"]
+        )
 
     def test_plugin_receives_context_ydata(
         self,
@@ -752,10 +753,14 @@ class TestPluginParameterPassing:
         plugin = ContextCapturingPlugin()
         PluginRegistry.register(plugin)
 
-        run_plugins(sample_jacobian, sample_parameters, sample_residuals, **sample_context)
+        run_plugins(
+            sample_jacobian, sample_parameters, sample_residuals, **sample_context
+        )
 
         assert "ydata" in plugin.captured_context
-        np.testing.assert_array_equal(plugin.captured_context["ydata"], sample_context["ydata"])
+        np.testing.assert_array_equal(
+            plugin.captured_context["ydata"], sample_context["ydata"]
+        )
 
     def test_plugin_receives_context_bounds(
         self,
@@ -770,7 +775,9 @@ class TestPluginParameterPassing:
         plugin = ContextCapturingPlugin()
         PluginRegistry.register(plugin)
 
-        run_plugins(sample_jacobian, sample_parameters, sample_residuals, **sample_context)
+        run_plugins(
+            sample_jacobian, sample_parameters, sample_residuals, **sample_context
+        )
 
         assert "bounds" in plugin.captured_context
         assert len(plugin.captured_context["bounds"]) == 2
@@ -788,7 +795,9 @@ class TestPluginParameterPassing:
         plugin = ContextCapturingPlugin()
         PluginRegistry.register(plugin)
 
-        run_plugins(sample_jacobian, sample_parameters, sample_residuals, **sample_context)
+        run_plugins(
+            sample_jacobian, sample_parameters, sample_residuals, **sample_context
+        )
 
         assert "model" in plugin.captured_context
         # Verify it's callable
@@ -807,7 +816,9 @@ class TestPluginParameterPassing:
         plugin = ContextCapturingPlugin()
         PluginRegistry.register(plugin)
 
-        run_plugins(sample_jacobian, sample_parameters, sample_residuals, **sample_context)
+        run_plugins(
+            sample_jacobian, sample_parameters, sample_residuals, **sample_context
+        )
 
         assert "config" in plugin.captured_context
         assert isinstance(plugin.captured_context["config"], DiagnosticsConfig)
@@ -1223,7 +1234,9 @@ class TestPluginIntegration:
                             code="OPT-001",
                             message="Negative scattering cross-section detected",
                             affected_parameters=tuple(np.where(parameters < 0)[0]),
-                            details={"negative_values": parameters[parameters < 0].tolist()},
+                            details={
+                                "negative_values": parameters[parameters < 0].tolist()
+                            },
                             recommendation="Add lower bounds of 0 for physical parameters",
                         )
                     )
