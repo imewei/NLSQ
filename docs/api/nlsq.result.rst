@@ -1,21 +1,34 @@
 nlsq.result module
 ==================
 
+Result types for NLSQ optimization operations.
+
+This module provides consolidated result types that were previously scattered
+across the codebase. As of v0.4.3, ``OptimizeResult`` and ``OptimizeWarning``
+have been moved here from ``nlsq.core._optimize``.
+
 .. automodule:: nlsq.result
    :members:
    :noindex:
    :undoc-members:
    :show-inheritance:
 
-Overview
---------
-
-The ``result`` module defines result containers for optimization outputs.
-
 Classes
 -------
 
+OptimizeResult
+~~~~~~~~~~~~~~
+
 .. autoclass:: nlsq.result.OptimizeResult
+   :members:
+   :noindex:
+   :undoc-members:
+   :show-inheritance:
+
+OptimizeWarning
+~~~~~~~~~~~~~~~
+
+.. autoclass:: nlsq.result.OptimizeWarning
    :members:
    :noindex:
    :undoc-members:
@@ -57,6 +70,23 @@ The OptimizeResult object contains:
 - **nfev**: Number of function evaluations
 - **njev**: Number of Jacobian evaluations
 - **nit**: Number of iterations
+
+Migration Notes
+---------------
+
+As of v0.4.3, ``OptimizeResult`` and ``OptimizeWarning`` have been moved from
+``nlsq.core._optimize`` to ``nlsq.result``. The old import paths continue to
+work with deprecation warnings during the 12-month transition period:
+
+.. code-block:: python
+
+   # Old (deprecated)
+   from nlsq.core._optimize import OptimizeResult
+
+   # New (recommended)
+   from nlsq.result import OptimizeResult
+   # or
+   from nlsq import OptimizeResult
 
 See Also
 --------

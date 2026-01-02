@@ -56,6 +56,7 @@ streaming Gauss-Newton, and exact covariance computation:
    nlsq.parameter_normalizer
    nlsq.streaming.telemetry
    nlsq.streaming.validators
+   nlsq.streaming.phases
 
 Global Optimization (v0.3.3+)
 -----------------------------
@@ -123,6 +124,7 @@ Protocol definitions for dependency injection:
    :maxdepth: 2
 
    nlsq.interfaces
+   nlsq.core.adapters
 
 Algorithms & Optimization
 --------------------------
@@ -221,9 +223,11 @@ Complete Module Listing
 - :doc:`nlsq.parameter_normalizer` - Parameter normalization for gradient balance
 - :doc:`nlsq.streaming.telemetry` - Defense layer telemetry (NEW in v0.4.2)
 - :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v0.4.2)
+- :doc:`nlsq.streaming.phases` - Phase classes (WarmupPhase, GaussNewtonPhase, etc.) (NEW in v0.4.3)
 
 **Interfaces & Protocols** (NEW in v0.4.2):
 - :doc:`nlsq.interfaces` - Protocol definitions for dependency injection
+- :doc:`nlsq.core.adapters` - Protocol adapters (CurveFitAdapter) (NEW in v0.4.3)
 
 **Global Optimization Modules** (NEW in v0.3.3+):
 - :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers
