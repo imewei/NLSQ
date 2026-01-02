@@ -123,7 +123,9 @@ logger = get_logger("trf")
 initialize_gpu_safely()
 
 # Import dataclasses for SVDCache
+from dataclasses import dataclass
 from typing import NamedTuple
+
 
 from nlsq.caching.unified_cache import get_global_cache
 from nlsq.callbacks import StopOptimization
@@ -207,6 +209,208 @@ class SVDCache(NamedTuple):
     V: jnp.ndarray
     J_h: jnp.ndarray
     x_hash: int
+
+
+# =====================================================================
+# TRF Configuration Dataclasses (US4 - Parameter Objects)
+# =====================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class TRFConfig:
+    """Immutable TRF algorithm configuration.
+
+    Groups algorithm configuration parameters passed to TRF optimizer functions.
+    This is an internal implementation detail - the public API remains unchanged.
+
+    Attributes
+    ----------
+    ftol : float
+        Tolerance for termination by change of cost function.
+    xtol : float
+        Tolerance for termination by change of independent variables.
+    gtol : float
+        Tolerance for termination by norm of gradient.
+    max_nfev : int or None
+        Maximum number of function evaluations. None for unlimited.
+    x_scale : str
+        Characteristic scale of variables. 'jac' for automatic scaling.
+    loss : str
+        Loss function type ('linear', 'soft_l1', 'huber', 'cauchy', 'arctan').
+    tr_solver : str
+        Trust-region subproblem solver ('exact', 'lsmr', 'cg').
+    verbose : int
+        Verbosity level (0=silent, 1=termination, 2=iterations).
+    """
+
+    ftol: float = 1e-8
+    xtol: float = 1e-8
+    gtol: float = 1e-8
+    max_nfev: int | None = None
+    x_scale: str = "jac"
+    loss: str = "linear"
+    tr_solver: str = "exact"
+    verbose: int = 0
+
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        if self.ftol <= 0:
+            raise ValueError(f"ftol must be positive, got {self.ftol}")
+        if self.xtol <= 0:
+            raise ValueError(f"xtol must be positive, got {self.xtol}")
+        if self.gtol <= 0:
+            raise ValueError(f"gtol must be positive, got {self.gtol}")
+        if self.max_nfev is not None and self.max_nfev <= 0:
+            raise ValueError(f"max_nfev must be positive, got {self.max_nfev}")
+        valid_losses = {"linear", "soft_l1", "huber", "cauchy", "arctan"}
+        if self.loss not in valid_losses:
+            raise ValueError(f"loss must be one of {valid_losses}, got {self.loss}")
+        valid_solvers = {"exact", "lsmr", "cg"}
+        if self.tr_solver not in valid_solvers:
+            raise ValueError(
+                f"tr_solver must be one of {valid_solvers}, got {self.tr_solver}"
+            )
+
+
+@dataclass(slots=True)
+class StepContext:
+    """Mutable state container for TRF step computation.
+
+    Groups the iteration state variables passed between TRF helper methods.
+    This reduces parameter count and improves code clarity.
+
+    Attributes
+    ----------
+    x : jnp.ndarray
+        Current parameter values.
+    f : jnp.ndarray
+        Residual vector at x.
+    J : jnp.ndarray
+        Jacobian matrix at x.
+    cost : float
+        Current cost (0.5 * ||f||^2).
+    g : jnp.ndarray
+        Gradient vector (J^T @ f).
+    trust_radius : float
+        Current trust region radius (Delta).
+    iteration : int
+        Current iteration number.
+    scale : jnp.ndarray
+        Variable scaling factors.
+    scale_inv : jnp.ndarray
+        Inverse scaling factors.
+    alpha : float
+        Levenberg-Marquardt parameter.
+    """
+
+    x: jnp.ndarray
+    f: jnp.ndarray
+    J: jnp.ndarray
+    cost: float
+    g: jnp.ndarray
+    trust_radius: float
+    iteration: int
+    scale: jnp.ndarray
+    scale_inv: jnp.ndarray
+    alpha: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class BoundsContext:
+    """Bound constraint data for TRF optimization.
+
+    Groups the bound-related arrays used in bounded optimization.
+
+    Attributes
+    ----------
+    lb : jnp.ndarray
+        Lower bounds on parameters.
+    ub : jnp.ndarray
+        Upper bounds on parameters.
+    x_scale : jnp.ndarray
+        Scaling factors for bounded variables.
+    x_offset : jnp.ndarray
+        Offset for bounded variables (center of bounds).
+    lb_scaled : jnp.ndarray
+        Scaled lower bounds.
+    ub_scaled : jnp.ndarray
+        Scaled upper bounds.
+    """
+
+    lb: jnp.ndarray
+    ub: jnp.ndarray
+    x_scale: jnp.ndarray
+    x_offset: jnp.ndarray
+    lb_scaled: jnp.ndarray
+    ub_scaled: jnp.ndarray
+
+    @classmethod
+    def from_bounds(
+        cls,
+        lb: jnp.ndarray,
+        ub: jnp.ndarray,
+        x_scale: jnp.ndarray | None = None,
+    ) -> "BoundsContext":
+        """Create BoundsContext from bounds arrays.
+
+        Parameters
+        ----------
+        lb : array_like
+            Lower bounds.
+        ub : array_like
+            Upper bounds.
+        x_scale : array_like, optional
+            Scaling factors. If None, uses 1.0.
+
+        Returns
+        -------
+        BoundsContext
+            Initialized bounds context.
+        """
+        lb = jnp.asarray(lb)
+        ub = jnp.asarray(ub)
+
+        if x_scale is None:
+            x_scale = jnp.ones_like(lb)
+        else:
+            x_scale = jnp.asarray(x_scale)
+
+        x_offset = (lb + ub) / 2.0
+        lb_scaled = (lb - x_offset) / x_scale
+        ub_scaled = (ub - x_offset) / x_scale
+
+        return cls(
+            lb=lb,
+            ub=ub,
+            x_scale=x_scale,
+            x_offset=x_offset,
+            lb_scaled=lb_scaled,
+            ub_scaled=ub_scaled,
+        )
+
+
+@dataclass(slots=True)
+class FallbackContext:
+    """Context for float64 fallback during mixed-precision optimization.
+
+    Tracks the state when falling back from float32 to float64.
+
+    Attributes
+    ----------
+    original_dtype : jnp.dtype
+        Original data type before fallback.
+    fallback_triggered : bool
+        Whether fallback was activated.
+    fallback_reason : str
+        Why fallback was needed.
+    step_context : StepContext or None
+        Step state at fallback point.
+    """
+
+    original_dtype: jnp.dtype
+    fallback_triggered: bool = False
+    fallback_reason: str = ""
+    step_context: StepContext | None = None
 
 
 # Algorithm constants
