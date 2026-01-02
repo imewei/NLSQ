@@ -879,11 +879,40 @@ def create_distributed_config(cluster_info: ClusterInfo) -> dict[str, Any]:
 
 
 # =============================================================================
-# Predefined Workflow Presets (Task Group 5)
+# Predefined Workflow Presets
 # =============================================================================
 
-# Following GlobalOptimizationConfig.PRESETS pattern
+# Workflow presets provide pre-configured settings for common optimization scenarios.
+# Each preset is a dictionary of WorkflowConfig-compatible settings.
+#
+# Core presets:
+#   - standard: Default curve_fit() behavior
+#   - quality: Highest precision with multi-start
+#   - fast: Speed-optimized with looser tolerances
+#   - large_robust: Chunked processing for large datasets
+#   - streaming: Streaming optimizer for huge datasets
+#   - hpc_distributed: Multi-GPU/node HPC configuration
+#   - memory_efficient: Minimize memory footprint
+#
+# Precision presets:
+#   - precision_high: Maximum numerical precision (tolerances 1e-10)
+#   - precision_standard: Standard precision (tolerances 1e-8)
+#
+# Scale presets:
+#   - streaming_large: Large-scale streaming with checkpoints
+#
+# Global optimization presets:
+#   - global_multimodal: Multi-start global search with Sobol sampling
+#   - multimodal: Problems with multiple local minima
+#
+# Mathematical behavior presets:
+#   - spectroscopy: Peak fitting optimization
+#   - timeseries: Time series analysis
+
 WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
+    # =========================================================================
+    # Core Presets
+    # =========================================================================
     "standard": {
         "description": "Standard curve_fit() with default tolerances",
         "tier": "STANDARD",
@@ -968,11 +997,11 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
         "enable_checkpoints": False,
         "chunk_size": 5000,
     },
-    # ==========================================================================
-    # Scientific Application Presets
-    # ==========================================================================
-    "spectroscopy": {
-        "description": "Optimized for peak fitting (Gaussian/Lorentzian/Voigt)",
+    # =========================================================================
+    # Precision Presets
+    # =========================================================================
+    "precision_high": {
+        "description": "Maximum numerical precision with tight tolerances (1e-10)",
         "tier": "STANDARD",
         "goal": "QUALITY",
         "enable_multistart": True,
@@ -983,23 +1012,8 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
         "xtol": 1e-10,
         "enable_checkpoints": False,
     },
-    "xpcs": {
-        "description": "X-ray photon correlation spectroscopy with multi-scale parameters",
-        "tier": "STREAMING",
-        "goal": "ROBUST",
-        "enable_multistart": True,
-        "n_starts": 10,
-        "sampler": "lhs",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_checkpoints": False,
-        # Uses hybrid streaming for tau/beta scale differences
-        "normalize": True,
-        "normalization_strategy": "bounds",
-    },
-    "saxs": {
-        "description": "Small-angle X-ray scattering form factor fitting",
+    "precision_standard": {
+        "description": "Standard numerical precision with default tolerances (1e-8)",
         "tier": "STANDARD",
         "goal": "ROBUST",
         "enable_multistart": True,
@@ -1010,45 +1024,11 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
         "xtol": 1e-8,
         "enable_checkpoints": False,
     },
-    "kinetics": {
-        "description": "Chemical/enzyme kinetics rate fitting",
-        "tier": "STANDARD",
-        "goal": "ROBUST",
-        "enable_multistart": True,
-        "n_starts": 10,
-        "sampler": "lhs",
-        "gtol": 1e-9,
-        "ftol": 1e-9,
-        "xtol": 1e-9,
-        "enable_checkpoints": False,
-    },
-    "dose_response": {
-        "description": "IC50/EC50 dose-response curves (4PL/5PL)",
-        "tier": "STANDARD",
-        "goal": "QUALITY",
-        "enable_multistart": True,
-        "n_starts": 20,
-        "sampler": "lhs",
-        "gtol": 1e-10,
-        "ftol": 1e-10,
-        "xtol": 1e-10,
-        "enable_checkpoints": False,
-    },
-    "imaging": {
-        "description": "2D Gaussian PSF fitting for microscopy/astronomy",
-        "tier": "CHUNKED",
-        "goal": "ROBUST",
-        "enable_multistart": True,
-        "n_starts": 5,
-        "sampler": "lhs",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_checkpoints": False,
-        "chunk_size": 100000,
-    },
-    "timeseries": {
-        "description": "Long time series with streaming (oscillations, decay)",
+    # =========================================================================
+    # Scale Presets
+    # =========================================================================
+    "streaming_large": {
+        "description": "Large-scale streaming optimization with checkpointing",
         "tier": "STREAMING",
         "goal": "ROBUST",
         "enable_multistart": True,
@@ -1059,29 +1039,21 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
         "xtol": 1e-7,
         "enable_checkpoints": True,
         "checkpoint_frequency": 100,
+        "chunk_size": 100000,
     },
-    "materials": {
-        "description": "Materials science (stress-strain, thermal analysis)",
+    # =========================================================================
+    # Global Optimization Presets
+    # =========================================================================
+    "global_multimodal": {
+        "description": "Global search for multimodal problems with Sobol sampling",
         "tier": "STANDARD",
-        "goal": "ROBUST",
+        "goal": "GLOBAL",
         "enable_multistart": True,
-        "n_starts": 10,
-        "sampler": "lhs",
+        "n_starts": 30,
+        "sampler": "sobol",
         "gtol": 1e-8,
         "ftol": 1e-8,
         "xtol": 1e-8,
-        "enable_checkpoints": False,
-    },
-    "binding": {
-        "description": "Binding isotherms and adsorption curves",
-        "tier": "STANDARD",
-        "goal": "ROBUST",
-        "enable_multistart": True,
-        "n_starts": 10,
-        "sampler": "lhs",
-        "gtol": 1e-9,
-        "ftol": 1e-9,
-        "xtol": 1e-9,
         "enable_checkpoints": False,
     },
     "multimodal": {
@@ -1096,20 +1068,52 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
         "xtol": 1e-8,
         "enable_checkpoints": False,
     },
-    "synchrotron": {
-        "description": "Synchrotron beamline data (large, high-precision)",
-        "tier": "STREAMING",
+    # =========================================================================
+    # Mathematical Behavior Presets
+    # =========================================================================
+    "spectroscopy": {
+        "description": "Optimized for peak fitting (Gaussian/Lorentzian/Voigt)",
+        "tier": "STANDARD",
         "goal": "QUALITY",
+        "enable_multistart": True,
+        "n_starts": 15,
+        "sampler": "lhs",
+        "gtol": 1e-10,
+        "ftol": 1e-10,
+        "xtol": 1e-10,
+        "enable_checkpoints": False,
+    },
+    "timeseries": {
+        "description": "Long time series with streaming (oscillations, decay)",
+        "tier": "STREAMING",
+        "goal": "ROBUST",
         "enable_multistart": True,
         "n_starts": 10,
         "sampler": "lhs",
-        "gtol": 1e-9,
-        "ftol": 1e-9,
-        "xtol": 1e-9,
+        "gtol": 1e-7,
+        "ftol": 1e-7,
+        "xtol": 1e-7,
         "enable_checkpoints": True,
-        "checkpoint_frequency": 50,
-        "chunk_size": 100000,
+        "checkpoint_frequency": 100,
     },
+}
+
+
+# =============================================================================
+# Deprecated Preset Aliases (will be removed in v0.6.0)
+# =============================================================================
+
+# Mapping of deprecated domain-specific preset names to their new generic equivalents.
+# These aliases provide backwards compatibility during the deprecation period.
+DEPRECATED_PRESET_ALIASES: dict[str, str] = {
+    "xpcs": "precision_standard",
+    "saxs": "precision_standard",
+    "kinetics": "precision_standard",
+    "dose_response": "precision_high",
+    "imaging": "streaming_large",
+    "materials": "precision_standard",
+    "binding": "precision_standard",
+    "synchrotron": "streaming_large",
 }
 
 
@@ -1335,8 +1339,13 @@ class WorkflowConfig:
         Parameters
         ----------
         preset_name : str
-            Name of the preset. One of: 'standard', 'quality', 'fast',
-            'large_robust', 'streaming', 'hpc_distributed', 'memory_efficient'.
+            Name of the preset. Available presets include:
+            - Core: 'standard', 'quality', 'fast', 'large_robust', 'streaming',
+              'hpc_distributed', 'memory_efficient'
+            - Precision: 'precision_high', 'precision_standard'
+            - Scale: 'streaming_large'
+            - Global: 'global_multimodal', 'multimodal'
+            - Behavior: 'spectroscopy', 'timeseries'
 
         Returns
         -------
@@ -1361,6 +1370,18 @@ class WorkflowConfig:
         1e-06
         """
         preset_name_lower = preset_name.lower()
+
+        # Check for deprecated preset aliases first
+        if preset_name_lower in DEPRECATED_PRESET_ALIASES:
+            new_preset = DEPRECATED_PRESET_ALIASES[preset_name_lower]
+            warnings.warn(
+                f"Preset '{preset_name}' is deprecated, use '{new_preset}' instead. "
+                "Will be removed in v0.6.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            preset_name_lower = new_preset
+
         if preset_name_lower not in WORKFLOW_PRESETS:
             valid_presets = list(WORKFLOW_PRESETS.keys())
             raise ValueError(
@@ -2383,6 +2404,7 @@ def get_quality_precision_config() -> dict[str, Any]:
 
 __all__ = [
     # Configuration
+    "DEPRECATED_PRESET_ALIASES",
     "WORKFLOW_PRESETS",
     # Cluster Detection and Distributed Processing (Task Group 6)
     "ClusterDetector",

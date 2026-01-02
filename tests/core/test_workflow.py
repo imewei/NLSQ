@@ -667,7 +667,7 @@ class TestWorkflowPresetsDict:
         """Test WORKFLOW_PRESETS dict contains all expected presets.
 
         Expected presets include core presets (standard, quality, fast, etc.)
-        and scientific application presets (spectroscopy, xpcs, saxs, etc.).
+        and generic mathematical behavior presets.
         """
         expected_presets = [
             # Core presets
@@ -678,26 +678,25 @@ class TestWorkflowPresetsDict:
             "streaming",
             "hpc_distributed",
             "memory_efficient",
-            # Scientific application presets
-            "spectroscopy",
-            "xpcs",
-            "saxs",
-            "kinetics",
-            "dose_response",
-            "imaging",
-            "timeseries",
-            "materials",
-            "binding",
+            # Precision presets
+            "precision_high",
+            "precision_standard",
+            # Scale presets
+            "streaming_large",
+            # Global optimization presets
+            "global_multimodal",
             "multimodal",
-            "synchrotron",
+            # Mathematical behavior presets
+            "spectroscopy",
+            "timeseries",
         ]
 
         # Check all expected presets exist
         for preset_name in expected_presets:
             assert preset_name in WORKFLOW_PRESETS, f"Missing preset: {preset_name}"
 
-        # Verify we have at least 18 presets (7 core + 11 scientific)
-        assert len(WORKFLOW_PRESETS) >= 18
+        # Verify we have at least 14 presets (7 core + 4 new generic + 3 behavior)
+        assert len(WORKFLOW_PRESETS) >= 14
         assert len(WORKFLOW_PRESETS) <= 30  # Reasonable upper bound for future growth
 
     def test_each_preset_has_required_fields(self):
