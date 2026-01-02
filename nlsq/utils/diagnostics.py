@@ -463,13 +463,6 @@ class OptimizationDiagnostics:
         data : dict, optional
             Additional event data
         """
-        event = {
-            "type": event_type,
-            "iteration": len(self.iteration_data),
-            "timestamp": time.time() - self.start_time if self.start_time else 0,
-            "data": data or {},
-        }
-
         # Store in warnings if it's a warning/error event
         if "failed" in event_type or "error" in event_type:
             self.warnings_issued.append(f"{event_type}: {data}")

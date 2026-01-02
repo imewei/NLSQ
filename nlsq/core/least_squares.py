@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import Any, Literal
 from warnings import warn
 
 import numpy as np

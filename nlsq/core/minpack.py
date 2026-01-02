@@ -163,9 +163,9 @@ def fit(
     bounds: tuple = (-float("inf"), float("inf")),
     method: str | None = None,
     workflow: Union[
-        str, "LDMemoryConfig", "HybridStreamingConfig", "GlobalOptimizationConfig"
+        str, LDMemoryConfig, HybridStreamingConfig, GlobalOptimizationConfig
     ] = "auto",
-    goal: Union[str, "OptimizationGoal", None] = None,
+    goal: Union[str, OptimizationGoal, None] = None,
     **kwargs: Any,
 ) -> CurveFitResult:
     """Unified curve fitting entry point with automatic workflow selection.

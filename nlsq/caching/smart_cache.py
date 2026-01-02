@@ -504,9 +504,9 @@ def cached_function(cache: SmartCache | None = None, ttl: float | None = None):
             return cached_result
 
         # Add cache management methods to wrapper function
-        setattr(wrapper, "cache", cache)
-        setattr(wrapper, "invalidate", cache.invalidate)
-        setattr(wrapper, "get_stats", cache.get_stats)
+        wrapper.cache = cache
+        wrapper.invalidate = cache.invalidate
+        wrapper.get_stats = cache.get_stats
 
         return wrapper
 
@@ -545,8 +545,8 @@ def cached_jacobian(cache: SmartCache | None = None):
             cache.set(cache_key, result)
             return result
 
-        setattr(wrapper, "cache", cache)
-        setattr(wrapper, "invalidate", cache.invalidate)
+        wrapper.cache = cache
+        wrapper.invalidate = cache.invalidate
 
         return wrapper
 

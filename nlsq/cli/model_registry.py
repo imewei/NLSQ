@@ -428,12 +428,12 @@ class ModelRegistry:
         if hasattr(module, "estimate_p0"):
             estimate_p0_func = module.estimate_p0
             if callable(estimate_p0_func):
-                setattr(model, "estimate_p0", estimate_p0_func)
+                model.estimate_p0 = estimate_p0_func
 
         if hasattr(module, "bounds"):
             bounds_func = module.bounds
             if callable(bounds_func):
-                setattr(model, "bounds", bounds_func)
+                model.bounds = bounds_func
 
         return model
 

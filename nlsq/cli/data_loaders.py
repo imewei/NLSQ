@@ -302,7 +302,6 @@ class DataLoader:
         comment_char = ascii_config.get("comment_char", "#")
         skip_header = ascii_config.get("skip_header", 0)
         skip_footer = ascii_config.get("skip_footer", 0)
-        usecols = ascii_config.get("usecols", None)
         dtype = ascii_config.get("dtype", "float64")
 
         try:

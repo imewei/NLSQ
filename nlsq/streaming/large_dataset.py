@@ -118,7 +118,7 @@ class ChunkBuffer:
     mask: np.ndarray
 
     @classmethod
-    def from_array(cls, arr: np.ndarray, pad_value: float = 0.0) -> "ChunkBuffer":
+    def from_array(cls, arr: np.ndarray, pad_value: float = 0.0) -> ChunkBuffer:
         """Create a ChunkBuffer from an array, padding to the appropriate bucket size.
 
         Parameters
@@ -563,7 +563,7 @@ def cleanup_memory() -> None:
         logger.debug(f"jax.clear_caches() failed (non-critical): {e}")
 
 
-def get_memory_tier(available_memory_gb: float) -> "MemoryTier":
+def get_memory_tier(available_memory_gb: float) -> MemoryTier:
     """Classify available memory into a MemoryTier.
 
     Convenience function that wraps MemoryTier.from_available_memory_gb()
@@ -893,7 +893,7 @@ class LargeDatasetFitter:
         self,
         memory_limit_gb: float = 8.0,
         config: LDMemoryConfig | None = None,
-        curve_fit_class: "CurveFit | None" = None,
+        curve_fit_class: CurveFit | None = None,
         logger: Logger | None = None,
         enable_mixed_precision: bool | None = None,
         mixed_precision_config=None,

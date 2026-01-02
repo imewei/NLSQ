@@ -210,9 +210,6 @@ class MultiStartOrchestrator:
             # Sobol and Halton are deterministic
             samples_raw = sampler(n_starts, n_params)
 
-        # Convert to numpy
-        samples = np.asarray(samples_raw)
-
         # Scale to bounds
         if self.config.center_on_p0 and p0 is not None:
             # Center samples around p0

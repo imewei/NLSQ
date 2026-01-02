@@ -462,7 +462,7 @@ def cached_jit(
             return compiled_func(*args, **kwargs)
 
         # Store reference to original function
-        setattr(wrapper, "__wrapped__", f)
+        wrapper.__wrapped__ = f
         return wrapper
 
     if func is None:
