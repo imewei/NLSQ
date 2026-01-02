@@ -27,7 +27,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import h5py
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -50,7 +49,10 @@ from nlsq.streaming.telemetry import (
     reset_defense_telemetry,
 )
 from nlsq.utils.logging import get_logger
-from nlsq.utils.safe_serialize import safe_dumps, safe_loads
+
+# Lazy import cache for CheckpointManager to avoid circular imports
+# Import happens at first checkpoint operation
+_lazy_imports: dict = {}
 
 # Module-level logger for warmup defense diagnostics
 _logger = get_logger("adaptive_hybrid_streaming")
@@ -186,6 +188,9 @@ class AdaptiveHybridStreamingOptimizer:
         self.phase1_optimizer_state: optax.OptState | None = None
         self.phase2_JTJ_accumulator: jnp.ndarray | None = None
         self.phase2_JTr_accumulator: jnp.ndarray | None = None
+
+        # Checkpoint manager (lazy initialized on first use)
+        self._checkpoint_manager = None
 
         # Multi-device support
         self.device_info: dict[str, Any] | None = None
@@ -2713,6 +2718,116 @@ class AdaptiveHybridStreamingOptimizer:
             "gradient_norm": gradient_norm,
         }
 
+    def _gn_iteration_with_retry(
+        self,
+        data_source: tuple[jnp.ndarray, jnp.ndarray],
+        current_params: jnp.ndarray,
+        trust_radius: float,
+        best_params: jnp.ndarray,
+        best_cost: float,
+    ) -> tuple[dict[str, Any], float]:
+        """Execute Gauss-Newton iteration with retry logic.
+
+        Parameters
+        ----------
+        data_source : tuple of array_like
+            Full dataset as (x_data, y_data).
+        current_params : array_like
+            Current parameters.
+        trust_radius : float
+            Current trust region radius.
+        best_params : array_like
+            Best parameters found so far (fallback).
+        best_cost : float
+            Best cost found so far (fallback).
+
+        Returns
+        -------
+        iter_result : dict
+            Iteration result dictionary.
+        trust_radius : float
+            Updated trust radius.
+        """
+        max_retries = getattr(self.config, "max_retries_per_batch", 0)
+
+        for retry_attempt in range(max_retries + 1):
+            try:
+                iter_result = self._gauss_newton_iteration(
+                    data_source, current_params, trust_radius
+                )
+                new_params = iter_result["new_params"]
+                new_cost = iter_result["new_cost"]
+
+                # Validate results - if finite, return success
+                if jnp.all(jnp.isfinite(new_params)) and jnp.isfinite(new_cost):
+                    return iter_result, trust_radius
+
+                # Non-finite results: retry or use fallback
+                if retry_attempt < max_retries:
+                    trust_radius *= 0.5
+                    continue
+
+                # Max retries exhausted: use best known params
+                iter_result["new_params"] = best_params
+                iter_result["new_cost"] = best_cost
+                iter_result["gradient_norm"] = 0.0
+                iter_result["actual_reduction"] = 0.0
+                return iter_result, trust_radius
+
+            except Exception:
+                if retry_attempt < max_retries:
+                    trust_radius *= 0.5
+                    continue
+
+                # Max retries exhausted: check fault tolerance
+                if not (
+                    hasattr(self.config, "enable_fault_tolerance")
+                    and self.config.enable_fault_tolerance
+                ):
+                    raise
+
+                # Use best parameters as fallback
+                iter_result = {
+                    "new_params": best_params,
+                    "new_cost": best_cost,
+                    "gradient_norm": 0.0,
+                    "actual_reduction": 0.0,
+                    "trust_radius": trust_radius,
+                }
+                return iter_result, trust_radius
+
+        # Should not reach here, but provide fallback
+        iter_result = {
+            "new_params": best_params,
+            "new_cost": best_cost,
+            "gradient_norm": 0.0,
+            "actual_reduction": 0.0,
+            "trust_radius": trust_radius,
+        }
+        return iter_result, trust_radius
+
+    def _should_save_checkpoint(self, iteration: int) -> bool:
+        """Check if checkpoint should be saved at this iteration.
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number (0-indexed).
+
+        Returns
+        -------
+        should_save : bool
+            True if checkpoint should be saved.
+        """
+        if not getattr(self.config, "enable_checkpoints", False):
+            return False
+        if not getattr(self.config, "checkpoint_dir", None):
+            return False
+        frequency = getattr(self.config, "checkpoint_frequency", 0)
+        if frequency <= 0:
+            return False
+        return (iteration + 1) % frequency == 0
+
     def _run_phase2_gauss_newton(
         self,
         data_source: tuple[jnp.ndarray, jnp.ndarray],
@@ -2819,61 +2934,9 @@ class AdaptiveHybridStreamingOptimizer:
             iter_start_time = time.time()
 
             # Perform one Gauss-Newton iteration with retry logic
-            max_retries = getattr(self.config, "max_retries_per_batch", 0)
-            retry_attempt = 0
-
-            while retry_attempt <= max_retries:
-                try:
-                    iter_result = self._gauss_newton_iteration(
-                        data_source, current_params, trust_radius
-                    )
-
-                    # Validate results
-                    new_params = iter_result["new_params"]
-                    new_cost = iter_result["new_cost"]
-
-                    if not jnp.all(jnp.isfinite(new_params)) or not jnp.isfinite(
-                        new_cost
-                    ):
-                        if retry_attempt < max_retries:
-                            # Retry with reduced trust region
-                            trust_radius *= 0.5
-                            retry_attempt += 1
-                            continue
-                        else:
-                            # Max retries reached, use best known params
-                            new_params = best_params
-                            new_cost = best_cost
-                            iter_result["gradient_norm"] = 0.0
-                            iter_result["actual_reduction"] = 0.0
-                            break
-
-                    # Success
-                    break
-
-                except Exception:
-                    if retry_attempt < max_retries:
-                        # Retry with reduced trust region
-                        trust_radius *= 0.5
-                        retry_attempt += 1
-                    # Max retries reached, use fallback
-                    elif (
-                        hasattr(self.config, "enable_fault_tolerance")
-                        and self.config.enable_fault_tolerance
-                    ):
-                        # Use best parameters as fallback
-                        new_params = best_params
-                        new_cost = best_cost
-                        iter_result = {
-                            "new_params": new_params,
-                            "new_cost": new_cost,
-                            "gradient_norm": 0.0,
-                            "actual_reduction": 0.0,
-                            "trust_radius": trust_radius,
-                        }
-                        break
-                    else:
-                        raise
+            iter_result, trust_radius = self._gn_iteration_with_retry(
+                data_source, current_params, trust_radius, best_params, best_cost
+            )
 
             # Extract results
             new_params = iter_result["new_params"]
@@ -2910,23 +2973,14 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
             # Save checkpoint periodically if enabled
-            if (
-                hasattr(self.config, "enable_checkpoints")
-                and self.config.enable_checkpoints
-                and hasattr(self.config, "checkpoint_frequency")
-                and (iteration + 1) % self.config.checkpoint_frequency == 0
-            ):
-                if (
-                    hasattr(self.config, "checkpoint_dir")
-                    and self.config.checkpoint_dir
-                ):
-                    checkpoint_path = (
-                        Path(self.config.checkpoint_dir)
-                        / f"checkpoint_phase2_iter{iteration + 1}.h5"
-                    )
-                    self.current_phase = 2
-                    self.normalized_params = current_params
-                    self._save_checkpoint(checkpoint_path)
+            if self._should_save_checkpoint(iteration):
+                checkpoint_path = (
+                    Path(self.config.checkpoint_dir)
+                    / f"checkpoint_phase2_iter{iteration + 1}.h5"
+                )
+                self.current_phase = 2
+                self.normalized_params = current_params
+                self._save_checkpoint(checkpoint_path)
 
             # Accept step if cost decreased
             # Save cost before step for convergence check
@@ -3451,6 +3505,67 @@ class AdaptiveHybridStreamingOptimizer:
 
         return True
 
+    def _get_checkpoint_manager(self):
+        """Get or create the checkpoint manager (lazy initialization).
+
+        Returns
+        -------
+        CheckpointManager
+            The checkpoint manager instance.
+        """
+        if self._checkpoint_manager is None:
+            if "CheckpointManager" not in _lazy_imports:
+                from nlsq.streaming.phases.checkpoint import CheckpointManager
+                _lazy_imports["CheckpointManager"] = CheckpointManager
+            self._checkpoint_manager = _lazy_imports["CheckpointManager"](self.config)
+        return self._checkpoint_manager
+
+    def _create_checkpoint_state(self):
+        """Create a CheckpointState from current optimizer state.
+
+        Returns
+        -------
+        CheckpointState
+            State container with all optimizer state for checkpointing.
+        """
+        from nlsq.streaming.phases.checkpoint import CheckpointState
+
+        return CheckpointState(
+            current_phase=self.current_phase,
+            normalized_params=self.normalized_params,
+            phase1_optimizer_state=self.phase1_optimizer_state,
+            phase2_JTJ_accumulator=self.phase2_JTJ_accumulator,
+            phase2_JTr_accumulator=self.phase2_JTr_accumulator,
+            best_params_global=self.best_params_global,
+            best_cost_global=self.best_cost_global,
+            phase_history=self.phase_history,
+            normalizer=self.normalizer,
+            tournament_selector=self.tournament_selector,
+            multistart_candidates=self.multistart_candidates,
+        )
+
+    def _restore_from_checkpoint_state(self, state) -> None:
+        """Restore optimizer state from a CheckpointState.
+
+        Parameters
+        ----------
+        state : CheckpointState
+            State container to restore from.
+        """
+        self.current_phase = state.current_phase
+        self.normalized_params = state.normalized_params
+        self.phase1_optimizer_state = state.phase1_optimizer_state
+        self.phase2_JTJ_accumulator = state.phase2_JTJ_accumulator
+        self.phase2_JTr_accumulator = state.phase2_JTr_accumulator
+        self.best_params_global = state.best_params_global
+        self.best_cost_global = state.best_cost_global
+        self.phase_history = state.phase_history
+        # Note: normalizer is NOT restored from checkpoint - recreated in _setup_normalization
+        if state.tournament_selector is not None:
+            self.tournament_selector = state.tournament_selector
+        if state.multistart_candidates is not None:
+            self.multistart_candidates = state.multistart_candidates
+
     def _save_checkpoint(self, checkpoint_path: str | Path) -> None:
         """Save checkpoint with phase-specific state to HDF5 file.
 
@@ -3471,111 +3586,9 @@ class AdaptiveHybridStreamingOptimizer:
         - best_cost_global: Best cost value globally
         - phase_history: Complete phase history
         """
-        checkpoint_path = Path(checkpoint_path)
-        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with h5py.File(checkpoint_path, "w") as f:
-            # Version metadata
-            f.attrs["version"] = "3.0"
-            f.attrs["timestamp"] = time.time()
-
-            # Create phase_state group
-            phase_state = f.create_group("phase_state")
-
-            # Save current phase and parameters
-            phase_state.create_dataset("current_phase", data=self.current_phase)
-            if self.normalized_params is not None:
-                phase_state.create_dataset(
-                    "normalized_params", data=self.normalized_params
-                )
-
-            # Save Phase 1 optimizer state (Optax L-BFGS)
-            if self.phase1_optimizer_state is not None:
-                opt_state_group = phase_state.create_group("phase1_optimizer_state")
-                inner_state = self.phase1_optimizer_state[0]
-                opt_state_group.create_dataset("count", data=int(inner_state.count))
-
-                # Check optimizer type by state attributes
-                if hasattr(inner_state, "diff_params_memory"):
-                    # L-BFGS state: ScaleByLBFGSState has count, params, updates,
-                    # diff_params_memory, diff_updates_memory, weights_memory
-                    opt_state_group.attrs["optimizer_type"] = "lbfgs"
-                    opt_state_group.create_dataset("params", data=inner_state.params)
-                    opt_state_group.create_dataset("updates", data=inner_state.updates)
-                    opt_state_group.create_dataset(
-                        "diff_params_memory", data=inner_state.diff_params_memory
-                    )
-                    opt_state_group.create_dataset(
-                        "diff_updates_memory", data=inner_state.diff_updates_memory
-                    )
-                    opt_state_group.create_dataset(
-                        "weights_memory", data=inner_state.weights_memory
-                    )
-                else:
-                    raise ValueError(
-                        "Unsupported Phase 1 optimizer state for checkpointing. "
-                        "Expected L-BFGS (ScaleByLBFGSState)."
-                    )
-
-            # Save Phase 2 accumulators
-            if self.phase2_JTJ_accumulator is not None:
-                phase_state.create_dataset(
-                    "phase2_jtj_accumulator", data=self.phase2_JTJ_accumulator
-                )
-            if self.phase2_JTr_accumulator is not None:
-                phase_state.create_dataset(
-                    "phase2_jtr_accumulator", data=self.phase2_JTr_accumulator
-                )
-
-            # Save best parameters tracking
-            if self.best_params_global is not None:
-                phase_state.create_dataset(
-                    "best_params_global", data=self.best_params_global
-                )
-            phase_state.create_dataset("best_cost_global", data=self.best_cost_global)
-
-            # Save phase history using safe JSON serialization
-            if self.phase_history:
-                import numpy as np
-
-                phase_history_bytes = safe_dumps(self.phase_history)
-                phase_state.create_dataset(
-                    "phase_history", data=np.void(phase_history_bytes)
-                )
-
-            # Save normalization state (if exists)
-            if self.normalizer is not None:
-                norm_group = phase_state.create_group("normalizer_state")
-                norm_group.attrs["strategy"] = self.normalizer.strategy
-                if self.normalizer.scales is not None:
-                    norm_group.create_dataset("scales", data=self.normalizer.scales)
-                if self.normalizer.offsets is not None:
-                    norm_group.create_dataset("offsets", data=self.normalizer.offsets)
-
-            # Save tournament state (if exists)
-            if self.tournament_selector is not None:
-                tournament_group = phase_state.create_group("tournament_state")
-                tournament_checkpoint = self.tournament_selector.to_checkpoint()
-                for key, value in tournament_checkpoint.items():
-                    if isinstance(value, (list, dict)):
-                        tournament_bytes = safe_dumps(value)
-                        tournament_group.create_dataset(
-                            key, data=np.void(tournament_bytes)
-                        )
-                    elif value is not None:
-                        try:
-                            tournament_group.create_dataset(key, data=value)
-                        except TypeError:
-                            tournament_bytes = safe_dumps(value)
-                            tournament_group.create_dataset(
-                                key, data=np.void(tournament_bytes)
-                            )
-
-            # Save multi-start candidates (if exists)
-            if self.multistart_candidates is not None:
-                phase_state.create_dataset(
-                    "multistart_candidates", data=self.multistart_candidates
-                )
+        manager = self._get_checkpoint_manager()
+        state = self._create_checkpoint_state()
+        manager.save(checkpoint_path, state)
 
     def _load_checkpoint(self, checkpoint_path: str | Path) -> None:
         """Load checkpoint and restore phase-specific state.
@@ -3592,118 +3605,20 @@ class AdaptiveHybridStreamingOptimizer:
         ValueError
             If checkpoint version is incompatible
         """
-        checkpoint_path = Path(checkpoint_path)
-        if not checkpoint_path.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+        manager = self._get_checkpoint_manager()
 
-        with h5py.File(checkpoint_path, "r") as f:
-            # Check version
-            version = f.attrs.get("version", "1.0")
-            if not version.startswith("3."):
-                raise ValueError(
-                    f"Incompatible checkpoint version: {version} (expected 3.x)"
-                )
+        # Create GlobalOptimizationConfig for tournament reconstruction if needed
+        global_config = None
+        if self.config.enable_multistart:
+            global_config = GlobalOptimizationConfig(
+                n_starts=self.config.n_starts,
+                elimination_rounds=self.config.elimination_rounds,
+                elimination_fraction=self.config.elimination_fraction,
+                batches_per_round=self.config.batches_per_round,
+            )
 
-            phase_state = f["phase_state"]
-
-            # Restore current phase
-            self.current_phase = int(phase_state["current_phase"][()])
-
-            # Restore normalized parameters
-            if "normalized_params" in phase_state:
-                self.normalized_params = jnp.array(phase_state["normalized_params"])
-
-            # Restore Phase 1 optimizer state
-            if "phase1_optimizer_state" in phase_state:
-                opt_state_group = phase_state["phase1_optimizer_state"]
-                count = int(opt_state_group["count"][()])
-                optimizer_type = opt_state_group.attrs.get("optimizer_type", "lbfgs")
-                if optimizer_type != "lbfgs":
-                    raise ValueError(
-                        "Unsupported Phase 1 optimizer state in checkpoint. "
-                        "Expected L-BFGS state."
-                    )
-
-                # Reconstruct L-BFGS state
-                from optax._src.transform import ScaleByLBFGSState
-
-                lbfgs_state = ScaleByLBFGSState(
-                    count=count,
-                    params=jnp.array(opt_state_group["params"]),
-                    updates=jnp.array(opt_state_group["updates"]),
-                    diff_params_memory=jnp.array(opt_state_group["diff_params_memory"]),
-                    diff_updates_memory=jnp.array(
-                        opt_state_group["diff_updates_memory"]
-                    ),
-                    weights_memory=jnp.array(opt_state_group["weights_memory"]),
-                )
-                self.phase1_optimizer_state = (lbfgs_state, optax.EmptyState())
-
-            # Restore Phase 2 accumulators
-            if "phase2_jtj_accumulator" in phase_state:
-                self.phase2_JTJ_accumulator = jnp.array(
-                    phase_state["phase2_jtj_accumulator"]
-                )
-            if "phase2_jtr_accumulator" in phase_state:
-                self.phase2_JTr_accumulator = jnp.array(
-                    phase_state["phase2_jtr_accumulator"]
-                )
-
-            # Restore best parameters tracking
-            if "best_params_global" in phase_state:
-                self.best_params_global = jnp.array(phase_state["best_params_global"])
-            self.best_cost_global = float(phase_state["best_cost_global"][()])
-
-            # Restore phase history using safe JSON deserialization
-            if "phase_history" in phase_state:
-                phase_history_bytes = bytes(phase_state["phase_history"][()])
-                self.phase_history = safe_loads(phase_history_bytes)
-
-            # Restore normalizer state (if exists)
-            if "normalizer_state" in phase_state:
-                norm_group = phase_state["normalizer_state"]
-                strategy = norm_group.attrs["strategy"]
-                scales = (
-                    jnp.array(norm_group["scales"]) if "scales" in norm_group else None
-                )
-                offsets = (
-                    jnp.array(norm_group["offsets"])
-                    if "offsets" in norm_group
-                    else None
-                )
-
-                # Note: Full normalizer reconstruction requires bounds/p0
-                # This is a partial restore - full normalizer created in _setup_normalization
-
-            # Restore tournament state (if exists)
-            if "tournament_state" in phase_state and self.config.enable_multistart:
-                tournament_group = phase_state["tournament_state"]
-                tournament_checkpoint = {}
-                for key in tournament_group:
-                    value = tournament_group[key][()]
-                    if isinstance(value, np.void):
-                        tournament_checkpoint[key] = safe_loads(bytes(value))
-                    else:
-                        tournament_checkpoint[key] = (
-                            np.array(value) if hasattr(value, "__len__") else value
-                        )
-
-                # Create GlobalOptimizationConfig for tournament
-                global_config = GlobalOptimizationConfig(
-                    n_starts=self.config.n_starts,
-                    elimination_rounds=self.config.elimination_rounds,
-                    elimination_fraction=self.config.elimination_fraction,
-                    batches_per_round=self.config.batches_per_round,
-                )
-                self.tournament_selector = TournamentSelector.from_checkpoint(
-                    tournament_checkpoint, global_config
-                )
-
-            # Restore multi-start candidates (if exists)
-            if "multistart_candidates" in phase_state:
-                self.multistart_candidates = jnp.array(
-                    phase_state["multistart_candidates"]
-                )
+        state = manager.load(checkpoint_path, global_config)
+        self._restore_from_checkpoint_state(state)
 
     def _detect_available_devices(self) -> dict[str, Any]:
         """Detect available GPU/TPU devices using JAX.
