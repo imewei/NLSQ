@@ -4,9 +4,10 @@ This module provides sparse matrix support for Jacobian computations,
 enabling efficient handling of problems with 20M+ data points.
 """
 
-# mypy: ignore-errors
+from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -14,6 +15,9 @@ from scipy.sparse import coo_matrix, csr_matrix
 
 from nlsq.constants import FINITE_DIFF_REL_STEP
 from nlsq.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from nlsq.result import CurveFitResult
 
 logger = get_logger(__name__)
 
@@ -36,8 +40,8 @@ class SparseJacobianComputer:
             Default is 0.01 which works well for most problems.
         """
         self.sparsity_threshold = sparsity_threshold
-        self._sparsity_pattern = None
-        self._sparse_indices = None
+        self._sparsity_pattern: np.ndarray | None = None
+        self._sparse_indices: tuple | None = None
 
     def detect_sparsity_pattern(
         self,
@@ -72,6 +76,7 @@ class SparseJacobianComputer:
         xdata_arr = np.asarray(xdata_sample)
 
         # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)
+        xdata_sliced: list | np.ndarray  # Can be list or ndarray
         if isinstance(xdata_sample, list | tuple):
             # Get number of data points from first coordinate array
             n_data_points = len(xdata_sample[0])
@@ -291,7 +296,7 @@ class SparseJacobianComputer:
 
     def sparse_normal_equations(
         self, J_sparse: csr_matrix, f: np.ndarray
-    ) -> tuple[callable, np.ndarray]:
+    ) -> tuple[Callable, np.ndarray]:
         """Set up normal equations with sparse Jacobian.
 
         Solves (J^T @ J) @ p = -J^T @ f without forming J^T @ J explicitly.
@@ -436,8 +441,8 @@ class SparseOptimizer:
         x0: np.ndarray,
         xdata: np.ndarray,
         ydata: np.ndarray,
-        **kwargs,
-    ) -> dict:
+        **kwargs: Any,
+    ) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
         """Optimize using sparse Jacobian methods.
 
         Parameters
