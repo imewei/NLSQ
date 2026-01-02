@@ -100,13 +100,12 @@ from nlsq.config import JAXConfig
 
 __jax_config = JAXConfig()
 import jax.numpy as jnp
-from jax import debug, jit, lax
+from jax import debug
 from jax.numpy.linalg import norm as jnorm
 from jax.tree_util import tree_flatten
 
 # Import safe SVD with fallback (full deterministic SVD only)
 from nlsq.stability.svd_fallback import (
-    compute_svd_with_fallback,
     initialize_gpu_safely,
 )
 
@@ -177,13 +176,13 @@ class SVDCache(NamedTuple):
     Attributes
     ----------
     U : jnp.ndarray
-        Left singular vectors (m × k), where m is residuals and k = min(m, n).
+        Left singular vectors (m x k), where m is residuals and k = min(m, n).
     s : jnp.ndarray
         Singular values (k,).
     V : jnp.ndarray
-        Right singular vectors (n × k), where n is parameters.
+        Right singular vectors (n x k), where n is parameters.
     J_h : jnp.ndarray
-        Scaled Jacobian in "hat" space (m × n).
+        Scaled Jacobian in "hat" space (m x n).
     x_hash : int
         Hash of parameter vector for cache validation. Cache is valid only
         when the current parameter hash matches this value.
@@ -195,7 +194,7 @@ class SVDCache(NamedTuple):
     so the SVD can be reused. When a step is accepted, the cache must be invalidated.
 
     The expected speedup from SVD caching is 20-40% on problems with frequent step
-    rejections, as SVD computation is O(mn²) and dominates iteration time.
+    rejections, as SVD computation is O(mn^2) and dominates iteration time.
     """
 
     U: jnp.ndarray
@@ -944,6 +943,519 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         return result
 
+    def _handle_mixed_precision_update(
+        self,
+        mixed_precision_manager: MixedPrecisionManager,
+        x: jnp.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        g: jnp.ndarray,
+        cost: float,
+        Delta: float,
+        alpha: float,
+        iteration: int,
+        d_jnp: jnp.ndarray,
+        step_norm: float | None,
+        g_norm: float,
+    ) -> dict | None:
+        """Handle mixed precision monitoring and potential upgrade.
+
+        This helper extracts mixed precision handling logic from trf_no_bounds,
+        reducing complexity.
+
+        Parameters
+        ----------
+        mixed_precision_manager : MixedPrecisionManager
+            The mixed precision manager instance
+        x : jnp.ndarray
+            Current parameter values
+        f : jnp.ndarray
+            Current residuals
+        J : jnp.ndarray
+            Current Jacobian
+        g : jnp.ndarray
+            Current gradient
+        cost : float
+            Current cost value
+        Delta : float
+            Trust region radius
+        alpha : float
+            Levenberg-Marquardt parameter
+        iteration : int
+            Current iteration number
+        d_jnp : jnp.ndarray
+            Scaling vector
+        step_norm : float | None
+            Step norm (None if not computed)
+        g_norm : float
+            Gradient norm
+
+        Returns
+        -------
+        dict | None
+            If upgrade occurred, returns dict with upgraded state:
+            - x, f, J, g, cost, Delta, iteration, alpha
+            Otherwise returns None.
+        """
+        # Compute parameter change for precision monitoring
+        param_change = jnorm(d_jnp) if step_norm is not None else 0.0
+
+        # Check for NaN/Inf in current state
+        has_nan_inf = bool(
+            jnp.isnan(f).any()
+            or jnp.isinf(f).any()
+            or jnp.isnan(J).any()
+            or jnp.isinf(J).any()
+            or jnp.isnan(g).any()
+            or jnp.isinf(g).any()
+        )
+
+        # Report metrics to manager
+        metrics = ConvergenceMetrics(
+            iteration=iteration,
+            residual_norm=float(jnorm(f)),
+            gradient_norm=float(g_norm),
+            parameter_change=float(param_change),
+            cost=float(cost),
+            trust_radius=float(Delta),
+            has_nan_inf=has_nan_inf,
+        )
+        mixed_precision_manager.report_metrics(metrics)
+
+        # Update best parameters
+        mixed_precision_manager.update_best(x, float(cost), iteration)
+
+        # Check if precision upgrade needed
+        if mixed_precision_manager.should_upgrade():
+            # Create optimization state for upgrade
+            opt_state = OptimizationState(
+                x=x,
+                f=f,
+                J=J,
+                g=g,
+                cost=float(cost),
+                trust_radius=float(Delta),
+                iteration=iteration,
+                dtype=x.dtype,
+                algorithm_specific={"alpha": alpha},
+            )
+
+            # Perform upgrade
+            upgraded_state = mixed_precision_manager.upgrade_precision(opt_state)
+
+            # Return upgraded state
+            return {
+                "x": upgraded_state.x,
+                "f": upgraded_state.f,
+                "J": upgraded_state.J,
+                "g": upgraded_state.g,
+                "cost": upgraded_state.cost,
+                "Delta": upgraded_state.trust_radius,
+                "iteration": upgraded_state.iteration,
+                "alpha": upgraded_state.algorithm_specific["alpha"],
+            }
+
+        return None
+
+    def _invoke_callback(
+        self,
+        callback: Callable,
+        iteration: int,
+        cost: float,
+        x: np.ndarray,
+        g_norm: float,
+        nfev: int,
+        step_norm: float | None,
+        actual_reduction: float | None,
+    ) -> int | None:
+        """Invoke user callback with proper exception handling.
+
+        This helper extracts callback handling logic from trf_no_bounds,
+        reducing complexity.
+
+        Parameters
+        ----------
+        callback : Callable
+            User-provided callback function
+        iteration : int
+            Current iteration number
+        cost : float
+            Current cost value
+        x : np.ndarray
+            Current parameter values
+        g_norm : float
+            Gradient norm
+        nfev : int
+            Number of function evaluations
+        step_norm : float | None
+            Step norm (None if not computed)
+        actual_reduction : float | None
+            Actual cost reduction (None if not computed)
+
+        Returns
+        -------
+        int | None
+            Termination status if callback requested stop, None otherwise.
+        """
+        try:
+            callback(
+                iteration=iteration,
+                cost=float(cost),  # JAX scalar -> Python float
+                params=np.array(x),  # JAX array -> NumPy array
+                info={
+                    "gradient_norm": float(g_norm),
+                    "nfev": nfev,
+                    "step_norm": float(step_norm) if step_norm is not None else None,
+                    "actual_reduction": float(actual_reduction)
+                    if actual_reduction is not None
+                    else None,
+                },
+            )
+        except StopOptimization:
+            self.logger.info("Optimization stopped by callback (StopOptimization)")
+            return 2  # User-requested stop
+        except Exception as e:
+            warnings.warn(
+                f"Callback raised exception: {e}. Continuing optimization.",
+                RuntimeWarning,
+            )
+        return None
+
+    def _initialize_bounds_state(
+        self,
+        x0: np.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        g: jnp.ndarray,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        x_scale: np.ndarray | str,
+    ) -> dict:
+        """Initialize bounds-specific state for TRF algorithm.
+
+        This helper extracts bounds initialization logic from trf_bounds,
+        reducing complexity.
+
+        Parameters
+        ----------
+        x0 : np.ndarray
+            Initial parameter guess
+        f : jnp.ndarray
+            Initial residuals
+        J : jnp.ndarray
+            Initial Jacobian
+        g : jnp.ndarray
+            Initial gradient
+        lb : np.ndarray
+            Lower bounds
+        ub : np.ndarray
+            Upper bounds
+        x_scale : np.ndarray | str
+            Parameter scaling
+
+        Returns
+        -------
+        dict
+            State containing v, dv, scale, scale_inv, Delta, jac_scale
+        """
+        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
+        if jac_scale:
+            scale, scale_inv = self.cJIT.compute_jac_scale(J)
+        else:
+            scale, scale_inv = x_scale, 1 / x_scale
+
+        v, dv = CL_scaling_vector(x0, g, lb, ub)
+
+        # Convert to JAX arrays
+        v = jnp.asarray(v)
+        dv = jnp.asarray(dv)
+        mask = dv != 0
+        v = v.at[mask].set(v[mask] * scale_inv[mask])
+
+        Delta = jnorm(x0 * scale_inv / v**SQRT_EXPONENT)
+        if Delta == 0:
+            Delta = 1.0
+
+        return {
+            "v": v,
+            "dv": dv,
+            "scale": scale,
+            "scale_inv": scale_inv,
+            "Delta": Delta,
+            "jac_scale": jac_scale,
+        }
+
+    def _solve_bounds_subproblem(
+        self,
+        J: jnp.ndarray,
+        f: jnp.ndarray,
+        g: jnp.ndarray,
+        v: jnp.ndarray,
+        dv: jnp.ndarray,
+        scale: np.ndarray,
+        scale_inv: np.ndarray,
+        Delta: float,
+        alpha: float,
+        solver: str,
+        n: int,
+    ) -> dict:
+        """Solve trust region subproblem with bounds.
+
+        This helper extracts bounds subproblem logic from trf_bounds,
+        reducing complexity.
+
+        Parameters
+        ----------
+        J : jnp.ndarray
+            Current Jacobian
+        f : jnp.ndarray
+            Current residuals
+        g : jnp.ndarray
+            Current gradient
+        v : jnp.ndarray
+            Coleman-Li scaling vector
+        dv : jnp.ndarray
+            Derivative of v
+        scale : np.ndarray
+            Parameter scaling
+        scale_inv : np.ndarray
+            Inverse parameter scaling
+        Delta : float
+            Trust region radius
+        alpha : float
+            Levenberg-Marquardt parameter
+        solver : str
+            Solver type
+        n : int
+            Number of parameters
+
+        Returns
+        -------
+        dict
+            Subproblem solution containing d, g_h, J_h, diag_h, p_h, s, V, uf
+        """
+        # Apply two types of scaling
+        d = v**SQRT_EXPONENT * scale
+
+        # C = diag(g * scale) Jv
+        diag_h = g * dv * scale
+
+        # "hat" gradient
+        g_h = d * g
+        J_diag = jnp.diag(diag_h**SQRT_EXPONENT)
+        d_jnp = jnp.array(d)
+        f_zeros = jnp.zeros([n])
+
+        if solver == "cg":
+            J_h = J * d_jnp
+            p_h = self.solve_tr_subproblem_cg_bounds(
+                J, f, d_jnp, J_diag, f_zeros, Delta, alpha
+            )
+            s, V, uf = None, None, None
+        elif solver == "sparse":
+            # Sparse solver path - fall back to dense for correctness
+            output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
+            J_h = output[0]
+            s, V, uf = output[2:]
+            p_h = None
+        else:
+            # Exact SVD solver (default)
+            output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
+            J_h = output[0]
+            s, V, uf = output[2:]
+            p_h = None
+
+        return {
+            "d": d,
+            "d_jnp": d_jnp,
+            "g_h": g_h,
+            "J_h": J_h,
+            "diag_h": diag_h,
+            "p_h": p_h,
+            "s": s,
+            "V": V,
+            "uf": uf,
+            "f_zeros": f_zeros,
+            "J_diag": J_diag,
+        }
+
+    def _evaluate_bounds_inner_loop(
+        self,
+        fun: Callable,
+        x: np.ndarray,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        J_h: jnp.ndarray,
+        g_h: jnp.ndarray,
+        diag_h: jnp.ndarray,
+        cost: float,
+        d: np.ndarray,
+        d_jnp: jnp.ndarray,
+        Delta: float,
+        alpha: float,
+        p_h: jnp.ndarray | None,
+        s: jnp.ndarray | None,
+        V: jnp.ndarray | None,
+        uf: jnp.ndarray | None,
+        f_zeros: jnp.ndarray,
+        J_diag: jnp.ndarray,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        data_mask: jnp.ndarray,
+        transform: Callable | None,
+        loss_function: Callable | None,
+        f_scale: float,
+        lb: np.ndarray,
+        ub: np.ndarray,
+        theta: float,
+        solver: str,
+        ftol: float,
+        xtol: float,
+        max_nfev: int,
+        nfev: int,
+        n: int,
+        m: int,
+    ) -> dict:
+        """Evaluate inner loop for bounds optimization.
+
+        This helper extracts the inner loop logic from trf_bounds,
+        reducing complexity.
+
+        Parameters
+        ----------
+        fun : Callable
+            Residual function
+        x : np.ndarray
+            Current parameters
+        f : jnp.ndarray
+            Current residuals
+        J : jnp.ndarray
+            Current Jacobian
+        J_h : jnp.ndarray
+            Scaled Jacobian
+        g_h : jnp.ndarray
+            Scaled gradient
+        diag_h : jnp.ndarray
+            Diagonal scaling
+        cost : float
+            Current cost
+        d : np.ndarray
+            Scaling vector
+        d_jnp : jnp.ndarray
+            JAX scaling vector
+        Delta : float
+            Trust region radius
+        alpha : float
+            LM parameter
+        p_h : jnp.ndarray | None
+            Pre-computed step (CG)
+        s, V, uf : SVD components
+        f_zeros : jnp.ndarray
+            Zero vector
+        J_diag : jnp.ndarray
+            Diagonal Jacobian
+        xdata, ydata : Data arrays
+        data_mask : Data mask
+        transform : Transform function
+        loss_function : Loss function
+        f_scale : Residual scale
+        lb, ub : Bounds
+        theta : Step back ratio
+        solver : Solver type
+        ftol, xtol : Tolerances
+        max_nfev : Max function evals
+        nfev : Current function evals
+        n, m : Problem dimensions
+
+        Returns
+        -------
+        dict
+            Inner loop result
+        """
+        actual_reduction = -1
+        inner_loop_count = 0
+        max_inner_iterations = 100
+        termination_status = None
+        step_norm = 0
+
+        while (
+            actual_reduction <= 0
+            and nfev < max_nfev
+            and inner_loop_count < max_inner_iterations
+        ):
+            inner_loop_count += 1
+
+            if solver == "cg":
+                if inner_loop_count > 1:
+                    p_h = self.solve_tr_subproblem_cg_bounds(
+                        J, f, d_jnp, J_diag, f_zeros, Delta, alpha
+                    )
+                _n_iter = 1
+            else:
+                p_h, alpha, _n_iter = solve_lsq_trust_region_jax(
+                    n, m, uf, s, V, Delta, initial_alpha=alpha
+                )
+
+            p = d * p_h
+            step, step_h, predicted_reduction = self.select_step(
+                x, J_h, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta
+            )
+
+            x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
+            f_new = fun(x_new, xdata, ydata, data_mask, transform)
+            nfev += 1
+
+            step_h_norm = jnorm(step_h)
+            if not self.check_isfinite(f_new):
+                Delta = 0.25 * step_h_norm
+                continue
+
+            if loss_function is not None:
+                cost_new = loss_function(f_new, f_scale, data_mask, cost_only=True)
+            else:
+                cost_new = self.default_loss_func(f_new)
+
+            actual_reduction = cost - cost_new
+            Delta_new, ratio = update_tr_radius(
+                Delta,
+                actual_reduction,
+                predicted_reduction,
+                step_h_norm,
+                step_h_norm > 0.95 * Delta,
+            )
+
+            step_norm = jnorm(step)
+            termination_status = check_termination(
+                actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
+            )
+            if termination_status is not None:
+                break
+
+            alpha *= Delta / Delta_new
+            Delta = Delta_new
+
+        # Check inner loop limit
+        if inner_loop_count >= max_inner_iterations:
+            self.logger.warning(
+                "Inner optimization loop hit iteration limit",
+                inner_iterations=inner_loop_count,
+                actual_reduction=actual_reduction,
+            )
+            termination_status = -3
+
+        return {
+            "accepted": actual_reduction > 0,
+            "x_new": x_new if actual_reduction > 0 else x,
+            "f_new": f_new if actual_reduction > 0 else f,
+            "cost_new": cost_new if actual_reduction > 0 else cost,
+            "actual_reduction": max(0, actual_reduction),
+            "step_norm": step_norm if actual_reduction > 0 else 0,
+            "Delta": Delta,
+            "alpha": alpha,
+            "termination_status": termination_status,
+            "nfev": nfev,
+        }
+
     def trf_no_bounds(
         self,
         fun: Callable,
@@ -1136,7 +1648,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 if verbose == 2:
                     # Use jax.debug.callback to avoid blocking host-device transfers
-                    # Callback runs asynchronously and doesn't block JAX execution
                     debug.callback(
                         self._log_iteration_callback,
                         iteration,
@@ -1245,69 +1756,37 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 iteration += 1
 
-                # Mixed precision monitoring and upgrade
+                # Mixed precision monitoring and upgrade using helper
                 if (
                     mixed_precision_manager is not None
                     and acceptance_result["accepted"]
                 ):
-                    # Compute parameter change for precision monitoring
-                    param_change = jnorm(d_jnp) if step_norm is not None else 0.0
-
-                    # Check for NaN/Inf in current state
-                    has_nan_inf = bool(
-                        jnp.isnan(f).any()
-                        or jnp.isinf(f).any()
-                        or jnp.isnan(J).any()
-                        or jnp.isinf(J).any()
-                        or jnp.isnan(g_jnp).any()
-                        or jnp.isinf(g_jnp).any()
-                    )
-
-                    # Report metrics to manager
-                    metrics = ConvergenceMetrics(
+                    upgrade_result = self._handle_mixed_precision_update(
+                        mixed_precision_manager=mixed_precision_manager,
+                        x=x,
+                        f=f,
+                        J=J,
+                        g=g_jnp,
+                        cost=cost,
+                        Delta=Delta,
+                        alpha=alpha,
                         iteration=iteration,
-                        residual_norm=float(jnorm(f)),
-                        gradient_norm=float(g_norm),
-                        parameter_change=float(param_change),
-                        cost=float(cost),
-                        trust_radius=float(Delta),
-                        has_nan_inf=has_nan_inf,
+                        d_jnp=d_jnp,
+                        step_norm=step_norm,
+                        g_norm=g_norm,
                     )
-                    mixed_precision_manager.report_metrics(metrics)
 
-                    # Update best parameters
-                    mixed_precision_manager.update_best(x, float(cost), iteration)
-
-                    # Check if precision upgrade needed
-                    if mixed_precision_manager.should_upgrade():
-                        # Create optimization state for upgrade
-                        opt_state = OptimizationState(
-                            x=x,
-                            f=f,
-                            J=J,
-                            g=g_jnp,
-                            cost=float(cost),
-                            trust_radius=float(Delta),
-                            iteration=iteration,
-                            dtype=x.dtype,
-                            algorithm_specific={"alpha": alpha},
-                        )
-
-                        # Perform upgrade
-                        upgraded_state = mixed_precision_manager.upgrade_precision(
-                            opt_state
-                        )
-
+                    if upgrade_result is not None:
                         # Update optimization variables with upgraded state
-                        x = upgraded_state.x
-                        f = upgraded_state.f
-                        J = upgraded_state.J
-                        g = upgraded_state.g
+                        x = upgrade_result["x"]
+                        f = upgrade_result["f"]
+                        J = upgrade_result["J"]
+                        g = upgrade_result["g"]
                         g_jnp = g
-                        cost = upgraded_state.cost
-                        Delta = upgraded_state.trust_radius
-                        iteration = upgraded_state.iteration
-                        alpha = upgraded_state.algorithm_specific["alpha"]
+                        cost = upgrade_result["cost"]
+                        Delta = upgrade_result["Delta"]
+                        iteration = upgrade_result["iteration"]
+                        alpha = upgrade_result["alpha"]
 
                         # Continue optimization in float64
                         self.logger.info(
@@ -1316,35 +1795,21 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                             cost=float(cost),
                         )
 
-                # Invoke user callback if provided
+                # Invoke user callback if provided using helper
                 if callback is not None:
-                    try:
-                        callback(
-                            iteration=iteration,
-                            cost=float(cost),  # JAX scalar → Python float
-                            params=np.array(x),  # JAX array → NumPy array
-                            info={
-                                "gradient_norm": float(g_norm),
-                                "nfev": nfev,
-                                "step_norm": float(step_norm)
-                                if step_norm is not None
-                                else None,
-                                "actual_reduction": float(actual_reduction)
-                                if actual_reduction is not None
-                                else None,
-                            },
-                        )
-                    except StopOptimization:
-                        termination_status = 2  # User-requested stop
-                        self.logger.info(
-                            "Optimization stopped by callback (StopOptimization)"
-                        )
+                    callback_status = self._invoke_callback(
+                        callback=callback,
+                        iteration=iteration,
+                        cost=cost,
+                        x=x,
+                        g_norm=g_norm,
+                        nfev=nfev,
+                        step_norm=step_norm,
+                        actual_reduction=actual_reduction,
+                    )
+                    if callback_status is not None:
+                        termination_status = callback_status
                         break
-                    except Exception as e:
-                        warnings.warn(
-                            f"Callback raised exception: {e}. Continuing optimization.",
-                            RuntimeWarning,
-                        )
 
         if termination_status is None:
             termination_status = 0
@@ -1356,151 +1821,25 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             and mixed_precision_manager.state == PrecisionState.FLOAT64_ACTIVE
             and termination_status == 0  # Max iterations reached without convergence
         ):
-            self.logger.info(
-                "Float64 optimization failed to converge, applying relaxed float32 fallback"
+            x, cost, termination_status = self._handle_float64_fallback(
+                mixed_precision_manager=mixed_precision_manager,
+                fun=fun,
+                xdata=xdata,
+                ydata=ydata,
+                jac=jac,
+                data_mask=data_mask,
+                loss_function=loss_function,
+                f_scale=f_scale,
+                original_tolerances=original_tolerances,
+                solver=solver,
+                tr_options=tr_options,
+                max_nfev=max_nfev,
+                f=f,
+                J=J,
+                g=g,
+                Delta=Delta,
+                alpha=alpha,
             )
-
-            # Get best state from entire optimization history
-            best_params = mixed_precision_manager.get_best_parameters()
-            best_cost = mixed_precision_manager.tracker.get_best_cost()
-            best_iteration = mixed_precision_manager.tracker.best_iteration
-
-            # Create state with best parameters
-            fallback_state = OptimizationState(
-                x=best_params,
-                f=f,  # Will be recomputed
-                J=J,  # Will be recomputed
-                g=g,  # Will be recomputed
-                cost=best_cost,
-                trust_radius=float(Delta),
-                iteration=best_iteration,
-                dtype=jnp.float64,
-                algorithm_specific={"alpha": alpha},
-            )
-
-            # Apply relaxed fallback (converts to float32, relaxes tolerances)
-            fallback_state, relaxed_tol = (
-                mixed_precision_manager.apply_relaxed_fallback(
-                    fallback_state, original_tolerances
-                )
-            )
-
-            self.logger.info(
-                f"Retrying with relaxed tolerances: "
-                f"gtol={relaxed_tol['gtol']:.2e}, "
-                f"ftol={relaxed_tol['ftol']:.2e}, "
-                f"xtol={relaxed_tol['xtol']:.2e}"
-            )
-
-            # Retry optimization with relaxed criteria and half iteration budget
-            retry_max_nfev = max(max_nfev // 2, 50)
-            x = fallback_state.x
-            Delta = fallback_state.trust_radius
-            iteration = 0  # Reset iteration counter for retry
-
-            # Recompute initial state for retry
-            f, J, cost, g, g_norm, _ = self._compute_initial_state(
-                fun, xdata, ydata, jac, x, loss_function, f_scale, data_mask
-            )
-            g_jnp = g
-
-            # Retry loop with relaxed tolerances
-            for retry_iter in range(retry_max_nfev):
-                # Check relaxed convergence criteria
-                if g_norm < relaxed_tol["gtol"]:
-                    termination_status = 1  # Gradient tolerance satisfied
-                    self.logger.info(
-                        f"Fallback converged via gradient tolerance at iteration {retry_iter}"
-                    )
-                    break
-
-                # Compute trust region step
-                try:
-                    step_result = self.compute_trust_region_step(
-                        J=J,
-                        g=g_jnp,
-                        Delta=Delta,
-                        lb_scaled=None,
-                        ub_scaled=None,
-                        theta=0.0,
-                        solver=solver,
-                        tr_options=tr_options,
-                    )
-                    d_jnp = step_result["step"]
-                    step_norm = step_result.get("step_norm")
-                except Exception as e:
-                    self.logger.warning(f"Fallback step computation failed: {e}")
-                    break
-
-                # Evaluate step
-                acceptance_result = self._evaluate_step(
-                    fun=fun,
-                    xdata=xdata,
-                    ydata=ydata,
-                    jac=jac,
-                    x=x,
-                    f=f,
-                    cost=cost,
-                    J=J,
-                    g=g_jnp,
-                    d=d_jnp,
-                    Delta=Delta,
-                    loss_function=loss_function,
-                    f_scale=f_scale,
-                    data_mask=data_mask,
-                )
-
-                if acceptance_result["accepted"]:
-                    # Update state
-                    x = acceptance_result["x_new"]
-                    f = acceptance_result["f_new"]
-                    cost = acceptance_result["cost_new"]
-                    J = acceptance_result["J_new"]
-                    g = acceptance_result["g_new"]
-                    g_jnp = g
-                    g_norm = acceptance_result["g_norm_new"]
-
-                    # Update trust radius
-                    if acceptance_result["ratio"] > 0.75:
-                        Delta = min(Delta * 2.0, MAX_TRUST_RADIUS)
-                    elif acceptance_result["ratio"] < 0.25:
-                        Delta *= 0.5
-
-                    # Check relaxed convergence
-                    if (
-                        acceptance_result.get("cost_reduction", 0)
-                        < relaxed_tol["ftol"] * cost
-                    ):
-                        termination_status = 2  # Cost tolerance satisfied
-                        self.logger.info(
-                            f"Fallback converged via cost tolerance at iteration {retry_iter}"
-                        )
-                        break
-
-                    if step_norm is not None and step_norm < relaxed_tol["xtol"]:
-                        termination_status = 3  # Step tolerance satisfied
-                        self.logger.info(
-                            f"Fallback converged via step tolerance at iteration {retry_iter}"
-                        )
-                        break
-                else:
-                    # Reduce trust radius
-                    Delta *= 0.5
-                    if Delta < MIN_TRUST_RADIUS:
-                        self.logger.info("Fallback trust radius too small, stopping")
-                        break
-
-            # Log final fallback result
-            final_best_params = mixed_precision_manager.get_best_parameters()
-            final_best_cost = mixed_precision_manager.tracker.get_best_cost()
-            self.logger.info(
-                f"Fallback complete. Best cost: {final_best_cost:.6e} "
-                f"(status: {termination_status})"
-            )
-
-            # Use best parameters from entire history for final result
-            x = final_best_params
-            cost = final_best_cost
 
         active_mask = jnp.zeros_like(x)  # JAX zeros instead of NumPy
 
@@ -1519,6 +1858,209 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             status=termination_status,
             all_times={},
         )
+
+    def _handle_float64_fallback(
+        self,
+        mixed_precision_manager: MixedPrecisionManager,
+        fun: Callable,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        jac: Callable,
+        data_mask: jnp.ndarray,
+        loss_function: Callable | None,
+        f_scale: float,
+        original_tolerances: dict,
+        solver: str,
+        tr_options: dict,
+        max_nfev: int,
+        f: jnp.ndarray,
+        J: jnp.ndarray,
+        g: jnp.ndarray,
+        Delta: float,
+        alpha: float,
+    ) -> tuple:
+        """Handle float64 failure fallback with relaxed tolerances.
+
+        This helper extracts the float64 fallback logic from trf_no_bounds,
+        reducing complexity.
+
+        Parameters
+        ----------
+        mixed_precision_manager : MixedPrecisionManager
+            The mixed precision manager
+        fun : Callable
+            Residual function
+        xdata, ydata : Data arrays
+        jac : Callable
+            Jacobian function
+        data_mask : Data mask
+        loss_function : Loss function
+        f_scale : Residual scale
+        original_tolerances : dict
+            Original ftol, xtol, gtol
+        solver : str
+            Solver type
+        tr_options : dict
+            Trust region options
+        max_nfev : int
+            Maximum function evaluations
+        f, J, g : Current state arrays
+        Delta : Trust region radius
+        alpha : LM parameter
+
+        Returns
+        -------
+        tuple
+            (x, cost, termination_status) after fallback
+        """
+        self.logger.info(
+            "Float64 optimization failed to converge, applying relaxed float32 fallback"
+        )
+
+        # Get best state from entire optimization history
+        best_params = mixed_precision_manager.get_best_parameters()
+        best_cost = mixed_precision_manager.tracker.get_best_cost()
+        best_iteration = mixed_precision_manager.tracker.best_iteration
+
+        # Create state with best parameters
+        fallback_state = OptimizationState(
+            x=best_params,
+            f=f,  # Will be recomputed
+            J=J,  # Will be recomputed
+            g=g,  # Will be recomputed
+            cost=best_cost,
+            trust_radius=float(Delta),
+            iteration=best_iteration,
+            dtype=jnp.float64,
+            algorithm_specific={"alpha": alpha},
+        )
+
+        # Apply relaxed fallback (converts to float32, relaxes tolerances)
+        fallback_state, relaxed_tol = mixed_precision_manager.apply_relaxed_fallback(
+            fallback_state, original_tolerances
+        )
+
+        self.logger.info(
+            f"Retrying with relaxed tolerances: "
+            f"gtol={relaxed_tol['gtol']:.2e}, "
+            f"ftol={relaxed_tol['ftol']:.2e}, "
+            f"xtol={relaxed_tol['xtol']:.2e}"
+        )
+
+        # Retry optimization with relaxed criteria and half iteration budget
+        retry_max_nfev = max(max_nfev // 2, 50)
+        x = fallback_state.x
+        Delta = fallback_state.trust_radius
+        termination_status = None
+
+        # Recompute initial state for retry
+        f, J, cost, g, g_norm, _ = self._compute_initial_state(
+            fun, xdata, ydata, jac, x, loss_function, f_scale, data_mask
+        )
+        g_jnp = g
+
+        # Retry loop with relaxed tolerances
+        for retry_iter in range(retry_max_nfev):
+            # Check relaxed convergence criteria
+            if g_norm < relaxed_tol["gtol"]:
+                termination_status = 1  # Gradient tolerance satisfied
+                self.logger.info(
+                    f"Fallback converged via gradient tolerance at iteration {retry_iter}"
+                )
+                break
+
+            # Compute trust region step
+            try:
+                step_result = self.compute_trust_region_step(
+                    J=J,
+                    g=g_jnp,
+                    Delta=Delta,
+                    lb_scaled=None,
+                    ub_scaled=None,
+                    theta=0.0,
+                    solver=solver,
+                    tr_options=tr_options,
+                )
+                d_jnp = step_result["step"]
+                step_norm = step_result.get("step_norm")
+            except Exception as e:
+                self.logger.warning(f"Fallback step computation failed: {e}")
+                break
+
+            # Evaluate step
+            acceptance_result = self._evaluate_step(
+                fun=fun,
+                xdata=xdata,
+                ydata=ydata,
+                jac=jac,
+                x=x,
+                f=f,
+                cost=cost,
+                J=J,
+                g=g_jnp,
+                d=d_jnp,
+                Delta=Delta,
+                loss_function=loss_function,
+                f_scale=f_scale,
+                data_mask=data_mask,
+            )
+
+            if acceptance_result["accepted"]:
+                # Update state
+                x = acceptance_result["x_new"]
+                f = acceptance_result["f_new"]
+                cost = acceptance_result["cost_new"]
+                J = acceptance_result["J_new"]
+                g = acceptance_result["g_new"]
+                g_jnp = g
+                g_norm = acceptance_result["g_norm_new"]
+
+                # Update trust radius
+                if acceptance_result["ratio"] > 0.75:
+                    Delta = min(Delta * 2.0, MAX_TRUST_RADIUS)
+                elif acceptance_result["ratio"] < 0.25:
+                    Delta *= 0.5
+
+                # Check relaxed convergence
+                if (
+                    acceptance_result.get("cost_reduction", 0)
+                    < relaxed_tol["ftol"] * cost
+                ):
+                    termination_status = 2  # Cost tolerance satisfied
+                    self.logger.info(
+                        f"Fallback converged via cost tolerance at iteration {retry_iter}"
+                    )
+                    break
+
+                if step_norm is not None and step_norm < relaxed_tol["xtol"]:
+                    termination_status = 3  # Step tolerance satisfied
+                    self.logger.info(
+                        f"Fallback converged via step tolerance at iteration {retry_iter}"
+                    )
+                    break
+            else:
+                # Reduce trust radius
+                Delta *= 0.5
+                if Delta < MIN_TRUST_RADIUS:
+                    self.logger.info("Fallback trust radius too small, stopping")
+                    break
+
+        # Log final fallback result
+        final_best_params = mixed_precision_manager.get_best_parameters()
+        final_best_cost = mixed_precision_manager.tracker.get_best_cost()
+        self.logger.info(
+            f"Fallback complete. Best cost: {final_best_cost:.6e} "
+            f"(status: {termination_status})"
+        )
+
+        # Use best parameters from entire history for final result
+        x = final_best_params
+        cost = final_best_cost
+
+        if termination_status is None:
+            termination_status = 0
+
+        return x, cost, termination_status
 
     def trf_bounds(
         self,
@@ -1621,9 +2163,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         .. [13] J. J. More, "The Levenberg-Marquardt Algorithm: Implementation and
                 Theory," in Numerical Analysis, ed. G. A. Watson (1978), pp. 105-116.
                 DOI: 10.1017/CBO9780511819595.006
-        .. [2] T. F. Coleman and Y. Li, “An interior trust region approach for
-                nonlinear minimization subject to bounds,” SIAM Journal on
-                Optimization, vol. 6, no. 2, pp. 418–445, 1996.
+        .. [2] T. F. Coleman and Y. Li, "An interior trust region approach for
+                nonlinear minimization subject to bounds," SIAM Journal on
+                Optimization, vol. 6, no. 2, pp. 418-445, 1996.
         """
 
         x = x0
@@ -1634,34 +2176,21 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         if loss_function is not None:
             rho = loss_function(f, f_scale)
-            cost_jnp = self.calculate_cost(rho, data_mask)
+            cost = self.calculate_cost(rho, data_mask)
             J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
         else:
-            cost_jnp = self.default_loss_func(f)
+            cost = self.default_loss_func(f)
 
-        # Keep cost as JAX array for performance (convert only when needed)
-        cost = cost_jnp
+        g = self.compute_grad(J, f)
 
-        g_jnp = self.compute_grad(J, f)
-        # Keep gradient as JAX array for performance
-        g = g_jnp
-
-        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
-        if jac_scale:
-            scale, scale_inv = self.cJIT.compute_jac_scale(J)
-        else:
-            scale, scale_inv = x_scale, 1 / x_scale
-
-        v, dv = CL_scaling_vector(x, g, lb, ub)
-
-        # Convert to JAX arrays and use .at[] syntax for immutable array updates
-        v = jnp.asarray(v)
-        dv = jnp.asarray(dv)
-        mask = dv != 0
-        v = v.at[mask].set(v[mask] * scale_inv[mask])
-        Delta = jnorm(x0 * scale_inv / v**SQRT_EXPONENT)
-        if Delta == 0:
-            Delta = 1.0
+        # Initialize bounds state using helper
+        bounds_state = self._initialize_bounds_state(x0, f, J, g, lb, ub, x_scale)
+        v = bounds_state["v"]
+        dv = bounds_state["dv"]
+        scale = bounds_state["scale"]
+        scale_inv = bounds_state["scale_inv"]
+        Delta = bounds_state["Delta"]
+        jac_scale = bounds_state["jac_scale"]
 
         # Use JAX norm for gradient norm calculation
         g_norm = jnorm(g * v, ord=jnp.inf)
@@ -1669,7 +2198,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if max_nfev is None:
             max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
 
-        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA  # "Levenberg-Marquardt" parameter
+        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA
 
         termination_status = None
         iteration = 0
@@ -1679,20 +2208,16 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if verbose == 2:
             print_header_nonlinear()
 
-        f_zeros = jnp.zeros([n])
         while True:
             v, dv = CL_scaling_vector(x, g, lb, ub)
-            # Convert to JAX arrays for later .at[] operations
             v = jnp.asarray(v)
             dv = jnp.asarray(dv)
 
-            # Use JAX norm for gradient norm calculation
             g_norm = jnorm(g * v, ord=jnp.inf)
             if g_norm < gtol:
                 termination_status = 1
 
             if verbose == 2:
-                # Use jax.debug.callback to avoid blocking host-device transfers
                 debug.callback(
                     self._log_iteration_callback,
                     iteration,
@@ -1706,204 +2231,129 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             if termination_status is not None or nfev == max_nfev:
                 break
 
-            # Now compute variables in "hat" space. Here, we also account for
-            # scaling introduced by `x_scale` parameter. This part is a bit tricky,
-            # you have to write down the formulas and see how the trust-region
-            # problem is formulated when the two types of scaling are applied.
-            # The idea is that first we apply `x_scale` and then apply Coleman-Li
-            # approach in the new variables.
-
-            # v is recomputed in the variables after applying `x_scale`, note that
-            # components which were identically 1 not affected.
-            # Use JAX .at[] syntax for immutable array updates
+            # Update v with scaling
             mask = dv != 0
             v = v.at[mask].set(v[mask] * scale_inv[mask])
 
-            # Here, we apply two types of scaling.
-            d = v**SQRT_EXPONENT * scale
+            # Solve bounds subproblem using helper
+            subproblem = self._solve_bounds_subproblem(
+                J=J,
+                f=f,
+                g=g,
+                v=v,
+                dv=dv,
+                scale=scale,
+                scale_inv=scale_inv,
+                Delta=Delta,
+                alpha=alpha,
+                solver=solver,
+                n=n,
+            )
 
-            # C = diag(g * scale) Jv
-            diag_h = g * dv * scale
-
-            # After all this has been done, we continue normally.
-
-            # "hat" gradient.
-            g_h = d * g
-            J_diag = jnp.diag(diag_h**SQRT_EXPONENT)
-            d_jnp = jnp.array(d)
-
-            # Choose solver based on solver parameter
-            if solver == "cg":
-                # Use conjugate gradient solver
-                J_h = J * d_jnp
-                p_h = self.solve_tr_subproblem_cg_bounds(
-                    J, f, d_jnp, J_diag, f_zeros, Delta, alpha
-                )
-                s, V, uf = None, None, None  # Not needed for CG path
-            elif solver == "sparse":
-                # Sparse solver path (Task 6.4: Sparse Activation)
-                # TODO: Implement sparse SVD with bounds
-                # For now, fall back to dense exact solver to maintain correctness
-                output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
-                J_h = output[0]
-                s, V, uf = output[2:]
-            else:
-                # Use exact SVD solver (default)
-                output = self.svd_bounds(f, J, d_jnp, J_diag, f_zeros)
-                J_h = output[0]
-                s, V, uf = output[2:]  # Keep as JAX arrays - no NumPy conversion
-
-            # theta controls step back step ratio from the bounds.
+            # theta controls step back step ratio from the bounds
             theta = max(0.995, 1 - g_norm)
 
-            actual_reduction = -1
-            inner_loop_count = 0
-            max_inner_iterations = 100  # Prevent infinite loops
-            while (
-                actual_reduction <= 0
-                and nfev < max_nfev
-                and inner_loop_count < max_inner_iterations
-            ):
-                inner_loop_count += 1
+            # Evaluate inner loop using helper
+            inner_result = self._evaluate_bounds_inner_loop(
+                fun=fun,
+                x=x,
+                f=f,
+                J=J,
+                J_h=subproblem["J_h"],
+                g_h=subproblem["g_h"],
+                diag_h=subproblem["diag_h"],
+                cost=cost,
+                d=subproblem["d"],
+                d_jnp=subproblem["d_jnp"],
+                Delta=Delta,
+                alpha=alpha,
+                p_h=subproblem["p_h"],
+                s=subproblem["s"],
+                V=subproblem["V"],
+                uf=subproblem["uf"],
+                f_zeros=subproblem["f_zeros"],
+                J_diag=subproblem["J_diag"],
+                xdata=xdata,
+                ydata=ydata,
+                data_mask=data_mask,
+                transform=transform,
+                loss_function=loss_function,
+                f_scale=f_scale,
+                lb=lb,
+                ub=ub,
+                theta=theta,
+                solver=solver,
+                ftol=ftol,
+                xtol=xtol,
+                max_nfev=max_nfev,
+                nfev=nfev,
+                n=n,
+                m=m,
+            )
 
-                if solver == "cg":
-                    # CG path: step already computed
-                    # For subsequent iterations in inner loop, re-solve with updated alpha
-                    if inner_loop_count > 1:
-                        p_h = self.solve_tr_subproblem_cg_bounds(
-                            J, f, d_jnp, J_diag, f_zeros, Delta, alpha
-                        )
-                    _n_iter = 1  # Dummy value for compatibility
-                else:
-                    # SVD path: use exact solver (JAX version for pure JAX execution)
-                    p_h, alpha, _n_iter = solve_lsq_trust_region_jax(
-                        n, m, uf, s, V, Delta, initial_alpha=alpha
-                    )
+            # Update from inner loop result
+            actual_reduction = inner_result["actual_reduction"]
+            step_norm = inner_result["step_norm"]
+            Delta = inner_result["Delta"]
+            alpha = inner_result["alpha"]
+            nfev = inner_result["nfev"]
 
-                p = d * p_h  # Trust-region solution in the original space.
-                step, step_h, predicted_reduction = self.select_step(
-                    x, J_h, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta
-                )
+            if inner_result["termination_status"] is not None:
+                termination_status = inner_result["termination_status"]
 
-                x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-                f_new = fun(x_new, xdata, ydata, data_mask, transform)
-
-                nfev += 1
-
-                step_h_norm = jnorm(step_h)
-                if not self.check_isfinite(f_new):
-                    Delta = 0.25 * step_h_norm
-                    continue
-
-                if loss_function is not None:
-                    cost_new_jnp = loss_function(
-                        f_new, f_scale, data_mask, cost_only=True
-                    )
-                else:
-                    cost_new_jnp = self.default_loss_func(f_new)
-                # Keep as JAX array for performance
-                cost_new = cost_new_jnp
-
-                actual_reduction = cost - cost_new
-                Delta_new, ratio = update_tr_radius(
-                    Delta,
-                    actual_reduction,
-                    predicted_reduction,
-                    step_h_norm,
-                    step_h_norm > 0.95 * Delta,
-                )
-
-                step_norm = jnorm(step)
-                termination_status = check_termination(
-                    actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
-                )
-                if termination_status is not None:
-                    break
-
-                alpha *= Delta / Delta_new
-                Delta = Delta_new
-
-            # Check if inner loop hit iteration limit
-            if inner_loop_count >= max_inner_iterations:
-                self.logger.warning(
-                    "Inner optimization loop hit iteration limit",
-                    inner_iterations=inner_loop_count,
-                    actual_reduction=actual_reduction,
-                )
-                termination_status = -3  # Inner loop limit exceeded
-
-            if actual_reduction > 0:
-                x = x_new
-                f = f_new
+            if inner_result["accepted"]:
+                x = inner_result["x_new"]
+                f = inner_result["f_new"]
                 f_true = f
-
-                cost = cost_new
+                cost = inner_result["cost_new"]
 
                 J = jac(x, xdata, ydata, data_mask, transform)
-
                 njev += 1
 
                 if loss_function is not None:
                     rho = loss_function(f, f_scale)
                     J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
 
-                g_jnp = self.compute_grad(J, f)
+                g = self.compute_grad(J, f)
                 if jac_scale:
                     scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
-                # Keep as JAX array for performance
-                g = g_jnp
             else:
                 step_norm = 0
                 actual_reduction = 0
 
             iteration += 1
 
-            # Invoke user callback if provided
+            # Invoke user callback using helper
             if callback is not None:
-                try:
-                    callback(
-                        iteration=iteration,
-                        cost=float(cost),  # JAX scalar → Python float
-                        params=np.array(x),  # JAX array → NumPy array
-                        info={
-                            "gradient_norm": float(g_norm),
-                            "nfev": nfev,
-                            "step_norm": float(step_norm)
-                            if step_norm is not None
-                            else None,
-                            "actual_reduction": float(actual_reduction)
-                            if actual_reduction is not None
-                            else None,
-                        },
-                    )
-                except StopOptimization:
-                    termination_status = 2  # User-requested stop
-                    self.logger.info(
-                        "Optimization stopped by callback (StopOptimization)"
-                    )
+                callback_status = self._invoke_callback(
+                    callback=callback,
+                    iteration=iteration,
+                    cost=cost,
+                    x=x,
+                    g_norm=g_norm,
+                    nfev=nfev,
+                    step_norm=step_norm,
+                    actual_reduction=actual_reduction,
+                )
+                if callback_status is not None:
+                    termination_status = callback_status
                     break
-                except Exception as e:
-                    warnings.warn(
-                        f"Callback raised exception: {e}. Continuing optimization.",
-                        RuntimeWarning,
-                    )
 
         if termination_status is None:
             termination_status = 0
 
         active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
-        # Convert JAX arrays to NumPy for final return
         return OptimizeResult(
             x=x,
-            cost=float(cost),  # Convert JAX scalar to Python float
+            cost=float(cost),
             fun=f_true,
             jac=J,
-            grad=np.array(g),  # Convert JAX array to NumPy
-            optimality=float(g_norm),  # Convert JAX scalar to Python float
+            grad=np.array(g),
+            optimality=float(g_norm),
             active_mask=active_mask,
             nfev=nfev,
             njev=njev,
-            nit=iteration,  # Number of iterations performed
+            nit=iteration,
             status=termination_status,
         )
 
@@ -2211,7 +2661,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if max_nfev is None:
             max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
 
-        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA  # "Levenberg-Marquardt" parameter
+        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA
 
         termination_status = None
         iteration = 0
@@ -2222,12 +2672,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             print_header_nonlinear()
 
         while True:
-            g_norm = jnorm(g, ord=jnp.inf)  # Use JAX norm with JAX infinity
+            g_norm = jnorm(g, ord=jnp.inf)
             if g_norm < gtol:
                 termination_status = 1
 
             if verbose == 2:
-                # Use jax.debug.callback to avoid blocking host-device transfers
                 debug.callback(
                     self._log_iteration_callback,
                     iteration,
@@ -2243,31 +2692,23 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             d = scale
             d_jnp = jnp.array(scale)
-
-            # g_h = d * g
             g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
 
             # Choose solver based on solver parameter
             if solver == "cg":
-                # Use conjugate gradient solver (timed)
                 st = time.time()
                 J_h = J * d_jnp
                 step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
-                step_h.block_until_ready()  # Single sync for timing
+                step_h.block_until_ready()
                 svd_times.append(time.time() - st)
 
                 st = time.time()
-                s, V, uf = None, None, None  # Not needed for CG path
+                s, V, uf = None, None, None
                 svd_ctimes.append(time.time() - st)
             elif solver == "sparse":
-                # Sparse solver path (Task 6.4: Sparse Activation)
-                # TODO: Implement sparse SVD
-                # For now, fall back to dense exact solver to maintain correctness
                 st = time.time()
                 svd_output = self.svd_no_bounds(J, d_jnp, f)
-                tree_flatten(svd_output)[0][
-                    0
-                ].block_until_ready()  # Single sync for timing
+                tree_flatten(svd_output)[0][0].block_until_ready()
                 svd_times.append(time.time() - st)
                 J_h = svd_output[0]
 
@@ -2275,22 +2716,19 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 s, V, uf = svd_output[2:]
                 svd_ctimes.append(time.time() - st)
             else:
-                # Use exact SVD solver (default)
                 st = time.time()
                 svd_output = self.svd_no_bounds(J, d_jnp, f)
-                tree_flatten(svd_output)[0][
-                    0
-                ].block_until_ready()  # Single sync for timing
+                tree_flatten(svd_output)[0][0].block_until_ready()
                 svd_times.append(time.time() - st)
                 J_h = svd_output[0]
 
                 st = time.time()
-                s, V, uf = svd_output[2:]  # Keep as JAX arrays - no NumPy conversion
+                s, V, uf = svd_output[2:]
                 svd_ctimes.append(time.time() - st)
 
             actual_reduction = -1
             inner_loop_count = 0
-            max_inner_iterations = 100  # Prevent infinite loops
+            max_inner_iterations = 100
             while (
                 actual_reduction <= 0
                 and nfev < max_nfev
@@ -2299,14 +2737,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 inner_loop_count += 1
 
                 if solver == "cg":
-                    # CG path: step already computed
-                    # For subsequent iterations in inner loop, re-solve with updated alpha
                     if inner_loop_count > 1:
                         step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
-                        # No explicit sync needed - JAX async handles it
-                    _n_iter = 1  # Dummy value for compatibility
+                    _n_iter = 1
                 else:
-                    # SVD path: use exact solver (JAX version for pure JAX execution)
                     step_h, alpha, _n_iter = solve_lsq_trust_region_jax(
                         n, m, uf, s, V, Delta, initial_alpha=alpha
                     )
@@ -2315,9 +2749,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
                     J_h, g_h_jnp, step_h
                 )
-                predicted_reduction_jnp.block_until_ready()  # Single sync for timing
+                predicted_reduction_jnp.block_until_ready()
                 st2 = time.time()
-                predicted_reduction = predicted_reduction_jnp  # Keep as JAX array
+                predicted_reduction = predicted_reduction_jnp
                 st3 = time.time()
                 ptimes.append(st2 - st1)
                 p_ctimes.append(st3 - st2)
@@ -2327,7 +2761,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 st = time.time()
                 f_new = fun(x_new, xdata, ydata, data_mask, transform)
-                f_new.block_until_ready()  # Single sync for timing
+                f_new.block_until_ready()
                 ftimes.append(time.time() - st)
 
                 nfev += 1
@@ -2345,9 +2779,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 else:
                     st1 = time.time()
                     cost_new_jnp = self.default_loss_func(f_new)
-                    cost_new_jnp.block_until_ready()  # Single sync for timing
+                    cost_new_jnp.block_until_ready()
                     st2 = time.time()
-                    cost_new = cost_new_jnp  # Keep as JAX array - no NumPy conversion
+                    cost_new = cost_new_jnp
                     st3 = time.time()
 
                     ctimes.append(st2 - st1)
@@ -2374,26 +2808,24 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha *= Delta / Delta_new
                 Delta = Delta_new
 
-            # Check if inner loop hit iteration limit
+            # Check inner loop limit
             if inner_loop_count >= max_inner_iterations:
                 self.logger.warning(
                     "Inner optimization loop hit iteration limit",
                     inner_iterations=inner_loop_count,
                     actual_reduction=actual_reduction,
                 )
-                termination_status = -3  # Inner loop limit exceeded
+                termination_status = -3
 
             if actual_reduction > 0:
                 x = x_new
-
                 f = f_new
                 f_true = f
-
                 cost = cost_new
 
                 st = time.time()
                 J = jac(x, xdata, ydata, data_mask, transform)
-                J.block_until_ready()  # Single sync for timing
+                J.block_until_ready()
                 jtimes.append(time.time() - st)
 
                 njev += 1
@@ -2404,9 +2836,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
                 st1 = time.time()
                 g_jnp = self.compute_grad(J, f)
-                g_jnp.block_until_ready()  # Single sync for timing
+                g_jnp.block_until_ready()
                 st2 = time.time()
-                g = g_jnp  # Keep as JAX array - no NumPy conversion
+                g = g_jnp
                 st3 = time.time()
 
                 gtimes.append(st2 - st1)
@@ -2421,40 +2853,26 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             iteration += 1
 
-            # Invoke user callback if provided
+            # Invoke user callback using helper
             if callback is not None:
-                try:
-                    callback(
-                        iteration=iteration,
-                        cost=float(cost),  # JAX scalar → Python float
-                        params=np.array(x),  # JAX array → NumPy array
-                        info={
-                            "gradient_norm": float(g_norm),
-                            "nfev": nfev,
-                            "step_norm": float(step_norm)
-                            if step_norm is not None
-                            else None,
-                            "actual_reduction": float(actual_reduction)
-                            if actual_reduction is not None
-                            else None,
-                        },
-                    )
-                except StopOptimization:
-                    termination_status = 2  # User-requested stop
-                    self.logger.info(
-                        "Optimization stopped by callback (StopOptimization)"
-                    )
+                callback_status = self._invoke_callback(
+                    callback=callback,
+                    iteration=iteration,
+                    cost=cost,
+                    x=x,
+                    g_norm=g_norm,
+                    nfev=nfev,
+                    step_norm=step_norm,
+                    actual_reduction=actual_reduction,
+                )
+                if callback_status is not None:
+                    termination_status = callback_status
                     break
-                except Exception as e:
-                    warnings.warn(
-                        f"Callback raised exception: {e}. Continuing optimization.",
-                        RuntimeWarning,
-                    )
 
         if termination_status is None:
             termination_status = 0
 
-        active_mask = jnp.zeros_like(x)  # JAX zeros instead of NumPy
+        active_mask = jnp.zeros_like(x)
 
         tlabels = [
             "ftimes",
@@ -2494,7 +2912,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             active_mask=active_mask,
             nfev=nfev,
             njev=njev,
-            nit=iteration,  # Number of iterations performed
+            nit=iteration,
             status=termination_status,
             all_times=tdicts,
         )
