@@ -43,9 +43,16 @@ import time
 import warnings
 from collections.abc import Callable
 from inspect import signature
-from typing import Any, Literal, Union
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 import numpy as np
+from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    from nlsq.core.workflow import OptimizationGoal
+    from nlsq.global_optimization.config import GlobalOptimizationConfig
+    from nlsq.streaming.hybrid_config import HybridStreamingConfig
+    from nlsq.streaming.large_dataset import LDMemoryConfig
 
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
@@ -720,6 +727,373 @@ def _fit_with_preset(
         )
 
 
+# =============================================================================
+# Helper functions for curve_fit complexity reduction (T003-T007)
+# =============================================================================
+
+
+def _extract_p0_from_args(
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> NDArray[np.floating[Any]] | None:
+    """Extract p0 initial guess from positional or keyword arguments.
+
+    Parameters
+    ----------
+    args : tuple
+        Positional arguments passed to curve_fit.
+    kwargs : dict
+        Keyword arguments passed to curve_fit.
+
+    Returns
+    -------
+    p0 : NDArray or None
+        Initial parameter guess, or None if not provided.
+    """
+    if args and len(args) >= 1:
+        return args[0]
+    return kwargs.get("p0")
+
+
+def _apply_auto_bounds(
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: NDArray[np.floating[Any]] | None,
+    bounds_safety_factor: float,
+    kwargs: dict[str, Any],
+) -> None:
+    """Apply automatic bounds inference from data characteristics.
+
+    Infers reasonable bounds based on data ranges, initial parameter guess,
+    and parameter positivity constraints. User-provided bounds take precedence.
+
+    Parameters
+    ----------
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : NDArray or None
+        Initial parameter guess.
+    bounds_safety_factor : float
+        Safety multiplier for automatic bounds.
+    kwargs : dict
+        Keyword arguments dict to update with merged bounds.
+    """
+    from nlsq.precision.bound_inference import infer_bounds, merge_bounds
+
+    if p0 is not None:
+        # Infer bounds from data
+        inferred_bounds = infer_bounds(
+            xdata, ydata, p0, safety_factor=bounds_safety_factor
+        )
+
+        # Get user-provided bounds if any
+        user_bounds = kwargs.get("bounds", (-np.inf, np.inf))
+
+        # Merge inferred with user bounds (user takes precedence)
+        merged_bounds = merge_bounds(inferred_bounds, user_bounds)
+
+        # Update kwargs with merged bounds
+        kwargs["bounds"] = merged_bounds
+
+
+def _apply_stability_checks(
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: NDArray[np.floating[Any]] | None,
+    f: ModelFunction,
+    stability: Literal["auto", "check"],
+    rescale_data: bool,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> tuple[ArrayLike, ArrayLike, tuple[Any, ...]]:
+    """Apply numerical stability checks and optional automatic fixes.
+
+    Parameters
+    ----------
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : NDArray or None
+        Initial parameter guess.
+    f : ModelFunction
+        The model function.
+    stability : {'auto', 'check'}
+        Stability mode - 'check' warns, 'auto' applies fixes.
+    rescale_data : bool
+        Whether to rescale data when applying automatic fixes.
+    args : tuple
+        Positional arguments (may be modified if p0 is updated).
+    kwargs : dict
+        Keyword arguments (may be updated with fixed p0).
+
+    Returns
+    -------
+    xdata : array_like
+        Possibly modified x data.
+    ydata : array_like
+        Possibly modified y data.
+    args : tuple
+        Possibly modified positional arguments.
+    """
+    from nlsq.stability.guard import apply_automatic_fixes, check_problem_stability
+
+    logger = get_logger("minpack")
+
+    # Check stability
+    stability_report = check_problem_stability(xdata, ydata, p0, f)
+
+    # Handle based on stability mode
+    if stability == "check":
+        # Just check and warn
+        if stability_report["severity"] == "critical":
+            logger.warning(
+                f"Critical stability issues detected ({len(stability_report['issues'])} issues):"
+            )
+            for issue_type, message, severity in stability_report["issues"]:
+                logger.warning(f"  [{severity.upper()}] {message}")
+            if stability_report["recommendations"]:
+                logger.info("Recommendations:")
+                for rec in stability_report["recommendations"]:
+                    logger.info(f"  - {rec}")
+        elif stability_report["severity"] == "warning":
+            logger.warning(
+                f"Stability warnings detected ({len(stability_report['issues'])} issues)"
+            )
+            for issue_type, message, severity in stability_report["issues"]:
+                logger.warning(f"  [{severity.upper()}] {message}")
+
+    elif stability == "auto":
+        # Apply automatic fixes if issues detected
+        if stability_report["severity"] in ["warning", "critical"]:
+            logger.info(
+                f"Applying automatic fixes for {len(stability_report['issues'])} stability issues..."
+            )
+            if not rescale_data:
+                logger.info(
+                    "  (rescale_data=False: data rescaling disabled for physics applications)"
+                )
+
+            xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
+                xdata,
+                ydata,
+                p0,
+                stability_report=stability_report,
+                rescale_data=rescale_data,
+            )
+
+            # Update data and parameters
+            xdata = xdata_fixed
+            ydata = ydata_fixed
+
+            if p0_fixed is not None:
+                # Update p0 in kwargs (move from args if needed)
+                kwargs["p0"] = p0_fixed
+                # If p0 was in args, we need to remove it from args
+                if args and len(args) >= 1:
+                    args = args[1:]
+
+            # Log applied fixes
+            for fix in fix_info["applied_fixes"]:
+                logger.info(f"  - {fix}")
+
+    return xdata, ydata, args
+
+
+def _run_multistart_optimization(
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: NDArray[np.floating[Any]] | None,
+    n_starts: int,
+    sampler: Literal["lhs", "sobol", "halton"],
+    center_on_p0: bool,
+    scale_factor: float,
+    kwargs: dict[str, Any],
+) -> CurveFitResult:
+    """Run multi-start optimization with Latin Hypercube Sampling.
+
+    Parameters
+    ----------
+    f : ModelFunction
+        The model function.
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : NDArray or None
+        Initial parameter guess.
+    n_starts : int
+        Number of starting points.
+    sampler : {'lhs', 'sobol', 'halton'}
+        Sampling strategy for generating starting points.
+    center_on_p0 : bool
+        Whether to center samples around p0.
+    scale_factor : float
+        Scale factor for exploration region.
+    kwargs : dict
+        Additional keyword arguments.
+
+    Returns
+    -------
+    result : CurveFitResult
+        Optimization result from best starting point.
+    """
+    from nlsq.global_optimization import (
+        GlobalOptimizationConfig,
+        MultiStartOrchestrator,
+    )
+
+    # Extract bounds from kwargs
+    bounds = kwargs.get("bounds", (-np.inf, np.inf))
+
+    # Create multi-start config
+    multistart_config = GlobalOptimizationConfig(
+        n_starts=n_starts,
+        sampler=sampler,
+        center_on_p0=center_on_p0,
+        scale_factor=scale_factor,
+    )
+
+    # Create orchestrator
+    orchestrator = MultiStartOrchestrator(config=multistart_config)
+
+    # Run multi-start optimization
+    result = orchestrator.fit(
+        f=f,
+        xdata=np.asarray(xdata),
+        ydata=np.asarray(ydata),
+        p0=np.asarray(p0) if p0 is not None else None,
+        bounds=bounds,
+        **{k: v for k, v in kwargs.items() if k not in ["bounds", "p0"]},
+    )
+
+    return result
+
+
+def _run_fallback_optimization(
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    max_fallback_attempts: int,
+    fallback_verbose: bool,
+    multistart: bool,
+    n_starts: int,
+) -> CurveFitResult:
+    """Run optimization with automatic fallback strategies.
+
+    Parameters
+    ----------
+    f : ModelFunction
+        The model function.
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    args : tuple
+        Positional arguments.
+    kwargs : dict
+        Keyword arguments.
+    max_fallback_attempts : int
+        Maximum number of fallback attempts.
+    fallback_verbose : bool
+        Whether to print detailed fallback information.
+    multistart : bool
+        Whether multistart was requested (for diagnostics).
+    n_starts : int
+        Number of starts (for diagnostics).
+
+    Returns
+    -------
+    result : CurveFitResult
+        Optimization result.
+    """
+    from nlsq.stability.fallback import FallbackOrchestrator
+
+    orchestrator = FallbackOrchestrator(
+        max_attempts=max_fallback_attempts, verbose=fallback_verbose
+    )
+
+    # Build kwargs for fallback
+    fallback_kwargs = kwargs.copy()
+    if args:
+        # Handle positional arguments (typically p0)
+        if len(args) >= 1:
+            fallback_kwargs.setdefault("p0", args[0])
+        if len(args) >= 2:
+            fallback_kwargs.setdefault("sigma", args[1])
+        if len(args) >= 3:
+            fallback_kwargs.setdefault("absolute_sigma", args[2])
+        # Remaining args would be unusual, pass through kwargs
+
+    result = orchestrator.fit_with_fallback(f, xdata, ydata, **fallback_kwargs)
+
+    # Add empty multi-start diagnostics for consistency
+    if (
+        not hasattr(result, "multistart_diagnostics")
+        and "multistart_diagnostics" not in result
+    ):
+        result["multistart_diagnostics"] = {
+            "n_starts_configured": n_starts if multistart else 0,
+            "bypassed": True,
+        }
+
+    return result
+
+
+def _prepare_optimizer_options(
+    kwargs: dict[str, Any],
+    max_jacobian_elements_for_svd: int,
+    compute_diagnostics: bool,
+    diagnostics_level: DiagnosticLevel,
+    diagnostics_config: DiagnosticsConfig | None,
+) -> tuple[int | None, bool, dict[str, Any] | None]:
+    """Extract and prepare optimizer options from kwargs.
+
+    Parameters
+    ----------
+    kwargs : dict
+        Keyword arguments (will be modified to remove extracted options).
+    max_jacobian_elements_for_svd : int
+        Maximum Jacobian elements for SVD computation.
+    compute_diagnostics : bool
+        Whether to compute diagnostics.
+    diagnostics_level : DiagnosticLevel
+        Level of diagnostics to compute.
+    diagnostics_config : DiagnosticsConfig or None
+        Diagnostics configuration.
+
+    Returns
+    -------
+    flength : int or None
+        Fixed data length for JAX compilation.
+    use_dynamic_sizing : bool
+        Whether to use dynamic sizing.
+    cache_config : dict or None
+        Cache configuration.
+    """
+    flength = kwargs.pop("flength", None)
+    use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
+    cache_config = kwargs.pop("cache_config", None)
+
+    # Pass diagnostics parameters through kwargs if requested
+    if compute_diagnostics:
+        kwargs["compute_diagnostics"] = True
+        kwargs["diagnostics_level"] = diagnostics_level
+        kwargs["diagnostics_config"] = diagnostics_config
+
+    return flength, use_dynamic_sizing, cache_config
+
+
+# =============================================================================
+# Main curve_fit function (refactored for reduced complexity)
+# =============================================================================
+
+
 def curve_fit(
     f: ModelFunction,
     xdata: ArrayLike,
@@ -970,181 +1344,49 @@ def curve_fit(
         multistart = True
         n_starts = 20
 
+    # Extract p0 for use in preprocessing steps
+    p0 = _extract_p0_from_args(args, kwargs)
+
     # Handle automatic bounds inference
     if auto_bounds:
-        from nlsq.precision.bound_inference import infer_bounds, merge_bounds
-
-        # Extract p0 from args or kwargs
-        p0 = None
-        if args and len(args) >= 1:
-            p0 = args[0]
-        elif "p0" in kwargs:
-            p0 = kwargs["p0"]
-
-        if p0 is not None:
-            # Infer bounds from data
-            inferred_bounds = infer_bounds(
-                xdata, ydata, p0, safety_factor=bounds_safety_factor
-            )
-
-            # Get user-provided bounds if any
-            user_bounds = kwargs.get("bounds", (-np.inf, np.inf))
-
-            # Merge inferred with user bounds (user takes precedence)
-            merged_bounds = merge_bounds(inferred_bounds, user_bounds)
-
-            # Update kwargs with merged bounds
-            kwargs["bounds"] = merged_bounds
+        _apply_auto_bounds(xdata, ydata, p0, bounds_safety_factor, kwargs)
 
     # Handle numerical stability checks and fixes
     if stability:
-        from nlsq.stability.guard import apply_automatic_fixes, check_problem_stability
-
-        logger = get_logger("minpack")
-
-        # Extract p0 from args or kwargs
-        p0 = None
-        if args and len(args) >= 1:
-            p0 = args[0]
-        elif "p0" in kwargs:
-            p0 = kwargs["p0"]
-
-        # Check stability
-        stability_report = check_problem_stability(xdata, ydata, p0, f)
-
-        # Handle based on stability mode
-        if stability == "check":
-            # Just check and warn
-            if stability_report["severity"] == "critical":
-                logger.warning(
-                    f"Critical stability issues detected ({len(stability_report['issues'])} issues):"
-                )
-                for issue_type, message, severity in stability_report["issues"]:
-                    logger.warning(f"  [{severity.upper()}] {message}")
-                if stability_report["recommendations"]:
-                    logger.info("Recommendations:")
-                    for rec in stability_report["recommendations"]:
-                        logger.info(f"  - {rec}")
-            elif stability_report["severity"] == "warning":
-                logger.warning(
-                    f"Stability warnings detected ({len(stability_report['issues'])} issues)"
-                )
-                for issue_type, message, severity in stability_report["issues"]:
-                    logger.warning(f"  [{severity.upper()}] {message}")
-
-        elif stability == "auto":
-            # Apply automatic fixes if issues detected
-            if stability_report["severity"] in ["warning", "critical"]:
-                logger.info(
-                    f"Applying automatic fixes for {len(stability_report['issues'])} stability issues..."
-                )
-                if not rescale_data:
-                    logger.info(
-                        "  (rescale_data=False: data rescaling disabled for physics applications)"
-                    )
-
-                xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
-                    xdata,
-                    ydata,
-                    p0,
-                    stability_report=stability_report,
-                    rescale_data=rescale_data,
-                )
-
-                # Update data and parameters
-                xdata = xdata_fixed
-                ydata = ydata_fixed
-
-                if p0_fixed is not None:
-                    # Update p0 in kwargs (move from args if needed)
-                    kwargs["p0"] = p0_fixed
-                    # If p0 was in args, we need to remove it from args
-                    if args and len(args) >= 1:
-                        args = args[1:]
-
-                # Log applied fixes
-                for fix in fix_info["applied_fixes"]:
-                    logger.info(f"  - {fix}")
+        xdata, ydata, args = _apply_stability_checks(
+            xdata, ydata, p0, f, stability, rescale_data, args, kwargs
+        )
+        # Re-extract p0 in case it was updated
+        p0 = _extract_p0_from_args(args, kwargs)
 
     # Handle multi-start optimization
     if multistart and n_starts > 0:
-        from nlsq.global_optimization import (
-            GlobalOptimizationConfig,
-            MultiStartOrchestrator,
+        return _run_multistart_optimization(
+            f, xdata, ydata, p0, n_starts, sampler, center_on_p0, scale_factor, kwargs
         )
-
-        # Extract p0 from args or kwargs
-        p0 = None
-        if args and len(args) >= 1:
-            p0 = args[0]
-        elif "p0" in kwargs:
-            p0 = kwargs["p0"]
-
-        # Extract bounds from kwargs
-        bounds = kwargs.get("bounds", (-np.inf, np.inf))
-
-        # Create multi-start config
-        multistart_config = GlobalOptimizationConfig(
-            n_starts=n_starts,
-            sampler=sampler,
-            center_on_p0=center_on_p0,
-            scale_factor=scale_factor,
-        )
-
-        # Create orchestrator
-        orchestrator = MultiStartOrchestrator(config=multistart_config)
-
-        # Run multi-start optimization
-        result = orchestrator.fit(
-            f=f,
-            xdata=np.asarray(xdata),
-            ydata=np.asarray(ydata),
-            p0=np.asarray(p0) if p0 is not None else None,
-            bounds=bounds,
-            **{k: v for k, v in kwargs.items() if k not in ["bounds", "p0"]},
-        )
-
-        return result
 
     # Use fallback orchestrator if requested
     if fallback:
-        from nlsq.stability.fallback import FallbackOrchestrator
-
-        orchestrator = FallbackOrchestrator(
-            max_attempts=max_fallback_attempts, verbose=fallback_verbose
+        return _run_fallback_optimization(
+            f,
+            xdata,
+            ydata,
+            args,
+            kwargs,
+            max_fallback_attempts,
+            fallback_verbose,
+            multistart,
+            n_starts,
         )
 
-        # Build kwargs for fallback
-        fallback_kwargs = kwargs.copy()
-        if args:
-            # Handle positional arguments (typically p0)
-            if len(args) >= 1:
-                fallback_kwargs.setdefault("p0", args[0])
-            if len(args) >= 2:
-                fallback_kwargs.setdefault("sigma", args[1])
-            if len(args) >= 3:
-                fallback_kwargs.setdefault("absolute_sigma", args[2])
-            # Remaining args would be unusual, pass through kwargs
-
-        result = orchestrator.fit_with_fallback(f, xdata, ydata, **fallback_kwargs)
-
-        # Add empty multi-start diagnostics for consistency
-        if (
-            not hasattr(result, "multistart_diagnostics")
-            and "multistart_diagnostics" not in result
-        ):
-            result["multistart_diagnostics"] = {
-                "n_starts_configured": 0,
-                "bypassed": True,
-            }
-
-        return result
-
     # Standard path without fallback or multi-start
-    # Extract CurveFit constructor parameters from kwargs
-    flength = kwargs.pop("flength", None)
-    use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
-    cache_config = kwargs.pop("cache_config", None)
+    flength, use_dynamic_sizing, cache_config = _prepare_optimizer_options(
+        kwargs,
+        max_jacobian_elements_for_svd,
+        compute_diagnostics,
+        diagnostics_level,
+        diagnostics_config,
+    )
 
     # Create CurveFit instance with appropriate parameters
     jcf = CurveFit(
@@ -1153,11 +1395,6 @@ def curve_fit(
         cache_config=cache_config,
         max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
     )
-    # Pass diagnostics parameters through kwargs
-    if compute_diagnostics:
-        kwargs["compute_diagnostics"] = True
-        kwargs["diagnostics_level"] = diagnostics_level
-        kwargs["diagnostics_config"] = diagnostics_config
 
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
