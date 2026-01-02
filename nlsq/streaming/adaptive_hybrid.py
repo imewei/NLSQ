@@ -16,7 +16,9 @@ The optimizer operates in four phases:
 This implementation focuses on Phase 0 setup logic and phase tracking infrastructure.
 """
 
-# mypy: ignore-errors
+# mypy: disable-error-code="assignment,misc,return-value,valid-type,union-attr,operator,import-untyped,attr-defined,arg-type"
+# Note: mypy errors are mostly assignment/return-value/union-attr issues from
+# complex streaming state management. These require deeper refactoring.
 
 from __future__ import annotations
 
