@@ -68,8 +68,10 @@ class IssueCategory(Enum):
         Numerical conditioning issues.
     CONVERGENCE : auto
         Convergence-related issues.
+    SENSITIVITY : auto
+        Parameter sensitivity spectrum issues (wide eigenvalue spread).
     SLOPPY : auto
-        Sloppy model characteristics.
+        Deprecated alias for SENSITIVITY. Will be removed in v0.6.0.
     """
 
     IDENTIFIABILITY = auto()
@@ -77,7 +79,10 @@ class IssueCategory(Enum):
     CORRELATION = auto()
     CONDITIONING = auto()
     CONVERGENCE = auto()
-    SLOPPY = auto()
+    SENSITIVITY = auto()
+    # Backwards compatibility alias - SLOPPY is deprecated in favor of SENSITIVITY
+    # Will be removed in v0.6.0
+    SLOPPY = SENSITIVITY
 
 
 class DiagnosticLevel(Enum):
@@ -88,7 +93,7 @@ class DiagnosticLevel(Enum):
     BASIC : auto
         Fast analysis: identifiability + gradient health.
     FULL : auto
-        Comprehensive analysis: includes sloppy model analysis.
+        Comprehensive analysis: includes parameter sensitivity analysis.
     """
 
     BASIC = auto()
@@ -425,16 +430,17 @@ class GradientHealthReport(AnalysisResult):
 
 
 @dataclass(slots=True)
-class SloppyModelReport(AnalysisResult):
-    """Report from sloppy model analysis.
+class ParameterSensitivityReport(AnalysisResult):
+    """Report from parameter sensitivity spectrum analysis.
 
     Contains results from eigenvalue spectrum analysis to identify
-    stiff vs sloppy parameter directions.
+    well-determined vs poorly-determined parameter directions based
+    on the spread of eigenvalues in the Fisher Information Matrix.
 
     Attributes
     ----------
     is_sloppy : bool
-        Whether the model exhibits sloppy behavior.
+        Whether the model exhibits wide eigenvalue spread (sensitivity spectrum).
     eigenvalues : np.ndarray
         Eigenvalue spectrum of the Fisher Information Matrix.
     eigenvectors : np.ndarray | None
@@ -446,9 +452,9 @@ class SloppyModelReport(AnalysisResult):
     stiff_indices : list[int]
         Indices of stiff (well-determined) directions.
     sloppy_indices : list[int]
-        Indices of sloppy (poorly-determined) directions.
+        Indices of poorly-determined directions.
     issues : list[ModelHealthIssue]
-        List of detected sloppy model issues (SLOPPY-001, SLOPPY-002).
+        List of detected sensitivity issues (SENS-001, SENS-002).
     health_status : HealthStatus
         Overall health status based on detected issues.
     """
@@ -469,7 +475,7 @@ class SloppyModelReport(AnalysisResult):
         Returns
         -------
         list[tuple[np.ndarray, float]]
-            List of (eigenvector, eigenvalue) tuples for sloppy directions.
+            List of (eigenvector, eigenvalue) tuples for poorly-determined directions.
         """
         if self.eigenvectors is None or len(self.sloppy_indices) == 0:
             return []
@@ -477,6 +483,10 @@ class SloppyModelReport(AnalysisResult):
             (self.eigenvectors[:, idx], self.eigenvalues[idx])
             for idx in self.sloppy_indices
         ]
+
+
+# Backwards compatibility alias
+SloppyModelReport = ParameterSensitivityReport
 
 
 @dataclass(slots=True)
@@ -625,7 +635,7 @@ class DiagnosticsConfig:
         Relative gradient magnitude threshold for vanishing detection.
         Default: 1e-6.
     sloppy_threshold : float
-        Eigenvalue ratio threshold for sloppy classification.
+        Eigenvalue ratio threshold for sensitivity classification.
         Default: 1e-6.
     gradient_window_size : int
         Window size for gradient norm history.
@@ -698,7 +708,7 @@ class ModelHealthReport:
     """Aggregated model health report with overall assessment.
 
     This dataclass aggregates results from all diagnostic components
-    (identifiability, gradient health, sloppy model, and plugins) into
+    (identifiability, gradient health, parameter sensitivity, and plugins) into
     a unified health report with overall status, health score, and
     actionable recommendations.
 
@@ -708,8 +718,8 @@ class ModelHealthReport:
         Results from identifiability analysis.
     gradient_health : GradientHealthReport | None
         Results from gradient health monitoring.
-    sloppy_model : SloppyModelReport | None
-        Results from sloppy model analysis (level=FULL only).
+    sloppy_model : ParameterSensitivityReport | None
+        Results from parameter sensitivity analysis (level=FULL only).
     plugin_results : dict[str, PluginResult]
         Results from diagnostic plugins, keyed by plugin name.
     status : HealthStatus
@@ -738,7 +748,7 @@ class ModelHealthReport:
 
     identifiability: IdentifiabilityReport | None = None
     gradient_health: GradientHealthReport | None = None
-    sloppy_model: SloppyModelReport | None = None
+    sloppy_model: ParameterSensitivityReport | None = None
     plugin_results: dict[str, PluginResult] = field(default_factory=dict)
     status: HealthStatus = HealthStatus.HEALTHY
     health_score: float = 1.0

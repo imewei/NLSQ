@@ -13,7 +13,7 @@ Categories:
 - CORR: Correlation issues
 - GRAD: Gradient issues
 - COND: Conditioning issues
-- SLOPPY: Sloppy model issues
+- SENS: Parameter sensitivity issues
 - CONV: Convergence issues
 
 Usage
@@ -81,17 +81,17 @@ RECOMMENDATIONS = Recommendations({
         "estimates. Consider: (1) Rescaling the data or parameters, (2) Simplifying "
         "the model, or (3) Using regularization to improve conditioning."
     ),
-    # Sloppy model issues
-    "SLOPPY-001": (
-        "Sloppy model behavior detected: The eigenvalue spectrum of the Fisher "
-        "Information Matrix spans many orders of magnitude, indicating that some "
+    # Parameter sensitivity issues
+    "SENS-001": (
+        "Wide parameter sensitivity spectrum detected: The eigenvalue spectrum of the "
+        "Fisher Information Matrix spans many orders of magnitude, indicating that some "
         "parameter combinations are well-determined (stiff) while others are "
-        "poorly-determined (sloppy). This is common in biological and chemical "
-        "kinetics models. Consider: (1) Focusing on predictions rather than "
+        "poorly-determined. This is common in complex nonlinear models with many "
+        "parameters. Consider: (1) Focusing on predictions rather than "
         "individual parameter values, (2) Reparameterizing along stiff directions, "
         "or (3) Using ensemble methods that account for parameter uncertainty."
     ),
-    "SLOPPY-002": (
+    "SENS-002": (
         "Low effective dimensionality detected: The model has fewer well-determined "
         "parameter combinations than total parameters. This suggests the model may "
         "be overparameterized for the available data. Consider: (1) Reducing the "

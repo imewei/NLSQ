@@ -78,16 +78,25 @@ class TestIssueCategory:
         assert hasattr(IssueCategory, "CORRELATION")
         assert hasattr(IssueCategory, "CONDITIONING")
         assert hasattr(IssueCategory, "CONVERGENCE")
+        assert hasattr(IssueCategory, "SENSITIVITY")
+        # SLOPPY is a deprecated alias for SENSITIVITY
         assert hasattr(IssueCategory, "SLOPPY")
 
     def test_issue_category_count(self) -> None:
-        """Test IssueCategory has expected number of values."""
+        """Test IssueCategory has expected number of values.
+
+        Note: SLOPPY is an alias for SENSITIVITY so it doesn't increase the count.
+        """
         assert len(IssueCategory) == 6
 
     def test_issue_category_unique_values(self) -> None:
         """Test IssueCategory values are unique."""
         values = [category.value for category in IssueCategory]
         assert len(values) == len(set(values))
+
+    def test_issue_category_sloppy_equals_sensitivity(self) -> None:
+        """Test SLOPPY is an alias for SENSITIVITY (backwards compatibility)."""
+        assert IssueCategory.SLOPPY == IssueCategory.SENSITIVITY
 
 
 class TestDiagnosticLevel:
@@ -395,7 +404,11 @@ class TestRecommendationsModule:
         assert isinstance(RECOMMENDATIONS, dict)
 
     def test_recommendations_has_expected_codes(self) -> None:
-        """Test RECOMMENDATIONS contains expected issue codes."""
+        """Test RECOMMENDATIONS contains expected issue codes.
+
+        Note: Issue codes were renamed from SLOPPY-* to SENS-* in the
+        domain-agnostic refactoring.
+        """
         from nlsq.diagnostics.recommendations import RECOMMENDATIONS
 
         expected_codes = [
@@ -406,8 +419,8 @@ class TestRecommendationsModule:
             "GRAD-002",
             "GRAD-003",
             "COND-001",
-            "SLOPPY-001",
-            "SLOPPY-002",
+            "SENS-001",
+            "SENS-002",
         ]
         for code in expected_codes:
             assert code in RECOMMENDATIONS, f"Missing recommendation for {code}"

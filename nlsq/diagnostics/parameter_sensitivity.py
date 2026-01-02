@@ -1,16 +1,17 @@
-"""Sloppy model analysis for nonlinear least squares models.
+"""Parameter sensitivity spectrum analysis for nonlinear least squares models.
 
-This module provides the SloppyModelAnalyzer class for analyzing
-eigenvalue spectra to identify stiff vs sloppy parameter directions.
+This module provides the ParameterSensitivityAnalyzer class for analyzing
+eigenvalue spectra to identify well-determined vs poorly-determined parameter
+directions based on the spread of eigenvalues in the Fisher Information Matrix.
 
-Sloppy models are common in biological and chemical kinetics where:
+Models with wide eigenvalue spread are common in complex nonlinear models where:
 - Eigenvalues of the FIM span many orders of magnitude
 - Some parameter combinations are well-determined (stiff)
-- Others are poorly-determined (sloppy)
+- Others are poorly-determined
 
 The analyzer generates actionable issues:
-- SLOPPY-001: Sloppy model behavior detected
-- SLOPPY-002: Low effective dimensionality
+- SENS-001: Wide parameter sensitivity spectrum detected
+- SENS-002: Low effective dimensionality
 
 References
 ----------
@@ -31,21 +32,22 @@ from nlsq.diagnostics.types import (
     IssueCategory,
     IssueSeverity,
     ModelHealthIssue,
-    SloppyModelReport,
+    ParameterSensitivityReport,
 )
 
 
-class SloppyModelAnalyzer:
-    """Analyzer for sloppy model characteristics from Jacobian matrices.
+class ParameterSensitivityAnalyzer:
+    """Analyzer for parameter sensitivity spectrum from Jacobian matrices.
 
     This class analyzes the eigenvalue spectrum of the Fisher Information
-    Matrix (FIM) to identify stiff vs sloppy parameter directions. It
-    detects sloppy behavior when eigenvalues span many orders of magnitude.
+    Matrix (FIM) to identify well-determined vs poorly-determined parameter
+    directions. It detects wide eigenvalue spread when eigenvalues span many
+    orders of magnitude.
 
     Parameters
     ----------
     config : DiagnosticsConfig | None
-        Configuration containing thresholds for sloppy analysis.
+        Configuration containing thresholds for sensitivity analysis.
         If None, uses default configuration.
 
     Attributes
@@ -55,12 +57,12 @@ class SloppyModelAnalyzer:
 
     Notes
     -----
-    Sloppy detection logic:
+    Detection logic:
 
-    - A model is considered "sloppy" when its eigenvalue range exceeds
-      a threshold derived from the config's sloppy_threshold.
+    - A model is considered to have wide eigenvalue spread when its eigenvalue
+      range exceeds a threshold derived from the config's sloppy_threshold.
     - The sloppy_threshold (default 1e-6) defines when a direction is
-      classified as sloppy: eigenvalue < threshold * max_eigenvalue.
+      classified as poorly-determined: eigenvalue < threshold * max_eigenvalue.
     - The overall is_sloppy flag is set when eigenvalue range (in orders
       of magnitude) is significant enough to cause practical issues.
 
@@ -68,29 +70,29 @@ class SloppyModelAnalyzer:
     --------
     >>> import numpy as np
     >>> from nlsq.diagnostics import DiagnosticsConfig
-    >>> from nlsq.diagnostics.sloppy_model import SloppyModelAnalyzer
+    >>> from nlsq.diagnostics.parameter_sensitivity import ParameterSensitivityAnalyzer
     >>> config = DiagnosticsConfig()
-    >>> analyzer = SloppyModelAnalyzer(config)
+    >>> analyzer = ParameterSensitivityAnalyzer(config)
     >>> J = np.random.randn(100, 3)  # 100 data points, 3 parameters
     >>> report = analyzer.analyze(J)
     >>> print(report.is_sloppy)
     False
     """
 
-    # Default threshold for sloppy model detection: 2.0 orders of magnitude
+    # Default threshold for wide eigenvalue spread detection: 2.0 orders of magnitude
     # This is a conservative threshold that identifies models where some
     # parameter combinations are 100x less well-determined than others.
-    # More strict analysis uses 6+ orders of magnitude per the sloppy model literature.
+    # More strict analysis uses 6+ orders of magnitude per the literature.
     DEFAULT_SLOPPY_DETECTION_ORDERS = 2.0
 
     # Threshold for stiff direction classification: 10% of max eigenvalue
     STIFF_RATIO_THRESHOLD = 0.1
 
-    # Threshold for sloppy direction classification: 1% of max eigenvalue
+    # Threshold for poorly-determined direction classification: 1% of max eigenvalue
     SLOPPY_RATIO_THRESHOLD = 0.01
 
     def __init__(self, config: DiagnosticsConfig | None = None) -> None:
-        """Initialize the sloppy model analyzer.
+        """Initialize the parameter sensitivity analyzer.
 
         Parameters
         ----------
@@ -100,11 +102,11 @@ class SloppyModelAnalyzer:
         """
         self.config = config if config is not None else DiagnosticsConfig()
 
-    def analyze(self, jacobian: np.ndarray) -> SloppyModelReport:
-        """Analyze sloppy model characteristics from a Jacobian matrix.
+    def analyze(self, jacobian: np.ndarray) -> ParameterSensitivityReport:
+        """Analyze parameter sensitivity spectrum from a Jacobian matrix.
 
         Computes the Fisher Information Matrix (FIM) as J.T @ J and
-        analyzes its eigenvalue spectrum for sloppy behavior.
+        analyzes its eigenvalue spectrum for wide eigenvalue spread.
 
         Parameters
         ----------
@@ -113,7 +115,7 @@ class SloppyModelAnalyzer:
 
         Returns
         -------
-        SloppyModelReport
+        ParameterSensitivityReport
             Report containing analysis results and any detected issues.
 
         Notes
@@ -123,7 +125,7 @@ class SloppyModelAnalyzer:
         1. FIM computation: FIM = J.T @ J
         2. Eigenvalue decomposition for spectrum analysis
         3. Eigenvalue range computation (log10 ratio)
-        4. Stiff/sloppy direction classification
+        4. Stiff/poorly-determined direction classification
         5. Effective dimensionality using participation ratio
         6. Issue detection based on thresholds
         """
@@ -142,8 +144,8 @@ class SloppyModelAnalyzer:
         # Analyze FIM eigenvalue spectrum
         return self._analyze_eigenvalue_spectrum(fim, n_params, start_time)
 
-    def analyze_from_fim(self, fim: np.ndarray) -> SloppyModelReport:
-        """Analyze sloppy model characteristics from a pre-computed FIM.
+    def analyze_from_fim(self, fim: np.ndarray) -> ParameterSensitivityReport:
+        """Analyze parameter sensitivity spectrum from a pre-computed FIM.
 
         Parameters
         ----------
@@ -152,14 +154,14 @@ class SloppyModelAnalyzer:
 
         Returns
         -------
-        SloppyModelReport
+        ParameterSensitivityReport
             Report containing analysis results and any detected issues.
         """
         start_time = time.perf_counter()
 
         # Validate FIM
         if fim.ndim != 2 or fim.shape[0] != fim.shape[1]:
-            return SloppyModelReport(
+            return ParameterSensitivityReport(
                 available=False,
                 error_message="FIM must be a square matrix",
                 is_sloppy=False,
@@ -179,7 +181,7 @@ class SloppyModelAnalyzer:
 
     def _validate_jacobian(
         self, jacobian: np.ndarray, start_time: float
-    ) -> SloppyModelReport | None:
+    ) -> ParameterSensitivityReport | None:
         """Validate the Jacobian matrix.
 
         Parameters
@@ -191,12 +193,12 @@ class SloppyModelAnalyzer:
 
         Returns
         -------
-        SloppyModelReport | None
+        ParameterSensitivityReport | None
             Error report if validation fails, None otherwise.
         """
         # Check for empty Jacobian
         if jacobian.size == 0:
-            return SloppyModelReport(
+            return ParameterSensitivityReport(
                 available=False,
                 error_message="Empty Jacobian matrix",
                 is_sloppy=False,
@@ -213,7 +215,7 @@ class SloppyModelAnalyzer:
 
         # Check dimensions
         if jacobian.ndim != 2:
-            return SloppyModelReport(
+            return ParameterSensitivityReport(
                 available=False,
                 error_message=f"Jacobian must be 2D, got {jacobian.ndim}D",
                 is_sloppy=False,
@@ -230,7 +232,7 @@ class SloppyModelAnalyzer:
 
         # Check for NaN
         if np.any(np.isnan(jacobian)):
-            return SloppyModelReport(
+            return ParameterSensitivityReport(
                 available=False,
                 error_message="Jacobian contains NaN values",
                 is_sloppy=False,
@@ -247,7 +249,7 @@ class SloppyModelAnalyzer:
 
         # Check for Inf
         if np.any(np.isinf(jacobian)):
-            return SloppyModelReport(
+            return ParameterSensitivityReport(
                 available=False,
                 error_message="Jacobian contains Inf values",
                 is_sloppy=False,
@@ -281,7 +283,7 @@ class SloppyModelAnalyzer:
 
     def _analyze_eigenvalue_spectrum(
         self, fim: np.ndarray, n_params: int, start_time: float
-    ) -> SloppyModelReport:
+    ) -> ParameterSensitivityReport:
         """Analyze the eigenvalue spectrum of the FIM.
 
         Parameters
@@ -295,7 +297,7 @@ class SloppyModelAnalyzer:
 
         Returns
         -------
-        SloppyModelReport
+        ParameterSensitivityReport
             Analysis results.
         """
         issues: list[ModelHealthIssue] = []
@@ -307,7 +309,7 @@ class SloppyModelAnalyzer:
         except Exception as e:
             # Graceful degradation on eigenvalue computation failure
             computation_time = (time.perf_counter() - start_time) * 1000
-            return SloppyModelReport(
+            return ParameterSensitivityReport(
                 available=False,
                 error_message=f"Eigenvalue computation failed: {e!s}",
                 is_sloppy=False,
@@ -325,22 +327,22 @@ class SloppyModelAnalyzer:
         # Compute eigenvalue range (log10 ratio of max to min non-zero eigenvalue)
         eigenvalue_range = self._compute_eigenvalue_range(eigenvalues)
 
-        # Compute sloppy detection threshold
+        # Compute detection threshold
         # The sloppy_threshold config parameter (default 1e-6) is used for direction
-        # classification. For overall sloppy detection, we use a threshold that
-        # identifies significant sloppiness (at least 2 orders of magnitude).
+        # classification. For overall detection, we use a threshold that
+        # identifies significant eigenvalue spread (at least 2 orders of magnitude).
         sloppy_threshold_log = -np.log10(self.config.sloppy_threshold)
         sloppy_detection_threshold = max(
             sloppy_threshold_log / 3.0,
             self.DEFAULT_SLOPPY_DETECTION_ORDERS
         )
 
-        # Check for sloppy model behavior (SLOPPY-001)
+        # Check for wide eigenvalue spread (SENS-001)
         # Use Python bool() to ensure is_sloppy is a native bool, not np.bool_
         is_sloppy = bool(eigenvalue_range > sloppy_detection_threshold)
 
-        # Classify stiff vs sloppy directions
-        # Pass is_sloppy to use adaptive thresholds when model is sloppy
+        # Classify stiff vs poorly-determined directions
+        # Pass is_sloppy to use adaptive thresholds when model has wide spread
         stiff_indices, sloppy_indices = self._classify_directions(
             eigenvalues, is_sloppy
         )
@@ -349,25 +351,25 @@ class SloppyModelAnalyzer:
         effective_dimensionality = self._compute_effective_dimensionality(eigenvalues)
 
         if is_sloppy:
-            issue = self._create_sloppy_001_issue(
+            issue = self._create_sens_001_issue(
                 eigenvalue_range, sloppy_detection_threshold
             )
             issues.append(issue)
             health_status = HealthStatus.WARNING
 
-        # Check for low effective dimensionality (SLOPPY-002)
+        # Check for low effective dimensionality (SENS-002)
         # Threshold: effective_dim < n_params / 2
         if effective_dimensionality < n_params / 2.0:
-            issue = self._create_sloppy_002_issue(
+            issue = self._create_sens_002_issue(
                 effective_dimensionality, n_params
             )
             issues.append(issue)
             # Keep as INFO since this is informational, not necessarily a problem
-            # health_status already set by SLOPPY-001 if applicable
+            # health_status already set by SENS-001 if applicable
 
         computation_time = (time.perf_counter() - start_time) * 1000
 
-        return SloppyModelReport(
+        return ParameterSensitivityReport(
             available=True,
             is_sloppy=is_sloppy,
             eigenvalues=eigenvalues,
@@ -466,24 +468,24 @@ class SloppyModelAnalyzer:
     def _classify_directions(
         self, eigenvalues: np.ndarray, is_sloppy: bool
     ) -> tuple[list[int], list[int]]:
-        """Classify directions as stiff or sloppy based on eigenvalues.
+        """Classify directions as stiff or poorly-determined based on eigenvalues.
 
         Stiff directions have eigenvalues close to the maximum.
-        Sloppy directions have eigenvalues much smaller than the maximum.
+        Poorly-determined directions have eigenvalues much smaller than the maximum.
 
         Parameters
         ----------
         eigenvalues : np.ndarray
             Eigenvalues sorted in descending order.
         is_sloppy : bool
-            Whether the model is overall sloppy.
+            Whether the model has wide eigenvalue spread.
 
         Returns
         -------
         stiff_indices : list[int]
             Indices of stiff (well-determined) directions.
         sloppy_indices : list[int]
-            Indices of sloppy (poorly-determined) directions.
+            Indices of poorly-determined directions.
         """
         if len(eigenvalues) == 0:
             return [], []
@@ -491,29 +493,29 @@ class SloppyModelAnalyzer:
         max_eigenvalue = np.max(eigenvalues)
 
         if max_eigenvalue <= 0:
-            # All zero eigenvalues - all are sloppy
+            # All zero eigenvalues - all are poorly-determined
             return [], list(range(len(eigenvalues)))
 
-        # For sloppy models, use adaptive thresholds based on eigenvalue distribution
-        # For non-sloppy models, use fixed thresholds
+        # For models with wide eigenvalue spread, use adaptive thresholds
+        # For well-conditioned models, use fixed thresholds
         if is_sloppy:
-            # In sloppy models, classify directions relative to the spectrum
-            # Sloppy: bottom 1/3 of eigenvalues (by value, not count)
+            # Classify directions relative to the spectrum
+            # Poorly-determined: bottom 1/3 of eigenvalues (by value, not count)
             # Stiff: top 1/3 of eigenvalues
             # Use geometric mean of sqrt of ratio as threshold
             # For a 3-order range, sqrt = 1.5 orders, so threshold = 10^(-1.5) ~ 0.03
             eigenvalue_range = self._compute_eigenvalue_range(eigenvalues)
             if eigenvalue_range > 0:
                 # Threshold based on eigenvalue range
-                # For 3-order range: sloppy < 10^(-1.5) * max ~ 3% of max
-                # For 6-order range: sloppy < 10^(-3) * max ~ 0.1% of max
+                # For 3-order range: poorly-determined < 10^(-1.5) * max ~ 3% of max
+                # For 6-order range: poorly-determined < 10^(-3) * max ~ 0.1% of max
                 sloppy_threshold = 10.0 ** (-eigenvalue_range / 2.0)
                 stiff_threshold = 10.0 ** (-eigenvalue_range / 4.0)
             else:
                 sloppy_threshold = self.SLOPPY_RATIO_THRESHOLD
                 stiff_threshold = self.STIFF_RATIO_THRESHOLD
         else:
-            # Non-sloppy: use config-based thresholds
+            # Well-conditioned: use config-based thresholds
             sloppy_threshold = self.config.sloppy_threshold
             stiff_threshold = self.STIFF_RATIO_THRESHOLD
 
@@ -566,29 +568,29 @@ class SloppyModelAnalyzer:
 
         return float(effective_dim)
 
-    def _create_sloppy_001_issue(
+    def _create_sens_001_issue(
         self, eigenvalue_range: float, threshold: float
     ) -> ModelHealthIssue:
-        """Create SLOPPY-001 issue for sloppy model detection.
+        """Create SENS-001 issue for wide eigenvalue spread detection.
 
         Parameters
         ----------
         eigenvalue_range : float
             Log10 range of eigenvalues.
         threshold : float
-            Threshold used for sloppy detection (in orders of magnitude).
+            Threshold used for detection (in orders of magnitude).
 
         Returns
         -------
         ModelHealthIssue
-            Issue describing sloppy model behavior.
+            Issue describing wide parameter sensitivity spectrum.
         """
         return ModelHealthIssue(
-            category=IssueCategory.SLOPPY,
+            category=IssueCategory.SENSITIVITY,
             severity=IssueSeverity.WARNING,
-            code="SLOPPY-001",
+            code="SENS-001",
             message=(
-                f"Sloppy model detected: eigenvalue spectrum spans "
+                f"Wide parameter sensitivity spectrum detected: eigenvalue spectrum spans "
                 f"{eigenvalue_range:.1f} orders of magnitude. "
                 "Some parameter combinations are poorly determined."
             ),
@@ -597,13 +599,13 @@ class SloppyModelAnalyzer:
                 "eigenvalue_range": eigenvalue_range,
                 "threshold_orders_of_magnitude": threshold,
             },
-            recommendation=get_recommendation("SLOPPY-001"),
+            recommendation=get_recommendation("SENS-001"),
         )
 
-    def _create_sloppy_002_issue(
+    def _create_sens_002_issue(
         self, effective_dimensionality: float, n_params: int
     ) -> ModelHealthIssue:
-        """Create SLOPPY-002 issue for low effective dimensionality.
+        """Create SENS-002 issue for low effective dimensionality.
 
         Parameters
         ----------
@@ -618,9 +620,9 @@ class SloppyModelAnalyzer:
             Issue describing low effective dimensionality.
         """
         return ModelHealthIssue(
-            category=IssueCategory.SLOPPY,
+            category=IssueCategory.SENSITIVITY,
             severity=IssueSeverity.INFO,
-            code="SLOPPY-002",
+            code="SENS-002",
             message=(
                 f"Low effective dimensionality: {effective_dimensionality:.1f} "
                 f"out of {n_params} parameters. "
@@ -632,5 +634,9 @@ class SloppyModelAnalyzer:
                 "n_params": n_params,
                 "ratio": effective_dimensionality / n_params if n_params > 0 else 0.0,
             },
-            recommendation=get_recommendation("SLOPPY-002"),
+            recommendation=get_recommendation("SENS-002"),
         )
+
+
+# Backwards compatibility alias
+SloppyModelAnalyzer = ParameterSensitivityAnalyzer
