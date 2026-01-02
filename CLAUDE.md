@@ -213,6 +213,7 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - N/A (library, no persistence) (006-legacy-modernization)
 - Python 3.12+ + JAX 0.8.0, NumPy, SciPy (reference implementations) (007-performance-optimizations)
 - Python ≥3.12 (per pyproject.toml) + JAX 0.8.0 (locked), NumPy, SciPy, pytest, ruff, mypy (008-tech-debt-remediation)
+- Python >=3.12 (per pyproject.toml) + JAX 0.8.0, NumPy >=2.2, SciPy >=1.16.0, Optax >=0.2.6 (009-code-quality-refactor)
 
 ## Recent Changes
 - 006-legacy-modernization: Comprehensive legacy modernization (v0.5.0):
