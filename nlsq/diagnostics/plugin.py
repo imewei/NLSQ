@@ -50,7 +50,7 @@ from __future__ import annotations
 import threading
 import time
 import warnings
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -177,8 +177,8 @@ class PluginRegistry:
     >>> PluginRegistry.clear()
     """
 
-    _plugins: dict[str, DiagnosticPlugin] = {}
-    _lock: threading.Lock = threading.Lock()
+    _plugins: ClassVar[dict[str, DiagnosticPlugin]] = {}
+    _lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def register(cls, plugin: DiagnosticPlugin) -> None:

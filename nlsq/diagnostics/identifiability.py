@@ -15,7 +15,6 @@ The analyzer generates actionable issues:
 """
 
 import time
-import warnings
 
 import numpy as np
 

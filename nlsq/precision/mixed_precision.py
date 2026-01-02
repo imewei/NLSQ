@@ -28,7 +28,7 @@ from enum import Enum, auto
 
 import jax.numpy as jnp
 import numpy as np
-from jax import device_put, lax
+from jax import lax
 
 __all__ = [
     "BestParameterTracker",

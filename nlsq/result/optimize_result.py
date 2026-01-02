@@ -19,12 +19,10 @@ Usage to migrate before v0.6.0:
     dict(result) # Convert to dict → use result.to_dict() instead
 """
 
-import warnings
 from dataclasses import dataclass
 from typing import Any
 
 import jax.numpy as jnp
-import numpy as np
 
 
 @dataclass(frozen=True, slots=True)

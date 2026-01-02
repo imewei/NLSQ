@@ -10,8 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from nlsq.interfaces.optimizer_protocol import CurveFitProtocol
-
 if TYPE_CHECKING:
     from nlsq.caching.unified_cache import UnifiedCache
     from nlsq.diagnostics.types import DiagnosticsConfig

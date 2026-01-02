@@ -84,10 +84,9 @@ def _convert_to_serializable(obj: Any) -> Any:
     if isinstance(obj, dict):
         result = {}
         for key, value in obj.items():
-            if not isinstance(key, str):
-                # JSON requires string keys
-                key = str(key)
-            result[key] = _convert_to_serializable(value)
+            # JSON requires string keys
+            str_key = str(key) if not isinstance(key, str) else key
+            result[str_key] = _convert_to_serializable(value)
         return result
 
     # Handle numpy arrays (small ones only - large arrays should use HDF5)

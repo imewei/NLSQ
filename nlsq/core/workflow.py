@@ -59,6 +59,7 @@ Cluster detection for HPC environments:
 ...     print(f"Running on cluster: {cluster_info.total_gpus} GPUs")
 """
 
+import importlib.util
 import os
 import warnings
 from dataclasses import dataclass, field
@@ -1454,12 +1455,7 @@ def _check_yaml_available() -> bool:
     bool
         True if pyyaml is available, False otherwise.
     """
-    try:
-        import yaml
-
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("yaml") is not None
 
 
 def load_yaml_config(config_path: str | Path | None = None) -> dict[str, Any] | None:
