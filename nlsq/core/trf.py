@@ -1456,6 +1456,111 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             "nfev": nfev,
         }
 
+    def _apply_accepted_step(
+        self,
+        acceptance_result: dict,
+        jac_scale: bool,
+        njev: int,
+    ) -> dict:
+        """Apply accepted step updates to optimization state.
+
+        This helper extracts the state update logic after step acceptance
+        from trf_no_bounds, reducing complexity.
+
+        Parameters
+        ----------
+        acceptance_result : dict
+            Result from _evaluate_step_acceptance
+        jac_scale : bool
+            Whether Jacobian scaling is enabled
+        njev : int
+            Current Jacobian evaluation count
+
+        Returns
+        -------
+        dict
+            Updated state variables: x, f, f_true, J, cost, g, njev,
+            and optionally scale, scale_inv.
+        """
+        result = {
+            "x": acceptance_result["x_new"],
+            "f": acceptance_result["f_new"],
+            "f_true": acceptance_result["f_true_new"],
+            "J": acceptance_result["J_new"],
+            "cost": acceptance_result["cost_new"],
+            "g": acceptance_result["g_new"],
+            "njev": njev + acceptance_result["njev"],
+        }
+
+        if jac_scale and "scale" in acceptance_result:
+            result["scale"] = acceptance_result["scale"]
+            result["scale_inv"] = acceptance_result["scale_inv"]
+
+        return result
+
+    def _build_optimize_result(
+        self,
+        x: jnp.ndarray,
+        cost: float,
+        f_true: jnp.ndarray,
+        J: jnp.ndarray,
+        g: jnp.ndarray,
+        g_norm: float,
+        nfev: int,
+        njev: int,
+        iteration: int,
+        termination_status: int,
+    ) -> OptimizeResult:
+        """Build OptimizeResult from optimization state.
+
+        This helper extracts result construction logic from trf_no_bounds
+        and trf_bounds, reducing complexity.
+
+        Parameters
+        ----------
+        x : jnp.ndarray
+            Final parameter values
+        cost : float
+            Final cost value
+        f_true : jnp.ndarray
+            Final residuals (unscaled)
+        J : jnp.ndarray
+            Final Jacobian matrix
+        g : jnp.ndarray
+            Final gradient
+        g_norm : float
+            Final gradient norm
+        nfev : int
+            Total function evaluations
+        njev : int
+            Total Jacobian evaluations
+        iteration : int
+            Total iterations performed
+        termination_status : int
+            Termination status code
+
+        Returns
+        -------
+        OptimizeResult
+            The optimization result object.
+        """
+        active_mask = jnp.zeros_like(x)  # JAX zeros instead of NumPy
+
+        return OptimizeResult(
+            x=x,
+            cost=float(cost),  # Convert JAX scalar to Python float
+            fun=f_true,
+            jac=J,
+            grad=np.array(g),  # Convert JAX array to NumPy
+            optimality=float(g_norm),  # Convert JAX scalar to Python float
+            active_mask=active_mask,
+            nfev=nfev,
+            njev=njev,
+            nit=iteration,  # Number of iterations performed
+            status=termination_status,
+            all_times={},
+        )
+
     def trf_no_bounds(
         self,
         fun: Callable,
@@ -1728,32 +1833,33 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     nfev=nfev,
                 )
 
-                # Update state from acceptance result
+                # Update state from acceptance result using helper
                 if acceptance_result["accepted"]:
-                    x = acceptance_result["x_new"]
-                    f = acceptance_result["f_new"]  # Scaled residuals for optimization
-                    f_true = acceptance_result[
-                        "f_true_new"
-                    ]  # Unscaled residuals for res.fun
-                    J = acceptance_result["J_new"]
-                    cost = acceptance_result["cost_new"]
-                    g = acceptance_result["g_new"]
+                    step_update = self._apply_accepted_step(
+                        acceptance_result=acceptance_result,
+                        jac_scale=jac_scale,
+                        njev=njev,
+                    )
+                    x = step_update["x"]
+                    f = step_update["f"]
+                    f_true = step_update["f_true"]
+                    J = step_update["J"]
+                    cost = step_update["cost"]
+                    g = step_update["g"]
                     g_jnp = g
-                    njev += acceptance_result["njev"]
+                    njev = step_update["njev"]
+                    if "scale" in step_update:
+                        scale = step_update["scale"]
+                        scale_inv = step_update["scale_inv"]
 
-                    if jac_scale and "scale" in acceptance_result:
-                        scale = acceptance_result["scale"]
-                        scale_inv = acceptance_result["scale_inv"]
-
+                # Update common values regardless of acceptance
                 actual_reduction = acceptance_result["actual_reduction"]
                 step_norm = acceptance_result["step_norm"]
                 Delta = acceptance_result["Delta"]
                 alpha = acceptance_result["alpha"]
                 nfev = acceptance_result["nfev"]
-
                 if acceptance_result["termination_status"] is not None:
                     termination_status = acceptance_result["termination_status"]
-
                 iteration += 1
 
                 # Mixed precision monitoring and upgrade using helper
@@ -1841,22 +1947,18 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha=alpha,
             )
 
-        active_mask = jnp.zeros_like(x)  # JAX zeros instead of NumPy
-
-        # Convert JAX arrays to NumPy for final return
-        return OptimizeResult(
+        # Build and return final result using helper
+        return self._build_optimize_result(
             x=x,
-            cost=float(cost),  # Convert JAX scalar to Python float
-            fun=f_true,
-            jac=J,
-            grad=np.array(g),  # Convert JAX array to NumPy
-            optimality=float(g_norm),  # Convert JAX scalar to Python float
-            active_mask=active_mask,
+            cost=cost,
+            f_true=f_true,
+            J=J,
+            g=g,
+            g_norm=g_norm,
             nfev=nfev,
             njev=njev,
-            nit=iteration,  # Number of iterations performed
-            status=termination_status,
-            all_times={},
+            iteration=iteration,
+            termination_status=termination_status,
         )
 
     def _handle_float64_fallback(
