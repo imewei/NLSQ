@@ -4,7 +4,11 @@ This module provides utilities for efficiently fitting curve parameters to very 
 (>10M points) with intelligent memory management, automatic chunking, and progress reporting.
 """
 
-# mypy: ignore-errors
+# mypy: disable-error-code="assignment,arg-type,var-annotated,misc,attr-defined,index"
+# Note: mypy errors are mostly assignment/index issues from dict-based result
+# accumulation in chunked fitting. These require deeper refactoring.
+
+from __future__ import annotations
 
 import gc
 import time
