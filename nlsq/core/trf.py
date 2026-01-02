@@ -86,7 +86,12 @@ References
     and Theory," Numerical Analysis, ed. G. A. Watson, Lecture
 """
 
-# mypy: ignore-errors
+# mypy: disable-error-code="arg-type,assignment,attr-defined,operator,misc,index,var-annotated,override"
+# Note: mypy errors are mostly arg-type/assignment mismatches where Optional values
+# are passed to methods expecting non-Optional, plus operator type conflicts between
+# JAX arrays and numpy arrays. These require deeper refactoring of the TRF API.
+
+from __future__ import annotations
 
 import time
 import warnings
