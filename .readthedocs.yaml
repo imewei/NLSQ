@@ -6,7 +6,7 @@
 # Features documented:
 #   - Adaptive Hybrid Streaming Optimizer with Parameter Normalization (v0.3.0+)
 #   - 4-phase optimization: normalization → L-BFGS warmup → Gauss-Newton → covariance
-#   - Model Health Diagnostics System (v0.5.0+):
+#   - Model Health Diagnostics System (v0.4.3+):
 #     - Identifiability analysis (FIM condition, rank, correlations)
 #     - Gradient health monitoring (vanishing, imbalance, stagnation)
 #     - Sloppy model analysis (eigenvalue spectrum, stiff/sloppy directions)

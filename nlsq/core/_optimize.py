@@ -9,7 +9,7 @@ Import from nlsq.result instead:
     # New (recommended):
     from nlsq.result import OptimizeResult, OptimizeWarning
 
-This shim will be removed in v0.6.0.
+This shim will be removed in v0.5.0.
 """
 
 import warnings
@@ -21,7 +21,7 @@ from nlsq.result import OptimizeResult, OptimizeWarning, _check_unknown_options
 warnings.warn(
     "Importing from nlsq.core._optimize is deprecated. "
     "Use 'from nlsq.result import OptimizeResult, OptimizeWarning' instead. "
-    "This module will be removed in v0.6.0.",
+    "This module will be removed in v0.5.0.",
     DeprecationWarning,
     stacklevel=2,
 )

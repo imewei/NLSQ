@@ -509,7 +509,7 @@ ignore_errors = true  # Complex dict types require runtime flexibility
 
 [[tool.mypy.overrides]]
 module = "nlsq.diagnostics.*"
-ignore_errors = true  # Model Health Diagnostics System (v0.5.0+)
+ignore_errors = true  # Model Health Diagnostics System (v0.4.3+)
 
 [[tool.mypy.overrides]]
 module = "tests.*"

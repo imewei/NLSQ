@@ -3,12 +3,12 @@
 This package provides the canonical location for optimization result types:
 
 - OptimizeResult: Base container for optimization results with attribute access
-- OptimizeResultV2: Memory-efficient frozen dataclass (v0.5.0+)
+- OptimizeResultV2: Memory-efficient frozen dataclass (v0.4.3+)
 - OptimizeWarning: Warning class for non-critical optimization issues
 - CurveFitResult: Enhanced result with statistical properties and visualization
 
 For backward compatibility, OptimizeResult and OptimizeWarning are also
-re-exported from nlsq.core._optimize (deprecated, will be removed in v0.6.0).
+re-exported from nlsq.core._optimize (deprecated, will be removed in v0.5.0).
 
 Example:
     >>> from nlsq.result import OptimizeResult, OptimizeResultV2
