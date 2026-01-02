@@ -1,9 +1,15 @@
 """Generic interface for least-squares minimization."""
 
-# mypy: ignore-errors
+# mypy: disable-error-code="arg-type,assignment"
+# Note: Remaining mypy errors are arg-type/assignment mismatches where Optional values
+# are passed to methods expecting non-Optional, or Literal type narrowing issues.
+# These require deeper refactoring. Fixed in this file: check_x_scale types,
+# safe_clip→jnp.clip, logger.warning, None callable guards, return type fixes.
+
+from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 from warnings import warn
 
 import numpy as np
@@ -204,8 +210,8 @@ def check_tolerance(
 
 
 def check_x_scale(
-    x_scale: str | Sequence[float], x0: Sequence[float]
-) -> str | Sequence[float]:
+    x_scale: str | Sequence[float] | np.ndarray, x0: np.ndarray
+) -> str | np.ndarray:
     """Check and prepare the `x_scale` parameter for optimization.
 
     This function checks and prepares the `x_scale` parameter for the
@@ -214,14 +220,14 @@ def check_x_scale(
 
     Parameters
     ----------
-    x_scale : str | Sequence[float]
+    x_scale : str | Sequence[float] | np.ndarray
         The scaling for the optimization variables.
-    x0 : Sequence[float]
+    x0 : np.ndarray
         The initial guess for the optimization variables.
 
     Returns
     -------
-    str | Sequence[float]
+    str | np.ndarray
         The prepared `x_scale` parameter.
     """
 
@@ -229,21 +235,21 @@ def check_x_scale(
         return x_scale
 
     try:
-        x_scale = np.asarray(x_scale, dtype=float)
-        valid = np.all(np.isfinite(x_scale)) and np.all(x_scale > 0)
+        x_scale_arr = np.asarray(x_scale, dtype=float)
+        valid: bool = bool(np.all(np.isfinite(x_scale_arr)) and np.all(x_scale_arr > 0))
     except (ValueError, TypeError):
         valid = False
 
     if not valid:
         raise ValueError("`x_scale` must be 'jac' or array_like with positive numbers.")
 
-    if x_scale.ndim == 0:
-        x_scale = np.resize(x_scale, x0.shape)
+    if x_scale_arr.ndim == 0:
+        x_scale_arr = np.resize(x_scale_arr, x0.shape)
 
-    if x_scale.shape != x0.shape:
+    if x_scale_arr.shape != x0.shape:
         raise ValueError("Inconsistent shapes between `x_scale` and `x0`.")
 
-    return x_scale
+    return x_scale_arr
 
 
 class AutoDiffJacobian:
@@ -592,9 +598,6 @@ class LeastSquares:
             def wrap_func(fargs, xdata, ydata, data_mask, atransform):
                 return jnp.atleast_1d(fun(fargs, *args, **kwargs))
 
-            def wrap_jac(fargs, xdata, ydata, data_mask, atransform):
-                return jnp.atleast_2d(jac(fargs, *args, **kwargs))
-
             rfunc = wrap_func
             if jac is None:
                 adj = AutoDiffJacobian()
@@ -602,6 +605,12 @@ class LeastSquares:
                     wrap_func, x0.size, masked=False, mode=jacobian_mode_selected
                 )
             else:
+                # Capture jac in closure with proper type narrowing
+                jac_callable = jac
+
+                def wrap_jac(fargs, xdata, ydata, data_mask, atransform):
+                    return jnp.atleast_2d(jac_callable(fargs, *args, **kwargs))
+
                 jac_func = wrap_jac
 
         return rfunc, jac_func
@@ -658,7 +667,7 @@ class LeastSquares:
         if not np.all(np.isfinite(f0)):
             if self.enable_stability:
                 self.logger.warning("Non-finite residuals detected, attempting to fix")
-                f0 = self.stability_guard.safe_clip(f0, -1e10, 1e10)
+                f0 = jnp.clip(f0, -1e10, 1e10)
                 if not np.all(np.isfinite(f0)):
                     raise ValueError("Residuals are not finite after stabilization")
             else:
@@ -757,6 +766,7 @@ class LeastSquares:
         self.logger.debug("Computing initial cost", loss_type=loss, f_scale=f_scale)
 
         if callable(loss):
+            assert loss_function is not None, "loss_function must be provided when loss is callable"
             rho = loss_function(f0, f_scale, data_mask=data_mask)
             if rho.shape != (3, m):
                 raise ValueError("The return value of `loss` callable has wrong shape.")
@@ -768,7 +778,7 @@ class LeastSquares:
         else:
             initial_cost_jnp = self.trf.default_loss_func(f0)
 
-        return np.array(initial_cost_jnp)
+        return float(initial_cost_jnp)
 
     def _check_memory_and_adjust_solver(
         self, m: int, n: int, method: str, tr_solver: str | None
@@ -799,7 +809,7 @@ class LeastSquares:
                 memory_required
             )
             if not is_available:
-                self.logger.warning("Memory constraint detected", message=msg)
+                self.logger.warning("Memory constraint detected", details=msg)
                 # Switch to memory-efficient solver
                 tr_solver = "lsmr"
 
@@ -837,7 +847,7 @@ class LeastSquares:
             def stable_rfunc(x, xd, yd, dm, tf):
                 result = original_rfunc(x, xd, yd, dm, tf)
                 if not jnp.all(jnp.isfinite(result)):
-                    result = self.stability_guard.safe_clip(result, -1e10, 1e10)
+                    result = jnp.clip(result, -1e10, 1e10)
                 return result
 
             # NOTE: Jacobian is NOT wrapped - stability checked only at initialization
