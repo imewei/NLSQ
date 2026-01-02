@@ -1,0 +1,77 @@
+name: Code Quality Gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.12"
+  MAX_COMPLEXITY: 15
+  MAX_FILE_LINES: 2000
+
+jobs:
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      # T037: Cyclomatic complexity check (fails on CC > 15)
+      - name: Check cyclomatic complexity
+        run: |
+          echo "Checking cyclomatic complexity (max: ${{ env.MAX_COMPLEXITY }})..."
+          if uv run ruff check nlsq/ --select=C901 --output-format=github 2>&1 | grep -q "C901"; then
+            echo "::error::Functions with complexity > ${{ env.MAX_COMPLEXITY }} detected"
+            uv run ruff check nlsq/ --select=C901
+            exit 1
+          fi
+          echo "All functions have complexity <= ${{ env.MAX_COMPLEXITY }}"
+
+      # T038: mypy type checking for core files
+      - name: Type check with mypy
+        run: |
+          echo "Running mypy type checking..."
+          uv run mypy nlsq/ --show-error-codes
+
+      # T039: File size warning (non-blocking)
+      - name: Check file sizes
+        run: |
+          echo "Checking for files > ${{ env.MAX_FILE_LINES }} lines..."
+          large_files=$(find nlsq -name "*.py" -exec wc -l {} \; | awk -v max=${{ env.MAX_FILE_LINES }} '$1 > max {print $0}' | sort -rn)
+          if [ -n "$large_files" ]; then
+            echo "::warning::Files exceeding ${{ env.MAX_FILE_LINES }} lines:"
+            echo "$large_files" | while read line; do
+              count=$(echo "$line" | awk '{print $1}')
+              file=$(echo "$line" | awk '{print $2}')
+              echo "::warning file=$file::$file has $count lines (limit: ${{ env.MAX_FILE_LINES }})"
+            done
+          else
+            echo "All files are within size limits"
+          fi
+
+      # Summary report
+      - name: Quality Summary
+        if: always()
+        run: |
+          echo "## Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Complexity (CC <= ${{ env.MAX_COMPLEXITY }}) | ${{ job.status == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| mypy Type Check | ${{ job.status == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| File Size (warning only) | N/A |" >> $GITHUB_STEP_SUMMARY
