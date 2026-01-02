@@ -146,7 +146,8 @@ class ProgressBar(CallbackBase):
 
         # Update postfix with current status
         g_norm = info.get("gradient_norm", np.nan)
-        self._pbar.set_postfix(  # type: ignore[attr-defined]
+        assert self._pbar is not None  # guaranteed by check above
+        self._pbar.set_postfix(
             {
                 "cost": f"{cost:.6e}",
                 "grad": f"{g_norm:.3e}",
@@ -155,7 +156,7 @@ class ProgressBar(CallbackBase):
         )
 
         # Update progress bar
-        self._pbar.update(delta_nfev if self.max_nfev else 1)  # type: ignore[attr-defined]
+        self._pbar.update(delta_nfev if self.max_nfev else 1)
 
     def close(self):
         """Close progress bar."""

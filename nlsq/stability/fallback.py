@@ -25,7 +25,7 @@ Example:
 """
 
 from collections.abc import Callable
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol
 
 import numpy as np
 
@@ -36,6 +36,12 @@ __all__ = [
     "FallbackResult",
     "FallbackStrategy",
 ]
+
+
+class StrategyFactory(Protocol):
+    """Protocol for strategy classes that can be instantiated with no arguments."""
+
+    def __call__(self) -> "FallbackStrategy": ...
 
 
 class FallbackStrategy:
@@ -342,7 +348,7 @@ class FallbackOrchestrator:
     ...     print(f"Recovered using: {result.fallback_strategy_used}")
     """
 
-    DEFAULT_STRATEGIES: ClassVar[list[type[FallbackStrategy]]] = [
+    DEFAULT_STRATEGIES: ClassVar[list[StrategyFactory]] = [
         AlternativeMethodStrategy,
         PerturbInitialGuessStrategy,
         AdjustTolerancesStrategy,
@@ -363,7 +369,7 @@ class FallbackOrchestrator:
 
         # Initialize strategies
         if strategies is None:
-            self.strategies = [strategy() for strategy in self.DEFAULT_STRATEGIES]  # type: ignore[call-arg]
+            self.strategies = [strategy() for strategy in self.DEFAULT_STRATEGIES]
         else:
             self.strategies = strategies
 

@@ -643,7 +643,7 @@ class NLSQLogger:
                 values.append(val)
             data[key] = np.array(values)
 
-        np.savez(file=filename, **data)  # type: ignore[arg-type]
+        np.savez(str(filename), **data)  # type: ignore[arg-type]
         self.info(f"Saved optimization history to {filename}")
 
 

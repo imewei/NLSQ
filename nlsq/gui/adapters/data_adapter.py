@@ -16,7 +16,7 @@ The adapter handles:
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -110,7 +110,7 @@ def load_from_file(
     # Check if this is a file-like object (Streamlit UploadedFile)
     if hasattr(file_path_or_uploaded, "read"):
         # It's a file-like object - write to temp file
-        file_obj: BinaryIO = file_path_or_uploaded  # type: ignore[assignment]
+        file_obj: BinaryIO = cast(BinaryIO, file_path_or_uploaded)
 
         # Get the filename if available (Streamlit UploadedFile has .name)
         filename = getattr(file_obj, "name", "uploaded_data.txt")

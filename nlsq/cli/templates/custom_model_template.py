@@ -57,6 +57,7 @@ Notes
 # Imports - Use JAX numpy for the model function
 # =============================================================================
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -67,7 +68,7 @@ import numpy as np
 
 def damped_oscillator(
     x: np.ndarray, amplitude: float, decay: float, frequency: float, phase: float
-) -> np.ndarray:
+) -> jax.Array:
     """Damped sinusoidal oscillator model.
 
     Mathematical form:
@@ -102,8 +103,7 @@ def damped_oscillator(
     - Half-life of amplitude: t_half = ln(2) / decay
     - At x=0: y = amplitude * cos(phase)
     """
-    # JAX arrays are duck-type compatible with numpy arrays
-    return amplitude * jnp.exp(-decay * x) * jnp.cos(frequency * x + phase)  # type: ignore[return-value]
+    return amplitude * jnp.exp(-decay * x) * jnp.cos(frequency * x + phase)
 
 
 # =============================================================================
