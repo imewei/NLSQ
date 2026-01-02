@@ -126,7 +126,6 @@ initialize_gpu_safely()
 from dataclasses import dataclass
 from typing import NamedTuple
 
-
 from nlsq.caching.unified_cache import get_global_cache
 from nlsq.callbacks import StopOptimization
 from nlsq.common_jax import CommonJIT, solve_lsq_trust_region_jax
@@ -350,7 +349,7 @@ class BoundsContext:
         lb: jnp.ndarray,
         ub: jnp.ndarray,
         x_scale: jnp.ndarray | None = None,
-    ) -> "BoundsContext":
+    ) -> BoundsContext:
         """Create BoundsContext from bounds arrays.
 
         Parameters

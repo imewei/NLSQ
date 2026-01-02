@@ -701,4 +701,4 @@ class GaussNewtonPhase:
         return total_cost
 
 
-__all__ = ["GaussNewtonPhase", "GNResult"]
+__all__ = ["GNResult", "GaussNewtonPhase"]

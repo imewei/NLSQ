@@ -10,8 +10,8 @@ optimization divergence in iterative least-squares solvers.
 
 Historical note (v0.3.1-v0.3.4):
   Randomized SVD was available but caused 3-25x worse fitting errors in
-  XPCS applications due to accumulated approximation error across trust-region
-  iterations. See tests/test_svd_regression.py for evidence.
+  iterative least-squares applications due to accumulated approximation error
+  across trust-region iterations. See tests/test_svd_regression.py for evidence.
 """
 
 import warnings

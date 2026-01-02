@@ -879,7 +879,7 @@ def _apply_stability_checks(
             )
             if not rescale_data:
                 logger.info(
-                    "  (rescale_data=False: data rescaling disabled for physics applications)"
+                    "  (rescale_data=False: data rescaling disabled for applications requiring unit preservation)"
                 )
 
             xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
@@ -1179,8 +1179,8 @@ def curve_fit(
     rescale_data : bool, optional
         When stability='auto', controls whether data is automatically rescaled
         to [0, 1] for ill-conditioned or large-range data. Set to False for
-        physics applications where data must maintain physical units (e.g.,
-        time delays in seconds, scattering vectors in nm^-1). NaN/Inf handling
+        applications where data must maintain physical units (e.g.,
+        time in seconds, frequency in Hz). NaN/Inf handling
         and parameter normalization are still applied when stability='auto'.
         Default: True.
     max_jacobian_elements_for_svd : int, optional

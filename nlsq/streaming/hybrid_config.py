@@ -152,7 +152,7 @@ class HybridStreamingConfig:
         Enable variance regularization for parameter groups. When enabled,
         adds a penalty term to the loss function that penalizes variance
         within specified parameter groups. This is essential for preventing
-        per-angle parameter absorption in XPCS laminar flow fitting.
+        per-group parameter absorption in multi-component fitting.
 
         The regularized loss becomes ``L = MSE + group_variance_lambda *
         sum(Var(group_i))`` where each group_i is a slice of parameters
@@ -164,8 +164,8 @@ class HybridStreamingConfig:
         for light regularization (allows moderate group variation), 0.1-1.0
         for moderate regularization (constrains groups to be similar), or
         10-1000 for strong regularization (forces groups to be nearly uniform).
-        For XPCS with per-angle scaling, use ``lambda ~ 0.1 * n_data /
-        (n_phi * sigma^2)`` where sigma is the expected experimental
+        For multi-component fits with per-group parameters, use ``lambda ~ 0.1 * n_data /
+        (n_groups * sigma^2)`` where sigma is the expected experimental
         variation (~0.05 for 5%).
 
     group_variance_indices : list of tuple, default=None
@@ -173,10 +173,10 @@ class HybridStreamingConfig:
         regularization. Each tuple specifies a slice [start:end] of the
         parameter vector that should have low internal variance.
 
-        Example for XPCS with 23 angles: ``group_variance_indices = [(0, 23),
+        Example for 23 independent groups: ``group_variance_indices = [(0, 23),
         (23, 46)]`` constrains contrast params [0:23] and offset params [23:46]
         to each have low variance, preventing them from absorbing
-        angle-dependent physical signals.
+        group-dependent physical signals.
 
         If None when enable_group_variance_regularization=True, no groups
         are regularized (effectively disabling the feature).
@@ -354,7 +354,7 @@ class HybridStreamingConfig:
     cg_absolute_tolerance: float = 1e-10  # Safety floor
     cg_param_threshold: int = 2000  # Auto-select threshold: p < this -> materialized
 
-    # Group variance regularization (for per-angle parameter absorption prevention)
+    # Group variance regularization (for per-group parameter absorption prevention)
     enable_group_variance_regularization: bool = False
     group_variance_lambda: float = 0.01
     group_variance_indices: list[tuple[int, int]] | None = None
@@ -365,7 +365,7 @@ class HybridStreamingConfig:
     # This is useful for:
     # - Heteroscedastic data (varying noise levels across groups)
     # - Emphasizing certain regions or groups of data
-    # - Domain-specific weighting (e.g., angle-dependent weights in XPCS)
+    # - Domain-specific weighting (e.g., group-dependent weights)
     # The weights are looked up using the first column of x_data as group index.
     enable_residual_weighting: bool = False
     residual_weights: list[float] | None = None  # Per-group weights, shape (n_groups,)
@@ -823,15 +823,15 @@ class HybridStreamingConfig:
     def scientific_default(cls):
         """Create profile optimized for scientific computing workflows.
 
-        This preset is tuned for scientific fitting scenarios like XPCS,
-        scattering, spectroscopy, and other physics-based models:
+        This preset is tuned for scientific fitting scenarios like spectroscopy,
+        decay curves, and other physics-based models:
         - Balanced defense layers that protect without being too aggressive
         - Float64 precision for numerical accuracy
         - L-BFGS warmup with moderate iterations
         - Enabled checkpoints for long-running fits
 
         Use this when:
-        - Fitting physics-based models (XPCS, scattering, decay curves)
+        - Fitting physics-based models (spectroscopy, decay curves)
         - Numerical precision is important
         - Parameters may have multiple scales
         - Reproducibility is required

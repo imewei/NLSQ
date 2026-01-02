@@ -25,7 +25,7 @@ Key Design Decisions (v0.3.0)
    (default 10M elements), SVD computation is skipped to avoid O(min(m,n)^2 * max(m,n))
    overhead. Only O(n) NaN/Inf checking is performed.
 
-3. **rescale_data parameter**: Physics applications (XPCS, scattering, etc.) can
+3. **rescale_data parameter**: Applications requiring unit preservation can
    set rescale_data=False to preserve physical units. The default (True) rescales
    data to [0, 1] when ill-conditioning is detected.
 
@@ -39,7 +39,7 @@ MAX_JACOBIAN_ELEMENTS_FOR_SVD : int = 10_000_000
     Performance characteristics:
     - 10M element Jacobian: ~1.5GB RAM, ~5 seconds (GPU)
     - SVD per iteration can exceed total optimization time
-    - For XPCS applications (1M points x 3 params = 3M), SVD is computed
+    - For large datasets (1M points x 3 params = 3M), SVD is computed
     - For large datasets (10M points x 3 params = 30M), SVD is skipped
 
 CONDITION_THRESHOLD : float = 1e12
@@ -1028,9 +1028,11 @@ def apply_automatic_fixes(
         Report from check_problem_stability(). If None, will be computed.
     rescale_data : bool, optional
         If True (default), rescale xdata/ydata to [0, 1] when ill-conditioned
-        or large range is detected. Set to False for physics applications where
-        data must maintain physical units (e.g., time delays in seconds,
-        scattering vectors in nm^-1). Default: True.
+        or large range is detected. Set to False for applications requiring
+        unit preservation where data must maintain physical units (e.g.,
+        time in seconds, frequency in Hz). NaN/Inf handling
+        and parameter normalization are still applied when stability='auto'.
+        Default: True.
 
     Returns
     -------
@@ -1055,7 +1057,7 @@ def apply_automatic_fixes(
     >>> x_fixed, y_fixed, p0_fixed, info = apply_automatic_fixes(x, y, [2.0, 1.0])
     >>> print(f"Applied fixes: {info['applied_fixes']}")
 
-    >>> # For physics data, disable rescaling to preserve physical units
+    >>> # For applications requiring unit preservation, disable rescaling
     >>> x_fixed, y_fixed, p0_fixed, info = apply_automatic_fixes(
     ...     x, y, [2.0, 1.0], rescale_data=False
     ... )

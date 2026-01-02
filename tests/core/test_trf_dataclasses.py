@@ -5,14 +5,14 @@ These dataclasses encapsulate TRF algorithm parameters and state.
 
 from __future__ import annotations
 
-import pytest
 import jax.numpy as jnp
+import pytest
 
 from nlsq.core.trf import (
-    TRFConfig,
-    StepContext,
     BoundsContext,
     FallbackContext,
+    StepContext,
+    TRFConfig,
 )
 
 
