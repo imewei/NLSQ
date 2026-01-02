@@ -34,15 +34,53 @@ nlsq.minpack.curve_fit : Main curve fitting function
 
 import warnings
 from collections.abc import Callable
-from typing import Union
+from typing import Any, Protocol, Union, runtime_checkable
 
 import jax.numpy as jnp
 import numpy as np
 
 # Type aliases for clarity
-ArrayLike = Union[np.ndarray, jnp.ndarray, list[float], float]
+# Note: ArrayLike uses numpy/jax arrays. Lists should be converted to arrays
+# before being passed to these functions. ArrayReturn is Any because JAX
+# operations return jax.Array which varies based on input type.
+ArrayLike = Union[np.ndarray, jnp.ndarray, float]
+ArrayReturn = Any  # JAX operations return jax.Array, use Any for flexibility
 ParameterList = list[float]
 BoundsTuple = tuple[list[float], list[float]]
+
+
+@runtime_checkable
+class FittableFunction(Protocol):
+    """Protocol for curve fitting functions with parameter estimation.
+
+    Functions implementing this protocol can be used with `p0='auto'`
+    in curve_fit() for automatic initial parameter estimation.
+    """
+
+    def __call__(self, x: ArrayLike, *args: float) -> ArrayReturn:
+        """Evaluate the function at x with given parameters."""
+        ...
+
+    def estimate_p0(self, xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
+        """Estimate initial parameters from data."""
+        ...
+
+    def bounds(self) -> BoundsTuple:
+        """Return default parameter bounds."""
+        ...
+
+
+def _attach_methods(
+    func: Callable[..., ArrayLike],
+    estimate_p0_func: Callable[[np.ndarray, np.ndarray], ParameterList],
+    bounds_func: Callable[[], BoundsTuple],
+) -> None:
+    """Attach estimate_p0 and bounds methods to a function.
+
+    This is a typed helper that avoids scattered type: ignore comments.
+    """
+    object.__setattr__(func, "estimate_p0", estimate_p0_func)
+    object.__setattr__(func, "bounds", bounds_func)
 
 
 # ============================================================================
@@ -50,7 +88,7 @@ BoundsTuple = tuple[list[float], list[float]]
 # ============================================================================
 
 
-def linear(x: ArrayLike, a: float, b: float) -> ArrayLike:
+def linear(x: ArrayLike, a: float, b: float) -> ArrayReturn:
     """Linear function: y = a*x + b
 
     Parameters
@@ -78,7 +116,7 @@ def linear(x: ArrayLike, a: float, b: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(linear, x, y, p0='auto')
     >>> print(f"Slope: {popt[0]:.2f}, Intercept: {popt[1]:.2f}")
     """
-    return a * x + b  # type: ignore[operator]
+    return a * x + b
 
 
 def estimate_p0_linear(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -123,8 +161,7 @@ def bounds_linear() -> BoundsTuple:
 
 
 # Attach methods to function
-linear.estimate_p0 = estimate_p0_linear  # type: ignore[attr-defined]
-linear.bounds = bounds_linear  # type: ignore[attr-defined]
+_attach_methods(linear, estimate_p0_linear, bounds_linear)
 
 
 # ============================================================================
@@ -132,7 +169,7 @@ linear.bounds = bounds_linear  # type: ignore[attr-defined]
 # ============================================================================
 
 
-def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
+def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayReturn:
     """Exponential decay: y = a * exp(-b*x) + c
 
     Common for radioactive decay, cooling curves, discharge curves.
@@ -172,7 +209,7 @@ def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(exponential_decay, x, y, p0='auto')
     >>> print(f"Half-life: {np.log(2)/popt[1]:.2f}")
     """
-    return a * jnp.exp(-b * x) + c  # type: ignore[operator]
+    return a * jnp.exp(-b * x) + c
 
 
 def estimate_p0_exponential_decay(
@@ -241,11 +278,10 @@ def bounds_exponential_decay() -> BoundsTuple:
     return ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
 
 
-exponential_decay.estimate_p0 = estimate_p0_exponential_decay  # type: ignore[attr-defined]
-exponential_decay.bounds = bounds_exponential_decay  # type: ignore[attr-defined]
+_attach_methods(exponential_decay, estimate_p0_exponential_decay, bounds_exponential_decay)
 
 
-def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
+def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayReturn:
     """Exponential growth: y = a * exp(b*x) + c
 
     Common for population growth, compound interest, bacterial growth.
@@ -284,7 +320,7 @@ def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(exponential_growth, x, y, p0='auto')
     >>> print(f"Doubling time: {np.log(2)/popt[1]:.2f}")
     """
-    return a * jnp.exp(b * x) + c  # type: ignore[operator]
+    return a * jnp.exp(b * x) + c
 
 
 def estimate_p0_exponential_growth(
@@ -331,8 +367,11 @@ def estimate_p0_exponential_growth(
     return [float(a), float(b), float(c)]
 
 
-exponential_growth.estimate_p0 = estimate_p0_exponential_growth  # type: ignore[attr-defined]
-exponential_growth.bounds = lambda: ([0, 0, -np.inf], [np.inf, np.inf, np.inf])  # type: ignore[attr-defined]
+_attach_methods(
+    exponential_growth,
+    estimate_p0_exponential_growth,
+    lambda: ([0, 0, -np.inf], [np.inf, np.inf, np.inf]),
+)
 
 
 # ============================================================================
@@ -340,7 +379,7 @@ exponential_growth.bounds = lambda: ([0, 0, -np.inf], [np.inf, np.inf, np.inf]) 
 # ============================================================================
 
 
-def gaussian(x: ArrayLike, amp: float, mu: float, sigma: float) -> ArrayLike:
+def gaussian(x: ArrayLike, amp: float, mu: float, sigma: float) -> ArrayReturn:
     """Gaussian (normal distribution) function: y = amp * exp(-(x-mu)² / (2*sigma²))
 
     Common for spectral peaks, chromatography peaks, probability distributions.
@@ -380,7 +419,7 @@ def gaussian(x: ArrayLike, amp: float, mu: float, sigma: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(gaussian, x, y, p0='auto')
     >>> print(f"Peak at {popt[1]:.2f}, FWHM = {2.355*popt[2]:.2f}")
     """
-    return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))  # type: ignore[operator]
+    return amp * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -430,8 +469,11 @@ def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     return [float(amp), float(mu), float(sigma)]
 
 
-gaussian.estimate_p0 = estimate_p0_gaussian  # type: ignore[attr-defined]
-gaussian.bounds = lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf])  # type: ignore[attr-defined]
+_attach_methods(
+    gaussian,
+    estimate_p0_gaussian,
+    lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf]),
+)
 
 
 # ============================================================================
@@ -439,7 +481,7 @@ gaussian.bounds = lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf])  # type: i
 # ============================================================================
 
 
-def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayLike:
+def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayReturn:
     """Sigmoid (logistic) function: y = L / (1 + exp(-k*(x-x0))) + b
 
     Common for dose-response curves, growth saturation, S-curves.
@@ -481,7 +523,7 @@ def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(sigmoid, x, y, p0='auto')
     >>> print(f"EC50 (midpoint): {popt[1]:.2f}")
     """
-    return L / (1 + jnp.exp(-k * (x - x0))) + b  # type: ignore[operator]
+    return L / (1 + jnp.exp(-k * (x - x0))) + b
 
 
 def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -529,8 +571,11 @@ def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     return [float(L), float(x0), float(k), float(b)]
 
 
-sigmoid.estimate_p0 = estimate_p0_sigmoid  # type: ignore[attr-defined]
-sigmoid.bounds = lambda: ([0, -np.inf, 0, -np.inf], [np.inf, np.inf, np.inf, np.inf])  # type: ignore[attr-defined]
+_attach_methods(
+    sigmoid,
+    estimate_p0_sigmoid,
+    lambda: ([0, -np.inf, 0, -np.inf], [np.inf, np.inf, np.inf, np.inf]),
+)
 
 
 # ============================================================================
@@ -538,7 +583,7 @@ sigmoid.bounds = lambda: ([0, -np.inf, 0, -np.inf], [np.inf, np.inf, np.inf, np.
 # ============================================================================
 
 
-def power_law(x: ArrayLike, a: float, b: float) -> ArrayLike:
+def power_law(x: ArrayLike, a: float, b: float) -> ArrayReturn:
     """Power law function: y = a * x^b
 
     Common for scaling relationships, fractals, allometry.
@@ -576,7 +621,7 @@ def power_law(x: ArrayLike, a: float, b: float) -> ArrayLike:
     >>> popt, pcov = curve_fit(power_law, x, y, p0='auto')
     >>> print(f"Scaling exponent: {popt[1]:.2f}")
     """
-    return a * jnp.power(x, b)  # type: ignore[arg-type]
+    return a * jnp.power(x, b)
 
 
 def estimate_p0_power_law(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -621,8 +666,11 @@ def estimate_p0_power_law(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList
         return [1.0, 1.0]
 
 
-power_law.estimate_p0 = estimate_p0_power_law  # type: ignore[attr-defined]
-power_law.bounds = lambda: ([0, -np.inf], [np.inf, np.inf])  # type: ignore[attr-defined]
+_attach_methods(
+    power_law,
+    estimate_p0_power_law,
+    lambda: ([0, -np.inf], [np.inf, np.inf]),
+)
 
 
 # ============================================================================
@@ -686,8 +734,7 @@ def polynomial(degree: int) -> Callable:
         return ([-np.inf] * (degree + 1), [np.inf] * (degree + 1))
 
     # Attach methods and metadata
-    poly.estimate_p0 = estimate_p0_poly  # type: ignore[attr-defined]
-    poly.bounds = bounds_poly  # type: ignore[attr-defined]
+    _attach_methods(poly, estimate_p0_poly, bounds_poly)
     poly.__name__ = f"polynomial_degree_{degree}"
     poly.__doc__ = f"""Polynomial of degree {degree}: y = c0\\*x^{degree} + c1\\*x^{degree - 1} + ... + c{degree}
 
