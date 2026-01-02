@@ -37,7 +37,13 @@ See Also:
     nlsq.trf : Trust Region Reflective implementation
 """
 
-# mypy: ignore-errors
+# mypy: disable-error-code="arg-type,return-value,assignment,attr-defined,index"
+# Note: mypy errors are mostly arg-type/return-value mismatches where Optional values
+# are passed to methods expecting non-Optional, return type mismatches (many methods
+# have legacy tuple return types but actually return CurveFitResult), and dict indexing
+# on result types that support both tuple unpacking and dict-like access.
+
+from __future__ import annotations
 
 import time
 import warnings
@@ -2607,7 +2613,7 @@ class CurveFit:
                 memory_required
             )
             if not is_available:
-                self.logger.warning("Memory constraint detected", message=msg)
+                self.logger.warning("Memory constraint detected", details=msg)
                 kwargs["tr_solver"] = "lsmr"
 
         # Start curve fit timer and call least squares
