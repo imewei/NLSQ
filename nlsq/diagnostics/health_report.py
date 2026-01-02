@@ -206,14 +206,15 @@ def _sort_issues(issues: list[ModelHealthIssue]) -> list[ModelHealthIssue]:
     list[ModelHealthIssue]
         Sorted list with CRITICAL first, then WARNING, then INFO.
     """
-    # Define severity order (lower value = higher priority)
+    # Define severity order by name (lower value = higher priority)
+    # Using names as keys avoids enum identity issues across import paths
     severity_order = {
-        IssueSeverity.CRITICAL: 0,
-        IssueSeverity.WARNING: 1,
-        IssueSeverity.INFO: 2,
+        "CRITICAL": 0,
+        "WARNING": 1,
+        "INFO": 2,
     }
 
-    return sorted(issues, key=lambda i: (severity_order[i.severity], i.code))
+    return sorted(issues, key=lambda i: (severity_order.get(i.severity.name, 3), i.code))
 
 
 def _determine_status(
@@ -243,12 +244,12 @@ def _determine_status(
     HealthStatus
         Overall status.
     """
-    # Check for critical issues
-    if any(issue.severity == IssueSeverity.CRITICAL for issue in all_issues):
+    # Check for critical issues (use .name to avoid enum identity issues)
+    if any(issue.severity.name == "CRITICAL" for issue in all_issues):
         return HealthStatus.CRITICAL
 
-    # Check for warning issues
-    if any(issue.severity == IssueSeverity.WARNING for issue in all_issues):
+    # Check for warning issues (use .name to avoid enum identity issues)
+    if any(issue.severity.name == "WARNING" for issue in all_issues):
         return HealthStatus.WARNING
 
     # Check if all components are unavailable or None (per contract error handling)

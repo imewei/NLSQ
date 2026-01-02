@@ -362,12 +362,7 @@ class TrustRegionJITFunctions:
             # Check if Gauss-Newton step is within trust region
             p_gn_norm = jnp.linalg.norm(p_gn)
 
-            # If within trust region, return Gauss-Newton step
-            if p_gn_norm <= Delta:
-                return p_gn
-
-            # Otherwise, need to find optimal alpha using regularized CG
-            # Use simple approach: solve with current alpha
+            # Compute regularized solution for use when step exceeds trust region
             p_reg, _, _ = conjugate_gradient_solve(J, f, d, alpha, max_iter)
 
             # Scale to trust region boundary
@@ -376,8 +371,15 @@ class TrustRegionJITFunctions:
             p_reg_norm = jnp.linalg.norm(p_reg)
             p_reg_norm = jnp.maximum(p_reg_norm, 1e-10)
             scaling = jnp.clip(Delta / p_reg_norm, 0.1, 10.0)
+            p_scaled = scaling * p_reg
 
-            return scaling * p_reg
+            # Use lax.cond for JAX-compatible conditional (instead of Python if)
+            # If within trust region, return Gauss-Newton step; otherwise scaled step
+            return lax.cond(
+                p_gn_norm <= Delta,
+                lambda: p_gn,
+                lambda: p_scaled,
+            )
 
         @jit
         def solve_tr_subproblem_cg_bounds(
@@ -404,12 +406,7 @@ class TrustRegionJITFunctions:
             # Check if Gauss-Newton step is within trust region
             p_gn_norm = jnp.linalg.norm(p_gn)
 
-            # If within trust region, return Gauss-Newton step
-            if p_gn_norm <= Delta:
-                return p_gn
-
-            # Otherwise, need to find optimal alpha using regularized CG
-            # Use simple approach: solve with current alpha
+            # Compute regularized solution for use when step exceeds trust region
             p_reg, _, _ = conjugate_gradient_solve(
                 J_augmented, f_augmented, d_augmented, alpha, max_iter
             )
@@ -420,8 +417,15 @@ class TrustRegionJITFunctions:
             p_reg_norm = jnp.linalg.norm(p_reg)
             p_reg_norm = jnp.maximum(p_reg_norm, 1e-10)
             scaling = jnp.clip(Delta / p_reg_norm, 0.1, 10.0)
+            p_scaled = scaling * p_reg
 
-            return scaling * p_reg
+            # Use lax.cond for JAX-compatible conditional (instead of Python if)
+            # If within trust region, return Gauss-Newton step; otherwise scaled step
+            return lax.cond(
+                p_gn_norm <= Delta,
+                lambda: p_gn,
+                lambda: p_scaled,
+            )
 
         # Store the iterative solver functions
         self.conjugate_gradient_solve = conjugate_gradient_solve

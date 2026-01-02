@@ -242,16 +242,21 @@ def validate_model(path: Path, trusted: bool = False) -> ModelValidationResult:
 def validate_path(path: Path, base_dir: Path | None = None) -> bool:
     """Validate path for traversal attacks.
 
-    Prevents path traversal attacks by ensuring the path stays within
-    an allowed base directory.
+    Prevents path traversal attacks by ensuring:
+    1. Absolute paths: Must exist (user explicitly provided the path)
+    2. Relative paths: Must stay within the base directory
+
+    This allows users to explicitly specify absolute paths to model files
+    they trust, while preventing relative path traversal attacks like
+    `../../../etc/passwd`.
 
     Parameters
     ----------
     path : Path
         Path to validate.
     base_dir : Path | None, default=None
-        Base directory that paths must stay within. If None, uses
-        current working directory.
+        Base directory that relative paths must stay within. If None, uses
+        current working directory. Only applies to relative paths.
 
     Returns
     -------
@@ -264,13 +269,21 @@ def validate_path(path: Path, base_dir: Path | None = None) -> bool:
     True
     >>> validate_path(Path("../../../etc/passwd"))
     False
+    >>> validate_path(Path("/tmp/my_model.py"))  # Absolute paths are allowed
+    True
     """
-    if base_dir is None:
-        base_dir = Path.cwd()
-
     try:
-        # Resolve both paths to absolute paths
+        # Resolve the path to its canonical form
         resolved_path = path.resolve()
+
+        # If the original path is absolute, allow it if it exists
+        # (user explicitly provided an absolute path)
+        if path.is_absolute():
+            return resolved_path.exists()
+
+        # For relative paths, ensure they stay within base_dir
+        if base_dir is None:
+            base_dir = Path.cwd()
         resolved_base = base_dir.resolve()
 
         # Check if the resolved path is within the base directory
