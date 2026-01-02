@@ -1997,5 +1997,234 @@ class TestLbfgsWarmupUtilities:
         assert isinstance(line_search_failed, bool)
 
 
+class TestResidualWeighting:
+    """Tests for residual weighting in loss computation.
+
+    Residual weighting enables weighted least squares optimization where
+    different data groups (e.g., angles in XPCS) have different importance.
+    This is used for anti-degeneracy Layer 5 (shear-sensitivity weighting).
+    """
+
+    def test_residual_weighting_config_validation(self):
+        """Test that residual weighting config validates correctly."""
+        # Valid config
+        config = HybridStreamingConfig(
+            enable_residual_weighting=True,
+            residual_weights=[1.0, 2.0, 3.0],
+        )
+        assert config.enable_residual_weighting is True
+        assert config.residual_weights == [1.0, 2.0, 3.0]
+
+        # Disabled config (no weights needed)
+        config_disabled = HybridStreamingConfig(
+            enable_residual_weighting=False,
+            residual_weights=None,
+        )
+        assert config_disabled.enable_residual_weighting is False
+
+    def test_residual_weighting_requires_weights(self):
+        """Test that enabling weighting without weights raises error."""
+        with pytest.raises(ValueError, match="residual_weights must be provided"):
+            HybridStreamingConfig(
+                enable_residual_weighting=True,
+                residual_weights=None,
+            )
+
+    def test_residual_weighting_rejects_empty_weights(self):
+        """Test that empty weight array is rejected."""
+        with pytest.raises(ValueError, match="must not be empty"):
+            HybridStreamingConfig(
+                enable_residual_weighting=True,
+                residual_weights=[],
+            )
+
+    def test_residual_weighting_rejects_negative_weights(self):
+        """Test that negative weights are rejected."""
+        with pytest.raises(ValueError, match="must all be positive"):
+            HybridStreamingConfig(
+                enable_residual_weighting=True,
+                residual_weights=[1.0, -0.5, 2.0],
+            )
+
+    def test_residual_weighting_rejects_zero_weights(self):
+        """Test that zero weights are rejected."""
+        with pytest.raises(ValueError, match="must all be positive"):
+            HybridStreamingConfig(
+                enable_residual_weighting=True,
+                residual_weights=[1.0, 0.0, 2.0],
+            )
+
+    def test_residual_weights_setup(self):
+        """Test that residual weights are properly set up in optimizer."""
+        weights = [0.5, 1.0, 1.5, 2.0]
+        config = HybridStreamingConfig(
+            enable_residual_weighting=True,
+            residual_weights=weights,
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Setup normalization triggers _setup_residual_weights
+        def model(x, a, b):
+            return a * x + b
+
+        p0 = jnp.array([1.0, 1.0])
+        optimizer._setup_normalization(model, p0, bounds=None)
+
+        # Weights should be converted to JAX array
+        assert optimizer._residual_weights_jax is not None
+        assert optimizer._residual_weights_jax.shape == (4,)
+        assert jnp.allclose(
+            optimizer._residual_weights_jax, jnp.array(weights, dtype=jnp.float64)
+        )
+
+    def test_residual_weights_disabled_by_default(self):
+        """Test that residual weighting is disabled by default."""
+        config = HybridStreamingConfig()
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        assert config.enable_residual_weighting is False
+        assert optimizer._residual_weights_jax is None
+
+    def test_set_residual_weights_dynamically(self):
+        """Test updating residual weights after initialization."""
+        import numpy as np
+
+        config = HybridStreamingConfig(
+            enable_residual_weighting=True,
+            residual_weights=[1.0, 1.0, 1.0],
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Update weights
+        new_weights = np.array([0.3, 0.7, 1.0, 1.3, 1.7])
+        optimizer.set_residual_weights(new_weights)
+
+        assert optimizer._residual_weights_jax.shape == (5,)
+        assert jnp.allclose(optimizer._residual_weights_jax, jnp.array(new_weights))
+
+    def test_weighted_loss_function_creation(self):
+        """Test that weighted loss function is created correctly."""
+        # Create optimizer with residual weighting
+        weights = [0.5, 1.0, 2.0]  # 3 groups with different weights
+        config = HybridStreamingConfig(
+            enable_residual_weighting=True,
+            residual_weights=weights,
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Setup model
+        def model(x, a, b):
+            return a * x[:, 1] + b  # Use second column as x value
+
+        p0 = jnp.array([2.0, 1.0])
+        optimizer._setup_normalization(model, p0, bounds=None)
+
+        # Create loss function
+        loss_fn = optimizer._create_warmup_loss_fn()
+
+        # Create test data with group indices in first column
+        # Group 0: indices 0-2, Group 1: indices 3-5, Group 2: indices 6-8
+        n_per_group = 3
+        x_data = jnp.array([
+            [0, 1.0], [0, 2.0], [0, 3.0],  # Group 0
+            [1, 1.0], [1, 2.0], [1, 3.0],  # Group 1
+            [2, 1.0], [2, 2.0], [2, 3.0],  # Group 2
+        ])
+        # True model: y = 2*x + 1
+        y_data = 2.0 * x_data[:, 1] + 1.0
+
+        # Get normalized params
+        params = optimizer.normalized_params
+
+        # Compute loss
+        loss = loss_fn(params, x_data, y_data)
+
+        # Loss should be finite
+        assert jnp.isfinite(loss)
+
+        # With perfect params, loss should be very small
+        assert loss < 1e-10
+
+    def test_weighted_loss_emphasizes_high_weight_groups(self):
+        """Test that weighted loss emphasizes groups with higher weights."""
+        # Create optimizer with residual weighting
+        # Group 0 has low weight, Group 1 has high weight
+        weights = [0.1, 10.0]
+        config = HybridStreamingConfig(
+            enable_residual_weighting=True,
+            residual_weights=weights,
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Setup model
+        def model(x, a):
+            return a * jnp.ones(x.shape[0])
+
+        p0 = jnp.array([1.0])
+        optimizer._setup_normalization(model, p0, bounds=None)
+
+        # Create loss function
+        loss_fn = optimizer._create_warmup_loss_fn()
+
+        # Create test data: error only in group 0 (low weight)
+        x_data_low_weight_error = jnp.array([
+            [0, 0.0], [0, 0.0],  # Group 0
+            [1, 0.0], [1, 0.0],  # Group 1
+        ])
+        y_data_low_weight_error = jnp.array([10.0, 10.0, 1.0, 1.0])
+
+        # Create test data: error only in group 1 (high weight)
+        x_data_high_weight_error = jnp.array([
+            [0, 0.0], [0, 0.0],  # Group 0
+            [1, 0.0], [1, 0.0],  # Group 1
+        ])
+        y_data_high_weight_error = jnp.array([1.0, 1.0, 10.0, 10.0])
+
+        params = optimizer.normalized_params
+
+        # Compute losses
+        loss_low_weight_error = loss_fn(params, x_data_low_weight_error, y_data_low_weight_error)
+        loss_high_weight_error = loss_fn(params, x_data_high_weight_error, y_data_high_weight_error)
+
+        # Error in high-weight group should produce higher loss
+        assert loss_high_weight_error > loss_low_weight_error
+
+    def test_weighted_loss_with_group_variance_regularization(self):
+        """Test that weighted loss works with group variance regularization."""
+        # Create optimizer with both features
+        weights = [1.0, 2.0]
+        config = HybridStreamingConfig(
+            enable_residual_weighting=True,
+            residual_weights=weights,
+            enable_group_variance_regularization=True,
+            group_variance_lambda=0.1,
+            group_variance_indices=[(0, 2)],  # First 2 params are a group
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Setup model with 3 parameters (2 in regularized group + 1 other)
+        def model(x, a, b, c):
+            return a * x[:, 1] + b + c
+
+        p0 = jnp.array([1.0, 2.0, 0.5])
+        optimizer._setup_normalization(model, p0, bounds=None)
+
+        # Create loss function
+        loss_fn = optimizer._create_warmup_loss_fn()
+
+        # Create test data
+        x_data = jnp.array([
+            [0, 1.0], [0, 2.0],
+            [1, 1.0], [1, 2.0],
+        ])
+        y_data = jnp.array([3.5, 4.5, 3.5, 4.5])
+
+        params = optimizer.normalized_params
+
+        # Loss should be computable without error
+        loss = loss_fn(params, x_data, y_data)
+        assert jnp.isfinite(loss)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
