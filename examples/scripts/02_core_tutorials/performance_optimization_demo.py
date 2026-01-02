@@ -547,10 +547,10 @@ def demo_adaptive_hybrid_streaming():
     print("=" * 70)
 
     def exponential_model(x, a, b, c):
-        return a * np.exp(-b * x) + c
+        return a * jnp.exp(-b * x) + c
 
-    # Simulate large dataset
-    total_data_size = cap_samples(50_000)
+    # Simulate large dataset (reduced in quick mode for faster CI)
+    total_data_size = 5_000 if QUICK else 50_000
     true_params = [5.0, 1.2, 0.5]
 
     x_data = np.linspace(0, 10, total_data_size)
@@ -605,8 +605,8 @@ def demo_combined_optimization():
 
         return result
 
-    # Problem size
-    n_points = cap_samples(50_000)
+    # Problem size (reduced in quick mode for faster CI)
+    n_points = 5_000 if QUICK else 50_000
     n_peaks = 4 if QUICK else 10
     n_params = n_peaks * 3  # 30 parameters
 

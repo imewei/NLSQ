@@ -38,10 +38,13 @@ EXCLUDED_PATTERNS = {
     "10_cli-commands/models",
     "10_cli-commands/data",
     "10_cli-commands/output",
+    # Performance optimization demo - inherently slow (~150s), covered by unit tests
+    "performance_optimization_demo",
 }
 
 # Scripts that need longer timeout (complex demonstrations)
 LONG_TIMEOUT_PATTERNS = {
+    "02_core_tutorials",  # performance_optimization_demo includes streaming
     "03_advanced",
     "08_workflow_system",
 }
