@@ -277,10 +277,17 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - Python >=3.12 (per pyproject.toml) + JAX 0.8.0, NumPy >=2.2, SciPy >=1.16.0, Optax >=0.2.6 (009-code-quality-refactor)
 - Python 3.12+ (per pyproject.toml requires-python) + PySide6 (Qt bindings), pyqtgraph (GPU-accelerated plotting), existing nlsq core (JAX 0.8.0, NumPy 2.x, SciPy 1.16+) (010-streamlit-to-qt)
 - N/A (file-based import/export, no database) (010-streamlit-to-qt)
+- Python >=3.12 + PySide6, pyqtgraph, qdarktheme (Qt GUI); JAX 0.8.0, NumPy, SciPy (core) (011-remove-streamlit)
+- N/A (file-based import/export only) (011-remove-streamlit)
 
 ## Recent Changes
+- 011-remove-streamlit: Remove Streamlit GUI (v0.5.1):
+  - **Streamlit Removal**: Removed legacy Streamlit GUI in favor of native Qt desktop app
+  - **Component Relocation**: Shared components (adapters, session_state, presets) moved to gui_qt
+  - **Dependency Cleanup**: Removed streamlit, streamlit-monaco, pywebview from dependencies
+  - Spec: `/specs/011-remove-streamlit/`
 - 010-streamlit-to-qt: Native Qt Desktop GUI (v0.5.0):
-  - **Native Desktop App**: PySide6-based GUI replacing Streamlit web interface
+  - **Native Desktop App**: PySide6-based GUI (Qt)
   - **GPU-Accelerated Plots**: pyqtgraph with OpenGL for 500K+ point datasets
   - **5-Page Workflow**: Data Loading, Model Selection, Fitting Options, Results, Export
   - **Theme Support**: Light/dark themes via qdarktheme with Ctrl+T toggle

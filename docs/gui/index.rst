@@ -1,8 +1,9 @@
 GUI User Guide
 ==============
 
-NLSQ provides an interactive graphical interface for curve fitting,
-built with Streamlit. The GUI allows you to fit data without writing code.
+NLSQ provides a native desktop GUI built with PySide6 (Qt) and pyqtgraph
+for GPU-accelerated scientific plotting. The GUI allows you to fit data
+without writing code.
 
 .. toctree::
    :maxdepth: 2
@@ -16,15 +17,15 @@ Launch the GUI from the command line:
 
 .. code-block:: bash
 
-   nlsq gui
+   nlsq-gui
 
 Or from Python:
 
 .. code-block:: python
 
-   from nlsq.gui import launch_gui
+   from nlsq.gui_qt import run_desktop
 
-   launch_gui()
+   run_desktop()
 
 Features
 --------

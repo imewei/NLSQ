@@ -15,18 +15,8 @@ import os
 import sys
 import warnings
 
-# Suppress Streamlit logging before any imports
-# This prevents "missing ScriptRunContext" warnings during docs build
-logging.getLogger("streamlit").setLevel(logging.ERROR)
-logging.getLogger("streamlit.runtime").setLevel(logging.ERROR)
-logging.getLogger("streamlit.runtime.scriptrunner_utils").setLevel(logging.ERROR)
-logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(
-    logging.ERROR
-)
-
 # Filter out specific warnings that we can't easily suppress
 warnings.filterwarnings("ignore", category=UserWarning, module="sphinx")
-warnings.filterwarnings("ignore", message=".*ScriptRunContext.*")
 
 add_path = os.path.abspath("../..")
 sys.path.insert(0, os.path.abspath("../.."))

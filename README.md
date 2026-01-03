@@ -25,7 +25,7 @@ NLSQ is a nonlinear least squares curve fitting library built on [JAX](https://g
 - **GPU/TPU acceleration** - JIT-compiled kernels via XLA
 - **Automatic differentiation** - No manual Jacobian calculations needed
 - **Large dataset support** - Handles 100M+ data points with streaming optimization
-- **Interactive GUI** - Streamlit-based graphical interface for no-code curve fitting
+- **Interactive GUI** - Native Qt desktop application for no-code curve fitting
 
 ## Installation
 
@@ -194,7 +194,7 @@ See the [GUI User Guide](docs/gui_user_guide.md) for detailed documentation.
 | **Mixed precision** | Automatic float32→float64 upgrade when needed |
 | **Workflow system** | Auto-selects strategy based on dataset size |
 | **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |
-| **Interactive GUI** | No-code curve fitting with Streamlit interface |
+| **Interactive GUI** | No-code curve fitting with Qt desktop application |
 | **Model Diagnostics** | Identifiability analysis, gradient health monitoring, sloppy model detection |
 
 ## Architecture
@@ -204,10 +204,10 @@ NLSQ is organized into well-separated layers (~72,000 lines):
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                             USER INTERFACES                                  │
-│  GUI (Streamlit)        CLI (Click)            Python API                   │
+│  Qt GUI (PySide6)       CLI (Click)            Python API                   │
 │  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()       │
-│  ├── Plotly components  ├── Security auditing  ├── CurveFit class           │
-│  └── Desktop (webview)  └── Export formats     └── LargeDatasetFitter       │
+│  ├── pyqtgraph plots    ├── Security auditing  ├── CurveFit class           │
+│  └── Native desktop     └── Export formats     └── LargeDatasetFitter       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                        OPTIMIZATION ORCHESTRATION                            │
 │  Workflow System         Global Optimization      Streaming Optimizer        │
@@ -427,7 +427,7 @@ See [examples/README.md](examples/README.md) for the full index.
 - NumPy 2.0+
 - SciPy 1.14.0+
 
-**GUI requirements**: Streamlit 1.52+, Plotly 6.5+
+**GUI requirements**: PySide6 6.6+, pyqtgraph 0.13+
 
 **GPU support** (Linux only): CUDA 12.1-12.9, NVIDIA driver >= 525
 

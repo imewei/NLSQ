@@ -81,15 +81,6 @@ Utilities
 - ``nlsq.config`` - Configuration management
 - ``nlsq.logging`` - Logging utilities
 
-GUI Module
-~~~~~~~~~~
-
-- ``nlsq.gui`` - Interactive Streamlit-based GUI for curve fitting
-- ``nlsq.gui.adapters`` - Bridge between GUI and core fitting engine
-- ``nlsq.gui.components`` - Reusable UI components
-
-See :doc:`nlsq.gui` for complete GUI API documentation.
-
 See :doc:`modules` for complete documentation of all modules.
 
 Development Tools

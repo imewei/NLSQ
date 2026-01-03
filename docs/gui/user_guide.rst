@@ -14,18 +14,15 @@ Getting Started
 Launching the GUI
 ~~~~~~~~~~~~~~~~~
 
-There are three ways to launch the NLSQ GUI:
+There are two ways to launch the NLSQ GUI:
 
 .. code-block:: bash
 
-   # Using the CLI command (recommended)
-   nlsq gui
+   # Using the entry point command (recommended)
+   nlsq-gui
 
-   # Using Streamlit directly
-   streamlit run nlsq/gui/app.py
-
-   # As a desktop application (requires pywebview)
-   python -m nlsq.gui.run_desktop
+   # Using the Python module
+   python -m nlsq.gui_qt
 
 Workflow Overview
 ~~~~~~~~~~~~~~~~~

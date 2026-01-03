@@ -16,10 +16,10 @@ The ``nlsq`` package is organized into logical subpackages:
 
 .. code-block:: text
 
-   nlsq/ (~72,278 lines)
+   nlsq/ (~62,000 lines)
    ├── core/           13,667 lines - Core optimization (curve_fit, TRF, LeastSquares)
    ├── streaming/      11,260 lines - Large dataset handling, 4-phase optimizer
-   ├── gui/           ~10,000 lines - Streamlit-based interactive interface
+   ├── gui_qt/        ~10,000 lines - Native Qt desktop GUI (PySide6/pyqtgraph)
    ├── cli/            4,853 lines - Command-line interface with security
    ├── diagnostics/    4,082 lines - Model health analysis, plugin system
    ├── caching/        3,363 lines - JIT caching, memory management
@@ -41,10 +41,10 @@ The following diagram illustrates the layered architecture of NLSQ:
    ┌─────────────────────────────────────────────────────────────────────────────┐
    │                             USER INTERFACES                                  │
    ├─────────────────────────────────────────────────────────────────────────────┤
-   │  GUI (Streamlit)        CLI (Click)            Python API                   │
+   │  Qt GUI (PySide6)       CLI (Click)            Python API                   │
    │  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()       │
-   │  ├── Plotly components  ├── Security auditing  ├── CurveFit class           │
-   │  └── Desktop (webview)  └── Export formats     └── LargeDatasetFitter       │
+   │  ├── pyqtgraph plots    ├── Security auditing  ├── CurveFit class           │
+   │  └── Native desktop     └── Export formats     └── LargeDatasetFitter       │
    ├─────────────────────────────────────────────────────────────────────────────┤
    │                        OPTIMIZATION ORCHESTRATION                            │
    ├─────────────────────────────────────────────────────────────────────────────┤
@@ -390,39 +390,43 @@ Integration strategy by dataset size:
 - Large (>100M): Tournament selection during streaming warmup
 
 
-GUI System
-----------
+Qt GUI System
+-------------
 
-The ``gui/`` package provides a Streamlit-based interactive interface:
+The ``gui_qt/`` package provides a native Qt desktop application:
 
 .. code-block:: text
 
-   gui/
-   ├── app.py              - Main Streamlit application
-   ├── state.py            - SessionState management
-   ├── adapters/           - NLSQ-GUI bridge (data, fit, model, export)
-   ├── components/         - Reusable UI widgets (Plotly plots, forms)
-   ├── pages/              - Multi-page workflow
-   │   ├── 1_Data_Loading.py
-   │   ├── 2_Model_Selection.py
-   │   ├── 3_Fitting_Options.py
-   │   ├── 4_Results.py
-   │   └── 5_Export.py
-   └── run_desktop.py      - pywebview integration for native windows
+   gui_qt/
+   ├── __init__.py         - run_desktop() entry point
+   ├── main_window.py      - MainWindow with sidebar navigation
+   ├── app_state.py        - AppState (Qt signals wrapping SessionState)
+   ├── session_state.py    - SessionState dataclass
+   ├── theme.py            - ThemeConfig, ThemeManager (light/dark)
+   ├── autosave.py         - AutosaveManager for crash recovery
+   ├── pages/              - 5-page workflow (QWidget-based)
+   │   ├── data_loading.py
+   │   ├── model_selection.py
+   │   ├── fitting_options.py
+   │   ├── results.py
+   │   └── export.py
+   ├── widgets/            - Reusable Qt widgets
+   ├── plots/              - pyqtgraph-based scientific plots
+   └── adapters/           - NLSQ-GUI bridge (data, fit, model, export)
 
 Launch options:
 
 .. code-block:: bash
 
-   # Web app
-   streamlit run nlsq/gui/app.py
+   # Entry point command
+   nlsq-gui
 
-   # Desktop application
-   python -m nlsq.gui.run_desktop
+   # Python module
+   python -m nlsq.gui_qt
 
    # Python API
-   from nlsq.gui import run_desktop
-   run_desktop(width=1400, height=900)
+   from nlsq.gui_qt import run_desktop
+   run_desktop()
 
 
 Design Patterns
@@ -447,7 +451,7 @@ Design Patterns
    * - Lazy Loading
      - ``__getattr__`` for specialty modules (50%+ import time reduction)
    * - Adapter
-     - GUI adapters bridge NLSQ ↔ Streamlit
+     - GUI adapters bridge NLSQ ↔ Qt widgets
 
 
 Data Flow Diagrams

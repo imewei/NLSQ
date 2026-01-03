@@ -1,31 +1,30 @@
-# NLSQ GUI Development Guide
+# NLSQ Qt GUI Development Guide
 
-This guide covers best practices, common pitfalls, and code review checklists for developing the NLSQ Streamlit-based GUI.
+This guide covers best practices, common pitfalls, and code review checklists for developing the NLSQ Qt desktop GUI.
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
 2. [Code Review Checklist](#code-review-checklist)
-3. [Streamlit Gotchas](#streamlit-gotchas)
-4. [State Management](#state-management)
-5. [Error Handling](#error-handling)
-6. [Testing Guidelines](#testing-guidelines)
+3. [State Management](#state-management)
+4. [Qt Best Practices](#qt-best-practices)
+5. [Testing Guidelines](#testing-guidelines)
 
 ---
 
 (architecture-overview)=
 ## Architecture Overview
 
-The GUI follows a layered architecture:
+The Qt GUI follows a layered architecture:
 
 ```
-Pages (Streamlit UI)
+Pages (QWidget-based UI)
+    ↓
+AppState (Qt signals for reactivity)
     ↓
 Adapters (Data transformation)
     ↓
-Components (Reusable UI elements)
-    ↓
-State (SessionState management)
+SessionState (Plain dataclass)
     ↓
 Core NLSQ (minpack, fit, etc.)
 ```
@@ -33,27 +32,35 @@ Core NLSQ (minpack, fit, etc.)
 ### Directory Structure
 
 ```
-nlsq/gui/
-├── app.py                 # Main entry point
-├── state.py               # SessionState dataclass
+nlsq/gui_qt/
+├── __init__.py            # run_desktop() entry point
+├── main_window.py         # MainWindow with sidebar navigation
+├── app_state.py           # AppState (Qt signals wrapping SessionState)
+├── session_state.py       # SessionState dataclass
 ├── presets.py             # Fitting presets
-├── pages/                 # Streamlit pages
-│   ├── 1_Data_Loading.py
-│   ├── 2_Model_Selection.py
-│   ├── 3_Fitting_Options.py
-│   ├── 4_Results.py
-│   └── 5_Export.py
-├── adapters/              # Bridge between GUI and core
-│   ├── fit_adapter.py
-│   ├── data_adapter.py
-│   ├── model_adapter.py
-│   └── export_adapter.py
-├── components/            # Reusable UI components
+├── theme.py               # ThemeConfig, ThemeManager
+├── autosave.py            # AutosaveManager for crash recovery
+├── pages/                 # 5-page workflow (QWidget-based)
+│   ├── __init__.py
+│   ├── data_loading.py
+│   ├── model_selection.py
+│   ├── fitting_options.py
+│   ├── results.py
+│   └── export.py
+├── widgets/               # Reusable Qt widgets
+│   ├── code_editor.py
 │   ├── param_config.py
-│   ├── live_cost_plot.py
-│   └── plotly_*.py
-└── utils/
-    └── theme.py           # Theme management
+│   └── ...
+├── plots/                 # pyqtgraph-based scientific plots
+│   ├── fit_plot.py
+│   ├── residuals_plot.py
+│   └── live_cost_plot.py
+└── adapters/              # Bridge between GUI and core
+    ├── __init__.py
+    ├── fit_adapter.py
+    ├── data_adapter.py
+    ├── model_adapter.py
+    └── export_adapter.py
 ```
 
 ---
@@ -63,7 +70,7 @@ nlsq/gui/
 
 ### State Management
 
-- [ ] **Check for element-level None in lists**: Never assume a list is valid just because it's not `None`. Always check individual elements.
+- [ ] **Check for element-level None in lists**: Never assume a list is valid just because it's not `None`.
 
   ```python
   # BAD: Only checks if list exists
@@ -75,35 +82,19 @@ nlsq/gui/
       return False
   ```
 
-- [ ] **Validate state before operations**: Check that required state fields are populated before using them.
+- [ ] **Use AppState for UI updates**: Changes should go through `AppState` methods to emit proper signals.
 
-- [ ] **Use type annotations**: All state fields should have proper type hints.
+- [ ] **Connect signals to slots**: Ensure UI components react to state changes via Qt signals.
 
 ### Error Handling
 
-- [ ] **Store errors in session state before `st.rerun()`**: Direct `st.error()` calls are lost on rerun.
+- [ ] **Show errors via QMessageBox**: Use Qt's native dialogs for user feedback.
 
   ```python
-  # BAD: Error message lost after rerun
-  try:
-      result = run_operation()
-  except Exception as e:
-      st.error(f"Failed: {e}")  # Lost after st.rerun()
-  st.rerun()
+  from PySide6.QtWidgets import QMessageBox
 
-  # GOOD: Error persists in session state
-  try:
-      result = run_operation()
-  except Exception as e:
-      st.session_state.error = f"Failed: {e}"
-  st.rerun()
-
-  # Later in render:
-  if st.session_state.error:
-      st.error(st.session_state.error)
+  QMessageBox.warning(self, "Error", f"Operation failed: {error}")
   ```
-
-- [ ] **Return error messages from functions**: Functions should return errors rather than displaying them directly.
 
 - [ ] **Log errors with context**: Use structured logging with relevant context.
 
@@ -124,180 +115,188 @@ nlsq/gui/
 
 ### UI Components
 
-- [ ] **Apply dark theme CSS on all pages**: Call `apply_dark_theme_css()` at the start of each page's `main()` function.
+- [ ] **Apply theme consistently**: Use ThemeManager for consistent styling.
 
-- [ ] **Use unique keys for Streamlit widgets**: Avoid key conflicts across reruns.
-
-- [ ] **Initialize session state variables**: Check and initialize state before use.
+- [ ] **Use lazy imports in pages**: Import adapters inside methods to avoid loading Qt at module import time.
 
   ```python
-  if "my_var" not in st.session_state:
-      st.session_state.my_var = default_value
+  def _on_button_click(self) -> None:
+      from nlsq.gui_qt.adapters.fit_adapter import run_fit
+      # ...
   ```
-
----
-
-(streamlit-gotchas)=
-## Streamlit Gotchas
-
-### 1. `st.rerun()` Clears Displayed Messages
-
-**Problem**: `st.error()`, `st.warning()`, and `st.success()` messages are cleared when `st.rerun()` is called.
-
-**Solution**: Store messages in session state and display them on re-render.
-
-```python
-# Store
-st.session_state.fit_error = "Fitting failed: convergence error"
-st.rerun()
-
-# Display (after rerun)
-if st.session_state.fit_error:
-    st.error(st.session_state.fit_error)
-```
-
-### 2. Multi-Page Apps Run Pages Independently
-
-**Problem**: CSS, state, and configurations set in `app.py` don't automatically apply to other pages.
-
-**Solution**: Each page must:
-- Call shared initialization functions (e.g., `apply_dark_theme_css()`)
-- Access shared state through `st.session_state`
-
-### 3. Callbacks Execute Before Widget Rendering
-
-**Problem**: Widget callbacks run during the rerun cycle before the UI is rendered.
-
-**Solution**: Use session state flags to track operations, not return values from callbacks.
-
-### 4. Widget Keys Must Be Unique
-
-**Problem**: Duplicate keys cause Streamlit errors or unexpected behavior.
-
-**Solution**: Include context in keys:
-```python
-st.text_input("Value", key=f"param_{param_name}_{index}")
-```
-
-### 5. File Uploaders Clear on Rerun
-
-**Problem**: Uploaded files are cleared after any rerun.
-
-**Solution**: Process and store file data immediately:
-```python
-if uploaded_file is not None:
-    content = uploaded_file.read()
-    st.session_state.file_content = content
-```
 
 ---
 
 (state-management)=
 ## State Management
 
-### SessionState Design
+### SessionState vs AppState
 
-The `SessionState` dataclass holds all workflow configuration. Key principles:
+The GUI uses two state classes:
 
-1. **Single source of truth**: All UI state flows through `st.session_state.nlsq_state`
-2. **Type safety**: Use dataclass with type annotations
-3. **Explicit defaults**: All fields have default values
-4. **Copyable**: Implement `copy()` for state snapshots
+1. **SessionState** (`session_state.py`): Plain dataclass holding all workflow configuration
+2. **AppState** (`app_state.py`): Qt-observable wrapper that emits signals for reactive updates
 
-### Auto p0 Handling
+Key principles:
 
-When `auto_p0=True`:
-1. Check if model has `estimate_p0` method
-2. Call `model.estimate_p0(xdata, ydata)` to get estimates
-3. Fill in `None` values in `state.p0` with estimates
-4. Preserve user-set values (non-None)
-5. Log which values were filled
+1. **AppState wraps SessionState**: Access underlying state via `app_state.state`
+2. **Use AppState methods for changes**: Call methods like `set_data()`, `set_model()` to emit signals
+3. **Connect to signals for updates**: Pages connect to `data_changed`, `model_changed`, etc.
 
 ```python
-if state.auto_p0 and has_auto_p0:
-    estimated = model.estimate_p0(xdata, ydata)
-    for i, v in enumerate(state.p0):
-        if v is None:
-            state.p0[i] = estimated[i]
+class FittingOptionsPage(QWidget):
+    def __init__(self, app_state: AppState) -> None:
+        self._app_state = app_state
+        # Connect to state changes
+        app_state.data_changed.connect(self._on_data_changed)
+        app_state.model_changed.connect(self._on_model_changed)
+```
+
+### PageState for Navigation Guards
+
+The `PageState` class derives navigation permissions from `SessionState`:
+
+```python
+page_state = PageState.from_session_state(app_state.state)
+if page_state.can_access("fitting_options"):
+    # Enable fitting options page
 ```
 
 ---
 
-(error-handling)=
-## Error Handling
+(qt-best-practices)=
+## Qt Best Practices
 
-### Logging Configuration
+### 1. Use Signals and Slots
 
-Use structured logging with the `nlsq.gui.*` namespace:
+**Problem**: Direct method calls between widgets create tight coupling.
+
+**Solution**: Use Qt's signal/slot mechanism for loose coupling.
 
 ```python
-import logging
+class FitWorker(QObject):
+    finished = Signal(object)  # Emit result
+    error = Signal(str)        # Emit error message
 
-logger = logging.getLogger("nlsq.gui.fitting")
-
-logger.info("Auto p0 applied | p0=%s", p0)
-logger.warning("Estimation failed | error=%s", e)
+    def run(self) -> None:
+        try:
+            result = perform_fit()
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
 ```
 
-### Error Return Pattern
+### 2. Run Long Operations in Threads
 
-Functions that can fail should return error messages:
+**Problem**: Long operations block the UI.
+
+**Solution**: Use `QThread` with worker objects.
 
 ```python
-def run_fit(state: SessionState) -> str | None:
-    """Execute fitting.
+class FitWorker(QObject):
+    finished = Signal(object)
+    progress = Signal(int, float)
 
-    Returns
-    -------
-    str | None
-        Error message if failed, None if successful.
-    """
-    try:
+    def run(self) -> None:
+        # Perform fit in background thread
         result = execute_fit(...)
-        state.fit_result = result
-        return None
-    except Exception as e:
-        return f"Fitting failed: {e}"
+        self.finished.emit(result)
+
+# Usage
+self._thread = QThread()
+self._worker = FitWorker(state)
+self._worker.moveToThread(self._thread)
+self._thread.started.connect(self._worker.run)
+self._worker.finished.connect(self._on_fit_complete)
+self._thread.start()
+```
+
+### 3. Lazy Import Qt Dependencies
+
+**Problem**: Importing PySide6/PyQt at module level slows down CLI usage.
+
+**Solution**: Import Qt dependencies inside functions when possible.
+
+```python
+def __getattr__(name: str):
+    """Lazy import pages to avoid importing Qt at module load time."""
+    if name == "DataLoadingPage":
+        from nlsq.gui_qt.pages.data_loading import DataLoadingPage
+        return DataLoadingPage
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+```
+
+### 4. Use pyqtgraph for Scientific Plots
+
+**Problem**: Matplotlib is slow for large datasets.
+
+**Solution**: Use pyqtgraph with OpenGL for GPU-accelerated plotting.
+
+```python
+from pyqtgraph import PlotWidget
+
+class FitPlotWidget(PlotWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setBackground("w")
+        self._data_scatter = self.plot([], [], pen=None, symbol="o")
+        self._fit_curve = self.plot([], [], pen="r")
 ```
 
 ---
 
+(testing-guidelines)=
 ## Testing Guidelines
+
+### pytest-qt Integration
+
+Use `pytest-qt` for testing Qt widgets:
+
+```python
+import pytest
+
+@pytest.fixture
+def app_state() -> AppState:
+    """Create a fresh AppState instance for testing."""
+    from nlsq.gui_qt.app_state import AppState
+    return AppState()
+
+def test_set_data_emits_signal(qtbot, app_state):
+    """Test that set_data emits data_changed signal."""
+    import numpy as np
+
+    with qtbot.waitSignal(app_state.data_changed, timeout=1000):
+        app_state.set_data(
+            xdata=np.array([1, 2, 3]),
+            ydata=np.array([1, 4, 9])
+        )
+```
 
 ### Test Categories
 
-1. **Unit tests**: Test individual functions in isolation
-2. **Component tests**: Test UI components with mock data
-3. **Integration tests**: Test full workflows end-to-end
+1. **Unit tests**: Test individual functions and state logic
+2. **Widget tests**: Test UI components with pytest-qt
+3. **Integration tests**: Test full workflows with qtbot
 
-### Regression Tests
-
-Add regression tests for any bug fix:
+### Common Patterns
 
 ```python
-def test_p0_all_none_without_auto_p0_not_ready(self):
-    """Regression: p0=[None, None, None] should NOT be ready without auto_p0.
+def test_page_state_from_session_state(app_state):
+    """Test PageState derivation from SessionState."""
+    import numpy as np
+    from nlsq.gui_qt.pages import PageState
 
-    Bug: is_ready_to_fit only checked `if state.p0 is None` but didn't
-    check if all elements in the list were None.
-    """
-    state.p0 = [None, None, None]
-    state.auto_p0 = False
+    # Initially, data not loaded
+    page_state = PageState.from_session_state(app_state.state)
+    assert page_state.data_loaded is False
+    assert page_state.can_access("model_selection") is False
 
-    all_none = all(v is None for v in state.p0)
-    is_ready = not all_none or (state.auto_p0 and has_auto_p0)
-
-    assert is_ready is False
+    # After setting data
+    app_state.set_data(np.array([1, 2]), np.array([1, 4]))
+    page_state = PageState.from_session_state(app_state.state)
+    assert page_state.data_loaded is True
+    assert page_state.can_access("model_selection") is True
 ```
-
-### Test Naming Convention
-
-Pattern: `test_<component>_<scenario>_<expected_behavior>`
-
-Examples:
-- `test_p0_all_none_without_auto_p0_not_ready`
-- `test_auto_p0_fills_none_values`
-- `test_bounds_conversion_handles_none`
 
 ---
 
@@ -306,39 +305,55 @@ Examples:
 ### Safe State Access
 
 ```python
-def get_session_state() -> SessionState:
-    """Get or initialize session state."""
-    if "nlsq_state" not in st.session_state:
-        st.session_state.nlsq_state = initialize_state()
-    return st.session_state.nlsq_state
+def _get_param_names(self) -> list[str]:
+    """Get parameter names from the model."""
+    from nlsq.gui_qt.adapters.model_adapter import get_model_info
+
+    state = self._app_state.state
+    if state.model_func is not None:
+        info = get_model_info(state.model_func)
+        return info.get("param_names", [])
+    return []
 ```
 
 ### Conditional Readiness Check
 
 ```python
-def is_ready_to_fit(state: SessionState) -> tuple[bool, str]:
+def _is_ready_to_fit(self) -> tuple[bool, str]:
     """Check if prerequisites are met.
 
     Returns (is_ready, message).
     """
-    if state.xdata is None:
+    state = self._app_state.state
+
+    if state.xdata is None or state.ydata is None:
         return False, "Data not loaded"
 
+    if state.model_func is None:
+        return False, "Model not selected"
+
     if state.p0 is None or all(v is None for v in state.p0):
-        if not (state.auto_p0 and model_has_auto_p0):
+        if not state.auto_p0:
             return False, "Initial parameters not set"
 
     return True, "Ready"
 ```
 
-### Theme-Aware Pages
+### Theme-Aware Widgets
 
 ```python
-def main() -> None:
-    """Page entry point."""
-    apply_dark_theme_css()  # Apply theme first
-    init_page_state()  # Initialize page-specific state
+class MyWidget(QWidget):
+    def __init__(self, theme_config: ThemeConfig) -> None:
+        super().__init__()
+        self._theme = theme_config
+        self._apply_theme()
 
-    st.title("Page Title")
-    # ... rest of page
+    def _apply_theme(self) -> None:
+        """Apply current theme styling."""
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {self._theme.background};
+                color: {self._theme.text};
+            }}
+        """)
 ```

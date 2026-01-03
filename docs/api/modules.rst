@@ -90,16 +90,6 @@ YAML-based workflow execution from the command line:
 
    nlsq.cli
 
-GUI Interface (v0.4.1+)
------------------------
-
-Interactive Streamlit-based graphical interface for curve fitting:
-
-.. toctree::
-   :maxdepth: 2
-
-   nlsq.gui
-
 Enhanced Features (v0.1.1)
 --------------------------
 
@@ -237,9 +227,6 @@ Complete Module Listing
 
 **Command-Line Interface Modules** (NEW in v0.4.1+):
 - :doc:`nlsq.cli` - CLI commands: ``nlsq fit``, ``nlsq batch``, ``nlsq info``, ``nlsq gui``
-
-**GUI Modules** (NEW in v0.4.1+):
-- :doc:`nlsq.gui` - Interactive Streamlit-based GUI for curve fitting
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management
