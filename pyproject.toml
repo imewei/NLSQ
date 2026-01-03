@@ -157,15 +157,6 @@ build = [
     "setuptools-scm>=9.0.0",   # Version management (tested on 9.2.2)
     "wheel>=0.42.0",           # Wheel builder (tested on 0.42.0)
 ]
-gui = [
-    # Streamlit GUI dependencies for desktop application
-    "streamlit>=1.52.2",           # Tested on 1.52.2
-    "plotly>=6.5.0",               # Tested on 6.5.0
-    "streamlit-monaco>=0.1.3",     # Tested on 0.1.3
-    "streamlit-desktop-app>=0.3.4", # Tested on 0.3.4
-    "pyyaml>=6.0.3",               # Tested on 6.0.3
-    "pywebview>=5.4",              # Tested on 5.4
-]
 gui_qt = [
     # PySide6 Qt GUI dependencies for native desktop application
     "PySide6>=6.6.0",              # Qt bindings (LGPL license)
@@ -212,12 +203,6 @@ all = [
     "setuptools>=68.0.0",
     "setuptools-scm>=9.0.0",
     "wheel>=0.42.0",
-    # GUI dependencies
-    "streamlit>=1.52.0",
-    "plotly>=6.5.0",
-    "streamlit-monaco>=0.1.3",
-    "streamlit-desktop-app>=0.3.4",
-    "pywebview>=5.4",
 ]
 
 [project.urls]
@@ -339,7 +324,6 @@ max-complexity = 15
 "nlsq/adaptive_hybrid_streaming.py" = ["PLR0913", "PLR0912", "PLR0915", "PLR2004"]
 "nlsq/hybrid_streaming_config.py" = ["PLR0913"]
 "nlsq/parameter_normalizer.py" = ["PLR0913", "PLR0912"]
-"nlsq/gui/*" = ["PLR0913", "PLR0912", "PLR0915", "C901"]  # GUI modules (known tech debt)
 "nlsq/diagnostics/*" = ["PLR0913", "PLR0912", "PLR0915", "C901"]  # Model Health Diagnostics
 "nlsq/cli/*" = ["C901"]  # CLI modules (known tech debt)
 "nlsq/core/least_squares.py" = ["C901"]  # least_squares CC=17 (known tech debt)
@@ -414,19 +398,7 @@ module = "yaml"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "streamlit.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = "plotly.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "streamlit_monaco.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "webview.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -504,10 +476,6 @@ ignore_errors = true  # Base optimizer class
 [[tool.mypy.overrides]]
 module = "nlsq.smart_cache"
 ignore_errors = true  # Optional xxhash dependency
-
-[[tool.mypy.overrides]]
-module = "nlsq.gui.*"
-ignore_errors = true  # GUI modules with Streamlit dependencies
 
 # Critical modules - type checked (v0.3.0 - strengthened)
 [[tool.mypy.overrides]]
@@ -635,8 +603,3 @@ exclude_dirs = ["tests", "examples", "docs", "benchmark", "scripts"]
 # Only fail on MEDIUM and HIGH severity issues
 skips = ["B404", "B603", "B607", "B110", "B101"]
 
-[tool.check-wheel-contents]
-# Ignore W004 for Streamlit multipage app files
-# These use numeric prefixes (1_, 2_, etc.) for page ordering per Streamlit convention
-# They are not importable Python modules by design
-ignore = ["W004"]
