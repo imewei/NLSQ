@@ -117,6 +117,8 @@ class SessionState:
     custom_code: str = ""
     custom_file_path: str | None = None
     custom_function_name: str = ""
+    model_config: dict | None = None  # Qt GUI: model configuration dict
+    model_func: Any = None  # Qt GUI: resolved model function callable
 
     # Parameter configuration
     p0: list[float] | None = None
@@ -203,6 +205,8 @@ class SessionState:
             custom_code=self.custom_code,
             custom_file_path=self.custom_file_path,
             custom_function_name=self.custom_function_name,
+            model_config=self.model_config,
+            model_func=self.model_func,
             p0=self.p0,
             bounds=self.bounds,
             transforms=dict(self.transforms),
@@ -327,6 +331,8 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
     state.custom_code = defaults.custom_code
     state.custom_file_path = defaults.custom_file_path
     state.custom_function_name = defaults.custom_function_name
+    state.model_config = defaults.model_config
+    state.model_func = defaults.model_func
 
     # Reset parameter configuration
     state.p0 = defaults.p0
