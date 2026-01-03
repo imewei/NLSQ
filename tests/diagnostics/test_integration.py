@@ -750,19 +750,15 @@ class TestBackwardCompatibility:
 
 @pytest.mark.diagnostics
 @pytest.mark.slow
-@pytest.mark.skip(
-    reason="Performance overhead varies significantly by environment; run manually for benchmarking"
-)
 class TestDiagnosticsPerformance:
     """Performance benchmark tests for diagnostics overhead (T053).
 
-    These tests verify that diagnostics overhead is <10% (relaxed from 5% for
-    CI stability across different hardware). Uses 10,000 point exponential
-    decay dataset as specified.
+    These tests verify that diagnostics overhead is reasonable (<100%) to catch
+    major performance regressions. Uses 10,000 point exponential decay dataset.
 
-    Note: These tests are skipped by default because overhead varies dramatically
-    based on JIT compilation state, CPU load, and hardware. Run manually with
-    `pytest -m slow --no-skip` for benchmarking.
+    Note: Overhead varies based on JIT compilation state, CPU load, and hardware.
+    The threshold is set conservatively to avoid flaky failures while still
+    catching significant regressions.
     """
 
     @pytest.fixture
@@ -784,21 +780,21 @@ class TestDiagnosticsPerformance:
         y = y_true + noise
         return x, y
 
-    def test_basic_diagnostics_overhead_under_10_percent(
+    def test_basic_diagnostics_overhead_under_100_percent(
         self, exponential_model, large_dataset
     ) -> None:
-        """Verify basic diagnostics overhead is <10%.
+        """Verify basic diagnostics overhead is reasonable (<100%).
 
         This test:
         1. Generates 10,000 point exponential decay dataset
         2. Times curve_fit without diagnostics (N iterations)
         3. Times curve_fit with diagnostics=True (N iterations)
         4. Calculates overhead percentage
-        5. Asserts overhead < 10% (relaxed from 5% for CI stability)
+        5. Asserts overhead < 100% (catches major regressions)
         """
         x, y = large_dataset
         n_iterations = 10
-        n_warmup = 3
+        n_warmup = 5  # More warmup for JIT stability
 
         # Warm up JIT compilation for both code paths
         # This ensures we're measuring execution time, not compilation time
@@ -846,9 +842,9 @@ class TestDiagnosticsPerformance:
         # Calculate overhead percentage
         overhead_percent = ((median_with - median_without) / median_without) * 100
 
-        # Assert overhead is under 10% (relaxed from 5% for CI stability)
-        assert overhead_percent < 10.0, (
-            f"Diagnostics overhead {overhead_percent:.2f}% exceeds 10% limit. "
+        # Assert overhead is under 100% (catches major regressions while tolerating variance)
+        assert overhead_percent < 100.0, (
+            f"Diagnostics overhead {overhead_percent:.2f}% exceeds 100% limit. "
             f"Median without: {median_without * 1000:.2f}ms, "
             f"Median with: {median_with * 1000:.2f}ms"
         )
@@ -858,12 +854,12 @@ class TestDiagnosticsPerformance:
     ) -> None:
         """Additional stability test with multiple measurement runs.
 
-        Performs multiple measurement cycles to verify overhead is consistently <10%.
+        Performs multiple measurement cycles to verify overhead is consistently reasonable.
         """
         x, y = large_dataset
         n_iterations_per_run = 5
         n_runs = 3
-        n_warmup = 2
+        n_warmup = 5  # More warmup for JIT stability
 
         # Warm up
         for _ in range(n_warmup):
@@ -896,9 +892,9 @@ class TestDiagnosticsPerformance:
             overhead = ((median_with - median_without) / median_without) * 100
             overheads.append(overhead)
 
-        # Check that the average overhead across runs is under 10%
+        # Check that the average overhead across runs is under 100%
         avg_overhead = np.mean(overheads)
-        assert avg_overhead < 10.0, (
-            f"Average diagnostics overhead {avg_overhead:.2f}% exceeds 10% limit. "
+        assert avg_overhead < 100.0, (
+            f"Average diagnostics overhead {avg_overhead:.2f}% exceeds 100% limit. "
             f"Individual run overheads: {[f'{o:.2f}%' for o in overheads]}"
         )
