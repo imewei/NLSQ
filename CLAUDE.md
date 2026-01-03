@@ -85,6 +85,15 @@ nlsq/
 ├── result/         # Result types (consolidated)
 │   ├── optimize_result.py # OptimizeResult (moved from core/_optimize.py)
 │   └── optimize_warning.py # OptimizeWarning (moved from core/_optimize.py)
+├── gui_qt/         # Native Qt desktop application (PySide6)
+│   ├── __init__.py        # run_desktop() entry point
+│   ├── main_window.py     # MainWindow with sidebar navigation
+│   ├── app_state.py       # AppState (Qt signals wrapping SessionState)
+│   ├── theme.py           # ThemeConfig, ThemeManager (light/dark)
+│   ├── autosave.py        # AutosaveManager for crash recovery
+│   ├── pages/             # Workflow pages (data, model, fitting, results, export)
+│   ├── widgets/           # Reusable Qt widgets
+│   └── plots/             # pyqtgraph-based scientific plots
 └── (root modules)  # Core infrastructure
     ├── callbacks.py, config.py, result.py
     ├── common_jax.py, common_scipy.py
@@ -179,6 +188,58 @@ When adding new tests, apply `@pytest.mark.serial` if the test:
 - `NLSQ_DEBUG=1`: Enable debug logging
 - `NLSQ_FORCE_CPU=1`: Force CPU backend for testing
 
+## Qt Desktop GUI
+
+NLSQ includes a native Qt desktop application built with PySide6 and pyqtgraph for GPU-accelerated plotting.
+
+### Launching the GUI
+
+```bash
+# Via entry point
+nlsq-gui
+
+# Or via module
+python -m nlsq.gui_qt
+
+# Or programmatically
+from nlsq.gui_qt import run_desktop
+run_desktop()
+```
+
+### GUI Features
+
+- **5-page workflow**: Data Loading → Model Selection → Fitting Options → Results → Export
+- **GPU-accelerated plots**: pyqtgraph with OpenGL for 500K+ point datasets
+- **Theme support**: Light/dark themes via qdarktheme (Ctrl+T to toggle)
+- **Keyboard shortcuts**: Ctrl+1-5 for pages, Ctrl+R run fit, Ctrl+O open file
+- **Autosave**: Session recovery on crash (1-minute autosave interval)
+- **Window persistence**: Size, position, theme saved between sessions
+
+### GUI Architecture
+
+```
+MainWindow (QMainWindow)
+├── Sidebar (QListWidget) - Page navigation with guards
+├── PageStack (QStackedWidget)
+│   ├── DataLoadingPage - File/clipboard import, column selection
+│   ├── ModelSelectionPage - Built-in/polynomial/custom models
+│   ├── FittingOptionsPage - Guided/Advanced modes, live cost plot
+│   ├── ResultsPage - Parameters, statistics, fit/residual plots
+│   └── ExportPage - ZIP/JSON/CSV/Python code export
+└── StatusBar - Data info, fit status
+```
+
+### GUI Dependencies
+
+Install with the `gui_qt` extra:
+```bash
+pip install "nlsq[gui_qt]"
+# Or with uv
+uv pip install "nlsq[gui_qt]"
+```
+
+Required packages: `PySide6>=6.5`, `pyqtgraph>=0.13`, `pyqtdarktheme>=2.1`
+
 ## Performance Optimizations (v1.0)
 
 ### Lazy Imports
@@ -214,8 +275,20 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - Python 3.12+ + JAX 0.8.0, NumPy, SciPy (reference implementations) (007-performance-optimizations)
 - Python ≥3.12 (per pyproject.toml) + JAX 0.8.0 (locked), NumPy, SciPy, pytest, ruff, mypy (008-tech-debt-remediation)
 - Python >=3.12 (per pyproject.toml) + JAX 0.8.0, NumPy >=2.2, SciPy >=1.16.0, Optax >=0.2.6 (009-code-quality-refactor)
+- Python 3.12+ (per pyproject.toml requires-python) + PySide6 (Qt bindings), pyqtgraph (GPU-accelerated plotting), existing nlsq core (JAX 0.8.0, NumPy 2.x, SciPy 1.16+) (010-streamlit-to-qt)
+- N/A (file-based import/export, no database) (010-streamlit-to-qt)
 
 ## Recent Changes
+- 010-streamlit-to-qt: Native Qt Desktop GUI (v0.5.0):
+  - **Native Desktop App**: PySide6-based GUI replacing Streamlit web interface
+  - **GPU-Accelerated Plots**: pyqtgraph with OpenGL for 500K+ point datasets
+  - **5-Page Workflow**: Data Loading, Model Selection, Fitting Options, Results, Export
+  - **Theme Support**: Light/dark themes via qdarktheme with Ctrl+T toggle
+  - **Keyboard Shortcuts**: Ctrl+1-5 pages, Ctrl+R run fit, Ctrl+O open file
+  - **Crash Recovery**: Autosave manager with 1-minute interval and session recovery
+  - **Window Persistence**: Size, position, theme, current page saved via QSettings
+  - **Export Formats**: ZIP session bundle, JSON, CSV, Python code generation
+  - Spec: `/specs/010-streamlit-to-qt/`
 - 006-legacy-modernization: Comprehensive legacy modernization (v0.4.3):
   - **Architecture**: Zero circular dependencies via lazy imports and TYPE_CHECKING
   - **God Module Reduction**: core/minpack.py now has <15 direct dependencies
