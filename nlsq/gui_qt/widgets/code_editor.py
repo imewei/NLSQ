@@ -286,7 +286,7 @@ class CodeEditorWidget(QWidget):
         Returns:
             List of function names
         """
-        from nlsq.gui.adapters.model_adapter import list_functions_in_module
+        from nlsq.gui_qt.adapters.model_adapter import list_functions_in_module
 
         code = self._editor.toPlainText()
         if not code.strip():

@@ -312,7 +312,7 @@ class ModelSelectionPage(QWidget):
         Args:
             index: The selected combo box index
         """
-        from nlsq.gui.adapters.model_adapter import (
+        from nlsq.gui_qt.adapters.model_adapter import (
             get_latex_equation,
             get_model,
             get_model_info,
@@ -372,7 +372,7 @@ class ModelSelectionPage(QWidget):
         Args:
             degree: The polynomial degree
         """
-        from nlsq.gui.adapters.model_adapter import get_model, get_polynomial_latex
+        from nlsq.gui_qt.adapters.model_adapter import get_model, get_polynomial_latex
 
         self._degree_value.setText(str(degree))
         self._current_model_type = "polynomial"
@@ -427,7 +427,7 @@ class ModelSelectionPage(QWidget):
         Args:
             index: The selected function index
         """
-        from nlsq.gui.adapters.model_adapter import (
+        from nlsq.gui_qt.adapters.model_adapter import (
             parse_custom_model_string,
             validate_jit_compatibility,
         )

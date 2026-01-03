@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from nlsq.gui.state import SessionState
+    from nlsq.gui_qt.session_state import SessionState
 
 __all__ = [
     "PageState",

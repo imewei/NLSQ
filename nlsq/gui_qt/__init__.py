@@ -2,8 +2,7 @@
 NLSQ Qt GUI - Native PySide6 Desktop Application
 
 This module provides a native Qt-based desktop application for NLSQ curve fitting,
-offering 100% feature parity with the Streamlit GUI but with GPU-accelerated plotting
-and native desktop integration.
+with GPU-accelerated plotting via pyqtgraph and native desktop integration.
 
 Usage:
     python -m nlsq.gui_qt

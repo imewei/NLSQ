@@ -299,7 +299,7 @@ class DataLoadingPage(QWidget):
         Args:
             file_path: Path to the file to load
         """
-        from nlsq.gui.adapters.data_adapter import load_from_file
+        from nlsq.gui_qt.adapters.data_adapter import load_from_file
 
         format_value = self._format_combo.currentData()
         config: dict[str, Any] = {
@@ -331,7 +331,7 @@ class DataLoadingPage(QWidget):
 
     def _on_parse_clipboard(self) -> None:
         """Handle parse clipboard button click."""
-        from nlsq.gui.adapters.data_adapter import detect_delimiter
+        from nlsq.gui_qt.adapters.data_adapter import detect_delimiter
 
         text = self._clipboard_text.toPlainText().strip()
         if not text:
@@ -424,7 +424,7 @@ class DataLoadingPage(QWidget):
 
     def _validate_and_update_stats(self) -> None:
         """Validate data and update statistics display."""
-        from nlsq.gui.adapters.data_adapter import compute_statistics, validate_data
+        from nlsq.gui_qt.adapters.data_adapter import compute_statistics, validate_data
 
         if self._xdata is None or self._ydata is None:
             return

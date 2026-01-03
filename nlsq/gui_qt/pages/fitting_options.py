@@ -84,7 +84,7 @@ class FitWorker(QObject):
 
     def run(self) -> None:
         """Execute the fitting operation."""
-        from nlsq.gui.adapters.fit_adapter import run_fit
+        from nlsq.gui_qt.adapters.fit_adapter import run_fit
 
         try:
             # Create callback for progress updates
@@ -311,7 +311,7 @@ class FittingOptionsPage(QWidget):
 
     def _on_model_changed(self) -> None:
         """Handle model change to update parameter config."""
-        from nlsq.gui.adapters.model_adapter import get_model_info
+        from nlsq.gui_qt.adapters.model_adapter import get_model_info
 
         state = self._app_state.state
         if state.model_func is not None:

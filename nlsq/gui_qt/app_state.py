@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
-from nlsq.gui.state import SessionState
+from nlsq.gui_qt.session_state import SessionState
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

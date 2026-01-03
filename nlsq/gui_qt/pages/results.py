@@ -244,7 +244,7 @@ class ResultsPage(QWidget):
         Returns:
             List of parameter names
         """
-        from nlsq.gui.adapters.model_adapter import get_model_info
+        from nlsq.gui_qt.adapters.model_adapter import get_model_info
 
         state = self._app_state.state
         if state.model_func is not None:
