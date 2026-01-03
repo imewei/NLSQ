@@ -1,7 +1,7 @@
 r"""CLI entry point for NLSQ workflow commands.
 
 This module provides the main command-line interface for NLSQ, supporting:
-- `nlsq gui` - Launch the interactive Streamlit GUI
+- `nlsq gui` - Launch the interactive Qt desktop GUI
 - `nlsq fit workflow.yaml` - Execute single curve fit from YAML config
 - `nlsq batch w1.yaml w2.yaml ...` - Execute parallel batch fitting
 - `nlsq info` - Display system and environment information
@@ -69,28 +69,10 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     # --- nlsq gui ---
-    gui_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "gui",
-        help="Launch the interactive Streamlit GUI",
+        help="Launch the interactive Qt desktop GUI",
         description="Start the NLSQ graphical user interface for interactive curve fitting",
-    )
-    gui_parser.add_argument(
-        "-p",
-        "--port",
-        type=int,
-        default=8501,
-        help="Port to run the Streamlit server on (default: 8501)",
-    )
-    gui_parser.add_argument(
-        "--browser",
-        action="store_true",
-        default=True,
-        help="Open browser automatically (default: true)",
-    )
-    gui_parser.add_argument(
-        "--no-browser",
-        action="store_true",
-        help="Do not open browser automatically",
     )
 
     # --- nlsq fit ---
@@ -204,65 +186,21 @@ def handle_gui(args: argparse.Namespace) -> int:
         Exit code (0 for success, non-zero for failure).
     """
     try:
-        import subprocess
-        from pathlib import Path
+        from nlsq.gui_qt import run_desktop
 
-        # Find the app.py location
-        import nlsq.gui
-
-        gui_module_path = Path(nlsq.gui.__file__).parent
-        app_path = gui_module_path / "app.py"
-
-        if not app_path.exists():
-            print(
-                "Error: GUI app.py not found. Please reinstall NLSQ.", file=sys.stderr
-            )
-            return 1
-
-        # Determine whether to open browser
-        open_browser = args.browser and not args.no_browser
-
-        # Build streamlit command
-        cmd = [
-            sys.executable,
-            "-m",
-            "streamlit",
-            "run",
-            str(app_path),
-            "--server.port",
-            str(args.port),
-        ]
-
-        if not open_browser:
-            cmd.extend(["--server.headless", "true"])
-
-        # Print launch message
-        print(f"Launching NLSQ GUI on port {args.port}...")
-        if open_browser:
-            print(f"Opening browser at http://localhost:{args.port}")
-        else:
-            print(f"Access the GUI at http://localhost:{args.port}")
-
-        # Run streamlit
-        result = subprocess.run(cmd, check=False)
-        return result.returncode
+        print("Launching NLSQ Qt GUI...")
+        return run_desktop()
 
     except ImportError as e:
         print(
-            "\nError: GUI dependencies not installed.\n"
-            "Install with: pip install nlsq[gui]\n"
+            "\nError: Qt GUI dependencies not installed.\n"
+            'Install with: pip install "nlsq[gui_qt]"\n'
             f"Details: {e}",
             file=sys.stderr,
         )
         return 1
-    except FileNotFoundError:
-        print(
-            "\nError: Streamlit not found.\nInstall with: pip install streamlit",
-            file=sys.stderr,
-        )
-        return 1
     except KeyboardInterrupt:
-        print("\nGUI server stopped.")
+        print("\nGUI closed.")
         return 0
 
 
