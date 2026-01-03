@@ -29,10 +29,10 @@ import sys
 # Check Python version
 from pathlib import Path
 
+import jax.numpy as jnp
+
 # Import NLSQ before importing JAX since NLSQ configures JAX to use 64-bit precision
 from nlsq import CurveFit, __version__
-
-import jax.numpy as jnp
 
 print(f"NLSQ version: {__version__}")
 

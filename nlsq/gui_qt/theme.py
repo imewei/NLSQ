@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, Signal
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
 
-__all__ = ["ThemeConfig", "DARK_THEME", "LIGHT_THEME", "ThemeManager"]
+__all__ = ["DARK_THEME", "LIGHT_THEME", "ThemeConfig", "ThemeManager"]
 
 
 @dataclass

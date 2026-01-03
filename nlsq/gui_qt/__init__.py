@@ -89,9 +89,8 @@ def run_desktop() -> int:
     # Install global exception hook
     sys.excepthook = _exception_hook
 
-    from PySide6.QtWidgets import QApplication
-
     import qdarktheme
+    from PySide6.QtWidgets import QApplication
 
     from nlsq.gui_qt.app_state import AppState
     from nlsq.gui_qt.main_window import MainWindow

@@ -9,21 +9,20 @@ from __future__ import annotations
 
 __all__: list[str] = [
     "BasePlot",
+    "FitPlotWidget",
+    "HistogramPlotWidget",
     "LiveCostPlot",
     "LiveCostPlotWidget",
-    "FitPlotWidget",
     "ResidualsPlotWidget",
-    "HistogramPlotWidget",
 ]
 
-# Flag to track if pyqtgraph has been configured
-_pg_configured = False
+# Mutable container to track if pyqtgraph has been configured
+_pg_state = {"configured": False}
 
 
 def _configure_pyqtgraph() -> None:
     """Configure pyqtgraph global settings for optimal performance."""
-    global _pg_configured
-    if not _pg_configured:
+    if not _pg_state["configured"]:
         import pyqtgraph as pg
 
         pg.setConfigOptions(
@@ -31,7 +30,7 @@ def _configure_pyqtgraph() -> None:
             antialias=True,  # Smooth lines
             enableExperimental=False,  # Stable features only
         )
-        _pg_configured = True
+        _pg_state["configured"] = True
 
 
 def __getattr__(name: str):
@@ -42,11 +41,7 @@ def __getattr__(name: str):
         from nlsq.gui_qt.plots.base_plot import BasePlotWidget
 
         return BasePlotWidget
-    elif name == "LiveCostPlot":
-        from nlsq.gui_qt.plots.live_cost_plot import LiveCostPlotWidget
-
-        return LiveCostPlotWidget
-    elif name == "LiveCostPlotWidget":
+    elif name in {"LiveCostPlot", "LiveCostPlotWidget"}:
         from nlsq.gui_qt.plots.live_cost_plot import LiveCostPlotWidget
 
         return LiveCostPlotWidget

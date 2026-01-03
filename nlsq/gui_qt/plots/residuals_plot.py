@@ -65,12 +65,14 @@ class ResidualsPlotWidget(QWidget):
         selector_row.addWidget(QLabel("Plot Type:"))
 
         self._plot_type_combo = QComboBox()
-        self._plot_type_combo.addItems([
-            "Residuals vs X",
-            "Residuals vs Fitted",
-            "Standardized Residuals vs X",
-            "Standardized Residuals vs Fitted",
-        ])
+        self._plot_type_combo.addItems(
+            [
+                "Residuals vs X",
+                "Residuals vs Fitted",
+                "Standardized Residuals vs X",
+                "Standardized Residuals vs Fitted",
+            ]
+        )
         self._plot_type_combo.currentIndexChanged.connect(self._update_plot)
         selector_row.addWidget(self._plot_type_combo)
         selector_row.addStretch()
@@ -200,7 +202,9 @@ class ResidualsPlotWidget(QWidget):
             normalized = np.abs(residuals) / (2 * std)
         else:
             max_val = np.max(np.abs(residuals))
-            normalized = np.abs(residuals) / max_val if max_val > 0 else np.zeros_like(residuals)
+            normalized = (
+                np.abs(residuals) / max_val if max_val > 0 else np.zeros_like(residuals)
+            )
 
         # Clip to [0, 1]
         normalized = np.clip(normalized, 0, 1)

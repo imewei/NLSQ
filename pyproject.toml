@@ -496,6 +496,22 @@ ignore_errors = true  # Model Health Diagnostics System (v0.4.3+)
 module = "tests.*"
 ignore_errors = true  # Don't enforce strict typing in tests
 
+[[tool.mypy.overrides]]
+module = "PySide6.*"
+ignore_missing_imports = true  # Qt bindings without type stubs
+
+[[tool.mypy.overrides]]
+module = "pyqtgraph.*"
+ignore_missing_imports = true  # pyqtgraph without type stubs
+
+[[tool.mypy.overrides]]
+module = "qdarktheme"
+ignore_missing_imports = true  # Qt dark theme without type stubs
+
+[[tool.mypy.overrides]]
+module = "nlsq.gui_qt.*"
+ignore_errors = true  # Qt GUI code with dynamic Qt types
+
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
@@ -602,4 +618,3 @@ exclude_lines = [
 exclude_dirs = ["tests", "examples", "docs", "benchmark", "scripts"]
 # Only fail on MEDIUM and HIGH severity issues
 skips = ["B404", "B603", "B607", "B110", "B101"]
-

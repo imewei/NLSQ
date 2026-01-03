@@ -7,6 +7,7 @@ and interactive visualizations of the fit quality.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -213,7 +214,7 @@ class ResultsPage(QWidget):
             if perr is not None:
                 ci = [
                     (v - 1.96 * e, v + 1.96 * e)
-                    for v, e in zip(values, uncertainties)
+                    for v, e in zip(values, uncertainties, strict=False)
                 ]
 
             self._param_results.set_results(
@@ -232,10 +233,14 @@ class ResultsPage(QWidget):
         converged = getattr(result, "success", True)
         n_iter = getattr(result, "nfev", 0)
         if converged:
-            self._status_label.setText(f"Fit completed successfully ({n_iter} evaluations)")
+            self._status_label.setText(
+                f"Fit completed successfully ({n_iter} evaluations)"
+            )
             self._status_label.setStyleSheet("color: #4CAF50;")
         else:
-            self._status_label.setText(f"Fit completed with warnings ({n_iter} evaluations)")
+            self._status_label.setText(
+                f"Fit completed with warnings ({n_iter} evaluations)"
+            )
             self._status_label.setStyleSheet("color: #FF9800;")
 
     def _get_param_names(self) -> list[str]:
@@ -283,7 +288,7 @@ class ResultsPage(QWidget):
 
         # R² (coefficient of determination)
         ss_res = np.sum(residuals**2)
-        ss_tot = np.sum((ydata - np.mean(ydata))**2)
+        ss_tot = np.sum((ydata - np.mean(ydata)) ** 2)
         r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
 
         # RMSE (root mean square error)
@@ -366,13 +371,11 @@ class ResultsPage(QWidget):
         conf_upper = None
 
         if pcov is not None and state.model_func is not None:
-            try:
+            with contextlib.suppress(Exception):
                 # Use delta method for confidence bands
                 conf_lower, conf_upper = self._compute_confidence_bands(
                     x_dense, popt, pcov, state.model_func
                 )
-            except Exception:
-                pass
 
         # Update fit plot
         self._fit_plot.set_data(xdata, ydata)

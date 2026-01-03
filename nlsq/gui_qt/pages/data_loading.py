@@ -247,7 +247,12 @@ class DataLoadingPage(QWidget):
         self._stats_y_range = QLabel("Y Range: -")
         self._stats_sigma = QLabel("Sigma: -")
 
-        for label in [self._stats_points, self._stats_x_range, self._stats_y_range, self._stats_sigma]:
+        for label in [
+            self._stats_points,
+            self._stats_x_range,
+            self._stats_y_range,
+            self._stats_sigma,
+        ]:
             layout.addWidget(label)
 
         # Validation status
@@ -277,7 +282,9 @@ class DataLoadingPage(QWidget):
         """Connect internal signals."""
         self._browse_btn.clicked.connect(self._on_browse)
         self._parse_btn.clicked.connect(self._on_parse_clipboard)
-        self._column_selector.selection_changed.connect(self._on_column_selection_changed)
+        self._column_selector.selection_changed.connect(
+            self._on_column_selection_changed
+        )
         self._clear_btn.clicked.connect(self.reset)
         self._apply_btn.clicked.connect(self._on_apply)
 
@@ -312,9 +319,13 @@ class DataLoadingPage(QWidget):
 
             # Store raw data for preview
             if sigma is not None:
-                self._raw_data = np.column_stack([xdata.T if xdata.ndim == 2 else xdata, ydata, sigma])
+                self._raw_data = np.column_stack(
+                    [xdata.T if xdata.ndim == 2 else xdata, ydata, sigma]
+                )
             else:
-                self._raw_data = np.column_stack([xdata.T if xdata.ndim == 2 else xdata, ydata])
+                self._raw_data = np.column_stack(
+                    [xdata.T if xdata.ndim == 2 else xdata, ydata]
+                )
 
             # Generate column names
             n_cols = self._raw_data.shape[1]
@@ -412,7 +423,9 @@ class DataLoadingPage(QWidget):
                 self._xdata = self._raw_data[:, x_idx] if x_idx is not None else None
                 self._ydata = self._raw_data[:, y_idx] if y_idx is not None else None
 
-            self._sigma = self._raw_data[:, sigma_idx] if sigma_idx is not None else None
+            self._sigma = (
+                self._raw_data[:, sigma_idx] if sigma_idx is not None else None
+            )
 
             # Validate data
             self._validate_and_update_stats()
@@ -457,11 +470,17 @@ class DataLoadingPage(QWidget):
 
         # Update display
         self._stats_points.setText(f"Points: {stats['point_count']:,}")
-        self._stats_x_range.setText(f"X Range: [{stats['x_min']:.4g}, {stats['x_max']:.4g}]")
-        self._stats_y_range.setText(f"Y Range: [{stats['y_min']:.4g}, {stats['y_max']:.4g}]")
+        self._stats_x_range.setText(
+            f"X Range: [{stats['x_min']:.4g}, {stats['x_max']:.4g}]"
+        )
+        self._stats_y_range.setText(
+            f"Y Range: [{stats['y_min']:.4g}, {stats['y_max']:.4g}]"
+        )
 
         if stats.get("has_sigma"):
-            self._stats_sigma.setText(f"Sigma Range: [{stats['sigma_min']:.4g}, {stats['sigma_max']:.4g}]")
+            self._stats_sigma.setText(
+                f"Sigma Range: [{stats['sigma_min']:.4g}, {stats['sigma_max']:.4g}]"
+            )
         else:
             self._stats_sigma.setText("Sigma: (not provided)")
 
@@ -490,13 +509,17 @@ class DataLoadingPage(QWidget):
             for col_idx in range(n_cols):
                 value = self._raw_data[row_idx, col_idx]
                 item = QStandardItem(f"{value:.6g}")
-                item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                )
                 row_items.append(item)
             self._preview_model.appendRow(row_items)
 
         # Update info
         if n_rows > preview_rows:
-            self._preview_info.setText(f"Showing first {preview_rows} of {n_rows:,} rows")
+            self._preview_info.setText(
+                f"Showing first {preview_rows} of {n_rows:,} rows"
+            )
         else:
             self._preview_info.setText(f"{n_rows:,} rows, {n_cols} columns")
 

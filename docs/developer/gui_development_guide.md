@@ -122,6 +122,7 @@ nlsq/gui_qt/
   ```python
   def _on_button_click(self) -> None:
       from nlsq.gui_qt.adapters.fit_adapter import run_fit
+
       # ...
   ```
 
@@ -160,6 +161,7 @@ The `PageState` class derives navigation permissions from `SessionState`:
 page_state = PageState.from_session_state(app_state.state)
 if page_state.can_access("fitting_options"):
     # Enable fitting options page
+    pass
 ```
 
 ---
@@ -176,7 +178,7 @@ if page_state.can_access("fitting_options"):
 ```python
 class FitWorker(QObject):
     finished = Signal(object)  # Emit result
-    error = Signal(str)        # Emit error message
+    error = Signal(str)  # Emit error message
 
     def run(self) -> None:
         try:
@@ -202,6 +204,7 @@ class FitWorker(QObject):
         result = execute_fit(...)
         self.finished.emit(result)
 
+
 # Usage
 self._thread = QThread()
 self._worker = FitWorker(state)
@@ -222,6 +225,7 @@ def __getattr__(name: str):
     """Lazy import pages to avoid importing Qt at module load time."""
     if name == "DataLoadingPage":
         from nlsq.gui_qt.pages.data_loading import DataLoadingPage
+
         return DataLoadingPage
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 ```
@@ -234,6 +238,7 @@ def __getattr__(name: str):
 
 ```python
 from pyqtgraph import PlotWidget
+
 
 class FitPlotWidget(PlotWidget):
     def __init__(self) -> None:
@@ -255,21 +260,21 @@ Use `pytest-qt` for testing Qt widgets:
 ```python
 import pytest
 
+
 @pytest.fixture
 def app_state() -> AppState:
     """Create a fresh AppState instance for testing."""
     from nlsq.gui_qt.app_state import AppState
+
     return AppState()
+
 
 def test_set_data_emits_signal(qtbot, app_state):
     """Test that set_data emits data_changed signal."""
     import numpy as np
 
     with qtbot.waitSignal(app_state.data_changed, timeout=1000):
-        app_state.set_data(
-            xdata=np.array([1, 2, 3]),
-            ydata=np.array([1, 4, 9])
-        )
+        app_state.set_data(xdata=np.array([1, 2, 3]), ydata=np.array([1, 4, 9]))
 ```
 
 ### Test Categories
@@ -350,10 +355,12 @@ class MyWidget(QWidget):
 
     def _apply_theme(self) -> None:
         """Apply current theme styling."""
-        self.setStyleSheet(f"""
+        self.setStyleSheet(
+            f"""
             QWidget {{
                 background-color: {self._theme.background};
                 color: {self._theme.text};
             }}
-        """)
+        """
+        )
 ```

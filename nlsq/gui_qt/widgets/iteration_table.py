@@ -97,19 +97,25 @@ class IterationTableWidget(QWidget):
 
         # Cost
         cost_item = QTableWidgetItem(f"{cost:.6g}")
-        cost_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        cost_item.setTextAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         self._table.setItem(row, 1, cost_item)
 
         # Step norm
         step_text = f"{step_norm:.6g}" if step_norm is not None else "-"
         step_item = QTableWidgetItem(step_text)
-        step_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        step_item.setTextAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         self._table.setItem(row, 2, step_item)
 
         # Gradient norm
         grad_text = f"{gradient_norm:.6g}" if gradient_norm is not None else "-"
         grad_item = QTableWidgetItem(grad_text)
-        grad_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        grad_item.setTextAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         self._table.setItem(row, 3, grad_item)
 
         # Auto-scroll to bottom

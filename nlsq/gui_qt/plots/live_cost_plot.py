@@ -56,7 +56,8 @@ class LiveCostPlotWidget(QWidget):
 
         # Create the line plot item
         self._line = self._plot_widget.plot(
-            [], [],
+            [],
+            [],
             pen=pg.mkPen(color="#2196F3", width=2),
             symbol="o",
             symbolSize=5,

@@ -15,12 +15,12 @@ if TYPE_CHECKING:
     from nlsq.gui_qt.session_state import SessionState
 
 __all__ = [
-    "PageState",
     "DataLoadingPage",
-    "ModelSelectionPage",
-    "FittingOptionsPage",
-    "ResultsPage",
     "ExportPage",
+    "FittingOptionsPage",
+    "ModelSelectionPage",
+    "PageState",
+    "ResultsPage",
 ]
 
 

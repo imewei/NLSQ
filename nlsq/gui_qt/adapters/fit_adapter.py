@@ -326,7 +326,9 @@ def execute_fit(
         bounds = (np.asarray(lower), np.asarray(upper))
 
     # Prepare callback wrapper
-    callback_wrapper = _CallbackWrapper(progress_callback) if progress_callback else None
+    callback_wrapper = (
+        _CallbackWrapper(progress_callback) if progress_callback else None
+    )
 
     # Build kwargs for fit()
     fit_kwargs: dict[str, Any] = {
@@ -658,7 +660,9 @@ def run_fit(
     config = create_fit_config_from_state(state)
 
     # Wrap the simple callback into ProgressCallback protocol
-    wrapped_callback = _SimpleProgressCallback(progress_callback) if progress_callback else None
+    wrapped_callback = (
+        _SimpleProgressCallback(progress_callback) if progress_callback else None
+    )
 
     # Execute fit
     return execute_fit(

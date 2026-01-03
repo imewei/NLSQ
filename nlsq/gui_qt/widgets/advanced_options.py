@@ -229,7 +229,9 @@ class AdvancedOptionsWidget(QWidget):
         preset_layout = QHBoxLayout()
         preset_label = QLabel("Preset:")
         self._defense_preset = QComboBox()
-        self._defense_preset.addItems(["default", "conservative", "aggressive", "custom"])
+        self._defense_preset.addItems(
+            ["default", "conservative", "aggressive", "custom"]
+        )
         self._defense_preset.setToolTip("Defense layer preset configuration")
         preset_layout.addWidget(preset_label)
         preset_layout.addWidget(self._defense_preset, 1)
@@ -325,53 +327,53 @@ class AdvancedOptionsWidget(QWidget):
         Args:
             options: Dictionary with option values
         """
-        # Termination
-        if "gtol" in options:
-            self._gtol_spin.setValue(options["gtol"])
-        if "ftol" in options:
-            self._ftol_spin.setValue(options["ftol"])
-        if "xtol" in options:
-            self._xtol_spin.setValue(options["xtol"])
-        if "max_iterations" in options:
-            self._max_iter_spin.setValue(options["max_iterations"])
-        if "max_function_evals" in options:
-            self._max_fev_spin.setValue(options["max_function_evals"])
+        self._set_spinbox_options(options)
+        self._set_checkbox_options(options)
+        self._set_combo_options(options)
 
-        # Multi-start
-        if "enable_multistart" in options:
-            self._multistart_check.setChecked(options["enable_multistart"])
-        if "n_starts" in options:
-            self._n_starts_spin.setValue(options["n_starts"])
-        if "sampler" in options:
-            idx = self._sampler_combo.findText(options["sampler"])
-            if idx >= 0:
-                self._sampler_combo.setCurrentIndex(idx)
-        if "center_on_p0" in options:
-            self._center_check.setChecked(options["center_on_p0"])
-        if "scale_factor" in options:
-            self._scale_spin.setValue(options["scale_factor"])
+    def _set_spinbox_options(self, options: dict[str, Any]) -> None:
+        """Set spinbox values from options dict."""
+        spinbox_mapping = {
+            "gtol": self._gtol_spin,
+            "ftol": self._ftol_spin,
+            "xtol": self._xtol_spin,
+            "max_iterations": self._max_iter_spin,
+            "max_function_evals": self._max_fev_spin,
+            "n_starts": self._n_starts_spin,
+            "scale_factor": self._scale_spin,
+            "chunk_size": self._chunk_spin,
+            "warmup_iterations": self._warmup_spin,
+        }
+        for key, spinbox in spinbox_mapping.items():
+            if key in options:
+                spinbox.setValue(options[key])
 
-        # Streaming
-        if "chunk_size" in options:
-            self._chunk_spin.setValue(options["chunk_size"])
-        if "normalize" in options:
-            self._normalize_check.setChecked(options["normalize"])
-        if "warmup_iterations" in options:
-            self._warmup_spin.setValue(options["warmup_iterations"])
+    def _set_checkbox_options(self, options: dict[str, Any]) -> None:
+        """Set checkbox values from options dict."""
+        checkbox_mapping = {
+            "enable_multistart": self._multistart_check,
+            "center_on_p0": self._center_check,
+            "normalize": self._normalize_check,
+            "layer1_enabled": self._layer1_check,
+            "layer2_enabled": self._layer2_check,
+            "layer3_enabled": self._layer3_check,
+            "layer4_enabled": self._layer4_check,
+        }
+        for key, checkbox in checkbox_mapping.items():
+            if key in options:
+                checkbox.setChecked(options[key])
 
-        # Defense
-        if "defense_preset" in options:
-            idx = self._defense_preset.findText(options["defense_preset"])
-            if idx >= 0:
-                self._defense_preset.setCurrentIndex(idx)
-        if "layer1_enabled" in options:
-            self._layer1_check.setChecked(options["layer1_enabled"])
-        if "layer2_enabled" in options:
-            self._layer2_check.setChecked(options["layer2_enabled"])
-        if "layer3_enabled" in options:
-            self._layer3_check.setChecked(options["layer3_enabled"])
-        if "layer4_enabled" in options:
-            self._layer4_check.setChecked(options["layer4_enabled"])
+    def _set_combo_options(self, options: dict[str, Any]) -> None:
+        """Set combobox values from options dict."""
+        combo_mapping = {
+            "sampler": self._sampler_combo,
+            "defense_preset": self._defense_preset,
+        }
+        for key, combo in combo_mapping.items():
+            if key in options:
+                idx = combo.findText(options[key])
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.

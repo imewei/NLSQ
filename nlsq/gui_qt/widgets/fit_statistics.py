@@ -62,7 +62,9 @@ class StatCard(QFrame):
         Args:
             color: CSS color string
         """
-        self._value_label.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {color};")
+        self._value_label.setStyleSheet(
+            f"font-size: 18px; font-weight: bold; color: {color};"
+        )
 
 
 class FitStatisticsWidget(QWidget):

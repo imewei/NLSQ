@@ -7,11 +7,168 @@ The adapter maps all fields from workflow_config_template.yaml to SessionState
 fields and vice versa.
 """
 
-from typing import TextIO
+from typing import Any, TextIO
 
 import yaml
 
 from nlsq.gui_qt.session_state import SessionState, initialize_state
+
+
+def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
+    """Parse model section of YAML config into state."""
+    if "model" not in config:
+        return
+
+    model = config["model"]
+    state.model_type = model.get("type", state.model_type)
+    state.model_name = model.get("name", state.model_name)
+    state.auto_p0 = model.get("auto_p0", state.auto_p0)
+    state.auto_bounds = model.get("auto_bounds", state.auto_bounds)
+
+    if "polynomial" in model:
+        state.polynomial_degree = model["polynomial"].get(
+            "degree", state.polynomial_degree
+        )
+
+    if "custom" in model:
+        state.custom_file_path = model["custom"].get("file", None)
+        state.custom_function_name = model["custom"].get("function", "")
+
+    if "parameters" in model:
+        _parse_model_parameters(model["parameters"], state)
+
+
+def _parse_model_parameters(
+    parameters: list[dict[str, Any]], state: SessionState
+) -> None:
+    """Parse model parameters from YAML config."""
+    p0_values = []
+    lower_bounds = []
+    upper_bounds = []
+    transforms = {}
+
+    for param in parameters:
+        if "initial" in param:
+            p0_values.append(param["initial"])
+        if "bounds" in param:
+            bounds = param["bounds"]
+            lower_bounds.append(bounds[0] if bounds[0] is not None else float("-inf"))
+            upper_bounds.append(bounds[1] if bounds[1] is not None else float("inf"))
+        if "transform" in param and "name" in param:
+            transforms[param["name"]] = param["transform"]
+
+    if p0_values:
+        state.p0 = p0_values
+    if lower_bounds or upper_bounds:
+        state.bounds = (lower_bounds, upper_bounds)
+    if transforms:
+        state.transforms = transforms
+
+
+def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
+    """Parse fitting section of YAML config into state."""
+    if "fitting" not in config:
+        return
+
+    fitting = config["fitting"]
+    state.method = fitting.get("method", state.method)
+
+    if "objective" in fitting:
+        state.loss = fitting["objective"].get("robust_loss", state.loss)
+
+    if "termination" in fitting:
+        term = fitting["termination"]
+        state.gtol = term.get("gtol", state.gtol)
+        state.ftol = term.get("ftol", state.ftol)
+        state.xtol = term.get("xtol", state.xtol)
+        state.max_iterations = term.get("max_iterations", state.max_iterations)
+        state.max_function_evals = term.get(
+            "max_function_evals", state.max_function_evals
+        )
+
+    if "multistart" in fitting:
+        ms = fitting["multistart"]
+        state.enable_multistart = ms.get("enabled", state.enable_multistart)
+        state.n_starts = ms.get("num_starts", state.n_starts)
+        state.sampler = ms.get("sampler", state.sampler)
+        state.center_on_p0 = ms.get("center_on_p0", state.center_on_p0)
+        state.scale_factor = ms.get("scale_factor", state.scale_factor)
+
+
+def _parse_hybrid_streaming_section(
+    config: dict[str, Any], state: SessionState
+) -> None:
+    """Parse hybrid streaming section of YAML config into state."""
+    if "hybrid_streaming" not in config:
+        return
+
+    hs = config["hybrid_streaming"]
+    state.normalize = hs.get("normalize", state.normalize)
+    state.warmup_iterations = hs.get("warmup_iterations", state.warmup_iterations)
+    state.max_warmup_iterations = hs.get(
+        "max_warmup_iterations", state.max_warmup_iterations
+    )
+    state.chunk_size = hs.get("chunk_size", state.chunk_size)
+    state.enable_checkpoints = hs.get("enable_checkpoints", state.enable_checkpoints)
+    state.checkpoint_dir = hs.get("checkpoint_dir", state.checkpoint_dir)
+    state.enable_multi_device = hs.get("enable_multi_device", state.enable_multi_device)
+
+    if "defense_layers" in hs:
+        _parse_defense_layers(hs["defense_layers"], state)
+
+
+def _parse_defense_layers(dl: dict[str, Any], state: SessionState) -> None:
+    """Parse defense layer settings from YAML config."""
+    state.defense_preset = dl.get("preset", state.defense_preset)
+
+    if "layer1_warm_start" in dl:
+        l1 = dl["layer1_warm_start"]
+        state.layer1_enabled = l1.get("enabled", state.layer1_enabled)
+        state.layer1_threshold = l1.get("threshold", state.layer1_threshold)
+
+    if "layer2_adaptive_lr" in dl:
+        state.layer2_enabled = dl["layer2_adaptive_lr"].get(
+            "enabled", state.layer2_enabled
+        )
+
+    if "layer3_cost_guard" in dl:
+        l3 = dl["layer3_cost_guard"]
+        state.layer3_enabled = l3.get("enabled", state.layer3_enabled)
+        state.layer3_tolerance = l3.get("tolerance", state.layer3_tolerance)
+
+    if "layer4_step_clipping" in dl:
+        l4 = dl["layer4_step_clipping"]
+        state.layer4_enabled = l4.get("enabled", state.layer4_enabled)
+        state.layer4_max_step = l4.get("max_step_size", state.layer4_max_step)
+
+
+def _parse_batch_section(config: dict[str, Any], state: SessionState) -> None:
+    """Parse batch section of YAML config into state."""
+    if "batch" not in config:
+        return
+
+    batch = config["batch"]
+    state.batch_max_workers = batch.get("max_workers", state.batch_max_workers)
+    state.batch_continue_on_error = batch.get(
+        "continue_on_error", state.batch_continue_on_error
+    )
+    state.batch_summary_format = batch.get("summary_format", state.batch_summary_format)
+
+
+def _parse_global_optimization_section(
+    config: dict[str, Any], state: SessionState
+) -> None:
+    """Parse global optimization section of YAML config into state."""
+    if "global_optimization" not in config:
+        return
+
+    go = config["global_optimization"]
+    if "n_starts" in go and go["n_starts"] > 0:
+        state.enable_multistart = True
+        state.n_starts = go["n_starts"]
+    state.sampler = go.get("sampler", state.sampler)
+    state.center_on_p0 = go.get("center_on_p0", state.center_on_p0)
+    state.scale_factor = go.get("scale_factor", state.scale_factor)
 
 
 def load_yaml_config(file: TextIO | str) -> SessionState:
@@ -56,147 +213,13 @@ def load_yaml_config(file: TextIO | str) -> SessionState:
     if config is None:
         config = {}
 
-    # Initialize state with defaults
     state = initialize_state()
 
-    # Parse model section
-    if "model" in config:
-        model = config["model"]
-        state.model_type = model.get("type", state.model_type)
-        state.model_name = model.get("name", state.model_name)
-        state.auto_p0 = model.get("auto_p0", state.auto_p0)
-        state.auto_bounds = model.get("auto_bounds", state.auto_bounds)
-
-        # Polynomial configuration
-        if "polynomial" in model:
-            state.polynomial_degree = model["polynomial"].get(
-                "degree", state.polynomial_degree
-            )
-
-        # Custom model configuration
-        if "custom" in model:
-            state.custom_file_path = model["custom"].get("file", None)
-            state.custom_function_name = model["custom"].get("function", "")
-
-        # Parameter definitions
-        if "parameters" in model:
-            p0_values = []
-            lower_bounds = []
-            upper_bounds = []
-            transforms = {}
-
-            for param in model["parameters"]:
-                if "initial" in param:
-                    p0_values.append(param["initial"])
-                if "bounds" in param:
-                    bounds = param["bounds"]
-                    lower_bounds.append(
-                        bounds[0] if bounds[0] is not None else float("-inf")
-                    )
-                    upper_bounds.append(
-                        bounds[1] if bounds[1] is not None else float("inf")
-                    )
-                if "transform" in param and "name" in param:
-                    transforms[param["name"]] = param["transform"]
-
-            if p0_values:
-                state.p0 = p0_values
-            if lower_bounds or upper_bounds:
-                state.bounds = (lower_bounds, upper_bounds)
-            if transforms:
-                state.transforms = transforms
-
-    # Parse fitting section
-    if "fitting" in config:
-        fitting = config["fitting"]
-        state.method = fitting.get("method", state.method)
-
-        # Objective settings
-        if "objective" in fitting:
-            objective = fitting["objective"]
-            state.loss = objective.get("robust_loss", state.loss)
-
-        # Termination criteria
-        if "termination" in fitting:
-            term = fitting["termination"]
-            state.gtol = term.get("gtol", state.gtol)
-            state.ftol = term.get("ftol", state.ftol)
-            state.xtol = term.get("xtol", state.xtol)
-            state.max_iterations = term.get("max_iterations", state.max_iterations)
-            state.max_function_evals = term.get(
-                "max_function_evals", state.max_function_evals
-            )
-
-        # Multi-start settings
-        if "multistart" in fitting:
-            ms = fitting["multistart"]
-            state.enable_multistart = ms.get("enabled", state.enable_multistart)
-            state.n_starts = ms.get("num_starts", state.n_starts)
-            state.sampler = ms.get("sampler", state.sampler)
-            state.center_on_p0 = ms.get("center_on_p0", state.center_on_p0)
-            state.scale_factor = ms.get("scale_factor", state.scale_factor)
-
-    # Parse hybrid streaming section
-    if "hybrid_streaming" in config:
-        hs = config["hybrid_streaming"]
-        state.normalize = hs.get("normalize", state.normalize)
-        state.warmup_iterations = hs.get("warmup_iterations", state.warmup_iterations)
-        state.max_warmup_iterations = hs.get(
-            "max_warmup_iterations", state.max_warmup_iterations
-        )
-        state.chunk_size = hs.get("chunk_size", state.chunk_size)
-        state.enable_checkpoints = hs.get(
-            "enable_checkpoints", state.enable_checkpoints
-        )
-        state.checkpoint_dir = hs.get("checkpoint_dir", state.checkpoint_dir)
-        state.enable_multi_device = hs.get(
-            "enable_multi_device", state.enable_multi_device
-        )
-
-        # Defense layer settings
-        if "defense_layers" in hs:
-            dl = hs["defense_layers"]
-            state.defense_preset = dl.get("preset", state.defense_preset)
-
-            if "layer1_warm_start" in dl:
-                l1 = dl["layer1_warm_start"]
-                state.layer1_enabled = l1.get("enabled", state.layer1_enabled)
-                state.layer1_threshold = l1.get("threshold", state.layer1_threshold)
-
-            if "layer2_adaptive_lr" in dl:
-                l2 = dl["layer2_adaptive_lr"]
-                state.layer2_enabled = l2.get("enabled", state.layer2_enabled)
-
-            if "layer3_cost_guard" in dl:
-                l3 = dl["layer3_cost_guard"]
-                state.layer3_enabled = l3.get("enabled", state.layer3_enabled)
-                state.layer3_tolerance = l3.get("tolerance", state.layer3_tolerance)
-
-            if "layer4_step_clipping" in dl:
-                l4 = dl["layer4_step_clipping"]
-                state.layer4_enabled = l4.get("enabled", state.layer4_enabled)
-                state.layer4_max_step = l4.get("max_step_size", state.layer4_max_step)
-
-    # Parse batch section
-    if "batch" in config:
-        batch = config["batch"]
-        state.batch_max_workers = batch.get("max_workers", state.batch_max_workers)
-        state.batch_continue_on_error = batch.get(
-            "continue_on_error", state.batch_continue_on_error
-        )
-        state.batch_summary_format = batch.get(
-            "summary_format", state.batch_summary_format
-        )
-
-    # Parse global optimization section (alternative multi-start config)
-    if "global_optimization" in config:
-        go = config["global_optimization"]
-        if "n_starts" in go and go["n_starts"] > 0:
-            state.enable_multistart = True
-            state.n_starts = go["n_starts"]
-        state.sampler = go.get("sampler", state.sampler)
-        state.center_on_p0 = go.get("center_on_p0", state.center_on_p0)
-        state.scale_factor = go.get("scale_factor", state.scale_factor)
+    _parse_model_section(config, state)
+    _parse_fitting_section(config, state)
+    _parse_hybrid_streaming_section(config, state)
+    _parse_batch_section(config, state)
+    _parse_global_optimization_section(config, state)
 
     return state
 

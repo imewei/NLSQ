@@ -7,6 +7,7 @@ including session bundles, JSON, CSV, and Python code generation.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import zipfile
 from io import StringIO
@@ -396,10 +397,10 @@ class ExportPage(QWidget):
                 data_csv.write("x,y,y_fit,residuals\n")
                 y_fit = self._compute_y_fit()
                 if y_fit is not None:
-                    for x, y, yf in zip(state.xdata, state.ydata, y_fit):
-                        data_csv.write(f"{x},{y},{yf},{y-yf}\n")
+                    for x, y, yf in zip(state.xdata, state.ydata, y_fit, strict=False):
+                        data_csv.write(f"{x},{y},{yf},{y - yf}\n")
                 else:
-                    for x, y in zip(state.xdata, state.ydata):
+                    for x, y in zip(state.xdata, state.ydata, strict=False):
                         data_csv.write(f"{x},{y},,\n")
                 zf.writestr("data.csv", data_csv.getvalue())
 
@@ -439,10 +440,10 @@ class ExportPage(QWidget):
             lines = ["x,y,y_fit,residuals"]
             y_fit = self._compute_y_fit()
             if y_fit is not None:
-                for x, y, yf in zip(state.xdata, state.ydata, y_fit):
-                    lines.append(f"{x},{y},{yf},{y-yf}")
+                for x, y, yf in zip(state.xdata, state.ydata, y_fit, strict=False):
+                    lines.append(f"{x},{y},{yf},{y - yf}")
             else:
-                for x, y in zip(state.xdata, state.ydata):
+                for x, y in zip(state.xdata, state.ydata, strict=False):
                     lines.append(f"{x},{y},,")
 
             Path(path).write_text("\n".join(lines), encoding="utf-8")
@@ -499,40 +500,48 @@ class ExportPage(QWidget):
             model_type = state.model_config.get("type", "unknown")
             if model_type == "builtin":
                 model_name = state.model_config.get("name", "linear")
-                lines.extend([
-                    f"# Using built-in model: {model_name}",
-                    f"from nlsq.core.functions import {model_name}",
-                    f"model = {model_name}",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        f"# Using built-in model: {model_name}",
+                        f"from nlsq.core.functions import {model_name}",
+                        f"model = {model_name}",
+                        "",
+                    ]
+                )
             elif model_type == "polynomial":
                 degree = state.model_config.get("degree", 2)
-                lines.extend([
-                    f"# Polynomial model of degree {degree}",
-                    "def polynomial(x, *coeffs):",
-                    "    result = 0.0",
-                    "    for i, c in enumerate(coeffs):",
-                    "        result += c * x**i",
-                    "    return result",
-                    "",
-                    f"# degree = {degree}",
-                    "model = polynomial",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        f"# Polynomial model of degree {degree}",
+                        "def polynomial(x, *coeffs):",
+                        "    result = 0.0",
+                        "    for i, c in enumerate(coeffs):",
+                        "        result += c * x**i",
+                        "    return result",
+                        "",
+                        f"# degree = {degree}",
+                        "model = polynomial",
+                        "",
+                    ]
+                )
             elif model_type == "custom":
                 code = state.model_config.get("code", "")
-                lines.extend([
-                    "# Custom model function",
-                    code,
-                    "",
-                ])
+                lines.extend(
+                    [
+                        "# Custom model function",
+                        code,
+                        "",
+                    ]
+                )
         else:
-            lines.extend([
-                "# Define your model function",
-                "def model(x, a, b):",
-                "    return a * x + b",
-                "",
-            ])
+            lines.extend(
+                [
+                    "# Define your model function",
+                    "def model(x, a, b):",
+                    "    return a * x + b",
+                    "",
+                ]
+            )
 
         # Add data
         if state.xdata is not None and state.ydata is not None:
@@ -541,26 +550,32 @@ class ExportPage(QWidget):
             if n <= 20:
                 x_str = np.array2string(state.xdata, separator=", ", max_line_width=80)
                 y_str = np.array2string(state.ydata, separator=", ", max_line_width=80)
-                lines.extend([
-                    "# Data",
-                    f"xdata = np.array({x_str})",
-                    f"ydata = np.array({y_str})",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        "# Data",
+                        f"xdata = np.array({x_str})",
+                        f"ydata = np.array({y_str})",
+                        "",
+                    ]
+                )
             else:
-                lines.extend([
-                    "# Data (load from file)",
-                    "# xdata = np.loadtxt('data.csv', delimiter=',', usecols=0)",
-                    "# ydata = np.loadtxt('data.csv', delimiter=',', usecols=1)",
-                    f"xdata = np.linspace(0, 10, {n})  # Replace with your data",
-                    f"ydata = np.zeros({n})  # Replace with your data",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        "# Data (load from file)",
+                        "# xdata = np.loadtxt('data.csv', delimiter=',', usecols=0)",
+                        "# ydata = np.loadtxt('data.csv', delimiter=',', usecols=1)",
+                        f"xdata = np.linspace(0, 10, {n})  # Replace with your data",
+                        f"ydata = np.zeros({n})  # Replace with your data",
+                        "",
+                    ]
+                )
 
         # Add fitting options
-        lines.extend([
-            "# Fitting options",
-        ])
+        lines.extend(
+            [
+                "# Fitting options",
+            ]
+        )
 
         if state.p0:
             p0_str = str(list(state.p0))
@@ -573,30 +588,32 @@ class ExportPage(QWidget):
         else:
             lines.append("bounds = (-np.inf, np.inf)")
 
-        lines.extend([
-            "",
-            "# Run curve fitting",
-            "popt, pcov = curve_fit(",
-            "    model,",
-            "    xdata,",
-            "    ydata,",
-            "    p0=p0,",
-            "    bounds=bounds,",
-            ")",
-            "",
-            "# Print results",
-            'print("Fitted parameters:")',
-            "for i, val in enumerate(popt):",
-            "    err = np.sqrt(pcov[i, i])",
-            '    print(f"  p{i} = {val:.6g} +/- {err:.6g}")',
-            "",
-            "# Compute R-squared",
-            "y_fit = model(xdata, *popt)",
-            "ss_res = np.sum((ydata - y_fit)**2)",
-            "ss_tot = np.sum((ydata - np.mean(ydata))**2)",
-            "r_squared = 1 - (ss_res / ss_tot)",
-            'print(f"R-squared: {r_squared:.6f}")',
-        ])
+        lines.extend(
+            [
+                "",
+                "# Run curve fitting",
+                "popt, pcov = curve_fit(",
+                "    model,",
+                "    xdata,",
+                "    ydata,",
+                "    p0=p0,",
+                "    bounds=bounds,",
+                ")",
+                "",
+                "# Print results",
+                'print("Fitted parameters:")',
+                "for i, val in enumerate(popt):",
+                "    err = np.sqrt(pcov[i, i])",
+                '    print(f"  p{i} = {val:.6g} +/- {err:.6g}")',
+                "",
+                "# Compute R-squared",
+                "y_fit = model(xdata, *popt)",
+                "ss_res = np.sum((ydata - y_fit)**2)",
+                "ss_tot = np.sum((ydata - np.mean(ydata))**2)",
+                "r_squared = 1 - (ss_res / ss_tot)",
+                'print(f"R-squared: {r_squared:.6f}")',
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -626,10 +643,8 @@ class ExportPage(QWidget):
                     value = float(popt[i]) if i < len(popt) else 0.0
                     uncert = 0.0
                     if pcov is not None:
-                        try:
+                        with contextlib.suppress(Exception):
                             uncert = float(np.sqrt(pcov[i, i]))
-                        except Exception:
-                            pass
                     params[name] = {
                         "value": value,
                         "uncertainty": uncert,
@@ -650,7 +665,7 @@ class ExportPage(QWidget):
                 if y_fit is not None:
                     residuals = state.ydata - y_fit
                     ss_res = float(np.sum(residuals**2))
-                    ss_tot = float(np.sum((state.ydata - np.mean(state.ydata))**2))
+                    ss_tot = float(np.sum((state.ydata - np.mean(state.ydata)) ** 2))
                     r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
                     rmse = float(np.sqrt(np.mean(residuals**2)))
 
@@ -683,8 +698,7 @@ class ExportPage(QWidget):
             for key, value in state.model_config.items():
                 if isinstance(value, str) and "\n" in value:
                     lines.append(f"  {key}: |")
-                    for line in value.split("\n"):
-                        lines.append(f"    {line}")
+                    lines.extend(f"    {line}" for line in value.split("\n"))
                 else:
                     lines.append(f"  {key}: {value}")
             lines.append("")
@@ -693,7 +707,9 @@ class ExportPage(QWidget):
         lines.append(f"  gtol: {state.gtol if hasattr(state, 'gtol') else 1e-8}")
         lines.append(f"  ftol: {state.ftol if hasattr(state, 'ftol') else 1e-8}")
         lines.append(f"  xtol: {state.xtol if hasattr(state, 'xtol') else 1e-8}")
-        lines.append(f"  max_iterations: {state.max_iterations if hasattr(state, 'max_iterations') else 200}")
+        lines.append(
+            f"  max_iterations: {state.max_iterations if hasattr(state, 'max_iterations') else 200}"
+        )
 
         return "\n".join(lines)
 

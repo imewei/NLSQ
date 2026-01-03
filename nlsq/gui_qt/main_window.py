@@ -220,7 +220,9 @@ class MainWindow(QMainWindow):
         for i, (page_name, _, _) in enumerate(PAGE_CONFIG):
             action = QAction(self)
             action.setShortcut(QKeySequence(f"Ctrl+{i + 1}"))
-            action.triggered.connect(lambda checked, idx=i: self._nav_list.setCurrentRow(idx))
+            action.triggered.connect(
+                lambda checked, idx=i: self._nav_list.setCurrentRow(idx)
+            )
             self.addAction(action)
 
         # Theme toggle (Ctrl+T)
@@ -312,9 +314,17 @@ class MainWindow(QMainWindow):
 
             # Update item flags
             if can_access:
-                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                item.setFlags(
+                    item.flags()
+                    | Qt.ItemFlag.ItemIsEnabled
+                    | Qt.ItemFlag.ItemIsSelectable
+                )
             else:
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled & ~Qt.ItemFlag.ItemIsSelectable)
+                item.setFlags(
+                    item.flags()
+                    & ~Qt.ItemFlag.ItemIsEnabled
+                    & ~Qt.ItemFlag.ItemIsSelectable
+                )
 
     def _update_status(self) -> None:
         """Update status bar with current data info."""

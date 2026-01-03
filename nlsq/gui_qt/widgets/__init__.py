@@ -9,16 +9,16 @@ parameter configuration, and results display.
 from __future__ import annotations
 
 __all__: list[str] = [
-    "ColumnSelector",
-    "ColumnSelectorWidget",
+    "AdvancedOptionsWidget",
     "CodeEditor",
     "CodeEditorWidget",
-    "PythonHighlighter",
-    "ParamConfigWidget",
-    "AdvancedOptionsWidget",
-    "IterationTableWidget",
-    "ParamResultsWidget",
+    "ColumnSelector",
+    "ColumnSelectorWidget",
     "FitStatisticsWidget",
+    "IterationTableWidget",
+    "ParamConfigWidget",
+    "ParamResultsWidget",
+    "PythonHighlighter",
 ]
 
 

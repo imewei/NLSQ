@@ -33,29 +33,125 @@ __all__ = ["CodeEditorWidget", "PythonHighlighter"]
 
 # Python keywords for highlighting
 PYTHON_KEYWORDS = {
-    "and", "as", "assert", "async", "await", "break", "class", "continue",
-    "def", "del", "elif", "else", "except", "finally", "for", "from",
-    "global", "if", "import", "in", "is", "lambda", "nonlocal", "not",
-    "or", "pass", "raise", "return", "try", "while", "with", "yield",
-    "True", "False", "None",
+    "and",
+    "as",
+    "assert",
+    "async",
+    "await",
+    "break",
+    "class",
+    "continue",
+    "def",
+    "del",
+    "elif",
+    "else",
+    "except",
+    "finally",
+    "for",
+    "from",
+    "global",
+    "if",
+    "import",
+    "in",
+    "is",
+    "lambda",
+    "nonlocal",
+    "not",
+    "or",
+    "pass",
+    "raise",
+    "return",
+    "try",
+    "while",
+    "with",
+    "yield",
+    "True",
+    "False",
+    "None",
 }
 
 # Built-in functions
 PYTHON_BUILTINS = {
-    "abs", "all", "any", "bin", "bool", "bytes", "callable", "chr",
-    "dict", "dir", "divmod", "enumerate", "filter", "float", "format",
-    "frozenset", "getattr", "hasattr", "hash", "hex", "id", "input",
-    "int", "isinstance", "issubclass", "iter", "len", "list", "map",
-    "max", "min", "next", "object", "oct", "open", "ord", "pow",
-    "print", "range", "repr", "reversed", "round", "set", "setattr",
-    "slice", "sorted", "str", "sum", "super", "tuple", "type", "vars", "zip",
+    "abs",
+    "all",
+    "any",
+    "bin",
+    "bool",
+    "bytes",
+    "callable",
+    "chr",
+    "dict",
+    "dir",
+    "divmod",
+    "enumerate",
+    "filter",
+    "float",
+    "format",
+    "frozenset",
+    "getattr",
+    "hasattr",
+    "hash",
+    "hex",
+    "id",
+    "input",
+    "int",
+    "isinstance",
+    "issubclass",
+    "iter",
+    "len",
+    "list",
+    "map",
+    "max",
+    "min",
+    "next",
+    "object",
+    "oct",
+    "open",
+    "ord",
+    "pow",
+    "print",
+    "range",
+    "repr",
+    "reversed",
+    "round",
+    "set",
+    "setattr",
+    "slice",
+    "sorted",
+    "str",
+    "sum",
+    "super",
+    "tuple",
+    "type",
+    "vars",
+    "zip",
 }
 
 # Scientific computing keywords
 NUMPY_KEYWORDS = {
-    "np", "jnp", "numpy", "jax", "exp", "log", "sin", "cos", "tan",
-    "sqrt", "abs", "power", "array", "zeros", "ones", "linspace",
-    "arange", "sum", "mean", "std", "where", "pi", "e",
+    "np",
+    "jnp",
+    "numpy",
+    "jax",
+    "exp",
+    "log",
+    "sin",
+    "cos",
+    "tan",
+    "sqrt",
+    "abs",
+    "power",
+    "array",
+    "zeros",
+    "ones",
+    "linspace",
+    "arange",
+    "sum",
+    "mean",
+    "std",
+    "where",
+    "pi",
+    "e",
 }
 
 
@@ -126,6 +222,7 @@ class PythonHighlighter(QSyntaxHighlighter):
     ) -> None:
         """Highlight specific words in the text."""
         import re
+
         for word in words:
             pattern = rf"\b{re.escape(word)}\b"
             for match in re.finditer(pattern, text):
@@ -134,6 +231,7 @@ class PythonHighlighter(QSyntaxHighlighter):
     def _highlight_function_defs(self, text: str) -> None:
         """Highlight function definition names."""
         import re
+
         pattern = r"\bdef\s+(\w+)"
         for match in re.finditer(pattern, text):
             # Highlight the function name (group 1)
@@ -144,26 +242,37 @@ class PythonHighlighter(QSyntaxHighlighter):
     def _highlight_numbers(self, text: str) -> None:
         """Highlight numeric literals."""
         import re
+
         # Match integers, floats, and scientific notation
         pattern = r"\b\d+\.?\d*(?:[eE][+-]?\d+)?\b"
         for match in re.finditer(pattern, text):
-            self.setFormat(match.start(), match.end() - match.start(), self._number_format)
+            self.setFormat(
+                match.start(), match.end() - match.start(), self._number_format
+            )
 
     def _highlight_strings(self, text: str) -> None:
         """Highlight string literals."""
         import re
+
         # Single-quoted strings
         for match in re.finditer(r"'[^'\\]*(?:\\.[^'\\]*)*'", text):
-            self.setFormat(match.start(), match.end() - match.start(), self._string_format)
+            self.setFormat(
+                match.start(), match.end() - match.start(), self._string_format
+            )
         # Double-quoted strings
         for match in re.finditer(r'"[^"\\]*(?:\\.[^"\\]*)*"', text):
-            self.setFormat(match.start(), match.end() - match.start(), self._string_format)
+            self.setFormat(
+                match.start(), match.end() - match.start(), self._string_format
+            )
 
     def _highlight_comments(self, text: str) -> None:
         """Highlight comments."""
         import re
+
         for match in re.finditer(r"#.*$", text):
-            self.setFormat(match.start(), match.end() - match.start(), self._comment_format)
+            self.setFormat(
+                match.start(), match.end() - match.start(), self._comment_format
+            )
 
 
 class CodeEditorWidget(QWidget):

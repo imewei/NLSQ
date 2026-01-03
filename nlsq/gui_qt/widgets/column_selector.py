@@ -37,7 +37,9 @@ class ColumnSelectorWidget(QWidget):
     """
 
     # Signal emitted when column selection changes
-    selection_changed = Signal(dict)  # {"x": int, "y": int, "sigma": int|None, "z": int|None}
+    selection_changed = Signal(
+        dict
+    )  # {"x": int, "y": int, "sigma": int|None, "z": int|None}
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the column selector widget.
@@ -72,27 +74,37 @@ class ColumnSelectorWidget(QWidget):
         # Column assignment group
         columns_group = QGroupBox("Column Assignment")
         columns_layout = QFormLayout(columns_group)
-        columns_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        columns_layout.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+        )
 
         # X column selector
         self._x_combo = QComboBox()
-        self._x_combo.setToolTip("Select the column containing X values (independent variable)")
+        self._x_combo.setToolTip(
+            "Select the column containing X values (independent variable)"
+        )
         columns_layout.addRow("X Column:", self._x_combo)
 
         # Y column selector
         self._y_combo = QComboBox()
-        self._y_combo.setToolTip("Select the column containing Y values (dependent variable for 1D, second coordinate for 2D)")
+        self._y_combo.setToolTip(
+            "Select the column containing Y values (dependent variable for 1D, second coordinate for 2D)"
+        )
         columns_layout.addRow("Y Column:", self._y_combo)
 
         # Z column selector (2D mode only)
         self._z_combo = QComboBox()
-        self._z_combo.setToolTip("Select the column containing Z values (dependent variable for 2D surface)")
+        self._z_combo.setToolTip(
+            "Select the column containing Z values (dependent variable for 2D surface)"
+        )
         self._z_label = QLabel("Z Column:")
         columns_layout.addRow(self._z_label, self._z_combo)
 
         # Sigma column selector (optional)
         self._sigma_combo = QComboBox()
-        self._sigma_combo.setToolTip("Select the column containing measurement uncertainties (optional)")
+        self._sigma_combo.setToolTip(
+            "Select the column containing measurement uncertainties (optional)"
+        )
         columns_layout.addRow("Sigma (optional):", self._sigma_combo)
 
         layout.addWidget(columns_group)
@@ -131,9 +143,13 @@ class ColumnSelectorWidget(QWidget):
 
         # Update Y column tooltip based on mode
         if is_2d:
-            self._y_combo.setToolTip("Select the column containing Y coordinates (second independent variable)")
+            self._y_combo.setToolTip(
+                "Select the column containing Y coordinates (second independent variable)"
+            )
         else:
-            self._y_combo.setToolTip("Select the column containing Y values (dependent variable)")
+            self._y_combo.setToolTip(
+                "Select the column containing Y values (dependent variable)"
+            )
 
     def _on_selection_changed(self) -> None:
         """Handle column selection change."""
@@ -266,7 +282,7 @@ class ColumnSelectorWidget(QWidget):
         if self._mode == "2d":
             if z_idx is None:
                 return False, "Z column required for 2D mode"
-            if z_idx == x_idx or z_idx == y_idx:
+            if z_idx in {x_idx, y_idx}:
                 return False, "Z must be different from X and Y columns"
 
         # Check sigma uniqueness if set

@@ -95,13 +95,17 @@ class ParamResultsWidget(QWidget):
             # Value
             value = values[row] if row < len(values) else 0.0
             value_item = QTableWidgetItem(f"{value:.6g}")
-            value_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            value_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             self._table.setItem(row, 1, value_item)
 
             # Uncertainty
             uncert = uncertainties[row] if row < len(uncertainties) else 0.0
-            uncert_item = QTableWidgetItem(f"\u00B1 {uncert:.6g}")  # ± symbol
-            uncert_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            uncert_item = QTableWidgetItem(f"\u00b1 {uncert:.6g}")  # ± symbol
+            uncert_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             self._table.setItem(row, 2, uncert_item)
 
             # Confidence interval
@@ -111,7 +115,9 @@ class ParamResultsWidget(QWidget):
             else:
                 ci_text = "-"
             ci_item = QTableWidgetItem(ci_text)
-            ci_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            ci_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             self._table.setItem(row, 3, ci_item)
 
     def clear(self) -> None:
