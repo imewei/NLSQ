@@ -118,8 +118,10 @@ class TestModelRegistryBuiltinRetrieval:
 class TestModelRegistryCustomModels:
     """Tests for custom model loading from external Python files."""
 
-    def test_load_custom_model_from_file(self, tmp_path: Path):
+    def test_load_custom_model_from_file(self, tmp_path: Path, monkeypatch):
         """Test loading a custom model from an external Python file."""
+        # Change to tmp_path so validate_path allows the model file
+        monkeypatch.chdir(tmp_path)
         # Create a custom model file
         model_file = tmp_path / "custom_model.py"
         model_file.write_text(
@@ -147,8 +149,10 @@ class TestModelRegistryCustomModels:
         result = model(x, 1.0, 1.0, 0.0)
         assert result is not None
 
-    def test_custom_model_with_estimate_p0(self, tmp_path: Path):
+    def test_custom_model_with_estimate_p0(self, tmp_path: Path, monkeypatch):
         """Test that custom models can have optional estimate_p0 method."""
+        # Change to tmp_path so validate_path allows the model file
+        monkeypatch.chdir(tmp_path)
         model_file = tmp_path / "custom_with_estimate.py"
         model_file.write_text(
             textwrap.dedent("""
@@ -180,8 +184,10 @@ class TestModelRegistryCustomModels:
         p0 = model.estimate_p0(xdata, ydata)
         assert p0 == [8.0, 0.1]
 
-    def test_custom_model_with_bounds(self, tmp_path: Path):
+    def test_custom_model_with_bounds(self, tmp_path: Path, monkeypatch):
         """Test that custom models can have optional bounds method."""
+        # Change to tmp_path so validate_path allows the model file
+        monkeypatch.chdir(tmp_path)
         model_file = tmp_path / "custom_with_bounds.py"
         model_file.write_text(
             textwrap.dedent("""

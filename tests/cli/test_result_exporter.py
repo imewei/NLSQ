@@ -271,10 +271,12 @@ class TestWorkflowRunner:
         assert 0.1 < popt[1] < 0.6  # decay rate
         assert 0.0 < popt[2] < 1.5  # offset
 
-    def test_workflow_execution_with_custom_model(self, tmp_path):
+    def test_workflow_execution_with_custom_model(self, tmp_path, monkeypatch):
         """Test workflow execution with a custom model from file."""
         from nlsq.cli.workflow_runner import WorkflowRunner
 
+        # Change to tmp_path so validate_path allows the model file
+        monkeypatch.chdir(tmp_path)
         # Create custom model file
         custom_model_file = tmp_path / "my_model.py"
         custom_model_file.write_text('''
