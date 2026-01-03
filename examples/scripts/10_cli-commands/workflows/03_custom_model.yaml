@@ -35,6 +35,7 @@ data:
   csv:
     header: true
     delimiter: ","
+    skip_header: 2
 
 # ==============================================================================
 # MODEL CONFIGURATION - CUSTOM MODEL

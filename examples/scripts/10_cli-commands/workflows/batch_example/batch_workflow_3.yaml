@@ -21,6 +21,7 @@ data:
   csv:
     header: true
     delimiter: ","
+    skip_header: 1
 
 model:
   type: "builtin"

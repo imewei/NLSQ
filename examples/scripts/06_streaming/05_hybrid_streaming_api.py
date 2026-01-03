@@ -191,9 +191,11 @@ def main():
     print(f"Fitted params: {popt}")
     print("\nDefense Layer Telemetry:")
     print(f"  Layer 1 (warm start) rate: {rates.get('layer1_warm_start_rate', 0):.1f}%")
-    print(f"  Layer 2 LR modes: {summary['layer2_lr_mode_counts']}")
-    print(f"  Layer 3 (cost guard) triggers: {summary['layer3_cost_guard_triggers']}")
-    print(f"  Layer 4 (step clip) triggers: {summary['layer4_clip_triggers']}")
+    print(f"  Layer 2 LR modes: {summary.get('layer2_lr_mode_counts', {})}")
+    print(
+        f"  Layer 3 (cost guard) triggers: {summary.get('layer3_cost_guard_triggers', 0)}"
+    )
+    print(f"  Layer 4 (step clip) triggers: {summary.get('layer4_clip_triggers', 0)}")
     print()
 
     # =========================================================================

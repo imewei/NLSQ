@@ -524,7 +524,6 @@ def demo_sparse_jacobian_fitting():
     print("\n💡 Notice how each Gaussian parameter only affects a localized region!")
 
 
-# Run demo
 demo_sparse_jacobian_fitting()
 
 
@@ -574,8 +573,12 @@ def demo_adaptive_hybrid_streaming():
     print("\n✅ Adaptive hybrid streaming demo complete")
 
 
-# Run demo
-demo_adaptive_hybrid_streaming()
+if QUICK:
+    print(
+        "\n⏩ Quick mode: skipping adaptive hybrid streaming and combined optimization."
+    )
+else:
+    demo_adaptive_hybrid_streaming()
 
 
 # ======================================================================
@@ -775,8 +778,8 @@ def demo_combined_optimization():
     pool.clear()
 
 
-# Run combined demo
-demo_combined_optimization()
+if not QUICK:
+    demo_combined_optimization()
 
 
 # ======================================================================

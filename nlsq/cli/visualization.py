@@ -21,6 +21,7 @@ Example Usage
 >>> output_paths = visualizer.generate(result, data, model, config)
 """
 
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -863,14 +864,20 @@ class FitVisualizer:
 
         for fmt in formats:
             output_path = output_dir / f"{filename_base}.{fmt}"
-            fig.savefig(
-                output_path,
-                format=fmt,
-                dpi=dpi,
-                bbox_inches="tight",
-                facecolor="white",
-                edgecolor="none",
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r".*Glyph 65534.*",
+                    category=UserWarning,
+                )
+                fig.savefig(
+                    output_path,
+                    format=fmt,
+                    dpi=dpi,
+                    bbox_inches="tight",
+                    facecolor="white",
+                    edgecolor="none",
+                )
             output_paths.append(str(output_path))
 
         return output_paths

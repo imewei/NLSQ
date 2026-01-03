@@ -30,9 +30,9 @@ import sys
 from pathlib import Path
 
 # Import NLSQ before importing JAX since NLSQ configures JAX to use 64-bit precision
-import jax.numpy as jnp
-
 from nlsq import CurveFit, __version__
+
+import jax.numpy as jnp
 
 print(f"NLSQ version: {__version__}")
 

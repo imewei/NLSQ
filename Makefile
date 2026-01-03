@@ -700,7 +700,7 @@ clean-test:
 		-not -path "./.specify/*" \
 		-not -path "./agent-os/*" \
 		-exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name "figures" \
+	find . -type d -name figures \
 		-not -path "./.venv/*" \
 		-not -path "./venv/*" \
 		-not -path "./.claude/*" \
