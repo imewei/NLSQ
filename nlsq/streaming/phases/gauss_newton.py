@@ -76,8 +76,10 @@ class GaussNewtonPhase:
 
     Notes
     -----
-    The Gauss-Newton method iteratively solves:
+    The Gauss-Newton method iteratively solves::
+
         (J^T J) @ step = J^T r
+
     where J is the Jacobian and r is the residual vector.
     """
 

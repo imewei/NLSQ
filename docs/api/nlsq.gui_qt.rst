@@ -78,74 +78,58 @@ Submodules
 Pages
 ~~~~~
 
-.. autosummary::
-   :toctree: generated/
+Workflow pages for the 5-step fitting process:
 
-   nlsq.gui_qt.pages.data_loading
-   nlsq.gui_qt.pages.model_selection
-   nlsq.gui_qt.pages.fitting_options
-   nlsq.gui_qt.pages.results
-   nlsq.gui_qt.pages.export
+- ``nlsq.gui_qt.pages.data_loading`` - Data import and column selection
+- ``nlsq.gui_qt.pages.model_selection`` - Model function selection
+- ``nlsq.gui_qt.pages.fitting_options`` - Fit configuration
+- ``nlsq.gui_qt.pages.results`` - Fit results and visualization
+- ``nlsq.gui_qt.pages.export`` - Export results in various formats
 
 Widgets
 ~~~~~~~
 
 Reusable Qt widgets for the fitting workflow:
 
-.. autosummary::
-   :toctree: generated/
-
-   nlsq.gui_qt.widgets.advanced_options
-   nlsq.gui_qt.widgets.column_selector
-   nlsq.gui_qt.widgets.param_config
-   nlsq.gui_qt.widgets.param_results
-   nlsq.gui_qt.widgets.fit_statistics
-   nlsq.gui_qt.widgets.iteration_table
-   nlsq.gui_qt.widgets.code_editor
+- ``nlsq.gui_qt.widgets.advanced_options`` - Advanced fitting options panel
+- ``nlsq.gui_qt.widgets.column_selector`` - Data column assignment widget
+- ``nlsq.gui_qt.widgets.param_config`` - Parameter configuration widget
+- ``nlsq.gui_qt.widgets.param_results`` - Fitted parameter display
+- ``nlsq.gui_qt.widgets.fit_statistics`` - Fit quality statistics
+- ``nlsq.gui_qt.widgets.iteration_table`` - Optimization iteration history
+- ``nlsq.gui_qt.widgets.code_editor`` - Syntax-highlighted code editor
 
 Plots
 ~~~~~
 
 pyqtgraph-based scientific plotting widgets:
 
-.. autosummary::
-   :toctree: generated/
-
-   nlsq.gui_qt.plots.base_plot
-   nlsq.gui_qt.plots.fit_plot
-   nlsq.gui_qt.plots.residuals_plot
-   nlsq.gui_qt.plots.histogram_plot
-   nlsq.gui_qt.plots.live_cost_plot
+- ``nlsq.gui_qt.plots.base_plot`` - Base plot widget class
+- ``nlsq.gui_qt.plots.fit_plot`` - Data and fit curve visualization
+- ``nlsq.gui_qt.plots.residuals_plot`` - Residuals visualization
+- ``nlsq.gui_qt.plots.histogram_plot`` - Residual histogram
+- ``nlsq.gui_qt.plots.live_cost_plot`` - Live cost function during fitting
 
 Adapters
 ~~~~~~~~
 
 Data adapters for the GUI workflow:
 
-.. autosummary::
-   :toctree: generated/
-
-   nlsq.gui_qt.adapters.data_adapter
-   nlsq.gui_qt.adapters.fit_adapter
-   nlsq.gui_qt.adapters.config_adapter
-   nlsq.gui_qt.adapters.export_adapter
+- ``nlsq.gui_qt.adapters.data_adapter`` - Data loading and validation
+- ``nlsq.gui_qt.adapters.fit_adapter`` - Fit execution wrapper
+- ``nlsq.gui_qt.adapters.config_adapter`` - YAML configuration import/export
+- ``nlsq.gui_qt.adapters.export_adapter`` - Results export utilities
 
 State Management
 ~~~~~~~~~~~~~~~~
 
-.. autosummary::
-   :toctree: generated/
-
-   nlsq.gui_qt.session_state
-   nlsq.gui_qt.app_state
+- ``nlsq.gui_qt.session_state`` - Session state dataclass
+- ``nlsq.gui_qt.app_state`` - Qt signal-based application state
 
 Theme
 ~~~~~
 
-.. autosummary::
-   :toctree: generated/
-
-   nlsq.gui_qt.theme
+- ``nlsq.gui_qt.theme`` - Theme configuration and management
 
 See Also
 --------

@@ -12,17 +12,8 @@ between components.
    :undoc-members:
    :show-inheritance:
 
-CurveFitAdapter
----------------
-
-.. autoclass:: nlsq.core.adapters.CurveFitAdapter
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :special-members: __init__
-
 Usage Example
-~~~~~~~~~~~~~
+-------------
 
 .. code-block:: python
 

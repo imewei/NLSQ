@@ -11,57 +11,33 @@ streaming optimizer, enabling modular streaming optimization workflows.
    :undoc-members:
    :show-inheritance:
 
-Phase Classes
--------------
+Phase Classes Overview
+----------------------
 
 WarmupPhase
 ~~~~~~~~~~~
 
-.. autoclass:: nlsq.streaming.phases.WarmupPhase
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. autoclass:: nlsq.streaming.phases.WarmupResult
-   :members:
-   :undoc-members:
-   :show-inheritance:
+L-BFGS warmup phase for initial parameter optimization. See
+:class:`~nlsq.streaming.phases.WarmupPhase` and
+:class:`~nlsq.streaming.phases.WarmupResult`.
 
 GaussNewtonPhase
 ~~~~~~~~~~~~~~~~
 
-.. autoclass:: nlsq.streaming.phases.GaussNewtonPhase
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. autoclass:: nlsq.streaming.phases.GNResult
-   :members:
-   :undoc-members:
-   :show-inheritance:
+Streaming Gauss-Newton phase for refined optimization. See
+:class:`~nlsq.streaming.phases.GaussNewtonPhase` and
+:class:`~nlsq.streaming.phases.GNResult`.
 
 PhaseOrchestrator
 ~~~~~~~~~~~~~~~~~
 
-.. autoclass:: nlsq.streaming.phases.PhaseOrchestrator
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. autoclass:: nlsq.streaming.phases.PhaseOrchestratorResult
-   :members:
-   :undoc-members:
-   :show-inheritance:
+Coordinates the multi-phase optimization workflow. See
+:class:`~nlsq.streaming.phases.PhaseOrchestrator` and
+:class:`~nlsq.streaming.phases.PhaseOrchestratorResult`.
 
 CheckpointManager
 ~~~~~~~~~~~~~~~~~
 
-.. autoclass:: nlsq.streaming.phases.CheckpointManager
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. autoclass:: nlsq.streaming.phases.CheckpointState
-   :members:
-   :undoc-members:
-   :show-inheritance:
+Manages checkpoint save/restore for crash recovery. See
+:class:`~nlsq.streaming.phases.CheckpointManager` and
+:class:`~nlsq.streaming.phases.CheckpointState`.

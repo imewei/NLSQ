@@ -1339,7 +1339,8 @@ class WorkflowConfig:
         Parameters
         ----------
         preset_name : str
-            Name of the preset. Available presets include:
+            Name of the preset. Available presets:
+
             - Core: 'standard', 'quality', 'fast', 'large_robust', 'streaming',
               'hpc_distributed', 'memory_efficient'
             - Precision: 'precision_high', 'precision_standard'
