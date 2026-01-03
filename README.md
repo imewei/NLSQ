@@ -178,10 +178,10 @@ The GUI provides:
 - **Data Loading**: Import CSV, ASCII, NPZ, or HDF5 files, or paste from clipboard
 - **Model Selection**: Choose from 7 built-in models, polynomials, or custom Python functions
 - **Fitting Options**: Guided presets (Fast/Robust/Quality) or advanced parameter control
-- **Interactive Results**: Plotly-based visualizations with confidence bands and residuals
+- **Interactive Results**: GPU-accelerated pyqtgraph plots with confidence bands and residuals
 - **Export**: Session bundles (ZIP), JSON/CSV results, and reproducible Python code
 
-See the [GUI User Guide](docs/gui_user_guide.md) for detailed documentation.
+See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) for detailed documentation.
 
 ## Key Features
 

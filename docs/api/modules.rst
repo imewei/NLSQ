@@ -90,6 +90,16 @@ YAML-based workflow execution from the command line:
 
    nlsq.cli
 
+Qt Desktop GUI (v0.5.0+)
+------------------------
+
+Native desktop application with PySide6 and pyqtgraph:
+
+.. toctree::
+   :maxdepth: 2
+
+   nlsq.gui_qt
+
 Enhanced Features (v0.1.1)
 --------------------------
 
@@ -227,6 +237,9 @@ Complete Module Listing
 
 **Command-Line Interface Modules** (NEW in v0.4.1+):
 - :doc:`nlsq.cli` - CLI commands: ``nlsq fit``, ``nlsq batch``, ``nlsq info``, ``nlsq gui``
+
+**Qt Desktop GUI** (NEW in v0.5.0+):
+- :doc:`nlsq.gui_qt` - Native desktop application with PySide6 and pyqtgraph
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management
