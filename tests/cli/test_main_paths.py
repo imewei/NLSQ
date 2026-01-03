@@ -135,32 +135,28 @@ def test_handle_config_file_exists(
     assert "exists" in capsys.readouterr().err
 
 
-def test_handle_gui_missing_app(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """handle_gui should return 1 if app.py is missing."""
-    from pathlib import Path
+def test_handle_gui_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """handle_gui should return 1 if Qt dependencies are missing."""
+    import builtins
 
-    monkeypatch.setattr(Path, "exists", lambda _self: False)
-    args = types.SimpleNamespace(port=8501, browser=False, no_browser=False)
-    assert cli_main.handle_gui(args) == 1
-    assert "app.py not found" in capsys.readouterr().err
+    original_import = builtins.__import__
 
+    def mock_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "nlsq.gui_qt" or name.startswith("nlsq.gui_qt"):
+            raise ImportError("PySide6 not installed")
+        return original_import(name, *args, **kwargs)
 
-def test_handle_gui_subprocess_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    """handle_gui should handle FileNotFoundError and KeyboardInterrupt."""
-    import subprocess
-
-    args = types.SimpleNamespace(port=8501, browser=False, no_browser=False)
-
-    def _raise_filenotfound(*_args: object, **_kwargs: object) -> None:
-        raise FileNotFoundError("missing")
-
-    monkeypatch.setattr(subprocess, "run", _raise_filenotfound)
+    monkeypatch.setattr(builtins, "__import__", mock_import)
+    args = types.SimpleNamespace()
     assert cli_main.handle_gui(args) == 1
 
-    def _raise_keyboard(*_args: object, **_kwargs: object) -> None:
+
+def test_handle_gui_keyboard_interrupt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """handle_gui should return 0 on KeyboardInterrupt."""
+
+    def mock_run_desktop() -> int:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(subprocess, "run", _raise_keyboard)
+    monkeypatch.setattr("nlsq.gui_qt.run_desktop", mock_run_desktop)
+    args = types.SimpleNamespace()
     assert cli_main.handle_gui(args) == 0

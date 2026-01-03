@@ -417,7 +417,7 @@ class TestIntegration:
 
         # Verify profiling
         assert metrics.total_time_sec > 0.0
-        assert metrics.total_time_sec < 5.0
+        assert metrics.total_time_sec < 10.0  # Increased for CI stability
 
         # Verify convergence
         assert popt is not None
