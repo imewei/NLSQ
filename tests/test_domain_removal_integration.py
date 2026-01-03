@@ -314,8 +314,6 @@ class TestModuleIntegration:
 
     def test_parameter_sensitivity_uses_correct_issue_category(self):
         """Test ParameterSensitivityAnalyzer issues use IssueCategory.SENSITIVITY."""
-        from nlsq.diagnostics.types import IssueCategory
-
         # Create analyzer and analyze a problematic Jacobian
         np.random.seed(42)
         J = np.random.randn(100, 3)
@@ -326,10 +324,11 @@ class TestModuleIntegration:
         analyzer = ParameterSensitivityAnalyzer(config=config)
         report = analyzer.analyze(J)
 
-        # If issues were generated, verify category
+        # If issues were generated, verify category by name
+        # (using name comparison avoids enum identity issues in parallel tests)
         for issue in report.issues:
-            assert issue.category == IssueCategory.SENSITIVITY, (
-                f"Issue category should be SENSITIVITY, got: {issue.category}"
+            assert issue.category.name == "SENSITIVITY", (
+                f"Issue category should be SENSITIVITY, got: {issue.category.name}"
             )
 
     def test_recommendations_use_sens_codes(self):

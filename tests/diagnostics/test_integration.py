@@ -750,9 +750,8 @@ class TestBackwardCompatibility:
 
 @pytest.mark.diagnostics
 @pytest.mark.slow
-@pytest.mark.xfail(
-    reason="Performance overhead varies significantly by environment; benchmark only",
-    strict=False,
+@pytest.mark.skip(
+    reason="Performance overhead varies significantly by environment; run manually for benchmarking"
 )
 class TestDiagnosticsPerformance:
     """Performance benchmark tests for diagnostics overhead (T053).
@@ -761,9 +760,9 @@ class TestDiagnosticsPerformance:
     CI stability across different hardware). Uses 10,000 point exponential
     decay dataset as specified.
 
-    Note: These tests are marked xfail because overhead varies dramatically
-    based on JIT compilation state, CPU load, and hardware. They serve as
-    benchmarks rather than correctness tests.
+    Note: These tests are skipped by default because overhead varies dramatically
+    based on JIT compilation state, CPU load, and hardware. Run manually with
+    `pytest -m slow --no-skip` for benchmarking.
     """
 
     @pytest.fixture
