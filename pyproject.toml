@@ -166,6 +166,14 @@ gui = [
     "pyyaml>=6.0.3",               # Tested on 6.0.3
     "pywebview>=5.4",              # Tested on 5.4
 ]
+gui_qt = [
+    # PySide6 Qt GUI dependencies for native desktop application
+    "PySide6>=6.6.0",              # Qt bindings (LGPL license)
+    "pyqtgraph>=0.13.0",           # GPU-accelerated scientific plotting
+    "pyqtdarktheme>=2.1.0",        # Modern theme support (qdarktheme)
+    "pyyaml>=6.0.3",               # YAML configuration support
+    "pytest-qt>=4.4.0",            # Qt widget testing
+]
 all = [
     # Development dependencies
     "pytest>=8.0.0",
@@ -221,6 +229,7 @@ Changelog = "https://github.com/imewei/NLSQ/blob/main/CHANGELOG.md"
 
 [project.scripts]
 nlsq = "nlsq.cli.main:main"
+nlsq-gui = "nlsq.gui_qt:run_desktop"
 
 [tool.setuptools]
 packages = ["nlsq"]
