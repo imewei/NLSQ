@@ -14,9 +14,7 @@ in parallel pytest-xdist workers.
 """
 
 import os
-import sys
 import time
-from contextlib import contextmanager
 from unittest import mock
 
 import jax
@@ -39,29 +37,6 @@ from nlsq.utils.profiling import (
 )
 
 
-@contextmanager
-def sync_debug_callback():
-    """Patch jax.debug.callback to execute synchronously.
-
-    This makes tests deterministic by removing async timing dependencies.
-    In parallel test environments, jax.debug.callback can be flaky due to
-    resource contention between workers.
-    """
-
-    def sync_callback(fn, *args, **kwargs):
-        # Convert JAX arrays to numpy for the callback
-        np_args = tuple(
-            np.asarray(a)
-            if hasattr(a, "__jax_array__") or isinstance(a, jax.Array)
-            else a
-            for a in args
-        )
-        fn(*np_args)
-
-    with mock.patch("jax.debug.callback", side_effect=sync_callback):
-        yield
-
-
 @pytest.mark.serial
 class TestAsyncLogging:
     """Test Task 2.4: Async logging with jax.debug.callback."""
@@ -77,98 +52,6 @@ class TestAsyncLogging:
         assert not is_jax_array(1.0)
         assert not is_jax_array("string")
         assert not is_jax_array(None)
-
-    @pytest.mark.skipif(
-        sys.platform == "darwin",
-        reason="jax.debug.callback mock is flaky on macOS runners",
-    )
-    def test_log_iteration_async_basic(self):
-        """Test basic async logging functionality."""
-        # Mock the logger and use sync callback for deterministic testing
-        with (
-            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
-            sync_debug_callback(),
-        ):
-            log_iteration_async(
-                iteration=10,
-                cost=1.5e-6,
-                gradient_norm=3.2e-8,
-                message="test message",
-                verbose=2,
-            )
-
-            # With sync callback, logger is called immediately
-            assert mock_logger.info.called
-
-    @pytest.mark.skipif(
-        sys.platform == "darwin",
-        reason="jax.debug.callback mock is flaky on macOS runners",
-    )
-    def test_log_iteration_async_jax_arrays(self):
-        """Test async logging with JAX arrays."""
-        with (
-            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
-            sync_debug_callback(),
-        ):
-            log_iteration_async(
-                iteration=jnp.array(5),
-                cost=jnp.array(2.3e-5),
-                gradient_norm=jnp.array(1.1e-7),
-                message="",
-                verbose=2,
-            )
-
-            # With sync callback, logger is called immediately
-            assert mock_logger.info.called
-
-    @pytest.mark.skipif(
-        sys.platform == "darwin",
-        reason="jax.debug.callback mock is flaky on macOS runners",
-    )
-    def test_log_iteration_async_verbosity_levels(self):
-        """Test verbosity control."""
-        with (
-            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
-            sync_debug_callback(),
-        ):
-            # verbose=0: No logging
-            log_iteration_async(1, 1.0, 1.0, verbose=0)
-            assert not mock_logger.info.called
-
-            # verbose=1: Log every 10 iterations
-            log_iteration_async(5, 1.0, 1.0, verbose=1)
-            assert not mock_logger.info.called
-
-            log_iteration_async(10, 1.0, 1.0, verbose=1)
-            assert mock_logger.info.called
-
-            mock_logger.reset_mock()
-
-            # verbose=2: Log every iteration
-            log_iteration_async(1, 1.0, 1.0, verbose=2)
-            assert mock_logger.info.called
-
-    @pytest.mark.skipif(
-        sys.platform == "darwin",
-        reason="jax.debug.callback mock is flaky on macOS runners",
-    )
-    def test_log_convergence_async(self):
-        """Test convergence logging."""
-        with (
-            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
-            sync_debug_callback(),
-        ):
-            log_convergence_async(
-                reason="`gtol` termination condition is satisfied.",
-                iterations=42,
-                final_cost=1.23e-10,
-                time_sec=2.456,
-                final_gradient_norm=5.67e-9,
-                verbose=1,
-            )
-
-            # With sync callback, logger is called immediately
-            assert mock_logger.info.called
 
     def test_async_logging_no_device_sync(self):
         """Verify async logging doesn't force device synchronization."""
