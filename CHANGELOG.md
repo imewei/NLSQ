@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-01-04
+
+### Changed
+
+#### Qt GUI Theme System Migration
+
+- **Replaced pyqtdarktheme with Qt 6.5+ Built-in Color Scheme**
+  - Removed `pyqtdarktheme` dependency (incompatible with Python 3.12+)
+  - Now uses `QApplication.styleHints().setColorScheme()` for native theming
+  - Zero external dependencies for theme support
+  - pyqtgraph plots continue to use `ThemeConfig` for custom styling
+  - **Files Modified**: `nlsq/gui_qt/theme.py`, `nlsq/gui_qt/__init__.py`
+  - **Files Modified**: 6 widget files (updated comments)
+
+#### Dependency Updates
+
+- **Updated to match local environment versions**:
+  - JAX: 0.8.0 → 0.8.2
+  - NumPy: 2.3.3 → 2.4.0
+  - SciPy: 1.16.2 → 1.16.3
+  - ruff: 0.13.1 → 0.14.10
+  - mypy: 1.18.2 → 1.19.1
+  - **Files Modified**: `pyproject.toml`, `.pre-commit-config.yaml`, `.readthedocs.yaml`
+
+### Removed
+
+- **pyqtdarktheme dependency**: Removed from `gui_qt` optional dependencies
+  - Package was incompatible with Python >=3.12
+  - **Files Modified**: `pyproject.toml` (gui_qt extras)
+
 ### Performance (012-nlsq-perf-optimization)
 
 - **15% Performance Improvement**: Reduced 10K point exponential decay fit from 1.04s to 0.88s
@@ -17,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Files Modified**: `nlsq/core/trf.py`, `nlsq/core/sparse_jacobian.py`, `nlsq/core/least_squares.py`, `nlsq/utils/logging.py`
 
 ### Fixed
+
+- **Python 3.13 Compatibility**: GUI now works with Python 3.12+ without deprecated theme library
 
 #### JIT Compatibility Fixes
 

@@ -649,15 +649,6 @@ wheels = [
 ]
 
 [[package]]
-name = "darkdetect"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/48/2e/346667de53b48417e6237efd9d076d6530c413666fcbc381adbfeff21ce7/darkdetect-0.7.1.tar.gz", hash = "sha256:47be3cf5134432ddb616bbffc927237718407914993c82809983e7ccebf49013", size = 6976, upload-time = "2022-07-18T21:10:27.64Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/63/bd/b31abc8fcaab163e0b9501020309dd9094b47d609035a23e6ec0a0a8ba10/darkdetect-0.7.1-py2.py3-none-any.whl", hash = "sha256:3efe69f8ecd5f1b7f4fbb0d1d93f656b0e493c45cc49222380ffe2a529cbc866", size = 8199, upload-time = "2022-07-18T21:10:26.178Z" },
-]
-
-[[package]]
 name = "debugpy"
 version = "1.8.19"
 source = { registry = "https://pypi.org/simple" }
@@ -1953,7 +1944,6 @@ docs = [
     { name = "sphinx-rtd-theme" },
 ]
 gui-qt = [
-    { name = "pyqtdarktheme" },
     { name = "pyqtgraph" },
     { name = "pyside6" },
     { name = "pytest-qt" },
@@ -2004,8 +1994,8 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "memory-profiler", marker = "extra == 'all'", specifier = ">=0.61.0" },
     { name = "memory-profiler", marker = "extra == 'benchmark'", specifier = ">=0.61.0" },
-    { name = "mypy", marker = "extra == 'all'", specifier = ">=1.18.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.18.0" },
+    { name = "mypy", marker = "extra == 'all'", specifier = ">=1.19.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.19.0" },
     { name = "myst-parser", marker = "extra == 'all'", specifier = ">=4.0.0" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=4.0.0" },
     { name = "notebook", marker = "extra == 'all'", specifier = ">=6.4.0" },
@@ -2017,7 +2007,6 @@ requires-dist = [
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "psutil", marker = "extra == 'all'", specifier = ">=7.0.0" },
     { name = "psutil", marker = "extra == 'benchmark'", specifier = ">=7.2.0" },
-    { name = "pyqtdarktheme", marker = "extra == 'gui-qt'", specifier = ">=2.1.0" },
     { name = "pyqtgraph", marker = "extra == 'gui-qt'", specifier = ">=0.13.0" },
     { name = "pyside6", marker = "extra == 'gui-qt'", specifier = ">=6.6.0" },
     { name = "pytest", marker = "extra == 'all'", specifier = ">=8.0.0" },
@@ -2041,8 +2030,8 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'all'", specifier = ">=6.0.3" },
     { name = "pyyaml", marker = "extra == 'gui-qt'", specifier = ">=6.0.3" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0.3" },
-    { name = "ruff", marker = "extra == 'all'", specifier = ">=0.13.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.13.0" },
+    { name = "ruff", marker = "extra == 'all'", specifier = ">=0.14.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "scipy", specifier = ">=1.16.0" },
     { name = "setuptools", marker = "extra == 'all'", specifier = ">=68.0.0" },
     { name = "setuptools", marker = "extra == 'build'", specifier = ">=68.0.0" },
@@ -2461,18 +2450,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e7/82/28175b2414effca1cdac8dc99f76d660e7a4fb0ceefa4b4ab8f5f6742925/pyproject_hooks-1.2.0.tar.gz", hash = "sha256:1e859bd5c40fae9448642dd871adf459e5e2084186e8d2c2a79a824c970da1f8", size = 19228, upload-time = "2024-09-29T09:24:13.293Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/24/12818598c362d7f300f18e74db45963dbcb85150324092410c8b49405e42/pyproject_hooks-1.2.0-py3-none-any.whl", hash = "sha256:9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913", size = 10216, upload-time = "2024-09-29T09:24:11.978Z" },
-]
-
-[[package]]
-name = "pyqtdarktheme"
-version = "2.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "darkdetect" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/f1/786feaad7a333072b34a913dbe38aef94b5ae43ad188934f5d70007aea79/pyqtdarktheme-2.1.0.tar.gz", hash = "sha256:5f8274ddfa3a5481ed9743cdb0f9debfeb7ff695b3a0d202a8104361d17dadb8", size = 42186, upload-time = "2022-12-25T08:33:11.662Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/cd/8ce0ac84e9f68dc549edcc5cbdeac7511439c5f7ee6c05f1f8826ef05d44/pyqtdarktheme-2.1.0-py3-none-any.whl", hash = "sha256:8739d99502230fbaca42551ea033c9ae31c81c4ebfec2f1ffde38f32a18bea7a", size = 54242, upload-time = "2022-12-25T08:33:10.125Z" },
 ]
 
 [[package]]
