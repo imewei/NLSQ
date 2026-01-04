@@ -305,6 +305,10 @@ def fit(
             goal_enum = goal_map[goal_lower]
         elif isinstance(goal, OptimizationGoal):
             goal_enum = goal
+        elif type(goal).__name__ == "OptimizationGoal":
+            # Handle enum identity issue in parallel test execution (pytest-xdist)
+            # where the same enum type may be loaded from different module imports
+            goal_enum = OptimizationGoal[goal.name]
         else:
             raise ValueError(
                 f"goal must be a string or OptimizationGoal enum, got {type(goal)}"
