@@ -8,10 +8,8 @@ measuring performance characteristics across different problem types and sizes.
 
 from __future__ import annotations
 
-import contextlib
 import time
 import warnings
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,17 +24,27 @@ from nlsq import (
     curve_fit,
 )
 
+from benchmarks.common.constants import (
+    DEFAULT_DATA_SIZES,
+    DEFAULT_N_REPEATS,
+    DEFAULT_WARMUP_RUNS,
+    DEFAULT_METHODS,
+    DEFAULT_BACKENDS,
+    DEFAULT_NOISE_LEVEL,
+    EXTENDED_DATA_SIZES,
+)
+
 
 @dataclass
 class BenchmarkConfig:
     """Configuration for benchmark runs."""
 
     name: str
-    problem_sizes: list[int] = field(default_factory=lambda: [100, 1000, 10000, 100000])
-    n_repeats: int = 5
-    warmup_runs: int = 1
-    methods: list[str] = field(default_factory=lambda: ["trf", "lm"])
-    backends: list[str] = field(default_factory=lambda: ["cpu"])
+    problem_sizes: list[int] = field(default_factory=lambda: list(EXTENDED_DATA_SIZES))
+    n_repeats: int = DEFAULT_N_REPEATS
+    warmup_runs: int = DEFAULT_WARMUP_RUNS
+    methods: list[str] = field(default_factory=lambda: list(DEFAULT_METHODS))
+    backends: list[str] = field(default_factory=lambda: list(DEFAULT_BACKENDS))
     compare_scipy: bool = True
 
 
@@ -83,7 +91,7 @@ class BenchmarkProblem:
         self.name = name
         self.n_parameters = n_parameters
 
-    def generate_data(self, n_points: int, noise_level: float = 0.1) -> tuple:
+    def generate_data(self, n_points: int, noise_level: float = DEFAULT_NOISE_LEVEL) -> tuple:
         """
         Generate synthetic data for the problem.
 
@@ -307,10 +315,13 @@ class BenchmarkSuite:
         """Benchmark NLSQ for a specific configuration."""
         results = []
 
-        # Warmup runs
+        # Warmup runs (JIT compilation, ignore failures)
         for _ in range(self.config.warmup_runs):
-            with contextlib.suppress(Exception):
+            try:
                 curve_fit(problem.model, x, y, p0=p0, method=method)
+            except (RuntimeError, ValueError, FloatingPointError):
+                # Warmup failures can happen - continue benchmarking
+                pass
 
         # Actual benchmark runs
         for _ in range(self.config.n_repeats):
@@ -326,7 +337,8 @@ class BenchmarkSuite:
 
                     success = True
                     final_cost = np.sum((problem.model(x, *popt) - y) ** 2)
-                except Exception as e:
+                except (RuntimeError, ValueError, FloatingPointError):
+                    # Optimization failures during benchmark are recorded as non-converged
                     success = False
                     final_cost = np.inf
                     jit_time = 0
@@ -403,7 +415,8 @@ class BenchmarkSuite:
                 success = ier in [1, 2, 3, 4]
                 final_cost = np.sum(infodict["fvec"] ** 2) if success else np.inf
                 n_function_evals = infodict["nfev"]
-            except Exception as e:
+            except (RuntimeError, ValueError, FloatingPointError):
+                # SciPy optimization failures during benchmark
                 success = False
                 final_cost = np.inf
                 n_function_evals = 0
@@ -616,11 +629,11 @@ def run_standard_benchmarks(output_dir: str = "./benchmark_results") -> Benchmar
     # Configure benchmarks
     config = BenchmarkConfig(
         name="standard",
-        problem_sizes=[100, 1000, 10000, 100000],
-        n_repeats=5,
-        warmup_runs=2,
-        methods=["trf", "lm"],
-        backends=["cpu"],
+        problem_sizes=list(EXTENDED_DATA_SIZES),
+        n_repeats=DEFAULT_N_REPEATS,
+        warmup_runs=DEFAULT_WARMUP_RUNS + 1,  # Extra warmup for standard suite
+        methods=list(DEFAULT_METHODS),
+        backends=list(DEFAULT_BACKENDS),
         compare_scipy=True,
     )
 
