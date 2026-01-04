@@ -1,313 +1,171 @@
-# NLSQ Benchmark Suite
+# NLSQ Benchmarks
 
-Comprehensive benchmarking and performance analysis tools for NLSQ (Nonlinear Least Squares), a GPU/TPU-accelerated curve fitting library built on JAX.
-
-## Quick Start
-
-```bash
-# Run standard benchmarks (exponential, gaussian, polynomial, sinusoidal)
-python benchmarks/run_benchmarks.py
-
-# Quick benchmarks (smaller sizes, fewer repeats)
-python benchmarks/run_benchmarks.py --quick
-
-# Benchmark specific problems
-python benchmarks/run_benchmarks.py --problems exponential gaussian --sizes 100 1000
-
-# Skip SciPy comparison (faster)
-python benchmarks/run_benchmarks.py --no-scipy
-
-# Custom output directory
-python benchmarks/run_benchmarks.py --output ./my_results
-
-# View help
-python benchmarks/run_benchmarks.py --help
-```
-
-**Output**: Text reports, CSV data, HTML dashboard with visualizations
-
----
-
-## Active Tools
-
-### 1. run_benchmarks.py ⭐ (Primary CLI)
-**Purpose**: Command-line interface for running standardized benchmarks
-
-**Features**:
-- NLSQ vs SciPy comparisons
-- Multiple problem types (exponential, gaussian, polynomial, sinusoidal)
-- Flexible configuration (sizes, repeats, methods)
-- Automatic dashboard generation with plots
-- Quick mode for fast iteration
-
-**Usage**: See [Quick Start](#quick-start) above
-
-**Documentation**: [Usage Guide](docs/usage_guide.md)
-
-### 2. benchmark_suite.py (Backend)
-**Purpose**: Comprehensive benchmarking infrastructure
-
-**Features**:
-- Configurable benchmark suite (BenchmarkConfig)
-- Profiler integration (PerformanceProfiler)
-- Dashboard generation (ProfilingDashboard)
-- Result export (CSV, JSON, HTML)
-
-**Usage**: Typically used via `run_benchmarks.py`, but can be imported:
-
-```python
-from benchmark_suite import BenchmarkConfig, BenchmarkRunner
-
-config = BenchmarkConfig(problem_sizes=[100, 1000], n_repeats=5)
-runner = BenchmarkRunner(config)
-results = runner.run_all_benchmarks()
-```
-
-### 3. profile_trf.py (Profiling Tool)
-**Purpose**: Profile TRF algorithm hot paths for optimization analysis
-
-**Features**:
-- JIT compilation vs runtime breakdown
-- Hot path identification
-- Automatic optimization recommendations
-- Scaling analysis
-
-**Usage**:
-```bash
-python benchmarks/profile_trf.py
-```
-
-**Output**: Timing breakdown, recommendations for optimization
-
-### 4. test_performance_regression.py ✅ (CI/CD)
-**Purpose**: Automated performance regression tests for CI/CD
-
-**Features**:
-- 13 pytest-benchmark tests across problem sizes
-- Baseline comparison
-- Automatic regression detection (<5% threshold)
-- JSON reports for CI integration
-
-**Usage**:
-```bash
-# Run all regression tests
-pytest benchmarks/test_performance_regression.py --benchmark-only
-
-# Save baseline
-pytest benchmarks/test_performance_regression.py --benchmark-save=baseline
-
-# Compare against baseline
-pytest benchmarks/test_performance_regression.py --benchmark-compare=baseline
-
-# Generate CI report
-pytest benchmarks/test_performance_regression.py --benchmark-json=report.json
-```
-
----
+Performance benchmarking suite for NLSQ, comparing against SciPy and tracking performance characteristics.
 
 ## Directory Structure
 
 ```
 benchmarks/
-├── README.md                          # This file
-├── run_benchmarks.py                  # Primary CLI ⭐
-├── benchmark_suite.py                 # Comprehensive suite
-├── profile_trf.py                     # TRF profiling tool
-├── test_performance_regression.py     # CI/CD regression tests ✅
-├── legacy/                            # Historical tools 📦
-│   ├── README.md                      # Legacy tools documentation
-│   ├── benchmark_v1.py                # Original benchmark tool
-│   └── benchmark_sprint2.py           # Sprint 2 benchmarks
-└── docs/                              # Documentation 📁
-    ├── README.md                      # Documentation index
-    ├── historical_results.md          # Benchmark results 2024-2025
-    ├── usage_guide.md                 # Detailed usage examples
-    ├── completed/                     # Completed optimizations
-    │   ├── numpy_jax_optimization.md  # NumPy↔JAX optimization (8%)
-    │   └── trf_profiling.md           # TRF profiling baseline
-    └── future/                        # Future optimizations
-        └── lax_scan_design.md         # Deferred: lax.scan design
+├── README.md                    # This file
+├── run_benchmarks.py            # CLI for running full benchmark suite
+├── benchmark_suite.py           # Core benchmarking infrastructure
+├── profile_trf.py               # TRF algorithm profiler
+│
+├── ci/                          # CI/CD regression tests
+│   ├── __init__.py
+│   └── test_regression.py       # Performance regression detection
+│
+├── components/                  # Component-specific benchmarks
+│   ├── __init__.py
+│   ├── cache_benchmark.py       # JIT compilation cache
+│   ├── jacobian_benchmark.py    # Jacobian mode auto-switching
+│   ├── memory_benchmark.py      # Memory pool optimization
+│   ├── precision_benchmark.py   # Mixed precision fallback
+│   ├── sparse_benchmark.py      # Sparse solver detection
+│   ├── stability_benchmark.py   # Stability guard overhead
+│   └── transfer_benchmark.py    # Host-device transfers
+│
+├── microbench/                  # Micro-benchmarks (pytest-benchmark)
+│   ├── __init__.py
+│   ├── test_import.py           # Import time (SC-001)
+│   ├── test_condition.py        # Condition estimation (SC-010)
+│   ├── test_sparse.py           # Sparse Jacobian (SC-002)
+│   └── test_optimizations.py    # Overall optimization
+│
+└── baselines/                   # Baseline results for comparison
+    ├── create_baseline.py
+    └── *.json
 ```
 
----
+## Quick Start
 
-## Current Performance (v0.1.1)
+### Run Full Benchmark Suite
 
-### Quick Summary
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **1D Fitting Speed** | 1.91-2.15ms | 150-270x vs initial version |
-| **GPU Speedup** | 150-270x | vs SciPy on CPU |
-| **Large Datasets** | 500K+ points | Sub-second performance |
-| **JIT Overhead** | 60-75% (first run) | Use CurveFit class to cache |
-| **Scaling** | Excellent | 50x more data → only 1.2x slower |
-
-### Performance Regression Tests (CI)
-
-**Status**: ✅ All 13 tests passing (October 2025)
-
-| Problem Size | Time (First Run) | Time (Cached) | Status |
-|-------------|------------------|---------------|--------|
-| Small (100) | ~500ms | 8.6ms | ✅ Pass |
-| Medium (1K) | ~600ms | ~10ms | ✅ Pass |
-| Large (10K) | ~630ms | ~15ms | ✅ Pass |
-| XLarge (50K) | ~580ms | ~20ms | ✅ Pass |
-
-**Zero Regressions**: 8% improvement from NumPy↔JAX optimization (October 2025)
-
----
-
-## Recommendations by Use Case
-
-### For Development
-
-**Quick benchmarks**:
 ```bash
+# Standard benchmarks
+python benchmarks/run_benchmarks.py
+
+# Quick benchmarks (smaller sizes, fewer repeats)
 python benchmarks/run_benchmarks.py --quick
+
+# Custom configuration
+python benchmarks/run_benchmarks.py --problems exponential gaussian --sizes 100 1000
 ```
 
-**Profile before optimizing**:
+### Run Component Benchmarks
+
 ```bash
-python benchmarks/profile_trf.py
+# Cache performance
+python benchmarks/components/cache_benchmark.py
+python benchmarks/components/cache_benchmark.py --quick
+
+# Jacobian auto-switching
+python benchmarks/components/jacobian_benchmark.py
+python benchmarks/components/jacobian_benchmark.py --mode=direct
+
+# Memory optimization
+python benchmarks/components/memory_benchmark.py
+
+# Sparse solvers
+python benchmarks/components/sparse_benchmark.py
+
+# Stability overhead
+python benchmarks/components/stability_benchmark.py
+
+# Host-device transfers (GPU)
+python benchmarks/components/transfer_benchmark.py --gpu --save-baseline
 ```
 
-**Run regression tests**:
+### Run Micro-benchmarks
+
 ```bash
-pytest benchmarks/test_performance_regression.py --benchmark-only
+# All microbenchmarks
+pytest benchmarks/microbench/ --benchmark-only
+
+# Save results
+pytest benchmarks/microbench/ --benchmark-json=results.json
+
+# Compare with baseline
+pytest benchmarks/microbench/ --benchmark-compare=baseline
 ```
 
-### For Production
+### Run CI Regression Tests
 
-**Full comparison**:
 ```bash
-python benchmarks/run_benchmarks.py --sizes 100 1000 10000 --repeats 10
+# Regression detection
+pytest benchmarks/ci/ --benchmark-only
+
+# Save new baseline
+pytest benchmarks/ci/ --benchmark-save=baseline
+
+# Compare against baseline
+pytest benchmarks/ci/ --benchmark-compare=baseline
 ```
 
-**Save baseline for future comparison**:
+## Benchmark Categories
+
+### CI Regression Tests (`ci/`)
+
+Tests designed for CI/CD pipeline integration:
+- Automatic performance regression detection
+- Baseline comparison with configurable thresholds
+- JSON output for CI reporting
+
+### Component Benchmarks (`components/`)
+
+Standalone scripts for specific NLSQ components:
+
+| Benchmark | Description | Target |
+|-----------|-------------|--------|
+| `cache_benchmark.py` | JIT compilation cache | >80% hit rate, 2-5x speedup |
+| `jacobian_benchmark.py` | jacfwd vs jacrev | 10-100x on high-param problems |
+| `memory_benchmark.py` | Memory pool reuse | 10-20% memory reduction |
+| `precision_benchmark.py` | Float32/64 fallback | Automatic precision upgrade |
+| `sparse_benchmark.py` | Sparse solver detection | 3-10x speedup on sparse |
+| `stability_benchmark.py` | Stability guard overhead | <5% overhead |
+| `transfer_benchmark.py` | GPU/CPU transfers | 80% transfer reduction |
+
+### Micro-benchmarks (`microbench/`)
+
+Focused pytest-benchmark tests for specific operations:
+
+| Test | Success Criterion |
+|------|-------------------|
+| `test_import.py` | SC-001: <400ms import time |
+| `test_condition.py` | SC-010: 50% faster condition estimation |
+| `test_sparse.py` | SC-002: 100x sparse Jacobian speedup |
+| `test_optimizations.py` | Overall optimization validation |
+
+## Baselines
+
+Baseline results are stored in `baselines/` as JSON files:
+
+- `cache_unification.json` - Cache performance baselines
+- `jacobian_autoswitch.json` - Jacobian mode baselines
+- `memory_reuse.json` - Memory optimization baselines
+- `sparse_activation.json` - Sparse solver baselines
+- `host_device_transfers.json` - Transfer profiling baselines
+- `linux-py312-beta1.json` - CI regression baseline
+
+## Creating New Baselines
+
 ```bash
-pytest benchmarks/test_performance_regression.py --benchmark-save=production
+# Component baselines (saved automatically)
+python benchmarks/components/cache_benchmark.py
+
+# CI baselines
+pytest benchmarks/ci/ --benchmark-save=my-baseline
+
+# Custom output path
+python benchmarks/components/cache_benchmark.py --output my_baseline.json
 ```
 
-### For Research
+## Requirements
 
-**Custom configuration**:
 ```bash
-python benchmarks/run_benchmarks.py \
-  --problems exponential gaussian \
-  --sizes 100 500 1000 5000 10000 \
-  --repeats 10 \
-  --output ./research_results
+# Core dependencies (included with nlsq[dev])
+pip install pytest pytest-benchmark
+
+# For GPU benchmarks
+pip install jax[cuda12]
 ```
-
-**View dashboard**:
-```bash
-open research_results/dashboard/dashboard.html
-```
-
----
-
-## Key Insights
-
-### When to Use NLSQ vs SciPy
-
-| Scenario | Recommendation | Speedup |
-|----------|---------------|---------|
-| < 1K points, CPU | Use SciPy | SciPy 10-20x faster |
-| > 1K points, CPU | Use NLSQ | Comparable or faster |
-| Any size, GPU/TPU | Use NLSQ | 150-270x faster |
-| Batch processing | Use NLSQ + CurveFit class | 58x faster (cached JIT) |
-
-### Configuration Trade-offs
-
-| Configuration | Overhead | Use Case |
-|--------------|----------|----------|
-| Default | 0% | High-performance computing |
-| + Stability | +25-30% | Production systems |
-| + All features | +30-60% | Critical applications |
-
-**All advanced features are opt-in** (OFF by default)
-
----
-
-## Documentation
-
-### Quick Links
-
-- **[Usage Guide](docs/usage_guide.md)** - Detailed usage examples and best practices
-- **[Historical Results](docs/historical_results.md)** - Benchmark data 2024-2025
-- **[Optimization History](docs/completed/)** - Completed optimizations
-- **[Future Work](docs/future/)** - Deferred optimizations
-- **[Legacy Tools](legacy/README.md)** - Historical benchmarking tools
-
-### Optimization History
-
-**NumPy↔JAX Optimization** (October 2025):
-- **Result**: 8% overall improvement (~15% on TRF algorithm)
-- **Method**: Eliminated 11 unnecessary array conversions
-- **Status**: ✅ COMPLETED
-- **Details**: [docs/completed/numpy_jax_optimization.md](docs/completed/numpy_jax_optimization.md)
-
-**TRF Profiling** (October 2025):
-- **Purpose**: Baseline performance analysis
-- **Key Finding**: Excellent scaling (50x data → 1.2x slower)
-- **Status**: ✅ COMPLETED
-- **Details**: [docs/completed/trf_profiling.md](docs/completed/trf_profiling.md)
-
-**lax.scan Conversion** (Deferred):
-- **Estimated Gain**: 5-10% (unverified)
-- **Status**: ⚠️ DEFERRED (diminishing returns)
-- **Details**: [docs/future/lax_scan_design.md](docs/future/lax_scan_design.md)
-
----
-
-## Troubleshooting
-
-### Slow Performance
-
-**Issue**: Benchmarks taking too long
-**Solutions**:
-- Use `--quick` flag for fast iteration
-- Use `--no-scipy` to skip SciPy comparison
-- Reduce problem sizes: `--sizes 100 1000`
-
-### Memory Errors
-
-**Issue**: Out of memory on large datasets
-**Solutions**:
-- Use `curve_fit_large()` instead of `curve_fit()`
-- Reduce problem sizes
-- Enable dynamic sizing (automatic)
-
-### Inconsistent Results
-
-**Issue**: Results vary between runs
-**Solutions**:
-- Increase repeats: `--repeats 10`
-- Use more warmup runs (edit config)
-- Check system resource contention
-
-See [Usage Guide](docs/usage_guide.md#troubleshooting) for detailed troubleshooting.
-
----
-
-## Related NLSQ Documentation
-
-- [Main README](../README.md) - Installation and quick start
-- [CHANGELOG](../CHANGELOG.md) - Version history and changes
-- [CLAUDE.md](../CLAUDE.md) - Developer guide and architecture
-- [Examples](../examples/) - Example notebooks and scripts
-
----
-
-## Status
-
-✅ **Production Ready** (v0.1.1, October 2025)
-- Comprehensive benchmark suite (Phase 3, Days 20-24)
-- 13 regression tests integrated in CI/CD
-- Zero performance regressions
-- 8% improvement from optimization work
-
-**Last Updated**: 2025-10-08
-**Version**: v0.1.1
-**Maintainer**: Wei Chen (Argonne National Laboratory)

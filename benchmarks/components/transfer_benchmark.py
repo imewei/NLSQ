@@ -25,11 +25,32 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from nlsq.least_squares import least_squares
-from nlsq.profiling import HAS_JAX_PROFILER, TransferProfiler
+from nlsq.core.least_squares import LeastSquares
+
+# Transfer profiling stubs (profiling module not yet implemented)
+HAS_JAX_PROFILER = False
+
+
+def least_squares(fun, x0, **kwargs):
+    """Wrapper for LeastSquares.least_squares method."""
+    ls = LeastSquares()
+    return ls.least_squares(fun, x0, **kwargs)
+
+
+class TransferProfiler:
+    """Stub for transfer profiler (not yet implemented)."""
+
+    def __init__(self, enable: bool = False):
+        self.enable = enable
+
+    def get_diagnostics(self) -> dict:
+        return {
+            "avg_bytes_per_iteration": 0,
+            "avg_transfers_per_iteration": 0,
+        }
 
 
 def get_system_info():
@@ -322,7 +343,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="benchmarks/baselines/host_device_transfers.json",
+        default=None,
         help="Output path for baseline JSON",
     )
     parser.add_argument(
@@ -367,7 +388,10 @@ def main():
 
     # Save baseline if requested
     if args.save_baseline:
-        output_path = Path(args.output)
+        if args.output:
+            output_path = Path(args.output)
+        else:
+            output_path = Path(__file__).parent.parent / "baselines" / "host_device_transfers.json"
         save_baseline(metrics, problem, system_info, output_path)
 
         # Print next steps

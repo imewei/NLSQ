@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Benchmark for unified cache performance (Task 1.12).
+"""Benchmark JIT compilation cache performance.
 
 This script measures cache performance including:
 - Cold JIT compilation time
@@ -13,9 +13,13 @@ Target Performance Metrics:
 - Warm JIT time: <2ms (cached compilation)
 
 Usage:
-    python benchmarks/benchmark_cache_unification.py
+    python benchmarks/components/cache_benchmark.py          # Full benchmark
+    python benchmarks/components/cache_benchmark.py --quick  # Quick validation
 """
 
+from __future__ import annotations
+
+import argparse
 import json
 import platform
 import sys
@@ -26,19 +30,25 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from nlsq import curve_fit
-from nlsq.unified_cache import clear_cache, get_cache_stats
+from nlsq.caching.unified_cache import clear_cache, get_cache_stats
+
+from benchmarks.common.constants import (
+    DEFAULT_DATA_SIZES,
+    TARGET_CACHE_HIT_RATE,
+    TARGET_SPEEDUP_FACTOR,
+    TARGET_WARM_JIT_TIME_MS,
+)
 
 
-def exponential_model(x, a, b, c):
+def exponential_model(x: jnp.ndarray, a: float, b: float, c: float) -> jnp.ndarray:
     """Exponential model for benchmarking."""
     return a * jnp.exp(-b * x) + c
 
 
-def benchmark_cold_jit_time(data_sizes=(100, 1000, 10000)):
+def benchmark_cold_jit_time(
+    data_sizes: tuple[int, ...] = DEFAULT_DATA_SIZES,
+) -> dict:
     """Measure cold JIT compilation time for different data sizes.
 
     Returns
@@ -49,15 +59,12 @@ def benchmark_cold_jit_time(data_sizes=(100, 1000, 10000)):
     times = []
 
     for size in data_sizes:
-        # Clear cache to ensure cold JIT
         clear_cache()
 
-        # Generate data
         x = np.linspace(0, 10, size)
         y_true = 2.5 * np.exp(-0.5 * x) + 1.0
         y = y_true + np.random.normal(0, 0.1, size)
 
-        # Time cold JIT compilation
         start = time.time()
         result = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
         _, _ = result
@@ -66,17 +73,17 @@ def benchmark_cold_jit_time(data_sizes=(100, 1000, 10000)):
         times.append(cold_time_ms)
         print(f"  Size {size}: {cold_time_ms:.1f} ms (cold JIT)")
 
-    times = np.array(times)
+    times_arr = np.array(times)
     return {
-        "p50": float(np.percentile(times, 50)),
-        "p95": float(np.percentile(times, 95)),
-        "mean": float(np.mean(times)),
+        "p50": float(np.percentile(times_arr, 50)),
+        "p95": float(np.percentile(times_arr, 95)),
+        "mean": float(np.mean(times_arr)),
         "data_sizes": list(data_sizes),
-        "all_times": times.tolist(),
+        "all_times": times_arr.tolist(),
     }
 
 
-def benchmark_warm_jit_time(n_iterations=100):
+def benchmark_warm_jit_time(n_iterations: int = 100) -> dict:
     """Measure warm JIT time (cache hits).
 
     Parameters
@@ -89,13 +96,11 @@ def benchmark_warm_jit_time(n_iterations=100):
     dict
         Warm JIT times in milliseconds (p50, p95)
     """
-    # Clear cache and run one fit to warm up
     clear_cache()
     x = np.linspace(0, 10, 1000)
     y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 1000)
     _ = curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
 
-    # Measure warm times
     times = []
     for _ in range(n_iterations):
         x = np.linspace(0, 10, 1000)
@@ -107,16 +112,19 @@ def benchmark_warm_jit_time(n_iterations=100):
         warm_time_ms = (time.time() - start) * 1000
         times.append(warm_time_ms)
 
-    times = np.array(times)
+    times_arr = np.array(times)
     return {
-        "p50": float(np.percentile(times, 50)),
-        "p95": float(np.percentile(times, 95)),
-        "mean": float(np.mean(times)),
+        "p50": float(np.percentile(times_arr, 50)),
+        "p95": float(np.percentile(times_arr, 95)),
+        "mean": float(np.mean(times_arr)),
         "n_iterations": n_iterations,
     }
 
 
-def benchmark_cache_hit_rate(n_fits=1000, data_sizes=(100, 200, 500, 1000)):
+def benchmark_cache_hit_rate(
+    n_fits: int = 1000,
+    data_sizes: tuple[int, ...] = (100, 200, 500, 1000),
+) -> dict:
     """Measure cache hit rate on batch processing workflow.
 
     Simulates typical batch fitting: same model, varying data sizes.
@@ -133,10 +141,8 @@ def benchmark_cache_hit_rate(n_fits=1000, data_sizes=(100, 200, 500, 1000)):
     dict
         Cache statistics including hit rate
     """
-    # Clear cache
     clear_cache()
 
-    # Run batch processing
     for i in range(n_fits):
         size = np.random.choice(data_sizes)
         x = np.linspace(0, 10, size)
@@ -147,11 +153,8 @@ def benchmark_cache_hit_rate(n_fits=1000, data_sizes=(100, 200, 500, 1000)):
 
         if (i + 1) % 100 == 0:
             stats = get_cache_stats()
-            print(
-                f"  Processed {i + 1}/{n_fits} fits, hit_rate={stats['hit_rate']:.2%}"
-            )
+            print(f"  Processed {i + 1}/{n_fits} fits, hit_rate={stats['hit_rate']:.2%}")
 
-    # Get final stats
     final_stats = get_cache_stats()
 
     return {
@@ -165,38 +168,64 @@ def benchmark_cache_hit_rate(n_fits=1000, data_sizes=(100, 200, 500, 1000)):
     }
 
 
-def calculate_speedup_factor(cold_time, warm_time):
-    """Calculate speedup from warm (cached) vs cold execution.
-
-    Parameters
-    ----------
-    cold_time : dict
-        Cold JIT timing results
-    warm_time : dict
-        Warm JIT timing results
-
-    Returns
-    -------
-    float
-        Speedup factor (cold_time / warm_time)
-    """
+def calculate_speedup_factor(cold_time: dict, warm_time: dict) -> float:
+    """Calculate speedup from warm (cached) vs cold execution."""
     cold_p50 = cold_time["p50"]
     warm_p50 = warm_time["p50"]
 
     if warm_p50 > 0:
         return cold_p50 / warm_p50
-    else:
-        return 0.0
+    return 0.0
 
 
-def main():
-    """Run comprehensive cache benchmarks and store results."""
+def run_quick_benchmark() -> dict:
+    """Run quick cache benchmark for validation."""
+    print("Quick Cache Benchmark")
     print("=" * 70)
-    print("Unified Cache Performance Benchmark (Task 1.12)")
+
+    clear_cache()
+    x = np.linspace(0, 10, 1000)
+    y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 1000)
+
+    start = time.time()
+    curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
+    cold_time = (time.time() - start) * 1000
+    print(f"Cold JIT time: {cold_time:.1f} ms")
+
+    warm_times = []
+    for _ in range(10):
+        x = np.linspace(0, 10, 1000)
+        y = 2.5 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 1000)
+        start = time.time()
+        curve_fit(exponential_model, x, y, p0=[2.0, 0.5, 1.0])
+        warm_times.append((time.time() - start) * 1000)
+
+    warm_p50 = float(np.percentile(warm_times, 50))
+    print(f"Warm JIT time (P50): {warm_p50:.2f} ms")
+    print(f"Speedup: {cold_time / warm_p50:.1f}x")
+
+    stats = get_cache_stats()
+    print("\nCache Statistics:")
+    print(f"  Hit rate: {stats['hit_rate']:.2%}")
+    print(f"  Hits: {stats['hits']}")
+    print(f"  Misses: {stats['misses']}")
+    print(f"  Cache size: {stats['cache_size']}")
+
+    return {
+        "cold_jit_time_ms": {"p50": cold_time},
+        "warm_jit_time_ms": {"p50": warm_p50},
+        "speedup_factor": cold_time / warm_p50,
+        "cache_hit_rate": stats["hit_rate"],
+    }
+
+
+def run_full_benchmark() -> dict:
+    """Run comprehensive cache benchmarks."""
+    print("=" * 70)
+    print("Unified Cache Performance Benchmark")
     print("=" * 70)
     print()
 
-    # System info
     print("System Information:")
     print(f"  Platform: {platform.system()} {platform.release()}")
     print(f"  Python: {platform.python_version()}")
@@ -204,7 +233,6 @@ def main():
     print(f"  Device: {jax.devices()[0].device_kind}")
     print()
 
-    # Benchmark 1: Cold JIT time
     print("Benchmark 1: Cold JIT Compilation Time")
     print("-" * 70)
     cold_time = benchmark_cold_jit_time()
@@ -213,7 +241,6 @@ def main():
     print(f"  Mean: {cold_time['mean']:.1f} ms")
     print()
 
-    # Benchmark 2: Warm JIT time
     print("Benchmark 2: Warm JIT Time (Cache Hits)")
     print("-" * 70)
     warm_time = benchmark_warm_jit_time(n_iterations=100)
@@ -222,12 +249,10 @@ def main():
     print(f"  Mean: {warm_time['mean']:.2f} ms")
     print()
 
-    # Calculate speedup
     speedup = calculate_speedup_factor(cold_time, warm_time)
     print(f"  Speedup Factor (Cold/Warm): {speedup:.1f}x")
     print()
 
-    # Benchmark 3: Cache hit rate
     print("Benchmark 3: Cache Hit Rate (1000 fits, varying sizes)")
     print("-" * 70)
     cache_stats = benchmark_cache_hit_rate(n_fits=1000)
@@ -238,36 +263,29 @@ def main():
     print(f"  Cache Size: {cache_stats['cache_size']}")
     print()
 
-    # Validation against targets
     print("Target Validation:")
     print("-" * 70)
 
-    target_hit_rate = 0.80
-    hit_rate_pass = cache_stats["hit_rate"] >= target_hit_rate
+    hit_rate_pass = cache_stats["hit_rate"] >= TARGET_CACHE_HIT_RATE
     print(
-        f"  Cache Hit Rate: {cache_stats['hit_rate']:.2%} (target: >80%) {'✓' if hit_rate_pass else '✗'}"
+        f"  Cache Hit Rate: {cache_stats['hit_rate']:.2%} "
+        f"(target: >{TARGET_CACHE_HIT_RATE:.0%}) {'PASS' if hit_rate_pass else 'FAIL'}"
     )
 
-    target_speedup = 2.0
-    speedup_pass = speedup >= target_speedup
+    speedup_pass = speedup >= TARGET_SPEEDUP_FACTOR
     print(
-        f"  Speedup Factor: {speedup:.1f}x (target: 2-5x) {'✓' if speedup_pass else '✗'}"
+        f"  Speedup Factor: {speedup:.1f}x "
+        f"(target: {TARGET_SPEEDUP_FACTOR:.0f}-5x) {'PASS' if speedup_pass else 'FAIL'}"
     )
 
-    target_warm_time = 2.0  # ms
-    warm_time_pass = warm_time["p50"] <= target_warm_time
+    warm_time_pass = warm_time["p50"] <= TARGET_WARM_JIT_TIME_MS
     print(
-        f"  Warm JIT Time: {warm_time['p50']:.2f} ms (target: <2ms) {'✓' if warm_time_pass else '✗'}"
+        f"  Warm JIT Time: {warm_time['p50']:.2f} ms "
+        f"(target: <{TARGET_WARM_JIT_TIME_MS:.0f}ms) {'PASS' if warm_time_pass else 'FAIL'}"
     )
     print()
 
-    # Store results
-    baseline_dir = Path(__file__).parent / "baselines"
-    baseline_dir.mkdir(exist_ok=True)
-
-    baseline_file = baseline_dir / "cache_unification.json"
-
-    results = {
+    return {
         "platform": platform.system().lower(),
         "python_version": platform.python_version(),
         "jax_version": jax.__version__,
@@ -285,24 +303,51 @@ def main():
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
+
+def main() -> int:
+    """Run cache benchmarks and save results."""
+    parser = argparse.ArgumentParser(description="Cache performance benchmark")
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Run quick validation benchmark",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output JSON file path",
+    )
+    args = parser.parse_args()
+
+    if args.quick:
+        results = run_quick_benchmark()
+    else:
+        results = run_full_benchmark()
+
+    baseline_dir = Path(__file__).parent.parent / "baselines"
+    baseline_dir.mkdir(exist_ok=True)
+    baseline_file = args.output or (baseline_dir / "cache_unification.json")
+
     with open(baseline_file, "w") as f:
         json.dump(results, f, indent=2)
 
     print(f"Results saved to: {baseline_file}")
     print()
 
-    # Summary
-    all_passed = all(results["targets_met"].values())
-    print("=" * 70)
-    if all_passed:
-        print("✓ All performance targets met!")
-    else:
-        print("✗ Some performance targets not met")
-        failed = [k for k, v in results["targets_met"].items() if not v]
-        print(f"  Failed: {', '.join(failed)}")
-    print("=" * 70)
+    if not args.quick:
+        all_passed = all(results["targets_met"].values())
+        print("=" * 70)
+        if all_passed:
+            print("All performance targets met!")
+        else:
+            print("Some performance targets not met")
+            failed = [k for k, v in results["targets_met"].items() if not v]
+            print(f"  Failed: {', '.join(failed)}")
+        print("=" * 70)
+        return 0 if all_passed else 1
 
-    return 0 if all_passed else 1
+    return 0
 
 
 if __name__ == "__main__":

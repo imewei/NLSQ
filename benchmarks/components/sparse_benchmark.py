@@ -15,7 +15,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import curve_fit
-from nlsq.sparse_jacobian import detect_jacobian_sparsity
+from nlsq.core.sparse_jacobian import detect_jacobian_sparsity
+
+from benchmarks.common.constants import (
+    DEFAULT_SEED,
+    LARGE_JACOBIAN_SHAPE,
+    MEDIUM_JACOBIAN_SHAPE,
+)
 
 
 def sparse_parameter_selection_model(x, *params):
@@ -46,9 +52,9 @@ def benchmark_sparse_detection():
     results = {}
 
     for n_params in [50, 100, 200]:
-        n_data = 10000
+        n_data = MEDIUM_JACOBIAN_SHAPE[0]
 
-        np.random.seed(42)
+        np.random.seed(DEFAULT_SEED)
         x_data = np.linspace(0, n_params, n_data)
         p0 = np.ones(n_params)
 
@@ -90,10 +96,10 @@ def benchmark_sparse_vs_dense():
 
     results = {}
 
-    # Test with different problem sizes
+    # Test with different problem sizes based on Jacobian shapes
     test_cases = [
-        {"n_params": 100, "n_data": 12000, "name": "medium"},
-        {"n_params": 200, "n_data": 20000, "name": "large"},
+        {"n_params": MEDIUM_JACOBIAN_SHAPE[1] * 2, "n_data": MEDIUM_JACOBIAN_SHAPE[0], "name": "medium"},
+        {"n_params": LARGE_JACOBIAN_SHAPE[1] * 4, "n_data": LARGE_JACOBIAN_SHAPE[0] // 5, "name": "large"},
     ]
 
     for case in test_cases:
@@ -106,7 +112,7 @@ def benchmark_sparse_vs_dense():
         print(f"{'=' * 60}")
 
         # Generate data
-        np.random.seed(42)
+        np.random.seed(DEFAULT_SEED)
         x_data = np.linspace(0, n_params, n_data)
         true_params = np.ones(n_params) * 2.0
         y_data = sparse_parameter_selection_model(x_data, *true_params)
@@ -219,7 +225,7 @@ def run_benchmarks():
     }
 
     # Save to baseline file
-    baseline_dir = Path(__file__).parent / "baselines"
+    baseline_dir = Path(__file__).parent.parent / "baselines"
     baseline_dir.mkdir(exist_ok=True)
     baseline_file = baseline_dir / "sparse_activation.json"
 

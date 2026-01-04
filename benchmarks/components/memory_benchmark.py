@@ -21,8 +21,8 @@ import jax.numpy as jnp
 import numpy as np
 import psutil
 
-from nlsq.memory_manager import MemoryManager
-from nlsq.memory_pool import MemoryPool, round_to_bucket
+from nlsq.caching.memory_manager import MemoryManager
+from nlsq.caching.memory_pool import MemoryPool, round_to_bucket
 
 
 def get_memory_usage_mb():
@@ -288,7 +288,7 @@ def main():
     results["benchmarks"]["bucketing_algorithm"] = benchmark_round_to_bucket()
 
     # Save results
-    output_path = Path(__file__).parent / "baselines" / "memory_reuse.json"
+    output_path = Path(__file__).parent.parent / "baselines" / "memory_reuse.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w") as f:

@@ -41,7 +41,7 @@ except ImportError:
 # Baseline Loading and Regression Gates
 # ============================================================================
 
-BASELINE_FILE = Path(__file__).parent / "baselines" / "linux-py312-beta1.json"
+BASELINE_FILE = Path(__file__).parent.parent / "baselines" / "linux-py312-beta1.json"
 
 
 def load_baseline():

@@ -16,7 +16,6 @@ Metrics:
 
 from __future__ import annotations
 
-import contextlib
 import time
 import tracemalloc
 from dataclasses import dataclass, field
@@ -27,7 +26,7 @@ import numpy as np
 
 from nlsq import curve_fit
 from nlsq.config import JAXConfig, configure_mixed_precision
-from nlsq.mixed_precision import MixedPrecisionConfig
+from nlsq.precision.mixed_precision import MixedPrecisionConfig
 
 
 @dataclass
@@ -236,8 +235,11 @@ def benchmark_single_run(
 
     # Cached run (no JIT compilation)
     start_time = time.perf_counter()
-    with contextlib.suppress(Exception):
+    try:
         _ = curve_fit(model, xdata, ydata, p0=p0)
+    except (RuntimeError, ValueError, FloatingPointError):
+        # Benchmark continues even if fit fails - timing is still valid
+        pass
     cached_run_time = time.perf_counter() - start_time
 
     # Calculate errors
@@ -307,12 +309,15 @@ def run_benchmark_suite(
             p0 = np.ones(len(true_params))
 
             for mode in modes:
-                # Run warmup
+                # Run warmup (JIT compilation, errors ignored)
                 for _ in range(config.warmup_runs):
-                    with contextlib.suppress(Exception):
+                    try:
                         benchmark_single_run(
                             xdata, ydata, model, p0, mode, problem_name, true_params
                         )
+                    except (RuntimeError, ValueError, FloatingPointError):
+                        # Warmup failures are expected for some problem/mode combos
+                        pass
 
                 # Run actual benchmark (take best of n_repeats)
                 run_results = []
