@@ -18,7 +18,9 @@ from pathlib import Path
 import pytest
 
 # Path to the workflow_system example directory (domain presets were relocated here)
-EXAMPLES_DIR = Path(__file__).parent.parent / "examples" / "scripts" / "08_workflow_system"
+EXAMPLES_DIR = (
+    Path(__file__).parent.parent / "examples" / "scripts" / "08_workflow_system"
+)
 
 # File name mapping for reorganized domain preset examples
 XPCS_FILE = "11_xpcs_presets.py"

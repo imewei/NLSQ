@@ -50,7 +50,9 @@ def sync_debug_callback():
     def sync_callback(fn, *args, **kwargs):
         # Convert JAX arrays to numpy for the callback
         np_args = tuple(
-            np.asarray(a) if hasattr(a, "__jax_array__") or isinstance(a, jax.Array) else a
+            np.asarray(a)
+            if hasattr(a, "__jax_array__") or isinstance(a, jax.Array)
+            else a
             for a in args
         )
         fn(*np_args)
