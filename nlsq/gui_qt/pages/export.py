@@ -479,6 +479,9 @@ class ExportPage(QWidget):
     def generate_python_code(self) -> str:
         """Generate Python code for reproducibility.
 
+        Uses the fit() function with workflow presets for consistency
+        with NLSQ's recommended approach.
+
         Returns:
             Python code string
         """
@@ -491,7 +494,7 @@ class ExportPage(QWidget):
             '"""',
             "",
             "import numpy as np",
-            "from nlsq import curve_fit",
+            "from nlsq import fit",
             "",
         ]
 
@@ -570,6 +573,9 @@ class ExportPage(QWidget):
                     ]
                 )
 
+        # Determine workflow preset
+        workflow = getattr(state, "preset", "standard") or "standard"
+
         # Add fitting options
         lines.extend(
             [
@@ -588,17 +594,24 @@ class ExportPage(QWidget):
         else:
             lines.append("bounds = (-np.inf, np.inf)")
 
+        lines.append(f'workflow = "{workflow}"  # Options: standard, fast, quality, large_robust')
+
         lines.extend(
             [
                 "",
-                "# Run curve fitting",
-                "popt, pcov = curve_fit(",
+                "# Run curve fitting using workflow preset",
+                "result = fit(",
                 "    model,",
                 "    xdata,",
                 "    ydata,",
                 "    p0=p0,",
                 "    bounds=bounds,",
+                "    workflow=workflow,",
                 ")",
+                "",
+                "# Extract parameters and covariance",
+                "popt = result.popt",
+                "pcov = result.pcov",
                 "",
                 "# Print results",
                 'print("Fitted parameters:")',
@@ -606,12 +619,10 @@ class ExportPage(QWidget):
                 "    err = np.sqrt(pcov[i, i])",
                 '    print(f"  p{i} = {val:.6g} +/- {err:.6g}")',
                 "",
-                "# Compute R-squared",
-                "y_fit = model(xdata, *popt)",
-                "ss_res = np.sum((ydata - y_fit)**2)",
-                "ss_tot = np.sum((ydata - np.mean(ydata))**2)",
-                "r_squared = 1 - (ss_res / ss_tot)",
-                'print(f"R-squared: {r_squared:.6f}")',
+                "# Print fit statistics (computed by NLSQ)",
+                'print(f"R-squared: {result.r_squared:.6f}")',
+                'print(f"RMSE: {result.rmse:.6g}")',
+                'print(f"Converged: {result.success}")',
             ]
         )
 
