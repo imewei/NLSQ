@@ -17,6 +17,8 @@ from nlsq import (
     curve_fit_large,
     estimate_memory_requirements,
 )
+from nlsq.core._optimize import OptimizeResult
+from nlsq.result import CurveFitResult
 from nlsq.streaming.large_dataset import LDMemoryConfig
 
 
@@ -303,9 +305,7 @@ class TestEndToEndValidation(unittest.TestCase):
         popt1, pcov1 = result1
         self.assertEqual(len(popt1), 3)
         self.assertEqual(pcov1.shape, (3, 3))
-        # Test enhanced features
-        from nlsq.result import CurveFitResult
-
+        # Test enhanced features (CurveFitResult imported at module level)
         self.assertIsInstance(result1, CurveFitResult)
         self.assertTrue(hasattr(result1, "r_squared"))
         self.assertTrue(hasattr(result1, "plot"))
@@ -320,8 +320,7 @@ class TestEndToEndValidation(unittest.TestCase):
         # 3. LargeDatasetFitter (returns OptimizeResult)
         fitter = LargeDatasetFitter()
         result3 = fitter.fit(quadratic, x_small, y_small, p0=[1, 1, 1])
-        from nlsq.core._optimize import OptimizeResult
-
+        # OptimizeResult imported at module level
         self.assertIsInstance(result3, OptimizeResult)
         self.assertTrue(hasattr(result3, "x"))
         self.assertTrue(hasattr(result3, "success"))

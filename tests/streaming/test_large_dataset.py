@@ -3,6 +3,9 @@ Comprehensive test suite for large dataset handling in NLSQ.
 
 Tests cover memory estimation, chunking strategies, streaming optimization,
 and optimized fitting for datasets >20M points.
+
+Note: TestMemoryEstimator is marked serial because psutil memory detection
+can have race conditions when mocked in parallel pytest-xdist execution.
 """
 
 import unittest
@@ -10,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from nlsq import (
     LargeDatasetFitter,
@@ -311,6 +315,7 @@ class TestDataChunker(unittest.TestCase):
         np.testing.assert_array_equal(y_chunk, expected_y_padded)
 
 
+@pytest.mark.serial
 class TestMemoryEstimator(unittest.TestCase):
     """Test the MemoryEstimator utility class."""
 
@@ -353,13 +358,13 @@ class TestMemoryEstimator(unittest.TestCase):
         self.assertGreater(stats.n_chunks, 1)
         self.assertEqual(chunk_size, stats.recommended_chunk_size)
 
-    @patch("nlsq.streaming.large_dataset.psutil")
-    def test_available_memory_detection(self, mock_psutil):
+    @patch("psutil.virtual_memory")
+    def test_available_memory_detection(self, mock_virtual_memory):
         """Test detecting available system memory."""
-        # Mock psutil to return specific memory info
+        # Mock psutil.virtual_memory to return specific memory info
         mock_memory = MagicMock()
         mock_memory.available = 8 * 1024**3  # 8 GB in bytes
-        mock_psutil.virtual_memory.return_value = mock_memory
+        mock_virtual_memory.return_value = mock_memory
 
         available_gb = MemoryEstimator.get_available_memory_gb()
         self.assertAlmostEqual(available_gb, 8.0, places=1)

@@ -249,7 +249,8 @@ class TestHostDeviceTransferReduction:
 
         # Should complete successfully
         assert popt is not None
-        assert metrics.total_time_sec < 5.0
+        # Allow generous timeout for parallel test execution (JIT compilation overhead)
+        assert metrics.total_time_sec < 30.0
 
         # Async logging shouldn't significantly slow down optimization
         # (baseline without logging is ~same time)

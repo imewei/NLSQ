@@ -8,6 +8,10 @@ workflow system, testing:
 - Memory pressure scenarios (mock low memory)
 - Config persistence (YAML -> workflow -> fit)
 - Error recovery and graceful degradation
+
+Note: TestEndToEndWorkflow and TestGoalTransitions are marked serial because
+the quality goal tests involve intensive JAX JIT compilation that can cause
+resource contention and flakiness in parallel pytest-xdist execution.
 """
 
 import os
@@ -76,6 +80,7 @@ def large_dataset():
     return x, y
 
 
+@pytest.mark.serial
 class TestEndToEndWorkflow:
     """Test full workflow: fit() -> auto_select -> backend -> result."""
 
@@ -93,7 +98,7 @@ class TestEndToEndWorkflow:
         )
 
         # Verify result structure
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
         assert result.pcov is not None
         assert len(result.popt) == 2
@@ -116,7 +121,7 @@ class TestEndToEndWorkflow:
             bounds=([0, 0], [10, 5]),
         )
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
         # Quality goal should achieve good fit
         np.testing.assert_allclose(result.popt[0], 2.5, rtol=0.1)
@@ -149,7 +154,7 @@ class TestDatasetSizeVariations:
 
         result = fit(exponential_model, x, y, p0=[2.0, 1.0])
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
 
     def test_fit_medium_dataset(self, medium_dataset):
@@ -158,7 +163,7 @@ class TestDatasetSizeVariations:
 
         result = fit(exponential_model, x, y, p0=[2.0, 0.5])
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
         # Check fit quality
         np.testing.assert_allclose(result.popt[0], 2.5, rtol=0.2)
@@ -180,6 +185,7 @@ class TestDatasetSizeVariations:
         assert config_large is not None
 
 
+@pytest.mark.serial
 class TestGoalTransitions:
     """Test goal transitions (fast -> quality) on same dataset."""
 

@@ -15,9 +15,12 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nlsq.caching.memory_manager import MemoryManager
 
 
+@pytest.mark.serial
 class TestAdaptiveMemoryTTL(unittest.TestCase):
     """Tests for adaptive TTL behavior in MemoryManager."""
 
@@ -27,17 +30,19 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         When call frequency exceeds 100 calls/sec, the effective TTL should
         increase to 10 seconds to reduce psutil overhead.
         """
-        manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
-
-        # Track psutil calls
-        psutil_call_count = 0
-        original_available = None
-
         with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             # Set up mock
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3  # 8 GB
             mock_psutil.virtual_memory.return_value = mock_mem
+
+            # Also mock Process for get_memory_usage_bytes called in __init__
+            mock_process = MagicMock()
+            mock_process.memory_info.return_value.rss = 100 * 1024**2
+            mock_psutil.Process.return_value = mock_process
+
+            # Create manager INSIDE patch so all psutil calls are mocked
+            manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
             # Simulate high-frequency calls (>100 calls/sec)
             # Make 150 calls very quickly to establish high frequency
@@ -71,12 +76,18 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         When call frequency is between 10 and 100 calls/sec, the effective TTL
         should be 5 seconds.
         """
-        manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
-
         with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
+
+            # Also mock Process for get_memory_usage_bytes called in __init__
+            mock_process = MagicMock()
+            mock_process.memory_info.return_value.rss = 100 * 1024**2
+            mock_psutil.Process.return_value = mock_process
+
+            # Create manager INSIDE patch so all psutil calls are mocked
+            manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
             # Simulate medium-frequency calls (~50 calls/sec)
             # We need to space calls to get ~50 calls/sec over the tracking window
@@ -117,12 +128,18 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         When call frequency is low, the default TTL should be used, and
         psutil should be called after the TTL expires.
         """
-        manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
-
         with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
+
+            # Also mock Process for get_memory_usage_bytes called in __init__
+            mock_process = MagicMock()
+            mock_process.memory_info.return_value.rss = 100 * 1024**2
+            mock_psutil.Process.return_value = mock_process
+
+            # Create manager INSIDE patch so all psutil calls are mocked
+            manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=True)
 
             # First call - should call psutil
             manager.get_available_memory()
@@ -149,15 +166,21 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         When adaptive_ttl is False, the MemoryManager should always use
         the default TTL regardless of call frequency.
         """
-        manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=False)
-
-        # Check that adaptive TTL is disabled
-        self.assertFalse(manager._adaptive_ttl)
-
         with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
+
+            # Also mock Process for get_memory_usage_bytes called in __init__
+            mock_process = MagicMock()
+            mock_process.memory_info.return_value.rss = 100 * 1024**2
+            mock_psutil.Process.return_value = mock_process
+
+            # Create manager INSIDE patch so all psutil calls are mocked
+            manager = MemoryManager(memory_cache_ttl=1.0, adaptive_ttl=False)
+
+            # Check that adaptive TTL is disabled
+            self.assertFalse(manager._adaptive_ttl)
 
             # Make many rapid calls to simulate high frequency
             for _ in range(150):

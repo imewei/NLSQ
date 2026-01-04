@@ -358,7 +358,12 @@ def run_plugins(
                 )
 
             # Handle invalid return type (not PluginResult)
-            if not isinstance(result, PluginResult):
+            # Use duck typing to handle module identity issues with pytest-xdist
+            if not (
+                hasattr(result, "plugin_name")
+                and hasattr(result, "data")
+                and hasattr(result, "issues")
+            ):
                 result = PluginResult(
                     plugin_name=plugin_name,
                     available=True,

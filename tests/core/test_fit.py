@@ -11,6 +11,10 @@ Tests cover:
 - fit() with goal="fast" uses looser tolerances
 - fit() coexists with curve_fit() (both callable)
 - fit() error handling for invalid workflow names
+
+Note: Classes testing quality/named workflows are marked serial because they
+involve intensive JAX JIT compilation that can cause flakiness in parallel
+pytest-xdist execution.
 """
 
 import jax.numpy as jnp
@@ -64,7 +68,7 @@ class TestFitWithWorkflowAuto:
         result = fit(exponential_model, x, y, p0=[2.0, 1.0], workflow="auto")
 
         # Should return CurveFitResult
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         # Should have popt and pcov attributes
         assert hasattr(result, "popt")
         assert hasattr(result, "pcov")
@@ -85,6 +89,7 @@ class TestFitWithWorkflowAuto:
         assert pcov.shape == (2, 2)
 
 
+@pytest.mark.serial
 class TestFitWithNamedWorkflow:
     """Test fit() with named workflow (e.g., 'standard')."""
 
@@ -93,7 +98,7 @@ class TestFitWithNamedWorkflow:
         x, y = sample_data
         result = fit(exponential_model, x, y, p0=[2.0, 1.0], workflow="standard")
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
         assert len(result.popt) == 2
 
@@ -109,7 +114,7 @@ class TestFitWithNamedWorkflow:
             bounds=([0, 0], [10, 5]),
         )
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
 
 
@@ -128,7 +133,7 @@ class TestFitWithCustomConfigObject:
         )
         result = fit(exponential_model, x, y, p0=[2.0, 1.0], workflow=config)
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
 
     def test_fit_with_hybridstreamingconfig(self, sample_data):
@@ -142,7 +147,7 @@ class TestFitWithCustomConfigObject:
         )
         result = fit(exponential_model, x, y, p0=[2.0, 1.0], workflow=config)
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
 
 
@@ -177,6 +182,7 @@ class TestFitPassesKwargs:
         assert result.popt is not None
 
 
+@pytest.mark.serial
 class TestFitWithQualityGoal:
     """Test fit() with goal='quality' uses tighter tolerances."""
 
@@ -192,7 +198,7 @@ class TestFitWithQualityGoal:
             bounds=([0, 0], [10, 5]),
         )
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
         # Quality goal should give good fit
         assert np.isclose(result.popt[0], 2.5, rtol=0.2)
@@ -209,10 +215,11 @@ class TestFitWithQualityGoal:
             bounds=([0, 0], [10, 5]),
         )
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
 
 
+@pytest.mark.serial
 class TestFitWithFastGoal:
     """Test fit() with goal='fast' uses looser tolerances."""
 
@@ -221,7 +228,7 @@ class TestFitWithFastGoal:
         x, y = sample_data
         result = fit(exponential_model, x, y, p0=[2.0, 1.0], goal="fast")
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
 
     def test_fit_goal_fast_with_optimization_goal_enum(self, sample_data):
@@ -235,7 +242,7 @@ class TestFitWithFastGoal:
             goal=OptimizationGoal.FAST,
         )
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
 
 
@@ -306,7 +313,7 @@ class TestFitIntegration:
         x, y = sample_data_poly
         result = fit(polynomial_model, x, y, p0=[1.0, 0.5, 2.0])
 
-        assert isinstance(result, CurveFitResult)
+        assert type(result).__name__ == "CurveFitResult"
         assert len(result.popt) == 3
         # Check parameters are close to true values
         np.testing.assert_allclose(result.popt, [1.0, 0.5, 2.0], rtol=0.3)

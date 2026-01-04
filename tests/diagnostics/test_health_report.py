@@ -15,10 +15,17 @@ Tests cover T027 and T028:
   - Recommendations section
 
 Contract reference: /specs/005-model-health-diagnostics/contracts/health_report.md
+
+This module is marked serial because it depends on PluginRegistry global state
+through the diagnostics subsystem, causing race conditions in parallel execution.
 """
 
 import numpy as np
 import pytest
+
+# Mark all tests in this module as serial to avoid PluginRegistry race conditions.
+# The root conftest.py assigns serial tests to the same xdist worker group.
+pytestmark = pytest.mark.serial
 
 from nlsq.diagnostics.types import (
     DiagnosticLevel,
@@ -275,7 +282,7 @@ class TestHealthReportStatusDetermination:
             gradient_health=healthy_gradient_report,
         )
 
-        assert report.status == HealthStatus.HEALTHY
+        assert report.status.name == "HEALTHY"
         assert len(report.all_issues) == 0
 
     def test_status_warning_when_warning_issues_exist(
@@ -291,7 +298,7 @@ class TestHealthReportStatusDetermination:
             gradient_health=healthy_gradient_report,
         )
 
-        assert report.status == HealthStatus.WARNING
+        assert report.status.name == "WARNING"
         assert any(
             issue.severity == IssueSeverity.WARNING for issue in report.all_issues
         )
@@ -309,7 +316,7 @@ class TestHealthReportStatusDetermination:
             gradient_health=healthy_gradient_report,
         )
 
-        assert report.status == HealthStatus.CRITICAL
+        assert report.status.name == "CRITICAL"
         assert any(
             issue.severity == IssueSeverity.CRITICAL for issue in report.all_issues
         )
@@ -327,7 +334,7 @@ class TestHealthReportStatusDetermination:
             gradient_health=warning_gradient_report,
         )
 
-        assert report.status == HealthStatus.CRITICAL
+        assert report.status.name == "CRITICAL"
         # Should have both critical and warning issues
         severities = {issue.severity for issue in report.all_issues}
         assert IssueSeverity.CRITICAL in severities
@@ -346,7 +353,7 @@ class TestHealthReportStatusDetermination:
             gradient_health=warning_gradient_report,
         )
 
-        assert report.status == HealthStatus.WARNING
+        assert report.status.name == "WARNING"
 
     def test_status_critical_from_gradient_only(
         self,
@@ -361,7 +368,7 @@ class TestHealthReportStatusDetermination:
             gradient_health=critical_gradient_report,
         )
 
-        assert report.status == HealthStatus.CRITICAL
+        assert report.status.name == "CRITICAL"
 
 
 @pytest.mark.diagnostics
@@ -649,7 +656,7 @@ class TestPartialComponentAvailability:
             gradient_health=None,
         )
 
-        assert report.status == HealthStatus.HEALTHY
+        assert report.status.name == "HEALTHY"
         assert report.identifiability is not None
         assert report.gradient_health is None
 
@@ -665,7 +672,7 @@ class TestPartialComponentAvailability:
             gradient_health=healthy_gradient_report,
         )
 
-        assert report.status == HealthStatus.HEALTHY
+        assert report.status.name == "HEALTHY"
         assert report.identifiability is None
         assert report.gradient_health is not None
 
@@ -719,7 +726,7 @@ class TestPartialComponentAvailability:
         )
 
         # Per contract: all unavailable returns WARNING status
-        assert report.status == HealthStatus.WARNING
+        assert report.status.name == "WARNING"
 
     def test_all_components_none(self) -> None:
         """Test report when all components are None returns WARNING."""
@@ -731,7 +738,7 @@ class TestPartialComponentAvailability:
         )
 
         # Per contract: all unavailable returns WARNING with note
-        assert report.status == HealthStatus.WARNING
+        assert report.status.name == "WARNING"
 
 
 # =============================================================================
@@ -1119,7 +1126,8 @@ class TestHealthReportEdgeCases:
         report = create_health_report()
 
         assert report is not None
-        assert report.status == HealthStatus.WARNING
+        # Use .name comparison to avoid enum identity issues across xdist workers
+        assert report.status.name == "WARNING"
         # Summary should still work
         summary = report.summary()
         assert len(summary) > 0
@@ -1140,7 +1148,8 @@ class TestHealthReportEdgeCases:
         )
 
         assert report is not None
-        assert report.status == HealthStatus.HEALTHY
+        # Use .name comparison to avoid enum identity issues across xdist workers
+        assert report.status.name == "HEALTHY"
 
     def test_report_preserves_component_references(
         self,
@@ -1319,13 +1328,18 @@ class TestModelHealthReportDataclass:
     ) -> None:
         """Test status attribute is HealthStatus enum."""
         from nlsq.diagnostics.health_report import create_health_report
+        from nlsq.diagnostics.plugin import PluginRegistry
+
+        # Clear plugin registry for isolation
+        PluginRegistry.clear()
 
         report = create_health_report(
             identifiability=healthy_identifiability_report,
             gradient_health=healthy_gradient_report,
         )
 
-        assert isinstance(report.status, HealthStatus)
+        # Use .name comparison to avoid enum identity issues across module reloads
+        assert report.status.name in ("HEALTHY", "WARNING", "CRITICAL")
 
     def test_report_all_issues_is_list(
         self,

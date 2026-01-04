@@ -7,6 +7,10 @@ This test suite validates the implementation of:
 - Task 2.10: Performance improvement validation
 
 All tests ensure GPU-CPU transfers are minimized during optimization.
+
+Note: TestAsyncLogging is marked serial because jax.debug.callback can have
+race conditions when multiple tests invoke async callbacks simultaneously
+in parallel pytest-xdist workers.
 """
 
 import os
@@ -34,6 +38,7 @@ from nlsq.utils.profiling import (
 from tests.conftest import wait_for
 
 
+@pytest.mark.serial
 class TestAsyncLogging:
     """Test Task 2.4: Async logging with jax.debug.callback."""
 
