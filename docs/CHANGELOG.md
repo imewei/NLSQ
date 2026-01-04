@@ -1,5 +1,16 @@
 # Documentation Changelog
 
+## v0.5.3 (2026-01-04)
+- Replaced pyqtdarktheme with Qt 6.5+ built-in color scheme (`setColorScheme()`)
+- Updated dependency versions: JAX 0.8.2, NumPy 2.4.0, SciPy 1.16.3, ruff 0.14.10, mypy 1.19.1
+- Added CHANGELOG entries for v0.5.0, v0.5.1, v0.5.2 release history
+- Reorganized benchmark suite into ci/components/microbench directories
+
+## v0.5.2 (2026-01-04)
+- 15% performance improvement in TRF optimizer (10K point fit: 1.04s → 0.88s)
+- Fixed JIT compatibility in TRF subproblem solvers
+- Fixed enum identity issues in parallel test execution
+
 ## v0.5.1 (2026-01-03)
 - Added `nlsq.gui_qt` API documentation to Sphinx
 - Fixed README link to GUI user guide (now points to ReadTheDocs)

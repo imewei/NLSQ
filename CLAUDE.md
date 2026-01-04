@@ -32,7 +32,7 @@ make env-info               # Show platform/GPU info
 
 ## Architecture
 
-### Package Structure (v0.4.2)
+### Package Structure (v0.5.3)
 
 The `nlsq` package is organized into logical subpackages:
 
@@ -277,11 +277,16 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - Python >=3.12 (per pyproject.toml) + JAX 0.8.0, NumPy >=2.2, SciPy >=1.16.0, Optax >=0.2.6 (009-code-quality-refactor)
 - Python 3.12+ (per pyproject.toml requires-python) + PySide6 (Qt bindings), pyqtgraph (GPU-accelerated plotting), existing nlsq core (JAX 0.8.0, NumPy 2.x, SciPy 1.16+) (010-streamlit-to-qt)
 - N/A (file-based import/export, no database) (010-streamlit-to-qt)
-- Python >=3.12 + PySide6, pyqtgraph, qdarktheme (Qt GUI); JAX 0.8.0, NumPy, SciPy (core) (011-remove-streamlit)
+- Python >=3.12 + PySide6, pyqtgraph (Qt GUI); JAX 0.8.2, NumPy 2.4, SciPy 1.16 (core) (011-remove-streamlit)
 - N/A (file-based import/export only) (011-remove-streamlit)
 - Python ≥3.12 (per pyproject.toml) + JAX 0.8.0 (locked), NumPy ≥2.2, SciPy ≥1.16.0 (012-nlsq-perf-optimization)
 
 ## Recent Changes
+- v0.5.3 (2026-01-04): Dependency Updates and Theme Migration:
+  - **Qt Theme Migration**: Replaced pyqtdarktheme with Qt 6.5+ built-in `setColorScheme()` API
+  - **Dependency Updates**: JAX 0.8.2, NumPy 2.4.0, SciPy 1.16.3, ruff 0.14.10, mypy 1.19.1
+  - **Python 3.13 Compatibility**: Removed pyqtdarktheme (incompatible with Python 3.12+)
+  - **Benchmark Reorganization**: Split into ci/, components/, microbench/ directories
 - 012-nlsq-perf-optimization: Core Performance Optimization (v0.5.2):
   - **15% Speedup**: Reduced 10K point fit time from ~1.04s to ~0.88s
   - **JAX Array Optimization**: Replaced NumPy copies with JAX functional updates (OPT-2, OPT-6)
@@ -299,7 +304,7 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
   - **Native Desktop App**: PySide6-based GUI (Qt)
   - **GPU-Accelerated Plots**: pyqtgraph with OpenGL for 500K+ point datasets
   - **5-Page Workflow**: Data Loading, Model Selection, Fitting Options, Results, Export
-  - **Theme Support**: Light/dark themes via qdarktheme with Ctrl+T toggle
+  - **Theme Support**: Light/dark themes via Qt built-in color scheme with Ctrl+T toggle
   - **Keyboard Shortcuts**: Ctrl+1-5 pages, Ctrl+R run fit, Ctrl+O open file
   - **Crash Recovery**: Autosave manager with 1-minute interval and session recovery
   - **Window Persistence**: Size, position, theme, current page saved via QSettings

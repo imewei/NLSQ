@@ -7,14 +7,14 @@ algorithms.
 This is the canonical location for OptimizeResult. For backward compatibility,
 the class is also re-exported from nlsq.core._optimize (deprecated).
 
-Migration Guide (v0.4.3 → v0.5.0)
+Migration Guide (v0.5.x → v1.0.0)
 ---------------------------------
-OptimizeResult (dict-based) will be replaced by OptimizeResultV2 (dataclass) in v0.5.0.
+OptimizeResult (dict-based) will be replaced by OptimizeResultV2 (dataclass) in v1.0.0.
 
 Current usage that will continue to work:
     result.x, result.success, result.cost  # Attribute access (preferred)
 
-Usage to migrate before v0.5.0:
+Usage to migrate before v1.0.0:
     result['x']  # Dict-style access → use result.x instead
     dict(result) # Convert to dict → use result.to_dict() instead
 """
@@ -87,7 +87,7 @@ class OptimizeResultV2:
 
     Notes
     -----
-    This class will become the default result type in v0.5.0 (12 months after v0.4.3).
+    This class will become the default result type in v1.0.0.
     """
 
     x: jnp.ndarray
@@ -326,5 +326,5 @@ class OptimizeResult(dict):
 
 
 # Legacy alias for explicit backward compatibility
-# Users who want the dict-based behavior after v0.5.0 can use this
+# Users who want the dict-based behavior after v1.0.0 can use this
 OptimizeResultLegacy = OptimizeResult

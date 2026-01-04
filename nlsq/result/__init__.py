@@ -8,7 +8,7 @@ This package provides the canonical location for optimization result types:
 - CurveFitResult: Enhanced result with statistical properties and visualization
 
 For backward compatibility, OptimizeResult and OptimizeWarning are also
-re-exported from nlsq.core._optimize (deprecated, will be removed in v0.5.0).
+re-exported from nlsq.core._optimize (deprecated, will be removed in v1.0.0).
 
 Example:
     >>> from nlsq.result import OptimizeResult, OptimizeResultV2

@@ -31,7 +31,7 @@ from nlsq import OptimizeResult, OptimizeWarning
 
 **Deprecation Timeline:**
 - v0.4.3 (2026-01-01): Old imports emit `DeprecationWarning`
-- v0.5.0 (2027-01-01): Old imports will be removed
+- v1.0.0: Old imports will be removed
 
 **Suppressing Warnings During Migration:**
 ```python

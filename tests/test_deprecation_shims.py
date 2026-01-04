@@ -1,4 +1,4 @@
-"""Tests for deprecation shims in NLSQ v0.5.0.
+"""Tests for deprecation shims in NLSQ v0.5.x.
 
 This module tests the deprecation warnings and aliases for:
 - SloppyModelAnalyzer -> ParameterSensitivityAnalyzer
