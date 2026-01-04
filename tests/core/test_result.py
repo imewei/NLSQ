@@ -208,7 +208,7 @@ def test_confidence_intervals_custom_alpha(simple_result):
 def test_confidence_intervals_no_covariance():
     """Test confidence intervals when covariance is not available."""
     # Create result without covariance
-    from nlsq.core._optimize import OptimizeResult
+    from nlsq.result import OptimizeResult
 
     result = CurveFitResult(OptimizeResult())
     result["popt"] = np.array([1.0, 2.0, 3.0])
@@ -381,7 +381,7 @@ def test_aic_zero_rss():
 
 def test_missing_model_in_result():
     """Test behavior when model is not stored in result."""
-    from nlsq.core._optimize import OptimizeResult
+    from nlsq.result import OptimizeResult
 
     result = CurveFitResult(OptimizeResult())
     result["popt"] = np.array([1.0, 2.0, 3.0])
@@ -397,7 +397,7 @@ def test_missing_model_in_result():
 def test_missing_data_in_result():
     """Test behavior when data is not stored in result."""
 
-    from nlsq.core._optimize import OptimizeResult
+    from nlsq.result import OptimizeResult
 
     def model(x, a):
         return a * x

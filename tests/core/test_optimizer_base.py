@@ -14,7 +14,7 @@ import unittest
 import numpy as np
 import pytest
 
-from nlsq.core._optimize import OptimizeResult
+from nlsq.result import OptimizeResult
 from nlsq.core.optimizer_base import OptimizerBase, TrustRegionOptimizerBase
 
 

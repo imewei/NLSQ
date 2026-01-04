@@ -440,7 +440,7 @@ class TestRecoveryCoverage(unittest.TestCase):
         recovery = OptimizationRecovery()
 
         # Create a mock result
-        from nlsq.core._optimize import OptimizeResult
+        from nlsq.result import OptimizeResult
 
         result = OptimizeResult(
             x=jnp.array([1.0, 2.0]),

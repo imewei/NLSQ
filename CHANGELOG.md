@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance (012-nlsq-perf-optimization)
+
+- **15% Performance Improvement**: Reduced 10K point exponential decay fit from 1.04s to 0.88s
+  - Eliminated redundant NumPy/JAX array conversions in hot paths
+  - Consolidated gradient norm computation (OPT-8) to avoid duplicate calculations
+  - Inlined masked_residual_func into transform functions for XLA fusion (OPT-11)
+  - Added logging guards to prevent overhead when logging disabled (OPT-17)
+  - **Files Modified**: `nlsq/core/trf.py`, `nlsq/core/sparse_jacobian.py`, `nlsq/core/least_squares.py`, `nlsq/utils/logging.py`
+
 ### Fixed
 
 #### JIT Compatibility Fixes

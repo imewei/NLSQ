@@ -356,6 +356,11 @@ class NLSQLogger:
         **kwargs
             Additional metrics to log
         """
+        # OPT-17: Guard to prevent unnecessary work when logging is disabled
+        # This avoids building metrics dict and history append when not logging
+        if not self.logger.isEnabledFor(LogLevel.PERFORMANCE):
+            return
+
         metrics: dict[str, Any] = {
             "iter": iteration,
             "cost": cost,

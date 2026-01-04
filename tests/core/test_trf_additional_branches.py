@@ -10,9 +10,11 @@ from nlsq.core.trf import TrustRegionReflective
 
 
 def test_check_convergence_criteria_hits() -> None:
+    """Test convergence criteria returns tuple (status, g_norm) per OPT-8."""
     trf = TrustRegionReflective()
-    status = trf._check_convergence_criteria(jnp.array([1e-9]), gtol=1e-6)
+    status, g_norm = trf._check_convergence_criteria(jnp.array([1e-9]), gtol=1e-6)
     assert status == 1
+    assert g_norm == pytest.approx(1e-9, rel=1e-6)
 
 
 def test_solve_trust_region_subproblem_sparse_branch(

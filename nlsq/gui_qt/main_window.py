@@ -29,7 +29,6 @@ from nlsq.gui_qt.pages import PageState
 from nlsq.gui_qt.theme import ThemeManager
 
 if TYPE_CHECKING:
-    from PySide6.QtWidgets import QApplication
 
     from nlsq.gui_qt.app_state import AppState
 

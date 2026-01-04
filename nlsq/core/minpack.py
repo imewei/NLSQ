@@ -49,7 +49,7 @@ import time
 import warnings
 from collections.abc import Callable
 from inspect import signature
-from typing import TYPE_CHECKING, Any, Literal, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray

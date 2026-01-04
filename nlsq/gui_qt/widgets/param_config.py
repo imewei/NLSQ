@@ -13,7 +13,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,

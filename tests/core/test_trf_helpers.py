@@ -164,7 +164,11 @@ class TestInitializeTRFState:
 
 
 class TestCheckConvergenceCriteria:
-    """Test the _check_convergence_criteria helper method."""
+    """Test the _check_convergence_criteria helper method.
+
+    Note: As of OPT-8 optimization, this method returns a tuple (status, g_norm)
+    to avoid redundant gradient norm computation.
+    """
 
     def test_convergence_satisfied(self):
         """Test convergence when gradient norm is below tolerance."""
@@ -174,9 +178,10 @@ class TestCheckConvergenceCriteria:
         g = jnp.array([1e-8, 1e-9])
         gtol = 1e-6
 
-        status = trf._check_convergence_criteria(g, gtol)
+        status, g_norm = trf._check_convergence_criteria(g, gtol)
 
         assert status == 1  # Convergence status
+        assert g_norm == pytest.approx(1e-8, rel=1e-6)
 
     def test_convergence_not_satisfied(self):
         """Test no convergence when gradient norm exceeds tolerance."""
@@ -186,9 +191,10 @@ class TestCheckConvergenceCriteria:
         g = jnp.array([0.1, 0.2])
         gtol = 1e-6
 
-        status = trf._check_convergence_criteria(g, gtol)
+        status, g_norm = trf._check_convergence_criteria(g, gtol)
 
         assert status is None  # No convergence
+        assert g_norm == pytest.approx(0.2, rel=1e-6)
 
     def test_convergence_boundary_case(self):
         """Test convergence at exact boundary."""
@@ -198,9 +204,10 @@ class TestCheckConvergenceCriteria:
         # Gradient norm exactly at tolerance (should NOT converge, needs to be <)
         g = jnp.array([gtol, 0.0])
 
-        status = trf._check_convergence_criteria(g, gtol)
+        status, g_norm = trf._check_convergence_criteria(g, gtol)
 
         assert status is None  # Boundary case: need g_norm < gtol (strict)
+        assert g_norm == pytest.approx(gtol, rel=1e-6)
 
     def test_convergence_just_below_tolerance(self):
         """Test convergence just below tolerance."""
@@ -210,9 +217,10 @@ class TestCheckConvergenceCriteria:
         # Gradient norm just below tolerance
         g = jnp.array([gtol * 0.99, 0.0])
 
-        status = trf._check_convergence_criteria(g, gtol)
+        status, g_norm = trf._check_convergence_criteria(g, gtol)
 
         assert status == 1  # Should converge
+        assert g_norm == pytest.approx(gtol * 0.99, rel=1e-6)
 
 
 class TestSolveTrustRegionSubproblem:

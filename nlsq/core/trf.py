@@ -714,7 +714,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         """
         m, n = J.shape
         state = {
-            "x": x0.copy(),
+            "x": jnp.asarray(x0),  # OPT-2: Use JAX array directly, no copy
             "f": f,
             "J": J,
             "nfev": 1,
@@ -757,7 +757,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         self,
         g: jnp.ndarray,
         gtol: float,
-    ) -> int | None:
+    ) -> tuple[int | None, float]:
         """Check if gradient convergence criterion is met.
 
         This helper extracts convergence checking logic from trf_no_bounds,
@@ -772,9 +772,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         Returns
         -------
-        int or None
-            Termination status: 1 if gradient tolerance satisfied, None otherwise
+        tuple[int | None, float]
+            Tuple of (termination_status, g_norm):
+            - termination_status: 1 if gradient tolerance satisfied, None otherwise
+            - g_norm: Computed gradient norm (OPT-8: returned to avoid redundant computation)
         """
+        # OPT-8: Compute g_norm once and return it to avoid redundant computation
         g_norm = jnorm(g, ord=jnp.inf)
 
         if g_norm < gtol:
@@ -783,9 +786,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 g_norm=float(g_norm),
                 gtol=gtol,
             )
-            return 1
+            return 1, float(g_norm)
 
-        return None
+        return None, float(g_norm)
 
     def _solve_trust_region_subproblem(
         self,
@@ -831,21 +834,21 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             - s, V, uf: SVD components (for exact solver)
         """
         # Setup scaled variables
-        d = scale
-        d_jnp = jnp.asarray(scale)
-        g_h_jnp = self.compute_grad_hat(g, d_jnp)
+        # OPT-2: Use JAX arrays directly to avoid NumPy/JAX conversion overhead
+        d = jnp.asarray(scale)
+        g_h = self.compute_grad_hat(g, d)
 
         result = {
             "d": d,
-            "d_jnp": d_jnp,
-            "g_h": g_h_jnp,
+            "d_jnp": d,  # Same as d now (backwards compatibility)
+            "g_h": g_h,
         }
 
         # Solve trust region subproblem
         if solver == "cg":
             # Conjugate gradient solver
-            J_h = J * d_jnp
-            step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
+            J_h = J * d
+            step_h = self.solve_tr_subproblem_cg(J, f, d, Delta, alpha)
             result.update(
                 {
                     "J_h": J_h,
@@ -864,7 +867,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             # - Sparse QR or sparse SVD decomposition
             # - Iterative sparse linear solvers
             # Target: 3-10x speed, 5-50x memory reduction on sparse problems
-            svd_output = self.svd_no_bounds(J, d_jnp, f)
+            svd_output = self.svd_no_bounds(J, d, f)
             J_h = svd_output[0]
             s, V, uf = svd_output[2:]
             result.update(
@@ -878,7 +881,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             )
         else:
             # SVD-based exact solver (default dense)
-            svd_output = self.svd_no_bounds(J, d_jnp, f)
+            svd_output = self.svd_no_bounds(J, d, f)
             J_h = svd_output[0]
             # PERFORMANCE FIX: Keep arrays as JAX to avoid conversion overhead (8-12% gain)
             # JAX arrays work with NumPy operations through duck typing, eliminating
@@ -1046,8 +1049,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             predicted_reduction = predicted_reduction_jnp
 
             # Transform step and evaluate objective
+            # OPT-18: Fused step computation to reduce intermediate allocations
             step = d * step_h
-            x_new = x + step
+            x_new = x + step  # Keep step for later use in convergence check
             f_new = fun(x_new, xdata, ydata, data_mask, transform)
             nfev += 1
             step_h_norm = jnorm(step_h)
@@ -1955,9 +1959,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         with self.logger.timer("optimization", log_result=False):
             while True:
                 # Check gradient convergence using helper (only if not already terminated)
+                # OPT-8: Get g_norm from convergence check to avoid redundant computation
                 if termination_status is None:
-                    termination_status = self._check_convergence_criteria(g, gtol)
-                g_norm = jnorm(g, ord=jnp.inf)  # For logging/printing
+                    termination_status, g_norm = self._check_convergence_criteria(g, gtol)
+                else:
+                    g_norm = jnorm(g, ord=jnp.inf)  # Only compute if already terminated
 
                 if verbose == 2:
                     # Use jax.debug.callback to avoid blocking host-device transfers

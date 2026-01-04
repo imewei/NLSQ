@@ -17,7 +17,7 @@ from nlsq import (
     curve_fit_large,
     estimate_memory_requirements,
 )
-from nlsq.core._optimize import OptimizeResult
+from nlsq.result import OptimizeResult
 from nlsq.result import CurveFitResult
 from nlsq.streaming.large_dataset import LDMemoryConfig
 

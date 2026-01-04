@@ -45,11 +45,16 @@ def _make_optimizer() -> SimpleNamespace:
 def test_check_convergence_criteria_branches() -> None:
     opt = _make_optimizer()
 
+    # OPT-8: Function now returns tuple (termination_status, g_norm)
     g_small = jnp.array([1e-8, 1e-9])
-    assert opt._check_convergence_criteria(g_small, gtol=1e-6) == 1
+    status, g_norm = opt._check_convergence_criteria(g_small, gtol=1e-6)
+    assert status == 1
+    assert g_norm == pytest.approx(1e-8, rel=1e-6)
 
     g_large = jnp.array([1e-2, 2e-2])
-    assert opt._check_convergence_criteria(g_large, gtol=1e-6) is None
+    status, g_norm = opt._check_convergence_criteria(g_large, gtol=1e-6)
+    assert status is None
+    assert g_norm == pytest.approx(2e-2, rel=1e-6)
 
 
 @pytest.mark.unit

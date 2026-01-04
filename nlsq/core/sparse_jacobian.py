@@ -100,8 +100,8 @@ class SparseJacobianComputer:
         f0 = func(xdata_sliced, *x0)
 
         for i in range(n_params):
-            x_perturb = x0.copy()
-            x_perturb[i] += eps
+            # OPT-6: Use JAX functional update instead of copy + mutate
+            x_perturb = jnp.asarray(x0).at[i].add(eps)
             f_perturb = func(xdata_sliced, *x_perturb)
 
             # Compute finite difference
@@ -264,8 +264,8 @@ class SparseJacobianComputer:
 
         # Compute finite differences
         for j in range(n_params):
-            x_perturb = x.copy()
-            x_perturb[j] += eps
+            # OPT-6: Use JAX functional update instead of copy + mutate
+            x_perturb = jnp.asarray(x).at[j].add(eps)
 
             f_perturb = func(xdata, *x_perturb)
             f_perturb = f_perturb - ydata

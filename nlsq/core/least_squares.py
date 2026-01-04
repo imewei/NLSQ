@@ -1395,7 +1395,11 @@ class LeastSquares:
             """The residual function when there is a 1D uncertainty transform,
             that is when only the diagonal elements of the inverse covariance
             matrix are used."""
-            return atransform * masked_residual_func(args, xdata, ydata, data_mask)
+            # OPT-11: Inlined masked_residual_func for XLA fusion optimization
+            # XLA can better fuse operations when they're in the same JIT scope
+            func_eval = func(xdata, *args) - ydata
+            masked_residual = jnp.where(data_mask, func_eval, 0)
+            return atransform * masked_residual
 
         @jit
         def func_2d_transform(
@@ -1407,8 +1411,10 @@ class LeastSquares:
         ) -> jnp.ndarray:
             """The residual function when there is a 2D uncertainty transform,
             that is when the full covariance matrix is given."""
-            f = masked_residual_func(args, xdata, ydata, data_mask)
-            return jax_solve_triangular(atransform, f, lower=True)
+            # OPT-11: Inlined masked_residual_func for XLA fusion optimization
+            func_eval = func(xdata, *args) - ydata
+            masked_residual = jnp.where(data_mask, func_eval, 0)
+            return jax_solve_triangular(atransform, masked_residual, lower=True)
 
         self.func_none = func_no_transform
         self.func_1d = func_1d_transform

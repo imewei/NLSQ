@@ -279,8 +279,17 @@ The stability guard in `nlsq/stability/guard.py` uses `svdvals()` (singular valu
 - N/A (file-based import/export, no database) (010-streamlit-to-qt)
 - Python >=3.12 + PySide6, pyqtgraph, qdarktheme (Qt GUI); JAX 0.8.0, NumPy, SciPy (core) (011-remove-streamlit)
 - N/A (file-based import/export only) (011-remove-streamlit)
+- Python ≥3.12 (per pyproject.toml) + JAX 0.8.0 (locked), NumPy ≥2.2, SciPy ≥1.16.0 (012-nlsq-perf-optimization)
 
 ## Recent Changes
+- 012-nlsq-perf-optimization: Core Performance Optimization (v0.5.2):
+  - **15% Speedup**: Reduced 10K point fit time from ~1.04s to ~0.88s
+  - **JAX Array Optimization**: Replaced NumPy copies with JAX functional updates (OPT-2, OPT-6)
+  - **XLA Fusion**: Inlined masked_residual_func for better GPU kernel fusion (OPT-11)
+  - **Gradient Caching**: Consolidated gradient norm computation to avoid redundant calculation (OPT-8)
+  - **Logging Guards**: Added isEnabledFor() checks to prevent overhead when logging disabled (OPT-17)
+  - **Numerical Accuracy**: All optimizations maintain 1e-8 tolerance
+  - Spec: `/specs/012-nlsq-perf-optimization/`
 - 011-remove-streamlit: Remove Streamlit GUI (v0.5.1):
   - **Streamlit Removal**: Removed legacy Streamlit GUI in favor of native Qt desktop app
   - **Component Relocation**: Shared components (adapters, session_state, presets) moved to gui_qt

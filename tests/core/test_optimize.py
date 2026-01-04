@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.core._optimize import OptimizeResult, OptimizeWarning, _check_unknown_options
+from nlsq.result import OptimizeResult, OptimizeWarning, _check_unknown_options
 
 
 class TestOptimizeResultBasic(unittest.TestCase):

@@ -617,9 +617,9 @@ class DataLoadingPage(QWidget):
 
                 # Set column assignments if specified
                 if "columns" in config["data"]:
-                    cols = config["data"]["columns"]
                     # Column selector will be updated when file loads
                     # Additional column configuration can be applied here
+                    pass
 
         except Exception as e:
             self._show_error("YAML Config Error", f"Failed to load configuration: {e}")
