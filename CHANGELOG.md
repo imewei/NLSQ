@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.4] - 2026-01-04
+## [0.5.2] - 2026-01-04
 
 ### Changed
 
@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - mypy: 1.18.2 → 1.19.1
   - **Files Modified**: `pyproject.toml`, `.pre-commit-config.yaml`, `.readthedocs.yaml`
 
+#### Benchmark Reorganization
+
+- **Reorganized benchmark suite into logical directories**:
+  - `benchmarks/ci/`: CI performance regression tests
+  - `benchmarks/components/`: Component-specific benchmarks
+  - `benchmarks/microbench/`: Micro-benchmarks for hot paths
+  - Extracted shared models and constants to reduce duplication
+  - **Files Modified**: `benchmarks/` directory structure
+
 ### Removed
 
 - **pyqtdarktheme dependency**: Removed from `gui_qt` optional dependencies
@@ -49,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Python 3.13 Compatibility**: GUI now works with Python 3.12+ without deprecated theme library
+- **Code Export**: Fixed `fit()` call in code export to use workflow presets correctly
 
 #### JIT Compatibility Fixes
 
@@ -77,6 +87,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Diagnostics Performance Tests**: Relaxed overhead threshold from 5% to 10%
   - Provides CI stability across different hardware configurations
   - **Files Modified**: `tests/diagnostics/test_integration.py`
+
+## [0.5.1] - 2026-01-03
+
+### Removed (011-remove-streamlit)
+
+- **Streamlit GUI**: Removed legacy Streamlit-based web GUI in favor of native Qt desktop app
+  - Removed `nlsq/gui/` package (Streamlit pages, components)
+  - Removed `nlsq gui` CLI command
+  - Removed Streamlit dependencies: `streamlit`, `streamlit-monaco`, `pywebview`
+  - **Migration**: Use `nlsq-gui` or `python -m nlsq.gui_qt` for the Qt desktop app
+
+### Changed
+
+- **Shared Components Migrated**: Moved reusable components to `nlsq/gui_qt/`
+  - `adapters.py`: Data adapters for file loading
+  - `session_state.py`: Session state management
+  - `presets.py`: Workflow presets for quick configuration
+  - **Files Moved**: From `nlsq/gui/` to `nlsq/gui_qt/`
+
+### Fixed
+
+- **Sphinx Documentation**: Fixed all 77 Sphinx build warnings
+- **Pre-commit Violations**: Resolved issues across gui_qt and docs
+
+## [0.5.0] - 2026-01-02
+
+### Added (010-streamlit-to-qt)
+
+#### Native Qt Desktop GUI
+
+- **New `nlsq.gui_qt` Package**: Native PySide6-based desktop application
+  - GPU-accelerated plotting via pyqtgraph with OpenGL
+  - Handles 500K+ point datasets smoothly
+  - Native desktop integration (menus, dialogs, keyboard shortcuts)
+  - **Files Added**: `nlsq/gui_qt/` package
+
+- **Entry Points**:
+  - `nlsq-gui`: Command-line entry point
+  - `python -m nlsq.gui_qt`: Module entry point
+  - `from nlsq.gui_qt import run_desktop`: Programmatic launch
+
+- **5-Page Workflow**:
+  - **Data Loading**: CSV, Excel, JSON, HDF5, clipboard import with column selection
+  - **Model Selection**: Built-in models, polynomial, custom JAX/NumPy models
+  - **Fitting Options**: Guided/Advanced modes, live cost plot, parameter bounds
+  - **Results**: Parameter table with uncertainties, fit plot, residuals plot
+  - **Export**: ZIP session bundle, JSON, CSV, Python code generation
+
+- **Theme Support**:
+  - Light/dark themes via qdarktheme
+  - Toggle with `Ctrl+T` keyboard shortcut
+  - Theme persists between sessions
+
+- **Keyboard Shortcuts**:
+  - `Ctrl+1` to `Ctrl+5`: Switch workflow pages
+  - `Ctrl+R`: Run fit
+  - `Ctrl+O`: Open file
+  - `Ctrl+S`: Save session
+  - `Ctrl+T`: Toggle theme
+
+- **Autosave & Crash Recovery**:
+  - 1-minute autosave interval
+  - Session recovery on crash or unexpected exit
+  - Window size, position, theme saved via QSettings
+
+- **Reusable Widgets**:
+  - `ColumnSelectorWidget`: Data column selection with validation
+  - `ParamConfigWidget`: Parameter bounds and initial values
+  - `AdvancedOptionsWidget`: Tolerance, method, convergence settings
+  - `FitStatisticsWidget`: R², RMSE, AIC, BIC display
+  - `ParamResultsWidget`: Parameter table with confidence intervals
+  - `IterationTableWidget`: Live iteration history
+  - `CodeEditorWidget`: Python syntax highlighting
+
+- **Scientific Plot Widgets** (pyqtgraph):
+  - `FitPlotWidget`: Data + fit curve + confidence bands
+  - `ResidualsPlotWidget`: Residuals vs fitted values
+  - `HistogramPlotWidget`: Residual distribution with normal overlay
+  - `LiveCostPlotWidget`: Real-time optimization cost
+
+### Changed
+
+- **GUI Architecture**: Moved from web-based (Streamlit) to native desktop (Qt)
+  - Better performance for large datasets
+  - Native OS integration
+  - No browser dependency
+
+### Technical Details
+
+**Dependencies Added:**
+- `PySide6>=6.6.0`: Qt bindings (LGPL license)
+- `pyqtgraph>=0.13.0`: GPU-accelerated scientific plotting
+- `pyqtdarktheme>=2.1.0`: Modern theme support
+- `pyyaml>=6.0.3`: YAML configuration support
+- `pytest-qt>=4.4.0`: Qt widget testing
+
+**Architecture:**
+```
+nlsq/gui_qt/
+├── __init__.py        # run_desktop() entry point
+├── main_window.py     # MainWindow with sidebar navigation
+├── app_state.py       # AppState (Qt signals wrapping SessionState)
+├── theme.py           # ThemeConfig, ThemeManager
+├── autosave.py        # AutosaveManager for crash recovery
+├── pages/             # 5 workflow pages
+├── widgets/           # Reusable Qt widgets
+└── plots/             # pyqtgraph-based scientific plots
+```
+
+## [0.4.4] - 2026-01-01
 
 ### Added
 
