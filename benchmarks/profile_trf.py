@@ -105,7 +105,7 @@ def profile_iteration_breakdown():
     p0 = [2.0, 0.5, 0.3]
 
     # Create CurveFit instance with timed mode
-    from nlsq.minpack import CurveFit
+    from nlsq import CurveFit
 
     cf = CurveFit()
 
@@ -118,83 +118,10 @@ def profile_iteration_breakdown():
     print(f"Status: {result[1] if len(result) > 1 else 'N/A'}")
 
 
-def analyze_loop_patterns():
-    """Analyze the loop patterns suitable for lax.scan conversion"""
-    print("\n" + "=" * 80)
-    print("Loop Pattern Analysis for lax.scan Conversion")
-    print("=" * 80)
-
-    print("""
-Key findings from TRF algorithm structure:
-
-1. OUTER LOOP (main optimization loop):
-   - Location: trf_no_bounds line 923, trf_bounds line 1247
-   - Pattern: while True with dynamic termination
-   - State variables:
-     * x, f, J, g (current parameters, residuals, Jacobian, gradient)
-     * cost, nfev, njev (cost, function/Jacobian evaluations)
-     * Delta, alpha (trust region radius, LM parameter)
-     * iteration, termination_status
-
-   Challenges for lax.scan:
-   - Dynamic termination (gradient tolerance, max iterations)
-   - Conditional updates (only update if actual_reduction > 0)
-   - Function evaluations (fun, jac) are expensive
-
-2. INNER LOOP (step acceptance loop):
-   - Location: trf_no_bounds line 974, trf_bounds line 1305
-   - Pattern: while (actual_reduction <= 0 and nfev < max_nfev and inner < 100)
-   - State variables:
-     * Delta (trust region radius)
-     * alpha (LM parameter)
-     * actual_reduction, predicted_reduction
-     * inner_loop_count
-
-   Challenges for lax.scan:
-   - Nested within outer loop
-   - Conditional continuation (actual_reduction > 0)
-   - Variable number of iterations (1 to 100)
-
-3. OPTIMIZATION OPPORTUNITIES:
-
-   a) High Priority (2-5x speedup):
-      - Convert inner loop to lax.scan with fixed max iterations
-      - Use lax.cond for conditional updates instead of Python if/else
-      - Pre-allocate arrays for iteration history
-
-   b) Medium Priority (1.5-2x speedup):
-      - Convert outer loop to lax.scan (more complex)
-      - Requires careful state management
-      - May need lax.while_loop instead for dynamic termination
-
-   c) Current bottlenecks (from benchmark data):
-      - Function evaluations (fun, jac): ~40% of time
-      - SVD decomposition: ~30% of time
-      - Gradient computation: ~15% of time
-      - NumPy ↔ JAX conversions: ~10% of time
-      - Other operations: ~5% of time
-
-4. RECOMMENDED APPROACH:
-
-   Step 1: Profile to confirm bottlenecks
-   Step 2: Convert inner loop to lax.scan first (easier, isolated)
-   Step 3: Minimize NumPy ↔ JAX conversions
-   Step 4: Consider lax.while_loop for outer loop if inner loop successful
-   Step 5: Vectorize operations within iterations
-
-Expected performance improvements:
-- Inner loop lax.scan: 1.5-2x speedup
-- Reduced conversions: 1.2-1.3x speedup
-- Combined: 2-3x total speedup
-- With outer loop optimization: 3-5x total speedup
-""")
-
-
 if __name__ == "__main__":
     # Run profiling
     profile_trf_algorithm()
     profile_iteration_breakdown()
-    analyze_loop_patterns()
 
     print("\n" + "=" * 80)
     print("Profiling Complete")
