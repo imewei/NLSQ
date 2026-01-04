@@ -114,8 +114,9 @@ BENCHMARK_PROBLEMS = {
     },
     "gaussian_4p": {
         "model": gaussian_peak,
-        "true_params": jnp.array([5.0, 0.0, 1.0, 0.5]),
-        "p0": jnp.array([4.0, 0.2, 1.2, 0.3]),
+        # Note: mu must be non-zero to avoid divide-by-zero in relative error calculation
+        "true_params": jnp.array([5.0, 0.5, 1.0, 0.5]),
+        "p0": jnp.array([4.0, 0.3, 1.2, 0.3]),
         "x_range": (-5.0, 5.0),
     },
     "polynomial_5p": {
@@ -133,7 +134,9 @@ BENCHMARK_PROBLEMS = {
 }
 
 BENCHMARK_SIZES = [1_000, 10_000, 100_000]
-ACCURACY_TOLERANCE = 1e-8
+# Relative tolerance for benchmark accuracy validation
+# With 1% noise, recovering parameters to ~1% accuracy is realistic
+ACCURACY_TOLERANCE = 0.05  # 5% relative error tolerance for noisy data
 NOISE_LEVEL = 0.01
 
 
@@ -223,28 +226,18 @@ def run_single_benchmark(
         result = curve_fit(model, x, y, p0=p0, full_output=True)
         elapsed = time.perf_counter() - start
 
-        # Extract results
-        if isinstance(result, tuple) and len(result) >= 2:
-            popt = result[0]
-            pcov = result[1]
-            # Check for full_output format
-            if len(result) >= 3:
-                infodict = result[2]
-                nfev = (
-                    infodict.get("nfev", None) if isinstance(infodict, dict) else None
-                )
-            else:
-                nfev = None
-        else:
-            popt = result
-            nfev = None
-
+        # Extract results from CurveFitResult object
+        # CurveFitResult has popt, pcov, nfev, success as attributes
+        popt = result.popt
+        nfev = getattr(result, "nfev", None)
         success = True
 
         # Calculate relative error in fitted parameters
+        # Use max(|true|, 1e-10) to avoid divide-by-zero for near-zero true values
         popt_np = np.array(popt)
         true_np = np.array(true_params)
-        relative_error = float(np.max(np.abs(popt_np - true_np) / np.abs(true_np)))
+        denominator = np.maximum(np.abs(true_np), 1e-10)
+        relative_error = float(np.max(np.abs(popt_np - true_np) / denominator))
 
     except Exception as e:
         elapsed = time.perf_counter() - start
