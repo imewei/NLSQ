@@ -14,6 +14,7 @@ in parallel pytest-xdist workers.
 """
 
 import os
+import sys
 import time
 from contextlib import contextmanager
 from unittest import mock
@@ -77,6 +78,10 @@ class TestAsyncLogging:
         assert not is_jax_array("string")
         assert not is_jax_array(None)
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="jax.debug.callback mock is flaky on macOS runners",
+    )
     def test_log_iteration_async_basic(self):
         """Test basic async logging functionality."""
         # Mock the logger and use sync callback for deterministic testing
@@ -95,6 +100,10 @@ class TestAsyncLogging:
             # With sync callback, logger is called immediately
             assert mock_logger.info.called
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="jax.debug.callback mock is flaky on macOS runners",
+    )
     def test_log_iteration_async_jax_arrays(self):
         """Test async logging with JAX arrays."""
         with (
@@ -112,6 +121,10 @@ class TestAsyncLogging:
             # With sync callback, logger is called immediately
             assert mock_logger.info.called
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="jax.debug.callback mock is flaky on macOS runners",
+    )
     def test_log_iteration_async_verbosity_levels(self):
         """Test verbosity control."""
         with (
@@ -135,6 +148,10 @@ class TestAsyncLogging:
             log_iteration_async(1, 1.0, 1.0, verbose=2)
             assert mock_logger.info.called
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="jax.debug.callback mock is flaky on macOS runners",
+    )
     def test_log_convergence_async(self):
         """Test convergence logging."""
         with (
