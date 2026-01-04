@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
-import optax  # type: ignore[import-not-found]
+import optax  # type: ignore[import-not-found,import-untyped]
 
 from nlsq.streaming.telemetry import get_defense_telemetry
 from nlsq.utils.logging import get_logger

@@ -30,15 +30,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq import curve_fit
-from nlsq.caching.unified_cache import clear_cache, get_cache_stats
-
 from benchmarks.common.constants import (
     DEFAULT_DATA_SIZES,
     TARGET_CACHE_HIT_RATE,
     TARGET_SPEEDUP_FACTOR,
     TARGET_WARM_JIT_TIME_MS,
 )
+from nlsq import curve_fit
+from nlsq.caching.unified_cache import clear_cache, get_cache_stats
 
 
 def exponential_model(x: jnp.ndarray, a: float, b: float, c: float) -> jnp.ndarray:
@@ -153,7 +152,9 @@ def benchmark_cache_hit_rate(
 
         if (i + 1) % 100 == 0:
             stats = get_cache_stats()
-            print(f"  Processed {i + 1}/{n_fits} fits, hit_rate={stats['hit_rate']:.2%}")
+            print(
+                f"  Processed {i + 1}/{n_fits} fits, hit_rate={stats['hit_rate']:.2%}"
+            )
 
     final_stats = get_cache_stats()
 

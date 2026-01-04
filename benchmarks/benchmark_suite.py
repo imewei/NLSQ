@@ -8,6 +8,7 @@ measuring performance characteristics across different problem types and sizes.
 
 from __future__ import annotations
 
+import contextlib
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -17,21 +18,20 @@ import jax.numpy as jnp
 import numpy as np
 from scipy.optimize import curve_fit as scipy_curve_fit
 
+from benchmarks.common.constants import (
+    DEFAULT_BACKENDS,
+    DEFAULT_DATA_SIZES,
+    DEFAULT_METHODS,
+    DEFAULT_N_REPEATS,
+    DEFAULT_NOISE_LEVEL,
+    DEFAULT_WARMUP_RUNS,
+    EXTENDED_DATA_SIZES,
+)
 from nlsq import (
     PerformanceProfiler,
     ProfilerVisualization,
     ProfilingDashboard,
     curve_fit,
-)
-
-from benchmarks.common.constants import (
-    DEFAULT_DATA_SIZES,
-    DEFAULT_N_REPEATS,
-    DEFAULT_WARMUP_RUNS,
-    DEFAULT_METHODS,
-    DEFAULT_BACKENDS,
-    DEFAULT_NOISE_LEVEL,
-    EXTENDED_DATA_SIZES,
 )
 
 
@@ -91,7 +91,9 @@ class BenchmarkProblem:
         self.name = name
         self.n_parameters = n_parameters
 
-    def generate_data(self, n_points: int, noise_level: float = DEFAULT_NOISE_LEVEL) -> tuple:
+    def generate_data(
+        self, n_points: int, noise_level: float = DEFAULT_NOISE_LEVEL
+    ) -> tuple:
         """
         Generate synthetic data for the problem.
 
@@ -317,11 +319,8 @@ class BenchmarkSuite:
 
         # Warmup runs (JIT compilation, ignore failures)
         for _ in range(self.config.warmup_runs):
-            try:
+            with contextlib.suppress(RuntimeError, ValueError, FloatingPointError):
                 curve_fit(problem.model, x, y, p0=p0, method=method)
-            except (RuntimeError, ValueError, FloatingPointError):
-                # Warmup failures can happen - continue benchmarking
-                pass
 
         # Actual benchmark runs
         for _ in range(self.config.n_repeats):

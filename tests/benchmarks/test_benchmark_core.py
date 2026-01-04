@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import json
 import time
@@ -205,14 +206,12 @@ def run_single_benchmark(
     true_params = problem["true_params"]
     p0 = problem["p0"]
 
-    x, y, y_true = generate_data(problem_name, n_points)
+    x, y, _ = generate_data(problem_name, n_points)
 
     # Warmup run to trigger JIT compilation
     if warmup:
-        try:
+        with contextlib.suppress(Exception):
             curve_fit(model, x, y, p0=p0)
-        except Exception:
-            pass
         gc.collect()
 
     # Measure memory before
@@ -231,7 +230,9 @@ def run_single_benchmark(
             # Check for full_output format
             if len(result) >= 3:
                 infodict = result[2]
-                nfev = infodict.get("nfev", None) if isinstance(infodict, dict) else None
+                nfev = (
+                    infodict.get("nfev", None) if isinstance(infodict, dict) else None
+                )
             else:
                 nfev = None
         else:
@@ -388,13 +389,15 @@ def print_summary(results: BenchmarkResults) -> None:
 
         # Get memory if available
         mem_values = [m.memory_bytes for m in metrics if m.memory_bytes is not None]
-        mem_str = f"{np.mean(mem_values)/1e6:.1f}MB" if mem_values else "N/A"
+        mem_str = f"{np.mean(mem_values) / 1e6:.1f}MB" if mem_values else "N/A"
 
         # Get max error
         max_error = max(m.relative_error for m in metrics)
         error_str = f"{max_error:.2e}" if max_error < float("inf") else "FAILED"
 
-        print(f"{problem:<25} {size:>10,} {avg_time:>12.4f} {mem_str:>12} {error_str:>12}")
+        print(
+            f"{problem:<25} {size:>10,} {avg_time:>12.4f} {mem_str:>12} {error_str:>12}"
+        )
 
     # Accuracy validation
     passed, failures = validate_accuracy(results)

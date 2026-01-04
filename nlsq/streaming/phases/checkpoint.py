@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import h5py  # type: ignore[import-not-found]
+import h5py  # type: ignore[import-not-found,import-untyped]
 import jax.numpy as jnp
 import numpy as np
-import optax  # type: ignore[import-not-found]
+import optax  # type: ignore[import-not-found,import-untyped]
 
 from nlsq.utils.safe_serialize import safe_dumps, safe_loads
 
@@ -385,7 +385,7 @@ class CheckpointManager:
                 "Expected L-BFGS state."
             )
 
-        from optax._src.transform import (  # type: ignore[import-not-found]
+        from optax._src.transform import (  # type: ignore[import-not-found,import-untyped]
             ScaleByLBFGSState,
         )
 

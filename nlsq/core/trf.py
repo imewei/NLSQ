@@ -1961,7 +1961,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 # Check gradient convergence using helper (only if not already terminated)
                 # OPT-8: Get g_norm from convergence check to avoid redundant computation
                 if termination_status is None:
-                    termination_status, g_norm = self._check_convergence_criteria(g, gtol)
+                    termination_status, g_norm = self._check_convergence_criteria(
+                        g, gtol
+                    )
                 else:
                     g_norm = jnorm(g, ord=jnp.inf)  # Only compute if already terminated
 

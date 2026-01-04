@@ -391,7 +391,11 @@ def main():
         if args.output:
             output_path = Path(args.output)
         else:
-            output_path = Path(__file__).parent.parent / "baselines" / "host_device_transfers.json"
+            output_path = (
+                Path(__file__).parent.parent
+                / "baselines"
+                / "host_device_transfers.json"
+            )
         save_baseline(metrics, problem, system_info, output_path)
 
         # Print next steps

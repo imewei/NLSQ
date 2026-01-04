@@ -29,7 +29,6 @@ from nlsq.gui_qt.pages import PageState
 from nlsq.gui_qt.theme import ThemeManager
 
 if TYPE_CHECKING:
-
     from nlsq.gui_qt.app_state import AppState
 
 __all__ = ["MainWindow"]

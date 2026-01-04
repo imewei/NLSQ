@@ -594,7 +594,9 @@ class ExportPage(QWidget):
         else:
             lines.append("bounds = (-np.inf, np.inf)")
 
-        lines.append(f'workflow = "{workflow}"  # Options: standard, fast, quality, large_robust')
+        lines.append(
+            f'workflow = "{workflow}"  # Options: standard, fast, quality, large_robust'
+        )
 
         lines.extend(
             [

@@ -14,14 +14,13 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq import curve_fit
-from nlsq.core.sparse_jacobian import detect_jacobian_sparsity
-
 from benchmarks.common.constants import (
     DEFAULT_SEED,
     LARGE_JACOBIAN_SHAPE,
     MEDIUM_JACOBIAN_SHAPE,
 )
+from nlsq import curve_fit
+from nlsq.core.sparse_jacobian import detect_jacobian_sparsity
 
 
 def sparse_parameter_selection_model(x, *params):
@@ -98,8 +97,16 @@ def benchmark_sparse_vs_dense():
 
     # Test with different problem sizes based on Jacobian shapes
     test_cases = [
-        {"n_params": MEDIUM_JACOBIAN_SHAPE[1] * 2, "n_data": MEDIUM_JACOBIAN_SHAPE[0], "name": "medium"},
-        {"n_params": LARGE_JACOBIAN_SHAPE[1] * 4, "n_data": LARGE_JACOBIAN_SHAPE[0] // 5, "name": "large"},
+        {
+            "n_params": MEDIUM_JACOBIAN_SHAPE[1] * 2,
+            "n_data": MEDIUM_JACOBIAN_SHAPE[0],
+            "name": "medium",
+        },
+        {
+            "n_params": LARGE_JACOBIAN_SHAPE[1] * 4,
+            "n_data": LARGE_JACOBIAN_SHAPE[0] // 5,
+            "name": "large",
+        },
     ]
 
     for case in test_cases:

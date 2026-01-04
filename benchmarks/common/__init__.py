@@ -6,32 +6,30 @@ This module provides shared components to reduce code duplication:
 - constants: Shared configuration constants
 """
 
+from benchmarks.common.constants import (
+    DEFAULT_DATA_SIZES,
+    DEFAULT_METHODS,
+    DEFAULT_N_REPEATS,
+    DEFAULT_NOISE_LEVEL,
+    DEFAULT_SEED,
+    DEFAULT_WARMUP_RUNS,
+)
 from benchmarks.common.models import (
     exponential_model,
     gaussian_model,
     polynomial_model,
     sinusoidal_model,
 )
-from benchmarks.common.constants import (
-    DEFAULT_DATA_SIZES,
-    DEFAULT_N_REPEATS,
-    DEFAULT_WARMUP_RUNS,
-    DEFAULT_METHODS,
-    DEFAULT_SEED,
-    DEFAULT_NOISE_LEVEL,
-)
 
 __all__ = [
-    # Models
+    "DEFAULT_DATA_SIZES",
+    "DEFAULT_METHODS",
+    "DEFAULT_NOISE_LEVEL",
+    "DEFAULT_N_REPEATS",
+    "DEFAULT_SEED",
+    "DEFAULT_WARMUP_RUNS",
     "exponential_model",
     "gaussian_model",
     "polynomial_model",
     "sinusoidal_model",
-    # Constants
-    "DEFAULT_DATA_SIZES",
-    "DEFAULT_N_REPEATS",
-    "DEFAULT_WARMUP_RUNS",
-    "DEFAULT_METHODS",
-    "DEFAULT_SEED",
-    "DEFAULT_NOISE_LEVEL",
 ]

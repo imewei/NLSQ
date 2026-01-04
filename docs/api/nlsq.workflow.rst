@@ -42,7 +42,9 @@ Quick Start
    y = 2.0 * np.exp(-0.5 * x) + 0.3 + np.random.normal(0, 0.05, len(x))
 
    # Auto-select workflow based on dataset size and available memory
-   config = auto_select_workflow(n_points=len(x), n_params=3, goal=OptimizationGoal.QUALITY)
+   config = auto_select_workflow(
+       n_points=len(x), n_params=3, goal=OptimizationGoal.QUALITY
+   )
 
    # Use a preset
    config = WorkflowConfig.from_preset("quality")
