@@ -128,7 +128,10 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         When call frequency is low, the default TTL should be used, and
         psutil should be called after the TTL expires.
         """
-        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
+        with (
+            patch("nlsq.caching.memory_manager.psutil") as mock_psutil,
+            patch("nlsq.caching.memory_manager.HAS_PSUTIL", True),
+        ):
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
@@ -166,7 +169,10 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         When adaptive_ttl is False, the MemoryManager should always use
         the default TTL regardless of call frequency.
         """
-        with patch("nlsq.caching.memory_manager.psutil") as mock_psutil:
+        with (
+            patch("nlsq.caching.memory_manager.psutil") as mock_psutil,
+            patch("nlsq.caching.memory_manager.HAS_PSUTIL", True),
+        ):
             mock_mem = MagicMock()
             mock_mem.available = 8 * 1024**3
             mock_psutil.virtual_memory.return_value = mock_mem
