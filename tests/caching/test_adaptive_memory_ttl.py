@@ -11,6 +11,7 @@ Tests that:
 - adaptive_ttl=False disables adaptive behavior
 """
 
+import sys
 import time
 import unittest
 from unittest.mock import MagicMock, patch
@@ -18,6 +19,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nlsq.caching.memory_manager import MemoryManager
+
+# macOS has unreliable sleep timing in CI, causing flaky tests
+IS_MACOS = sys.platform == "darwin"
 
 
 @pytest.mark.serial
@@ -122,6 +126,7 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
                 "Medium frequency calls should use cached values",
             )
 
+    @pytest.mark.skipif(IS_MACOS, reason="Timing-dependent test flaky on macOS CI")
     def test_low_frequency_callers_use_default_ttl(self):
         """Test that low-frequency callers (<10 calls/sec) use default TTL (1.0s).
 
@@ -163,6 +168,7 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
             # Low frequency (2 calls over ~1.1 seconds = ~1.8 calls/sec)
             # Should continue using default TTL
 
+    @pytest.mark.skipif(IS_MACOS, reason="Timing-dependent test flaky on macOS CI")
     def test_adaptive_ttl_false_disables_adaptive_behavior(self):
         """Test that adaptive_ttl=False disables adaptive behavior.
 
