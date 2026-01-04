@@ -110,6 +110,7 @@ dev = [
     "pytest>=8.0.0",         # Tested on 8.4.2
     "pytest-cov>=7.0.0",     # Tested on 7.0.0
     "pytest-xdist>=3.8.0",   # Tested on 3.8.0
+    "pytest-rerunfailures>=14.0",  # Retry flaky tests
     "black>=25.0.0",         # Tested on 25.9.0 (CalVer)
     "ruff>=0.13.0",          # Tested on 0.13.1
     "mypy>=1.18.0",          # Tested on 1.18.2
@@ -131,6 +132,7 @@ test = [
     "pytest-cov>=7.0.0",     # Tested on 7.0.0
     "pytest-xdist>=3.8.0",   # Tested on 3.8.0
     "pytest-timeout>=2.4.0", # Tested on 2.4.0
+    "pytest-rerunfailures>=14.0",  # Retry flaky tests (parallel execution race conditions)
     "hypothesis>=6.148.0",   # Tested on 6.148.9
 ]
 benchmark = [
@@ -534,7 +536,7 @@ addopts = [
     # baseline before tests run. Large-p tests (5000 params) can push total > 60GB.
     # Using 4 workers: 4 × 2GB = 8GB max, leaving headroom for large tests.
     "-n", "4",  # Fixed 4 workers to prevent memory exhaustion (was: auto)
-    "--dist", "loadscope",  # Group by test scope for better isolation (was: loadgroup)
+    "--dist", "loadscope",  # Group by test module/class for better isolation
     # Coverage disabled for faster CI (enable locally with pytest --cov)
     # Test suite: 1,563 tests (as of 2025-11-16)
     # Current coverage: 82.15% (exceeds 80% target)
@@ -547,6 +549,9 @@ addopts = [
     "--tb=short",  # Shorter traceback format for faster output
     "--no-header",  # Skip header for cleaner output
     "--benchmark-disable",  # Avoid pytest-benchmark warnings under xdist
+    # Flaky test handling (parallel execution race conditions)
+    "--reruns", "2",  # Retry failed tests up to 2 times
+    "--reruns-delay", "1",  # 1 second delay between retries
 ]
 # Console output width for better readability
 console_output_style = "progress"
