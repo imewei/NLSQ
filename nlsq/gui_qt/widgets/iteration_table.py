@@ -131,4 +131,4 @@ class IterationTableWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        pass  # Theme is applied globally via qdarktheme
+        pass  # Theme is applied globally via Qt color scheme

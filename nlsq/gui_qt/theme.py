@@ -3,6 +3,9 @@ NLSQ Qt GUI Theme Management
 
 This module provides theme configuration and management for the Qt application.
 Supports light and dark themes with consistent styling across widgets and plots.
+
+Uses Qt 6.5+ built-in color scheme API for widget theming. pyqtgraph plots
+are themed separately via ThemeConfig since they don't follow Qt's color scheme.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
+from PySide6.QtGui import Qt
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
@@ -104,8 +108,8 @@ LIGHT_THEME = ThemeConfig(
 class ThemeManager(QObject):
     """Manages application theme switching.
 
-    This class handles theme changes for the entire application, including
-    qdarktheme setup and emitting signals for widgets to update their styling.
+    This class handles theme changes for the entire application using Qt 6.5+
+    built-in color scheme API and emitting signals for widgets to update their styling.
     """
 
     # Signal emitted when theme changes
@@ -132,14 +136,12 @@ class ThemeManager(QObject):
         Args:
             name: Theme name ("light" or "dark")
         """
-        import qdarktheme
-
         if name == "light":
             self._current_theme = LIGHT_THEME
-            qdarktheme.setup_theme("light", corner_shape="sharp")
+            self._app.styleHints().setColorScheme(Qt.ColorScheme.Light)
         else:
             self._current_theme = DARK_THEME
-            qdarktheme.setup_theme("dark", corner_shape="sharp")
+            self._app.styleHints().setColorScheme(Qt.ColorScheme.Dark)
 
         self.theme_changed.emit(self._current_theme)
 

@@ -82,13 +82,13 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.3.3)
-    "scipy>=1.16.0",          # Tested on 1.16.2
+    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.0)
+    "scipy>=1.16.0",          # Tested on 1.16.3
 
     # JAX ecosystem (>=0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
-    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.8.0)
-    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.8.0)
+    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.8.2)
+    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.8.2)
                                # Platform-specific extras installed separately:
                                #   Linux CPU:  pip install "jax[cpu]>=0.8.0"
                                #   Linux GPU:  make install-jax-gpu (recommended)
@@ -112,8 +112,8 @@ dev = [
     "pytest-xdist>=3.8.0",   # Tested on 3.8.0
     "pytest-rerunfailures>=14.0",  # Retry flaky tests
     "black>=25.0.0",         # Tested on 25.9.0 (CalVer)
-    "ruff>=0.13.0",          # Tested on 0.13.1
-    "mypy>=1.18.0",          # Tested on 1.18.2
+    "ruff>=0.14.0",          # Tested on 0.14.10
+    "mypy>=1.19.0",          # Tested on 1.19.1
     "pre-commit>=4.0.0",     # Tested on 4.3.0
     "ipython>=8.0.0",        # Tested on 8.20.0
     "bandit>=1.9.0",         # Tested on 1.9.2
@@ -161,9 +161,8 @@ build = [
 ]
 gui_qt = [
     # PySide6 Qt GUI dependencies for native desktop application
-    "PySide6>=6.6.0",              # Qt bindings (LGPL license)
+    "PySide6>=6.6.0",              # Qt bindings (LGPL license), uses Qt 6.5+ built-in color scheme
     "pyqtgraph>=0.13.0",           # GPU-accelerated scientific plotting
-    "pyqtdarktheme>=2.1.0",        # Modern theme support (qdarktheme)
     "pyyaml>=6.0.3",               # YAML configuration support
     "pytest-qt>=4.4.0",            # Qt widget testing
 ]
@@ -173,8 +172,8 @@ all = [
     "pytest-cov>=7.0.0",
     "pytest-xdist>=3.8.0",
     "black>=25.0.0",
-    "ruff>=0.13.0",
-    "mypy>=1.18.0",
+    "ruff>=0.14.0",
+    "mypy>=1.19.0",
     "pre-commit>=4.0.0",
     "ipython>=8.0.0",
     "bandit>=1.9.0",
@@ -506,9 +505,6 @@ ignore_missing_imports = true  # Qt bindings without type stubs
 module = "pyqtgraph.*"
 ignore_missing_imports = true  # pyqtgraph without type stubs
 
-[[tool.mypy.overrides]]
-module = "qdarktheme"
-ignore_missing_imports = true  # Qt dark theme without type stubs
 
 [[tool.mypy.overrides]]
 module = "nlsq.gui_qt.*"

@@ -89,7 +89,7 @@ def run_desktop() -> int:
     # Install global exception hook
     sys.excepthook = _exception_hook
 
-    import qdarktheme
+    from PySide6.QtGui import Qt
     from PySide6.QtWidgets import QApplication
 
     from nlsq.gui_qt.app_state import AppState
@@ -103,8 +103,8 @@ def run_desktop() -> int:
     # Apply Fusion style for cross-platform consistency
     app.setStyle("Fusion")
 
-    # Apply dark theme by default
-    qdarktheme.setup_theme("dark", corner_shape="sharp")
+    # Apply dark theme by default using Qt 6.5+ built-in color scheme
+    app.styleHints().setColorScheme(Qt.ColorScheme.Dark)
 
     # Create centralized state
     app_state = AppState()
