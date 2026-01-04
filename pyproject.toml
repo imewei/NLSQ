@@ -594,7 +594,11 @@ markers = [
 
 [tool.coverage.run]
 source = ["nlsq"]
-omit = ["*/tests/*", "*/_version.py"]
+omit = [
+    "*/tests/*",
+    "*/_version.py",
+    "*/gui_qt/*",  # Qt GUI requires display for testing (Xvfb in separate CI job)
+]
 
 [tool.coverage.report]
 # Test suite: 1,557 tests (as of 2025-11-16)
