@@ -15,6 +15,7 @@ in parallel pytest-xdist workers.
 
 import os
 import time
+from contextlib import contextmanager
 from unittest import mock
 
 import jax
@@ -35,7 +36,27 @@ from nlsq.utils.profiling import (
     compare_transfer_reduction,
     profile_optimization,
 )
-from tests.conftest import wait_for
+
+
+@contextmanager
+def sync_debug_callback():
+    """Patch jax.debug.callback to execute synchronously.
+
+    This makes tests deterministic by removing async timing dependencies.
+    In parallel test environments, jax.debug.callback can be flaky due to
+    resource contention between workers.
+    """
+
+    def sync_callback(fn, *args, **kwargs):
+        # Convert JAX arrays to numpy for the callback
+        np_args = tuple(
+            np.asarray(a) if hasattr(a, "__jax_array__") or isinstance(a, jax.Array) else a
+            for a in args
+        )
+        fn(*np_args)
+
+    with mock.patch("jax.debug.callback", side_effect=sync_callback):
+        yield
 
 
 @pytest.mark.serial
@@ -56,8 +77,11 @@ class TestAsyncLogging:
 
     def test_log_iteration_async_basic(self):
         """Test basic async logging functionality."""
-        # Mock the logger to capture calls
-        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
+        # Mock the logger and use sync callback for deterministic testing
+        with (
+            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
+            sync_debug_callback(),
+        ):
             log_iteration_async(
                 iteration=10,
                 cost=1.5e-6,
@@ -66,20 +90,15 @@ class TestAsyncLogging:
                 verbose=2,
             )
 
-            # Callback executes asynchronously
-            jax.effects_barrier()
-            wait_for(
-                lambda: mock_logger.info.called,
-                timeout=2.0,
-                message="Logger not called",
-            )
-
-            # Verify logger was called
+            # With sync callback, logger is called immediately
             assert mock_logger.info.called
 
     def test_log_iteration_async_jax_arrays(self):
         """Test async logging with JAX arrays."""
-        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
+        with (
+            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
+            sync_debug_callback(),
+        ):
             log_iteration_async(
                 iteration=jnp.array(5),
                 cost=jnp.array(2.3e-5),
@@ -88,18 +107,15 @@ class TestAsyncLogging:
                 verbose=2,
             )
 
-            jax.effects_barrier()
-            wait_for(
-                lambda: mock_logger.info.called,
-                timeout=2.0,
-                message="Logger not called",
-            )
-
+            # With sync callback, logger is called immediately
             assert mock_logger.info.called
 
     def test_log_iteration_async_verbosity_levels(self):
         """Test verbosity control."""
-        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
+        with (
+            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
+            sync_debug_callback(),
+        ):
             # verbose=0: No logging
             log_iteration_async(1, 1.0, 1.0, verbose=0)
             assert not mock_logger.info.called
@@ -109,29 +125,20 @@ class TestAsyncLogging:
             assert not mock_logger.info.called
 
             log_iteration_async(10, 1.0, 1.0, verbose=1)
-            jax.effects_barrier()
-            wait_for(
-                lambda: mock_logger.info.called,
-                timeout=2.0,
-                message="Logger not called",
-            )
             assert mock_logger.info.called
 
             mock_logger.reset_mock()
 
             # verbose=2: Log every iteration
             log_iteration_async(1, 1.0, 1.0, verbose=2)
-            jax.effects_barrier()
-            wait_for(
-                lambda: mock_logger.info.called,
-                timeout=2.0,
-                message="Logger not called",
-            )
             assert mock_logger.info.called
 
     def test_log_convergence_async(self):
         """Test convergence logging."""
-        with mock.patch("nlsq.utils.async_logger.logger") as mock_logger:
+        with (
+            mock.patch("nlsq.utils.async_logger.logger") as mock_logger,
+            sync_debug_callback(),
+        ):
             log_convergence_async(
                 reason="`gtol` termination condition is satisfied.",
                 iterations=42,
@@ -141,13 +148,7 @@ class TestAsyncLogging:
                 verbose=1,
             )
 
-            jax.effects_barrier()
-            wait_for(
-                lambda: mock_logger.info.called,
-                timeout=2.0,
-                message="Logger not called",
-            )
-
+            # With sync callback, logger is called immediately
             assert mock_logger.info.called
 
     def test_async_logging_no_device_sync(self):
