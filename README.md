@@ -347,17 +347,23 @@ with memory_context(config):
 # Launch GUI
 nlsq gui
 
+# Copy configuration templates
+nlsq config
+
 # Single workflow
 nlsq fit experiment.yaml
 
+# Output results to stdout (for piping)
+nlsq fit experiment.yaml --stdout | jq '.popt'
+
 # Batch processing
-nlsq batch configs/*.yaml --summary results.json
+nlsq batch configs/*.yaml --summary results.json --workers 4
 
 # System info
 nlsq info
 ```
 
-See [CLI Reference](https://nlsq.readthedocs.io/en/latest/user_guide/cli_reference.html) for YAML configuration.
+See [CLI Reference](https://nlsq.readthedocs.io/en/latest/reference/cli.html) for full documentation.
 
 </details>
 

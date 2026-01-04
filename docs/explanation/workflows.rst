@@ -11,11 +11,122 @@ This page is high-level by design. For the exact configuration fields, see
 Why use the workflow system?
 ----------------------------
 
+- **Automatic optimization**: Selects the best fitting strategy based on dataset size and memory
 - Reproducible runs driven by versioned configuration
 - Consistent defaults across team members and machines
 - Clear separation of data, model, fitting, and outputs
 - Minimal glue code for batch or automated execution
 - **Built-in numerical safeguards** via the 4-Layer Defense Strategy (v0.3.6+)
+
+Workflow Tiers
+--------------
+
+NLSQ automatically selects one of four processing tiers based on your dataset
+size and available memory:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 20 60
+
+   * - Tier
+     - Dataset Size
+     - Description
+   * - **STANDARD**
+     - < 10K points
+     - Standard ``curve_fit()`` for small datasets that fit in memory.
+       Uses O(N) memory where N is number of data points.
+   * - **CHUNKED**
+     - 10K - 10M points
+     - ``LargeDatasetFitter`` with automatic chunking. Processes data in
+       sequential chunks with O(chunk_size) memory complexity.
+   * - **STREAMING**
+     - 10M - 100M points
+     - ``AdaptiveHybridStreamingOptimizer`` with O(batch_size) memory.
+       Uses mini-batch gradient descent for memory efficiency.
+   * - **STREAMING_CHECKPOINT**
+     - > 100M points
+     - Streaming with automatic checkpointing for massive datasets.
+       Enables resume capability for multi-hour fits.
+
+Optimization Goals
+------------------
+
+The ``OptimizationGoal`` enum controls the optimization priority:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Goal
+     - Description
+   * - **FAST**
+     - Prioritize speed. Uses one tier looser tolerances, skips multi-start.
+       Best for quick exploration or well-conditioned problems.
+   * - **ROBUST**
+     - Standard tolerances with multi-start for better global optimum.
+       Uses ``MultiStartOrchestrator`` for reliability. Best for production use.
+   * - **GLOBAL**
+     - Synonym for ROBUST. Emphasizes global optimization.
+   * - **MEMORY_EFFICIENT**
+     - Minimize memory usage with standard tolerances.
+       Prioritizes streaming/chunking with smaller chunk sizes.
+   * - **QUALITY**
+     - Highest precision as TOP PRIORITY. Uses one tier tighter tolerances,
+       enables multi-start, runs validation passes. Best for publication-quality results.
+
+Available Presets
+-----------------
+
+NLSQ provides pre-configured workflow presets for common use cases:
+
+**Core Presets:**
+
+- ``standard`` - Default curve_fit() behavior, no multi-start
+- ``quality`` - Highest precision (1e-10 tolerance, 20-point multi-start)
+- ``fast`` - Speed-optimized (1e-6 tolerance, no multi-start)
+- ``large_robust`` - Chunked processing with 10-point multi-start
+- ``streaming`` - AdaptiveHybridStreamingOptimizer for huge datasets
+- ``hpc_distributed`` - Multi-GPU/node HPC configuration with checkpointing
+- ``memory_efficient`` - Minimize memory footprint with small chunks
+
+**Specialized Presets:**
+
+- ``precision_high`` / ``precision_standard`` - Precision-focused configurations
+- ``global_multimodal`` / ``multimodal`` - 30 Sobol-sampled starts for multimodal problems
+- ``spectroscopy`` - Peak fitting (Gaussian/Lorentzian/Voigt)
+- ``timeseries`` - Time series with streaming and checkpointing
+
+.. code-block:: python
+
+   from nlsq.core.workflow import WorkflowConfig
+
+   # Load a preset
+   config = WorkflowConfig.from_preset("quality")
+
+   # Check preset settings
+   print(config.gtol)  # 1e-10
+   print(config.enable_multistart)  # True
+   print(config.n_starts)  # 20
+
+Automatic Workflow Selection
+----------------------------
+
+Use ``auto_select_workflow()`` to automatically choose the best configuration
+based on your dataset size and available system memory:
+
+.. code-block:: python
+
+   from nlsq.core.workflow import auto_select_workflow, OptimizationGoal
+
+   # Auto-select based on dataset characteristics
+   config = auto_select_workflow(
+       n_points=5_000_000,
+       n_params=5,
+       goal=OptimizationGoal.QUALITY,
+   )
+
+   # The returned config is ready to use
+   print(config)  # HybridStreamingConfig or LDMemoryConfig
 
 Typical workflow lifecycle
 --------------------------
@@ -63,8 +174,10 @@ See :doc:`../reference/configuration` for detailed configuration options.
 Where to go next
 ----------------
 
+- API reference: :doc:`../api/nlsq.workflow`
 - Configuration layout and examples: :doc:`../howto/configure_yaml`
 - Configuration options: :doc:`../reference/configuration`
+- Common workflow patterns: :doc:`../howto/common_workflows`
 
 Interactive Notebooks
 ---------------------

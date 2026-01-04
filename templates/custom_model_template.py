@@ -57,6 +57,7 @@ Notes
 # Imports - Use JAX numpy for the model function
 # =============================================================================
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -67,7 +68,7 @@ import numpy as np
 
 def damped_oscillator(
     x: np.ndarray, amplitude: float, decay: float, frequency: float, phase: float
-) -> np.ndarray:
+) -> jax.Array:
     """Damped sinusoidal oscillator model.
 
     Mathematical form:
@@ -102,8 +103,7 @@ def damped_oscillator(
     - Half-life of amplitude: t_half = ln(2) / decay
     - At x=0: y = amplitude * cos(phase)
     """
-    # JAX arrays are duck-type compatible with numpy arrays
-    return amplitude * jnp.exp(-decay * x) * jnp.cos(frequency * x + phase)  # type: ignore[return-value]
+    return amplitude * jnp.exp(-decay * x) * jnp.cos(frequency * x + phase)
 
 
 # =============================================================================
@@ -260,3 +260,50 @@ def bounds() -> tuple[list[float], list[float]]:
 # def lorentzian(x, amplitude, x0, gamma):
 #     """Lorentzian peak: y = amplitude * gamma^2 / ((x - x0)^2 + gamma^2)"""
 #     return amplitude * gamma**2 / ((x - x0)**2 + gamma**2)
+
+# =============================================================================
+# Example: 2D Gaussian Surface Model (for 2D/surface fitting)
+# =============================================================================
+# For 2D fitting, the first argument is xy with shape (2, n):
+#   xy[0] = x coordinates, xy[1] = y coordinates
+#
+# def gaussian_2d(xy, amp, x0, y0, sigma_x, sigma_y, offset):
+#     """2D Gaussian surface model for image/surface fitting.
+#
+#     Parameters
+#     ----------
+#     xy : array_like, shape (2, n)
+#         Coordinates: xy[0] = x values, xy[1] = y values
+#     amp : float
+#         Peak amplitude
+#     x0, y0 : float
+#         Center coordinates
+#     sigma_x, sigma_y : float
+#         Standard deviations (widths) in x and y
+#     offset : float
+#         Background offset
+#
+#     Returns
+#     -------
+#     z : array_like
+#         Surface values at each (x, y) coordinate
+#     """
+#     x, y = xy[0], xy[1]
+#     return amp * jnp.exp(
+#         -((x - x0)**2 / (2 * sigma_x**2) +
+#           (y - y0)**2 / (2 * sigma_y**2))
+#     ) + offset
+#
+# def estimate_p0_2d(xdata, ydata):
+#     """Estimate initial parameters for 2D Gaussian.
+#
+#     Note: For 2D fitting, ydata is the z values (dependent variable).
+#     """
+#     x, y = xdata[0], xdata[1]
+#     amp = np.max(ydata) - np.min(ydata)
+#     x0 = np.mean(x)
+#     y0 = np.mean(y)
+#     sigma_x = (np.max(x) - np.min(x)) / 4
+#     sigma_y = (np.max(y) - np.min(y)) / 4
+#     offset = np.min(ydata)
+#     return [amp, x0, y0, sigma_x, sigma_y, offset]

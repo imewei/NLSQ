@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 3.1 (Updated for NLSQ v0.4.1+ with 2D surface fitting)
+# Version: 3.2 (Updated for NLSQ v0.5.3 with complete workflow presets)
 #
 # This template provides comprehensive configuration options for NLSQ curve
 # fitting workflows. Copy this file to your project and customize as needed.
@@ -254,7 +254,7 @@ metadata:
   # Brief description of workflow purpose.
   description: "NLSQ workflow configuration template with optimized defaults."
   # Configuration version for tracking changes.
-  version: "2.1"
+  version: "3.2"
   # Optional ownership information.
   author: ""
   contact: ""
@@ -265,14 +265,33 @@ metadata:
 # These settings control the NLSQ workflow tier and optimization behavior.
 # The default_workflow can be a preset name or a custom workflow defined below.
 #
-# Built-in presets:
-#   - standard:         Standard curve_fit() with default tolerances
-#   - quality:          Highest precision with multi-start and tight tolerances
-#   - fast:             Speed-optimized with looser tolerances
-#   - large_robust:     Chunked processing with multi-start for large datasets
-#   - streaming:        AdaptiveHybridStreamingOptimizer for huge datasets
-#   - hpc_distributed:  Multi-GPU/node configuration for HPC clusters
-#   - memory_efficient: Minimize memory with streaming/small chunks
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ BUILT-IN WORKFLOW PRESETS                                                   │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ CORE PRESETS                                                                │
+# │   - standard:         Standard curve_fit() with default tolerances (1e-8)   │
+# │   - quality:          Highest precision with multi-start (tol 1e-10)        │
+# │   - fast:             Speed-optimized with looser tolerances (1e-6)         │
+# │   - large_robust:     Chunked processing with multi-start for large data    │
+# │   - streaming:        AdaptiveHybridStreamingOptimizer for huge datasets    │
+# │   - hpc_distributed:  Multi-GPU/node configuration for HPC clusters (PBS)   │
+# │   - memory_efficient: Minimize memory with streaming/small chunks           │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ PRECISION PRESETS                                                           │
+# │   - precision_high:     Maximum numerical precision (tolerances 1e-10)      │
+# │   - precision_standard: Standard numerical precision (tolerances 1e-8)      │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ SCALE PRESETS                                                               │
+# │   - streaming_large:  Large-scale streaming with checkpointing              │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ GLOBAL OPTIMIZATION PRESETS                                                 │
+# │   - global_multimodal: Multi-start global search with Sobol sampling        │
+# │   - multimodal:        Problems with multiple local minima                  │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ MATHEMATICAL BEHAVIOR PRESETS                                               │
+# │   - spectroscopy:    Peak fitting (Gaussian/Lorentzian/Voigt), tol 1e-10    │
+# │   - timeseries:      Long time series with streaming and checkpointing      │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
 default_workflow: "standard"
 
@@ -322,6 +341,41 @@ workflows:
     chunk_size: 5000         # Smaller chunks for lower memory
     enable_checkpoints: true
     checkpoint_dir: "checkpoints"
+
+  # Example: Spectroscopy peak fitting (uses precision_high-like settings)
+  spectroscopy_peaks:
+    tier: "STANDARD"
+    goal: "QUALITY"
+    gtol: 1.0e-10
+    ftol: 1.0e-10
+    xtol: 1.0e-10
+    enable_multistart: true
+    n_starts: 15
+    sampler: "lhs"
+
+  # Example: Multimodal optimization (multiple local minima)
+  multimodal_search:
+    tier: "STANDARD"
+    goal: "GLOBAL"
+    enable_multistart: true
+    n_starts: 30
+    sampler: "sobol"         # Better coverage for multimodal surfaces
+    gtol: 1.0e-8
+    ftol: 1.0e-8
+    xtol: 1.0e-8
+
+  # Example: Long time series with streaming
+  timeseries_streaming:
+    tier: "STREAMING"
+    goal: "ROBUST"
+    enable_multistart: true
+    n_starts: 10
+    sampler: "lhs"
+    gtol: 1.0e-7
+    ftol: 1.0e-7
+    xtol: 1.0e-7
+    enable_checkpoints: true
+    checkpoint_frequency: 100
 
 # ==============================================================================
 # PATHS
