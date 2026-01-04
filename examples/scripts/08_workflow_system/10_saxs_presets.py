@@ -10,7 +10,7 @@ SAXS analysis typically involves:
 - Moderate dataset sizes (typically hundreds to thousands of q-points)
 
 Run this example:
-    python examples/scripts/domain_presets/saxs_preset.py
+    python examples/scripts/08_workflow_system/10_saxs_presets.py
 """
 
 import jax.numpy as jnp

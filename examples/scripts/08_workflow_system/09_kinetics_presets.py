@@ -11,7 +11,7 @@ Kinetics analysis typically involves:
 - Often limited data points requiring robust convergence
 
 Run this example:
-    python examples/scripts/domain_presets/kinetics_preset.py
+    python examples/scripts/08_workflow_system/09_kinetics_presets.py
 """
 
 import jax.numpy as jnp

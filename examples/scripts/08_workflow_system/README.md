@@ -41,8 +41,12 @@ popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, preset="robust")
 | 05 | [YAML Configuration](05_yaml_configuration.ipynb) | Intermediate | 20 min | File-based config with `load_yaml_config()`, environment overrides |
 | 06 | [Auto Selection](06_auto_selection.ipynb) | Advanced | 25 min | `WorkflowSelector` internals, `auto_select_workflow()`, memory tiers |
 | 07 | [HPC and Checkpointing](07_hpc_and_checkpointing.ipynb) | Advanced | 30 min | PBS Pro cluster detection, checkpoint/resume, fault tolerance |
+| 08 | [Custom Presets](08_custom_presets.ipynb) | Intermediate | 25 min | Building domain-specific configs with `with_overrides()` |
+| 09 | [Kinetics Presets](09_kinetics_presets.ipynb) | Intermediate | 20 min | Chemical/enzyme kinetics: rate constants, Michaelis-Menten |
+| 10 | [SAXS Presets](10_saxs_presets.ipynb) | Intermediate | 20 min | Small-angle X-ray scattering form factor fitting |
+| 11 | [XPCS Presets](11_xpcs_presets.ipynb) | Intermediate | 20 min | X-ray photon correlation spectroscopy fitting |
 
-**Total time**: ~2.5 hours
+**Total time**: ~4 hours
 
 ---
 
@@ -241,6 +245,13 @@ checkpoint_dir = create_checkpoint_directory(base_dir="./checkpoints")
 6. [06_auto_selection](06_auto_selection.ipynb) - Deep dive into selection logic
 7. [07_hpc_and_checkpointing](07_hpc_and_checkpointing.ipynb) - Cluster computing
 
+### Domain-Specific Path (85 min)
+
+8. [08_custom_presets](08_custom_presets.ipynb) - Building custom presets with `with_overrides()`
+9. [09_kinetics_presets](09_kinetics_presets.ipynb) - Chemical/enzyme kinetics fitting
+10. [10_saxs_presets](10_saxs_presets.ipynb) - SAXS form factor fitting
+11. [11_xpcs_presets](11_xpcs_presets.ipynb) - XPCS correlation function fitting
+
 ---
 
 ## When to Use What
@@ -284,6 +295,14 @@ checkpoint_dir = create_checkpoint_directory(base_dir="./checkpoints")
 ├── 06_auto_selection.py
 ├── 07_hpc_and_checkpointing.ipynb
 ├── 07_hpc_and_checkpointing.py
+├── 08_custom_presets.ipynb         # Domain-specific preset guide
+├── 08_custom_presets.py
+├── 09_kinetics_presets.ipynb       # Kinetics fitting examples
+├── 09_kinetics_presets.py
+├── 10_saxs_presets.ipynb           # SAXS form factor examples
+├── 10_saxs_presets.py
+├── 11_xpcs_presets.ipynb           # XPCS correlation examples
+├── 11_xpcs_presets.py
 ├── figures/                        # Saved visualizations
 ├── nlsq.yaml                       # Example YAML configuration
 ├── nlsq_fit.pbs                    # Example PBS Pro job script
@@ -293,5 +312,5 @@ checkpoint_dir = create_checkpoint_directory(base_dir="./checkpoints")
 ---
 
 <p align="center">
-<i>NLSQ v0.3.6+ | Last updated: 2025-12-23</i>
+<i>NLSQ v0.5.3 | Last updated: 2026-01-04</i>
 </p>

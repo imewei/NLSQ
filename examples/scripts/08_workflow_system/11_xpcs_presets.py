@@ -10,7 +10,7 @@ XPCS analysis typically involves:
 - Potential for large datasets from modern 2D detectors
 
 Run this example:
-    python examples/scripts/domain_presets/xpcs_preset.py
+    python examples/scripts/08_workflow_system/11_xpcs_presets.py
 """
 
 import jax.numpy as jnp

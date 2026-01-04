@@ -13,7 +13,7 @@ Key patterns covered:
 5. Common parameter adjustments by use case
 
 Run this example:
-    python examples/scripts/domain_presets/custom_preset_guide.py
+    python examples/scripts/08_workflow_system/08_custom_presets.py
 """
 
 import jax.numpy as jnp
