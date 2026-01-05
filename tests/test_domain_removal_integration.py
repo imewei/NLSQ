@@ -284,10 +284,7 @@ class TestModuleIntegration:
 
         assert hasattr(IssueCategory, "SENSITIVITY")
         # SLOPPY alias has been removed in v0.6.0
-        assert not hasattr(IssueCategory, "SLOPPY") or (
-            # If it exists, it should equal SENSITIVITY (for backwards compat)
-            IssueCategory.SLOPPY == IssueCategory.SENSITIVITY
-        )
+        assert not hasattr(IssueCategory, "SLOPPY")
 
     def test_parameter_sensitivity_uses_correct_issue_category(self):
         """Test ParameterSensitivityAnalyzer issues use IssueCategory.SENSITIVITY."""

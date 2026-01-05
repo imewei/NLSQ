@@ -79,24 +79,15 @@ class TestIssueCategory:
         assert hasattr(IssueCategory, "CONDITIONING")
         assert hasattr(IssueCategory, "CONVERGENCE")
         assert hasattr(IssueCategory, "SENSITIVITY")
-        # SLOPPY is a deprecated alias for SENSITIVITY
-        assert hasattr(IssueCategory, "SLOPPY")
 
     def test_issue_category_count(self) -> None:
-        """Test IssueCategory has expected number of values.
-
-        Note: SLOPPY is an alias for SENSITIVITY so it doesn't increase the count.
-        """
+        """Test IssueCategory has expected number of values."""
         assert len(IssueCategory) == 6
 
     def test_issue_category_unique_values(self) -> None:
         """Test IssueCategory values are unique."""
         values = [category.value for category in IssueCategory]
         assert len(values) == len(set(values))
-
-    def test_issue_category_sloppy_equals_sensitivity(self) -> None:
-        """Test SLOPPY is an alias for SENSITIVITY (backwards compatibility)."""
-        assert IssueCategory.SLOPPY == IssueCategory.SENSITIVITY
 
 
 class TestDiagnosticLevel:

@@ -832,27 +832,13 @@ verify-fast:
 install-hooks:
 	@echo "$(BOLD)$(BLUE)Installing git hooks...$(RESET)"
 	@pre-commit install
-	@echo '#!/bin/bash' > .git/hooks/pre-push
-	@echo '# Pre-push hook: Run verification before pushing' >> .git/hooks/pre-push
-	@echo 'echo "Running pre-push verification..."' >> .git/hooks/pre-push
-	@echo 'make verify-fast' >> .git/hooks/pre-push
-	@echo 'exit_code=$$?' >> .git/hooks/pre-push
-	@echo 'if [ $$exit_code -ne 0 ]; then' >> .git/hooks/pre-push
-	@echo '    echo ""' >> .git/hooks/pre-push
-	@echo '    echo "Push blocked: verification failed!"' >> .git/hooks/pre-push
-	@echo '    echo "Fix the issues above and try again."' >> .git/hooks/pre-push
-	@echo '    echo ""' >> .git/hooks/pre-push
-	@echo '    echo "To bypass (not recommended): git push --no-verify"' >> .git/hooks/pre-push
-	@echo '    exit 1' >> .git/hooks/pre-push
-	@echo 'fi' >> .git/hooks/pre-push
-	@chmod +x .git/hooks/pre-push
+	@rm -f .git/hooks/pre-push  # No pre-push hook - lint runs on commit, CI runs on push
 	@echo "$(BOLD)$(GREEN)✓ Git hooks installed!$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Hooks installed:$(RESET)"
-	@echo "  - pre-commit: lint, format, basic checks"
-	@echo "  - pre-push: full verification (make verify-fast)"
+	@echo "  - pre-commit: lint, format, type checks"
 	@echo ""
 	@echo "$(BOLD)Usage:$(RESET)"
 	@echo "  git commit -m 'msg'  → runs pre-commit hooks"
-	@echo "  git push             → runs make verify-fast"
-	@echo "  git push --no-verify → skip hooks (emergency only)"
+	@echo "  git push             → triggers GitHub Actions CI"
+	@echo "  make verify-fast     → full local verification (optional)"
