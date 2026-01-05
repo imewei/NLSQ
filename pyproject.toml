@@ -121,7 +121,8 @@ dev = [
 ]
 docs = [
     "sphinx>=8.0.0",                    # Tested on 8.2.3
-    "sphinx-rtd-theme>=3.0.0",          # Tested on 3.0.2
+    "furo>=2024.8.6",                   # Modern Sphinx theme
+    "sphinx-copybutton>=0.5.2",         # Copy button for code blocks
     "sphinx-autodoc-typehints>=3.5.0",  # Tested on 3.5.2
     "sphinx-design>=0.6.0",             # For grid cards and tabs in documentation
     "ipython>=8.0.0",                   # Tested on 8.20.0
@@ -180,7 +181,8 @@ all = [
     "pyupgrade>=3.21.0",
     # Documentation dependencies
     "sphinx>=8.0.0",
-    "sphinx-rtd-theme>=3.0.0",
+    "furo>=2024.8.6",
+    "sphinx-copybutton>=0.5.2",
     "sphinx-autodoc-typehints>=3.5.0",
     "sphinx-design>=0.6.0",
     "myst-parser>=4.0.0",

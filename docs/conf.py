@@ -18,6 +18,17 @@ import warnings
 # Filter out specific warnings that we can't easily suppress
 warnings.filterwarnings("ignore", category=UserWarning, module="sphinx")
 
+# Suppress duplicate object description warnings from autodoc/autosummary
+# These occur when classes are documented both in autosummary stubs and main module docs
+warnings.filterwarnings(
+    "ignore",
+    message=r"duplicate object description",
+    category=UserWarning,
+)
+
+# Configure Sphinx logging to suppress duplicate object warnings
+logging.getLogger("sphinx.domains.python").setLevel(logging.ERROR)
+
 add_path = os.path.abspath("../..")
 sys.path.insert(0, os.path.abspath("../.."))
 sys.path.insert(0, os.path.abspath(".."))
@@ -109,6 +120,7 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.coverage",
     "sphinx.ext.duration",
+    "sphinx_copybutton",  # Copy button for code blocks
     "myst_parser",  # Enabled for developer documentation in Markdown
     "sphinx_design",  # For grid cards and tabs in documentation
 ]
@@ -352,10 +364,16 @@ autodoc_typehints_format = "short"
 # Napoleon configuration for Google/NumPy docstrings
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
-napoleon_include_init_with_doc = False
+napoleon_include_init_with_doc = True
 napoleon_include_private_with_doc = False
-napoleon_use_ivar = True  # Use :ivar: for attributes to avoid duplicate with autodoc
-napoleon_attr_annotations = True  # Parse type annotations for attributes
+napoleon_include_special_with_doc = True
+napoleon_use_admonition_for_examples = True
+napoleon_use_admonition_for_notes = True
+napoleon_use_admonition_for_references = True
+napoleon_use_ivar = False
+napoleon_use_param = True
+napoleon_use_rtype = True
+napoleon_type_aliases = None
 
 # Notebooks are not included in the documentation build
 # Example notebooks are available in the examples/ directory
@@ -366,14 +384,16 @@ myst_enable_extensions = [
     "colon_fence",
     "deflist",
     "dollarmath",
+    "fieldlist",
     "html_admonition",
     "html_image",
-    # "linkify",  # Disabled due to missing dependency
     "replacements",
     "smartquotes",
+    "strikethrough",
     "substitution",
     "tasklist",
 ]
+myst_heading_anchors = 3
 
 # Source file types - RST for main docs, Markdown for developer docs
 source_suffix = {
@@ -397,48 +417,32 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = [
     "_build",
-    "_reorganization",
     "Thumbs.db",
     ".DS_Store",
-    "user_guides",  # Old directory, content moved to guides/
-    "autodoc",  # Old directory, renamed to api/
-    "development",  # Old directory, consolidated to history/
-    "archive",  # Old directory, moved to history/archived_reports/
-    "FINAL_DOCUMENTATION_REPORT.md",  # Standalone report file
-    "history/archived_reports/TEST_GENERATION_PHASE2_REPORT.md",  # Archived report
-    "history/archived_reports/sprint_1_2_completion_report.md",  # Archived report
-    "history/archived_reports/sprint_3_completion_report.md",  # Archived report
+    ".nlsq_cache",
 ]
 autodoc_typehints = "description"
 
 # -- Options for HTML output -------------------------------------------------
 
-html_theme = "sphinx_rtd_theme"
-html_title = f"{project} v{release}"
-html_short_title = project
-
-html_theme_options = {
-    "analytics_id": "",
-    "logo_only": False,
-    "prev_next_buttons_location": "bottom",
-    "style_external_links": False,
-    "collapse_navigation": True,
-    "sticky_navigation": True,
-    "navigation_depth": 3,  # Reduced from 4 for shallower sidebar navigation
-    "includehidden": True,
-    "titles_only": False,
-}
-
-html_context = {
-    "display_github": True,
-    "github_user": "imewei",
-    "github_repo": "nlsq",
-    "github_version": "main",
-    "conf_py_path": "/docs/",
-}
-
+html_theme = "furo"
+html_title = f"{project} Documentation"
 html_static_path = ["_static"]
-html_css_files = []
+
+# Furo theme options
+html_theme_options = {
+    "light_css_variables": {
+        "color-brand-primary": "#2563eb",
+        "color-brand-content": "#1d4ed8",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#60a5fa",
+        "color-brand-content": "#93c5fd",
+    },
+    "sidebar_hide_name": False,
+    "navigation_with_keys": True,
+    "top_of_page_button": "edit",
+}
 
 # Additional HTML options
 html_show_sourcelink = True
@@ -447,8 +451,8 @@ html_show_copyright = True
 html_last_updated_fmt = "%b %d, %Y"
 
 # Logo and favicon
-html_logo = "images/NLSQ_logo.png"
-html_favicon = None
+html_logo = "_static/NLSQ_logo.png"
+# html_favicon = "_static/favicon.ico"
 
 # -- Linkcheck configuration -------------------------------------------------
 
@@ -476,3 +480,63 @@ linkcheck_allowed_redirects = {
 linkcheck_timeout = 30
 linkcheck_retries = 2
 linkcheck_workers = 5
+
+# -- Copy button configuration -----------------------------------------------
+copybutton_prompt_text = r">>> |\.\.\. |\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: "
+copybutton_prompt_is_regexp = True
+
+# -- Options for LaTeX output ------------------------------------------------
+latex_elements = {
+    "papersize": "letterpaper",
+    "pointsize": "11pt",
+    "preamble": r"""
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+""",
+}
+
+latex_documents = [
+    (
+        "index",
+        "nlsq.tex",
+        "NLSQ Documentation",
+        author,
+        "manual",
+    ),
+]
+
+# -- Options for MathJax -----------------------------------------------------
+mathjax3_config = {
+    "tex": {
+        "macros": {
+            "vec": [r"\boldsymbol{#1}", 1],
+            "mat": [r"\mathbf{#1}", 1],
+        }
+    }
+}
+
+
+# -- Sphinx setup hook -------------------------------------------------------
+def setup(app):
+    """Configure Sphinx after initialization."""
+    import logging as _logging
+    import re
+
+    # Create a custom filter to suppress duplicate object warnings
+    class DuplicateObjectFilter(_logging.Filter):
+        """Filter out duplicate object description warnings."""
+
+        def filter(self, record):
+            msg = record.getMessage()
+            return "duplicate object description" not in msg
+
+    # Apply filter to Sphinx loggers
+    for logger_name in [
+        "sphinx",
+        "sphinx.domains",
+        "sphinx.domains.python",
+        "sphinx.ext.autodoc",
+    ]:
+        logger = _logging.getLogger(logger_name)
+        logger.addFilter(DuplicateObjectFilter())
