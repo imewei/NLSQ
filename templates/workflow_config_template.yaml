@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 3.2 (Updated for NLSQ v0.5.3 with complete workflow presets)
+# Version: 3.2 (Updated for NLSQ v0.5.4 with complete workflow presets)
 #
 # This template provides comprehensive configuration options for NLSQ curve
 # fitting workflows. Copy this file to your project and customize as needed.

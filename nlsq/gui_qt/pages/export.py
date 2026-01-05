@@ -640,7 +640,7 @@ class ExportPage(QWidget):
         result = state.fit_result
 
         data: dict[str, Any] = {
-            "nlsq_version": "0.5.3",
+            "nlsq_version": "0.5.4",
             "export_type": "fit_results",
         }
 

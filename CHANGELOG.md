@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-01-05
+
+### Changed
+
+#### Documentation System Migration
+
+- **Migrated to Furo Theme**: Replaced sphinx-rtd-theme with Furo for modern documentation styling
+  - Clean, responsive design with light/dark mode support
+  - Improved navigation and code block styling
+  - Added sphinx-design for grid cards and tabs
+  - **Files Modified**: `docs/conf.py`, `pyproject.toml`
+
+- **Cleaned Up Obsolete Documentation**: Removed outdated architecture analysis files
+  - Removed `docs/architecture/` directory (4 obsolete analysis files)
+  - Moved logo to `docs/_static/` directory
+  - Updated cross-references in documentation
+  - **Files Modified**: `docs/reference/index.rst`, various docs files
+
+#### Deprecation Removal
+
+- **Removed All Deprecated Functionality**: Cleaned up deprecated code and shims
+  - Removed deprecated compatibility shims in `nlsq/compat/`
+  - Removed deprecated workflow preset aliases (`large`, `huge`, `ultra`)
+  - Removed deprecated `randomized_svd` parameter from SVD fallback
+  - Removed deprecated `emit_warnings` handling in diagnostics
+  - Created migration guide at `docs/howto/migration-v0.6.0.md`
+  - **Files Modified**: `nlsq/compat/__init__.py`, `nlsq/core/workflow.py`, `nlsq/stability/svd_fallback.py`, `nlsq/diagnostics/`
+
+### Fixed
+
+#### CI/CD Improvements
+
+- **Removed Pre-push Hook**: Eliminated pre-push git hook to avoid CI interference
+  - Simplified Makefile by removing hook-related targets
+  - **Files Modified**: `Makefile`
+
+- **Windows Compatibility**: Made resource module import conditional
+  - `resource` module is Unix-only; now gracefully handles Windows
+  - **Files Modified**: `nlsq/cli/model_validation.py`
+
+#### Test Suite Reliability
+
+- **Removed Flaky Tests**: Eliminated timing-dependent tests that caused CI failures
+  - Removed flaky adaptive memory TTL tests
+  - Removed flaky async logging tests that depended on timing
+  - Skip timing-dependent tests on macOS CI
+  - **Files Modified**: `tests/caching/test_adaptive_memory_ttl.py`, `tests/core/test_host_device_transfers.py`
+
+- **Fixed Benchmark Tests**: Prevented divide-by-zero in benchmark relative error calculations
+  - **Files Modified**: `tests/benchmarks/test_benchmark_core.py`
+
+- **Fixed Domain Preset Paths**: Updated preset paths after workflow relocation
+  - **Files Modified**: `tests/test_domain_preset_examples.py`
+
+#### Documentation Fixes
+
+- **Fixed Invalid Docstring Headers**: Corrected malformed docstring section headers
+  - **Files Modified**: `nlsq/__init__.py`, `nlsq/precision/parameter_estimation.py`
+
+- **Rewrote Fallback Module Docs**: Updated fallback documentation to match actual implementation
+  - **Files Modified**: `docs/api/nlsq.fallback.rst`
+
+### Documentation
+
+- **Comprehensive Documentation Update**: AST-based code analysis and documentation gap closure
+  - Analyzed 28+ Python files across all subpackages
+  - Identified and documented 94.9% of all public classes and functions
+  - Updated Sphinx API documentation for consistency
+  - **Coverage Stats**:
+    - Interfaces: 100% documented
+    - Diagnostics: 96.4% documented
+    - Global Optimization: 96.9% documented
+    - CLI: 89.2% documented
+    - Core: 88.5% documented
+
 ## [0.5.3] - 2026-01-04
 
 ### Changed

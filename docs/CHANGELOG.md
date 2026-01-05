@@ -1,5 +1,12 @@
 # Documentation Changelog
 
+## v0.5.4 (2026-01-05)
+- Migrated to Furo theme for modern documentation styling
+- Removed all deprecated functionality from NLSQ package
+- Comprehensive documentation update with AST-based code analysis (94.9% coverage)
+- Fixed pre-push hook CI interference
+- Fixed Windows resource module import compatibility
+
 ## v0.5.3 (2026-01-04)
 - Replaced pyqtdarktheme with Qt 6.5+ built-in color scheme (`setColorScheme()`)
 - Updated dependency versions: JAX 0.8.2, NumPy 2.4.0, SciPy 1.16.3, ruff 0.14.10, mypy 1.19.1
