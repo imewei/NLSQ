@@ -1,5 +1,5 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/imewei/NLSQ/main/docs/images/NLSQ_logo.png" alt="NLSQ logo" width="400">
+<img src="https://raw.githubusercontent.com/imewei/NLSQ/main/docs/_static/NLSQ_logo.png" alt="NLSQ logo" width="400">
 
 # NLSQ: GPU-Accelerated Curve Fitting
 
@@ -429,7 +429,7 @@ See [examples/README.md](examples/README.md) for the full index.
 ## Requirements
 
 - Python 3.12+
-- JAX 0.8.0 (locked version)
+- JAX 0.8.0+
 - NumPy 2.0+
 - SciPy 1.14.0+
 
