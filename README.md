@@ -171,7 +171,7 @@ NLSQ includes an interactive GUI for curve fitting without writing code:
 
 ```bash
 # Launch the GUI
-nlsq gui
+nlsq-gui
 ```
 
 The GUI provides:
