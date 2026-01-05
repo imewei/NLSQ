@@ -8,7 +8,7 @@ Tests cover:
 - Issue generation (SENS-001, SENS-002)
 - Graceful degradation for SVD failures
 - Multi-exponential model sensitivity detection
-- Deprecation warnings for old class names
+- Known sensitivity patterns from the literature
 """
 
 import warnings
@@ -1068,80 +1068,3 @@ class TestKnownSensitivityPatterns:
         report = analyzer.analyze(J)
         assert report.available is True
         # Gaussian peak with good coverage should be identifiable
-
-
-@pytest.mark.diagnostics
-class TestDeprecationWarnings:
-    """Tests for deprecation warnings when using old class names.
-
-    These tests verify backwards compatibility with deprecated names.
-    """
-
-    def test_sloppy_model_analyzer_import_raises_warning(self) -> None:
-        """Test that importing SloppyModelAnalyzer raises DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            from nlsq.diagnostics import SloppyModelAnalyzer
-
-            # Check that a deprecation warning was raised
-            deprecation_warnings = [
-                warning
-                for warning in w
-                if issubclass(warning.category, DeprecationWarning)
-            ]
-            assert len(deprecation_warnings) >= 1
-
-            # Check the warning message
-            warning_message = str(deprecation_warnings[0].message)
-            assert "SloppyModelAnalyzer" in warning_message
-            assert "ParameterSensitivityAnalyzer" in warning_message
-            assert "v0.6.0" in warning_message
-
-    def test_sloppy_model_analyzer_is_alias(self) -> None:
-        """Test that SloppyModelAnalyzer is an alias for ParameterSensitivityAnalyzer."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            from nlsq.diagnostics import (
-                ParameterSensitivityAnalyzer,
-                SloppyModelAnalyzer,
-            )
-
-            assert SloppyModelAnalyzer is ParameterSensitivityAnalyzer
-
-    def test_sloppy_model_report_import_raises_warning(self) -> None:
-        """Test that importing SloppyModelReport raises DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            from nlsq.diagnostics import SloppyModelReport
-
-            # Check that a deprecation warning was raised
-            deprecation_warnings = [
-                warning
-                for warning in w
-                if issubclass(warning.category, DeprecationWarning)
-            ]
-            assert len(deprecation_warnings) >= 1
-
-            # Check the warning message
-            warning_message = str(deprecation_warnings[0].message)
-            assert "SloppyModelReport" in warning_message
-            assert "ParameterSensitivityReport" in warning_message
-            assert "v0.6.0" in warning_message
-
-    def test_sloppy_model_report_is_alias(self) -> None:
-        """Test that SloppyModelReport is an alias for ParameterSensitivityReport."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            from nlsq.diagnostics import (
-                ParameterSensitivityReport,
-                SloppyModelReport,
-            )
-
-            assert SloppyModelReport is ParameterSensitivityReport
-
-    def test_issue_category_sloppy_equals_sensitivity(self) -> None:
-        """Test that IssueCategory.SLOPPY equals IssueCategory.SENSITIVITY."""
-        from nlsq.diagnostics import IssueCategory
-
-        # SLOPPY is a backwards-compatibility alias
-        assert IssueCategory.SLOPPY == IssueCategory.SENSITIVITY

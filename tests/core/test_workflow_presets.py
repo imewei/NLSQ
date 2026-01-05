@@ -9,12 +9,9 @@ This module tests the new generic presets that replace domain-specific presets:
 These tests verify the domain-agnostic preset configurations work correctly.
 """
 
-import warnings
-
 import pytest
 
 from nlsq.core.workflow import (
-    DEPRECATED_PRESET_ALIASES,
     WORKFLOW_PRESETS,
     OptimizationGoal,
     WorkflowConfig,
@@ -128,38 +125,13 @@ class TestPresetValidation:
         with pytest.raises(ValueError, match="Unknown preset"):
             WorkflowConfig.from_preset("unknown_preset_name")
 
-    def test_deprecated_domain_presets_work_with_warning(self):
-        """Test deprecated domain presets work with deprecation warnings.
+    def test_removed_domain_presets_raise_valueerror(self):
+        """Test removed domain presets raise ValueError with helpful message.
 
-        Per the spec, deprecated presets should still work but emit
-        DeprecationWarning. They should NOT raise ValueError.
+        As of v0.6.0, deprecated domain presets have been removed.
+        They should raise ValueError with migration guidance.
         """
-        deprecated_presets = list(DEPRECATED_PRESET_ALIASES.keys())
-
-        for preset_name in deprecated_presets:
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always")
-                config = WorkflowConfig.from_preset(preset_name)
-
-                # Should produce a valid config, not raise ValueError
-                assert config is not None
-                assert config.gtol > 0
-
-                # Should emit deprecation warning
-                deprecation_warnings = [
-                    x for x in w if issubclass(x.category, DeprecationWarning)
-                ]
-                assert len(deprecation_warnings) >= 1, (
-                    f"No deprecation warning for preset '{preset_name}'"
-                )
-
-    def test_deprecated_presets_not_in_workflow_presets(self):
-        """Test deprecated presets are not in WORKFLOW_PRESETS dict directly.
-
-        The old domain presets should be removed from WORKFLOW_PRESETS,
-        but still accessible via DEPRECATED_PRESET_ALIASES.
-        """
-        deprecated_presets = [
+        removed_presets = [
             "xpcs",
             "saxs",
             "kinetics",
@@ -170,9 +142,34 @@ class TestPresetValidation:
             "synchrotron",
         ]
 
-        for preset_name in deprecated_presets:
+        for preset_name in removed_presets:
+            with pytest.raises(ValueError) as exc_info:
+                WorkflowConfig.from_preset(preset_name)
+
+            # Should include helpful error message with replacement
+            error_msg = str(exc_info.value)
+            assert "removed in v0.6.0" in error_msg
+            assert preset_name in error_msg
+
+    def test_removed_presets_not_in_workflow_presets(self):
+        """Test removed presets are not in WORKFLOW_PRESETS dict.
+
+        The old domain presets have been removed from WORKFLOW_PRESETS.
+        """
+        removed_presets = [
+            "xpcs",
+            "saxs",
+            "kinetics",
+            "dose_response",
+            "imaging",
+            "materials",
+            "binding",
+            "synchrotron",
+        ]
+
+        for preset_name in removed_presets:
             assert preset_name not in WORKFLOW_PRESETS, (
-                f"Deprecated preset '{preset_name}' should not be in WORKFLOW_PRESETS"
+                f"Removed preset '{preset_name}' should not be in WORKFLOW_PRESETS"
             )
 
 

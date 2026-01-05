@@ -2,7 +2,6 @@
 
 This module provides:
 - compute_svd_with_fallback: Deterministic full SVD with GPU/CPU/NumPy fallback chain
-- compute_svd_adaptive: Deprecated alias for compute_svd_with_fallback (full SVD only)
 
 IMPORTANT: As of v0.3.5, this module uses ONLY full deterministic SVD.
 Randomized/approximate SVD has been completely removed because it causes
@@ -134,53 +133,6 @@ def compute_svd_with_fallback(J_h, full_matrices=False):
         else:
             # Not a GPU-specific error, re-raise
             raise
-
-
-def compute_svd_adaptive(
-    J_h: jnp.ndarray,
-    full_matrices: bool = False,
-    use_randomized: bool | None = None,
-    n_components: int | None = None,
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Compute SVD - ALWAYS uses full deterministic SVD.
-
-    .. deprecated:: 0.3.5
-        The `use_randomized` and `n_components` parameters are ignored.
-        This function now always uses full deterministic SVD via
-        `compute_svd_with_fallback`. Use that function directly instead.
-
-    Randomized SVD was removed in v0.3.5 because it caused optimization
-    divergence in iterative least-squares solvers.
-
-    Parameters
-    ----------
-    J_h : jnp.ndarray
-        Jacobian matrix in hat space
-    full_matrices : bool, default=False
-        Whether to compute full matrices
-    use_randomized : bool, optional
-        IGNORED. Kept for API compatibility only.
-        If True, a deprecation warning is issued.
-    n_components : int, optional
-        IGNORED. Kept for API compatibility only.
-
-    Returns
-    -------
-    U, s, V : jnp.ndarray
-        Full deterministic SVD decomposition (V is transposed back)
-    """
-    # Warn if caller explicitly requested randomized SVD
-    if use_randomized is True:
-        warnings.warn(
-            "Randomized SVD was removed in v0.3.5 due to optimization divergence. "
-            "Using full deterministic SVD instead. See tests/test_svd_regression.py "
-            "for evidence of the issue.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-    # Always use full deterministic SVD
-    return compute_svd_with_fallback(J_h, full_matrices=full_matrices)
 
 
 def initialize_gpu_safely():

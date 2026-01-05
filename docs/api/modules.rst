@@ -245,7 +245,7 @@ Complete Module Listing
 - :doc:`nlsq.config` - Configuration management
 - :doc:`nlsq.device` - GPU detection and warnings (NEW in v0.1.6)
 - :doc:`nlsq.validators` - Input validation (NEW in v0.1.1)
-- :doc:`nlsq.diagnostics` - Model Health Diagnostics System (identifiability, gradient health, sloppy models)
+- :doc:`nlsq.diagnostics` - Model Health Diagnostics System (identifiability, gradient health, parameter sensitivity)
 - :doc:`nlsq.caching` - JIT and result caching
 - :doc:`nlsq.unified_cache` - Unified compilation cache (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.compilation_cache` - Legacy compilation cache

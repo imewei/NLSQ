@@ -18,7 +18,7 @@ Key Capabilities
 
 - **Identifiability Analysis** - Detect structural and practical parameter unidentifiability
 - **Gradient Health Monitoring** - Track gradient behavior during optimization
-- **Sloppy Model Analysis** - Identify stiff vs sloppy parameter directions
+- **Parameter Sensitivity Analysis** - Identify stiff vs sensitive parameter directions
 - **Health Reports** - Aggregated diagnostics with severity-based issue categorization
 - **Plugin System** - Extensible architecture for domain-specific diagnostics
 
@@ -59,7 +59,7 @@ Types and Data Classes
    AnalysisResult
    IdentifiabilityReport
    GradientHealthReport
-   SloppyModelReport
+   ParameterSensitivityReport
    PluginResult
    DiagnosticsReport
    DiagnosticsConfig
@@ -74,7 +74,7 @@ Analyzer Classes
 
    IdentifiabilityAnalyzer
    GradientMonitor
-   SloppyModelAnalyzer
+   ParameterSensitivityAnalyzer
 
 Plugin System
 -------------
@@ -161,7 +161,7 @@ The diagnostics system uses structured issue codes to identify specific problems
      - WARNING
      - Gradient stagnation detected
 
-**Sloppy Model Issues (SLOPPY-xxx)**
+**Parameter Sensitivity Issues (SENS-xxx)**
 
 .. list-table::
    :widths: 15 15 70
@@ -170,10 +170,10 @@ The diagnostics system uses structured issue codes to identify specific problems
    * - Code
      - Severity
      - Description
-   * - SLOPPY-001
+   * - SENS-001
      - WARNING
-     - Sloppy model behavior detected (wide eigenvalue spread)
-   * - SLOPPY-002
+     - Wide sensitivity spread detected (large eigenvalue range)
+   * - SENS-002
      - INFO
      - Low effective dimensionality
 
@@ -244,25 +244,29 @@ Monitor gradient behavior during optimization using callbacks:
     print(f"Vanishing detected: {grad_report.vanishing_detected}")
     print(f"Imbalance detected: {grad_report.imbalance_detected}")
 
-Sloppy Model Analysis
-~~~~~~~~~~~~~~~~~~~~~
+Parameter Sensitivity Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Analyze eigenvalue spectrum to identify sloppy behavior:
+Analyze eigenvalue spectrum to identify sensitivity behavior:
 
 .. code-block:: python
 
-    from nlsq.diagnostics import DiagnosticsConfig, DiagnosticLevel, SloppyModelAnalyzer
+    from nlsq.diagnostics import (
+        DiagnosticsConfig,
+        DiagnosticLevel,
+        ParameterSensitivityAnalyzer,
+    )
 
-    # Enable full analysis for sloppy model detection
+    # Enable full analysis for sensitivity spectrum detection
     config = DiagnosticsConfig(
         level=DiagnosticLevel.FULL,
         sloppy_threshold=1e-6,
     )
 
-    analyzer = SloppyModelAnalyzer(config)
+    analyzer = ParameterSensitivityAnalyzer(config)
     report = analyzer.analyze(jacobian)
 
-    print(f"Is sloppy: {report.is_sloppy}")
+    print(f"Wide sensitivity spread: {report.is_sloppy}")
     print(f"Eigenvalue range: {report.eigenvalue_range:.1f} orders of magnitude")
     print(f"Effective dimensionality: {report.effective_dimensionality:.1f}")
     print(f"Stiff directions: {report.stiff_indices}")
@@ -279,7 +283,7 @@ Combine all analyses into a unified health report:
         DiagnosticsConfig,
         IdentifiabilityAnalyzer,
         GradientMonitor,
-        SloppyModelAnalyzer,
+        ParameterSensitivityAnalyzer,
         create_health_report,
     )
 
@@ -289,14 +293,14 @@ Combine all analyses into a unified health report:
     ident_analyzer = IdentifiabilityAnalyzer(config)
     ident_report = ident_analyzer.analyze(jacobian)
 
-    sloppy_analyzer = SloppyModelAnalyzer(config)
-    sloppy_report = sloppy_analyzer.analyze(jacobian)
+    sens_analyzer = ParameterSensitivityAnalyzer(config)
+    sens_report = sens_analyzer.analyze(jacobian)
 
     # Create aggregated report
     health_report = create_health_report(
         identifiability=ident_report,
         gradient_health=grad_report,  # From GradientMonitor
-        sloppy_model=sloppy_report,
+        sensitivity=sens_report,
         config=config,
     )
 
@@ -391,7 +395,7 @@ The ``DiagnosticsConfig`` dataclass controls all diagnostic thresholds:
      - Description
    * - ``level``
      - BASIC
-     - Diagnostic depth: BASIC or FULL (includes sloppy analysis)
+     - Diagnostic depth: BASIC or FULL (includes sensitivity analysis)
    * - ``condition_threshold``
      - 1e8
      - FIM condition number threshold for practical identifiability
@@ -406,7 +410,7 @@ The ``DiagnosticsConfig`` dataclass controls all diagnostic thresholds:
      - Relative gradient magnitude threshold for vanishing detection
    * - ``sloppy_threshold``
      - 1e-6
-     - Eigenvalue ratio threshold for sloppy classification
+     - Eigenvalue ratio threshold for sensitivity classification
    * - ``gradient_window_size``
      - 100
      - Sliding window size for gradient norm history
@@ -434,7 +438,7 @@ The diagnostics system is designed for memory efficiency:
 
 - **IdentifiabilityAnalyzer**: Computes SVD once, reuses results
 
-- **SloppyModelAnalyzer**: Uses eigenvalue decomposition from SVD
+- **ParameterSensitivityAnalyzer**: Uses eigenvalue decomposition from SVD
 
 See Also
 --------

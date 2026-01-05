@@ -633,7 +633,3 @@ class ParameterSensitivityAnalyzer:
             },
             recommendation=get_recommendation("SENS-002"),
         )
-
-
-# Backwards compatibility alias
-SloppyModelAnalyzer = ParameterSensitivityAnalyzer

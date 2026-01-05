@@ -7,7 +7,7 @@ summary formatting and serialization utilities.
 The health report aggregates results from:
 - Identifiability analysis
 - Gradient health monitoring
-- Sloppy model analysis (level=FULL)
+- Parameter sensitivity analysis (level=FULL)
 - Custom diagnostic plugins
 
 It computes an overall health score and status, collects all issues,
@@ -28,15 +28,15 @@ from nlsq.diagnostics.types import (
     IssueSeverity,
     ModelHealthIssue,
     ModelHealthReport,
+    ParameterSensitivityReport,
     PluginResult,
-    SloppyModelReport,
 )
 
 
 def create_health_report(
     identifiability: IdentifiabilityReport | None = None,
     gradient_health: GradientHealthReport | None = None,
-    sloppy_model: SloppyModelReport | None = None,
+    sloppy_model: ParameterSensitivityReport | None = None,
     plugin_results: dict[str, PluginResult] | None = None,
     config: DiagnosticsConfig | None = None,
 ) -> ModelHealthReport:
@@ -56,7 +56,7 @@ def create_health_report(
         Identifiability analysis results.
     gradient_health : GradientHealthReport, optional
         Gradient health monitoring results.
-    sloppy_model : SloppyModelReport, optional
+    sloppy_model : ParameterSensitivityReport, optional
         Sloppy model analysis results.
     plugin_results : dict[str, PluginResult], optional
         Results from diagnostic plugins, keyed by plugin name.
@@ -150,7 +150,7 @@ def create_health_report(
 def _collect_issues(
     identifiability: IdentifiabilityReport | None,
     gradient_health: GradientHealthReport | None,
-    sloppy_model: SloppyModelReport | None,
+    sloppy_model: ParameterSensitivityReport | None,
     plugin_results: dict[str, PluginResult],
 ) -> list[ModelHealthIssue]:
     """Collect all issues from all component reports.
@@ -161,7 +161,7 @@ def _collect_issues(
         Identifiability analysis results.
     gradient_health : GradientHealthReport | None
         Gradient health monitoring results.
-    sloppy_model : SloppyModelReport | None
+    sloppy_model : ParameterSensitivityReport | None
         Sloppy model analysis results.
     plugin_results : dict[str, PluginResult]
         Results from diagnostic plugins.
@@ -267,7 +267,7 @@ def _determine_status(
 def _compute_health_score(
     identifiability: IdentifiabilityReport | None,
     gradient_health: GradientHealthReport | None,
-    sloppy_model: SloppyModelReport | None,
+    sloppy_model: ParameterSensitivityReport | None,
     config: DiagnosticsConfig,
 ) -> float:
     """Compute overall health score from component scores.
@@ -290,7 +290,7 @@ def _compute_health_score(
         Identifiability analysis results.
     gradient_health : GradientHealthReport | None
         Gradient health monitoring results.
-    sloppy_model : SloppyModelReport | None
+    sloppy_model : ParameterSensitivityReport | None
         Sloppy model analysis results.
     config : DiagnosticsConfig
         Configuration for thresholds.
@@ -350,7 +350,7 @@ def _compute_health_score(
 def _compute_total_time(
     identifiability: IdentifiabilityReport | None,
     gradient_health: GradientHealthReport | None,
-    sloppy_model: SloppyModelReport | None,
+    sloppy_model: ParameterSensitivityReport | None,
     plugin_results: dict[str, PluginResult],
 ) -> float:
     """Compute total computation time from all components.
@@ -361,7 +361,7 @@ def _compute_total_time(
         Identifiability analysis results.
     gradient_health : GradientHealthReport | None
         Gradient health monitoring results.
-    sloppy_model : SloppyModelReport | None
+    sloppy_model : ParameterSensitivityReport | None
         Sloppy model analysis results.
     plugin_results : dict[str, PluginResult]
         Results from diagnostic plugins.

@@ -306,22 +306,6 @@ class JAXConfig:
         # Load defaults
         large_dataset_config = LargeDatasetConfig()
 
-        # Emit deprecation warnings for removed sampling environment variables (v0.2.0)
-        deprecated_env_vars = {
-            "NLSQ_DISABLE_SAMPLING": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
-            "NLSQ_SAMPLING_THRESHOLD": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
-            "NLSQ_MAX_SAMPLED_SIZE": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
-            "NLSQ_SAMPLING_STRATEGY": "Subsampling was removed in v0.2.0. Use streaming optimization instead.",
-        }
-        for env_var, message in deprecated_env_vars.items():
-            if os.getenv(env_var):
-                warnings.warn(
-                    f"{env_var} environment variable is no longer used. {message} "
-                    "See MIGRATION_V0.2.0.md for details.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-
         # Override from environment variables
         if os.getenv("NLSQ_DISABLE_AUTO_SOLVER_SELECTION") == "1":
             large_dataset_config.enable_automatic_solver_selection = False

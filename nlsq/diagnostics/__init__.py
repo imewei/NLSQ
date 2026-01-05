@@ -59,13 +59,7 @@ Factory Functions:
 Recommendations:
     RECOMMENDATIONS : Mapping of issue codes to recommendation text
     get_recommendation : Get recommendation text for an issue code
-
-Deprecated Names (will be removed in v0.6.0):
-    SloppyModelAnalyzer : Use ParameterSensitivityAnalyzer instead
-    SloppyModelReport : Use ParameterSensitivityReport instead
 """
-
-import warnings
 
 from nlsq.diagnostics.gradient_health import GradientMonitor
 from nlsq.diagnostics.health_report import create_health_report
@@ -89,53 +83,6 @@ from nlsq.diagnostics.types import (
     PluginResult,
 )
 
-# Mapping of deprecated names to their new names and the actual objects
-_DEPRECATED_NAME_ALIASES = {
-    "SloppyModelAnalyzer": (
-        "ParameterSensitivityAnalyzer",
-        ParameterSensitivityAnalyzer,
-    ),
-    "SloppyModelReport": (
-        "ParameterSensitivityReport",
-        ParameterSensitivityReport,
-    ),
-}
-
-
-def __getattr__(name: str):
-    """Provide deprecation warnings for renamed classes.
-
-    This function is called when an attribute is not found in the module.
-    It provides backwards compatibility for deprecated names while emitting
-    deprecation warnings.
-
-    Parameters
-    ----------
-    name : str
-        The name of the attribute being accessed.
-
-    Returns
-    -------
-    object
-        The object corresponding to the deprecated name.
-
-    Raises
-    ------
-    AttributeError
-        If the name is not a known deprecated alias.
-    """
-    if name in _DEPRECATED_NAME_ALIASES:
-        new_name, obj = _DEPRECATED_NAME_ALIASES[name]
-        warnings.warn(
-            f"{name} is deprecated, use {new_name} instead. Will be removed in v0.6.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return obj
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 __all__ = [
     "RECOMMENDATIONS",
     "AnalysisResult",
@@ -156,9 +103,6 @@ __all__ = [
     "ParameterSensitivityReport",
     "PluginRegistry",
     "PluginResult",
-    # Deprecated names - kept for backwards compatibility
-    "SloppyModelAnalyzer",
-    "SloppyModelReport",
     "create_health_report",
     "get_recommendation",
     "run_plugins",

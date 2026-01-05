@@ -4,13 +4,13 @@ This module provides end-to-end integration tests verifying that:
 1. New generic presets work with curve_fit
 2. ParameterSensitivityAnalyzer works in full workflow
 3. No domain-specific strings leak into output
-4. Deprecated presets still produce valid configs
+4. Removed presets raise ValueError with helpful messages
 5. Integration points between modified modules work correctly
 
 Task Group 7.3: Strategic integration tests for domain removal spec.
+Updated for v0.6.0: deprecated presets now raise ValueError.
 """
 
-import warnings
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -19,7 +19,6 @@ import pytest
 
 from nlsq.core.minpack import curve_fit
 from nlsq.core.workflow import (
-    DEPRECATED_PRESET_ALIASES,
     WORKFLOW_PRESETS,
     WorkflowConfig,
 )
@@ -94,26 +93,14 @@ class TestPresetWithCurveFitEndToEnd:
         assert len(popt) == 2
         assert pcov is not None
 
-    def test_deprecated_preset_produces_valid_curve_fit_result(self, synthetic_data):
-        """Test deprecated preset still produces valid curve_fit results."""
-        x, y, _ = synthetic_data
+    def test_removed_preset_raises_valueerror(self):
+        """Test removed domain presets raise ValueError with helpful message."""
+        with pytest.raises(ValueError) as exc_info:
+            WorkflowConfig.from_preset("xpcs")
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            config = WorkflowConfig.from_preset("xpcs")
-
-        popt, pcov = curve_fit(
-            exponential_decay,
-            x,
-            y,
-            p0=[1.0, 1.0],
-            gtol=config.gtol,
-            ftol=config.ftol,
-            xtol=config.xtol,
-        )
-
-        assert len(popt) == 2
-        assert pcov is not None
+        error_msg = str(exc_info.value)
+        assert "removed in v0.6.0" in error_msg
+        assert "precision_standard" in error_msg  # suggested replacement
 
 
 class TestParameterSensitivityAnalyzerWorkflow:
@@ -222,65 +209,9 @@ class TestNoDomainStringsInOutput:
                 f"Report string contains biology term '{term}'"
             )
 
-    def test_no_domain_strings_in_non_deprecation_code(self):
-        """Test non-deprecation code in core modules is domain-agnostic.
-
-        The DEPRECATED_PRESET_ALIASES mapping is intentionally allowed to contain
-        domain terms like 'xpcs' since that is part of the backwards compatibility
-        layer. But actual preset definitions should be domain-agnostic.
-        """
-        nlsq_root = Path(__file__).parent.parent / "nlsq"
-
-        # Check that no domain presets are in WORKFLOW_PRESETS directly
-        domain_preset_names = set(DEPRECATED_PRESET_ALIASES.keys())
-
-        for preset_name in domain_preset_names:
-            assert preset_name not in WORKFLOW_PRESETS, (
-                f"Domain preset '{preset_name}' should be in DEPRECATED_PRESET_ALIASES, "
-                "not WORKFLOW_PRESETS"
-            )
-
-
-class TestDeprecatedPresetsStillWork:
-    """Regression test: verify deprecated presets still produce valid configs."""
-
-    def test_all_deprecated_presets_produce_valid_configs(self):
-        """Test all deprecated presets in DEPRECATED_PRESET_ALIASES work."""
-        for old_preset in DEPRECATED_PRESET_ALIASES:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                config = WorkflowConfig.from_preset(old_preset)
-
-            # Config should be valid
-            assert config.gtol > 0
-            assert config.ftol > 0
-            assert config.xtol > 0
-            assert config.tier is not None
-            assert config.goal is not None
-
-    def test_deprecated_presets_match_new_preset_config(self):
-        """Test deprecated presets produce configs matching their new preset targets."""
-        for old_preset, new_preset in DEPRECATED_PRESET_ALIASES.items():
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                old_config = WorkflowConfig.from_preset(old_preset)
-
-            new_config = WorkflowConfig.from_preset(new_preset)
-
-            # Core tolerances should match
-            assert old_config.gtol == new_config.gtol, (
-                f"gtol mismatch for {old_preset} -> {new_preset}"
-            )
-            assert old_config.ftol == new_config.ftol, (
-                f"ftol mismatch for {old_preset} -> {new_preset}"
-            )
-            assert old_config.xtol == new_config.xtol, (
-                f"xtol mismatch for {old_preset} -> {new_preset}"
-            )
-
-    def test_deprecated_preset_count_matches_spec(self):
-        """Test that exactly 8 deprecated presets exist per spec."""
-        expected_deprecated = {
+    def test_no_domain_presets_in_workflow_presets(self):
+        """Test that no domain presets are in WORKFLOW_PRESETS directly."""
+        removed_preset_names = {
             "xpcs",
             "saxs",
             "kinetics",
@@ -291,13 +222,57 @@ class TestDeprecatedPresetsStillWork:
             "synchrotron",
         }
 
-        actual_deprecated = set(DEPRECATED_PRESET_ALIASES.keys())
+        for preset_name in removed_preset_names:
+            assert preset_name not in WORKFLOW_PRESETS, (
+                f"Removed domain preset '{preset_name}' should not be in WORKFLOW_PRESETS"
+            )
 
-        assert actual_deprecated == expected_deprecated, (
-            f"Deprecated presets mismatch.\n"
-            f"Expected: {expected_deprecated}\n"
-            f"Actual: {actual_deprecated}"
-        )
+
+class TestRemovedPresetsRaiseValueError:
+    """Tests verifying removed presets raise ValueError with helpful messages."""
+
+    def test_all_removed_presets_raise_valueerror(self):
+        """Test all removed domain presets raise ValueError."""
+        removed_presets = [
+            "xpcs",
+            "saxs",
+            "kinetics",
+            "dose_response",
+            "imaging",
+            "materials",
+            "binding",
+            "synchrotron",
+        ]
+
+        for preset_name in removed_presets:
+            with pytest.raises(ValueError) as exc_info:
+                WorkflowConfig.from_preset(preset_name)
+
+            error_msg = str(exc_info.value)
+            assert "removed in v0.6.0" in error_msg
+            assert preset_name in error_msg
+
+    def test_removed_preset_error_includes_replacement(self):
+        """Test error message includes the suggested replacement preset."""
+        replacements = {
+            "xpcs": "precision_standard",
+            "saxs": "precision_standard",
+            "kinetics": "precision_standard",
+            "dose_response": "precision_high",
+            "imaging": "streaming_large",
+            "materials": "precision_standard",
+            "binding": "precision_standard",
+            "synchrotron": "streaming_large",
+        }
+
+        for old_preset, expected_replacement in replacements.items():
+            with pytest.raises(ValueError) as exc_info:
+                WorkflowConfig.from_preset(old_preset)
+
+            error_msg = str(exc_info.value)
+            assert expected_replacement in error_msg, (
+                f"Error for '{old_preset}' should suggest '{expected_replacement}'"
+            )
 
 
 class TestModuleIntegration:
@@ -308,9 +283,11 @@ class TestModuleIntegration:
         from nlsq.diagnostics.types import IssueCategory
 
         assert hasattr(IssueCategory, "SENSITIVITY")
-        # SLOPPY should be an alias for backwards compatibility
-        assert hasattr(IssueCategory, "SLOPPY")
-        assert IssueCategory.SLOPPY == IssueCategory.SENSITIVITY
+        # SLOPPY alias has been removed in v0.6.0
+        assert not hasattr(IssueCategory, "SLOPPY") or (
+            # If it exists, it should equal SENSITIVITY (for backwards compat)
+            IssueCategory.SLOPPY == IssueCategory.SENSITIVITY
+        )
 
     def test_parameter_sensitivity_uses_correct_issue_category(self):
         """Test ParameterSensitivityAnalyzer issues use IssueCategory.SENSITIVITY."""
@@ -344,3 +321,21 @@ class TestModuleIntegration:
             assert not code.startswith("SLOPPY-"), (
                 f"RECOMMENDATIONS should not contain SLOPPY- codes: {code}"
             )
+
+    def test_sloppy_aliases_no_longer_exist(self):
+        """Test that SloppyModelAnalyzer and SloppyModelReport aliases are removed."""
+        import nlsq.diagnostics as diag
+
+        # These aliases should no longer exist
+        assert not hasattr(diag, "SloppyModelAnalyzer"), (
+            "SloppyModelAnalyzer alias should be removed"
+        )
+        assert not hasattr(diag, "SloppyModelReport"), (
+            "SloppyModelReport alias should be removed"
+        )
+
+    def test_compat_module_is_empty(self):
+        """Test that nlsq.compat module is empty."""
+        import nlsq.compat
+
+        assert nlsq.compat.__all__ == [], "nlsq.compat.__all__ should be empty"

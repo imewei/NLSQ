@@ -32,7 +32,6 @@ Functions
    :toctree: generated/
 
    compute_svd_with_fallback
-   compute_svd_adaptive
 
 compute_svd_with_fallback (Primary API)
 ---------------------------------------
@@ -59,26 +58,6 @@ The recommended function for SVD in NLSQ:
 1. **JAX GPU SVD** (jax.scipy.linalg.svd on GPU)
 2. **JAX CPU SVD** (automatic fallback if GPU fails with cuSolver error)
 3. **NumPy SVD** (last resort if JAX CPU also fails)
-
-compute_svd_adaptive (Deprecated)
----------------------------------
-
-.. deprecated:: 0.3.5
-   This function now always uses full deterministic SVD.
-   The ``use_randomized`` and ``n_components`` parameters are ignored.
-   Use ``compute_svd_with_fallback`` directly instead.
-
-.. code-block:: python
-
-   from nlsq.svd_fallback import compute_svd_adaptive
-   import jax.numpy as jnp
-
-   # compute_svd_adaptive now always uses full SVD
-   A = jnp.ones((100_000, 50))
-   U, s, V = compute_svd_adaptive(A)  # Same as compute_svd_with_fallback
-
-   # This will issue a DeprecationWarning:
-   U, s, V = compute_svd_adaptive(A, use_randomized=True)
 
 GPU/CPU Fallback
 ----------------

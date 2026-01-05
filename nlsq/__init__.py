@@ -36,7 +36,6 @@ except ImportError:
     __version__ = "0.0.0+unknown"
 
 # Standard library imports needed at module level
-import warnings  # For deprecation warnings (v0.2.0)
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -151,7 +150,7 @@ _LAZY_MODULES: dict[str, str] = {
     "get_global_compilation_cache": "nlsq.caching.compilation_cache",
     # Validators
     "InputValidator": "nlsq.utils.validators",
-    # Model Health Diagnostics (new in v1.0)
+    # Model Health Diagnostics
     "HealthStatus": "nlsq.diagnostics.types",
     "IssueSeverity": "nlsq.diagnostics.types",
     "IssueCategory": "nlsq.diagnostics.types",
@@ -159,12 +158,12 @@ _LAZY_MODULES: dict[str, str] = {
     "ModelHealthIssue": "nlsq.diagnostics.types",
     "IdentifiabilityReport": "nlsq.diagnostics.types",
     "GradientHealthReport": "nlsq.diagnostics.types",
-    "SloppyModelReport": "nlsq.diagnostics.types",
+    "ParameterSensitivityReport": "nlsq.diagnostics.types",
     "ModelHealthReport": "nlsq.diagnostics.types",
     "DiagnosticsConfig": "nlsq.diagnostics.types",
     "IdentifiabilityAnalyzer": "nlsq.diagnostics.identifiability",
     "GradientMonitor": "nlsq.diagnostics.gradient_health",
-    "SloppyModelAnalyzer": "nlsq.diagnostics.sloppy_model",
+    "ParameterSensitivityAnalyzer": "nlsq.diagnostics.parameter_sensitivity",
     "DiagnosticPlugin": "nlsq.diagnostics.plugin",
     "PluginRegistry": "nlsq.diagnostics.plugin",
     "run_plugins": "nlsq.diagnostics.plugin",

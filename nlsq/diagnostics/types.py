@@ -70,8 +70,6 @@ class IssueCategory(Enum):
         Convergence-related issues.
     SENSITIVITY : auto
         Parameter sensitivity spectrum issues (wide eigenvalue spread).
-    SLOPPY : auto
-        Deprecated alias for SENSITIVITY. Will be removed in v0.6.0.
     """
 
     IDENTIFIABILITY = auto()
@@ -80,9 +78,6 @@ class IssueCategory(Enum):
     CONDITIONING = auto()
     CONVERGENCE = auto()
     SENSITIVITY = auto()
-    # Backwards compatibility alias - SLOPPY is deprecated in favor of SENSITIVITY
-    # Will be removed in v0.6.0
-    SLOPPY = SENSITIVITY
 
 
 class DiagnosticLevel(Enum):
@@ -485,10 +480,6 @@ class ParameterSensitivityReport(AnalysisResult):
             (self.eigenvectors[:, idx], self.eigenvalues[idx])
             for idx in self.sloppy_indices
         ]
-
-
-# Backwards compatibility alias
-SloppyModelReport = ParameterSensitivityReport
 
 
 @dataclass(slots=True)

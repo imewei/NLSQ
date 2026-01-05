@@ -17,14 +17,12 @@ Historical context:
   Resolution (v0.3.5): Randomized SVD completely removed from codebase.
 """
 
-import warnings
-
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from nlsq import LeastSquares
-from nlsq.stability.svd_fallback import compute_svd_adaptive, compute_svd_with_fallback
+from nlsq.stability.svd_fallback import compute_svd_with_fallback
 
 
 class TestNoRandomizedSVD:
@@ -60,39 +58,12 @@ class TestNoRandomizedSVD:
             "jax.random should not be used in svd_fallback module"
         )
 
-    def test_compute_svd_adaptive_warns_on_use_randomized_true(self):
-        """Verify compute_svd_adaptive warns if use_randomized=True is passed."""
-        m, n = 100, 10
-        A = jnp.ones((m, n))
+    def test_no_compute_svd_adaptive_function(self):
+        """Verify compute_svd_adaptive function no longer exists."""
+        from nlsq.stability import svd_fallback
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            _, _, _ = compute_svd_adaptive(A, use_randomized=True)
-
-            # Should issue a deprecation warning
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "Randomized SVD was removed" in str(w[0].message)
-
-    def test_compute_svd_adaptive_uses_full_svd(self):
-        """Verify compute_svd_adaptive always uses full deterministic SVD."""
-        np.random.seed(42)
-        m, n = 1000, 10
-        A = jnp.array(np.random.randn(m, n))
-
-        # Get results from compute_svd_adaptive
-        U_adaptive, s_adaptive, V_adaptive = compute_svd_adaptive(A)
-
-        # Get results from compute_svd_with_fallback (known full SVD)
-        U_full, s_full, V_full = compute_svd_with_fallback(A)
-
-        # They should be identical
-        np.testing.assert_array_almost_equal(s_adaptive, s_full, decimal=14)
-        np.testing.assert_array_almost_equal(
-            np.abs(U_adaptive), np.abs(U_full), decimal=14
-        )
-        np.testing.assert_array_almost_equal(
-            np.abs(V_adaptive), np.abs(V_full), decimal=14
+        assert not hasattr(svd_fallback, "compute_svd_adaptive"), (
+            "compute_svd_adaptive function should be removed from svd_fallback module"
         )
 
 

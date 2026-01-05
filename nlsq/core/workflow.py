@@ -1099,24 +1099,6 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
-# =============================================================================
-# Deprecated Preset Aliases (will be removed in v0.6.0)
-# =============================================================================
-
-# Mapping of deprecated domain-specific preset names to their new generic equivalents.
-# These aliases provide backwards compatibility during the deprecation period.
-DEPRECATED_PRESET_ALIASES: dict[str, str] = {
-    "xpcs": "precision_standard",
-    "saxs": "precision_standard",
-    "kinetics": "precision_standard",
-    "dose_response": "precision_high",
-    "imaging": "streaming_large",
-    "materials": "precision_standard",
-    "binding": "precision_standard",
-    "synchrotron": "streaming_large",
-}
-
-
 @dataclass(slots=True)
 class WorkflowConfig:
     """Configuration dataclass for workflow selection and execution.
@@ -1372,16 +1354,24 @@ class WorkflowConfig:
         """
         preset_name_lower = preset_name.lower()
 
-        # Check for deprecated preset aliases first
-        if preset_name_lower in DEPRECATED_PRESET_ALIASES:
-            new_preset = DEPRECATED_PRESET_ALIASES[preset_name_lower]
-            warnings.warn(
-                f"Preset '{preset_name}' is deprecated, use '{new_preset}' instead. "
-                "Will be removed in v0.6.0.",
-                DeprecationWarning,
-                stacklevel=2,
+        # Check for removed domain-specific presets with helpful error messages
+        _REMOVED_PRESETS = {
+            "xpcs": "precision_standard",
+            "saxs": "precision_standard",
+            "kinetics": "precision_standard",
+            "dose_response": "precision_high",
+            "imaging": "streaming_large",
+            "materials": "precision_standard",
+            "binding": "precision_standard",
+            "synchrotron": "streaming_large",
+        }
+        if preset_name_lower in _REMOVED_PRESETS:
+            suggested = _REMOVED_PRESETS[preset_name_lower]
+            raise ValueError(
+                f"Preset '{preset_name}' was removed in v0.6.0. "
+                f"Use '{suggested}' instead. "
+                f"See https://nlsq.readthedocs.io/en/latest/howto/migration-v0.6.0.html"
             )
-            preset_name_lower = new_preset
 
         if preset_name_lower not in WORKFLOW_PRESETS:
             valid_presets = list(WORKFLOW_PRESETS.keys())
@@ -2405,7 +2395,6 @@ def get_quality_precision_config() -> dict[str, Any]:
 
 __all__ = [
     # Configuration
-    "DEPRECATED_PRESET_ALIASES",
     "WORKFLOW_PRESETS",
     # Cluster Detection and Distributed Processing (Task Group 6)
     "ClusterDetector",
