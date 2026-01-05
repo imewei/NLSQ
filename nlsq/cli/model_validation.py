@@ -23,13 +23,20 @@ Dangerous Patterns Blocked
 import ast
 import logging
 import os
-import resource
-import signal
+import sys
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+# Platform-specific imports for resource limiting
+# These modules are Unix-only and not available on Windows
+_HAS_RESOURCE_LIMITS = sys.platform != "win32"
+
+if _HAS_RESOURCE_LIMITS:
+    import resource
+    import signal
 
 logger = logging.getLogger("nlsq.cli.security")
 
@@ -316,12 +323,28 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     ResourceLimitError
         If timeout or memory limit is exceeded.
 
+    Notes
+    -----
+    Resource limits (memory, signals) are only enforced on Unix-like systems.
+    On Windows, this context manager yields without enforcing limits.
+
     Examples
     --------
     >>> with resource_limits(timeout=5.0, memory_mb=256):
     ...     # Execute potentially slow/memory-intensive code
     ...     result = execute_model(model, data)
     """
+    # On Windows, resource limits are not available
+    # Yield without enforcing any limits
+    if not _HAS_RESOURCE_LIMITS:
+        logger.debug(
+            "Resource limits not available on this platform (Windows), "
+            "skipping enforcement"
+        )
+        yield
+        return
+
+    # Unix-specific resource limiting
     # Store original limits
     original_mem = resource.getrlimit(resource.RLIMIT_AS)
 
