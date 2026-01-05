@@ -690,8 +690,8 @@ def curve_fit_large(
     -----
     All large datasets use streaming optimization for 100% data utilization.
 
-    Important: Model Function Requirements for Chunking
-    ----------------------------------------------------
+    **Important: Model Function Requirements for Chunking**
+
     When auto_size_detection triggers chunked processing (>1M points), your model
     function MUST respect the size of xdata. Model output shape must match ydata shape.
 

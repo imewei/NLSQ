@@ -38,8 +38,10 @@ Basic usage with automatic p0 estimation:
 >>> print(f"Fitted: amplitude={popt[0]:.2f}, rate={popt[1]:.2f}, offset={popt[2]:.2f}")
 >>> # Output: Fitted: amplitude=2.95, rate=0.51, offset=1.04
 
-How It Works
-------------
+Notes
+-----
+The automatic parameter estimation works as follows:
+
 1. **Custom estimation**: Checks if function has `.estimate_p0(xdata, ydata)` method
 2. **Pattern detection**: Analyzes data shape to detect function type
 3. **Heuristic estimation**: Uses data statistics to estimate parameters:
