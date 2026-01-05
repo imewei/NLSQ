@@ -64,12 +64,7 @@ Quick Links
 Full Module Documentation
 -------------------------
 
-For auto-generated documentation of all modules:
-
-.. toctree::
-   :maxdepth: 1
-
-   /api/modules
+For auto-generated documentation of all modules, see :doc:`/api/modules`.
 
 See Also
 --------
