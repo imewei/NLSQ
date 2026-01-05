@@ -475,7 +475,7 @@ module = "nlsq.optimizer_base"
 ignore_errors = true  # Base optimizer class
 
 [[tool.mypy.overrides]]
-module = "nlsq.smart_cache"
+module = "nlsq.caching.smart_cache"
 ignore_errors = true  # Optional xxhash dependency
 
 # Critical modules - type checked (v0.3.0 - strengthened)
