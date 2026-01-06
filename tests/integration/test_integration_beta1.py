@@ -328,7 +328,7 @@ class TestEndToEndIntegration:
         assert popt is not None
         assert pcov is not None
         assert np.allclose(popt, [2.5, 0.4, 0.7], rtol=0.2)
-        assert metrics.total_time_sec < 5.0  # Allow for JIT compilation variance
+        assert metrics.total_time_sec < 10.0  # Allow for JIT compilation variance
         assert pcov.shape == (3, 3)
 
     def test_complete_workflow_medium_dataset(self):

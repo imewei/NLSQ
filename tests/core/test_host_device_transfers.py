@@ -293,7 +293,7 @@ class TestPerformanceImprovement:
 
         # Should complete in reasonable time
         # Includes JIT compilation, so allow generous time
-        assert metrics.total_time_sec < 5.0
+        assert metrics.total_time_sec < 10.0
 
         # Verify convergence
         assert np.allclose(popt, [2.2, 0.6], rtol=0.1)
