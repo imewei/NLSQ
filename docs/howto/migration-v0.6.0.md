@@ -15,18 +15,18 @@ deprecated functionality that was announced in previous releases.
 
 ### 1. Workflow Presets
 
-The following domain-specific presets have been removed:
+The following domain-specific presets have been removed. Use the core presets instead:
 
-| Removed Preset   | Replacement          |
-|------------------|----------------------|
-| `xpcs`           | `precision_standard` |
-| `saxs`           | `precision_standard` |
-| `kinetics`       | `precision_standard` |
-| `dose_response`  | `precision_high`     |
-| `imaging`        | `streaming_large`    |
-| `materials`      | `precision_standard` |
-| `binding`        | `precision_standard` |
-| `synchrotron`    | `streaming_large`    |
+| Removed Preset   | Replacement   |
+|------------------|---------------|
+| `xpcs`           | `standard`    |
+| `saxs`           | `standard`    |
+| `kinetics`       | `standard`    |
+| `dose_response`  | `quality`     |
+| `imaging`        | `streaming`   |
+| `materials`      | `standard`    |
+| `binding`        | `standard`    |
+| `synchrotron`    | `streaming`   |
 
 **Before (v0.5.x):**
 ```python
@@ -41,7 +41,7 @@ config = WorkflowConfig.from_preset("xpcs")
 from nlsq.core.workflow import WorkflowConfig
 
 # Use the generic replacement
-config = WorkflowConfig.from_preset("precision_standard")
+config = WorkflowConfig.from_preset("standard")
 ```
 
 ### 2. Parameter Sensitivity Analysis

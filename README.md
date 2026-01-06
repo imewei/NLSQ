@@ -461,12 +461,12 @@ See [examples/README.md](examples/README.md) for the full index.
 
 - Python 3.12+
 - JAX 0.8.0+
-- NumPy 2.0+
-- SciPy 1.14.0+
+- NumPy 2.2+
+- SciPy 1.16.0+
 
 **GUI requirements**: PySide6 6.6+, pyqtgraph 0.13+
 
-**GPU support** (Linux only): CUDA 12.1-12.9, NVIDIA driver >= 525
+**GPU support** (Linux only): CUDA 12.x-13.x, NVIDIA driver >= 525
 
 ## Citation
 
