@@ -218,7 +218,7 @@ def main():
 
     config = HybridStreamingConfig.defense_strict()
     print("\n  defense_strict() configuration:")
-    print(f"    warmup_max_iterations: {config.warmup_max_iterations}")
+    print(f"    warmup_iterations: {config.warmup_iterations}")
     print(f"    normalize: {config.normalize}")
 
     if QUICK:

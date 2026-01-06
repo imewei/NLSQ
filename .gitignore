@@ -185,11 +185,12 @@ nlsq/_version.py
 # Generated plots/images (from examples)
 curve_fit_result*.png
 radioactive_decay.png
+outputs/
 
 # Uncomment if you want to ignore all generated images:
-# *.png
-# *.jpg
-# *.pdf
+*.png
+*.jpg
+*.pdf
 
 # ----------------------------------------------------------------------------
 # Benchmark Results

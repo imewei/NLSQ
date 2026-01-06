@@ -217,14 +217,18 @@ try:
         max_nfev=200 if QUICK else 1000,
     )
 except OptimizationError:
-    _ = cf_gpu.curve_fit(
-        complex_model,
-        x_large[:100],
-        y_large[:100],
-        p0=[3, 0.5, 2, 1],
-        maxiter=20 if QUICK else 50,
-        max_nfev=400 if QUICK else 1000,
-    )
+    try:
+        _ = cf_gpu.curve_fit(
+            complex_model,
+            x_large[:100],
+            y_large[:100],
+            p0=[3, 0.5, 2, 1],
+            maxiter=20 if QUICK else 50,
+            max_nfev=600 if QUICK else 1000,
+            gtol=1e-6 if QUICK else 1e-8,
+        )
+    except OptimizationError:
+        print("⚠️  Quick-mode warmup failed to converge; continuing benchmark.")
 
 # Benchmark: 10 fits (reduced in quick mode)
 n_runs = 3 if QUICK else 10
