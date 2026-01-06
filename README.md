@@ -443,7 +443,7 @@ See [Diagnostics API](https://nlsq.readthedocs.io/en/latest/api/nlsq.diagnostics
 
 </details>
 
-See [Advanced Features](https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html) for complete documentation.
+See [Advanced User Guide](https://nlsq.readthedocs.io/en/latest/advanced_guide.html) for complete documentation.
 
 ## Examples
 
