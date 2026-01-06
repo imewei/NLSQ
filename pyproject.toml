@@ -229,7 +229,7 @@ nlsq = ["py.typed", "*.pyi"]
 
 [tool.setuptools_scm]
 write_to = "nlsq/_version.py"
-version_scheme = "post-release"
+version_scheme = "python-simplified-semver"
 local_scheme = "no-local-version"
 fallback_version = "0.0.0+unknown"  # Fallback for non-git installs
 
