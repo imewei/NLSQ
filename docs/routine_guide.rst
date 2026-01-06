@@ -24,6 +24,8 @@ This guide is designed for users who want to perform standard curve fitting anal
 
    tutorials/01_first_fit
    tutorials/02_understanding_results
+   howto/migration
+   howto/choose_model
 
 .. toctree::
    :maxdepth: 2
