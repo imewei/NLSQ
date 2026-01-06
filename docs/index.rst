@@ -26,191 +26,58 @@ on modern hardware.
 Documentation
 -------------
 
+Choose your path:
+
 .. grid:: 2
    :gutter: 3
 
-   .. grid-item-card:: Tutorials
-      :link: tutorials/index
+   .. grid-item-card:: Routine Analysis
+      :link: routine_guide
       :link-type: doc
 
-      **Learn NLSQ step by step**
+      **Fast, Standardized Fitting**
 
-      Start here if you're new. Six progressive tutorials that teach you
-      curve fitting from basics to GPU acceleration.
+      Best for:
+      - Standard data analysis
+      - Using the CLI or GUI
+      - Pre-defined workflows
+      - Quick results
 
       +++
-      :doc:`Start Learning → <tutorials/index>`
+      :doc:`Routine User Guide → <routine_guide>`
 
-   .. grid-item-card:: How-To Guides
-      :link: howto/index
+   .. grid-item-card:: Advanced Development
+      :link: advanced_guide
       :link-type: doc
 
-      **Solve specific problems**
+      **Custom Pipelines & Scale**
 
-      Practical recipes for common tasks: migrating from SciPy, handling
-      large datasets, troubleshooting bad fits.
-
-      +++
-      :doc:`Find Solutions → <howto/index>`
-
-   .. grid-item-card:: Explanation
-      :link: explanation/index
-      :link-type: doc
-
-      **Understand concepts**
-
-      Learn how curve fitting works, why JAX enables GPU acceleration,
-      and what makes the Trust Region algorithm robust.
+      Best for:
+      - Python API integration
+      - Custom models & algorithms
+      - HPC & Graphics Cards
+      - Debugging & Diagnostics
 
       +++
-      :doc:`Explore Concepts → <explanation/index>`
-
-   .. grid-item-card:: Reference
-      :link: reference/index
-      :link-type: doc
-
-      **Look up details**
-
-      Complete API documentation, configuration options, CLI commands,
-      and built-in model functions.
-
-      +++
-      :doc:`View Reference → <reference/index>`
-
-----
-
-Quick Start
------------
-
-**Install**:
-
-.. code-block:: bash
-
-   pip install nlsq
-
-**Fit some data**:
-
-.. code-block:: python
-
-   import numpy as np
-   from nlsq import curve_fit
-   import jax.numpy as jnp
-
-
-   # Define your model (use jax.numpy for GPU acceleration)
-   def exponential(x, a, tau, c):
-       return a * jnp.exp(-x / tau) + c
-
-
-   # Generate example data
-   x = np.linspace(0, 10, 10000)
-   y = 2.5 * np.exp(-x / 3.0) + 0.5 + 0.1 * np.random.randn(10000)
-
-   # Fit! (automatically uses GPU if available)
-   popt, pcov = curve_fit(exponential, x, y, p0=[1.0, 1.0, 0.0])
-
-   print(f"amplitude = {popt[0]:.3f}")  # ~2.5
-   print(f"tau = {popt[1]:.3f}")  # ~3.0
-   print(f"offset = {popt[2]:.3f}")  # ~0.5
-
-**Next step**: :doc:`tutorials/01_first_fit`
-
-----
-
-Why NLSQ?
----------
-
-.. list-table::
-   :widths: 30 70
-   :class: borderless
-
-   * - **GPU Acceleration**
-     - 270x faster than SciPy on large datasets. Same code runs on CPU or GPU.
-   * - **Drop-in API**
-     - Minimal changes from ``scipy.optimize.curve_fit``. Familiar interface.
-   * - **Automatic Jacobians**
-     - JAX automatic differentiation computes exact derivatives.
-   * - **Large Datasets**
-     - Automatic chunking and streaming for datasets up to 100M+ points.
-   * - **Production Ready**
-     - 3553 tests, 100% pass rate, comprehensive error handling, numerical stability.
-
-Performance
-~~~~~~~~~~~
-
-**GPU Benchmarks** (NVIDIA Tesla V100):
-
-.. list-table::
-   :header-rows: 1
-   :widths: 25 25 25 25
-
-   * - Dataset Size
-     - SciPy (CPU)
-     - NLSQ (GPU)
-     - Speedup
-   * - 10,000
-     - 0.18s
-     - 0.04s
-     - 4.5x
-   * - 100,000
-     - 2.1s
-     - 0.09s
-     - 23x
-   * - 1,000,000
-     - 40.5s
-     - 0.15s
-     - 270x
-
-----
-
-Interactive GUI
----------------
-
-No code required? Use the interactive GUI:
-
-.. code-block:: bash
-
-   nlsq gui
-
-Load data, select a model, click fit. See :doc:`gui/index` for details.
+      :doc:`Advanced User Guide → <advanced_guide>`
 
 ----
 
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: Learn
+   :caption: Guides
 
-   tutorials/index
-
-.. toctree::
-   :hidden:
-   :maxdepth: 2
-   :caption: Use
-
-   howto/index
-   gui/index
+   routine_guide
+   advanced_guide
 
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: Understand
-
-   explanation/index
-
-.. toctree::
-   :hidden:
-   :maxdepth: 2
-   :caption: Reference
+   :caption: Project Info
 
    reference/index
-   api/index
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Development
-
+   howto/migration-v0.6.0
    developer/index
    CHANGELOG
 
