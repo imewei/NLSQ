@@ -6,7 +6,7 @@ Each tutorial builds on the previous one, taking you from your first fit
 to advanced GPU-accelerated optimization.
 
 .. note::
-   **Coming from SciPy?** Check out :doc:`/howto/migrate_from_scipy` for a quick migration guide.
+   **Coming from SciPy?** Check out :doc:`/howto/migration` for a quick migration guide.
 
 Tutorial Series
 ---------------

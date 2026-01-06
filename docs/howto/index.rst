@@ -10,8 +10,7 @@ Getting Started
 .. toctree::
    :maxdepth: 1
 
-   migrate_from_scipy
-   migration-v0.4.3
+   migration
    choose_model
 
 Working with Data
@@ -60,10 +59,8 @@ Quick Reference
 
    * - Task
      - Guide
-   * - Migrate from scipy.optimize.curve_fit
-     - :doc:`migrate_from_scipy`
-   * - Migrate from v0.4.2 to v0.4.3
-     - :doc:`migration-v0.4.3`
+   * - Migrate from SciPy or older NLSQ versions
+     - :doc:`migration`
    * - Choose the right model function
      - :doc:`choose_model`
    * - Handle datasets > 100K points

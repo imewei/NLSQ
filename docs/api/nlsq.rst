@@ -62,7 +62,7 @@ See Also
 * :doc:`/tutorials/01_first_fit` - Getting started tutorial
 * :doc:`/howto/handle_large_data` - Large dataset handling guide
 * :doc:`/howto/optimize_performance` - Performance optimization
-* :doc:`/howto/migrate_from_scipy` - Migrating from SciPy
+* :doc:`/howto/migration` - Migration Guide
 
 Submodules
 ----------

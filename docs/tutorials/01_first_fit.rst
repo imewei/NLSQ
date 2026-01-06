@@ -233,5 +233,5 @@ In :doc:`02_understanding_results`, you'll learn how to:
 
 .. seealso::
 
-   - :doc:`/howto/migrate_from_scipy` - If you're coming from SciPy
+   - :doc:`/howto/migration` - If you're coming from SciPy
    - :doc:`/explanation/how_fitting_works` - Understand the algorithm

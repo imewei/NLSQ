@@ -885,7 +885,7 @@ Related Documentation
 
 -  :doc:`../reference/configuration` - Configuration reference
 -  :doc:`advanced_api` - Advanced API usage
--  :doc:`migrate_from_scipy` - Migrating from SciPy
+-  :doc:`migration` - Migration Guide
 -  :doc:`troubleshooting` - Common issues and solutions
 -  :doc:`../api/index` - Complete API documentation
 

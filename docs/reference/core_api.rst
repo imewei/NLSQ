@@ -220,5 +220,5 @@ See Also
 --------
 
 - :doc:`/tutorials/01_first_fit` - Getting started tutorial
-- :doc:`/howto/migrate_from_scipy` - Migration from SciPy
+- :doc:`/howto/migration` - Migration Guide
 - :doc:`large_data` - Large dataset APIs
