@@ -1,57 +1,185 @@
 Workflow System Overview
 ========================
 
-The workflow system lets you run an end-to-end analysis with a single
-configuration file. It provides a consistent way to define data inputs,
-models, fitting options, and outputs without writing custom pipeline code.
+NLSQ provides automatic workflow selection based on memory constraints and dataset
+characteristics. The system analyzes available memory and data size to choose the
+optimal fitting strategy, preventing out-of-memory errors while maximizing performance.
 
-This page is high-level by design. For the exact configuration fields, see
-:doc:`../howto/configure_yaml`.
+.. versionchanged:: 0.5.5
+   The tier-based workflow system was replaced with a unified memory-based approach.
+   ``MemoryBudgetSelector`` replaces ``auto_select_workflow()``, and strategy selection
+   is now driven entirely by memory budget computation.
 
-Why use the workflow system?
-----------------------------
+Unified Memory-Based Strategy
+-----------------------------
 
-- **Automatic optimization**: Selects the best fitting strategy based on dataset size and memory
-- Reproducible runs driven by versioned configuration
-- Consistent defaults across team members and machines
-- Clear separation of data, model, fitting, and outputs
-- Minimal glue code for batch or automated execution
-- **Built-in numerical safeguards** via the 4-Layer Defense Strategy (v0.3.6+)
+The memory-based approach uses a simple decision tree based on memory budget:
 
-Workflow Tiers
---------------
+.. code-block:: text
 
-NLSQ automatically selects one of four processing tiers based on your dataset
-size and available memory:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │                    MEMORY BUDGET COMPUTATION                     │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ available_gb = min(cpu_available, gpu_available_if_used)        │
+   │ threshold_gb = available_gb × 0.75  (safety factor)             │
+   │                                                                  │
+   │ # Memory estimates (float64 = 8 bytes)                          │
+   │ data_gb     = n_points × (n_features + 1) × 8 / 1e9            │
+   │ jacobian_gb = n_points × n_params × 8 / 1e9    ← THE BIG ONE   │
+   │ solver_gb   = n_params² × 8 / 1e9 + svd_overhead               │
+   │ peak_gb     = data_gb + 1.3 × jacobian_gb + solver_gb          │
+   └─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+               ┌───────────────────────────────┐
+               │     data_gb > threshold_gb ?  │
+               └───────────────────────────────┘
+                       │ YES              │ NO
+                       ▼                  ▼
+          ┌──────────────────┐    ┌───────────────────────────┐
+          │ STREAMING        │    │ peak_gb > threshold_gb?   │
+          │ HybridStreaming  │    └───────────────────────────┘
+          │ with adaptive    │          │ YES           │ NO
+          │ batch_size       │          ▼               ▼
+          └──────────────────┘   ┌─────────────┐  ┌─────────────┐
+                                 │ CHUNKED     │  │ STANDARD    │
+                                 │ LDMemory    │  │ Direct TRF  │
+                                 │ with auto   │  │ curve_fit() │
+                                 │ chunk_size  │  └─────────────┘
+                                 └─────────────┘
+
+Memory Estimation Details
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The system estimates memory requirements for each component:
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 20 60
+   :widths: 20 40 40
 
-   * - Tier
-     - Dataset Size
+   * - Component
+     - Formula
+     - Example (10M pts, 10 params)
+   * - Data (x, y)
+     - n × (features + 1) × 8
+     - 160 MB
+   * - Jacobian
+     - n × p × 8
+     - 800 MB
+   * - J\ :sup:`T`\ J
+     - p² × 8
+     - 0.8 KB
+   * - SVD working
+     - ~0.3 × jacobian
+     - 240 MB
+   * - **Peak**
+     - data + 1.3×J + solver
+     - **~1.3 GB**
+
+The Jacobian matrix dominates memory usage for most problems. The 1.3× multiplier
+accounts for temporary arrays during computation.
+
+Automatic Memory-Based Selection
+--------------------------------
+
+When using ``workflow="auto"`` or ``method="auto"``, the ``MemoryBudgetSelector``
+automatically picks the best strategy:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Strategy
+     - When Selected
+   * - **streaming**
+     - Data alone exceeds 75% of available memory
+   * - **chunked**
+     - Data fits, but peak memory (data + Jacobian) exceeds threshold
+   * - **standard**
+     - Everything fits comfortably in memory
+
+.. code-block:: python
+
+   from nlsq import fit, curve_fit
+   from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+
+   # Automatic selection via fit()
+   result = fit(model, x, y, p0=[1, 2], workflow="auto")
+
+   # Automatic selection via curve_fit()
+   popt, pcov = curve_fit(model, x, y, p0=[1, 2], method="auto")
+
+   # Direct use of MemoryBudgetSelector
+   selector = MemoryBudgetSelector(safety_factor=0.75)
+   strategy, config = selector.select(
+       n_points=10_000_000,
+       n_params=10,
+       memory_limit_gb=16.0,  # Optional override
+   )
+   print(f"Selected: {strategy}")  # "streaming", "chunked", or "standard"
+
+   # Inspect memory budget
+   budget = MemoryBudget.compute(n_points=10_000_000, n_params=10)
+   print(f"Peak memory: {budget.peak_gb:.2f} GB")
+   print(f"Fits in memory: {budget.fits_in_memory}")
+
+Named Workflow Presets
+----------------------
+
+The ``fit()`` function accepts named presets for common use cases:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 40 40
+
+   * - Workflow
      - Description
-   * - **STANDARD**
-     - < 10K points
-     - Standard ``curve_fit()`` for small datasets that fit in memory.
-       Uses O(N) memory where N is number of data points.
-   * - **CHUNKED**
-     - 10K - 10M points
-     - ``LargeDatasetFitter`` with automatic chunking. Processes data in
-       sequential chunks with O(chunk_size) memory complexity.
-   * - **STREAMING**
-     - 10M - 100M points
-     - ``AdaptiveHybridStreamingOptimizer`` with O(batch_size) memory.
-       Uses mini-batch gradient descent for memory efficiency.
-   * - **STREAMING_CHECKPOINT**
-     - > 100M points
-     - Streaming with automatic checkpointing for massive datasets.
-       Enables resume capability for multi-hour fits.
+     - Use Case
+   * - ``"auto"``
+     - Memory-based automatic selection
+     - Default - picks best strategy based on dataset size and memory
+   * - ``"standard"``
+     - Standard curve_fit with default tolerances (1e-8)
+     - Small to medium datasets
+   * - ``"quality"``
+     - Multi-start (20 starts) with tight tolerances (1e-10)
+     - When accuracy matters most
+   * - ``"fast"``
+     - Looser tolerances (1e-6), no multi-start
+     - Quick exploratory fits
+   * - ``"large_robust"``
+     - Chunked processing with multi-start (10 starts)
+     - Large datasets needing robustness
+   * - ``"streaming"``
+     - AdaptiveHybridStreamingOptimizer with tolerances (1e-7)
+     - Huge datasets (10M+ points)
+   * - ``"hpc_distributed"``
+     - Multi-GPU/node with checkpoints
+     - HPC cluster deployments
+
+Usage Examples
+~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   from nlsq import fit, curve_fit
+
+   # Automatic selection (recommended)
+   result = fit(model, x, y, p0=[1, 2], workflow="auto")
+
+   # Named preset
+   result = fit(model, x, y, p0=[1, 2], workflow="quality")
+
+   # With method='auto' in curve_fit
+   popt, pcov = curve_fit(model, x, y, p0=[1, 2], method="auto")
+
+   # Direct memory control
+   result = fit(model, x, y, p0=[1, 2], workflow="auto", memory_limit_gb=8.0)
 
 Optimization Goals
 ------------------
 
-The ``OptimizationGoal`` enum controls the optimization priority:
+The ``OptimizationGoal`` enum controls tolerance scaling:
 
 .. list-table::
    :header-rows: 1
@@ -74,75 +202,24 @@ The ``OptimizationGoal`` enum controls the optimization priority:
      - Highest precision as TOP PRIORITY. Uses one tier tighter tolerances,
        enables multi-start, runs validation passes. Best for publication-quality results.
 
-Available Presets
------------------
-
-NLSQ provides pre-configured workflow presets for common use cases:
-
-**Core Presets:**
-
-- ``standard`` - Default curve_fit() behavior, no multi-start
-- ``quality`` - Highest precision (1e-10 tolerance, 20-point multi-start)
-- ``fast`` - Speed-optimized (1e-6 tolerance, no multi-start)
-- ``large_robust`` - Chunked processing with 10-point multi-start
-- ``streaming`` - AdaptiveHybridStreamingOptimizer for huge datasets
-- ``hpc_distributed`` - Multi-GPU/node HPC configuration with checkpointing
-- ``memory_efficient`` - Minimize memory footprint with small chunks
-
-**Specialized Presets:**
-
-- ``precision_high`` / ``precision_standard`` - Precision-focused configurations
-- ``global_multimodal`` / ``multimodal`` - 30 Sobol-sampled starts for multimodal problems
-- ``spectroscopy`` - Peak fitting (Gaussian/Lorentzian/Voigt)
-- ``timeseries`` - Time series with streaming and checkpointing
-
 .. code-block:: python
 
-   from nlsq.core.workflow import WorkflowConfig
+   from nlsq import fit
+   from nlsq.core.workflow import OptimizationGoal
 
-   # Load a preset
-   config = WorkflowConfig.from_preset("quality")
+   # Quality-focused fit
+   result = fit(model, x, y, p0=[1, 2], goal=OptimizationGoal.QUALITY)
 
-   # Check preset settings
-   print(config.gtol)  # 1e-10
-   print(config.enable_multistart)  # True
-   print(config.n_starts)  # 20
-
-Automatic Workflow Selection
-----------------------------
-
-Use ``auto_select_workflow()`` to automatically choose the best configuration
-based on your dataset size and available system memory:
-
-.. code-block:: python
-
-   from nlsq.core.workflow import auto_select_workflow, OptimizationGoal
-
-   # Auto-select based on dataset characteristics
-   config = auto_select_workflow(
-       n_points=5_000_000,
-       n_params=5,
-       goal=OptimizationGoal.QUALITY,
-   )
-
-   # The returned config is ready to use
-   print(config)  # HybridStreamingConfig or LDMemoryConfig
-
-Typical workflow lifecycle
---------------------------
-
-1. Prepare a YAML configuration file for your dataset and model.
-2. Run the workflow from the CLI or a job runner.
-3. Inspect logs and result artifacts.
-4. Iterate on configuration parameters as needed.
+   # Speed-focused fit
+   result = fit(model, x, y, p0=[1, 2], goal=OptimizationGoal.FAST)
 
 4-Layer Defense Strategy
 ------------------------
 
-Starting in v0.3.6, all workflows using ``hybrid_streaming`` or
-``AdaptiveHybridStreamingOptimizer`` include a 4-layer defense against L-BFGS
-warmup divergence. This is particularly important for **warm-start refinement**
-scenarios where initial parameters are already near optimal.
+All workflows using ``hybrid_streaming`` or ``AdaptiveHybridStreamingOptimizer``
+include a 4-layer defense against L-BFGS warmup divergence. This is particularly
+important for **warm-start refinement** scenarios where initial parameters are
+already near optimal.
 
 The layers activate automatically:
 
@@ -169,26 +246,10 @@ Defense presets for common scenarios:
    # To disable (pre-0.3.6 behavior)
    config = HybridStreamingConfig.defense_disabled()
 
-See :doc:`../reference/configuration` for detailed configuration options.
-
 Where to go next
 ----------------
 
 - API reference: :doc:`../api/nlsq.workflow`
-- Configuration layout and examples: :doc:`../howto/configure_yaml`
 - Configuration options: :doc:`../reference/configuration`
 - Common workflow patterns: :doc:`../howto/common_workflows`
-
-Interactive Notebooks
----------------------
-
-Hands-on tutorials for the workflow system:
-
-- `fit() Quickstart <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/01_fit_quickstart.ipynb>`_ - Using fit() with automatic workflow selection
-- `Workflow Tiers <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/02_workflow_tiers.ipynb>`_ - Understanding the four workflow tiers
-- `Optimization Goals <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/03_optimization_goals.ipynb>`_ - All 5 OptimizationGoal values
-- `Workflow Presets <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/04_workflow_presets.ipynb>`_ - Using built-in presets
-- `YAML Configuration <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/05_yaml_configuration.ipynb>`_ - Configuration files
-- `Auto Selection <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/06_auto_selection.ipynb>`_ - Automatic workflow selection
-- `HPC and Checkpointing <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/08_workflow_system/07_hpc_and_checkpointing.ipynb>`_ - Cluster computing and fault tolerance
-- `Defense Layers Demo <https://github.com/imewei/NLSQ/blob/main/examples/notebooks/02_features/defense_layers_demo.ipynb>`_ - 4-layer defense strategy for warm-start refinement
+- Large dataset handling: :doc:`../howto/handle_large_data`

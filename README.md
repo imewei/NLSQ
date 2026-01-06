@@ -192,7 +192,7 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 | **Large datasets** | Chunked and streaming optimizers for 100M+ points |
 | **Multi-start** | Global optimization with LHS/Sobol sampling |
 | **Mixed precision** | Automatic float32→float64 upgrade when needed |
-| **Workflow system** | Auto-selects strategy based on dataset size |
+| **Workflow system** | Memory-based auto-selection (MemoryBudgetSelector) |
 | **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |
 | **Interactive GUI** | No-code curve fitting with Qt desktop application |
 | **Model Diagnostics** | Identifiability analysis, gradient health monitoring, sloppy model detection |
@@ -203,41 +203,41 @@ NLSQ is organized into well-separated layers (~72,000 lines):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                             USER INTERFACES                                  │
+│                             USER INTERFACES                                 │
 │  Qt GUI (PySide6)       CLI (Click)            Python API                   │
 │  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()       │
 │  ├── pyqtgraph plots    ├── Security auditing  ├── CurveFit class           │
 │  └── Native desktop     └── Export formats     └── LargeDatasetFitter       │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                        OPTIMIZATION ORCHESTRATION                            │
-│  Workflow System         Global Optimization      Streaming Optimizer        │
-│  ├── WorkflowSelector    ├── MultiStartOrch.     ├── AdaptiveHybrid         │
-│  ├── Tier: STANDARD/     ├── TournamentSelect    ├── 4-Phase Pipeline:      │
+│                        OPTIMIZATION ORCHESTRATION                           │
+│  Workflow System         Global Optimization      Streaming Optimizer       │
+│  ├── MemoryBudgetSel.    ├── MultiStartOrch.     ├── AdaptiveHybrid         │
+│  ├── Strategy: STANDARD/ ├── TournamentSelect    ├── 4-Phase Pipeline:      │
 │  │   CHUNKED/STREAMING   ├── LHS/Sobol/Halton    │   0: Normalization       │
-│  └── Goal-based config   └── Sampling            │   1: L-BFGS warmup       │
-│                                                   │   2: Gauss-Newton        │
-│                                                   └── 3: Denormalization     │
+│  └── Memory-based auto   └── Sampling            │   1: L-BFGS warmup       │
+│                                                  │   2: Gauss-Newton        │
+│                                                  └── 3: Denormalization     │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                          CORE OPTIMIZATION ENGINE                            │
+│                          CORE OPTIMIZATION ENGINE                           │
 │  curve_fit() ─→ CurveFit ─→ LeastSquares ─→ TrustRegionReflective           │
-│       │              │            │                │                         │
-│       ▼              ▼            ▼                ▼                         │
+│       │              │            │                │                        │
+│       ▼              ▼            ▼                ▼                        │
 │  API Wrapper    Cache+State  Orchestrator+AD   SVD-based TRF                │
 │  (SciPy-compat) (UnifiedCache) (AutoDiffJac)   (JIT-compiled)               │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                          SUPPORT SUBSYSTEMS                                  │
+│                          SUPPORT SUBSYSTEMS                                 │
 │  stability/           precision/          caching/          diagnostics/    │
 │  ├── NumericalGuard   ├── MixedPrecision  ├── UnifiedCache  ├── Identifiab. │
 │  ├── SVD fallback     ├── AlgorithmSel.   ├── SmartCache    ├── GradientMon │
 │  └── Recovery         └── BoundsInfer.    └── MemoryMgr     └── PluginSys.  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                            INFRASTRUCTURE                                    │
+│                            INFRASTRUCTURE                                   │
 │  interfaces/ (Protocols)     config.py (Singleton)    Security              │
 │  ├── OptimizerProtocol       ├── JAXConfig            ├── safe_serialize    │
 │  ├── CurveFitProtocol        ├── MemoryConfig         ├── model_validation  │
 │  └── CacheProtocol           └── LargeDatasetConfig   └── resource_limits   │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                         JAX RUNTIME (0.8.0)                                  │
+│                         JAX RUNTIME (0.8.0)                                 │
 │  x64 enabled │ JIT compilation │ Autodiff │ GPU/TPU backend (optional)      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -307,8 +307,39 @@ popt, pcov = curve_fit(
 ```python
 from nlsq import fit
 
-# Presets: 'fast', 'robust', 'global', 'quality', 'memory_efficient'
-popt, pcov = fit(model, x, y, preset="robust")
+# Named presets: 'auto', 'standard', 'quality', 'fast', 'large_robust', 'streaming'
+result = fit(model, x, y, p0=[1, 1, 1], workflow="quality")
+
+# Automatic memory-based selection (default)
+result = fit(model, x, y, p0=[1, 1, 1], workflow="auto")
+
+# With method='auto' in curve_fit
+from nlsq import curve_fit
+
+popt, pcov = curve_fit(model, x, y, p0=[1, 1, 1], method="auto")
+```
+
+</details>
+
+<details>
+<summary><b>Memory-based strategy selection</b></summary>
+
+```python
+from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+
+# Compute memory budget for your dataset
+budget = MemoryBudget.compute(n_points=10_000_000, n_params=10)
+print(f"Peak memory: {budget.peak_gb:.2f} GB")
+print(f"Fits in memory: {budget.fits_in_memory}")
+
+# Let selector choose strategy
+selector = MemoryBudgetSelector(safety_factor=0.75)
+strategy, config = selector.select(
+    n_points=10_000_000,
+    n_params=10,
+    memory_limit_gb=16.0,  # Optional override
+)
+print(f"Selected: {strategy}")  # "streaming", "chunked", or "standard"
 ```
 
 </details>

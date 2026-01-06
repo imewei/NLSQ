@@ -68,12 +68,25 @@ optima in problems with multiple local minima:
    :maxdepth: 2
 
    nlsq.global_optimization
+   nlsq.global_optimization.config
+   nlsq.global_optimization.sampling
 
-Workflow System (v0.3.4+)
+Core Factories (v0.4.3+)
+------------------------
+
+Factory functions for creating optimizers and configurations:
+
+.. toctree::
+   :maxdepth: 2
+
+   nlsq.core.factories
+   nlsq.core.adapters
+
+Workflow System (v0.5.5+)
 -------------------------
 
-Unified workflow system with automatic strategy selection based on dataset size
-and available memory:
+Memory-based workflow system with automatic strategy selection based on
+available memory and dataset characteristics:
 
 .. toctree::
    :maxdepth: 2

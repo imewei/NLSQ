@@ -180,11 +180,7 @@ nitpick_ignore = [
     # Internal class references in docstrings
     ("py:class", "auto"),
     ("py:class", "ClusterInfo"),
-    ("py:class", "WorkflowConfig"),
-    ("py:class", "WorkflowTier"),
     ("py:class", "OptimizationGoal"),
-    ("py:class", "DatasetSizeTier"),
-    ("py:class", "MemoryTier"),
     ("py:class", "LDMemoryConfig"),
     ("py:class", "MultiGPUConfig"),
     ("py:class", "MixedPrecisionConfig"),
@@ -199,7 +195,6 @@ nitpick_ignore = [
     ("py:class", "default="),
     # Base class references
     ("py:class", "nlsq.optimizer_base.TrustRegionOptimizerBase"),
-    ("py:class", "nlsq.workflow.WorkflowTier"),
     ("py:class", "nlsq.workflow.OptimizationGoal"),
     ("py:class", "nlsq.types.CheckpointInfo"),
     ("py:class", "nlsq.types.AggregateStats"),
@@ -297,7 +292,6 @@ nitpick_ignore += [
     ("py:obj", "format_error_message"),
     ("py:obj", "estimate_initial_parameters"),
     ("py:obj", "device_put"),
-    ("py:obj", "auto_select_workflow"),
     ("py:obj", "apply_automatic_fixes"),
     ("py:obj", "analyze_failure"),
     # py:mod references
