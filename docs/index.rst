@@ -77,7 +77,6 @@ Choose your path:
    :caption: Project Info
 
    reference/index
-   howto/migration-v0.6.0
    developer/index
    CHANGELOG
 
