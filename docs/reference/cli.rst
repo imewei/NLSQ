@@ -232,22 +232,6 @@ See :doc:`configuration` for the full configuration reference.
      - AdaptiveHybridStreamingOptimizer for huge datasets
    * - ``hpc_distributed``
      - Multi-GPU/node configuration for HPC clusters (PBS)
-   * - ``memory_efficient``
-     - Minimize memory with streaming/small chunks
-   * - ``precision_high``
-     - Maximum numerical precision (tolerances 1e-10)
-   * - ``precision_standard``
-     - Standard numerical precision (tolerances 1e-8)
-   * - ``streaming_large``
-     - Large-scale streaming with checkpointing
-   * - ``global_multimodal``
-     - Multi-start global search with Sobol sampling
-   * - ``multimodal``
-     - Problems with multiple local minima
-   * - ``spectroscopy``
-     - Peak fitting (Gaussian/Lorentzian/Voigt), tight tolerances
-   * - ``timeseries``
-     - Long time series with streaming and checkpointing
 
 Exit Codes
 ----------
