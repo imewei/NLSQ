@@ -7,9 +7,6 @@ This package provides the canonical location for optimization result types:
 - OptimizeWarning: Warning class for non-critical optimization issues
 - CurveFitResult: Enhanced result with statistical properties and visualization
 
-For backward compatibility, OptimizeResult and OptimizeWarning are also
-re-exported from nlsq.core._optimize (deprecated, will be removed in v1.0.0).
-
 Example:
     >>> from nlsq.result import OptimizeResult, OptimizeResultV2
     >>> result = OptimizeResult(x=[1.0, 2.0], success=True)

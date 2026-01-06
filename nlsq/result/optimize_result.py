@@ -4,9 +4,6 @@ This module provides the OptimizeResult class, which stores the complete
 results from nonlinear least squares optimization performed using JAX-accelerated
 algorithms.
 
-This is the canonical location for OptimizeResult. For backward compatibility,
-the class is also re-exported from nlsq.core._optimize (deprecated).
-
 Migration Guide (v0.5.x → v1.0.0)
 ---------------------------------
 OptimizeResult (dict-based) will be replaced by OptimizeResultV2 (dataclass) in v1.0.0.
