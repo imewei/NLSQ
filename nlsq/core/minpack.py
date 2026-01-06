@@ -91,7 +91,7 @@ from nlsq.utils.validators import InputValidator
 # from nlsq.stability.recovery import OptimizationRecovery
 # from nlsq.utils.diagnostics import OptimizationDiagnostics
 
-__all__ = ["WORKFLOW_PRESETS", "CurveFit", "curve_fit", "fit"]
+__all__ = ["CurveFit", "curve_fit", "fit"]
 
 
 # Predefined workflow presets for fit() function
@@ -256,13 +256,12 @@ def fit(
     --------
     curve_fit : Lower-level API with full control
     curve_fit_large : Specialized API for large datasets
-    auto_select_workflow : Automatic workflow selection function
-    WORKFLOW_PRESETS : Available workflow presets
+    MemoryBudgetSelector : Memory-based automatic strategy selection
     """
     # Import workflow module components
     from nlsq.core.workflow import (
+        MemoryBudgetSelector,
         OptimizationGoal,
-        auto_select_workflow,
     )
 
     # Convert data to arrays for size calculations
@@ -343,10 +342,13 @@ def fit(
         workflow_lower = workflow.lower()
 
         if workflow_lower == "auto":
-            # Auto-select workflow based on dataset characteristics
-            config = auto_select_workflow(
+            # Auto-select workflow based on memory budget
+            selector = MemoryBudgetSelector()
+            memory_limit_gb = kwargs.pop("memory_limit_gb", None)
+            _strategy, config = selector.select(
                 n_points=n_points,
                 n_params=n_params,
+                memory_limit_gb=memory_limit_gb,
                 goal=goal_enum,
             )
             return _fit_with_config(
@@ -560,10 +562,17 @@ def _fit_with_preset(
     **kwargs: Any,
 ) -> CurveFitResult:
     """Apply a named workflow preset and route to appropriate backend."""
-    from nlsq.core.workflow import WorkflowTier, calculate_adaptive_tolerances
+    from nlsq.core.workflow import calculate_adaptive_tolerances
 
+    # Map old tier strings to new strategy strings
+    tier_to_strategy = {
+        "STANDARD": "standard",
+        "CHUNKED": "chunked",
+        "STREAMING": "streaming",
+        "STREAMING_CHECKPOINT": "streaming",
+    }
     tier_str = preset.get("tier", "STANDARD")
-    tier = WorkflowTier[tier_str]
+    strategy = tier_to_strategy.get(tier_str, "standard")
 
     # Apply preset tolerances (unless overridden in kwargs or by goal)
     if goal is not None:
@@ -582,7 +591,7 @@ def _fit_with_preset(
     enable_multistart = preset.get("enable_multistart", False)
     n_starts = preset.get("n_starts", 10)
 
-    if tier == WorkflowTier.STANDARD:
+    if strategy == "standard":
         # Standard curve_fit path
         if enable_multistart:
             return curve_fit(
@@ -613,7 +622,7 @@ def _fit_with_preset(
                 **kwargs,
             )
 
-    elif tier == WorkflowTier.CHUNKED:
+    elif strategy == "chunked":
         # Large dataset with chunking
         from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
@@ -664,7 +673,7 @@ def _fit_with_preset(
 
             return result
 
-    elif tier in (WorkflowTier.STREAMING, WorkflowTier.STREAMING_CHECKPOINT):
+    elif strategy == "streaming":
         # Streaming optimization path
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
@@ -688,7 +697,7 @@ def _fit_with_preset(
         )
 
         enable_checkpoints = preset.get(
-            "enable_checkpoints", tier == WorkflowTier.STREAMING_CHECKPOINT
+            "enable_checkpoints", tier_str == "STREAMING_CHECKPOINT"
         )
 
         config = HybridStreamingConfig(
@@ -763,6 +772,65 @@ def _extract_p0_from_args(
     if args and len(args) >= 1:
         return args[0]
     return kwargs.get("p0")
+
+
+def _log_memory_budget_diagnostics(
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: NDArray[np.floating[Any]] | None,
+) -> None:
+    """Log memory budget diagnostics when verbose >= 2.
+
+    Shows memory estimates and suggested strategy based on current system.
+
+    Parameters
+    ----------
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : array_like or None
+        Initial parameter guess.
+    """
+    from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+
+    logger = get_logger("nlsq")
+
+    # Determine n_params from p0 or estimate from xdata/ydata shape
+    if p0 is not None:
+        n_params = len(np.atleast_1d(p0))
+    else:
+        n_params = 3  # Default estimate
+
+    n_points = len(np.asarray(xdata))
+
+    # Compute memory budget
+    try:
+        budget = MemoryBudget.compute(n_points=n_points, n_params=n_params)
+
+        # Get strategy recommendation
+        selector = MemoryBudgetSelector()
+        strategy, _ = selector.select(
+            n_points=n_points,
+            n_params=n_params,
+            verbose=False,  # Already logging here
+        )
+
+        logger.info(
+            f"[NLSQ] Memory budget: available={budget.available_gb:.1f} GB, "
+            f"threshold={budget.threshold_gb:.1f} GB"
+        )
+        logger.info(
+            f"[NLSQ] Estimates: data={budget.data_gb:.2f} GB, "
+            f"jacobian={budget.jacobian_gb:.2f} GB, peak={budget.peak_gb:.2f} GB"
+        )
+        logger.info(
+            f"[NLSQ] Strategy: {strategy} "
+            f"(peak {budget.peak_gb:.2f} GB {'<' if budget.fits_in_memory else '>'} "
+            f"threshold {budget.threshold_gb:.1f} GB)"
+        )
+    except Exception as e:
+        logger.debug(f"[NLSQ] Memory budget diagnostics unavailable: {e}")
 
 
 def _apply_auto_bounds(
@@ -1356,6 +1424,11 @@ def curve_fit(
 
     # Extract p0 for use in preprocessing steps
     p0 = _extract_p0_from_args(args, kwargs)
+
+    # Verbose memory budget diagnostics (verbose >= 2)
+    verbose = kwargs.get("verbose", 1)
+    if verbose >= 2:
+        _log_memory_budget_diagnostics(xdata, ydata, p0)
 
     # Handle automatic bounds inference
     if auto_bounds:
@@ -2545,6 +2618,203 @@ class CurveFit:
 
         return result
 
+    def _curve_fit_auto_memory(
+        self,
+        f: Callable,
+        xdata: np.ndarray | tuple[np.ndarray],
+        ydata: np.ndarray,
+        p0: np.ndarray | None = None,
+        sigma: np.ndarray | None = None,
+        absolute_sigma: bool = False,
+        check_finite: bool = True,
+        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        solver: str = "auto",
+        batch_size: int | None = None,
+        jac: Callable | None = None,
+        data_mask: np.ndarray | None = None,
+        timeit: bool = False,
+        return_eval: bool = False,
+        callback: Callable | None = None,
+        compute_diagnostics: bool = False,
+        diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
+        diagnostics_config: DiagnosticsConfig | None = None,
+        **kwargs,
+    ) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
+        """Handle curve fitting with automatic memory-based strategy selection.
+
+        Uses MemoryBudgetSelector to determine the optimal strategy based on
+        available system memory and dataset characteristics. Routes to:
+        - "streaming": AdaptiveHybridStreamingOptimizer for data exceeding memory
+        - "chunked": LargeDatasetFitter for peak memory exceeding threshold
+        - "standard": Standard curve_fit() when everything fits in memory
+
+        Parameters
+        ----------
+        f : Callable
+            Model function f(x, *params) -> predictions
+        xdata : array_like
+            Independent variable data
+        ydata : array_like
+            Dependent variable data
+        p0 : array_like, optional
+            Initial parameter guess
+        sigma : array_like, optional
+            Uncertainties in ydata
+        absolute_sigma : bool, default=False
+            Whether sigma is absolute or relative
+        check_finite : bool, default=True
+            Check for finite input values
+        bounds : tuple, optional
+            Parameter bounds as (lower, upper)
+        solver : str, default="auto"
+            Solver type for standard curve_fit
+        batch_size : int, optional
+            Batch size for minibatch solver
+        jac : callable, optional
+            Jacobian function
+        data_mask : array_like, optional
+            Mask for data points
+        timeit : bool, default=False
+            Return timing information
+        return_eval : bool, default=False
+            Return function evaluation
+        callback : callable, optional
+            Progress callback function
+        compute_diagnostics : bool, default=False
+            Compute fit diagnostics
+        diagnostics_level : DiagnosticLevel
+            Level of diagnostics to compute
+        diagnostics_config : DiagnosticsConfig, optional
+            Configuration for diagnostics
+        **kwargs
+            Additional parameters
+
+        Returns
+        -------
+        result : tuple or CurveFitResult
+            Optimization result (popt, pcov) or CurveFitResult object
+        """
+        from nlsq.core.workflow import MemoryBudgetSelector
+
+        # Convert ydata to array for size determination
+        ydata_arr = np.asarray(ydata, float)
+        n_points = len(ydata_arr)
+
+        # Determine parameter count
+        if p0 is not None:
+            n_params = len(np.atleast_1d(p0))
+        else:
+            # Estimate parameter count by inspecting function signature
+            import inspect
+
+            sig = inspect.signature(f)
+            # Subtract 1 for xdata parameter
+            n_params = max(1, len(sig.parameters) - 1)
+
+        # Get memory_limit_gb from kwargs if provided
+        memory_limit_gb = kwargs.pop("memory_limit_gb", None)
+
+        # Get verbosity for logging
+        verbose = kwargs.get("verbose", 1)
+
+        # Select strategy based on memory budget
+        selector = MemoryBudgetSelector()
+        strategy, config = selector.select(
+            n_points=n_points,
+            n_params=n_params,
+            memory_limit_gb=memory_limit_gb,
+            verbose=(verbose >= 2),
+        )
+
+        if verbose >= 1:
+            self.logger.info(
+                "Memory-based auto selection",
+                strategy=strategy,
+                n_points=n_points,
+                n_params=n_params,
+            )
+
+        # Route to appropriate strategy
+        if strategy == "streaming":
+            # Delegate to hybrid streaming optimizer
+            return self._curve_fit_hybrid_streaming(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                callback=callback,
+                **kwargs,
+            )
+
+        elif strategy == "chunked":
+            # Delegate to LargeDatasetFitter
+            from nlsq.streaming.large_dataset import LargeDatasetFitter
+
+            # Create fitter with memory-aware configuration
+            fitter = LargeDatasetFitter(
+                memory_limit_gb=memory_limit_gb,
+                config=config,
+            )
+
+            # Run fit
+            result = fitter.fit(
+                f=f,
+                xdata=np.asarray(xdata, float),
+                ydata=ydata_arr,
+                p0=p0,
+                bounds=bounds,
+                **kwargs,
+            )
+
+            # Convert OptimizeResult to CurveFitResult format
+            popt = result.x
+            pcov = result.get("pcov", np.full((n_params, n_params), np.inf))
+
+            if timeit:
+                ctime = result.get("execution_time", 0)
+                return popt, pcov, result, 0, ctime
+            elif return_eval:
+                feval = f(np.asarray(xdata, float), *popt)
+                return popt, pcov, np.array(feval)
+            else:
+                # Return CurveFitResult for consistency
+                curve_fit_result = CurveFitResult(result)
+                curve_fit_result["model"] = f
+                curve_fit_result["xdata"] = xdata
+                curve_fit_result["ydata"] = ydata
+                curve_fit_result["pcov"] = pcov
+                return curve_fit_result
+
+        else:
+            # Standard curve_fit path (strategy == "standard")
+            # Call curve_fit with method=None to use default TRF
+            return self.curve_fit(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=None,  # Use default TRF
+                solver=solver,
+                batch_size=batch_size,
+                jac=jac,
+                data_mask=data_mask,
+                timeit=timeit,
+                return_eval=return_eval,
+                callback=callback,
+                compute_diagnostics=compute_diagnostics,
+                diagnostics_level=diagnostics_level,
+                diagnostics_config=diagnostics_config,
+                **kwargs,
+            )
+
     def _run_optimization(
         self,
         f: Callable,
@@ -2751,6 +3021,7 @@ class CurveFit:
             - 'trf' (default): Trust Region Reflective
             - 'lm': Levenberg-Marquardt
             - 'hybrid_streaming': Adaptive Hybrid Streaming Optimizer (for large datasets)
+            - 'auto': Memory-based automatic selection (streaming/chunked/standard)
             If None, auto-selects 'trf'.
         """
         # Check for hybrid_streaming method early and delegate
@@ -2765,6 +3036,30 @@ class CurveFit:
                 check_finite=check_finite,
                 bounds=bounds,
                 callback=callback,
+                **kwargs,
+            )
+
+        # Memory-based automatic method selection (method="auto")
+        if method == "auto":
+            return self._curve_fit_auto_memory(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                solver=solver,
+                batch_size=batch_size,
+                jac=jac,
+                data_mask=data_mask,
+                timeit=timeit,
+                return_eval=return_eval,
+                callback=callback,
+                compute_diagnostics=compute_diagnostics,
+                diagnostics_level=diagnostics_level,
+                diagnostics_config=diagnostics_config,
                 **kwargs,
             )
 

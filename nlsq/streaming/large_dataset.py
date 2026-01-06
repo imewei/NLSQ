@@ -563,35 +563,6 @@ def cleanup_memory() -> None:
         logger.debug(f"jax.clear_caches() failed (non-critical): {e}")
 
 
-def get_memory_tier(available_memory_gb: float) -> MemoryTier:
-    """Classify available memory into a MemoryTier.
-
-    Convenience function that wraps MemoryTier.from_available_memory_gb()
-    for easier access from this module.
-
-    Parameters
-    ----------
-    available_memory_gb : float
-        Available system memory in gigabytes.
-
-    Returns
-    -------
-    MemoryTier
-        The appropriate memory tier (LOW, MEDIUM, HIGH, or VERY_HIGH).
-
-    Examples
-    --------
-    >>> from nlsq.streaming.large_dataset import get_memory_tier
-    >>> tier = get_memory_tier(32.0)
-    >>> tier
-    <MemoryTier.MEDIUM: (64.0, 'Standard memory (16-64GB)')>
-    """
-    # Deferred import to avoid circular dependency
-    from nlsq.core.workflow import MemoryTier
-
-    return MemoryTier.from_available_memory_gb(available_memory_gb)
-
-
 class ProgressReporter:
     """Progress reporting for long-running fits."""
 
@@ -2535,5 +2506,4 @@ __all__ = [
     "cleanup_memory",
     "estimate_memory_requirements",
     "fit_large_dataset",
-    "get_memory_tier",
 ]

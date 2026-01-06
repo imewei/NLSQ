@@ -18,11 +18,14 @@ from nlsq.core.least_squares import LeastSquares
 from nlsq.core.minpack import CurveFit, curve_fit
 from nlsq.core.sparse_jacobian import SparseJacobianComputer, SparseOptimizer
 from nlsq.core.trf import TrustRegionReflective
+from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
 from nlsq.result import OptimizeResult, OptimizeWarning
 
 __all__ = [
     "CurveFit",
     "LeastSquares",
+    "MemoryBudget",
+    "MemoryBudgetSelector",
     "OptimizeResult",
     "OptimizeWarning",
     "SparseJacobianComputer",

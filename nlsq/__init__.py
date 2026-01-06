@@ -98,15 +98,10 @@ _LAZY_MODULES: dict[str, str] = {
     "SparseJacobianComputer": "nlsq.core.sparse_jacobian",
     "SparseOptimizer": "nlsq.core.sparse_jacobian",
     "detect_jacobian_sparsity": "nlsq.core.sparse_jacobian",
-    # Workflow System
-    "WORKFLOW_PRESETS": "nlsq.core.workflow",
-    "DatasetSizeTier": "nlsq.core.workflow",
-    "MemoryTier": "nlsq.core.workflow",
+    # Workflow System (014-unified-memory-strategy)
+    "MemoryBudget": "nlsq.core.workflow",
+    "MemoryBudgetSelector": "nlsq.core.workflow",
     "OptimizationGoal": "nlsq.core.workflow",
-    "WorkflowConfig": "nlsq.core.workflow",
-    "WorkflowSelector": "nlsq.core.workflow",
-    "WorkflowTier": "nlsq.core.workflow",
-    "auto_select_workflow": "nlsq.core.workflow",
     # Algorithm Selection
     "AlgorithmSelector": "nlsq.precision.algorithm_selector",
     "auto_select_algorithm": "nlsq.precision.algorithm_selector",
@@ -227,14 +222,12 @@ def __dir__() -> list[str]:
 
 # Public API - only expose main user-facing functions
 __all__ = [
-    "WORKFLOW_PRESETS",
     "AdaptiveHybridStreamingOptimizer",
     "AlgorithmSelector",
     "BoundsInference",
     "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
-    "DatasetSizeTier",
     "DefenseLayerTelemetry",
     "FallbackOrchestrator",
     "FallbackResult",
@@ -245,10 +238,11 @@ __all__ = [
     "LargeDatasetConfig",
     "LargeDatasetFitter",
     "LeastSquares",
+    "MemoryBudget",
+    "MemoryBudgetSelector",
     "MemoryConfig",
     "MemoryManager",
     "MemoryPool",
-    "MemoryTier",
     "MultiStartOrchestrator",
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
@@ -267,13 +261,9 @@ __all__ = [
     "SparseOptimizer",
     "TRFMemoryPool",
     "TournamentSelector",
-    "WorkflowConfig",
-    "WorkflowSelector",
-    "WorkflowTier",
     "__version__",
     "apply_automatic_fixes",
     "auto_select_algorithm",
-    "auto_select_workflow",
     "cached_function",
     "cached_jacobian",
     "cached_jit",
@@ -461,8 +451,7 @@ def fit(
     --------
     curve_fit : Lower-level API with full control
     curve_fit_large : Specialized API for large datasets
-    auto_select_workflow : Automatic workflow selection function
-    WorkflowSelector : Class-based workflow selection
+    MemoryBudgetSelector : Memory-based optimizer selection
     """
     # Input validation
     xdata = np.asarray(xdata)
