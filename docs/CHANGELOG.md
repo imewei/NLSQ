@@ -1,5 +1,12 @@
 # Documentation Changelog
 
+## v0.6.0 (2026-01-06)
+- Reorganized documentation into Routine User Guide and Advanced User Guide
+- Consolidated 3 migration files into single comprehensive `howto/migration.rst`
+- Removed stale deprecation notices from result module
+- Removed 8 non-existent workflow presets from CLI documentation
+- Fixed broken documentation links in README
+
 ## v0.5.4 (2026-01-05)
 - Migrated to Furo theme for modern documentation styling
 - Removed all deprecated functionality from NLSQ package

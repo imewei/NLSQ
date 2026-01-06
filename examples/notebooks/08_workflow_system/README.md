@@ -310,5 +310,5 @@ if cluster_info:
 ---
 
 <p align="center">
-<i>NLSQ v0.5.4 | Last updated: 2026-01-06</i>
+<i>NLSQ v0.6.0 | Last updated: 2026-01-06</i>
 </p>

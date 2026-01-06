@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-01-06
+
+### Changed
+
+#### Documentation Reorganization
+
+- **Restructured Documentation**: Reorganized documentation into two distinct user paths
+  - **Routine User Guide**: Workflows, CLI, GUI, getting started tutorials
+  - **Advanced User Guide**: API reference, performance optimization, troubleshooting
+  - **Files Modified**: `docs/index.rst`, `docs/routine_guide.rst`, `docs/advanced_guide.rst`
+
+- **Consolidated Migration Guides**: Merged 3 separate migration files into single comprehensive guide
+  - Combined `migrate_from_scipy.rst`, `migration-v0.4.3.md`, `migration-v0.6.0.md` into `howto/migration.rst`
+  - Updated all cross-references throughout documentation
+  - **Files Deleted**: `docs/howto/migrate_from_scipy.rst`, `docs/howto/migration-v0.4.3.md`, `docs/howto/migration-v0.6.0.md`
+
+#### Cleanup
+
+- **Removed Stale Deprecation Notices**: Cleaned up references to non-existent `nlsq.core._optimize` module
+  - **Files Modified**: `nlsq/result/__init__.py`, `nlsq/result/optimize_result.py`
+
+- **Removed Invalid CLI Presets**: Removed 8 non-existent workflow presets from CLI documentation
+  - Removed: `memory_efficient`, `precision_high`, `precision_standard`, `streaming_large`, `global_multimodal`, `multimodal`, `spectroscopy`, `timeseries`
+  - **Files Modified**: `docs/reference/cli.rst`
+
+- **Fixed Broken Links**: Updated stale documentation links
+  - Fixed README link to advanced guide
+  - **Files Modified**: `README.md`
+
 ## [0.5.4] - 2026-01-05
 
 ### Changed
