@@ -1,16 +1,14 @@
 """Custom Preset Guide: Building Domain-Specific Configurations.
 
-This guide demonstrates the with_overrides() pattern for creating domain-specific
-workflow configurations in NLSQ. The library provides generic presets (precision_high,
-precision_standard, streaming_large, global_multimodal) that can be customized
-for any scientific or engineering domain.
+This guide demonstrates patterns for creating domain-specific fitting
+configurations in NLSQ. The library provides built-in presets that can be
+used directly or customized for specific scientific or engineering domains.
 
 Key patterns covered:
-1. Basic with_overrides() usage
-2. Building on different base presets
-3. Chaining multiple overrides
-4. Creating reusable preset factories
-5. Common parameter adjustments by use case
+1. Using built-in WORKFLOW_PRESETS
+2. Creating custom configurations with fit()
+3. Building preset factories for your domain
+4. Common parameter adjustments by use case
 
 Run this example:
     python examples/scripts/08_workflow_system/08_custom_presets.py
@@ -20,12 +18,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import fit
-from nlsq.core.workflow import WORKFLOW_PRESETS, WorkflowConfig
+from nlsq.core.minpack import WORKFLOW_PRESETS
 
 
 def main():
     print("=" * 70)
-    print("Custom Preset Guide: The with_overrides() Pattern")
+    print("Custom Preset Guide")
     print("=" * 70)
     print()
 
@@ -35,153 +33,90 @@ def main():
     print("1. Available Base Presets")
     print("-" * 60)
     print()
-    print("NLSQ provides these generic presets as starting points:")
+    print("NLSQ provides these presets as starting points:")
     print()
 
-    # Group presets by category
-    precision_presets = ["precision_high", "precision_standard"]
-    scale_presets = ["streaming_large"]
-    global_presets = ["global_multimodal", "multimodal"]
-    core_presets = ["standard", "quality", "fast", "large_robust", "streaming"]
-
-    print("  Precision presets (for numerical accuracy):")
-    for name in precision_presets:
-        if name in WORKFLOW_PRESETS:
-            desc = WORKFLOW_PRESETS[name].get("description", "")
-            print(f"    - {name}: {desc}")
-
-    print()
-    print("  Scale presets (for large datasets):")
-    for name in scale_presets:
-        if name in WORKFLOW_PRESETS:
-            desc = WORKFLOW_PRESETS[name].get("description", "")
-            print(f"    - {name}: {desc}")
-
-    print()
-    print("  Global optimization presets:")
-    for name in global_presets:
-        if name in WORKFLOW_PRESETS:
-            desc = WORKFLOW_PRESETS[name].get("description", "")
-            print(f"    - {name}: {desc}")
-
-    print()
-    print("  Core presets:")
-    for name in core_presets:
-        if name in WORKFLOW_PRESETS:
-            desc = WORKFLOW_PRESETS[name].get("description", "")
-            print(f"    - {name}: {desc}")
+    for name, config in WORKFLOW_PRESETS.items():
+        desc = config.get("description", "No description")
+        print(f"  {name:<20} - {desc}")
 
     # =========================================================================
-    # 2. Basic with_overrides() Usage
+    # 2. Preset Details
     # =========================================================================
     print()
     print()
-    print("2. Basic with_overrides() Usage")
+    print("2. Preset Details")
+    print("-" * 60)
+
+    presets_to_show = ["standard", "quality", "fast", "streaming"]
+
+    for preset_name in presets_to_show:
+        if preset_name in WORKFLOW_PRESETS:
+            print(f"\n  '{preset_name}' preset:")
+            for key, value in WORKFLOW_PRESETS[preset_name].items():
+                print(f"    {key}: {value}")
+
+    # =========================================================================
+    # 3. Using Presets with fit()
+    # =========================================================================
+    print()
+    print()
+    print("3. Using Presets with fit()")
     print("-" * 60)
     print()
-    print("The with_overrides() method creates a new config with modified settings:")
+    print("  Basic usage:")
     print()
-    print("  # Start from a base preset")
-    print("  base_config = WorkflowConfig.from_preset('precision_standard')")
+    print("    # Use built-in preset")
+    print("    popt, pcov = fit(model, x, y, workflow='quality')")
     print()
-    print("  # Create customized version")
-    print("  custom_config = base_config.with_overrides(")
-    print("      n_starts=20,          # More starting points")
-    print("      sampler='sobol',      # Different sampling strategy")
-    print("      gtol=1e-10,           # Tighter tolerance")
-    print("  )")
+    print("    # Use automatic memory-based selection")
+    print("    popt, pcov = fit(model, x, y, workflow='auto')")
     print()
-
-    # Demonstrate
-    base_config = WorkflowConfig.from_preset("precision_standard")
-    custom_config = base_config.with_overrides(
-        n_starts=20,
-        sampler="sobol",
-        gtol=1e-10,
-    )
-
-    print("  Result comparison:")
-    print(f"    Base n_starts:   {base_config.n_starts}")
-    print(f"    Custom n_starts: {custom_config.n_starts}")
-    print(f"    Base sampler:    {base_config.sampler}")
-    print(f"    Custom sampler:  {custom_config.sampler}")
-    print(f"    Base gtol:       {base_config.gtol}")
-    print(f"    Custom gtol:     {custom_config.gtol}")
-
-    # =========================================================================
-    # 3. Choosing the Right Base Preset
-    # =========================================================================
+    print("  With additional parameters:")
     print()
-    print()
-    print("3. Choosing the Right Base Preset")
-    print("-" * 60)
-    print()
-    print("  Use case                          -> Base preset")
-    print("  " + "-" * 55)
-    print("  High precision fitting            -> precision_high")
-    print("  Standard scientific analysis      -> precision_standard")
-    print("  Large datasets (>1M points)       -> streaming_large")
-    print("  Multiple local minima expected    -> global_multimodal")
-    print("  Quick exploratory fitting         -> fast")
-    print("  Publication-quality results       -> quality")
-    print()
+    print("    popt, pcov = fit(")
+    print("        model, x, y,")
+    print("        workflow='standard',")
+    print("        multistart=True,      # Override preset setting")
+    print("        n_starts=20,          # Custom number of starts")
+    print("        sampler='sobol',      # Different sampler")
+    print("    )")
 
     # =========================================================================
     # 4. Common Override Patterns
     # =========================================================================
     print()
+    print()
     print("4. Common Override Patterns")
     print("-" * 60)
 
-    # Pattern A: Increase multi-start coverage
-    print()
-    print("  Pattern A: Increase multi-start coverage")
-    print("  (for models with multiple local minima)")
-    print()
-    config_a = WorkflowConfig.from_preset("precision_standard").with_overrides(
-        n_starts=30,  # More starting points
-        sampler="sobol",  # Better space coverage
-    )
-    print(f"    n_starts: {config_a.n_starts}")
-    print(f"    sampler:  {config_a.sampler}")
+    patterns = [
+        {
+            "name": "Pattern A: Increase multi-start coverage",
+            "use_case": "Models with multiple local minima",
+            "code": "fit(f, x, y, workflow='standard', multistart=True, n_starts=30, sampler='sobol')",
+        },
+        {
+            "name": "Pattern B: Tighten tolerances",
+            "use_case": "High-precision structural parameters",
+            "code": "fit(f, x, y, workflow='standard', gtol=1e-12, ftol=1e-12, xtol=1e-12)",
+        },
+        {
+            "name": "Pattern C: Memory-constrained fitting",
+            "use_case": "Systems with limited RAM",
+            "code": "fit(f, x, y, workflow='streaming', memory_limit_gb=8.0)",
+        },
+        {
+            "name": "Pattern D: Fast exploration",
+            "use_case": "Quick iterative fitting",
+            "code": "fit(f, x, y, workflow='fast')",
+        },
+    ]
 
-    # Pattern B: Tighten tolerances
-    print()
-    print("  Pattern B: Tighten tolerances")
-    print("  (for high-precision structural parameters)")
-    print()
-    config_b = WorkflowConfig.from_preset("precision_standard").with_overrides(
-        gtol=1e-12,
-        ftol=1e-12,
-        xtol=1e-12,
-    )
-    print(f"    gtol: {config_b.gtol}")
-    print(f"    ftol: {config_b.ftol}")
-    print(f"    xtol: {config_b.xtol}")
-
-    # Pattern C: Enable checkpointing for long runs
-    print()
-    print("  Pattern C: Enable checkpointing")
-    print("  (for long-running fits that need fault tolerance)")
-    print()
-    config_c = WorkflowConfig.from_preset("streaming_large").with_overrides(
-        enable_checkpoints=True,
-        checkpoint_dir="./my_checkpoints",
-    )
-    print(f"    enable_checkpoints: {config_c.enable_checkpoints}")
-    print(f"    checkpoint_dir:     {config_c.checkpoint_dir}")
-
-    # Pattern D: Memory-constrained environment
-    print()
-    print("  Pattern D: Memory-constrained fitting")
-    print("  (for systems with limited RAM)")
-    print()
-    config_d = WorkflowConfig.from_preset("streaming_large").with_overrides(
-        chunk_size=5000,  # Smaller chunks
-        memory_limit_gb=8.0,  # Explicit memory limit
-    )
-    print(f"    chunk_size:      {config_d.chunk_size}")
-    print(f"    memory_limit_gb: {config_d.memory_limit_gb}")
+    for pattern in patterns:
+        print(f"\n  {pattern['name']}")
+        print(f"  Use case: {pattern['use_case']}")
+        print(f"  Code: {pattern['code']}")
 
     # =========================================================================
     # 5. Creating Reusable Preset Factories
@@ -191,63 +126,74 @@ def main():
     print("5. Creating Reusable Preset Factories")
     print("-" * 60)
     print()
-    print("  Define functions that return customized configs for your domain:")
+    print("  Define functions that return customized fit kwargs for your domain:")
     print()
 
-    def create_spectroscopy_preset(high_resolution: bool = False) -> WorkflowConfig:
-        """Create preset for spectroscopic peak fitting.
+    def create_spectroscopy_preset(high_resolution: bool = False) -> dict:
+        """Create preset kwargs for spectroscopic peak fitting.
 
         Parameters
         ----------
         high_resolution : bool
             If True, use tighter tolerances for high-resolution spectra.
         """
-        base = "precision_high" if high_resolution else "precision_standard"
-        return WorkflowConfig.from_preset(base).with_overrides(
-            n_starts=15,  # Multi-peak fits need global search
-            sampler="lhs",  # Good for peak position/width spaces
-        )
+        if high_resolution:
+            return {
+                "workflow": "quality",
+                "multistart": True,
+                "n_starts": 15,
+                "sampler": "lhs",
+            }
+        else:
+            return {
+                "workflow": "standard",
+                "multistart": True,
+                "n_starts": 10,
+                "sampler": "lhs",
+            }
 
-    def create_timeseries_preset(n_points: int) -> WorkflowConfig:
-        """Create preset for time series analysis.
+    def create_timeseries_preset(n_points: int) -> dict:
+        """Create preset kwargs for time series analysis.
 
         Parameters
         ----------
         n_points : int
-            Number of data points (affects tier selection).
+            Number of data points (affects workflow selection).
         """
         if n_points > 1_000_000:
-            base = "streaming_large"
+            return {"workflow": "streaming"}
         else:
-            base = "precision_standard"
+            return {
+                "workflow": "standard",
+                "multistart": True,
+                "n_starts": 10,
+            }
 
-        return WorkflowConfig.from_preset(base).with_overrides(
-            enable_multistart=True,
-            n_starts=10,
-        )
-
-    def create_optimization_preset(n_params: int) -> WorkflowConfig:
-        """Create preset based on parameter count.
+    def create_optimization_preset(n_params: int) -> dict:
+        """Create preset kwargs based on parameter count.
 
         More parameters -> more multi-start coverage needed.
         """
         n_starts = max(10, n_params * 3)  # Scale with complexity
-        return WorkflowConfig.from_preset("global_multimodal").with_overrides(
-            n_starts=n_starts,
-        )
+        return {
+            "workflow": "standard",
+            "multistart": True,
+            "n_starts": n_starts,
+            "sampler": "sobol",
+        }
 
     # Demonstrate factories
-    print("  Examples:")
-    spec_config = create_spectroscopy_preset(high_resolution=True)
-    print(
-        f"    Spectroscopy (high-res): gtol={spec_config.gtol}, n_starts={spec_config.n_starts}"
-    )
-
-    ts_config = create_timeseries_preset(n_points=500_000)
-    print(f"    Time series (500K pts):  tier={ts_config.tier.name}")
-
-    opt_config = create_optimization_preset(n_params=8)
-    print(f"    8-param optimization:    n_starts={opt_config.n_starts}")
+    print("  Example factories:")
+    print()
+    print("    def create_spectroscopy_preset(high_resolution=False):")
+    print("        if high_resolution:")
+    print("            return {'workflow': 'quality', 'multistart': True, ...}")
+    print("        else:")
+    print("            return {'workflow': 'standard', ...}")
+    print()
+    print("  Usage:")
+    print("    kwargs = create_spectroscopy_preset(high_resolution=True)")
+    print("    popt, pcov = fit(model, x, y, **kwargs)")
 
     # =========================================================================
     # 6. Complete Example: Domain-Specific Fitting
@@ -258,41 +204,6 @@ def main():
     print("-" * 60)
     print()
 
-    # Define a custom preset for a hypothetical domain
-    def create_my_domain_preset() -> WorkflowConfig:
-        """Create a preset for my specific application.
-
-        This example shows all the considerations for a custom domain.
-        """
-        return WorkflowConfig.from_preset("precision_standard").with_overrides(
-            # Tolerance settings
-            gtol=1e-9,  # Tighter for accurate parameters
-            ftol=1e-9,
-            xtol=1e-9,
-            # Multi-start settings
-            enable_multistart=True,
-            n_starts=15,
-            sampler="sobol",  # Better coverage
-            # Memory settings (if needed)
-            # chunk_size=50000,
-            # memory_limit_gb=16.0,
-        )
-
-    # Use the custom preset
-    config = create_my_domain_preset()
-
-    print("  Custom domain preset configuration:")
-    print(f"    tier:              {config.tier.name}")
-    print(f"    goal:              {config.goal.name}")
-    print(f"    gtol:              {config.gtol}")
-    print(f"    enable_multistart: {config.enable_multistart}")
-    print(f"    n_starts:          {config.n_starts}")
-    print(f"    sampler:           {config.sampler}")
-    print()
-
-    # Simple test fit
-    print("  Testing with exponential decay fit...")
-
     def exponential(x, a, b, c):
         return a * jnp.exp(-b * x) + c
 
@@ -301,20 +212,50 @@ def main():
     y_true = 2.5 * np.exp(-1.3 * x_data) + 0.5
     y_data = y_true + 0.1 * np.random.randn(100)
 
+    print("  Testing with exponential decay fit...")
+    print("  True parameters: a=2.5, b=1.3, c=0.5")
+
+    # Use factory
+    kwargs = create_spectroscopy_preset(high_resolution=True)
+    print(f"  Preset kwargs: {kwargs}")
+
     popt, pcov = fit(
         exponential,
         x_data,
         y_data,
         p0=[1.0, 1.0, 0.0],
         bounds=([0.1, 0.1, -1.0], [10.0, 10.0, 2.0]),
-        workflow_config=config,
+        **kwargs,
     )
 
-    print(f"    Fitted parameters: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
-    print("    True parameters:   a=2.5000, b=1.3000, c=0.5000")
+    print(f"  Fitted parameters: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
 
     # =========================================================================
-    # 7. Summary: Key Takeaways
+    # 7. Defense Preset Examples
+    # =========================================================================
+    print()
+    print()
+    print("7. Defense Presets for Streaming (v0.3.6+)")
+    print("-" * 60)
+    print()
+    print("  For streaming workflows, use HybridStreamingConfig presets:")
+    print()
+    print("    from nlsq import HybridStreamingConfig")
+    print()
+    print("    # Warm-start refinement (checkpoint resume)")
+    print("    config = HybridStreamingConfig.defense_strict()")
+    print()
+    print("    # Exploration (rough initial guesses)")
+    print("    config = HybridStreamingConfig.defense_relaxed()")
+    print()
+    print("    # Production scientific computing")
+    print("    config = HybridStreamingConfig.scientific_default()")
+    print()
+    print("  Then pass to fit():")
+    print("    popt, pcov = fit(model, x, y, workflow=config)")
+
+    # =========================================================================
+    # 8. Summary: Key Takeaways
     # =========================================================================
     print()
     print()
@@ -322,25 +263,25 @@ def main():
     print("Summary: Key Takeaways")
     print("=" * 70)
     print()
-    print("1. Start from an appropriate base preset:")
-    print("   - precision_high/standard for numerical accuracy")
-    print("   - streaming_large for big data")
-    print("   - global_multimodal for complex optimization landscapes")
+    print("1. Use built-in presets for common scenarios:")
+    print("   fit(model, x, y, workflow='quality')  # High precision")
+    print("   fit(model, x, y, workflow='fast')     # Quick exploration")
+    print("   fit(model, x, y, workflow='auto')     # Memory-based selection")
     print()
-    print("2. Use with_overrides() to customize:")
-    print("   config = WorkflowConfig.from_preset('base').with_overrides(...)")
+    print("2. Override preset settings as needed:")
+    print("   fit(model, x, y, workflow='standard', n_starts=30, sampler='sobol')")
     print()
     print("3. Common customizations:")
-    print("   - n_starts: More for complex models, fewer for simple ones")
-    print("   - sampler: 'sobol' for better coverage, 'lhs' for efficiency")
-    print("   - tolerances: Tighter for structural params, looser for rates")
+    print("   - multistart=True, n_starts=N: Enable global search")
+    print("   - sampler='sobol': Better space coverage")
+    print("   - gtol/ftol/xtol: Control convergence tolerances")
     print()
-    print("4. Create reusable factory functions for your domain:")
-    print("   def create_my_preset(**kwargs) -> WorkflowConfig: ...")
+    print("4. Create factory functions for your domain:")
+    print("   def create_my_preset(**kwargs) -> dict: ...")
+    print("   popt, pcov = fit(model, x, y, **create_my_preset())")
     print()
-    print("5. The original base preset is never modified:")
-    print("   with_overrides() returns a new config instance")
-    print()
+    print("5. For streaming, use HybridStreamingConfig presets:")
+    print("   fit(model, x, y, workflow=HybridStreamingConfig.defense_strict())")
 
 
 if __name__ == "__main__":

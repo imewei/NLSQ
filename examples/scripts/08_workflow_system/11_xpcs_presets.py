@@ -1,7 +1,7 @@
 """XPCS (X-ray Photon Correlation Spectroscopy) Domain Preset Example.
 
 This example demonstrates how to create a custom preset for XPCS data analysis
-using NLSQ's WorkflowConfig.from_preset().with_overrides() pattern.
+using NLSQ's fit() function with custom kwargs.
 
 XPCS analysis typically involves:
 - Fitting correlation functions (g2) to extract relaxation times
@@ -17,48 +17,67 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import fit
-from nlsq.core.workflow import WorkflowConfig
 
 
-def create_xpcs_preset() -> WorkflowConfig:
-    """Create a workflow configuration optimized for XPCS correlation function fitting.
+def create_xpcs_preset() -> dict:
+    """Create fit kwargs optimized for XPCS correlation function fitting.
 
     XPCS-specific considerations:
     - Tolerances: 1e-8 provides sufficient precision for correlation functions
     - Multi-start: Enabled to avoid local minima in stretched exponential fits
-    - Normalization: Important for parameters spanning many orders of magnitude
+    - Sobol sampler: Better coverage for multi-scale parameter spaces
 
     Returns
     -------
-    WorkflowConfig
-        Configuration optimized for XPCS analysis.
+    dict
+        Keyword arguments for fit() optimized for XPCS analysis.
 
     Example
     -------
-    >>> config = create_xpcs_preset()
-    >>> config.gtol
-    1e-08
-    >>> config.enable_multistart
-    True
+    >>> kwargs = create_xpcs_preset()
+    >>> popt, pcov = fit(model, t, g2, **kwargs)
     """
-    # Start from precision_standard preset and customize for XPCS
-    # precision_standard provides:
-    #   - gtol=ftol=xtol=1e-8 (appropriate for correlation analysis)
-    #   - enable_multistart=True (helps with stretched exponential fits)
-    #   - n_starts=10 (reasonable for 3-4 parameter fits)
-    #   - sampler='lhs' (good coverage of parameter space)
-
-    config = WorkflowConfig.from_preset("precision_standard").with_overrides(
-        # XPCS-specific overrides:
-        # Increase n_starts for stretched exponential fits which can have
-        # multiple local minima depending on the stretching exponent
-        n_starts=15,
-        # Use Sobol sampling for better coverage of multi-dimensional
+    # XPCS typically needs multi-start due to stretched exponential fits
+    # which can have multiple local minima depending on the stretching exponent
+    return {
+        "workflow": "standard",
+        # Multi-start is critical for:
+        # 1. Stretched exponential fits with unknown beta
+        # 2. Multi-tau correlation functions
+        "multistart": True,
+        "n_starts": 15,  # More starts for stretched exponential fits
+        # Sobol sampling for better coverage of multi-dimensional
         # parameter spaces (tau, beta, baseline, contrast)
-        sampler="sobol",
-    )
+        "sampler": "sobol",
+        # Tolerances appropriate for correlation analysis
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+    }
 
-    return config
+
+def create_xpcs_high_precision_preset() -> dict:
+    """Create fit kwargs for high-precision XPCS analysis.
+
+    Use this for:
+    - Publication-quality relaxation time determination
+    - Small stretching exponent differences
+    - Multi-component dynamics analysis
+
+    Returns
+    -------
+    dict
+        Keyword arguments for fit() with high precision settings.
+    """
+    return {
+        "workflow": "quality",
+        "multistart": True,
+        "n_starts": 25,
+        "sampler": "sobol",
+        "gtol": 1e-10,
+        "ftol": 1e-10,
+        "xtol": 1e-10,
+    }
 
 
 def xpcs_g2_model(t, tau, beta, baseline, contrast):
@@ -94,111 +113,116 @@ def main():
     print("=" * 70)
     print()
 
-    # Create the XPCS preset
-    config = create_xpcs_preset()
-
-    print("XPCS Preset Configuration:")
-    print("-" * 40)
-    print(f"  Tier:              {config.tier.name}")
-    print(f"  Goal:              {config.goal.name}")
-    print(f"  gtol:              {config.gtol}")
-    print(f"  ftol:              {config.ftol}")
-    print(f"  xtol:              {config.xtol}")
-    print(f"  enable_multistart: {config.enable_multistart}")
-    print(f"  n_starts:          {config.n_starts}")
-    print(f"  sampler:           {config.sampler}")
-    print()
-
-    # Generate synthetic XPCS data
-    print("Generating synthetic XPCS data...")
     np.random.seed(42)
+
+    # =========================================================================
+    # 1. Standard XPCS Fitting
+    # =========================================================================
+    print("1. Standard XPCS Correlation Function Fitting:")
+    print("-" * 50)
 
     # Logarithmically spaced delay times (typical for correlation functions)
     t_data = np.logspace(-6, 2, 100)  # 1 us to 100 s
 
     # True parameters
-    true_params = {
-        "tau": 0.01,  # 10 ms relaxation time
-        "beta": 0.8,  # Stretched exponential (subdiffusive dynamics)
-        "baseline": 0.0,  # Ideal baseline
-        "contrast": 0.3,  # Typical speckle contrast
-    }
+    true_tau = 0.01  # 10 ms relaxation time
+    true_beta = 0.8  # Stretched exponential (subdiffusive dynamics)
+    true_baseline = 0.0  # Ideal baseline
+    true_contrast = 0.3  # Typical speckle contrast
 
     # Generate noisy data
-    y_true = xpcs_g2_model(
-        t_data,
-        true_params["tau"],
-        true_params["beta"],
-        true_params["baseline"],
-        true_params["contrast"],
+    y_true = (
+        true_contrast * np.exp(-2.0 * (t_data / true_tau) ** true_beta) + true_baseline
     )
-    noise = 0.01 * np.random.randn(len(t_data))
-    y_data = y_true + noise
+    y_data = y_true + 0.01 * np.random.randn(len(t_data))
 
-    print(f"  Data points: {len(t_data)}")
-    print(f"  True tau:    {true_params['tau']:.4f} s")
-    print(f"  True beta:   {true_params['beta']:.2f}")
-    print()
+    print("  True parameters:")
+    print(f"    tau: {true_tau:.4f} s")
+    print(f"    beta: {true_beta:.2f}")
+    print(f"    contrast: {true_contrast:.2f}")
+
+    # Get XPCS preset kwargs
+    kwargs = create_xpcs_preset()
+    print(f"\n  XPCS preset: {kwargs}")
 
     # Initial guesses and bounds
-    # Note: Multi-scale parameters require careful bounds
-    p0 = [0.1, 0.9, 0.0, 0.25]  # [tau, beta, baseline, contrast]
+    p0 = [0.1, 0.9, 0.0, 0.25]
 
     bounds = (
         [1e-8, 0.1, -0.1, 0.01],  # Lower bounds
         [1e3, 2.0, 0.1, 1.0],  # Upper bounds
     )
 
-    # Fit using the XPCS preset
-    print("Fitting with XPCS preset...")
+    # Fit
     popt, pcov = fit(
         xpcs_g2_model,
         t_data,
         y_data,
         p0=p0,
         bounds=bounds,
-        workflow_config=config,
+        **kwargs,
     )
 
-    # Results
+    print("\n  Fitted parameters:")
+    print(f"    tau: {popt[0]:.6f} s (true: {true_tau})")
+    print(f"    beta: {popt[1]:.4f} (true: {true_beta})")
+    print(f"    baseline: {popt[2]:.6f} (true: {true_baseline})")
+    print(f"    contrast: {popt[3]:.4f} (true: {true_contrast})")
+
+    # =========================================================================
+    # 2. High-Precision XPCS Analysis
+    # =========================================================================
     print()
-    print("Fit Results:")
-    print("-" * 40)
-    print(f"  tau:      {popt[0]:.6f} s (true: {true_params['tau']:.6f})")
-    print(f"  beta:     {popt[1]:.4f} (true: {true_params['beta']:.4f})")
-    print(f"  baseline: {popt[2]:.6f} (true: {true_params['baseline']:.6f})")
-    print(f"  contrast: {popt[3]:.4f} (true: {true_params['contrast']:.4f})")
+    print("2. High-Precision XPCS Analysis:")
+    print("-" * 50)
 
-    # Parameter uncertainties from covariance
-    if pcov is not None:
-        perr = np.sqrt(np.diag(pcov))
-        print()
-        print("Parameter Uncertainties (1-sigma):")
-        print(f"  tau:      +/- {perr[0]:.6f} s")
-        print(f"  beta:     +/- {perr[1]:.6f}")
-        print(f"  baseline: +/- {perr[2]:.6f}")
-        print(f"  contrast: +/- {perr[3]:.6f}")
+    kwargs_hp = create_xpcs_high_precision_preset()
+    print(f"  High-precision preset: {kwargs_hp}")
 
+    popt_hp, pcov_hp = fit(
+        xpcs_g2_model,
+        t_data,
+        y_data,
+        p0=p0,
+        bounds=bounds,
+        **kwargs_hp,
+    )
+
+    perr = np.sqrt(np.diag(pcov_hp))
+    print("\n  Fitted with uncertainties:")
+    print(f"    tau: {popt_hp[0]:.6f} ± {perr[0]:.6f} s")
+    print(f"    beta: {popt_hp[1]:.5f} ± {perr[1]:.5f}")
+    print(f"    baseline: {popt_hp[2]:.6f} ± {perr[2]:.6f}")
+    print(f"    contrast: {popt_hp[3]:.5f} ± {perr[3]:.5f}")
+
+    # =========================================================================
+    # Summary
+    # =========================================================================
     print()
     print("=" * 70)
-    print("Notes on XPCS Preset Customization")
+    print("Summary")
     print("=" * 70)
     print()
-    print("The XPCS preset builds on 'precision_standard' with adjustments for:")
+    print("XPCS preset characteristics:")
+    print("  - Multi-start enabled: Critical for stretched exponential fits")
+    print("  - n_starts=15: More starts for complex dynamics")
+    print("  - Sobol sampler: Better coverage of tau/beta space")
+    print("  - gtol=1e-8: Sufficient for correlation analysis")
     print()
-    print("1. Multi-start optimization (n_starts=15)")
-    print("   - Stretched exponential fits often have multiple local minima")
-    print("   - Especially important when beta is unknown a priori")
+    print("Use cases:")
+    print("  - Colloidal dynamics (diffusion, aging)")
+    print("  - Polymer relaxation studies")
+    print("  - Liquid crystal dynamics")
+    print("  - Two-time correlation analysis")
     print()
-    print("2. Sobol sampling")
-    print("   - Better coverage of the tau/beta parameter space")
-    print("   - More uniform exploration than random sampling")
+    print("Parameter bounds guidance:")
+    print("  - tau: Set based on experimental time window")
+    print("  - beta: [0.1, 2.0] covers sub- and super-diffusive regimes")
+    print("  - contrast: [0, 1] for normalized correlation functions")
     print()
-    print("3. Parameter bounds guidance:")
-    print("   - tau: Set bounds based on experimental time window")
-    print("   - beta: [0.1, 2.0] covers sub- and super-diffusive regimes")
-    print("   - contrast: [0, 1] for normalized correlation functions")
-    print()
+    print("Usage:")
+    print("  kwargs = create_xpcs_preset()")
+    print("  popt, pcov = fit(xpcs_g2_model, t, g2, **kwargs)")
 
 
 if __name__ == "__main__":

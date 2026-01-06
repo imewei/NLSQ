@@ -1,47 +1,60 @@
 """
-Converted from 07_hpc_and_checkpointing.ipynb
+HPC Integration and Checkpointing
 
-This script was automatically generated from a Jupyter notebook.
+This script demonstrates HPC cluster integration and checkpointing for
+fault-tolerant curve fitting.
 
 Features demonstrated:
 - ClusterDetector and ClusterInfo for PBS Pro detection
-- WorkflowTier.STREAMING_CHECKPOINT for fault tolerance
-- Checkpointing with enable_checkpoints=True and checkpoint_dir
-- create_checkpoint_directory() for timestamp-based directories
-- Checkpoint resume workflow
+- Checkpointing with enable_checkpoints and checkpoint_dir
+- create_checkpoint_directory() for timestamped directories
+- Defense layers for checkpoint resume (v0.3.6+)
 - PBS Pro job script generation
 
 Run this example:
     python examples/scripts/08_workflow_system/07_hpc_and_checkpointing.py
 """
 
+import json
 import os
-import pickle
 import shutil
-import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 
-from nlsq.core.workflow import (
-    WORKFLOW_PRESETS,
-    ClusterDetector,
-    ClusterInfo,
-    OptimizationGoal,
-    WorkflowConfig,
-    WorkflowTier,
-    create_checkpoint_directory,
-    create_distributed_config,
-    get_multi_gpu_config,
-)
+from nlsq import HybridStreamingConfig, OptimizationGoal
+from nlsq.core.minpack import WORKFLOW_PRESETS
+from nlsq.core.workflow import ClusterDetector, ClusterInfo
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 if QUICK:
     print("Quick mode: reduced iterations for HPC and checkpointing demo.")
 
 
-def save_checkpoint(checkpoint_dir, iteration, params, loss, metadata=None):
-    """Save optimization checkpoint.
+def create_checkpoint_directory(base_dir: str = "./nlsq_checkpoints") -> str:
+    """Create a timestamped checkpoint directory.
+
+    Parameters
+    ----------
+    base_dir : str, optional
+        Base directory for checkpoints.
+
+    Returns
+    -------
+    str
+        Path to the created checkpoint directory.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    checkpoint_dir = Path(base_dir) / f"checkpoint_{timestamp}"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    return str(checkpoint_dir)
+
+
+def save_checkpoint(
+    checkpoint_dir: str, iteration: int, params, loss: float, metadata=None
+):
+    """Save optimization checkpoint using JSON.
 
     Parameters
     ----------
@@ -56,23 +69,24 @@ def save_checkpoint(checkpoint_dir, iteration, params, loss, metadata=None):
     metadata : dict, optional
         Additional metadata to save
     """
-    checkpoint_path = Path(checkpoint_dir) / f"checkpoint_{iteration:06d}.pkl"
+    checkpoint_path = Path(checkpoint_dir) / f"checkpoint_{iteration:06d}.json"
 
     checkpoint_data = {
         "iteration": iteration,
-        "params": np.array(params),
+        "params": np.array(params).tolist(),
         "loss": float(loss),
         "metadata": metadata or {},
+        "timestamp": datetime.now().isoformat(),
     }
 
-    with open(checkpoint_path, "wb") as f:
-        pickle.dump(checkpoint_data, f)
+    with open(checkpoint_path, "w") as f:
+        json.dump(checkpoint_data, f, indent=2)
 
     print(f"  Saved checkpoint: {checkpoint_path.name}")
     return checkpoint_path
 
 
-def load_latest_checkpoint(checkpoint_dir):
+def load_latest_checkpoint(checkpoint_dir: str) -> dict | None:
     """Load the most recent checkpoint.
 
     Parameters
@@ -90,22 +104,24 @@ def load_latest_checkpoint(checkpoint_dir):
         return None
 
     # Find all checkpoint files
-    checkpoints = list(checkpoint_dir.glob("checkpoint_*.pkl"))
+    checkpoints = list(checkpoint_dir.glob("checkpoint_*.json"))
     if not checkpoints:
         return None
 
     # Sort by name (which includes iteration number)
     latest = sorted(checkpoints)[-1]
 
-    with open(latest, "rb") as f:
-        checkpoint_data = pickle.load(f)
+    with open(latest) as f:
+        checkpoint_data = json.load(f)
+
+    checkpoint_data["params"] = np.array(checkpoint_data["params"])
 
     print(f"  Loaded checkpoint: {latest.name}")
     return checkpoint_data
 
 
 def optimization_with_checkpoints(
-    checkpoint_dir, max_iterations=100, checkpoint_interval=10
+    checkpoint_dir: str, max_iterations: int = 100, checkpoint_interval: int = 10
 ):
     """Example optimization loop with checkpoint support."""
 
@@ -184,34 +200,26 @@ def main():
     print(f"    Interconnect: {simulated_cluster.interconnect}")
 
     # =========================================================================
-    # 2. WorkflowTier.STREAMING_CHECKPOINT
+    # 2. Streaming Strategy for Large Datasets
     # =========================================================================
     print()
-    print("2. WorkflowTier.STREAMING_CHECKPOINT:")
+    print("2. Streaming Strategy for Large Datasets:")
     print("-" * 50)
 
-    print("  Available WorkflowTiers:")
-    for tier in WorkflowTier:
-        print(f"    - {tier.name}")
+    print("  Available strategies (memory-based selection):")
+    print("    - standard:  Full in-memory computation")
+    print("    - chunked:   Memory-managed chunk processing")
+    print("    - streaming: Mini-batch gradient descent")
 
-    hpc_config = WorkflowConfig(
-        tier=WorkflowTier.STREAMING_CHECKPOINT,
-        goal=OptimizationGoal.ROBUST,
-        gtol=1e-7,
-        ftol=1e-7,
-        xtol=1e-7,
-        enable_checkpoints=True,
-        checkpoint_dir="./nlsq_checkpoints",
-        enable_multistart=True,
-        n_starts=10,
-    )
+    print("\n  Streaming configurations:")
+    print("    HybridStreamingConfig - Streaming optimizer configuration")
+    print("    HybridStreamingConfig.defense_strict() - Checkpoint resume preset")
+    print("    HybridStreamingConfig.scientific_default() - Production preset")
 
-    print("\n  HPC Configuration:")
-    print(f"    tier: {hpc_config.tier}")
-    print(f"    goal: {hpc_config.goal}")
-    print(f"    enable_checkpoints: {hpc_config.enable_checkpoints}")
-    print(f"    checkpoint_dir: {hpc_config.checkpoint_dir}")
-    print(f"    enable_multistart: {hpc_config.enable_multistart}")
+    config = HybridStreamingConfig.defense_strict()
+    print("\n  defense_strict() configuration:")
+    print(f"    warmup_max_iterations: {config.warmup_max_iterations}")
+    print(f"    normalize: {config.normalize}")
 
     if QUICK:
         print()
@@ -224,7 +232,7 @@ def main():
         print("  - ClusterInfo for cluster metadata (nodes, GPUs, job ID)")
         print()
         print("Checkpointing:")
-        print("  - WorkflowTier.STREAMING_CHECKPOINT for fault tolerance")
+        print("  - Use streaming strategy for fault tolerance")
         print("  - enable_checkpoints=True, checkpoint_dir='./checkpoints'")
         print()
         print("Defense Layers for Checkpoint Resume (v0.3.6+):")
@@ -278,25 +286,22 @@ def main():
     print(f"  Final parameters: {final_params}")
 
     # =========================================================================
-    # 5. HPC Distributed Configuration
+    # 5. HPC Distributed Preset
     # =========================================================================
     print()
-    print("5. HPC Distributed Configuration:")
+    print("5. HPC Workflow Presets:")
     print("-" * 50)
 
-    dist_config = create_distributed_config(simulated_cluster)
-
-    print("  Distributed config from cluster:")
-    for key, value in list(dist_config.items())[:8]:
-        print(f"    {key}: {value}")
-
-    gpu_config = get_multi_gpu_config(simulated_cluster)
-
-    if gpu_config:
-        print("\n  Multi-GPU configuration:")
-        print(f"    n_devices: {gpu_config.n_devices}")
-        print(f"    per_device_batch_size: {gpu_config.per_device_batch_size}")
-        print(f"    total_batch_size: {gpu_config.total_batch_size}")
+    if "hpc_distributed" in WORKFLOW_PRESETS:
+        hpc_preset = WORKFLOW_PRESETS["hpc_distributed"]
+        print("  hpc_distributed preset:")
+        for key, value in list(hpc_preset.items())[:8]:
+            print(f"    {key}: {value}")
+    else:
+        print("  Available presets for HPC:")
+        for name in WORKFLOW_PRESETS:
+            desc = WORKFLOW_PRESETS[name].get("description", "")
+            print(f"    - {name}: {desc}")
 
     # =========================================================================
     # 6. PBS Pro Job Script
@@ -366,22 +371,10 @@ echo "========================================"
     print("    #PBS -q gpu")
 
     # =========================================================================
-    # 7. HPC Distributed Preset
+    # 7. Defense Layers for Checkpoint Resume (v0.3.6+)
     # =========================================================================
     print()
-    print("7. HPC Distributed Preset:")
-    print("-" * 50)
-
-    hpc_preset = WORKFLOW_PRESETS["hpc_distributed"]
-
-    for key, value in list(hpc_preset.items())[:8]:
-        print(f"  {key}: {value}")
-
-    # =========================================================================
-    # 8. Defense Layers for Checkpoint Resume (v0.3.6+)
-    # =========================================================================
-    print()
-    print("8. Defense Layers for Checkpoint Resume (v0.3.6+):")
+    print("7. Defense Layers for Checkpoint Resume (v0.3.6+):")
     print("-" * 70)
     print()
     print("When resuming from checkpoints, your initial parameters are near-optimal.")
@@ -404,18 +397,6 @@ echo "========================================"
     print()
     print("  # Use defense_strict for checkpoint resume scenarios")
     print("  config = HybridStreamingConfig.defense_strict()")
-    print("  config = config.with_overrides(")
-    print("      enable_checkpoints=True,")
-    print("      checkpoint_dir='./checkpoints',")
-    print("  )")
-    print()
-    print("Defense presets comparison:")
-    print(
-        "  defense_strict()     - Best for checkpoint resume (step size: 1e-6 to 1e-4)"
-    )
-    print("  defense_relaxed()    - For fresh starts (step size: 1e-4 to 0.01)")
-    print("  scientific_default() - Balanced for production")
-    print("  defense_disabled()   - Pre-0.3.6 behavior (no protection)")
 
     # =========================================================================
     # Cleanup
@@ -448,12 +429,11 @@ echo "========================================"
     print("HPC Integration:")
     print("  - ClusterDetector.detect() for PBS Pro detection")
     print("  - ClusterInfo for cluster metadata (nodes, GPUs, job ID)")
-    print("  - create_distributed_config() for HPC-optimized settings")
     print()
     print("Checkpointing:")
-    print("  - WorkflowTier.STREAMING_CHECKPOINT for fault tolerance")
-    print("  - enable_checkpoints=True, checkpoint_dir='./checkpoints'")
+    print("  - Use streaming strategy for very large datasets")
     print("  - create_checkpoint_directory() for timestamped directories")
+    print("  - JSON-based checkpoints for portability")
     print()
     print("PBS Pro Job Scripts:")
     print("  - #PBS -l select=N:ncpus=C:ngpus=G:mem=Mgb")
@@ -464,7 +444,6 @@ echo "========================================"
     print("  - Checkpoint resume = warm-start scenario (parameters near optimal)")
     print("  - Use HybridStreamingConfig.defense_strict() for resume protection")
     print("  - 4-layer defense prevents L-BFGS warmup from diverging")
-    print("  - See docs/guides/defense_layers.rst for full configuration")
 
 
 if __name__ == "__main__":

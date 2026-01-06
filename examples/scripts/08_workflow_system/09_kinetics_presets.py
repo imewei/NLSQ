@@ -1,8 +1,7 @@
 """Chemical/Enzyme Kinetics Domain Preset Example.
 
 This example demonstrates how to create a custom preset for chemical and
-enzyme kinetics fitting using NLSQ's WorkflowConfig.from_preset().with_overrides()
-pattern.
+enzyme kinetics fitting using NLSQ's fit() function with custom kwargs.
 
 Kinetics analysis typically involves:
 - Fitting rate equations (exponential decays, Michaelis-Menten, etc.)
@@ -18,11 +17,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import fit
-from nlsq.core.workflow import WorkflowConfig
 
 
-def create_kinetics_preset() -> WorkflowConfig:
-    """Create a workflow configuration optimized for kinetics rate constant fitting.
+def create_kinetics_preset() -> dict:
+    """Create fit kwargs optimized for kinetics rate constant fitting.
 
     Kinetics-specific considerations:
     - Rate constants can span many orders of magnitude (10^-6 to 10^6 s^-1)
@@ -32,328 +30,246 @@ def create_kinetics_preset() -> WorkflowConfig:
 
     Returns
     -------
-    WorkflowConfig
-        Configuration optimized for kinetics analysis.
+    dict
+        Keyword arguments for fit() optimized for kinetics analysis.
 
     Example
     -------
-    >>> config = create_kinetics_preset()
-    >>> config.enable_multistart
-    True
-    >>> config.n_starts
-    20
+    >>> kwargs = create_kinetics_preset()
+    >>> popt, pcov = fit(model, x, y, **kwargs)
     """
-    # Start from precision_standard and customize for kinetics
     # Kinetics fitting often has multiple local minima, especially
     # for multi-exponential and complex reaction schemes
-
-    config = WorkflowConfig.from_preset("precision_standard").with_overrides(
-        # Kinetics-specific overrides:
-        # More aggressive multi-start for rate constant fitting
-        # Multi-exponential models are notorious for local minima
-        n_starts=20,
-        # Sobol sampling provides better coverage for rate constant
-        # parameter spaces which often span many orders of magnitude
-        sampler="sobol",
-        # Standard tolerances are usually sufficient for rate constants
-        # since experimental uncertainty dominates
-        gtol=1e-8,
-        ftol=1e-8,
-        xtol=1e-8,
-    )
-
-    return config
+    return {
+        "workflow": "standard",
+        # Multi-start is critical for kinetics due to:
+        # 1. Exponential sensitivity to rate constants
+        # 2. Multiple timescales in complex reactions
+        "multistart": True,
+        "n_starts": 20,  # More starts for exponential models
+        "sampler": "lhs",  # Good for spanning rate constant ranges
+        # Moderate tolerances sufficient for rate constants
+        # (rate constants typically reported to 2-3 significant figures)
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+    }
 
 
-def first_order_decay(t, k, A0, offset):
-    """First-order decay kinetics: A(t) = A0 * exp(-k*t) + offset.
+def create_kinetics_high_precision_preset() -> dict:
+    """Create fit kwargs for high-precision kinetics analysis.
 
-    Parameters
-    ----------
-    t : array_like
-        Time points
-    k : float
-        Rate constant (s^-1 or appropriate time units)
-    A0 : float
-        Initial amplitude
-    offset : float
-        Baseline offset (product concentration at equilibrium)
+    Use this for:
+    - Activation energy determination (Arrhenius plots)
+    - Isotope effect studies requiring precise kH/kD ratios
+    - Competitive kinetics with similar rate constants
 
     Returns
     -------
-    array
-        Concentration or signal at each time point
+    dict
+        Keyword arguments for fit() with high precision settings.
     """
-    return A0 * jnp.exp(-k * t) + offset
+    return {
+        "workflow": "quality",
+        "multistart": True,
+        "n_starts": 30,  # More starts for high precision
+        "sampler": "sobol",  # Better space coverage
+        "gtol": 1e-10,
+        "ftol": 1e-10,
+        "xtol": 1e-10,
+    }
 
 
-def biexponential_decay(t, k1, k2, A1, A2, offset):
-    """Bi-exponential decay: sum of two first-order processes.
+def michaelis_menten(substrate, vmax, km):
+    """Michaelis-Menten enzyme kinetics model.
+
+    v = Vmax * [S] / (Km + [S])
 
     Parameters
     ----------
-    t : array_like
-        Time points
-    k1 : float
-        Fast rate constant
-    k2 : float
-        Slow rate constant
-    A1 : float
-        Amplitude of fast component
-    A2 : float
-        Amplitude of slow component
-    offset : float
-        Baseline offset
-
-    Returns
-    -------
-    array
-        Concentration or signal at each time point
-    """
-    return A1 * jnp.exp(-k1 * t) + A2 * jnp.exp(-k2 * t) + offset
-
-
-def michaelis_menten(s, vmax, km):
-    """Michaelis-Menten enzyme kinetics: v = Vmax * [S] / (Km + [S]).
-
-    Parameters
-    ----------
-    s : array_like
-        Substrate concentration
+    substrate : array_like
+        Substrate concentration [S]
     vmax : float
-        Maximum reaction velocity
+        Maximum reaction velocity Vmax
     km : float
-        Michaelis constant (substrate concentration at half Vmax)
+        Michaelis constant Km
 
     Returns
     -------
     array
-        Reaction velocity at each substrate concentration
+        Reaction velocity v
     """
-    return vmax * s / (km + s)
+    return vmax * substrate / (km + substrate)
+
+
+def first_order_decay(t, a0, k):
+    """First-order decay kinetics.
+
+    [A] = [A]0 * exp(-k*t)
+
+    Parameters
+    ----------
+    t : array_like
+        Time points
+    a0 : float
+        Initial concentration [A]0
+    k : float
+        Rate constant k
+
+    Returns
+    -------
+    array
+        Concentration at time t
+    """
+    return a0 * jnp.exp(-k * t)
+
+
+def biexponential_decay(t, a1, k1, a2, k2, offset):
+    """Biexponential decay kinetics.
+
+    [A] = A1 * exp(-k1*t) + A2 * exp(-k2*t) + offset
+
+    Useful for:
+    - Protein folding with intermediate states
+    - Parallel reaction pathways
+    - Relaxation with fast and slow components
+    """
+    return a1 * jnp.exp(-k1 * t) + a2 * jnp.exp(-k2 * t) + offset
 
 
 def main():
     print("=" * 70)
-    print("Chemical/Enzyme Kinetics Domain Preset Example")
-    print("=" * 70)
-    print()
-
-    # Create the kinetics preset
-    config = create_kinetics_preset()
-
-    print("Kinetics Preset Configuration:")
-    print("-" * 40)
-    print(f"  Tier:              {config.tier.name}")
-    print(f"  Goal:              {config.goal.name}")
-    print(f"  gtol:              {config.gtol}")
-    print(f"  ftol:              {config.ftol}")
-    print(f"  xtol:              {config.xtol}")
-    print(f"  enable_multistart: {config.enable_multistart}")
-    print(f"  n_starts:          {config.n_starts}")
-    print(f"  sampler:           {config.sampler}")
-    print()
-
-    # =========================================================================
-    # Example 1: First-order decay
-    # =========================================================================
-    print("=" * 70)
-    print("Example 1: First-Order Decay Kinetics")
+    print("Chemical/Enzyme Kinetics Domain Preset")
     print("=" * 70)
     print()
 
     np.random.seed(42)
 
-    # Time points
-    t_data = np.linspace(0, 10, 50)  # 0-10 seconds
-
-    # True parameters
-    true_k = 0.5  # 0.5 s^-1 (half-life = 1.4 s)
-    true_A0 = 100.0  # Initial concentration
-    true_offset = 10.0  # Baseline
-
-    # Generate noisy data
-    y_true = first_order_decay(t_data, true_k, true_A0, true_offset)
-    noise = 3.0 * np.random.randn(len(t_data))
-    y_data = y_true + noise
-
-    print(f"  True rate constant k = {true_k} s^-1")
-    print(f"  True half-life = {np.log(2) / true_k:.3f} s")
-    print()
-
-    # Initial guesses (deliberately off)
-    p0 = [0.1, 80.0, 5.0]  # [k, A0, offset]
-    bounds = ([0.001, 0.1, 0.0], [10.0, 200.0, 50.0])
-
-    # Fit using kinetics preset
-    print("Fitting first-order decay...")
-    popt, pcov = fit(
-        first_order_decay,
-        t_data,
-        y_data,
-        p0=p0,
-        bounds=bounds,
-        workflow_config=config,
-    )
-
-    print()
-    print("First-Order Fit Results:")
-    print("-" * 40)
-    print(f"  k:      {popt[0]:.4f} s^-1 (true: {true_k})")
-    print(f"  A0:     {popt[1]:.2f} (true: {true_A0})")
-    print(f"  offset: {popt[2]:.2f} (true: {true_offset})")
-    print(f"  Fitted half-life: {np.log(2) / popt[0]:.3f} s")
-
-    if pcov is not None:
-        perr = np.sqrt(np.diag(pcov))
-        print()
-        print("  Uncertainties:")
-        print(f"    k:      +/- {perr[0]:.4f} s^-1")
-        print(f"    A0:     +/- {perr[1]:.2f}")
-        print(f"    offset: +/- {perr[2]:.2f}")
-
     # =========================================================================
-    # Example 2: Bi-exponential decay (challenging case)
+    # 1. Michaelis-Menten Enzyme Kinetics
     # =========================================================================
-    print()
-    print("=" * 70)
-    print("Example 2: Bi-Exponential Decay (Challenging Case)")
-    print("=" * 70)
-    print()
+    print("1. Michaelis-Menten Enzyme Kinetics:")
+    print("-" * 50)
 
-    np.random.seed(123)
-
-    # Time points (more dense to resolve two phases)
-    t_data2 = np.linspace(0, 20, 100)
-
-    # True parameters (well-separated rates)
-    true_k1 = 1.0  # Fast rate (1.0 s^-1)
-    true_k2 = 0.1  # Slow rate (0.1 s^-1)
-    true_A1 = 60.0  # Fast amplitude
-    true_A2 = 40.0  # Slow amplitude
-    true_offset2 = 5.0
-
-    # Generate noisy data
-    y_true2 = biexponential_decay(
-        t_data2, true_k1, true_k2, true_A1, true_A2, true_offset2
-    )
-    noise2 = 2.0 * np.random.randn(len(t_data2))
-    y_data2 = y_true2 + noise2
-
-    print(f"  True fast rate k1 = {true_k1} s^-1")
-    print(f"  True slow rate k2 = {true_k2} s^-1")
-    print(f"  Rate ratio k1/k2 = {true_k1 / true_k2:.1f}")
-    print()
-
-    # Initial guesses (this is a challenging fit)
-    p0_bi = [0.5, 0.05, 50.0, 50.0, 0.0]  # [k1, k2, A1, A2, offset]
-    bounds_bi = (
-        [0.01, 0.001, 1.0, 1.0, 0.0],  # Lower bounds
-        [10.0, 1.0, 200.0, 200.0, 20.0],  # Upper bounds
-    )
-
-    print("Fitting bi-exponential decay...")
-    print("(This is challenging - multi-start helps avoid local minima)")
-    popt2, pcov2 = fit(
-        biexponential_decay,
-        t_data2,
-        y_data2,
-        p0=p0_bi,
-        bounds=bounds_bi,
-        workflow_config=config,
-    )
-
-    print()
-    print("Bi-Exponential Fit Results:")
-    print("-" * 40)
-    print(f"  k1 (fast):  {popt2[0]:.4f} s^-1 (true: {true_k1})")
-    print(f"  k2 (slow):  {popt2[1]:.4f} s^-1 (true: {true_k2})")
-    print(f"  A1:         {popt2[2]:.2f} (true: {true_A1})")
-    print(f"  A2:         {popt2[3]:.2f} (true: {true_A2})")
-    print(f"  offset:     {popt2[4]:.2f} (true: {true_offset2})")
-
-    # =========================================================================
-    # Example 3: Michaelis-Menten enzyme kinetics
-    # =========================================================================
-    print()
-    print("=" * 70)
-    print("Example 3: Michaelis-Menten Enzyme Kinetics")
-    print("=" * 70)
-    print()
-
-    np.random.seed(456)
-
-    # Substrate concentrations (log-spaced for better coverage)
-    s_data = np.logspace(-2, 2, 30)  # 0.01 to 100 mM
-
-    # True parameters
-    true_vmax = 100.0  # Maximum velocity (arbitrary units)
+    # Generate synthetic enzyme kinetics data
+    true_vmax = 100.0  # max velocity (units/min)
     true_km = 5.0  # Michaelis constant (mM)
 
-    # Generate noisy data
-    v_true = michaelis_menten(s_data, true_vmax, true_km)
-    v_noise = 3.0 * np.random.randn(len(s_data))
-    v_data = np.maximum(v_true + v_noise, 0.1)
+    substrate_conc = np.array([0.5, 1.0, 2.0, 3.0, 5.0, 7.5, 10.0, 15.0, 20.0, 30.0])
+    velocity_true = true_vmax * substrate_conc / (true_km + substrate_conc)
+    velocity_data = velocity_true * (1 + 0.05 * np.random.randn(len(substrate_conc)))
 
-    print(f"  True Vmax = {true_vmax}")
-    print(f"  True Km = {true_km} mM")
-    print()
+    print(f"  True Vmax: {true_vmax} units/min")
+    print(f"  True Km: {true_km} mM")
 
-    # Initial guesses
-    p0_mm = [50.0, 1.0]  # [Vmax, Km]
-    bounds_mm = ([1.0, 0.01], [500.0, 100.0])
+    # Fit using kinetics preset
+    kwargs = create_kinetics_preset()
+    print(f"\n  Kinetics preset: {kwargs}")
 
-    print("Fitting Michaelis-Menten kinetics...")
-    popt3, pcov3 = fit(
+    popt, pcov = fit(
         michaelis_menten,
-        s_data,
-        v_data,
-        p0=p0_mm,
-        bounds=bounds_mm,
-        workflow_config=config,
+        substrate_conc,
+        velocity_data,
+        p0=[50.0, 10.0],  # Initial guess
+        bounds=([0.1, 0.01], [500.0, 100.0]),
+        **kwargs,
     )
 
-    print()
-    print("Michaelis-Menten Fit Results:")
-    print("-" * 40)
-    print(f"  Vmax: {popt3[0]:.2f} (true: {true_vmax})")
-    print(f"  Km:   {popt3[1]:.2f} mM (true: {true_km})")
-
-    if pcov3 is not None:
-        perr3 = np.sqrt(np.diag(pcov3))
-        print()
-        print("  Uncertainties:")
-        print(f"    Vmax: +/- {perr3[0]:.2f}")
-        print(f"    Km:   +/- {perr3[1]:.2f} mM")
+    print(f"\n  Fitted Vmax: {popt[0]:.2f} units/min (true: {true_vmax})")
+    print(f"  Fitted Km: {popt[1]:.2f} mM (true: {true_km})")
 
     # =========================================================================
-    # Best practices summary
+    # 2. First-Order Decay Kinetics
+    # =========================================================================
+    print()
+    print("2. First-Order Decay Kinetics:")
+    print("-" * 50)
+
+    true_a0 = 1.0  # Initial concentration
+    true_k = 0.05  # Rate constant (s^-1)
+
+    time = np.linspace(0, 100, 50)
+    conc_true = true_a0 * np.exp(-true_k * time)
+    conc_data = conc_true + 0.02 * np.random.randn(len(time))
+
+    print(f"  True [A]0: {true_a0}")
+    print(f"  True k: {true_k} s^-1")
+
+    popt, pcov = fit(
+        first_order_decay,
+        time,
+        conc_data,
+        p0=[0.5, 0.1],
+        bounds=([0.01, 0.001], [10.0, 1.0]),
+        **kwargs,
+    )
+
+    perr = np.sqrt(np.diag(pcov))
+    print(f"\n  Fitted [A]0: {popt[0]:.4f} ± {perr[0]:.4f}")
+    print(f"  Fitted k: {popt[1]:.5f} ± {perr[1]:.5f} s^-1")
+
+    # =========================================================================
+    # 3. Biexponential Decay (Complex Kinetics)
+    # =========================================================================
+    print()
+    print("3. Biexponential Decay (Complex Kinetics):")
+    print("-" * 50)
+
+    # Parameters: fast phase + slow phase
+    true_a1, true_k1 = 0.6, 0.5  # Fast component
+    true_a2, true_k2 = 0.4, 0.02  # Slow component
+    true_offset = 0.0
+
+    time = np.linspace(0, 200, 100)
+    signal_true = (
+        true_a1 * np.exp(-true_k1 * time)
+        + true_a2 * np.exp(-true_k2 * time)
+        + true_offset
+    )
+    signal_data = signal_true + 0.02 * np.random.randn(len(time))
+
+    print("  True parameters:")
+    print(f"    Fast: A1={true_a1}, k1={true_k1} s^-1")
+    print(f"    Slow: A2={true_a2}, k2={true_k2} s^-1")
+
+    # Biexponential fits are notoriously sensitive to initial guesses
+    # Multi-start is critical here
+    popt, pcov = fit(
+        biexponential_decay,
+        time,
+        signal_data,
+        p0=[0.5, 0.3, 0.3, 0.01, 0.0],  # Initial guess
+        bounds=([0.0, 0.001, 0.0, 0.0001, -0.1], [2.0, 10.0, 2.0, 10.0, 0.1]),
+        **kwargs,
+    )
+
+    print("\n  Fitted parameters:")
+    print(f"    Fast: A1={popt[0]:.3f}, k1={popt[1]:.4f} s^-1")
+    print(f"    Slow: A2={popt[2]:.3f}, k2={popt[3]:.5f} s^-1")
+
+    # =========================================================================
+    # Summary
     # =========================================================================
     print()
     print("=" * 70)
-    print("Best Practices for Kinetics Fitting")
+    print("Summary")
     print("=" * 70)
     print()
-    print("1. Multi-start optimization (n_starts=20)")
-    print("   - Essential for multi-exponential models")
-    print("   - Helps escape local minima")
-    print("   - Sobol sampling for rate constant spaces")
+    print("Kinetics preset characteristics:")
+    print("  - Multi-start enabled: Essential for exponential models")
+    print("  - n_starts=20: More starts for rate constant fitting")
+    print("  - LHS sampler: Good coverage of rate constant ranges")
+    print("  - Standard tolerances: Sufficient for typical rate constants")
     print()
-    print("2. Parameter bounds:")
-    print("   - Rate constants: set physically reasonable limits")
-    print("   - Order k1 > k2 if rates should be distinguishable")
-    print("   - Use log-scale bounds for rate constants")
+    print("Use cases:")
+    print("  - Enzyme kinetics (Michaelis-Menten)")
+    print("  - First-order reactions")
+    print("  - Multi-exponential decays")
+    print("  - Activation energy determination")
     print()
-    print("3. Data considerations:")
-    print("   - Sample time points to capture all phases")
-    print("   - For bi-exponential: need ~10x rate separation")
-    print("   - More data points improve parameter correlation")
-    print()
-    print("4. Common pitfalls:")
-    print("   - Swapped rate constants (k1 <-> k2)")
-    print("   - Correlated amplitude/rate parameters")
-    print("   - Insufficient time range for slow phases")
-    print()
+    print("Usage:")
+    print("  kwargs = create_kinetics_preset()")
+    print("  popt, pcov = fit(model, x, y, **kwargs)")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,13 @@
 """
-Converted from 04_workflow_presets.ipynb
+Workflow Presets Guide
 
-This script was automatically generated from a Jupyter notebook.
-Plots are saved to the figures/ directory instead of displayed inline.
+This script demonstrates the built-in workflow presets available in NLSQ.
 
 Features demonstrated:
-- All entries in the WORKFLOW_PRESETS dictionary
+- Available WORKFLOW_PRESETS and their configurations
 - Using presets for common fitting scenarios
 - Inspecting preset configurations
-- Customizing presets as starting points
+- Defense layer presets for streaming
 
 Run this example:
     python examples/scripts/08_workflow_system/04_workflow_presets.py
@@ -16,13 +15,13 @@ Run this example:
 
 import time
 from pathlib import Path
-from pprint import pprint
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import WORKFLOW_PRESETS, HybridStreamingConfig, WorkflowConfig, fit
+from nlsq import HybridStreamingConfig, fit
+from nlsq.core.minpack import WORKFLOW_PRESETS
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -35,7 +34,7 @@ def exponential_model(x, a, b, c):
 
 def main():
     print("=" * 70)
-    print("WORKFLOW_PRESETS Guide")
+    print("Workflow Presets Guide")
     print("=" * 70)
     print()
 
@@ -60,13 +59,16 @@ def main():
     print("-" * 60)
 
     print("\n'standard' preset:")
-    pprint(WORKFLOW_PRESETS["standard"])
+    for key, value in WORKFLOW_PRESETS["standard"].items():
+        print(f"    {key}: {value}")
 
     print("\n'quality' preset:")
-    pprint(WORKFLOW_PRESETS["quality"])
+    for key, value in WORKFLOW_PRESETS["quality"].items():
+        print(f"    {key}: {value}")
 
     print("\n'streaming' preset:")
-    pprint(WORKFLOW_PRESETS["streaming"])
+    for key, value in WORKFLOW_PRESETS["streaming"].items():
+        print(f"    {key}: {value}")
 
     # =========================================================================
     # 3. Preset Comparison Table
@@ -75,14 +77,12 @@ def main():
     print("3. Preset Comparison:")
     print("=" * 100)
     print(
-        f"{'Preset':<18} {'Tier':<12} {'Goal':<16} "
-        f"{'Multistart':<12} {'n_starts':<10} {'gtol':<12}"
+        f"{'Preset':<18} {'Strategy':<12} {'Multistart':<12} {'n_starts':<10} {'gtol':<12}"
     )
     print("-" * 100)
 
     for name, config in WORKFLOW_PRESETS.items():
         tier = config.get("tier", "STANDARD")
-        goal = config.get("goal", "ROBUST")
         multistart = config.get("enable_multistart", False)
         n_starts = config.get("n_starts", 0)
         gtol = config.get("gtol", 1e-8)
@@ -90,8 +90,7 @@ def main():
         multistart_str = "Yes" if multistart else "No"
 
         print(
-            f"{name:<18} {tier:<12} {goal:<16} "
-            f"{multistart_str:<12} {n_starts:<10} {gtol:<12.0e}"
+            f"{name:<18} {tier:<12} {multistart_str:<12} {n_starts:<10} {gtol:<12.0e}"
         )
 
     # =========================================================================
@@ -129,7 +128,7 @@ def main():
             y_data,
             p0=p0,
             bounds=bounds,
-            preset=preset_name,
+            workflow=preset_name,
         )
 
         elapsed = time.time() - start_time
@@ -149,48 +148,10 @@ def main():
         print(f"    Parameters: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
 
     # =========================================================================
-    # 5. Creating WorkflowConfig from Presets
+    # 5. Preset Use Case Guide
     # =========================================================================
     print()
-    print("5. WorkflowConfig from Presets:")
-    print("-" * 50)
-
-    config = WorkflowConfig.from_preset("quality")
-
-    print("\nWorkflowConfig from 'quality' preset:")
-    print(f"  tier:              {config.tier.name}")
-    print(f"  goal:              {config.goal.name}")
-    print(f"  enable_multistart: {config.enable_multistart}")
-    print(f"  n_starts:          {config.n_starts}")
-    print(f"  gtol:              {config.gtol}")
-
-    # =========================================================================
-    # 6. Customizing Presets
-    # =========================================================================
-    print()
-    print("6. Customizing Presets:")
-    print("-" * 50)
-
-    base_config = WorkflowConfig.from_preset("quality")
-    custom_config = base_config.with_overrides(
-        n_starts=30,
-        sampler="sobol",
-        gtol=1e-12,
-    )
-
-    print("\nCustomized 'quality' preset:")
-    print(f"  Original n_starts: {base_config.n_starts}")
-    print(f"  Custom n_starts:   {custom_config.n_starts}")
-    print(f"  Original sampler:  {base_config.sampler}")
-    print(f"  Custom sampler:    {custom_config.sampler}")
-    print(f"  Original gtol:     {base_config.gtol}")
-    print(f"  Custom gtol:       {custom_config.gtol}")
-
-    # =========================================================================
-    # 7. Preset Documentation
-    # =========================================================================
-    print()
-    print("7. Preset Use Case Guide:")
+    print("5. Preset Use Case Guide:")
     print("=" * 80)
 
     preset_docs = {
@@ -217,12 +178,7 @@ def main():
         "streaming": {
             "summary": "Streaming for huge datasets",
             "best_for": "Datasets that exceed available memory (100M+ points)",
-            "tradeoffs": "No covariance matrix, approximate convergence",
-        },
-        "hpc_distributed": {
-            "summary": "Multi-GPU/node HPC clusters",
-            "best_for": "PBS Pro, Slurm clusters with checkpoint recovery",
-            "tradeoffs": "Requires HPC environment setup",
+            "tradeoffs": "Approximate convergence (mini-batch gradient)",
         },
         "memory_efficient": {
             "summary": "Minimize memory footprint",
@@ -238,11 +194,11 @@ def main():
         print(f"    Tradeoffs:  {doc['tradeoffs']}")
 
     # =========================================================================
-    # 8. Defense Layer Presets (v0.3.6+)
+    # 6. Defense Layer Presets (v0.3.6+)
     # =========================================================================
     print()
     print()
-    print("8. Defense Layer Presets (v0.3.6+):")
+    print("6. Defense Layer Presets (v0.3.6+):")
     print("-" * 70)
     print()
     print("For streaming workflows, HybridStreamingConfig provides defense presets")
@@ -286,11 +242,11 @@ def main():
     print("  Layer 4: Step Clipping - Limit parameter update magnitude")
 
     # =========================================================================
-    # 9. Visualization
+    # 7. Visualization
     # =========================================================================
     print()
     print()
-    print("9. Saving visualizations...")
+    print("7. Saving visualizations...")
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
@@ -368,9 +324,9 @@ def main():
         print(f"  - {name}: {desc}")
     print()
     print("Quick usage:")
-    print("  fit(model, x, y, preset='quality')")
-    print("  WorkflowConfig.from_preset('quality')")
-    print("  config.with_overrides(n_starts=30)")
+    print("  fit(model, x, y, workflow='quality')")
+    print("  fit(model, x, y, workflow='fast')")
+    print("  fit(model, x, y, workflow='streaming')")
     print()
     print("Defense presets for streaming (v0.3.6+):")
     print("  HybridStreamingConfig.defense_strict()     # Warm-start refinement")

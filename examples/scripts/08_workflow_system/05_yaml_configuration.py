@@ -1,13 +1,13 @@
 """
-Converted from 05_yaml_configuration.ipynb
+YAML Configuration for NLSQ Workflows
 
-This script was automatically generated from a Jupyter notebook.
+This script demonstrates how to configure NLSQ fitting using YAML files.
 
 Features demonstrated:
-- Create an nlsq.yaml configuration file
-- Configure tolerances, memory limits, and checkpointing via YAML
-- Use load_yaml_config() and get_custom_workflow() functions
-- Override YAML settings with environment variables
+- Creating an nlsq.yaml configuration file
+- Configuring tolerances and memory limits via YAML
+- Environment variable overrides
+- Using YAML configuration with curve_fit()
 
 Run this example:
     python examples/scripts/08_workflow_system/05_yaml_configuration.py
@@ -28,18 +28,55 @@ except ImportError:
 from nlsq import curve_fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
-from nlsq.core.workflow import (
-    WorkflowConfig,
-    get_custom_workflow,
-    get_env_overrides,
-    load_config_with_overrides,
-    load_yaml_config,
-)
 
 
 def exponential_decay(x, a, b, c):
     """Exponential decay model."""
     return a * jnp.exp(-b * x) + c
+
+
+def load_yaml_config(path: str = "nlsq.yaml") -> dict | None:
+    """Load YAML configuration from file."""
+    config_path = Path(path)
+    if not config_path.exists():
+        return None
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+
+def get_env_overrides() -> dict:
+    """Get configuration overrides from environment variables."""
+    overrides = {}
+
+    if "NLSQ_WORKFLOW_GOAL" in os.environ:
+        overrides["goal"] = os.environ["NLSQ_WORKFLOW_GOAL"]
+
+    if "NLSQ_MEMORY_LIMIT_GB" in os.environ:
+        overrides["memory_limit_gb"] = float(os.environ["NLSQ_MEMORY_LIMIT_GB"])
+
+    if "NLSQ_DEFAULT_WORKFLOW" in os.environ:
+        overrides["default_workflow"] = os.environ["NLSQ_DEFAULT_WORKFLOW"]
+
+    if "NLSQ_CHECKPOINT_DIR" in os.environ:
+        overrides["checkpoint_dir"] = os.environ["NLSQ_CHECKPOINT_DIR"]
+
+    return overrides
+
+
+def load_config_with_overrides(path: str = "nlsq.yaml") -> dict:
+    """Load YAML config and apply environment variable overrides."""
+    config = load_yaml_config(path) or {}
+    env_overrides = get_env_overrides()
+    config.update(env_overrides)
+    return config
+
+
+def get_workflow_settings(workflow_name: str, config: dict) -> dict:
+    """Get settings for a named workflow from config."""
+    workflows = config.get("workflows", {})
+    if workflow_name in workflows:
+        return workflows[workflow_name]
+    return {}
 
 
 def fit_with_yaml_config(
@@ -84,15 +121,12 @@ def fit_with_yaml_config(
     if workflow_name is None:
         workflow_name = yaml_config.get("default_workflow", "standard")
 
-    # Try to get custom workflow
-    workflow = get_custom_workflow(workflow_name, config_path)
+    # Get workflow settings
+    workflow = get_workflow_settings(workflow_name, yaml_config)
 
-    if workflow is None:
-        # Fall back to preset
-        try:
-            workflow = WorkflowConfig.from_preset(workflow_name)
-        except ValueError:
-            workflow = WorkflowConfig()  # Default
+    if not workflow:
+        # No workflow defined, use defaults
+        return curve_fit(f, xdata, ydata, p0=p0, bounds=bounds)
 
     # Apply workflow settings
     return curve_fit(
@@ -101,12 +135,14 @@ def fit_with_yaml_config(
         ydata,
         p0=p0,
         bounds=bounds,
-        gtol=workflow.gtol,
-        ftol=workflow.ftol,
-        xtol=workflow.xtol,
-        multistart=workflow.enable_multistart,
-        n_starts=workflow.n_starts if workflow.enable_multistart else 0,
-        sampler=workflow.sampler,
+        gtol=workflow.get("gtol", 1e-8),
+        ftol=workflow.get("ftol", 1e-8),
+        xtol=workflow.get("xtol", 1e-8),
+        multistart=workflow.get("enable_multistart", False),
+        n_starts=workflow.get("n_starts", 0)
+        if workflow.get("enable_multistart", False)
+        else 0,
+        sampler=workflow.get("sampler", "lhs"),
     )
 
 
@@ -129,8 +165,7 @@ def main():
         "memory_limit_gb": 16.0,
         "workflows": {
             "high_precision": {
-                "tier": "STANDARD",
-                "goal": "QUALITY",
+                "strategy": "standard",
                 "gtol": 1e-10,
                 "ftol": 1e-10,
                 "xtol": 1e-10,
@@ -139,16 +174,14 @@ def main():
                 "sampler": "lhs",
             },
             "quick_explore": {
-                "tier": "STANDARD",
-                "goal": "FAST",
+                "strategy": "standard",
                 "gtol": 1e-5,
                 "ftol": 1e-5,
                 "xtol": 1e-5,
                 "enable_multistart": False,
             },
             "large_data": {
-                "tier": "CHUNKED",
-                "goal": "ROBUST",
+                "strategy": "chunked",
                 "gtol": 1e-8,
                 "ftol": 1e-8,
                 "xtol": 1e-8,
@@ -157,9 +190,8 @@ def main():
                 "enable_multistart": True,
                 "n_starts": 4 if QUICK else 10,
             },
-            "hpc_checkpoint": {
-                "tier": "STREAMING_CHECKPOINT",
-                "goal": "ROBUST",
+            "streaming_checkpoint": {
+                "strategy": "streaming",
                 "gtol": 1e-7,
                 "ftol": 1e-7,
                 "xtol": 1e-7,
@@ -196,22 +228,21 @@ def main():
     print(f"  workflows defined: {list(config.get('workflows', {}).keys())}")
 
     # =========================================================================
-    # 3. Get custom workflows
+    # 3. Get workflow settings
     # =========================================================================
     print()
-    print("3. Getting custom workflows:")
+    print("3. Getting workflow settings:")
 
-    for wf_name in ["high_precision", "large_data", "hpc_checkpoint"]:
-        workflow = get_custom_workflow(wf_name)
-        if workflow:
+    for wf_name in ["high_precision", "large_data", "streaming_checkpoint"]:
+        settings = get_workflow_settings(wf_name, config)
+        if settings:
             print(f"\n  {wf_name}:")
-            print(f"    tier: {workflow.tier}")
-            print(f"    goal: {workflow.goal}")
-            print(f"    gtol: {workflow.gtol}")
-            if workflow.enable_multistart:
-                print(f"    n_starts: {workflow.n_starts}")
-            if workflow.enable_checkpoints:
-                print(f"    checkpoint_dir: {workflow.checkpoint_dir}")
+            print(f"    strategy: {settings.get('strategy', 'standard')}")
+            print(f"    gtol: {settings.get('gtol', 1e-8)}")
+            if settings.get("enable_multistart"):
+                print(f"    n_starts: {settings.get('n_starts')}")
+            if settings.get("enable_checkpoints"):
+                print(f"    checkpoint_dir: {settings.get('checkpoint_dir')}")
 
     # =========================================================================
     # 4. Environment variable overrides
@@ -258,28 +289,32 @@ def main():
 
     print(f"  True parameters: a={true_a}, b={true_b}, c={true_c}")
 
-    # Load and use high_precision workflow
-    workflow = get_custom_workflow("high_precision")
+    # Use high_precision workflow
+    settings = get_workflow_settings("high_precision", config)
 
-    if workflow:
+    if settings:
         popt, _ = curve_fit(
             exponential_decay,
             x_data,
             y_data,
             p0=[1.0, 1.0, 0.0],
             bounds=([0, 0, -1], [10, 5, 2]),
-            gtol=workflow.gtol,
-            ftol=workflow.ftol,
-            xtol=workflow.xtol,
-            multistart=workflow.enable_multistart,
-            n_starts=workflow.n_starts if workflow.enable_multistart else 0,
-            sampler=workflow.sampler,
+            gtol=settings.get("gtol", 1e-8),
+            ftol=settings.get("ftol", 1e-8),
+            xtol=settings.get("xtol", 1e-8),
+            multistart=settings.get("enable_multistart", False),
+            n_starts=settings.get("n_starts", 0)
+            if settings.get("enable_multistart", False)
+            else 0,
+            sampler=settings.get("sampler", "lhs"),
         )
 
         print()
         print("  high_precision workflow result:")
         print(f"    a={popt[0]:.6f}, b={popt[1]:.6f}, c={popt[2]:.6f}")
-        print(f"    Settings: gtol={workflow.gtol}, n_starts={workflow.n_starts}")
+        print(
+            f"    Settings: gtol={settings.get('gtol')}, n_starts={settings.get('n_starts')}"
+        )
 
     # =========================================================================
     # 6. Using helper function
@@ -325,11 +360,11 @@ def main():
     print("  - Easy sharing between collaborators")
     print("  - Environment-specific overrides")
     print()
-    print("Key functions:")
-    print("  - load_yaml_config(path)")
-    print("  - get_custom_workflow(name)")
-    print("  - load_config_with_overrides()")
-    print("  - get_env_overrides()")
+    print("Key patterns:")
+    print("  - load_yaml_config(path) - Load YAML file")
+    print("  - get_workflow_settings(name, config) - Get named workflow")
+    print("  - get_env_overrides() - Get environment variable overrides")
+    print("  - load_config_with_overrides() - Merge YAML + env vars")
     print()
     print("Environment variables:")
     print("  - NLSQ_WORKFLOW_GOAL")

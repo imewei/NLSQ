@@ -1,14 +1,13 @@
 """
-Converted from 03_optimization_goals.ipynb
+Goal-Driven Optimization in NLSQ
 
-This script was automatically generated from a Jupyter notebook.
-Plots are saved to the figures/ directory instead of displayed inline.
+This script demonstrates how OptimizationGoal affects fitting behavior.
 
 Features demonstrated:
 - All 5 OptimizationGoal values and their behaviors
-- Internal settings each goal applies
-- Combining goals with WorkflowTier
-- Visualization comparing goal performance
+- Adaptive tolerance calculation based on dataset size and goal
+- Using goals with fit() presets
+- Comparing goal performance
 
 Run this example:
     python examples/scripts/08_workflow_system/03_optimization_goals.py
@@ -21,8 +20,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import OptimizationGoal, WorkflowConfig, WorkflowTier, fit
-from nlsq.core.workflow import DatasetSizeTier, calculate_adaptive_tolerances
+from nlsq import OptimizationGoal, fit
+from nlsq.core.workflow import calculate_adaptive_tolerances
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -122,27 +121,10 @@ def main():
         )
 
     # =========================================================================
-    # 3. DatasetSizeTier Reference
+    # 3. Practical Comparison
     # =========================================================================
     print()
-    print("3. DatasetSizeTier Reference:")
-    print("-" * 50)
-    print(f"{'Tier':<15} {'Max Points':<15} {'Base Tolerance'}")
-    print("-" * 50)
-
-    for tier in DatasetSizeTier:
-        max_pts = tier.max_points
-        if max_pts == float("inf"):
-            max_pts_str = "unlimited"
-        else:
-            max_pts_str = f"{int(max_pts):,}"
-        print(f"{tier.name:<15} {max_pts_str:<15} {tier.tolerance:.0e}")
-
-    # =========================================================================
-    # 4. Practical Comparison
-    # =========================================================================
-    print()
-    print("4. Testing Goals on Exponential Decay Problem:")
+    print("3. Testing Goals on Exponential Decay Problem:")
     print("-" * 70)
 
     # Generate synthetic data
@@ -164,9 +146,14 @@ def main():
     print(f"  Dataset size: {n_samples} points")
 
     results = {}
-    goals_to_test = ["fast", "robust", "global"]
+    # Map goal names to workflow presets
+    preset_mapping = {
+        "fast": "fast",
+        "robust": "standard",  # standard preset uses robust behavior
+        "quality": "quality",
+    }
 
-    for goal_name in goals_to_test:
+    for goal_name, preset_name in preset_mapping.items():
         start_time = time.time()
 
         popt, pcov = fit(
@@ -175,7 +162,7 @@ def main():
             y_data,
             p0=p0,
             bounds=bounds,
-            preset=goal_name,
+            workflow=preset_name,
         )
 
         elapsed = time.time() - start_time
@@ -202,41 +189,27 @@ def main():
         )
 
     # =========================================================================
-    # 5. WorkflowConfig with Goals
+    # 4. Using Goals with fit()
     # =========================================================================
     print()
-    print("5. WorkflowConfig with Different Goals:")
+    print("4. Using Goals with fit():")
     print("-" * 60)
-
-    for goal in [
-        OptimizationGoal.FAST,
-        OptimizationGoal.ROBUST,
-        OptimizationGoal.QUALITY,
-    ]:
-        config = WorkflowConfig(goal=goal)
-        print(f"\n  {goal.name}:")
-        print(f"    tier:              {config.tier.name}")
-        print(f"    gtol:              {config.gtol}")
-        print(f"    enable_multistart: {config.enable_multistart}")
-
-    # Combining goals with tiers
-    print("\n  Quality + Streaming (combined):")
-    config_combined = WorkflowConfig(
-        goal=OptimizationGoal.QUALITY,
-        tier=WorkflowTier.STREAMING,
-        enable_multistart=True,
-        n_starts=20,
-    )
-    print(f"    tier:              {config_combined.tier.name}")
-    print(f"    goal:              {config_combined.goal.name}")
-    print(f"    enable_multistart: {config_combined.enable_multistart}")
-    print(f"    n_starts:          {config_combined.n_starts}")
+    print()
+    print("Available workflow presets that correspond to goals:")
+    print()
+    print("  fit(f, x, y, workflow='fast')     # FAST goal behavior")
+    print("  fit(f, x, y, workflow='standard') # ROBUST goal behavior")
+    print("  fit(f, x, y, workflow='quality')  # QUALITY goal behavior")
+    print()
+    print("For explicit goal parameter with multistart:")
+    print()
+    print("  fit(f, x, y, goal='quality', multistart=True, n_starts=20)")
 
     # =========================================================================
-    # 6. GLOBAL vs ROBUST
+    # 5. GLOBAL vs ROBUST
     # =========================================================================
     print()
-    print("6. GLOBAL and ROBUST Equivalence:")
+    print("5. GLOBAL and ROBUST Equivalence:")
     print("-" * 50)
 
     normalized = OptimizationGoal.normalize(OptimizationGoal.GLOBAL)
@@ -250,14 +223,14 @@ def main():
     print(f"  Same: {tols_global['gtol'] == tols_robust['gtol']}")
 
     # =========================================================================
-    # 7. Visualization
+    # 6. Visualization
     # =========================================================================
     print()
-    print("7. Saving visualizations...")
+    print("6. Saving visualizations...")
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    colors = {"fast": "blue", "robust": "green", "global": "red"}
+    colors = {"fast": "blue", "robust": "green", "quality": "red"}
 
     # Top left: Tolerance comparison across dataset sizes
     ax1 = axes[0, 0]
@@ -343,11 +316,11 @@ def main():
     print(f"True parameters: a={true_a}, b={true_b}, c={true_c}")
     print()
     print("Goal recommendations:")
-    print("  - Exploratory analysis:    OptimizationGoal.FAST")
-    print("  - Production fitting:      OptimizationGoal.ROBUST")
-    print("  - Global search emphasis:  OptimizationGoal.GLOBAL")
-    print("  - Memory constraints:      OptimizationGoal.MEMORY_EFFICIENT")
-    print("  - Publication quality:     OptimizationGoal.QUALITY")
+    print("  - Exploratory analysis:    workflow='fast'")
+    print("  - Production fitting:      workflow='standard' (ROBUST behavior)")
+    print("  - Global search emphasis:  workflow='global'")
+    print("  - Memory constraints:      workflow='memory_efficient'")
+    print("  - Publication quality:     workflow='quality'")
     print()
     print("Key behaviors:")
     print("  - FAST: Looser tolerances, no multi-start")

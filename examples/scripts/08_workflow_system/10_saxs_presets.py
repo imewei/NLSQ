@@ -1,7 +1,7 @@
 """SAXS (Small-Angle X-ray Scattering) Domain Preset Example.
 
 This example demonstrates how to create a custom preset for SAXS form factor
-fitting using NLSQ's WorkflowConfig.from_preset().with_overrides() pattern.
+fitting using NLSQ's fit() function with custom kwargs.
 
 SAXS analysis typically involves:
 - Fitting form factor models (spheres, cylinders, core-shell, etc.)
@@ -17,11 +17,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq import fit
-from nlsq.core.workflow import WorkflowConfig
 
 
-def create_saxs_preset() -> WorkflowConfig:
-    """Create a workflow configuration optimized for SAXS form factor fitting.
+def create_saxs_preset() -> dict:
+    """Create fit kwargs optimized for SAXS form factor fitting.
 
     SAXS-specific considerations:
     - Tolerances: 1e-8 to 1e-10 for accurate structural parameters
@@ -30,241 +29,262 @@ def create_saxs_preset() -> WorkflowConfig:
 
     Returns
     -------
-    WorkflowConfig
-        Configuration optimized for SAXS analysis.
+    dict
+        Keyword arguments for fit() optimized for SAXS analysis.
 
     Example
     -------
-    >>> config = create_saxs_preset()
-    >>> config.gtol
-    1e-09
-    >>> config.enable_multistart
-    True
+    >>> kwargs = create_saxs_preset()
+    >>> popt, pcov = fit(model, q, I, **kwargs)
     """
-    # Start from precision_standard and customize for SAXS
-    # For SAXS, we often need tighter tolerances than default for
-    # accurate size determination, but not as tight as precision_high
-    # since form factor oscillations provide good gradient information
-
-    config = WorkflowConfig.from_preset("precision_standard").with_overrides(
-        # SAXS-specific overrides:
-        # Tighter tolerances for accurate structural parameters
-        # Form factor fitting benefits from higher precision
-        gtol=1e-9,
-        ftol=1e-9,
-        xtol=1e-9,
-        # Moderate n_starts - form factors are usually well-behaved
-        # but can have local minima for polydisperse or multi-component systems
-        n_starts=12,
-        # LHS sampling works well for SAXS parameter spaces
-        sampler="lhs",
-    )
-
-    return config
+    # SAXS typically needs tighter tolerances than default for
+    # accurate size determination, but form factor oscillations
+    # provide good gradient information
+    return {
+        "workflow": "standard",
+        # Multi-start is helpful for:
+        # 1. Complex form factors (core-shell, polydisperse)
+        # 2. Shape ambiguity (sphere vs oblate ellipsoid)
+        "multistart": True,
+        "n_starts": 10,  # Sufficient for most form factors
+        "sampler": "lhs",
+        # Tighter tolerances for structural accuracy
+        "gtol": 1e-9,
+        "ftol": 1e-9,
+        "xtol": 1e-9,
+    }
 
 
-def sphere_form_factor(q, radius, scale, background):
-    """Sphere form factor for SAXS fitting.
+def create_saxs_high_precision_preset() -> dict:
+    """Create fit kwargs for high-precision SAXS analysis.
 
-    The form factor amplitude for a uniform sphere:
-        F(q) = 3 * [sin(qR) - qR*cos(qR)] / (qR)^3
+    Use this for:
+    - Publication-quality structural parameters
+    - Polydispersity analysis
+    - Complex multi-component systems
 
-    Intensity: I(q) = scale * |F(q)|^2 + background
+    Returns
+    -------
+    dict
+        Keyword arguments for fit() with high precision settings.
+    """
+    return {
+        "workflow": "quality",
+        "multistart": True,
+        "n_starts": 20,
+        "sampler": "sobol",  # Better coverage for high-dimensional problems
+        "gtol": 1e-10,
+        "ftol": 1e-10,
+        "xtol": 1e-10,
+    }
+
+
+def sphere_form_factor(q, intensity_scale, radius, background):
+    """Spherical form factor for SAXS.
+
+    I(q) = I0 * [3(sin(qR) - qR*cos(qR)) / (qR)^3]^2 + background
 
     Parameters
     ----------
     q : array_like
-        Scattering vector magnitude (typically in nm^-1 or A^-1)
+        Scattering vector (Å^-1 or nm^-1)
+    intensity_scale : float
+        Overall intensity scaling factor
     radius : float
         Sphere radius (same units as 1/q)
-    scale : float
-        Intensity scaling factor (proportional to concentration and contrast)
     background : float
-        Flat background intensity
+        Flat background level
 
     Returns
     -------
     array
-        Scattering intensity at each q value
+        Scattered intensity I(q)
     """
     qr = q * radius
 
     # Avoid division by zero at q=0
-    # Use Taylor expansion for small qr: F(qr) -> 1 - (qr)^2/10 + ...
-    form_factor = jnp.where(
-        jnp.abs(qr) < 1e-6,
-        1.0 - qr**2 / 10.0,
-        3.0 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3,
-    )
+    # Use Taylor expansion near qr=0
+    def safe_form_factor(qr):
+        # Form factor: 3*(sin(qr) - qr*cos(qr)) / qr^3
+        small = qr < 1e-6
+        large_qr = jnp.where(small, 1.0, qr)
 
-    return scale * form_factor**2 + background
+        # For large qr, use exact formula
+        ff_large = (
+            3.0 * (jnp.sin(large_qr) - large_qr * jnp.cos(large_qr)) / large_qr**3
+        )
+
+        # For small qr, use Taylor expansion: 1 - qr^2/10 + O(qr^4)
+        ff_small = 1.0 - qr**2 / 10.0
+
+        return jnp.where(small, ff_small, ff_large)
+
+    form_factor = safe_form_factor(qr)
+    return intensity_scale * form_factor**2 + background
 
 
-def core_shell_form_factor(q, r_core, r_shell, scale, background):
-    """Core-shell sphere form factor for SAXS fitting.
+def core_shell_sphere(
+    q, scale, r_core, thickness, sld_core, sld_shell, sld_solvent, bg
+):
+    """Core-shell sphere form factor for SAXS.
 
-    A simplified model with fixed contrast ratios.
+    Models particles with a core of one density surrounded by a shell
+    of different density.
 
     Parameters
     ----------
     q : array_like
-        Scattering vector magnitude
+        Scattering vector
+    scale : float
+        Overall scale factor
     r_core : float
         Core radius
-    r_shell : float
-        Total radius (core + shell thickness)
-    scale : float
-        Intensity scaling factor
-    background : float
-        Flat background intensity
+    thickness : float
+        Shell thickness (total radius = r_core + thickness)
+    sld_core : float
+        Core scattering length density
+    sld_shell : float
+        Shell scattering length density
+    sld_solvent : float
+        Solvent scattering length density
+    bg : float
+        Background
 
     Returns
     -------
     array
-        Scattering intensity at each q value
+        Scattered intensity
     """
+    r_total = r_core + thickness
 
-    def sphere_amplitude(q_val, r):
-        qr = q_val * r
-        return jnp.where(
-            jnp.abs(qr) < 1e-6,
-            1.0 - qr**2 / 10.0,
-            3.0 * (jnp.sin(qr) - qr * jnp.cos(qr)) / qr**3,
+    def sphere_amplitude(q, r):
+        qr = q * r
+        small = qr < 1e-6
+        large_qr = jnp.where(small, 1.0, qr)
+        amp_large = (
+            3.0 * (jnp.sin(large_qr) - large_qr * jnp.cos(large_qr)) / large_qr**3
         )
+        amp_small = 1.0 - qr**2 / 10.0
+        return jnp.where(small, amp_small, amp_large)
 
-    # Simplified core-shell with fixed contrast ratio (core=1, shell=0.5)
+    # Volume weighted amplitudes
     v_core = (4.0 / 3.0) * jnp.pi * r_core**3
-    v_shell = (4.0 / 3.0) * jnp.pi * r_shell**3
+    v_total = (4.0 / 3.0) * jnp.pi * r_total**3
 
-    f_core = v_core * sphere_amplitude(q, r_core)
-    f_shell = v_shell * sphere_amplitude(q, r_shell)
+    f_core = v_core * (sld_core - sld_shell) * sphere_amplitude(q, r_core)
+    f_shell = v_total * (sld_shell - sld_solvent) * sphere_amplitude(q, r_total)
 
-    # Combined amplitude (assuming shell contrast is 0.5 of core)
-    f_total = f_core + 0.5 * (f_shell - f_core)
-
-    return scale * (f_total / v_shell) ** 2 + background
+    form_factor = f_core + f_shell
+    return scale * form_factor**2 + bg
 
 
 def main():
     print("=" * 70)
-    print("SAXS Domain Preset Example")
+    print("SAXS (Small-Angle X-ray Scattering) Domain Preset")
     print("=" * 70)
     print()
 
-    # Create the SAXS preset
-    config = create_saxs_preset()
-
-    print("SAXS Preset Configuration:")
-    print("-" * 40)
-    print(f"  Tier:              {config.tier.name}")
-    print(f"  Goal:              {config.goal.name}")
-    print(f"  gtol:              {config.gtol}")
-    print(f"  ftol:              {config.ftol}")
-    print(f"  xtol:              {config.xtol}")
-    print(f"  enable_multistart: {config.enable_multistart}")
-    print(f"  n_starts:          {config.n_starts}")
-    print(f"  sampler:           {config.sampler}")
-    print()
-
-    # Generate synthetic SAXS data for sphere form factor
-    print("Generating synthetic SAXS data (spheres)...")
     np.random.seed(42)
 
+    # =========================================================================
+    # 1. Simple Sphere Form Factor
+    # =========================================================================
+    print("1. Simple Sphere Form Factor:")
+    print("-" * 50)
+
+    true_scale = 100.0
+    true_radius = 50.0  # nm
+    true_bg = 0.1
+
     # q-range typical for SAXS (nm^-1)
-    q_data = np.logspace(-2, 0, 200)  # 0.01 to 1 nm^-1
+    q = np.linspace(0.01, 0.5, 200)
 
-    # True parameters
-    true_params = {
-        "radius": 10.0,  # 10 nm radius
-        "scale": 1e6,  # Intensity scale
-        "background": 10.0,  # Background counts
-    }
-
-    # Generate noisy data with realistic Poisson-like noise
-    y_true = sphere_form_factor(
-        q_data,
-        true_params["radius"],
-        true_params["scale"],
-        true_params["background"],
+    # Generate synthetic SAXS data
+    I_true = (
+        true_scale
+        * (
+            (
+                3
+                * (np.sin(q * true_radius) - q * true_radius * np.cos(q * true_radius))
+                / (q * true_radius) ** 3
+            )
+            ** 2
+        )
+        + true_bg
     )
-    # Add relative noise that increases at low intensity
-    noise = 0.05 * np.sqrt(np.maximum(y_true, 1)) * np.random.randn(len(q_data))
-    y_data = np.maximum(y_true + noise, 0.1)  # Ensure positive intensities
+    I_data = I_true * (1 + 0.02 * np.random.randn(len(q)))
 
-    print(f"  Data points: {len(q_data)}")
-    print(f"  True radius: {true_params['radius']:.2f} nm")
-    print(f"  True scale:  {true_params['scale']:.2e}")
-    print()
+    print("  True parameters:")
+    print(f"    Intensity scale: {true_scale}")
+    print(f"    Radius: {true_radius} nm")
+    print(f"    Background: {true_bg}")
 
-    # Initial guesses and bounds
-    # Note: Scale and radius have very different magnitudes
-    p0 = [8.0, 5e5, 5.0]  # [radius, scale, background]
+    # Fit using SAXS preset
+    kwargs = create_saxs_preset()
+    print(f"\n  SAXS preset: {kwargs}")
 
-    bounds = (
-        [1.0, 1e3, 0.0],  # Lower bounds
-        [50.0, 1e9, 100.0],  # Upper bounds
-    )
-
-    # Fit using the SAXS preset
-    print("Fitting sphere form factor with SAXS preset...")
     popt, pcov = fit(
         sphere_form_factor,
-        q_data,
-        y_data,
-        p0=p0,
-        bounds=bounds,
-        workflow_config=config,
+        q,
+        I_data,
+        p0=[50.0, 30.0, 0.5],
+        bounds=([0.1, 1.0, 0.0], [1000.0, 200.0, 10.0]),
+        **kwargs,
     )
 
-    # Results
+    print("\n  Fitted parameters:")
+    print(f"    Intensity scale: {popt[0]:.2f} (true: {true_scale})")
+    print(f"    Radius: {popt[1]:.2f} nm (true: {true_radius})")
+    print(f"    Background: {popt[2]:.4f} (true: {true_bg})")
+
+    # =========================================================================
+    # 2. High-Precision SAXS Analysis
+    # =========================================================================
     print()
-    print("Fit Results:")
-    print("-" * 40)
-    print(f"  radius:     {popt[0]:.4f} nm (true: {true_params['radius']:.4f})")
-    print(f"  scale:      {popt[1]:.4e} (true: {true_params['scale']:.4e})")
-    print(f"  background: {popt[2]:.4f} (true: {true_params['background']:.4f})")
+    print("2. High-Precision SAXS Analysis:")
+    print("-" * 50)
 
-    # Parameter uncertainties
-    if pcov is not None:
-        perr = np.sqrt(np.diag(pcov))
-        print()
-        print("Parameter Uncertainties (1-sigma):")
-        print(f"  radius:     +/- {perr[0]:.4f} nm")
-        print(f"  scale:      +/- {perr[1]:.4e}")
-        print(f"  background: +/- {perr[2]:.4f}")
+    kwargs_hp = create_saxs_high_precision_preset()
+    print(f"  High-precision preset: {kwargs_hp}")
 
-    # Calculate relative error
-    rel_error = 100 * np.abs(popt[0] - true_params["radius"]) / true_params["radius"]
-    print()
-    print(f"  Radius relative error: {rel_error:.3f}%")
+    popt_hp, pcov_hp = fit(
+        sphere_form_factor,
+        q,
+        I_data,
+        p0=[50.0, 30.0, 0.5],
+        bounds=([0.1, 1.0, 0.0], [1000.0, 200.0, 10.0]),
+        **kwargs_hp,
+    )
 
+    perr = np.sqrt(np.diag(pcov_hp))
+    print("\n  Fitted with uncertainties:")
+    print(f"    Intensity: {popt_hp[0]:.3f} ± {perr[0]:.3f}")
+    print(f"    Radius: {popt_hp[1]:.3f} ± {perr[1]:.3f} nm")
+    print(f"    Background: {popt_hp[2]:.5f} ± {perr[2]:.5f}")
+
+    # =========================================================================
+    # Summary
+    # =========================================================================
     print()
     print("=" * 70)
-    print("Notes on SAXS Preset Customization")
+    print("Summary")
     print("=" * 70)
     print()
-    print("The SAXS preset builds on 'precision_standard' with adjustments for:")
+    print("SAXS preset characteristics:")
+    print("  - Multi-start enabled: Helps with shape ambiguity")
+    print("  - n_starts=10: Sufficient for typical form factors")
+    print("  - gtol=1e-9: Tighter tolerance for structural accuracy")
+    print("  - LHS sampler: Good coverage of parameter space")
     print()
-    print("1. Tighter tolerances (1e-9)")
-    print("   - Form factor oscillations provide good gradient information")
-    print("   - Accurate size determination requires higher precision")
-    print("   - Still computationally efficient for typical SAXS datasets")
+    print("Use cases:")
+    print("  - Nanoparticle size determination")
+    print("  - Protein shape analysis")
+    print("  - Core-shell structures")
+    print("  - Polydispersity analysis")
     print()
-    print("2. Multi-start optimization (n_starts=12)")
-    print("   - Helps with polydisperse systems")
-    print("   - Useful for complex form factors (core-shell, ellipsoids)")
-    print("   - Moderate number sufficient for well-conditioned problems")
-    print()
-    print("3. Parameter scaling considerations:")
-    print("   - Intensity scales span many orders of magnitude")
-    print("   - NLSQ's automatic normalization handles this well")
-    print("   - Use bounds to constrain physically reasonable values")
-    print()
-    print("4. Common SAXS models:")
-    print("   - Sphere, cylinder, ellipsoid form factors")
-    print("   - Core-shell and multi-shell structures")
-    print("   - Structure factors for concentrated systems")
-    print()
+    print("Usage:")
+    print("  kwargs = create_saxs_preset()")
+    print("  popt, pcov = fit(form_factor, q, I, **kwargs)")
 
 
 if __name__ == "__main__":

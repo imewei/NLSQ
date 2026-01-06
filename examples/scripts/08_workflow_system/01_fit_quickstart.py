@@ -1,13 +1,12 @@
 """
-Converted from 01_fit_quickstart.ipynb
+NLSQ Unified fit() Entry Point - Quickstart
 
-This script was automatically generated from a Jupyter notebook.
-Plots are saved to the figures/ directory instead of displayed inline.
+This script demonstrates the unified fit() entry point for curve fitting.
 
 Features demonstrated:
-- Using fit() with automatic workflow selection
-- Applying preset configurations (fast, robust, global)
-- Configuring fit() with WorkflowConfig
+- Using fit() with automatic memory-based strategy selection
+- Applying preset configurations (fast, standard, quality)
+- Using fit() with explicit multistart configuration
 - Comparing fit(), curve_fit(), and curve_fit_large()
 
 Run this example:
@@ -20,7 +19,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import OptimizationGoal, WorkflowConfig, curve_fit, curve_fit_large, fit
+from nlsq import OptimizationGoal, curve_fit, curve_fit_large, fit
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,16 +59,17 @@ def main():
     print(f"  Dataset size: {n_samples} points")
 
     # =========================================================================
-    # 2. Basic fit() usage
+    # 2. Basic fit() usage with auto strategy selection
     # =========================================================================
     print()
-    print("2. Basic fit() - automatic workflow selection...")
+    print("2. Basic fit() - automatic memory-based strategy selection...")
 
     popt, pcov = fit(
         exponential_decay,
         x_data,
         y_data,
         p0=[1.0, 1.0, 0.0],
+        workflow="auto",  # Automatic strategy selection based on memory
     )
 
     print(f"  Fitted: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
@@ -90,59 +90,45 @@ def main():
         y_data,
         p0=[1.0, 1.0, 0.0],
         bounds=bounds,
-        preset="fast",
+        workflow="fast",
     )
     print(
-        f"  preset='fast':   a={popt_fast[0]:.4f}, b={popt_fast[1]:.4f}, c={popt_fast[2]:.4f}"
+        f"  workflow='fast':     a={popt_fast[0]:.4f}, b={popt_fast[1]:.4f}, c={popt_fast[2]:.4f}"
     )
 
-    # Preset: 'robust'
-    popt_robust, _ = fit(
+    # Preset: 'standard'
+    popt_standard, _ = fit(
         exponential_decay,
         x_data,
         y_data,
         p0=[1.0, 1.0, 0.0],
         bounds=bounds,
-        preset="robust",
+        workflow="standard",
     )
     print(
-        f"  preset='robust': a={popt_robust[0]:.4f}, b={popt_robust[1]:.4f}, c={popt_robust[2]:.4f}"
+        f"  workflow='standard': a={popt_standard[0]:.4f}, b={popt_standard[1]:.4f}, c={popt_standard[2]:.4f}"
     )
 
-    # Preset: 'global'
-    popt_global, _ = fit(
+    # Preset: 'quality'
+    popt_quality, _ = fit(
         exponential_decay,
         x_data,
         y_data,
         p0=[1.0, 1.0, 0.0],
         bounds=bounds,
-        preset="global",
+        workflow="quality",
     )
     print(
-        f"  preset='global': a={popt_global[0]:.4f}, b={popt_global[1]:.4f}, c={popt_global[2]:.4f}"
+        f"  workflow='quality':  a={popt_quality[0]:.4f}, b={popt_quality[1]:.4f}, c={popt_quality[2]:.4f}"
     )
 
     # =========================================================================
-    # 4. Using WorkflowConfig
+    # 4. Using fit() with explicit multistart
     # =========================================================================
     print()
-    print("4. Using WorkflowConfig for custom configuration...")
+    print("4. Using fit() with explicit multistart configuration...")
 
-    config = WorkflowConfig(
-        goal=OptimizationGoal.QUALITY,
-        enable_multistart=True,
-        n_starts=15,
-        sampler="lhs",
-    )
-
-    print("  WorkflowConfig:")
-    print(f"    goal: {config.goal}")
-    print(f"    enable_multistart: {config.enable_multistart}")
-    print(f"    n_starts: {config.n_starts}")
-    print(f"    sampler: {config.sampler}")
-
-    # Using custom parameters with fit()
-    popt_custom, _ = fit(
+    popt_ms, _ = fit(
         exponential_decay,
         x_data,
         y_data,
@@ -153,7 +139,7 @@ def main():
         sampler="lhs",
     )
     print(
-        f"  Custom result: a={popt_custom[0]:.4f}, b={popt_custom[1]:.4f}, c={popt_custom[2]:.4f}"
+        f"  multistart result: a={popt_ms[0]:.4f}, b={popt_ms[1]:.4f}, c={popt_ms[2]:.4f}"
     )
 
     # =========================================================================
@@ -232,21 +218,22 @@ def main():
     print(f"True parameters: a={true_a}, b={true_b}, c={true_c}")
     print()
     print("Results from different approaches:")
-    print(f"  fit() auto:      a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
+    print(f"  fit() auto:        a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
     print(
-        f"  preset='fast':   a={popt_fast[0]:.4f}, b={popt_fast[1]:.4f}, c={popt_fast[2]:.4f}"
+        f"  workflow='fast':   a={popt_fast[0]:.4f}, b={popt_fast[1]:.4f}, c={popt_fast[2]:.4f}"
     )
     print(
-        f"  preset='robust': a={popt_robust[0]:.4f}, b={popt_robust[1]:.4f}, c={popt_robust[2]:.4f}"
+        f"  workflow='quality':a={popt_quality[0]:.4f}, b={popt_quality[1]:.4f}, c={popt_quality[2]:.4f}"
     )
     print(
-        f"  curve_fit():     a={popt_cf[0]:.4f}, b={popt_cf[1]:.4f}, c={popt_cf[2]:.4f}"
+        f"  curve_fit():       a={popt_cf[0]:.4f}, b={popt_cf[1]:.4f}, c={popt_cf[2]:.4f}"
     )
     print()
     print("Key takeaways:")
-    print("  - fit() is the unified entry point with automatic workflow selection")
-    print("  - Use presets (fast, robust, global) for quick configuration")
-    print("  - WorkflowConfig provides full control over workflow settings")
+    print("  - fit() is the unified entry point with automatic strategy selection")
+    print("  - Use workflow='auto' for memory-based automatic strategy selection")
+    print("  - Use workflow presets (fast, standard, quality) for quick configuration")
+    print("  - Use multistart=True with n_starts/sampler for global optimization")
     print("  - Choose API based on your needs: fit() for general use,")
     print("    curve_fit() for SciPy compatibility, curve_fit_large() for big data")
 
