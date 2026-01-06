@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 3.2 (Updated for NLSQ v0.5.4 with complete workflow presets)
+# Version: 4.0 (Updated for NLSQ v0.6.0)
 #
 # This template provides comprehensive configuration options for NLSQ curve
 # fitting workflows. Copy this file to your project and customize as needed.
@@ -254,7 +254,7 @@ metadata:
   # Brief description of workflow purpose.
   description: "NLSQ workflow configuration template with optimized defaults."
   # Configuration version for tracking changes.
-  version: "3.2"
+  version: "4.0"
   # Optional ownership information.
   author: ""
   contact: ""
@@ -266,32 +266,18 @@ metadata:
 # The default_workflow can be a preset name or a custom workflow defined below.
 #
 # ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ BUILT-IN WORKFLOW PRESETS                                                   │
+# │ BUILT-IN WORKFLOW PRESETS (from nlsq.core.minpack.WORKFLOW_PRESETS)         │
 # ├─────────────────────────────────────────────────────────────────────────────┤
-# │ CORE PRESETS                                                                │
 # │   - standard:         Standard curve_fit() with default tolerances (1e-8)   │
 # │   - quality:          Highest precision with multi-start (tol 1e-10)        │
 # │   - fast:             Speed-optimized with looser tolerances (1e-6)         │
 # │   - large_robust:     Chunked processing with multi-start for large data    │
 # │   - streaming:        AdaptiveHybridStreamingOptimizer for huge datasets    │
 # │   - hpc_distributed:  Multi-GPU/node configuration for HPC clusters (PBS)   │
-# │   - memory_efficient: Minimize memory with streaming/small chunks           │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │ PRECISION PRESETS                                                           │
-# │   - precision_high:     Maximum numerical precision (tolerances 1e-10)      │
-# │   - precision_standard: Standard numerical precision (tolerances 1e-8)      │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │ SCALE PRESETS                                                               │
-# │   - streaming_large:  Large-scale streaming with checkpointing              │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │ GLOBAL OPTIMIZATION PRESETS                                                 │
-# │   - global_multimodal: Multi-start global search with Sobol sampling        │
-# │   - multimodal:        Problems with multiple local minima                  │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │ MATHEMATICAL BEHAVIOR PRESETS                                               │
-# │   - spectroscopy:    Peak fitting (Gaussian/Lorentzian/Voigt), tol 1e-10    │
-# │   - timeseries:      Long time series with streaming and checkpointing      │
 # └─────────────────────────────────────────────────────────────────────────────┘
+#
+# Note: For custom workflows beyond these presets, define them in the 'workflows'
+# section below or pass a config object directly to fit().
 
 default_workflow: "standard"
 
