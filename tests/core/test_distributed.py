@@ -12,12 +12,12 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nlsq.core.workflow import (
-    WORKFLOW_PRESETS,
     ClusterDetector,
     ClusterInfo,
     MultiGPUConfig,
-    WorkflowConfig,
     create_distributed_config,
     get_multi_gpu_config,
 )
@@ -126,29 +126,6 @@ class TestClusterDetector:
         assert multi_config.use_pjit is True  # Multi-node SHOULD use pjit
         # Multi-node should have larger per-device batch size
         assert multi_config.per_device_batch_size == 50000
-
-    def test_hpc_distributed_preset_configuration(self) -> None:
-        """Test 'hpc_distributed' preset configuration."""
-        # Check preset exists
-        assert "hpc_distributed" in WORKFLOW_PRESETS
-
-        preset = WORKFLOW_PRESETS["hpc_distributed"]
-
-        # Verify preset properties
-        assert preset["tier"] == "STREAMING_CHECKPOINT"
-        assert preset["goal"] == "ROBUST"
-        assert preset["enable_multistart"] is True
-        assert preset["n_starts"] == 10
-        assert preset["enable_checkpoints"] is True
-        assert preset["distributed"] is True
-        assert preset["chunk_size"] == 500_000  # Larger for distributed
-        assert preset["auto_detect_cluster"] is True
-
-        # Create WorkflowConfig from preset
-        config = WorkflowConfig.from_preset("hpc_distributed")
-        assert config.enable_checkpoints is True
-        assert config.enable_multistart is True
-        assert config.chunk_size == 500_000
 
 
 class TestClusterInfoDataclass:

@@ -17,12 +17,10 @@ from unittest.mock import MagicMock, patch
 import jax
 import pytest
 
-from nlsq.core.workflow import MemoryTier
 from nlsq.streaming.large_dataset import (
     GPUMemoryEstimator,
     MemoryEstimator,
     cleanup_memory,
-    get_memory_tier,
 )
 
 
@@ -244,60 +242,3 @@ class TestMemoryCleanup:
         ):
             # Should not raise exception
             cleanup_memory()  # No exception = test passes
-
-
-@pytest.mark.serial
-class TestMemoryTierClassification:
-    """Tests for MemoryTier classification function.
-
-    Marked serial to avoid enum identity issues in parallel execution.
-    """
-
-    def test_memory_tier_low(self):
-        """Test LOW memory tier classification (<16GB)."""
-        tier = get_memory_tier(8.0)
-        assert tier.name == "LOW"
-
-        tier = get_memory_tier(15.9)
-        assert tier.name == "LOW"
-
-    def test_memory_tier_medium(self):
-        """Test MEDIUM memory tier classification (16-64GB)."""
-        tier = get_memory_tier(16.0)
-        assert tier.name == "MEDIUM"
-
-        tier = get_memory_tier(32.0)
-        assert tier.name == "MEDIUM"
-
-        tier = get_memory_tier(63.9)
-        assert tier.name == "MEDIUM"
-
-    def test_memory_tier_high(self):
-        """Test HIGH memory tier classification (64-128GB)."""
-        tier = get_memory_tier(64.0)
-        assert tier.name == "HIGH"
-
-        tier = get_memory_tier(100.0)
-        assert tier.name == "HIGH"
-
-        tier = get_memory_tier(127.9)
-        assert tier.name == "HIGH"
-
-    def test_memory_tier_very_high(self):
-        """Test VERY_HIGH memory tier classification (>128GB)."""
-        tier = get_memory_tier(128.0)
-        assert tier.name == "VERY_HIGH"
-
-        tier = get_memory_tier(256.0)
-        assert tier.name == "VERY_HIGH"
-
-        tier = get_memory_tier(1024.0)
-        assert tier.name == "VERY_HIGH"
-
-    def test_memory_tier_thresholds(self):
-        """Test MemoryTier uses correct thresholds: 16GB, 64GB, 128GB."""
-        # Verify the thresholds are as specified in requirements
-        assert MemoryTier.LOW.max_memory_gb == 16.0
-        assert MemoryTier.MEDIUM.max_memory_gb == 64.0
-        assert MemoryTier.HIGH.max_memory_gb == 128.0
-        assert MemoryTier.VERY_HIGH.max_memory_gb == float("inf")

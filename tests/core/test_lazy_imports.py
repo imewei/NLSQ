@@ -121,12 +121,16 @@ class TestLazyImportCategories:
         assert hasattr(nlsq, "get_memory_manager")
 
     def test_workflow_imports(self) -> None:
-        """Test workflow system lazy imports."""
+        """Test workflow system lazy imports.
+
+        Note: WorkflowConfig, WorkflowSelector, and auto_select_workflow were
+        removed in 014-unified-memory-strategy. Test updated to check new APIs.
+        """
         import nlsq
 
-        assert hasattr(nlsq, "WorkflowConfig")
-        assert hasattr(nlsq, "WorkflowSelector")
-        assert hasattr(nlsq, "auto_select_workflow")
+        # New memory-based APIs
+        assert hasattr(nlsq, "MemoryBudget")
+        assert hasattr(nlsq, "MemoryBudgetSelector")
 
 
 class TestBackwardCompatibility:
