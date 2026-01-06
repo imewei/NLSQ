@@ -586,7 +586,7 @@ With least_squares
 
 .. code-block:: python
 
-    from nlsq import least_squares
+    from nlsq import LeastSquares
     from nlsq.validators import InputValidator
 
 
@@ -613,7 +613,8 @@ With least_squares
 
             warnings.warn(warning)
 
-        return least_squares(fun, x0, **kwargs)
+        ls = LeastSquares()
+        return ls.least_squares(fun, x0, **kwargs)
 
 See Also
 --------

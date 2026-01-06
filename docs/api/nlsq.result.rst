@@ -45,10 +45,11 @@ Example Usage
    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.1], full_output=True)
 
    # Access additional result information
-   # (when using least_squares directly)
-   from nlsq import least_squares
+   # (when using LeastSquares directly)
+   from nlsq import LeastSquares
 
-   result = least_squares(residuals, p0)
+   ls = LeastSquares()
+   result = ls.least_squares(residuals, p0)
 
    print(f"Success: {result.success}")
    print(f"Message: {result.message}")

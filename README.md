@@ -406,7 +406,7 @@ from nlsq.diagnostics import (
     DiagnosticsConfig,
     IdentifiabilityAnalyzer,
     GradientMonitor,
-    SloppyModelAnalyzer,
+    ParameterSensitivityAnalyzer,
     create_health_report,
 )
 
@@ -424,17 +424,17 @@ callback = monitor.create_callback()
 result = curve_fit(model, x, y, p0=p0, callback=callback)
 grad_report = monitor.get_report()
 
-# Detect sloppy model behavior
-sloppy_analyzer = SloppyModelAnalyzer(config)
-sloppy_report = sloppy_analyzer.analyze(result.jac)
-print(f"Is sloppy: {sloppy_report.is_sloppy}")
-print(f"Effective dimensionality: {sloppy_report.effective_dimensionality:.1f}")
+# Analyze parameter sensitivity spectrum
+sensitivity_analyzer = ParameterSensitivityAnalyzer(config)
+sensitivity_report = sensitivity_analyzer.analyze(result.jac)
+print(f"Is sloppy: {sensitivity_report.is_sloppy}")
+print(f"Effective dimensionality: {sensitivity_report.effective_dimensionality:.1f}")
 
 # Create aggregated health report
 health_report = create_health_report(
     identifiability=report,
     gradient_health=grad_report,
-    sloppy_model=sloppy_report,
+    sloppy_model=sensitivity_report,
 )
 print(health_report.summary())
 ```

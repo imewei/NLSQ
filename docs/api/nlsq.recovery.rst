@@ -58,7 +58,7 @@ Use recovery to automatically retry failed optimizations:
 .. code-block:: python
 
     from nlsq.recovery import OptimizationRecovery
-    from nlsq import least_squares
+    from nlsq import LeastSquares
     import numpy as np
 
     # Create recovery system
@@ -67,7 +67,8 @@ Use recovery to automatically retry failed optimizations:
 
     # Define optimization function
     def optimize(params, regularization=0):
-        return least_squares(
+        ls = LeastSquares()
+        return ls.least_squares(
             residual_func, params, method="trf", regularization=regularization
         )
 
