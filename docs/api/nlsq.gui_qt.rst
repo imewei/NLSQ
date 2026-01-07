@@ -135,4 +135,4 @@ See Also
 --------
 
 - :doc:`/gui/index` - GUI user guide
-- :doc:`/gui/user_guide` - Complete GUI documentation
+- :doc:`/gui/user_guide` - Complete GUI reference

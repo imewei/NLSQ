@@ -1,5 +1,5 @@
-GUI User Guide
-==============
+Complete GUI Reference
+======================
 
 The NLSQ GUI provides an interactive graphical interface for performing
 nonlinear least squares curve fitting with GPU/TPU acceleration.

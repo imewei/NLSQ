@@ -52,6 +52,6 @@ use the Python API instead (see :doc:`/tutorials/index`).
 See Also
 --------
 
-- :doc:`user_guide` - Complete GUI documentation
+- :doc:`user_guide` - Complete GUI reference
 - :doc:`/tutorials/01_first_fit` - Python API tutorial
 - :doc:`/reference/index` - API reference
