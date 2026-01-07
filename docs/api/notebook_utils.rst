@@ -5,10 +5,6 @@ The ``notebook_utils`` package provides extensible notebook transformation utili
 
 .. currentmodule:: notebook_utils
 
-.. contents:: Table of Contents
-   :local:
-   :depth: 2
-
 Module Overview
 ---------------
 

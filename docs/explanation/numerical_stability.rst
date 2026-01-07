@@ -4,10 +4,6 @@ Numerical Stability Guide
 This guide explains NLSQ's numerical stability features and how to use them
 effectively for challenging optimization problems.
 
-.. contents:: Table of Contents
-   :local:
-   :depth: 2
-
 Overview
 --------
 

@@ -3,10 +3,6 @@ Notebook Configuration Utilities
 
 The notebook configuration utilities provide a modern, extensible framework for transforming Jupyter notebooks with reproducible configurations. This system uses the **Strategy** and **Chain of Responsibility** design patterns to ensure composable, testable transformations.
 
-.. contents:: Table of Contents
-   :local:
-   :depth: 2
-
 Overview
 --------
 

@@ -6,11 +6,6 @@ hybrid streaming optimizer. This feature prevents per-group parameters
 (such as per-angle contrast and offset in XPCS laminar flow fitting)
 from absorbing physical signals that should be captured by shared parameters.
 
-.. contents:: Table of Contents
-   :local:
-   :depth: 2
-
-
 Motivation
 ----------
 

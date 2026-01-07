@@ -3,10 +3,6 @@ Migration Guide
 
 This comprehensive guide covers migration to NLSQ from SciPy and between NLSQ versions.
 
-.. contents:: Table of Contents
-   :local:
-   :depth: 2
-
 ----
 
 Migrating from SciPy

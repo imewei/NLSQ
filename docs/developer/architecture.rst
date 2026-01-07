@@ -5,10 +5,6 @@ This document provides a comprehensive architectural overview of NLSQ, a GPU/TPU
 nonlinear least squares curve fitting library built on JAX. The codebase consists of
 approximately 72,000 lines of Python code organized into well-separated modules.
 
-.. contents:: Table of Contents
-   :local:
-   :depth: 3
-
 Package Structure
 -----------------
 
