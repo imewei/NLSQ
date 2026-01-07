@@ -283,72 +283,6 @@ v0.4.2 → v0.4.3
 
 ----
 
-Planned Deprecations (v1.0.0)
------------------------------
-
-The following items will be removed in v1.0.0. Start migrating now.
-
-OptimizeResult Dict-Style Access
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Current Status:** Supported but deprecated
-
-**Removal Target:** v1.0.0
-
-The dict-style access (``result['x']``) on ``OptimizeResult`` and ``OptimizeResultV2``
-will be removed. Use attribute access instead.
-
-.. code-block:: python
-
-   # Deprecated (will be removed in v1.0.0)
-   result["x"]
-   result["success"]
-   result["cost"]
-
-   # Recommended (use now)
-   result.x
-   result.success
-   result.cost
-
-   # If you need a dictionary
-   result_dict = result.to_dict()
-
-**Migration Script:**
-
-Find deprecated usage in your codebase:
-
-.. code-block:: bash
-
-   # Find dict-style access on results
-   grep -rn "result\['" --include="*.py" .
-   grep -rn 'result\["' --include="*.py" .
-
-**Why This Change:**
-
-- ``OptimizeResultV2`` is a frozen dataclass with ``__slots__`` for memory efficiency
-- Attribute access is 2x faster than dict lookup
-- Removes ambiguity between result objects and plain dictionaries
-
-OptimizeResultV2.__getitem__
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Current Status:** Backward compatibility method
-
-**Removal Target:** v1.0.0
-
-The ``__getitem__`` method on ``OptimizeResultV2`` exists solely for backward
-compatibility during the deprecation period. It will be removed in v1.0.0.
-
-.. code-block:: python
-
-   # This works now (deprecated)
-   value = result_v2["x"]
-
-   # Use this instead
-   value = result_v2.x
-
-----
-
 Deprecation Timeline
 --------------------
 
@@ -394,7 +328,7 @@ Run these commands to identify deprecated code in your project:
    # Deprecated compat imports (removed in v0.6.0)
    grep -rn "from nlsq.compat import" .
 
-   # Deprecated dict-style access (will be removed in v1.0.0)
+   # Deprecated dict-style access (removed in v0.6.0)
    grep -rn "result\['" --include="*.py" .
 
 ----
@@ -418,9 +352,6 @@ Migration Checklist
 - [ ] Replace ``IssueCategory.SLOPPY`` with ``IssueCategory.SENSITIVITY``
 - [ ] Replace ``compute_svd_adaptive`` with ``compute_svd_with_fallback``
 - [ ] Remove imports from ``nlsq.compat``
-
-**Preparing for v1.0.0:**
-
 - [ ] Replace ``result['x']`` with ``result.x`` throughout codebase
 - [ ] Use ``result.to_dict()`` if dictionary conversion needed
 
