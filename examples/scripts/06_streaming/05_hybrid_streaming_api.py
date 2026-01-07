@@ -152,12 +152,12 @@ def main():
         verbose=0,
     )
 
-    print(f"Success: {result['success']}")
-    print(f"Message: {result['message']}")
-    print(f"Final cost: {result.get('cost', 'N/A')}")
+    print(f"Success: {result.success}")
+    print(f"Message: {result.message}")
+    print(f"Final cost: {getattr(result, 'cost', 'N/A')}")
 
-    if "streaming_diagnostics" in result:
-        diag = result["streaming_diagnostics"]
+    if hasattr(result, "streaming_diagnostics") and result.streaming_diagnostics:
+        diag = result.streaming_diagnostics
         print("\nStreaming diagnostics available:")
         print(f"  Keys: {list(diag.keys())}")
     print()
