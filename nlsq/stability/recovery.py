@@ -380,31 +380,38 @@ class OptimizationRecovery:
         Parameters
         ----------
         result : dict
-            Optimization result
+            Optimization result (dict or object with attributes)
 
         Returns
         -------
         success : bool
             Whether recovery succeeded
         """
+
+        def _get_value(obj, key, default=None):
+            """Get value from dict or object attribute."""
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
         # Check for explicit success flag
-        if "success" in result:
-            return result["success"]
+        success = _get_value(result, "success")
+        if success is not None:
+            return success
 
         # Check for valid parameters
-        if "x" in result or "params" in result:
-            params = result.get("x", result.get("params"))
-            if params is not None:
-                # Check for NaN/Inf
-                if not np.all(np.isfinite(params)):
+        params = _get_value(result, "x") or _get_value(result, "params")
+        if params is not None:
+            # Check for NaN/Inf
+            if not np.all(np.isfinite(params)):
+                return False
+
+            # Check cost if available
+            cost = _get_value(result, "cost")
+            if cost is not None:
+                if not np.isfinite(cost) or cost > 1e10:
                     return False
 
-                # Check cost if available
-                if "cost" in result:
-                    cost = result["cost"]
-                    if not np.isfinite(cost) or cost > 1e10:
-                        return False
-
-                return True
+            return True
 
         return False

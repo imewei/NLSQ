@@ -4,16 +4,17 @@ This module provides the OptimizeResult class, which stores the complete
 results from nonlinear least squares optimization performed using JAX-accelerated
 algorithms.
 
-Migration Guide (v0.5.x → v1.0.0)
----------------------------------
-OptimizeResult (dict-based) will be replaced by OptimizeResultV2 (dataclass) in v1.0.0.
+Usage
+-----
+Access results using attribute syntax::
 
-Current usage that will continue to work:
-    result.x, result.success, result.cost  # Attribute access (preferred)
+    result.x        # Optimized parameters
+    result.success  # Convergence status
+    result.cost     # Final cost value
 
-Usage to migrate before v1.0.0:
-    result['x']  # Dict-style access → use result.x instead
-    dict(result) # Convert to dict → use result.to_dict() instead
+For dictionary conversion, use::
+
+    result.to_dict()  # Convert to dict
 """
 
 from dataclasses import dataclass
@@ -69,22 +70,12 @@ class OptimizeResultV2:
     all_times : dict | None
         Detailed timing information for profiling.
 
-    Migration Guide
-    ---------------
-    For code using OptimizeResult dict-style access:
-
-        # Old style (still works during 12-month deprecation)
-        result['x']
-
-        # New style (preferred)
-        result.x
-
-        # Convert to dict if needed
-        result.to_dict()
-
-    Notes
-    -----
-    This class will become the default result type in v1.0.0.
+    Examples
+    --------
+    >>> result.x        # Access optimized parameters
+    >>> result.success  # Check convergence
+    >>> result.cost     # Get final cost value
+    >>> result.to_dict()  # Convert to dictionary
     """
 
     x: jnp.ndarray
@@ -104,7 +95,7 @@ class OptimizeResultV2:
     all_times: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for backward compatibility.
+        """Convert to dictionary.
 
         Returns
         -------
@@ -117,20 +108,6 @@ class OptimizeResultV2:
             if value is not None or field_name in ("x", "success", "cost", "fun"):
                 result[field_name] = value
         return result
-
-    def __getitem__(self, key: str) -> Any:
-        """Support dict-style access during deprecation period.
-
-        This method allows result['x'] syntax for backward compatibility.
-        Will be removed after deprecation period.
-        """
-        if hasattr(self, key):
-            return getattr(self, key)
-        raise KeyError(key)
-
-    def keys(self) -> list[str]:
-        """Return list of field names for dict-like iteration."""
-        return [f for f in self.__slots__ if getattr(self, f) is not None]
 
     def __repr__(self) -> str:
         """Compact representation showing key fields."""
@@ -272,18 +249,6 @@ class OptimizeResult(dict):
         if hasattr(result, 'active_mask'):
             constrained_params = jnp.where(result.active_mask)[0]
             print(f"Parameters at bounds: {constrained_params}")
-
-    Dictionary Interface
-    --------------------
-    Since OptimizeResult inherits from dict, all attributes are also
-    accessible via dictionary syntax::
-
-        # Dictionary-style access
-        parameters = result['x']
-        success_flag = result['success']
-
-        # List all available results
-        print("Available results:", list(result.keys()))
 
     Integration with SciPy
     ----------------------
