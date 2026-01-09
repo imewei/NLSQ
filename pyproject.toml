@@ -544,8 +544,8 @@ addopts = [
     "-n", "4",  # Fixed 4 workers to prevent memory exhaustion (was: auto)
     "--dist", "loadscope",  # Group by test module/class for better isolation
     # Coverage disabled for faster CI (enable locally with pytest --cov)
-    # Test suite: 1,563 tests (as of 2025-11-16)
-    # Current coverage: 82.15% (exceeds 80% target)
+    # Test suite: 3,285 tests (as of 2026-01-09)
+    # Current coverage: 82% (exceeds 80% target)
     # "--cov=nlsq",
     # "--cov-report=term-missing",
     # "--cov-report=html",
@@ -611,7 +611,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Test suite: 1,557 tests (as of 2025-11-16)
+# Test suite: 3,285 tests (as of 2026-01-09)
 # Current coverage: 82% (exceeds 80% target)
 # Industry-standard for scientific computing libraries: 70-80%
 precision = 2
