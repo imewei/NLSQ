@@ -400,7 +400,9 @@ class OptimizationRecovery:
             return success
 
         # Check for valid parameters
-        params = _get_value(result, "x") or _get_value(result, "params")
+        params = _get_value(result, "x")
+        if params is None:
+            params = _get_value(result, "params")
         if params is not None:
             # Check for NaN/Inf
             if not np.all(np.isfinite(params)):
