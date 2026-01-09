@@ -5,25 +5,45 @@ documentation, and static type checking with mypy.
 
 Note: These types are primarily for documentation and tooling. Python's duck typing
 means functions will work with any compatible objects at runtime.
+
+Note: JAX imports are deferred using TYPE_CHECKING to avoid import-time errors
+during documentation builds or in environments where JAX is not fully configured.
+At runtime, JAX array types are represented as Any to allow the module to be
+imported without JAX being available.
 """
 
-from collections.abc import Callable
-from typing import Any, Protocol, TypedDict
+from __future__ import annotations
 
-import jax.numpy as jnp
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, TypedDict, Union
+
 import numpy as np
 
+# =============================================================================
 # Array-like types
-# Array-like type that can be converted to numpy/JAX arrays.
-type ArrayLike = np.ndarray | jnp.ndarray | list | tuple
+# =============================================================================
+# At runtime, we use Any for JAX arrays to avoid import-time JAX dependency.
+# Static type checkers will see the full type via TYPE_CHECKING block.
+
+if TYPE_CHECKING:
+    import jax.numpy as jnp
+
+    # Full type definitions for static analysis
+    ArrayLike: TypeAlias = np.ndarray | jnp.ndarray | list | tuple
+    JAXArray: TypeAlias = jnp.ndarray
+else:
+    # Runtime definitions - avoid JAX import
+    # Use Any as a stand-in for jax.numpy.ndarray
+    ArrayLike: TypeAlias = Union[np.ndarray, Any, list, tuple]
+    JAXArray: TypeAlias = Any
 
 # NumPy array of floating point numbers.
-type FloatArray = np.ndarray
+FloatArray: TypeAlias = np.ndarray
 
-# JAX array for GPU/TPU-accelerated computations.
-type JAXArray = jnp.ndarray
-
+# =============================================================================
 # Function types
+# =============================================================================
+
 # Model function f(x, *params) -> y_pred.
 #
 # The model function takes independent variable(s) x and fit parameters,
@@ -33,7 +53,7 @@ type JAXArray = jnp.ndarray
 #     - Linear: f(x, a, b) = a*x + b
 #     - Exponential: f(x, a, b) = a * exp(-b * x)
 #     - Multi-parameter: f(x, p1, p2, ..., pN) = ...
-type ModelFunction = Callable[..., ArrayLike]
+ModelFunction: TypeAlias = Callable[..., ArrayLike]
 
 # Jacobian function jac(x, *params) -> J.
 #
@@ -46,7 +66,7 @@ type ModelFunction = Callable[..., ArrayLike]
 #
 # Returns:
 #     J: Jacobian matrix of shape (m, n) where m = len(f(x)) and n = len(params)
-type JacobianFunction = Callable[..., ArrayLike]
+JacobianFunction: TypeAlias = Callable[..., ArrayLike]
 
 # Callback function for monitoring optimization progress.
 #
@@ -56,7 +76,7 @@ type JacobianFunction = Callable[..., ArrayLike]
 #
 # Returns:
 #     True to stop optimization, False/None to continue
-type CallbackFunction = Callable[[FloatArray, FloatArray], bool | None]
+CallbackFunction: TypeAlias = Callable[[FloatArray, FloatArray], bool | None]
 
 # Loss function rho(z) for robust fitting.
 #
@@ -68,18 +88,24 @@ type CallbackFunction = Callable[[FloatArray, FloatArray], bool | None]
 #
 # Returns:
 #     rho: Transformed residuals for robust fitting
-type LossFunction = Callable[[FloatArray], FloatArray]
+LossFunction: TypeAlias = Callable[[FloatArray], FloatArray]
 
+# =============================================================================
 # Bounds types
+# =============================================================================
+
 # Parameter bounds as (lower, upper) tuple.
 #
 # Examples:
 #     - Unbounded: (-np.inf, np.inf)
 #     - Lower only: (0, np.inf) for positive parameters
 #     - Both: ([-1, 0], [1, 10]) for constrained parameters
-type BoundsTuple = tuple[ArrayLike, ArrayLike]
+BoundsTuple: TypeAlias = tuple[ArrayLike, ArrayLike]
 
-# Result types (using dict for backward compatibility)
+# =============================================================================
+# Result types
+# =============================================================================
+
 # Optimization result dictionary with parameters and diagnostics.
 #
 # Common fields:
@@ -92,26 +118,33 @@ type BoundsTuple = tuple[ArrayLike, ArrayLike]
 #     - optimality: Final gradient norm
 #     - nfev: Number of function evaluations
 #     - njev: Number of Jacobian evaluations (optional)
-type OptimizeResultDict = dict[str, Any]
+OptimizeResultDict: TypeAlias = dict[str, Any]
 
+# =============================================================================
 # Configuration types
+# =============================================================================
+
 # Optimization method name.
 #
 # Options:
 #     - "trf": Trust Region Reflective (default, supports bounds)
 #     - "dogbox": Dogleg algorithm for box-constrained problems
 #     - "lm": Levenberg-Marquardt (unconstrained only, faster)
-type MethodLiteral = str  # "trf" | "dogbox" | "lm"
+MethodLiteral: TypeAlias = str  # "trf" | "dogbox" | "lm"
 
 # Linear solver for trust region subproblems.
 #
 # Options:
 #     - "exact": Direct solver using SVD (default, more accurate)
 #     - "lsmr": Iterative solver (faster for large problems)
-type SolverLiteral = str  # "exact" | "lsmr"
+SolverLiteral: TypeAlias = str  # "exact" | "lsmr"
 
 
+# =============================================================================
 # Streaming diagnostic types (Task 6.2)
+# =============================================================================
+
+
 class CheckpointInfo(TypedDict, total=False):
     """Checkpoint information in streaming diagnostics."""
 
@@ -166,7 +199,11 @@ class StreamingDiagnostics(TypedDict, total=False):
     checkpoint_save_time: float  # Total time spent saving checkpoints
 
 
+# =============================================================================
 # Protocols for structural typing
+# =============================================================================
+
+
 class HasShape(Protocol):
     """Protocol for objects with a shape attribute."""
 
