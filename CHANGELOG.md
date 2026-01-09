@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-01-09
+
+### Fixed
+
+- **Security**: Upgraded urllib3 to 2.6.3 to address CVE-2026-21441 (decompression bomb vulnerability)
+- **JAX Array Boolean Evaluation**: Fixed `ValueError` in `recovery._check_recovery_success()` when result contains JAX arrays with multiple elements. Replaced `x or y` pattern with explicit `None` check to avoid boolean conversion of arrays
+
+### Changed
+
+- **Lint Configuration**: Added UP040 exception for `nlsq/types.py` to allow intentional use of `TypeAlias` syntax that avoids import-time JAX dependency
+
 ## [0.6.0] - 2026-01-06
 
 ### Changed
