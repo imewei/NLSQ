@@ -56,6 +56,7 @@ from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from nlsq.core.workflow import OptimizationGoal
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
     from nlsq.global_optimization.config import GlobalOptimizationConfig
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
     from nlsq.streaming.large_dataset import LDMemoryConfig
@@ -980,6 +981,116 @@ def _apply_stability_checks(
     return xdata, ydata, args
 
 
+def _run_cmaes_optimization(
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: NDArray[np.floating[Any]] | None,
+    bounds: tuple[ArrayLike, ArrayLike],
+    method: str,
+    cmaes_config: CMAESConfig | None,
+    kwargs: dict[str, Any],
+) -> CurveFitResult | None:
+    """Run CMA-ES global optimization if appropriate.
+
+    Parameters
+    ----------
+    f : ModelFunction
+        The model function.
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    p0 : NDArray or None
+        Initial parameter guess.
+    bounds : tuple
+        Lower and upper bounds for parameters.
+    method : str
+        Method requested ('cmaes' or 'auto').
+    cmaes_config : CMAESConfig or None
+        Configuration for CMA-ES optimization.
+    kwargs : dict
+        Additional keyword arguments.
+
+    Returns
+    -------
+    result : CurveFitResult or None
+        Optimization result if CMA-ES was used, None if fallback to standard.
+    """
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
+    from nlsq.global_optimization.method_selector import MethodSelector
+
+    # Convert bounds to numpy arrays for scale ratio computation
+    lower = np.asarray(bounds[0])
+    upper = np.asarray(bounds[1])
+
+    # Use MethodSelector to decide if CMA-ES should be used
+    selector = MethodSelector()
+    selected_method = selector.select(
+        requested_method=method if method != "auto" else "auto",
+        lower_bounds=lower,
+        upper_bounds=upper,
+    )
+
+    if selected_method != "cmaes":
+        # Fall through to standard optimization
+        return None
+
+    # Import CMAESOptimizer lazily to avoid evosax import at module load
+    from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+    # Use provided config or default
+    config = cmaes_config if cmaes_config is not None else CMAESConfig()
+
+    # Create optimizer
+    optimizer = CMAESOptimizer(config=config)
+
+    # Extract sigma from kwargs if provided
+    sigma = kwargs.get("sigma")
+
+    # Run CMA-ES optimization
+    result_dict = optimizer.fit(f, xdata, ydata, p0=p0, bounds=bounds, sigma=sigma)
+
+    # Convert dict result to CurveFitResult-like structure
+    # CMAESOptimizer returns {"popt": ..., "pcov": ..., ...}
+    popt = result_dict["popt"]
+    pcov = result_dict["pcov"]
+
+    # Create a CurveFitResult-compatible object
+    # We need to construct a result that behaves like CurveFitResult
+    from nlsq.result import CurveFitResult
+
+    # Build a minimal result dict with required fields
+    result = CurveFitResult(
+        x=popt,
+        pcov=pcov,
+        cost=None,  # CMA-ES doesn't provide this directly
+        fun=None,
+        jac=None,
+        grad=None,
+        optimality=None,
+        active_mask=None,
+        nfev=0,
+        njev=0,
+        nit=0,
+        status=1,  # Success
+        success=True,
+        message="Optimized with CMA-ES",
+        xdata=np.asarray(xdata),
+        ydata=np.asarray(ydata),
+        model=f,
+    )
+
+    # Add multi-start diagnostics placeholder
+    result["multistart_diagnostics"] = {
+        "n_starts_configured": 0,
+        "bypassed": True,
+        "method": "cmaes",
+    }
+
+    return result
+
+
 def _run_multistart_optimization(
     f: ModelFunction,
     xdata: ArrayLike,
@@ -1192,6 +1303,9 @@ def curve_fit(
     sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
+    # CMA-ES global optimization parameters
+    method: Literal["auto", "cmaes", "multi-start", "trf"] | None = None,
+    cmaes_config: CMAESConfig | None = None,
     # Diagnostics parameters (User Story 1)
     compute_diagnostics: bool = False,
     diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
@@ -1318,6 +1432,28 @@ def curve_fit(
         Multiplier for the exploration range around p0. Smaller values (0.5)
         mean tighter exploration, larger values (2.0) mean wider exploration.
         Only used when multistart=True or global_search=True. Default: 1.0.
+    method : {'auto', 'cmaes', 'multi-start', 'trf'} | None, optional
+        Optimization method to use:
+
+        - 'auto': Automatically select based on parameter scale ratio.
+          Uses CMA-ES for multi-scale problems (>1000x scale difference)
+          when evosax is installed, otherwise multi-start.
+        - 'cmaes': Use CMA-ES (Covariance Matrix Adaptation Evolution Strategy)
+          for gradient-free global optimization. Requires bounds.
+          Best for multi-scale parameters spanning many orders of magnitude.
+          Falls back to multi-start if evosax is not installed.
+        - 'multi-start': Use multi-start optimization with Latin Hypercube
+          Sampling for initial points.
+        - 'trf': Use Trust Region Reflective (default behavior).
+        - None: Default behavior (TRF with optional multi-start if enabled).
+
+        Default: None.
+    cmaes_config : CMAESConfig | None, optional
+        Configuration for CMA-ES optimization. If None, uses default config
+        or preset specified by method parameter. See CMAESConfig for options
+        including max_generations, restart_strategy, and popsize.
+        Only used when method='cmaes' or method='auto' selects CMA-ES.
+        Default: None.
     *args, **kwargs
         Additional arguments passed to CurveFit.curve_fit method.
 
@@ -1441,6 +1577,18 @@ def curve_fit(
         )
         # Re-extract p0 in case it was updated
         p0 = _extract_p0_from_args(args, kwargs)
+
+    # Handle CMA-ES global optimization
+    if method in ("cmaes", "auto"):
+        bounds = kwargs.get("bounds")
+        if bounds is not None:
+            result = _run_cmaes_optimization(
+                f, xdata, ydata, p0, bounds, method, cmaes_config, kwargs
+            )
+            if result is not None:
+                return result
+        # If bounds is None and method='cmaes', we could warn, but for 'auto'
+        # we just fall through to standard path
 
     # Handle multi-start optimization
     if multistart and n_starts > 0:

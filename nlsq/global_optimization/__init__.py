@@ -60,6 +60,22 @@ nlsq.LargeDatasetFitter : Chunked processing for medium-large datasets
 nlsq.AdaptiveHybridStreamingOptimizer : Streaming for very large datasets
 """
 
+# Bounds transformation utilities
+from nlsq.global_optimization.bounds_transform import (
+    compute_default_popsize,
+    transform_from_bounds,
+    transform_to_bounds,
+)
+
+# CMA-ES global optimization (lazy import for optional evosax dependency)
+from nlsq.global_optimization.cmaes_config import (
+    CMAES_PRESETS,
+    CMAESConfig,
+    is_evosax_available,
+)
+
+# CMA-ES diagnostics
+from nlsq.global_optimization.cmaes_diagnostics import CMAESDiagnostics
 from nlsq.global_optimization.config import (
     PRESETS,
     GlobalOptimizationConfig,
@@ -76,18 +92,41 @@ from nlsq.global_optimization.sampling import (
 from nlsq.global_optimization.tournament import TournamentSelector
 
 __all__ = [
+    "CMAES_PRESETS",
     "PRESETS",
-    # Configuration
+    "BIPOPRestarter",
+    "CMAESConfig",
+    "CMAESDiagnostics",
+    "CMAESOptimizer",
     "GlobalOptimizationConfig",
-    # Multi-start orchestration
+    "MethodSelector",
     "MultiStartOrchestrator",
-    # Tournament selection for large datasets
     "TournamentSelector",
     "center_samples_around_p0",
+    "compute_default_popsize",
     "get_sampler",
     "halton_sample",
-    # Sampling functions
+    "is_evosax_available",
     "latin_hypercube_sample",
     "scale_samples_to_bounds",
     "sobol_sample",
+    "transform_from_bounds",
+    "transform_to_bounds",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import for CMAESOptimizer, BIPOPRestarter, MethodSelector to avoid importing evosax at package load."""
+    if name == "CMAESOptimizer":
+        from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        return CMAESOptimizer
+    if name == "BIPOPRestarter":
+        from nlsq.global_optimization.bipop import BIPOPRestarter
+
+        return BIPOPRestarter
+    if name == "MethodSelector":
+        from nlsq.global_optimization.method_selector import MethodSelector
+
+        return MethodSelector
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -167,6 +167,10 @@ gui_qt = [
     "pyyaml>=6.0.3",               # YAML configuration support
     "pytest-qt>=4.5.0",            # Qt widget testing (tested on 4.5.0)
 ]
+global = [
+    # CMA-ES global optimization using evosax (JAX-native evolution strategies)
+    "evosax>=0.2.0,<0.3.0",        # JAX-based CMA-ES with built-in BIPOP restart conditions
+]
 all = [
     # Development dependencies
     "pytest>=9.0.0",
@@ -213,6 +217,8 @@ all = [
     "PySide6>=6.10.0",
     "pyqtgraph>=0.14.0",
     "pytest-qt>=4.5.0",
+    # Global optimization (CMA-ES)
+    "evosax>=0.2.0,<0.3.0",
 ]
 
 [project.urls]

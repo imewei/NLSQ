@@ -40,8 +40,12 @@ Custom configuration:
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+# Import CMA-ES presets to include in global PRESETS
+from nlsq.global_optimization.cmaes_config import CMAES_PRESETS
+
 # Preset configurations for common use cases
-PRESETS: dict[str, dict[str, Any]] = {
+# Multi-start presets (standard optimization)
+_MULTISTART_PRESETS: dict[str, dict[str, Any]] = {
     "fast": {
         "n_starts": 0,
         "sampler": "lhs",
@@ -88,6 +92,11 @@ PRESETS: dict[str, dict[str, Any]] = {
         "batches_per_round": 50,
     },
 }
+
+# Combined PRESETS dict includes both multi-start and CMA-ES presets
+# Multi-start presets: 'fast', 'robust', 'global', 'thorough', 'streaming'
+# CMA-ES presets: 'cmaes-fast', 'cmaes', 'cmaes-global'
+PRESETS: dict[str, dict[str, Any]] = {**_MULTISTART_PRESETS, **CMAES_PRESETS}
 
 
 @dataclass(slots=True)
@@ -247,13 +256,13 @@ class GlobalOptimizationConfig:
         20
         """
         preset_name_lower = preset_name.lower()
-        if preset_name_lower not in PRESETS:
-            valid_presets = list(PRESETS.keys())
+        if preset_name_lower not in _MULTISTART_PRESETS:
+            valid_presets = list(_MULTISTART_PRESETS.keys())
             raise ValueError(
                 f"Unknown preset '{preset_name}'. Valid presets: {valid_presets}"
             )
 
-        preset_values = PRESETS[preset_name_lower].copy()
+        preset_values = _MULTISTART_PRESETS[preset_name_lower].copy()
         preset_values["_preset"] = preset_name_lower
         return cls(**preset_values)
 
