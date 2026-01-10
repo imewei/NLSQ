@@ -197,7 +197,7 @@ class MemoryManager:
 
         if time_span <= 0:
             # All calls happened at the same time, assume very high frequency
-            return 10.0
+            return 15.0
 
         # Compute calls per second
         num_calls = len(self._call_frequency_tracker)
