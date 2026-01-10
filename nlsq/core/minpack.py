@@ -150,6 +150,27 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
         "ftol": 1e-6,
         "xtol": 1e-6,
     },
+    # CMA-ES global optimization presets
+    "cmaes": {
+        "description": "CMA-ES global optimization with BIPOP restarts",
+        "tier": "STANDARD",
+        "method": "cmaes",
+        "enable_multistart": False,  # CMA-ES handles this internally via BIPOP
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "cmaes_preset": "cmaes",
+    },
+    "cmaes-global": {
+        "description": "Thorough CMA-ES exploration with extended generations",
+        "tier": "STANDARD",
+        "method": "cmaes",
+        "enable_multistart": False,
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "cmaes_preset": "cmaes-global",
+    },
 }
 
 
@@ -591,6 +612,28 @@ def _fit_with_preset(
     # Check if multi-start is enabled
     enable_multistart = preset.get("enable_multistart", False)
     n_starts = preset.get("n_starts", 10)
+
+    # Check for CMA-ES method in preset
+    preset_method = preset.get("method")
+    if preset_method == "cmaes":
+        from nlsq.global_optimization.cmaes_config import CMAESConfig
+
+        cmaes_preset_name = preset.get("cmaes_preset", "cmaes")
+        cmaes_config = CMAESConfig.from_preset(cmaes_preset_name)
+
+        return curve_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method="cmaes",
+            cmaes_config=cmaes_config,
+            **kwargs,
+        )
 
     if strategy == "standard":
         # Standard curve_fit path
