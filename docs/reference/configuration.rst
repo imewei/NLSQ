@@ -212,52 +212,63 @@ Override configuration in code:
 Presets
 -------
 
-Use presets for common configurations:
+Use presets for common configurations via the ``workflow`` argument (or ``preset`` in ``fit``):
 
 .. code-block:: python
 
    from nlsq import fit
 
-   # Fast fitting (lower precision)
-   popt, pcov = fit(model, x, y, preset="fast")
+   # Standard fitting
+   fit(model, x, y, workflow="standard")
 
-   # High precision
-   popt, pcov = fit(model, x, y, preset="precise")
+   # High precision (multi-start)
+   fit(model, x, y, workflow="quality")
 
-   # Global optimization
-   popt, pcov = fit(model, x, y, preset="global")
+   # Global optimization (CMA-ES)
+   fit(model, x, y, workflow="cmaes")
 
-**Preset definitions:**
+**Available Presets:**
 
 .. list-table::
    :header-rows: 1
-   :widths: 15 20 20 20 25
+   :widths: 20 20 20 40
 
    * - Preset
-     - gtol
-     - ftol
-     - max_nfev
+     - Tolerances
+     - Starts
      - Notes
-   * - default
+   * - ``standard``
      - 1e-8
-     - 1e-8
-     - 500
-     - Standard
-   * - fast
+     - 1
+     - Default, general purpose
+   * - ``quality``
+     - 1e-10
+     - 20
+     - High precision, robust to local minima
+   * - ``fast``
      - 1e-6
+     - 1
+     - High speed, loose tolerances
+   * - ``cmaes``
+     - 1e-8
+     - BIPOP
+     - Global search (100 gens)
+   * - ``cmaes-global``
+     - 1e-8
+     - BIPOP
+     - Deep global search (200 gens, 2x pop)
+   * - ``large_robust``
+     - 1e-8
+     - 10
+     - Chunked processing for large data
+   * - ``streaming``
+     - 1e-7
+     - 1
+     - Out-of-core for huge data
+   * - ``hpc_distributed``
      - 1e-6
-     - 200
-     - Quick, good enough
-   * - precise
-     - 1e-12
-     - 1e-12
-     - 2000
-     - High accuracy
-   * - global
-     - 1e-8
-     - 1e-8
-     - 5000
-     - Avoids local minima
+     - 10
+     - Checkpointing enabled for HPC
 
 Default Values
 --------------

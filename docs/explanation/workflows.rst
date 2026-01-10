@@ -126,36 +126,92 @@ automatically picks the best strategy:
 Named Workflow Presets
 ----------------------
 
-The ``fit()`` function accepts named presets for common use cases:
+The ``fit()`` function accepts named presets for common use cases. These presets
+configure the underlying optimizer, tolerances, and execution strategy.
+
+Selector Guide
+~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 40 40
+   :widths: 20 20 60
 
    * - Workflow
-     - Description
+     - Tier
      - Use Case
-   * - ``"auto"``
-     - Memory-based automatic selection
-     - Default - picks best strategy based on dataset size and memory
    * - ``"standard"``
-     - Standard curve_fit with default tolerances (1e-8)
-     - Small to medium datasets
+     - STANDARD
+     - **Default**. General purpose fitting ($10^{-8}$ tolerance).
    * - ``"quality"``
-     - Multi-start (20 starts) with tight tolerances (1e-10)
-     - When accuracy matters most
+     - STANDARD
+     - **Max Precision**. Tight tolerances ($10^{-10}$) + 20 multi-starts.
    * - ``"fast"``
-     - Looser tolerances (1e-6), no multi-start
-     - Quick exploratory fits
+     - STANDARD
+     - **Max Speed**. Loose tolerances ($10^{-6}$), single-start.
+   * - ``"cmaes"``
+     - STANDARD
+     - **Global Search**. CMA-ES (BIPOP, 100 gens) for non-convex problems.
+   * - ``"cmaes-global"``
+     - STANDARD
+     - **Deep Global**. CMA-ES (200 gens, 2x population) for difficult landscapes.
    * - ``"large_robust"``
-     - Chunked processing with multi-start (10 starts)
-     - Large datasets needing robustness
+     - CHUNKED
+     - **Large Data**. Chunked processing + 10 starts.
    * - ``"streaming"``
-     - AdaptiveHybridStreamingOptimizer with tolerances (1e-7)
-     - Huge datasets (10M+ points)
+     - STREAMING
+     - **Huge Data**. Out-of-core streaming + adaptive tolerances.
    * - ``"hpc_distributed"``
-     - Multi-GPU/node with checkpoints
-     - HPC cluster deployments
+     - CHECKPOINT
+     - **HPC**. Multi-GPU/node with checkpointing.
+
+Detailed Preset Logic
+~~~~~~~~~~~~~~~~~~~~~
+
+1. Standard (``standard``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+The baseline for most curve fitting tasks. Uses JAX-accelerated Trust Region Reflective (``trf``)
+optimization.
+* **Tolerances**: $10^{-8}$ (Machine precision for float32/standard scientific work).
+* **Method**: Single start from provided ``p0``.
+
+2. Quality (``quality``)
+^^^^^^^^^^^^^^^^^^^^^^^^
+Brute-force local robustness. Assumes the landscape may have nearby local minima or saddle points.
+* **Strategy**: Tightens tolerances to $10^{-10}$ and runs **20 parallel starts** (randomized around ``p0``).
+
+3. Fast (``fast``)
+^^^^^^^^^^^^^^^^^^
+Optimization for high-throughput pipelines where "approximate" is sufficient (e.g., initial screening).
+* **Strategy**: Loosens tolerances to $10^{-6}$ to allow early exit.
+
+4. CMA-ES Standard (``cmaes``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Gradient-free global optimization for non-convex landscapes where ``trf`` gets stuck.
+* **Stage 1**: CMA-ES with **BIPOP** restarts (100 generations).
+* **Stage 2**: NLSQ refinement for covariance.
+* **Population**: Automatic ($4 + 3\ln(N)$).
+
+5. CMA-ES Global (``cmaes-global``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+"Scorched earth" global search for extremely difficult (multimodal) landscapes.
+* **Strategy**: Doubles the population size ($2 \times [4 + 3\ln(N)]$ and generation budget (200)
+  compared to standard ``cmaes``.
+
+6. Large Robust (``large_robust``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+For datasets that technically fit in RAM but cause OOM or slowdowns with full matrix operations.
+* **Strategy**: Uses ``ChunkedOptimizer``. Breaks Hessian calculation into manageable chunks.
+  Includes 10 random starts.
+
+7. Streaming (``streaming``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+True out-of-core processing for datasets larger than system RAM.
+* **Strategy**: Uses ``AdaptiveHybridStreamingOptimizer``. Streams data from disk, accumulating gradients iteratively.
+
+8. HPC Distributed (``hpc_distributed``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+For long-running jobs on clusters (Slurm/PBS).
+* **Strategy**: Enables **checkpointing** to survive preemptions and optimizes for multi-GPU scaling.
 
 Usage Examples
 ~~~~~~~~~~~~~~

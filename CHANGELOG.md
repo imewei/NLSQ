@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - setuptools: >=80.0.0, wheel: >=0.45.0
   - PySide6: >=6.10.0, pyqtgraph: >=0.14.0, pytest-qt: >=4.5.0
 
-- **Documentation**: Updated test suite statistics to 3285 tests with 100% pass rate and 82% code coverage
+- **Documentation**: Updated test suite statistics to 3389 tests with 100% pass rate and 82% code coverage
 
 ## [0.6.1] - 2026-01-09
 
