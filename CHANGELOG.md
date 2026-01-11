@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-01-11
+
+### Added
+
+#### CMA-ES Global Optimization
+
+- **CMA-ES Optimizer**: Added evolution strategy optimizer for multi-scale parameter problems
+  - `CMAESOptimizer`: Main optimizer class with BIPOP restart strategy
+  - `CMAESConfig`: Configuration dataclass with presets (`cmaes`, `cmaes-fast`, `cmaes-global`)
+  - `CMAESDiagnostics`: Convergence diagnostics and visualization
+  - `BIPOPRestarter`: Bi-Population restart strategy implementation
+  - `MethodSelector`: Automatic selection between CMA-ES and Multi-Start based on scale ratio
+  - Memory-efficient batching: `population_batch_size`, `data_chunk_size` parameters
+  - **Files Added**: `nlsq/global_optimization/cmaes_optimizer.py`, `nlsq/global_optimization/cmaes_config.py`, `nlsq/global_optimization/method_selector.py`, `nlsq/global_optimization/bipop.py`
+
+### Changed
+
+#### Workflow System Simplification (Breaking Change)
+
+- **Simplified to 3 Smart Workflows**: Replaced 9 named presets with 3 memory-aware workflows
+  - `workflow="auto"` (default): Memory-aware local optimization, bounds optional
+  - `workflow="auto_global"`: Memory-aware global optimization, bounds required
+  - `workflow="hpc"`: Global optimization with checkpointing for HPC jobs
+  - **Files Modified**: `nlsq/core/minpack.py`, `nlsq/__init__.py`
+
+- **Removed Presets**: The following presets now raise `ValueError` with migration guidance:
+  - `standard` → `workflow="auto"`
+  - `fast` → `workflow="auto"` with `gtol=1e-6, ftol=1e-6, xtol=1e-6`
+  - `quality` → `workflow="auto_global"` with `n_starts=20`
+  - `large_robust`, `streaming` → `workflow="auto"` (auto-detects memory strategy)
+  - `hpc_distributed` → `workflow="hpc"`
+  - `cmaes`, `cmaes-global` → `workflow="auto_global"` with `cmaes_config=CMAESConfig(...)`
+  - `global_auto` → `workflow="auto_global"`
+
+- **Memory Strategy × Method Matrix**: `auto_global` produces 6 combinations:
+  - Memory strategies: standard, chunked, streaming (auto-selected by MemoryBudgetSelector)
+  - Global methods: Multi-Start or CMA-ES (auto-selected by MethodSelector when scale ratio > 1000)
+
+#### Documentation Updates
+
+- **README**: Updated workflow presets section with 3-workflow system and usage table
+- **API Docs**: Added CMA-ES optimizer classes to `nlsq.global_optimization` API reference
+- **Workflow Docs**: Clarified bounds are "Optional" for `auto` workflow (not "No")
+- **Test Statistics**: Updated to 3389 tests with 100% pass rate
+- **Documentation Coverage**: 97.8% (212 classes, 252 functions, 696/722 methods documented)
+
+### Fixed
+
+- **Examples**: Fixed ML integration tutorial to properly skip heavy operations in quick mode
+  - Added `if not QUICK:` guards around 500-epoch NN training and 1000-step Optax optimization
+  - Test execution reduced from 180s timeout to 6s
+
 ## [0.6.2] - 2026-01-09
 
 ### Changed
