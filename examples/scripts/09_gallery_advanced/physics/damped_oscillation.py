@@ -1,5 +1,5 @@
 """
-Advanced Damped Oscillation Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Damped Oscillation Fitting with fit() API and workflow="auto_global".
 
 This example demonstrates fitting damped harmonic oscillator data to extract
 the damping coefficient and natural frequency using NLSQ's advanced fit() API
@@ -7,8 +7,8 @@ and global optimization for robust parameter estimation.
 
 Compared to 04_gallery/physics/damped_oscillation.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Damped harmonic oscillator model
@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
@@ -110,8 +110,8 @@ p0 = [14, 0.04, 3.0, 0.0]  # A0, gamma, omega, phi
 # Parameter bounds
 bounds = ([0, 0, 0, -np.pi], [20, 0.5, 10, np.pi])
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with workflow='auto'
+print("\nMethod 1: fit() with workflow='auto'")
 popt, pcov = fit(
     damped_oscillator,
     time,
@@ -120,7 +120,7 @@ popt, pcov = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
     **FIT_KWARGS,
 )
 
@@ -134,12 +134,12 @@ print(f"  omega (frequency): {omega_fit:.4f} +/- {omega_err:.4f} rad/s")
 print(f"  phi (phase): {phi_fit:.4f} +/- {phi_err:.4f} rad")
 
 if QUICK:
-    print("\n⏩ Quick mode: skipping global/custom fits and extended plots.")
+    print("\n[Quick mode] skipping auto_global/custom fits and extended plots.")
     sys.exit(0)
 
-# Method 2: fit() with 'global' preset
+# Method 2: fit() with workflow='auto_global'
 global_starts = 20
-print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
+print(f"\nMethod 2: fit() with workflow='auto_global' ({global_starts} starts)")
 popt_global, pcov_global = fit(
     damped_oscillator,
     time,
@@ -148,7 +148,7 @@ popt_global, pcov_global = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="global",
+    workflow="auto_global",
     n_starts=global_starts,
 )
 
@@ -160,8 +160,8 @@ print(f"  gamma: {gamma_g:.5f} +/- {perr_g[1]:.5f}")
 print(f"  omega: {omega_g:.4f} +/- {perr_g[2]:.4f}")
 print(f"  phi: {phi_g:.4f} +/- {perr_g[3]:.4f}")
 
-# Method 3: GlobalOptimizationConfig with custom settings
-print("\nMethod 3: GlobalOptimizationConfig with custom settings")
+# Method 3: workflow='auto_global' with custom settings
+print("\nMethod 3: workflow='auto_global' with custom settings")
 popt_custom, pcov_custom = fit(
     damped_oscillator,
     time,
@@ -170,7 +170,7 @@ popt_custom, pcov_custom = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    multistart=True,
+    workflow="auto_global",
     n_starts=15,
     sampler="lhs",
 )
@@ -184,7 +184,7 @@ print(f"  omega: {omega_c:.4f} +/- {perr_c[2]:.4f}")
 print(f"  phi: {phi_c:.4f} +/- {perr_c[3]:.4f}")
 
 
-# Use robust preset results for analysis
+# Use auto workflow results for analysis
 A0_fit, gamma_fit, omega_fit, phi_fit = popt
 perr = np.sqrt(np.diag(pcov))
 A0_err, gamma_err, omega_err, phi_err = perr
@@ -202,7 +202,7 @@ period_err = period_fit * (omega_err / omega_fit)
 
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Robust Preset)")
+print("FITTED PARAMETERS (auto workflow)")
 print("=" * 70)
 print(f"  A0 (initial amplitude): {A0_fit:.3f} +/- {A0_err:.3f} degrees")
 print(f"  gamma (damping coeff): {gamma_fit:.5f} +/- {gamma_err:.5f} s^-1")
@@ -447,9 +447,9 @@ print(f"  Period:                     T = {period_fit:.3f} +/- {period_err:.3f} 
 print(f"\n  Estimated pendulum length: {length_estimated:.3f} m")
 print(f"  Damping regime: Lightly damped (zeta = {damping_ratio:.4f})")
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' (5 multi-starts)")
-print(f"  - fit() with preset='global' ({global_starts} multi-starts)")
-print(f"  - fit() with GlobalOptimizationConfig ({6 if QUICK else 15} custom starts)")
+print("  - fit() with workflow='auto'")
+print(f"  - fit() with workflow='auto_global' ({global_starts} multi-starts)")
+print(f"  - fit() with workflow='auto_global', n_starts={15}, sampler='lhs'")
 if QUICK:
     print("⏩ Quick mode: skipping extended plotting.")
     sys.exit(0)

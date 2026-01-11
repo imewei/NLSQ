@@ -1,5 +1,5 @@
 """
-Advanced Chemical Reaction Kinetics Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Chemical Reaction Kinetics Fitting with fit() API and workflow="auto_global".
 
 This example demonstrates fitting chemical reaction kinetics data to determine
 rate constants and reaction orders using NLSQ's advanced fit() API and global
@@ -7,8 +7,8 @@ optimization capabilities.
 
 Compared to 04_gallery/chemistry/reaction_kinetics.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - First-order kinetics (exponential decay)
@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
@@ -135,8 +135,8 @@ print("-" * 70)
 # Initial parameter guess
 p0_1st = [0.9, 0.004]  # C0, k
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with 'auto' workflow
+print("\nMethod 1: fit() with 'auto' workflow")
 popt_1st_robust, pcov_1st_robust = fit(
     first_order_decay,
     time,
@@ -145,7 +145,7 @@ popt_1st_robust, pcov_1st_robust = fit(
     sigma=sigma_1st,
     absolute_sigma=True,
     bounds=([0, 0], [2, 0.1]),
-    preset="robust",
+    workflow="auto",
 )
 
 C0_1st_fit, k_1st_fit = popt_1st_robust
@@ -162,9 +162,9 @@ print(
     f"  t_1/2: {t_half_1st:.2f} +/- {t_half_1st_err:.2f} s (true: {np.log(2) / k_1st_true:.2f})"
 )
 
-# Method 2: fit() with 'global' preset
+# Method 2: fit() with 'auto_global' workflow
 global_starts = 6 if QUICK else 20
-print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
+print(f"\nMethod 2: fit() with 'auto_global' workflow ({global_starts} starts)")
 popt_1st_global, pcov_1st_global = fit(
     first_order_decay,
     time,
@@ -173,7 +173,7 @@ popt_1st_global, pcov_1st_global = fit(
     sigma=sigma_1st,
     absolute_sigma=True,
     bounds=([0, 0], [2, 0.1]),
-    preset="global",
+    workflow="auto_global",
     n_starts=global_starts,
 )
 
@@ -212,7 +212,7 @@ noise_2nd = np.random.normal(0, 0.02 * C_2nd_true, size=len(time))
 C_2nd_measured = C_2nd_true + noise_2nd
 sigma_2nd = np.asarray(0.02 * C_2nd_measured + 0.001)
 
-# Fit with robust preset
+# Fit with auto workflow
 popt_2nd, pcov_2nd = fit(
     second_order_decay,
     time,
@@ -220,7 +220,7 @@ popt_2nd, pcov_2nd = fit(
     p0=[0.9, 0.008],
     sigma=sigma_2nd,
     bounds=([0, 0], [2, 0.1]),
-    preset="robust",
+    workflow="auto",
 )
 
 C0_2nd_fit, k_2nd_fit = popt_2nd
@@ -233,7 +233,7 @@ t_half_2nd_err = t_half_2nd * np.sqrt(
     (k_2nd_err / k_2nd_fit) ** 2 + (C0_2nd_err / C0_2nd_fit) ** 2
 )
 
-print("Fitted Parameters (robust preset):")
+print("Fitted Parameters (auto workflow):")
 print(f"  [A]_0: {C0_2nd_fit:.4f} +/- {C0_2nd_err:.4f} M (true: {C0_2nd})")
 print(f"  k:    {k_2nd_fit:.6f} +/- {k_2nd_err:.6f} M^-1 s^-1 (true: {k_2nd_true})")
 print("\nHalf-Life (concentration-dependent):")
@@ -252,18 +252,11 @@ print(f"  RMSE: {rmse_2nd:.5f} M")
 # Reaction Order Determination with Global Optimization
 # =============================================================================
 print("\n" + "-" * 70)
-print("REACTION ORDER DETERMINATION with GlobalOptimizationConfig")
+print("REACTION ORDER DETERMINATION with workflow='auto_global'")
 print("-" * 70)
 
 # Use global optimization to ensure we find the true global minimum
 # for model selection
-
-global_config = GlobalOptimizationConfig(
-    n_starts=6 if QUICK else 20,
-    sampler="lhs",
-    center_on_p0=True,
-    scale_factor=1.5,
-)
 
 # Fit both models to first-order data with global optimization
 popt_1st_model, _ = fit(
@@ -273,7 +266,7 @@ popt_1st_model, _ = fit(
     p0=[0.9, 0.004],
     sigma=sigma_1st,
     bounds=([0, 0], [2, 0.1]),
-    multistart=True,
+    workflow="auto_global",
     n_starts=6 if QUICK else 20,
     sampler="lhs",
 )
@@ -285,7 +278,7 @@ popt_2nd_model, _ = fit(
     p0=[0.9, 0.008],
     sigma=sigma_1st,
     bounds=([0, 0], [2, 0.1]),
-    multistart=True,
+    workflow="auto_global",
     n_starts=6 if QUICK else 20,
     sampler="lhs",
 )
@@ -407,7 +400,7 @@ ax1.axvline(
 
 ax1.set_xlabel("Time (s)", fontsize=11)
 ax1.set_ylabel("Concentration [A] (M)", fontsize=11)
-ax1.set_title("First-Order Reaction - fit() API", fontsize=12, fontweight="bold")
+ax1.set_title("First-Order Reaction - fit() with auto", fontsize=12, fontweight="bold")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
@@ -482,7 +475,7 @@ ax4.axvline(
 
 ax4.set_xlabel("Time (s)", fontsize=11)
 ax4.set_ylabel("Concentration [A] (M)", fontsize=11)
-ax4.set_title("Second-Order Reaction - fit() API", fontsize=12, fontweight="bold")
+ax4.set_title("Second-Order Reaction - fit() with auto", fontsize=12, fontweight="bold")
 ax4.legend()
 ax4.grid(True, alpha=0.3)
 
@@ -570,7 +563,7 @@ summary_text = [
     ["RMSE", f"{rmse_1st:.5f} M", f"{rmse_2nd:.5f} M"],
     ["", "", ""],
     ["API: fit() with", "", ""],
-    ["preset='robust'", "", ""],
+    ["workflow='auto'", "", ""],
 ]
 
 table_text = "\n".join(["  ".join(row) for row in summary_text])
@@ -614,9 +607,9 @@ print("\nModel Selection with Global Optimization:")
 print(f"  Best fit for test data: First-order (AIC = {AIC_1st:.2f})")
 
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' (5 multi-starts)")
-print("  - fit() with preset='global' (20 multi-starts)")
-print("  - fit() with GlobalOptimizationConfig for model selection")
+print("  - fit() with workflow='auto'")
+print("  - fit() with workflow='auto_global' (20 multi-starts)")
+print("  - fit() with workflow='auto_global' for model selection")
 
 print("\nThis example demonstrates:")
 print("  - First-order and second-order kinetics fitting with fit() API")

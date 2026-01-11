@@ -1,14 +1,14 @@
 """
-Advanced Bacterial Growth Curve Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Bacterial Growth Curve Fitting with fit() API and workflow presets.
 
 This example demonstrates fitting bacterial growth curves using the logistic growth
-model with NLSQ's advanced fit() API and global optimization capabilities for
-robust growth rate and carrying capacity determination.
+model with NLSQ's advanced fit() API and workflow presets for robust growth rate
+and carrying capacity determination.
 
 Compared to 04_gallery/biology/growth_curves.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflow presets ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Logistic growth model (Verhulst equation)
@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
@@ -143,10 +143,10 @@ bounds = (
 )
 
 # =============================================================================
-# Method 1: Using fit() with 'robust' preset
+# Method 1: Using fit() with 'auto' workflow
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 1: fit() with 'robust' preset")
+print("Method 1: fit() with 'auto' workflow")
 print("-" * 70)
 
 popt_robust, pcov_robust = fit(
@@ -157,7 +157,7 @@ popt_robust, pcov_robust = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
 )
 
 N0_fit, K_fit, r_fit = popt_robust
@@ -174,10 +174,10 @@ if QUICK:
 
 
 # =============================================================================
-# Method 2: Using fit() with 'global' preset for thorough search
+# Method 2: Using fit() with 'auto_global' workflow for thorough search
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 2: fit() with 'global' preset (20 starts)")
+print("Method 2: fit() with 'auto_global' workflow (20 starts)")
 print("-" * 70)
 
 popt_global, pcov_global = fit(
@@ -188,7 +188,7 @@ popt_global, pcov_global = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="global",
+    workflow="auto_global",
     n_starts=6 if QUICK else 20,
 )
 
@@ -201,21 +201,13 @@ print(f"  r = {r_g:.3f} +/- {perr_g[2]:.3f} hr^-1")
 
 
 # =============================================================================
-# Method 3: Using GlobalOptimizationConfig with custom settings
+# Method 3: Using workflow="auto_global" with custom settings
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 3: GlobalOptimizationConfig with custom settings")
+print("Method 3: workflow='auto_global' with custom settings")
 print("-" * 70)
 
-# Create custom global optimization configuration
-global_config = GlobalOptimizationConfig(
-    n_starts=6 if QUICK else 15,
-    sampler="lhs",
-    center_on_p0=True,
-    scale_factor=1.0,
-)
-
-# Use explicit multi-start parameters with fit()
+# Use workflow="auto_global" with explicit parameters
 popt_custom, pcov_custom = fit(
     logistic_growth,
     time,
@@ -224,7 +216,7 @@ popt_custom, pcov_custom = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    multistart=True,
+    workflow="auto_global",
     n_starts=6 if QUICK else 15,
     sampler="lhs",
 )
@@ -248,7 +240,7 @@ t_mid = np.log((K_fit - N0_fit) / N0_fit) / r_fit
 max_growth_rate = r_fit * K_fit / 4
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Robust Preset)")
+print("FITTED PARAMETERS (Auto Workflow)")
 print("=" * 70)
 print(f"  N0 (initial OD):    {N0_fit:.4f} +/- {N0_err:.4f}")
 print(f"  K (carrying cap.):  {K_fit:.3f} +/- {K_err:.3f}")
@@ -493,8 +485,8 @@ ax6.axis("off")
 api_table = [
     ["Method", "N0", "K", "r (hr^-1)"],
     ["-" * 20, "-" * 8, "-" * 6, "-" * 10],
-    ["fit() 'robust'", f"{N0_fit:.4f}", f"{K_fit:.3f}", f"{r_fit:.3f}"],
-    ["fit() 'global'", f"{N0_g:.4f}", f"{K_g:.3f}", f"{r_g:.3f}"],
+    ["fit() 'auto'", f"{N0_fit:.4f}", f"{K_fit:.3f}", f"{r_fit:.3f}"],
+    ["fit() 'auto_global'", f"{N0_g:.4f}", f"{K_g:.3f}", f"{r_g:.3f}"],
     ["fit() custom", f"{N0_c:.4f}", f"{K_c:.3f}", f"{r_c:.3f}"],
     ["", "", "", ""],
     ["True values", f"{N0_true:.4f}", f"{K_true:.3f}", f"{r_true:.3f}"],
@@ -543,9 +535,9 @@ print(f"  Exponential phase: {exp_duration:.1f} hours")
 print(f"  Stationary phase:  after {t_stationary:.1f} hours")
 print(f"\nModel quality: chi^2/dof = {chi_squared_reduced:.2f}, RMSE = {rmse:.4f}")
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' (5 multi-starts)")
-print("  - fit() with preset='global' (20 multi-starts)")
-print("  - fit() with GlobalOptimizationConfig (custom settings)")
+print("  - fit() with workflow='auto'")
+print("  - fit() with workflow='auto_global' (20 multi-starts)")
+print("  - fit() with workflow='auto_global' (custom settings)")
 print("\nThis example demonstrates:")
 print("  - Logistic growth model fitting with fit() API")
 print("  - Global optimization for robust parameter estimation")

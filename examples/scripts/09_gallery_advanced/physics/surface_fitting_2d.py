@@ -1,5 +1,5 @@
 """
-Advanced 2D Surface Fitting with fit() API and Global Optimization.
+Advanced 2D Surface Fitting with fit() API and workflow="auto_global".
 
 This example demonstrates fitting 2D surface data using NLSQ's advanced fit() API,
 including global optimization for multi-modal landscapes. Applications include:
@@ -10,7 +10,7 @@ including global optimization for multi-modal landscapes. Applications include:
 
 Compared to 04_gallery/physics/surface_fitting_2d.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for challenging 2D fits
+- Demonstrates workflow="auto_global" for challenging 2D fits
 - Shows rotated 2D Gaussian fitting (7 parameters)
 - Includes multi-peak 2D fitting example
 
@@ -235,7 +235,7 @@ bounds_rotated = (
 )
 
 # Fit with different methods
-print("\nMethod 1: fit() with preset='fast'")
+print("\nMethod 1: fit() with workflow='auto' and relaxed tolerances")
 if QUICK_MODE:
     print("  Quick mode: using simplified fit")
     popt_fast = np.array(
@@ -259,7 +259,10 @@ else:
         sigma=sigma,
         bounds=bounds_rotated,
         absolute_sigma=True,
-        preset="fast",
+        workflow="auto",
+        gtol=1e-6,
+        ftol=1e-6,
+        xtol=1e-6,
         **FIT_KWARGS,
     )
 
@@ -267,7 +270,7 @@ amp_f, x0_f, y0_f, sx_f, sy_f, theta_f, off_f = popt_fast
 print(f"  Center: ({x0_f:.3f}, {y0_f:.3f})")
 print(f"  Rotation: {np.degrees(theta_f):.1f} deg (true: {np.degrees(theta_true):.1f})")
 
-print("\nMethod 2: fit() with preset='robust' (recommended for rotated fits)")
+print("\nMethod 2: fit() with workflow='auto' (recommended for rotated fits)")
 if QUICK_MODE:
     print("  Quick mode: reusing fast fit")
     popt_robust, pcov_robust = popt_fast, pcov_fast
@@ -280,7 +283,7 @@ else:
         sigma=sigma,
         bounds=bounds_rotated,
         absolute_sigma=True,
-        preset="robust",
+        workflow="auto",
         **FIT_KWARGS,
     )
 
@@ -289,10 +292,10 @@ print(f"  Center: ({x0_r:.3f}, {y0_r:.3f})")
 print(f"  Rotation: {np.degrees(theta_r):.1f} deg")
 
 n_global = 3 if QUICK_MODE else 15
-print(f"\nMethod 3: fit() with preset='global' ({n_global} starts)")
+print(f"\nMethod 3: fit() with workflow='auto_global' ({n_global} starts)")
 print("  (Global optimization helps with rotation angle degeneracy)")
 if QUICK_MODE:
-    print("  Quick mode: reusing robust fit")
+    print("  Quick mode: reusing auto fit")
     popt_global, pcov_global = popt_robust, pcov_robust
 else:
     popt_global, pcov_global = fit(
@@ -303,7 +306,7 @@ else:
         sigma=sigma,
         bounds=bounds_rotated,
         absolute_sigma=True,
-        preset="global",
+        workflow="auto_global",
         n_starts=n_global,
     )
 
@@ -389,7 +392,7 @@ if not QUICK_MODE:
         sigma=sigma2,
         bounds=bounds_double,
         absolute_sigma=True,
-        preset="global",
+        workflow="auto_global",
         n_starts=20,
     )
 
@@ -595,12 +598,12 @@ print("\nWhy Global Optimization Matters for 2D Fitting:")
 print("  - Rotation angle has pi-periodicity degeneracy")
 print("  - Multi-peak fits have many local minima")
 print("  - Initial guess sensitivity in high-dimensional spaces")
-print("  - preset='global' recommended for rotated/multi-peak 2D fits")
+print("  - workflow='auto_global' recommended for rotated/multi-peak 2D fits")
 
 print("\nAPI Methods Demonstrated:")
-print("  - fit() with preset='fast' for simple 2D fits")
-print("  - fit() with preset='robust' for moderate difficulty")
-print("  - fit() with preset='global' for rotated/multi-peak (recommended)")
+print("  - fit() with workflow='auto', gtol/ftol/xtol=1e-6 for simple 2D fits")
+print("  - fit() with workflow='auto' for moderate difficulty")
+print("  - fit() with workflow='auto_global' for rotated/multi-peak (recommended)")
 
 print("\nApplications:")
 print("  - Astigmatic laser beam profiling")

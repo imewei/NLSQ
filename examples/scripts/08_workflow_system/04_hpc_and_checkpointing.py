@@ -12,7 +12,7 @@ Features demonstrated:
 - PBS Pro job script generation
 
 Run this example:
-    python examples/scripts/08_workflow_system/07_hpc_and_checkpointing.py
+    python examples/scripts/08_workflow_system/04_hpc_and_checkpointing.py
 """
 
 import json

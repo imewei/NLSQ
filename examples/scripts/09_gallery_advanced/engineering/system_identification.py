@@ -1,5 +1,5 @@
 """
-Advanced System Identification with fit() API and GlobalOptimizationConfig.
+Advanced System Identification with fit() API and workflow presets.
 
 This example demonstrates system identification by fitting a first-order
 transfer function to step response data using NLSQ's advanced fit() API
@@ -7,8 +7,8 @@ and global optimization for robust parameter extraction.
 
 Compared to 04_gallery/engineering/system_identification.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - First-order system dynamics
@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
@@ -136,8 +136,8 @@ p0 = [75, 12, 1.5]  # K, tau, t_delay
 # Parameter bounds
 bounds = ([0, 0.1, 0], [150, 50, 10])
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with 'auto' workflow
+print("\nMethod 1: fit() with 'auto' workflow")
 popt, pcov = fit(
     first_order_step_response,
     time,
@@ -146,7 +146,7 @@ popt, pcov = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
     **FIT_KWARGS,
 )
 
@@ -162,8 +162,8 @@ if QUICK:
     print("\n⏩ Quick mode: skipping global/custom fits and extended analysis.")
     sys.exit(0)
 
-# Method 2: fit() with 'global' preset
-print("\nMethod 2: fit() with 'global' preset")
+# Method 2: fit() with 'auto_global' workflow
+print("\nMethod 2: fit() with 'auto_global' workflow")
 popt_global, pcov_global = fit(
     first_order_step_response,
     time,
@@ -172,7 +172,7 @@ popt_global, pcov_global = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="global",
+    workflow="auto_global",
 )
 
 K_g, tau_g, t_delay_g = popt_global
@@ -182,8 +182,8 @@ print(f"  K (gain):        {K_g:.2f} +/- {perr_g[0]:.2f} C")
 print(f"  tau (time const): {tau_g:.2f} +/- {perr_g[1]:.2f} s")
 print(f"  t_d (delay):     {t_delay_g:.2f} +/- {perr_g[2]:.2f} s")
 
-# Method 3: GlobalOptimizationConfig with custom settings
-print("\nMethod 3: GlobalOptimizationConfig with custom settings")
+# Method 3: workflow="auto_global" with custom settings
+print("\nMethod 3: workflow='auto_global' with custom settings")
 popt_custom, pcov_custom = fit(
     first_order_step_response,
     time,
@@ -192,7 +192,7 @@ popt_custom, pcov_custom = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    multistart=True,
+    workflow="auto_global",
     n_starts=15,
     sampler="lhs",
 )
@@ -205,7 +205,7 @@ print(f"  tau (time const): {tau_c:.2f} +/- {perr_c[1]:.2f} s")
 print(f"  t_d (delay):     {t_delay_c:.2f} +/- {perr_c[2]:.2f} s")
 
 
-# Use robust preset results for analysis
+# Use auto workflow results for analysis
 K_fit, tau_fit, t_delay_fit = popt
 perr = np.sqrt(np.diag(pcov))
 K_err, tau_err, t_delay_err = perr
@@ -219,7 +219,7 @@ t_settle_2pct = t_delay_fit + 4 * tau_fit
 
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Robust Preset)")
+print("FITTED PARAMETERS (Auto Workflow)")
 print("=" * 70)
 print(f"  K (gain):        {K_fit:.2f} +/- {K_err:.2f} C")
 print(f"  tau (time const): {tau_fit:.2f} +/- {tau_err:.2f} s")
@@ -322,7 +322,7 @@ ax1.plot(
     first_order_step_response(t_fine, *popt),
     "g-",
     linewidth=2.5,
-    label="Fitted model (robust)",
+    label="Fitted model (auto)",
 )
 
 ax1.axhline(K_fit * 0.632, color="blue", linestyle=":", alpha=0.5)
@@ -459,9 +459,9 @@ print(f"  Settling time (2%): {t_settle_2pct:.2f} s")
 print(f"  Bandwidth:          {1 / (2 * np.pi * tau_fit):.4f} Hz")
 print(f"\n  Model quality:      R^2 = {r_squared:.4f}, RMSE = {rmse:.2f}C")
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' (5 multi-starts)")
-print("  - fit() with preset='global' (20 multi-starts)")
-print("  - fit() with GlobalOptimizationConfig (custom settings)")
+print("  - fit() with workflow='auto' for standard fitting")
+print("  - fit() with workflow='auto_global' for thorough search")
+print("  - fit() with workflow='auto_global' and custom n_starts/sampler")
 print("\nThis example demonstrates:")
 print("  - First-order system identification with fit() API")
 print("  - Global optimization for robust parameter estimation")

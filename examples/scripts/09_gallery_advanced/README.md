@@ -1,19 +1,19 @@
-# 09 - Advanced Gallery (fit() API + GlobalOptimizationConfig)
+# 09 - Advanced Gallery (fit() API + workflow System)
 
 This gallery contains the same examples as `04_gallery/` but updated to use NLSQ's
-v0.3.x advanced features:
+v0.6.3 3-workflow system:
 
-- **`fit()` API**: Unified entry point with automatic workflow selection
-- **Presets**: `'fast'`, `'robust'`, `'global'` for common use cases
-- **`GlobalOptimizationConfig`**: Multi-start optimization for robust parameter estimation
+- **`fit()` API**: Unified entry point with automatic memory-based strategy selection
+- **Three Workflows**: `'auto'`, `'auto_global'`, `'hpc'` for all use cases
+- **Global Optimization**: Multi-start and CMA-ES for robust parameter estimation
 
 ## Relationship to 04_gallery/
 
 | Original (04_gallery/)           | Advanced (09_gallery_advanced/)           |
 |----------------------------------|-------------------------------------------|
-| Uses `curve_fit()` directly      | Uses `fit()` with presets                 |
+| Uses `curve_fit()` directly      | Uses `fit()` with workflows               |
 | Single local optimization        | Multi-start global optimization           |
-| Manual parameter tuning          | Automatic workflow selection              |
+| Manual parameter tuning          | Automatic workflow and memory management  |
 | Works well with good guesses     | Robust even with poor initial guesses     |
 
 ## Examples by Domain
@@ -51,58 +51,54 @@ v0.3.x advanced features:
 
 ## API Patterns Demonstrated
 
-### Basic fit() with Preset
+### Basic fit() with workflow='auto' (default)
 
 ```python
 from nlsq import fit
 
-# Robust fitting with 5 multi-starts (recommended for most cases)
+# Local optimization with automatic memory management
 popt, pcov = fit(
     model_function,
     xdata,
     ydata,
     p0=initial_guess,
     bounds=(lower, upper),
-    preset="robust",  # 'fast', 'robust', or 'global'
+    workflow="auto",  # Default - local optimization
 )
 ```
 
-### Global Optimization with Presets
+### Global Optimization with workflow='auto_global'
 
 ```python
-# Thorough global search with 20 multi-starts
+from nlsq import fit
+
+# Global optimization with 20 multi-starts
 popt, pcov = fit(
     model_function,
     xdata,
     ydata,
     p0=initial_guess,
     bounds=(lower, upper),
-    preset="global",  # Uses GlobalOptimizationConfig internally
+    workflow="auto_global",  # Multi-start or CMA-ES
+    n_starts=20,
 )
 ```
 
 ### Custom Multi-Start Configuration
 
 ```python
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 # Full control over multi-start optimization
-config = GlobalOptimizationConfig(
-    n_starts=15,
-    sampler="lhs",  # Latin Hypercube Sampling
-    center_on_p0=True,
-    scale_factor=1.0,
-)
-
 popt, pcov = fit(
     model_function,
     xdata,
     ydata,
     p0=initial_guess,
     bounds=(lower, upper),
-    multistart=True,
+    workflow="auto_global",
     n_starts=15,
-    sampler="lhs",
+    sampler="lhs",  # Latin Hypercube Sampling
 )
 ```
 
@@ -135,17 +131,18 @@ popt, pcov = fit(
     ydata,
     p0=initial_guess,
     bounds=(lower, upper),
-    preset="robust",  # Automatic multi-start
+    workflow="auto_global",  # Automatic multi-start
+    n_starts=5,
 )
 ```
 
-## When to Use Each Preset
+## When to Use Each Workflow
 
-| Preset | Multi-starts | Best For |
-|--------|--------------|----------|
-| `'fast'` | 1 | Well-conditioned problems, known good initial guess |
-| `'robust'` | 5 | Most applications, moderate noise, uncertain initial guess |
-| `'global'` | 20 | Multimodal problems, spectroscopy, complex models |
+| Workflow | Description | Best For |
+|----------|-------------|----------|
+| `'auto'` | Local optimization | Well-conditioned problems, known good initial guess |
+| `'auto_global'` | Multi-start or CMA-ES | Most applications, multimodal problems, uncertain initial guess |
+| `'hpc'` | `auto_global` + checkpointing | Long-running HPC jobs, fault tolerance |
 
 ## Global Optimization is Critical For
 

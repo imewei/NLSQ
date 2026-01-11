@@ -1,14 +1,14 @@
 """
-Advanced Dose-Response Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Dose-Response Fitting with fit() API and workflow presets.
 
 This example demonstrates fitting dose-response curves using the Hill equation
-(4-parameter logistic model) with NLSQ's advanced fit() API and global optimization
-capabilities for robust EC50/IC50 determination.
+(4-parameter logistic model) with NLSQ's advanced fit() API and workflow presets
+for robust EC50/IC50 determination.
 
 Compared to 04_gallery/biology/dose_response.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflow presets ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - 4-parameter logistic (4PL) model
@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
@@ -108,10 +108,10 @@ bounds = (
 )
 
 # =============================================================================
-# Method 1: Using fit() with 'robust' preset (recommended for most cases)
+# Method 1: Using fit() with 'auto' workflow (recommended for most cases)
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 1: fit() with 'robust' preset")
+print("Method 1: fit() with 'auto' workflow")
 print("-" * 70)
 
 popt_robust, pcov_robust = fit(
@@ -122,7 +122,7 @@ popt_robust, pcov_robust = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="robust",  # Multi-start with 5 starts for robustness
+    workflow="auto",  # Automatic workflow selection
 )
 
 bottom_fit, top_fit, EC50_fit, hill_slope_fit = popt_robust
@@ -133,11 +133,11 @@ print(f"  EC50 = {EC50_fit:.3f} +/- {EC50_err:.3f} uM (true: {EC50_true})")
 print(f"  Hill slope = {hill_slope_fit:.3f} +/- {hill_slope_err:.3f}")
 
 # =============================================================================
-# Method 2: Using fit() with 'global' preset (thorough global search)
+# Method 2: Using fit() with 'auto_global' workflow (thorough global search)
 # =============================================================================
 global_starts = 6 if QUICK else 20
 print("\n" + "-" * 70)
-print(f"Method 2: fit() with 'global' preset ({global_starts} starts)")
+print(f"Method 2: fit() with 'auto_global' workflow ({global_starts} starts)")
 print("-" * 70)
 
 popt_global, pcov_global = fit(
@@ -148,7 +148,7 @@ popt_global, pcov_global = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    preset="global",  # Thorough global search with 20 starts
+    workflow="auto_global",  # Thorough global search with multi-starts
     n_starts=global_starts,
 )
 
@@ -159,24 +159,14 @@ print(f"  EC50 = {EC50_g:.3f} +/- {perr_g[2]:.3f} uM")
 print(f"  Hill slope = {hill_slope_g:.3f} +/- {perr_g[3]:.3f}")
 
 # =============================================================================
-# Method 3: Using GlobalOptimizationConfig directly for full control
+# Method 3: Using workflow="auto_global" directly for full control
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 3: GlobalOptimizationConfig with custom settings")
+print("Method 3: workflow='auto_global' with custom settings")
 print("-" * 70)
 
-# Create a custom global optimization configuration
+# Use workflow="auto_global" with explicit parameters for full control
 custom_starts = 6 if QUICK else 15
-global_config = GlobalOptimizationConfig(
-    n_starts=custom_starts,  # starting points
-    sampler="lhs",  # Latin Hypercube Sampling for good coverage
-    center_on_p0=True,  # Center samples around initial guess
-    scale_factor=1.0,  # Exploration range scale
-    elimination_rounds=3,  # Progressive elimination rounds
-    elimination_fraction=0.5,  # Eliminate 50% worst per round
-)
-
-# Use fit() with explicit multi-start parameters
 popt_custom, pcov_custom = fit(
     four_parameter_logistic,
     dose,
@@ -185,11 +175,11 @@ popt_custom, pcov_custom = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    multistart=True,
-    n_starts=custom_starts,
-    sampler="lhs",
-    center_on_p0=True,
-    scale_factor=1.0,
+    workflow="auto_global",
+    n_starts=custom_starts,  # starting points
+    sampler="lhs",  # Latin Hypercube Sampling for good coverage
+    center_on_p0=True,  # Center samples around initial guess
+    scale_factor=1.0,  # Exploration range scale
 )
 
 bottom_c, top_c, EC50_c, hill_slope_c = popt_custom
@@ -213,7 +203,7 @@ EC80 = EC50_fit * np.power((top_fit - 80) / (80 - bottom_fit), 1 / hill_slope_fi
 
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Robust Preset)")
+print("FITTED PARAMETERS (Auto Workflow)")
 print("=" * 70)
 print(f"  Bottom (baseline):  {bottom_fit:.2f} +/- {bottom_err:.2f} %")
 print(f"  Top (max response): {top_fit:.2f} +/- {top_err:.2f} %")
@@ -286,7 +276,7 @@ if QUICK:
     print("⏩ Quick mode: skipping compound B comparison and heavy plotting.")
     sys.exit(0)
 
-# Fit Drug B with robust preset
+# Fit Drug B with auto workflow
 popt_B, pcov_B = fit(
     four_parameter_logistic,
     dose,
@@ -294,7 +284,7 @@ popt_B, pcov_B = fit(
     p0=[0, 100, 5, 1.0],
     sigma=sigma,
     bounds=bounds,
-    preset="robust",
+    workflow="auto",
 )
 
 bottom_B_fit, top_B_fit, EC50_B_fit, hill_slope_B_fit = popt_B
@@ -490,10 +480,10 @@ ax6.axis("off")
 
 # Create summary table
 api_table = [
-    ["API Method", "Preset/Config", "EC50 (uM)", "Hill"],
+    ["API Method", "Workflow", "EC50 (uM)", "Hill"],
     ["-" * 20, "-" * 15, "-" * 10, "-" * 8],
-    ["fit()", "'robust'", f"{EC50_fit:.3f}", f"{hill_slope_fit:.3f}"],
-    ["fit()", "'global'", f"{EC50_g:.3f}", f"{hill_slope_g:.3f}"],
+    ["fit()", "'auto'", f"{EC50_fit:.3f}", f"{hill_slope_fit:.3f}"],
+    ["fit()", "'auto_global'", f"{EC50_g:.3f}", f"{hill_slope_g:.3f}"],
     ["fit()", "custom 15-start", f"{EC50_c:.3f}", f"{hill_slope_c:.3f}"],
     ["", "", "", ""],
     ["True values", "-", f"{EC50_true:.3f}", f"{hill_slope_true:.3f}"],
@@ -502,8 +492,8 @@ api_table = [
     ["-" * 40, "", "", ""],
     ["  - Auto workflow selection", "", "", ""],
     ["  - Built-in multi-start", "", "", ""],
-    ["  - Preset configurations", "", "", ""],
-    ["  - GlobalOptimizationConfig", "", "", ""],
+    ["  - Workflow configurations", "", "", ""],
+    ["  - workflow='auto_global'", "", "", ""],
 ]
 
 table_text = "\n".join(["  ".join(row) for row in api_table])
@@ -537,13 +527,13 @@ print(f"    Hill slope: {hill_slope_fit:.2f} ({cooperativity.split('(')[0].strip
 print(f"    Potency:   {potency.split('(')[0].strip()}")
 
 print("\n  API Methods Used:")
-print("    - fit() with preset='robust' (5 multi-starts)")
-print("    - fit() with preset='global' (20 multi-starts)")
-print("    - fit() with custom multi-start settings")
+print("    - fit() with workflow='auto'")
+print("    - fit() with workflow='auto_global' (20 multi-starts)")
+print("    - fit() with workflow='auto_global' (custom settings)")
 
 print("\nAdvantages over curve_fit():")
 print("  - Automatic multi-start optimization avoids local minima")
-print("  - Preset configurations for common use cases")
-print("  - GlobalOptimizationConfig for fine-grained control")
+print("  - Workflow configurations for common use cases")
+print("  - workflow='auto_global' for fine-grained control")
 print("  - Better parameter recovery with noisy data")
 print("=" * 70)

@@ -1,14 +1,14 @@
 """
-Advanced Enzyme Kinetics Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Enzyme Kinetics Fitting with fit() API and workflow presets.
 
 This example demonstrates fitting enzyme kinetics data using the Michaelis-Menten
-model with NLSQ's advanced fit() API and global optimization capabilities for
-robust K_M and V_max determination.
+model with NLSQ's advanced fit() API and workflow presets for robust K_M and V_max
+determination.
 
 Compared to 04_gallery/biology/enzyme_kinetics.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflow presets ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Michaelis-Menten kinetics
@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
@@ -139,10 +139,10 @@ print("=" * 70)
 p0 = [120, 60]  # Vmax, Km
 
 # =============================================================================
-# Method 1: Using fit() with 'robust' preset
+# Method 1: Using fit() with 'auto' workflow
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 1: fit() with 'robust' preset")
+print("Method 1: fit() with 'auto' workflow")
 print("-" * 70)
 
 popt_robust, pcov_robust = fit(
@@ -153,7 +153,7 @@ popt_robust, pcov_robust = fit(
     sigma=sigma_v,
     absolute_sigma=True,
     bounds=([0, 0], [200, 500]),
-    preset="robust",
+    workflow="auto",
     **FIT_KWARGS,
 )
 
@@ -170,10 +170,10 @@ if QUICK:
 
 
 # =============================================================================
-# Method 2: Using fit() with 'global' preset for thorough search
+# Method 2: Using fit() with 'auto_global' workflow for thorough search
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 2: fit() with 'global' preset (20 starts)")
+print("Method 2: fit() with 'auto_global' workflow (20 starts)")
 print("-" * 70)
 
 popt_global, pcov_global = fit(
@@ -184,7 +184,7 @@ popt_global, pcov_global = fit(
     sigma=sigma_v,
     absolute_sigma=True,
     bounds=([0, 0], [200, 500]),
-    preset="global",
+    workflow="auto_global",
 )
 
 Vmax_g, Km_g = popt_global
@@ -195,21 +195,13 @@ print(f"  K_M = {Km_g:.2f} +/- {perr_g[1]:.2f} uM")
 
 
 # =============================================================================
-# Method 3: Using GlobalOptimizationConfig with custom settings
+# Method 3: Using workflow="auto_global" with custom settings
 # =============================================================================
 print("\n" + "-" * 70)
-print("Method 3: GlobalOptimizationConfig with custom settings")
+print("Method 3: workflow='auto_global' with custom settings")
 print("-" * 70)
 
-# Create custom global optimization configuration
-global_config = GlobalOptimizationConfig(
-    n_starts=4 if QUICK else 15,
-    sampler="lhs",
-    center_on_p0=True,
-    scale_factor=1.0,
-)
-
-# Use explicit multi-start parameters with fit()
+# Use workflow="auto_global" with explicit parameters
 popt_custom, pcov_custom = fit(
     michaelis_menten,
     S,
@@ -218,7 +210,7 @@ popt_custom, pcov_custom = fit(
     sigma=sigma_v,
     absolute_sigma=True,
     bounds=([0, 0], [200, 500]),
-    multistart=True,
+    workflow="auto_global",
     n_starts=4 if QUICK else 15,
     sampler="lhs",
 )
@@ -236,7 +228,7 @@ perr = np.sqrt(np.diag(pcov_robust))
 Vmax_err, Km_err = perr
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Robust Preset)")
+print("FITTED PARAMETERS (Auto Workflow)")
 print("=" * 70)
 print(f"  V_max: {Vmax_fit:.2f} +/- {Vmax_err:.2f} uM/min")
 print(f"  K_M:   {Km_fit:.2f} +/- {Km_err:.2f} uM")
@@ -306,7 +298,7 @@ popt_inh, pcov_inh = fit(
     p0=[100, 50, 30],
     sigma=sigma_v,
     bounds=([0, 0, 0], [200, 500, 200]),
-    preset="robust",
+    workflow="auto",
 )
 
 Vmax_inh, Km_inh, Ki_fit = popt_inh
@@ -476,8 +468,8 @@ ax6.axis("off")
 api_table = [
     ["Method", "V_max (uM/min)", "K_M (uM)"],
     ["-" * 25, "-" * 15, "-" * 10],
-    ["fit() 'robust'", f"{Vmax_fit:.2f}", f"{Km_fit:.2f}"],
-    ["fit() 'global'", f"{Vmax_g:.2f}", f"{Km_g:.2f}"],
+    ["fit() 'auto'", f"{Vmax_fit:.2f}", f"{Km_fit:.2f}"],
+    ["fit() 'auto_global'", f"{Vmax_g:.2f}", f"{Km_g:.2f}"],
     ["fit() custom 15-start", f"{Vmax_c:.2f}", f"{Km_c:.2f}"],
     ["", "", ""],
     ["True values", f"{Vmax_true:.2f}", f"{Km_true:.2f}"],
@@ -485,8 +477,8 @@ api_table = [
     ["Key Advantages of fit():", "", ""],
     ["-" * 35, "", ""],
     ["  - Automatic multi-start", "", ""],
-    ["  - GlobalOptimizationConfig", "", ""],
-    ["  - Preset configurations", "", ""],
+    ["  - workflow='auto_global'", "", ""],
+    ["  - Workflow configurations", "", ""],
     ["  - Robust parameter recovery", "", ""],
 ]
 
@@ -521,9 +513,9 @@ print("\nInhibition analysis:")
 print(f"  Inhibition constant (K_i): {Ki_fit:.2f} +/- {Ki_err:.2f} uM")
 print("  Type: Competitive (K_M increased, V_max unchanged)")
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' (5 multi-starts)")
-print("  - fit() with preset='global' (20 multi-starts)")
-print("  - fit() with GlobalOptimizationConfig (custom settings)")
+print("  - fit() with workflow='auto'")
+print("  - fit() with workflow='auto_global' (20 multi-starts)")
+print("  - fit() with workflow='auto_global' (custom settings)")
 print("\nThis example demonstrates:")
 print("  - Michaelis-Menten fitting with fit() API")
 print("  - Global optimization for robust parameter estimation")

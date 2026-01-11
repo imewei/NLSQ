@@ -1,5 +1,5 @@
 """
-Advanced Spectroscopy Peak Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Spectroscopy Peak Fitting with fit() API and workflow="auto_global".
 
 This example demonstrates fitting multiple peaks in a spectroscopy spectrum
 using NLSQ's advanced fit() API and global optimization. Multi-peak fitting
@@ -8,8 +8,8 @@ particularly important.
 
 Compared to 04_gallery/physics/spectroscopy_peaks.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Multi-peak fitting (3 overlapping peaks)
@@ -27,7 +27,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 # Keep quick-mode runs light for CI/automation
 QUICK_MODE = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
@@ -163,8 +163,8 @@ bounds = (
     [10, 100, 2000, 9, 1.0, 1000, 10, 1.0, 500, 13, 1.0],
 )
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with workflow='auto'
+print("\nMethod 1: fit() with workflow='auto'")
 if QUICK_MODE:
     print("  Quick mode: using true parameters for a fast baseline.")
     popt_robust = np.array(
@@ -192,7 +192,7 @@ else:
         sigma=sigma,
         bounds=bounds,
         absolute_sigma=True,
-        preset="robust",
+        workflow="auto",
         **FIT_KWARGS,
     )
 
@@ -213,17 +213,17 @@ perr_robust = np.sqrt(np.diag(pcov_robust))
     width3_r,
 ) = popt_robust
 
-print("Peak Centers (robust):")
+print("Peak Centers (auto):")
 print(f"  Peak 1 (K-alpha): {cen1_r:.3f} keV (true: {cen1_true})")
 print(f"  Peak 2 (K-beta):  {cen2_r:.3f} keV (true: {cen2_true})")
 print(f"  Peak 3 (Escape):  {cen3_r:.3f} keV (true: {cen3_true})")
 
-# Method 2: fit() with 'global' preset (CRITICAL for spectroscopy)
+# Method 2: fit() with workflow='auto_global' (CRITICAL for spectroscopy)
 global_starts = 2 if QUICK_MODE else 20
-print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
+print(f"\nMethod 2: fit() with workflow='auto_global' ({global_starts} starts)")
 print("  (Global optimization is especially important for multi-peak fitting)")
 if QUICK_MODE:
-    print("  Quick mode: reusing robust fit for global preset comparison.")
+    print("  Quick mode: reusing auto fit for auto_global comparison.")
     popt_global, pcov_global = popt_robust, pcov_robust
 else:
     popt_global, pcov_global = fit(
@@ -234,7 +234,7 @@ else:
         sigma=sigma,
         bounds=bounds,
         absolute_sigma=True,
-        preset="global",
+        workflow="auto_global",
         n_starts=global_starts,
     )
 
@@ -254,19 +254,19 @@ perr_global = np.sqrt(np.diag(pcov_global))
     width3_g,
 ) = popt_global
 
-print("Peak Centers (global):")
+print("Peak Centers (auto_global):")
 print(f"  Peak 1 (K-alpha): {cen1_g:.3f} keV")
 print(f"  Peak 2 (K-beta):  {cen2_g:.3f} keV")
 print(f"  Peak 3 (Escape):  {cen3_g:.3f} keV")
 
 if QUICK_MODE:
-    print("\n⏩ Quick mode: skipping custom multi-start and plots.")
+    print("\n[Quick mode] skipping custom multi-start and plots.")
     sys.exit(0)
 
-# Method 3: GlobalOptimizationConfig with many starts (for difficult spectra)
+# Method 3: workflow='auto_global' with many starts (for difficult spectra)
 custom_starts = 4 if QUICK_MODE else 30
 print(
-    f"\nMethod 3: GlobalOptimizationConfig with {custom_starts} starts (thorough search)"
+    f"\nMethod 3: workflow='auto_global' with {custom_starts} starts (thorough search)"
 )
 popt_custom, pcov_custom = fit(
     multi_peak_model,
@@ -276,7 +276,7 @@ popt_custom, pcov_custom = fit(
     sigma=sigma,
     bounds=bounds,
     absolute_sigma=True,
-    multistart=True,
+    workflow="auto_global",
     n_starts=custom_starts,
     sampler="lhs",
 )
@@ -303,7 +303,7 @@ print(f"  Peak 2 (K-beta):  {cen2_c:.3f} keV")
 print(f"  Peak 3 (Escape):  {cen3_c:.3f} keV")
 
 
-# Use global preset results for detailed analysis (most reliable for spectroscopy)
+# Use auto_global workflow results for detailed analysis (most reliable for spectroscopy)
 popt = popt_global
 perr = perr_global
 
@@ -337,7 +337,7 @@ perr = perr_global
 
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Global Preset - Recommended for Spectroscopy)")
+print("FITTED PARAMETERS (auto_global workflow - Recommended for Spectroscopy)")
 print("=" * 70)
 
 print("\nBackground:")
@@ -550,14 +550,16 @@ print("\nWhy Global Optimization is Critical for Spectroscopy:")
 print("  - Multi-peak fitting has many local minima")
 print("  - Peak overlap creates parameter correlations")
 print("  - Poor initial guesses can lead to unphysical results")
-print(f"  - preset='global' ({global_starts} starts) recommended for complex spectra")
 print(
-    f"  - For very complex spectra, use multistart=True with n_starts={custom_starts}+"
+    f"  - workflow='auto_global' ({global_starts} starts) recommended for complex spectra"
+)
+print(
+    f"  - For very complex spectra, use workflow='auto_global' with n_starts={custom_starts}+"
 )
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' (5 multi-starts)")
-print(f"  - fit() with preset='global' ({global_starts} multi-starts)")
-print(f"  - fit() with GlobalOptimizationConfig ({custom_starts} custom starts)")
+print("  - fit() with workflow='auto'")
+print(f"  - fit() with workflow='auto_global' ({global_starts} multi-starts)")
+print(f"  - fit() with workflow='auto_global', n_starts={custom_starts}, sampler='lhs'")
 
 if QUICK_MODE:
     print("⏩ Quick mode: skipping extended plotting.")

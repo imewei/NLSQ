@@ -1,5 +1,5 @@
 """
-Advanced Sensor Calibration with fit() API and GlobalOptimizationConfig.
+Advanced Sensor Calibration with fit() API and workflow presets.
 
 This example demonstrates calibrating a non-linear temperature sensor
 (e.g., thermistor, RTD) using NLSQ's advanced fit() API and global optimization
@@ -7,8 +7,8 @@ for robust calibration curve fitting.
 
 Compared to 04_gallery/engineering/sensor_calibration.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Non-linear sensor response modeling
@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 if os.environ.get("NLSQ_EXAMPLES_QUICK"):
     print("Quick mode: skipping advanced sensor calibration demo.")
@@ -115,7 +115,7 @@ popt_linear, pcov_linear = fit(
     p0=[0.01, -20],
     sigma=sigma_temp,
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
 )
 
 a_lin, b_lin = popt_linear
@@ -143,7 +143,7 @@ popt_quad, pcov_quad = fit(
     p0=[-20, 0.01, -1e-6],
     sigma=sigma_temp,
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
 )
 
 c0, c1, c2 = popt_quad
@@ -164,8 +164,8 @@ print("\n" + "-" * 70)
 print("Model 3: Cubic Calibration with fit() API")
 print("-" * 70)
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with 'auto' workflow
+print("\nMethod 1: fit() with 'auto' workflow")
 popt_cubic, pcov_cubic = fit(
     cubic_model,
     voltage_measured,
@@ -173,7 +173,7 @@ popt_cubic, pcov_cubic = fit(
     p0=[-20, 0.01, -1e-6, 1e-10],
     sigma=sigma_temp,
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
 )
 
 d0, d1, d2, d3 = popt_cubic
@@ -187,8 +187,8 @@ print(f"  y = {d0:.4f} + {d1:.6f}*V + {d2:.3e}*V^2 + {d3:.3e}*V^3")
 print(f"  RMSE: {rmse_cubic:.3f} C")
 print(f"  Max residual: {np.max(np.abs(residuals_cubic)):.2f} C")
 
-# Method 2: fit() with 'global' preset
-print("\nMethod 2: fit() with 'global' preset")
+# Method 2: fit() with 'auto_global' workflow
+print("\nMethod 2: fit() with 'auto_global' workflow")
 popt_cubic_g, pcov_cubic_g = fit(
     cubic_model,
     voltage_measured,
@@ -196,7 +196,7 @@ popt_cubic_g, pcov_cubic_g = fit(
     p0=[-20, 0.01, -1e-6, 1e-10],
     sigma=sigma_temp,
     absolute_sigma=True,
-    preset="global",
+    workflow="auto_global",
 )
 
 d0_g, d1_g, d2_g, d3_g = popt_cubic_g
@@ -207,8 +207,8 @@ rmse_cubic_g = np.sqrt(np.mean(residuals_cubic_g**2))
 
 print(f"  RMSE: {rmse_cubic_g:.3f} C")
 
-# Method 3: GlobalOptimizationConfig with custom settings
-print("\nMethod 3: GlobalOptimizationConfig with custom settings")
+# Method 3: workflow="auto_global" with custom settings
+print("\nMethod 3: workflow='auto_global' with custom settings")
 popt_cubic_c, pcov_cubic_c = fit(
     cubic_model,
     voltage_measured,
@@ -216,7 +216,7 @@ popt_cubic_c, pcov_cubic_c = fit(
     p0=[-20, 0.01, -1e-6, 1e-10],
     sigma=sigma_temp,
     absolute_sigma=True,
-    multistart=True,
+    workflow="auto_global",
     n_starts=15,
     sampler="lhs",
 )
@@ -440,9 +440,9 @@ print(f"  Std residual: {np.std(residuals_cubic):.3f} C")
 print(f"\nValid range: {temp_reference.min():.0f} to {temp_reference.max():.0f} C")
 print(f"             ({voltage_measured.min():.0f} to {voltage_measured.max():.0f} mV)")
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' for all models")
-print("  - fit() with preset='global' for thorough search")
-print("  - fit() with GlobalOptimizationConfig for custom settings")
+print("  - fit() with workflow='auto' for all models")
+print("  - fit() with workflow='auto_global' for thorough search")
+print("  - fit() with workflow='auto_global' and custom n_starts/sampler")
 print("\nThis example demonstrates:")
 print("  - Non-linear sensor calibration with fit() API")
 print("  - Model comparison (linear, quadratic, cubic)")

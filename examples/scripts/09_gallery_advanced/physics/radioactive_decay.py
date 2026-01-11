@@ -1,5 +1,5 @@
 """
-Advanced Radioactive Decay Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Radioactive Decay Fitting with fit() API and workflow="auto_global".
 
 This example demonstrates fitting radioactive decay data to determine
 the half-life of an isotope using NLSQ's advanced fit() API and global
@@ -7,8 +7,8 @@ optimization for robust parameter estimation.
 
 Compared to 04_gallery/physics/radioactive_decay.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Exponential decay fitting
@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
@@ -101,8 +101,8 @@ print("-" * 70)
 # Initial parameter guess
 p0 = [1200, 0.0001]
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with workflow='auto'
+print("\nMethod 1: fit() with workflow='auto'")
 popt, pcov = fit(
     radioactive_decay,
     time,
@@ -110,7 +110,7 @@ popt, pcov = fit(
     p0=p0,
     sigma=sigma,
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
     **FIT_KWARGS,
 )
 
@@ -125,11 +125,11 @@ print(f"  lambda = {lambda_fit:.6e} +/- {lambda_err:.6e} yr^-1")
 print(f"  t_1/2 = {t_half_fit:.0f} +/- {t_half_err:.0f} years")
 
 if QUICK:
-    print("\n⏩ Quick mode: skipping global/custom fits and extended analysis.")
+    print("\n[Quick mode] skipping auto_global/custom fits and extended analysis.")
     sys.exit(0)
 
-# Method 2: fit() with 'global' preset
-print("\nMethod 2: fit() with 'global' preset")
+# Method 2: fit() with workflow='auto_global'
+print("\nMethod 2: fit() with workflow='auto_global'")
 popt_global, pcov_global = fit(
     radioactive_decay,
     time,
@@ -137,7 +137,7 @@ popt_global, pcov_global = fit(
     p0=p0,
     sigma=sigma,
     absolute_sigma=True,
-    preset="global",
+    workflow="auto_global",
 )
 
 N0_g, lambda_g = popt_global
@@ -148,8 +148,8 @@ print(f"  N0 = {N0_g:.2f} +/- {perr_g[0]:.2f}")
 print(f"  lambda = {lambda_g:.6e} +/- {perr_g[1]:.6e}")
 print(f"  t_1/2 = {t_half_g:.0f} +/- {t_half_err_g:.0f} years")
 
-# Method 3: GlobalOptimizationConfig with custom settings
-print("\nMethod 3: GlobalOptimizationConfig with custom settings")
+# Method 3: workflow='auto_global' with custom settings
+print("\nMethod 3: workflow='auto_global' with custom settings")
 popt_custom, pcov_custom = fit(
     radioactive_decay,
     time,
@@ -157,7 +157,7 @@ popt_custom, pcov_custom = fit(
     p0=p0,
     sigma=sigma,
     absolute_sigma=True,
-    multistart=True,
+    workflow="auto_global",
     n_starts=15,
     sampler="lhs",
 )
@@ -171,7 +171,7 @@ print(f"  lambda = {lambda_c:.6e} +/- {perr_c[1]:.6e}")
 print(f"  t_1/2 = {t_half_c:.0f} +/- {t_half_err_c:.0f} years")
 
 
-# Use robust preset results for analysis
+# Use auto workflow results for analysis
 N0_fit, lambda_fit = popt
 perr = np.sqrt(np.diag(pcov))
 N0_err, lambda_err = perr
@@ -179,7 +179,7 @@ t_half_fit, t_half_err = propagate_uncertainty(lambda_fit, lambda_err)
 
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Robust Preset)")
+print("FITTED PARAMETERS (auto workflow)")
 print("=" * 70)
 print(f"  N0 = {N0_fit:.2f} +/- {N0_err:.2f} counts/min")
 print(f"  lambda = {lambda_fit:.6e} +/- {lambda_err:.6e} yr^-1")
@@ -336,9 +336,9 @@ print(
     f"  Agreement: {100 * (1 - abs(t_half_fit - half_life_true) / half_life_true):.1f}%"
 )
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' (5 multi-starts)")
-print("  - fit() with preset='global' (20 multi-starts)")
-print("  - fit() with GlobalOptimizationConfig (custom settings)")
+print("  - fit() with workflow='auto'")
+print("  - fit() with workflow='auto_global'")
+print("  - fit() with workflow='auto_global', n_starts=15, sampler='lhs'")
 print("\nThis example demonstrates:")
 print("  - Exponential decay fitting with fit() API")
 print("  - Global optimization for robust parameter estimation")

@@ -57,8 +57,8 @@ popt, pcov = fit(
 |---|--------|-------|-------------|
 | 01 | [01_fit_quickstart.py](01_fit_quickstart.py) | Beginner | Basic `fit()` usage with the 3 workflows |
 | 02 | [02_workflow_tiers.py](02_workflow_tiers.py) | Intermediate | MemoryBudget, MemoryBudgetSelector, strategy decision tree |
-| 06 | [06_auto_selection.py](06_auto_selection.py) | Advanced | `auto_global` method selection (CMA-ES vs Multi-Start) |
-| 07 | [07_hpc_and_checkpointing.py](07_hpc_and_checkpointing.py) | Advanced | PBS Pro cluster detection, checkpoint/resume |
+| 03 | [03_auto_selection.py](03_auto_selection.py) | Advanced | `auto_global` method selection (CMA-ES vs Multi-Start) |
+| 04 | [04_hpc_and_checkpointing.py](04_hpc_and_checkpointing.py) | Advanced | PBS Pro cluster detection, checkpoint/resume |
 
 ---
 
@@ -69,7 +69,7 @@ popt, pcov = fit(
 python examples/scripts/08_workflow_system/01_fit_quickstart.py
 
 # Run with quick mode (reduced iterations)
-NLSQ_EXAMPLES_QUICK=1 python examples/scripts/08_workflow_system/07_hpc_and_checkpointing.py
+NLSQ_EXAMPLES_QUICK=1 python examples/scripts/08_workflow_system/04_hpc_and_checkpointing.py
 ```
 
 ---
@@ -189,8 +189,8 @@ The following presets have been removed in v0.6.3. Use these equivalents:
 08_workflow_system/
 ├── 01_fit_quickstart.py       # Basic fit() usage with 3 workflows
 ├── 02_workflow_tiers.py       # Memory strategy selection
-├── 06_auto_selection.py       # Global method selection (CMA-ES vs Multi-Start)
-├── 07_hpc_and_checkpointing.py # HPC workflow with checkpointing
+├── 03_auto_selection.py       # Global method selection (CMA-ES vs Multi-Start)
+├── 04_hpc_and_checkpointing.py # HPC workflow with checkpointing
 ├── figures/                   # Saved visualizations
 ├── nlsq_fit.pbs              # PBS job script template
 └── README.md                  # This file

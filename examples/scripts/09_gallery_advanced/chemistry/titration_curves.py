@@ -1,5 +1,5 @@
 """
-Advanced Acid-Base Titration Curve Fitting with fit() API and GlobalOptimizationConfig.
+Advanced Acid-Base Titration Curve Fitting with fit() API and workflow="auto_global".
 
 This example demonstrates acid-base titration curve analysis using NLSQ's
 advanced fit() API and global optimization capabilities for robust pKa
@@ -7,8 +7,8 @@ and equivalence point determination.
 
 Compared to 04_gallery/chemistry/titration_curves.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Henderson-Hasselbalch equation
@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
@@ -192,8 +192,8 @@ p0 = [4.5, 24.0, 3.0]  # pKa, Ve, pH0
 bounds_lower = [3.0, 20.0, 2.5]
 bounds_upper = [6.0, 30.0, 4.0]
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with 'auto' workflow
+print("\nMethod 1: fit() with 'auto' workflow")
 popt_robust, pcov_robust = fit(
     simplified_titration,
     V_fit,
@@ -202,7 +202,7 @@ popt_robust, pcov_robust = fit(
     sigma=sigma_fit,
     bounds=(bounds_lower, bounds_upper),
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
     **FIT_KWARGS,
 )
 
@@ -215,9 +215,9 @@ print(f"  Ve = {Ve_fit:.2f} +/- {Ve_err:.2f} mL (true: {Ve_true})")
 if QUICK:
     print("\n⏩ Quick mode: skipping global/custom multi-start fits.")
 else:
-    # Method 2: fit() with 'global' preset
+    # Method 2: fit() with 'auto_global' workflow
     global_starts = 20
-    print(f"\nMethod 2: fit() with 'global' preset ({global_starts} starts)")
+    print(f"\nMethod 2: fit() with 'auto_global' workflow ({global_starts} starts)")
     popt_global, pcov_global = fit(
         simplified_titration,
         V_fit,
@@ -226,7 +226,7 @@ else:
         sigma=sigma_fit,
         bounds=(bounds_lower, bounds_upper),
         absolute_sigma=True,
-        preset="global",
+        workflow="auto_global",
         n_starts=global_starts,
     )
 
@@ -236,15 +236,8 @@ else:
     print(f"  pKa = {pKa_g:.3f} +/- {perr_g[0]:.3f}")
     print(f"  Ve = {Ve_g:.2f} +/- {perr_g[1]:.2f} mL")
 
-    # Method 3: GlobalOptimizationConfig with custom settings
-    print("\nMethod 3: GlobalOptimizationConfig with custom settings")
-
-    global_config = GlobalOptimizationConfig(
-        n_starts=15,
-        sampler="lhs",
-        center_on_p0=True,
-        scale_factor=1.0,
-    )
+    # Method 3: workflow='auto_global' with custom settings
+    print("\nMethod 3: workflow='auto_global' with custom settings")
 
     popt_custom, pcov_custom = fit(
         simplified_titration,
@@ -254,8 +247,8 @@ else:
         sigma=sigma_fit,
         bounds=(bounds_lower, bounds_upper),
         absolute_sigma=True,
-        multistart=True,
-        n_starts=global_config.n_starts,
+        workflow="auto_global",
+        n_starts=15,
         sampler="lhs",
     )
 
@@ -265,7 +258,7 @@ else:
     print(f"  pKa = {pKa_c:.3f} +/- {perr_c[0]:.3f}")
     print(f"  Ve = {Ve_c:.2f} +/- {perr_c[1]:.2f} mL")
 
-# Use robust preset results for analysis
+# Use auto workflow results for analysis
 pKa_fit, Ve_fit, pH0_fit = popt_robust
 perr = np.sqrt(np.diag(pcov_robust))
 pKa_err, Ve_err, pH0_err = perr
@@ -279,7 +272,7 @@ reduced_chi_squared = chi_squared / dof
 rmse = np.sqrt(np.mean(residuals**2))
 
 print("\n" + "=" * 70)
-print("FITTED PARAMETERS (Robust Preset)")
+print("FITTED PARAMETERS (Auto Workflow)")
 print("=" * 70)
 print(f"  pKa = {pKa_fit:.3f} +/- {pKa_err:.3f}")
 print(f"  Equivalence point = {Ve_fit:.2f} +/- {Ve_err:.2f} mL")
@@ -371,7 +364,7 @@ for i, V in enumerate(V_di):
 pH_di_measured = pH_di_true + np.random.normal(0, 0.08, size=pH_di_true.shape)
 sigma_pH_di = np.full_like(pH_di_measured, 0.08)
 
-# Fit diprotic model with robust preset
+# Fit diprotic model with auto workflow
 p0_di = [6.0, 10.0, 24.0, 48.0]
 bounds_lower_di = [5.0, 9.0, 20.0, 45.0]
 bounds_upper_di = [7.0, 11.0, 30.0, 55.0]
@@ -384,13 +377,13 @@ popt_di, pcov_di = fit(
     sigma=sigma_pH_di,
     bounds=(bounds_lower_di, bounds_upper_di),
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
 )
 
 pKa1_fit_di, pKa2_fit_di, Ve1_fit, Ve2_fit = popt_di
 pKa1_err_di, pKa2_err_di, Ve1_err, Ve2_err = np.sqrt(np.diag(pcov_di))
 
-print("Fitted Parameters (robust preset):")
+print("Fitted Parameters (auto workflow):")
 print(f"  pKa1 = {pKa1_fit_di:.2f} +/- {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})")
 print(f"  pKa2 = {pKa2_fit_di:.2f} +/- {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})")
 print(f"  Ve1 = {Ve1_fit:.2f} +/- {Ve1_err:.2f} mL (true: {Ve1_true:.1f} mL)")
@@ -424,7 +417,7 @@ ax1.errorbar(
     label="Measured pH",
     capsize=2,
 )
-ax1.plot(V_fit, pH_fitted_curve, "r-", linewidth=2, label="Fitted curve (robust)")
+ax1.plot(V_fit, pH_fitted_curve, "r-", linewidth=2, label="Fitted curve (auto)")
 ax1.axvline(Ve_fit, color="g", linestyle="--", label=f"Ve = {Ve_fit:.2f} mL")
 ax1.axhline(
     pKa_fit, color="orange", linestyle="--", alpha=0.5, label=f"pKa = {pKa_fit:.2f}"
@@ -432,7 +425,7 @@ ax1.axhline(
 
 ax1.set_xlabel("Volume of NaOH (mL)", fontsize=11)
 ax1.set_ylabel("pH", fontsize=11)
-ax1.set_title("Monoprotic Titration - fit() API", fontsize=12, fontweight="bold")
+ax1.set_title("Monoprotic Titration - fit() with auto", fontsize=12, fontweight="bold")
 ax1.legend(fontsize=9)
 ax1.grid(True, alpha=0.3)
 
@@ -556,7 +549,9 @@ ax7.axhline(pKa2_fit_di, color="purple", linestyle=":", alpha=0.5)
 
 ax7.set_xlabel("Volume of NaOH (mL)", fontsize=11)
 ax7.set_ylabel("pH", fontsize=11)
-ax7.set_title("Diprotic Acid Titration - fit() API", fontsize=12, fontweight="bold")
+ax7.set_title(
+    "Diprotic Acid Titration - fit() with auto", fontsize=12, fontweight="bold"
+)
 ax7.legend(fontsize=9)
 ax7.grid(True, alpha=0.3)
 
@@ -597,13 +592,13 @@ ax9.axis("off")
 summary_text = [
     ["Method", "pKa", "Ve (mL)"],
     ["-" * 20, "-" * 8, "-" * 10],
-    ["fit() 'robust'", f"{pKa_fit:.3f}", f"{Ve_fit:.2f}"],
-    ["fit() 'global'", f"{pKa_g:.3f}", f"{Ve_g:.2f}"],
+    ["fit() 'auto'", f"{pKa_fit:.3f}", f"{Ve_fit:.2f}"],
+    ["fit() 'auto_global'", f"{pKa_g:.3f}", f"{Ve_g:.2f}"],
     ["fit() custom", f"{pKa_c:.3f}", f"{Ve_c:.2f}"],
     ["", "", ""],
     ["True values", f"{pKa_true:.3f}", f"{Ve_true:.2f}"],
     ["", "", ""],
-    ["Diprotic (robust):", "", ""],
+    ["Diprotic (auto):", "", ""],
     [f"  pKa1 = {pKa1_fit_di:.2f}", "", ""],
     [f"  pKa2 = {pKa2_fit_di:.2f}", "", ""],
     ["", "", ""],
@@ -658,9 +653,9 @@ print(
 )
 
 print("\n3. API Methods Used:")
-print("   - fit() with preset='robust' (5 multi-starts)")
-print("   - fit() with preset='global' (20 multi-starts)")
-print("   - fit() with GlobalOptimizationConfig (custom settings)")
+print("   - fit() with workflow='auto'")
+print("   - fit() with workflow='auto_global' (20 multi-starts)")
+print("   - fit() with workflow='auto_global' (custom settings)")
 
 print("\n4. KEY INSIGHTS:")
 print("   - Henderson-Hasselbalch equation accurately models buffer region")

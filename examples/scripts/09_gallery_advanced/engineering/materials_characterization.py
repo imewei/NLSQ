@@ -1,13 +1,13 @@
 """
-Advanced Materials Characterization with fit() API and GlobalOptimizationConfig.
+Advanced Materials Characterization with fit() API and workflow presets.
 
 This example demonstrates fitting stress-strain curves to extract mechanical
 properties of materials using NLSQ's advanced fit() API and global optimization.
 
 Compared to 04_gallery/engineering/materials_characterization.py:
 - Uses fit() instead of curve_fit() for automatic workflow selection
-- Demonstrates GlobalOptimizationConfig for multi-start optimization
-- Shows how presets ('robust', 'global') improve fitting reliability
+- Demonstrates workflow="auto_global" for multi-start optimization
+- Shows how workflows ('auto', 'auto_global') improve fitting reliability
 
 Key Concepts:
 - Elastic modulus (Young's modulus) extraction
@@ -25,7 +25,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, fit
+from nlsq import fit
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
@@ -126,8 +126,8 @@ print("-" * 70)
 elastic_limit = 0.5 * sigma_y_true
 mask_fit_elastic = stress_measured < elastic_limit
 
-# Method 1: fit() with 'robust' preset
-print("\nMethod 1: fit() with 'robust' preset")
+# Method 1: fit() with 'auto' workflow
+print("\nMethod 1: fit() with 'auto' workflow")
 popt_elastic, pcov_elastic = fit(
     linear_elastic,
     strain_measured[mask_fit_elastic],
@@ -135,7 +135,7 @@ popt_elastic, pcov_elastic = fit(
     p0=[70],
     sigma=sigma_stress[mask_fit_elastic],
     absolute_sigma=True,
-    preset="robust",
+    workflow="auto",
 )
 
 E_fit = popt_elastic[0]
@@ -148,8 +148,8 @@ print(
     + f"({100 * abs(E_fit - E_true) / E_true:.1f}%)"
 )
 
-# Method 2: fit() with 'global' preset
-print("\nMethod 2: fit() with 'global' preset")
+# Method 2: fit() with 'auto_global' workflow
+print("\nMethod 2: fit() with 'auto_global' workflow")
 popt_elastic_g, pcov_elastic_g = fit(
     linear_elastic,
     strain_measured[mask_fit_elastic],
@@ -157,7 +157,7 @@ popt_elastic_g, pcov_elastic_g = fit(
     p0=[70],
     sigma=sigma_stress[mask_fit_elastic],
     absolute_sigma=True,
-    preset="global",
+    workflow="auto_global",
     n_starts=6 if QUICK else 20,
 )
 
@@ -215,8 +215,8 @@ if np.sum(mask_fit_plastic) > 10:
     strain_plastic_fit = strain_measured[mask_fit_plastic] - epsilon_y_fit
     stress_plastic_fit = stress_measured[mask_fit_plastic]
 
-    # Method 1: fit() with robust preset
-    print("\nMethod 1: fit() with 'robust' preset")
+    # Method 1: fit() with auto workflow
+    print("\nMethod 1: fit() with 'auto' workflow")
     popt_plastic, pcov_plastic = fit(
         hollomon_model,
         strain_plastic_fit,
@@ -225,7 +225,7 @@ if np.sum(mask_fit_plastic) > 10:
         sigma=sigma_stress[mask_fit_plastic],
         bounds=([100, 0.01], [1000, 1.0]),
         absolute_sigma=True,
-        preset="robust",
+        workflow="auto",
     )
 
     K_fit, n_fit = popt_plastic
@@ -236,8 +236,8 @@ if np.sum(mask_fit_plastic) > 10:
     print(f"  Hardening Exponent (n):   {n_fit:.3f} +/- {n_err:.3f}")
     print(f"  True values:              K={K_hardening:.1f} MPa, n={n_hardening:.3f}")
 
-    # Method 2: fit() with global preset
-    print("\nMethod 2: fit() with 'global' preset")
+    # Method 2: fit() with auto_global workflow
+    print("\nMethod 2: fit() with 'auto_global' workflow")
     popt_plastic_g, pcov_plastic_g = fit(
         hollomon_model,
         strain_plastic_fit,
@@ -246,7 +246,7 @@ if np.sum(mask_fit_plastic) > 10:
         sigma=sigma_stress[mask_fit_plastic],
         bounds=([100, 0.01], [1000, 1.0]),
         absolute_sigma=True,
-        preset="global",
+        workflow="auto_global",
     )
 
     K_g, n_g = popt_plastic_g
@@ -255,8 +255,8 @@ if np.sum(mask_fit_plastic) > 10:
     print(f"  Strength Coefficient (K): {K_g:.1f} +/- {perr_g[0]:.1f} MPa")
     print(f"  Hardening Exponent (n):   {n_g:.3f} +/- {perr_g[1]:.3f}")
 
-    # Method 3: GlobalOptimizationConfig with custom settings
-    print("\nMethod 3: GlobalOptimizationConfig with custom settings")
+    # Method 3: workflow="auto_global" with custom settings
+    print("\nMethod 3: workflow='auto_global' with custom settings")
     popt_plastic_c, pcov_plastic_c = fit(
         hollomon_model,
         strain_plastic_fit,
@@ -265,7 +265,7 @@ if np.sum(mask_fit_plastic) > 10:
         sigma=sigma_stress[mask_fit_plastic],
         bounds=([100, 0.01], [1000, 1.0]),
         absolute_sigma=True,
-        multistart=True,
+        workflow="auto_global",
         n_starts=15,
         sampler="lhs",
     )
@@ -566,9 +566,9 @@ print(f"  Hardening (n):    {n_fit:.3f}")
 print(f"  Elongation:       {elongation:.1f}%")
 print(f"  Toughness:        {toughness:.1f} MPa")
 print("\nAPI Methods Used:")
-print("  - fit() with preset='robust' for elastic and plastic regions")
-print("  - fit() with preset='global' for thorough parameter search")
-print("  - fit() with GlobalOptimizationConfig for custom multi-start")
+print("  - fit() with workflow='auto' for elastic and plastic regions")
+print("  - fit() with workflow='auto_global' for thorough parameter search")
+print("  - fit() with workflow='auto_global' and custom n_starts/sampler")
 print("\nThis example demonstrates:")
 print("  - Elastic modulus extraction with fit() API")
 print("  - Yield strength determination (0.2% offset method)")
