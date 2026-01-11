@@ -192,7 +192,7 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 | **Large datasets** | Chunked and streaming optimizers for 100M+ points |
 | **Multi-start** | Global optimization with LHS/Sobol sampling |
 | **Mixed precision** | Automatic float32→float64 upgrade when needed |
-| **Workflow system** | Memory-based auto-selection (MemoryBudgetSelector) |
+| **Workflow system** | 3 smart workflows: `auto`, `auto_global`, `hpc` with memory-aware strategy |
 | **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |
 | **Interactive GUI** | No-code curve fitting with Qt desktop application |
 | **Model Diagnostics** | Identifiability analysis, gradient health monitoring, sloppy model detection |
@@ -326,22 +326,38 @@ Requires: `pip install "nlsq[global]"`
 </details>
 
 <details>
-<summary><b>Workflow presets</b></summary>
+<summary><b>Workflow presets (v0.6.3)</b></summary>
+
+NLSQ v0.6.3 simplifies workflows to 3 smart options:
 
 ```python
 from nlsq import fit
 
-# Named presets: 'auto', 'standard', 'quality', 'fast', 'large_robust', 'streaming'
-result = fit(model, x, y, p0=[1, 1, 1], workflow="quality")
+# workflow="auto" (default) - memory-aware local optimization
+result = fit(model, x, y, p0=[1, 1, 1])
 
-# Automatic memory-based selection (default)
-result = fit(model, x, y, p0=[1, 1, 1], workflow="auto")
+# workflow="auto_global" - memory-aware global optimization (requires bounds)
+result = fit(
+    model, x, y, p0=[1, 1, 1], workflow="auto_global", bounds=([0, 0, 0], [10, 5, 10])
+)
 
-# With method='auto' in curve_fit
-from nlsq import curve_fit
-
-popt, pcov = curve_fit(model, x, y, p0=[1, 1, 1], method="auto")
+# workflow="hpc" - auto_global + checkpointing for HPC jobs
+result = fit(
+    model,
+    x,
+    y,
+    p0=[1, 1, 1],
+    workflow="hpc",
+    bounds=([0, 0, 0], [10, 5, 10]),
+    checkpoint_dir="/scratch/checkpoints",
+)
 ```
+
+| Workflow | Bounds | Use Case |
+|----------|--------|----------|
+| `auto` | Optional | Default. Local optimization with auto memory strategy |
+| `auto_global` | Required | Multi-modal problems, unknown initial guess |
+| `hpc` | Required | Long-running HPC jobs with checkpointing |
 
 </details>
 

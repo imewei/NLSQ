@@ -102,6 +102,46 @@ Utility Functions
 
 .. autofunction:: get_sampler
 
+CMA-ES Optimizer
+----------------
+
+Evolution strategy optimizer for multi-scale parameter problems:
+
+.. autoclass:: CMAESOptimizer
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :special-members: __init__
+
+.. autoclass:: CMAESConfig
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :special-members: __init__
+
+.. autoclass:: CMAESDiagnostics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: BIPOPRestarter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Method Selection
+----------------
+
+Automatic selection between CMA-ES and Multi-Start:
+
+.. autoclass:: MethodSelector
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :special-members: __init__
+
+.. autofunction:: is_evosax_available
+
 CMA-ES Memory Helpers
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -110,6 +150,8 @@ Helper functions for managing memory with CMA-ES on large datasets:
 .. autofunction:: estimate_cmaes_memory_gb
 
 .. autofunction:: auto_configure_cmaes_memory
+
+.. autofunction:: compute_default_popsize
 
 Tournament Selection
 --------------------
