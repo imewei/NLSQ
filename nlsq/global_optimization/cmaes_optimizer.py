@@ -353,6 +353,17 @@ class CMAESOptimizer:
         sigma_jax = jnp.asarray(sigma) if sigma is not None else None
 
         n_params = len(lower_bounds)
+        n_data = len(ydata_jax)
+
+        # Log initialization
+        logger.info(
+            f"CMA-ES optimizer initialized: n_params={n_params}, n_data={n_data}, "
+            f"restart_strategy={self.config.restart_strategy}"
+        )
+        logger.debug(
+            f"CMA-ES bounds: lower={np.asarray(lower_bounds)}, "
+            f"upper={np.asarray(upper_bounds)}"
+        )
 
         # Determine population size
         popsize = self.config.popsize
@@ -366,15 +377,31 @@ class CMAESOptimizer:
             and self.config.restart_strategy == "bipop"
         ):
             popsize = popsize * 2
+            logger.debug("CMA-ES: Using 2x population for cmaes-global preset")
+
+        # Log memory optimization settings
+        if self.config.population_batch_size is not None:
+            logger.info(
+                f"CMA-ES memory optimization: population_batch_size="
+                f"{self.config.population_batch_size}"
+            )
+        if self.config.data_chunk_size is not None:
+            logger.info(
+                f"CMA-ES memory optimization: data_chunk_size="
+                f"{self.config.data_chunk_size} (data streaming enabled)"
+            )
 
         # Determine initial solution
         if p0 is not None:
             p0_jax = jnp.asarray(p0)
             # Transform to unbounded space
             initial_solution = transform_from_bounds(p0_jax, lower_bounds, upper_bounds)
+            logger.debug(f"CMA-ES starting from p0={np.asarray(p0_jax)}")
         else:
             # Start at center of bounds (x=0 in unbounded space = midpoint)
             initial_solution = jnp.zeros(n_params)
+            midpoint = (lower_bounds + upper_bounds) / 2
+            logger.debug(f"CMA-ES starting from bounds midpoint={np.asarray(midpoint)}")
 
         # Create fitness function
         fitness_fn = _create_fitness_function(
@@ -412,8 +439,9 @@ class CMAESOptimizer:
         )
 
         logger.info(
-            f"CMA-ES completed: {generations} generations, "
-            f"best fitness: {float(best_fitness):.6e}"
+            f"CMA-ES optimization completed: {generations} generations, "
+            f"best_fitness={float(best_fitness):.6e}, "
+            f"wall_time={diagnostics.wall_time:.2f}s"
         )
 
         # NLSQ refinement phase for proper pcov estimation
@@ -528,6 +556,13 @@ class CMAESOptimizer:
         best_fitness = jnp.array(-jnp.inf)
         convergence_reason = "max_generations"
 
+        # Progress milestones for logging (25%, 50%, 75%)
+        milestones = {
+            int(self.config.max_generations * 0.25): "25%",
+            int(self.config.max_generations * 0.50): "50%",
+            int(self.config.max_generations * 0.75): "75%",
+        }
+
         # Main optimization loop
         for gen in range(self.config.max_generations):
             key, key_ask, key_tell = jax.random.split(key, 3)
@@ -551,11 +586,22 @@ class CMAESOptimizer:
 
             # Simple convergence check based on std
             if float(state.std) < self.config.tol_x:
-                logger.debug(f"Converged at generation {gen + 1}: std < tol_x")
+                logger.info(
+                    f"CMA-ES converged at generation {gen + 1}: "
+                    f"std={float(state.std):.2e} < tol_x={self.config.tol_x:.2e}"
+                )
                 convergence_reason = "xtol"
                 break
 
-            # Log progress at debug level
+            # Log progress at milestones (INFO level)
+            if gen + 1 in milestones:
+                logger.info(
+                    f"CMA-ES progress {milestones[gen + 1]}: "
+                    f"gen={gen + 1}/{self.config.max_generations}, "
+                    f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.2e}"
+                )
+
+            # Log detailed progress at debug level
             if logger.isEnabledFor(logging.DEBUG) and (gen + 1) % 10 == 0:
                 logger.debug(
                     f"Generation {gen + 1}/{self.config.max_generations}: "
@@ -630,6 +676,13 @@ class CMAESOptimizer:
         while not restarter.exhausted:
             # Get population size for this run
             popsize = restarter.get_next_popsize()
+            run_type = "large" if popsize >= base_popsize * 2 else "small"
+
+            logger.info(
+                f"BIPOP restart #{restarter.restart_count + 1}: "
+                f"popsize={popsize} ({run_type}), "
+                f"max_gen={self.config.max_generations}"
+            )
 
             # Initialize CMA-ES for this run
             es = CMA_ES(population_size=popsize, solution=initial_solution)
@@ -669,16 +722,17 @@ class CMAESOptimizer:
 
                 # Trigger restart after sustained stagnation (5 consecutive)
                 if stagnation_counter >= 5:
-                    logger.debug(
-                        f"BIPOP: Stagnation detected at generation {gen + 1}, "
-                        f"fitness_spread={fitness_spread:.2e}"
+                    logger.info(
+                        f"BIPOP run #{restarter.restart_count + 1}: "
+                        f"stagnation at gen {gen + 1}, fitness_spread={fitness_spread:.2e}"
                     )
                     break
 
                 # Also check std-based convergence
                 if float(state.std) < self.config.tol_x:
-                    logger.debug(
-                        f"BIPOP: Converged at generation {gen + 1}: std < tol_x"
+                    logger.info(
+                        f"BIPOP run #{restarter.restart_count + 1}: "
+                        f"converged at gen {gen + 1}, std={float(state.std):.2e}"
                     )
                     break
 
@@ -693,6 +747,11 @@ class CMAESOptimizer:
 
             total_generations += gen + 1
             final_sigma = float(state.std)
+
+            logger.info(
+                f"BIPOP run #{restarter.restart_count + 1} completed: "
+                f"{gen + 1} generations, best_fitness={float(run_best_fitness):.6e}"
+            )
 
             # Record restart info
             diagnostics.restart_history.append(
@@ -709,7 +768,7 @@ class CMAESOptimizer:
 
             # Check if this run converged well (no need for more restarts)
             if float(state.std) < self.config.tol_x and stagnation_counter < 5:
-                logger.debug("BIPOP: Good convergence, stopping restarts")
+                logger.info("BIPOP: Good convergence achieved, stopping restarts early")
                 convergence_reason = "xtol"
                 break
 
@@ -783,7 +842,11 @@ class CMAESOptimizer:
         # Convert p0 to numpy for NLSQ
         p0_numpy = np.asarray(p0)
 
-        logger.debug(f"Starting NLSQ refinement from CMA-ES solution: {p0_numpy}")
+        logger.info(
+            f"Starting NLSQ Trust Region Reflective refinement "
+            f"(n_params={len(p0_numpy)})"
+        )
+        logger.debug(f"NLSQ refinement starting from: {p0_numpy}")
 
         # Convert to numpy arrays for NLSQ compatibility
         xdata_np = np.asarray(xdata)
@@ -806,7 +869,13 @@ class CMAESOptimizer:
             popt = np.asarray(result.x)  # type: ignore[union-attr]
             pcov = np.asarray(result.pcov)  # type: ignore[union-attr]
 
-            logger.debug(f"NLSQ refinement complete: popt={popt}")
+            # Compute parameter change from CMA-ES to NLSQ
+            param_change = np.linalg.norm(popt - p0_numpy)
+            logger.info(
+                f"NLSQ refinement completed: "
+                f"parameter adjustment norm={param_change:.6e}"
+            )
+            logger.debug(f"NLSQ refined popt={popt}")
 
             return {
                 "popt": popt,
