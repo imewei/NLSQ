@@ -1,13 +1,12 @@
 """
-Converted from 01_multistart_basics.ipynb
+Multi-Start Optimization Basics with NLSQ (v0.6.3)
 
-This script was automatically generated from a Jupyter notebook.
-Plots are saved to the figures/ directory instead of displayed inline.
+This script demonstrates global optimization using the unified fit() API
+with workflow='auto_global' for automatic method selection.
 
 Features demonstrated:
 - Local minima trap problem in nonlinear optimization
-- GlobalOptimizationConfig configuration
-- curve_fit() with global_optimization parameter
+- fit(workflow='auto_global') for global optimization
 - Comparison of single-start vs multi-start results
 - Visualization of loss landscape and starting point distribution
 
@@ -22,7 +21,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import GlobalOptimizationConfig, curve_fit
+from nlsq import fit
 from nlsq.global_optimization import latin_hypercube_sample, scale_samples_to_bounds
 
 FIG_DIR = Path(__file__).parent / "figures"
@@ -40,7 +39,7 @@ def multimodal_model(x, a, b, c, d):
 
 def main():
     print("=" * 70)
-    print("Multi-Start Optimization Basics")
+    print("Multi-Start Optimization Basics (v0.6.3)")
     print("=" * 70)
     print()
 
@@ -86,10 +85,10 @@ def main():
     print()
     print("2. Single-start optimization (showing sensitivity to initial guess)...")
 
-    # Define bounds
+    # Define bounds (required for auto_global)
     bounds = ([0.5, 0.5, -np.pi, -2.0], [5.0, 3.0, np.pi, 5.0])
 
-    # Try several different initial guesses
+    # Try several different initial guesses with workflow='auto'
     initial_guesses = [
         [1.0, 0.8, 0.0, 0.5],  # Poor guess 1
         [3.0, 2.5, 2.0, 2.0],  # Poor guess 2
@@ -100,12 +99,14 @@ def main():
 
     for i, p0 in enumerate(initial_guesses):
         try:
-            popt, pcov = curve_fit(
+            # workflow='auto' uses local optimization (single-start)
+            popt, pcov = fit(
                 multimodal_model,
                 x_data,
                 y_data,
                 p0=p0,
                 bounds=bounds,
+                workflow="auto",  # Local optimization
             )
             y_pred = multimodal_model(x_data, *popt)
             ssr = float(jnp.sum((y_data - y_pred) ** 2))
@@ -120,57 +121,48 @@ def main():
             single_start_results.append({"p0": p0, "popt": None, "ssr": float("inf")})
 
     # =========================================================================
-    # 3. Multi-start optimization
+    # 3. Global optimization with fit(workflow='auto_global')
     # =========================================================================
     print()
-    print("3. Multi-start optimization...")
-
-    # Configure multi-start optimization
-    global_config = GlobalOptimizationConfig(
-        n_starts=10,
-        sampler="lhs",
-        center_on_p0=True,
-        scale_factor=1.0,
-    )
-
-    print("  GlobalOptimizationConfig:")
-    print(f"    n_starts: {global_config.n_starts}")
-    print(f"    sampler: {global_config.sampler}")
-    print(f"    center_on_p0: {global_config.center_on_p0}")
-    print(f"    scale_factor: {global_config.scale_factor}")
+    print("3. Global optimization with fit(workflow='auto_global')...")
 
     # Use the first (poor) initial guess
     p0_poor = [1.0, 0.8, 0.0, 0.5]
 
-    # Fit with multi-start optimization
-    popt_multi, pcov_multi = curve_fit(
+    print("  workflow='auto_global' automatically selects:")
+    print("    - Multi-Start (default) or CMA-ES based on parameter scale ratio")
+    print("    - Memory strategy based on dataset size")
+    print()
+
+    # Fit with global optimization - auto-selects Multi-Start or CMA-ES
+    popt_global, pcov_global = fit(
         multimodal_model,
         x_data,
         y_data,
         p0=p0_poor,
         bounds=bounds,
-        multistart=True,
-        n_starts=10,
-        sampler="lhs",
+        workflow="auto_global",  # Global optimization with auto method selection
+        n_starts=10,  # Number of multi-start runs
     )
 
-    y_pred_multi = multimodal_model(x_data, *popt_multi)
-    ssr_multi = float(jnp.sum((y_data - y_pred_multi) ** 2))
+    y_pred_global = multimodal_model(x_data, *popt_global)
+    ssr_global = float(jnp.sum((y_data - y_pred_global) ** 2))
 
-    print()
-    print("  Multi-start result:")
+    print("  Global optimization result:")
     print(
-        f"    Parameters: a={popt_multi[0]:.3f}, b={popt_multi[1]:.3f}, c={popt_multi[2]:.3f}, d={popt_multi[3]:.3f}"
+        f"    Parameters: a={popt_global[0]:.3f}, b={popt_global[1]:.3f}, "
+        f"c={popt_global[2]:.3f}, d={popt_global[3]:.3f}"
     )
-    print(f"    SSR: {ssr_multi:.4f}")
+    print(f"    SSR: {ssr_global:.4f}")
 
     # Compare with single-start from same initial guess
-    popt_single, _ = curve_fit(
+    popt_single, _ = fit(
         multimodal_model,
         x_data,
         y_data,
         p0=p0_poor,
         bounds=bounds,
+        workflow="auto",  # Local optimization
     )
     y_pred_single = multimodal_model(x_data, *popt_single)
     ssr_single = float(jnp.sum((y_data - y_pred_single) ** 2))
@@ -178,9 +170,9 @@ def main():
     print()
     print("  Comparison (same initial guess):")
     print(f"    Single-start SSR: {ssr_single:.4f}")
-    print(f"    Multi-start SSR:  {ssr_multi:.4f}")
-    if ssr_multi < ssr_single:
-        improvement = (1 - ssr_multi / ssr_single) * 100
+    print(f"    Global (auto_global) SSR: {ssr_global:.4f}")
+    if ssr_global < ssr_single:
+        improvement = (1 - ssr_global / ssr_single) * 100
         print(f"    Improvement: {improvement:.1f}% lower SSR")
 
     # =========================================================================
@@ -200,29 +192,34 @@ def main():
         y_pred_single,
         "b-",
         linewidth=2,
-        label=f"Single-start (SSR={ssr_single:.2f})",
+        label=f"workflow='auto' (SSR={ssr_single:.2f})",
     )
     ax1.plot(
         x_data,
-        y_pred_multi,
+        y_pred_global,
         "r-",
         linewidth=2,
-        label=f"Multi-start (SSR={ssr_multi:.2f})",
+        label=f"workflow='auto_global' (SSR={ssr_global:.2f})",
     )
     ax1.set_xlabel("x")
     ax1.set_ylabel("y")
-    ax1.set_title("Single-Start vs Multi-Start Comparison")
+    ax1.set_title("Local vs Global Optimization Comparison")
     ax1.legend()
 
     # Right plot: Residuals comparison
     ax2 = axes[1]
     residuals_single = y_data - y_pred_single
-    residuals_multi = y_data - y_pred_multi
+    residuals_global = y_data - y_pred_global
     ax2.scatter(
-        x_data, residuals_single, alpha=0.5, s=15, label="Single-start", color="blue"
+        x_data, residuals_single, alpha=0.5, s=15, label="workflow='auto'", color="blue"
     )
     ax2.scatter(
-        x_data, residuals_multi, alpha=0.5, s=15, label="Multi-start", color="red"
+        x_data,
+        residuals_global,
+        alpha=0.5,
+        s=15,
+        label="workflow='auto_global'",
+        color="red",
     )
     ax2.axhline(y=0, color="k", linestyle="--", alpha=0.5)
     ax2.set_xlabel("x")
@@ -273,17 +270,17 @@ def main():
         color="blue",
         marker="o",
         s=100,
-        label="Single-start result",
+        label="workflow='auto'",
         edgecolors="white",
         linewidths=1,
     )
     ax.scatter(
-        [popt_multi[1]],
-        [popt_multi[2]],
+        [popt_global[1]],
+        [popt_global[2]],
         color="red",
         marker="s",
         s=100,
-        label="Multi-start result",
+        label="workflow='auto_global'",
         edgecolors="white",
         linewidths=1,
     )
@@ -379,27 +376,33 @@ def main():
     # =========================================================================
     print()
     print("=" * 70)
-    print("Summary")
+    print("Summary - The Three Workflows (v0.6.3)")
     print("=" * 70)
+    print()
     print(f"True parameters: a={true_a}, b={true_b}, c={true_c}, d={true_d}")
     print()
-    print("Single-start result (poor initial guess):")
+    print("workflow='auto' (local optimization):")
     print(
-        f"  Parameters: a={popt_single[0]:.3f}, b={popt_single[1]:.3f}, c={popt_single[2]:.3f}, d={popt_single[3]:.3f}"
+        f"  Parameters: a={popt_single[0]:.3f}, b={popt_single[1]:.3f}, "
+        f"c={popt_single[2]:.3f}, d={popt_single[3]:.3f}"
     )
     print(f"  SSR: {ssr_single:.4f}")
     print()
-    print("Multi-start result (10 starts, LHS):")
+    print("workflow='auto_global' (global optimization, 10 starts):")
     print(
-        f"  Parameters: a={popt_multi[0]:.3f}, b={popt_multi[1]:.3f}, c={popt_multi[2]:.3f}, d={popt_multi[3]:.3f}"
+        f"  Parameters: a={popt_global[0]:.3f}, b={popt_global[1]:.3f}, "
+        f"c={popt_global[2]:.3f}, d={popt_global[3]:.3f}"
     )
-    print(f"  SSR: {ssr_multi:.4f}")
+    print(f"  SSR: {ssr_global:.4f}")
     print()
     print("Key takeaways:")
-    print("  - Local minima are common in nonlinear optimization")
-    print("  - Single-start optimization is sensitive to initial guess")
-    print("  - Multi-start explores multiple starting points for global optimum")
-    print("  - LHS provides stratified coverage of parameter space")
+    print("  - workflow='auto': Local optimization, good when you have a good guess")
+    print("  - workflow='auto_global': Global optimization for multi-modal problems")
+    print("  - workflow='hpc': auto_global + checkpointing for long HPC jobs")
+    print()
+    print("Global method auto-selection (auto_global):")
+    print("  - Multi-Start: Default, explores multiple starting points")
+    print("  - CMA-ES: Selected when scale_ratio > 1000 AND evosax available")
 
 
 if __name__ == "__main__":

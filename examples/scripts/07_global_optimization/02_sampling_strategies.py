@@ -1,8 +1,8 @@
 """
-Converted from 02_sampling_strategies.ipynb
+Sampling Strategies for Global Optimization (v0.6.3)
 
-This script was automatically generated from a Jupyter notebook.
-Plots are saved to the figures/ directory instead of displayed inline.
+This script demonstrates different sampling strategies used by
+workflow='auto_global' for generating starting points.
 
 Features demonstrated:
 - Latin Hypercube Sampling (LHS) - stratified random sampling
@@ -17,7 +17,6 @@ Run this example:
 """
 
 import os
-import sys
 from pathlib import Path
 
 import jax
@@ -32,7 +31,7 @@ QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 if QUICK:
     print("Quick mode: reduced iterations for sampling strategies.")
 
-from nlsq import curve_fit
+from nlsq import fit
 from nlsq.global_optimization import (
     halton_sample,
     latin_hypercube_sample,
@@ -95,12 +94,14 @@ def evaluate_starting_points(samples_unit, lb, ub, x_data, y_data, true_params, 
 
     for p0 in samples_scaled:
         try:
-            popt, _ = curve_fit(
+            # Use workflow='auto' for local optimization from each starting point
+            popt, _ = fit(
                 multimodal_model,
                 x_data,
                 y_data,
                 p0=list(p0),
                 bounds=bounds,
+                workflow="auto",
             )
             y_pred = multimodal_model(x_data, *popt)
             ssr = float(jnp.sum((y_data - y_pred) ** 2))
@@ -120,7 +121,7 @@ def evaluate_starting_points(samples_unit, lb, ub, x_data, y_data, true_params, 
 
 def main():
     print("=" * 70)
-    print("Sampling Strategies for Multi-Start Optimization")
+    print("Sampling Strategies for Global Optimization (v0.6.3)")
     print("=" * 70)
     print()
 
@@ -143,8 +144,8 @@ def main():
         print("  - halton_sample(n_samples, n_dims)")
         print("  - scale_samples_to_bounds(samples, lb, ub)")
         print()
-        print("Usage with curve_fit():")
-        print('  curve_fit(..., multistart=True, n_starts=10, sampler="lhs")')
+        print("Usage with fit():")
+        print("  fit(..., workflow='auto_global', n_starts=10, sampler='lhs')")
         return
 
     # Set random seed for reproducibility
@@ -435,22 +436,22 @@ def main():
     print(f"  Saved: {FIG_DIR / '02_success_rate_comparison.png'}")
 
     # =========================================================================
-    # 7. Demonstrate samplers with curve_fit()
+    # 7. Demonstrate samplers with fit(workflow='auto_global')
     # =========================================================================
     print()
-    print("7. Using samplers with curve_fit()...")
+    print("7. Using samplers with fit(workflow='auto_global')...")
 
     samplers = ["lhs", "sobol", "halton"]
     results = {}
 
     for sampler in samplers:
-        popt, pcov = curve_fit(
+        popt, pcov = fit(
             multimodal_model,
             x_data,
             y_data,
             p0=[1.0, 1.0, 0.0],
             bounds=bounds,
-            multistart=True,
+            workflow="auto_global",  # Global optimization
             n_starts=10,
             sampler=sampler,
         )
@@ -469,12 +470,12 @@ def main():
     # =========================================================================
     print()
     print("=" * 70)
-    print("Summary")
+    print("Summary - Sampling Strategies (v0.6.3)")
     print("=" * 70)
     print()
     print("Sampling Strategies:")
     print("  - Random: Baseline, poor space-filling")
-    print("  - LHS: Stratified random, good coverage, stochastic")
+    print("  - LHS: Stratified random, good coverage, stochastic (default)")
     print("  - Sobol: Quasi-random, excellent coverage, deterministic")
     print("  - Halton: Quasi-random, very good coverage, deterministic")
     print()
@@ -484,8 +485,8 @@ def main():
     print("  - halton_sample(n_samples, n_dims)")
     print("  - scale_samples_to_bounds(samples, lb, ub)")
     print()
-    print("Usage with curve_fit():")
-    print('  curve_fit(..., multistart=True, n_starts=10, sampler="lhs")')
+    print("Usage with fit():")
+    print("  fit(..., workflow='auto_global', n_starts=10, sampler='lhs')")
     print()
     print("Sampler Selection Guidelines:")
     print("  - General use: LHS (default)")
