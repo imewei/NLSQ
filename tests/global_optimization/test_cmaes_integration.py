@@ -204,7 +204,10 @@ class TestCMAESLogging:
         )
         optimizer = CMAESOptimizer(config=config)
 
-        with caplog.at_level(logging.INFO):
+        # Capture logs from the CMA-ES optimizer logger specifically
+        with caplog.at_level(
+            logging.INFO, logger="nlsq.global_optimization.cmaes_optimizer"
+        ):
             optimizer.fit(model, x, y, bounds=bounds)
 
         # Should have INFO logs for CMA-ES start/end
@@ -235,7 +238,10 @@ class TestCMAESLogging:
         )
         optimizer = CMAESOptimizer(config=config)
 
-        with caplog.at_level(logging.DEBUG):
+        # Capture logs from the CMA-ES optimizer logger specifically
+        with caplog.at_level(
+            logging.DEBUG, logger="nlsq.global_optimization.cmaes_optimizer"
+        ):
             optimizer.fit(model, x, y, bounds=bounds)
 
         # Check for DEBUG level messages
