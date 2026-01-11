@@ -36,29 +36,30 @@ if TYPE_CHECKING:
 
 __all__ = ["FittingOptionsPage"]
 
-# Preset configurations
+# Preset configurations using 3-workflow system (v0.6.3)
+# Workflows: 'auto' (local), 'auto_global' (global optimization), 'hpc'
 PRESETS = {
     "Fast": {
+        "workflow": "auto",
         "gtol": 1e-6,
         "ftol": 1e-6,
         "xtol": 1e-6,
         "max_iterations": 100,
-        "enable_multistart": False,
     },
     "Robust": {
+        "workflow": "auto_global",
         "gtol": 1e-8,
         "ftol": 1e-8,
         "xtol": 1e-8,
         "max_iterations": 200,
-        "enable_multistart": True,
         "n_starts": 5,
     },
     "Quality": {
+        "workflow": "auto_global",
         "gtol": 1e-10,
         "ftol": 1e-10,
         "xtol": 1e-10,
         "max_iterations": 500,
-        "enable_multistart": True,
         "n_starts": 10,
     },
 }

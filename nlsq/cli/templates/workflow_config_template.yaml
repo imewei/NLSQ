@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 4.0 (Updated for NLSQ v0.6.0)
+# Version: 4.1 (Updated for NLSQ v0.6.3 - 3-workflow system)
 #
 # This template provides comprehensive configuration options for NLSQ curve
 # fitting workflows. Copy this file to your project and customize as needed.
@@ -155,66 +155,51 @@
 # TUTORIAL: Common Configuration Patterns
 # ==============================================================================
 #
-# Pattern 1: Small Dataset, Maximum Precision (< 10K points)
+# Pattern 1: Local Optimization with Default Tolerances
 # ──────────────────────────────────────────────────────────
-#   default_workflow: "quality"
-#   # or custom:
-#   workflows:
-#     my_precision:
-#       tier: "STANDARD"
-#       goal: "QUALITY"
-#       gtol: 1.0e-12
-#       ftol: 1.0e-12
-#       xtol: 1.0e-12
-#       enable_multistart: true
-#       n_starts: 25
+#   default_workflow: "auto"
+#   # Memory-aware: automatically selects STANDARD or CHUNKED tier
 #
-# Pattern 2: Large Dataset, Balanced Performance (100K - 10M points)
+# Pattern 2: Global Optimization for Multi-Modal Problems
 # ──────────────────────────────────────────────────────────────────
-#   default_workflow: "large_robust"
-#   # or custom:
-#   workflows:
-#     my_large:
-#       tier: "CHUNKED"
-#       goal: "ROBUST"
-#       gtol: 1.0e-8
-#       ftol: 1.0e-8
-#       xtol: 1.0e-8
-#       enable_multistart: true
-#       n_starts: 10
-#       chunk_size: 100000
+#   default_workflow: "auto_global"
+#   fitting:
+#     multistart:
+#       num_starts: 10
+#       sampler: "lhs"
+#   # Requires bounds on parameters
 #
-# Pattern 3: Huge Dataset, Memory Constrained (10M+ points, <16GB RAM)
+# Pattern 3: High Precision Global Search
 # ────────────────────────────────────────────────────────────────────
-#   default_workflow: "streaming"
-#   memory_limit_gb: 8.0
-#   # or custom:
-#   workflows:
-#     my_streaming:
-#       tier: "STREAMING"
-#       goal: "MEMORY_EFFICIENT"
-#       gtol: 1.0e-6
-#       enable_checkpoints: true
-#       checkpoint_dir: "checkpoints"
+#   default_workflow: "auto_global"
+#   fitting:
+#     termination:
+#       gtol: 1.0e-10
+#       ftol: 1.0e-10
+#       xtol: 1.0e-10
+#     multistart:
+#       num_starts: 20
 #
-# Pattern 4: HPC Multi-GPU Cluster (PBS Pro)
-# ──────────────────────────────────────────
-#   default_workflow: "hpc_distributed"
-#   # Auto-detects cluster via PBS_NODEFILE
+# Pattern 4: HPC Multi-GPU Cluster (PBS Pro/SLURM)
+# ──────────────────────────────────────────────────────────
+#   default_workflow: "hpc"
+#   # Enables checkpointing + auto_global optimization
+#   # Auto-detects cluster via PBS_NODEFILE or SLURM_JOB_NODELIST
 #
 # Pattern 5: Quick Development/Testing
 # ────────────────────────────────────
-#   default_workflow: "fast"
+#   default_workflow: "auto"
 #   runtime:
 #     precision: "float32"
 #   fitting:
 #     termination:
+#       gtol: 1.0e-6
 #       max_iterations: 50
 #
 # Pattern 6: Warm Start Refinement
 # ──────────────────────────────────────────
 # Use when refining parameters from a previous fit.
-#   default_workflow: "streaming"
+#   default_workflow: "auto"
 #   hybrid_streaming:
 #     defense_layers:
 #       preset: "strict"  # Or configure layers individually:
@@ -231,7 +216,7 @@
 # Pattern 7: Production Monitoring with Telemetry
 # ─────────────────────────────────────────────────────────
 # For batch processing with defense layer monitoring.
-#   default_workflow: "streaming"
+#   default_workflow: "auto"
 #   hybrid_streaming:
 #     defense_layers:
 #       preset: null  # Use defaults
@@ -242,7 +227,7 @@
 #   #   from nlsq import get_defense_telemetry, reset_defense_telemetry
 #   #   reset_defense_telemetry()
 #   #   for dataset in datasets:
-#   #       curve_fit(model, x, y, method="hybrid_streaming")
+#   #       curve_fit(model, x, y, workflow="auto")
 #   #   telemetry = get_defense_telemetry()
 #   #   push_to_prometheus(telemetry.export_metrics())
 #
@@ -266,23 +251,29 @@ metadata:
 # The default_workflow can be a preset name or a custom workflow defined below.
 #
 # ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ BUILT-IN WORKFLOW PRESETS (from nlsq.core.minpack.WORKFLOW_PRESETS)         │
+# │ 3-WORKFLOW SYSTEM (v0.6.3)                                                  │
 # ├─────────────────────────────────────────────────────────────────────────────┤
-# │   - standard:         Standard curve_fit() with default tolerances (1e-8)   │
-# │   - quality:          Highest precision with multi-start (tol 1e-10)        │
-# │   - fast:             Speed-optimized with looser tolerances (1e-6)         │
-# │   - large_robust:     Chunked processing with multi-start for large data    │
-# │   - streaming:        AdaptiveHybridStreamingOptimizer for huge datasets    │
-# │   - hpc_distributed:  Multi-GPU/node configuration for HPC clusters (PBS)   │
-# │   - cmaes:            CMA-ES global optimization with BIPOP restarts        │
-# │   - cmaes-global:     Thorough CMA-ES exploration (2x population, 200 gens) │
-# │   - global_auto:      Auto-selects CMA-ES or Multi-Start based on scale     │
+# │ NLSQ provides a simplified 3-workflow system that automatically selects     │
+# │ optimal processing strategies based on dataset size and memory constraints: │
+# │                                                                             │
+# │   workflow='auto'        Memory-aware local optimization (default)          │
+# │                          - Automatic tier selection: STANDARD → CHUNKED     │
+# │                          - Single starting point optimization               │
+# │                                                                             │
+# │   workflow='auto_global' Memory-aware global optimization (requires bounds) │
+# │                          - Multi-start or CMA-ES for global optimum search  │
+# │                          - Automatic tier selection: STANDARD → STREAMING   │
+# │                          - Use n_starts parameter to control restarts       │
+# │                                                                             │
+# │   workflow='hpc'         auto_global + checkpointing for HPC environments   │
+# │                          - Fault-tolerant with resume capability            │
+# │                          - Multi-GPU/node support via PBS/SLURM             │
 # └─────────────────────────────────────────────────────────────────────────────┘
 #
-# Note: For custom workflows beyond these presets, define them in the 'workflows'
-# section below or pass a config object directly to fit().
+# Note: For advanced configurations, use the 'workflows' section below or pass
+# a WorkflowConfig object directly to fit().
 
-default_workflow: "standard"
+default_workflow: "auto"
 
 # Memory limit for workflow auto-selection. Set to null to auto-detect.
 # Performance: Lower limits force streaming/chunked tiers.
@@ -881,8 +872,9 @@ hybrid_streaming:
 # Multi-start global optimization with Latin Hypercube Sampling.
 
 global_optimization:
-  # Presets: "fast", "robust", "global", "thorough", "streaming"
-  preset: null  # Use preset or define custom below
+  # Configure multi-start global optimization (used with workflow='auto_global')
+  # For CMA-ES global optimization, see the 'cmaes' section below.
+  preset: null  # Use custom configuration below
 
   # Custom configuration (overrides preset if set)
   n_starts: 10               # Number of starting points (0 = disabled)
@@ -922,10 +914,13 @@ global_optimization:
 #   - Large population explores globally, small refines locally
 #   - Automatic convergence detection with restart on stagnation
 #
-# Usage in workflow:
-#   default_workflow: "cmaes"       # Use standard CMA-ES preset
+# Usage with 3-workflow system:
+#   default_workflow: "auto_global"  # Enable global optimization
+#   cmaes:
+#     preset: "cmaes"                # Use standard CMA-ES settings
 #   # or
-#   default_workflow: "cmaes-global" # Use thorough exploration
+#   cmaes:
+#     preset: "cmaes-global"         # Use thorough exploration settings
 
 cmaes:
   # ==========================================================================

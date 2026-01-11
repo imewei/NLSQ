@@ -573,8 +573,8 @@ class ExportPage(QWidget):
                     ]
                 )
 
-        # Determine workflow preset
-        workflow = getattr(state, "preset", "standard") or "standard"
+        # Determine workflow (3-workflow system v0.6.3)
+        workflow = getattr(state, "workflow", "auto") or "auto"
 
         # Add fitting options
         lines.extend(
@@ -594,9 +594,7 @@ class ExportPage(QWidget):
         else:
             lines.append("bounds = (-np.inf, np.inf)")
 
-        lines.append(
-            f'workflow = "{workflow}"  # Options: standard, fast, quality, large_robust'
-        )
+        lines.append(f'workflow = "{workflow}"  # Options: auto, auto_global, hpc')
 
         lines.extend(
             [

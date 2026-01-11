@@ -66,16 +66,16 @@ class SessionState:
         Optimization method ("trf", "lm", "dogbox").
     loss : str
         Loss function type.
-    enable_multistart : bool
-        Whether to enable multi-start optimization.
+    workflow : str
+        Workflow type: "auto" (local), "auto_global" (global), "hpc".
     n_starts : int
-        Number of starting points for multi-start.
+        Number of starting points for global optimization.
     sampler : str
-        Sampling method for multi-start ("lhs", "sobol", "halton").
+        Sampling method for global optimization ("lhs", "sobol", "halton").
     center_on_p0 : bool
-        Whether to center multi-start samples on p0.
+        Whether to center global optimization samples on p0.
     scale_factor : float
-        Scale factor for multi-start sampling region.
+        Scale factor for global optimization sampling region.
     chunk_size : int
         Chunk size for streaming optimization.
     normalize : bool
@@ -89,7 +89,7 @@ class SessionState:
     defense_preset : str or None
         Defense layer preset for hybrid streaming.
     preset : str
-        Active preset name ("standard", "fast", "robust", "quality").
+        Active UI preset name ("Fast", "Robust", "Quality").
     mode : str
         UI mode ("guided" or "advanced").
     fit_result : Any
@@ -136,8 +136,8 @@ class SessionState:
     method: str = "trf"
     loss: str = "linear"
 
-    # Multi-start settings
-    enable_multistart: bool = False
+    # Workflow and global optimization settings (3-workflow system v0.6.3)
+    workflow: str = "auto"  # "auto", "auto_global", or "hpc"
     n_starts: int = 10
     sampler: str = "lhs"
     center_on_p0: bool = True
@@ -172,7 +172,7 @@ class SessionState:
     batch_summary_format: str = "json"
 
     # UI state
-    preset: str = "standard"
+    preset: str = "Robust"  # UI preset name: "Fast", "Robust", "Quality"
     mode: str = "guided"
 
     # Fit result state
@@ -219,7 +219,7 @@ class SessionState:
             max_function_evals=self.max_function_evals,
             method=self.method,
             loss=self.loss,
-            enable_multistart=self.enable_multistart,
+            workflow=self.workflow,
             n_starts=self.n_starts,
             sampler=self.sampler,
             center_on_p0=self.center_on_p0,
@@ -307,7 +307,7 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
     """
     # Save preferences if needed
     saved_mode = state.mode if preserve_preferences else "guided"
-    saved_preset = state.preset if preserve_preferences else "standard"
+    saved_preset = state.preset if preserve_preferences else "Robust"
 
     # Create a fresh state
     defaults = SessionState()
@@ -350,8 +350,8 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
     state.method = defaults.method
     state.loss = defaults.loss
 
-    # Reset multi-start settings
-    state.enable_multistart = defaults.enable_multistart
+    # Reset workflow and global optimization settings
+    state.workflow = defaults.workflow
     state.n_starts = defaults.n_starts
     state.sampler = defaults.sampler
     state.center_on_p0 = defaults.center_on_p0
@@ -451,9 +451,9 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
                 "max_iterations": state.max_iterations,
                 "max_function_evals": state.max_function_evals,
             },
-            "multistart": {
-                "enabled": state.enable_multistart,
-                "num_starts": state.n_starts,
+            "workflow": state.workflow,
+            "global_optimization": {
+                "n_starts": state.n_starts,
                 "sampler": state.sampler,
                 "center_on_p0": state.center_on_p0,
                 "scale_factor": state.scale_factor,
@@ -519,7 +519,7 @@ def apply_preset_to_state(state: SessionState, preset_name: str) -> None:
     state : SessionState
         The session state to modify.
     preset_name : str
-        The name of the preset to apply ("fast", "robust", "quality", etc.).
+        The name of the preset to apply ("Fast", "Robust", "Quality").
 
     Raises
     ------
@@ -534,7 +534,7 @@ def apply_preset_to_state(state: SessionState, preset_name: str) -> None:
     state.gtol = preset["gtol"]
     state.ftol = preset["ftol"]
     state.xtol = preset["xtol"]
-    state.enable_multistart = preset["enable_multistart"]
+    state.workflow = preset.get("workflow", "auto")
 
-    if preset["enable_multistart"]:
+    if state.workflow == "auto_global":
         state.n_starts = preset.get("n_starts", 10)

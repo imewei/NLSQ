@@ -63,13 +63,11 @@ class FitConfig:
     loss : str
         Loss function type.
     workflow : str | None
-        Workflow preset name ('fast', 'robust', 'quality', etc.).
+        Workflow name: 'auto' (local), 'auto_global' (global), 'hpc'.
     goal : str | None
         Optimization goal ('fast', 'robust', 'quality').
-    enable_multistart : bool
-        Whether to enable multi-start optimization.
     n_starts : int
-        Number of starting points for multi-start.
+        Number of starting points for global optimization (auto_global).
     sampler : str
         Sampling method for multi-start.
     chunk_size : int
@@ -89,7 +87,6 @@ class FitConfig:
     loss: str = "linear"
     workflow: str | None = None
     goal: str | None = None
-    enable_multistart: bool = False
     n_starts: int = 10
     sampler: str = "lhs"
     center_on_p0: bool = True
@@ -344,7 +341,7 @@ def execute_fit(
     if callback_wrapper is not None:
         fit_kwargs["callback"] = callback_wrapper
 
-    # Determine workflow
+    # Determine workflow (3-workflow system v0.6.3)
     workflow = config.workflow
     if workflow is None:
         workflow = "auto"
@@ -352,13 +349,9 @@ def execute_fit(
     # Determine goal
     goal = config.goal
 
-    # Handle multi-start configuration
-    if config.enable_multistart and not workflow.startswith("hpc"):
-        # Use quality or large_robust workflow for multi-start
-        if len(xdata) > 1_000_000:
-            workflow = "large_robust"
-        else:
-            workflow = "quality"
+    # For auto_global workflow, pass n_starts parameter
+    if workflow == "auto_global" and config.n_starts > 0:
+        fit_kwargs["n_starts"] = config.n_starts
 
     # Add method if not auto-selecting
     if config.method and config.method != "auto":
@@ -556,15 +549,11 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
     FitConfig
         Configuration for fitting.
     """
-    # Determine workflow from state
-    workflow = None
-    if hasattr(state, "preset") and state.preset:
-        preset_map = {
-            "fast": "fast",
-            "robust": "standard",
-            "quality": "quality",
-        }
-        workflow = preset_map.get(state.preset.lower())
+    # Determine workflow from state using 3-workflow system (v0.6.3)
+    # Get workflow directly from state, or default to 'auto'
+    workflow = getattr(state, "workflow", None)
+    if workflow is None:
+        workflow = "auto"
 
     return FitConfig(
         p0=state.p0,
@@ -578,7 +567,6 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
         loss=state.loss,
         workflow=workflow,
         goal=None,
-        enable_multistart=state.enable_multistart,
         n_starts=state.n_starts,
         sampler=state.sampler,
         center_on_p0=getattr(state, "center_on_p0", True),

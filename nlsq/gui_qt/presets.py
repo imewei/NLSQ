@@ -1,117 +1,48 @@
 """Preset configurations for the NLSQ GUI.
 
 This module defines preset configurations for common curve fitting scenarios.
-The presets are synchronized with nlsq.core.minpack.WORKFLOW_PRESETS to ensure
-consistent behavior between CLI and GUI interfaces.
+The presets use the 3-workflow system (v0.6.3):
 
-Core Presets (matching WORKFLOW_PRESETS):
-    - standard: Default curve_fit() with default tolerances (1e-8)
-    - fast: Speed-optimized with looser tolerances (1e-6), no multi-start
-    - quality: Highest precision, tighter tolerances (1e-10), multi-start (n_starts=20)
-    - large_robust: Chunked processing with multi-start for large datasets
-    - streaming: AdaptiveHybridStreamingOptimizer for huge datasets
-    - hpc_distributed: Multi-GPU/node configuration for HPC clusters
+GUI Presets:
+    - Fast: Local optimization with looser tolerances (workflow='auto')
+    - Robust: Global optimization with default tolerances (workflow='auto_global')
+    - Quality: Global optimization with tighter tolerances (workflow='auto_global')
 
-Global Optimization Presets:
-    - cmaes: CMA-ES global optimization with BIPOP restarts (100 gens)
-    - cmaes-global: Thorough CMA-ES exploration (200 gens, 2x population)
-    - global_auto: Auto-selects CMA-ES or Multi-Start based on parameter scale
+Workflows (v0.6.3):
+    - 'auto': Memory-aware local optimization (default)
+    - 'auto_global': Memory-aware global optimization (requires bounds)
+    - 'hpc': auto_global + checkpointing for HPC environments
 """
 
 from typing import Any
 
-# GUI Preset configurations
-# Synchronized with nlsq.core.minpack.WORKFLOW_PRESETS for consistency
+# GUI Preset configurations using 3-workflow system (v0.6.3)
 PRESETS: dict[str, dict[str, Any]] = {
-    # === Core Presets (matching WORKFLOW_PRESETS) ===
-    "standard": {
-        "description": "Standard curve_fit() with default tolerances",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_multistart": False,
-        "n_starts": 0,
-        "tier": "STANDARD",
-    },
-    "fast": {
-        "description": "Speed-optimized with looser tolerances",
+    "Fast": {
+        "description": "Speed-optimized local optimization with looser tolerances",
+        "workflow": "auto",
         "gtol": 1e-6,
         "ftol": 1e-6,
         "xtol": 1e-6,
-        "enable_multistart": False,
-        "n_starts": 0,
-        "tier": "STANDARD",
+        "max_iterations": 100,
     },
-    "quality": {
-        "description": "Highest precision with multi-start and tighter tolerances",
+    "Robust": {
+        "description": "Global optimization with multi-start for reliable results",
+        "workflow": "auto_global",
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "max_iterations": 200,
+        "n_starts": 5,
+    },
+    "Quality": {
+        "description": "Highest precision global optimization with tighter tolerances",
+        "workflow": "auto_global",
         "gtol": 1e-10,
         "ftol": 1e-10,
         "xtol": 1e-10,
-        "enable_multistart": True,
-        "n_starts": 20,
-        "tier": "STANDARD",
-    },
-    "large_robust": {
-        "description": "Chunked processing with multi-start for large datasets",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_multistart": True,
+        "max_iterations": 500,
         "n_starts": 10,
-        "tier": "CHUNKED",
-    },
-    "streaming": {
-        "description": "AdaptiveHybridStreamingOptimizer for huge datasets",
-        "gtol": 1e-7,
-        "ftol": 1e-7,
-        "xtol": 1e-7,
-        "enable_multistart": False,
-        "n_starts": 0,
-        "tier": "STREAMING",
-    },
-    "hpc_distributed": {
-        "description": "Multi-GPU/node configuration for HPC clusters",
-        "gtol": 1e-6,
-        "ftol": 1e-6,
-        "xtol": 1e-6,
-        "enable_multistart": True,
-        "n_starts": 10,
-        "enable_checkpoints": True,
-        "tier": "STREAMING_CHECKPOINT",
-    },
-    # === Global Optimization Presets ===
-    "cmaes": {
-        "description": "CMA-ES global optimization with BIPOP restarts",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_multistart": False,
-        "n_starts": 0,
-        "method": "cmaes",
-        "cmaes_preset": "cmaes",
-        "tier": "STANDARD",
-    },
-    "cmaes-global": {
-        "description": "Thorough CMA-ES exploration with extended generations",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_multistart": False,
-        "n_starts": 0,
-        "method": "cmaes",
-        "cmaes_preset": "cmaes-global",
-        "tier": "STANDARD",
-    },
-    "global_auto": {
-        "description": "Auto-selects CMA-ES or Multi-Start based on parameter scale",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_multistart": True,
-        "n_starts": 10,
-        "method": "auto",
-        "cmaes_preset": "cmaes",
-        "tier": "STANDARD",
     },
 }
 
@@ -122,9 +53,7 @@ def get_preset(name: str) -> dict[str, Any]:
     Parameters
     ----------
     name : str
-        The preset name. Available presets:
-        - Core: "standard", "fast", "quality", "large_robust", "streaming", "hpc_distributed"
-        - Global: "cmaes", "cmaes-global", "global_auto"
+        The preset name. Available presets: "Fast", "Robust", "Quality".
 
     Returns
     -------
@@ -138,25 +67,27 @@ def get_preset(name: str) -> dict[str, Any]:
 
     Examples
     --------
-    >>> preset = get_preset("fast")
+    >>> preset = get_preset("Fast")
     >>> preset["gtol"]
     1e-06
-    >>> preset["enable_multistart"]
-    False
+    >>> preset["workflow"]
+    'auto'
 
-    >>> preset = get_preset("quality")
+    >>> preset = get_preset("Quality")
     >>> preset["n_starts"]
-    20
-
-    >>> preset = get_preset("cmaes")
-    >>> preset["method"]
-    'cmaes'
+    10
     """
-    name_lower = name.lower()
-    if name_lower not in PRESETS:
-        available = ", ".join(PRESETS.keys())
-        raise ValueError(f"Unknown preset '{name}'. Available presets: {available}")
-    return PRESETS[name_lower].copy()
+    # Try exact match first
+    if name in PRESETS:
+        return PRESETS[name].copy()
+
+    # Try case-insensitive match
+    name_map = {k.lower(): k for k in PRESETS}
+    if name.lower() in name_map:
+        return PRESETS[name_map[name.lower()]].copy()
+
+    available = ", ".join(PRESETS.keys())
+    raise ValueError(f"Unknown preset '{name}'. Available presets: {available}")
 
 
 def get_preset_names() -> list[str]:
@@ -170,9 +101,9 @@ def get_preset_names() -> list[str]:
     Examples
     --------
     >>> names = get_preset_names()
-    >>> "fast" in names
+    >>> "Fast" in names
     True
-    >>> "quality" in names
+    >>> "Quality" in names
     True
     """
     return list(PRESETS.keys())
@@ -198,8 +129,8 @@ def get_preset_description(name: str) -> str:
 
     Examples
     --------
-    >>> get_preset_description("fast")
-    'Speed-optimized with looser tolerances'
+    >>> get_preset_description("Fast")
+    'Speed-optimized local optimization with looser tolerances'
     """
     preset = get_preset(name)
     return preset.get("description", "")
@@ -220,7 +151,7 @@ def get_preset_tolerances(name: str) -> tuple[float, float, float]:
 
     Examples
     --------
-    >>> gtol, ftol, xtol = get_preset_tolerances("quality")
+    >>> gtol, ftol, xtol = get_preset_tolerances("Quality")
     >>> gtol
     1e-10
     """
@@ -228,8 +159,8 @@ def get_preset_tolerances(name: str) -> tuple[float, float, float]:
     return preset["gtol"], preset["ftol"], preset["xtol"]
 
 
-def preset_uses_multistart(name: str) -> bool:
-    """Check if a preset uses multi-start optimization.
+def preset_uses_global_optimization(name: str) -> bool:
+    """Check if a preset uses global optimization (auto_global workflow).
 
     Parameters
     ----------
@@ -239,21 +170,21 @@ def preset_uses_multistart(name: str) -> bool:
     Returns
     -------
     bool
-        True if the preset enables multi-start.
+        True if the preset uses workflow='auto_global'.
 
     Examples
     --------
-    >>> preset_uses_multistart("fast")
+    >>> preset_uses_global_optimization("Fast")
     False
-    >>> preset_uses_multistart("robust")
+    >>> preset_uses_global_optimization("Robust")
     True
     """
     preset = get_preset(name)
-    return preset.get("enable_multistart", False)
+    return preset.get("workflow") == "auto_global"
 
 
 def get_preset_n_starts(name: str) -> int:
-    """Get the number of multi-start points for a preset.
+    """Get the number of global optimization starts for a preset.
 
     Parameters
     ----------
@@ -263,86 +194,22 @@ def get_preset_n_starts(name: str) -> int:
     Returns
     -------
     int
-        The number of starting points (0 if multi-start disabled).
+        The number of starting points (0 if using local optimization).
 
     Examples
     --------
-    >>> get_preset_n_starts("quality")
-    20
-    >>> get_preset_n_starts("fast")
+    >>> get_preset_n_starts("Quality")
+    10
+    >>> get_preset_n_starts("Fast")
     0
     """
     preset = get_preset(name)
-    if not preset.get("enable_multistart", False):
+    if preset.get("workflow") != "auto_global":
         return 0
     return preset.get("n_starts", 10)
 
 
-def validate_preset_consistency() -> bool:
-    """Validate that GUI presets are consistent with WORKFLOW_PRESETS.
-
-    This function checks that the GUI presets match the corresponding
-    WORKFLOW_PRESETS in nlsq.core.minpack. Presets that exist only in GUI
-    (like "robust") are not validated.
-
-    Returns
-    -------
-    bool
-        True if all presets are consistent.
-
-    Raises
-    ------
-    AssertionError
-        If any preset is inconsistent.
-    """
-    from nlsq.core.minpack import WORKFLOW_PRESETS
-
-    # Presets that should match between GUI and WORKFLOW_PRESETS
-    presets_to_validate = [
-        "standard",
-        "fast",
-        "quality",
-        "large_robust",
-        "streaming",
-        "hpc_distributed",
-        "cmaes",
-        "cmaes-global",
-        "global_auto",
-    ]
-
-    for name in presets_to_validate:
-        gui_preset = PRESETS[name]
-        minpack_preset = WORKFLOW_PRESETS[name]
-
-        # Check tolerances
-        assert gui_preset["gtol"] == minpack_preset["gtol"], f"{name} gtol mismatch"
-        assert gui_preset["ftol"] == minpack_preset["ftol"], f"{name} ftol mismatch"
-        assert gui_preset["xtol"] == minpack_preset["xtol"], f"{name} xtol mismatch"
-
-        # Check multistart settings
-        assert gui_preset["enable_multistart"] == minpack_preset["enable_multistart"], (
-            f"{name} enable_multistart mismatch"
-        )
-
-        # Check n_starts if multistart is enabled
-        if minpack_preset.get("n_starts") is not None:
-            assert gui_preset["n_starts"] == minpack_preset["n_starts"], (
-                f"{name} n_starts mismatch"
-            )
-
-        # Check tier
-        assert gui_preset["tier"] == minpack_preset["tier"], f"{name} tier mismatch"
-
-        # Check method if specified
-        if "method" in minpack_preset:
-            assert gui_preset.get("method") == minpack_preset["method"], (
-                f"{name} method mismatch"
-            )
-
-    return True
-
-
-# Streaming presets for large datasets
+# Streaming presets for large datasets (used with workflow='auto')
 STREAMING_PRESETS: dict[str, dict[str, Any]] = {
     "conservative": {
         "description": "Conservative streaming with all defense layers enabled",
