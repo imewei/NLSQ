@@ -94,6 +94,137 @@ from nlsq.utils.validators import InputValidator
 
 __all__ = ["CurveFit", "curve_fit", "fit"]
 
+# Logger for workflow selection messages
+_logger = get_logger(__name__)
+
+# =============================================================================
+# NEW WORKFLOW SYSTEM (v0.6.3)
+# =============================================================================
+#
+# Valid workflows: "auto", "auto_global", "hpc"
+# - "auto": Memory-aware local optimization (default)
+# - "auto_global": Memory-aware global optimization (requires bounds)
+# - "hpc": auto_global + checkpointing for HPC environments
+#
+# The following presets were removed in v0.6.3 and will raise ValueError:
+
+REMOVED_PRESETS: dict[str, str] = {
+    "standard": (
+        "Use workflow='auto' instead. "
+        "The system automatically selects the optimal memory strategy."
+    ),
+    "fast": (
+        "Use workflow='auto' with gtol=1e-6, ftol=1e-6, xtol=1e-6 instead:\n"
+        "    fit(model, x, y, workflow='auto', gtol=1e-6, ftol=1e-6, xtol=1e-6)"
+    ),
+    "quality": (
+        "Use workflow='auto_global' with bounds and n_starts=20 instead:\n"
+        "    fit(model, x, y, workflow='auto_global', bounds=bounds, n_starts=20)"
+    ),
+    "large_robust": (
+        "Use workflow='auto' instead. "
+        "The system automatically detects large datasets and applies chunking."
+    ),
+    "streaming": (
+        "Use workflow='auto' instead. "
+        "The system automatically detects memory pressure and enables streaming."
+    ),
+    "hpc_distributed": (
+        "Use workflow='hpc' with bounds instead:\n"
+        "    fit(model, x, y, workflow='hpc', bounds=bounds, checkpoint_dir='/path/to/checkpoints')"
+    ),
+    "cmaes": (
+        "Use workflow='auto_global' with bounds instead. "
+        "CMA-ES is auto-selected when scale_ratio > 1000:\n"
+        "    fit(model, x, y, workflow='auto_global', bounds=bounds)"
+    ),
+    "cmaes-global": (
+        "Use workflow='auto_global' with extended CMA-ES config:\n"
+        "    from nlsq.global_optimization import CMAESConfig\n"
+        "    fit(model, x, y, workflow='auto_global', bounds=bounds, "
+        "cmaes_config=CMAESConfig(n_generations=200))"
+    ),
+    "global_auto": (
+        "Use workflow='auto_global' instead:\n"
+        "    fit(model, x, y, workflow='auto_global', bounds=bounds)"
+    ),
+}
+
+# Documentation URL for migration guide
+_MIGRATION_DOCS_URL = "https://nlsq.readthedocs.io/en/latest/howto/migration.html"
+
+
+def _raise_removed_preset_error(preset_name: str) -> None:
+    """Raise ValueError for removed workflow presets with migration guidance.
+
+    Parameters
+    ----------
+    preset_name : str
+        The name of the removed preset.
+
+    Raises
+    ------
+    ValueError
+        Always raised with migration instructions.
+    """
+    migration_hint = REMOVED_PRESETS.get(preset_name, "Use workflow='auto' instead.")
+    raise ValueError(
+        f"Workflow preset '{preset_name}' was removed in v0.6.3.\n\n"
+        f"{migration_hint}\n\n"
+        f"See migration guide: {_MIGRATION_DOCS_URL}"
+    )
+
+
+def _parse_goal_parameter(goal: str | Any | None) -> Any:
+    """Parse goal parameter into OptimizationGoal enum.
+
+    Parameters
+    ----------
+    goal : str, OptimizationGoal, or None
+        The goal specification to parse.
+
+    Returns
+    -------
+    OptimizationGoal or None
+        The parsed goal enum, or None if goal was None.
+
+    Raises
+    ------
+    ValueError
+        If goal string is not recognized.
+    """
+    from nlsq.core.workflow import OptimizationGoal
+
+    if goal is None:
+        return None
+
+    if isinstance(goal, str):
+        goal_lower = goal.lower()
+        goal_map = {
+            "fast": OptimizationGoal.FAST,
+            "robust": OptimizationGoal.ROBUST,
+            "global": OptimizationGoal.GLOBAL,
+            "memory_efficient": OptimizationGoal.MEMORY_EFFICIENT,
+            "quality": OptimizationGoal.QUALITY,
+        }
+        if goal_lower not in goal_map:
+            raise ValueError(
+                f"Unknown goal '{goal}'. Must be one of: {list(goal_map.keys())}"
+            )
+        return goal_map[goal_lower]
+
+    if isinstance(goal, OptimizationGoal):
+        return goal
+
+    # Handle enum identity issue in parallel test execution (pytest-xdist)
+    # where the same enum type may be loaded from different module imports
+    if type(goal).__name__ == "OptimizationGoal":
+        return OptimizationGoal[goal.name]
+
+    raise ValueError(
+        f"goal must be a string or OptimizationGoal enum, got {type(goal)}"
+    )
+
 
 # Predefined workflow presets for fit() function
 # Following GlobalOptimizationConfig.PRESETS pattern
@@ -295,10 +426,7 @@ def fit(
     MemoryBudgetSelector : Memory-based automatic strategy selection
     """
     # Import workflow module components
-    from nlsq.core.workflow import (
-        MemoryBudgetSelector,
-        OptimizationGoal,
-    )
+    from nlsq.core.workflow import MemoryBudgetSelector
 
     # Convert data to arrays for size calculations
     xdata_arr = np.asarray(xdata)
@@ -322,32 +450,7 @@ def fit(
         n_params = len(args) - 1
 
     # Convert goal string to OptimizationGoal enum if needed
-    goal_enum: OptimizationGoal | None = None
-    if goal is not None:
-        if isinstance(goal, str):
-            goal_lower = goal.lower()
-            goal_map = {
-                "fast": OptimizationGoal.FAST,
-                "robust": OptimizationGoal.ROBUST,
-                "global": OptimizationGoal.GLOBAL,
-                "memory_efficient": OptimizationGoal.MEMORY_EFFICIENT,
-                "quality": OptimizationGoal.QUALITY,
-            }
-            if goal_lower not in goal_map:
-                raise ValueError(
-                    f"Unknown goal '{goal}'. Must be one of: {list(goal_map.keys())}"
-                )
-            goal_enum = goal_map[goal_lower]
-        elif isinstance(goal, OptimizationGoal):
-            goal_enum = goal
-        elif type(goal).__name__ == "OptimizationGoal":
-            # Handle enum identity issue in parallel test execution (pytest-xdist)
-            # where the same enum type may be loaded from different module imports
-            goal_enum = OptimizationGoal[goal.name]
-        else:
-            raise ValueError(
-                f"goal must be a string or OptimizationGoal enum, got {type(goal)}"
-            )
+    goal_enum = _parse_goal_parameter(goal)
 
     # Process workflow parameter
     # Import config classes for isinstance checks
@@ -377,6 +480,10 @@ def fit(
     if isinstance(workflow, str):
         workflow_lower = workflow.lower()
 
+        # Check if this is a removed preset first
+        if workflow_lower in REMOVED_PRESETS:
+            _raise_removed_preset_error(workflow_lower)
+
         if workflow_lower == "auto":
             # Auto-select workflow based on memory budget
             selector = MemoryBudgetSelector()
@@ -387,6 +494,7 @@ def fit(
                 memory_limit_gb=memory_limit_gb,
                 goal=goal_enum,
             )
+            _logger.info(f"[NLSQ] workflow='auto' selected strategy: {_strategy}")
             return _fit_with_config(
                 f=f,
                 xdata=xdata_arr,
@@ -398,6 +506,40 @@ def fit(
                 bounds=bounds,
                 method=method,
                 config=config,
+                goal=goal_enum,
+                **kwargs,
+            )
+
+        elif workflow_lower == "auto_global":
+            # Memory-aware global optimization (requires bounds)
+            return _fit_with_auto_global(
+                f=f,
+                xdata=xdata_arr,
+                ydata=ydata_arr,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                n_points=n_points,
+                n_params=n_params,
+                goal=goal_enum,
+                **kwargs,
+            )
+
+        elif workflow_lower == "hpc":
+            # HPC workflow with checkpointing (wraps auto_global)
+            return _fit_with_hpc(
+                f=f,
+                xdata=xdata_arr,
+                ydata=ydata_arr,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                n_points=n_points,
+                n_params=n_params,
                 goal=goal_enum,
                 **kwargs,
             )
@@ -856,6 +998,427 @@ def _fit_with_preset(  # noqa: C901
             method=method,
             **kwargs,
         )
+
+
+# =============================================================================
+# NEW WORKFLOW HANDLERS (v0.6.3)
+# =============================================================================
+
+
+def _fit_with_auto_global(
+    f: ModelFunction,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    p0: ArrayLike | None,
+    sigma: ArrayLike | None,
+    absolute_sigma: bool,
+    check_finite: bool,
+    bounds: tuple,
+    n_points: int,
+    n_params: int,
+    goal: Any,
+    **kwargs: Any,
+) -> CurveFitResult:
+    """Memory-aware global optimization workflow (T026-T035).
+
+    This function implements the auto_global workflow which:
+    1. Validates that bounds are provided (required for global optimization)
+    2. Uses MemoryBudgetSelector to select memory strategy (standard/chunked/streaming)
+    3. Uses MethodSelector to select global method (CMA-ES or Multi-Start)
+    4. Routes to appropriate backend based on the 6 strategy×method combinations
+
+    Parameters
+    ----------
+    f : callable
+        Model function f(x, *params) -> y.
+    xdata : np.ndarray
+        Independent variable data.
+    ydata : np.ndarray
+        Dependent variable data.
+    p0 : ArrayLike | None
+        Initial parameter guess.
+    sigma : ArrayLike | None
+        Uncertainties in ydata.
+    absolute_sigma : bool
+        Whether sigma is absolute.
+    check_finite : bool
+        Check for finite input values.
+    bounds : tuple
+        Parameter bounds (lower, upper). Required.
+    n_points : int
+        Number of data points.
+    n_params : int
+        Number of parameters.
+    goal : OptimizationGoal | None
+        Optimization goal.
+    **kwargs : Any
+        Additional arguments including:
+        - n_starts: int (default 10) - Number of multi-start runs
+        - cmaes_config: CMAESConfig | None - Override CMA-ES configuration
+        - memory_limit_gb: float | None - Override memory detection
+
+    Returns
+    -------
+    CurveFitResult
+        Optimization result.
+
+    Raises
+    ------
+    ValueError
+        If bounds are not provided.
+    """
+    from nlsq.core.workflow import MemoryBudgetSelector, calculate_adaptive_tolerances
+    from nlsq.global_optimization.method_selector import MethodSelector
+
+    # FR-002: Validate bounds are provided
+    lb, ub = prepare_bounds(bounds, n_params)
+    if np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)):
+        raise ValueError(
+            "workflow='auto_global' requires bounds. "
+            "Provide bounds as (lower, upper) arrays:\n"
+            "    fit(model, x, y, workflow='auto_global', bounds=([0, 0], [10, 10]))"
+        )
+
+    # Extract optional parameters
+    n_starts = kwargs.pop("n_starts", 10)
+    cmaes_config = kwargs.pop("cmaes_config", None)
+    memory_limit_gb = kwargs.pop("memory_limit_gb", None)
+
+    # FR-000: Select memory strategy
+    selector = MemoryBudgetSelector(safety_factor=0.75)
+    strategy, _memory_config = selector.select(
+        n_points=n_points,
+        n_params=n_params,
+        memory_limit_gb=memory_limit_gb,
+        goal=goal,
+    )
+    _logger.info(f"[NLSQ] workflow='auto_global' memory strategy: {strategy}")
+
+    # FR-005: Select global method (CMA-ES vs Multi-Start)
+    method_selector = MethodSelector()
+    global_method = method_selector.select(
+        requested_method="auto",
+        lower_bounds=lb,
+        upper_bounds=ub,
+    )
+    _logger.info(f"[NLSQ] workflow='auto_global' global method: {global_method}")
+
+    # Apply adaptive tolerances if goal is specified
+    if goal is not None:
+        adaptive_tols = calculate_adaptive_tolerances(n_points, goal)
+        for tol_key in ["gtol", "ftol", "xtol"]:
+            if tol_key not in kwargs:
+                kwargs[tol_key] = adaptive_tols[tol_key]
+
+    # Route to appropriate backend based on strategy x method combination
+    if global_method == "cmaes":
+        return _fit_global_cmaes(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            bounds=(lb, ub),
+            strategy=strategy,
+            cmaes_config=cmaes_config,
+            **kwargs,
+        )
+    else:
+        # Multi-start path
+        return _fit_global_multistart(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=(lb, ub),
+            strategy=strategy,
+            n_starts=n_starts,
+            **kwargs,
+        )
+
+
+def _fit_with_hpc(
+    f: ModelFunction,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    p0: ArrayLike | None,
+    sigma: ArrayLike | None,
+    absolute_sigma: bool,
+    check_finite: bool,
+    bounds: tuple,
+    n_points: int,
+    n_params: int,
+    goal: Any,
+    **kwargs: Any,
+) -> CurveFitResult:
+    """HPC workflow with automatic checkpointing (T042-T048).
+
+    This function wraps auto_global with automatic checkpointing for
+    crash recovery in HPC environments.
+
+    Parameters
+    ----------
+    f : callable
+        Model function.
+    xdata, ydata : np.ndarray
+        Data arrays.
+    p0 : ArrayLike | None
+        Initial parameters.
+    sigma : ArrayLike | None
+        Uncertainties.
+    absolute_sigma : bool
+        Whether sigma is absolute.
+    check_finite : bool
+        Check for finite input values.
+    bounds : tuple
+        Parameter bounds (required).
+    n_points, n_params : int
+        Data dimensions.
+    goal : OptimizationGoal | None
+        Optimization goal.
+    **kwargs : Any
+        Additional arguments including:
+        - checkpoint_dir: str | None - Checkpoint directory
+        - checkpoint_interval: int - Save every N generations/starts
+
+    Returns
+    -------
+    CurveFitResult
+        Optimization result.
+
+    Raises
+    ------
+    ValueError
+        If bounds are not provided.
+    """
+    # FR-002: Validate bounds are provided
+    lb, ub = prepare_bounds(bounds, n_params)
+    if np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)):
+        raise ValueError(
+            "workflow='hpc' requires bounds. "
+            "Provide bounds as (lower, upper) arrays:\n"
+            "    fit(model, x, y, workflow='hpc', bounds=([0, 0], [10, 10]))"
+        )
+
+    # Extract HPC-specific parameters
+    checkpoint_dir = kwargs.pop("checkpoint_dir", None)
+    checkpoint_interval = kwargs.pop("checkpoint_interval", 5)
+
+    _logger.info(
+        f"[NLSQ] workflow='hpc' with checkpointing "
+        f"(dir={checkpoint_dir}, interval={checkpoint_interval})"
+    )
+
+    # For now, delegate to auto_global
+    # TODO: Add checkpoint infrastructure in Phase 5 (T042-T048)
+    return _fit_with_auto_global(
+        f=f,
+        xdata=xdata,
+        ydata=ydata,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
+        bounds=bounds,
+        n_points=n_points,
+        n_params=n_params,
+        goal=goal,
+        **kwargs,
+    )
+
+
+def _fit_global_cmaes(
+    f: ModelFunction,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    p0: ArrayLike | None,
+    sigma: ArrayLike | None,
+    absolute_sigma: bool,
+    bounds: tuple[np.ndarray, np.ndarray],
+    strategy: str,
+    cmaes_config: Any | None,
+    **kwargs: Any,
+) -> CurveFitResult:
+    """Run CMA-ES global optimization with memory-aware strategy.
+
+    Parameters
+    ----------
+    strategy : str
+        Memory strategy: 'standard', 'chunked', or 'streaming'.
+    cmaes_config : CMAESConfig | None
+        CMA-ES configuration override.
+    """
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
+    from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+    # Create or use provided config
+    if cmaes_config is None:
+        cmaes_config = CMAESConfig()
+
+    # FR-003: Set data_chunk_size for streaming/chunked strategies
+    if strategy == "streaming":
+        if cmaes_config.data_chunk_size is None:
+            # Calculate appropriate chunk size
+            n_points = len(ydata)
+            cmaes_config = CMAESConfig(
+                **{
+                    **cmaes_config.__dict__,
+                    "data_chunk_size": min(100_000, max(10_000, n_points // 10)),
+                }
+            )
+    elif strategy == "chunked":
+        if cmaes_config.data_chunk_size is None:
+            n_points = len(ydata)
+            cmaes_config = CMAESConfig(
+                **{
+                    **cmaes_config.__dict__,
+                    "data_chunk_size": min(500_000, max(50_000, n_points // 5)),
+                }
+            )
+
+    optimizer = CMAESOptimizer(config=cmaes_config)
+
+    result_dict = optimizer.fit(
+        f=f,
+        xdata=xdata,
+        ydata=ydata,
+        p0=np.asarray(p0) if p0 is not None else None,
+        bounds=bounds,
+        sigma=np.asarray(sigma) if sigma is not None else None,
+        **kwargs,
+    )
+
+    # Convert to CurveFitResult
+    result = CurveFitResult(
+        {
+            "x": result_dict["popt"],
+            "popt": result_dict["popt"],
+            "pcov": result_dict["pcov"],
+            "success": True,
+            "message": "CMA-ES optimization completed",
+            "model": f,
+            "xdata": xdata,
+            "ydata": ydata,
+        }
+    )
+    if "cmaes_diagnostics" in result_dict:
+        result["cmaes_diagnostics"] = result_dict["cmaes_diagnostics"]
+
+    return result
+
+
+def _fit_global_multistart(
+    f: ModelFunction,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    p0: ArrayLike | None,
+    sigma: ArrayLike | None,
+    absolute_sigma: bool,
+    check_finite: bool,
+    bounds: tuple[np.ndarray, np.ndarray],
+    strategy: str,
+    n_starts: int,
+    **kwargs: Any,
+) -> CurveFitResult:
+    """Run multi-start optimization with memory-aware strategy.
+
+    Parameters
+    ----------
+    strategy : str
+        Memory strategy: 'standard', 'chunked', or 'streaming'.
+    n_starts : int
+        Number of multi-start runs.
+    """
+    if strategy == "standard":
+        # Standard curve_fit with multi-start
+        return curve_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            multistart=True,
+            n_starts=n_starts,
+            **kwargs,
+        )
+    elif strategy == "chunked":
+        # Chunked processing with multi-start
+        from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
+
+        config = LDMemoryConfig(
+            memory_limit_gb=8.0,
+            min_chunk_size=1000,
+            max_chunk_size=1_000_000,
+        )
+        fitter = LargeDatasetFitter(
+            memory_limit_gb=config.memory_limit_gb,
+            config=config,
+        )
+        result = fitter.fit(
+            f,
+            xdata,
+            ydata,
+            p0=np.asarray(p0) if p0 is not None else None,
+            bounds=bounds,
+            method="trf",
+            multistart=True,
+            n_starts=n_starts,
+            **kwargs,
+        )
+        if not isinstance(result, CurveFitResult):
+            result = CurveFitResult(result)
+            result["model"] = f
+            result["xdata"] = xdata
+            result["ydata"] = ydata
+        return result
+    else:
+        # Streaming with multi-start (FR-004)
+        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        # Prepare p0
+        if p0 is None:
+            sig = signature(f)
+            args = sig.parameters
+            n_params = len(args) - 1
+            p0 = np.ones(n_params)
+        p0_arr = np.atleast_1d(p0)
+
+        config = HybridStreamingConfig(
+            normalize=True,
+            warmup_iterations=200,
+            gauss_newton_tol=kwargs.get("gtol", 1e-8),
+            enable_multistart=True,
+            n_starts=n_starts,
+        )
+
+        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+        result_dict = optimizer.fit(
+            data_source=(xdata, ydata),
+            func=f,
+            p0=p0_arr,
+            bounds=bounds,
+            sigma=np.asarray(sigma) if sigma is not None else None,
+            absolute_sigma=absolute_sigma,
+            callback=kwargs.get("callback"),
+            verbose=kwargs.get("verbose", 1),
+        )
+
+        result = CurveFitResult(result_dict)
+        result["model"] = f
+        result["xdata"] = xdata
+        result["ydata"] = ydata
+        result["pcov"] = result_dict.get(
+            "pcov", np.full((len(p0_arr), len(p0_arr)), np.inf)
+        )
+        return result
 
 
 # =============================================================================

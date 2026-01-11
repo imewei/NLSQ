@@ -1,33 +1,129 @@
 Workflow System Overview
 ========================
 
+.. versionchanged:: 0.6.3
+   The workflow system was simplified from 9 presets to 3 smart workflows:
+   ``auto``, ``auto_global``, and ``hpc``. The system now automatically selects
+   the optimal strategy based on memory constraints and problem characteristics.
+
 NLSQ provides automatic workflow selection based on memory constraints and dataset
 characteristics. The system analyzes available memory and data size to choose the
 optimal fitting strategy, preventing out-of-memory errors while maximizing performance.
 
-.. versionchanged:: 0.5.5
-   The tier-based workflow system was replaced with a unified memory-based approach.
-   ``MemoryBudgetSelector`` replaces ``auto_select_workflow()``, and strategy selection
-   is now driven entirely by memory budget computation.
+The Three Workflows
+-------------------
 
-Unified Memory-Based Strategy
------------------------------
+NLSQ v0.6.3 provides three workflows that cover all use cases:
 
-The memory-based approach uses a simple decision tree based on memory budget:
+.. list-table::
+   :header-rows: 1
+   :widths: 15 35 25 25
+
+   * - Workflow
+     - Description
+     - Requires Bounds
+     - Use Case
+   * - ``auto``
+     - Memory-aware local optimization
+     - No
+     - **Default**. Standard curve fitting.
+   * - ``auto_global``
+     - Memory-aware global optimization
+     - Yes
+     - Multi-modal problems, unknown initial guess.
+   * - ``hpc``
+     - ``auto_global`` + checkpointing
+     - Yes
+     - Long-running HPC jobs.
+
+workflow="auto" (Default)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The default workflow for local optimization. It automatically selects the
+best memory strategy based on your data size:
+
+.. code-block:: python
+
+   from nlsq import fit
+   import jax.numpy as jnp
+
+
+   def model(x, a, b, c):
+       return a * jnp.exp(-b * x) + c
+
+
+   # Default: workflow="auto"
+   result = fit(model, x, y, p0=[1.0, 0.5, 0.1])
+
+   # Explicit workflow selection
+   result = fit(model, x, y, p0=[1.0, 0.5, 0.1], workflow="auto")
+
+workflow="auto_global"
+~~~~~~~~~~~~~~~~~~~~~~
+
+For problems with multiple local minima or unknown initial guesses. Requires
+bounds to define the search space.
+
+The system automatically selects between:
+
+- **CMA-ES**: When parameter scale ratio > 1000 (wide bounds relative to typical values)
+- **Multi-Start**: Otherwise, using Latin Hypercube Sampling
+
+.. code-block:: python
+
+   from nlsq import fit
+
+   # Global optimization with automatic method selection
+   result = fit(
+       model,
+       x,
+       y,
+       p0=[1.0, 0.5, 0.1],
+       workflow="auto_global",
+       bounds=([0, 0, 0], [10, 5, 1]),
+       n_starts=10,  # For multi-start (default: 10)
+   )
+
+workflow="hpc"
+~~~~~~~~~~~~~~
+
+For long-running jobs on HPC clusters. Wraps ``auto_global`` with automatic
+checkpointing for crash recovery.
+
+.. code-block:: python
+
+   from nlsq import fit
+
+   result = fit(
+       model,
+       x,
+       y,
+       p0=[1.0, 0.5, 0.1],
+       workflow="hpc",
+       bounds=([0, 0, 0], [10, 5, 1]),
+       checkpoint_dir="/scratch/my_job/checkpoints",
+       checkpoint_interval=10,  # Save every 10 generations/starts
+   )
+
+Memory Strategy Selection
+-------------------------
+
+Both ``auto`` and ``auto_global`` workflows use the ``MemoryBudgetSelector``
+to choose the optimal memory strategy. The selector uses 75% of available
+RAM as the threshold.
 
 .. code-block:: text
 
    ┌─────────────────────────────────────────────────────────────────┐
    │                    MEMORY BUDGET COMPUTATION                     │
    ├─────────────────────────────────────────────────────────────────┤
-   │ available_gb = min(cpu_available, gpu_available_if_used)        │
+   │ available_gb = psutil.virtual_memory().available / 1e9          │
    │ threshold_gb = available_gb × 0.75  (safety factor)             │
    │                                                                  │
    │ # Memory estimates (float64 = 8 bytes)                          │
-   │ data_gb     = n_points × (n_features + 1) × 8 / 1e9            │
-   │ jacobian_gb = n_points × n_params × 8 / 1e9    ← THE BIG ONE   │
-   │ solver_gb   = n_params² × 8 / 1e9 + svd_overhead               │
-   │ peak_gb     = data_gb + 1.3 × jacobian_gb + solver_gb          │
+   │ data_gb     = n_points × 2 × 8 / 1e9  (x + y)                   │
+   │ jacobian_gb = n_points × n_params × 8 / 1e9                     │
+   │ peak_gb     = data_gb + 1.3 × jacobian_gb + solver_overhead     │
    └─────────────────────────────────────────────────────────────────┘
                                │
                                ▼
@@ -48,236 +144,112 @@ The memory-based approach uses a simple decision tree based on memory budget:
                                  │ chunk_size  │  └─────────────┘
                                  └─────────────┘
 
-Memory Estimation Details
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Strategy × Method Matrix
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-The system estimates memory requirements for each component:
+The ``auto_global`` workflow produces 6 combinations:
 
 .. list-table::
    :header-rows: 1
    :widths: 20 40 40
 
-   * - Component
-     - Formula
-     - Example (10M pts, 10 params)
-   * - Data (x, y)
-     - n × (features + 1) × 8
-     - 160 MB
-   * - Jacobian
-     - n × p × 8
-     - 800 MB
-   * - J\ :sup:`T`\ J
-     - p² × 8
-     - 0.8 KB
-   * - SVD working
-     - ~0.3 × jacobian
-     - 240 MB
-   * - **Peak**
-     - data + 1.3×J + solver
-     - **~1.3 GB**
-
-The Jacobian matrix dominates memory usage for most problems. The 1.3× multiplier
-accounts for temporary arrays during computation.
-
-Automatic Memory-Based Selection
---------------------------------
-
-When using ``workflow="auto"`` or ``method="auto"``, the ``MemoryBudgetSelector``
-automatically picks the best strategy:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 80
-
-   * - Strategy
-     - When Selected
-   * - **streaming**
-     - Data alone exceeds 75% of available memory
-   * - **chunked**
-     - Data fits, but peak memory (data + Jacobian) exceeds threshold
+   * - Memory Strategy
+     - Multi-Start
+     - CMA-ES
    * - **standard**
-     - Everything fits comfortably in memory
+     - MultiStartOrchestrator + n_starts × TRF
+     - CMAESOptimizer + BIPOP + TRF refine
+   * - **chunked**
+     - LargeDatasetFitter + multi-start
+     - CMAESOptimizer + data_chunk_size
+   * - **streaming**
+     - AdaptiveHybridStreaming + multi-start
+     - CMAESOptimizer + data streaming
+
+Method Selection (CMA-ES vs Multi-Start)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``MethodSelector`` chooses between CMA-ES and Multi-Start based on
+parameter scale ratio:
 
 .. code-block:: python
 
-   from nlsq import fit, curve_fit
-   from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+   from nlsq.global_optimization.method_selector import MethodSelector
 
-   # Automatic selection via fit()
-   result = fit(model, x, y, p0=[1, 2], workflow="auto")
+   selector = MethodSelector()
+   method = selector.select("auto", lower_bounds, upper_bounds)
+   # Returns "cmaes" or "multi-start"
 
-   # Automatic selection via curve_fit()
-   popt, pcov = curve_fit(model, x, y, p0=[1, 2], method="auto")
+- **CMA-ES**: Selected when ``scale_ratio > 1000`` AND ``evosax`` is available
+- **Multi-Start**: Selected otherwise
 
-   # Direct use of MemoryBudgetSelector
-   selector = MemoryBudgetSelector(safety_factor=0.75)
-   strategy, config = selector.select(
-       n_points=10_000_000,
-       n_params=10,
-       memory_limit_gb=16.0,  # Optional override
+The scale ratio is computed as:
+
+.. code-block:: python
+
+   scale_ratio = max(upper - lower) / min(upper - lower)
+
+Memory Override
+~~~~~~~~~~~~~~~
+
+You can override automatic memory detection:
+
+.. code-block:: python
+
+   # Force smaller memory footprint
+   result = fit(
+       model,
+       x,
+       y,
+       p0=[1, 2],
+       workflow="auto",
+       memory_limit_gb=4.0,  # Pretend only 4GB available
    )
-   print(f"Selected: {strategy}")  # "streaming", "chunked", or "standard"
 
-   # Inspect memory budget
-   budget = MemoryBudget.compute(n_points=10_000_000, n_params=10)
-   print(f"Peak memory: {budget.peak_gb:.2f} GB")
-   print(f"Fits in memory: {budget.fits_in_memory}")
+Tolerance Configuration
+-----------------------
 
-Named Workflow Presets
-----------------------
-
-The ``fit()`` function accepts named presets for common use cases. These presets
-configure the underlying optimizer, tolerances, and execution strategy.
-
-Selector Guide
-~~~~~~~~~~~~~~
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 20 60
-
-   * - Workflow
-     - Tier
-     - Use Case
-   * - ``"standard"``
-     - STANDARD
-     - **Default**. General purpose fitting ($10^{-8}$ tolerance).
-   * - ``"quality"``
-     - STANDARD
-     - **Max Precision**. Tight tolerances ($10^{-10}$) + 20 multi-starts.
-   * - ``"fast"``
-     - STANDARD
-     - **Max Speed**. Loose tolerances ($10^{-6}$), single-start.
-   * - ``"global_auto"``
-     - STANDARD
-     - **Smart Global**. Auto-selects CMA-ES/Multi-Start based on parameter scale.
-   * - ``"cmaes"``
-     - STANDARD
-     - **Global Search**. CMA-ES (BIPOP, 100 gens) for non-convex problems.
-   * - ``"cmaes-global"``
-     - STANDARD
-     - **Deep Global**. CMA-ES (200 gens, 2x population) for difficult landscapes.
-   * - ``"large_robust"``
-     - CHUNKED
-     - **Large Data**. Chunked processing + 10 starts.
-   * - ``"streaming"``
-     - STREAMING
-     - **Huge Data**. Out-of-core streaming + adaptive tolerances.
-   * - ``"hpc_distributed"``
-     - CHECKPOINT
-     - **HPC**. Multi-GPU/node with checkpointing.
-
-Detailed Preset Logic
-~~~~~~~~~~~~~~~~~~~~~
-
-1. Standard (``standard``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-The baseline for most curve fitting tasks. Uses JAX-accelerated Trust Region Reflective (``trf``)
-optimization.
-* **Tolerances**: $10^{-8}$ (Machine precision for float32/standard scientific work).
-* **Method**: Single start from provided ``p0``.
-
-2. Quality (``quality``)
-^^^^^^^^^^^^^^^^^^^^^^^^
-Brute-force local robustness. Assumes the landscape may have nearby local minima or saddle points.
-* **Strategy**: Tightens tolerances to $10^{-10}$ and runs **20 parallel starts** (randomized around ``p0``).
-
-3. Fast (``fast``)
-^^^^^^^^^^^^^^^^^^
-Optimization for high-throughput pipelines where "approximate" is sufficient (e.g., initial screening).
-* **Strategy**: Loosens tolerances to $10^{-6}$ to allow early exit.
-
-4. Global Auto (``global_auto``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Smart global optimization that adapts to the problem complexity.
-* **Strategy**: Automatically selects between **CMA-ES** (if parameter scales differ >1000x)
-  and **Multi-Start** (10 starts).
-* **Use Case**: The recommended default for "hard" problems.
-
-5. CMA-ES Standard (``cmaes``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Gradient-free global optimization for non-convex landscapes where ``trf`` gets stuck.
-* **Stage 1**: CMA-ES with **BIPOP** restarts (100 generations).
-* **Stage 2**: NLSQ refinement for covariance.
-* **Population**: Automatic ($4 + 3\ln(N)$).
-
-6. CMA-ES Global (``cmaes-global``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-"Scorched earth" global search for extremely difficult (multimodal) landscapes.
-* **Strategy**: Doubles the population size ($2 \times [4 + 3\ln(N)]$ and generation budget (200)
-  compared to standard ``cmaes``.
-
-7. Large Robust (``large_robust``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-For datasets that technically fit in RAM but cause OOM or slowdowns with full matrix operations.
-* **Strategy**: Uses ``ChunkedOptimizer``. Breaks Hessian calculation into manageable chunks.
-  Includes 10 random starts.
-
-8. Streaming (``streaming``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-True out-of-core processing for datasets larger than system RAM.
-* **Strategy**: Uses ``AdaptiveHybridStreamingOptimizer``. Streams data from disk, accumulating gradients iteratively.
-
-9. HPC Distributed (``hpc_distributed``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-For long-running jobs on clusters (Slurm/PBS).
-* **Strategy**: Enables **checkpointing** to survive preemptions and optimizes for multi-GPU scaling.
-
-Usage Examples
-~~~~~~~~~~~~~~
+Tolerances are set directly, not via presets:
 
 .. code-block:: python
 
-   from nlsq import fit, curve_fit
+   # Fast fitting with looser tolerances
+   result = fit(model, x, y, p0=[1, 2], gtol=1e-6, ftol=1e-6, xtol=1e-6)
 
-   # Automatic selection (recommended)
-   result = fit(model, x, y, p0=[1, 2], workflow="auto")
+   # High precision fitting
+   result = fit(model, x, y, p0=[1, 2], gtol=1e-10, ftol=1e-10, xtol=1e-10)
 
-   # Named preset
-   result = fit(model, x, y, p0=[1, 2], workflow="quality")
+Migration from Old Presets
+--------------------------
 
-   # With method='auto' in curve_fit
-   popt, pcov = curve_fit(model, x, y, p0=[1, 2], method="auto")
-
-   # Direct memory control
-   result = fit(model, x, y, p0=[1, 2], workflow="auto", memory_limit_gb=8.0)
-
-Optimization Goals
-------------------
-
-The ``OptimizationGoal`` enum controls tolerance scaling:
+.. versionchanged:: 0.6.3
+   The following presets were removed. Using them will raise ``ValueError``
+   with a migration hint.
 
 .. list-table::
    :header-rows: 1
    :widths: 20 80
 
-   * - Goal
-     - Description
-   * - **FAST**
-     - Prioritize speed. Uses one tier looser tolerances, skips multi-start.
-       Best for quick exploration or well-conditioned problems.
-   * - **ROBUST**
-     - Standard tolerances with multi-start for better global optimum.
-       Uses ``MultiStartOrchestrator`` for reliability. Best for production use.
-   * - **GLOBAL**
-     - Synonym for ROBUST. Emphasizes global optimization.
-   * - **MEMORY_EFFICIENT**
-     - Minimize memory usage with standard tolerances.
-       Prioritizes streaming/chunking with smaller chunk sizes.
-   * - **QUALITY**
-     - Highest precision as TOP PRIORITY. Uses one tier tighter tolerances,
-       enables multi-start, runs validation passes. Best for publication-quality results.
-
-.. code-block:: python
-
-   from nlsq import fit
-   from nlsq.core.workflow import OptimizationGoal
-
-   # Quality-focused fit
-   result = fit(model, x, y, p0=[1, 2], goal=OptimizationGoal.QUALITY)
-
-   # Speed-focused fit
-   result = fit(model, x, y, p0=[1, 2], goal=OptimizationGoal.FAST)
+   * - Old Preset
+     - New Equivalent
+   * - ``standard``
+     - ``workflow="auto"``
+   * - ``fast``
+     - ``workflow="auto", gtol=1e-6, ftol=1e-6, xtol=1e-6``
+   * - ``quality``
+     - ``workflow="auto_global", n_starts=20``
+   * - ``large_robust``
+     - ``workflow="auto"`` (auto-detects large data)
+   * - ``streaming``
+     - ``workflow="auto"`` (auto-detects memory pressure)
+   * - ``hpc_distributed``
+     - ``workflow="hpc"``
+   * - ``cmaes``
+     - ``workflow="auto_global"`` (auto-selects CMA-ES)
+   * - ``cmaes-global``
+     - ``workflow="auto_global", cmaes_config=CMAESConfig(n_generations=200)``
+   * - ``global_auto``
+     - ``workflow="auto_global"``
 
 4-Layer Defense Strategy
 ------------------------
@@ -293,24 +265,6 @@ The layers activate automatically:
 2. **Adaptive Step Size**: Scales step size based on fit quality (1e-6 to 0.001)
 3. **Cost-Increase Guard**: Aborts if loss increases > 5%
 4. **Step Clipping**: Limits parameter update magnitude (max norm 0.1)
-
-Defense presets for common scenarios:
-
-.. code-block:: python
-
-   from nlsq import HybridStreamingConfig
-
-   # For warm-start refinement (strictest)
-   config = HybridStreamingConfig.defense_strict()
-
-   # For exploration (more aggressive learning)
-   config = HybridStreamingConfig.defense_relaxed()
-
-   # For production scientific computing
-   config = HybridStreamingConfig.scientific_default()
-
-   # To disable (pre-0.3.6 behavior)
-   config = HybridStreamingConfig.defense_disabled()
 
 Where to go next
 ----------------

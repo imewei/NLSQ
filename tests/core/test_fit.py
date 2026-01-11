@@ -91,31 +91,46 @@ class TestFitWithWorkflowAuto:
 
 @pytest.mark.serial
 class TestFitWithNamedWorkflow:
-    """Test fit() with named workflow (e.g., 'standard')."""
+    """Test fit() with the new 3-workflow system (v0.6.3).
 
-    def test_fit_with_standard_workflow(self, sample_data):
-        """Test fit() with workflow='standard'."""
+    .. versionchanged:: 0.6.3
+       Updated from old preset names to new workflow system.
+    """
+
+    def test_fit_with_auto_workflow(self, sample_data):
+        """Test fit() with workflow='auto'."""
         x, y = sample_data
-        result = fit(exponential_model, x, y, p0=[2.0, 1.0], workflow="standard")
+        result = fit(exponential_model, x, y, p0=[2.0, 1.0], workflow="auto")
 
         assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
         assert len(result.popt) == 2
 
-    def test_fit_with_quality_workflow(self, sample_data):
-        """Test fit() with workflow='quality'."""
+    def test_fit_with_auto_global_workflow(self, sample_data):
+        """Test fit() with workflow='auto_global'."""
         x, y = sample_data
         result = fit(
             exponential_model,
             x,
             y,
             p0=[2.0, 1.0],
-            workflow="quality",
+            workflow="auto_global",
             bounds=([0, 0], [10, 5]),
         )
 
         assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
+
+    def test_removed_preset_raises_error(self, sample_data):
+        """Test that removed presets raise helpful ValueError."""
+        from nlsq.core.minpack import REMOVED_PRESETS
+
+        x, y = sample_data
+
+        for preset in ["standard", "quality"]:
+            assert preset in REMOVED_PRESETS
+            with pytest.raises(ValueError, match=r"was removed in v0\.6\.3"):
+                fit(exponential_model, x, y, p0=[2.0, 1.0], workflow=preset)
 
 
 class TestFitWithCustomConfigObject:

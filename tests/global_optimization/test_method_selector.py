@@ -216,7 +216,9 @@ class TestMethodSelectorLogging:
         upper = np.array([1, 1])
 
         with (
-            caplog.at_level(logging.INFO),
+            caplog.at_level(
+                logging.INFO, logger="nlsq.global_optimization.method_selector"
+            ),
             patch(
                 "nlsq.global_optimization.method_selector.is_evosax_available",
                 return_value=False,
@@ -226,9 +228,9 @@ class TestMethodSelectorLogging:
                 requested_method="cmaes", lower_bounds=lower, upper_bounds=upper
             )
 
-        # Should log about fallback
+        # Should log about fallback - look for "falling" (from "Falling back")
         assert any(
-            "fallback" in record.message.lower()
+            "falling" in record.message.lower()
             or "multi-start" in record.message.lower()
             for record in caplog.records
         )

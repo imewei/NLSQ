@@ -1,10 +1,13 @@
-"""Tests for global_auto preset auto-selection logic.
+"""Tests for auto_global workflow auto-selection logic.
 
 Tests cover:
 - Auto-selection between CMA-ES and Multi-Start via MethodSelector
 - Wide bounds (>1000x scale) trigger CMA-ES selection
 - Narrow bounds trigger Multi-Start selection
-- Integration with fit() function and workflow presets
+- Integration with fit() function and workflow parameter
+
+.. versionchanged:: 0.6.3
+   Tests updated from global_auto preset to auto_global workflow.
 """
 
 from __future__ import annotations
@@ -23,8 +26,8 @@ def model(x, a, b):
     return a * jnp.exp(-b * x)
 
 
-class TestGlobalAutoPresetSelection:
-    """Tests for global_auto preset method selection logic."""
+class TestAutoGlobalMethodSelection:
+    """Tests for auto_global workflow method selection logic."""
 
     @pytest.mark.skipif(not is_evosax_available(), reason="evosax not installed")
     def test_wide_bounds_selects_cmaes(self):
@@ -46,7 +49,7 @@ class TestGlobalAutoPresetSelection:
             y,
             p0=[1.0, 0.5],
             bounds=bounds,
-            workflow="global_auto",
+            workflow="auto_global",  # NEW: use auto_global workflow
         )
 
         # Should succeed and return valid result
@@ -76,53 +79,33 @@ class TestGlobalAutoPresetSelection:
             y,
             p0=[1.0, 1.0],
             bounds=bounds,
-            workflow="global_auto",
+            workflow="auto_global",  # NEW: use auto_global workflow
         )
 
         # Should succeed and return valid result
         assert result is not None
         assert "x" in result or hasattr(result, "x")
 
-    def test_global_auto_preset_exists(self):
-        """Test that global_auto preset is defined in WORKFLOW_PRESETS."""
-        from nlsq.core.minpack import WORKFLOW_PRESETS
+    def test_removed_presets_raise_error(self):
+        """Test that using removed global_auto preset raises ValueError."""
+        from nlsq import fit
+        from nlsq.core.minpack import REMOVED_PRESETS
 
-        assert "global_auto" in WORKFLOW_PRESETS
+        assert "global_auto" in REMOVED_PRESETS
 
-        preset = WORKFLOW_PRESETS["global_auto"]
-        assert preset["method"] == "auto"
-        assert preset["enable_multistart"] is True  # Fallback
-        assert "cmaes_preset" in preset
+        np.random.seed(42)
+        x = jnp.linspace(0, 5, 50)
+        y = 2.5 * jnp.exp(-0.5 * x)
 
-    def test_method_auto_triggers_selector(self):
-        """Test that method='auto' in preset triggers MethodSelector."""
-        from nlsq.global_optimization.method_selector import MethodSelector
-
-        selector = MethodSelector()
-
-        # Wide bounds should select CMA-ES
-        lower_wide = np.array([0.01, 0.0001])
-        upper_wide = np.array([100.0, 10.0])
-
-        with patch(
-            "nlsq.global_optimization.method_selector.is_evosax_available",
-            return_value=True,
-        ):
-            method = selector.select(
-                requested_method="auto",
-                lower_bounds=lower_wide,
-                upper_bounds=upper_wide,
+        with pytest.raises(ValueError, match=r"was removed in v0\.6\.3"):
+            fit(
+                model,
+                x,
+                y,
+                p0=[1.0, 0.5],
+                bounds=([0.1, 0.1], [10.0, 10.0]),
+                workflow="global_auto",  # OLD: removed preset
             )
-            # Scale ratio = 9999.9 / 0.0099 > 1000
-            # Actually: ranges = [99.99, 9.9999], ratio = ~10
-            # Need to fix this - let me compute correctly
-            # lower = [0.01, 0.0001], upper = [100.0, 10.0]
-            # ranges = [99.99, 9.9999]
-            # max/min = 99.99/9.9999 = ~10, not >1000
-
-            # To get >1000x ratio, need bounds like:
-            # lower = [0, 0], upper = [10000, 1] gives ranges = [10000, 1], ratio = 10000
-            pass  # Test corrected below
 
     @pytest.mark.skipif(not is_evosax_available(), reason="evosax not installed")
     def test_truly_wide_bounds_selects_cmaes(self):
@@ -160,12 +143,12 @@ class TestGlobalAutoPresetSelection:
         assert method == "multi-start"
 
 
-class TestGlobalAutoFitIntegration:
-    """Integration tests for global_auto preset through fit() API."""
+class TestAutoGlobalFitIntegration:
+    """Integration tests for auto_global workflow through fit() API."""
 
     @pytest.mark.skipif(not is_evosax_available(), reason="evosax not installed")
-    def test_fit_with_global_auto_wide_bounds(self):
-        """Test fit() with global_auto preset and wide bounds uses CMA-ES."""
+    def test_fit_with_auto_global_wide_bounds(self):
+        """Test fit() with auto_global workflow and wide bounds uses CMA-ES."""
         from nlsq import fit
 
         # Generate test data
@@ -182,7 +165,7 @@ class TestGlobalAutoFitIntegration:
             y,
             p0=[1.0, 0.5],
             bounds=bounds,
-            workflow="global_auto",
+            workflow="auto_global",  # NEW: use auto_global workflow
         )
 
         assert result.success
@@ -191,8 +174,8 @@ class TestGlobalAutoFitIntegration:
         assert 1.0 < popt[0] < 5.0  # a should be around 2.5
         assert 0.1 < popt[1] < 1.0  # b should be around 0.5
 
-    def test_fit_with_global_auto_narrow_bounds(self):
-        """Test fit() with global_auto preset and narrow bounds uses Multi-Start."""
+    def test_fit_with_auto_global_narrow_bounds(self):
+        """Test fit() with auto_global workflow and narrow bounds uses Multi-Start."""
         from nlsq import fit
 
         # Generate test data
@@ -209,7 +192,7 @@ class TestGlobalAutoFitIntegration:
             y,
             p0=[2.0, 0.5],
             bounds=bounds,
-            workflow="global_auto",
+            workflow="auto_global",  # NEW: use auto_global workflow
         )
 
         assert result.success

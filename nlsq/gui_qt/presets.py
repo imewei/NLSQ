@@ -1,21 +1,38 @@
 """Preset configurations for the NLSQ GUI.
 
 This module defines preset configurations for common curve fitting scenarios.
-The presets are designed to be consistent with nlsq.minpack.WORKFLOW_PRESETS
-while providing a GUI-friendly interface.
+The presets are synchronized with nlsq.core.minpack.WORKFLOW_PRESETS to ensure
+consistent behavior between CLI and GUI interfaces.
 
-Presets:
-    - fast: Speed-optimized with looser tolerances, no multi-start
-    - robust: Balanced precision/speed, multi-start enabled (n_starts=10)
-    - quality: Highest precision, tighter tolerances, multi-start (n_starts=20)
-    - standard: Default settings (same as NLSQ defaults)
+Core Presets (matching WORKFLOW_PRESETS):
+    - standard: Default curve_fit() with default tolerances (1e-8)
+    - fast: Speed-optimized with looser tolerances (1e-6), no multi-start
+    - quality: Highest precision, tighter tolerances (1e-10), multi-start (n_starts=20)
+    - large_robust: Chunked processing with multi-start for large datasets
+    - streaming: AdaptiveHybridStreamingOptimizer for huge datasets
+    - hpc_distributed: Multi-GPU/node configuration for HPC clusters
+
+Global Optimization Presets:
+    - cmaes: CMA-ES global optimization with BIPOP restarts (100 gens)
+    - cmaes-global: Thorough CMA-ES exploration (200 gens, 2x population)
+    - global_auto: Auto-selects CMA-ES or Multi-Start based on parameter scale
 """
 
 from typing import Any
 
 # GUI Preset configurations
-# These are designed to match nlsq.minpack.WORKFLOW_PRESETS for consistency
+# Synchronized with nlsq.core.minpack.WORKFLOW_PRESETS for consistency
 PRESETS: dict[str, dict[str, Any]] = {
+    # === Core Presets (matching WORKFLOW_PRESETS) ===
+    "standard": {
+        "description": "Standard curve_fit() with default tolerances",
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "enable_multistart": False,
+        "n_starts": 0,
+        "tier": "STANDARD",
+    },
     "fast": {
         "description": "Speed-optimized with looser tolerances",
         "gtol": 1e-6,
@@ -25,17 +42,8 @@ PRESETS: dict[str, dict[str, Any]] = {
         "n_starts": 0,
         "tier": "STANDARD",
     },
-    "robust": {
-        "description": "Balanced precision and speed with multi-start",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "enable_multistart": True,
-        "n_starts": 10,
-        "tier": "STANDARD",
-    },
     "quality": {
-        "description": "Highest precision with multi-start for best results",
+        "description": "Highest precision with multi-start and tighter tolerances",
         "gtol": 1e-10,
         "ftol": 1e-10,
         "xtol": 1e-10,
@@ -43,13 +51,66 @@ PRESETS: dict[str, dict[str, Any]] = {
         "n_starts": 20,
         "tier": "STANDARD",
     },
-    "standard": {
-        "description": "Default NLSQ settings",
+    "large_robust": {
+        "description": "Chunked processing with multi-start for large datasets",
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "enable_multistart": True,
+        "n_starts": 10,
+        "tier": "CHUNKED",
+    },
+    "streaming": {
+        "description": "AdaptiveHybridStreamingOptimizer for huge datasets",
+        "gtol": 1e-7,
+        "ftol": 1e-7,
+        "xtol": 1e-7,
+        "enable_multistart": False,
+        "n_starts": 0,
+        "tier": "STREAMING",
+    },
+    "hpc_distributed": {
+        "description": "Multi-GPU/node configuration for HPC clusters",
+        "gtol": 1e-6,
+        "ftol": 1e-6,
+        "xtol": 1e-6,
+        "enable_multistart": True,
+        "n_starts": 10,
+        "enable_checkpoints": True,
+        "tier": "STREAMING_CHECKPOINT",
+    },
+    # === Global Optimization Presets ===
+    "cmaes": {
+        "description": "CMA-ES global optimization with BIPOP restarts",
         "gtol": 1e-8,
         "ftol": 1e-8,
         "xtol": 1e-8,
         "enable_multistart": False,
         "n_starts": 0,
+        "method": "cmaes",
+        "cmaes_preset": "cmaes",
+        "tier": "STANDARD",
+    },
+    "cmaes-global": {
+        "description": "Thorough CMA-ES exploration with extended generations",
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "enable_multistart": False,
+        "n_starts": 0,
+        "method": "cmaes",
+        "cmaes_preset": "cmaes-global",
+        "tier": "STANDARD",
+    },
+    "global_auto": {
+        "description": "Auto-selects CMA-ES or Multi-Start based on parameter scale",
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "enable_multistart": True,
+        "n_starts": 10,
+        "method": "auto",
+        "cmaes_preset": "cmaes",
         "tier": "STANDARD",
     },
 }
@@ -61,7 +122,9 @@ def get_preset(name: str) -> dict[str, Any]:
     Parameters
     ----------
     name : str
-        The preset name ("fast", "robust", "quality", "standard").
+        The preset name. Available presets:
+        - Core: "standard", "fast", "quality", "large_robust", "streaming", "hpc_distributed"
+        - Global: "cmaes", "cmaes-global", "global_auto"
 
     Returns
     -------
@@ -84,6 +147,10 @@ def get_preset(name: str) -> dict[str, Any]:
     >>> preset = get_preset("quality")
     >>> preset["n_starts"]
     20
+
+    >>> preset = get_preset("cmaes")
+    >>> preset["method"]
+    'cmaes'
     """
     name_lower = name.lower()
     if name_lower not in PRESETS:
@@ -215,7 +282,8 @@ def validate_preset_consistency() -> bool:
     """Validate that GUI presets are consistent with WORKFLOW_PRESETS.
 
     This function checks that the GUI presets match the corresponding
-    WORKFLOW_PRESETS in nlsq.minpack.
+    WORKFLOW_PRESETS in nlsq.core.minpack. Presets that exist only in GUI
+    (like "robust") are not validated.
 
     Returns
     -------
@@ -229,35 +297,47 @@ def validate_preset_consistency() -> bool:
     """
     from nlsq.core.minpack import WORKFLOW_PRESETS
 
-    # Check fast preset
-    gui_fast = PRESETS["fast"]
-    minpack_fast = WORKFLOW_PRESETS["fast"]
-    assert gui_fast["gtol"] == minpack_fast["gtol"], "Fast gtol mismatch"
-    assert gui_fast["ftol"] == minpack_fast["ftol"], "Fast ftol mismatch"
-    assert gui_fast["xtol"] == minpack_fast["xtol"], "Fast xtol mismatch"
-    assert gui_fast["enable_multistart"] == minpack_fast["enable_multistart"], (
-        "Fast multistart mismatch"
-    )
+    # Presets that should match between GUI and WORKFLOW_PRESETS
+    presets_to_validate = [
+        "standard",
+        "fast",
+        "quality",
+        "large_robust",
+        "streaming",
+        "hpc_distributed",
+        "cmaes",
+        "cmaes-global",
+        "global_auto",
+    ]
 
-    # Check quality preset
-    gui_quality = PRESETS["quality"]
-    minpack_quality = WORKFLOW_PRESETS["quality"]
-    assert gui_quality["gtol"] == minpack_quality["gtol"], "Quality gtol mismatch"
-    assert gui_quality["ftol"] == minpack_quality["ftol"], "Quality ftol mismatch"
-    assert gui_quality["xtol"] == minpack_quality["xtol"], "Quality xtol mismatch"
-    assert gui_quality["enable_multistart"] == minpack_quality["enable_multistart"], (
-        "Quality multistart mismatch"
-    )
-    assert gui_quality["n_starts"] == minpack_quality["n_starts"], (
-        "Quality n_starts mismatch"
-    )
+    for name in presets_to_validate:
+        gui_preset = PRESETS[name]
+        minpack_preset = WORKFLOW_PRESETS[name]
 
-    # Check standard preset
-    gui_standard = PRESETS["standard"]
-    minpack_standard = WORKFLOW_PRESETS["standard"]
-    assert gui_standard["gtol"] == minpack_standard["gtol"], "Standard gtol mismatch"
-    assert gui_standard["ftol"] == minpack_standard["ftol"], "Standard ftol mismatch"
-    assert gui_standard["xtol"] == minpack_standard["xtol"], "Standard xtol mismatch"
+        # Check tolerances
+        assert gui_preset["gtol"] == minpack_preset["gtol"], f"{name} gtol mismatch"
+        assert gui_preset["ftol"] == minpack_preset["ftol"], f"{name} ftol mismatch"
+        assert gui_preset["xtol"] == minpack_preset["xtol"], f"{name} xtol mismatch"
+
+        # Check multistart settings
+        assert gui_preset["enable_multistart"] == minpack_preset["enable_multistart"], (
+            f"{name} enable_multistart mismatch"
+        )
+
+        # Check n_starts if multistart is enabled
+        if minpack_preset.get("n_starts") is not None:
+            assert gui_preset["n_starts"] == minpack_preset["n_starts"], (
+                f"{name} n_starts mismatch"
+            )
+
+        # Check tier
+        assert gui_preset["tier"] == minpack_preset["tier"], f"{name} tier mismatch"
+
+        # Check method if specified
+        if "method" in minpack_preset:
+            assert gui_preset.get("method") == minpack_preset["method"], (
+                f"{name} method mismatch"
+            )
 
     return True
 

@@ -276,6 +276,7 @@ metadata:
 # │   - hpc_distributed:  Multi-GPU/node configuration for HPC clusters (PBS)   │
 # │   - cmaes:            CMA-ES global optimization with BIPOP restarts        │
 # │   - cmaes-global:     Thorough CMA-ES exploration (2x population, 200 gens) │
+# │   - global_auto:      Auto-selects CMA-ES or Multi-Start based on scale     │
 # └─────────────────────────────────────────────────────────────────────────────┘
 #
 # Note: For custom workflows beyond these presets, define them in the 'workflows'

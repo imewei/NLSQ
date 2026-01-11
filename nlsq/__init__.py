@@ -347,6 +347,9 @@ def fit(
     check_finite: bool = True,
     bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
     method: MethodLiteral | None = None,
+    # NEW: Workflow parameter (v0.6.3)
+    workflow: str | None = None,
+    # Legacy: preset parameter (deprecated)
     preset: Literal["fast", "robust", "global", "streaming", "large"] | None = None,
     # Multi-start parameters (can override preset)
     multistart: bool | None = None,
@@ -453,6 +456,29 @@ def fit(
     curve_fit_large : Specialized API for large datasets
     MemoryBudgetSelector : Memory-based optimizer selection
     """
+    # NEW WORKFLOW SYSTEM (v0.6.3)
+    # If workflow parameter is specified, delegate to minpack.fit()
+    if workflow is not None:
+        from nlsq.core.minpack import fit as minpack_fit
+
+        # Forward to the new workflow-based fit
+        return minpack_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,
+            workflow=workflow,
+            n_starts=n_starts if n_starts is not None else 10,
+            memory_limit_gb=memory_limit_gb,
+            **kwargs,
+        )
+
+    # LEGACY PATH: preset-based configuration (for backwards compatibility)
     # Input validation
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
