@@ -1,13 +1,13 @@
 """
 NLSQ Unified fit() Entry Point - Quickstart
 
-This script demonstrates the unified fit() entry point for curve fitting.
+This script demonstrates the unified fit() entry point for curve fitting
+with the new 3-workflow system (v0.6.3).
 
-Features demonstrated:
-- Using fit() with automatic memory-based strategy selection
-- Applying preset configurations (fast, standard, quality)
-- Using fit() with explicit multistart configuration
-- Comparing fit(), curve_fit(), and curve_fit_large()
+The Three Workflows:
+- workflow="auto"        : Memory-aware local optimization (bounds optional)
+- workflow="auto_global" : Memory-aware global optimization (bounds required)
+- workflow="hpc"         : auto_global + checkpointing for HPC (bounds required)
 
 Run this example:
     python examples/scripts/08_workflow_system/01_fit_quickstart.py
@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from nlsq import OptimizationGoal, curve_fit, curve_fit_large, fit
+from nlsq import curve_fit, curve_fit_large, fit
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -32,7 +32,7 @@ def exponential_decay(x, a, b, c):
 
 def main():
     print("=" * 70)
-    print("Unified fit() Entry Point - Quickstart")
+    print("Unified fit() Entry Point - Quickstart (v0.6.3)")
     print("=" * 70)
     print()
 
@@ -59,96 +59,109 @@ def main():
     print(f"  Dataset size: {n_samples} points")
 
     # =========================================================================
-    # 2. Basic fit() usage with auto strategy selection
+    # 2. workflow='auto' - Local optimization with automatic memory strategy
     # =========================================================================
     print()
-    print("2. Basic fit() - automatic memory-based strategy selection...")
+    print("2. workflow='auto' - Local optimization with automatic memory strategy...")
+    print("   (Default workflow, bounds are optional)")
 
-    popt, pcov = fit(
+    popt_auto, pcov_auto = fit(
         exponential_decay,
         x_data,
         y_data,
         p0=[1.0, 1.0, 0.0],
-        workflow="auto",  # Automatic strategy selection based on memory
+        workflow="auto",  # Default: automatic memory-based strategy selection
     )
 
-    print(f"  Fitted: a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
+    print(f"  Fitted: a={popt_auto[0]:.4f}, b={popt_auto[1]:.4f}, c={popt_auto[2]:.4f}")
     print(f"  True:   a={true_a:.4f}, b={true_b:.4f}, c={true_c:.4f}")
 
     # =========================================================================
-    # 3. Using presets
+    # 3. workflow='auto' with bounds
     # =========================================================================
     print()
-    print("3. Using presets...")
+    print("3. workflow='auto' with optional bounds...")
 
     bounds = ([0.1, 0.1, -1.0], [10.0, 5.0, 2.0])
 
-    # Preset: 'fast'
+    popt_bounded, _ = fit(
+        exponential_decay,
+        x_data,
+        y_data,
+        p0=[1.0, 1.0, 0.0],
+        bounds=bounds,
+        workflow="auto",  # Bounds are optional for 'auto'
+    )
+    print(
+        f"  Bounded fit: a={popt_bounded[0]:.4f}, b={popt_bounded[1]:.4f}, c={popt_bounded[2]:.4f}"
+    )
+
+    # =========================================================================
+    # 4. workflow='auto_global' - Global optimization with automatic method selection
+    # =========================================================================
+    print()
+    print("4. workflow='auto_global' - Global optimization (bounds required)...")
+    print("   Automatically selects CMA-ES or Multi-Start based on parameter scales")
+
+    popt_global, _ = fit(
+        exponential_decay,
+        x_data,
+        y_data,
+        p0=[1.0, 1.0, 0.0],
+        bounds=bounds,
+        workflow="auto_global",  # Bounds required for global optimization
+        n_starts=5,  # Number of multi-start runs (if Multi-Start is selected)
+    )
+    print(
+        f"  Global fit: a={popt_global[0]:.4f}, b={popt_global[1]:.4f}, c={popt_global[2]:.4f}"
+    )
+
+    # =========================================================================
+    # 5. Adjusting tolerances directly
+    # =========================================================================
+    print()
+    print("5. Adjusting tolerances directly (not via presets)...")
+    print("   Set gtol, ftol, xtol explicitly for precision control")
+
+    # Looser tolerances for speed
     popt_fast, _ = fit(
         exponential_decay,
         x_data,
         y_data,
         p0=[1.0, 1.0, 0.0],
         bounds=bounds,
-        workflow="fast",
+        workflow="auto",
+        gtol=1e-6,
+        ftol=1e-6,
+        xtol=1e-6,
     )
     print(
-        f"  workflow='fast':     a={popt_fast[0]:.4f}, b={popt_fast[1]:.4f}, c={popt_fast[2]:.4f}"
+        f"  Fast (gtol=1e-6): a={popt_fast[0]:.4f}, b={popt_fast[1]:.4f}, c={popt_fast[2]:.4f}"
     )
 
-    # Preset: 'standard'
-    popt_standard, _ = fit(
+    # Tighter tolerances for precision
+    popt_precise, _ = fit(
         exponential_decay,
         x_data,
         y_data,
         p0=[1.0, 1.0, 0.0],
         bounds=bounds,
-        workflow="standard",
+        workflow="auto",
+        gtol=1e-10,
+        ftol=1e-10,
+        xtol=1e-10,
     )
     print(
-        f"  workflow='standard': a={popt_standard[0]:.4f}, b={popt_standard[1]:.4f}, c={popt_standard[2]:.4f}"
-    )
-
-    # Preset: 'quality'
-    popt_quality, _ = fit(
-        exponential_decay,
-        x_data,
-        y_data,
-        p0=[1.0, 1.0, 0.0],
-        bounds=bounds,
-        workflow="quality",
-    )
-    print(
-        f"  workflow='quality':  a={popt_quality[0]:.4f}, b={popt_quality[1]:.4f}, c={popt_quality[2]:.4f}"
+        f"  Precise (gtol=1e-10): a={popt_precise[0]:.4f}, b={popt_precise[1]:.4f}, c={popt_precise[2]:.4f}"
     )
 
     # =========================================================================
-    # 4. Using fit() with explicit multistart
+    # 6. Comparison with curve_fit() and curve_fit_large()
     # =========================================================================
     print()
-    print("4. Using fit() with explicit multistart configuration...")
+    print("6. Comparison with other APIs...")
 
-    popt_ms, _ = fit(
-        exponential_decay,
-        x_data,
-        y_data,
-        p0=[1.0, 1.0, 0.0],
-        bounds=bounds,
-        multistart=True,
-        n_starts=15,
-        sampler="lhs",
-    )
-    print(
-        f"  multistart result: a={popt_ms[0]:.4f}, b={popt_ms[1]:.4f}, c={popt_ms[2]:.4f}"
-    )
-
-    # =========================================================================
-    # 5. Comparison with curve_fit() and curve_fit_large()
-    # =========================================================================
-    print()
-    print("5. Comparison with other APIs...")
-
-    # curve_fit()
+    # curve_fit() - SciPy-compatible API
     popt_cf, _ = curve_fit(
         exponential_decay,
         x_data,
@@ -160,9 +173,7 @@ def main():
         f"  curve_fit():       a={popt_cf[0]:.4f}, b={popt_cf[1]:.4f}, c={popt_cf[2]:.4f}"
     )
 
-    # curve_fit_large() - uses standard curve_fit for small datasets
-    # Note: curve_fit_large auto-detects dataset size and falls back to curve_fit
-    # for small datasets. Here we just call it to show the API.
+    # curve_fit_large() - for large datasets
     popt_cfl, _ = curve_fit_large(
         exponential_decay,
         x_data,
@@ -175,12 +186,12 @@ def main():
     )
 
     # =========================================================================
-    # 6. Visualization
+    # 7. Visualization
     # =========================================================================
     print()
-    print("6. Saving visualization...")
+    print("7. Saving visualization...")
 
-    y_pred = exponential_decay(x_data, *popt)
+    y_pred = exponential_decay(x_data, *popt_auto)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -213,29 +224,32 @@ def main():
     # =========================================================================
     print()
     print("=" * 70)
-    print("Summary")
+    print("Summary - The Three Workflows (v0.6.3)")
     print("=" * 70)
-    print(f"True parameters: a={true_a}, b={true_b}, c={true_c}")
     print()
-    print("Results from different approaches:")
-    print(f"  fit() auto:        a={popt[0]:.4f}, b={popt[1]:.4f}, c={popt[2]:.4f}")
+    print("Workflows:")
+    print("  workflow='auto'        : Local optimization, bounds optional")
+    print("                           Auto-selects: STANDARD / CHUNKED / STREAMING")
+    print()
+    print("  workflow='auto_global' : Global optimization, bounds required")
+    print("                           Auto-selects: CMA-ES or Multi-Start")
     print(
-        f"  workflow='fast':   a={popt_fast[0]:.4f}, b={popt_fast[1]:.4f}, c={popt_fast[2]:.4f}"
+        "                           Plus memory strategy: STANDARD / CHUNKED / STREAMING"
     )
-    print(
-        f"  workflow='quality':a={popt_quality[0]:.4f}, b={popt_quality[1]:.4f}, c={popt_quality[2]:.4f}"
-    )
-    print(
-        f"  curve_fit():       a={popt_cf[0]:.4f}, b={popt_cf[1]:.4f}, c={popt_cf[2]:.4f}"
-    )
+    print()
+    print("  workflow='hpc'         : auto_global + checkpointing for HPC")
+    print("                           For long-running cluster jobs")
+    print()
+    print("Tolerance control (set directly, not via presets):")
+    print("  gtol, ftol, xtol=1e-6  : Fast fitting, looser tolerances")
+    print("  gtol, ftol, xtol=1e-10 : High precision fitting")
     print()
     print("Key takeaways:")
     print("  - fit() is the unified entry point with automatic strategy selection")
-    print("  - Use workflow='auto' for memory-based automatic strategy selection")
-    print("  - Use workflow presets (fast, standard, quality) for quick configuration")
-    print("  - Use multistart=True with n_starts/sampler for global optimization")
-    print("  - Choose API based on your needs: fit() for general use,")
-    print("    curve_fit() for SciPy compatibility, curve_fit_large() for big data")
+    print("  - Use workflow='auto' for standard local optimization (default)")
+    print("  - Use workflow='auto_global' for global search (multi-modal problems)")
+    print("  - Use workflow='hpc' for long-running HPC jobs with checkpointing")
+    print("  - Set tolerances directly (gtol, ftol, xtol) for precision control")
 
 
 if __name__ == "__main__":

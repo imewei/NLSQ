@@ -1,14 +1,26 @@
 # Section 08: Workflow System
 
-**The unified `fit()` API with automatic memory-based strategy selection for any dataset size.**
+**The unified `fit()` API with automatic memory-based strategy selection (v0.6.3).**
 
 ---
 
 ## Overview
 
-The workflow system provides a single entry point, `fit()`, that automatically selects
-the optimal fitting strategy based on your dataset size, available memory, and optimization
-goals. It uses a memory-based decision tree to choose between three strategies:
+NLSQ v0.6.3 simplifies the workflow system to **three smart workflows** that automatically
+select the optimal fitting strategy based on your dataset size, available memory, and
+optimization requirements.
+
+### The Three Workflows
+
+| Workflow | Description | Bounds | Use Case |
+|----------|-------------|--------|----------|
+| `auto` | Memory-aware local optimization | Optional | **Default**. Standard curve fitting. |
+| `auto_global` | Memory-aware global optimization | Required | Multi-modal problems, unknown initial guess. |
+| `hpc` | `auto_global` + checkpointing | Required | Long-running HPC jobs. |
+
+### Memory Strategies (Auto-Selected)
+
+Each workflow automatically selects the optimal memory strategy:
 
 | Strategy | Dataset Size | Memory Model | Description |
 |----------|--------------|--------------|-------------|
@@ -16,16 +28,25 @@ goals. It uses a memory-based decision tree to choose between three strategies:
 | `chunked` | Jacobian exceeds memory | O(chunk_size) | Memory-managed chunk processing |
 | `streaming` | Data exceeds memory | O(batch_size) | Mini-batch gradient descent |
 
-Instead of choosing which function to use, simply call `fit()` and let NLSQ decide:
-
 ```python
 from nlsq import fit
 
-# Works for any dataset size - automatic strategy selection
-popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, workflow="auto")
+# workflow='auto' - Local optimization (default)
+popt, pcov = fit(model, x, y, p0=p0, workflow="auto")
 
-# Or with a named preset for specific behavior
-popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, workflow="quality")
+# workflow='auto_global' - Global optimization (bounds required)
+popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, workflow="auto_global")
+
+# workflow='hpc' - HPC with checkpointing
+popt, pcov = fit(
+    model,
+    x,
+    y,
+    p0=p0,
+    bounds=bounds,
+    workflow="hpc",
+    checkpoint_dir="/scratch/checkpoints",
+)
 ```
 
 ---
@@ -34,17 +55,10 @@ popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, workflow="quality")
 
 | # | Script | Level | Description |
 |---|--------|-------|-------------|
-| 01 | [01_fit_quickstart.py](01_fit_quickstart.py) | Beginner | Basic `fit()` usage, workflow presets, comparison with `curve_fit()` |
+| 01 | [01_fit_quickstart.py](01_fit_quickstart.py) | Beginner | Basic `fit()` usage with the 3 workflows |
 | 02 | [02_workflow_tiers.py](02_workflow_tiers.py) | Intermediate | MemoryBudget, MemoryBudgetSelector, strategy decision tree |
-| 03 | [03_optimization_goals.py](03_optimization_goals.py) | Intermediate | FAST, ROBUST, QUALITY goals, adaptive tolerances |
-| 04 | [04_workflow_presets.py](04_workflow_presets.py) | Beginner | WORKFLOW_PRESETS dictionary, defense layer presets |
-| 05 | [05_yaml_configuration.py](05_yaml_configuration.py) | Intermediate | File-based config, environment variable overrides |
-| 06 | [06_auto_selection.py](06_auto_selection.py) | Advanced | MemoryBudgetSelector internals, adaptive tolerances |
-| 07 | [07_hpc_and_checkpointing.py](07_hpc_and_checkpointing.py) | Advanced | PBS Pro cluster detection, checkpoint/resume, fault tolerance |
-| 08 | [08_custom_presets.py](08_custom_presets.py) | Intermediate | Building domain-specific configs with kwargs factory pattern |
-| 09 | [09_kinetics_presets.py](09_kinetics_presets.py) | Intermediate | Chemical/enzyme kinetics: rate constants, Michaelis-Menten |
-| 10 | [10_saxs_presets.py](10_saxs_presets.py) | Intermediate | Small-angle X-ray scattering form factor fitting |
-| 11 | [11_xpcs_presets.py](11_xpcs_presets.py) | Intermediate | X-ray photon correlation spectroscopy fitting |
+| 06 | [06_auto_selection.py](06_auto_selection.py) | Advanced | `auto_global` method selection (CMA-ES vs Multi-Start) |
+| 07 | [07_hpc_and_checkpointing.py](07_hpc_and_checkpointing.py) | Advanced | PBS Pro cluster detection, checkpoint/resume |
 
 ---
 
@@ -67,24 +81,31 @@ NLSQ_EXAMPLES_QUICK=1 python examples/scripts/08_workflow_system/07_hpc_and_chec
 ```python
 from nlsq import fit
 
-# Basic usage - automatic workflow selection
+# workflow='auto' - Local optimization (bounds optional)
+popt, pcov = fit(model, x, y, p0=p0, workflow="auto")
+
+# workflow='auto' with bounds
 popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, workflow="auto")
 
-# With a named preset
-popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, workflow="quality")
+# workflow='auto_global' - Global optimization (bounds required)
+# Auto-selects CMA-ES or Multi-Start based on parameter scale ratio
+popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, workflow="auto_global", n_starts=10)
 
-# With explicit parameters
+# workflow='hpc' - For HPC cluster jobs with checkpointing
 popt, pcov = fit(
     model,
     x,
     y,
     p0=p0,
     bounds=bounds,
-    workflow="standard",
-    multistart=True,
-    n_starts=10,
-    sampler="sobol",
-    gtol=1e-10,
+    workflow="hpc",
+    checkpoint_dir="/scratch/my_job/checkpoints",
+    checkpoint_interval=10,
+)
+
+# Tolerance control (set directly, not via presets)
+popt, pcov = fit(
+    model, x, y, p0=p0, workflow="auto", gtol=1e-10, ftol=1e-10, xtol=1e-10
 )
 ```
 
@@ -115,65 +136,18 @@ print(f"Selected strategy: {strategy}")  # 'standard', 'chunked', or 'streaming'
 4. Else -> STANDARD
 ```
 
-### Workflow Presets (WORKFLOW_PRESETS)
+### Global Method Selection (auto_global only)
 
 ```python
-from nlsq.core.minpack import WORKFLOW_PRESETS
+from nlsq.global_optimization.method_selector import MethodSelector
 
-# Available presets
-presets = list(WORKFLOW_PRESETS.keys())
-# ['standard', 'quality', 'fast', 'large_robust', 'streaming', 'hpc_distributed', ...]
-
-# Inspect a preset
-print(WORKFLOW_PRESETS["quality"])
+selector = MethodSelector()
+method = selector.select("auto", lower_bounds, upper_bounds)
+# Returns "cmaes" or "multi-start"
 ```
 
-| Preset | Strategy | Multi-start | Best For |
-|--------|----------|-------------|----------|
-| `fast` | standard | No | Quick exploration |
-| `standard` | standard | No | General use |
-| `quality` | standard | Yes (10 starts) | Publication results |
-| `large_robust` | chunked | Yes (5 starts) | Large datasets |
-| `streaming` | streaming | Yes (5 starts) | Very large datasets |
-| `hpc_distributed` | streaming | Yes (10 starts) | Cluster computing |
-
-### Custom Presets (kwargs Factory Pattern)
-
-```python
-from nlsq import fit
-
-
-def create_my_domain_preset() -> dict:
-    """Create a preset for my specific application."""
-    return {
-        "workflow": "standard",
-        "gtol": 1e-9,
-        "ftol": 1e-9,
-        "xtol": 1e-9,
-        "multistart": True,
-        "n_starts": 15,
-        "sampler": "sobol",
-    }
-
-
-# Use with fit()
-popt, pcov = fit(model, x, y, p0=p0, bounds=bounds, **create_my_domain_preset())
-```
-
-### Defense Layer Presets (Streaming)
-
-```python
-from nlsq import HybridStreamingConfig
-
-# For checkpoint resume (warm-start protection)
-config = HybridStreamingConfig.defense_strict()
-
-# For exploration (rough initial guesses)
-config = HybridStreamingConfig.defense_relaxed()
-
-# For production scientific computing
-config = HybridStreamingConfig.scientific_default()
-```
+- **CMA-ES**: Selected when parameter scale ratio > 1000 AND evosax is available
+- **Multi-Start**: Selected otherwise
 
 ---
 
@@ -181,13 +155,31 @@ config = HybridStreamingConfig.scientific_default()
 
 | Scenario | Workflow | Why |
 |----------|----------|-----|
-| Quick prototype | `workflow="fast"` | Speed over precision |
-| Production fitting | `workflow="standard"` | Balanced defaults |
-| Publication figures | `workflow="quality"` | Highest precision |
-| >1M data points | `workflow="auto"` | Automatic chunked selection |
-| >10M data points | `workflow="streaming"` | Mini-batch processing |
-| HPC cluster job | `workflow="streaming"` + defense presets | Checkpointing for fault tolerance |
-| Custom domain | `**create_my_preset()` | kwargs factory pattern |
+| Standard curve fitting | `workflow="auto"` | Default, automatic memory handling |
+| Well-conditioned problem | `workflow="auto"` | Local optimization is sufficient |
+| Multi-modal problem | `workflow="auto_global"` | Global search for multiple minima |
+| Unknown initial guess | `workflow="auto_global"` | Explores parameter space |
+| Wide parameter bounds | `workflow="auto_global"` | May select CMA-ES for scale-invariance |
+| Long HPC job | `workflow="hpc"` | Checkpointing for fault tolerance |
+| Fast exploration | `workflow="auto", gtol=1e-6` | Looser tolerances |
+| Publication quality | `workflow="auto", gtol=1e-10` | Tighter tolerances |
+
+---
+
+## Migration from Old Presets
+
+The following presets have been removed in v0.6.3. Use these equivalents:
+
+| Old Preset | New Equivalent |
+|------------|----------------|
+| `standard` | `workflow="auto"` |
+| `fast` | `workflow="auto", gtol=1e-6, ftol=1e-6, xtol=1e-6` |
+| `quality` | `workflow="auto_global", n_starts=20` |
+| `large_robust` | `workflow="auto"` (auto-detects large data) |
+| `streaming` | `workflow="auto"` (auto-detects memory pressure) |
+| `hpc_distributed` | `workflow="hpc"` |
+| `cmaes` | `workflow="auto_global"` (auto-selects CMA-ES) |
+| `global_auto` | `workflow="auto_global"` |
 
 ---
 
@@ -195,23 +187,17 @@ config = HybridStreamingConfig.scientific_default()
 
 ```
 08_workflow_system/
-├── 01_fit_quickstart.py
-├── 02_workflow_tiers.py
-├── 03_optimization_goals.py
-├── 04_workflow_presets.py
-├── 05_yaml_configuration.py
-├── 06_auto_selection.py
-├── 07_hpc_and_checkpointing.py
-├── 08_custom_presets.py
-├── 09_kinetics_presets.py
-├── 10_saxs_presets.py
-├── 11_xpcs_presets.py
-├── figures/                    # Saved visualizations
-└── README.md                   # This file
+├── 01_fit_quickstart.py       # Basic fit() usage with 3 workflows
+├── 02_workflow_tiers.py       # Memory strategy selection
+├── 06_auto_selection.py       # Global method selection (CMA-ES vs Multi-Start)
+├── 07_hpc_and_checkpointing.py # HPC workflow with checkpointing
+├── figures/                   # Saved visualizations
+├── nlsq_fit.pbs              # PBS job script template
+└── README.md                  # This file
 ```
 
 ---
 
 <p align="center">
-<i>NLSQ v0.6.0 | Last updated: 2026-01-06</i>
+<i>NLSQ v0.6.3 | Last updated: 2026-01-11</i>
 </p>
