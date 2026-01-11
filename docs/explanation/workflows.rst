@@ -21,19 +21,19 @@ NLSQ v0.6.3 provides three workflows that cover all use cases:
 
    * - Workflow
      - Description
-     - Requires Bounds
+     - Bounds
      - Use Case
    * - ``auto``
      - Memory-aware local optimization
-     - No
+     - Optional
      - **Default**. Standard curve fitting.
    * - ``auto_global``
      - Memory-aware global optimization
-     - Yes
+     - Required
      - Multi-modal problems, unknown initial guess.
    * - ``hpc``
      - ``auto_global`` + checkpointing
-     - Yes
+     - Required
      - Long-running HPC jobs.
 
 workflow="auto" (Default)
@@ -57,6 +57,11 @@ best memory strategy based on your data size:
 
    # Explicit workflow selection
    result = fit(model, x, y, p0=[1.0, 0.5, 0.1], workflow="auto")
+
+   # With optional bounds (constrains solution to valid range)
+   result = fit(
+       model, x, y, p0=[1.0, 0.5, 0.1], workflow="auto", bounds=([0, 0, -1], [10, 5, 1])
+   )
 
 workflow="auto_global"
 ~~~~~~~~~~~~~~~~~~~~~~
