@@ -486,15 +486,59 @@ def fit(
 
         if workflow_lower == "auto":
             # Auto-select workflow based on memory budget
+            _logger.info(
+                f"workflow='auto' starting: n_points={n_points:,}, n_params={n_params}"
+            )
+
             selector = MemoryBudgetSelector()
             memory_limit_gb = kwargs.pop("memory_limit_gb", None)
+
+            # Compute memory budget for logging
+            from nlsq.core.workflow import MemoryBudget
+
+            budget = MemoryBudget.compute(
+                n_points=n_points,
+                n_params=n_params,
+                memory_limit_gb=memory_limit_gb,
+            )
+            _logger.info(
+                f"workflow='auto' memory budget: "
+                f"available={budget.available_gb:.1f}GB, "
+                f"threshold={budget.threshold_gb:.1f}GB, "
+                f"peak_estimate={budget.peak_gb:.2f}GB"
+            )
+
             _strategy, config = selector.select(
                 n_points=n_points,
                 n_params=n_params,
                 memory_limit_gb=memory_limit_gb,
                 goal=goal_enum,
             )
-            _logger.info(f"[NLSQ] workflow='auto' selected strategy: {_strategy}")
+
+            # Log strategy selection with reasoning
+            if _strategy == "streaming":
+                _logger.info(
+                    f"workflow='auto' selected: STREAMING "
+                    f"(data {budget.data_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+                )
+            elif _strategy == "chunked":
+                _logger.info(
+                    f"workflow='auto' selected: CHUNKED "
+                    f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+                )
+            else:
+                _logger.info(
+                    f"workflow='auto' selected: STANDARD "
+                    f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)"
+                )
+
+            # Log bounds info if provided
+            if bounds is not None:
+                lb, ub = prepare_bounds(bounds, n_params)
+                has_bounds = not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
+                _logger.debug(
+                    f"workflow='auto' bounds: {'provided' if has_bounds else 'unbounded'}"
+                )
             return _fit_with_config(
                 f=f,
                 xdata=xdata_arr,
@@ -1067,8 +1111,17 @@ def _fit_with_auto_global(
     ValueError
         If bounds are not provided.
     """
-    from nlsq.core.workflow import MemoryBudgetSelector, calculate_adaptive_tolerances
+    from nlsq.core.workflow import (
+        MemoryBudget,
+        MemoryBudgetSelector,
+        calculate_adaptive_tolerances,
+    )
     from nlsq.global_optimization.method_selector import MethodSelector
+
+    # Log workflow initialization
+    _logger.info(
+        f"workflow='auto_global' starting: n_points={n_points:,}, n_params={n_params}"
+    )
 
     # FR-002: Validate bounds are provided
     lb, ub = prepare_bounds(bounds, n_params)
@@ -1079,20 +1132,62 @@ def _fit_with_auto_global(
             "    fit(model, x, y, workflow='auto_global', bounds=([0, 0], [10, 10]))"
         )
 
+    # Log bounds information
+    _logger.debug(f"workflow='auto_global' bounds: lower={lb}, upper={ub}")
+
+    # Compute parameter scale ratio for method selection logging
+    scale_range = ub - lb
+    scale_ratio = (
+        float(np.max(scale_range) / np.min(scale_range))
+        if np.min(scale_range) > 0
+        else 1.0
+    )
+    _logger.debug(f"workflow='auto_global' parameter scale ratio: {scale_ratio:.1f}")
+
     # Extract optional parameters
     n_starts = kwargs.pop("n_starts", 10)
     cmaes_config = kwargs.pop("cmaes_config", None)
     memory_limit_gb = kwargs.pop("memory_limit_gb", None)
 
-    # FR-000: Select memory strategy
+    # FR-000: Select memory strategy with detailed logging
     selector = MemoryBudgetSelector(safety_factor=0.75)
+
+    # Compute memory budget for logging
+    budget = MemoryBudget.compute(
+        n_points=n_points,
+        n_params=n_params,
+        memory_limit_gb=memory_limit_gb,
+    )
+    _logger.info(
+        f"workflow='auto_global' memory budget: "
+        f"available={budget.available_gb:.1f}GB, "
+        f"threshold={budget.threshold_gb:.1f}GB, "
+        f"peak_estimate={budget.peak_gb:.2f}GB"
+    )
+
     strategy, _memory_config = selector.select(
         n_points=n_points,
         n_params=n_params,
         memory_limit_gb=memory_limit_gb,
         goal=goal,
     )
-    _logger.info(f"[NLSQ] workflow='auto_global' memory strategy: {strategy}")
+
+    # Log strategy selection with reasoning
+    if strategy == "streaming":
+        _logger.info(
+            f"workflow='auto_global' memory strategy: STREAMING "
+            f"(data {budget.data_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+        )
+    elif strategy == "chunked":
+        _logger.info(
+            f"workflow='auto_global' memory strategy: CHUNKED "
+            f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+        )
+    else:
+        _logger.info(
+            f"workflow='auto_global' memory strategy: STANDARD "
+            f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)"
+        )
 
     # FR-005: Select global method (CMA-ES vs Multi-Start)
     method_selector = MethodSelector()
@@ -1101,7 +1196,18 @@ def _fit_with_auto_global(
         lower_bounds=lb,
         upper_bounds=ub,
     )
-    _logger.info(f"[NLSQ] workflow='auto_global' global method: {global_method}")
+
+    # Log global method selection with reasoning
+    if global_method == "cmaes":
+        _logger.info(
+            f"workflow='auto_global' global method: CMA-ES "
+            f"(scale_ratio={scale_ratio:.1f} > 1000 or evosax available)"
+        )
+    else:
+        _logger.info(
+            f"workflow='auto_global' global method: Multi-Start "
+            f"(n_starts={n_starts}, scale_ratio={scale_ratio:.1f})"
+        )
 
     # Apply adaptive tolerances if goal is specified
     if goal is not None:
@@ -1195,6 +1301,9 @@ def _fit_with_hpc(
     ValueError
         If bounds are not provided.
     """
+    # Log workflow initialization
+    _logger.info(f"workflow='hpc' starting: n_points={n_points:,}, n_params={n_params}")
+
     # FR-002: Validate bounds are provided
     lb, ub = prepare_bounds(bounds, n_params)
     if np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)):
@@ -1208,10 +1317,29 @@ def _fit_with_hpc(
     checkpoint_dir = kwargs.pop("checkpoint_dir", None)
     checkpoint_interval = kwargs.pop("checkpoint_interval", 5)
 
+    # Log HPC configuration
     _logger.info(
-        f"[NLSQ] workflow='hpc' with checkpointing "
-        f"(dir={checkpoint_dir}, interval={checkpoint_interval})"
+        f"workflow='hpc' checkpointing enabled: "
+        f"dir={checkpoint_dir or 'auto'}, interval={checkpoint_interval}"
     )
+
+    # Detect cluster environment
+    from nlsq.core.workflow import ClusterDetector
+
+    detector = ClusterDetector()
+    cluster_info = detector.detect()
+
+    if cluster_info is not None:
+        _logger.info(
+            f"workflow='hpc' cluster detected: "
+            f"scheduler={cluster_info.scheduler}, "
+            f"nodes={cluster_info.node_count}, "
+            f"gpus={cluster_info.total_gpus}"
+        )
+        if cluster_info.job_id:
+            _logger.debug(f"workflow='hpc' job_id={cluster_info.job_id}")
+    else:
+        _logger.info("workflow='hpc' running on local machine (no cluster detected)")
 
     # For now, delegate to auto_global
     # TODO: Add checkpoint infrastructure in Phase 5 (T042-T048)
