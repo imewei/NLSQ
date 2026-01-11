@@ -302,6 +302,30 @@ popt, pcov = curve_fit(
 </details>
 
 <details>
+<summary><b>CMA-ES global optimization</b></summary>
+
+For multi-scale parameter problems (parameters spanning >1000x scale ratio):
+
+```python
+from nlsq.global_optimization import CMAESOptimizer, CMAESConfig
+
+# Basic usage with BIPOP restart strategy
+optimizer = CMAESOptimizer()
+result = optimizer.fit(model, x, y, bounds=bounds)
+
+# Memory-efficient configuration for large datasets (>10M points)
+config = CMAESConfig(
+    population_batch_size=4,  # Batch population evaluation
+    data_chunk_size=50000,  # Stream data in chunks
+)
+optimizer = CMAESOptimizer(config=config)
+```
+
+Requires: `pip install "nlsq[global]"`
+
+</details>
+
+<details>
 <summary><b>Workflow presets</b></summary>
 
 ```python

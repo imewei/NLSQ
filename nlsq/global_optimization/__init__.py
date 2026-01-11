@@ -71,6 +71,8 @@ from nlsq.global_optimization.bounds_transform import (
 from nlsq.global_optimization.cmaes_config import (
     CMAES_PRESETS,
     CMAESConfig,
+    auto_configure_cmaes_memory,
+    estimate_cmaes_memory_gb,
     is_evosax_available,
 )
 
@@ -102,8 +104,10 @@ __all__ = [
     "MethodSelector",
     "MultiStartOrchestrator",
     "TournamentSelector",
+    "auto_configure_cmaes_memory",
     "center_samples_around_p0",
     "compute_default_popsize",
+    "estimate_cmaes_memory_gb",
     "get_sampler",
     "halton_sample",
     "is_evosax_available",

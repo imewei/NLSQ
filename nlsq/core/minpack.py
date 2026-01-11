@@ -171,6 +171,17 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
         "xtol": 1e-8,
         "cmaes_preset": "cmaes-global",
     },
+    "global_auto": {
+        "description": "Auto-selects optim method based on scale (CMA-ES vs Multi-Start)",
+        "tier": "STANDARD",
+        "method": "auto",
+        "enable_multistart": True,  # Fallback to multi-start if CMA-ES not selected
+        "n_starts": 10,
+        "gtol": 1e-8,
+        "ftol": 1e-8,
+        "xtol": 1e-8,
+        "cmaes_preset": "cmaes",  # Config if CMA-ES is selected
+    },
 }
 
 
@@ -227,6 +238,9 @@ def fit(
         - 'large_robust': Chunked + multi-start for large datasets
         - 'streaming': AdaptiveHybridStreamingOptimizer for huge datasets
         - 'hpc_distributed': Multi-GPU/node configuration
+        - 'global_auto': Auto-selects CMA-ES vs Multi-Start based on scale ratio
+        - 'cmaes': CMA-ES with BIPOP restarts (100 generations)
+        - 'cmaes-global': Thorough CMA-ES exploration (200 gens, 2x population)
         - Custom config object: LDMemoryConfig, HybridStreamingConfig, or GlobalOptimizationConfig
     goal : str or OptimizationGoal, optional
         Optimization goal that modifies tolerances:
@@ -568,7 +582,7 @@ def _fit_with_config(
         )
 
 
-def _fit_with_preset(
+def _fit_with_preset(  # noqa: C901
     f: ModelFunction,
     xdata: np.ndarray,
     ydata: np.ndarray,
@@ -609,6 +623,10 @@ def _fit_with_preset(
             if tol_key not in kwargs and tol_key in preset:
                 kwargs[tol_key] = preset[tol_key]
 
+    # Use method from preset if not explicitly provided
+    if method is None:
+        method = preset.get("method")
+
     # Check if multi-start is enabled
     enable_multistart = preset.get("enable_multistart", False)
     n_starts = preset.get("n_starts", 10)
@@ -634,6 +652,56 @@ def _fit_with_preset(
             cmaes_config=cmaes_config,
             **kwargs,
         )
+
+    # Handle method="auto" selection via MethodSelector
+    if preset_method == "auto":
+        from nlsq.global_optimization.cmaes_config import CMAESConfig
+        from nlsq.global_optimization.method_selector import MethodSelector
+
+        # Need bounds to compute scale ratio - extract from bounds tuple
+        lb, ub = prepare_bounds(bounds, len(np.atleast_1d(p0)) if p0 is not None else 1)
+
+        selector = MethodSelector()
+        selected_method = selector.select(
+            requested_method="auto",
+            lower_bounds=lb,
+            upper_bounds=ub,
+        )
+
+        if selected_method == "cmaes":
+            # Use CMA-ES with preset config
+            cmaes_preset_name = preset.get("cmaes_preset", "cmaes")
+            cmaes_config = CMAESConfig.from_preset(cmaes_preset_name)
+
+            return curve_fit(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method="cmaes",
+                cmaes_config=cmaes_config,
+                **kwargs,
+            )
+        else:
+            # Fall back to multi-start TRF
+            return curve_fit(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                method=method,  # Use specified or default
+                multistart=enable_multistart,
+                n_starts=n_starts if enable_multistart else 0,
+                **kwargs,
+            )
 
     if strategy == "standard":
         # Standard curve_fit path
@@ -1060,7 +1128,11 @@ def _run_cmaes_optimization(
     result : CurveFitResult or None
         Optimization result if CMA-ES was used, None if fallback to standard.
     """
-    from nlsq.global_optimization.cmaes_config import CMAESConfig
+    from nlsq.global_optimization.bounds_transform import compute_default_popsize
+    from nlsq.global_optimization.cmaes_config import (
+        CMAESConfig,
+        auto_configure_cmaes_memory,
+    )
     from nlsq.global_optimization.method_selector import MethodSelector
 
     # Convert bounds to numpy arrays for scale ratio computation
@@ -1084,6 +1156,43 @@ def _run_cmaes_optimization(
 
     # Use provided config or default
     config = cmaes_config if cmaes_config is not None else CMAESConfig()
+
+    # Check if memory-based chunking is needed for large datasets
+    n_data = len(np.asarray(xdata))
+    n_params = len(lower)
+
+    # Only auto-configure if chunk sizes not already set
+    if config.data_chunk_size is None and config.population_batch_size is None:
+        # Get available memory from MemoryBudget
+        from nlsq.core.workflow import MemoryBudget
+
+        budget = MemoryBudget.compute(n_points=n_data, n_params=n_params)
+
+        # Compute population size for memory estimation
+        popsize = config.popsize
+        if popsize is None:
+            popsize = compute_default_popsize(n_params)
+            # Double for cmaes-global preset (detected by max_generations == 200)
+            if config.max_generations == 200 and config.restart_strategy == "bipop":
+                popsize = popsize * 2
+
+        # Auto-configure batch sizes based on available memory
+        pop_batch, data_chunk = auto_configure_cmaes_memory(
+            n_data=n_data,
+            popsize=popsize,
+            available_memory_gb=budget.available_gb,
+            safety_factor=0.7,
+        )
+
+        # Create new config with computed chunk sizes if needed
+        if pop_batch is not None or data_chunk is not None:
+            from dataclasses import replace
+
+            config = replace(
+                config,
+                population_batch_size=pop_batch,
+                data_chunk_size=data_chunk,
+            )
 
     # Create optimizer
     optimizer = CMAESOptimizer(config=config)

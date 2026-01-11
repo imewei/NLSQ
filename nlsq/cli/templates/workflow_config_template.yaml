@@ -274,6 +274,8 @@ metadata:
 # │   - large_robust:     Chunked processing with multi-start for large data    │
 # │   - streaming:        AdaptiveHybridStreamingOptimizer for huge datasets    │
 # │   - hpc_distributed:  Multi-GPU/node configuration for HPC clusters (PBS)   │
+# │   - cmaes:            CMA-ES global optimization with BIPOP restarts        │
+# │   - cmaes-global:     Thorough CMA-ES exploration (2x population, 200 gens) │
 # └─────────────────────────────────────────────────────────────────────────────┘
 #
 # Note: For custom workflows beyond these presets, define them in the 'workflows'
@@ -891,6 +893,102 @@ global_optimization:
   elimination_rounds: 3      # Rounds of elimination
   elimination_fraction: 0.5  # Fraction eliminated per round
   batches_per_round: 50      # Data batches for evaluation
+
+# ==============================================================================
+# CMA-ES GLOBAL OPTIMIZATION
+# ==============================================================================
+# Covariance Matrix Adaptation Evolution Strategy for global optimization.
+# Uses evosax library with BIPOP restart strategy for robust global search.
+#
+# Requires: pip install 'nlsq[global]' (installs evosax dependency)
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ CMA-ES PRESETS                                                              │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ "cmaes-fast"   │ Quick search: 50 gens, no restarts (exploratory fits)      │
+# │ "cmaes"        │ Standard: 100 gens, BIPOP restarts (default)               │
+# │ "cmaes-global" │ Thorough: 200 gens, 2x population, BIPOP (difficult cases) │
+# └─────────────────────────────────────────────────────────────────────────────┘
+#
+# When to use CMA-ES:
+#   - Multi-modal loss surfaces (multiple local minima)
+#   - Non-convex optimization problems
+#   - Unknown or poor initial parameter guesses
+#   - Complex model landscapes
+#
+# BIPOP restart strategy:
+#   - Alternates between large and small population restarts
+#   - Large population explores globally, small refines locally
+#   - Automatic convergence detection with restart on stagnation
+#
+# Usage in workflow:
+#   default_workflow: "cmaes"       # Use standard CMA-ES preset
+#   # or
+#   default_workflow: "cmaes-global" # Use thorough exploration
+
+cmaes:
+  # ==========================================================================
+  # PRESET SELECTION
+  # ==========================================================================
+  # Use a preset configuration or customize below.
+  # Options: "cmaes-fast", "cmaes", "cmaes-global", null (use custom below)
+  preset: null
+
+  # ==========================================================================
+  # POPULATION SETTINGS
+  # ==========================================================================
+  # Population size per generation.
+  # null = automatic: int(4 + 3 * log(n_params)) - recommended for most cases
+  # Larger populations increase exploration but slow convergence.
+  popsize: null
+
+  # Maximum generations before stopping.
+  # cmaes-fast: 50, cmaes: 100, cmaes-global: 200
+  max_generations: 100
+
+  # ==========================================================================
+  # STEP SIZE AND TOLERANCES
+  # ==========================================================================
+  # Initial step size (sigma) controls search radius.
+  # Typical values: 0.3-0.5 for normalized parameters, larger for wide bounds.
+  sigma: 0.5
+
+  # Function tolerance for convergence detection.
+  # Stops when fitness improvement < tol_fun over recent generations.
+  tol_fun: 1.0e-8
+
+  # Parameter tolerance for convergence detection.
+  # Stops when parameter change < tol_x.
+  tol_x: 1.0e-8
+
+  # ==========================================================================
+  # RESTART STRATEGY (BIPOP)
+  # ==========================================================================
+  # BIPOP (Bi-Population) restart strategy for escaping local minima.
+  # Alternates large-population exploration with small-population refinement.
+  #
+  # Options: "none" (single run), "bipop" (recommended for global search)
+  restart_strategy: "bipop"
+
+  # Maximum restart attempts for BIPOP strategy.
+  # Each restart uses different population size.
+  # Set to 0 to disable restarts.
+  max_restarts: 9
+
+  # ==========================================================================
+  # NLSQ REFINEMENT
+  # ==========================================================================
+  # Refine best CMA-ES solution with NLSQ Trust Region Reflective.
+  # Combines global search (CMA-ES) with local refinement (TRF).
+  # Highly recommended for maximum precision.
+  refine_with_nlsq: true
+
+  # ==========================================================================
+  # REPRODUCIBILITY
+  # ==========================================================================
+  # Random seed for reproducibility.
+  # null = random seed (different results each run)
+  seed: null
 
 # ==============================================================================
 # TRUST REGION / STEP SIZE

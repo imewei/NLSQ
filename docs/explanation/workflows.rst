@@ -148,6 +148,9 @@ Selector Guide
    * - ``"fast"``
      - STANDARD
      - **Max Speed**. Loose tolerances ($10^{-6}$), single-start.
+   * - ``"global_auto"``
+     - STANDARD
+     - **Smart Global**. Auto-selects CMA-ES/Multi-Start based on parameter scale.
    * - ``"cmaes"``
      - STANDARD
      - **Global Search**. CMA-ES (BIPOP, 100 gens) for non-convex problems.
@@ -184,31 +187,38 @@ Brute-force local robustness. Assumes the landscape may have nearby local minima
 Optimization for high-throughput pipelines where "approximate" is sufficient (e.g., initial screening).
 * **Strategy**: Loosens tolerances to $10^{-6}$ to allow early exit.
 
-4. CMA-ES Standard (``cmaes``)
+4. Global Auto (``global_auto``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Smart global optimization that adapts to the problem complexity.
+* **Strategy**: Automatically selects between **CMA-ES** (if parameter scales differ >1000x)
+  and **Multi-Start** (10 starts).
+* **Use Case**: The recommended default for "hard" problems.
+
+5. CMA-ES Standard (``cmaes``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Gradient-free global optimization for non-convex landscapes where ``trf`` gets stuck.
 * **Stage 1**: CMA-ES with **BIPOP** restarts (100 generations).
 * **Stage 2**: NLSQ refinement for covariance.
 * **Population**: Automatic ($4 + 3\ln(N)$).
 
-5. CMA-ES Global (``cmaes-global``)
+6. CMA-ES Global (``cmaes-global``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 "Scorched earth" global search for extremely difficult (multimodal) landscapes.
 * **Strategy**: Doubles the population size ($2 \times [4 + 3\ln(N)]$ and generation budget (200)
   compared to standard ``cmaes``.
 
-6. Large Robust (``large_robust``)
+7. Large Robust (``large_robust``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 For datasets that technically fit in RAM but cause OOM or slowdowns with full matrix operations.
 * **Strategy**: Uses ``ChunkedOptimizer``. Breaks Hessian calculation into manageable chunks.
   Includes 10 random starts.
 
-7. Streaming (``streaming``)
+8. Streaming (``streaming``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 True out-of-core processing for datasets larger than system RAM.
 * **Strategy**: Uses ``AdaptiveHybridStreamingOptimizer``. Streams data from disk, accumulating gradients iteratively.
 
-8. HPC Distributed (``hpc_distributed``)
+9. HPC Distributed (``hpc_distributed``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 For long-running jobs on clusters (Slurm/PBS).
 * **Strategy**: Enables **checkpointing** to survive preemptions and optimizes for multi-GPU scaling.

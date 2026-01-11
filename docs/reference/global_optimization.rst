@@ -111,6 +111,100 @@ For fine-grained control, create a custom ``CMAESConfig``:
 
    optimizer = CMAESOptimizer(config=config)
 
+Memory Management for Large Datasets
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+CMA-ES can encounter out-of-memory (OOM) issues with large datasets (>10M points)
+because each fitness evaluation processes the full dataset across all population
+members. NLSQ provides two strategies to manage memory:
+
+**Population Batching**: Evaluates population members in smaller groups instead
+of all at once.
+
+.. code-block:: python
+
+   config = CMAESConfig(
+       population_batch_size=4,  # Evaluate 4 candidates at a time
+   )
+
+**Data Streaming**: Processes the dataset in chunks, accumulating the sum of
+squared residuals across chunks.
+
+.. code-block:: python
+
+   config = CMAESConfig(
+       data_chunk_size=50000,  # Process 50K points per chunk
+   )
+
+**Combined Configuration** for maximum memory efficiency:
+
+.. code-block:: python
+
+   from nlsq.global_optimization import CMAESConfig, CMAESOptimizer
+
+   # For 100M+ point datasets
+   config = CMAESConfig(
+       population_batch_size=4,  # Batch population evaluation
+       data_chunk_size=50000,  # Stream data in 50K chunks
+       max_generations=100,
+   )
+
+   optimizer = CMAESOptimizer(config=config)
+
+Memory Estimation
+"""""""""""""""""
+
+Use the helper functions to estimate and auto-configure memory usage:
+
+.. code-block:: python
+
+   from nlsq.global_optimization import (
+       estimate_cmaes_memory_gb,
+       auto_configure_cmaes_memory,
+   )
+
+   # Estimate memory for a configuration
+   memory_gb = estimate_cmaes_memory_gb(
+       n_data=100_000_000,
+       popsize=16,
+       population_batch_size=4,
+       data_chunk_size=50000,
+   )
+   print(f"Estimated memory: {memory_gb:.3f} GB")  # ~0.005 GB
+
+   # Auto-configure based on available memory
+   pop_batch, data_chunk = auto_configure_cmaes_memory(
+       n_data=100_000_000,
+       popsize=16,
+       available_memory_gb=4.0,  # Target GPU memory
+   )
+   config = CMAESConfig(
+       population_batch_size=pop_batch,
+       data_chunk_size=data_chunk,
+   )
+
+Memory comparison for 100M points with popsize=16:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 30 30
+
+   * - Configuration
+     - Peak Memory
+     - Reduction
+   * - No batching (default)
+     - 12.8 GB
+     - --
+   * - ``population_batch_size=4``
+     - 3.2 GB
+     - 75%
+   * - ``data_chunk_size=50000``
+     - ~18 MB
+     - 99.9%
+   * - Both combined
+     - ~5 MB
+     - 99.96%
+
 Integration with curve_fit
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -222,22 +316,44 @@ See the ``MultiStartOrchestrator`` API for details.
 API Reference
 -------------
 
+Configuration
+^^^^^^^^^^^^^
+
 .. autoclass:: nlsq.global_optimization.CMAESConfig
    :members:
    :undoc-members:
+
+Optimizer
+^^^^^^^^^
 
 .. autoclass:: nlsq.global_optimization.CMAESOptimizer
    :members:
    :undoc-members:
 
+Diagnostics
+^^^^^^^^^^^
+
 .. autoclass:: nlsq.global_optimization.CMAESDiagnostics
    :members:
    :undoc-members:
+
+Restart Strategy
+^^^^^^^^^^^^^^^^
 
 .. autoclass:: nlsq.global_optimization.BIPOPRestarter
    :members:
    :undoc-members:
 
+Method Selection
+^^^^^^^^^^^^^^^^
+
 .. autoclass:: nlsq.global_optimization.MethodSelector
    :members:
    :undoc-members:
+
+Memory Helpers
+^^^^^^^^^^^^^^
+
+.. autofunction:: nlsq.global_optimization.estimate_cmaes_memory_gb
+
+.. autofunction:: nlsq.global_optimization.auto_configure_cmaes_memory

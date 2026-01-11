@@ -249,6 +249,10 @@ Use presets for common configurations via the ``workflow`` argument (or ``preset
      - 1e-6
      - 1
      - High speed, loose tolerances
+   * - ``global_auto``
+     - 1e-8
+     - Auto
+     - Smart CMA-ES/Multi-Start selection
    * - ``cmaes``
      - 1e-8
      - BIPOP

@@ -102,6 +102,15 @@ Utility Functions
 
 .. autofunction:: get_sampler
 
+CMA-ES Memory Helpers
+^^^^^^^^^^^^^^^^^^^^^
+
+Helper functions for managing memory with CMA-ES on large datasets:
+
+.. autofunction:: estimate_cmaes_memory_gb
+
+.. autofunction:: auto_configure_cmaes_memory
+
 Tournament Selection
 --------------------
 

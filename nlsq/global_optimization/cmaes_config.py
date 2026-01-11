@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 __all__ = [
     "CMAES_PRESETS",
     "CMAESConfig",
+    "auto_configure_cmaes_memory",
+    "estimate_cmaes_memory_gb",
     "get_evosax_import_error",
     "is_evosax_available",
 ]
@@ -93,6 +95,13 @@ class CMAESConfig:
         Restart strategy. Default: 'bipop'.
     max_restarts : int
         Maximum restart attempts for BIPOP. Default: 9.
+    population_batch_size : int | None
+        Batch size for population evaluation. If None, evaluates all candidates
+        in parallel. Set to smaller values (e.g., 4) to reduce memory usage.
+    data_chunk_size : int | None
+        Chunk size for data streaming. If None, processes full dataset at once.
+        Set to smaller values (e.g., 50000) for datasets >10M points to avoid OOM.
+        Must be >= 1024 for numerical stability.
     refine_with_nlsq : bool
         Whether to refine best solution with NLSQ TRF. Default: True.
     seed : int | None
@@ -102,6 +111,13 @@ class CMAESConfig:
     --------
     >>> config = CMAESConfig(popsize=32, max_generations=200)
     >>> config = CMAESConfig.from_preset('cmaes-global')
+
+    Memory-efficient configuration for large datasets:
+
+    >>> config = CMAESConfig(
+    ...     population_batch_size=4,  # Evaluate 4 candidates at a time
+    ...     data_chunk_size=50000,    # Process 50K points per chunk
+    ... )
     """
 
     # Population and generations
@@ -116,6 +132,10 @@ class CMAESConfig:
     # Restart strategy (BIPOP enabled by default per spec)
     restart_strategy: Literal["none", "bipop"] = "bipop"
     max_restarts: int = 9
+
+    # Memory management
+    population_batch_size: int | None = None
+    data_chunk_size: int | None = None
 
     # NLSQ refinement
     refine_with_nlsq: bool = True
@@ -159,6 +179,17 @@ class CMAESConfig:
             raise ValueError(
                 f"restart_strategy must be 'none' or 'bipop', "
                 f"got '{self.restart_strategy}'"
+            )
+
+        if self.population_batch_size is not None and self.population_batch_size < 1:
+            raise ValueError(
+                f"population_batch_size must be >= 1, got {self.population_batch_size}"
+            )
+
+        if self.data_chunk_size is not None and self.data_chunk_size < 1024:
+            raise ValueError(
+                f"data_chunk_size must be >= 1024 for numerical stability, "
+                f"got {self.data_chunk_size}"
             )
 
     @classmethod
@@ -217,3 +248,125 @@ CMAES_PRESETS: dict[str, dict] = {
         "max_restarts": 9,
     },
 }
+
+
+def estimate_cmaes_memory_gb(
+    n_data: int,
+    popsize: int,
+    population_batch_size: int | None = None,
+    data_chunk_size: int | None = None,
+) -> float:
+    """Estimate peak GPU memory usage for CMA-ES in GB.
+
+    Parameters
+    ----------
+    n_data : int
+        Number of data points.
+    popsize : int
+        Population size.
+    population_batch_size : int | None, optional
+        Batch size for population evaluation. If None, uses full popsize.
+    data_chunk_size : int | None, optional
+        Chunk size for data streaming. If None, uses full dataset.
+
+    Returns
+    -------
+    float
+        Estimated peak memory usage in GB.
+
+    Examples
+    --------
+    >>> estimate_cmaes_memory_gb(10_000_000, popsize=16)
+    1.1920928955078125
+
+    >>> estimate_cmaes_memory_gb(10_000_000, popsize=16, population_batch_size=4)
+    0.298023223876953
+
+    >>> estimate_cmaes_memory_gb(10_000_000, popsize=16, data_chunk_size=50000)
+    0.005960464477539062
+    """
+    eff_pop = population_batch_size if population_batch_size else popsize
+    eff_data = data_chunk_size if data_chunk_size else n_data
+
+    # Memory per candidate during fitness evaluation:
+    # - predictions array: eff_data * 8 bytes (float64)
+    # - residuals array: eff_data * 8 bytes (float64)
+    # - intermediate computations: ~eff_data * 8 bytes
+    bytes_per_candidate = eff_data * 8 * 3  # 3 arrays
+    peak_bytes = eff_pop * bytes_per_candidate
+
+    # Add overhead for input data (xdata, ydata)
+    # When data_chunk_size is set, we use dynamic_slice which doesn't copy
+    if data_chunk_size is None:
+        peak_bytes += n_data * 8 * 2  # xdata + ydata
+
+    return peak_bytes / (1024**3)
+
+
+def auto_configure_cmaes_memory(
+    n_data: int,
+    popsize: int,
+    available_memory_gb: float = 8.0,
+    safety_factor: float = 0.7,
+) -> tuple[int | None, int | None]:
+    """Auto-configure batch sizes to fit in available memory.
+
+    Parameters
+    ----------
+    n_data : int
+        Number of data points.
+    popsize : int
+        Population size.
+    available_memory_gb : float, optional
+        Available GPU/CPU memory in GB. Default: 8.0.
+    safety_factor : float, optional
+        Safety factor for memory allocation (0-1). Default: 0.7.
+
+    Returns
+    -------
+    tuple[int | None, int | None]
+        (population_batch_size, data_chunk_size) configuration.
+        None means no batching/chunking needed for that dimension.
+
+    Examples
+    --------
+    >>> auto_configure_cmaes_memory(1_000_000, popsize=16, available_memory_gb=8.0)
+    (None, None)  # No batching needed
+
+    >>> auto_configure_cmaes_memory(100_000_000, popsize=16, available_memory_gb=8.0)
+    (4, None)  # Population batching only
+
+    >>> auto_configure_cmaes_memory(100_000_000, popsize=16, available_memory_gb=1.0)
+    (1, 65536)  # Both population batching and data chunking
+    """
+    target_memory_bytes = available_memory_gb * safety_factor * (1024**3)
+    bytes_per_point_per_candidate = 8 * 3  # float64, 3 arrays
+
+    # Try full data, full population first
+    full_memory = n_data * popsize * bytes_per_point_per_candidate
+    if full_memory <= target_memory_bytes:
+        return None, None  # No batching needed
+
+    # Try population batching only (halving until it fits)
+    for pop_batch in [popsize // 2, popsize // 4, popsize // 8, 1]:
+        if pop_batch < 1:
+            continue
+        memory = n_data * pop_batch * bytes_per_point_per_candidate
+        if memory <= target_memory_bytes:
+            return pop_batch, None
+
+    # Need data chunking - calculate optimal chunk size
+    # With pop_batch=1, find largest chunk that fits
+    max_chunk = int(target_memory_bytes / bytes_per_point_per_candidate)
+
+    # Use power-of-2 bucket sizes for JIT cache efficiency
+    # These match CHUNK_BUCKETS from nlsq/streaming/large_dataset.py
+    chunk_buckets = (1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072)
+
+    # Find largest bucket that fits
+    data_chunk = 1024  # Minimum
+    for bucket in chunk_buckets:
+        if bucket <= max_chunk:
+            data_chunk = bucket
+
+    return 1, data_chunk

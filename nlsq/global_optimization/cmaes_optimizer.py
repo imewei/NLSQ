@@ -34,13 +34,15 @@ __all__ = ["CMAESOptimizer"]
 logger = logging.getLogger(__name__)
 
 
-def _create_fitness_function(
+def _create_fitness_function(  # noqa: C901
     model_func: Callable,
     xdata: jax.Array,
     ydata: jax.Array,
     lower_bounds: jax.Array,
     upper_bounds: jax.Array,
     sigma: jax.Array | None = None,
+    population_batch_size: int | None = None,
+    data_chunk_size: int | None = None,
 ) -> Callable[[jax.Array], jax.Array]:
     """Create a fitness function for CMA-ES optimization.
 
@@ -60,45 +62,163 @@ def _create_fitness_function(
         Upper bounds for parameters.
     sigma : jax.Array | None, optional
         Standard deviation of ydata for weighted residuals.
+    population_batch_size : int | None, optional
+        Batch size for population evaluation to avoid OOM.
+    data_chunk_size : int | None, optional
+        Chunk size for data streaming to avoid OOM on large datasets.
 
     Returns
     -------
     Callable[[jax.Array], jax.Array]
         Fitness function that takes unbounded parameters and returns fitness.
     """
+    n_data = xdata.shape[0]
 
-    @jax.jit
-    def fitness_single(params_unbounded: jax.Array) -> jax.Array:
-        """Compute fitness for a single parameter set."""
-        # Transform to bounded space
-        params_bounded = transform_to_bounds(
-            params_unbounded, lower_bounds, upper_bounds
+    # Determine if we need data streaming
+    use_data_streaming = data_chunk_size is not None and n_data > data_chunk_size
+
+    if use_data_streaming:
+        # Mypy doesn't infer not-None from the boolean flag
+        assert data_chunk_size is not None
+
+        # Calculate number of full chunks and remainder
+        n_full_chunks = n_data // data_chunk_size
+        remainder = n_data % data_chunk_size
+
+        # Pad data to exact multiple of chunk_size for efficient slicing
+        if remainder > 0:
+            pad_size = data_chunk_size - remainder
+            xdata_padded = jnp.pad(xdata, (0, pad_size), constant_values=0.0)
+            ydata_padded = jnp.pad(ydata, (0, pad_size), constant_values=0.0)
+            if sigma is not None:
+                # Pad sigma with 1.0 to avoid division issues (residual will be 0)
+                sigma_padded = jnp.pad(sigma, (0, pad_size), constant_values=1.0)
+            else:
+                sigma_padded = None
+            n_chunks = n_full_chunks + 1
+        else:
+            xdata_padded = xdata
+            ydata_padded = ydata
+            sigma_padded = sigma
+            n_chunks = n_full_chunks
+
+        # Reshape data into chunks for efficient access
+        xdata_chunked = xdata_padded.reshape(n_chunks, data_chunk_size)
+        ydata_chunked = ydata_padded.reshape(n_chunks, data_chunk_size)
+        if sigma_padded is not None:
+            sigma_chunked = sigma_padded.reshape(n_chunks, data_chunk_size)
+        else:
+            sigma_chunked = None
+
+        # Create validity mask for the last chunk (handles padding)
+        if remainder > 0:
+            last_chunk_mask = jnp.arange(data_chunk_size) < remainder
+        else:
+            last_chunk_mask = jnp.ones(data_chunk_size, dtype=bool)
+
+        @jax.jit
+        def compute_chunk_ssr(
+            params_bounded: jax.Array,
+            x_chunk: jax.Array,
+            y_chunk: jax.Array,
+            sigma_chunk: jax.Array | None,
+            valid_mask: jax.Array,
+        ) -> jax.Array:
+            """Compute SSR for one data chunk."""
+            predictions = model_func(x_chunk, *params_bounded)
+            residuals = y_chunk - predictions
+
+            if sigma_chunk is not None:
+                residuals = residuals / sigma_chunk
+
+            # Apply validity mask to handle padding in last chunk
+            residuals_sq = jnp.where(valid_mask, residuals**2, 0.0)
+            return jnp.sum(residuals_sq)
+
+        def fitness_single_streaming(params_unbounded: jax.Array) -> jax.Array:
+            """Compute fitness by streaming over data chunks."""
+            params_bounded = transform_to_bounds(
+                params_unbounded, lower_bounds, upper_bounds
+            )
+
+            # Accumulate SSR over chunks
+            ssr_total = jnp.array(0.0)
+
+            for chunk_idx in range(n_chunks):
+                x_chunk = xdata_chunked[chunk_idx]
+                y_chunk = ydata_chunked[chunk_idx]
+                sigma_chunk = (
+                    sigma_chunked[chunk_idx] if sigma_chunked is not None else None
+                )
+
+                # Use appropriate mask for last chunk
+                if chunk_idx == n_chunks - 1 and remainder > 0:
+                    valid_mask = last_chunk_mask
+                else:
+                    valid_mask = jnp.ones(data_chunk_size, dtype=bool)
+
+                ssr_total = ssr_total + compute_chunk_ssr(
+                    params_bounded, x_chunk, y_chunk, sigma_chunk, valid_mask
+                )
+
+            return jnp.where(jnp.isfinite(ssr_total), -ssr_total, -jnp.inf)
+
+        fitness_single = fitness_single_streaming
+
+        logger.debug(
+            f"Data streaming enabled: {n_data} points -> {n_chunks} chunks of {data_chunk_size}"
         )
+    else:
+        # Original non-streaming fitness function
+        @jax.jit
+        def fitness_single(params_unbounded: jax.Array) -> jax.Array:
+            """Compute fitness for a single parameter set."""
+            # Transform to bounded space
+            params_bounded = transform_to_bounds(
+                params_unbounded, lower_bounds, upper_bounds
+            )
 
-        # Compute predictions
-        predictions = model_func(xdata, *params_bounded)
+            # Compute predictions
+            predictions = model_func(xdata, *params_bounded)
 
-        # Compute residuals
-        residuals = ydata - predictions
+            # Compute residuals
+            residuals = ydata - predictions
 
-        # Weight by sigma if provided
-        if sigma is not None:
-            residuals = residuals / sigma
+            # Weight by sigma if provided
+            if sigma is not None:
+                residuals = residuals / sigma
 
-        # Sum of squared residuals
-        ssr = jnp.sum(residuals**2)
+            # Sum of squared residuals
+            ssr = jnp.sum(residuals**2)
 
-        # Handle NaN/Inf (assign worst fitness)
-        fitness = jnp.where(jnp.isfinite(ssr), -ssr, -jnp.inf)
+            # Handle NaN/Inf (assign worst fitness)
+            fitness = jnp.where(jnp.isfinite(ssr), -ssr, -jnp.inf)
 
-        return fitness
+            return fitness
 
     @jax.jit
-    def fitness_population(population: jax.Array) -> jax.Array:
+    def fitness_population_jit(population: jax.Array) -> jax.Array:
         """Compute fitness for entire population (vectorized)."""
         return jax.vmap(fitness_single)(population)
 
-    return fitness_population
+    if population_batch_size is None:
+        return fitness_population_jit
+
+    def fitness_population_batched(population: jax.Array) -> jax.Array:
+        """Compute fitness for population in batches (sequential loop)."""
+        n = population.shape[0]
+        # If population fits in one batch, run directly
+        if n <= population_batch_size:
+            return fitness_population_jit(population)
+
+        results = []
+        for i in range(0, n, population_batch_size):
+            batch = population[i : i + population_batch_size]
+            results.append(fitness_population_jit(batch))
+
+        return jnp.concatenate(results)
+
+    return fitness_population_batched
 
 
 class CMAESOptimizer:
@@ -258,7 +378,14 @@ class CMAESOptimizer:
 
         # Create fitness function
         fitness_fn = _create_fitness_function(
-            f, xdata_jax, ydata_jax, lower_bounds, upper_bounds, sigma_jax
+            f,
+            xdata_jax,
+            ydata_jax,
+            lower_bounds,
+            upper_bounds,
+            sigma_jax,
+            population_batch_size=self.config.population_batch_size,
+            data_chunk_size=self.config.data_chunk_size,
         )
 
         # Track wall time
