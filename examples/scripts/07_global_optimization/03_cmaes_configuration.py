@@ -302,7 +302,8 @@ def main():
             ha="center",
         )
 
-    plt.tight_layout()
+    # Note: bbox_inches="tight" handles layout; plt.tight_layout() can cause
+    # warnings with annotations that extend beyond the axes
     plt.savefig(FIG_DIR / "03_method_selection.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"  Saved: {FIG_DIR / '03_method_selection.png'}")

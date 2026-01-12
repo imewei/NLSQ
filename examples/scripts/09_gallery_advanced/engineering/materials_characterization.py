@@ -149,12 +149,14 @@ print(
 )
 
 # Method 2: fit() with 'auto_global' workflow
+# Note: auto_global requires bounds for multi-start sampling
 print("\nMethod 2: fit() with 'auto_global' workflow")
 popt_elastic_g, pcov_elastic_g = fit(
     linear_elastic,
     strain_measured[mask_fit_elastic],
     stress_measured[mask_fit_elastic],
     p0=[70],
+    bounds=([0], [500]),  # Young's modulus bounds in GPa
     sigma=sigma_stress[mask_fit_elastic],
     absolute_sigma=True,
     workflow="auto_global",

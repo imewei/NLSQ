@@ -2147,7 +2147,8 @@ def curve_fit(
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
     # CMA-ES global optimization parameters
-    method: Literal["auto", "cmaes", "multi-start", "trf"] | None = None,
+    method: Literal["auto", "cmaes", "multi-start", "trf", "hybrid_streaming"]
+    | None = None,
     cmaes_config: CMAESConfig | None = None,
     # Diagnostics parameters (User Story 1)
     compute_diagnostics: bool = False,
@@ -2470,6 +2471,9 @@ def curve_fit(
         max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
     )
 
+    # Pass method through to CurveFit if specified (e.g., hybrid_streaming)
+    if method is not None:
+        kwargs["method"] = method
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
     # Add empty multi-start diagnostics for consistency
@@ -3571,17 +3575,24 @@ class CurveFit:
         # Extract verbosity from kwargs
         verbose = kwargs.pop("verbose", 1)
 
-        # Create configuration (allow kwargs to override defaults)
-        config_overrides = {}
-        for key in list(kwargs.keys()):
-            if hasattr(HybridStreamingConfig, key):
-                config_overrides[key] = kwargs.pop(key)
+        # Handle config: either a complete HybridStreamingConfig object or individual overrides
+        config = kwargs.pop("config", None)
+        if config is None:
+            # Create configuration from individual kwargs
+            config_overrides = {}
+            for key in list(kwargs.keys()):
+                if hasattr(HybridStreamingConfig, key):
+                    config_overrides[key] = kwargs.pop(key)
 
-        config = (
-            HybridStreamingConfig(**config_overrides)
-            if config_overrides
-            else HybridStreamingConfig()
-        )
+            config = (
+                HybridStreamingConfig(**config_overrides)
+                if config_overrides
+                else HybridStreamingConfig()
+            )
+        elif not isinstance(config, HybridStreamingConfig):
+            raise TypeError(
+                f"config must be a HybridStreamingConfig, got {type(config).__name__}"
+            )
 
         # Create optimizer
         optimizer = AdaptiveHybridStreamingOptimizer(config=config)
