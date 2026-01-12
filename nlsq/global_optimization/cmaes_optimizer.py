@@ -854,7 +854,20 @@ class CMAESOptimizer:
         sigma_np = np.asarray(sigma) if sigma is not None else None
 
         try:
-            # Run NLSQ curve_fit for refinement
+            # Run NLSQ curve_fit for refinement with memory-aware workflow
+            # Use workflow='auto' to auto-select memory strategy (standard/chunked/streaming)
+            # This prevents OOM on large datasets that were handled with data_chunk_size
+            # during the CMA-ES evolutionary phase
+            refinement_kwargs = {**kwargs}
+            refinement_kwargs.pop(
+                "workflow", None
+            )  # Remove if present to avoid conflict
+
+            n_points = len(ydata_np)
+            logger.debug(
+                f"NLSQ refinement using workflow='auto' for {n_points:,} points"
+            )
+
             result = curve_fit(
                 f,
                 xdata_np,
@@ -862,7 +875,8 @@ class CMAESOptimizer:
                 p0=p0_numpy,
                 sigma=sigma_np,
                 bounds=bounds,
-                **kwargs,
+                workflow="auto",  # Memory-aware: auto-selects standard/chunked/streaming
+                **refinement_kwargs,
             )
 
             # CurveFitResult has .x for parameters, .pcov for covariance
