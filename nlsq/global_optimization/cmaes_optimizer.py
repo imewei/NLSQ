@@ -311,7 +311,7 @@ class CMAESOptimizer:
         Parameters
         ----------
         f : Callable
-            Model function f(x, *params) -> y.
+            Model function ``f(x, *params) -> y``.
         xdata : ArrayLike
             Independent variable data.
         ydata : ArrayLike

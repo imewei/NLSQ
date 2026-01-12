@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **README**: Updated workflow presets section with 3-workflow system and usage table
 - **API Docs**: Added CMA-ES optimizer classes to `nlsq.global_optimization` API reference
 - **Workflow Docs**: Clarified bounds are "Optional" for `auto` workflow (not "No")
-- **Test Statistics**: Updated to 3389 tests with 100% pass rate
+- **Test Statistics**: Updated to 3485 tests with 100% pass rate
 - **Documentation Coverage**: 97.8% (212 classes, 252 functions, 696/722 methods documented)
 
 ### Fixed
@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - setuptools: >=80.0.0, wheel: >=0.45.0
   - PySide6: >=6.10.0, pyqtgraph: >=0.14.0, pytest-qt: >=4.5.0
 
-- **Documentation**: Updated test suite statistics to 3389 tests with 100% pass rate and 82% code coverage
+- **Documentation**: Updated test suite statistics to 3485 tests with 100% pass rate and 82% code coverage
 
 ## [0.6.1] - 2026-01-09
 

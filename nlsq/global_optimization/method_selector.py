@@ -137,10 +137,12 @@ class MethodSelector:
         Notes
         -----
         Selection logic:
+
         1. If 'cmaes' requested and evosax available -> 'cmaes'
-        2. If 'cmaes' requested but evosax unavailable -> 'multi-start' (with INFO log)
+        2. If 'cmaes' requested but evosax unavailable -> 'multi-start' (with warning)
         3. If 'multi-start' requested -> 'multi-start'
         4. If 'auto' or None:
+
            - If scale_ratio > threshold and evosax available -> 'cmaes'
            - Otherwise -> 'multi-start'
         """
