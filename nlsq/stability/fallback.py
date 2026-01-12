@@ -405,7 +405,9 @@ class FallbackOrchestrator:
         RuntimeError
             If all fallback strategies fail
         """
-        from nlsq import curve_fit  # Import here to avoid circular dependency
+        from nlsq.core.minpack import (
+            curve_fit,  # Deferred import to avoid circular dependency
+        )
 
         # Inject xdata/ydata for strategies that need it
         kwargs["_xdata"] = xdata

@@ -499,9 +499,9 @@ class SparseOptimizer:
 
         # Fall back to standard dense optimization
         logger.info(f"Using standard dense methods for {n_data}×{n_params} problem")
-        from nlsq import curve_fit
+        from nlsq.core.minpack import curve_fit
 
-        return curve_fit(func, xdata, ydata, x0, **kwargs)
+        return curve_fit(func, xdata, ydata, p0=x0, **kwargs)
 
     def _optimize_sparse(
         self,

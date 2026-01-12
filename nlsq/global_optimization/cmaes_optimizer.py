@@ -837,7 +837,7 @@ class CMAESOptimizer:
         dict[str, Any]
             Result dictionary with popt, pcov, and additional fields.
         """
-        from nlsq import curve_fit
+        from nlsq.core.minpack import curve_fit
 
         # Convert p0 to numpy for NLSQ
         p0_numpy = np.asarray(p0)

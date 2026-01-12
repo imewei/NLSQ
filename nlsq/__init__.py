@@ -41,7 +41,14 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 
 # Core API - always needed for basic functionality
-from nlsq import callbacks
+from nlsq.callbacks import (
+    CallbackBase,
+    CallbackChain,
+    EarlyStopping,
+    IterationLogger,
+    ProgressBar,
+    StopOptimization,
+)
 from nlsq.core import functions
 from nlsq.core.least_squares import LeastSquares
 from nlsq.core.minpack import CurveFit, curve_fit
@@ -225,16 +232,20 @@ __all__ = [
     "AdaptiveHybridStreamingOptimizer",
     "AlgorithmSelector",
     "BoundsInference",
+    "CallbackBase",
+    "CallbackChain",
     "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
     "DefenseLayerTelemetry",
+    "EarlyStopping",
     "FallbackOrchestrator",
     "FallbackResult",
     "FallbackStrategy",
     "GlobalOptimizationConfig",
     "HybridStreamingConfig",
     "InputValidator",
+    "IterationLogger",
     "LargeDatasetConfig",
     "LargeDatasetFitter",
     "LeastSquares",
@@ -255,10 +266,12 @@ __all__ = [
     "ProfileMetrics",
     "ProfilerVisualization",
     "ProfilingDashboard",
+    "ProgressBar",
     "RobustDecomposition",
     "SmartCache",
     "SparseJacobianComputer",
     "SparseOptimizer",
+    "StopOptimization",
     "TRFMemoryPool",
     "TournamentSelector",
     "__version__",
@@ -267,7 +280,6 @@ __all__ = [
     "cached_function",
     "cached_jacobian",
     "cached_jit",
-    "callbacks",
     "check_problem_stability",
     "clear_all_caches",
     "clear_compilation_cache",
