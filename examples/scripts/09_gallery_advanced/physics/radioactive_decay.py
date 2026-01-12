@@ -126,49 +126,59 @@ print(f"  t_1/2 = {t_half_fit:.0f} +/- {t_half_err:.0f} years")
 
 if QUICK:
     print("\n[Quick mode] skipping auto_global/custom fits and extended analysis.")
-    sys.exit(0)
+    # Use auto fit results as fallback for visualization
+    N0_g, lambda_g = N0_fit, lambda_fit
+    t_half_g, t_half_err_g = t_half_fit, t_half_err
+    N0_c, lambda_c = N0_fit, lambda_fit
+    t_half_c, t_half_err_c = t_half_fit, t_half_err
+else:
+    # Bounds for global optimization
+    bounds_lower = [10, 1e-6]  # N0 > 10, lambda > 1e-6
+    bounds_upper = [10000, 1e-2]  # N0 < 10000, lambda < 1e-2
 
-# Method 2: fit() with workflow='auto_global'
-print("\nMethod 2: fit() with workflow='auto_global'")
-popt_global, pcov_global = fit(
-    radioactive_decay,
-    time,
-    N_measured,
-    p0=p0,
-    sigma=sigma,
-    absolute_sigma=True,
-    workflow="auto_global",
-)
+    # Method 2: fit() with workflow='auto_global'
+    print("\nMethod 2: fit() with workflow='auto_global'")
+    popt_global, pcov_global = fit(
+        radioactive_decay,
+        time,
+        N_measured,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=True,
+        workflow="auto_global",
+        bounds=(bounds_lower, bounds_upper),
+    )
 
-N0_g, lambda_g = popt_global
-perr_g = np.sqrt(np.diag(pcov_global))
-t_half_g, t_half_err_g = propagate_uncertainty(lambda_g, perr_g[1])
+    N0_g, lambda_g = popt_global
+    perr_g = np.sqrt(np.diag(pcov_global))
+    t_half_g, t_half_err_g = propagate_uncertainty(lambda_g, perr_g[1])
 
-print(f"  N0 = {N0_g:.2f} +/- {perr_g[0]:.2f}")
-print(f"  lambda = {lambda_g:.6e} +/- {perr_g[1]:.6e}")
-print(f"  t_1/2 = {t_half_g:.0f} +/- {t_half_err_g:.0f} years")
+    print(f"  N0 = {N0_g:.2f} +/- {perr_g[0]:.2f}")
+    print(f"  lambda = {lambda_g:.6e} +/- {perr_g[1]:.6e}")
+    print(f"  t_1/2 = {t_half_g:.0f} +/- {t_half_err_g:.0f} years")
 
-# Method 3: workflow='auto_global' with custom settings
-print("\nMethod 3: workflow='auto_global' with custom settings")
-popt_custom, pcov_custom = fit(
-    radioactive_decay,
-    time,
-    N_measured,
-    p0=p0,
-    sigma=sigma,
-    absolute_sigma=True,
-    workflow="auto_global",
-    n_starts=15,
-    sampler="lhs",
-)
+    # Method 3: workflow='auto_global' with custom settings
+    print("\nMethod 3: workflow='auto_global' with custom settings")
+    popt_custom, pcov_custom = fit(
+        radioactive_decay,
+        time,
+        N_measured,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=True,
+        workflow="auto_global",
+        bounds=(bounds_lower, bounds_upper),
+        n_starts=15,
+        sampler="lhs",
+    )
 
-N0_c, lambda_c = popt_custom
-perr_c = np.sqrt(np.diag(pcov_custom))
-t_half_c, t_half_err_c = propagate_uncertainty(lambda_c, perr_c[1])
+    N0_c, lambda_c = popt_custom
+    perr_c = np.sqrt(np.diag(pcov_custom))
+    t_half_c, t_half_err_c = propagate_uncertainty(lambda_c, perr_c[1])
 
-print(f"  N0 = {N0_c:.2f} +/- {perr_c[0]:.2f}")
-print(f"  lambda = {lambda_c:.6e} +/- {perr_c[1]:.6e}")
-print(f"  t_1/2 = {t_half_c:.0f} +/- {t_half_err_c:.0f} years")
+    print(f"  N0 = {N0_c:.2f} +/- {perr_c[0]:.2f}")
+    print(f"  lambda = {lambda_c:.6e} +/- {perr_c[1]:.6e}")
+    print(f"  t_1/2 = {t_half_c:.0f} +/- {t_half_err_c:.0f} years")
 
 
 # Use auto workflow results for analysis

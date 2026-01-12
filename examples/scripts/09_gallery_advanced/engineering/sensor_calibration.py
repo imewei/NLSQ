@@ -28,9 +28,7 @@ import numpy as np
 
 from nlsq import fit
 
-if os.environ.get("NLSQ_EXAMPLES_QUICK"):
-    print("Quick mode: skipping advanced sensor calibration demo.")
-    sys.exit(0)
+QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 
 # Set random seed
 np.random.seed(42)
@@ -96,6 +94,19 @@ voltage_measured = voltage_true + np.random.normal(0, 5, size=len(temp_reference
 sigma_voltage = 5.0 * np.ones_like(voltage_measured)
 sigma_temp = 0.1 * np.ones_like(temp_reference)
 
+
+if QUICK:
+    print("=" * 70)
+    print("SENSOR CALIBRATION: Quick Mode Summary")
+    print("=" * 70)
+    print("\n⏩ Quick mode: skipping full sensor calibration demo.")
+    print("\nThis example demonstrates:")
+    print("  - Linear, quadratic, cubic calibration models")
+    print("  - Steinhart-Hart thermistor model")
+    print("  - fit() with workflow='auto' and workflow='auto_global'")
+    print("  - Multi-start optimization for non-linear models")
+    print("=" * 70)
+    sys.exit(0)
 
 print("=" * 70)
 print("SENSOR CALIBRATION: ADVANCED FITTING WITH fit() API")
@@ -187,47 +198,63 @@ print(f"  y = {d0:.4f} + {d1:.6f}*V + {d2:.3e}*V^2 + {d3:.3e}*V^3")
 print(f"  RMSE: {rmse_cubic:.3f} C")
 print(f"  Max residual: {np.max(np.abs(residuals_cubic)):.2f} C")
 
-# Method 2: fit() with 'auto_global' workflow
-print("\nMethod 2: fit() with 'auto_global' workflow")
-popt_cubic_g, pcov_cubic_g = fit(
-    cubic_model,
-    voltage_measured,
-    temp_reference,
-    p0=[-20, 0.01, -1e-6, 1e-10],
-    sigma=sigma_temp,
-    absolute_sigma=True,
-    workflow="auto_global",
-)
+if QUICK:
+    # Use auto workflow results as fallback for visualization
+    d0_g, d1_g, d2_g, d3_g = d0, d1, d2, d3
+    rmse_cubic_g = rmse_cubic
+    residuals_cubic_g = residuals_cubic
+    d0_c, d1_c, d2_c, d3_c = d0, d1, d2, d3
+    rmse_cubic_c = rmse_cubic
+    residuals_cubic_c = residuals_cubic
+    print("\n[Quick mode] Skipping auto_global methods - using auto results")
+else:
+    # Bounds for global optimization
+    bounds_cubic_lower = [-100, 0.001, -1e-4, -1e-8]
+    bounds_cubic_upper = [100, 0.1, 1e-4, 1e-8]
 
-d0_g, d1_g, d2_g, d3_g = popt_cubic_g
-perr_g = np.sqrt(np.diag(pcov_cubic_g))
-temp_pred_cubic_g = cubic_model(voltage_measured, *popt_cubic_g)
-residuals_cubic_g = temp_reference - temp_pred_cubic_g
-rmse_cubic_g = np.sqrt(np.mean(residuals_cubic_g**2))
+    # Method 2: fit() with 'auto_global' workflow
+    print("\nMethod 2: fit() with 'auto_global' workflow")
+    popt_cubic_g, pcov_cubic_g = fit(
+        cubic_model,
+        voltage_measured,
+        temp_reference,
+        p0=[-20, 0.01, -1e-6, 1e-10],
+        sigma=sigma_temp,
+        absolute_sigma=True,
+        workflow="auto_global",
+        bounds=(bounds_cubic_lower, bounds_cubic_upper),
+    )
 
-print(f"  RMSE: {rmse_cubic_g:.3f} C")
+    d0_g, d1_g, d2_g, d3_g = popt_cubic_g
+    perr_g = np.sqrt(np.diag(pcov_cubic_g))
+    temp_pred_cubic_g = cubic_model(voltage_measured, *popt_cubic_g)
+    residuals_cubic_g = temp_reference - temp_pred_cubic_g
+    rmse_cubic_g = np.sqrt(np.mean(residuals_cubic_g**2))
 
-# Method 3: workflow="auto_global" with custom settings
-print("\nMethod 3: workflow='auto_global' with custom settings")
-popt_cubic_c, pcov_cubic_c = fit(
-    cubic_model,
-    voltage_measured,
-    temp_reference,
-    p0=[-20, 0.01, -1e-6, 1e-10],
-    sigma=sigma_temp,
-    absolute_sigma=True,
-    workflow="auto_global",
-    n_starts=15,
-    sampler="lhs",
-)
+    print(f"  RMSE: {rmse_cubic_g:.3f} C")
 
-d0_c, d1_c, d2_c, d3_c = popt_cubic_c
-perr_c = np.sqrt(np.diag(pcov_cubic_c))
-temp_pred_cubic_c = cubic_model(voltage_measured, *popt_cubic_c)
-residuals_cubic_c = temp_reference - temp_pred_cubic_c
-rmse_cubic_c = np.sqrt(np.mean(residuals_cubic_c**2))
+    # Method 3: workflow="auto_global" with custom settings
+    print("\nMethod 3: workflow='auto_global' with custom settings")
+    popt_cubic_c, pcov_cubic_c = fit(
+        cubic_model,
+        voltage_measured,
+        temp_reference,
+        p0=[-20, 0.01, -1e-6, 1e-10],
+        sigma=sigma_temp,
+        absolute_sigma=True,
+        workflow="auto_global",
+        bounds=(bounds_cubic_lower, bounds_cubic_upper),
+        n_starts=15,
+        sampler="lhs",
+    )
 
-print(f"  RMSE: {rmse_cubic_c:.3f} C")
+    d0_c, d1_c, d2_c, d3_c = popt_cubic_c
+    perr_c = np.sqrt(np.diag(pcov_cubic_c))
+    temp_pred_cubic_c = cubic_model(voltage_measured, *popt_cubic_c)
+    residuals_cubic_c = temp_reference - temp_pred_cubic_c
+    rmse_cubic_c = np.sqrt(np.mean(residuals_cubic_c**2))
+
+    print(f"  RMSE: {rmse_cubic_c:.3f} C")
 
 
 # =============================================================================

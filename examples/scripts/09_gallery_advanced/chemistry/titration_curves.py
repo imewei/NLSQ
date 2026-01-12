@@ -214,6 +214,9 @@ print(f"  Ve = {Ve_fit:.2f} +/- {Ve_err:.2f} mL (true: {Ve_true})")
 
 if QUICK:
     print("\n⏩ Quick mode: skipping global/custom multi-start fits.")
+    # Use auto fit results as fallback for visualization
+    pKa_g, Ve_g, pH0_g = pKa_fit, Ve_fit, pH0_fit
+    pKa_c, Ve_c, pH0_c = pKa_fit, Ve_fit, pH0_fit
 else:
     # Method 2: fit() with 'auto_global' workflow
     global_starts = 20
@@ -328,76 +331,91 @@ print(f"Effective buffer range: {pKa_fit - 1:.2f} - {pKa_fit + 1:.2f} (pKa +/- 1
 # Diprotic Acid Titration (Carbonic Acid)
 # =============================================================================
 if QUICK:
-    print("⏩ Quick mode: skipping buffer capacity and diprotic sections.")
-    sys.exit(0)
+    print("⏩ Quick mode: skipping diprotic section.")
+    # Define fallback values for visualization and summary
+    pKa1_fit_di, pKa2_fit_di = 6.35, 10.33
+    pKa1_true_di, pKa2_true_di = 6.35, 10.33
+    pKa1_err_di, pKa2_err_di = 0.0, 0.0
+    Ve1_fit, Ve2_fit = 25.0, 50.0
+    Ve1_err, Ve2_err = 0.0, 0.0
+    rmse_di, chi_squared_di, dof_di = 0.0, 0.0, 1
+    # Minimal placeholder data for visualization
+    V_di = np.linspace(0.1, 70, 20)
+    pH_di_measured = np.linspace(4, 12, 20)
+    sigma_pH_di = np.full(20, 0.08)
+    pH_di_fitted = pH_di_measured
+else:
+    print("\n" + "-" * 70)
+    print("DIPROTIC ACID TITRATION (Carbonic Acid) with fit() API")
+    print("-" * 70)
 
-print("\n" + "-" * 70)
-print("DIPROTIC ACID TITRATION (Carbonic Acid) with fit() API")
-print("-" * 70)
+    # True parameters for H2CO3
+    pKa1_true_di = 6.35
+    pKa2_true_di = 10.33
+    Ve1_true = 25.0
+    Ve2_true = 50.0
 
-# True parameters for H2CO3
-pKa1_true_di = 6.35
-pKa2_true_di = 10.33
-Ve1_true = 25.0
-Ve2_true = 50.0
+    # Generate synthetic diprotic titration data
+    V_di = np.linspace(0.1, 70, 150)
+    pH_di_true = np.zeros_like(V_di)
 
-# Generate synthetic diprotic titration data
-V_di = np.linspace(0.1, 70, 150)
-pH_di_true = np.zeros_like(V_di)
-
-for i, V in enumerate(V_di):
-    if Ve1_true > V:
-        f = V / Ve1_true
-        if 0.01 < f < 0.99:
-            pH_di_true[i] = pKa1_true_di + np.log10(f / (1 - f))
+    for i, V in enumerate(V_di):
+        if Ve1_true > V:
+            f = V / Ve1_true
+            if 0.01 < f < 0.99:
+                pH_di_true[i] = pKa1_true_di + np.log10(f / (1 - f))
+            else:
+                pH_di_true[i] = 4.0
+        elif Ve2_true > V:
+            f = (V - Ve1_true) / (Ve2_true - Ve1_true)
+            if 0.01 < f < 0.99:
+                pH_di_true[i] = pKa2_true_di + np.log10(f / (1 - f))
+            else:
+                pH_di_true[i] = 8.3
         else:
-            pH_di_true[i] = 4.0
-    elif Ve2_true > V:
-        f = (V - Ve1_true) / (Ve2_true - Ve1_true)
-        if 0.01 < f < 0.99:
-            pH_di_true[i] = pKa2_true_di + np.log10(f / (1 - f))
-        else:
-            pH_di_true[i] = 8.3
-    else:
-        pH_di_true[i] = 12.0
+            pH_di_true[i] = 12.0
 
-pH_di_measured = pH_di_true + np.random.normal(0, 0.08, size=pH_di_true.shape)
-sigma_pH_di = np.full_like(pH_di_measured, 0.08)
+    pH_di_measured = pH_di_true + np.random.normal(0, 0.08, size=pH_di_true.shape)
+    sigma_pH_di = np.full_like(pH_di_measured, 0.08)
 
-# Fit diprotic model with auto workflow
-p0_di = [6.0, 10.0, 24.0, 48.0]
-bounds_lower_di = [5.0, 9.0, 20.0, 45.0]
-bounds_upper_di = [7.0, 11.0, 30.0, 55.0]
+    # Fit diprotic model with auto workflow
+    p0_di = [6.0, 10.0, 24.0, 48.0]
+    bounds_lower_di = [5.0, 9.0, 20.0, 45.0]
+    bounds_upper_di = [7.0, 11.0, 30.0, 55.0]
 
-popt_di, pcov_di = fit(
-    diprotic_titration,
-    V_di,
-    pH_di_measured,
-    p0=p0_di,
-    sigma=sigma_pH_di,
-    bounds=(bounds_lower_di, bounds_upper_di),
-    absolute_sigma=True,
-    workflow="auto",
-)
+    popt_di, pcov_di = fit(
+        diprotic_titration,
+        V_di,
+        pH_di_measured,
+        p0=p0_di,
+        sigma=sigma_pH_di,
+        bounds=(bounds_lower_di, bounds_upper_di),
+        absolute_sigma=True,
+        workflow="auto",
+    )
 
-pKa1_fit_di, pKa2_fit_di, Ve1_fit, Ve2_fit = popt_di
-pKa1_err_di, pKa2_err_di, Ve1_err, Ve2_err = np.sqrt(np.diag(pcov_di))
+    pKa1_fit_di, pKa2_fit_di, Ve1_fit, Ve2_fit = popt_di
+    pKa1_err_di, pKa2_err_di, Ve1_err, Ve2_err = np.sqrt(np.diag(pcov_di))
 
-print("Fitted Parameters (auto workflow):")
-print(f"  pKa1 = {pKa1_fit_di:.2f} +/- {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})")
-print(f"  pKa2 = {pKa2_fit_di:.2f} +/- {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})")
-print(f"  Ve1 = {Ve1_fit:.2f} +/- {Ve1_err:.2f} mL (true: {Ve1_true:.1f} mL)")
-print(f"  Ve2 = {Ve2_fit:.2f} +/- {Ve2_err:.2f} mL (true: {Ve2_true:.1f} mL)")
+    print("Fitted Parameters (auto workflow):")
+    print(
+        f"  pKa1 = {pKa1_fit_di:.2f} +/- {pKa1_err_di:.2f} (true: {pKa1_true_di:.2f})"
+    )
+    print(
+        f"  pKa2 = {pKa2_fit_di:.2f} +/- {pKa2_err_di:.2f} (true: {pKa2_true_di:.2f})"
+    )
+    print(f"  Ve1 = {Ve1_fit:.2f} +/- {Ve1_err:.2f} mL (true: {Ve1_true:.1f} mL)")
+    print(f"  Ve2 = {Ve2_fit:.2f} +/- {Ve2_err:.2f} mL (true: {Ve2_true:.1f} mL)")
 
-pH_di_fitted = diprotic_titration(V_di, *popt_di)
-residuals_di = pH_di_measured - pH_di_fitted
-rmse_di = np.sqrt(np.mean(residuals_di**2))
-chi_squared_di = np.sum((residuals_di / sigma_pH_di) ** 2)
-dof_di = len(pH_di_measured) - len(popt_di)
+    pH_di_fitted = diprotic_titration(V_di, *popt_di)
+    residuals_di = pH_di_measured - pH_di_fitted
+    rmse_di = np.sqrt(np.mean(residuals_di**2))
+    chi_squared_di = np.sum((residuals_di / sigma_pH_di) ** 2)
+    dof_di = len(pH_di_measured) - len(popt_di)
 
-print("\nGoodness of Fit:")
-print(f"  RMSE = {rmse_di:.4f} pH units")
-print(f"  chi^2/dof = {chi_squared_di / dof_di:.3f}")
+    print("\nGoodness of Fit:")
+    print(f"  RMSE = {rmse_di:.4f} pH units")
+    print(f"  chi^2/dof = {chi_squared_di / dof_di:.3f}")
 
 
 # =============================================================================
