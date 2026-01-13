@@ -84,6 +84,9 @@ from nlsq.utils.error_messages import OptimizationError
 from nlsq.utils.logging import get_logger
 from nlsq.utils.validators import InputValidator
 
+# Feature flags for component extraction (lazy import to avoid circular deps)
+# from nlsq.core.feature_flags import get_feature_flags  # Imported at function level
+
 # Lazy imports: these are imported at function level to reduce module dependencies
 # from nlsq.diagnostics.types import DiagnosticsReport
 # from nlsq.precision.algorithm_selector import auto_select_algorithm
@@ -316,7 +319,7 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
-def fit(
+def fit(  # noqa: C901
     f: ModelFunction,
     xdata: ArrayLike,
     ydata: ArrayLike,
@@ -442,12 +445,32 @@ def fit(
         p0_arr = np.atleast_1d(p0)
         n_params = len(p0_arr)
     else:
-        # Infer from function signature
-        sig = signature(f)
-        args = sig.parameters
-        if len(args) < 2:
-            raise ValueError("Unable to determine number of fit parameters.")
-        n_params = len(args) - 1
+        # Try to auto-estimate p0 to determine n_params
+        # This handles functions with *args signatures (e.g., polynomials) correctly
+        estimated_success = False
+        if hasattr(f, "estimate_p0"):
+            try:
+                # Use estimator to get p0 and count
+                # We reuse this p0 to avoid re-estimation overhead later
+                estimated_p0_val = f.estimate_p0(xdata_arr, ydata_arr)
+                # Convert to list/array to check length safely
+                p0_temp = np.atleast_1d(estimated_p0_val)
+                n_params = len(p0_temp)
+                p0 = estimated_p0_val
+                estimated_success = True
+            except Exception as e:
+                # Log debug warning but continue to fallback.
+                # Note: We don't want to crash here if estimation fails, just fallback.
+                if "_logger" in globals():
+                    _logger.debug(f"Automatic p0 estimation failed: {e}")
+
+        if not estimated_success:
+            # Fallback to inference from function signature
+            sig = signature(f)
+            args = sig.parameters
+            if len(args) < 2:
+                raise ValueError("Unable to determine number of fit parameters.")
+            n_params = len(args) - 1
 
     # Convert goal string to OptimizationGoal enum if needed
     goal_enum = _parse_goal_parameter(goal)
@@ -3321,6 +3344,80 @@ class CurveFit:
 
         return data_mask, none_mask, len_diff, should_pad
 
+    def _preprocess_input_data(
+        self,
+        f: Callable,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        p0: np.ndarray,
+        check_finite: bool,
+    ) -> tuple[np.ndarray, np.ndarray, int, int]:
+        """Preprocess input data with optional feature flag routing.
+
+        Routes to either the new DataPreprocessor component or the original
+        inline methods based on the NLSQ_PREPROCESSOR_IMPL feature flag.
+
+        Parameters
+        ----------
+        f : Callable
+            Model function
+        xdata : np.ndarray
+            X data
+        ydata : np.ndarray
+            Y data
+        p0 : np.ndarray
+            Initial parameter guess
+        check_finite : bool
+            Whether to check for finite values
+
+        Returns
+        -------
+        xdata : np.ndarray
+            Validated X data
+        ydata : np.ndarray
+            Validated Y data
+        m : int
+            Data length
+        xdims : int
+            X data dimensionality
+        """
+        # Check feature flag for new implementation
+        from nlsq.core.feature_flags import get_feature_flags
+
+        flags = get_feature_flags()
+
+        if flags.should_use_new("preprocessor"):
+            # Use new DataPreprocessor component
+            from nlsq.core.orchestration import DataPreprocessor
+
+            preprocessor = DataPreprocessor()
+            data = preprocessor.preprocess(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                check_finite=check_finite,
+            )
+
+            # Convert JAX arrays back to numpy for compatibility with rest of pipeline
+            xdata = np.asarray(data.xdata)
+            ydata = np.asarray(data.ydata)
+            m = data.n_points
+            xdims = xdata.ndim
+
+            return xdata, ydata, m, xdims
+
+        # Original implementation (old code path)
+        # Step 6: Validate and sanitize inputs (if stability enabled)
+        xdata, ydata = self._validate_and_sanitize_inputs(f, xdata, ydata, p0)
+
+        # Step 7: Convert to arrays and validate finiteness
+        xdata, ydata = self._convert_and_validate_arrays(xdata, ydata, check_finite)
+
+        # Step 8: Validate data lengths
+        m, xdims = self._validate_data_lengths(xdata, ydata)
+
+        return xdata, ydata, m, xdims
+
     def _apply_padding_if_needed(
         self,
         xdata: np.ndarray,
@@ -3465,14 +3562,11 @@ class CurveFit:
             method, f, xdata, ydata, p0, bounds, kwargs
         )
 
-        # Step 6: Validate and sanitize inputs (if stability enabled)
-        xdata, ydata = self._validate_and_sanitize_inputs(f, xdata, ydata, p0)
-
-        # Step 7: Convert to arrays and validate finiteness
-        xdata, ydata = self._convert_and_validate_arrays(xdata, ydata, check_finite)
-
-        # Step 8: Validate data lengths
-        m, xdims = self._validate_data_lengths(xdata, ydata)
+        # Steps 6-8: Preprocess data (validation, conversion, length check)
+        # Use new DataPreprocessor when feature flag enabled
+        xdata, ydata, m, xdims = self._preprocess_input_data(
+            f, xdata, ydata, p0, check_finite
+        )
 
         # Step 9: Setup data mask and padding parameters
         data_mask, none_mask, len_diff, should_pad = self._setup_data_mask_and_padding(

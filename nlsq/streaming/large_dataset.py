@@ -38,7 +38,6 @@ from nlsq.utils.logging import get_logger
 # Type-only imports to avoid circular dependencies
 if TYPE_CHECKING:
     from nlsq.core.minpack import CurveFit
-    from nlsq.core.workflow import MemoryTier
 
 # Default fallback memory in GB when detection fails (per requirements)
 _DEFAULT_FALLBACK_MEMORY_GB = 16.0

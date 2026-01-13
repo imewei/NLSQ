@@ -538,7 +538,85 @@ class CurveFitResult(OptimizeResult):
         intervals = np.column_stack([lower, upper])
         return intervals
 
-    def plot(self, ax=None, show_residuals: bool = True, **kwargs):
+    def confidence_band(self, x=None, alpha: float = 0.95):
+        """Compute mean prediction confidence band.
+
+        Parameters
+        ----------
+        x : array_like, optional
+            x values for prediction. If None, uses self.xdata (default: None).
+        alpha : float, optional
+            Confidence level (default: 0.95 for 95% CI).
+
+        Returns
+        -------
+        lower : ndarray
+            Lower confidence bound.
+        upper : ndarray
+            Upper confidence bound.
+
+        Notes
+        -----
+        This calculates the confidence interval for the mean response (f(x)),
+        representing the uncertainty in the model curve itself due to parameter
+        uncertainties.
+        """
+        if not hasattr(self, "model"):
+            raise AttributeError("Cannot compute confidence band: model not available")
+        if not hasattr(self, "pcov") or self.pcov is None:
+            raise AttributeError("Cannot compute confidence band: pcov not available")
+
+        from scipy import stats
+
+        if x is None:
+            if not hasattr(self, "xdata"):
+                raise AttributeError(
+                    "Cannot compute confidence band: xdata not available"
+                )
+            x = self.xdata
+
+        # Ensure inputs are numpy arrays
+        x = np.asarray(x)
+        popt = self.popt
+        pcov = self.pcov
+
+        # Jacobian calculation (finite difference)
+        n_points = len(x)
+        n_params = len(popt)
+        eps = 1e-8
+
+        # Calculate base prediction
+        y0 = np.array(self.model(x, *popt))
+        jacobian = np.zeros((n_points, n_params))
+
+        for i in range(n_params):
+            params_plus = popt.copy()
+            params_plus[i] += eps
+            y_plus = np.array(self.model(x, *params_plus))
+            jacobian[:, i] = (y_plus - y0) / eps
+
+        # Variance of the mean response: J @ pcov @ J.T (diagonal)
+        # element-wise for diagonal
+        variance = np.sum((jacobian @ pcov) * jacobian, axis=1)
+        std_error = np.sqrt(np.maximum(variance, 0))
+
+        # t-statistic
+        n_data = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
+        dof = max(n_data - n_params, 1)
+        t_val = stats.t.ppf((1 + alpha) / 2, dof)
+
+        lower = y0 - t_val * std_error
+        upper = y0 + t_val * std_error
+
+        return lower, upper
+
+    def plot(
+        self,
+        ax=None,
+        show_residuals: bool = True,
+        show_confidence: bool = True,
+        **kwargs,
+    ):
         """Plot data, fitted curve, and residuals.
 
         Parameters
@@ -547,6 +625,8 @@ class CurveFitResult(OptimizeResult):
             Axes to plot on. If None, creates new figure.
         show_residuals : bool, optional
             Whether to show residual plot (default: True).
+        show_confidence : bool, optional
+            Whether to show 95% confidence band (default: True).
         **kwargs
             Additional keyword arguments passed to plotting functions.
 
@@ -562,10 +642,6 @@ class CurveFitResult(OptimizeResult):
         >>> result = curve_fit(model, x, y)
         >>> result.plot()
         >>> plt.show()
-
-        >>> # Custom styling
-        >>> fig, ax = plt.subplots()
-        >>> result.plot(ax=ax, show_residuals=False, color='red', alpha=0.7)
         """
         try:
             import matplotlib.pyplot as plt
@@ -599,7 +675,14 @@ class CurveFitResult(OptimizeResult):
         # Sort for smooth curve plotting
         sort_idx = np.argsort(x)
         x_sorted = x[sort_idx]
-        y_pred_sorted = self.predictions[sort_idx]
+        # Recalculate predictions on sorted x for smooth line
+        # Use high density x for plotting if x is sparse?
+        # For strict correctness with user data, stick to sorted data points or interpolated?
+        # Usually for plotting we want a smooth line
+        # But predictions property gives y at xdata.
+        # Let's generate a dense grid for the line and band
+        x_dense = np.linspace(x.min(), x.max(), 500)
+        y_dense = np.array(self.model(x_dense, *self.popt))
 
         # Extract plotting parameters from kwargs
         scatter_alpha = kwargs.pop("alpha", 0.6)
@@ -612,11 +695,21 @@ class CurveFitResult(OptimizeResult):
         scatter_kwargs.update(kwargs)
         ax1.scatter(x, y, **scatter_kwargs)
 
-        # Plot fitted curve
+        # Plot confidence band
         fit_color = "red" if scatter_color is None else scatter_color
+        if show_confidence and hasattr(self, "pcov") and self.pcov is not None:
+            try:
+                lower, upper = self.confidence_band(x_dense, alpha=0.95)
+                ax1.fill_between(
+                    x_dense, lower, upper, color=fit_color, alpha=0.2, label="95% CI"
+                )
+            except Exception:
+                pass  # Fail gracefully if band calculation fails
+
+        # Plot fitted curve
         ax1.plot(
-            x_sorted,
-            y_pred_sorted,
+            x_dense,
+            y_dense,
             color=fit_color,
             linewidth=2,
             label="Fit",
