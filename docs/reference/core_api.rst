@@ -165,6 +165,13 @@ The result object returned by optimization functions.
 - ``message``: Termination message
 - ``success``: Whether optimization succeeded
 
+**Methods:**
+
+- :meth:`~nlsq.result.CurveFitResult.plot`: Plot data, fit, and confidence bands
+- :meth:`~nlsq.result.CurveFitResult.confidence_band`: Calculate confidence intervals
+
+See :doc:`visualization` for details on plotting.
+
 Return Values
 -------------
 

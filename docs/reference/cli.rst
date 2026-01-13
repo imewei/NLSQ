@@ -61,6 +61,7 @@ Execute single curve fit from a YAML workflow configuration.
      workflow.yaml        Path to workflow YAML configuration file
 
    Options:
+     --style PRESET       Override visualization style (publication, nature, science, presentation, minimal)
      -o, --output FILE    Override export.results_file path
      --stdout             Output results as JSON to stdout (for piping)
 
@@ -70,6 +71,9 @@ Execute single curve fit from a YAML workflow configuration.
 
    # Basic fit
    nlsq fit workflow.yaml
+
+   # Generate Nature-style figure
+   nlsq fit workflow.yaml --style nature
 
    # Override output file
    nlsq fit workflow.yaml --output results.json

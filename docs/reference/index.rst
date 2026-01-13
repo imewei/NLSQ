@@ -17,6 +17,7 @@ Complete reference documentation for all NLSQ modules, functions, and classes.
    large_data
    global_optimization
    configuration
+   visualization
    cli
 
 Core API
