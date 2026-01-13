@@ -12,9 +12,13 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PySide6.QtWidgets import (
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QScrollArea,
     QSplitter,
     QTabWidget,
@@ -54,7 +58,9 @@ class ResultsPage(QWidget):
         """
         super().__init__()
         self._app_state = app_state
+        self._app_state = app_state
         self._has_results = False
+        self._last_result = None
         self._setup_ui()
         self._connect_signals()
 
@@ -65,9 +71,20 @@ class ResultsPage(QWidget):
         layout.setSpacing(16)
 
         # Title
+        # Header row with title and export button
+        header_layout = QHBoxLayout()
         title = QLabel("Results")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        self._export_btn = QPushButton("Export Figure...")
+        self._export_btn.clicked.connect(self._on_export_clicked)
+        self._export_btn.setEnabled(False)
+        header_layout.addWidget(self._export_btn)
+
+        layout.addLayout(header_layout)
 
         # Main content - splitter with left/right panels
         splitter = QSplitter()
@@ -180,6 +197,7 @@ class ResultsPage(QWidget):
             return
 
         self._has_results = True
+        self._last_result = result
 
         # Extract result data
         state = self._app_state.state
@@ -242,6 +260,105 @@ class ResultsPage(QWidget):
                 f"Fit completed with warnings ({n_iter} evaluations)"
             )
             self._status_label.setStyleSheet("color: #FF9800;")
+
+        self._export_btn.setEnabled(True)
+
+    def _on_export_clicked(self) -> None:
+        """Handle export button click."""
+        import os
+        from pathlib import Path
+
+        from nlsq.cli.visualization import STYLE_PRESETS, FitVisualizer
+
+        # Select style preset
+        presets = list(STYLE_PRESETS.keys())
+        style, ok = QInputDialog.getItem(
+            self, "Select Style", "Visualization Preset:", presets, 0, False
+        )
+        if not ok or not style:
+            return
+
+        # Select output file (base name)
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Figure",
+            "",
+            "PDF Files (*.pdf);;PNG Files (*.png);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        # Parse output path
+        path_obj = Path(file_path)
+        output_dir = path_obj.parent
+        filename_prefix = path_obj.stem
+        # Determining desired format from extension if explicitly set?
+        # FitVisualizer configuration 'formats' list.
+        # If user selected .png, use png. If .pdf, use pdf.
+        ext = path_obj.suffix.lower().lstrip(".")
+        formats = [ext] if ext in ["png", "pdf", "svg", "eps"] else ["pdf", "png"]
+
+        # Prepare visualizer arguments
+        state = self._app_state.state
+        xdata = state.xdata
+        ydata = state.ydata
+        # Reconstruct result (we might not have the original object reference here?
+        # update_results(result) was called, but we didn't store 'result' in self._last_result.
+        # We need to store the last result object.
+        if not hasattr(self, "_last_result") or self._last_result is None:
+            QMessageBox.warning(self, "Export Failed", "No result data available.")
+            return
+
+        result = self._last_result
+
+        # Prepare dictionaries compatible with FitVisualizer or dict-like access
+        # Result might be OptimizeResult or CurveFitResult.
+        # Convert to dict for Visualizer if needed, or Visualizer handles dict-like?
+        # FitVisualizer.generate takes result: dict.
+        # But CurveFitResult (and OptimizeResult) behaves like a dict.
+
+        # Data dict
+        data_dict = {
+            "xdata": xdata,
+            "ydata": ydata,
+            # Pass sigma if available? Not stored in state except implicitly used?
+            # Ideally state should track sigma. For now assume None or equal weights.
+        }
+
+        # Config dict
+        config = {
+            "visualization": {
+                "enabled": True,
+                "output_dir": str(output_dir),
+                "filename_prefix": filename_prefix,
+                "style": style,
+                "formats": formats,
+                "main_plot": {
+                    "confidence_band": {"enabled": True},
+                    "annotation": {"enabled": True},
+                    "legend": {"enabled": True},
+                },
+                "residuals_plot": {"enabled": True},
+                "histogram": {"enabled": True},
+            }
+        }
+
+        try:
+            visualizer = FitVisualizer()
+            paths = visualizer.generate(
+                result=self._last_result,  # Should behave as dict
+                data=data_dict,
+                model=state.model_func,
+                config=config,
+            )
+
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"Figures exported to:\n{output_dir}\n\nGenerated {len(paths)} files.",
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", f"An error occurred:\n{e!s}")
 
     def _get_param_names(self) -> list[str]:
         """Get parameter names from the model.
@@ -371,18 +488,41 @@ class ResultsPage(QWidget):
         conf_upper = None
 
         if pcov is not None and state.model_func is not None:
-            with contextlib.suppress(Exception):
+            try:
                 # Use delta method for confidence bands
                 conf_lower, conf_upper = self._compute_confidence_bands(
                     x_dense, popt, pcov, state.model_func
                 )
+            except Exception as e:
+                # Log error but don't crash UI
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to compute confidence bands: {e}", exc_info=True)
+                conf_lower = None
+                conf_upper = None
 
         # Update fit plot
         self._fit_plot.set_data(xdata, ydata)
         self._fit_plot.set_fit(x_dense, y_dense, conf_lower, conf_upper)
 
+        # Compute confidence interval for residuals (at data points)
+        conf_interval_resid = None
+        if pcov is not None and state.model_func is not None:
+            try:
+                # Calculate CI at original data points
+                c_low, c_high = self._compute_confidence_bands(
+                    xdata, popt, pcov, state.model_func
+                )
+                conf_interval_resid = (c_high - c_low) / 2
+            except Exception:
+                # Logging handled in _compute_confidence_bands, just ignore here
+                pass
+
         # Update residuals plot
-        self._residuals_plot.set_residuals(xdata, residuals, y_fit)
+        self._residuals_plot.set_residuals(
+            xdata, residuals, y_fit, confidence_interval=conf_interval_resid
+        )
 
         # Update histogram
         self._histogram_plot.set_data(residuals)
@@ -407,6 +547,8 @@ class ResultsPage(QWidget):
         """
         # Compute numerical gradient of model w.r.t. parameters
         eps = 1e-8
+        # Ensure popt is a mutable numpy array (handle JAX arrays)
+        popt = np.array(popt)
         n_params = len(popt)
         n_points = len(x)
 

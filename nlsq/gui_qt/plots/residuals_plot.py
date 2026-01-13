@@ -52,6 +52,7 @@ class ResidualsPlotWidget(QWidget):
         self._residuals: NDArray | None = None
         self._fitted: NDArray | None = None
         self._std_residuals: NDArray | None = None
+        self._confidence_interval: NDArray | None = None
 
         self._setup_ui()
 
@@ -101,6 +102,7 @@ class ResidualsPlotWidget(QWidget):
         x: NDArray,
         residuals: NDArray,
         fitted: NDArray | None = None,
+        confidence_interval: NDArray | None = None,
     ) -> None:
         """Set the residuals data.
 
@@ -108,10 +110,14 @@ class ResidualsPlotWidget(QWidget):
             x: X data array
             residuals: Residuals (y - y_fit)
             fitted: Fitted values (optional, for residuals vs fitted)
+            confidence_interval: Half-width of confidence bands (at x points)
         """
         self._x = np.asarray(x)
         self._residuals = np.asarray(residuals)
         self._fitted = np.asarray(fitted) if fitted is not None else None
+        self._confidence_interval = (
+            np.asarray(confidence_interval) if confidence_interval is not None else None
+        )
 
         # Compute standardized residuals
         std = np.std(self._residuals)
@@ -157,6 +163,45 @@ class ResidualsPlotWidget(QWidget):
 
         # Downsample if needed
         plot_x, plot_y = self._downsample(plot_x, plot_y)
+
+        # Draw confidence bands (only for Residuals vs X)
+        if plot_type == 0 and self._confidence_interval is not None:
+            # We assume confidence interval is symmetric around zero for residuals
+            band_upper = self._confidence_interval
+            band_lower = -self._confidence_interval
+
+            # Downsample bands to match x
+            # Note: We reuse plot_x from above which is downsampled self._x
+            # So we must downsample the CI array using the same logic/slice
+            # But self._downsample calculates stride internally.
+            # To be safe and consistent, we should downsample CI using the same internal logic
+            # OR pass them together. Simpler to just re-downsample here.
+            _, band_upper_ds = self._downsample(self._x, band_upper)
+            _, band_lower_ds = self._downsample(self._x, band_lower)
+
+            curve_lower = pg.PlotDataItem(plot_x, band_lower_ds, pen=pg.mkPen(None))
+            curve_upper = pg.PlotDataItem(plot_x, band_upper_ds, pen=pg.mkPen(None))
+
+            fill = pg.FillBetweenItem(
+                curve_lower,
+                curve_upper,
+                brush=pg.mkBrush(244, 67, 54, 30),  # Red with low alpha
+            )
+            self._plot_widget.addItem(curve_lower)
+            self._plot_widget.addItem(curve_upper)
+            self._plot_widget.addItem(fill)
+
+        # Draw warning lines for standardized residuals
+        if plot_type >= 2:
+            for y_val in [-2, 2]:
+                line = pg.InfiniteLine(
+                    pos=y_val,
+                    angle=0,
+                    pen=pg.mkPen(
+                        color=(255, 152, 0), width=1, style=pg.QtCore.Qt.DashLine
+                    ),
+                )
+                self._plot_widget.addItem(line)
 
         # Add zero reference line
         self._zero_line = pg.InfiniteLine(

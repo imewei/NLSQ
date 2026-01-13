@@ -346,6 +346,21 @@ def execute_fit(
     if workflow is None:
         workflow = "auto"
 
+    # Fallback logic: auto_global strictly requires bounds.
+    # If using auto_global but no finite bounds are provided (common for polynomials),
+    # degrade to 'auto' (local optimization) to prevent crash.
+    if workflow == "auto_global":
+        is_bounded = False
+        if bounds is not None:
+            # bounds are (lower, upper) arrays at this point
+            b_lower, b_upper = bounds
+            # Check if any bound is finite
+            if np.any(np.isfinite(b_lower)) or np.any(np.isfinite(b_upper)):
+                is_bounded = True
+
+        if not is_bounded:
+            workflow = "auto"
+
     # Determine goal
     goal = config.goal
 
