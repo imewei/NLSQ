@@ -102,6 +102,7 @@ class TestEvosaxUnavailabilityFallback:
         # We need to test the import behavior directly
         pass  # Tested via test_method_selector.py::test_select_explicit_cmaes_without_evosax_falls_back
 
+    @pytest.mark.serial  # Log capture is unreliable during parallel execution
     def test_method_selector_fallback_logs_info(self, caplog) -> None:
         """Test that MethodSelector logs INFO when falling back from CMA-ES."""
         import logging

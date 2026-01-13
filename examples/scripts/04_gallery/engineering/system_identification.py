@@ -230,8 +230,8 @@ from scipy import stats
 dw = np.sum(np.diff(residuals) ** 2) / np.sum(residuals**2)
 print(f"  Durbin-Watson: {dw:.2f} (2.0 = no autocorrelation)")
 
-# Check residual normality
-_, p_value_normality = stats.normaltest(residuals)
+# Check residual normality (convert to numpy for scipy compatibility)
+_, p_value_normality = stats.normaltest(np.asarray(residuals))
 print(
     f"  Residuals normal? p = {p_value_normality:.3f} "
     + f"({'Yes' if p_value_normality > 0.05 else 'No'} at α=0.05)"

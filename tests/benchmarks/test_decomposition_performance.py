@@ -45,6 +45,7 @@ def generate_benchmark_data(
 # =============================================================================
 
 
+@pytest.mark.serial  # Run without parallel contention for accurate timing
 class TestDecompositionPerformance:
     """Performance regression tests for decomposed CurveFit."""
 
