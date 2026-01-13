@@ -153,6 +153,9 @@ class TestCurveFitMultistart:
 class TestFitFunction:
     """Tests for the unified fit() function with presets."""
 
+    @pytest.mark.filterwarnings(
+        "ignore:The 'preset' parameter is deprecated:FutureWarning"
+    )
     def test_fit_robust_preset(self):
         """Test that fit(preset='robust') applies correct multi-start configuration."""
         from nlsq import fit
@@ -184,6 +187,9 @@ class TestFitFunction:
         popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
+    @pytest.mark.filterwarnings(
+        "ignore:The 'preset' parameter is deprecated:FutureWarning"
+    )
     def test_fit_streaming_preset(self):
         """Test that fit(preset='streaming') uses AdaptiveHybridStreaming with tournament."""
         from nlsq import fit
@@ -216,6 +222,9 @@ class TestFitFunction:
             "bypassed", False
         )
 
+    @pytest.mark.filterwarnings(
+        "ignore:The 'preset' parameter is deprecated:FutureWarning"
+    )
     def test_fit_auto_detects_dataset_size(self):
         """Test that fit() auto-detects dataset size and selects appropriate strategy."""
         from nlsq import fit
@@ -240,6 +249,9 @@ class TestFitFunction:
         # chunking or streaming (depending on size threshold)
         # The key test is that it doesn't fail and returns valid results
 
+    @pytest.mark.filterwarnings(
+        "ignore:The 'preset' parameter is deprecated:FutureWarning"
+    )
     def test_fit_fast_preset_no_multistart(self):
         """Test that fit(preset='fast') has n_starts=0 (no multi-start overhead)."""
         from nlsq import fit
@@ -271,6 +283,9 @@ class TestFitFunction:
         popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
+    @pytest.mark.filterwarnings(
+        "ignore:The 'preset' parameter is deprecated:FutureWarning"
+    )
     def test_fit_global_preset(self):
         """Test that fit(preset='global') uses n_starts=20."""
         from nlsq import fit

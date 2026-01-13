@@ -71,6 +71,9 @@ def generate_test_data(n_points: int = 1000, noise_level: float = 0.1, seed: int
 class TestEndToEndWorkflows:
     """End-to-end workflow tests for multi-start optimization."""
 
+    @pytest.mark.filterwarnings(
+        "ignore:The 'preset' parameter is deprecated:FutureWarning"
+    )
     def test_fit_global_preset_on_small_dataset(self):
         """End-to-end: fit() with 'global' preset on small dataset returns valid result.
 
