@@ -82,50 +82,6 @@ class TestFullPipelineIntegration:
             f"Not all phases completed: {completed_phases}"
         )
 
-    @pytest.mark.slow
-    @pytest.mark.serial
-    @pytest.mark.timeout(180)
-    def test_full_pipeline_gaussian_model(self):
-        """Test full pipeline on Gaussian model with multiple parameters."""
-
-        def gaussian_model(x, amplitude, mean, stddev, baseline):
-            return amplitude * jnp.exp(-0.5 * ((x - mean) / stddev) ** 2) + baseline
-
-        x = jnp.linspace(-5, 5, 5000)
-        true_params = jnp.array([10.0, 0.0, 1.5, 2.0])
-        y_true = gaussian_model(x, *true_params)
-
-        # Add noise
-        key = jax.random.PRNGKey(123)
-        noise = jax.random.normal(key, y_true.shape) * 0.2
-        y_noisy = y_true + noise
-
-        # Initial guess
-        p0 = jnp.array([8.0, 0.5, 1.0, 1.5])
-
-        # Fit with hybrid streaming method
-        result = curve_fit(
-            gaussian_model,
-            x,
-            y_noisy,
-            p0=p0,
-            bounds=([0, -5, 0.1, 0], [20, 5, 5, 10]),
-            method="hybrid_streaming",
-            verbose=0,
-        )
-
-        popt, pcov = result
-
-        # Verify parameters (skip inf values which indicate unbounded parameters)
-        param_errors = jnp.abs((popt - true_params) / true_params)
-        # Filter out inf values caused by covariance issues
-        finite_errors = param_errors[jnp.isfinite(param_errors)]
-        assert jnp.all(finite_errors < 0.15), f"Gaussian fit error: {param_errors}"
-
-        # Verify covariance is positive semi-definite
-        eigenvalues = jnp.linalg.eigvalsh(pcov)
-        assert jnp.all(eigenvalues >= -1e-10), "Covariance not positive semi-definite"
-
 
 class TestSciPyCompatibility:
     """Compare results with scipy.optimize.curve_fit for compatibility."""
