@@ -74,7 +74,11 @@ class TestGPUMemoryDetection:
 
         mock_devices = [mock_device]
 
-        with patch.object(jax, "devices", return_value=mock_devices):
+        # Patch at the module level where get_cached_devices is called
+        with patch(
+            "nlsq.streaming.large_dataset.get_cached_devices",
+            return_value=mock_devices,
+        ):
             estimator = GPUMemoryEstimator()
             available_gb = estimator.get_available_gpu_memory_gb()
 
@@ -90,7 +94,11 @@ class TestGPUMemoryDetection:
 
         mock_devices = [mock_device]
 
-        with patch.object(jax, "devices", return_value=mock_devices):
+        # Patch at the module level where get_cached_devices is called
+        with patch(
+            "nlsq.streaming.large_dataset.get_cached_devices",
+            return_value=mock_devices,
+        ):
             estimator = GPUMemoryEstimator()
             available_gb = estimator.get_available_gpu_memory_gb()
 
@@ -106,7 +114,11 @@ class TestGPUMemoryDetection:
 
         mock_devices = [mock_device]
 
-        with patch.object(jax, "devices", return_value=mock_devices):
+        # Patch at the module level where get_cached_devices is called
+        with patch(
+            "nlsq.streaming.large_dataset.get_cached_devices",
+            return_value=mock_devices,
+        ):
             estimator = GPUMemoryEstimator()
             available_gb = estimator.get_available_gpu_memory_gb()
 
@@ -134,7 +146,11 @@ class TestGPUMemoryDetection:
 
         mock_devices = [mock_gpu1, mock_gpu2]
 
-        with patch.object(jax, "devices", return_value=mock_devices):
+        # Patch at the module level where get_cached_devices is called
+        with patch(
+            "nlsq.streaming.large_dataset.get_cached_devices",
+            return_value=mock_devices,
+        ):
             estimator = GPUMemoryEstimator()
             available_gb = estimator.get_available_gpu_memory_gb()
 
@@ -161,7 +177,10 @@ class TestCombinedMemoryEstimation:
 
         with (
             patch("psutil.virtual_memory", return_value=mock_cpu_memory),
-            patch.object(jax, "devices", return_value=[mock_gpu]),
+            patch(
+                "nlsq.streaming.large_dataset.get_cached_devices",
+                return_value=[mock_gpu],
+            ),
         ):
             total_gb = MemoryEstimator.get_total_available_memory_gb()
 
@@ -180,7 +199,10 @@ class TestCombinedMemoryEstimation:
 
         with (
             patch("psutil.virtual_memory", return_value=mock_cpu_memory),
-            patch.object(jax, "devices", return_value=[mock_cpu_device]),
+            patch(
+                "nlsq.streaming.large_dataset.get_cached_devices",
+                return_value=[mock_cpu_device],
+            ),
         ):
             total_gb = MemoryEstimator.get_total_available_memory_gb()
 
