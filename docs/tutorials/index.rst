@@ -1,19 +1,52 @@
 Tutorials
 =========
 
-Learn curve fitting with NLSQ through hands-on, step-by-step tutorials.
-Each tutorial builds on the previous one, taking you from your first fit
-to advanced GPU-accelerated optimization.
+Learn curve fitting with NLSQ through comprehensive, hands-on tutorials
+organized for two types of users:
+
+- **Routine Users**: Use the 3-workflow system (auto, auto_global, hpc) via ``fit()``
+- **Advanced Users**: Design custom workflows using NLSQ's API layer
 
 .. note::
    **Coming from SciPy?** Check out :doc:`/howto/migration` for a quick migration guide.
 
-Tutorial Series
----------------
+Choose Your Path
+----------------
+
+.. grid:: 2
+   :gutter: 3
+
+   .. grid-item-card:: Routine User Tutorials
+      :link: routine/index
+      :link-type: doc
+
+      Learn the 3-workflow system for standard curve fitting tasks.
+      Covers fit(), GUI, GPU acceleration, and troubleshooting.
+
+      **~2.5 hours** | Beginner-friendly
+
+   .. grid-item-card:: Advanced User Tutorials
+      :link: advanced/index
+      :link-type: doc
+
+      Design custom optimization pipelines using NLSQ's API layer.
+      Covers architecture, protocols, orchestration components.
+
+      **~5 hours** | Requires Python experience
+
+Tutorial Sections
+-----------------
+
+.. toctree::
+   :maxdepth: 2
+   :caption: User-Focused Tutorials
+
+   routine/index
+   advanced/index
 
 .. toctree::
    :maxdepth: 1
-   :numbered:
+   :caption: Quick Start (Legacy)
 
    01_first_fit
    02_understanding_results
@@ -22,55 +55,78 @@ Tutorial Series
    05_large_datasets
    06_gpu_acceleration
 
-Learning Path
--------------
+The 3-Workflow System
+---------------------
+
+NLSQ's core feature is the **3-workflow system** that automatically handles
+memory management, optimization strategy, and GPU acceleration:
 
 .. list-table::
    :header-rows: 1
-   :widths: 10 25 40 15
+   :widths: 15 35 25 25
 
-   * - Tutorial
-     - Title
-     - What You'll Learn
-     - Time
-   * - 1
-     - :doc:`01_first_fit`
-     - Install NLSQ, define a model, fit data
-     - 10 min
-   * - 2
-     - :doc:`02_understanding_results`
-     - Interpret covariance, calculate uncertainties
-     - 15 min
-   * - 3
-     - :doc:`03_fitting_with_bounds`
-     - Constrain parameters with bounds
-     - 10 min
-   * - 4
-     - :doc:`04_multiple_parameters`
-     - Fit complex multi-parameter models
-     - 15 min
-   * - 5
-     - :doc:`05_large_datasets`
-     - Handle datasets with millions of points
-     - 15 min
-   * - 6
-     - :doc:`06_gpu_acceleration`
-     - Set up and use GPU acceleration
-     - 20 min
+   * - Workflow
+     - Description
+     - Bounds
+     - Use Case
+   * - ``auto``
+     - Memory-aware local optimization
+     - Optional
+     - **Default** - standard fitting
+   * - ``auto_global``
+     - Memory-aware global optimization
+     - **Required**
+     - Multiple minima, unknown guess
+   * - ``hpc``
+     - Global + checkpointing
+     - **Required**
+     - Long HPC jobs
+
+Quick Example
+-------------
+
+.. code-block:: python
+
+   from nlsq import fit
+   import jax.numpy as jnp
+
+
+   def model(x, a, b, c):
+       return a * jnp.exp(-b * x) + c
+
+
+   # Default workflow (auto)
+   popt, pcov = fit(model, x, y, p0=[1.0, 0.5, 0.0])
+
+   # Global optimization
+   popt, pcov = fit(
+       model,
+       x,
+       y,
+       p0=[1.0, 0.5, 0.0],
+       workflow="auto_global",
+       bounds=([0, 0, -1], [10, 5, 1]),
+   )
 
 Prerequisites
 -------------
 
-- Python 3.12 or higher
-- Basic Python knowledge (variables, functions, imports)
-- Basic understanding of scientific data (x, y coordinates)
+**Routine Tutorials:**
 
-No prior curve fitting experience is required - we'll cover everything from the basics.
+- Python 3.12 or higher
+- Basic Python knowledge
+- No curve fitting experience required
+
+**Advanced Tutorials:**
+
+- Completed routine tutorials
+- Python classes and type hints
+- Basic optimization concepts
 
 Next Steps
 ----------
 
-After completing the tutorials, explore:
+After completing the tutorials:
 
 - :doc:`/howto/index` - Solve specific problems
 - :doc:`/explanation/index` - Understand concepts in depth

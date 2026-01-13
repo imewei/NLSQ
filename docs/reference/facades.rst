@@ -98,4 +98,4 @@ See Also
 
 - :doc:`orchestration` - Orchestration components
 - :doc:`global_optimization` - Global optimization methods
-- :doc:`/explanation/architecture` - Architecture overview
+- :doc:`/tutorials/advanced/architecture/index` - Architecture overview

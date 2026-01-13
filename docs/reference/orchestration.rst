@@ -179,4 +179,4 @@ See Also
 
 - :doc:`core_api` - Main curve fitting API
 - :doc:`large_data` - Large dataset handling
-- :doc:`/explanation/architecture` - Architecture overview
+- :doc:`/tutorials/advanced/architecture/index` - Architecture overview
