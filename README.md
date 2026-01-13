@@ -199,7 +199,7 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 
 ## Architecture
 
-NLSQ is organized into well-separated layers (~72,000 lines):
+NLSQ is organized into well-separated layers (~75,000 lines):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -216,7 +216,9 @@ NLSQ is organized into well-separated layers (~72,000 lines):
 │  │   CHUNKED/STREAMING   ├── LHS/Sobol/Halton    │   0: Normalization       │
 │  └── Memory-based auto   └── Sampling            │   1: L-BFGS warmup       │
 │                                                  │   2: Gauss-Newton        │
-│                                                  └── 3: Denormalization     │
+│  Orchestration (v0.7.0)                          └── 3: Denormalization     │
+│  ├── DataPreprocessor    ├── OptimizationSel.                               │
+│  ├── CovarianceComputer  └── StreamingCoord.                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                          CORE OPTIMIZATION ENGINE                           │
 │  curve_fit() ─→ CurveFit ─→ LeastSquares ─→ TrustRegionReflective           │
@@ -230,6 +232,8 @@ NLSQ is organized into well-separated layers (~72,000 lines):
 │  ├── NumericalGuard   ├── MixedPrecision  ├── UnifiedCache  ├── Identifiab. │
 │  ├── SVD fallback     ├── AlgorithmSel.   ├── SmartCache    ├── GradientMon │
 │  └── Recovery         └── BoundsInfer.    └── MemoryMgr     └── PluginSys.  │
+│  facades/ (v0.7.0)                                                          │
+│  ├── OptimizationFacade  ├── StabilityFacade  └── DiagnosticsFacade         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                            INFRASTRUCTURE                                   │
 │  interfaces/ (Protocols)     config.py (Singleton)    Security              │

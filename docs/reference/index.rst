@@ -16,6 +16,8 @@ Complete reference documentation for all NLSQ modules, functions, and classes.
    functions
    large_data
    global_optimization
+   orchestration
+   facades
    configuration
    visualization
    cli
