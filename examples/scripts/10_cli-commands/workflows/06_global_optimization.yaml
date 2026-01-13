@@ -1,29 +1,49 @@
 # ==============================================================================
-# 06_global_optimization.yaml - Multi-Start Global Optimization
+# 06_global_optimization.yaml - CMA-ES Global Optimization
 # ==============================================================================
-# Demonstrates multi-start optimization for robust parameter estimation.
+# Demonstrates CMA-ES (Covariance Matrix Adaptation Evolution Strategy) for
+# robust global optimization of challenging curve fitting problems.
 #
 # Usage:
 #   nlsq fit workflows/06_global_optimization.yaml
 #
-# Multi-start optimization helps:
-#   - Find global optimum instead of local minima
-#   - Handle poor initial guesses
-#   - Improve reliability for complex models
+# CMA-ES is automatically selected when:
+#   - Parameter bounds span > 3 orders of magnitude
+#   - Manual configuration via global_optimization.cmaes
 #
-# Samplers available: "lhs" (Latin Hypercube), "sobol", "halton"
+# Key Features:
+#   - BIPOP restart strategy for escaping local minima
+#   - Automatic population size selection
+#   - Optional NLSQ refinement for maximum precision
+#   - Memory-efficient batching for large datasets
+#
+# Requires: pip install 'nlsq[global]'  (installs evosax)
 # ==============================================================================
 
 metadata:
-  workflow_name: "global_optimization_demo"
-  description: "Multi-start optimization for damped oscillator"
-  version: "1.0"
+  workflow_name: "cmaes_global_optimization"
+  description: "CMA-ES global optimization for damped oscillator fitting"
+  version: "2.0"
+
+# ==============================================================================
+# WORKFLOW SELECTION
+# ==============================================================================
+# Use "auto_global" to enable global optimization (multi-start or CMA-ES)
+# Bounds are REQUIRED for global optimization workflows
+
+workflow: "auto_global"
+
+# Number of starting points for multi-start (fallback if evosax not installed)
+# CMA-ES uses population size instead when available
+n_starts: 15
+
+# Sampling method for multi-start fallback: "lhs", "sobol", "halton"
+sampler: "lhs"
 
 # ==============================================================================
 # DATA CONFIGURATION
 # ==============================================================================
 data:
-  dataset_id: "damped_osc_global"
   input_file: "data/damped_oscillation.csv"
   format: "csv"
 
@@ -42,61 +62,99 @@ data:
 # ==============================================================================
 model:
   type: "custom"
-  path: "models/physics_models.py"
-  function: "damped_oscillator"
+  custom:
+    file: "models/physics_models.py"
+    function: "damped_oscillator"
 
-  # Provide explicit initial guess and bounds for multi-start
+  # Disable auto estimation - we provide explicit bounds for CMA-ES
   auto_p0: false
   auto_bounds: false
 
+  # Parameter configuration with bounds (REQUIRED for auto_global workflow)
+  # CMA-ES explores the full bounded parameter space
   parameters:
     - name: "A0"
-      initial: 10.0     # Intentionally off from true value (15.0)
-      bounds: [0.0, 30.0]
+      initial: 10.0          # Intentionally off from true value (~15.0)
+      bounds: [0.1, 50.0]    # Wide bounds for global search
     - name: "gamma"
-      initial: 0.1      # Intentionally off from true value (0.05)
-      bounds: [0.001, 0.5]
+      initial: 0.1           # Intentionally off from true value (~0.05)
+      bounds: [0.001, 1.0]   # 3 orders of magnitude - triggers CMA-ES
     - name: "omega"
-      initial: 2.0      # Intentionally off from true value (pi)
+      initial: 2.0           # Intentionally off from true value (~pi)
       bounds: [0.1, 10.0]
     - name: "phi"
-      initial: 0.5      # Intentionally off from true value (0.0)
+      initial: 0.5           # Intentionally off from true value (~0.0)
       bounds: [-3.14159, 3.14159]
 
 # ==============================================================================
-# FITTING CONFIGURATION - MULTI-START
+# FITTING CONFIGURATION
 # ==============================================================================
 fitting:
   termination:
-    ftol: 1.0e-8
-    xtol: 1.0e-8
-    gtol: 1.0e-8
-    max_iterations: 200
-
-  # Multi-start optimization configuration
-  multistart:
-    enabled: true
-    num_starts: 15          # Number of starting points
-    sampler: "lhs"          # Latin Hypercube Sampling (most uniform)
-    center_on_p0: true      # Center samples around initial guess
-    scale_factor: 1.0       # Exploration region scale
-    seed: 42                # Random seed for reproducibility
+    ftol: 1.0e-10            # Tight tolerance for high precision
+    xtol: 1.0e-10
+    gtol: 1.0e-10
+    max_iterations: 300
 
 # ==============================================================================
-# GLOBAL OPTIMIZATION SETTINGS
+# GLOBAL OPTIMIZATION - CMA-ES CONFIGURATION
 # ==============================================================================
-# Alternative way to configure global optimization:
+# CMA-ES is a state-of-the-art evolutionary algorithm for nonlinear optimization.
+# It automatically adapts its search distribution to the problem landscape.
+
 global_optimization:
-  n_starts: 15
-  sampler: "lhs"
+  # Multi-start fallback options (used if evosax not installed)
   center_on_p0: true
   scale_factor: 1.0
+
+  # CMA-ES configuration (requires evosax: pip install 'nlsq[global]')
+  cmaes:
+    # Preset options: "cmaes-fast" (50 gens), "cmaes" (100 gens), "cmaes-global" (200 gens)
+    # Set to null to use custom settings below
+    preset: null
+
+    # Population size (null = automatic: 4 + 3*log(n_params) ~ 8 for 4 params)
+    # Larger population = more exploration, slower convergence
+    popsize: 16
+
+    # Maximum generations before stopping
+    max_generations: 150
+
+    # Initial step size (standard deviation in normalized space)
+    # 0.5 is good default; smaller = more local search, larger = more global
+    sigma: 0.5
+
+    # BIPOP restart strategy - key for escaping local minima
+    # "bipop": Bi-population with alternating large/small populations
+    # "none": No restarts (faster but may get stuck)
+    restart_strategy: "bipop"
+    max_restarts: 9
+
+    # Convergence tolerances
+    tol_fun: 1.0e-10         # Stop when function improvement < tol_fun
+    tol_x: 1.0e-10           # Stop when parameter change < tol_x
+
+    # Refine best CMA-ES solution with NLSQ TRF optimizer
+    # Highly recommended - provides ~2x precision improvement
+    refine_with_nlsq: true
+
+    # Random seed for reproducibility (null = random)
+    seed: 42
+
+# ==============================================================================
+# RUNTIME CONFIGURATION
+# ==============================================================================
+runtime:
+  device: "cpu"
+  precision: "float64"
+  random_seed: 42
+  verbosity: 2               # Show CMA-ES progress
 
 # ==============================================================================
 # EXPORT CONFIGURATION
 # ==============================================================================
 export:
-  results_file: "output/06_global_optimization_results.json"
+  results_file: "output/06_cmaes_optimization_results.json"
 
   include:
     parameters: true
@@ -108,18 +166,14 @@ export:
 # ==============================================================================
 # VISUALIZATION CONFIGURATION
 # ==============================================================================
-# Style: "publication" - Standard journal format.
-# Demonstrates grayscale palette for B&W printing compatibility.
-
 visualization:
   enabled: true
   output_dir: "output/figures"
-  filename_prefix: "06_global_opt"
+  filename_prefix: "06_cmaes_opt"
   formats: ["png", "pdf"]
   dpi: 300
   figure_size: [6.0, 4.5]
   style: "publication"
-  layout: "combined"
 
   font:
     family: "serif"
@@ -144,7 +198,7 @@ visualization:
     fit:
       linewidth: 1.5
       linestyle: "-"
-      label: "Global Optimum Fit"
+      label: "CMA-ES Global Optimum"
       n_points: 1000
 
     confidence_band:
@@ -190,5 +244,5 @@ visualization:
     edgecolor: "white"
     title: "Residual Distribution"
 
-  # Grayscale palette for B&W printing
+  # Grayscale palette for B&W printing compatibility
   active_scheme: "grayscale"

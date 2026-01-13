@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 5.0 (NLSQ v0.6.3 - 3-Workflow System)
+# Version: 6.0 (NLSQ v0.7.0 - Comprehensive Configuration)
 #
 # This template provides configuration options for NLSQ curve fitting workflows.
 # Copy this file to your project and customize as needed.
@@ -36,7 +36,7 @@
 # ==============================================================================
 
 # ==============================================================================
-# 3-WORKFLOW SYSTEM (v0.6.3)
+# 3-WORKFLOW SYSTEM (v0.6.3+)
 # ==============================================================================
 #
 # NLSQ uses a simplified 3-workflow system that automatically selects optimal
@@ -56,6 +56,7 @@
 # │   Memory-aware global optimization (REQUIRES BOUNDS)                        │
 # │   - Multi-start Latin Hypercube Sampling or CMA-ES                          │
 # │   - Automatic strategy selection based on parameter scale                   │
+# │   - CMA-ES triggered when bounds span > 3 orders of magnitude              │
 # │   - Use n_starts to control number of starting points (default: 10)        │
 # │   - Best for: multi-modal problems, unknown initial guesses                 │
 # │                                                                             │
@@ -102,7 +103,7 @@
 metadata:
   workflow_name: "example_workflow"
   description: "NLSQ workflow configuration"
-  version: "5.0"
+  version: "6.0"
   author: ""
 
 # ==============================================================================
@@ -147,6 +148,7 @@ data:
     delimiter: ","
     header: true
     encoding: "utf-8"
+    skip_rows: 0      # Skip N rows at start of file
 
   # ASCII options (.txt, .dat)
   ascii:
@@ -172,6 +174,7 @@ data:
   validation:
     require_finite: true
     min_points: 2
+    max_points: null  # null = no limit
 
 # ==============================================================================
 # MODEL
@@ -186,12 +189,15 @@ data:
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ BUILTIN MODELS                                                              │
 # ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Name               │ Formula                     │ Parameters               │
+# ├────────────────────┼─────────────────────────────┼──────────────────────────┤
 # │ linear             │ a*x + b                     │ a, b                     │
 # │ exponential_decay  │ a*exp(-b*x) + c             │ a, b, c                  │
 # │ exponential_growth │ a*exp(b*x) + c              │ a, b, c                  │
 # │ gaussian           │ amp*exp(-(x-mu)²/(2σ²))     │ amp, mu, sigma           │
 # │ sigmoid            │ L/(1+exp(-k*(x-x0))) + b    │ L, x0, k, b              │
 # │ power_law          │ a*x^b                       │ a, b                     │
+# │ polynomial(N)      │ c0 + c1*x + ... + cN*x^N    │ c0, c1, ..., cN          │
 # └─────────────────────────────────────────────────────────────────────────────┘
 
 model:
@@ -241,46 +247,90 @@ model:
 fitting:
   # Convergence tolerances
   termination:
-    gtol: 1.0e-8       # Gradient tolerance
-    ftol: 1.0e-8       # Function tolerance
-    xtol: 1.0e-8       # Parameter tolerance
+    gtol: 1.0e-8       # Gradient tolerance (gradient norm)
+    ftol: 1.0e-8       # Function tolerance (relative cost reduction)
+    xtol: 1.0e-8       # Parameter tolerance (relative parameter change)
     max_iterations: 200
     max_function_evals: 2000
 
-  # Robust loss function: "none", "huber", "soft_l1", "cauchy"
+  # Robust loss function for outlier handling
+  # Options: "none", "huber", "soft_l1", "cauchy", "arctan"
   robust_loss: "none"
 
-  # Jacobian computation: "auto" uses JAX autodiff (recommended)
+  # Jacobian computation mode
+  # "auto" - Use JAX autodiff (recommended)
+  # "fwd"  - Forward-mode differentiation (better for n_params > n_data)
+  # "rev"  - Reverse-mode differentiation (better for n_data > n_params)
   jacobian_mode: "auto"
+
+  # Finite difference step size (only used if autodiff unavailable)
+  diff_step: null     # null = automatic
+
+  # Parameter scaling for better conditioning
+  # "jac" - Scale by Jacobian column norms (default)
+  # array - Custom scale factors per parameter
+  x_scale: "jac"
 
 # ==============================================================================
 # GLOBAL OPTIMIZATION (for workflow="auto_global" or "hpc")
 # ==============================================================================
 # Multi-start and CMA-ES configuration.
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ GLOBAL OPTIMIZATION PRESETS                                                 │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Preset       │ n_starts │ Method         │ Use Case                         │
+# ├──────────────┼──────────┼────────────────┼──────────────────────────────────┤
+# │ fast         │ 5        │ multi-start    │ Quick exploration                │
+# │ robust       │ 10       │ multi-start    │ General purpose (default)        │
+# │ global       │ 20       │ CMA-ES/multi   │ Thorough search                  │
+# │ thorough     │ 50       │ CMA-ES/multi   │ Difficult problems               │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
 global_optimization:
   # Multi-start sampling options
-  center_on_p0: true       # Center samples around initial guess
-  scale_factor: 1.0        # Exploration region scale
+  center_on_p0: true         # Center samples around initial guess
+  scale_factor: 1.0          # Exploration region scale (1.0 = full bounds)
 
-  # CMA-ES configuration (used when bounds span > 3 orders of magnitude)
+  # Tournament elimination (for multi-start)
+  elimination_rounds: 3      # Number of elimination rounds
+  elimination_fraction: 0.5  # Fraction eliminated per round
+
+  # CMA-ES configuration (requires: pip install 'nlsq[global]')
+  # Automatically used when bounds span > 3 orders of magnitude
   cmaes:
     # Preset: "cmaes-fast" (50 gens), "cmaes" (100 gens), "cmaes-global" (200 gens)
-    preset: null           # null = use settings below
+    preset: null             # null = use settings below
 
-    popsize: null          # null = automatic (4 + 3*log(n_params))
+    # Population size (null = automatic: 4 + 3*log(n_params))
+    popsize: null
+
+    # Maximum generations before stopping
     max_generations: 100
-    sigma: 0.5             # Initial step size
-    restart_strategy: "bipop"  # "none" or "bipop"
+
+    # Initial step size (standard deviation in normalized space)
+    # 0.5 is good default; smaller = more local search
+    sigma: 0.5
+
+    # Restart strategy for escaping local minima
+    # "none"  - No restarts (faster but may get stuck)
+    # "bipop" - Bi-population with alternating large/small populations
+    restart_strategy: "bipop"
     max_restarts: 9
-    refine_with_nlsq: true # Refine best solution with TRF
 
-    # Tolerances
-    tol_fun: 1.0e-8
-    tol_x: 1.0e-8
+    # Convergence tolerances
+    tol_fun: 1.0e-8          # Stop when function improvement < tol_fun
+    tol_x: 1.0e-8            # Stop when parameter change < tol_x
 
-    # Reproducibility
-    seed: null             # null = random
+    # Memory management for large datasets
+    population_batch_size: null  # null = evaluate all candidates at once
+    data_chunk_size: null        # null = use full dataset (set for >10M points)
+
+    # Refine best CMA-ES solution with NLSQ TRF optimizer
+    refine_with_nlsq: true
+
+    # Random seed for reproducibility (null = random)
+    seed: null
 
 # ==============================================================================
 # CHECKPOINTING (for workflow="hpc" or large datasets)
@@ -289,7 +339,8 @@ global_optimization:
 checkpointing:
   enabled: false
   directory: "checkpoints"
-  frequency: 100           # Save every N iterations
+  frequency: 100             # Save every N iterations
+  resume_from: null          # Path to checkpoint file to resume from
 
 # ==============================================================================
 # RUNTIME
@@ -303,49 +354,183 @@ runtime:
   # Numerical precision: "float64" (recommended) or "float32"
   precision: "float64"
 
-  # Random seed for reproducibility
+  # Random seed for reproducibility (affects multi-start, CMA-ES)
   random_seed: 42
 
   # Verbosity: 0 (silent), 1 (progress), 2 (detailed), 3 (debug)
   verbosity: 1
 
-  # Parallel workers
-  threads: 4
+  # Number of threads for parallel operations
+  threads: null              # null = auto-detect
+
+# ==============================================================================
+# MEMORY MANAGEMENT
+# ==============================================================================
+# Configuration for memory-aware processing.
+
+memory:
+  # Maximum memory usage in GB (null = 80% of available)
+  limit_gb: null
+
+  # Safety factor for memory estimation (0.0-1.0)
+  safety_factor: 0.8
+
+  # Out-of-memory handling strategy
+  # "fallback" - Switch to streaming/chunked processing
+  # "reduce"   - Reduce batch size and retry
+  # "error"    - Raise an error
+  oom_strategy: "fallback"
+
+  # Minimum chunk size for chunked processing
+  min_chunk_size: 1000
+
+  # Maximum chunk size (null = auto based on memory)
+  max_chunk_size: null
+
+# ==============================================================================
+# MIXED PRECISION
+# ==============================================================================
+# Automatic precision fallback for numerical stability.
+# When enabled, NLSQ will fall back to float64 if float32 encounters issues.
+
+mixed_precision:
+  # Enable automatic precision fallback
+  enable_fallback: true
+
+  # Maximum iterations with degraded precision before switching
+  max_degradation_iterations: 5
+
+  # Threshold for detecting gradient explosion
+  gradient_explosion_threshold: 1.0e10
+
+  # Minimum precision improvement required
+  precision_limit_threshold: 1.0e-7
+
+  # Window size for stall detection
+  stall_window: 10
+
+  # Tolerance relaxation factor when falling back
+  tolerance_relaxation_factor: 10.0
+
+  # Verbose logging of precision changes
+  verbose: false
 
 # ==============================================================================
 # STREAMING OPTIMIZER (Advanced)
 # ==============================================================================
 # Configuration for large dataset processing.
 # Automatically used by "auto" and "auto_global" when datasets exceed memory.
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ STREAMING OPTIMIZATION PHASES                                               │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ Phase 1: L-BFGS Warmup                                                      │
+# │   - Fast approximate optimization using limited-memory BFGS                 │
+# │   - Processes data in chunks to reduce memory usage                         │
+# │   - Uses line search for step size selection                                │
+# │                                                                             │
+# │ Phase 2: Gauss-Newton Refinement                                            │
+# │   - High-precision refinement using Trust Region Reflective (TRF)          │
+# │   - Computes Jacobian for accurate covariance estimation                    │
+# │   - Uses conjugate gradient for large systems                               │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
 streaming:
   # Chunk size (points per batch)
   chunk_size: 10000
 
-  # Parameter normalization: "auto", "bounds", "p0", "none"
+  # Parameter normalization strategy
+  # "auto"   - Automatic selection based on problem structure
+  # "bounds" - Normalize to [0, 1] using bounds
+  # "p0"     - Normalize relative to initial guess
+  # "none"   - No normalization
   normalization_strategy: "auto"
 
-  # L-BFGS warmup phase
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 1: L-BFGS Warmup Configuration
+  # ─────────────────────────────────────────────────────────────────────────────
   warmup_iterations: 200
   max_warmup_iterations: 500
+  lbfgs_history_size: 10
+  lbfgs_initial_step_size: 0.1
 
-  # Defense layers prevent divergence when starting near optimum
+  # Line search method: "wolfe", "strong_wolfe", "backtracking"
+  lbfgs_line_search: "wolfe"
+
+  # Learning rate for different phases
+  lbfgs_exploration_step_size: 0.1
+  lbfgs_refinement_step_size: 1.0
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 2: Gauss-Newton Refinement Configuration
+  # ─────────────────────────────────────────────────────────────────────────────
+  gauss_newton_max_iterations: 100
+  gauss_newton_tol: 1.0e-8
+  trust_region_initial: 1.0
+  regularization_factor: 1.0e-10
+
+  # Conjugate gradient solver settings
+  cg_max_iterations: 100
+  cg_relative_tolerance: 1.0e-4
+  cg_absolute_tolerance: 1.0e-10
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Defense Layers (prevent divergence near optimum)
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Presets:
+  #   "default"    - Balanced protection (recommended)
+  #   "strict"     - Strong protection for near-optimal starts
+  #   "relaxed"    - Minimal protection for exploration
+  #   "disabled"   - No protection (fastest, may diverge)
+  #   "scientific" - Tuned for physics-based models
   defense_layers:
-    # Preset: "default", "strict", "relaxed", "disabled", "scientific"
     preset: "default"
 
     # Individual layer configuration (when preset: null)
     # layer1_warm_start:
     #   enabled: true
-    #   threshold: 0.01    # Skip warmup if loss < 1% of variance
+    #   threshold: 0.01      # Skip warmup if loss < 1% of variance
     # layer2_adaptive_lr:
     #   enabled: true
+    #   refinement_lr: 1.0e-6
+    #   careful_lr: 1.0e-5
     # layer3_cost_guard:
     #   enabled: true
-    #   tolerance: 0.05    # Abort if loss increases > 5%
+    #   tolerance: 0.05      # Abort if loss increases > 5%
     # layer4_step_clipping:
     #   enabled: true
     #   max_step_size: 0.1
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Advanced Streaming Options
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  # Loop strategy for chunk processing
+  # "auto" - Automatic selection (recommended)
+  # "scan" - Use jax.lax.scan (memory efficient)
+  # "loop" - Use Python loop (debugging)
+  loop_strategy: "auto"
+
+  # Group variance regularization (for hierarchical models)
+  enable_group_variance_regularization: false
+  group_variance_lambda: 0.01
+  group_variance_indices: null  # List of (start, end) tuples
+
+  # Residual weighting (for heteroscedastic data)
+  enable_residual_weighting: false
+  residual_weights: null  # Path to weights file or array
+
+  # Multi-device support
+  enable_multi_device: false
+
+  # Fault tolerance
+  enable_fault_tolerance: true
+  max_retries_per_batch: 2
+  min_success_rate: 0.5
+  validate_numerics: true
+
+  # Garbage collection
+  gc_chunk_interval: 10
 
   # Telemetry for monitoring
   telemetry:
@@ -367,8 +552,10 @@ export:
     covariance: true
     uncertainties: true
     statistics: true
-    residuals: false       # Can be large for big datasets
+    convergence_info: true
+    residuals: false         # Can be large for big datasets
     fitted_values: false
+    jacobian: false          # Very large, rarely needed
 
   # Output formats
   formats:
@@ -383,15 +570,25 @@ export:
 visualization:
   enabled: true
   output_dir: "figures"
+  filename_prefix: "fit"
 
-  # Style: "publication", "presentation", "nature", "science", "minimal"
+  # Style presets:
+  #   "publication"   - Journal-ready (serif fonts, clean)
+  #   "presentation"  - Large fonts for slides
+  #   "nature"        - Nature journal style
+  #   "science"       - Science journal style
+  #   "minimal"       - Minimal decoration
   style: "publication"
 
   # Resolution
   dpi: 300
   figure_size: [6.0, 4.5]
 
-  # Color scheme: "default", "colorblind", "grayscale", "high_contrast"
+  # Color scheme presets:
+  #   "default"       - Standard colors
+  #   "colorblind"    - Colorblind-safe palette
+  #   "grayscale"     - B&W printing compatible
+  #   "high_contrast" - High visibility
   color_scheme: "default"
 
   # Output formats
@@ -399,18 +596,75 @@ visualization:
     - "pdf"
     - "png"
 
+  # Font configuration
+  font:
+    family: "serif"       # "serif", "sans-serif", "monospace"
+    size: 10
+    math_fontset: "cm"    # "cm", "stix", "dejavuserif"
+
   # Plot components
   main_plot:
+    title: null           # null = auto-generated
+    x_label: null         # null = "x"
+    y_label: null         # null = "y"
     show_grid: true
+    grid_alpha: 0.3
+
+    data:
+      marker: "o"
+      size: 20
+      alpha: 0.7
+      label: "Data"
+      show_errorbars: true
+      capsize: 2
+
+    fit:
+      linewidth: 1.5
+      linestyle: "-"
+      label: "Fit"
+      n_points: 500
+
     confidence_band:
       enabled: true
       level: 0.95
+      alpha: 0.2
+
+    legend:
+      enabled: true
+      location: "best"
+      frameon: true
+
+    annotation:
+      enabled: true
+      show_r_squared: true
+      show_rmse: true
+      show_chi_squared: false
+      location: "upper right"
+      fontsize: 9
+      box_alpha: 0.8
 
   residuals_plot:
     enabled: true
+    type: "scatter"       # "scatter", "line", "stem"
+    x_label: null
+    y_label: "Residual"
+    show_zero_line: true
+    marker: "o"
+    size: 15
+    alpha: 0.7
+
+    std_bands:
+      enabled: true
+      levels: [1, 2]
+      alpha: 0.3
 
   histogram:
     enabled: true
+    bins: "auto"
+    show_normal_fit: true
+    alpha: 0.7
+    edgecolor: "white"
+    title: "Residual Distribution"
 
 # ==============================================================================
 # BATCH PROCESSING
@@ -418,9 +672,13 @@ visualization:
 # Configuration for `nlsq batch` command.
 
 batch:
-  max_workers: null        # null = auto-detect
+  max_workers: null          # null = auto-detect
   continue_on_error: true
   summary_file: "output/batch_summary.json"
+
+  # Aggregation options
+  aggregate_results: true
+  comparison_plots: true
 
 # ==============================================================================
 # LOGGING
@@ -429,8 +687,11 @@ batch:
 logging:
   log_file: "logs/workflow.log"
   console: true
+
+  # Log levels: "DEBUG", "INFO", "WARNING", "ERROR"
   log_level: "INFO"
+
   rotation:
     enabled: true
-    max_bytes: 10485760    # 10 MB
+    max_bytes: 10485760      # 10 MB
     backup_count: 5
