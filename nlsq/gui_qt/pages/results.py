@@ -7,7 +7,6 @@ and interactive visualizations of the fit quality.
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -57,7 +56,6 @@ class ResultsPage(QWidget):
             app_state: Application state manager
         """
         super().__init__()
-        self._app_state = app_state
         self._app_state = app_state
         self._has_results = False
         self._last_result = None
@@ -265,7 +263,6 @@ class ResultsPage(QWidget):
 
     def _on_export_clicked(self) -> None:
         """Handle export button click."""
-        import os
         from pathlib import Path
 
         from nlsq.cli.visualization import STYLE_PRESETS, FitVisualizer
@@ -302,15 +299,12 @@ class ResultsPage(QWidget):
         state = self._app_state.state
         xdata = state.xdata
         ydata = state.ydata
-        # Reconstruct result (we might not have the original object reference here?
-        # update_results(result) was called, but we didn't store 'result' in self._last_result.
-        # We need to store the last result object.
+        # Check if we have result data stored from update_results()
         if not hasattr(self, "_last_result") or self._last_result is None:
             QMessageBox.warning(self, "Export Failed", "No result data available.")
             return
 
-        result = self._last_result
-
+        # Note: self._last_result is accessed directly in data_dict construction below
         # Prepare dictionaries compatible with FitVisualizer or dict-like access
         # Result might be OptimizeResult or CurveFitResult.
         # Convert to dict for Visualizer if needed, or Visualizer handles dict-like?

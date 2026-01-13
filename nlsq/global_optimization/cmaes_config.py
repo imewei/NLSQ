@@ -7,11 +7,8 @@ optimization using the evosax library.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
-
-if TYPE_CHECKING:
-    pass
+from dataclasses import dataclass
+from typing import Literal
 
 __all__ = [
     "CMAES_PRESETS",
@@ -44,11 +41,11 @@ def is_evosax_available() -> bool:
 
     if _EVOSAX_AVAILABLE is None:
         try:
-            from evosax.algorithms import CMA_ES  # type: ignore[import-not-found]
-            from evosax.core.restart import (  # type: ignore[import-not-found]
-                cma_cond,
-                spread_cond,
-            )
+            # Import to verify package is available and functional
+            # We need to test actual imports, not just find_spec, because
+            # evosax may be installed but have missing dependencies
+            import evosax.algorithms  # type: ignore[import-not-found]
+            import evosax.core.restart  # type: ignore[import-not-found]
 
             _EVOSAX_AVAILABLE = True
             _EVOSAX_IMPORT_ERROR = None
