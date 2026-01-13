@@ -57,6 +57,16 @@ from nlsq.interfaces.optimizer_protocol import (
     LeastSquaresOptimizerProtocol,
     OptimizerProtocol,
 )
+from nlsq.interfaces.orchestration_protocol import (
+    CovarianceComputerProtocol,
+    CovarianceResult,
+    DataPreprocessorProtocol,
+    OptimizationConfig,
+    OptimizationSelectorProtocol,
+    PreprocessedData,
+    StreamingCoordinatorProtocol,
+    StreamingDecision,
+)
 from nlsq.interfaces.result_protocol import ResultProtocol
 
 __all__ = [
@@ -64,13 +74,21 @@ __all__ = [
     "AutodiffJacobian",
     "BoundedCacheProtocol",
     "CacheProtocol",
+    "CovarianceComputerProtocol",
+    "CovarianceResult",
     "CurveFitProtocol",
+    "DataPreprocessorProtocol",
     "DataSourceProtocol",
     "DictCache",
     "JacobianProtocol",
     "LeastSquaresOptimizerProtocol",
+    "OptimizationConfig",
+    "OptimizationSelectorProtocol",
     "OptimizerProtocol",
+    "PreprocessedData",
     "ResultProtocol",
     "SparseJacobianProtocol",
+    "StreamingCoordinatorProtocol",
     "StreamingDataSourceProtocol",
+    "StreamingDecision",
 ]
