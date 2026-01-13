@@ -16,7 +16,6 @@ and provides human-readable summaries with recommendations.
 
 import time
 import warnings
-from typing import Any
 
 from nlsq.diagnostics.types import (
     DiagnosticLevel,

@@ -69,6 +69,16 @@ DEFAULT_MEMORY_LIMIT_GB = 4.0  # Default memory limit in gigabytes
 MEMORY_SAFETY_FACTOR = 0.9  # Use 90% of available memory
 
 # =============================================================================
+# Chunk and Batch Sizes
+# =============================================================================
+
+DEFAULT_CHUNK_SIZE = 1024  # Default chunk size for streaming operations
+
+DEFAULT_BATCH_SIZE = 200  # Default batch size for GUI/visualization operations
+
+MEDIUM_DATASET_THRESHOLD = 10_000  # Threshold for medium-sized datasets
+
+# =============================================================================
 # Trust Region Step Scaling
 # =============================================================================
 
@@ -138,6 +148,8 @@ DEFAULT_TOLERANCE_RELAXATION_FACTOR = 10.0
 # =============================================================================
 
 __all__ = [
+    "DEFAULT_BATCH_SIZE",
+    "DEFAULT_CHUNK_SIZE",
     "DEFAULT_FTOL",
     "DEFAULT_F_SCALE",
     "DEFAULT_GRADIENT_EXPLOSION_THRESHOLD",
@@ -159,6 +171,7 @@ __all__ = [
     "MAX_CONDITION_NUMBER",
     "MAX_REASONABLE_PARAMETERS",
     "MAX_TRUST_RADIUS",
+    "MEDIUM_DATASET_THRESHOLD",
     "MEMORY_SAFETY_FACTOR",
     "MIN_DATA_POINTS",
     "MIN_PARAMETERS",

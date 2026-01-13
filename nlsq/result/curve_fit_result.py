@@ -672,9 +672,8 @@ class CurveFitResult(OptimizeResult):
         x = np.array(self.xdata)
         y = np.array(self.ydata)
 
-        # Sort for smooth curve plotting
-        sort_idx = np.argsort(x)
-        x_sorted = x[sort_idx]
+        # Sort index computed but we use dense grid for smooth plotting
+        _ = np.argsort(x)  # Available if needed for scatter ordering
         # Recalculate predictions on sorted x for smooth line
         # Use high density x for plotting if x is sparse?
         # For strict correctness with user data, stick to sorted data points or interpolated?

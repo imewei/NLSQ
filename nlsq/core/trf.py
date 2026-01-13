@@ -93,7 +93,6 @@ References
 
 from __future__ import annotations
 
-import time
 import warnings
 from collections.abc import Callable
 
@@ -107,7 +106,6 @@ __jax_config = JAXConfig()
 import jax.numpy as jnp
 from jax import debug
 from jax.numpy.linalg import norm as jnorm
-from jax.tree_util import tree_flatten
 
 # Import safe SVD with fallback (full deterministic SVD only)
 from nlsq.stability.svd_fallback import (

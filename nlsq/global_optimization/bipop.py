@@ -15,7 +15,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import jax.numpy as jnp
 import numpy as np
 
 if TYPE_CHECKING:
