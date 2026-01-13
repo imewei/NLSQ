@@ -491,6 +491,19 @@ def fit(
         )
 
     # LEGACY PATH: preset-based configuration (for backwards compatibility)
+    # Emit deprecation warning if preset is explicitly provided
+    if preset is not None:
+        import warnings
+
+        warnings.warn(
+            "The 'preset' parameter is deprecated and will be removed in v0.8.0. "
+            "Use the 'workflow' parameter instead: "
+            "workflow='auto' (default), 'auto_global' (robust), or 'hpc' (streaming). "
+            "See migration guide: https://nlsq.readthedocs.io/en/latest/migration.html",
+            FutureWarning,
+            stacklevel=2,
+        )
+
     # Input validation
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)

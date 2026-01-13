@@ -1606,6 +1606,324 @@ class AdaptiveHybridStreamingOptimizer:
         # No switch criteria met
         return False, ""
 
+    # =========================================================================
+    # Phase 1 Helper Methods (extracted for complexity reduction)
+    # =========================================================================
+
+    def _check_warm_start_and_record(
+        self,
+        current_params: jnp.ndarray,
+        loss_fn: Callable,
+        x_data: jnp.ndarray,
+        y_data: jnp.ndarray,
+        telemetry: Any,
+    ) -> tuple[bool, dict[str, Any] | None, float, float]:
+        """Check warm start detection (Layer 1 defense).
+
+        Computes initial loss and relative loss, checks if we're already
+        near optimal and can skip L-BFGS warmup.
+
+        Parameters
+        ----------
+        current_params : jnp.ndarray
+            Current parameters in normalized space.
+        loss_fn : Callable
+            Loss function.
+        x_data : jnp.ndarray
+            Input data.
+        y_data : jnp.ndarray
+            Output data.
+        telemetry : DefenseLayerTelemetry
+            Telemetry recorder.
+
+        Returns
+        -------
+        should_exit : bool
+            True if warm start detected and should skip warmup.
+        result : dict or None
+            If should_exit, the result dict to return. Otherwise None.
+        initial_loss : float
+            Computed initial loss value.
+        relative_loss : float
+            Computed relative loss (loss / y_variance).
+        """
+        initial_loss = float(loss_fn(current_params, x_data, y_data))
+        y_variance = float(jnp.var(y_data))
+        relative_loss = initial_loss / (y_variance + 1e-10)
+
+        # Store for Layer 3 cost-increase guard
+        self._warmup_initial_loss = initial_loss
+        self._warmup_relative_loss = relative_loss
+
+        # Log diagnostic info
+        if self.config.verbose >= 2:
+            _logger.debug(
+                f"Phase 1 initial assessment: loss={initial_loss:.6e}, "
+                f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}"
+            )
+
+        # Check warm start threshold
+        if (
+            self.config.enable_warm_start_detection
+            and relative_loss < self.config.warm_start_threshold
+        ):
+            # Record Layer 1 telemetry
+            telemetry.record_layer1_trigger(
+                relative_loss=relative_loss, threshold=self.config.warm_start_threshold
+            )
+
+            phase_record = {
+                "phase": 1,
+                "name": "lbfgs_warmup",
+                "iterations": 0,
+                "final_loss": initial_loss,
+                "best_loss": initial_loss,
+                "switch_reason": (
+                    f"Warm start detected (relative_loss={relative_loss:.4e} "
+                    f"< {self.config.warm_start_threshold})"
+                ),
+                "timestamp": time.time(),
+                "skipped": True,
+                "warm_start": True,
+                "relative_loss": relative_loss,
+            }
+            self.phase_history.append(phase_record)
+
+            if self.config.verbose >= 1:
+                _logger.info(
+                    f"Phase 1: Skipping L-BFGS warmup - warm start detected "
+                    f"(relative_loss={relative_loss:.4e})"
+                )
+
+            result = {
+                "final_params": current_params,
+                "best_params": current_params,
+                "best_loss": initial_loss,
+                "final_loss": initial_loss,
+                "iterations": 0,
+                "switch_reason": "Warm start detected - skipping L-BFGS warmup",
+                "warm_start": True,
+                "relative_loss": relative_loss,
+            }
+            return True, result, initial_loss, relative_loss
+
+        return False, None, initial_loss, relative_loss
+
+    def _select_adaptive_step_size(
+        self,
+        relative_loss: float,
+        telemetry: Any,
+    ) -> tuple[float, str]:
+        """Select adaptive initial step size for L-BFGS (Layer 2 defense).
+
+        Parameters
+        ----------
+        relative_loss : float
+            Relative loss (loss / y_variance).
+        telemetry : DefenseLayerTelemetry
+            Telemetry recorder.
+
+        Returns
+        -------
+        initial_step : float
+            Selected initial step size.
+        lr_mode : str
+            Mode name ('refinement', 'careful', 'exploration', 'fixed').
+        """
+        if self.config.enable_adaptive_warmup_lr:
+            if relative_loss < 0.1:
+                # Refinement mode: near optimal, use large step for Newton-like speed
+                initial_step = self.config.lbfgs_refinement_step_size
+                lr_mode = "refinement"
+            elif relative_loss < 1.0:
+                # Careful mode: reasonable starting point
+                initial_step = 0.5  # Intermediate step size
+                lr_mode = "careful"
+            else:
+                # Exploration mode: far from optimal, use small step to prevent overshoot
+                initial_step = self.config.lbfgs_exploration_step_size
+                lr_mode = "exploration"
+
+            self._warmup_lr_mode = lr_mode
+
+            # Record Layer 2 telemetry
+            telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
+
+            if self.config.verbose >= 2:
+                _logger.debug(
+                    f"Phase 1 L-BFGS adaptive step: mode={lr_mode}, step={initial_step:.2f}, "
+                    f"relative_loss={relative_loss:.4e}"
+                )
+        else:
+            initial_step = self.config.lbfgs_initial_step_size
+            lr_mode = "fixed"
+            self._warmup_lr_mode = lr_mode
+            # Record fixed mode telemetry
+            telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
+
+        return initial_step, lr_mode
+
+    def _check_cost_increase_guard(
+        self,
+        iteration: int,
+        loss_value: float,
+        best_loss: float,
+        best_params: jnp.ndarray,
+        lr_mode: str,
+        relative_loss: float,
+        telemetry: Any,
+    ) -> tuple[bool, dict[str, Any] | None]:
+        """Check cost increase guard (Layer 3 defense).
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number.
+        loss_value : float
+            Current loss value.
+        best_loss : float
+            Best loss seen so far.
+        best_params : jnp.ndarray
+            Best parameters seen so far.
+        lr_mode : str
+            Learning rate mode.
+        relative_loss : float
+            Initial relative loss.
+        telemetry : DefenseLayerTelemetry
+            Telemetry recorder.
+
+        Returns
+        -------
+        should_exit : bool
+            True if cost guard triggered.
+        result : dict or None
+            If should_exit, the result dict to return. Otherwise None.
+        """
+        if not self.config.enable_cost_guard or iteration <= 0:
+            return False, None
+
+        cost_increase_ratio = loss_value / self._warmup_initial_loss
+        cost_threshold = 1.0 + self.config.cost_increase_tolerance
+
+        if cost_increase_ratio > cost_threshold:
+            # Record Layer 3 telemetry
+            telemetry.record_layer3_trigger(
+                cost_ratio=cost_increase_ratio,
+                tolerance=self.config.cost_increase_tolerance,
+                iteration=iteration,
+            )
+
+            # Loss increased beyond tolerance - abort and return best
+            if self.config.verbose >= 1:
+                _logger.warning(
+                    f"Phase 1: Cost increase guard triggered at iteration "
+                    f"{iteration + 1}. Loss {loss_value:.6e} > "
+                    f"{self._warmup_initial_loss:.6e} * {cost_threshold:.2f}. "
+                    f"Reverting to best params (loss={best_loss:.6e})."
+                )
+
+            phase_record = {
+                "phase": 1,
+                "name": "lbfgs_warmup",
+                "iterations": iteration + 1,
+                "final_loss": loss_value,
+                "best_loss": best_loss,
+                "switch_reason": (
+                    f"Cost increase guard triggered (ratio={cost_increase_ratio:.4f})"
+                ),
+                "timestamp": time.time(),
+                "cost_guard_triggered": True,
+                "lr_mode": lr_mode,
+                "relative_loss": relative_loss,
+            }
+            self.phase_history.append(phase_record)
+
+            result = {
+                "final_params": best_params,  # Return BEST, not current
+                "best_params": best_params,
+                "best_loss": best_loss,
+                "final_loss": loss_value,
+                "iterations": iteration + 1,
+                "switch_reason": "Cost increase guard triggered",
+                "cost_guard_triggered": True,
+                "cost_increase_ratio": cost_increase_ratio,
+                "lr_mode": lr_mode,
+                "relative_loss": relative_loss,
+            }
+            return True, result
+
+        return False, None
+
+    def _build_phase1_result(
+        self,
+        final_params: jnp.ndarray,
+        best_params: jnp.ndarray,
+        best_loss: float,
+        final_loss: float,
+        iterations: int,
+        switch_reason: str,
+        lr_mode: str,
+        relative_loss: float,
+        record_history: bool = True,
+        **extra_fields: Any,
+    ) -> dict[str, Any]:
+        """Build Phase 1 result dict and optionally record to phase history.
+
+        Parameters
+        ----------
+        final_params : jnp.ndarray
+            Final parameters.
+        best_params : jnp.ndarray
+            Best parameters found.
+        best_loss : float
+            Best loss value.
+        final_loss : float
+            Final loss value.
+        iterations : int
+            Number of iterations performed.
+        switch_reason : str
+            Reason for switching/ending.
+        lr_mode : str
+            Learning rate mode used.
+        relative_loss : float
+            Initial relative loss.
+        record_history : bool, optional
+            Whether to append to phase_history.
+        **extra_fields : Any
+            Additional fields to include in result.
+
+        Returns
+        -------
+        result : dict
+            Phase 1 result dictionary.
+        """
+        if record_history:
+            phase_record = {
+                "phase": 1,
+                "name": "lbfgs_warmup",
+                "iterations": iterations,
+                "final_loss": final_loss,
+                "best_loss": best_loss,
+                "switch_reason": switch_reason,
+                "timestamp": time.time(),
+                "lr_mode": lr_mode,
+                "relative_loss": relative_loss,
+            }
+            self.phase_history.append(phase_record)
+
+        result = {
+            "final_params": final_params,
+            "best_params": best_params,
+            "best_loss": best_loss,
+            "final_loss": final_loss,
+            "iterations": iterations,
+            "switch_reason": switch_reason,
+            "lr_mode": lr_mode,
+            "relative_loss": relative_loss,
+        }
+        result.update(extra_fields)
+        return result
+
     def _run_phase1_warmup(
         self,
         data_source: Any,
@@ -1674,103 +1992,24 @@ class AdaptiveHybridStreamingOptimizer:
         telemetry = get_defense_telemetry()
         telemetry.record_warmup_start()
 
-        # =====================================================
         # LAYER 1: Warm Start Detection
-        # =====================================================
-        initial_loss = float(loss_fn(current_params, x_data, y_data))
-        y_variance = float(jnp.var(y_data))
-        relative_loss = initial_loss / (y_variance + 1e-10)
-
-        # Store for Layer 3 cost-increase guard
-        self._warmup_initial_loss = initial_loss
-        self._warmup_relative_loss = relative_loss
-
-        # Log diagnostic info
-        if self.config.verbose >= 2:
-            _logger.debug(
-                f"Phase 1 initial assessment: loss={initial_loss:.6e}, "
-                f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}"
+        should_exit, result, initial_loss, relative_loss = (
+            self._check_warm_start_and_record(
+                current_params=current_params,
+                loss_fn=loss_fn,
+                x_data=x_data,
+                y_data=y_data,
+                telemetry=telemetry,
             )
+        )
+        if should_exit:
+            return result
 
-        # Check warm start threshold
-        if (
-            self.config.enable_warm_start_detection
-            and relative_loss < self.config.warm_start_threshold
-        ):
-            # Record Layer 1 telemetry
-            telemetry.record_layer1_trigger(
-                relative_loss=relative_loss, threshold=self.config.warm_start_threshold
-            )
-
-            phase_record = {
-                "phase": 1,
-                "name": "lbfgs_warmup",
-                "iterations": 0,
-                "final_loss": initial_loss,
-                "best_loss": initial_loss,
-                "switch_reason": (
-                    f"Warm start detected (relative_loss={relative_loss:.4e} "
-                    f"< {self.config.warm_start_threshold})"
-                ),
-                "timestamp": time.time(),
-                "skipped": True,
-                "warm_start": True,
-                "relative_loss": relative_loss,
-            }
-            self.phase_history.append(phase_record)
-
-            if self.config.verbose >= 1:
-                _logger.info(
-                    f"Phase 1: Skipping L-BFGS warmup - warm start detected "
-                    f"(relative_loss={relative_loss:.4e})"
-                )
-
-            return {
-                "final_params": current_params,
-                "best_params": current_params,
-                "best_loss": initial_loss,
-                "final_loss": initial_loss,
-                "iterations": 0,
-                "switch_reason": "Warm start detected - skipping L-BFGS warmup",
-                "warm_start": True,
-                "relative_loss": relative_loss,
-            }
-
-        # =====================================================
         # LAYER 2: Adaptive Initial Step Size Selection for L-BFGS
-        # =====================================================
-        # L-BFGS uses initial step size instead of learning rate
-        # The step size controls how conservative the first steps are
-        if self.config.enable_adaptive_warmup_lr:
-            if relative_loss < 0.1:
-                # Refinement mode: near optimal, use large step for Newton-like speed
-                initial_step = self.config.lbfgs_refinement_step_size
-                lr_mode = "refinement"
-            elif relative_loss < 1.0:
-                # Careful mode: reasonable starting point
-                initial_step = 0.5  # Intermediate step size
-                lr_mode = "careful"
-            else:
-                # Exploration mode: far from optimal, use small step to prevent overshoot
-                initial_step = self.config.lbfgs_exploration_step_size
-                lr_mode = "exploration"
-
-            self._warmup_lr_mode = lr_mode
-
-            # Record Layer 2 telemetry
-            telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
-
-            if self.config.verbose >= 2:
-                _logger.debug(
-                    f"Phase 1 L-BFGS adaptive step: mode={lr_mode}, step={initial_step:.2f}, "
-                    f"relative_loss={relative_loss:.4e}"
-                )
-        else:
-            initial_step = self.config.lbfgs_initial_step_size
-            lr_mode = "fixed"
-            self._warmup_lr_mode = lr_mode
-            # Record fixed mode telemetry
-            telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
+        initial_step, lr_mode = self._select_adaptive_step_size(
+            relative_loss=relative_loss,
+            telemetry=telemetry,
+        )
 
         # Create L-BFGS optimizer with selected initial step size
         optimizer, opt_state = self._create_lbfgs_optimizer(
@@ -1811,59 +2050,18 @@ class AdaptiveHybridStreamingOptimizer:
                 best_loss = loss_value
                 best_params = current_params
 
-            # =====================================================
             # LAYER 3: Cost-Increase Guard
-            # =====================================================
-            if self.config.enable_cost_guard and iteration > 0:
-                cost_increase_ratio = loss_value / self._warmup_initial_loss
-                cost_threshold = 1.0 + self.config.cost_increase_tolerance
-
-                if cost_increase_ratio > cost_threshold:
-                    # Record Layer 3 telemetry
-                    telemetry.record_layer3_trigger(
-                        cost_ratio=cost_increase_ratio,
-                        tolerance=self.config.cost_increase_tolerance,
-                        iteration=iteration,
-                    )
-
-                    # Loss increased beyond tolerance - abort and return best
-                    if self.config.verbose >= 1:
-                        _logger.warning(
-                            f"Phase 1: Cost increase guard triggered at iteration "
-                            f"{iteration + 1}. Loss {loss_value:.6e} > "
-                            f"{self._warmup_initial_loss:.6e} * {cost_threshold:.2f}. "
-                            f"Reverting to best params (loss={best_loss:.6e})."
-                        )
-
-                    phase_record = {
-                        "phase": 1,
-                        "name": "lbfgs_warmup",
-                        "iterations": iteration + 1,
-                        "final_loss": loss_value,
-                        "best_loss": best_loss,
-                        "switch_reason": (
-                            f"Cost increase guard triggered "
-                            f"(ratio={cost_increase_ratio:.4f})"
-                        ),
-                        "timestamp": time.time(),
-                        "cost_guard_triggered": True,
-                        "lr_mode": lr_mode,
-                        "relative_loss": relative_loss,
-                    }
-                    self.phase_history.append(phase_record)
-
-                    return {
-                        "final_params": best_params,  # Return BEST, not current
-                        "best_params": best_params,
-                        "best_loss": best_loss,
-                        "final_loss": loss_value,
-                        "iterations": iteration + 1,
-                        "switch_reason": "Cost increase guard triggered",
-                        "cost_guard_triggered": True,
-                        "cost_increase_ratio": cost_increase_ratio,
-                        "lr_mode": lr_mode,
-                        "relative_loss": relative_loss,
-                    }
+            cost_guard_exit, cost_guard_result = self._check_cost_increase_guard(
+                iteration=iteration,
+                loss_value=loss_value,
+                best_loss=best_loss,
+                best_params=best_params,
+                lr_mode=lr_mode,
+                relative_loss=relative_loss,
+                telemetry=telemetry,
+            )
+            if cost_guard_exit:
+                return cost_guard_result
 
             # Check for precision upgrade if NaN/Inf detected
             self._upgrade_precision_if_needed(
@@ -1901,58 +2099,31 @@ class AdaptiveHybridStreamingOptimizer:
                 )
 
                 if should_switch:
-                    # Record Phase 1 completion
-                    phase_record = {
-                        "phase": 1,
-                        "name": "lbfgs_warmup",
-                        "iterations": iteration + 1,
-                        "final_loss": loss_value,
-                        "best_loss": best_loss,
-                        "switch_reason": reason,
-                        "timestamp": time.time(),
-                        "lr_mode": lr_mode,
-                        "relative_loss": relative_loss,
-                    }
-                    self.phase_history.append(phase_record)
-
-                    return {
-                        "final_params": current_params,
-                        "best_params": best_params,
-                        "best_loss": best_loss,
-                        "final_loss": loss_value,
-                        "iterations": iteration + 1,
-                        "switch_reason": reason,
-                        "lr_mode": lr_mode,
-                        "relative_loss": relative_loss,
-                    }
+                    return self._build_phase1_result(
+                        final_params=current_params,
+                        best_params=best_params,
+                        best_loss=best_loss,
+                        final_loss=loss_value,
+                        iterations=iteration + 1,
+                        switch_reason=reason,
+                        lr_mode=lr_mode,
+                        relative_loss=relative_loss,
+                    )
 
             # Update previous loss
             prev_loss = loss_value
 
         # Maximum iterations reached (this shouldn't happen if max_iter criterion active)
-        phase_record = {
-            "phase": 1,
-            "name": "lbfgs_warmup",
-            "iterations": self.config.max_warmup_iterations,
-            "final_loss": loss_value,
-            "best_loss": best_loss,
-            "switch_reason": "Maximum iterations reached",
-            "timestamp": time.time(),
-            "lr_mode": lr_mode,
-            "relative_loss": relative_loss,
-        }
-        self.phase_history.append(phase_record)
-
-        return {
-            "final_params": current_params,
-            "best_params": best_params,
-            "best_loss": best_loss,
-            "final_loss": loss_value,
-            "iterations": self.config.max_warmup_iterations,
-            "switch_reason": "Maximum iterations reached",
-            "lr_mode": lr_mode,
-            "relative_loss": relative_loss,
-        }
+        return self._build_phase1_result(
+            final_params=current_params,
+            best_params=best_params,
+            best_loss=best_loss,
+            final_loss=loss_value,
+            iterations=self.config.max_warmup_iterations,
+            switch_reason="Maximum iterations reached",
+            lr_mode=lr_mode,
+            relative_loss=relative_loss,
+        )
 
     def _compute_jacobian_chunk(
         self,

@@ -230,6 +230,344 @@ class ModelRegistry:
         self._builtin_cache[model_name] = model
         return model
 
+    # =========================================================================
+    # Custom Model Helper Methods (extracted for complexity reduction)
+    # =========================================================================
+
+    def _validate_custom_model_config(
+        self,
+        config: dict[str, Any],
+    ) -> tuple[str, str]:
+        """Validate and extract custom model configuration.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration with path, function, and optional trusted keys.
+
+        Returns
+        -------
+        file_path : str
+            The file path to the model.
+        function_name : str
+            The function name to load.
+
+        Raises
+        ------
+        ModelError
+            If file_path or function_name is missing.
+        """
+        file_path = config.get("path", "")
+        function_name = config.get("function", "")
+
+        if not file_path:
+            raise ModelError(
+                "File path is required for custom models",
+                model_type="custom",
+                suggestion="Specify 'path' in the model configuration",
+            )
+
+        if not function_name:
+            raise ModelError(
+                "Function name is required for custom models",
+                model_type="custom",
+                context={"path": file_path},
+                suggestion="Specify 'function' in the model configuration",
+            )
+
+        return file_path, function_name
+
+    def _validate_model_file_exists(
+        self,
+        file_path: str,
+        function_name: str,
+    ) -> Path:
+        """Validate that the model file exists and is a regular file.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the model file.
+        function_name : str
+            Function name (for error messages).
+
+        Returns
+        -------
+        path : Path
+            Validated Path object.
+
+        Raises
+        ------
+        ModelError
+            If file doesn't exist or isn't a regular file.
+        """
+        path = Path(file_path)
+        if not path.exists():
+            raise ModelError(
+                f"Custom model file not found: {file_path}",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": file_path},
+                suggestion="Check the file path and ensure the file exists",
+            )
+
+        if not path.is_file():
+            raise ModelError(
+                f"Path is not a file: {file_path}",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": file_path},
+                suggestion="Provide a path to a Python file",
+            )
+
+        return path
+
+    def _check_path_security(
+        self,
+        path: Path,
+        function_name: str,
+        is_trusted: bool,
+    ) -> None:
+        """Check for path traversal attacks.
+
+        Parameters
+        ----------
+        path : Path
+            Path to validate.
+        function_name : str
+            Function name (for error messages).
+        is_trusted : bool
+            Whether the model is trusted.
+
+        Raises
+        ------
+        ModelError
+            If path traversal is detected.
+        """
+        if not validate_path(path):
+            audit_logger = get_audit_logger()
+            from nlsq.cli.model_validation import ModelValidationResult
+
+            result = ModelValidationResult(
+                path=path,
+                is_valid=False,
+                is_trusted=is_trusted,
+                violations=["Path traversal detected"],
+            )
+            audit_logger.log_load_attempt(path, result)
+            raise ModelError(
+                f"Path traversal detected: {path}",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": str(path)},
+                suggestion="Model files must be within the current working directory",
+            )
+
+    def _validate_model_security(
+        self,
+        path: Path,
+        function_name: str,
+        is_trusted: bool,
+    ) -> None:
+        """Run AST-based security validation on the model file.
+
+        Parameters
+        ----------
+        path : Path
+            Path to the model file.
+        function_name : str
+            Function name (for error messages).
+        is_trusted : bool
+            Whether to skip validation.
+
+        Raises
+        ------
+        ModelError
+            If security validation fails and not trusted.
+        """
+        validation_result = validate_model(path, trusted=is_trusted)
+
+        audit_logger = get_audit_logger()
+        audit_logger.log_load_attempt(path, validation_result)
+
+        if not validation_result.is_valid and not is_trusted:
+            violations_msg = "; ".join(validation_result.violations[:3])
+            if len(validation_result.violations) > 3:
+                violations_msg += f" (and {len(validation_result.violations) - 3} more)"
+
+            raise ModelError(
+                f"Security validation failed for {path}: {violations_msg}",
+                model_name=function_name,
+                model_type="custom",
+                context={
+                    "path": str(path),
+                    "violations": validation_result.violations,
+                },
+                suggestion="Remove dangerous patterns or use --trust flag to skip validation",
+            )
+
+        if is_trusted and validation_result.violations:
+            logger.warning(
+                "Loading model %s with --trust flag, bypassing security checks. "
+                "Violations that would have blocked: %s",
+                path,
+                "; ".join(validation_result.violations[:3]),
+            )
+
+    def _load_module_from_path(
+        self,
+        path: Path,
+        function_name: str,
+    ) -> Any:
+        """Load a Python module from a file path.
+
+        Parameters
+        ----------
+        path : Path
+            Path to the Python file.
+        function_name : str
+            Function name (for error messages).
+
+        Returns
+        -------
+        module : module
+            The loaded Python module.
+
+        Raises
+        ------
+        ModelError
+            If module cannot be loaded.
+        """
+        try:
+            spec = importlib.util.spec_from_file_location("custom_model", path)
+            if spec is None or spec.loader is None:
+                raise ModelError(
+                    f"Failed to load custom model file: {path}",
+                    model_name=function_name,
+                    model_type="custom",
+                    context={"path": str(path)},
+                    suggestion="Ensure the file is a valid Python module",
+                )
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except SyntaxError as e:
+            raise ModelError(
+                f"Syntax error in custom model file: {e}",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": str(path), "line": e.lineno},
+                suggestion="Fix the syntax error in the custom model file",
+            ) from e
+        except ModelError:
+            raise
+        except Exception as e:
+            raise ModelError(
+                f"Error loading custom model file: {e}",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": str(path)},
+                suggestion="Ensure the file is a valid Python module",
+            ) from e
+
+    def _resolve_function_from_module(
+        self,
+        module: Any,
+        function_name: str,
+        path: Path,
+    ) -> ModelFunction:
+        """Resolve and validate the model function from a loaded module.
+
+        Parameters
+        ----------
+        module : module
+            The loaded Python module.
+        function_name : str
+            Name of the function to extract.
+        path : Path
+            Path to the module file (for error messages).
+
+        Returns
+        -------
+        model : ModelFunction
+            The resolved model function.
+
+        Raises
+        ------
+        ModelError
+            If function not found, not callable, or invalid signature.
+        """
+        if not hasattr(module, function_name):
+            available_functions = [
+                name
+                for name, obj in inspect.getmembers(module)
+                if callable(obj) and not name.startswith("_")
+            ]
+            raise ModelError(
+                f"Function '{function_name}' not found in {path}",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": str(path), "available_functions": available_functions},
+                suggestion=f"Available functions: {', '.join(available_functions) or 'none'}",
+            )
+
+        model = getattr(module, function_name)
+
+        if not callable(model):
+            raise ModelError(
+                f"'{function_name}' is not a callable function",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": str(path)},
+                suggestion="Ensure the model is defined as a function",
+            )
+
+        # Validate signature has at least one parameter (x)
+        sig = inspect.signature(model)
+        params = list(sig.parameters.keys())
+        if len(params) < 1:
+            raise ModelError(
+                f"Model function '{function_name}' must have at least one parameter (x)",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": str(path), "parameters": params},
+                suggestion="Define model as f(x, *params) where x is the independent variable",
+            )
+
+        return model
+
+    def _attach_model_utilities(
+        self,
+        model: ModelFunction,
+        module: Any,
+    ) -> ModelFunction:
+        """Attach estimate_p0 and bounds methods from module to model.
+
+        Parameters
+        ----------
+        model : ModelFunction
+            The model function.
+        module : module
+            The module containing optional utilities.
+
+        Returns
+        -------
+        model : ModelFunction
+            The model with attached utilities.
+        """
+        if hasattr(module, "estimate_p0"):
+            estimate_p0_func = module.estimate_p0
+            if callable(estimate_p0_func):
+                model.estimate_p0 = estimate_p0_func  # type: ignore[attr-defined]
+
+        if hasattr(module, "bounds"):
+            bounds_func = module.bounds
+            if callable(bounds_func):
+                model.bounds = bounds_func  # type: ignore[attr-defined]
+
+        return model
+
     def _get_custom_model(
         self,
         config: dict[str, Any],
@@ -260,182 +598,27 @@ class ModelRegistry:
             If the file or function cannot be found, the function is invalid,
             or the model fails security validation.
         """
-        file_path = config.get("path", "")
-        function_name = config.get("function", "")
+        # Step 1: Validate configuration
+        file_path, function_name = self._validate_custom_model_config(config)
         is_trusted = trusted or config.get("trusted", False)
 
-        if not file_path:
-            raise ModelError(
-                "File path is required for custom models",
-                model_type="custom",
-                suggestion="Specify 'path' in the model configuration",
-            )
+        # Step 2: Validate file exists
+        path = self._validate_model_file_exists(file_path, function_name)
 
-        if not function_name:
-            raise ModelError(
-                "Function name is required for custom models",
-                model_type="custom",
-                context={"path": file_path},
-                suggestion="Specify 'function' in the model configuration",
-            )
+        # Step 3: Security validation - path traversal
+        self._check_path_security(path, function_name, is_trusted)
 
-        # Check if file exists
-        path = Path(file_path)
-        if not path.exists():
-            raise ModelError(
-                f"Custom model file not found: {file_path}",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path},
-                suggestion="Check the file path and ensure the file exists",
-            )
+        # Step 4: Security validation - AST-based
+        self._validate_model_security(path, function_name, is_trusted)
 
-        if not path.is_file():
-            raise ModelError(
-                f"Path is not a file: {file_path}",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path},
-                suggestion="Provide a path to a Python file",
-            )
+        # Step 5: Load module dynamically
+        module = self._load_module_from_path(path, function_name)
 
-        # Security validation: path traversal prevention
-        if not validate_path(path):
-            audit_logger = get_audit_logger()
-            # Log the blocked attempt with a minimal result
-            from nlsq.cli.model_validation import ModelValidationResult
+        # Step 6: Resolve and validate function
+        model = self._resolve_function_from_module(module, function_name, path)
 
-            result = ModelValidationResult(
-                path=path,
-                is_valid=False,
-                is_trusted=is_trusted,
-                violations=["Path traversal detected"],
-            )
-            audit_logger.log_load_attempt(path, result)
-            raise ModelError(
-                f"Path traversal detected: {file_path}",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path},
-                suggestion="Model files must be within the current working directory",
-            )
-
-        # Security validation: AST-based pattern detection
-        validation_result = validate_model(path, trusted=is_trusted)
-
-        # Log the model loading attempt
-        audit_logger = get_audit_logger()
-        audit_logger.log_load_attempt(path, validation_result)
-
-        if not validation_result.is_valid and not is_trusted:
-            violations_msg = "; ".join(validation_result.violations[:3])
-            if len(validation_result.violations) > 3:
-                violations_msg += f" (and {len(validation_result.violations) - 3} more)"
-
-            raise ModelError(
-                f"Security validation failed for {file_path}: {violations_msg}",
-                model_name=function_name,
-                model_type="custom",
-                context={
-                    "path": file_path,
-                    "violations": validation_result.violations,
-                },
-                suggestion="Remove dangerous patterns or use --trust flag to skip validation",
-            )
-
-        if is_trusted and validation_result.violations:
-            logger.warning(
-                "Loading model %s with --trust flag, bypassing security checks. "
-                "Violations that would have blocked: %s",
-                path,
-                "; ".join(validation_result.violations[:3]),
-            )
-
-        # Load the module dynamically
-        try:
-            spec = importlib.util.spec_from_file_location("custom_model", path)
-            if spec is None or spec.loader is None:
-                raise ModelError(
-                    f"Failed to load custom model file: {file_path}",
-                    model_name=function_name,
-                    model_type="custom",
-                    context={"path": file_path},
-                    suggestion="Ensure the file is a valid Python module",
-                )
-
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-        except SyntaxError as e:
-            raise ModelError(
-                f"Syntax error in custom model file: {e}",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path, "line": e.lineno},
-                suggestion="Fix the syntax error in the custom model file",
-            ) from e
-        except ModelError:
-            # Re-raise ModelError without wrapping
-            raise
-        except Exception as e:
-            raise ModelError(
-                f"Error loading custom model file: {e}",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path},
-                suggestion="Ensure the file is a valid Python module",
-            ) from e
-
-        # Get the model function
-        if not hasattr(module, function_name):
-            # List available functions in the module
-            available_functions = [
-                name
-                for name, obj in inspect.getmembers(module)
-                if callable(obj) and not name.startswith("_")
-            ]
-            raise ModelError(
-                f"Function '{function_name}' not found in {file_path}",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path, "available_functions": available_functions},
-                suggestion=f"Available functions: {', '.join(available_functions) or 'none'}",
-            )
-
-        model = getattr(module, function_name)
-
-        if not callable(model):
-            raise ModelError(
-                f"'{function_name}' is not a callable function",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path},
-                suggestion="Ensure the model is defined as a function",
-            )
-
-        # Validate function signature has at least one parameter (x)
-        sig = inspect.signature(model)
-        params = list(sig.parameters.keys())
-        if len(params) < 1:
-            raise ModelError(
-                f"Model function '{function_name}' must have at least one parameter (x)",
-                model_name=function_name,
-                model_type="custom",
-                context={"path": file_path, "parameters": params},
-                suggestion="Define model as f(x, *params) where x is the independent variable",
-            )
-
-        # Attach optional estimate_p0 and bounds methods if available
-        if hasattr(module, "estimate_p0"):
-            estimate_p0_func = module.estimate_p0
-            if callable(estimate_p0_func):
-                model.estimate_p0 = estimate_p0_func
-
-        if hasattr(module, "bounds"):
-            bounds_func = module.bounds
-            if callable(bounds_func):
-                model.bounds = bounds_func
-
-        return model
+        # Step 7: Attach utility methods
+        return self._attach_model_utilities(model, module)
 
     def _get_polynomial_model(self, config: dict[str, Any]) -> ModelFunction:
         """Generate a polynomial model of given degree.

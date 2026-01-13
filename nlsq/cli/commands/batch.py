@@ -94,6 +94,263 @@ def _run_single_workflow(
         }
 
 
+# =============================================================================
+# Batch Processing Helper Functions (extracted for complexity reduction)
+# =============================================================================
+
+
+def _validate_batch_inputs(
+    workflow_paths: list[str],
+    continue_on_error: bool,
+) -> list[str]:
+    """Validate batch inputs and return list of missing files.
+
+    Parameters
+    ----------
+    workflow_paths : list[str]
+        List of workflow file paths.
+    continue_on_error : bool
+        If True, return missing files without raising.
+
+    Returns
+    -------
+    missing_files : list[str]
+        List of missing file paths (empty if all exist).
+
+    Raises
+    ------
+    CLIError
+        If no workflow files specified, or if files missing and continue_on_error=False.
+    """
+    if not workflow_paths:
+        raise CLIError(
+            "No workflow files specified",
+            suggestion="Provide at least one YAML workflow file path",
+        )
+
+    missing_files = [path for path in workflow_paths if not Path(path).exists()]
+
+    if missing_files and not continue_on_error:
+        raise CLIError(
+            f"Workflow files not found: {missing_files}",
+            context={"missing_files": missing_files},
+            suggestion="Check that all file paths are correct",
+        )
+
+    return missing_files
+
+
+def _calculate_optimal_workers(
+    n_workflows: int,
+    max_workers: int | None,
+) -> int:
+    """Calculate optimal number of workers for batch processing.
+
+    Parameters
+    ----------
+    n_workflows : int
+        Number of workflows to process.
+    max_workers : int or None
+        User-specified max workers. If None, auto-detect.
+
+    Returns
+    -------
+    int
+        Number of workers to use.
+    """
+    if max_workers is not None:
+        return max_workers
+
+    # Auto-detect: use minimum of CPU count and number of workflows
+    # For threads, limit to 4 to avoid overwhelming JAX with concurrent compilations
+    cpu_count = os.cpu_count() or 1
+    return min(4, cpu_count, n_workflows)
+
+
+def _collect_batch_results(
+    executor: ThreadPoolExecutor,
+    workflow_paths: list[str],
+    verbose: bool,
+    logger: Any,
+) -> list[dict[str, Any]]:
+    """Collect results from submitted workflow futures.
+
+    Parameters
+    ----------
+    executor : ThreadPoolExecutor
+        The executor running workflows.
+    workflow_paths : list[str]
+        List of workflow paths.
+    verbose : bool
+        Enable verbose logging.
+    logger : Logger
+        Logger instance.
+
+    Returns
+    -------
+    list[dict]
+        List of result dictionaries.
+    """
+    results: list[dict[str, Any]] = []
+
+    # Submit all workflows
+    futures = {
+        executor.submit(_run_single_workflow, path, verbose): path
+        for path in workflow_paths
+    }
+
+    # Collect results as they complete
+    for future in as_completed(futures):
+        workflow_path = futures[future]
+
+        try:
+            result = future.result()
+            results.append(result)
+
+            # Log status
+            if result["status"] == "success":
+                if verbose:
+                    logger.info(f"SUCCESS: {workflow_path}")
+            else:
+                error_info = result.get("error", {})
+                error_msg = error_info.get("message", "Unknown error")
+                logger.warning(f"FAILED: {workflow_path} - {error_msg}")
+
+        except Exception as e:
+            # Handle executor-level errors
+            results.append(
+                {
+                    "status": "failed",
+                    "workflow_path": workflow_path,
+                    "result": None,
+                    "error": {
+                        "type": "ExecutorError",
+                        "message": str(e),
+                        "context": {},
+                        "suggestion": None,
+                    },
+                }
+            )
+            logger.warning(f"FAILED: {workflow_path} - Executor error: {e}")
+
+    return results
+
+
+def _build_batch_summary(
+    results: list[dict[str, Any]],
+    n_workflows: int,
+    max_workers: int,
+    start_time: datetime,
+    end_time: datetime,
+) -> dict[str, Any]:
+    """Build summary dictionary from batch results.
+
+    Parameters
+    ----------
+    results : list[dict]
+        List of result dictionaries.
+    n_workflows : int
+        Total number of workflows.
+    max_workers : int
+        Number of workers used.
+    start_time : datetime
+        Batch start time.
+    end_time : datetime
+        Batch end time.
+
+    Returns
+    -------
+    dict
+        Summary dictionary with stats and details.
+    """
+    duration = (end_time - start_time).total_seconds()
+    succeeded = sum(1 for r in results if r["status"] == "success")
+    failed = sum(1 for r in results if r["status"] == "failed")
+
+    return {
+        "total": n_workflows,
+        "succeeded": succeeded,
+        "failed": failed,
+        "duration_seconds": duration,
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
+        "max_workers": max_workers,
+        "failures": [
+            {
+                "workflow_path": r["workflow_path"],
+                "error": r.get("error"),
+            }
+            for r in results
+            if r["status"] == "failed"
+        ],
+        "successes": [
+            {
+                "workflow_path": r["workflow_path"],
+            }
+            for r in results
+            if r["status"] == "success"
+        ],
+    }
+
+
+def _write_batch_summary(
+    summary: dict[str, Any],
+    summary_file: str,
+    verbose: bool,
+    logger: Any,
+) -> None:
+    """Write batch summary to file.
+
+    Parameters
+    ----------
+    summary : dict
+        Summary dictionary.
+    summary_file : str
+        Output file path.
+    verbose : bool
+        Enable verbose logging.
+    logger : Logger
+        Logger instance.
+    """
+    summary_path = Path(summary_file)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    if verbose:
+        logger.info(f"Summary written to: {summary_file}")
+
+
+def _print_batch_summary(
+    summary: dict[str, Any],
+    results: list[dict[str, Any]],
+) -> None:
+    """Print batch summary to console.
+
+    Parameters
+    ----------
+    summary : dict
+        Summary dictionary.
+    results : list[dict]
+        List of result dictionaries.
+    """
+    print("\nBatch Summary:")
+    print(f"  Total: {summary['total']}")
+    print(f"  Succeeded: {summary['succeeded']}")
+    print(f"  Failed: {summary['failed']}")
+    print(f"  Duration: {summary['duration_seconds']:.2f}s")
+
+    if summary["failed"] > 0:
+        print("\nFailed workflows:")
+        for r in results:
+            if r["status"] == "failed":
+                error_info = r.get("error", {})
+                print(
+                    f"  - {r['workflow_path']}: {error_info.get('message', 'Unknown error')}"
+                )
+
+
 def run_batch(
     workflow_paths: list[str],
     summary_file: str | None = None,
@@ -133,137 +390,37 @@ def run_batch(
         console=True,
     )
 
-    if not workflow_paths:
-        raise CLIError(
-            "No workflow files specified",
-            suggestion="Provide at least one YAML workflow file path",
-        )
+    # Step 1: Validate inputs
+    _validate_batch_inputs(workflow_paths, continue_on_error)
 
-    # Validate all paths exist before starting
-    missing_files = [path for path in workflow_paths if not Path(path).exists()]
-
-    if missing_files and not continue_on_error:
-        raise CLIError(
-            f"Workflow files not found: {missing_files}",
-            context={"missing_files": missing_files},
-            suggestion="Check that all file paths are correct",
-        )
-
-    # Determine number of workers
+    # Step 2: Calculate optimal workers
     n_workflows = len(workflow_paths)
-    if max_workers is None:
-        # Auto-detect: use minimum of CPU count and number of workflows
-        # For threads, limit to 4 to avoid overwhelming JAX with concurrent compilations
-        cpu_count = os.cpu_count() or 1
-        max_workers = min(4, cpu_count, n_workflows)
+    num_workers = _calculate_optimal_workers(n_workflows, max_workers)
 
     if verbose:
         logger.info(f"Starting batch processing of {n_workflows} workflows")
-        logger.info(f"Using {max_workers} parallel workers (threads)")
+        logger.info(f"Using {num_workers} parallel workers (threads)")
 
-    # Execute workflows in parallel using ThreadPoolExecutor
-    # ThreadPoolExecutor is safer than ProcessPoolExecutor for JAX
-    results: list[dict[str, Any]] = []
+    # Step 3: Execute workflows and collect results
     start_time = datetime.now()
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all workflows
-        futures = {
-            executor.submit(_run_single_workflow, path, verbose): path
-            for path in workflow_paths
-        }
-
-        # Collect results as they complete
-        for future in as_completed(futures):
-            workflow_path = futures[future]
-
-            try:
-                result = future.result()
-                results.append(result)
-
-                # Log status
-                if result["status"] == "success":
-                    if verbose:
-                        logger.info(f"SUCCESS: {workflow_path}")
-                else:
-                    error_info = result.get("error", {})
-                    error_msg = error_info.get("message", "Unknown error")
-                    logger.warning(f"FAILED: {workflow_path} - {error_msg}")
-
-            except Exception as e:
-                # Handle executor-level errors
-                results.append(
-                    {
-                        "status": "failed",
-                        "workflow_path": workflow_path,
-                        "result": None,
-                        "error": {
-                            "type": "ExecutorError",
-                            "message": str(e),
-                            "context": {},
-                            "suggestion": None,
-                        },
-                    }
-                )
-                logger.warning(f"FAILED: {workflow_path} - Executor error: {e}")
-
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        results = _collect_batch_results(executor, workflow_paths, verbose, logger)
     end_time = datetime.now()
-    duration = (end_time - start_time).total_seconds()
 
-    # Generate summary
-    succeeded = sum(1 for r in results if r["status"] == "success")
-    failed = sum(1 for r in results if r["status"] == "failed")
+    # Step 4: Build summary
+    summary = _build_batch_summary(
+        results=results,
+        n_workflows=n_workflows,
+        max_workers=num_workers,
+        start_time=start_time,
+        end_time=end_time,
+    )
 
-    summary = {
-        "total": n_workflows,
-        "succeeded": succeeded,
-        "failed": failed,
-        "duration_seconds": duration,
-        "start_time": start_time.isoformat(),
-        "end_time": end_time.isoformat(),
-        "max_workers": max_workers,
-        "failures": [
-            {
-                "workflow_path": r["workflow_path"],
-                "error": r.get("error"),
-            }
-            for r in results
-            if r["status"] == "failed"
-        ],
-        "successes": [
-            {
-                "workflow_path": r["workflow_path"],
-            }
-            for r in results
-            if r["status"] == "success"
-        ],
-    }
-
-    # Write summary file
+    # Step 5: Write summary file if requested
     if summary_file is not None:
-        summary_path = Path(summary_file)
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_batch_summary(summary, summary_file, verbose, logger)
 
-        with open(summary_path, "w", encoding="utf-8") as f:
-            json.dump(summary, f, indent=2)
-
-        if verbose:
-            logger.info(f"Summary written to: {summary_file}")
-
-    # Log final summary
-    print("\nBatch Summary:")
-    print(f"  Total: {n_workflows}")
-    print(f"  Succeeded: {succeeded}")
-    print(f"  Failed: {failed}")
-    print(f"  Duration: {duration:.2f}s")
-
-    if failed > 0:
-        print("\nFailed workflows:")
-        for r in results:
-            if r["status"] == "failed":
-                error_info = r.get("error", {})
-                print(
-                    f"  - {r['workflow_path']}: {error_info.get('message', 'Unknown error')}"
-                )
+    # Step 6: Print summary to console
+    _print_batch_summary(summary, results)
 
     return results
