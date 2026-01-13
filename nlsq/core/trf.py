@@ -124,7 +124,7 @@ initialize_gpu_safely()
 
 # Import dataclasses for SVDCache
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from nlsq.caching.unified_cache import get_global_cache
 from nlsq.callbacks import StopOptimization
@@ -416,7 +416,6 @@ class FallbackContext:
 # Trust region parameters
 TR_REDUCTION_FACTOR = 0.25  # Factor to reduce trust region when numerical issues occur
 TR_BOUNDARY_THRESHOLD = 0.95  # Threshold for checking if step is close to boundary
-LOSS_FUNCTION_COEFF = 0.5  # Coefficient for loss function (0.5 * ||f||^2)
 SQRT_EXPONENT = 0.5  # Exponent for square root in scaling (v**0.5)
 
 
@@ -624,7 +623,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     **kwargs,
                 )
             else:
-                return self.trf_no_bounds_timed(
+                return self.trf_no_bounds(
                     fun,
                     xdata,
                     ydata,
@@ -647,6 +646,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     verbose,
                     solver,
                     callback,
+                    profiler=TRFProfiler(),
                 )
         else:
             return self.trf_bounds(
@@ -741,10 +741,19 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Compute scaling factors
         jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
-            state["scale"], state["scale_inv"] = self.cJIT.compute_jac_scale(J)
+            scale_np, scale_inv_np = self.cJIT.compute_jac_scale(J)
+            # T022: Convert scale to JAX arrays once at entry to avoid repeated conversion
+            state["scale"], state["scale_inv"] = (
+                jnp.asarray(scale_np),
+                jnp.asarray(scale_inv_np),
+            )
             state["jac_scale"] = True
         else:
-            state["scale"], state["scale_inv"] = x_scale, 1 / x_scale
+            # T022: Convert scale to JAX arrays once at entry to avoid repeated conversion
+            state["scale"], state["scale_inv"] = (
+                jnp.asarray(x_scale),
+                jnp.asarray(1 / x_scale),
+            )
             state["jac_scale"] = False
 
         # Initialize trust region radius
@@ -795,7 +804,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         J: jnp.ndarray,
         f: jnp.ndarray,
         g: jnp.ndarray,
-        scale: np.ndarray,
+        scale: jnp.ndarray,
         Delta: float,
         alpha: float,
         solver: str,
@@ -813,7 +822,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             Current residuals
         g : jnp.ndarray
             Current gradient
-        scale : np.ndarray
+        scale : jnp.ndarray
             Parameter scaling factors
         Delta : float
             Current trust region radius
@@ -834,8 +843,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             - s, V, uf: SVD components (for exact solver)
         """
         # Setup scaled variables
-        # OPT-2: Use JAX arrays directly to avoid NumPy/JAX conversion overhead
-        d = jnp.asarray(scale)
+        # T022: scale is already a JAX array (converted once in _initialize_trf_state)
+        d = scale  # Already JAX array, no conversion needed
         g_h = self.compute_grad_hat(g, d)
 
         result = {
@@ -1455,7 +1464,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # "hat" gradient
         g_h = d * g
         J_diag = jnp.diag(diag_h**SQRT_EXPONENT)
-        d_jnp = jnp.array(d)
+        # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
+        d_jnp = jnp.asarray(d)
         f_zeros = jnp.zeros([n])
 
         if solver == "cg":
@@ -1885,10 +1895,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         -----
         The algorithm is described in [13]_.
 
-        MAINTENANCE NOTE: There is a profiling-instrumented version of this function
-        called `trf_no_bounds_timed()` used for performance analysis. If you modify
-        this function, please apply equivalent changes there. See TRFProfiler classes
-        above for future consolidation approach.
 
         """
 
@@ -2688,7 +2694,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         lb: np.ndarray,
         ub: np.ndarray,
         theta: float,
-    ):
+    ) -> tuple[np.ndarray, Any, Any]:
         """Select the best step according to Trust Region Reflective algorithm.
 
         Parameters
@@ -2732,7 +2738,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         p_stride, hits = step_size_to_bound(x, p, lb, ub)
 
         # Compute the reflected direction.
-        r_h = jnp.array(p_h)  # JAX copy instead of NumPy
+        # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
+        r_h = jnp.asarray(p_h)
         # Use JAX .at[] syntax for immutable array updates
         hits_mask = hits.astype(bool)
         r_h = r_h.at[hits_mask].set(r_h[hits_mask] * -1)
@@ -2794,446 +2801,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             return r, r_h, -r_value
         else:
             return ag, ag_h, -ag_value
-
-    def trf_no_bounds_timed(
-        self,
-        fun: Callable,
-        xdata: jnp.ndarray | tuple[jnp.ndarray],
-        ydata: jnp.ndarray,
-        jac: Callable,
-        data_mask: jnp.ndarray,
-        transform: jnp.ndarray,
-        x0: np.ndarray,
-        f: jnp.ndarray,
-        J: jnp.ndarray,
-        lb: np.ndarray,
-        ub: np.ndarray,
-        ftol: float,
-        xtol: float,
-        gtol: float,
-        max_nfev: int,
-        f_scale: float,
-        x_scale: np.ndarray,
-        loss_function: None | Callable,
-        tr_options: dict,
-        verbose: int,
-        solver: str = "exact",
-        callback: Callable | None = None,
-    ) -> dict:
-        """Trust Region Reflective algorithm with detailed profiling.
-
-        MAINTENANCE NOTE
-        ----------------
-        This function is a profiling-instrumented version of `trf_no_bounds()`.
-        It includes .block_until_ready() calls after every JAX operation to get
-        accurate GPU timing, which adds overhead unsuitable for production use.
-
-        **If you modify trf_no_bounds(), please apply equivalent changes here.**
-
-        The two functions implement the same algorithm but differ in:
-        - This version: Adds timing instrumentation via block_until_ready()
-        - trf_no_bounds(): Uses helper methods (_initialize_trf_state, etc.)
-
-        Future work: Consolidate using TRFProfiler abstraction (see classes above).
-
-        This function records timing for each operation and returns them in the
-        `all_times` field of the result. Used exclusively for performance analysis
-        in benchmarks/profile_trf.py.
-
-        Parameters
-        ----------
-        fun : callable
-            The residual function
-        xdata : array_like or tuple of array_like
-            The independent variable where the data is measured. If `xdata` is a
-            tuple, then the input arguments to `fun` are assumed to be
-            ``(xdata[0], xdata[1], ...)``.
-        ydata : jnp.ndarray
-            The dependent data
-        jac : callable
-            The Jacobian of `fun`.
-        data_mask : jnp.ndarray
-            The mask for the data.
-        transform : jnp.ndarray
-            The uncertainty transform for the data.
-        x0 : jnp.ndarray
-            Initial guess. Array of real elements of size (n,), where 'n' is the
-            number of independent variables.
-        f0 : jnp.ndarray
-            Initial residuals. Array of real elements of size (m,), where 'm' is
-            the number of data points.
-        J0 : jnp.ndarray
-            Initial Jacobian. Array of real elements of size (m, n), where 'm' is
-            the number of data points and 'n' is the number of independent
-            variables.
-        lb : jnp.ndarray
-            Lower bounds on independent variables. Array of real elements of size
-            (n,), where 'n' is the number of independent variables.
-        ub : jnp.ndarray
-            Upper bounds on independent variables. Array of real elements of size
-            (n,), where 'n' is the number of independent variables.
-        ftol : float
-            Tolerance for termination by the change of the cost function.
-        xtol : float
-            Tolerance for termination by the change of the independent variables.
-        gtol : float
-            Tolerance for termination by the norm of the gradient.
-        max_nfev : int
-            Maximum number of function evaluations.
-        f_scale : float
-            Cost function scalar
-        x_scale : jnp.ndarray
-            Scaling factors for independent variables.
-        loss_function : callable, optional
-            Loss function. If None, the standard least-squares problem is
-            solved.
-        tr_options : dict
-            Options for the trust-region algorithm.
-        verbose : int
-            Level of algorithm's verbosity:
-
-                * 0 (default) : work silently.
-                * 1 : display a termination report.
-
-        Returns
-        -------
-        result : OptimizeResult
-            The optimization result represented as a ``OptimizeResult`` object.
-            Important attributes are: ``x`` the solution array, ``success`` a
-            Boolean flag indicating if the optimizer exited successfully and
-            ``message`` which describes the cause of the termination. See
-            `OptimizeResult` for a description of other attributes.
-
-        Notes
-        -----
-        The algorithm is described in [13]_.
-        """
-
-        ftimes = []
-        jtimes = []
-        svd_times = []
-        ctimes = []
-        gtimes = []
-        gtimes2 = []
-        ptimes = []
-
-        svd_ctimes = []
-        g_ctimes = []
-        c_ctimes = []
-        p_ctimes = []
-
-        x = x0
-
-        # NOTE: We avoid excessive .block_until_ready() calls to enable JAX async execution.
-        # Sync only at critical decision points where Python needs actual values.
-        st = time.time()
-        f = fun(x, xdata, ydata, data_mask, transform)
-        f.block_until_ready()  # Single sync for timing
-        ftimes.append(time.time() - st)
-        f_true = f
-        nfev = 1
-
-        st = time.time()
-        J = jac(x, xdata, ydata, data_mask, transform)
-        J.block_until_ready()  # Single sync for timing
-        jtimes.append(time.time() - st)
-
-        njev = 1
-        m, n = J.shape
-
-        if loss_function is not None:
-            rho = loss_function(f, f_scale)
-            cost_jnp = self.calculate_cost(rho, data_mask)
-            J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
-        else:
-            st1 = time.time()
-            cost_jnp = self.default_loss_func(f)
-            cost_jnp.block_until_ready()  # Sync for timing
-            st2 = time.time()
-        cost = cost_jnp  # Keep as JAX array - no NumPy conversion
-        st3 = time.time()
-
-        ctimes.append(st2 - st1)
-        c_ctimes.append(st3 - st2)
-
-        st1 = time.time()
-        g_jnp = self.compute_grad(J, f)
-        g_jnp.block_until_ready()  # Sync for timing
-        st2 = time.time()
-        g = g_jnp  # Keep as JAX array - no NumPy conversion
-        st3 = time.time()
-
-        gtimes.append(st2 - st1)
-        g_ctimes.append(st3 - st2)
-
-        jac_scale = isinstance(x_scale, str) and x_scale == "jac"
-        if jac_scale:
-            scale, scale_inv = self.cJIT.compute_jac_scale(J)
-        else:
-            scale, scale_inv = x_scale, 1 / x_scale
-
-        Delta = jnorm(x0 * scale_inv)
-        if Delta == 0:
-            Delta = 1.0
-
-        if max_nfev is None:
-            max_nfev = x0.size * DEFAULT_MAX_NFEV_MULTIPLIER
-
-        alpha = INITIAL_LEVENBERG_MARQUARDT_LAMBDA
-
-        termination_status = None
-        iteration = 0
-        step_norm = None
-        actual_reduction = None
-
-        if verbose == 2:
-            print_header_nonlinear()
-
-        while True:
-            g_norm = jnorm(g, ord=jnp.inf)
-            if g_norm < gtol:
-                termination_status = 1
-
-            if verbose == 2:
-                debug.callback(
-                    self._log_iteration_callback,
-                    iteration,
-                    nfev,
-                    cost,
-                    actual_reduction,
-                    step_norm,
-                    g_norm,
-                )
-
-            if termination_status is not None or nfev == max_nfev:
-                break
-
-            d = scale
-            d_jnp = jnp.array(scale)
-            g_h_jnp = self.compute_grad_hat(g_jnp, d_jnp)
-
-            # Choose solver based on solver parameter
-            if solver == "cg":
-                st = time.time()
-                J_h = J * d_jnp
-                step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
-                step_h.block_until_ready()
-                svd_times.append(time.time() - st)
-
-                st = time.time()
-                s, V, uf = None, None, None
-                svd_ctimes.append(time.time() - st)
-            elif solver == "sparse":
-                st = time.time()
-                svd_output = self.svd_no_bounds(J, d_jnp, f)
-                tree_flatten(svd_output)[0][0].block_until_ready()
-                svd_times.append(time.time() - st)
-                J_h = svd_output[0]
-
-                st = time.time()
-                s, V, uf = svd_output[2:]
-                svd_ctimes.append(time.time() - st)
-            else:
-                st = time.time()
-                svd_output = self.svd_no_bounds(J, d_jnp, f)
-                tree_flatten(svd_output)[0][0].block_until_ready()
-                svd_times.append(time.time() - st)
-                J_h = svd_output[0]
-
-                st = time.time()
-                s, V, uf = svd_output[2:]
-                svd_ctimes.append(time.time() - st)
-
-            actual_reduction = -1
-            inner_loop_count = 0
-            max_inner_iterations = 100
-            while (
-                actual_reduction <= 0
-                and nfev < max_nfev
-                and inner_loop_count < max_inner_iterations
-            ):
-                inner_loop_count += 1
-
-                if solver == "cg":
-                    if inner_loop_count > 1:
-                        step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
-                    _n_iter = 1
-                else:
-                    step_h, alpha, _n_iter = solve_lsq_trust_region_jax(
-                        n, m, uf, s, V, Delta, initial_alpha=alpha
-                    )
-
-                st1 = time.time()
-                predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
-                    J_h, g_h_jnp, step_h
-                )
-                predicted_reduction_jnp.block_until_ready()
-                st2 = time.time()
-                predicted_reduction = predicted_reduction_jnp
-                st3 = time.time()
-                ptimes.append(st2 - st1)
-                p_ctimes.append(st3 - st2)
-
-                step = d * step_h
-                x_new = x + step
-
-                st = time.time()
-                f_new = fun(x_new, xdata, ydata, data_mask, transform)
-                f_new.block_until_ready()
-                ftimes.append(time.time() - st)
-
-                nfev += 1
-
-                step_h_norm = jnorm(step_h)
-
-                if not self.check_isfinite(f_new):
-                    Delta = 0.25 * step_h_norm
-                    continue
-
-                if loss_function is not None:
-                    cost_new_jnp = loss_function(
-                        f_new, f_scale, data_mask, cost_only=True
-                    )
-                else:
-                    st1 = time.time()
-                    cost_new_jnp = self.default_loss_func(f_new)
-                    cost_new_jnp.block_until_ready()
-                    st2 = time.time()
-                    cost_new = cost_new_jnp
-                    st3 = time.time()
-
-                    ctimes.append(st2 - st1)
-                    c_ctimes.append(st3 - st2)
-
-                actual_reduction = cost - cost_new
-
-                Delta_new, ratio = update_tr_radius(
-                    Delta,
-                    actual_reduction,
-                    predicted_reduction,
-                    step_h_norm,
-                    step_h_norm > 0.95 * Delta,
-                )
-
-                step_norm = jnorm(step)
-                termination_status = check_termination(
-                    actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
-                )
-
-                if termination_status is not None:
-                    break
-
-                alpha *= Delta / Delta_new
-                Delta = Delta_new
-
-            # Check inner loop limit
-            if inner_loop_count >= max_inner_iterations:
-                self.logger.warning(
-                    "Inner optimization loop hit iteration limit",
-                    inner_iterations=inner_loop_count,
-                    actual_reduction=actual_reduction,
-                )
-                termination_status = -3
-
-            if actual_reduction > 0:
-                x = x_new
-                f = f_new
-                f_true = f
-                cost = cost_new
-
-                st = time.time()
-                J = jac(x, xdata, ydata, data_mask, transform)
-                J.block_until_ready()
-                jtimes.append(time.time() - st)
-
-                njev += 1
-
-                if loss_function is not None:
-                    rho = loss_function(f, f_scale)
-                    J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
-
-                st1 = time.time()
-                g_jnp = self.compute_grad(J, f)
-                g_jnp.block_until_ready()
-                st2 = time.time()
-                g = g_jnp
-                st3 = time.time()
-
-                gtimes.append(st2 - st1)
-                g_ctimes.append(st3 - st2)
-
-                if jac_scale:
-                    scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
-
-            else:
-                step_norm = 0
-                actual_reduction = 0
-
-            iteration += 1
-
-            # Invoke user callback using helper
-            if callback is not None:
-                callback_status = self._invoke_callback(
-                    callback=callback,
-                    iteration=iteration,
-                    cost=cost,
-                    x=x,
-                    g_norm=g_norm,
-                    nfev=nfev,
-                    step_norm=step_norm,
-                    actual_reduction=actual_reduction,
-                )
-                if callback_status is not None:
-                    termination_status = callback_status
-                    break
-
-        if termination_status is None:
-            termination_status = 0
-
-        active_mask = jnp.zeros_like(x)
-
-        tlabels = [
-            "ftimes",
-            "jtimes",
-            "svd_times",
-            "ctimes",
-            "gtimes",
-            "ptimes",
-            "g_ctimes",
-            "c_ctimes",
-            "svd_ctimes",
-            "p_ctimes",
-            "gtimes2",
-        ]
-        all_times = [
-            ftimes,
-            jtimes,
-            svd_times,
-            ctimes,
-            gtimes,
-            ptimes,
-            g_ctimes,
-            c_ctimes,
-            svd_ctimes,
-            p_ctimes,
-            gtimes2,
-        ]
-
-        tdicts = dict(zip(tlabels, all_times, strict=False))
-        return OptimizeResult(
-            x=x,
-            cost=cost,
-            fun=f_true,
-            jac=J,
-            grad=g,
-            optimality=g_norm,
-            active_mask=active_mask,
-            nfev=nfev,
-            njev=njev,
-            nit=iteration,
-            status=termination_status,
-            all_times=tdicts,
-        )
 
     def optimize(
         self,

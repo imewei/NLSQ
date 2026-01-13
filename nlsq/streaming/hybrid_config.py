@@ -185,6 +185,12 @@ class HybridStreamingConfig:
         Size of data chunks for streaming J^T J accumulation.
         Larger chunks = faster but more memory. Typical: 5000-50000.
 
+    gc_chunk_interval : int, default=10
+        Chunks between gc.collect() calls (FR-007).
+        Controls how often garbage collection runs during chunked processing.
+        Higher values reduce GC overhead but may increase memory usage.
+        Default of 10 balances memory reclamation with performance.
+
     enable_checkpoints : bool, default=True
         Enable checkpoint save/resume for fault tolerance.
 
@@ -373,6 +379,9 @@ class HybridStreamingConfig:
     # Streaming configuration
     chunk_size: int = 10000
 
+    # Garbage collection interval for chunked processing (FR-007)
+    gc_chunk_interval: int = 10  # Chunks between gc.collect() calls
+
     # Loop strategy for chunk accumulation
     # 'auto': Use scan on GPU/TPU (better fusion), Python loops on CPU (lower overhead)
     # 'scan': Always use JAX lax.scan (best for GPU/TPU)
@@ -518,6 +527,12 @@ class HybridStreamingConfig:
                 batches_per_round=self.batches_per_round,
                 scale_factor=self.scale_factor,
             )
+
+            # Validate gc_chunk_interval (FR-007)
+            if self.gc_chunk_interval < 1:
+                raise ValueError(
+                    f"gc_chunk_interval must be >= 1, got {self.gc_chunk_interval}"
+                )
 
         except ConfigValidationError as e:
             # Re-raise as ValueError for backwards compatibility

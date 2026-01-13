@@ -358,27 +358,33 @@ def infer_bounds_for_multistart(
     upper = np.where(np.isfinite(upper), upper, inferred_upper)
 
     # Final check: if bounds are still not finite, use fallback
+    # Vectorized fallback for lower bounds
     if not np.all(np.isfinite(lower)):
-        # Fallback for lower bounds: use p0 / safety_factor or -safety_factor
-        for i in range(len(lower)):
-            if not np.isfinite(lower[i]):
-                if p0[i] > 0:
-                    lower[i] = p0[i] / safety_factor
-                elif p0[i] < 0:
-                    lower[i] = p0[i] * safety_factor
-                else:
-                    lower[i] = -safety_factor
+        # Create fallback values vectorized based on p0 sign
+        # p0 > 0: use p0 / safety_factor
+        # p0 < 0: use p0 * safety_factor
+        # p0 == 0: use -safety_factor
+        fallback_lower = np.where(
+            p0 > 0,
+            p0 / safety_factor,
+            np.where(p0 < 0, p0 * safety_factor, -safety_factor),
+        )
+        # Apply fallback only where lower is not finite
+        lower = np.where(np.isfinite(lower), lower, fallback_lower)
 
+    # Vectorized fallback for upper bounds
     if not np.all(np.isfinite(upper)):
-        # Fallback for upper bounds: use p0 * safety_factor or safety_factor
-        for i in range(len(upper)):
-            if not np.isfinite(upper[i]):
-                if p0[i] > 0:
-                    upper[i] = p0[i] * safety_factor
-                elif p0[i] < 0:
-                    upper[i] = p0[i] / safety_factor
-                else:
-                    upper[i] = safety_factor
+        # Create fallback values vectorized based on p0 sign
+        # p0 > 0: use p0 * safety_factor
+        # p0 < 0: use p0 / safety_factor
+        # p0 == 0: use safety_factor
+        fallback_upper = np.where(
+            p0 > 0,
+            p0 * safety_factor,
+            np.where(p0 < 0, p0 / safety_factor, safety_factor),
+        )
+        # Apply fallback only where upper is not finite
+        upper = np.where(np.isfinite(upper), upper, fallback_upper)
 
     return lower, upper
 
@@ -489,19 +495,38 @@ def analyze_bounds_quality(
     lower, upper = bounds
     p0 = np.asarray(p0)
 
-    # Check feasibility
+    # Check feasibility (vectorized)
     is_feasible = np.all((p0 >= lower) & (p0 <= upper))
 
-    # Compute bound ratios (handling zero lower bounds)
-    bound_ratios = np.zeros_like(lower, dtype=float)
-    for i in range(len(lower)):
-        if lower[i] > 0:
-            bound_ratios[i] = upper[i] / lower[i]
-        elif lower[i] == 0 and upper[i] > 0:
-            bound_ratios[i] = np.inf
-        else:
-            # Negative lower bound
-            bound_ratios[i] = (upper[i] - lower[i]) / max(abs(lower[i]), abs(upper[i]))
+    # Compute bound ratios vectorized
+    # Case 1: lower > 0 -> ratio = upper / lower
+    # Case 2: lower == 0 and upper > 0 -> ratio = inf
+    # Case 3: lower < 0 -> ratio = (upper - lower) / max(|lower|, |upper|)
+
+    # Vectorized computation of bound ratios
+    abs_lower = np.abs(lower)
+    abs_upper = np.abs(upper)
+    max_abs = np.maximum(abs_lower, abs_upper)
+
+    # Create safe divisor to avoid divide by zero warning
+    # Use 1.0 where lower <= 0, actual lower value where lower > 0
+    safe_lower = np.where(lower > 0, lower, 1.0)
+    safe_max_abs = np.where(max_abs > 0, max_abs, 1.0)
+
+    # Compute all three cases with safe divisors
+    # Case 1: lower > 0 -> upper / lower
+    ratio_positive_lower = upper / safe_lower
+
+    # Case 2: lower == 0 and upper > 0 -> inf
+    # Case 3: lower < 0 -> (upper - lower) / max(|lower|, |upper|)
+    ratio_negative_lower = (upper - lower) / safe_max_abs
+
+    # Select the appropriate ratio based on lower bound value
+    bound_ratios = np.where(
+        lower > 0,
+        ratio_positive_lower,
+        np.where((lower == 0) & (upper > 0), np.inf, ratio_negative_lower),
+    )
 
     # Geometric mean of finite ratios
     finite_ratios = bound_ratios[np.isfinite(bound_ratios)]
@@ -510,7 +535,7 @@ def analyze_bounds_quality(
     else:
         avg_bound_ratio = np.inf
 
-    # Identify tight and loose parameters
+    # Identify tight and loose parameters (vectorized)
     tight_parameters = list(np.where(bound_ratios < 5.0)[0])
     loose_parameters = list(np.where(bound_ratios > 50.0)[0])
 

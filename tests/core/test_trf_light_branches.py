@@ -25,15 +25,23 @@ def test_calculate_cost_and_isfinite() -> None:
 
 @pytest.mark.unit
 def test_trf_dispatches_to_unbounded_variants(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that trf() dispatches to trf_no_bounds for unbounded problems.
+
+    Both timeit=False and timeit=True now use trf_no_bounds (with different
+    profiler settings), so we only need to verify that trf_no_bounds is called.
+    """
     trf_module = importlib.import_module("nlsq.core.trf")
     optimizer = trf_module.TrustRegionReflective()
 
-    monkeypatch.setattr(
-        optimizer, "trf_no_bounds", lambda *_a, **_k: {"mode": "no_bounds"}
-    )
-    monkeypatch.setattr(
-        optimizer, "trf_no_bounds_timed", lambda *_a, **_k: {"mode": "timed"}
-    )
+    # Track calls to trf_no_bounds
+    calls = {"count": 0, "profiler_provided": []}
+
+    def mock_trf_no_bounds(*_a, **_k):
+        calls["count"] += 1
+        calls["profiler_provided"].append(_k.get("profiler") is not None)
+        return {"mode": "no_bounds"}
+
+    monkeypatch.setattr(optimizer, "trf_no_bounds", mock_trf_no_bounds)
 
     lb = np.array([-np.inf, -np.inf])
     ub = np.array([np.inf, np.inf])
@@ -41,6 +49,7 @@ def test_trf_dispatches_to_unbounded_variants(monkeypatch: pytest.MonkeyPatch) -
     f0 = jnp.array([0.0, 0.0])
     J0 = jnp.eye(2)
 
+    # Test with timeit=False (no explicit profiler)
     result = optimizer.trf(
         fun=lambda *_a, **_k: jnp.array([0.0, 0.0]),
         xdata=jnp.array([0.0, 1.0]),
@@ -67,7 +76,10 @@ def test_trf_dispatches_to_unbounded_variants(monkeypatch: pytest.MonkeyPatch) -
         callback=None,
     )
     assert result["mode"] == "no_bounds"
+    assert calls["count"] == 1
+    assert calls["profiler_provided"][0] is False
 
+    # Test with timeit=True (TRFProfiler provided)
     result = optimizer.trf(
         fun=lambda *_a, **_k: jnp.array([0.0, 0.0]),
         xdata=jnp.array([0.0, 1.0]),
@@ -93,4 +105,6 @@ def test_trf_dispatches_to_unbounded_variants(monkeypatch: pytest.MonkeyPatch) -
         solver="exact",
         callback=None,
     )
-    assert result["mode"] == "timed"
+    assert result["mode"] == "no_bounds"
+    assert calls["count"] == 2
+    assert calls["profiler_provided"][1] is True

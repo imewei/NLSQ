@@ -16,7 +16,7 @@ from collections import defaultdict
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache, lru_cache
 from logging import Logger
 from typing import TYPE_CHECKING, Literal
 
@@ -47,6 +47,14 @@ _DEFAULT_FALLBACK_MEMORY_GB = 16.0
 # a fixed set of sizes, enabling efficient compilation cache reuse.
 # See research.md for rationale on power-of-2 buckets.
 CHUNK_BUCKETS: tuple[int, ...] = (1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072)
+
+
+# Module-level device cache for performance (FR-004)
+# Use functools.cache for clean caching without global statement
+@cache
+def get_cached_devices() -> list:
+    """Get cached JAX devices, computing once on first call."""
+    return jax.devices()
 
 
 def get_bucket_size(chunk_size: int) -> int:
@@ -163,6 +171,76 @@ class ChunkBuffer:
         return self.data[: self.valid_length]
 
 
+class ChunkBufferPool:
+    """Pre-allocated buffer pool for streaming chunk operations (FR-006).
+
+    Reduces memory allocation overhead by reusing buffers across chunks.
+    This is particularly beneficial for large dataset processing where
+    many chunks of similar size are processed sequentially.
+
+    Parameters
+    ----------
+    chunk_size : int
+        Size of each chunk buffer
+    dtype : np.dtype
+        Data type for buffers (default: np.float64)
+
+    Examples
+    --------
+    >>> pool = ChunkBufferPool(chunk_size=10000)
+    >>> x_buf, y_buf = pool.get_buffers(5000)
+    >>> x_buf.shape
+    (5000,)
+    >>> # Buffers can be reused without reallocation
+    >>> x_buf2, y_buf2 = pool.get_buffers(8000)
+    >>> x_buf2.shape
+    (8000,)
+    """
+
+    def __init__(self, chunk_size: int, dtype: np.dtype = np.float64) -> None:
+        """Initialize buffer pool with pre-allocated arrays.
+
+        Parameters
+        ----------
+        chunk_size : int
+            Size of each chunk buffer
+        dtype : np.dtype
+            Data type for buffers
+        """
+        self._x_buffer = np.empty(chunk_size, dtype=dtype)
+        self._y_buffer = np.empty(chunk_size, dtype=dtype)
+        self._chunk_size = chunk_size
+        self._dtype = dtype
+
+    def get_buffers(self, size: int) -> tuple[np.ndarray, np.ndarray]:
+        """Get buffer views of the specified size.
+
+        Parameters
+        ----------
+        size : int
+            Actual size needed (must be <= chunk_size)
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            Views into the pre-allocated x and y buffers
+        """
+        if size > self._chunk_size:
+            # Fallback: allocate new if larger than pool
+            return np.empty(size, dtype=self._dtype), np.empty(size, dtype=self._dtype)
+        return self._x_buffer[:size], self._y_buffer[:size]
+
+    @property
+    def chunk_size(self) -> int:
+        """Return the pool's chunk size."""
+        return self._chunk_size
+
+    @property
+    def dtype(self) -> np.dtype:
+        """Return the pool's data type."""
+        return self._dtype
+
+
 @dataclass(slots=True)
 class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     """Configuration for memory management in large dataset fitting.
@@ -189,6 +267,10 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     save_diagnostics : bool
         Whether to compute and save detailed diagnostic statistics (default: False)
         When False, skips statistical computations for successful chunks (5-10% faster)
+    gc_chunk_interval : int
+        Chunks between gc.collect() calls (default: 10, FR-007)
+        Controls how often garbage collection runs during chunked processing.
+        Higher values reduce GC overhead but may increase memory usage.
     """
 
     memory_limit_gb: float = 8.0
@@ -200,6 +282,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     streaming_max_epochs: int = 10
     min_success_rate: float = 0.5
     save_diagnostics: bool = False
+    gc_chunk_interval: int = 10
 
 
 @dataclass(slots=True)
@@ -268,7 +351,7 @@ class GPUMemoryEstimator:
         total_available_bytes = 0.0
 
         try:
-            devices = jax.devices()
+            devices = get_cached_devices()
 
             for device in devices:
                 # Skip CPU devices
@@ -318,7 +401,7 @@ class GPUMemoryEstimator:
         total_capacity_bytes = 0.0
 
         try:
-            devices = jax.devices()
+            devices = get_cached_devices()
 
             for device in devices:
                 platform = getattr(device, "platform", "cpu")
@@ -347,7 +430,7 @@ class GPUMemoryEstimator:
             True if at least one GPU device is available.
         """
         try:
-            devices = jax.devices()
+            devices = get_cached_devices()
             for device in devices:
                 platform = getattr(device, "platform", "cpu")
                 if platform != "cpu":
@@ -621,7 +704,8 @@ class DataChunker:
         chunk_size: int,
         shuffle: bool = False,
         random_seed: int | None = None,
-    ) -> Generator[tuple[np.ndarray, np.ndarray, int]]:
+        buffer_pool: ChunkBufferPool | None = None,
+    ) -> Generator[tuple[np.ndarray, np.ndarray, int, int]]:
         """Create data chunks for processing.
 
         Parameters
@@ -636,6 +720,10 @@ class DataChunker:
             Whether to shuffle data before chunking (default: False)
         random_seed : int, optional
             Random seed for shuffling
+        buffer_pool : ChunkBufferPool, optional
+            Pre-allocated buffer pool for chunk reuse (FR-006).
+            If provided, chunks are written into pooled buffers to reduce
+            allocation overhead.
 
         Yields
         ------
@@ -676,7 +764,14 @@ class DataChunker:
                 # safe for least-squares as repeated points don't change the solution
                 chunk_indices = np.resize(chunk_indices, bucket_size)
 
-            yield xdata[chunk_indices], ydata[chunk_indices], i, current_chunk_size
+            # FR-006: Use buffer pool if provided to reduce allocation overhead
+            if buffer_pool is not None:
+                x_buf, y_buf = buffer_pool.get_buffers(bucket_size)
+                np.copyto(x_buf[:bucket_size], xdata[chunk_indices[:bucket_size]])
+                np.copyto(y_buf[:bucket_size], ydata[chunk_indices[:bucket_size]])
+                yield x_buf[:bucket_size], y_buf[:bucket_size], i, current_chunk_size
+            else:
+                yield xdata[chunk_indices], ydata[chunk_indices], i, current_chunk_size
 
 
 class LargeDatasetFitter:
@@ -952,6 +1047,27 @@ class LargeDatasetFitter:
         # Cache validated functions by (id(func), id(func.__code__)) to avoid
         # redundant validation across chunks. Provides 1-5% performance gain.
         self._validated_functions: dict[tuple[int, int], bool] = {}
+
+        # FR-006: Buffer pool for chunk reuse (initialized lazily)
+        self._buffer_pool: ChunkBufferPool | None = None
+
+    def _get_or_create_buffer_pool(self, chunk_size: int) -> ChunkBufferPool:
+        """Get existing buffer pool or create new one if size changed.
+
+        Parameters
+        ----------
+        chunk_size : int
+            Required chunk size
+
+        Returns
+        -------
+        ChunkBufferPool
+            Buffer pool with appropriate size
+        """
+        bucket_size = get_bucket_size(chunk_size)
+        if self._buffer_pool is None or self._buffer_pool.chunk_size < bucket_size:
+            self._buffer_pool = ChunkBufferPool(bucket_size)
+        return self._buffer_pool
 
     @lru_cache(maxsize=100)
     def _should_log_error(self, error_signature: str, current_time: float) -> bool:
@@ -2194,12 +2310,18 @@ class LargeDatasetFitter:
         ) = self._initialize_chunked_fit_state(p0, show_progress, stats)
         chunk_times = []  # Track processing time per chunk
 
+        # Get gc_chunk_interval from config (FR-007)
+        gc_chunk_interval = self.config.gc_chunk_interval
+
+        # FR-006: Initialize buffer pool for chunk reuse
+        buffer_pool = self._get_or_create_buffer_pool(stats.recommended_chunk_size)
+
         try:
             # Process dataset in chunks with sequential parameter refinement
             # Note: create_chunks yields (x, y, idx, valid_length) - we ignore valid_length
             # here since the cyclic padding doesn't affect least-squares solutions
             for x_chunk, y_chunk, chunk_idx, _valid_length in DataChunker.create_chunks(
-                xdata, ydata, stats.recommended_chunk_size
+                xdata, ydata, stats.recommended_chunk_size, buffer_pool=buffer_pool
             ):
                 chunk_start_time = time.time()
                 try:
@@ -2275,8 +2397,9 @@ class LargeDatasetFitter:
                 if progress:
                     progress.update(chunk_idx, chunk_result)
 
-                # Memory cleanup
-                gc.collect()
+                # Memory cleanup - conditional based on gc_chunk_interval (FR-007)
+                if chunk_idx % gc_chunk_interval == 0:
+                    gc.collect()
 
             # Check success rate and create final result
             return self._check_success_rate_and_create_result(
@@ -2495,6 +2618,7 @@ def estimate_memory_requirements(n_points: int, n_params: int) -> DatasetStats:
 
 
 __all__ = [
+    "ChunkBufferPool",
     "DataChunker",
     "DatasetStats",
     "GPUMemoryEstimator",
@@ -2505,4 +2629,5 @@ __all__ = [
     "cleanup_memory",
     "estimate_memory_requirements",
     "fit_large_dataset",
+    "get_cached_devices",
 ]

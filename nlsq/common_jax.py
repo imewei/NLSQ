@@ -458,7 +458,8 @@ class CommonJIT:
 
         """
 
-        s_jnp = jnp.array(s)
+        # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
+        s_jnp = jnp.asarray(s)
         v = self.js_dot(J, s_jnp)
 
         a = np.dot(v, v)
@@ -469,7 +470,8 @@ class CommonJIT:
         b = np.dot(g, s)
 
         if s0 is not None:
-            s0_jnp = jnp.array(s0)
+            # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
+            s0_jnp = jnp.asarray(s0)
             u = self.js0_dot(J, s0_jnp)
 
             b += np.dot(u, v)
@@ -556,7 +558,8 @@ class CommonJIT:
             Values of the function. If `s` was 2-D, then ndarray is
             returned, otherwise, float is returned.
         """
-        s = jnp.array(s_np)  # comes in as np array
+        # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
+        s = jnp.asarray(s_np)
 
         if s.ndim == 1:
             if diag is None:

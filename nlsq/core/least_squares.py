@@ -459,8 +459,16 @@ class LeastSquares:
         xtol: float,
         gtol: float,
         x_scale,
+        prepared_bounds: tuple[np.ndarray, np.ndarray] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, np.ndarray]:
         """Validate and prepare least squares inputs.
+
+        Parameters
+        ----------
+        prepared_bounds : tuple[np.ndarray, np.ndarray] or None, optional
+            Pre-prepared bounds as (lb, ub). If provided, skips prepare_bounds call.
+            This optimization avoids redundant bounds preparation when caller has
+            already called prepare_bounds. Default is None.
 
         Returns
         -------
@@ -514,8 +522,11 @@ class LeastSquares:
         if x0.ndim > 1:
             raise ValueError("`x0` must have at most 1 dimension.")
 
-        # Prepare bounds
-        lb, ub = prepare_bounds(bounds, x0.shape[0])
+        # Use prepared bounds if provided, otherwise prepare them
+        if prepared_bounds is not None:
+            lb, ub = prepared_bounds
+        else:
+            lb, ub = prepare_bounds(bounds, x0.shape[0])
 
         if lb.shape != x0.shape or ub.shape != x0.shape:
             raise ValueError("Inconsistent shapes between bounds and `x0`.")
@@ -1003,6 +1014,7 @@ class LeastSquares:
         callback: CallbackFunction | None = None,
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
+        prepared_bounds: tuple[np.ndarray, np.ndarray] | None = None,
         **timeout_kwargs: Any,
     ) -> dict[str, Any]:
         """Solve nonlinear least squares problem using JAX-accelerated algorithms.
@@ -1059,6 +1071,10 @@ class LeastSquares:
             Additional arguments for objective function.
         kwargs : dict, optional
             Additional optimization parameters.
+        prepared_bounds : tuple[np.ndarray, np.ndarray] or None, optional
+            Pre-prepared bounds as (lb, ub). If provided, skips prepare_bounds call.
+            This optimization avoids redundant bounds preparation when caller has
+            already called prepare_bounds. Default is None.
 
         Returns
         -------
@@ -1076,9 +1092,20 @@ class LeastSquares:
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
 
-        # Step 2: Validate inputs
+        # Step 2: Validate inputs (pass prepared_bounds if available)
         x0, lb, ub, ftol, xtol, gtol, x_scale = self._validate_least_squares_inputs(
-            x0, bounds, method, jac, loss, verbose, max_nfev, ftol, xtol, gtol, x_scale
+            x0,
+            bounds,
+            method,
+            jac,
+            loss,
+            verbose,
+            max_nfev,
+            ftol,
+            xtol,
+            gtol,
+            x_scale,
+            prepared_bounds=prepared_bounds,
         )
 
         self.n = len(x0)

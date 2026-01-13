@@ -2746,7 +2746,7 @@ class CurveFit:
         """Create JIT-compiled SVD function for covariance computation."""
 
         @jit
-        def covariance_svd(jac):
+        def covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
             _, s, VT = jax_svd(jac, full_matrices=False)
             return s, VT
 
@@ -3930,8 +3930,15 @@ class CurveFit:
         timeit: bool,
         callback: Callable | None,
         kwargs: dict,
+        prepared_bounds: tuple[np.ndarray, np.ndarray] | None = None,
     ) -> tuple:
         """Setup and run the optimization.
+
+        Parameters
+        ----------
+        prepared_bounds : tuple[np.ndarray, np.ndarray] or None, optional
+            Pre-prepared bounds as (lb, ub). If provided, passes to least_squares
+            to skip redundant prepare_bounds call. Default is None.
 
         Returns
         -------
@@ -3998,7 +4005,7 @@ class CurveFit:
             if self.enable_overflow_check:
                 original_f = f
 
-                def stable_f(x, *params):
+                def stable_f(x, *params) -> jnp.ndarray:
                     result = original_f(x, *params)
                     max_val = jnp.max(jnp.abs(result))
                     result = jnp.where(
@@ -4025,6 +4032,7 @@ class CurveFit:
                     method=method,
                     timeit=timeit,
                     callback=callback,
+                    prepared_bounds=prepared_bounds,
                     **kwargs,
                 )
             except Exception as e:
@@ -4348,7 +4356,7 @@ class CurveFit:
         # Setup sigma transformation
         transform = self._setup_sigma_transform(sigma, ydata, data_mask, len_diff, m)
 
-        # Run optimization
+        # Run optimization (pass prepared bounds to avoid redundant prepare_bounds call)
         res, jnp_xdata, ctime = self._run_optimization(
             f,
             p0,
@@ -4367,6 +4375,7 @@ class CurveFit:
             timeit,
             callback,
             kwargs,
+            prepared_bounds=(_lb, _ub),
         )
 
         popt = res.x

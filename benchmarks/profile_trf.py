@@ -92,9 +92,13 @@ def profile_trf_algorithm():
 
 
 def profile_iteration_breakdown():
-    """Profile iteration-level breakdown of TRF algorithm"""
+    """Profile iteration-level breakdown of TRF algorithm.
+
+    Uses trf_no_bounds with TRFProfiler for detailed timing of each
+    operation (function evaluations, Jacobian, SVD, etc).
+    """
     print("\n" + "=" * 80)
-    print("TRF Iteration-Level Profiling (using trf_no_bounds_timed)")
+    print("TRF Iteration-Level Profiling (using TRFProfiler)")
     print("=" * 80)
 
     # Use medium-sized problem
@@ -109,8 +113,8 @@ def profile_iteration_breakdown():
 
     cf = CurveFit()
 
-    # Use curve_fit which internally can use trf_no_bounds_timed for profiling
-    # For now, just run regular fit and analyze
+    # Use curve_fit which internally uses trf_no_bounds with TRFProfiler
+    # when timeit=True
     result = cf.curve_fit(exponential, x, y, p0=p0)
 
     print("\nIteration completed successfully")
