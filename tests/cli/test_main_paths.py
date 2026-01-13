@@ -36,7 +36,7 @@ def test_handle_fit_error_paths(
     monkeypatch.setattr(fit_module, "run_fit", _raise)
 
     args = types.SimpleNamespace(
-        workflow="w.yaml", output=None, stdout=False, verbose=False
+        workflow="w.yaml", output=None, stdout=False, verbose=False, style=None
     )
     exit_code = cli_main.handle_fit(args)
 
@@ -54,7 +54,7 @@ def test_handle_fit_result_none(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(fit_module, "run_fit", lambda **_k: None)
     args = types.SimpleNamespace(
-        workflow="w.yaml", output=None, stdout=False, verbose=False
+        workflow="w.yaml", output=None, stdout=False, verbose=False, style=None
     )
     assert cli_main.handle_fit(args) == 1
 

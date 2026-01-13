@@ -30,6 +30,7 @@ from nlsq.cli.workflow_runner import WorkflowRunner
 def run_fit(
     workflow_path: str,
     output_override: str | None = None,
+    style_override: str | None = None,
     stdout: bool = False,
     verbose: bool = False,
 ) -> dict[str, Any] | None:
@@ -41,6 +42,8 @@ def run_fit(
         Path to the workflow YAML configuration file.
     output_override : str, optional
         Override the export.results_file path.
+    style_override : str, optional
+        Override the visualization style preset.
     stdout : bool
         If True, output results as JSON to stdout.
     verbose : bool
@@ -107,6 +110,14 @@ def run_fit(
         if "export" not in config:
             config["export"] = {}
         config["export"]["results_file"] = output_override
+
+    # Apply style override
+    if style_override is not None:
+        if "visualization" not in config:
+            config["visualization"] = {}
+        config["visualization"]["style"] = style_override
+        # Ensure enabled if style is explicitly set
+        config["visualization"]["enabled"] = True
 
     # Apply stdout mode
     if stdout:

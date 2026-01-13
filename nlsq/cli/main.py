@@ -94,6 +94,13 @@ def create_parser() -> argparse.ArgumentParser:
         help="Override export.results_file path",
     )
     fit_parser.add_argument(
+        "--style",
+        type=str,
+        default=None,
+        choices=["publication", "presentation", "nature", "science", "minimal"],
+        help="Override visualization style preset",
+    )
+    fit_parser.add_argument(
         "--stdout",
         action="store_true",
         help="Output results as JSON to stdout (for piping)",
@@ -223,6 +230,7 @@ def handle_fit(args: argparse.Namespace) -> int:
         result = fit.run_fit(
             workflow_path=args.workflow,
             output_override=args.output,
+            style_override=args.style,
             stdout=args.stdout,
             verbose=args.verbose if hasattr(args, "verbose") else False,
         )
