@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import jax
 import pytest
 
+import nlsq.streaming.large_dataset as large_dataset_module
 from nlsq.streaming.large_dataset import (
     GPUMemoryEstimator,
     MemoryEstimator,
@@ -65,134 +66,102 @@ class TestGPUMemoryDetection:
 
     def test_gpu_memory_detection_via_jax_device_api(self):
         """Test GPU memory detection via jax.devices()[0].memory_stats()."""
-        # Clear the cached devices to ensure mock is used
-        get_cached_devices.cache_clear()
+        # Create a mock GPU device with memory_stats
+        mock_device = MagicMock()
+        mock_device.platform = "gpu"
+        mock_device.memory_stats.return_value = {
+            "bytes_limit": 16 * 1024**3,  # 16 GB total
+            "bytes_in_use": 4 * 1024**3,  # 4 GB in use
+        }
 
-        try:
-            # Create a mock GPU device with memory_stats
-            mock_device = MagicMock()
-            mock_device.platform = "gpu"
-            mock_device.memory_stats.return_value = {
-                "bytes_limit": 16 * 1024**3,  # 16 GB total
-                "bytes_in_use": 4 * 1024**3,  # 4 GB in use
-            }
+        mock_devices = [mock_device]
 
-            mock_devices = [mock_device]
+        # Use patch.object for reliable module-level patching in parallel tests
+        with patch.object(
+            large_dataset_module,
+            "get_cached_devices",
+            return_value=mock_devices,
+        ):
+            estimator = GPUMemoryEstimator()
+            available_gb = estimator.get_available_gpu_memory_gb()
 
-            # Patch at the module level where get_cached_devices is called
-            with patch(
-                "nlsq.streaming.large_dataset.get_cached_devices",
-                return_value=mock_devices,
-            ):
-                estimator = GPUMemoryEstimator()
-                available_gb = estimator.get_available_gpu_memory_gb()
-
-                # Should return approximately 12 GB (16 - 4)
-                assert 11.9 <= available_gb <= 12.1, (
-                    f"Expected ~12 GB, got {available_gb}"
-                )
-        finally:
-            # Clear the cache after test to not affect other tests
-            get_cached_devices.cache_clear()
+            # Should return approximately 12 GB (16 - 4)
+            assert 11.9 <= available_gb <= 12.1, f"Expected ~12 GB, got {available_gb}"
 
     def test_fallback_when_gpu_detection_fails(self):
         """Test fallback when GPU detection fails (containerized environments)."""
-        # Clear the cached devices to ensure mock is used
-        get_cached_devices.cache_clear()
+        # Create a mock device that raises an exception on memory_stats
+        mock_device = MagicMock()
+        mock_device.platform = "gpu"
+        mock_device.memory_stats.side_effect = Exception("No memory stats available")
 
-        try:
-            # Create a mock device that raises an exception on memory_stats
-            mock_device = MagicMock()
-            mock_device.platform = "gpu"
-            mock_device.memory_stats.side_effect = Exception(
-                "No memory stats available"
-            )
+        mock_devices = [mock_device]
 
-            mock_devices = [mock_device]
+        # Use patch.object for reliable module-level patching in parallel tests
+        with patch.object(
+            large_dataset_module,
+            "get_cached_devices",
+            return_value=mock_devices,
+        ):
+            estimator = GPUMemoryEstimator()
+            available_gb = estimator.get_available_gpu_memory_gb()
 
-            # Patch at the module level where get_cached_devices is called
-            with patch(
-                "nlsq.streaming.large_dataset.get_cached_devices",
-                return_value=mock_devices,
-            ):
-                estimator = GPUMemoryEstimator()
-                available_gb = estimator.get_available_gpu_memory_gb()
-
-                # Should return 0 when GPU detection fails
-                assert available_gb == 0.0, (
-                    f"Expected 0 GB on failure, got {available_gb}"
-                )
-        finally:
-            # Clear the cache after test to not affect other tests
-            get_cached_devices.cache_clear()
+            # Should return 0 when GPU detection fails
+            assert available_gb == 0.0, f"Expected 0 GB on failure, got {available_gb}"
 
     def test_cpu_only_environment_returns_zero(self):
         """Test that CPU-only environments return 0 for GPU memory."""
-        # Clear the cached devices to ensure mock is used
-        get_cached_devices.cache_clear()
+        # Create a mock CPU-only device
+        mock_device = MagicMock()
+        mock_device.platform = "cpu"
+        mock_device.device_kind = "cpu"
 
-        try:
-            # Create a mock CPU-only device
-            mock_device = MagicMock()
-            mock_device.platform = "cpu"
-            mock_device.device_kind = "cpu"
+        mock_devices = [mock_device]
 
-            mock_devices = [mock_device]
+        # Use patch.object for reliable module-level patching in parallel tests
+        with patch.object(
+            large_dataset_module,
+            "get_cached_devices",
+            return_value=mock_devices,
+        ):
+            estimator = GPUMemoryEstimator()
+            available_gb = estimator.get_available_gpu_memory_gb()
 
-            # Patch at the module level where get_cached_devices is called
-            with patch(
-                "nlsq.streaming.large_dataset.get_cached_devices",
-                return_value=mock_devices,
-            ):
-                estimator = GPUMemoryEstimator()
-                available_gb = estimator.get_available_gpu_memory_gb()
-
-                # Should return 0 for CPU-only environment
-                assert available_gb == 0.0, (
-                    f"Expected 0 GB for CPU-only, got {available_gb}"
-                )
-        finally:
-            # Clear the cache after test to not affect other tests
-            get_cached_devices.cache_clear()
+            # Should return 0 for CPU-only environment
+            assert available_gb == 0.0, (
+                f"Expected 0 GB for CPU-only, got {available_gb}"
+            )
 
     def test_multiple_gpus_aggregate_memory(self):
         """Test that multiple GPUs aggregate available memory."""
-        # Clear the cached devices to ensure mock is used
-        get_cached_devices.cache_clear()
+        # Create mock GPU devices
+        mock_gpu1 = MagicMock()
+        mock_gpu1.platform = "gpu"
+        mock_gpu1.memory_stats.return_value = {
+            "bytes_limit": 16 * 1024**3,
+            "bytes_in_use": 4 * 1024**3,
+        }
 
-        try:
-            # Create mock GPU devices
-            mock_gpu1 = MagicMock()
-            mock_gpu1.platform = "gpu"
-            mock_gpu1.memory_stats.return_value = {
-                "bytes_limit": 16 * 1024**3,
-                "bytes_in_use": 4 * 1024**3,
-            }
+        mock_gpu2 = MagicMock()
+        mock_gpu2.platform = "gpu"
+        mock_gpu2.memory_stats.return_value = {
+            "bytes_limit": 16 * 1024**3,
+            "bytes_in_use": 2 * 1024**3,
+        }
 
-            mock_gpu2 = MagicMock()
-            mock_gpu2.platform = "gpu"
-            mock_gpu2.memory_stats.return_value = {
-                "bytes_limit": 16 * 1024**3,
-                "bytes_in_use": 2 * 1024**3,
-            }
+        mock_devices = [mock_gpu1, mock_gpu2]
 
-            mock_devices = [mock_gpu1, mock_gpu2]
+        # Use patch.object for reliable module-level patching in parallel tests
+        with patch.object(
+            large_dataset_module,
+            "get_cached_devices",
+            return_value=mock_devices,
+        ):
+            estimator = GPUMemoryEstimator()
+            available_gb = estimator.get_available_gpu_memory_gb()
 
-            # Patch at the module level where get_cached_devices is called
-            with patch(
-                "nlsq.streaming.large_dataset.get_cached_devices",
-                return_value=mock_devices,
-            ):
-                estimator = GPUMemoryEstimator()
-                available_gb = estimator.get_available_gpu_memory_gb()
-
-                # Should aggregate: (16-4) + (16-2) = 12 + 14 = 26 GB
-                assert 25.9 <= available_gb <= 26.1, (
-                    f"Expected ~26 GB, got {available_gb}"
-                )
-        finally:
-            # Clear the cache after test to not affect other tests
-            get_cached_devices.cache_clear()
+            # Should aggregate: (16-4) + (16-2) = 12 + 14 = 26 GB
+            assert 25.9 <= available_gb <= 26.1, f"Expected ~26 GB, got {available_gb}"
 
 
 class TestCombinedMemoryEstimation:
@@ -200,9 +169,6 @@ class TestCombinedMemoryEstimation:
 
     def test_combined_memory_estimation_cpu_and_gpu(self):
         """Test combined memory estimation (CPU + GPU)."""
-        # Clear the cached devices to ensure mock is used
-        get_cached_devices.cache_clear()
-
         # Mock CPU memory
         mock_cpu_memory = MagicMock()
         mock_cpu_memory.available = 64 * 1024**3  # 64 GB
@@ -215,21 +181,19 @@ class TestCombinedMemoryEstimation:
             "bytes_in_use": 8 * 1024**3,  # 8 GB in use
         }
 
-        try:
-            with (
-                patch("psutil.virtual_memory", return_value=mock_cpu_memory),
-                patch(
-                    "nlsq.streaming.large_dataset.get_cached_devices",
-                    return_value=[mock_gpu],
-                ),
-            ):
-                total_gb = MemoryEstimator.get_total_available_memory_gb()
+        # Use patch.object for reliable module-level patching in parallel tests
+        with (
+            patch("psutil.virtual_memory", return_value=mock_cpu_memory),
+            patch.object(
+                large_dataset_module,
+                "get_cached_devices",
+                return_value=[mock_gpu],
+            ),
+        ):
+            total_gb = MemoryEstimator.get_total_available_memory_gb()
 
-                # CPU (64) + GPU available (40-8=32) = 96 GB
-                assert 95.9 <= total_gb <= 96.1, f"Expected ~96 GB, got {total_gb}"
-        finally:
-            # Clear the cache after test to not affect other tests
-            get_cached_devices.cache_clear()
+            # CPU (64) + GPU available (40-8=32) = 96 GB
+            assert 95.9 <= total_gb <= 96.1, f"Expected ~96 GB, got {total_gb}"
 
     def test_combined_memory_cpu_only(self):
         """Test combined memory when no GPU available."""
@@ -241,10 +205,12 @@ class TestCombinedMemoryEstimation:
         mock_cpu_device = MagicMock()
         mock_cpu_device.platform = "cpu"
 
+        # Use patch.object for reliable module-level patching in parallel tests
         with (
             patch("psutil.virtual_memory", return_value=mock_cpu_memory),
-            patch(
-                "nlsq.streaming.large_dataset.get_cached_devices",
+            patch.object(
+                large_dataset_module,
+                "get_cached_devices",
                 return_value=[mock_cpu_device],
             ),
         ):
