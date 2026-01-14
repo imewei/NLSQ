@@ -528,7 +528,9 @@ class CMAESOptimizer:
         tuple[jax.Array, jax.Array, int]
             Best solution, best fitness, and number of generations.
         """
-        from evosax.algorithms import CMA_ES  # type: ignore[import-not-found]
+        from evosax.algorithms import (  # type: ignore[import-not-found,import-untyped]
+            CMA_ES,
+        )
 
         logger.info(
             f"Starting CMA-ES: popsize={popsize}, max_gen={self.config.max_generations}"
@@ -646,7 +648,9 @@ class CMAESOptimizer:
         tuple[jax.Array, jax.Array, int]
             Best solution, best fitness, and total number of generations.
         """
-        from evosax.algorithms import CMA_ES
+        from evosax.algorithms import (  # type: ignore[import-not-found,import-untyped]
+            CMA_ES,
+        )
 
         from nlsq.global_optimization.bipop import BIPOPRestarter
 

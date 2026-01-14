@@ -44,8 +44,8 @@ def is_evosax_available() -> bool:
             # Import to verify package is available and functional
             # We need to test actual imports, not just find_spec, because
             # evosax may be installed but have missing dependencies
-            import evosax.algorithms  # type: ignore[import-not-found]
-            import evosax.core.restart  # type: ignore[import-not-found]
+            import evosax.algorithms  # type: ignore[import-not-found,import-untyped]
+            import evosax.core.restart  # type: ignore[import-not-found,import-untyped]
 
             _EVOSAX_AVAILABLE = True
             _EVOSAX_IMPORT_ERROR = None
