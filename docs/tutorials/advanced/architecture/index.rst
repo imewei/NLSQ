@@ -34,7 +34,7 @@ Package Structure
    │   ├── least_squares.py   # LeastSquares orchestrator
    │   ├── trf.py             # Trust Region Reflective
    │   ├── factories.py       # Factory functions
-   │   ├── orchestration/     # Decomposed components (v0.7.0)
+   │   ├── orchestration/     # Decomposed components (v0.6.4)
    │   └── adapters/          # Protocol adapters
    ├── interfaces/     # Protocol definitions (DI)
    ├── streaming/      # Large dataset handling

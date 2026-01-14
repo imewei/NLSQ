@@ -1,7 +1,7 @@
-Orchestration Components (v0.7.0)
+Orchestration Components (v0.6.4)
 =================================
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
 The monolithic ``CurveFit`` class was decomposed into four focused components.
 This chapter covers each component and how to use them directly.

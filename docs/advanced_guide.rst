@@ -44,7 +44,7 @@ NLSQ provides multiple API levels for different needs:
    optimizer = LeastSquares()
    result = optimizer.least_squares(fun=residuals, x0=p0)
 
-   # Orchestration: Decomposed components (v0.7.0)
+   # Orchestration: Decomposed components (v0.6.4)
    from nlsq.core.orchestration import DataPreprocessor, OptimizationSelector
 
    preprocessor = DataPreprocessor()

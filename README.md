@@ -216,7 +216,7 @@ NLSQ is organized into well-separated layers (~75,000 lines):
 │  │   CHUNKED/STREAMING   ├── LHS/Sobol/Halton    │   0: Normalization       │
 │  └── Memory-based auto   └── Sampling            │   1: L-BFGS warmup       │
 │                                                  │   2: Gauss-Newton        │
-│  Orchestration (v0.7.0)                          └── 3: Denormalization     │
+│  Orchestration (v0.6.4)                          └── 3: Denormalization     │
 │  ├── DataPreprocessor    ├── OptimizationSel.                               │
 │  ├── CovarianceComputer  └── StreamingCoord.                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -232,7 +232,7 @@ NLSQ is organized into well-separated layers (~75,000 lines):
 │  ├── NumericalGuard   ├── MixedPrecision  ├── UnifiedCache  ├── Identifiab. │
 │  ├── SVD fallback     ├── AlgorithmSel.   ├── SmartCache    ├── GradientMon │
 │  └── Recovery         └── BoundsInfer.    └── MemoryMgr     └── PluginSys.  │
-│  facades/ (v0.7.0)                                                          │
+│  facades/ (v0.6.4)                                                          │
 │  ├── OptimizationFacade  ├── StabilityFacade  └── DiagnosticsFacade         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                            INFRASTRUCTURE                                   │

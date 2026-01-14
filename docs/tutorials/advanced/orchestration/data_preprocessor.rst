@@ -1,7 +1,7 @@
 DataPreprocessor
 ================
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
 The ``DataPreprocessor`` handles input validation, type conversion, and
 data cleaning before optimization.

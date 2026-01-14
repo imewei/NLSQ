@@ -82,7 +82,7 @@ Factory functions for creating optimizers and configurations:
    nlsq.core.factories
    nlsq.core.adapters
 
-Orchestration Components (v0.7.0+)
+Orchestration Components (v0.6.4+)
 ----------------------------------
 
 Decomposed curve fitting components for modular testing and customization:
@@ -92,7 +92,7 @@ Decomposed curve fitting components for modular testing and customization:
 
    nlsq.core.orchestration
 
-Facades (v0.7.0+)
+Facades (v0.6.4+)
 -----------------
 
 Lazy-loading facades for breaking circular dependencies:
@@ -262,10 +262,10 @@ Complete Module Listing
 - :doc:`nlsq.interfaces` - Protocol definitions for dependency injection
 - :doc:`nlsq.core.adapters` - Protocol adapters (CurveFitAdapter) (NEW in v0.4.3)
 
-**Orchestration Components** (NEW in v0.7.0):
+**Orchestration Components** (NEW in v0.6.4):
 - :doc:`nlsq.core.orchestration` - DataPreprocessor, OptimizationSelector, CovarianceComputer, StreamingCoordinator
 
-**Facades** (NEW in v0.7.0):
+**Facades** (NEW in v0.6.4):
 - :doc:`nlsq.facades` - OptimizationFacade, StabilityFacade, DiagnosticsFacade
 
 **Global Optimization Modules** (NEW in v0.3.3+):

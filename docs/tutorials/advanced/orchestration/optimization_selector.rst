@@ -1,7 +1,7 @@
 OptimizationSelector
 ====================
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
 The ``OptimizationSelector`` handles parameter detection, bounds processing,
 initial guess generation, and method selection.

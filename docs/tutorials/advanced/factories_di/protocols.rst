@@ -73,7 +73,7 @@ CacheProtocol
 
        def clear(self) -> None: ...
 
-Orchestration Protocols (v0.7.0)
+Orchestration Protocols (v0.6.4)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python

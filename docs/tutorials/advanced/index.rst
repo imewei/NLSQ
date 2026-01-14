@@ -24,7 +24,7 @@ What You'll Learn
 - NLSQ's internal architecture and design patterns
 - How to use core API classes directly
 - Factory functions and dependency injection
-- The v0.7.0 orchestration component system
+- The v0.6.4 orchestration component system
 - Performance tuning and profiling
 - Creating custom optimizers and extensions
 
@@ -66,7 +66,7 @@ Learning Path
      - 30 min
    * - 4
      - :doc:`orchestration/index`
-     - v0.7.0 decomposed components
+     - v0.6.4 decomposed components
      - 45 min
    * - 5
      - :doc:`custom_workflows/index`
@@ -133,7 +133,7 @@ Import Patterns
    # Factories
    from nlsq.core.factories import create_optimizer, configure_curve_fit
 
-   # Orchestration (v0.7.0+)
+   # Orchestration (v0.6.4+)
    from nlsq.core.orchestration import (
        DataPreprocessor,
        OptimizationSelector,

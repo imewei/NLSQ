@@ -1,7 +1,7 @@
 Facades
 =======
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
 Facades provide lazy-loading wrappers that break circular dependencies
 while providing convenient access to components.

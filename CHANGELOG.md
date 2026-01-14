@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-01-14
+
+### Added
+
+#### CurveFit God Class Decomposition
+
+- **Architecture Refactor**: Split monolithic CurveFit class into 4 focused components
+- **New Components** in `nlsq/core/orchestration/`:
+  - `DataPreprocessor`: Input validation, array conversion (<300 LOC)
+  - `OptimizationSelector`: Method selection, bounds, initial guess (<350 LOC)
+  - `CovarianceComputer`: Covariance via SVD, sigma transformation (<350 LOC)
+  - `StreamingCoordinator`: Memory analysis, streaming strategy (<350 LOC)
+- **Facades** for circular dependency breaking in `nlsq/facades/`:
+  - `OptimizationFacade`: Lazy access to CMA-ES, multi-start
+  - `StabilityFacade`: Lazy access to SVD fallback, stability guard
+  - `DiagnosticsFacade`: Lazy access to convergence monitoring
+- **Feature Flags**: Gradual rollout via `NLSQ_*_IMPL` environment variables
+- **Performance**: No regression (48% faster than baseline in benchmarks)
+- **Tests**: 3,688 tests pass, 100% pass rate
+- Reference: `specs/017-curve-fit-decomposition/`
+
 ### Changed
 
 #### Performance Optimizations (Phase 2)

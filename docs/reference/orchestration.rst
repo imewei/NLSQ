@@ -1,7 +1,7 @@
 Orchestration Components
 ========================
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
 The orchestration module provides decomposed components for curve fitting,
 enabling modular testing, customization, and gradual migration via feature flags.

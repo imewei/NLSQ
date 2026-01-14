@@ -1,7 +1,7 @@
 CovarianceComputer
 ==================
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
 The ``CovarianceComputer`` estimates parameter uncertainties via SVD-based
 covariance computation.

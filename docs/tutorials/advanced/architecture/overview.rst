@@ -21,7 +21,7 @@ Module Hierarchy
    │   ├── functions.py            # Built-in models
    │   ├── factories.py            # Factory functions
    │   ├── sparse_jacobian.py      # Sparse Jacobian support
-   │   ├── orchestration/          # v0.7.0 components
+   │   ├── orchestration/          # v0.6.4 components
    │   │   ├── data_preprocessor.py
    │   │   ├── optimization_selector.py
    │   │   ├── covariance_computer.py

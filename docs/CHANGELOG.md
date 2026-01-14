@@ -1,5 +1,10 @@
 # Documentation Changelog
 
+## v0.6.4 (2026-01-14)
+- Updated version references from v0.7.0 to v0.6.4 across all orchestration documentation
+- Added CurveFit decomposition architecture documentation (v0.6.4 feature)
+- Updated package structure references to v0.6.4
+
 ## v0.6.0 (2026-01-06)
 - Reorganized documentation into Routine User Guide and Advanced User Guide
 - Consolidated 3 migration files into single comprehensive `howto/migration.rst`

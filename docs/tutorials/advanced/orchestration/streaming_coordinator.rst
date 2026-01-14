@@ -1,7 +1,7 @@
 StreamingCoordinator
 ====================
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
 The ``StreamingCoordinator`` analyzes memory requirements and selects the
 optimal processing strategy.

@@ -1,14 +1,14 @@
 Orchestration Overview
 ======================
 
-.. versionadded:: 0.7.0
+.. versionadded:: 0.6.4
 
-This page explains the v0.7.0 decomposition of the CurveFit class.
+This page explains the v0.6.4 decomposition of the CurveFit class.
 
 The Decomposition
 -----------------
 
-Before v0.7.0, ``CurveFit`` was a "god class" with 2500+ lines handling:
+Before v0.6.4, ``CurveFit`` was a "god class" with 2500+ lines handling:
 
 - Data validation
 - Parameter detection
