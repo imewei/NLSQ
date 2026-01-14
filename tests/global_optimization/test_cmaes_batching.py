@@ -10,6 +10,13 @@ from nlsq.global_optimization import (
     auto_configure_cmaes_memory,
     estimate_cmaes_memory_gb,
 )
+from nlsq.global_optimization.cmaes_config import is_evosax_available
+
+# Skip all tests if evosax is not available
+pytestmark = pytest.mark.skipif(
+    not is_evosax_available(),
+    reason="evosax not installed - skipping CMA-ES batching tests",
+)
 
 
 class TestPopulationBatching:
