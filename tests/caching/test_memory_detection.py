@@ -21,6 +21,7 @@ from nlsq.streaming.large_dataset import (
     GPUMemoryEstimator,
     MemoryEstimator,
     cleanup_memory,
+    get_cached_devices,
 )
 
 
@@ -163,6 +164,9 @@ class TestCombinedMemoryEstimation:
 
     def test_combined_memory_estimation_cpu_and_gpu(self):
         """Test combined memory estimation (CPU + GPU)."""
+        # Clear the cached devices to ensure mock is used
+        get_cached_devices.cache_clear()
+
         # Mock CPU memory
         mock_cpu_memory = MagicMock()
         mock_cpu_memory.available = 64 * 1024**3  # 64 GB
@@ -175,17 +179,21 @@ class TestCombinedMemoryEstimation:
             "bytes_in_use": 8 * 1024**3,  # 8 GB in use
         }
 
-        with (
-            patch("psutil.virtual_memory", return_value=mock_cpu_memory),
-            patch(
-                "nlsq.streaming.large_dataset.get_cached_devices",
-                return_value=[mock_gpu],
-            ),
-        ):
-            total_gb = MemoryEstimator.get_total_available_memory_gb()
+        try:
+            with (
+                patch("psutil.virtual_memory", return_value=mock_cpu_memory),
+                patch(
+                    "nlsq.streaming.large_dataset.get_cached_devices",
+                    return_value=[mock_gpu],
+                ),
+            ):
+                total_gb = MemoryEstimator.get_total_available_memory_gb()
 
-            # CPU (64) + GPU available (40-8=32) = 96 GB
-            assert 95.9 <= total_gb <= 96.1, f"Expected ~96 GB, got {total_gb}"
+                # CPU (64) + GPU available (40-8=32) = 96 GB
+                assert 95.9 <= total_gb <= 96.1, f"Expected ~96 GB, got {total_gb}"
+        finally:
+            # Clear the cache after test to not affect other tests
+            get_cached_devices.cache_clear()
 
     def test_combined_memory_cpu_only(self):
         """Test combined memory when no GPU available."""

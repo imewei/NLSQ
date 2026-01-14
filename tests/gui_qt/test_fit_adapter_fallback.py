@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+import nlsq.gui_qt.adapters.fit_adapter as fit_adapter_module
 from nlsq.gui_qt.adapters.fit_adapter import FitConfig, execute_fit
 
 
@@ -16,8 +17,9 @@ def test_execute_fit_auto_global_fallback():
     # Config with auto_global but NO bounds
     config = FitConfig(p0=None, bounds=None, workflow="auto_global", n_starts=5)
 
-    # Mock minpack.fit to verification
-    with patch("nlsq.gui_qt.adapters.fit_adapter.fit") as mock_fit:
+    # Mock minpack.fit using patch.object for more reliable patching
+    # This patches the 'fit' attribute on the module object directly
+    with patch.object(fit_adapter_module, "fit") as mock_fit:
         # Mock result
         mock_result = MagicMock()
         mock_result.__getitem__ = lambda self, key: False  # For aborted check
@@ -25,6 +27,11 @@ def test_execute_fit_auto_global_fallback():
 
         # Execute
         execute_fit(xdata, ydata, None, model, config, None)
+
+        # Verify mock was actually called (catch flaky test issues early)
+        assert mock_fit.called, (
+            "Mock fit() was not called - possible import caching issue"
+        )
 
         # Verify call args
         _args, kwargs = mock_fit.call_args
@@ -52,13 +59,18 @@ def test_execute_fit_auto_global_with_bounds_preserved():
         p0=None, bounds=([-10], [10]), workflow="auto_global", n_starts=5
     )
 
-    # Mock minpack.fit
-    with patch("nlsq.gui_qt.adapters.fit_adapter.fit") as mock_fit:
+    # Mock minpack.fit using patch.object for more reliable patching
+    with patch.object(fit_adapter_module, "fit") as mock_fit:
         mock_result = MagicMock()
         mock_result.__getitem__ = lambda self, key: False
         mock_fit.return_value = mock_result
 
         execute_fit(xdata, ydata, None, model, config, None)
+
+        # Verify mock was actually called (catch flaky test issues early)
+        assert mock_fit.called, (
+            "Mock fit() was not called - possible import caching issue"
+        )
 
         _args, kwargs = mock_fit.call_args
         assert kwargs["workflow"] == "auto_global", (
