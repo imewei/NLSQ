@@ -65,98 +65,134 @@ class TestGPUMemoryDetection:
 
     def test_gpu_memory_detection_via_jax_device_api(self):
         """Test GPU memory detection via jax.devices()[0].memory_stats()."""
-        # Create a mock GPU device with memory_stats
-        mock_device = MagicMock()
-        mock_device.platform = "gpu"
-        mock_device.memory_stats.return_value = {
-            "bytes_limit": 16 * 1024**3,  # 16 GB total
-            "bytes_in_use": 4 * 1024**3,  # 4 GB in use
-        }
+        # Clear the cached devices to ensure mock is used
+        get_cached_devices.cache_clear()
 
-        mock_devices = [mock_device]
+        try:
+            # Create a mock GPU device with memory_stats
+            mock_device = MagicMock()
+            mock_device.platform = "gpu"
+            mock_device.memory_stats.return_value = {
+                "bytes_limit": 16 * 1024**3,  # 16 GB total
+                "bytes_in_use": 4 * 1024**3,  # 4 GB in use
+            }
 
-        # Patch at the module level where get_cached_devices is called
-        with patch(
-            "nlsq.streaming.large_dataset.get_cached_devices",
-            return_value=mock_devices,
-        ):
-            estimator = GPUMemoryEstimator()
-            available_gb = estimator.get_available_gpu_memory_gb()
+            mock_devices = [mock_device]
 
-            # Should return approximately 12 GB (16 - 4)
-            assert 11.9 <= available_gb <= 12.1, f"Expected ~12 GB, got {available_gb}"
+            # Patch at the module level where get_cached_devices is called
+            with patch(
+                "nlsq.streaming.large_dataset.get_cached_devices",
+                return_value=mock_devices,
+            ):
+                estimator = GPUMemoryEstimator()
+                available_gb = estimator.get_available_gpu_memory_gb()
+
+                # Should return approximately 12 GB (16 - 4)
+                assert 11.9 <= available_gb <= 12.1, (
+                    f"Expected ~12 GB, got {available_gb}"
+                )
+        finally:
+            # Clear the cache after test to not affect other tests
+            get_cached_devices.cache_clear()
 
     def test_fallback_when_gpu_detection_fails(self):
         """Test fallback when GPU detection fails (containerized environments)."""
-        # Create a mock device that raises an exception on memory_stats
-        mock_device = MagicMock()
-        mock_device.platform = "gpu"
-        mock_device.memory_stats.side_effect = Exception("No memory stats available")
+        # Clear the cached devices to ensure mock is used
+        get_cached_devices.cache_clear()
 
-        mock_devices = [mock_device]
+        try:
+            # Create a mock device that raises an exception on memory_stats
+            mock_device = MagicMock()
+            mock_device.platform = "gpu"
+            mock_device.memory_stats.side_effect = Exception(
+                "No memory stats available"
+            )
 
-        # Patch at the module level where get_cached_devices is called
-        with patch(
-            "nlsq.streaming.large_dataset.get_cached_devices",
-            return_value=mock_devices,
-        ):
-            estimator = GPUMemoryEstimator()
-            available_gb = estimator.get_available_gpu_memory_gb()
+            mock_devices = [mock_device]
 
-            # Should return 0 when GPU detection fails
-            assert available_gb == 0.0, f"Expected 0 GB on failure, got {available_gb}"
+            # Patch at the module level where get_cached_devices is called
+            with patch(
+                "nlsq.streaming.large_dataset.get_cached_devices",
+                return_value=mock_devices,
+            ):
+                estimator = GPUMemoryEstimator()
+                available_gb = estimator.get_available_gpu_memory_gb()
+
+                # Should return 0 when GPU detection fails
+                assert available_gb == 0.0, (
+                    f"Expected 0 GB on failure, got {available_gb}"
+                )
+        finally:
+            # Clear the cache after test to not affect other tests
+            get_cached_devices.cache_clear()
 
     def test_cpu_only_environment_returns_zero(self):
         """Test that CPU-only environments return 0 for GPU memory."""
-        # Create a mock CPU-only device
-        mock_device = MagicMock()
-        mock_device.platform = "cpu"
-        mock_device.device_kind = "cpu"
+        # Clear the cached devices to ensure mock is used
+        get_cached_devices.cache_clear()
 
-        mock_devices = [mock_device]
+        try:
+            # Create a mock CPU-only device
+            mock_device = MagicMock()
+            mock_device.platform = "cpu"
+            mock_device.device_kind = "cpu"
 
-        # Patch at the module level where get_cached_devices is called
-        with patch(
-            "nlsq.streaming.large_dataset.get_cached_devices",
-            return_value=mock_devices,
-        ):
-            estimator = GPUMemoryEstimator()
-            available_gb = estimator.get_available_gpu_memory_gb()
+            mock_devices = [mock_device]
 
-            # Should return 0 for CPU-only environment
-            assert available_gb == 0.0, (
-                f"Expected 0 GB for CPU-only, got {available_gb}"
-            )
+            # Patch at the module level where get_cached_devices is called
+            with patch(
+                "nlsq.streaming.large_dataset.get_cached_devices",
+                return_value=mock_devices,
+            ):
+                estimator = GPUMemoryEstimator()
+                available_gb = estimator.get_available_gpu_memory_gb()
+
+                # Should return 0 for CPU-only environment
+                assert available_gb == 0.0, (
+                    f"Expected 0 GB for CPU-only, got {available_gb}"
+                )
+        finally:
+            # Clear the cache after test to not affect other tests
+            get_cached_devices.cache_clear()
 
     def test_multiple_gpus_aggregate_memory(self):
         """Test that multiple GPUs aggregate available memory."""
-        # Create mock GPU devices
-        mock_gpu1 = MagicMock()
-        mock_gpu1.platform = "gpu"
-        mock_gpu1.memory_stats.return_value = {
-            "bytes_limit": 16 * 1024**3,
-            "bytes_in_use": 4 * 1024**3,
-        }
+        # Clear the cached devices to ensure mock is used
+        get_cached_devices.cache_clear()
 
-        mock_gpu2 = MagicMock()
-        mock_gpu2.platform = "gpu"
-        mock_gpu2.memory_stats.return_value = {
-            "bytes_limit": 16 * 1024**3,
-            "bytes_in_use": 2 * 1024**3,
-        }
+        try:
+            # Create mock GPU devices
+            mock_gpu1 = MagicMock()
+            mock_gpu1.platform = "gpu"
+            mock_gpu1.memory_stats.return_value = {
+                "bytes_limit": 16 * 1024**3,
+                "bytes_in_use": 4 * 1024**3,
+            }
 
-        mock_devices = [mock_gpu1, mock_gpu2]
+            mock_gpu2 = MagicMock()
+            mock_gpu2.platform = "gpu"
+            mock_gpu2.memory_stats.return_value = {
+                "bytes_limit": 16 * 1024**3,
+                "bytes_in_use": 2 * 1024**3,
+            }
 
-        # Patch at the module level where get_cached_devices is called
-        with patch(
-            "nlsq.streaming.large_dataset.get_cached_devices",
-            return_value=mock_devices,
-        ):
-            estimator = GPUMemoryEstimator()
-            available_gb = estimator.get_available_gpu_memory_gb()
+            mock_devices = [mock_gpu1, mock_gpu2]
 
-            # Should aggregate: (16-4) + (16-2) = 12 + 14 = 26 GB
-            assert 25.9 <= available_gb <= 26.1, f"Expected ~26 GB, got {available_gb}"
+            # Patch at the module level where get_cached_devices is called
+            with patch(
+                "nlsq.streaming.large_dataset.get_cached_devices",
+                return_value=mock_devices,
+            ):
+                estimator = GPUMemoryEstimator()
+                available_gb = estimator.get_available_gpu_memory_gb()
+
+                # Should aggregate: (16-4) + (16-2) = 12 + 14 = 26 GB
+                assert 25.9 <= available_gb <= 26.1, (
+                    f"Expected ~26 GB, got {available_gb}"
+                )
+        finally:
+            # Clear the cache after test to not affect other tests
+            get_cached_devices.cache_clear()
 
 
 class TestCombinedMemoryEstimation:
