@@ -924,6 +924,9 @@ class CMAESOptimizer:
         NDArray[np.floating]
             Estimated covariance matrix (diagonal approximation).
         """
-        # Return identity matrix as rough estimate
+        # Return diagonal matrix with inf variance to indicate unknown covariance
         # Proper pcov requires Jacobian from NLSQ
-        return np.eye(n_params) * np.inf
+        # Use np.full to avoid RuntimeWarning from 0.0 * np.inf = nan in np.eye() * np.inf
+        pcov = np.full((n_params, n_params), 0.0)
+        np.fill_diagonal(pcov, np.inf)
+        return pcov
