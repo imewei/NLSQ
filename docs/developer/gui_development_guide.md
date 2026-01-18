@@ -355,12 +355,10 @@ class MyWidget(QWidget):
 
     def _apply_theme(self) -> None:
         """Apply current theme styling."""
-        self.setStyleSheet(
-            f"""
+        self.setStyleSheet(f"""
             QWidget {{
                 background-color: {self._theme.background};
                 color: {self._theme.text};
             }}
-        """
-        )
+        """)
 ```
