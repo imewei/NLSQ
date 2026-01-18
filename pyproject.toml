@@ -242,9 +242,9 @@ nlsq = ["py.typed", "*.pyi"]
 
 [tool.setuptools_scm]
 write_to = "nlsq/_version.py"
-version_scheme = "python-simplified-semver"
+version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
-fallback_version = "0.0.0+unknown"  # Fallback for non-git installs
+tag_regex = "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
 
 [tool.uv]
 # UV-specific configuration for faster builds and better caching
