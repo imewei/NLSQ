@@ -47,7 +47,8 @@ jobs:
           echo "## Dependency Security Audit" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           # Ignore CVE-2025-53000 (nbconvert) - no fix available, documented in CHANGELOG.md
-          uv run pip-audit --format markdown --ignore-vuln CVE-2025-53000 >> $GITHUB_STEP_SUMMARY 2>&1 || {
+          # Ignore CVE-2026-0994 (protobuf) - no fix available in v6.33.4, required by orbax
+          uv run pip-audit --format markdown --ignore-vuln CVE-2025-53000 --ignore-vuln CVE-2026-0994 >> $GITHUB_STEP_SUMMARY 2>&1 || {
             EXIT_CODE=$?
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Vulnerabilities found!** See details above." >> $GITHUB_STEP_SUMMARY
@@ -60,7 +61,8 @@ jobs:
         if: always()
         run: |
           # Ignore CVE-2025-53000 (nbconvert) - no fix available
-          uv run pip-audit --format json --ignore-vuln CVE-2025-53000 --output audit-report.json || true
+          # Ignore CVE-2026-0994 (protobuf) - no fix available
+          uv run pip-audit --format json --ignore-vuln CVE-2025-53000 --ignore-vuln CVE-2026-0994 --output audit-report.json || true
 
       - name: Upload audit report
         if: always()
