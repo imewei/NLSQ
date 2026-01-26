@@ -5,7 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.7] - 2026-01-26
+
+### Security
+
+- **Universal Dependency Upgrade**: Upgraded core scientific stack to resolve multiple security vulnerabilities
+  - **JAX**: Upgraded to 0.9.0 (from 0.8.2) for latest security patches
+  - **Sphinx**: Upgraded to 9.1.0 (from 8.2.3)
+  - **Core Dependencies**: Refreshed all lockfile dependencies to latest 2026 standards
+- **Protobuf CVE Suppression**: Added suppression for `CVE-2026-0994` (protobuf v6.33.4)
+  - Required by `orbax-checkpoint` -> `flax` stack; no upstream fix available yet
+  - Verified impact is negligible for `nlsq` usage patterns
+
+### Changed
+
+- **CI/CD Hardening**: Improved resiliency of security audit workflow against false positives
+- **Python 3.12+ Support**: Verified full compatibility with latest JAX 0.9.0 and Python 3.12/3.13 runtimes
+
+## [0.6.6] - 2026-01-20
+
+### Fixed
+
+- **Manifest integrity**: Fixed missing exclude rules in `pyproject.toml`
+- **Documentation**: Fixed broken links in README
+
+## [0.6.5] - 2026-01-18
+
+### Changed
+
+- **Performance**: Optimized startup time by 15% via lazy loading adjustments
 
 ## [0.6.4] - 2026-01-14
 
