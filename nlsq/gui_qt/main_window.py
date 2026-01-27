@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -33,13 +33,16 @@ if TYPE_CHECKING:
 
 __all__ = ["MainWindow"]
 
-# Page configuration: (name, display_label, icon_placeholder)
+# Page configuration: (name, display_label, QStyle.StandardPixmap enum name)
+# NOTE: Emoji characters in QListWidgetItem text cause SIGBUS on
+# PySide6 6.10.1 + macOS 26 + Apple Silicon (Qt text-shaping bug).
+# Use QStyle standard pixmap icons instead.
 PAGE_CONFIG = [
-    ("data_loading", "Data Loading", "📁"),
-    ("model_selection", "Model Selection", "📐"),
-    ("fitting_options", "Fitting Options", "⚙️"),
-    ("results", "Results", "📊"),
-    ("export", "Export", "💾"),
+    ("data_loading", "Data Loading", "SP_DirOpenIcon"),
+    ("model_selection", "Model Selection", "SP_FileDialogContentsView"),
+    ("fitting_options", "Fitting Options", "SP_ComputerIcon"),
+    ("results", "Results", "SP_FileDialogInfoView"),
+    ("export", "Export", "SP_DialogSaveButton"),
 ]
 
 
@@ -85,8 +88,18 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._update_navigation_guards()
         self._restore_state()
-        self._check_recovery()
-        self._autosave.start()
+        # In safe mode, skip all deferred timers (recovery check + autosave)
+        # to isolate whether the SIGBUS is caused by these callbacks.
+        # Usage: NLSQ_SAFE_MODE=1 nlsq-gui
+        import os
+
+        if not os.environ.get("NLSQ_SAFE_MODE"):
+            # Defer recovery check to the next event-loop iteration so the
+            # window has a native surface before any QMessageBox is shown
+            # (SIGBUS on macOS when a modal dialog parents to a window that
+            # hasn't been shown yet).
+            QTimer.singleShot(0, self._check_recovery)
+            self._autosave.start()
 
     def _setup_window(self) -> None:
         """Configure window properties."""
@@ -139,8 +152,15 @@ class MainWindow(QMainWindow):
         self._nav_list.setObjectName("navList")
         self._nav_list.setSpacing(4)
 
-        for page_name, display_label, icon in PAGE_CONFIG:
-            item = QListWidgetItem(f"{icon}  {display_label}")
+        from PySide6.QtWidgets import QStyle
+
+        for page_name, display_label, pixmap_name in PAGE_CONFIG:
+            pixmap_enum = getattr(QStyle.StandardPixmap, pixmap_name, None)
+            if pixmap_enum is not None:
+                icon = self.style().standardIcon(pixmap_enum)
+                item = QListWidgetItem(icon, display_label)
+            else:
+                item = QListWidgetItem(display_label)
             item.setData(Qt.ItemDataRole.UserRole, page_name)
             self._nav_list.addItem(item)
 

@@ -23,16 +23,32 @@ import pytest
 class TestImportGuards:
     """Verify defensive environment variables are set before JAX loads."""
 
-    def test_jax_cpu_enforcement_on_macos(self):
-        """nlsq.__init__ must set JAX_PLATFORM_NAME=cpu on macOS."""
-        if sys.platform != "darwin":
-            pytest.skip("macOS-only guard")
+    def test_jax_cpu_enforcement_on_non_linux(self):
+        """nlsq.__init__ must set JAX CPU vars on non-Linux platforms."""
+        if sys.platform == "linux":
+            pytest.skip("Non-Linux guard (macOS/Windows only)")
 
         # Importing nlsq triggers the hotfix
         import nlsq
 
         assert os.environ.get("JAX_PLATFORM_NAME") == "cpu"
+        assert os.environ.get("JAX_PLATFORMS") == "cpu"
         assert os.environ.get("NLSQ_FORCE_CPU") == "1"
+
+    def test_macos_specific_env_vars(self):
+        """nlsq.__init__ must set macOS-specific stability vars on Darwin."""
+        if sys.platform != "darwin":
+            pytest.skip("macOS-only guard")
+
+        import nlsq
+
+        assert os.environ.get("OMP_NUM_THREADS") == "1"
+        assert os.environ.get("MPLBACKEND") == "Agg"
+        assert os.environ.get("QT_MAC_WANTS_LAYER") == "1"
+        assert os.environ.get("QT_API") == "pyside6"
+        assert os.environ.get("PYQTGRAPH_QT_LIB") == "PySide6"
+        assert os.environ.get("QT_OPENGL") == "software"
+        assert os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1"
 
     def test_jax_backend_is_cpu(self):
         """JAX must resolve to CPU backend in the test environment."""

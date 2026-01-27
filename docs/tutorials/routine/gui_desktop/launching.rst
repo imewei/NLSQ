@@ -117,7 +117,15 @@ Try disabling OpenGL acceleration:
 
 .. code-block:: bash
 
-   export QT_QUICK_BACKEND=software
+   # Disable OpenGL for pyqtgraph plots
+   export NLSQ_GUI_USE_OPENGL=0
+   nlsq-gui
+
+To re-enable OpenGL later:
+
+.. code-block:: bash
+
+   export NLSQ_GUI_USE_OPENGL=1
    nlsq-gui
 
 Next Steps
