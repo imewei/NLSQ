@@ -16,7 +16,12 @@ Prerequisites
 -------------
 
 - Completed tutorials 1-5
-- NVIDIA GPU with CUDA support (for GPU acceleration)
+- **Linux** with an NVIDIA GPU and CUDA support (GPU acceleration is Linux-only)
+
+.. note::
+
+   On macOS and Windows, NLSQ automatically enforces CPU mode at import
+   time. The tutorials below apply to Linux GPU setups.
 
 When GPU Acceleration Helps
 ---------------------------
@@ -74,18 +79,21 @@ First, check what JAX backend is currently active:
 
 Output will show either ``cpu``, ``gpu``, or ``tpu``.
 
-Step 2: Install JAX with GPU Support
-------------------------------------
+Step 2: Install JAX with GPU Support (Linux)
+---------------------------------------------
 
-If you see ``cpu`` but have an NVIDIA GPU, install JAX with CUDA:
+If you see ``cpu`` but have an NVIDIA GPU on Linux, install JAX with CUDA:
 
 .. code-block:: bash
 
-   # For CUDA 12.x (most modern systems)
-   pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+   # Recommended: auto-detect CUDA version
+   make install-jax-gpu
 
-   # For CUDA 11.x (older systems)
-   pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+   # Or manually for CUDA 12.x
+   pip install --upgrade "jax[cuda12-local]"
+
+   # Or for CUDA 13.x
+   pip install --upgrade "jax[cuda13-local]"
 
    # Verify installation
    python -c "import jax; print(jax.devices())"
@@ -123,7 +131,10 @@ NLSQ automatically uses GPU if available:
 Forcing CPU or GPU
 ------------------
 
-You can explicitly control the backend:
+On **macOS and Windows**, NLSQ automatically enforces CPU mode — no
+configuration needed.
+
+On **Linux**, you can explicitly control the backend:
 
 .. code-block:: python
 
@@ -143,7 +154,7 @@ NLSQ also provides environment variables:
 
 .. code-block:: bash
 
-   # Force CPU for testing
+   # Force CPU for testing (Linux)
    NLSQ_FORCE_CPU=1 python my_script.py
 
 Benchmarking CPU vs GPU
@@ -233,14 +244,14 @@ GPU memory is limited. For very large datasets:
 
    popt, pcov = curve_fit_large(model, x, y, memory_limit_gb=8.0)  # Limit GPU memory usage
 
-TPU Acceleration
-----------------
+TPU Acceleration (Linux)
+-------------------------
 
-NLSQ also supports Google TPUs:
+NLSQ also supports Google TPUs on Linux:
 
 .. code-block:: python
 
-   # On Google Colab with TPU runtime
+   # On Google Colab with TPU runtime (Linux)
    import jax
 
    print(f"TPU devices: {jax.devices()}")
@@ -377,8 +388,8 @@ Complete Example: GPU Performance Comparison
 Key Takeaways
 -------------
 
-1. **GPU provides 10-300x speedup** for large datasets
-2. Install JAX with CUDA: ``pip install "jax[cuda12_pip]"``
+1. **GPU provides 10-300x speedup** for large datasets (Linux only)
+2. Install JAX with CUDA: ``make install-jax-gpu`` or ``pip install "jax[cuda12-local]"``
 3. Check backend with ``jax.devices()``
 4. First call includes JIT compilation overhead
 5. Use ``CurveFit`` class for repeated fits

@@ -14,10 +14,18 @@ users realize when GPU acceleration is available but not being used. This module
 helps maximize performance by alerting users to available hardware acceleration
 opportunities.
 
+.. important::
+
+   GPU acceleration is **Linux only**. On macOS and Windows,
+   ``check_gpu_availability()`` and ``get_recommended_package()`` return
+   early without running any subprocess detection. The CPU-only backend
+   is enforced automatically by ``nlsq/__init__.py``.
+
 Key Features
 ------------
 
-- **Automatic GPU detection** via nvidia-smi hardware query
+- **Linux-only GPU detection** via nvidia-smi hardware query
+- **Platform-aware guards** — non-Linux platforms skip detection entirely
 - **JAX device inspection** to check current compute backend
 - **User-friendly warnings** with actionable installation instructions
 - **150-270x speedup recommendations** for GPU-enabled configurations
@@ -280,11 +288,12 @@ Implementation Details
 **GPU Detection Algorithm**:
 
 1. Check if ``NLSQ_SKIP_GPU_CHECK`` environment variable is set
-2. Query nvidia-smi for GPU hardware (5 second timeout)
-3. Parse GPU name from output
-4. Query JAX for current device backend
-5. Compare hardware availability vs JAX usage
-6. Print warning only if mismatch detected
+2. Check platform — return immediately on macOS and Windows (GPU is Linux-only)
+3. Query nvidia-smi for GPU hardware (5 second timeout)
+4. Parse GPU name from output
+5. Query JAX for current device backend
+6. Compare hardware availability vs JAX usage
+7. Print warning only if mismatch detected
 
 **Error Handling**:
 

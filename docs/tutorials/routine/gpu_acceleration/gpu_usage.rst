@@ -4,10 +4,16 @@ GPU Usage
 Once JAX is installed with GPU support, NLSQ automatically uses the GPU.
 No code changes are required.
 
+.. important::
+
+   GPU acceleration is **Linux only**. On macOS and Windows, NLSQ
+   automatically enforces CPU mode at import time — no manual
+   configuration needed.
+
 Automatic GPU Detection
 -----------------------
 
-NLSQ detects available GPUs automatically:
+NLSQ detects available GPUs automatically (on Linux):
 
 .. code-block:: python
 
@@ -49,7 +55,10 @@ NLSQ uses persistent JIT caching at ``~/.cache/nlsq/jax_cache``.
 Forcing CPU Usage
 -----------------
 
-To run on CPU even when GPU is available:
+On **macOS and Windows**, CPU mode is enforced automatically — no action
+needed.
+
+On **Linux**, to run on CPU even when a GPU is available:
 
 .. code-block:: python
 
@@ -57,10 +66,8 @@ To run on CPU even when GPU is available:
 
    os.environ["NLSQ_FORCE_CPU"] = "1"
 
-   # Or set JAX backend
-   import jax
-
-   jax.config.update("jax_platform_name", "cpu")
+   # Or set JAX backend directly
+   os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
 Data Transfer
 -------------

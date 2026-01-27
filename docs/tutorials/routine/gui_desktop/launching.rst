@@ -85,11 +85,21 @@ Install OpenGL libraries if needed:
 
 **macOS:**
 
-Works out of the box on macOS 12+.
+Works on macOS 12+. NLSQ automatically applies several stability guards
+at import time to prevent SIGBUS crashes on Apple Silicon:
+
+- Forces software OpenGL rendering (``QT_OPENGL=software``)
+- Sets ``MPLBACKEND=Agg`` for matplotlib
+- Disables multi-threaded XLA (``XLA_FLAGS``)
+- Enforces CPU-only JAX backend
+
+The sidebar uses native Qt style icons (not emoji) to avoid a Qt text
+shaping crash on PySide6 6.10+ with macOS 26.
 
 **Windows:**
 
 Requires Visual C++ Redistributable. Usually already installed.
+CPU-only JAX backend is enforced automatically.
 
 Troubleshooting Launch Issues
 -----------------------------
@@ -108,16 +118,18 @@ Install graphics drivers or OpenGL libraries.
 
 .. code-block:: bash
 
-   # Check for errors
+   # Check for errors with debug logging
+   NLSQ_DEBUG=1 nlsq-gui
+
+   # Or run directly from Python
    python -c "from nlsq.gui_qt import run_desktop; run_desktop()"
 
-**Blank window:**
+**Blank window or rendering issues:**
 
-Try disabling OpenGL acceleration:
+Try disabling OpenGL acceleration for pyqtgraph plots:
 
 .. code-block:: bash
 
-   # Disable OpenGL for pyqtgraph plots
    export NLSQ_GUI_USE_OPENGL=0
    nlsq-gui
 
@@ -127,6 +139,15 @@ To re-enable OpenGL later:
 
    export NLSQ_GUI_USE_OPENGL=1
    nlsq-gui
+
+**SIGBUS crash on macOS (safe mode):**
+
+If the application crashes on launch, try safe mode which disables
+deferred timers (autosave, session recovery):
+
+.. code-block:: bash
+
+   NLSQ_SAFE_MODE=1 nlsq-gui
 
 Next Steps
 ----------

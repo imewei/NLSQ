@@ -3,24 +3,34 @@ GPU Setup
 
 This guide covers installing and configuring JAX for GPU acceleration.
 
-NVIDIA GPU (CUDA)
------------------
+.. important::
+
+   **GPU acceleration is supported on Linux only.** macOS and Windows
+   automatically use the CPU backend — NLSQ enforces this at import time
+   by setting ``JAX_PLATFORM_NAME=cpu``.
+
+NVIDIA GPU (CUDA) — Linux
+--------------------------
 
 **Requirements:**
 
-- NVIDIA GPU with CUDA support
-- CUDA 12.x drivers installed
+- **Linux** operating system
+- NVIDIA GPU with CUDA support (Maxwell or newer, SM ≥ 5.2)
+- CUDA 12.x or 13.x drivers installed
 - cuDNN (bundled with JAX)
 
 **Installation:**
 
 .. code-block:: bash
 
-   # Install JAX with CUDA 12 support
-   pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+   # Recommended: use the Makefile target (auto-detects CUDA version)
+   make install-jax-gpu
 
-   # Or for CUDA 11
-   pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+   # Or manually for CUDA 12
+   pip install --upgrade "jax[cuda12-local]"
+
+   # Or for CUDA 13
+   pip install --upgrade "jax[cuda13-local]"
 
 **Verify installation:**
 
@@ -36,15 +46,16 @@ Expected output:
 
 .. code-block:: text
 
-   JAX version: 0.8.0
+   JAX version: 0.9.0
    Devices: [CudaDevice(id=0)]
    Default backend: gpu
 
-AMD GPU (ROCm)
---------------
+AMD GPU (ROCm) — Linux
+-----------------------
 
 **Requirements:**
 
+- **Linux** operating system
 - AMD GPU with ROCm support
 - ROCm 5.x+ installed
 
@@ -54,38 +65,24 @@ AMD GPU (ROCm)
 
    pip install --upgrade "jax[rocm]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
-Apple Silicon (M1/M2/M3)
-------------------------
+macOS and Windows (CPU Only)
+-----------------------------
 
-**Requirements:**
+NLSQ enforces CPU-only mode on macOS and Windows at import time. No
+additional configuration is needed — the following environment variables
+are set automatically:
 
-- Apple Silicon Mac (M1, M2, M3)
-- macOS 12.0+
+- ``NLSQ_FORCE_CPU=1``
+- ``JAX_PLATFORM_NAME=cpu``
+- ``JAX_PLATFORMS=cpu``
 
-**Installation (experimental):**
-
-.. code-block:: bash
-
-   pip install jax-metal
-
-**Verify:**
-
-.. code-block:: python
-
-   import jax
-
-   print(jax.devices())  # Should show Metal device
-
-CPU-Only Setup
---------------
-
-If no GPU is available, JAX works on CPU:
+On macOS, additional guards prevent SIGBUS crashes from Metal/OpenGL/XLA
+conflicts (``XLA_FLAGS``, ``OMP_NUM_THREADS``, ``MPLBACKEND``, etc.).
 
 .. code-block:: bash
 
+   # Just install JAX (CPU backend is automatic)
    pip install jax jaxlib
-
-NLSQ will use CPU automatically.
 
 Docker Setup
 ------------
