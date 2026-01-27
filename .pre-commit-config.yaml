@@ -1,5 +1,5 @@
 # Pre-commit configuration
-# Updated: 2026-01-04
+# Updated: 2026-01-27
 # Python 3.13, uv package manager
 # Aligned with pyproject.toml and uv.lock
 #
@@ -42,7 +42,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10  # Aligned with local ruff 0.14.10 and pyproject.toml >=0.14.0
+    rev: v0.14.14  # Aligned with local ruff 0.14.14 and pyproject.toml >=0.14.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -60,7 +60,7 @@ repos:
         exclude: ^(tests/|examples/|benchmarks/)
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.36.0
+    rev: 0.36.1
     hooks:
       - id: check-github-workflows
 
@@ -78,7 +78,7 @@ repos:
         exclude: ^(docs/archive/|benchmarks/docs/|examples/_templates/|PERFORMANCE_ANALYSIS\.md)
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.9.2  # Security linting (low-level checks only)
+    rev: 1.9.3  # Security linting (low-level checks only)
     hooks:
       - id: bandit
         args: ['-ll', '--skip=B101,B601,B602,B607']

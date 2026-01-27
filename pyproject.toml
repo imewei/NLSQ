@@ -82,13 +82,13 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.0)
+    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.1)
     "scipy>=1.16.0",          # Tested on 1.16.3
 
     # JAX ecosystem (>=0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
-    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.8.2)
-    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.8.2)
+    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.9.0)
+    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.9.0)
                                # Platform-specific extras installed separately:
                                #   Linux CPU:  pip install "jax[cpu]>=0.8.0"
                                #   Linux GPU:  make install-jax-gpu (recommended)
@@ -103,6 +103,9 @@ dependencies = [
 
     # Large dataset support
     "h5py>=3.15.0",           # Required for streaming large datasets (tested on 3.15.1)
+
+    # Type checking
+    "mypy>=1.19.0",           # Static type checker (tested on 1.19.1)
 ]
 
 [project.optional-dependencies]
@@ -112,11 +115,11 @@ dev = [
     "pytest-xdist>=3.8.0",   # Tested on 3.8.0
     "pytest-rerunfailures>=16.0",  # Retry flaky tests (tested on 16.1)
     "black>=25.0.0",         # Tested on 25.12.0 (CalVer)
-    "ruff>=0.14.0",          # Tested on 0.14.10
+    "ruff>=0.14.0",          # Tested on 0.14.14
     "mypy>=1.19.0",          # Tested on 1.19.1
     "pre-commit>=4.5.0",     # Tested on 4.5.1
     "ipython>=9.0.0",        # Tested on 9.8.0
-    "bandit>=1.9.0",         # Tested on 1.9.2
+    "bandit>=1.9.0",         # Tested on 1.9.3
     "pyupgrade>=3.21.0",     # Tested on 3.21.2
 ]
 docs = [
