@@ -124,10 +124,6 @@ class NLSQLogger:
 
         self.logger.setLevel(level)
 
-        # Prevent duplicate handlers
-        if not self.logger.handlers:
-            self._setup_handlers()
-
         # Performance tracking
         self.timers: dict[str, float] = {}
 
@@ -138,12 +134,22 @@ class NLSQLogger:
         if not hasattr(logging, "PERFORMANCE"):
             logging.addLevelName(LogLevel.PERFORMANCE, "PERFORMANCE")
 
-    def _setup_handlers(self):
-        """Setup console and optional file handlers."""
-        # Console handler with formatting
+        # Shared handlers on the root 'nlsq' logger
+        self._setup_global_handlers()
+
+
+    def _setup_global_handlers(self):
+        """Setup shared handlers on the root 'nlsq' logger."""
+        root_nlsq = logging.getLogger("nlsq")
+
+        # Skip if already initialized or has handlers
+        if getattr(root_nlsq, "_nlsq_initialized", False) or root_nlsq.handlers:
+            return
+
+        # Console handler
         console_handler = logging.StreamHandler(sys.stdout)
 
-        # Check for debug mode
+        # Check modes
         debug_mode = os.getenv("NLSQ_DEBUG", "0") == "1"
         verbose_mode = os.getenv("NLSQ_VERBOSE", "0") == "1"
 
@@ -161,13 +167,14 @@ class NLSQLogger:
             formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
         console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
+        root_nlsq.addHandler(console_handler)
 
         # Optional file handler for debug mode
         if debug_mode:
             log_dir = Path(os.getenv("NLSQ_LOG_DIR", "."))
             log_dir.mkdir(exist_ok=True)
 
+            # Use a more specific timestamp or process ID to avoid collisions
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file = log_dir / f"nlsq_debug_{timestamp}.log"
 
@@ -178,9 +185,17 @@ class NLSQLogger:
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
             file_handler.setFormatter(file_formatter)
-            self.logger.addHandler(file_handler)
+            root_nlsq.addHandler(file_handler)
 
-            self.logger.info(f"Debug logging enabled: {log_file}")
+            # Log this only once
+            root_nlsq.info(f"Debug logging enabled (Session): {log_file}")
+
+        root_nlsq._nlsq_initialized = True
+        root_nlsq.propagate = True
+
+        # Ensure individual logger propagates (standard, but explicit here)
+        self.logger.propagate = True
+
 
     def _format_message(self, message: str, **kwargs) -> str:
         """Format message with operation context and kwargs."""
@@ -705,10 +720,15 @@ def enable_debug_mode():
     os.environ["NLSQ_DEBUG"] = "1"
     set_global_level(LogLevel.DEBUG)
 
-    # Recreate handlers for existing loggers
-    for logger in _loggers.values():
-        logger.logger.handlers.clear()
-        logger._setup_handlers()
+    # Recreate global handlers
+    root_nlsq = logging.getLogger("nlsq")
+    root_nlsq.handlers.clear()
+    root_nlsq._nlsq_initialized = False
+
+    # Force setup on next logger access
+    if _loggers:
+        list(_loggers.values())[0]._setup_global_handlers()
+
 
 
 def enable_verbose_mode():
