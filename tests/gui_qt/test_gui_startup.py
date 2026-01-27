@@ -173,7 +173,7 @@ class TestExceptionHook:
 
         # The source should contain \n (in f-strings) but NOT \\n
         # We check the actual string literals in the source code
-        assert '\\\\n' not in source, (
+        assert "\\\\n" not in source, (
             "_exception_hook contains double-escaped newlines (\\\\n). "
             "These render as literal backslash-n instead of actual newlines."
         )

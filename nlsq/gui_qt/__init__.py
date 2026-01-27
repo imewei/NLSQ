@@ -198,10 +198,23 @@ def run_desktop() -> int:
             if any(
                 p in k.upper()
                 for p in (
-                    "QT", "DISPLAY", "XDG", "LANG", "LC_", "DYLD",
-                    "MallocNanoZone", "METAL", "GPU", "GL",
-                    "JAX", "XLA", "OMP", "NLSQ", "PYTHON",
-                    "VIRTUAL", "PATH",
+                    "QT",
+                    "DISPLAY",
+                    "XDG",
+                    "LANG",
+                    "LC_",
+                    "DYLD",
+                    "MallocNanoZone",
+                    "METAL",
+                    "GPU",
+                    "GL",
+                    "JAX",
+                    "XLA",
+                    "OMP",
+                    "NLSQ",
+                    "PYTHON",
+                    "VIRTUAL",
+                    "PATH",
                 )
             ):
                 _stage(f"  {k}={os.environ[k]}")

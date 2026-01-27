@@ -137,7 +137,6 @@ class NLSQLogger:
         # Shared handlers on the root 'nlsq' logger
         self._setup_global_handlers()
 
-
     def _setup_global_handlers(self):
         """Setup shared handlers on the root 'nlsq' logger."""
         root_nlsq = logging.getLogger("nlsq")
@@ -190,12 +189,11 @@ class NLSQLogger:
             # Log this only once
             root_nlsq.info(f"Debug logging enabled (Session): {log_file}")
 
-        root_nlsq._nlsq_initialized = True
+        root_nlsq._nlsq_initialized = True  # type: ignore[attr-defined]
         root_nlsq.propagate = True
 
         # Ensure individual logger propagates (standard, but explicit here)
         self.logger.propagate = True
-
 
     def _format_message(self, message: str, **kwargs) -> str:
         """Format message with operation context and kwargs."""
@@ -723,12 +721,11 @@ def enable_debug_mode():
     # Recreate global handlers
     root_nlsq = logging.getLogger("nlsq")
     root_nlsq.handlers.clear()
-    root_nlsq._nlsq_initialized = False
+    root_nlsq._nlsq_initialized = False  # type: ignore[attr-defined]
 
     # Force setup on next logger access
     if _loggers:
-        list(_loggers.values())[0]._setup_global_handlers()
-
+        next(iter(_loggers.values()))._setup_global_handlers()
 
 
 def enable_verbose_mode():

@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PySide6.QtCore import Signal
-from PySide6.QtGui import QGuiApplication, QFontDatabase
+from PySide6.QtGui import QFontDatabase, QGuiApplication
 from PySide6.QtWidgets import (
     QFileDialog,
     QGroupBox,
@@ -212,8 +212,7 @@ class ExportPage(QWidget):
         fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
         family = fixed_font.family()
         self._code_preview.setStyleSheet(
-            f"font-family: '{family}', monospace; "
-            "font-size: 12px;"
+            f"font-family: '{family}', monospace; font-size: 12px;"
         )
         self._code_preview.setPlaceholderText(
             "Click 'Generate Code' to preview Python code..."

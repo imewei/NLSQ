@@ -37,6 +37,16 @@ class TestNLSQLogger(unittest.TestCase):
             if key in os.environ:
                 del os.environ[key]
 
+        # Reset global logger state to ensure clean start for each test
+        root_nlsq = logging.getLogger("nlsq")
+        # Close and remove existing handlers to release file locks
+        for handler in root_nlsq.handlers[:]:
+            handler.close()
+            root_nlsq.removeHandler(handler)
+        
+        if hasattr(root_nlsq, "_nlsq_initialized"):
+            del root_nlsq._nlsq_initialized
+
     def tearDown(self):
         """Clean up after tests."""
         # Restore original environment
@@ -201,7 +211,9 @@ class TestNLSQLogger(unittest.TestCase):
 
         # In verbose mode, info messages should be shown
         # We can't easily test console output, but we can verify the setup
-        handler = logger.logger.handlers[0]
+        # Handlers are attached to the root 'nlsq' logger
+        root_logger = logging.getLogger("nlsq")
+        handler = root_logger.handlers[0]
         self.assertEqual(handler.level, logging.INFO)
 
     def test_save_iteration_data(self):
