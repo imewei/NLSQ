@@ -7,6 +7,7 @@ and stacked page layout.
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QSettings, Qt, QTimer
@@ -91,8 +92,6 @@ class MainWindow(QMainWindow):
         # In safe mode, skip all deferred timers (recovery check + autosave)
         # to isolate whether the SIGBUS is caused by these callbacks.
         # Usage: NLSQ_SAFE_MODE=1 nlsq-gui
-        import os
-
         if not os.environ.get("NLSQ_SAFE_MODE"):
             # Defer recovery check to the next event-loop iteration so the
             # window has a native surface before any QMessageBox is shown
@@ -450,6 +449,21 @@ class MainWindow(QMainWindow):
         self._autosave.stop()
         self._autosave.clear_recovery()
 
+        # Clean up disk cache directory created by SmartCache
+        self._cleanup_cache()
+
         # Save window state before closing
         self._save_state()
         event.accept()
+
+    def _cleanup_cache(self) -> None:
+        """Remove the .nlsq_cache directory on clean shutdown."""
+        import shutil
+
+        from nlsq.caching.smart_cache import clear_all_caches, get_global_cache
+
+        cache_dir = get_global_cache().cache_dir
+        clear_all_caches()
+        # Remove the directory itself (clear_all_caches only deletes files)
+        if os.path.isdir(cache_dir):
+            shutil.rmtree(cache_dir, ignore_errors=True)
