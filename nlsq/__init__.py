@@ -25,16 +25,58 @@ Examples
 
 """
 
+import faulthandler
 import os
 import sys
 
-# CRITICAL HOTFIX: Enforce CPU backend on macOS to prevent SIGBUS errors
-# This addresses a known conflict between JAX's Metal backend and PySide6.
-# It MUST run before any JAX initialization (which happens in nlsq.core.least_squares).
-if sys.platform == "darwin":
+# Enable faulthandler FIRST so any SIGBUS/SIGSEGV during import prints a
+# traceback to stderr instead of dying silently.  This is deliberately before
+# the environment lock and all library imports below.
+faulthandler.enable()
+
+_NLSQ_DEBUG = bool(os.environ.get("NLSQ_DEBUG"))
+
+
+def _dbg(msg: str) -> None:
+    if _NLSQ_DEBUG:
+        sys.stderr.write(f"[nlsq] {msg}\n")
+        sys.stderr.flush()
+
+
+_dbg("faulthandler enabled")
+
+# =============================================================================
+# PLATFORM-SPECIFIC ENVIRONMENT LOCK
+# GPU acceleration (CUDA) is supported ONLY on Linux.
+# macOS and Windows enforce CPU-only JAX backend.
+# These MUST be set before any JAX, Matplotlib, or Qt modules are initialized.
+# =============================================================================
+if sys.platform != "linux":
+    # Non-Linux CPU enforcement (macOS + Windows)
     os.environ["NLSQ_FORCE_CPU"] = "1"
     os.environ["JAX_PLATFORM_NAME"] = "cpu"
+    os.environ["JAX_PLATFORMS"] = "cpu"
 
+if sys.platform == "darwin":
+    # macOS-specific: Prevent SIGBUS from Metal/OpenGL/XLA conflicts
+    if "XLA_FLAGS" not in os.environ:
+        os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MPLBACKEND"] = "Agg"
+    if "QT_MAC_WANTS_LAYER" not in os.environ:
+        os.environ["QT_MAC_WANTS_LAYER"] = "1"
+    os.environ["QT_API"] = "pyside6"
+    os.environ["PYQTGRAPH_QT_LIB"] = "PySide6"
+    # Force software OpenGL — prevents Metal/OpenGL context conflicts that
+    # cause SIGBUS on macOS 26+ Apple Silicon with PySide6 / Qt 6.10.
+    os.environ.setdefault("QT_OPENGL", "software")
+    os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+
+_dbg("env lock applied")
+
+import numpy as np
+
+_dbg("numpy imported")
 
 # =============================================================================
 # CORE IMPORTS (Always Eager - Required for basic curve_fit usage)
@@ -49,9 +91,6 @@ except ImportError:
 # Standard library imports needed at module level
 from typing import TYPE_CHECKING, Any, Literal
 
-import numpy as np
-
-# Core API - always needed for basic functionality
 from nlsq.callbacks import (
     CallbackBase,
     CallbackChain,
@@ -60,11 +99,19 @@ from nlsq.callbacks import (
     ProgressBar,
     StopOptimization,
 )
+
+_dbg("callbacks imported")
+
 from nlsq.core import functions
 from nlsq.core.least_squares import LeastSquares
 from nlsq.core.minpack import CurveFit, curve_fit
+
+_dbg("core imported")
+
 from nlsq.result import OptimizeResult, OptimizeWarning
 from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
+
+_dbg("types imported")
 
 # =============================================================================
 # LAZY IMPORT SYSTEM
@@ -569,6 +616,7 @@ def fit(
             else None
         )
 
+
         # Create config with multi-start settings
         # Use the correct parameter names from HybridStreamingConfig
         config = HybridStreamingConfig(
@@ -1036,3 +1084,5 @@ def curve_fit_large(
 from nlsq.device import check_gpu_availability
 
 check_gpu_availability()
+
+_dbg("nlsq import complete")

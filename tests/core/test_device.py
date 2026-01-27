@@ -15,15 +15,24 @@ Plus additional tests for:
 """
 
 import subprocess
+import sys
 from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from nlsq.device import check_gpu_availability
+import pytest
+
+import nlsq.device
+from nlsq.device import check_gpu_availability, get_recommended_package
 
 
 class TestCheckGPUAvailability:
     """Test basic GPU detection functionality."""
+
+    @pytest.fixture(autouse=True)
+    def _force_linux_platform(self, monkeypatch):
+        """Ensure tests exercise the full code path by simulating Linux."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "linux")
 
     def test_gpu_available_cpu_jax(self):
         """Test GPU hardware present but JAX running CPU-only.
@@ -134,6 +143,11 @@ class TestCheckGPUAvailability:
 class TestGPUDetectionErrorHandling:
     """Test exception handling for GPU detection errors."""
 
+    @pytest.fixture(autouse=True)
+    def _force_linux_platform(self, monkeypatch):
+        """Ensure tests exercise the full code path by simulating Linux."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "linux")
+
     def test_nvidia_smi_timeout(self):
         """Test subprocess timeout after 5 seconds.
 
@@ -222,6 +236,11 @@ class TestGPUDetectionErrorHandling:
 
 class TestGPUNameSanitization:
     """Test GPU name handling with edge cases."""
+
+    @pytest.fixture(autouse=True)
+    def _force_linux_platform(self, monkeypatch):
+        """Ensure tests exercise the full code path by simulating Linux."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "linux")
 
     def test_gpu_name_with_special_chars(self):
         """Test malicious GPU name with special characters.
@@ -316,6 +335,11 @@ class TestGPUNameSanitization:
 
 class TestImportIntegration:
     """Test import-time behavior."""
+
+    @pytest.fixture(autouse=True)
+    def _force_linux_platform(self, monkeypatch):
+        """Ensure tests exercise the full code path by simulating Linux."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "linux")
 
     def test_import_nlsq_triggers_check(self):
         """Verify check_gpu_availability called on nlsq import.
@@ -438,6 +462,11 @@ class TestImportIntegration:
 class TestGPUDetectionWithMultipleDevices:
     """Test GPU detection with multiple JAX devices."""
 
+    @pytest.fixture(autouse=True)
+    def _force_linux_platform(self, monkeypatch):
+        """Ensure tests exercise the full code path by simulating Linux."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "linux")
+
     def test_multiple_cpu_devices(self):
         """Test multiple CPU devices (no GPU).
 
@@ -543,3 +572,49 @@ class TestGPUDetectionWithMultipleDevices:
             # Verify no output (GPU device found)
             output_str = output.getvalue()
             assert output_str == "", f"Expected no output, got: {output_str}"
+
+
+class TestPlatformGuard:
+    """Test that GPU functions exit early on non-Linux platforms."""
+
+    def test_check_gpu_availability_exits_on_macos(self, monkeypatch):
+        """check_gpu_availability must return False on macOS without calling subprocess."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "darwin")
+        monkeypatch.delenv("NLSQ_SKIP_GPU_CHECK", raising=False)
+
+        with patch("subprocess.run") as mock_subprocess:
+            result = check_gpu_availability()
+
+        assert result is False
+        mock_subprocess.assert_not_called()
+
+    def test_check_gpu_availability_exits_on_windows(self, monkeypatch):
+        """check_gpu_availability must return False on Windows without calling subprocess."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "win32")
+        monkeypatch.delenv("NLSQ_SKIP_GPU_CHECK", raising=False)
+
+        with patch("subprocess.run") as mock_subprocess:
+            result = check_gpu_availability()
+
+        assert result is False
+        mock_subprocess.assert_not_called()
+
+    def test_get_recommended_package_returns_none_on_macos(self, monkeypatch):
+        """get_recommended_package must return None on macOS without calling subprocess."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "darwin")
+
+        with patch("subprocess.run") as mock_subprocess:
+            result = get_recommended_package()
+
+        assert result is None
+        mock_subprocess.assert_not_called()
+
+    def test_get_recommended_package_returns_none_on_windows(self, monkeypatch):
+        """get_recommended_package must return None on Windows without calling subprocess."""
+        monkeypatch.setattr(nlsq.device.sys, "platform", "win32")
+
+        with patch("subprocess.run") as mock_subprocess:
+            result = get_recommended_package()
+
+        assert result is None
+        mock_subprocess.assert_not_called()

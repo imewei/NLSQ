@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import sys
 
 _logger = logging.getLogger(__name__)
 
@@ -100,6 +101,10 @@ def get_recommended_package() -> str | None:
         Package name like "jax[cuda12-local]" or "jax[cuda13-local]",
         or None if no compatible setup found.
     """
+    # GPU acceleration is Linux-only
+    if sys.platform != "linux":
+        return None
+
     _cuda_version, cuda_major = get_system_cuda_version()
     _gpu_name, sm_version = get_gpu_info()
 
@@ -163,6 +168,10 @@ def check_gpu_availability(warn: bool = True) -> bool:
     if os.environ.get("NLSQ_SKIP_GPU_CHECK", "").lower() in ("1", "true", "yes"):
         return False
 
+    # GPU acceleration is Linux-only; skip detection on other platforms
+    if sys.platform != "linux":
+        return False
+
     try:
         gpu_name, sm_version = get_gpu_info()
         cuda_version, cuda_major = get_system_cuda_version()
@@ -223,7 +232,8 @@ def _print_gpu_warning(
         print("  pip uninstall -y jax jaxlib")
         print(f'  pip install "{pkg}"')
 
-    print("\nSee README.md for details.\n")
+    print("\nNote: GPU acceleration is supported on Linux only.")
+    print("See README.md for details.\n")
 
 
 def get_device_info() -> dict:
