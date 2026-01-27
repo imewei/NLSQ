@@ -15,7 +15,6 @@ import sys
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. Import-order guards (no Qt/GUI imports at module level)
 # ---------------------------------------------------------------------------
@@ -30,7 +29,7 @@ class TestImportGuards:
             pytest.skip("macOS-only guard")
 
         # Importing nlsq triggers the hotfix
-        import nlsq  # noqa: F401
+        import nlsq
 
         assert os.environ.get("JAX_PLATFORM_NAME") == "cpu"
         assert os.environ.get("NLSQ_FORCE_CPU") == "1"
@@ -43,9 +42,9 @@ class TestImportGuards:
 
     def test_matplotlib_agg_backend_after_gui_import(self):
         """gui_qt must force matplotlib to the Agg backend."""
-        from nlsq.gui_qt import run_desktop  # noqa: F401
-
         import matplotlib
+
+        from nlsq.gui_qt import run_desktop
 
         assert matplotlib.get_backend().lower() == "agg"
 
@@ -79,6 +78,32 @@ class TestImportGuards:
         # Reset so other tests aren't affected
         _pg_state["configured"] = False
         pg.setConfigOptions(useOpenGL=False)
+
+    def test_pyqtgraph_configured_on_package_import(self, qtbot):
+        """pyqtgraph must be configured eagerly when the plots package loads.
+
+        Direct submodule imports (e.g. ``from nlsq.gui_qt.plots.fit_plot import ...``)
+        bypass ``__getattr__``, so the guard must also run at module level.
+        Verify by re-importing in a subprocess to avoid cross-test state leaks.
+        """
+        import subprocess
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from nlsq.gui_qt.plots import _pg_state; "
+                "assert _pg_state['configured'] is True, "
+                "'pyqtgraph not configured at package load time'",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, (
+            f"pyqtgraph not eagerly configured on import: {result.stderr}"
+        )
 
 
 # ---------------------------------------------------------------------------

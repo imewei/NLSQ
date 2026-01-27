@@ -65,6 +65,14 @@ def _configure_pyqtgraph() -> None:
         _pg_state["configured"] = True
 
 
+# Eagerly configure pyqtgraph when this package is imported (not just when
+# widgets are accessed via __getattr__).  Direct submodule imports like
+# ``from nlsq.gui_qt.plots.fit_plot import FitPlotWidget`` bypass __getattr__
+# but still trigger __init__.py, so this ensures the OpenGL/Metal guard
+# always runs before any pyqtgraph widget is created.
+_configure_pyqtgraph()
+
+
 def __getattr__(name: str):
     """Lazy import plot widgets to avoid importing Qt dependencies at module load time."""
     _configure_pyqtgraph()
