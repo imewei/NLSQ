@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PySide6.QtCore import Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QFontDatabase
 from PySide6.QtWidgets import (
     QFileDialog,
     QGroupBox,
@@ -209,8 +209,10 @@ class ExportPage(QWidget):
 
         self._code_preview = QTextEdit()
         self._code_preview.setReadOnly(True)
+        fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        family = fixed_font.family()
         self._code_preview.setStyleSheet(
-            "font-family: 'Consolas', 'Monaco', 'Courier New', monospace; "
+            f"font-family: '{family}', monospace; "
             "font-size: 12px;"
         )
         self._code_preview.setPlaceholderText(
@@ -370,14 +372,18 @@ class ExportPage(QWidget):
             theme: Theme configuration
         """
         if theme.is_dark:
+            fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+            family = fixed_font.family()
             self._code_preview.setStyleSheet(
-                "font-family: 'Consolas', 'Monaco', 'Courier New', monospace; "
+                f"font-family: '{family}', monospace; "
                 "font-size: 12px; "
                 "background-color: #1e1e1e; color: #d4d4d4;"
             )
         else:
+            fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+            family = fixed_font.family()
             self._code_preview.setStyleSheet(
-                "font-family: 'Consolas', 'Monaco', 'Courier New', monospace; "
+                f"font-family: '{family}', monospace; "
                 "font-size: 12px; "
                 "background-color: #ffffff; color: #000000;"
             )

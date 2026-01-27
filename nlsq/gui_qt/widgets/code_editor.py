@@ -13,6 +13,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
+    QFontDatabase,
     QSyntaxHighlighter,
     QTextCharFormat,
 )
@@ -313,8 +314,7 @@ class CodeEditorWidget(QWidget):
         self._editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
         # Set monospace font
-        font = QFont("Consolas, 'Courier New', monospace")
-        font.setStyleHint(QFont.StyleHint.Monospace)
+        font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
         font.setPointSize(10)
         self._editor.setFont(font)
 
