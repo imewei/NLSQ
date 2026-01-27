@@ -25,6 +25,17 @@ Examples
 
 """
 
+import os
+import sys
+
+# CRITICAL HOTFIX: Enforce CPU backend on macOS to prevent SIGBUS errors
+# This addresses a known conflict between JAX's Metal backend and PySide6.
+# It MUST run before any JAX initialization (which happens in nlsq.core.least_squares).
+if sys.platform == "darwin":
+    os.environ["NLSQ_FORCE_CPU"] = "1"
+    os.environ["JAX_PLATFORM_NAME"] = "cpu"
+
+
 # =============================================================================
 # CORE IMPORTS (Always Eager - Required for basic curve_fit usage)
 # =============================================================================

@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 __all__ = ["run_desktop"]
 
 
+
+# Force Matplotlib to use non-interactive backend to prevent
+# conflicts with PySide6 event loop (SIGBUS on macOS)
+# MUST be done before any other imports that might trigger matplotlib
+import matplotlib
+import os
+# Set backend to Agg
+matplotlib.use("Agg")
+
+
+
 def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) -> None:
     """Global exception hook to handle uncaught exceptions.
 

@@ -7,6 +7,10 @@ All plots support theme switching and are optimized for large datasets (500K+ po
 
 from __future__ import annotations
 
+import logging
+import os
+import sys
+
 __all__: list[str] = [
     "BasePlot",
     "FitPlotWidget",
@@ -20,15 +24,43 @@ __all__: list[str] = [
 _pg_state = {"configured": False}
 
 
+_log = logging.getLogger(__name__)
+
+
 def _configure_pyqtgraph() -> None:
-    """Configure pyqtgraph global settings for optimal performance."""
+    """Configure pyqtgraph global settings for optimal performance.
+
+    On macOS, OpenGL acceleration is disabled by default because Apple
+    deprecated OpenGL in macOS 10.14 and has progressively reduced driver
+    support.  PySide6 (6.5+) uses Metal for its rendering backend, and
+    creating an OpenGL context alongside Metal can produce SIGBUS crashes
+    at the GPU-driver level.
+
+    Set the environment variable ``NLSQ_GUI_USE_OPENGL=1`` to force-enable
+    OpenGL on macOS at your own risk (e.g. for benchmarking).
+    """
     if not _pg_state["configured"]:
         import pyqtgraph as pg
 
+        use_opengl_env = os.getenv("NLSQ_GUI_USE_OPENGL", "").strip().lower()
+        if use_opengl_env:
+            use_opengl = use_opengl_env in {"1", "true", "yes", "on"}
+        else:
+            # macOS deprecated OpenGL in favour of Metal (10.14+).  Mixing an
+            # OpenGL rendering context with PySide6's Metal backend causes
+            # SIGBUS on macOS 26+.  Default to software rendering there.
+            use_opengl = sys.platform != "darwin"
+
+        if not use_opengl and sys.platform == "darwin":
+            _log.info(
+                "pyqtgraph OpenGL disabled on macOS (Apple deprecated OpenGL). "
+                "Set NLSQ_GUI_USE_OPENGL=1 to override."
+            )
+
         pg.setConfigOptions(
-            useOpenGL=True,  # GPU acceleration for large datasets
-            antialias=True,  # Smooth lines
-            enableExperimental=False,  # Stable features only
+            useOpenGL=use_opengl,
+            antialias=True,
+            enableExperimental=False,
         )
         _pg_state["configured"] = True
 
