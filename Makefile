@@ -175,13 +175,13 @@ install:
 install-dev: install
 	@echo "$(BOLD)$(BLUE)Installing development dependencies...$(RESET)"
 	@$(INSTALL_CMD) -e ".[dev,test,docs]"
-	@pre-commit install 2>/dev/null || true
+	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ Dev dependencies installed!$(RESET)"
 
 install-all: install
 	@echo "$(BOLD)$(BLUE)Installing ALL dependencies (dev, test, docs, benchmark)...$(RESET)"
 	@$(INSTALL_CMD) -e ".[all]"
-	@pre-commit install 2>/dev/null || true
+	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ All dependencies installed!$(RESET)"
 
 # ===================
@@ -373,7 +373,7 @@ endif
 gpu-check:
 	@echo "$(BOLD)$(BLUE)Checking GPU Configuration...$(RESET)"
 	@echo "============================="
-	@$(PYTHON) -c "\
+	@$(RUN_CMD) $(PYTHON) -c "\
 import jax; \
 print(f'JAX version: {jax.__version__}'); \
 print(f'JAX backend: {jax.default_backend()}'); \
@@ -446,7 +446,7 @@ else: \
     print('    Not detected (nvidia-smi failed)')" 2>/dev/null || echo "    nvidia-smi not found"
 	@echo ""
 	@echo "  JAX Status:"
-	@$(PYTHON) -c "\
+	@$(RUN_CMD) $(PYTHON) -c "\
 import jax; \
 print(f'    Version: {jax.__version__}'); \
 print(f'    Backend: {jax.default_backend()}'); \
@@ -572,7 +572,7 @@ security-check:
 
 pre-commit-all:
 	@echo "$(BOLD)$(BLUE)Running all pre-commit hooks...$(RESET)"
-	pre-commit run --all-files
+	$(RUN_CMD) pre-commit run --all-files
 
 # ===================
 # Documentation targets
@@ -588,13 +588,13 @@ docs:
 # ===================
 build: clean-build
 	@echo "$(BOLD)$(BLUE)Building distribution packages...$(RESET)"
-	$(PYTHON) -m build
+	$(RUN_CMD) $(PYTHON) -m build
 	@echo "$(BOLD)$(GREEN)✓ Build complete!$(RESET)"
 	@echo "Distributions in dist/"
 
 validate:
 	@echo "$(BOLD)$(BLUE)Validating package build...$(RESET)"
-	$(PYTHON) -m twine check dist/*
+	$(RUN_CMD) $(PYTHON) -m twine check dist/*
 	@echo "$(BOLD)$(GREEN)✓ Package validation passed!$(RESET)"
 
 publish: build validate
@@ -603,7 +603,7 @@ publish: build validate
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		echo "$(BOLD)$(BLUE)Publishing to PyPI...$(RESET)"; \
-		$(PYTHON) -m twine upload dist/*; \
+		$(RUN_CMD) $(PYTHON) -m twine upload dist/*; \
 		echo "$(BOLD)$(GREEN)✓ Published to PyPI!$(RESET)"; \
 	else \
 		echo "Cancelled."; \
@@ -611,18 +611,18 @@ publish: build validate
 
 publish-test:
 	@echo "$(BOLD)$(BLUE)Publishing to TestPyPI...$(RESET)"
-	$(PYTHON) -m twine upload --repository testpypi dist/*
+	$(RUN_CMD) $(PYTHON) -m twine upload --repository testpypi dist/*
 
 # ===================
 # Benchmark targets
 # ===================
 benchmark:
 	@echo "$(BOLD)$(BLUE)Running performance benchmarks...$(RESET)"
-	$(PYTHON) benchmarks/benchmark.py
+	$(RUN_CMD) $(PYTHON) benchmarks/benchmark.py
 
 benchmark-large:
 	@echo "$(BOLD)$(BLUE)Running large dataset benchmarks...$(RESET)"
-	$(PYTHON) benchmarks/benchmark.py --large-datasets
+	$(RUN_CMD) $(PYTHON) benchmarks/benchmark.py --large-datasets
 
 # ===================
 # Cleanup targets
@@ -772,20 +772,20 @@ info:
 	@echo ""
 	@echo "$(BOLD)$(BLUE)JAX Configuration$(RESET)"
 	@echo "=================="
-	@$(PYTHON) -c "import jax; print('JAX version:', jax.__version__); print('Default backend:', jax.default_backend())" 2>/dev/null || echo "JAX not installed"
+	@$(RUN_CMD) $(PYTHON) -c "import jax; print('JAX version:', jax.__version__); print('Default backend:', jax.default_backend())" 2>/dev/null || echo "JAX not installed"
 
 version:
-	@$(PYTHON) -c "import $(PACKAGE_NAME); print($(PACKAGE_NAME).__version__)" 2>/dev/null || \
+	@$(RUN_CMD) $(PYTHON) -c "import $(PACKAGE_NAME); print($(PACKAGE_NAME).__version__)" 2>/dev/null || \
 		echo "$(BOLD)$(RED)Error: Package not installed. Run 'make install' first.$(RESET)"
 
 validate-install:
 	@echo "$(BOLD)$(BLUE)Validating installation...$(RESET)"
-	@$(PYTHON) -c "import $(PACKAGE_NAME); print(f'NLSQ version: {$(PACKAGE_NAME).__version__}'); print('Available modules:', [m for m in dir($(PACKAGE_NAME)) if not m.startswith('_')])"
+	@$(RUN_CMD) $(PYTHON) -c "import $(PACKAGE_NAME); print(f'NLSQ version: {$(PACKAGE_NAME).__version__}'); print('Available modules:', [m for m in dir($(PACKAGE_NAME)) if not m.startswith('_')])"
 	@echo "$(BOLD)$(GREEN)✓ Installation validated!$(RESET)"
 
 debug-modules:
 	@echo "$(BOLD)$(BLUE)Debugging modules...$(RESET)"
-	NLSQ_DEBUG=1 $(PYTHON) -c "from $(PACKAGE_NAME) import stability, recovery, memory_manager, smart_cache; print('All modules imported successfully')"
+	NLSQ_DEBUG=1 $(RUN_CMD) $(PYTHON) -c "from $(PACKAGE_NAME) import stability, recovery, memory_manager, smart_cache; print('All modules imported successfully')"
 
 # ===================
 # Pre-push verification (run before pushing to ensure CI will pass)
@@ -796,7 +796,7 @@ verify:
 	@echo "$(BOLD)$(BLUE)======================================$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Step 1/4: Pre-commit hooks$(RESET)"
-	@pre-commit run --all-files || (echo "$(RED)Pre-commit failed!$(RESET)" && exit 1)
+	@$(RUN_CMD) pre-commit run --all-files || (echo "$(RED)Pre-commit failed!$(RESET)" && exit 1)
 	@echo ""
 	@echo "$(BOLD)Step 2/4: Type checking$(RESET)"
 	@$(RUN_CMD) mypy $(PACKAGE_NAME) || (echo "$(RED)Type check failed!$(RESET)" && exit 1)
@@ -817,7 +817,7 @@ verify-fast:
 	@echo "$(BOLD)$(BLUE)======================================$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Step 1/3: Pre-commit hooks$(RESET)"
-	@pre-commit run --all-files || (echo "$(RED)Pre-commit failed!$(RESET)" && exit 1)
+	@$(RUN_CMD) pre-commit run --all-files || (echo "$(RED)Pre-commit failed!$(RESET)" && exit 1)
 	@echo ""
 	@echo "$(BOLD)Step 2/3: Type checking$(RESET)"
 	@$(RUN_CMD) mypy $(PACKAGE_NAME) || (echo "$(RED)Type check failed!$(RESET)" && exit 1)
@@ -831,7 +831,7 @@ verify-fast:
 
 install-hooks:
 	@echo "$(BOLD)$(BLUE)Installing git hooks...$(RESET)"
-	@pre-commit install
+	@$(RUN_CMD) pre-commit install
 	@rm -f .git/hooks/pre-push  # No pre-push hook - lint runs on commit, CI runs on push
 	@echo "$(BOLD)$(GREEN)✓ Git hooks installed!$(RESET)"
 	@echo ""

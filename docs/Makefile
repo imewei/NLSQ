@@ -4,9 +4,20 @@
 # You can set these variables from the command line, and also
 # from the environment for the first two.
 SPHINXOPTS    ?=
-SPHINXBUILD   ?= sphinx-build
+
+# Detect uv for virtual environment management
+ifneq ($(shell command -v uv 2>/dev/null),)
+    SPHINXBUILD   ?= uv run --extra docs sphinx-build
+else
+    SPHINXBUILD   ?= sphinx-build
+endif
 SOURCEDIR     = .
 BUILDDIR      = _build
+
+# Explicit Sphinx builder targets (replaces unsafe catch-all "%" rule
+# which routes ANY unknown target to Sphinx and breaks when invoked
+# with non-builder names like "clean-all").
+.PHONY: help clean html dirhtml singlehtml latex latexpdf text man linkcheck doctest
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -23,9 +34,7 @@ clean:
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "Clean complete!"
 
-.PHONY: help clean Makefile
-
-# Catch-all target: route all unknown targets to Sphinx using the new
-# "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
-%: Makefile
+# Sphinx builders — only known targets are routed to sphinx-build.
+# $(O) is meant as a shortcut for $(SPHINXOPTS).
+html dirhtml singlehtml latex latexpdf text man linkcheck doctest:
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
