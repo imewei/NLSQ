@@ -19,8 +19,14 @@ import os
 import shutil
 from pathlib import Path
 
-import nbformat
 import pytest
+
+nbformat = pytest.importorskip(
+    "nbformat", reason="nbformat required for notebook tests"
+)
+nbclient = pytest.importorskip(
+    "nbclient", reason="nbclient required for notebook tests"
+)
 from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 

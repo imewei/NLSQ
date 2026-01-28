@@ -5,6 +5,7 @@ Provides common test functions, data generators, and fixtures for
 scientific computing tests.
 """
 
+import importlib
 import os
 import shutil
 
@@ -12,6 +13,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+
+# Dynamically skip gui_qt tests when pytest-qt is not installed
+collect_ignore_glob = []
+if importlib.util.find_spec("pytestqt") is None:
+    collect_ignore_glob.append("gui_qt/*")
 
 # ============================================================================
 # JAX Configuration for Optimal Test Performance (Phase 1 Optimization)

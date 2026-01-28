@@ -361,6 +361,7 @@ class TestMemoryCeiling:
 
     @pytest.mark.slow
     @pytest.mark.serial  # Memory-intensive: runs without parallelism to prevent OOM
+    @pytest.mark.timeout(600)  # JIT compilation for 5000-param model needs >120s
     def test_5000_param_problem_under_500mb(self):
         """Test 5000-parameter problem stays < 500MB peak RSS.
 
@@ -601,6 +602,7 @@ class TestImplicitVsMaterializedScaling:
 
     @pytest.mark.slow
     @pytest.mark.serial  # Memory-intensive: sweeps large param counts with tracemalloc
+    @pytest.mark.timeout(600)  # JIT compilation per param count needs >120s total
     def test_implicit_vs_materialized_scaling(self):
         """Sweep p and measure peak memory and wall-clock time.
 
