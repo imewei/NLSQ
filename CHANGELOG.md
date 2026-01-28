@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **GUI Cache Cleanup**: Ensured `.nlsq_cache` is removed on clean shutdown
+- **Logging Isolation**: Fixed test isolation for logging handlers
+
+### Changed
+
+- **Dependency Hardening**: Added `pytest-benchmark` and updated locked dependencies
+- **Documentation**: Clarified platform-specific GPU support (macOS/Windows enforcement)
+- **Test Suite**: Hardened against environment variability and JIT timeouts
+- **Infrastructure**: Hardened Makefile execution with unified `$(RUN_CMD)` wrappers
+
 ## [0.6.7] - 2026-01-26
 
 ### Security
