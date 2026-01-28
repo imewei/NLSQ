@@ -113,6 +113,7 @@ dev = [
     "pytest>=9.0.0",         # Tested on 9.0.2
     "pytest-cov>=7.0.0",     # Tested on 7.0.0
     "pytest-xdist>=3.8.0",   # Tested on 3.8.0
+    "pytest-benchmark>=5.2.3", # Tested on 5.2.3
     "pytest-rerunfailures>=16.0",  # Retry flaky tests (tested on 16.1)
     "black>=25.0.0",         # Tested on 25.12.0 (CalVer)
     "ruff>=0.14.0",          # Tested on 0.14.14
