@@ -1,5 +1,13 @@
 # Documentation Changelog
 
+## v0.6.8 (2026-01-28)
+- Fixed critical GUI startup crashes on macOS (SIGBUS) caused by OpenGL/Metal conflicts
+- Enhanced JAX platform guards and device detection reliability
+- Unified logging handlers to prevent file lock issues on Windows
+- Hardened test suite against environmental variability and timeouts
+- Fixed GUI cache directory cleanup on shutdown
+
+
 ## v0.6.4 (2026-01-14)
 - Updated version references from v0.7.0 to v0.6.4 across all orchestration documentation
 - Added CurveFit decomposition architecture documentation (v0.6.4 feature)
