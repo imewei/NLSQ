@@ -41,6 +41,7 @@ class TestNLSQLogger(unittest.TestCase):
         root_nlsq = logging.getLogger("nlsq")
         # Close and remove existing handlers to release file locks
         for handler in root_nlsq.handlers[:]:
+            handler.flush()  # Ensure data written before close
             handler.close()
             root_nlsq.removeHandler(handler)
 
@@ -49,6 +50,17 @@ class TestNLSQLogger(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after tests."""
+        # Close and remove all handlers from root nlsq logger to release file locks.
+        # This is critical on Windows where file handles are not released immediately.
+        root_nlsq = logging.getLogger("nlsq")
+        for handler in root_nlsq.handlers[:]:
+            handler.flush()
+            handler.close()
+            root_nlsq.removeHandler(handler)
+
+        if hasattr(root_nlsq, "_nlsq_initialized"):
+            del root_nlsq._nlsq_initialized
+
         # Restore original environment
         for key, value in self.original_env.items():
             if value is not None:
@@ -180,7 +192,9 @@ class TestNLSQLogger(unittest.TestCase):
 
     def test_debug_mode_file_creation(self):
         """Test that debug mode creates log file."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        # Use ignore_cleanup_errors=True for Windows resilience - file handles
+        # may not be immediately released even after flush/close on Windows.
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             os.environ["NLSQ_DEBUG"] = "1"
             os.environ["NLSQ_LOG_DIR"] = tmpdir
 
@@ -193,6 +207,7 @@ class TestNLSQLogger(unittest.TestCase):
             # not the child logger — so we must close it there (needed on Windows).
             root_nlsq = logging.getLogger("nlsq")
             for handler in root_nlsq.handlers[:]:
+                handler.flush()  # Ensure all data is written before close
                 handler.close()
                 root_nlsq.removeHandler(handler)
 
