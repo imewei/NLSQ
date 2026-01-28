@@ -43,7 +43,7 @@ class TestNLSQLogger(unittest.TestCase):
         for handler in root_nlsq.handlers[:]:
             handler.close()
             root_nlsq.removeHandler(handler)
-        
+
         if hasattr(root_nlsq, "_nlsq_initialized"):
             del root_nlsq._nlsq_initialized
 
@@ -188,10 +188,13 @@ class TestNLSQLogger(unittest.TestCase):
             logger.debug("Test debug message")
             logger.info("Test info message")
 
-            # Close logger handlers to release file handles BEFORE reading (needed on Windows)
-            for handler in logger.logger.handlers[:]:
+            # Close ALL handlers on the root nlsq logger to release file locks.
+            # NLSQLogger attaches the FileHandler to the root 'nlsq' logger,
+            # not the child logger — so we must close it there (needed on Windows).
+            root_nlsq = logging.getLogger("nlsq")
+            for handler in root_nlsq.handlers[:]:
                 handler.close()
-                logger.logger.removeHandler(handler)
+                root_nlsq.removeHandler(handler)
 
             # Check that log file was created
             log_files = [f for f in os.listdir(tmpdir) if f.startswith("nlsq_debug_")]
