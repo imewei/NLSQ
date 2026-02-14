@@ -419,7 +419,7 @@ class CodeEditorWidget(QWidget):
             ast.parse(code)
             return True, "Syntax valid"
         except SyntaxError as e:
-            line = e.lineno if e.lineno else 1
+            line = e.lineno or 1
             return False, f"Line {line}: {e.msg}"
 
     def set_theme(self, theme: ThemeConfig) -> None:

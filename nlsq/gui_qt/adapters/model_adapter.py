@@ -704,7 +704,7 @@ def get_latex_equation(model_name: str) -> str:
     # Handle polynomial with degree in name
     if model_name.startswith("polynomial_degree_"):
         try:
-            degree = int(model_name.split("_")[-1])
+            degree = int(model_name.rsplit("_", maxsplit=1)[-1])
             return get_polynomial_latex(degree)
         except (ValueError, IndexError):
             pass

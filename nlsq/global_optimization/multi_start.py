@@ -403,7 +403,7 @@ class MultiStartOrchestrator:
                 xdata,
                 ydata,
                 p0=p0,
-                bounds=bounds if bounds else (-np.inf, np.inf),
+                bounds=bounds or (-np.inf, np.inf),
                 **kwargs,
             )
 

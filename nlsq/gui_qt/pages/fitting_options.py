@@ -355,7 +355,7 @@ class FittingOptionsPage(QWidget):
         # Update p0 and bounds from param config
         if not self._param_config.is_auto_p0():
             p0, bounds = self._param_config.get_values()
-            state.p0 = p0 if p0 else None
+            state.p0 = p0 or None
             state.bounds = bounds
             state.auto_p0 = False
         else:

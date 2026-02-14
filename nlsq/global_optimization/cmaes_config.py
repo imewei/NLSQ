@@ -282,8 +282,8 @@ def estimate_cmaes_memory_gb(
     >>> estimate_cmaes_memory_gb(10_000_000, popsize=16, data_chunk_size=50000)
     0.005960464477539062
     """
-    eff_pop = population_batch_size if population_batch_size else popsize
-    eff_data = data_chunk_size if data_chunk_size else n_data
+    eff_pop = population_batch_size if population_batch_size is not None else popsize
+    eff_data = data_chunk_size if data_chunk_size is not None else n_data
 
     # Memory per candidate during fitness evaluation:
     # - predictions array: eff_data * 8 bytes (float64)

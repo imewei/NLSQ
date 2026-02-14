@@ -494,11 +494,11 @@ class LeastSquares:
             )
 
         # Validate method
-        if method not in ["trf"]:
+        if method != "trf":
             raise ValueError("`method` must be 'trf'")
 
         # Validate jac parameter
-        if jac not in [None] and not callable(jac):
+        if jac is not None and not callable(jac):
             raise ValueError("`jac` must be None or callable.")
 
         # Validate verbose level
@@ -940,7 +940,7 @@ class LeastSquares:
                 tr_options.copy(),
                 verbose,
                 timeit,
-                solver=tr_solver if tr_solver else "exact",
+                solver=tr_solver or "exact",
                 diagnostics=self.diagnostics if self.enable_diagnostics else None,
                 callback=callback,
                 **timeout_kwargs,

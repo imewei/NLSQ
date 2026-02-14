@@ -380,7 +380,7 @@ def execute_fit(
             ydata=ydata,
             p0=p0,
             sigma=sigma,
-            bounds=bounds if bounds else (-float("inf"), float("inf")),
+            bounds=bounds or (-float("inf"), float("inf")),
             workflow=workflow,
             goal=goal,
             **fit_kwargs,

@@ -761,7 +761,7 @@ def _fit_with_config(
                 ydata,
                 p0=np.asarray(p0) if p0 is not None else None,
                 bounds=bounds,
-                method=method if method else "trf",
+                method=method or "trf",
                 **kwargs,
             )
 
@@ -980,7 +980,7 @@ def _fit_with_preset(  # noqa: C901
                 ydata,
                 p0=np.asarray(p0) if p0 is not None else None,
                 bounds=bounds,
-                method=method if method else "trf",
+                method=method or "trf",
                 multistart=enable_multistart,
                 n_starts=n_starts if enable_multistart else 0,
                 **kwargs,
@@ -3547,7 +3547,7 @@ class CurveFit:
             "Starting curve fit",
             n_params=n,
             n_data_points=len(ydata),
-            method=method if method else "trf",
+            method=method or "trf",
             solver=solver,
             batch_size=batch_size if solver == "minibatch" else None,
             has_bounds=has_bounds,

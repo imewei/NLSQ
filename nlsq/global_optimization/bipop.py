@@ -76,9 +76,7 @@ class BIPOPRestarter:
     _use_large_pop: bool = field(default=True, init=False)
     _best_solution: jax.Array | None = field(default=None, init=False)
     _best_fitness: float = field(default=-float("inf"), init=False)
-    _rng: np.random.Generator = field(
-        default_factory=lambda: np.random.default_rng(), init=False
-    )
+    _rng: np.random.Generator = field(default_factory=np.random.default_rng, init=False)
 
     @property
     def exhausted(self) -> bool:

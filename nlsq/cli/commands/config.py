@@ -68,7 +68,7 @@ def run_config(
     # Copy workflow template
     if copy_workflow:
         src = get_workflow_template()
-        dest_name = output if output else "workflow_config.yaml"
+        dest_name = output or "workflow_config.yaml"
         dest = cwd / dest_name
 
         if dest.exists() and not force:
@@ -84,7 +84,7 @@ def run_config(
     # Copy custom model template
     if copy_model:
         src = get_custom_model_template()
-        dest_name = output if output else "custom_model.py"
+        dest_name = output or "custom_model.py"
         dest = cwd / dest_name
 
         if dest.exists() and not force:
