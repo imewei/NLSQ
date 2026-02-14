@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Dependency Security Upgrade**: Refreshed `uv.lock` to resolve 2 CVEs (failing daily audit since 2026-02-11)
+  - **cryptography**: 46.0.4 → 46.0.5 — fixes CVE-2026-26007 (ECDSA/ECDH missing subgroup validation on SECT curves)
+  - **pillow**: 12.1.0 → 12.1.1 — fixes CVE-2026-25990 (out-of-bounds write in PSD image loading)
+
 ### Fixed
 
 - **GUI Cache Cleanup**: Ensured `.nlsq_cache` is removed on clean shutdown
