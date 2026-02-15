@@ -1,0 +1,17 @@
+{
+  "version": "0.3.0-beta.3",
+  "created_at": "2026-02-14T18:24:57.635913",
+  "platform": {
+    "system": "Darwin",
+    "python_version": "3.13.9",
+    "jax_version": "0.9.0.1"
+  },
+  "metrics": {
+    "cold_jit_ms": 905.0227499974426,
+    "hot_path_ms": 384.03860840189736
+  },
+  "thresholds": {
+    "cold_jit_regression_factor": 1.1,
+    "hot_path_regression_factor": 1.1
+  }
+}
