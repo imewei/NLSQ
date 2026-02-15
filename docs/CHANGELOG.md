@@ -1,5 +1,8 @@
 # Documentation Changelog
 
+## v0.6.9 (2026-02-14)
+- Bump version to 0.6.9
+
 ## v0.6.8 (2026-01-28)
 - Fixed critical GUI startup crashes on macOS (SIGBUS) caused by OpenGL/Metal conflicts
 - Enhanced JAX platform guards and device detection reliability
