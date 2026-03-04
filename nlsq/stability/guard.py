@@ -618,6 +618,10 @@ class NumericalStabilityGuard:
         # Robust standard deviation estimate
         robust_std = 1.4826 * mad
 
+        # Guard: if MAD is zero (constant residuals), no outliers possible
+        if robust_std < jnp.finfo(residuals.dtype).eps:
+            return residuals, False
+
         # Detect outliers (more than 5 robust std from median)
         outlier_mask = jnp.abs(residuals - median_res) > 5 * robust_std
         has_outliers = jnp.any(outlier_mask)
