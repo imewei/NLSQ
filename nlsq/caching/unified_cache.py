@@ -24,6 +24,7 @@ Design Goals
 
 import hashlib
 import logging
+import threading
 import time
 import weakref
 from collections import OrderedDict
@@ -397,10 +398,11 @@ class UnifiedCache:
 
 # Global unified cache instance
 _global_unified_cache: UnifiedCache | None = None
+_global_unified_cache_lock = threading.Lock()
 
 
 def get_global_cache() -> UnifiedCache:
-    """Get or create global unified cache instance.
+    """Get or create global unified cache instance (thread-safe).
 
     Returns
     -------
@@ -408,9 +410,12 @@ def get_global_cache() -> UnifiedCache:
         Global unified cache instance
     """
     global _global_unified_cache  # noqa: PLW0603
-    if _global_unified_cache is None:
-        _global_unified_cache = UnifiedCache(maxsize=128, enable_stats=True)
-    return _global_unified_cache
+    if _global_unified_cache is not None:  # Fast path (no lock)
+        return _global_unified_cache
+    with _global_unified_cache_lock:
+        if _global_unified_cache is None:  # Double-check under lock
+            _global_unified_cache = UnifiedCache(maxsize=128, enable_stats=True)
+        return _global_unified_cache
 
 
 def clear_cache():
