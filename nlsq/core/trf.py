@@ -373,7 +373,16 @@ class BoundsContext:
         else:
             x_scale = jnp.asarray(x_scale)
 
-        x_offset = (lb + ub) / 2.0
+        # Handle infinite bounds: when both are infinite the midpoint is 0;
+        # when only one is infinite the offset is the finite bound.
+        both_finite = jnp.isfinite(lb) & jnp.isfinite(ub)
+        lb_finite_only = jnp.isfinite(lb) & ~jnp.isfinite(ub)
+        ub_finite_only = ~jnp.isfinite(lb) & jnp.isfinite(ub)
+        x_offset = jnp.where(
+            both_finite,
+            (lb + ub) / 2.0,
+            jnp.where(lb_finite_only, lb, jnp.where(ub_finite_only, ub, 0.0)),
+        )
         lb_scaled = (lb - x_offset) / x_scale
         ub_scaled = (ub - x_offset) / x_scale
 
@@ -749,9 +758,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             state["jac_scale"] = True
         else:
             # T022: Convert scale to JAX arrays once at entry to avoid repeated conversion
+            scale_arr = jnp.asarray(x_scale)
+            # Guard against zero scale values to avoid Inf in scale_inv
+            safe_scale = jnp.where(scale_arr == 0, 1.0, scale_arr)
             state["scale"], state["scale_inv"] = (
-                jnp.asarray(x_scale),
-                jnp.asarray(1 / x_scale),
+                scale_arr,
+                jnp.asarray(1 / safe_scale),
             )
             state["jac_scale"] = False
 

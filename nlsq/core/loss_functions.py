@@ -373,7 +373,8 @@ class LossFunctionsJIT:
     def construct_all_loss_functions(self):
         loss_funcs = {}
         for key, loss in self.IMPLEMENTED_LOSSES.items():
-            loss_funcs[key] = self.construct_single_loss_function(loss)
+            if loss is not None:
+                loss_funcs[key] = self.construct_single_loss_function(loss)
 
         return loss_funcs
 
