@@ -34,6 +34,35 @@ def test_compute_svd_with_fallback_cpu_path(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.stability
 @pytest.mark.unit
+def test_compute_svd_with_fallback_cuda_ffi_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test fallback triggers for JAX >=0.8 CUDA FFI errors (cusolver_gesvdj_ffi)."""
+    module = importlib.import_module("nlsq.stability.svd_fallback")
+
+    calls = {"count": 0}
+
+    def _fake_svd(matrix, full_matrices=False):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError(
+                "NOT_FOUND: No FFI handler registered for "
+                "cusolver_gesvdj_ffi on a platform CUDA (canonical cuda)"
+            )
+        return jnp.eye(2), jnp.array([2.0, 1.0]), jnp.eye(2)
+
+    monkeypatch.setattr(module, "jax_svd", _fake_svd)
+
+    with pytest.warns(RuntimeWarning):
+        U, s, V = module.compute_svd_with_fallback(jnp.eye(2), full_matrices=False)
+
+    assert np.allclose(np.array(s), np.array([2.0, 1.0]))
+    assert U.shape == (2, 2)
+    assert V.shape == (2, 2)
+
+
+@pytest.mark.stability
+@pytest.mark.unit
 def test_compute_svd_with_fallback_numpy_last_resort(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -62,3 +91,38 @@ def test_compute_svd_with_fallback_numpy_last_resort(
     assert V.shape == (2, 2)
     assert numpy_called["hit"] is True
     assert len(warning_record) >= 1
+
+
+@pytest.mark.stability
+@pytest.mark.unit
+class TestIsGpuError:
+    """Unit tests for the _is_gpu_error helper."""
+
+    def test_legacy_cusolver(self) -> None:
+        from nlsq.stability.svd_fallback import _is_gpu_error
+
+        assert _is_gpu_error("cuSolver internal error") is True
+
+    def test_ffi_cusolver_gesvdj(self) -> None:
+        from nlsq.stability.svd_fallback import _is_gpu_error
+
+        msg = (
+            "NOT_FOUND: No FFI handler registered for "
+            "cusolver_gesvdj_ffi on a platform CUDA (canonical cuda)"
+        )
+        assert _is_gpu_error(msg) is True
+
+    def test_cublas_error(self) -> None:
+        from nlsq.stability.svd_fallback import _is_gpu_error
+
+        assert _is_gpu_error("cuBLAS operation failed") is True
+
+    def test_internal_error(self) -> None:
+        from nlsq.stability.svd_fallback import _is_gpu_error
+
+        assert _is_gpu_error("INTERNAL: solver failed") is True
+
+    def test_unrelated_error(self) -> None:
+        from nlsq.stability.svd_fallback import _is_gpu_error
+
+        assert _is_gpu_error("ValueError: shapes don't match") is False

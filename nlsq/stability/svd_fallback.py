@@ -21,6 +21,22 @@ import jax.numpy as jnp
 from jax.scipy.linalg import svd as jax_svd
 
 
+def _is_gpu_error(error_msg: str) -> bool:
+    """Check if an error message indicates a GPU/CUDA-specific failure.
+
+    Detects both legacy cuSolver errors and newer JAX CUDA FFI errors:
+    - Legacy: "cuSolver internal error" (JAX <0.8)
+    - FFI: "No FFI handler registered for cusolver_gesvdj_ffi" (JAX >=0.8)
+    """
+    msg_lower = error_msg.lower()
+    return (
+        "cusolver" in msg_lower
+        or "cublas" in msg_lower
+        or ("ffi" in msg_lower and "cuda" in msg_lower)
+        or "INTERNAL" in error_msg
+    )
+
+
 def with_cpu_fallback(func):
     """Decorator to add CPU fallback for GPU operations that might fail."""
 
@@ -30,7 +46,7 @@ def with_cpu_fallback(func):
             # Try GPU first
             return func(*args, **kwargs)
         except Exception as e:
-            if "cuSolver" in str(e) or "INTERNAL" in str(e):
+            if _is_gpu_error(str(e)):
                 warnings.warn(
                     f"GPU operation failed ({e}), falling back to CPU",
                     RuntimeWarning,
@@ -97,9 +113,9 @@ def compute_svd_with_fallback(J_h, full_matrices=False):
         U, s, Vt = jax_svd(J_h, full_matrices=full_matrices)
         return U, s, Vt.T
     except Exception as gpu_error:
-        # Check if it's a cuSolver error
+        # Check if it's a GPU-specific error (cuSolver or CUDA FFI)
         error_msg = str(gpu_error)
-        if "cuSolver" in error_msg or "INTERNAL" in error_msg:
+        if _is_gpu_error(error_msg):
             warnings.warn(
                 "GPU SVD failed with cuSolver error, attempting CPU fallback",
                 RuntimeWarning,
