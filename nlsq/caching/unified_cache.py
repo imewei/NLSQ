@@ -11,7 +11,7 @@ Key Features
 - LRU eviction with configurable maxsize
 - Optional two-tier caching (memory + disk)
 - Weak references to avoid memory leaks
-- Thread-safe operations
+- Thread-safe operations via per-instance threading.Lock
 - Async disk writes (deferred to Phase 2)
 
 Design Goals
@@ -48,6 +48,7 @@ class UnifiedCache:
     - LRU eviction when maxsize exceeded
     - Optional disk caching (two-tier architecture)
     - Weak references to functions to prevent memory leaks
+    - Thread-safe operations via per-instance lock
 
     Attributes
     ----------
@@ -111,6 +112,9 @@ class UnifiedCache:
             }
         else:
             self._stats = {}
+
+        # Per-instance lock for thread-safe cache operations
+        self._lock = threading.Lock()
 
     def _get_function_hash(self, func: Callable) -> str:
         """Generate stable hash for a function.
@@ -258,6 +262,10 @@ class UnifiedCache:
     ) -> Callable:
         """Get cached compiled function or compile if not cached.
 
+        Thread-safe: the lock is held for dict operations only and released
+        during expensive JIT compilation to avoid serializing parallel
+        compilations.
+
         Parameters
         ----------
         func : Callable
@@ -276,63 +284,53 @@ class UnifiedCache:
         compiled_func : Callable
             JIT-compiled function (from cache or newly compiled)
         """
-        # Generate cache key
+        # Generate cache key (pure computation, no shared state)
         cache_key = self._generate_cache_key(func, args, kwargs, static_argnums)
 
-        # Check cache (also moves to end for LRU)
-        if cache_key in self._cache:
+        # Check cache under lock
+        with self._lock:
+            if cache_key in self._cache:
+                if self.enable_stats:
+                    self._stats["hits"] += 1
+                self._cache.move_to_end(cache_key)
+                logger.debug(f"Cache hit for key {cache_key[:8]}...")
+                return self._cache[cache_key]
+
+        # Cache miss -- update stats under lock
+        with self._lock:
             if self.enable_stats:
-                self._stats["hits"] += 1
+                self._stats["misses"] += 1
+                self._stats["compilations"] += 1
 
-            # Move to end (most recently used)
-            self._cache.move_to_end(cache_key)
-
-            logger.debug(f"Cache hit for key {cache_key[:8]}...")
-            return self._cache[cache_key]
-
-        # Cache miss: compile function
-        if self.enable_stats:
-            self._stats["misses"] += 1
-            self._stats["compilations"] += 1
-
+        # Compile outside lock (expensive, don't serialize)
         logger.debug(f"Cache miss for key {cache_key[:8]}..., compiling")
-
-        # Measure compilation time
         start_time = time.time()
-
         compiled_func = jax.jit(
             func, static_argnums=static_argnums, donate_argnums=donate_argnums
         )
-
         compile_time_ms = (time.time() - start_time) * 1000
-        self._compile_times[cache_key] = compile_time_ms
 
-        # Check if we need to evict (LRU)
-        if len(self._cache) >= self.maxsize:
-            # Remove oldest item (FIFO within LRU)
-            oldest_key = next(iter(self._cache))
-            del self._cache[oldest_key]
+        # Store under lock
+        with self._lock:
+            self._compile_times[cache_key] = compile_time_ms
 
-            # Clean up associated data
-            if oldest_key in self._compile_times:
-                del self._compile_times[oldest_key]
+            if len(self._cache) >= self.maxsize:
+                oldest_key = next(iter(self._cache))
+                del self._cache[oldest_key]
+                if oldest_key in self._compile_times:
+                    del self._compile_times[oldest_key]
+                if self.enable_stats:
+                    self._stats["evictions"] += 1
+                logger.debug(f"Evicted cache entry {oldest_key[:8]}... (LRU)")
+
+            self._cache[cache_key] = compiled_func
+
+            func_hash = self._get_function_hash(func)
+            if func_hash not in self._func_refs:
+                self._func_refs[func_hash] = weakref.ref(func)
 
             if self.enable_stats:
-                self._stats["evictions"] += 1
-
-            logger.debug(f"Evicted cache entry {oldest_key[:8]}... (LRU)")
-
-        # Store in cache
-        self._cache[cache_key] = compiled_func
-
-        # Store weak reference to function to avoid memory leaks
-        func_hash = self._get_function_hash(func)
-        if func_hash not in self._func_refs:
-            self._func_refs[func_hash] = weakref.ref(func)
-
-        # Update cache size stat
-        if self.enable_stats:
-            self._stats["cache_size"] = len(self._cache)
+                self._stats["cache_size"] = len(self._cache)
 
         return compiled_func
 
@@ -354,32 +352,34 @@ class UnifiedCache:
         if not self.enable_stats:
             return {"enabled": False}
 
-        total_requests = self._stats["hits"] + self._stats["misses"]
-        hit_rate = self._stats["hits"] / total_requests if total_requests > 0 else 0.0
-
-        total_compile_time_ms = sum(self._compile_times.values())
-
-        return {
-            **self._stats,
-            "hit_rate": hit_rate,
-            "total_requests": total_requests,
-            "compile_time_ms": total_compile_time_ms,
-        }
+        with self._lock:
+            total_requests = self._stats["hits"] + self._stats["misses"]
+            hit_rate = (
+                self._stats["hits"] / total_requests if total_requests > 0 else 0.0
+            )
+            total_compile_time_ms = sum(self._compile_times.values())
+            return {
+                **self._stats,
+                "hit_rate": hit_rate,
+                "total_requests": total_requests,
+                "compile_time_ms": total_compile_time_ms,
+            }
 
     def clear(self):
         """Clear all cached compilations and reset statistics."""
-        self._cache.clear()
-        self._func_refs.clear()
-        self._compile_times.clear()
+        with self._lock:
+            self._cache.clear()
+            self._func_refs.clear()
+            self._compile_times.clear()
 
-        if self.enable_stats:
-            self._stats = {
-                "hits": 0,
-                "misses": 0,
-                "compilations": 0,
-                "evictions": 0,
-                "cache_size": 0,
-            }
+            if self.enable_stats:
+                self._stats = {
+                    "hits": 0,
+                    "misses": 0,
+                    "compilations": 0,
+                    "evictions": 0,
+                    "cache_size": 0,
+                }
 
         logger.info("Unified cache cleared")
 
@@ -393,7 +393,9 @@ class UnifiedCache:
                 f"compilations={stats['compilations']})"
             )
         else:
-            return f"UnifiedCache(size={len(self._cache)}/{self.maxsize})"
+            with self._lock:
+                size = len(self._cache)
+            return f"UnifiedCache(size={size}/{self.maxsize})"
 
 
 # Global unified cache instance
