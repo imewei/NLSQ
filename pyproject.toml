@@ -58,10 +58,17 @@ requires-python = ">=3.12"
 #     make install-jax-gpu-cuda13   # Force CUDA 13 (requires system CUDA 13.x)
 #     make install-jax-gpu-cuda12   # Force CUDA 12 (requires system CUDA 12.x)
 #
-#   Manual install (uses system CUDA):
-#     pip uninstall -y jax jaxlib
+#   Manual install (uses system CUDA — uninstall ALL existing JAX/CUDA packages first):
+#     pip uninstall -y jax jaxlib jax-cuda13-plugin jax-cuda13-pjrt jax-cuda12-plugin jax-cuda12-pjrt
 #     pip install "jax[cuda13-local]"  # If system has CUDA 13.x
 #     pip install "jax[cuda12-local]"  # If system has CUDA 12.x
+#
+#   Or with nlsq extras (ensures matching versions):
+#     pip install "nlsq[gpu_cuda13]"   # CUDA 13
+#     pip install "nlsq[gpu_cuda12]"   # CUDA 12
+#
+#   IMPORTANT: Never install both cuda12 and cuda13 plugins simultaneously.
+#   Only ONE CUDA plugin set can be active — having both causes PJRT registration conflicts.
 #
 #   GPU Compatibility:
 #     CUDA 13 (SM 7.5+): RTX 20xx/30xx/40xx, T4, A100, H100, L40
@@ -85,15 +92,16 @@ dependencies = [
     "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.1)
     "scipy>=1.16.0",          # Tested on 1.16.3
 
-    # JAX ecosystem (>=0.8.3)
+    # JAX ecosystem (>=0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
-    "jax>=0.8.3",             # JAX >=0.8.3 (tested on 0.9.0)
-    "jaxlib>=0.8.3",          # JAXlib >=0.8.3 (tested on 0.9.0)
+    # IMPORTANT: CUDA plugin versions must exactly match jaxlib version
+    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.9.1)
+    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.9.1)
                                # Platform-specific extras installed separately:
-                               #   Linux CPU:  pip install "jax[cpu]>=0.8.3"
+                               #   Linux CPU:  pip install "jax[cpu]>=0.8.0"
                                #   Linux GPU:  make install-jax-gpu (recommended)
-                               #   macOS:      pip install "jax[cpu]>=0.8.3" (CPU only)
-                               #   Windows:    pip install "jax[cpu]>=0.8.3" (CPU only)
+                               #   macOS:      pip install "jax[cpu]>=0.8.0" (CPU only)
+                               #   Windows:    pip install "jax[cpu]>=0.8.0" (CPU only)
     "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.6)
 
     # Visualization and monitoring
@@ -170,6 +178,16 @@ gui_qt = [
     "pyqtgraph>=0.14.0",           # GPU-accelerated scientific plotting (tested on 0.14.0)
     "pyyaml>=6.0.3",               # YAML configuration support
     "pytest-qt>=4.5.0",            # Qt widget testing (tested on 4.5.0)
+]
+gpu_cuda13 = [
+    # CUDA 13 GPU support — versions must match jaxlib
+    "jax-cuda13-plugin>=0.8.0",    # CUDA 13 plugin (must match jaxlib version)
+    "jax-cuda13-pjrt>=0.8.0",     # CUDA 13 PJRT runtime (must match jaxlib version)
+]
+gpu_cuda12 = [
+    # CUDA 12 GPU support — versions must match jaxlib
+    "jax-cuda12-plugin>=0.8.0",    # CUDA 12 plugin (must match jaxlib version)
+    "jax-cuda12-pjrt>=0.8.0",     # CUDA 12 PJRT runtime (must match jaxlib version)
 ]
 global = [
     # CMA-ES global optimization using evosax (JAX-native evolution strategies)

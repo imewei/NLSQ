@@ -299,8 +299,8 @@ ifeq ($(PLATFORM),linux)
 	fi; \
 	echo "GPU SM version: $$SM_DISPLAY (compatible with CUDA 13)"
 	@echo ""
-	@echo "Step 1/2: Uninstalling CPU-only JAX..."
-	@$(UNINSTALL_CMD) jax jaxlib 2>/dev/null || true
+	@echo "Step 1/2: Uninstalling existing JAX and CUDA plugins..."
+	@$(UNINSTALL_CMD) jax jaxlib jax-cuda12-plugin jax-cuda12-pjrt jax-cuda13-plugin jax-cuda13-pjrt 2>/dev/null || true
 	@echo ""
 	@echo "Step 2/2: Installing JAX with system CUDA 13..."
 	@echo "Command: $(INSTALL_CMD) $(JAX_GPU_CUDA13_PKG)"
@@ -351,8 +351,8 @@ ifeq ($(PLATFORM),linux)
 	fi; \
 	echo "GPU SM version: $$SM_DISPLAY (compatible with CUDA 12)"
 	@echo ""
-	@echo "Step 1/2: Uninstalling CPU-only JAX..."
-	@$(UNINSTALL_CMD) jax jaxlib 2>/dev/null || true
+	@echo "Step 1/2: Uninstalling existing JAX and CUDA plugins..."
+	@$(UNINSTALL_CMD) jax jaxlib jax-cuda12-plugin jax-cuda12-pjrt jax-cuda13-plugin jax-cuda13-pjrt 2>/dev/null || true
 	@echo ""
 	@echo "Step 2/2: Installing JAX with system CUDA 12..."
 	@echo "Command: $(INSTALL_CMD) $(JAX_GPU_CUDA12_PKG)"
