@@ -33,7 +33,7 @@ def _is_gpu_error(error_msg: str) -> bool:
         "cusolver" in msg_lower
         or "cublas" in msg_lower
         or ("ffi" in msg_lower and "cuda" in msg_lower)
-        or "INTERNAL" in error_msg
+        or "internal error" in msg_lower
     )
 
 

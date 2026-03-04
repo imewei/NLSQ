@@ -36,6 +36,7 @@ import os
 import sys
 import time
 import uuid
+from collections import deque
 from contextlib import contextmanager
 from datetime import datetime
 from enum import IntEnum
@@ -128,7 +129,7 @@ class NLSQLogger:
         self.timers: dict[str, float] = {}
 
         # Optimization tracking
-        self.optimization_history: list[dict[str, Any]] = []
+        self.optimization_history: deque[dict[str, Any]] = deque(maxlen=10000)
 
         # Register custom log level
         if not hasattr(logging, "PERFORMANCE"):

@@ -128,7 +128,7 @@ class MemoryManager:
         # This enables move_to_end() for recently used arrays and
         # popitem(last=False) for LRU eviction when at capacity.
         self.memory_pool: OrderedDict[tuple, np.ndarray] = OrderedDict()
-        self.allocation_history: list = []
+        self.allocation_history: deque[dict] = deque(maxlen=1000)
         self.gc_threshold = gc_threshold
         self.disable_padding = disable_padding
 

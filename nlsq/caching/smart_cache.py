@@ -26,7 +26,7 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
-import builtins
+
 import contextlib
 
 import jax.numpy as jnp
@@ -255,7 +255,7 @@ class SmartCache:
                 except Exception as e:
                     warnings.warn(f"Could not load from disk cache: {e}")
                     # Remove corrupted cache file
-                    with contextlib.suppress(builtins.BaseException):
+                    with contextlib.suppress(OSError):
                         os.remove(cache_file)
 
         if self.enable_stats:
@@ -339,7 +339,7 @@ class SmartCache:
             if self.disk_cache_enabled:
                 cache_file = os.path.join(self.cache_dir, f"{key}.npz")
                 if os.path.exists(cache_file):
-                    with contextlib.suppress(builtins.BaseException):
+                    with contextlib.suppress(OSError):
                         os.remove(cache_file)
 
     def get_stats(self) -> dict:
