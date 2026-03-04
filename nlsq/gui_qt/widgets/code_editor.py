@@ -451,9 +451,10 @@ class CodeEditorWidget(QWidget):
         self._editor.setReadOnly(read_only)
 
     def setMaximumHeight(self, height: int) -> None:
-        """Set maximum height.
+        """Set maximum height for both the widget and its internal editor.
 
         Args:
             height: Maximum height in pixels
         """
+        super().setMaximumHeight(height)
         self._editor.setMaximumHeight(height)
