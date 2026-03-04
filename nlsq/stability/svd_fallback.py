@@ -26,15 +26,14 @@ def _is_gpu_error(error_msg: str) -> bool:
     Detects both legacy cuSolver errors and newer JAX CUDA FFI errors:
     - Legacy: "cuSolver internal error" (JAX <0.8)
     - FFI: "No FFI handler registered for cusolver_gesvdj_ffi" (JAX >=0.8)
-    - XLA status: "INTERNAL: solver failed" (gRPC/XLA status codes)
+    - XLA status: "INTERNAL: ..." (gRPC/XLA status code prefix, case-sensitive)
     """
     msg_lower = error_msg.lower()
     return (
         "cusolver" in msg_lower
         or "cublas" in msg_lower
         or ("ffi" in msg_lower and "cuda" in msg_lower)
-        or "internal error" in msg_lower
-        or msg_lower.startswith("internal:")
+        or error_msg.startswith("INTERNAL:")
     )
 
 

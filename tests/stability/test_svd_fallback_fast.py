@@ -117,10 +117,20 @@ class TestIsGpuError:
 
         assert _is_gpu_error("cuBLAS operation failed") is True
 
-    def test_internal_error(self) -> None:
+    def test_xla_internal_status(self) -> None:
         from nlsq.stability.svd_fallback import _is_gpu_error
 
         assert _is_gpu_error("INTERNAL: solver failed") is True
+
+    def test_generic_internal_error_not_matched(self) -> None:
+        from nlsq.stability.svd_fallback import _is_gpu_error
+
+        assert _is_gpu_error("internal error in parsing") is False
+
+    def test_lowercase_internal_not_matched(self) -> None:
+        from nlsq.stability.svd_fallback import _is_gpu_error
+
+        assert _is_gpu_error("internal: something went wrong") is False
 
     def test_unrelated_error(self) -> None:
         from nlsq.stability.svd_fallback import _is_gpu_error
