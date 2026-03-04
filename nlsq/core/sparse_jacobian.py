@@ -97,7 +97,17 @@ class SparseJacobianComputer:
 
         # Use finite differences to detect sparsity
         eps = FINITE_DIFF_REL_STEP
-        f0 = func(xdata_sliced, *x0)
+        f0 = np.asarray(func(xdata_sliced, *x0))
+
+        # Validate that function output matches the subsampled xdata size.
+        # Closure-based model functions may ignore xdata and always return
+        # full-size output, making sparsity detection inapplicable.
+        if f0.shape[0] != n_data:
+            raise ValueError(
+                f"Function output size ({f0.shape[0]}) does not match "
+                f"xdata sample size ({n_data}). The function may use "
+                f"closure-captured data instead of xdata."
+            )
 
         for i in range(n_params):
             # OPT-6: Use JAX functional update instead of copy + mutate
