@@ -264,7 +264,8 @@ class UnifiedCache:
 
         Thread-safe: the lock is held for dict operations only and released
         during expensive JIT compilation to avoid serializing parallel
-        compilations.
+        compilations.  A re-check after compilation prevents duplicate
+        stores when multiple threads miss on the same key simultaneously.
 
         Parameters
         ----------
@@ -287,7 +288,7 @@ class UnifiedCache:
         # Generate cache key (pure computation, no shared state)
         cache_key = self._generate_cache_key(func, args, kwargs, static_argnums)
 
-        # Check cache under lock
+        # Check cache under lock; record miss stats in the same acquisition
         with self._lock:
             if cache_key in self._cache:
                 if self.enable_stats:
@@ -296,8 +297,7 @@ class UnifiedCache:
                 logger.debug(f"Cache hit for key {cache_key[:8]}...")
                 return self._cache[cache_key]
 
-        # Cache miss -- update stats under lock
-        with self._lock:
+            # Cache miss -- update stats while we still hold the lock
             if self.enable_stats:
                 self._stats["misses"] += 1
                 self._stats["compilations"] += 1
@@ -310,8 +310,17 @@ class UnifiedCache:
         )
         compile_time_ms = (time.time() - start_time) * 1000
 
-        # Store under lock
+        # Pre-compute function hash outside lock (avoid inspect.getsource inside lock)
+        func_hash = self._get_function_hash(func)
+
+        # Store under lock (re-check to avoid duplicate compilation)
         with self._lock:
+            # Another thread may have stored while we compiled
+            if cache_key in self._cache:
+                # Use the already-stored version, discard ours
+                self._cache.move_to_end(cache_key)
+                return self._cache[cache_key]
+
             self._compile_times[cache_key] = compile_time_ms
 
             if len(self._cache) >= self.maxsize:
@@ -325,7 +334,6 @@ class UnifiedCache:
 
             self._cache[cache_key] = compiled_func
 
-            func_hash = self._get_function_hash(func)
             if func_hash not in self._func_refs:
                 self._func_refs[func_hash] = weakref.ref(func)
 

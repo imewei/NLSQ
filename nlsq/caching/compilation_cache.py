@@ -94,6 +94,10 @@ class CompilationCache:
         when functions are garbage-collected and a new object reuses the
         same ``id()``.
 
+        The WeakKeyDictionary is protected by ``self._lock`` to prevent
+        TOCTOU races where GC fires between ``__contains__`` and
+        ``__getitem__``.
+
         Parameters
         ----------
         func : callable
@@ -104,11 +108,13 @@ class CompilationCache:
         hash : str
             SHA256 hash of function code (first 8 chars)
         """
-        # Check memoization cache first (fast path for repeated calls)
-        if func in self._func_hash_cache:
-            return self._func_hash_cache[func]
+        # Check memoization cache under lock (GC can fire between
+        # __contains__ and __getitem__ on WeakKeyDictionary)
+        with self._lock:
+            if func in self._func_hash_cache:
+                return self._func_hash_cache[func]
 
-        # Compute hash from bytecode
+        # Compute hash outside lock (no shared state access)
         try:
             func_code = func.__code__.co_code if hasattr(func, "__code__") else b""
             code_hash = hashlib.sha256(func_code).hexdigest()[:8]
@@ -117,8 +123,9 @@ class CompilationCache:
             name = getattr(func, "__qualname__", getattr(func, "__name__", "unknown"))
             code_hash = hashlib.sha256(name.encode()).hexdigest()[:8]
 
-        # Memoize — entry is auto-removed when func is garbage-collected
-        self._func_hash_cache[func] = code_hash
+        # Store under lock
+        with self._lock:
+            self._func_hash_cache[func] = code_hash
         return code_hash
 
     def _get_function_signature(self, func: Callable, *args, **kwargs) -> str:
@@ -214,7 +221,7 @@ class CompilationCache:
         except (AttributeError, TypeError):
             cache_key = f"{id(func)}_s{static_argnums}_d{donate_argnums}"
 
-        # Check cache (lock-guarded)
+        # Check cache and record miss stats in single lock acquisition
         with self._lock:
             if cache_key in self.cache:
                 if self.enable_stats:
@@ -223,8 +230,7 @@ class CompilationCache:
                 self.cache.move_to_end(cache_key)
                 return self.cache[cache_key]
 
-        # Record miss stats under lock
-        with self._lock:
+            # Cache miss -- update stats while we still hold the lock
             if self.enable_stats:
                 self.stats["misses"] += 1
                 self.stats["compilations"] += 1
@@ -234,8 +240,12 @@ class CompilationCache:
             func, static_argnums=static_argnums, donate_argnums=donate_argnums
         )
 
-        # Store in cache under lock
+        # Store in cache under lock (re-check to avoid duplicate)
         with self._lock:
+            if cache_key in self.cache:
+                self.cache.move_to_end(cache_key)
+                return self.cache[cache_key]
+
             # Task 9.2: Evict oldest entry if at capacity before adding new one
             self._evict_if_at_capacity()
 
@@ -273,7 +283,7 @@ class CompilationCache:
         sig = self._get_function_signature(func, *args, **kwargs)
         full_key = f"{sig}_s{static_argnums}"
 
-        # Check cache (lock-guarded)
+        # Check cache and record miss stats in single lock acquisition
         with self._lock:
             if full_key in self.cache:
                 if self.enable_stats:
@@ -282,8 +292,7 @@ class CompilationCache:
                 self.cache.move_to_end(full_key)
                 return self.cache[full_key], sig
 
-        # Record miss stats under lock
-        with self._lock:
+            # Cache miss -- update stats while we still hold the lock
             if self.enable_stats:
                 self.stats["misses"] += 1
                 self.stats["compilations"] += 1
@@ -291,8 +300,12 @@ class CompilationCache:
         # Compile outside lock (jax.jit can be slow)
         compiled_func = jax.jit(func, static_argnums=static_argnums)
 
-        # Store in cache under lock
+        # Store in cache under lock (re-check to avoid duplicate)
         with self._lock:
+            if full_key in self.cache:
+                self.cache.move_to_end(full_key)
+                return self.cache[full_key], sig
+
             # Task 9.2: Evict if at capacity before storing
             self._evict_if_at_capacity()
 
