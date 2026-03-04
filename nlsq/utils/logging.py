@@ -34,6 +34,7 @@ Example
 import logging
 import os
 import sys
+import threading
 import time
 import uuid
 from collections import deque
@@ -671,10 +672,11 @@ class NLSQLogger:
 
 # Module-level convenience functions
 _loggers: dict[str, NLSQLogger] = {}
+_loggers_lock = threading.Lock()
 
 
 def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
-    """Get or create a logger for the given name.
+    """Get or create a logger for the given name (thread-safe).
 
     Parameters
     ----------
@@ -693,9 +695,12 @@ def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
     >>> logger = get_logger("my_module")
     >>> logger.info("Processing started", n_items=100)
     """
-    if name not in _loggers:
-        _loggers[name] = NLSQLogger(name, level)
-    return _loggers[name]
+    if name in _loggers:  # Fast path (no lock)
+        return _loggers[name]
+    with _loggers_lock:
+        if name not in _loggers:  # Double-check under lock
+            _loggers[name] = NLSQLogger(name, level)
+        return _loggers[name]
 
 
 def set_global_level(level: int | LogLevel):
