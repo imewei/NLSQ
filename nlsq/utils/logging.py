@@ -711,7 +711,9 @@ def set_global_level(level: int | LogLevel):
     level : int | LogLevel
         New logging level
     """
-    for logger in _loggers.values():
+    with _loggers_lock:
+        loggers_snapshot = list(_loggers.values())
+    for logger in loggers_snapshot:
         logger.logger.setLevel(level)
 
     # Also set for root NLSQ logger
