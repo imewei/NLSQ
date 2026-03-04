@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 from jax import jit, lax
+from jax.scipy.linalg import svd as jax_svd
 
-from nlsq.stability.svd_fallback import compute_svd_with_fallback
+from nlsq.stability.svd_fallback import _is_gpu_error, compute_svd_with_fallback
 
 __all__ = ["TrustRegionJITFunctions"]
 
@@ -156,44 +157,54 @@ class TrustRegionJITFunctions:
         """Create the functions to compute the SVD of the Jacobian matrix.
         There are two versions, one for problems with bounds and one for
         problems without bounds. The version for problems with bounds is
-        slightly more complicated."""
+        slightly more complicated.
+
+        Each version has a JIT-compiled inner function that uses jax_svd directly
+        (enabling proper XLA compilation), wrapped by a Python outer function that
+        handles the GPU/CPU/NumPy fallback chain via try/except.
+        """
 
         @jit
+        def _svd_no_bounds_jit(
+            J: jnp.ndarray, d: jnp.ndarray, f: jnp.ndarray
+        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+            J_h = J * d
+            U, s, Vt = jax_svd(J_h, full_matrices=False)
+            uf = U.T.dot(f)
+            return J_h, U, s, Vt.T, uf
+
         def svd_no_bounds(
             J: jnp.ndarray, d: jnp.ndarray, f: jnp.ndarray
         ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-            """Compute the SVD of the Jacobian matrix, J, in the "hat" space.
-            This is the version for problems without bounds.
+            """Compute the SVD of J in hat space (unbounded variant).
 
-            Parameters
-            ----------
-            J : jnp.ndarray
-                The Jacobian matrix.
-            d : jnp.ndarray
-                The diagonal of the diagonal matrix D.
-            f : jnp.ndarray
-                The residuals.
-
-            Returns
-            -------
-            J_h : jnp.ndarray
-                  the Jacobian matrix in the "hat" space.
-            U : jnp.ndarray
-                the left singular vectors of the SVD of J_h.
-            s : jnp.ndarray
-                the singular values of the SVD of J_h.
-            V : jnp.ndarray
-                the right singular vectors of the SVD of J_h.
-            uf : jnp.ndarray
-                 the dot product of U.T and f.
+            Uses JIT-compiled jax_svd with GPU/CPU/NumPy fallback chain.
             """
-            J_h = J * d
-            # Use full deterministic SVD for numerical precision
-            U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
-            uf = U.T.dot(f)
-            return J_h, U, s, V, uf
+            try:
+                return _svd_no_bounds_jit(J, d, f)
+            except Exception as e:
+                if _is_gpu_error(str(e)):
+                    J_h = J * d
+                    U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
+                    uf = U.T.dot(f)
+                    return J_h, U, s, V, uf
+                raise
 
         @jit
+        def _svd_bounds_jit(
+            f: jnp.ndarray,
+            J: jnp.ndarray,
+            d: jnp.ndarray,
+            J_diag: jnp.ndarray,
+            f_zeros: jnp.ndarray,
+        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+            J_h = J * d
+            J_augmented = jnp.concatenate([J_h, J_diag])
+            f_augmented = jnp.concatenate([f, f_zeros])
+            U, s, Vt = jax_svd(J_augmented, full_matrices=False)
+            uf = U.T.dot(f_augmented)
+            return J_h, U, s, Vt.T, uf
+
         def svd_bounds(
             f: jnp.ndarray,
             J: jnp.ndarray,
@@ -201,42 +212,23 @@ class TrustRegionJITFunctions:
             J_diag: jnp.ndarray,
             f_zeros: jnp.ndarray,
         ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-            """Compute the SVD of the Jacobian matrix, J, in the "hat" space.
-            This is the version for problems with bounds.
+            """Compute the SVD of J in hat space (bounded variant).
 
-            Parameters
-            ----------
-            f : jnp.ndarray
-                The residuals.
-            J : jnp.ndarray
-                The Jacobian matrix.
-            d : jnp.ndarray
-                The diagonal of the diagonal matrix D.
-            J_diag : jnp.ndarray
-                    Added term to Jacobian matrix.
-            f_zeros : jnp.ndarray
-                    Empty residuals for the added term.
-
-            Returns
-            -------
-            J_h : jnp.ndarray
-                  the Jacobian matrix in the "hat" space.
-            U : jnp.ndarray
-                the left singular vectors of the SVD of J_h.
-            s : jnp.ndarray
-                the singular values of the SVD of J_h.
-            V : jnp.ndarray
-                the right singular vectors of the SVD of J_h.
-            uf : jnp.ndarray
-                 the dot product of U.T and f.
+            Uses JIT-compiled jax_svd with GPU/CPU/NumPy fallback chain.
             """
-            J_h = J * d
-            J_augmented = jnp.concatenate([J_h, J_diag])
-            f_augmented = jnp.concatenate([f, f_zeros])
-            # Use full deterministic SVD for numerical precision
-            U, s, V = compute_svd_with_fallback(J_augmented, full_matrices=False)
-            uf = U.T.dot(f_augmented)
-            return J_h, U, s, V, uf
+            try:
+                return _svd_bounds_jit(f, J, d, J_diag, f_zeros)
+            except Exception as e:
+                if _is_gpu_error(str(e)):
+                    J_h = J * d
+                    J_augmented = jnp.concatenate([J_h, J_diag])
+                    f_augmented = jnp.concatenate([f, f_zeros])
+                    U, s, V = compute_svd_with_fallback(
+                        J_augmented, full_matrices=False
+                    )
+                    uf = U.T.dot(f_augmented)
+                    return J_h, U, s, V, uf
+                raise
 
         self.svd_no_bounds = svd_no_bounds
         self.svd_bounds = svd_bounds
@@ -353,6 +345,8 @@ class TrustRegionJITFunctions:
             """Solve trust region subproblem using conjugate gradient.
 
             This replaces the SVD-based solve_lsq_trust_region function.
+            The regularized CG solve is deferred into the lax.cond false branch
+            so it is only computed when the GN step exceeds the trust region.
             """
             # First try to solve without regularization (alpha=0)
             p_gn, _residual_norm, _n_iter = conjugate_gradient_solve(
@@ -362,23 +356,15 @@ class TrustRegionJITFunctions:
             # Check if Gauss-Newton step is within trust region
             p_gn_norm = jnp.linalg.norm(p_gn)
 
-            # Compute regularized solution for use when step exceeds trust region
-            p_reg, _, _ = conjugate_gradient_solve(J, f, d, alpha, max_iter)
+            def compute_regularized():
+                p_reg, _, _ = conjugate_gradient_solve(J, f, d, alpha, max_iter)
+                p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
+                return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
 
-            # Scale to trust region boundary
-            # Clamp scaling factor to prevent numerical instability
-            # when trust region collapses or parameter norm is near zero
-            p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.maximum(p_reg_norm, 1e-10)
-            scaling = jnp.clip(Delta / p_reg_norm, 0.1, 10.0)
-            p_scaled = scaling * p_reg
-
-            # Use lax.cond for JAX-compatible conditional (instead of Python if)
-            # If within trust region, return Gauss-Newton step; otherwise scaled step
             return lax.cond(
                 p_gn_norm <= Delta,
                 lambda: p_gn,
-                lambda: p_scaled,
+                compute_regularized,
             )
 
         @jit
@@ -392,7 +378,11 @@ class TrustRegionJITFunctions:
             alpha: float = 0.0,
             max_iter: int | None = None,
         ) -> jnp.ndarray:
-            """Solve trust region subproblem with bounds using conjugate gradient."""
+            """Solve trust region subproblem with bounds using conjugate gradient.
+
+            The regularized CG solve is deferred into the lax.cond false branch
+            so it is only computed when the GN step exceeds the trust region.
+            """
             # Augment the system for bounds
             J_augmented = jnp.concatenate([J * d[None, :], J_diag])
             f_augmented = jnp.concatenate([f, f_zeros])
@@ -406,25 +396,17 @@ class TrustRegionJITFunctions:
             # Check if Gauss-Newton step is within trust region
             p_gn_norm = jnp.linalg.norm(p_gn)
 
-            # Compute regularized solution for use when step exceeds trust region
-            p_reg, _, _ = conjugate_gradient_solve(
-                J_augmented, f_augmented, d_augmented, alpha, max_iter
-            )
+            def compute_regularized():
+                p_reg, _, _ = conjugate_gradient_solve(
+                    J_augmented, f_augmented, d_augmented, alpha, max_iter
+                )
+                p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
+                return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
 
-            # Scale to trust region boundary
-            # Clamp scaling factor to prevent numerical instability
-            # when trust region collapses or parameter norm is near zero
-            p_reg_norm = jnp.linalg.norm(p_reg)
-            p_reg_norm = jnp.maximum(p_reg_norm, 1e-10)
-            scaling = jnp.clip(Delta / p_reg_norm, 0.1, 10.0)
-            p_scaled = scaling * p_reg
-
-            # Use lax.cond for JAX-compatible conditional (instead of Python if)
-            # If within trust region, return Gauss-Newton step; otherwise scaled step
             return lax.cond(
                 p_gn_norm <= Delta,
                 lambda: p_gn,
-                lambda: p_scaled,
+                compute_regularized,
             )
 
         # Store the iterative solver functions

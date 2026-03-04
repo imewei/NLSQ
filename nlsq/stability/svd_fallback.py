@@ -14,7 +14,6 @@ Historical note (v0.3.1-v0.3.4):
 """
 
 import warnings
-from functools import wraps
 
 import jax
 import jax.numpy as jnp
@@ -37,50 +36,6 @@ def _is_gpu_error(error_msg: str) -> bool:
         or "internal error" in msg_lower
         or msg_lower.startswith("internal:")
     )
-
-
-def with_cpu_fallback(func):
-    """Decorator to add CPU fallback for GPU operations that might fail."""
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            # Try GPU first
-            return func(*args, **kwargs)
-        except Exception as e:
-            if _is_gpu_error(str(e)):
-                warnings.warn(
-                    f"GPU operation failed ({e}), falling back to CPU",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                # Force CPU execution
-                with jax.default_device(jax.devices("cpu")[0]):
-                    return func(*args, **kwargs)
-            else:
-                # Re-raise if not a GPU-specific error
-                raise
-
-    return wrapper
-
-
-@with_cpu_fallback
-def safe_svd(matrix, full_matrices=False):
-    """Compute SVD with automatic CPU fallback if GPU fails.
-
-    Parameters
-    ----------
-    matrix : jnp.ndarray
-        Matrix to decompose
-    full_matrices : bool
-        Whether to compute full matrices
-
-    Returns
-    -------
-    U, s, Vt : jnp.ndarray
-        SVD decomposition components
-    """
-    return jax_svd(matrix, full_matrices=full_matrices)
 
 
 def compute_svd_with_fallback(J_h, full_matrices=False):

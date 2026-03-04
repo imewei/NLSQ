@@ -485,32 +485,32 @@ class CommonJIT:
             return a, b
 
     def compute_jac_scale(
-        self, J: jnp.ndarray, scale_inv_old: np.ndarray | None = None
-    ) -> tuple[np.ndarray, np.ndarray]:
+        self, J: jnp.ndarray, scale_inv_old: jnp.ndarray | np.ndarray | None = None
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute variables scale based on the Jacobian matrix.
+
+        Returns JAX arrays to keep results on-device and avoid GPU→CPU sync.
 
         Parameters
         ----------
         J : jnp.ndarray
             Jacobian matrix.
-        scale_inv_old : Optional[np.ndarray], optional
+        scale_inv_old : jnp.ndarray | np.ndarray | None, optional
             Previous scale, by default None
 
         Returns
         -------
-        scale : np.ndarray
+        scale : jnp.ndarray
             Scale for the variables.
-        scale_inv : np.ndarray
+        scale_inv : jnp.ndarray
             Inverse of the scale for the variables.
         """
-
-        scale_inv_jnp = self.jac_sum_func(J)
-        scale_inv = np.array(scale_inv_jnp)
+        scale_inv = self.jac_sum_func(J)
 
         if scale_inv_old is None:
-            scale_inv[scale_inv == 0] = 1
+            scale_inv = jnp.where(scale_inv == 0, 1.0, scale_inv)
         else:
-            scale_inv = np.maximum(scale_inv, scale_inv_old)
+            scale_inv = jnp.maximum(scale_inv, scale_inv_old)
 
         return 1 / scale_inv, scale_inv
 
@@ -617,3 +617,173 @@ class CommonJIT:
             return jnp.sum(J**2, axis=0) ** 0.5
 
         self.jac_sum_func = jac_sum_func
+
+
+# ---------------------------------------------------------------------------
+# JIT-compiled versions of trust-region helper functions (B002, B003 fixes)
+# These eliminate GPU→CPU sync overhead by keeping all operations on device.
+# ---------------------------------------------------------------------------
+
+
+@jit
+def update_tr_radius_jax(
+    Delta: float,
+    actual_reduction: float,
+    predicted_reduction: float,
+    step_norm: float,
+    bound_hit: bool,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """JIT-compiled trust-region radius update (replaces common_scipy.update_tr_radius).
+
+    Uses branchless jnp.where to avoid Python control flow and GPU→CPU sync.
+
+    Parameters
+    ----------
+    Delta : float
+        Current trust region radius.
+    actual_reduction : float
+        Actual cost reduction.
+    predicted_reduction : float
+        Predicted cost reduction.
+    step_norm : float
+        Norm of the step.
+    bound_hit : bool
+        Whether the step hit the trust region boundary.
+
+    Returns
+    -------
+    Delta : jnp.ndarray
+        Updated trust region radius.
+    ratio : jnp.ndarray
+        Ratio of actual to predicted reduction.
+    """
+    # Compute ratio with branchless logic
+    safe_pred = jnp.where(predicted_reduction != 0, predicted_reduction, 1.0)
+    ratio = jnp.where(
+        predicted_reduction > 0,
+        actual_reduction / safe_pred,
+        jnp.where(
+            (predicted_reduction == 0) & (actual_reduction == 0),
+            1.0,
+            0.0,
+        ),
+    )
+
+    # Update Delta with branchless logic
+    Delta_shrunk = 0.25 * step_norm
+    Delta_grown = Delta * 2.0
+    Delta_new = jnp.where(
+        ratio < 0.25,
+        Delta_shrunk,
+        jnp.where((ratio > 0.75) & bound_hit, Delta_grown, Delta),
+    )
+
+    return Delta_new, ratio
+
+
+@jit
+def check_termination_jax(
+    dF: float,
+    F: float,
+    dx_norm: float,
+    x_norm: float,
+    ratio: float,
+    ftol: float,
+    xtol: float,
+) -> jnp.ndarray:
+    """JIT-compiled termination check (replaces common_scipy.check_termination).
+
+    Returns integer status code as a JAX scalar (no GPU→CPU sync needed until
+    the Python-level loop checks it). Returns 0 for "not terminated".
+
+    Parameters
+    ----------
+    dF : float
+        Change in cost function.
+    F : float
+        Current cost function value.
+    dx_norm : float
+        Norm of the step.
+    x_norm : float
+        Norm of the current parameters.
+    ratio : float
+        Ratio of actual to predicted reduction.
+    ftol : float
+        Cost function tolerance.
+    xtol : float
+        Parameter tolerance.
+
+    Returns
+    -------
+    status : jnp.ndarray
+        0=not terminated, 2=ftol, 3=xtol, 4=both.
+    """
+    ftol_satisfied = (dF < ftol * F) & (ratio > 0.25)
+    xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
+
+    status = jnp.where(
+        ftol_satisfied & xtol_satisfied,
+        4,
+        jnp.where(ftol_satisfied, 2, jnp.where(xtol_satisfied, 3, 0)),
+    )
+    return status
+
+
+# ---------------------------------------------------------------------------
+# JIT-compiled bounds helper functions (S07-S10)
+# These keep bounds operations on-device, avoiding NumPy→JAX transfers.
+# The NumPy originals in common_scipy.py remain for functions that need them.
+# ---------------------------------------------------------------------------
+
+
+@jit
+def CL_scaling_vector_jax(
+    x: jnp.ndarray, g: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """JIT-compiled Coleman-Li scaling vector (replaces common_scipy.CL_scaling_vector).
+
+    Keeps result on-device to avoid GPU→CPU sync at call sites.
+    """
+    v = jnp.ones_like(x)
+    dv = jnp.zeros_like(x)
+
+    mask_neg = (g < 0) & jnp.isfinite(ub)
+    mask_pos = (g > 0) & jnp.isfinite(lb)
+
+    v = jnp.where(mask_neg, ub - x, jnp.where(mask_pos, x - lb, v))
+    dv = jnp.where(mask_neg, -1.0, jnp.where(mask_pos, 1.0, dv))
+
+    return v, dv
+
+
+@jit
+def in_bounds_jax(x: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray) -> jnp.ndarray:
+    """JIT-compiled bounds check (replaces common_scipy.in_bounds).
+
+    Returns a JAX scalar boolean, avoiding GPU→CPU sync until Python checks it.
+    """
+    return jnp.all((x >= lb) & (x <= ub))
+
+
+@jit
+def make_strictly_feasible_jax(
+    x: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray
+) -> jnp.ndarray:
+    """JIT-compiled strict feasibility projection for rstep=0 case.
+
+    Shifts boundary points to the interior using jnp.nextafter.
+    Only supports rstep=0 (the only value used in trf.py hot path).
+    """
+    # find_active_constraints with rtol=0 inlined
+    lower_mask = x <= lb
+    upper_mask = x >= ub
+
+    x_new = jnp.where(
+        lower_mask,
+        jnp.nextafter(lb, ub),
+        jnp.where(upper_mask, jnp.nextafter(ub, lb), x),
+    )
+
+    # Handle tight bounds where nextafter still violates
+    tight = (x_new < lb) | (x_new > ub)
+    return jnp.where(tight, 0.5 * (lb + ub), x_new)

@@ -127,7 +127,15 @@ from typing import Any, NamedTuple
 
 from nlsq.caching.unified_cache import get_global_cache
 from nlsq.callbacks import StopOptimization
-from nlsq.common_jax import CommonJIT, solve_lsq_trust_region_jax
+from nlsq.common_jax import (
+    CL_scaling_vector_jax,
+    CommonJIT,
+    check_termination_jax,
+    in_bounds_jax,
+    make_strictly_feasible_jax,
+    solve_lsq_trust_region_jax,
+    update_tr_radius_jax,
+)
 from nlsq.common_scipy import (
     CL_scaling_vector,
     check_termination,
@@ -749,12 +757,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Compute scaling factors
         jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
-            scale_np, scale_inv_np = self.cJIT.compute_jac_scale(J)
-            # T022: Convert scale to JAX arrays once at entry to avoid repeated conversion
-            state["scale"], state["scale_inv"] = (
-                jnp.asarray(scale_np),
-                jnp.asarray(scale_inv_np),
-            )
+            scale, scale_inv = self.cJIT.compute_jac_scale(J)
+            state["scale"], state["scale_inv"] = scale, scale_inv
             state["jac_scale"] = True
         else:
             # T022: Convert scale to JAX arrays once at entry to avoid repeated conversion
@@ -798,6 +802,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             - g_norm: Computed gradient norm (OPT-8: returned to avoid redundant computation)
         """
         # OPT-8: Compute g_norm once and return it to avoid redundant computation
+        # Keep as JAX scalar to defer GPU→CPU sync until actually needed
         g_norm = jnorm(g, ord=jnp.inf)
 
         if g_norm < gtol:
@@ -806,9 +811,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 g_norm=float(g_norm),
                 gtol=gtol,
             )
-            return 1, float(g_norm)
+            return 1, g_norm
 
-        return None, float(g_norm)
+        return None, g_norm
 
     def _solve_trust_region_subproblem(
         self,
@@ -1089,8 +1094,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             cost_new = cost_new_jnp
             actual_reduction = cost - cost_new
 
-            # Update trust region radius
-            Delta_new, ratio = update_tr_radius(
+            # Update trust region radius (JIT-compiled, stays on device)
+            Delta_new, ratio = update_tr_radius_jax(
                 Delta,
                 actual_reduction,
                 predicted_reduction,
@@ -1098,13 +1103,16 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 step_h_norm > TR_BOUNDARY_THRESHOLD * Delta,
             )
 
-            # Check termination criteria
+            # Check termination criteria (JIT-compiled, stays on device)
             step_norm = jnorm(step)
-            termination_status = check_termination(
+            term_code = check_termination_jax(
                 actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
             )
 
-            if termination_status is not None:
+            # Single GPU→CPU sync per inner iteration: materialize term_code
+            term_code_int = int(term_code)
+            if term_code_int != 0:
+                termination_status = term_code_int
                 break
 
             alpha *= Delta / Delta_new
@@ -1232,14 +1240,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Compute parameter change for precision monitoring
         param_change = jnorm(d_jnp) if step_norm is not None else 0.0
 
-        # Check for NaN/Inf in current state
+        # Check for NaN/Inf in current state (fused into single device op)
         has_nan_inf = bool(
-            jnp.isnan(f).any()
-            or jnp.isinf(f).any()
-            or jnp.isnan(J).any()
-            or jnp.isinf(J).any()
-            or jnp.isnan(g).any()
-            or jnp.isinf(g).any()
+            ~jnp.isfinite(f).all() | ~jnp.isfinite(J).all() | ~jnp.isfinite(g).all()
         )
 
         # Report metrics to manager
@@ -1396,11 +1399,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         else:
             scale, scale_inv = x_scale, 1 / x_scale
 
-        v, dv = CL_scaling_vector(x0, g, lb, ub)
+        v, dv = CL_scaling_vector_jax(x0, g, jnp.asarray(lb), jnp.asarray(ub))
 
-        # Convert to JAX arrays
-        v = jnp.asarray(v)
-        dv = jnp.asarray(dv)
         mask = dv != 0
         v = v.at[mask].set(v[mask] * scale_inv[mask])
 
@@ -1540,6 +1540,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         f_scale: float,
         lb: np.ndarray,
         ub: np.ndarray,
+        lb_jnp: jnp.ndarray,
+        ub_jnp: jnp.ndarray,
         theta: float,
         solver: str,
         ftol: float,
@@ -1631,10 +1633,22 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             p = d * p_h
             step, step_h, predicted_reduction = self.select_step(
-                x, J_h, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta
+                x,
+                J_h,
+                diag_h,
+                g_h,
+                p,
+                p_h,
+                d,
+                Delta,
+                lb,
+                ub,
+                theta,
+                lb_jnp=lb_jnp,
+                ub_jnp=ub_jnp,
             )
 
-            x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
+            x_new = make_strictly_feasible_jax(x + step, lb_jnp, ub_jnp)
             f_new = fun(x_new, xdata, ydata, data_mask, transform)
             nfev += 1
 
@@ -1649,7 +1663,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 cost_new = self.default_loss_func(f_new)
 
             actual_reduction = cost - cost_new
-            Delta_new, ratio = update_tr_radius(
+            Delta_new, ratio = update_tr_radius_jax(
                 Delta,
                 actual_reduction,
                 predicted_reduction,
@@ -1658,10 +1672,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             )
 
             step_norm = jnorm(step)
-            termination_status = check_termination(
+            term_code = check_termination_jax(
                 actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
             )
-            if termination_status is not None:
+            # Single GPU→CPU sync per inner iteration
+            term_code_int = int(term_code)
+            if term_code_int != 0:
+                termination_status = term_code_int
                 break
 
             alpha *= Delta / Delta_new
@@ -2509,6 +2526,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         njev = 1
         m, n = J.shape
 
+        # Convert bounds to JAX once at entry to avoid repeated transfers
+        lb_jnp = jnp.asarray(lb)
+        ub_jnp = jnp.asarray(ub)
+
         if loss_function is not None:
             rho = loss_function(f, f_scale)
             cost = self.calculate_cost(rho, data_mask)
@@ -2544,9 +2565,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             print_header_nonlinear()
 
         while True:
-            v, dv = CL_scaling_vector(x, g, lb, ub)
-            v = jnp.asarray(v)
-            dv = jnp.asarray(dv)
+            v, dv = CL_scaling_vector_jax(x, g, lb_jnp, ub_jnp)
 
             g_norm = jnorm(g * v, ord=jnp.inf)
             if g_norm < gtol:
@@ -2616,6 +2635,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 f_scale=f_scale,
                 lb=lb,
                 ub=ub,
+                lb_jnp=lb_jnp,
+                ub_jnp=ub_jnp,
                 theta=theta,
                 solver=solver,
                 ftol=ftol,
@@ -2677,9 +2698,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if termination_status is None:
             termination_status = 0
 
-        active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
+        x_out = np.asarray(x)
+        active_mask = find_active_constraints(x_out, lb, ub, rtol=xtol)
         return OptimizeResult(
-            x=x,
+            x=x_out,
             cost=float(cost),
             fun=f_true,
             jac=J,
@@ -2705,6 +2727,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         lb: np.ndarray,
         ub: np.ndarray,
         theta: float,
+        lb_jnp: jnp.ndarray | None = None,
+        ub_jnp: jnp.ndarray | None = None,
     ) -> tuple[np.ndarray, Any, Any]:
         """Select the best step according to Trust Region Reflective algorithm.
 
@@ -2732,6 +2756,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             Upper bounds on variables.
         theta : float
             Controls step back step ratio from the bounds.
+        lb_jnp : jnp.ndarray, optional
+            Pre-converted JAX lower bounds (avoids repeated conversion).
+        ub_jnp : jnp.ndarray, optional
+            Pre-converted JAX upper bounds (avoids repeated conversion).
 
         Returns
         -------
@@ -2742,7 +2770,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         predicted_reduction : float
             Predicted reduction in the cost function.
         """
-        if in_bounds(x + p, lb, ub):
+        if lb_jnp is not None and ub_jnp is not None:
+            _in_bounds = in_bounds_jax(x + p, lb_jnp, ub_jnp)
+        else:
+            _in_bounds = in_bounds(x + p, lb, ub)
+        if _in_bounds:
             p_value = self.cJIT.evaluate_quadratic(J_h, g_h, p_h, diag=diag_h)
             return p, p_h, -p_value
 

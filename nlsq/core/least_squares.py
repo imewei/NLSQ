@@ -859,8 +859,9 @@ class LeastSquares:
 
             def stable_rfunc(x, xd, yd, dm, tf):
                 result = original_rfunc(x, xd, yd, dm, tf)
-                if not jnp.all(jnp.isfinite(result)):
-                    result = jnp.clip(result, -1e10, 1e10)
+                result = jnp.where(
+                    jnp.isfinite(result), result, jnp.clip(result, -1e10, 1e10)
+                )
                 return result
 
             # NOTE: Jacobian is NOT wrapped - stability checked only at initialization
