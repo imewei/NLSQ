@@ -14,6 +14,7 @@ Phase 3 Optimizations (Task Group 9):
 import hashlib
 import json
 import os
+import threading
 import time
 import warnings
 from collections.abc import Callable
@@ -64,6 +65,9 @@ class SmartCache:
     - For smaller arrays, hashes full array directly without redundant
       sampling, providing 15-20% improvement in cache key generation
 
+    All dict operations are protected by a per-instance ``threading.Lock``
+    so that concurrent threads can safely call ``get``/``set``/``invalidate``.
+
     Attributes
     ----------
     cache_dir : str
@@ -98,6 +102,7 @@ class SmartCache:
         enable_stats : bool
             Track cache statistics
         """
+        self._lock = threading.Lock()
         self.cache_dir = cache_dir
         self.memory_cache: dict[str, tuple[Any, float]] = {}  # value, timestamp
         self.access_count: dict[str, int] = {}  # Track access frequency
@@ -222,31 +227,33 @@ class SmartCache:
         value : Any or None
             Cached value or None if not found
         """
-        # Check memory cache first
-        if key in self.memory_cache:
-            value, timestamp = self.memory_cache[key]
-            self.access_count[key] = self.access_count.get(key, 0) + 1
+        # Check memory cache first (under lock for atomic LRU update)
+        with self._lock:
+            if key in self.memory_cache:
+                value, timestamp = self.memory_cache[key]
+                self.access_count[key] = self.access_count.get(key, 0) + 1
 
-            if self.enable_stats:
-                self.cache_stats["hits"] += 1
-                self.cache_stats["memory_hits"] += 1
+                if self.enable_stats:
+                    self.cache_stats["hits"] += 1
+                    self.cache_stats["memory_hits"] += 1
 
-            # Move to end (LRU)
-            del self.memory_cache[key]
-            self.memory_cache[key] = (value, timestamp)
+                # Move to end (LRU)
+                del self.memory_cache[key]
+                self.memory_cache[key] = (value, timestamp)
 
-            return value
+                return value
 
-        # Check disk cache
+        # Check disk cache (disk I/O outside lock)
         if self.disk_cache_enabled:
             cache_file = os.path.join(self.cache_dir, f"{key}.npz")
             if os.path.exists(cache_file):
                 try:
                     value = self._load_from_disk(cache_file)
 
-                    if self.enable_stats:
-                        self.cache_stats["hits"] += 1
-                        self.cache_stats["disk_hits"] += 1
+                    with self._lock:
+                        if self.enable_stats:
+                            self.cache_stats["hits"] += 1
+                            self.cache_stats["disk_hits"] += 1
 
                     # Add to memory cache, preserving file mtime as timestamp
                     # so TTL checks reflect the original cache time, not load time
@@ -260,8 +267,9 @@ class SmartCache:
                     with contextlib.suppress(OSError):
                         os.remove(cache_file)
 
-        if self.enable_stats:
-            self.cache_stats["misses"] += 1
+        with self._lock:
+            if self.enable_stats:
+                self.cache_stats["misses"] += 1
 
         return None
 
@@ -275,10 +283,10 @@ class SmartCache:
         value : Any
             Value to cache
         """
-        # Add to memory cache
+        # Add to memory cache (lock acquired inside _add_to_memory_cache)
         self._add_to_memory_cache(key, value)
 
-        # Save to disk cache
+        # Save to disk cache (disk I/O outside lock)
         if self.disk_cache_enabled:
             cache_file = os.path.join(self.cache_dir, f"{key}.npz")
             try:
@@ -302,23 +310,24 @@ class SmartCache:
             pass the file's mtime so that TTL checks reflect the original
             cache time rather than the load time.  Defaults to ``time.time()``.
         """
-        # Check if we need to evict
-        if len(self.memory_cache) >= self.max_memory_items:
-            # Evict least recently used item
-            if self.memory_cache:
-                oldest_key = next(iter(self.memory_cache))
-                del self.memory_cache[oldest_key]
-                if oldest_key in self.access_count:
-                    del self.access_count[oldest_key]
+        with self._lock:
+            # Check if we need to evict
+            if len(self.memory_cache) >= self.max_memory_items:
+                # Evict least recently used item
+                if self.memory_cache:
+                    oldest_key = next(iter(self.memory_cache))
+                    del self.memory_cache[oldest_key]
+                    if oldest_key in self.access_count:
+                        del self.access_count[oldest_key]
 
-                if self.enable_stats:
-                    self.cache_stats["evictions"] += 1
+                    if self.enable_stats:
+                        self.cache_stats["evictions"] += 1
 
-        self.memory_cache[key] = (
-            value,
-            timestamp if timestamp is not None else time.time(),
-        )
-        self.access_count[key] = 1
+            self.memory_cache[key] = (
+                value,
+                timestamp if timestamp is not None else time.time(),
+            )
+            self.access_count[key] = 1
 
     def invalidate(self, key: str | None = None):
         """Invalidate cache entries.
@@ -329,9 +338,10 @@ class SmartCache:
             Specific key to invalidate, or None to clear all
         """
         if key is None:
-            # Clear all caches
-            self.memory_cache.clear()
-            self.access_count.clear()
+            # Clear all caches (dict ops under lock, disk I/O outside)
+            with self._lock:
+                self.memory_cache.clear()
+                self.access_count.clear()
 
             if self.disk_cache_enabled:
                 try:
@@ -342,10 +352,11 @@ class SmartCache:
                     warnings.warn(f"Could not clear disk cache: {e}")
         else:
             # Clear specific key
-            if key in self.memory_cache:
-                del self.memory_cache[key]
-            if key in self.access_count:
-                del self.access_count[key]
+            with self._lock:
+                if key in self.memory_cache:
+                    del self.memory_cache[key]
+                if key in self.access_count:
+                    del self.access_count[key]
 
             if self.disk_cache_enabled:
                 cache_file = os.path.join(self.cache_dir, f"{key}.npz")
@@ -361,33 +372,41 @@ class SmartCache:
         stats : dict
             Cache statistics including hit rate
         """
-        total_accesses = self.cache_stats["hits"] + self.cache_stats["misses"]
+        with self._lock:
+            total_accesses = self.cache_stats["hits"] + self.cache_stats["misses"]
 
-        if total_accesses > 0:
-            hit_rate = self.cache_stats["hits"] / total_accesses
-        else:
-            hit_rate = 0.0
+            if total_accesses > 0:
+                hit_rate = self.cache_stats["hits"] / total_accesses
+            else:
+                hit_rate = 0.0
 
-        return {
-            **self.cache_stats,
-            "hit_rate": hit_rate,
-            "memory_size": len(self.memory_cache),
-            "total_accesses": total_accesses,
-        }
+            return {
+                **self.cache_stats,
+                "hit_rate": hit_rate,
+                "memory_size": len(self.memory_cache),
+                "total_accesses": total_accesses,
+            }
 
     def optimize_cache(self):
-        """Optimize cache by removing rarely accessed items."""
-        if not self.access_count:
-            return
+        """Optimize cache by removing rarely accessed items.
 
-        # Calculate average access count
-        avg_access = np.mean(list(self.access_count.values()))
+        Takes a snapshot of keys under lock, then invalidates outside.
+        """
+        with self._lock:
+            if not self.access_count:
+                return
+            # Snapshot under lock
+            access_snapshot = dict(self.access_count)
 
-        # Remove items with below-average access
+        # Calculate average access count (no lock needed for snapshot)
+        avg_access = np.mean(list(access_snapshot.values()))
+
+        # Identify items with below-average access
         keys_to_remove = [
-            key for key, count in self.access_count.items() if count < avg_access * 0.5
+            key for key, count in access_snapshot.items() if count < avg_access * 0.5
         ]
 
+        # Invalidate outside the lock (invalidate acquires its own lock)
         for key in keys_to_remove:
             self.invalidate(key)
 
@@ -501,7 +520,8 @@ def cached_function(cache: SmartCache | None = None, ttl: float | None = None):
             if cached_result is not None:
                 # Check TTL if specified
                 if ttl is not None:
-                    _value, timestamp = cache.memory_cache.get(cache_key, (None, 0))
+                    with cache._lock:
+                        _value, timestamp = cache.memory_cache.get(cache_key, (None, 0))
                     if time.time() - timestamp > ttl:
                         # Expired, recompute
                         cached_result = None
@@ -569,10 +589,14 @@ class JITCompilationCache:
 
     This cache stores compiled functions to avoid recompilation
     when function signatures match.
+
+    All dict operations are protected by a per-instance ``threading.Lock``
+    so that concurrent threads can safely call ``get_or_compile``/``clear``.
     """
 
     def __init__(self):
         """Initialize JIT compilation cache."""
+        self._lock = threading.Lock()
         self.compiled_functions = {}
         self.compilation_times = {}
 
@@ -596,23 +620,32 @@ class JITCompilationCache:
         # Create key from function and static args
         key = (func.__module__, func.__name__, static_argnums)
 
-        if key in self.compiled_functions:
-            return self.compiled_functions[key]
+        # Check cache under lock
+        with self._lock:
+            if key in self.compiled_functions:
+                return self.compiled_functions[key]
 
-        # Compile and cache
+        # Compile outside lock (jit can be slow)
         start_time = time.time()
         compiled_func = jit(func, static_argnums=static_argnums)
         compilation_time = time.time() - start_time
 
-        self.compiled_functions[key] = compiled_func
-        self.compilation_times[key] = compilation_time
+        # Store under lock (double-check to avoid overwriting a concurrent compile)
+        with self._lock:
+            if key not in self.compiled_functions:
+                self.compiled_functions[key] = compiled_func
+                self.compilation_times[key] = compilation_time
+            else:
+                # Another thread already stored it; use that one
+                compiled_func = self.compiled_functions[key]
 
         return compiled_func
 
     def clear(self):
         """Clear compilation cache."""
-        self.compiled_functions.clear()
-        self.compilation_times.clear()
+        with self._lock:
+            self.compiled_functions.clear()
+            self.compilation_times.clear()
 
     def get_stats(self) -> dict:
         """Get compilation statistics.
@@ -622,11 +655,12 @@ class JITCompilationCache:
         stats : dict
             Compilation statistics
         """
-        return {
-            "cached_functions": len(self.compiled_functions),
-            "total_compilation_time": sum(self.compilation_times.values()),
-            "functions": list(self.compiled_functions.keys()),
-        }
+        with self._lock:
+            return {
+                "cached_functions": len(self.compiled_functions),
+                "total_compilation_time": sum(self.compilation_times.values()),
+                "functions": list(self.compiled_functions.keys()),
+            }
 
 
 # Global cache instances
