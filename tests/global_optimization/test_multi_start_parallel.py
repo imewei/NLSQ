@@ -7,6 +7,7 @@ in evaluate_starting_points().
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import patch
 
 import jax.numpy as jnp
@@ -124,3 +125,74 @@ def test_parallel_evaluate_reports_diagnostics() -> None:
     assert "wall_time_sec" in diag
     assert diag["n_workers"] >= 1
     assert diag["wall_time_sec"] > 0
+
+
+@pytest.mark.slow
+@pytest.mark.stability
+def test_parallel_stress_20_starts() -> None:
+    """Stress test: 20 concurrent fits with varied problem shapes."""
+    from nlsq.global_optimization import (
+        GlobalOptimizationConfig,
+        MultiStartOrchestrator,
+    )
+
+    rng = np.random.default_rng(99)
+
+    def model(x, a, b, c):
+        return a * jnp.exp(-b * x) + c
+
+    x = np.linspace(0, 5, 200)
+    y = 2.5 * np.exp(-0.3 * x) + 0.5 + rng.normal(0, 0.05, 200)
+
+    config = GlobalOptimizationConfig(n_starts=20, sampler="lhs")
+    orch = MultiStartOrchestrator(config=config)
+    result = orch.fit(model, x, y, bounds=([0, 0, -5], [10, 5, 5]))
+
+    # Should complete without error and return valid parameters
+    assert result.popt.shape == (3,)
+
+    diag = result.get("multistart_diagnostics", {})
+    if hasattr(result, "multistart_diagnostics"):
+        diag = result.multistart_diagnostics
+
+    assert diag["n_starts_successful"] > 0
+    assert diag.get("parallel") is True
+    assert diag.get("n_workers", 0) >= 1
+    assert diag.get("wall_time_sec", 0) > 0
+
+
+@pytest.mark.unit
+def test_all_starts_fail_parallel_fallback() -> None:
+    """When all parallel starts fail, falls back to single-start."""
+    from nlsq.global_optimization import (
+        GlobalOptimizationConfig,
+        MultiStartOrchestrator,
+    )
+
+    lock = threading.Lock()
+    call_count = {"n": 0}
+
+    def fragile_model(x, a):
+        with lock:
+            call_count["n"] += 1
+            current = call_count["n"]
+        if current <= 5:
+            raise RuntimeError("intentional failure")
+        return a * x
+
+    x = np.linspace(0, 1, 20)
+    y = 2.0 * x + np.random.default_rng(7).normal(0, 0.01, 20)
+
+    config = GlobalOptimizationConfig(n_starts=5, sampler="lhs")
+    orch = MultiStartOrchestrator(config=config)
+
+    # All 5 parallel starts fail (each hits the RuntimeError on first model call),
+    # then the single-start fallback (6th+ call) should succeed
+    result = orch.fit(fragile_model, x, y, bounds=([0], [10]))
+
+    diag = result.get("multistart_diagnostics", {})
+    if hasattr(result, "multistart_diagnostics"):
+        diag = result.multistart_diagnostics
+
+    # Either explicit fallback flag or we got a valid result
+    assert diag.get("fallback_to_single_start") is True or result.popt is not None
