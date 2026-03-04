@@ -52,10 +52,14 @@ def test_eviction_on_maxsize() -> None:
 
 @pytest.mark.cache
 def test_function_hash_fallback_builtin() -> None:
-    """_get_function_hash should fall back for builtins without source."""
+    """_get_function_hash should produce a persistent hash for builtins."""
     cache = UnifiedCache(enable_stats=False)
     func_hash = cache._get_function_hash(len)
-    assert func_hash.startswith("id_")
+    # Should be a deterministic hex string (persistent across sessions)
+    assert len(func_hash) == 16
+    assert all(c in "0123456789abcdef" for c in func_hash)
+    # Should be deterministic
+    assert cache._get_function_hash(len) == func_hash
 
 
 @pytest.mark.cache

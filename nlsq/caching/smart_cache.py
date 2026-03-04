@@ -248,8 +248,10 @@ class SmartCache:
                         self.cache_stats["hits"] += 1
                         self.cache_stats["disk_hits"] += 1
 
-                    # Add to memory cache
-                    self._add_to_memory_cache(key, value)
+                    # Add to memory cache, preserving file mtime as timestamp
+                    # so TTL checks reflect the original cache time, not load time
+                    disk_mtime = os.path.getmtime(cache_file)
+                    self._add_to_memory_cache(key, value, timestamp=disk_mtime)
                     return value
 
                 except Exception as e:
@@ -284,7 +286,9 @@ class SmartCache:
             except Exception as e:
                 warnings.warn(f"Could not save to disk cache: {e}")
 
-    def _add_to_memory_cache(self, key: str, value: Any):
+    def _add_to_memory_cache(
+        self, key: str, value: Any, timestamp: float | None = None
+    ):
         """Add item to memory cache with LRU eviction.
 
         Parameters
@@ -293,6 +297,10 @@ class SmartCache:
             Cache key
         value : Any
             Value to cache
+        timestamp : float, optional
+            Timestamp to associate with the entry.  When loading from disk,
+            pass the file's mtime so that TTL checks reflect the original
+            cache time rather than the load time.  Defaults to ``time.time()``.
         """
         # Check if we need to evict
         if len(self.memory_cache) >= self.max_memory_items:
@@ -306,7 +314,10 @@ class SmartCache:
                 if self.enable_stats:
                     self.cache_stats["evictions"] += 1
 
-        self.memory_cache[key] = (value, time.time())
+        self.memory_cache[key] = (
+            value,
+            timestamp if timestamp is not None else time.time(),
+        )
         self.access_count[key] = 1
 
     def invalidate(self, key: str | None = None):

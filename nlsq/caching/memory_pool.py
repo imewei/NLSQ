@@ -176,15 +176,18 @@ class MemoryPool:
 
         # Try to reuse from pool
         if self.pools.get(pool_key):
-            # Remove from pool (but don't use the array itself - just marks a reuse)
-            self.pools[pool_key].pop()
+            pooled_arr = self.pools[pool_key].pop()
 
             if self.enable_stats:
                 self.stats["reuses"] += 1
 
-            # Always allocate the exact requested shape
-            # (Bucketing just helps with pool key matching, not actual storage)
-            arr = jnp.zeros(shape, dtype=dtype)
+            # Reuse the pooled array if its shape matches exactly;
+            # otherwise allocate with the exact requested shape
+            # (bucketed pool keys may group different shapes together)
+            if pooled_arr.shape == shape and pooled_arr.dtype == dtype:
+                arr = jnp.zeros_like(pooled_arr)
+            else:
+                arr = jnp.zeros(shape, dtype=dtype)
             self.allocated[id(arr)] = (shape, dtype)
             return arr
 

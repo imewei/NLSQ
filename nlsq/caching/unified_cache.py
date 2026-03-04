@@ -143,16 +143,24 @@ class UnifiedCache:
         except (OSError, TypeError):
             # Fallback for built-in functions, lambdas, or C functions
             try:
-                # For lambdas and simple functions, use their code object
                 if hasattr(func, "__code__"):
                     code = func.__code__
                     code_hash = hashlib.sha256(code.co_code).hexdigest()[:8]
                     return f"code_{code_hash}_{code.co_argcount}"
                 else:
-                    # Last resort: use object ID (not ideal for persistence)
-                    return f"id_{id(func)}"
+                    # Use qualified name for a persistent key instead of id()
+                    name = getattr(
+                        func,
+                        "__qualname__",
+                        getattr(func, "__name__", "unknown"),
+                    )
+                    module = getattr(func, "__module__", "unknown")
+                    return hashlib.sha256(f"{module}.{name}".encode()).hexdigest()[:16]
             except (AttributeError, TypeError, ValueError):
-                return f"id_{id(func)}"
+                name = getattr(
+                    func, "__qualname__", getattr(func, "__name__", "unknown")
+                )
+                return hashlib.sha256(name.encode()).hexdigest()[:16]
 
     def _get_array_signature(self, arr) -> str:
         """Get signature for array based on dtype and rank (shape-relaxed).

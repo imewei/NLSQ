@@ -10,6 +10,7 @@ Phase 3 Optimizations (Task Group 9):
 
 import hashlib
 import warnings
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
@@ -62,10 +63,11 @@ class CompilationCache:
         self.enable_stats = enable_stats
         self.max_cache_size = max_cache_size
 
-        # Task 9.5: Use composite key (id(func), id(func.__code__))
-        # This prevents cache poisoning when functions are redefined
-        # with the same name in notebooks
-        self._func_hash_cache: dict[tuple[int, int], str] = {}
+        # WeakKeyDictionary: entries are auto-removed when the function
+        # object is garbage-collected, preventing stale id() reuse
+        self._func_hash_cache: weakref.WeakKeyDictionary[Callable, str] = (
+            weakref.WeakKeyDictionary()
+        )
 
         if enable_stats:
             self.stats = {
@@ -78,9 +80,10 @@ class CompilationCache:
     def _get_function_code_hash(self, func: Callable) -> str:
         """Get memoized hash of function code.
 
-        This method caches function code hashes using a composite key
-        (id(func), id(func.__code__)) to handle function redefinition
-        in notebooks correctly.
+        This method caches function code hashes using a WeakKeyDictionary
+        keyed on the function object itself. This prevents stale entries
+        when functions are garbage-collected and a new object reuses the
+        same ``id()``.
 
         Parameters
         ----------
@@ -91,35 +94,22 @@ class CompilationCache:
         -------
         hash : str
             SHA256 hash of function code (first 8 chars)
-
-        Notes
-        -----
-        Task 9.5 (2.1a): Uses composite key to prevent cache poisoning
-        when functions are redefined with the same name but different
-        code in interactive environments like Jupyter notebooks.
         """
-        # Task 9.5: Use composite key for race condition fix
-        func_id = id(func)
-        try:
-            code_id = id(func.__code__) if hasattr(func, "__code__") else 0
-        except (AttributeError, TypeError):
-            code_id = 0
+        # Check memoization cache first (fast path for repeated calls)
+        if func in self._func_hash_cache:
+            return self._func_hash_cache[func]
 
-        composite_key = (func_id, code_id)
-
-        # Check memoization cache first (95% faster for repeated calls)
-        if composite_key in self._func_hash_cache:
-            return self._func_hash_cache[composite_key]
-
-        # Compute hash (expensive - only done once per function)
+        # Compute hash from bytecode
         try:
             func_code = func.__code__.co_code if hasattr(func, "__code__") else b""
             code_hash = hashlib.sha256(func_code).hexdigest()[:8]
         except (AttributeError, TypeError):
-            code_hash = hashlib.sha256(str(func_id).encode()).hexdigest()[:8]
+            # Fallback: hash the function's qualified name
+            name = getattr(func, "__qualname__", getattr(func, "__name__", "unknown"))
+            code_hash = hashlib.sha256(name.encode()).hexdigest()[:8]
 
-        # Memoize for future lookups using composite key
-        self._func_hash_cache[composite_key] = code_hash
+        # Memoize — entry is auto-removed when func is garbage-collected
+        self._func_hash_cache[func] = code_hash
         return code_hash
 
     def _get_function_signature(self, func: Callable, *args, **kwargs) -> str:
@@ -274,9 +264,13 @@ class CompilationCache:
             self.cache.move_to_end(full_key)
             return self.cache[full_key], sig
 
-        # Compile with signature-aware caching
-        # Note: compile() already increments misses and compilations
-        compiled_func = self.compile(func, static_argnums=static_argnums)
+        # Compile directly (avoid delegating to compile() which uses a
+        # different key scheme and would double-count stats)
+        if self.enable_stats:
+            self.stats["misses"] += 1
+            self.stats["compilations"] += 1
+
+        compiled_func = jax.jit(func, static_argnums=static_argnums)
 
         # Task 9.2: Evict if at capacity before storing
         self._evict_if_at_capacity()
