@@ -137,12 +137,10 @@ from nlsq.common_jax import (
     update_tr_radius_jax,
 )
 from nlsq.common_scipy import (
-    CL_scaling_vector,
     check_termination,
     find_active_constraints,
     in_bounds,
     intersect_trust_region,
-    make_strictly_feasible,
     minimize_quadratic_1d,
     print_header_nonlinear,
     print_iteration_nonlinear,
@@ -1362,8 +1360,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         f: jnp.ndarray,
         J: jnp.ndarray,
         g: jnp.ndarray,
-        lb: np.ndarray,
-        ub: np.ndarray,
+        lb_jnp: jnp.ndarray,
+        ub_jnp: jnp.ndarray,
         x_scale: np.ndarray | str,
     ) -> dict:
         """Initialize bounds-specific state for TRF algorithm.
@@ -1381,10 +1379,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             Initial Jacobian
         g : jnp.ndarray
             Initial gradient
-        lb : np.ndarray
-            Lower bounds
-        ub : np.ndarray
-            Upper bounds
+        lb_jnp : jnp.ndarray
+            Lower bounds (pre-converted to JAX)
+        ub_jnp : jnp.ndarray
+            Upper bounds (pre-converted to JAX)
         x_scale : np.ndarray | str
             Parameter scaling
 
@@ -1399,7 +1397,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         else:
             scale, scale_inv = x_scale, 1 / x_scale
 
-        v, dv = CL_scaling_vector_jax(x0, g, jnp.asarray(lb), jnp.asarray(ub))
+        v, dv = CL_scaling_vector_jax(x0, g, lb_jnp, ub_jnp)
 
         mask = dv != 0
         v = v.at[mask].set(v[mask] * scale_inv[mask])
@@ -2540,7 +2538,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         g = self.compute_grad(J, f)
 
         # Initialize bounds state using helper
-        bounds_state = self._initialize_bounds_state(x0, f, J, g, lb, ub, x_scale)
+        bounds_state = self._initialize_bounds_state(
+            x0, f, J, g, lb_jnp, ub_jnp, x_scale
+        )
         v = bounds_state["v"]
         dv = bounds_state["dv"]
         scale = bounds_state["scale"]
