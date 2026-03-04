@@ -9,6 +9,7 @@ Phase 3 Optimizations (Task Group 9):
 """
 
 import hashlib
+import threading
 import warnings
 import weakref
 from collections import OrderedDict
@@ -31,6 +32,12 @@ class CompilationCache:
     - Evicts oldest entry with popitem(last=False) when at capacity
     - Uses composite key (id(func), id(func.__code__)) to prevent
       cache poisoning when functions are redefined with same name
+
+    Thread Safety
+    -------------
+    All public methods are guarded by a per-instance ``threading.Lock``.
+    The lock is held only for dict operations and released during
+    ``jax.jit()`` compilation to avoid blocking concurrent threads.
 
     Attributes
     ----------
@@ -76,6 +83,8 @@ class CompilationCache:
                 "compilations": 0,
                 "cache_size": 0,
             }
+
+        self._lock = threading.Lock()
 
     def _get_function_code_hash(self, func: Callable) -> str:
         """Get memoized hash of function code.
@@ -167,6 +176,8 @@ class CompilationCache:
 
         Uses LRU eviction with popitem(last=False) to remove the
         least recently used entry.
+
+        Note: Caller must hold ``self._lock``.
         """
         while len(self.cache) >= self.max_cache_size:
             # Task 9.2: LRU eviction using popitem(last=False)
@@ -203,31 +214,36 @@ class CompilationCache:
         except (AttributeError, TypeError):
             cache_key = f"{id(func)}_s{static_argnums}_d{donate_argnums}"
 
-        # Check cache
-        if cache_key in self.cache:
+        # Check cache (lock-guarded)
+        with self._lock:
+            if cache_key in self.cache:
+                if self.enable_stats:
+                    self.stats["hits"] += 1
+                # Task 9.2: Move to end for LRU tracking (most recently used)
+                self.cache.move_to_end(cache_key)
+                return self.cache[cache_key]
+
+        # Record miss stats under lock
+        with self._lock:
             if self.enable_stats:
-                self.stats["hits"] += 1
-            # Task 9.2: Move to end for LRU tracking (most recently used)
-            self.cache.move_to_end(cache_key)
-            return self.cache[cache_key]
+                self.stats["misses"] += 1
+                self.stats["compilations"] += 1
 
-        # Compile function
-        if self.enable_stats:
-            self.stats["misses"] += 1
-            self.stats["compilations"] += 1
-
+        # Compile function outside lock (jax.jit can be slow)
         compiled_func = jax.jit(
             func, static_argnums=static_argnums, donate_argnums=donate_argnums
         )
 
-        # Task 9.2: Evict oldest entry if at capacity before adding new one
-        self._evict_if_at_capacity()
+        # Store in cache under lock
+        with self._lock:
+            # Task 9.2: Evict oldest entry if at capacity before adding new one
+            self._evict_if_at_capacity()
 
-        # Store in cache (at end, as most recently used)
-        self.cache[cache_key] = compiled_func
+            # Store in cache (at end, as most recently used)
+            self.cache[cache_key] = compiled_func
 
-        if self.enable_stats:
-            self.stats["cache_size"] = len(self.cache)
+            if self.enable_stats:
+                self.stats["cache_size"] = len(self.cache)
 
         return compiled_func
 
@@ -257,29 +273,34 @@ class CompilationCache:
         sig = self._get_function_signature(func, *args, **kwargs)
         full_key = f"{sig}_s{static_argnums}"
 
-        if full_key in self.cache:
+        # Check cache (lock-guarded)
+        with self._lock:
+            if full_key in self.cache:
+                if self.enable_stats:
+                    self.stats["hits"] += 1
+                # Task 9.2: Move to end for LRU tracking
+                self.cache.move_to_end(full_key)
+                return self.cache[full_key], sig
+
+        # Record miss stats under lock
+        with self._lock:
             if self.enable_stats:
-                self.stats["hits"] += 1
-            # Task 9.2: Move to end for LRU tracking
-            self.cache.move_to_end(full_key)
-            return self.cache[full_key], sig
+                self.stats["misses"] += 1
+                self.stats["compilations"] += 1
 
-        # Compile directly (avoid delegating to compile() which uses a
-        # different key scheme and would double-count stats)
-        if self.enable_stats:
-            self.stats["misses"] += 1
-            self.stats["compilations"] += 1
-
+        # Compile outside lock (jax.jit can be slow)
         compiled_func = jax.jit(func, static_argnums=static_argnums)
 
-        # Task 9.2: Evict if at capacity before storing
-        self._evict_if_at_capacity()
+        # Store in cache under lock
+        with self._lock:
+            # Task 9.2: Evict if at capacity before storing
+            self._evict_if_at_capacity()
 
-        # Store with full signature
-        self.cache[full_key] = compiled_func
+            # Store with full signature
+            self.cache[full_key] = compiled_func
 
-        if self.enable_stats:
-            self.stats["cache_size"] = len(self.cache)
+            if self.enable_stats:
+                self.stats["cache_size"] = len(self.cache)
 
         return compiled_func, sig
 
@@ -289,14 +310,15 @@ class CompilationCache:
         This method clears all cached data and resets statistics counters to
         zero, allowing accurate hit/miss tracking after the clear operation.
         """
-        self.cache.clear()
-        self._func_hash_cache.clear()
+        with self._lock:
+            self.cache.clear()
+            self._func_hash_cache.clear()
 
-        if self.enable_stats:
-            self.stats["hits"] = 0
-            self.stats["misses"] = 0
-            self.stats["compilations"] = 0
-            self.stats["cache_size"] = 0
+            if self.enable_stats:
+                self.stats["hits"] = 0
+                self.stats["misses"] = 0
+                self.stats["compilations"] = 0
+                self.stats["cache_size"] = 0
 
     def get_stats(self) -> dict:
         """Get cache statistics.
@@ -309,15 +331,18 @@ class CompilationCache:
         if not self.enable_stats:
             return {"enabled": False}
 
-        total_requests = self.stats["hits"] + self.stats["misses"]
-        hit_rate = self.stats["hits"] / total_requests if total_requests > 0 else 0.0
+        with self._lock:
+            total_requests = self.stats["hits"] + self.stats["misses"]
+            hit_rate = (
+                self.stats["hits"] / total_requests if total_requests > 0 else 0.0
+            )
 
-        return {
-            **self.stats,
-            "hit_rate": hit_rate,
-            "total_requests": total_requests,
-            "max_cache_size": self.max_cache_size,
-        }
+            return {
+                **self.stats,
+                "hit_rate": hit_rate,
+                "total_requests": total_requests,
+                "max_cache_size": self.max_cache_size,
+            }
 
     def __enter__(self):
         """Context manager entry."""
@@ -328,12 +353,16 @@ class CompilationCache:
         return False
 
 
-# Global compilation cache
+# Global compilation cache (thread-safe double-checked locking)
 _global_compilation_cache: CompilationCache | None = None
+_global_compilation_cache_lock = threading.Lock()
 
 
 def get_global_compilation_cache() -> CompilationCache:
-    """Get or create global compilation cache.
+    """Get or create global compilation cache (thread-safe).
+
+    Uses double-checked locking to avoid acquiring the lock on
+    every call once the singleton has been initialized.
 
     Returns
     -------
@@ -341,9 +370,12 @@ def get_global_compilation_cache() -> CompilationCache:
         Global compilation cache instance
     """
     global _global_compilation_cache  # noqa: PLW0603
-    if _global_compilation_cache is None:
-        _global_compilation_cache = CompilationCache(enable_stats=True)
-    return _global_compilation_cache
+    if _global_compilation_cache is not None:
+        return _global_compilation_cache
+    with _global_compilation_cache_lock:
+        if _global_compilation_cache is None:
+            _global_compilation_cache = CompilationCache(enable_stats=True)
+        return _global_compilation_cache
 
 
 def cached_jit(
