@@ -85,15 +85,15 @@ dependencies = [
     "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.1)
     "scipy>=1.16.0",          # Tested on 1.16.3
 
-    # JAX ecosystem (>=0.8.0)
+    # JAX ecosystem (>=0.8.3)
     # GPU users: see GPU ACCELERATION section above for installation
-    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.9.0)
-    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.9.0)
+    "jax>=0.8.3",             # JAX >=0.8.3 (tested on 0.9.0)
+    "jaxlib>=0.8.3",          # JAXlib >=0.8.3 (tested on 0.9.0)
                                # Platform-specific extras installed separately:
-                               #   Linux CPU:  pip install "jax[cpu]>=0.8.0"
+                               #   Linux CPU:  pip install "jax[cpu]>=0.8.3"
                                #   Linux GPU:  make install-jax-gpu (recommended)
-                               #   macOS:      pip install "jax[cpu]>=0.8.0" (CPU only)
-                               #   Windows:    pip install "jax[cpu]>=0.8.0" (CPU only)
+                               #   macOS:      pip install "jax[cpu]>=0.8.3" (CPU only)
+                               #   Windows:    pip install "jax[cpu]>=0.8.3" (CPU only)
     "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.6)
 
     # Visualization and monitoring

@@ -134,7 +134,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     batch_parser.add_argument(
         "--continue-on-error",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="Continue processing on individual workflow failures (default: true)",
     )

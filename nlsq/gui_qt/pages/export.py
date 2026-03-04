@@ -30,6 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import nlsq
+
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
     from nlsq.gui_qt.theme import ThemeConfig
@@ -643,7 +645,7 @@ class ExportPage(QWidget):
         result = state.fit_result
 
         data: dict[str, Any] = {
-            "nlsq_version": "0.6.2",
+            "nlsq_version": nlsq.__version__,
             "export_type": "fit_results",
         }
 

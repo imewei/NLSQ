@@ -454,7 +454,9 @@ class FittingOptionsPage(QWidget):
         """Clean up the worker thread."""
         if self._fit_thread is not None:
             self._fit_thread.quit()
-            self._fit_thread.wait()
+            if not self._fit_thread.wait(5000):  # 5s timeout
+                self._fit_thread.terminate()
+                self._fit_thread.wait(1000)
             self._fit_thread = None
             self._fit_worker = None
 
