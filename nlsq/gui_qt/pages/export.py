@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import json
 import zipfile
+from importlib.metadata import version as _pkg_version
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -29,8 +30,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-import nlsq
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
@@ -645,7 +644,7 @@ class ExportPage(QWidget):
         result = state.fit_result
 
         data: dict[str, Any] = {
-            "nlsq_version": nlsq.__version__,
+            "nlsq_version": _pkg_version("nlsq"),
             "export_type": "fit_results",
         }
 
