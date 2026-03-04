@@ -213,15 +213,18 @@ class NLSQLogger:
 
     def debug(self, message: str, **kwargs):
         """Log debug message with optional structured data."""
-        self.logger.debug(self._format_message(message, **kwargs))
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(self._format_message(message, **kwargs))
 
     def info(self, message: str, **kwargs):
         """Log info message with optional structured data."""
-        self.logger.info(self._format_message(message, **kwargs))
+        if self.logger.isEnabledFor(logging.INFO):
+            self.logger.info(self._format_message(message, **kwargs))
 
     def warning(self, message: str, **kwargs):
         """Log warning message with optional structured data."""
-        self.logger.warning(self._format_message(message, **kwargs))
+        if self.logger.isEnabledFor(logging.WARNING):
+            self.logger.warning(self._format_message(message, **kwargs))
 
     def error(self, message: str, exc_info: bool = False, **kwargs):
         """Log error message with optional exception info."""
