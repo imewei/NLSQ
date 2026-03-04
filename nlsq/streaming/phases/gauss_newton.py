@@ -641,7 +641,7 @@ class GaussNewtonPhase:
 
         # Apply trust region constraint
         step_norm = jnp.linalg.norm(step)
-        if step_norm > trust_radius:
+        if step_norm > 0 and step_norm > trust_radius:
             step = step * (trust_radius / step_norm)
 
         # Compute predicted reduction

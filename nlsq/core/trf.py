@@ -93,6 +93,7 @@ References
 
 from __future__ import annotations
 
+import math
 import warnings
 from collections.abc import Callable
 
@@ -251,12 +252,12 @@ class TRFConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration values."""
-        if self.ftol <= 0:
-            raise ValueError(f"ftol must be positive, got {self.ftol}")
-        if self.xtol <= 0:
-            raise ValueError(f"xtol must be positive, got {self.xtol}")
-        if self.gtol <= 0:
-            raise ValueError(f"gtol must be positive, got {self.gtol}")
+        if self.ftol <= 0 or not math.isfinite(self.ftol):
+            raise ValueError(f"ftol must be a finite positive number, got {self.ftol}")
+        if self.xtol <= 0 or not math.isfinite(self.xtol):
+            raise ValueError(f"xtol must be a finite positive number, got {self.xtol}")
+        if self.gtol <= 0 or not math.isfinite(self.gtol):
+            raise ValueError(f"gtol must be a finite positive number, got {self.gtol}")
         if self.max_nfev is not None and self.max_nfev <= 0:
             raise ValueError(f"max_nfev must be positive, got {self.max_nfev}")
         valid_losses = {"linear", "soft_l1", "huber", "cauchy", "arctan"}

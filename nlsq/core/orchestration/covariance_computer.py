@@ -150,6 +150,16 @@ class CovarianceComputer:
         VT_np = np.asarray(VT)
 
         # Determine threshold for singular values
+        if len(s_np) == 0:
+            return CovarianceResult(
+                pcov=jnp.full((n_params, n_params), jnp.inf),
+                perr=jnp.full(n_params, jnp.inf),
+                method="svd",
+                condition_number=float("inf"),
+                is_singular=True,
+                sigma_used=sigma is not None,
+                absolute_sigma=absolute_sigma,
+            )
         threshold = np.finfo(float).eps * max(jac.shape) * s_np[0]
 
         # Filter out near-zero singular values
@@ -317,8 +327,8 @@ class CovarianceComputer:
                             "All eigenvalues must be positive."
                         )
                         raise ValueError(msg) from e
-                except Exception:
-                    pass
+                except (np.linalg.LinAlgError, ValueError):
+                    pass  # eigenvalue analysis failed; fall through to generic error
                 msg = (
                     "Failed to compute Cholesky decomposition of `sigma`. "
                     "The covariance matrix must be symmetric and positive definite."

@@ -169,7 +169,8 @@ def _solve_lsq_trust_region_jax_impl(
 
     # Normalize p to exactly Delta to prevent numerical drift
     p_iterative_norm = jnp.linalg.norm(p_iterative)
-    p_iterative_normalized = p_iterative * (Delta / p_iterative_norm)
+    safe_norm = jnp.maximum(p_iterative_norm, jnp.finfo(p_iterative.dtype).tiny)
+    p_iterative_normalized = p_iterative * (Delta / safe_norm)
 
     # Select between Gauss-Newton and iterative solution
     p_final = lax.cond(

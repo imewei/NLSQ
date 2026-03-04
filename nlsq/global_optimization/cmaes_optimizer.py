@@ -566,6 +566,7 @@ class CMAESOptimizer:
         }
 
         # Main optimization loop
+        gen = -1
         for gen in range(self.config.max_generations):
             key, key_ask, key_tell = jax.random.split(key, 3)
 
@@ -702,6 +703,7 @@ class CMAESOptimizer:
 
             # Run optimization loop
             stagnation_counter = 0
+            gen = -1
             for gen in range(self.config.max_generations):
                 key, key_ask, key_tell = jax.random.split(key, 3)
 

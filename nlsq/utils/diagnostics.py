@@ -130,7 +130,7 @@ class ConvergenceMonitor:
         # Check for alternating pattern
         differences = np.diff(costs)
         sign_changes = np.sum(np.diff(np.sign(differences)) != 0)
-        oscillation_score = sign_changes / (len(differences) - 1)
+        oscillation_score = sign_changes / max(1, len(differences) - 1)
 
         # Also check parameter oscillation
         if len(self.param_history) >= 3:
