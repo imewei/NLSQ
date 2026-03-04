@@ -12,6 +12,8 @@ and supports automatic bounds inference and parameter estimation.
 Key Features
 ------------
 - Evaluate N starting points and select best by loss value
+- Parallel evaluation using ThreadPoolExecutor with per-thread CurveFit isolation
+- Adaptive worker count based on hardware (GPU count, CPU cores)
 - Preset configurations: 'fast', 'robust', 'global', 'thorough', 'streaming'
 - Integration with parameter estimation for centering LHS samples
 - Automatic bounds inference when bounds not provided
@@ -47,9 +49,11 @@ latin_hypercube_sample : LHS sampling function
 TournamentSelector : Tournament selection for large datasets (Task Group 4)
 """
 
+import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import jax
 import numpy as np
 
 from nlsq.global_optimization.config import GlobalOptimizationConfig
@@ -68,6 +72,89 @@ from nlsq.result import CurveFitResult
 from nlsq.utils.logging import get_logger
 
 __all__ = ["MultiStartOrchestrator"]
+
+
+def _fit_single_start(
+    f: Callable,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    p0: np.ndarray,
+    bounds: tuple,
+    kwargs: dict,
+) -> tuple[np.ndarray, float, Any]:
+    """Thread worker -- isolated CurveFit instance per call.
+
+    Each worker creates its own CurveFit() to isolate mutable per-fit state
+    in LeastSquares (self.n, self.func_*, self.jac*). JIT-compiled functions
+    and the compilation cache are shared safely across threads.
+
+    Parameters
+    ----------
+    f : Callable
+        Model function ``f(x, *params) -> y``.
+    xdata : np.ndarray
+        Independent variable data.
+    ydata : np.ndarray
+        Dependent variable data.
+    p0 : np.ndarray
+        Initial parameter guess for this starting point.
+    bounds : tuple
+        Parameter bounds (lower, upper).
+    kwargs : dict
+        Additional arguments passed to curve_fit.
+
+    Returns
+    -------
+    tuple
+        (params, loss, result) where params is the fitted parameters,
+        loss is the sum of squared residuals (inf on failure), and
+        result is the CurveFitResult or None on failure.
+    """
+    from nlsq.core.minpack import CurveFit
+
+    cf = CurveFit()
+    try:
+        result: CurveFitResult = cf.curve_fit(  # type: ignore[assignment]
+            f, xdata, ydata, p0=p0, bounds=bounds, **kwargs
+        )
+        if hasattr(result, "cost"):
+            loss = 2 * result.cost  # cost is half sum of squares
+        elif hasattr(result, "fun"):
+            loss = float(np.sum(np.asarray(result.fun) ** 2))
+        else:
+            # Fallback: compute from residuals
+            predictions = f(xdata, *result.popt)
+            loss = float(np.sum((ydata - np.asarray(predictions)) ** 2))
+        return (result.popt, loss, result)
+    except Exception:
+        return (p0, float("inf"), None)
+
+
+def _select_worker_count(n_starts: int) -> int:
+    """Select optimal number of parallel workers.
+
+    Adapts to hardware:
+    - Multi-GPU: one fit per GPU
+    - Single GPU: min(n_starts, 4) to limit memory contention
+    - CPU-only: min(n_starts, cpu_count)
+
+    Parameters
+    ----------
+    n_starts : int
+        Number of starting points to evaluate.
+
+    Returns
+    -------
+    int
+        Number of workers to use for parallel evaluation.
+    """
+    n_devices = len(jax.devices())
+    if n_devices > 1:
+        return min(n_starts, n_devices)
+    elif n_devices == 1:
+        return min(n_starts, 4)
+    else:
+        return min(n_starts, os.cpu_count() or 4)
 
 
 class MultiStartOrchestrator:
@@ -132,6 +219,7 @@ class MultiStartOrchestrator:
 
             self.curve_fit = CurveFit()
         self.logger = get_logger("multi_start")
+        self._parallel_diagnostics: dict[str, Any] = {}
 
     @classmethod
     def from_preset(
@@ -248,7 +336,12 @@ class MultiStartOrchestrator:
         bounds: tuple[np.ndarray, np.ndarray],
         **kwargs: Any,
     ) -> list[tuple[np.ndarray, float, CurveFitResult | None]]:
-        """Evaluate all starting points and return sorted results.
+        """Evaluate starting points in parallel using ThreadPoolExecutor.
+
+        Each starting point is evaluated with an isolated CurveFit instance
+        to avoid thread-safety issues with mutable per-fit state in
+        LeastSquares. JIT-compiled functions and the compilation cache are
+        shared safely across threads.
 
         Parameters
         ----------
@@ -262,7 +355,7 @@ class MultiStartOrchestrator:
             Array of shape (n_starts, n_params) with starting points.
         bounds : tuple
             Tuple of (lower_bounds, upper_bounds) for parameters.
-        kwargs : dict
+        **kwargs
             Additional arguments passed to curve_fit.
 
         Returns
@@ -276,59 +369,64 @@ class MultiStartOrchestrator:
         if len(starting_points) == 0:
             return []
 
-        results: list[tuple[np.ndarray, float, CurveFitResult | None]] = []
+        import time as _time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         n_starts = len(starting_points)
+        n_workers = _select_worker_count(n_starts)
 
         self.logger.debug(
-            f"Evaluating {n_starts} starting points",
+            f"Evaluating {n_starts} starting points with {n_workers} workers",
             n_starts=n_starts,
-            sampler=self.config.sampler,
+            n_workers=n_workers,
         )
 
-        for i, p0 in enumerate(starting_points):
-            try:
-                # Run optimization from this starting point
-                result: CurveFitResult = self.curve_fit.curve_fit(  # type: ignore[assignment]
-                    f,
-                    xdata,
-                    ydata,
-                    p0=p0,
-                    bounds=bounds,
-                    **kwargs,
-                )
+        start_wall = _time.monotonic()
+        results: list[tuple[np.ndarray, float, CurveFitResult | None]] = [
+            None  # type: ignore[list-item]
+        ] * n_starts
 
-                # Compute loss (sum of squared residuals)
-                if hasattr(result, "cost"):
-                    loss = 2 * result.cost  # cost is half sum of squares
-                elif hasattr(result, "fun"):
-                    loss = float(np.sum(np.asarray(result.fun) ** 2))
-                else:
-                    # Fallback: compute from residuals
-                    predictions = f(xdata, *result.popt)
-                    residuals = ydata - np.asarray(predictions)
-                    loss = float(np.sum(residuals**2))
-
-                results.append((result.popt, loss, result))
-
+        if n_workers <= 1:
+            # Sequential fallback (1 start or 1 worker)
+            for i, p0 in enumerate(starting_points):
+                results[i] = _fit_single_start(f, xdata, ydata, p0, bounds, kwargs)
+                _params, loss, _ = results[i]
                 self.logger.debug(
                     f"Starting point {i + 1}/{n_starts}: loss={loss:.6f}",
                     starting_point_idx=i,
                     loss=loss,
                 )
+        else:
+            # Parallel execution
+            futures = {}
+            with ThreadPoolExecutor(max_workers=n_workers) as executor:
+                for i, p0 in enumerate(starting_points):
+                    future = executor.submit(
+                        _fit_single_start, f, xdata, ydata, p0, bounds, kwargs
+                    )
+                    futures[future] = i
 
-            except Exception as e:
-                # Optimization failed for this starting point
-                self.logger.debug(
-                    f"Starting point {i + 1}/{n_starts} failed: {e}",
-                    starting_point_idx=i,
-                    error=str(e),
-                )
-                # Add with infinite loss so it's never selected
-                results.append((p0, float("inf"), None))
+                for future in as_completed(futures):
+                    i = futures[future]
+                    results[i] = future.result()
+                    _params, loss, _ = results[i]
+                    self.logger.debug(
+                        f"Starting point {i + 1}/{n_starts}: loss={loss:.6f}",
+                        starting_point_idx=i,
+                        loss=loss,
+                    )
+
+        wall_time = _time.monotonic() - start_wall
+
+        # Store parallel diagnostics for fit() to merge
+        self._parallel_diagnostics = {
+            "parallel": n_workers > 1,
+            "n_workers": n_workers,
+            "wall_time_sec": wall_time,
+        }
 
         # Sort by loss (ascending)
         results.sort(key=lambda x: x[1])
-
         return results
 
     def fit(
@@ -499,6 +597,9 @@ class MultiStartOrchestrator:
             bounds=bounds,
             **kwargs,
         )
+
+        # Merge parallel diagnostics
+        diagnostics.update(self._parallel_diagnostics)
 
         # Count successful evaluations
         n_successful = sum(
