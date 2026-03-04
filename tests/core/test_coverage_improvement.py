@@ -8,7 +8,7 @@ import numpy as np
 
 from nlsq.core.loss_functions import LossFunctionsJIT
 from nlsq.core.trf import TrustRegionReflective
-from nlsq.stability.svd_fallback import compute_svd_with_fallback, safe_svd
+from nlsq.stability.svd_fallback import compute_svd_with_fallback
 from nlsq.utils.validators import InputValidator
 
 
@@ -201,16 +201,6 @@ class TestLossFunctionsCoverage(unittest.TestCase):
 class TestSVDFallbackCoverage(unittest.TestCase):
     """Tests for SVD fallback."""
 
-    def test_safe_svd(self):
-        """Test safe SVD computation."""
-        # Test with simple matrix
-        A = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-
-        U, s, Vt = safe_svd(A)
-        self.assertEqual(U.shape, (2, 2))
-        self.assertEqual(s.shape, (2,))
-        self.assertEqual(Vt.shape, (2, 2))
-
     def test_compute_svd_with_fallback(self):
         """Test SVD with fallback."""
         # Test with simple matrix
@@ -229,12 +219,12 @@ class TestSVDFallbackCoverage(unittest.TestCase):
         A = jnp.array([[1e-10, 0], [0, 1e10]])
 
         try:
-            U, s, Vt = safe_svd(A)
+            U, s, V = compute_svd_with_fallback(A)
             # Should handle gracefully
             self.assertTrue(jnp.all(jnp.isfinite(U)))
             self.assertTrue(jnp.all(jnp.isfinite(s)))
-            self.assertTrue(jnp.all(jnp.isfinite(Vt)))
-        except:
+            self.assertTrue(jnp.all(jnp.isfinite(V)))
+        except Exception:
             # May fail but should not crash
             pass
 

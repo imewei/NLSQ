@@ -162,17 +162,6 @@ class TestSVDFallbackCoverage(unittest.TestCase):
         # This should not raise an error
         initialize_gpu_safely()
 
-    def test_safe_svd_function(self):
-        """Test safe_svd function with decorator."""
-        from nlsq.stability.svd_fallback import safe_svd
-
-        A = jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
-        U, s, Vt = safe_svd(A, full_matrices=False)
-
-        self.assertEqual(U.shape, (3, 2))
-        self.assertEqual(s.shape, (2,))
-        self.assertEqual(Vt.shape, (2, 2))
-
     def test_compute_svd_with_full_matrices(self):
         """Test SVD computation with full_matrices=True."""
         A = jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])

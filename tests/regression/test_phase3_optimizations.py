@@ -275,8 +275,8 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
         """Clean up after tests."""
         self.cache.clear()
 
-    def test_func_hash_cache_uses_composite_key(self):
-        """Test that _func_hash_cache uses composite key (id(func), id(func.__code__))."""
+    def test_func_hash_cache_uses_weak_key(self):
+        """Test that _func_hash_cache uses function object as weak key."""
 
         # Define a function
         def test_func(x):
@@ -285,36 +285,29 @@ class TestFunctionHashRaceConditionFix(unittest.TestCase):
         # Get function hash
         hash1 = self.cache._get_function_code_hash(test_func)
 
-        # Check that composite key is in cache
-        # The key should be (id(func), id(func.__code__))
-        func_id = id(test_func)
-        code_id = id(test_func.__code__)
-        composite_key = (func_id, code_id)
-
-        self.assertIn(composite_key, self.cache._func_hash_cache)
-        self.assertEqual(self.cache._func_hash_cache[composite_key], hash1)
+        # Check that function object is in the WeakKeyDictionary cache
+        self.assertIn(test_func, self.cache._func_hash_cache)
+        self.assertEqual(self.cache._func_hash_cache[test_func], hash1)
 
     def test_redefined_function_gets_different_hash(self):
-        """Test that redefined function with same name gets different cache entry."""
+        """Test that redefined function with same name gets different hash."""
 
         # Define first version of function
-        def my_function(x):
+        def my_function_v1(x):
             return x + 1
 
-        hash1 = self.cache._get_function_code_hash(my_function)
-        code1_id = id(my_function.__code__)
+        hash1 = self.cache._get_function_code_hash(my_function_v1)
 
-        # Redefine function with same name but different code
-        def my_function(x):
+        # Define second version with different code
+        def my_function_v2(x):
             return x * 2
 
-        hash2 = self.cache._get_function_code_hash(my_function)
-        code2_id = id(my_function.__code__)
+        hash2 = self.cache._get_function_code_hash(my_function_v2)
 
-        # Different code objects should have different IDs
-        self.assertNotEqual(code1_id, code2_id)
+        # Different code should produce different hashes
+        self.assertNotEqual(hash1, hash2)
 
-        # Cache should have entries for both (different composite keys)
+        # Both functions alive, so cache should have entries for both
         self.assertEqual(len(self.cache._func_hash_cache), 2)
 
     def test_same_function_returns_cached_hash(self):
@@ -385,14 +378,13 @@ class TestPhase3Integration(unittest.TestCase):
         key = smart_cache.cache_key(np.array([1.0]))
         self.assertTrue(key.startswith(CACHE_VERSION))
 
-        # 4. Compilation cache uses composite key for func hash
+        # 4. Compilation cache uses WeakKeyDictionary for func hash
         def test_func(x):
             return x + 1
 
-        compilation_cache._get_function_code_hash(test_func)
-        func_id = id(test_func)
-        code_id = id(test_func.__code__)
-        self.assertIn((func_id, code_id), compilation_cache._func_hash_cache)
+        hash_val = compilation_cache._get_function_code_hash(test_func)
+        self.assertIn(test_func, compilation_cache._func_hash_cache)
+        self.assertEqual(compilation_cache._func_hash_cache[test_func], hash_val)
 
 
 if __name__ == "__main__":
