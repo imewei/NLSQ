@@ -534,6 +534,7 @@ def apply_preset_to_state(state: SessionState, preset_name: str) -> None:
     state.gtol = preset["gtol"]
     state.ftol = preset["ftol"]
     state.xtol = preset["xtol"]
+    state.max_iterations = preset.get("max_iterations", 200)
     state.workflow = preset.get("workflow", "auto")
 
     if state.workflow == "auto_global":

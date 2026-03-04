@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from nlsq.gui_qt.plots.live_cost_plot import LiveCostPlotWidget
+from nlsq.gui_qt.presets import PRESETS
 from nlsq.gui_qt.widgets.advanced_options import AdvancedOptionsWidget
 from nlsq.gui_qt.widgets.iteration_table import IterationTableWidget
 from nlsq.gui_qt.widgets.param_config import ParamConfigWidget
@@ -35,34 +36,6 @@ if TYPE_CHECKING:
     from nlsq.gui_qt.theme import ThemeConfig
 
 __all__ = ["FittingOptionsPage"]
-
-# Preset configurations using 3-workflow system (v0.6.3)
-# Workflows: 'auto' (local), 'auto_global' (global optimization), 'hpc'
-PRESETS = {
-    "Fast": {
-        "workflow": "auto",
-        "gtol": 1e-6,
-        "ftol": 1e-6,
-        "xtol": 1e-6,
-        "max_iterations": 100,
-    },
-    "Robust": {
-        "workflow": "auto_global",
-        "gtol": 1e-8,
-        "ftol": 1e-8,
-        "xtol": 1e-8,
-        "max_iterations": 200,
-        "n_starts": 5,
-    },
-    "Quality": {
-        "workflow": "auto_global",
-        "gtol": 1e-10,
-        "ftol": 1e-10,
-        "xtol": 1e-10,
-        "max_iterations": 500,
-        "n_starts": 10,
-    },
-}
 
 
 class FitWorker(QObject):
@@ -322,6 +295,10 @@ class FittingOptionsPage(QWidget):
 
     def run_fit(self) -> None:
         """Execute the curve fitting operation."""
+        # Guard against double invocation
+        if self._fit_thread is not None and self._fit_thread.isRunning():
+            return
+
         # Check prerequisites
         state = self._app_state.state
         if state.xdata is None or state.ydata is None:

@@ -507,7 +507,7 @@ class ExportPage(QWidget):
 
         # Add model function
         if state.model_config:
-            model_type = state.model_config.get("type", "unknown")
+            model_type = state.model_type
             if model_type == "builtin":
                 model_name = state.model_config.get("name", "linear")
                 lines.extend(

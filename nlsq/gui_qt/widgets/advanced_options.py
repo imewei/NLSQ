@@ -303,7 +303,7 @@ class AdvancedOptionsWidget(QWidget):
             "max_iterations": self._max_iter_spin.value(),
             "max_function_evals": self._max_fev_spin.value(),
             # Multi-start
-            "enable_multistart": self._multistart_check.isChecked(),
+            "workflow": "auto_global" if self._multistart_check.isChecked() else "auto",
             "n_starts": self._n_starts_spin.value(),
             "sampler": self._sampler_combo.currentText(),
             "center_on_p0": self._center_check.isChecked(),

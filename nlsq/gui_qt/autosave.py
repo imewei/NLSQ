@@ -191,3 +191,5 @@ class AutosaveManager(QObject):
             self._app_state.data_changed.emit()
         if state.model_config is not None:
             self._app_state.model_changed.emit()
+        if state.xdata is not None or state.model_config is not None:
+            self._app_state.page_access_changed.emit()

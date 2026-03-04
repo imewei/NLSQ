@@ -88,7 +88,8 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
 
     if "multistart" in fitting:
         ms = fitting["multistart"]
-        state.enable_multistart = ms.get("enabled", state.enable_multistart)
+        if ms.get("enabled", False):
+            state.workflow = "auto_global"
         state.n_starts = ms.get("num_starts", state.n_starts)
         state.sampler = ms.get("sampler", state.sampler)
         state.center_on_p0 = ms.get("center_on_p0", state.center_on_p0)
@@ -164,7 +165,7 @@ def _parse_global_optimization_section(
 
     go = config["global_optimization"]
     if "n_starts" in go and go["n_starts"] > 0:
-        state.enable_multistart = True
+        state.workflow = "auto_global"
         state.n_starts = go["n_starts"]
     state.sampler = go.get("sampler", state.sampler)
     state.center_on_p0 = go.get("center_on_p0", state.center_on_p0)
