@@ -8,7 +8,6 @@ Reference: specs/017-curve-fit-decomposition/spec.md FR-004
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -53,6 +52,7 @@ class StreamingCoordinator:
             safety_factor: Memory safety factor (0.75 means use 75% of available)
         """
         self.safety_factor = safety_factor
+        self._cached_available_memory: float | None = None
 
     def decide(
         self,
@@ -171,20 +171,21 @@ class StreamingCoordinator:
 
         return total_mb
 
-    @lru_cache(maxsize=1)
     def get_available_memory(self) -> float:
         """Get available system memory in MB.
-
-        Uses psutil with caching for efficiency.
 
         Returns:
             Available memory in MB
         """
+        if self._cached_available_memory is not None:
+            return self._cached_available_memory
+
         try:
             import psutil
 
             mem = psutil.virtual_memory()
-            return float(mem.available) / (1024 * 1024)
+            self._cached_available_memory = float(mem.available) / (1024 * 1024)
+            return self._cached_available_memory
         except ImportError:
             # Fallback if psutil not available
             return _DEFAULT_FALLBACK_MEMORY_MB

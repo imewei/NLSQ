@@ -237,12 +237,21 @@ class ConfiguredOptimizer:
 
         config = GlobalOptimizationConfig(n_starts=self._config.n_starts)
         optimizer = MultiStartOrchestrator(config=config)
+        # Infer p0 shape from function signature if not provided
+        if p0 is None:
+            from inspect import signature
+
+            sig = signature(f)
+            # Subtract 1 for the x parameter
+            n_params = max(len(sig.parameters) - 1, 1)
+            p0 = np.ones(n_params)
+
         # MultiStartOrchestrator.fit() returns dict, not tuple
         return optimizer.fit(
             f,
             xdata,
             ydata,
-            p0=p0 if p0 is not None else np.zeros(1),
+            p0=p0,
             **kwargs,
         )
 
