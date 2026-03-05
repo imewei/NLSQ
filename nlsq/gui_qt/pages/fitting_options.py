@@ -425,10 +425,15 @@ class FittingOptionsPage(QWidget):
             )
 
     def _cleanup_thread(self) -> None:
-        """Clean up the worker thread."""
+        """Clean up the worker thread.
+
+        Uses a short synchronous wait (100ms) to avoid blocking the main
+        thread.  If the thread hasn't finished by then, cleanup is deferred
+        to the thread's ``finished`` signal so the UI stays responsive.
+        """
         if self._fit_thread is not None:
             self._fit_thread.quit()
-            if self._fit_thread.wait(10000):  # 10s timeout for JAX JIT
+            if self._fit_thread.wait(100):  # brief non-blocking check
                 # Thread stopped cleanly — safe to delete immediately
                 if self._fit_worker is not None:
                     self._fit_worker.deleteLater()
@@ -436,8 +441,8 @@ class FittingOptionsPage(QWidget):
                 self._fit_thread.deleteLater()
                 self._fit_thread = None
             else:
-                # Do NOT terminate or deleteLater — JAX GPU operations leave
-                # undefined state. Connect finished signal for deferred cleanup.
+                # Deferred cleanup via finished signal — keeps UI responsive
+                # while JAX GPU operations complete in the background.
                 import logging
 
                 logging.getLogger(__name__).warning(

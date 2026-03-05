@@ -460,8 +460,17 @@ class ExportPage(QWidget):
                 raise ValueError("No fit results available")
 
             param_names = self._get_param_names()
-            popt = getattr(result, "x", None) or getattr(result, "popt", [])
+            popt = getattr(result, "x", None)
+            if popt is None:
+                popt = getattr(result, "popt", [])
             pcov = getattr(result, "pcov", None)
+
+            # Compute t-value for 95% CI
+            from scipy import stats
+
+            n_data = len(state.ydata) if state.ydata is not None else 0
+            dof = max(n_data - len(param_names), 1)
+            t_val = stats.t.ppf(0.975, dof)
 
             lines = ["parameter,value,uncertainty,ci_lower,ci_upper"]
             for i, name in enumerate(param_names):
@@ -469,8 +478,8 @@ class ExportPage(QWidget):
                 if pcov is not None:
                     try:
                         uncert = np.sqrt(pcov[i, i])
-                        ci_lower = value - 1.96 * uncert
-                        ci_upper = value + 1.96 * uncert
+                        ci_lower = value - t_val * uncert
+                        ci_upper = value + t_val * uncert
                     except Exception:
                         uncert = 0.0
                         ci_lower = ci_upper = value
@@ -650,11 +659,20 @@ class ExportPage(QWidget):
 
         # Parameters
         if result is not None:
-            popt = getattr(result, "x", None) or getattr(result, "popt", None)
+            popt = getattr(result, "x", None)
+            if popt is None:
+                popt = getattr(result, "popt", None)
             pcov = getattr(result, "pcov", None)
             param_names = self._get_param_names()
 
             if popt is not None:
+                # Compute t-value for 95% CI
+                from scipy import stats
+
+                n_data = len(state.ydata) if state.ydata is not None else 0
+                dof = max(n_data - len(param_names), 1)
+                t_val = stats.t.ppf(0.975, dof)
+
                 params = {}
                 for i, name in enumerate(param_names):
                     value = float(popt[i]) if i < len(popt) else 0.0
@@ -665,8 +683,8 @@ class ExportPage(QWidget):
                     params[name] = {
                         "value": value,
                         "uncertainty": uncert,
-                        "ci_lower": value - 1.96 * uncert,
-                        "ci_upper": value + 1.96 * uncert,
+                        "ci_lower": value - t_val * uncert,
+                        "ci_upper": value + t_val * uncert,
                     }
                 data["parameters"] = params
 

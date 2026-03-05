@@ -492,7 +492,7 @@ class ResultsPage(QWidget):
             try:
                 # Use delta method for confidence bands
                 conf_lower, conf_upper = self._compute_confidence_bands(
-                    x_dense, popt, pcov, state.model_func
+                    x_dense, popt, pcov, state.model_func, n_data=len(xdata)
                 )
             except Exception as e:
                 # Log error but don't crash UI
@@ -534,6 +534,7 @@ class ResultsPage(QWidget):
         popt: np.ndarray,
         pcov: np.ndarray,
         model_func: Any,
+        n_data: int | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Compute confidence bands using the delta method.
 
@@ -542,6 +543,8 @@ class ResultsPage(QWidget):
             popt: Fitted parameters
             pcov: Covariance matrix
             model_func: Model function
+            n_data: Actual number of data points for DOF calculation.
+                If None, falls back to len(x).
 
         Returns:
             Tuple of (lower_band, upper_band)
@@ -572,7 +575,7 @@ class ResultsPage(QWidget):
         # 95% confidence using t-distribution (consistent with parameter CIs)
         from scipy import stats
 
-        dof = max(len(x) - n_params, 1)
+        dof = max((n_data if n_data is not None else n_points) - n_params, 1)
         t_val = stats.t.ppf(0.975, dof)
         conf_lower = y_base - t_val * std
         conf_upper = y_base + t_val * std
