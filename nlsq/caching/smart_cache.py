@@ -327,7 +327,7 @@ class SmartCache:
                 value,
                 timestamp if timestamp is not None else time.time(),
             )
-            self.access_count[key] = 1
+            self.access_count[key] = self.access_count.get(key, 0) + 1
 
     def invalidate(self, key: str | None = None):
         """Invalidate cache entries.

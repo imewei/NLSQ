@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import threading
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -118,6 +119,7 @@ class JAXConfig:
     """
 
     _instance: Optional["JAXConfig"] = None
+    _lock: threading.RLock = threading.RLock()
     _x64_enabled: bool = False
     _initialized: bool = False
     _memory_config: MemoryConfig | None = None
@@ -126,19 +128,21 @@ class JAXConfig:
     _gpu_memory_configured: bool = False
 
     def __new__(cls) -> "JAXConfig":
-        """Ensure singleton pattern."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
+        """Ensure singleton pattern (thread-safe)."""
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):
         """Initialize JAX and memory configuration if not already done."""
-        if not self._initialized:
-            self._initialize_jax()
-            self._initialize_memory_config()
-            self._initialize_large_dataset_config()
-            self._initialize_mixed_precision_config()
-            self._initialized = True
+        with self._lock:
+            if not self._initialized:
+                self._initialize_jax()
+                self._initialize_memory_config()
+                self._initialize_large_dataset_config()
+                self._initialize_mixed_precision_config()
+                self._initialized = True
 
     def _initialize_jax(self):
         """Initialize JAX with default NLSQ settings."""
@@ -741,7 +745,11 @@ def set_memory_limits(
     current_config = get_memory_config()
     new_config = MemoryConfig(
         memory_limit_gb=memory_limit_gb,
-        gpu_memory_fraction=gpu_memory_fraction or current_config.gpu_memory_fraction,
+        gpu_memory_fraction=(
+            gpu_memory_fraction
+            if gpu_memory_fraction is not None
+            else current_config.gpu_memory_fraction
+        ),
         safety_factor=safety_factor,
         enable_mixed_precision_fallback=current_config.enable_mixed_precision_fallback,
         chunk_size_mb=current_config.chunk_size_mb,

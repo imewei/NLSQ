@@ -1009,10 +1009,8 @@ def curve_fit_large(
         # Handle sigma parameter by including it in kwargs if provided
         if sigma is not None:
             kwargs["sigma"] = sigma
-        if not absolute_sigma:
-            kwargs["absolute_sigma"] = absolute_sigma
-        if not check_finite:
-            kwargs["check_finite"] = check_finite
+        kwargs["absolute_sigma"] = absolute_sigma
+        kwargs["check_finite"] = check_finite
 
         # Add multi-start parameters to kwargs
         kwargs["multistart"] = multistart
