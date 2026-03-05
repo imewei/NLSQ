@@ -4,6 +4,7 @@ This module provides real-time monitoring, convergence detection,
 and diagnostic reporting for optimization processes.
 """
 
+import threading
 import time
 import warnings
 from collections import deque
@@ -273,7 +274,7 @@ class OptimizationDiagnostics:
             - 1: Normal (cheap 1-norm condition estimate, O(nm))
             - 2: Detailed (full SVD condition number, O(mn²))
         """
-        self.iteration_data: list[dict[str, Any]] = []
+        self.iteration_data: deque[dict[str, Any]] = deque(maxlen=10_000)
         self.convergence_monitor = ConvergenceMonitor()
         self.start_time: float | None = None
         self.enable_plotting = enable_plotting
@@ -281,7 +282,7 @@ class OptimizationDiagnostics:
 
         # Problem detection
         self.warnings_issued: list[str] = []
-        self.numerical_issues: list[str] = []
+        self.numerical_issues: deque[str] = deque(maxlen=1_000)
 
         # Performance metrics
         self.function_eval_count = 0
@@ -328,9 +329,9 @@ class OptimizationDiagnostics:
         """
         self.problem_name = problem_name
         self.start_time = time.time()
-        self.iteration_data = []
+        self.iteration_data = deque(maxlen=10_000)
         self.warnings_issued = []
-        self.numerical_issues = []
+        self.numerical_issues = deque(maxlen=1_000)
         self.function_eval_count = 0
         self.jacobian_eval_count = 0
 
@@ -669,7 +670,7 @@ class OptimizationDiagnostics:
             if self.numerical_issues:
                 lines.append("\n--- Numerical Issues ---")
                 lines.extend(
-                    f"  • {issue}" for issue in self.numerical_issues[:5]
+                    f"  • {issue}" for issue in list(self.numerical_issues)[:5]
                 )  # Show first 5
                 if len(self.numerical_issues) > 5:
                     lines.append(f"  ... and {len(self.numerical_issues) - 5} more")
@@ -745,6 +746,7 @@ class OptimizationDiagnostics:
 
 # Global diagnostics instance
 _global_diagnostics: OptimizationDiagnostics | None = None
+_global_diagnostics_lock = threading.Lock()
 
 
 def get_diagnostics(verbosity: int | None = None) -> OptimizationDiagnostics:
@@ -763,9 +765,11 @@ def get_diagnostics(verbosity: int | None = None) -> OptimizationDiagnostics:
     """
     global _global_diagnostics  # noqa: PLW0603
     if _global_diagnostics is None:
-        _global_diagnostics = OptimizationDiagnostics(
-            verbosity=verbosity if verbosity is not None else 1
-        )
+        with _global_diagnostics_lock:
+            if _global_diagnostics is None:
+                _global_diagnostics = OptimizationDiagnostics(
+                    verbosity=verbosity if verbosity is not None else 1
+                )
     return _global_diagnostics
 
 
@@ -778,4 +782,5 @@ def reset_diagnostics(verbosity: int = 1):
         Verbosity level (0=minimal, 1=normal, 2=detailed)
     """
     global _global_diagnostics  # noqa: PLW0603
-    _global_diagnostics = OptimizationDiagnostics(verbosity=verbosity)
+    with _global_diagnostics_lock:
+        _global_diagnostics = OptimizationDiagnostics(verbosity=verbosity)

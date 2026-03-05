@@ -279,6 +279,12 @@ class NLSQLogger:
         finally:
             elapsed = time.perf_counter() - start_time
             self.timers[f"{name}_{op_id[:8]}"] = elapsed
+            # Cap timers dict to prevent unbounded growth
+            if len(self.timers) > 10_000:
+                # Remove oldest entries (first inserted)
+                keys = list(self.timers)
+                for k in keys[: len(keys) // 2]:
+                    del self.timers[k]
             self.info(f"END {name}", elapsed=f"{elapsed:.3f}s")
             _context.operation_id = None
 

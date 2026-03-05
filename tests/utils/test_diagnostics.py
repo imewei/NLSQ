@@ -207,7 +207,7 @@ class TestOptimizationDiagnostics(unittest.TestCase):
     def test_initialization(self):
         """Test diagnostics initialization."""
         diag = OptimizationDiagnostics()
-        self.assertEqual(diag.iteration_data, [])
+        self.assertEqual(len(diag.iteration_data), 0)
         self.assertEqual(diag.function_eval_count, 0)
 
     def test_start_optimization(self):

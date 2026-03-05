@@ -6,6 +6,7 @@ used during L-BFGS warmup in the adaptive hybrid streaming optimizer.
 
 from __future__ import annotations
 
+import threading
 import time
 
 __all__ = [
@@ -313,6 +314,7 @@ class DefenseLayerTelemetry:
 
 # Global telemetry instance for monitoring
 _defense_telemetry: DefenseLayerTelemetry | None = None
+_defense_telemetry_lock = threading.Lock()
 
 
 def get_defense_telemetry() -> DefenseLayerTelemetry:
@@ -325,12 +327,15 @@ def get_defense_telemetry() -> DefenseLayerTelemetry:
     """
     global _defense_telemetry  # noqa: PLW0603
     if _defense_telemetry is None:
-        _defense_telemetry = DefenseLayerTelemetry()
+        with _defense_telemetry_lock:
+            if _defense_telemetry is None:
+                _defense_telemetry = DefenseLayerTelemetry()
     return _defense_telemetry
 
 
 def reset_defense_telemetry() -> None:
     """Reset global defense layer telemetry."""
     global _defense_telemetry  # noqa: PLW0602
-    if _defense_telemetry is not None:
-        _defense_telemetry.reset()
+    with _defense_telemetry_lock:
+        if _defense_telemetry is not None:
+            _defense_telemetry.reset()
