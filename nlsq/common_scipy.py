@@ -113,7 +113,8 @@ def solve_lsq_trust_region(
         denom = s**2 + alpha
         p_norm = norm(suf / denom)
         phi = p_norm - Delta
-        phi_prime = -np.sum(suf**2 / denom**3) / p_norm
+        safe_p_norm = p_norm if p_norm != 0 else np.finfo(float).tiny
+        phi_prime = -np.sum(suf**2 / denom**3) / safe_p_norm
         return phi, phi_prime
 
     suf = s * uf
@@ -143,6 +144,7 @@ def solve_lsq_trust_region(
     else:
         alpha = initial_alpha
 
+    it = -1
     for it in range(max_iter):
         if alpha < alpha_lower or alpha > alpha_upper:
             alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
@@ -534,7 +536,7 @@ def print_iteration_nonlinear(
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
     logger.info(
-        f"{iteration:^15}{nfev:^15}{nfev:^15.4e}{cost_reduction}{cost}{optimality:^15.2e}"
+        f"{iteration:^15}{nfev:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}"
     )
 
 
@@ -556,7 +558,7 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimalit
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
-    logger.info(f"{iteration:^15}{cost:^15.4e}{cost}{step_norm}{cost_reduction:^15.2e}")
+    logger.info(f"{iteration:^15}{cost:^15.4e}{cost_reduction}{step_norm}")
 
 
 # Simple helper functions.

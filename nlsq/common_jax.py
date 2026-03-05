@@ -62,7 +62,8 @@ def phi_and_derivative_jax(
     denom = s**2 + alpha
     p_norm = jnp.linalg.norm(suf / denom)
     phi = p_norm - Delta
-    phi_prime = -jnp.sum(suf**2 / denom**3) / p_norm
+    safe_p_norm = jnp.where(p_norm == 0.0, jnp.finfo(p_norm.dtype).tiny, p_norm)
+    phi_prime = -jnp.sum(suf**2 / denom**3) / safe_p_norm
     return phi, phi_prime
 
 
@@ -159,7 +160,7 @@ def _solve_lsq_trust_region_jax_impl(
         return (alpha_new, alpha_lower_new, alpha_upper_new, iteration + 1, converged)
 
     # Run the while loop
-    init_state = (alpha_start, alpha_lower, alpha_upper, jnp.array(0), False)
+    init_state = (alpha_start, alpha_lower, alpha_upper, jnp.array(0), jnp.array(False))
     final_alpha, _, _, n_iter_final, _ = lax.while_loop(
         loop_cond, loop_body, init_state
     )
