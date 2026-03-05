@@ -180,18 +180,21 @@ class ParamConfigWidget(QWidget):
                 if isinstance(upper_spin, QDoubleSpinBox):
                     upper_spin.setValue(upper[row])
 
-    def get_values(self) -> tuple[list[float], tuple[list[float], list[float]] | None]:
+    def get_values(
+        self,
+    ) -> tuple[list[float], tuple[list[float | None], list[float | None]] | None]:
         """Get the current parameter values.
 
         Returns:
-            Tuple of (p0, bounds) where bounds is (lower, upper) or None
+            Tuple of (p0, bounds) where bounds is (lower, upper) or None.
+            Bound values are None when at the sentinel threshold (unbounded).
         """
         if self._auto_p0_check.isChecked():
             return [], None
 
         p0: list[float] = []
-        lower: list[float] = []
-        upper: list[float] = []
+        lower: list[float | None] = []
+        upper: list[float | None] = []
 
         for row in range(self._table.rowCount()):
             p0_spin = self._table.cellWidget(row, 1)
