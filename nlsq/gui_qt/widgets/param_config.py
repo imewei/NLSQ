@@ -201,9 +201,11 @@ class ParamConfigWidget(QWidget):
             if isinstance(p0_spin, QDoubleSpinBox):
                 p0.append(p0_spin.value())
             if isinstance(lower_spin, QDoubleSpinBox):
-                lower.append(lower_spin.value())
+                lv = lower_spin.value()
+                lower.append(None if lv <= -1e10 else lv)
             if isinstance(upper_spin, QDoubleSpinBox):
-                upper.append(upper_spin.value())
+                uv = upper_spin.value()
+                upper.append(None if uv >= 1e10 else uv)
 
         bounds = (lower, upper) if lower and upper else None
         return p0, bounds

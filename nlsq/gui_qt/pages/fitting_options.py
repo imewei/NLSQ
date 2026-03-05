@@ -348,8 +348,9 @@ class FittingOptionsPage(QWidget):
         self._set_running_state(True)
 
         # Create and start worker thread
+        # Pass a snapshot of state to avoid TOCTOU race between UI and worker thread
         self._fit_thread = QThread()
-        self._fit_worker = FitWorker(state)
+        self._fit_worker = FitWorker(state.copy())
         self._fit_worker.moveToThread(self._fit_thread)
 
         # Connect signals
@@ -394,16 +395,9 @@ class FittingOptionsPage(QWidget):
         self._status_label.setText("Fit completed")
         self._status_label.setStyleSheet("color: #4CAF50;")
 
-        # Update app state
+        # Update app state — navigation to Results page happens via signal
         self._app_state.set_fit_result(result)
         self.fit_completed.emit(result)
-
-        QMessageBox.information(
-            self,
-            "Fit Complete",
-            "Curve fitting completed successfully.\n"
-            "Go to Results page to view the fitted parameters.",
-        )
 
     def _on_fit_error(self, message: str) -> None:
         """Handle fit error.
@@ -431,11 +425,21 @@ class FittingOptionsPage(QWidget):
         """Clean up the worker thread."""
         if self._fit_thread is not None:
             self._fit_thread.quit()
-            if not self._fit_thread.wait(5000):  # 5s timeout
-                self._fit_thread.terminate()
-                self._fit_thread.wait(1000)
-            self._fit_thread = None
-            self._fit_worker = None
+            if not self._fit_thread.wait(10000):  # 10s timeout for JAX JIT
+                # Do NOT terminate — JAX GPU operations leave undefined state.
+                # Log and let the thread finish naturally.
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Fit thread did not stop within timeout; "
+                    "allowing it to finish in background"
+                )
+            if self._fit_worker is not None:
+                self._fit_worker.deleteLater()
+                self._fit_worker = None
+            if self._fit_thread is not None:
+                self._fit_thread.deleteLater()
+                self._fit_thread = None
 
     def _set_running_state(self, running: bool) -> None:
         """Update UI for running/stopped state.

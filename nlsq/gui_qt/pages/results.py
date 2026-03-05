@@ -225,11 +225,17 @@ class ResultsPage(QWidget):
             values = list(popt)
             uncertainties = list(perr) if perr is not None else [0.0] * len(values)
 
-            # Compute confidence intervals (95% = ±1.96*std)
+            # Compute confidence intervals using t-distribution (correct for small n)
             ci = None
             if perr is not None:
+                from scipy import stats
+
+                n_data = len(state.ydata) if state.ydata is not None else 0
+                n_params = len(values)
+                dof = max(n_data - n_params, 1)
+                t_val = stats.t.ppf(0.975, dof)
                 ci = [
-                    (v - 1.96 * e, v + 1.96 * e)
+                    (v - t_val * e, v + t_val * e)
                     for v, e in zip(values, uncertainties, strict=False)
                 ]
 
