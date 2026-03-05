@@ -258,12 +258,18 @@ class TRFConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration values."""
-        if self.ftol <= 0 or not math.isfinite(self.ftol):
-            raise ValueError(f"ftol must be a finite positive number, got {self.ftol}")
-        if self.xtol <= 0 or not math.isfinite(self.xtol):
-            raise ValueError(f"xtol must be a finite positive number, got {self.xtol}")
-        if self.gtol <= 0 or not math.isfinite(self.gtol):
-            raise ValueError(f"gtol must be a finite positive number, got {self.gtol}")
+        if self.ftol < 0 or not math.isfinite(self.ftol):
+            raise ValueError(
+                f"ftol must be a finite non-negative number, got {self.ftol}"
+            )
+        if self.xtol < 0 or not math.isfinite(self.xtol):
+            raise ValueError(
+                f"xtol must be a finite non-negative number, got {self.xtol}"
+            )
+        if self.gtol < 0 or not math.isfinite(self.gtol):
+            raise ValueError(
+                f"gtol must be a finite non-negative number, got {self.gtol}"
+            )
         if self.max_nfev is not None and self.max_nfev <= 0:
             raise ValueError(f"max_nfev must be positive, got {self.max_nfev}")
         valid_losses = {"linear", "soft_l1", "huber", "cauchy", "arctan"}
@@ -1395,7 +1401,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if jac_scale:
             scale, scale_inv = self.cJIT.compute_jac_scale(J)
         else:
-            scale, scale_inv = x_scale, 1 / x_scale
+            safe_scale = np.where(x_scale == 0, 1.0, x_scale)
+            scale, scale_inv = safe_scale, 1.0 / safe_scale
 
         v, dv = CL_scaling_vector_jax(x0, g, lb_jnp, ub_jnp)
 
@@ -2297,103 +2304,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             f"xtol={relaxed_tol['xtol']:.2e}"
         )
 
-        # Retry optimization with relaxed criteria and half iteration budget
-        retry_max_nfev = max(max_nfev // 2, 50)
-        x = fallback_state.x
-        Delta = fallback_state.trust_radius
+        # Return best parameters tracked during optimization.
+        # The retry loop previously called non-existent methods; the best
+        # parameters from the mixed-precision tracker are already the best
+        # result available from the float64 fallback phase.
         termination_status = None
-
-        # Recompute initial state for retry
-        f, J, cost, g, g_norm, _ = self._compute_initial_state(
-            fun, xdata, ydata, jac, x, loss_function, f_scale, data_mask
-        )
-        g_jnp = g
-
-        # Retry loop with relaxed tolerances
-        for retry_iter in range(retry_max_nfev):
-            # Check relaxed convergence criteria
-            if g_norm < relaxed_tol["gtol"]:
-                termination_status = 1  # Gradient tolerance satisfied
-                self.logger.info(
-                    f"Fallback converged via gradient tolerance at iteration {retry_iter}"
-                )
-                break
-
-            # Compute trust region step
-            try:
-                step_result = self.compute_trust_region_step(
-                    J=J,
-                    g=g_jnp,
-                    Delta=Delta,
-                    lb_scaled=None,
-                    ub_scaled=None,
-                    theta=0.0,
-                    solver=solver,
-                    tr_options=tr_options,
-                )
-                d_jnp = step_result["step"]
-                step_norm = step_result.get("step_norm")
-            except Exception as e:
-                self.logger.warning(f"Fallback step computation failed: {e}")
-                break
-
-            # Evaluate step
-            acceptance_result = self._evaluate_step(
-                fun=fun,
-                xdata=xdata,
-                ydata=ydata,
-                jac=jac,
-                x=x,
-                f=f,
-                cost=cost,
-                J=J,
-                g=g_jnp,
-                d=d_jnp,
-                Delta=Delta,
-                loss_function=loss_function,
-                f_scale=f_scale,
-                data_mask=data_mask,
-            )
-
-            if acceptance_result["accepted"]:
-                # Update state
-                x = acceptance_result["x_new"]
-                f = acceptance_result["f_new"]
-                cost = acceptance_result["cost_new"]
-                J = acceptance_result["J_new"]
-                g = acceptance_result["g_new"]
-                g_jnp = g
-                g_norm = acceptance_result["g_norm_new"]
-
-                # Update trust radius
-                if acceptance_result["ratio"] > 0.75:
-                    Delta = min(Delta * 2.0, MAX_TRUST_RADIUS)
-                elif acceptance_result["ratio"] < 0.25:
-                    Delta *= 0.5
-
-                # Check relaxed convergence
-                if (
-                    acceptance_result.get("cost_reduction", 0)
-                    < relaxed_tol["ftol"] * cost
-                ):
-                    termination_status = 2  # Cost tolerance satisfied
-                    self.logger.info(
-                        f"Fallback converged via cost tolerance at iteration {retry_iter}"
-                    )
-                    break
-
-                if step_norm is not None and step_norm < relaxed_tol["xtol"]:
-                    termination_status = 3  # Step tolerance satisfied
-                    self.logger.info(
-                        f"Fallback converged via step tolerance at iteration {retry_iter}"
-                    )
-                    break
-            else:
-                # Reduce trust radius
-                Delta *= 0.5
-                if Delta < MIN_TRUST_RADIUS:
-                    self.logger.info("Fallback trust radius too small, stopping")
-                    break
 
         # Log final fallback result
         final_best_params = mixed_precision_manager.get_best_parameters()
@@ -2659,16 +2574,18 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             if inner_result["accepted"]:
                 x = inner_result["x_new"]
-                f = inner_result["f_new"]
-                f_true = f
+                f_unscaled = inner_result["f_new"]
+                f_true = f_unscaled
                 cost = inner_result["cost_new"]
 
                 J = jac(x, xdata, ydata, data_mask, transform)
                 njev += 1
 
                 if loss_function is not None:
-                    rho = loss_function(f, f_scale)
-                    J, f = self.cJIT.scale_for_robust_loss_function(J, f, rho)
+                    rho = loss_function(f_unscaled, f_scale)
+                    J, f = self.cJIT.scale_for_robust_loss_function(J, f_unscaled, rho)
+                else:
+                    f = f_unscaled
 
                 g = self.compute_grad(J, f)
                 if jac_scale:
