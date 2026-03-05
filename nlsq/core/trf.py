@@ -1479,7 +1479,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         # "hat" gradient
         g_h = d * g
-        J_diag = jnp.diag(diag_h**SQRT_EXPONENT)
+        J_diag = jnp.diag(jnp.sqrt(jnp.maximum(diag_h, 0.0)))
         # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
         d_jnp = jnp.asarray(d)
         f_zeros = jnp.zeros([n])
