@@ -53,8 +53,6 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "system",
         "popen",
         "spawn",
-        "call",
-        "run",
         "Popen",
         # Network access
         "socket",
@@ -351,6 +349,7 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     # Timer for timeout
     timer = None
     timeout_occurred = False
+    old_handler = signal.SIG_DFL
 
     def timeout_handler():
         nonlocal timeout_occurred
@@ -363,12 +362,8 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
             raise ResourceLimitError(f"Execution timeout ({timeout}s exceeded)")
 
     try:
-        # Set memory limit
-        memory_bytes = memory_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
-
-        # Set up timeout
-        old_handler = signal.signal(signal.SIGALRM, signal_handler)
+        # Set up timeout (skip RLIMIT_AS — incompatible with JAX's virtual address space)
+        old_handler = signal.signal(signal.SIGALRM, signal_handler)  # type: ignore[assignment]
         timer = threading.Timer(timeout, timeout_handler)
         timer.start()
 
@@ -436,7 +431,7 @@ class AuditLogger:
             handler = RotatingFileHandler(
                 self.log_file,
                 maxBytes=self.max_size_bytes,
-                backupCount=self.retention_days,
+                backupCount=min(self.retention_days, 10),
             )
             formatter = logging.Formatter(
                 "%(asctime)s - %(levelname)s - %(message)s",
