@@ -419,16 +419,17 @@ class ResultsPage(QWidget):
         k = len(popt)
 
         # AIC (Akaike Information Criterion)
-        # AIC = n * log(RSS/n) + 2k
+        # Using concentrated Gaussian log-likelihood: k+1 counts sigma^2
+        # AIC = n * log(RSS/n) + 2*(k+1)
         if ss_res > 0:
-            aic = n * np.log(ss_res / n) + 2 * k
+            aic = n * np.log(ss_res / n) + 2 * (k + 1)
         else:
             aic = -np.inf
 
         # BIC (Bayesian Information Criterion)
-        # BIC = n * log(RSS/n) + k * log(n)
+        # BIC = n * log(RSS/n) + (k+1) * log(n)
         if ss_res > 0:
-            bic = n * np.log(ss_res / n) + k * np.log(n)
+            bic = n * np.log(ss_res / n) + (k + 1) * np.log(n)
         else:
             bic = -np.inf
 
@@ -568,9 +569,13 @@ class ResultsPage(QWidget):
         var = np.sum((J @ pcov) * J, axis=1)
         std = np.sqrt(np.maximum(var, 0))
 
-        # 95% confidence: ±1.96 * std
-        conf_lower = y_base - 1.96 * std
-        conf_upper = y_base + 1.96 * std
+        # 95% confidence using t-distribution (consistent with parameter CIs)
+        from scipy import stats
+
+        dof = max(len(x) - n_params, 1)
+        t_val = stats.t.ppf(0.975, dof)
+        conf_lower = y_base - t_val * std
+        conf_upper = y_base + t_val * std
 
         return conf_lower, conf_upper
 

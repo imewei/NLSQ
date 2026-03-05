@@ -295,8 +295,11 @@ class FittingOptionsPage(QWidget):
 
     def run_fit(self) -> None:
         """Execute the curve fitting operation."""
-        # Guard against double invocation
-        if self._fit_thread is not None and self._fit_thread.isRunning():
+        # Guard against double invocation — check both tracked thread ref and
+        # app-level running flag (thread ref is cleared in deferred cleanup)
+        if self._fit_thread is not None:
+            return
+        if getattr(self._app_state.state, "fit_running", False):
             return
 
         # Check prerequisites
