@@ -2308,7 +2308,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # The retry loop previously called non-existent methods; the best
         # parameters from the mixed-precision tracker are already the best
         # result available from the float64 fallback phase.
-        termination_status = None
+        termination_status = (
+            0  # Did not converge independently; using best tracked params
+        )
 
         # Log final fallback result
         final_best_params = mixed_precision_manager.get_best_parameters()

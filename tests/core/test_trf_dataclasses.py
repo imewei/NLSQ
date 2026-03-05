@@ -60,17 +60,23 @@ class TestTRFConfig:
 
     def test_validation_negative_ftol(self):
         """Test validation rejects negative ftol."""
-        with pytest.raises(ValueError, match="ftol must be a finite positive number"):
+        with pytest.raises(
+            ValueError, match="ftol must be a finite non-negative number"
+        ):
             TRFConfig(ftol=-1e-8)
 
     def test_validation_negative_xtol(self):
         """Test validation rejects negative xtol."""
-        with pytest.raises(ValueError, match="xtol must be a finite positive number"):
+        with pytest.raises(
+            ValueError, match="xtol must be a finite non-negative number"
+        ):
             TRFConfig(xtol=-1e-8)
 
     def test_validation_negative_gtol(self):
         """Test validation rejects negative gtol."""
-        with pytest.raises(ValueError, match="gtol must be a finite positive number"):
+        with pytest.raises(
+            ValueError, match="gtol must be a finite non-negative number"
+        ):
             TRFConfig(gtol=-1e-8)
 
     def test_validation_negative_max_nfev(self):

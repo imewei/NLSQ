@@ -425,21 +425,29 @@ class FittingOptionsPage(QWidget):
         """Clean up the worker thread."""
         if self._fit_thread is not None:
             self._fit_thread.quit()
-            if not self._fit_thread.wait(10000):  # 10s timeout for JAX JIT
-                # Do NOT terminate — JAX GPU operations leave undefined state.
-                # Log and let the thread finish naturally.
+            if self._fit_thread.wait(10000):  # 10s timeout for JAX JIT
+                # Thread stopped cleanly — safe to delete immediately
+                if self._fit_worker is not None:
+                    self._fit_worker.deleteLater()
+                    self._fit_worker = None
+                self._fit_thread.deleteLater()
+                self._fit_thread = None
+            else:
+                # Do NOT terminate or deleteLater — JAX GPU operations leave
+                # undefined state. Connect finished signal for deferred cleanup.
                 import logging
 
                 logging.getLogger(__name__).warning(
                     "Fit thread did not stop within timeout; "
                     "allowing it to finish in background"
                 )
-            if self._fit_worker is not None:
-                self._fit_worker.deleteLater()
-                self._fit_worker = None
-            if self._fit_thread is not None:
-                self._fit_thread.deleteLater()
+                thread = self._fit_thread
+                worker = self._fit_worker
+                thread.finished.connect(thread.deleteLater)
+                if worker is not None:
+                    thread.finished.connect(worker.deleteLater)
                 self._fit_thread = None
+                self._fit_worker = None
 
     def _set_running_state(self, running: bool) -> None:
         """Update UI for running/stopped state.

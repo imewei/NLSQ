@@ -35,7 +35,6 @@ from typing import Any
 _HAS_RESOURCE_LIMITS = sys.platform != "win32"
 
 if _HAS_RESOURCE_LIMITS:
-    import resource
     import signal
 
 logger = logging.getLogger("nlsq.cli.security")
@@ -343,9 +342,6 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
         return
 
     # Unix-specific resource limiting
-    # Store original limits
-    original_mem = resource.getrlimit(resource.RLIMIT_AS)
-
     # Timer for timeout
     timer = None
     timeout_occurred = False
@@ -375,9 +371,6 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
         # Cancel timer
         if timer is not None:
             timer.cancel()
-
-        # Restore original limits
-        resource.setrlimit(resource.RLIMIT_AS, original_mem)
 
         # Restore original signal handler
         signal.signal(signal.SIGALRM, old_handler)
