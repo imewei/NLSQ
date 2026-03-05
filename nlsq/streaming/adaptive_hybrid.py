@@ -180,7 +180,7 @@ class AdaptiveHybridStreamingOptimizer:
         # Fault tolerance components
         self.stability_guard = NumericalStabilityGuard()
         self.best_params_global: jnp.ndarray | None = None
-        self.best_cost_global: float = jnp.inf
+        self.best_cost_global: float = float("inf")
         self.checkpoint_counter: int = 0
         self.retry_count: int = 0
 

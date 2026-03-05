@@ -346,7 +346,14 @@ class NumericalStabilityGuard:
         if jnp.allclose(J, 0.0):
             warnings.warn("Jacobian is all zeros, adding small perturbation")
             J = J + self.eps  # Broadcasting is more memory efficient than jnp.ones
-            return J, {"has_nan": False, "has_inf": False, "condition_number": np.inf}
+            return J, {
+                "has_nan": False,
+                "has_inf": False,
+                "is_ill_conditioned": True,
+                "condition_number": np.inf,
+                "regularized": True,
+                "svd_skipped": False,
+            }
 
         # Compute singular values for condition number
         condition_number = np.inf

@@ -78,7 +78,7 @@ class AutosaveManager(QObject):
             if timestamp:
                 self.recovery_available.emit(timestamp)
                 return True
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError):
             pass
 
         return False
@@ -96,7 +96,7 @@ class AutosaveManager(QObject):
             data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
             self._restore_state(data)
             return True
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, TypeError):
             return False
 
     def clear_recovery(self) -> None:
@@ -117,7 +117,7 @@ class AutosaveManager(QObject):
                 encoding="utf-8",
             )
             self.autosave_completed.emit()
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError, TypeError):
             # Silently fail - autosave is best-effort
             pass
 
