@@ -23,6 +23,7 @@ Phase 3 Optimizations (Task Group 9):
 
 import gc
 import logging
+import threading
 import time
 import warnings
 from collections import OrderedDict, deque
@@ -894,6 +895,7 @@ class MemoryManager:
 
 # Global memory manager instance
 _memory_manager: MemoryManager | None = None
+_memory_manager_lock = threading.Lock()
 
 
 def get_memory_manager() -> MemoryManager:
@@ -906,7 +908,9 @@ def get_memory_manager() -> MemoryManager:
     """
     global _memory_manager  # noqa: PLW0603
     if _memory_manager is None:
-        _memory_manager = MemoryManager()
+        with _memory_manager_lock:
+            if _memory_manager is None:
+                _memory_manager = MemoryManager()
     return _memory_manager
 
 
