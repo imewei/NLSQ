@@ -126,11 +126,11 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         xdata = np.array(1.0)
         ydata = np.array(2.0)
 
-        # Scalars cause TypeError during validation, not a validation error
-        with self.assertRaises(TypeError):
-            _errors, _warnings_list, _x_clean, _y_clean = (
-                self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
-            )
+        # Scalars are caught gracefully during validation
+        errors, _warnings_list, _x_clean, _y_clean = (
+            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
+        )
+        self.assertTrue(any("at least 1-dimensional" in e for e in errors))
 
     def test_insufficient_points_for_parameters(self):
         """Test error when not enough points for number of parameters."""
