@@ -390,7 +390,9 @@ class SmartCache:
     def optimize_cache(self):
         """Optimize cache by removing rarely accessed items.
 
-        Takes a snapshot of keys under lock, then invalidates outside.
+        Computes threshold from snapshot, then re-checks live counts under
+        lock before invalidating to avoid evicting keys that became hot
+        between the snapshot and eviction.
         """
         with self._lock:
             if not self.access_count:
@@ -400,11 +402,15 @@ class SmartCache:
 
         # Calculate average access count (no lock needed for snapshot)
         avg_access = np.mean(list(access_snapshot.values()))
+        threshold = avg_access * 0.5
 
-        # Identify items with below-average access
-        keys_to_remove = [
-            key for key, count in access_snapshot.items() if count < avg_access * 0.5
-        ]
+        # Re-check live count under lock before invalidating each key
+        keys_to_remove = []
+        with self._lock:
+            for key in access_snapshot:
+                live_count = self.access_count.get(key, 0)
+                if live_count < threshold:
+                    keys_to_remove.append(key)
 
         # Invalidate outside the lock (invalidate acquires its own lock)
         for key in keys_to_remove:
@@ -514,17 +520,28 @@ def cached_function(cache: SmartCache | None = None, ttl: float | None = None):
             # Generate cache key
             cache_key = cache.cache_key(func, *args, **kwargs)
 
-            # Check cache
-            cached_result = cache.get(cache_key)
+            # Check cache (get value and timestamp atomically under one lock)
+            cached_result = None
+            with cache._lock:
+                if cache_key in cache.memory_cache:
+                    value, timestamp = cache.memory_cache[cache_key]
+                    cache.access_count[cache_key] = (
+                        cache.access_count.get(cache_key, 0) + 1
+                    )
+                    if cache.enable_stats:
+                        cache.cache_stats["hits"] += 1
+                        cache.cache_stats["memory_hits"] += 1
+                    # LRU move
+                    del cache.memory_cache[cache_key]
+                    cache.memory_cache[cache_key] = (value, timestamp)
+                    # TTL check
+                    if ttl is not None and time.time() - timestamp > ttl:
+                        value = None  # expired
+                    cached_result = value
 
-            if cached_result is not None:
-                # Check TTL if specified
-                if ttl is not None:
-                    with cache._lock:
-                        _value, timestamp = cache.memory_cache.get(cache_key, (None, 0))
-                    if time.time() - timestamp > ttl:
-                        # Expired, recompute
-                        cached_result = None
+            # Disk fallback (outside lock)
+            if cached_result is None and cache.disk_cache_enabled:
+                cached_result = cache.get(cache_key)
 
             if cached_result is None:
                 # Compute and cache
