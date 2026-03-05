@@ -65,6 +65,13 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "importlib",
         "__loader__",
         "__spec__",
+        # Reflection / sandbox escape
+        "getattr",
+        "globals",
+        "locals",
+        "vars",
+        "__builtins__",
+        "__subclasses__",
     }
 )
 

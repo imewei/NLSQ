@@ -94,6 +94,7 @@ class InputValidator:
             # Check dimensions
             if xdata.ndim == 0:
                 errors.append("xdata must be at least 1-dimensional")
+                return errors, warnings_list, xdata, ydata, 0
 
             # Handle 2D xdata (multiple independent variables)
             if xdata.ndim == 2:

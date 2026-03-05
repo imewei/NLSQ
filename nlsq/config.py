@@ -1,5 +1,6 @@
 """Central configuration management for NLSQ package."""
 
+import copy
 import json
 import logging
 import os
@@ -486,7 +487,7 @@ class JAXConfig:
         # Explicit validation after initialization (not assert - can be optimized away)
         if instance._memory_config is None:
             raise RuntimeError("Memory config initialization failed")
-        return instance._memory_config
+        return copy.copy(instance._memory_config)
 
     @classmethod
     def set_memory_config(cls, config: MemoryConfig):
@@ -527,7 +528,7 @@ class JAXConfig:
         # Explicit validation after initialization (not assert - can be optimized away)
         if instance._large_dataset_config is None:
             raise RuntimeError("Large dataset config initialization failed")
-        return instance._large_dataset_config
+        return copy.copy(instance._large_dataset_config)
 
     @classmethod
     def set_large_dataset_config(cls, config: LargeDatasetConfig):

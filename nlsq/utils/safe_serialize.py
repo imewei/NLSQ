@@ -91,7 +91,7 @@ def _convert_to_serializable(obj: Any) -> Any:
 
     # Handle numpy arrays (small ones only - large arrays should use HDF5)
     if isinstance(obj, np.ndarray):
-        if obj.size > 1000:
+        if obj.size > 10_000:
             raise SafeSerializationError(
                 f"NumPy array too large for JSON serialization ({obj.size} elements). "
                 "Use HDF5 storage for large arrays."

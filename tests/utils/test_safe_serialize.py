@@ -193,7 +193,7 @@ class TestNumpyTypes:
 
     def test_large_array_rejected(self):
         """Test that large numpy arrays are rejected."""
-        data = np.ones(1001)
+        data = np.ones(10_001)
         with pytest.raises(SafeSerializationError, match="too large"):
             safe_dumps(data)
 
@@ -477,14 +477,14 @@ class TestAdversarialSecurity:
             safe_dumps({"class": dict})
 
     def test_array_size_limit_at_boundary(self):
-        """Test array size limit at exact boundary (1000 allowed, 1001 rejected)."""
-        # Exactly 1000 elements should be allowed
-        data_ok = np.ones(1000)
+        """Test array size limit at exact boundary (10000 allowed, 10001 rejected)."""
+        # Exactly 10000 elements should be allowed (supports 100-param pcov)
+        data_ok = np.ones(10_000)
         result = safe_loads(safe_dumps(data_ok))
-        assert len(result) == 1000
+        assert len(result) == 10_000
 
-        # 1001 elements should be rejected
-        data_too_large = np.ones(1001)
+        # 10001 elements should be rejected
+        data_too_large = np.ones(10_001)
         with pytest.raises(SafeSerializationError, match="too large"):
             safe_dumps(data_too_large)
 
