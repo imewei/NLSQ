@@ -248,40 +248,40 @@ class JAXConfig:
         if self._memory_config is not None:
             return
 
-        # Load defaults
-        memory_config = MemoryConfig()
+        # Collect env overrides, then construct MemoryConfig in one shot
+        # (safe if MemoryConfig ever becomes frozen=True)
+        overrides: dict = {}
 
-        # Override from environment variables
         limit = os.getenv("NLSQ_MEMORY_LIMIT_GB")
         if limit:
             try:
-                memory_config.memory_limit_gb = float(limit)
+                overrides["memory_limit_gb"] = float(limit)
             except ValueError:
                 warnings.warn(f"Invalid NLSQ_MEMORY_LIMIT_GB: {limit}", stacklevel=2)
 
         fraction = os.getenv("NLSQ_GPU_MEMORY_FRACTION")
         if fraction:
             try:
-                memory_config.gpu_memory_fraction = float(fraction)
+                overrides["gpu_memory_fraction"] = float(fraction)
             except ValueError:
                 warnings.warn(
                     f"Invalid NLSQ_GPU_MEMORY_FRACTION: {fraction}", stacklevel=2
                 )
 
         if os.getenv("NLSQ_DISABLE_MIXED_PRECISION_FALLBACK") == "1":
-            memory_config.enable_mixed_precision_fallback = False
+            overrides["enable_mixed_precision_fallback"] = False
 
         chunk_size = os.getenv("NLSQ_CHUNK_SIZE_MB")
         if chunk_size:
             try:
-                memory_config.chunk_size_mb = int(chunk_size)
+                overrides["chunk_size_mb"] = int(chunk_size)
             except ValueError:
                 warnings.warn(f"Invalid NLSQ_CHUNK_SIZE_MB: {chunk_size}", stacklevel=2)
 
-        if os.getenv("NLSQ_OOM_STRATEGY"):
-            strategy = os.getenv("NLSQ_OOM_STRATEGY")
+        strategy = os.getenv("NLSQ_OOM_STRATEGY")
+        if strategy:
             if strategy in ["fallback", "reduce", "error"]:
-                memory_config.out_of_memory_strategy = strategy
+                overrides["out_of_memory_strategy"] = strategy
             else:
                 warnings.warn(
                     f"Invalid NLSQ_OOM_STRATEGY: {strategy}. Must be 'fallback', 'reduce', or 'error'.",
@@ -291,16 +291,16 @@ class JAXConfig:
         safety_factor = os.getenv("NLSQ_SAFETY_FACTOR")
         if safety_factor:
             try:
-                memory_config.safety_factor = float(safety_factor)
+                overrides["safety_factor"] = float(safety_factor)
             except ValueError:
                 warnings.warn(
                     f"Invalid NLSQ_SAFETY_FACTOR: {safety_factor}", stacklevel=2
                 )
 
         if os.getenv("NLSQ_DISABLE_PROGRESS_REPORTING") == "1":
-            memory_config.progress_reporting = False
+            overrides["progress_reporting"] = False
 
-        self._memory_config = memory_config
+        self._memory_config = MemoryConfig(**overrides)
 
     def _initialize_large_dataset_config(self):
         """Initialize large dataset configuration from environment variables."""
@@ -498,12 +498,11 @@ class JAXConfig:
             New memory configuration
         """
         instance = cls()
-        instance._memory_config = config
+        with cls._lock:
+            instance._memory_config = config
 
         # Apply GPU memory settings immediately if possible
         try:
-            pass
-
             if config.gpu_memory_fraction is not None:
                 # Note: JAX memory fraction handling varies by version and backend
                 # This is stored in our config for use by downstream components
@@ -540,7 +539,8 @@ class JAXConfig:
             New large dataset configuration
         """
         instance = cls()
-        instance._large_dataset_config = config
+        with cls._lock:
+            instance._large_dataset_config = config
 
     @classmethod
     def get_mixed_precision_config(cls):
@@ -569,7 +569,8 @@ class JAXConfig:
             New mixed precision configuration
         """
         instance = cls()
-        instance._mixed_precision_config = config
+        with cls._lock:
+            instance._mixed_precision_config = config
 
     @classmethod
     @contextmanager
