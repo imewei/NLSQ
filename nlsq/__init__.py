@@ -304,6 +304,7 @@ __all__ = [
     "HybridStreamingConfig",
     "InputValidator",
     "IterationLogger",
+    "LDMemoryConfig",
     "LargeDatasetConfig",
     "LargeDatasetFitter",
     "LeastSquares",
@@ -543,7 +544,7 @@ def fit(
             bounds=bounds,
             method=method,
             workflow=workflow,
-            n_starts=n_starts if n_starts is not None else 10,
+            n_starts=n_starts,
             memory_limit_gb=memory_limit_gb,
             **kwargs,
         )
