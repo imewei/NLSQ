@@ -1401,7 +1401,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if jac_scale:
             scale, scale_inv = self.cJIT.compute_jac_scale(J)
         else:
-            safe_scale = np.where(x_scale == 0, 1.0, x_scale)
+            safe_scale = jnp.where(jnp.asarray(x_scale) == 0, 1.0, jnp.asarray(x_scale))
             scale, scale_inv = safe_scale, 1.0 / safe_scale
 
         v, dv = CL_scaling_vector_jax(x0, g, lb_jnp, ub_jnp)
@@ -2522,7 +2522,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             )
 
             # theta controls step back step ratio from the bounds
-            theta = max(0.995, 1 - g_norm)
+            theta = jnp.maximum(jnp.float64(0.995), 1.0 - g_norm)
 
             # Evaluate inner loop using helper
             inner_result = self._evaluate_bounds_inner_loop(
