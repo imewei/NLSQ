@@ -194,7 +194,7 @@ def test_evaluate_step_acceptance_nonfinite_rejects() -> None:
     )
 
     assert result["accepted"] is False
-    assert result["actual_reduction"] == 0
+    assert result["actual_reduction"] <= 0  # Negative or zero when step rejected
     assert result["Delta"] < 1.0
 
 

@@ -1138,7 +1138,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Prepare result
         result = {
             "accepted": actual_reduction > 0,
-            "actual_reduction": max(0, actual_reduction),
+            "actual_reduction": actual_reduction,
             "step_norm": step_norm if actual_reduction > 0 else 0,
             "Delta": Delta,
             "alpha": alpha,
@@ -1703,7 +1703,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             "x_new": x_new if actual_reduction > 0 else x,
             "f_new": f_new if actual_reduction > 0 else f,
             "cost_new": cost_new if actual_reduction > 0 else cost,
-            "actual_reduction": max(0, actual_reduction),
+            "actual_reduction": actual_reduction,
             "step_norm": step_norm if actual_reduction > 0 else 0,
             "Delta": Delta,
             "alpha": alpha,
