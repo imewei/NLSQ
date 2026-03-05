@@ -166,7 +166,9 @@ def solve_lsq_trust_region(
     # Make the norm of p equal to Delta, p is changed only slightly during
     # this. It is done to prevent p lie outside the trust region (which can
     # cause problems later).
-    p *= Delta / norm(p)
+    p_norm = norm(p)
+    if p_norm > 0:
+        p *= Delta / p_norm
 
     return p, alpha, it + 1
 

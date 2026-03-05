@@ -96,12 +96,16 @@ def _solve_lsq_trust_region_jax_impl(
     use_gauss_newton = full_rank & (p_gn_norm <= Delta)
 
     # Compute alpha bounds
-    alpha_upper = jnp.linalg.norm(suf) / Delta
+    safe_Delta = jnp.maximum(Delta, jnp.finfo(jnp.result_type(Delta)).tiny)
+    alpha_upper = jnp.linalg.norm(suf) / safe_Delta
 
     # Compute alpha_lower based on full_rank
     def compute_alpha_lower_full_rank():
         phi_val, phi_prime_val = phi_and_derivative_jax(0.0, suf, s, Delta)
-        return -phi_val / phi_prime_val
+        safe_phi_prime = jnp.where(
+            phi_prime_val == 0.0, jnp.finfo(phi_prime_val.dtype).tiny, phi_prime_val
+        )
+        return -phi_val / safe_phi_prime
 
     alpha_lower = lax.cond(
         full_rank,
@@ -149,8 +153,11 @@ def _solve_lsq_trust_region_jax_impl(
             lambda: alpha_upper,
         )
 
-        # Update alpha using Newton step
-        ratio = phi_val / phi_prime_val
+        # Update alpha using Newton step (guard phi_prime_val == 0)
+        safe_phi_prime = jnp.where(
+            phi_prime_val == 0.0, jnp.finfo(phi_prime_val.dtype).tiny, phi_prime_val
+        )
+        ratio = phi_val / safe_phi_prime
         alpha_lower_new = jnp.maximum(alpha_lower, alpha - ratio)
         alpha_new = alpha - (phi_val + Delta) * ratio / Delta
 
