@@ -342,6 +342,14 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
         return
 
     # Unix-specific resource limiting
+    # signal.signal() can only be called from the main thread
+    if threading.current_thread() is not threading.main_thread():
+        logger.debug(
+            "Resource limits not available from non-main thread, skipping enforcement"
+        )
+        yield
+        return
+
     # Timer for timeout
     timer = None
     timeout_occurred = False
@@ -356,9 +364,11 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     def signal_handler(signum, frame):
         if timeout_occurred:
             raise ResourceLimitError(f"Execution timeout ({timeout}s exceeded)")
+        # Not our timeout — forward to displaced handler
+        if callable(old_handler):
+            old_handler(signum, frame)
 
     try:
-        # Set up timeout (skip RLIMIT_AS — incompatible with JAX's virtual address space)
         old_handler = signal.signal(signal.SIGALRM, signal_handler)  # type: ignore[assignment]
         timer = threading.Timer(timeout, timeout_handler)
         timer.start()
@@ -368,9 +378,11 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     except MemoryError as err:
         raise ResourceLimitError(f"Memory limit ({memory_mb}MB) exceeded") from err
     finally:
-        # Cancel timer
+        # Cancel timer and disarm signal before restoring handler
         if timer is not None:
             timer.cancel()
+        # Clear any pending alarm
+        signal.alarm(0)
 
         # Restore original signal handler
         signal.signal(signal.SIGALRM, old_handler)
