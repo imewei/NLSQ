@@ -256,6 +256,9 @@ class CovarianceComputer:
         s, _ = self._covariance_svd(jacobian)
         s_np = np.asarray(s)
 
+        if len(s_np) == 0 or s_np[0] == 0:
+            return float("inf")
+
         # Filter near-zero singular values
         threshold = np.finfo(float).eps * max(jacobian.shape) * s_np[0]
         s_valid = s_np[s_np > threshold]

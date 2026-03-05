@@ -286,8 +286,10 @@ class CurveFitResult(OptimizeResult):
         ss_res = np.sum(self.residuals**2)
         ss_tot = np.sum((y - np.mean(y)) ** 2)
 
-        if ss_tot == 0:
-            warnings.warn("Total sum of squares is zero (constant data). R² undefined.")
+        if not np.isfinite(ss_tot) or ss_tot == 0:
+            warnings.warn(
+                "Total sum of squares is zero or NaN (constant/NaN data). R² undefined."
+            )
             return np.nan
 
         return 1 - (ss_res / ss_tot)
@@ -379,8 +381,8 @@ class CurveFitResult(OptimizeResult):
         k = len(self.popt)
         rss = np.sum(self.residuals**2)
 
-        if rss <= 0:
-            warnings.warn("RSS ≤ 0, AIC undefined.")
+        if not np.isfinite(rss) or rss <= 0:
+            warnings.warn("RSS ≤ 0 or NaN, AIC undefined.")
             return np.nan
 
         return 2 * k + n * np.log(rss / n)
@@ -411,8 +413,8 @@ class CurveFitResult(OptimizeResult):
         k = len(self.popt)
         rss = np.sum(self.residuals**2)
 
-        if rss <= 0:
-            warnings.warn("RSS ≤ 0, BIC undefined.")
+        if not np.isfinite(rss) or rss <= 0:
+            warnings.warn("RSS ≤ 0 or NaN, BIC undefined.")
             return np.nan
 
         return k * np.log(n) + n * np.log(rss / n)
