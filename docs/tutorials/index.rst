@@ -46,12 +46,18 @@ Tutorial Sections
 
 .. toctree::
    :maxdepth: 1
-   :caption: Quick Start (Legacy)
+   :caption: Additional Tutorials
+
+   04_multiple_parameters
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Legacy Redirects
+   :hidden:
 
    01_first_fit
    02_understanding_results
    03_fitting_with_bounds
-   04_multiple_parameters
    05_large_datasets
    06_gpu_acceleration
 

@@ -356,7 +356,7 @@ Key Takeaways
 Next Steps
 ----------
 
-In :doc:`05_large_datasets`, you'll learn how to:
+In :doc:`/tutorials/routine/data_handling/large_datasets`, you'll learn how to:
 
 - Handle datasets with millions of points
 - Use streaming optimization
