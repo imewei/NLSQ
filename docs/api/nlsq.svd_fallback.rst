@@ -40,7 +40,7 @@ The recommended function for SVD in NLSQ:
 
 .. code-block:: python
 
-   from nlsq.svd_fallback import compute_svd_with_fallback
+   from nlsq.stability.svd_fallback import compute_svd_with_fallback
    import jax.numpy as jnp
 
    # Matrix of any size
@@ -66,7 +66,7 @@ Handle GPU failures gracefully:
 
 .. code-block:: python
 
-   from nlsq.svd_fallback import compute_svd_with_fallback
+   from nlsq.stability.svd_fallback import compute_svd_with_fallback
    import jax.numpy as jnp
 
    # Matrix that might cause numerical issues

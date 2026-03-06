@@ -31,7 +31,7 @@ Large Dataset API
 Specialized functions for large-scale fitting:
 
 - :func:`nlsq.curve_fit_large` - Automatic chunking and memory management
-- :class:`nlsq.LargeDatasetHandler` - Advanced dataset management
+- :class:`nlsq.LargeDatasetFitter` - Advanced dataset management
 
 See :doc:`large_datasets_api` for detailed documentation.
 

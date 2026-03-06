@@ -23,9 +23,9 @@ Key Features
 Functions
 ---------
 
-.. autofunction:: nlsq.error_messages.format_error_message
+.. autofunction:: nlsq.utils.error_messages.format_error_message
    :noindex:
-.. autofunction:: nlsq.error_messages.get_suggestion
+.. autofunction:: nlsq.utils.error_messages.get_suggestion
    :noindex:
 
 Example Usage
@@ -33,7 +33,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.error_messages import format_error_message
+   from nlsq.utils.error_messages import format_error_message
 
    try:
        # Some operation that might fail

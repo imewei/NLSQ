@@ -23,11 +23,11 @@ Key Features
 Functions
 ---------
 
-.. autofunction:: nlsq.profiler_visualization.plot_timeline
+.. autofunction:: nlsq.utils.profiler_visualization.plot_timeline
    :noindex:
-.. autofunction:: nlsq.profiler_visualization.generate_flame_graph
+.. autofunction:: nlsq.utils.profiler_visualization.generate_flame_graph
    :noindex:
-.. autofunction:: nlsq.profiler_visualization.create_html_report
+.. autofunction:: nlsq.utils.profiler_visualization.create_html_report
    :noindex:
 
 Example Usage
@@ -35,8 +35,8 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.profiler import Profiler
-   from nlsq.profiler_visualization import plot_timeline, create_html_report
+   from nlsq.utils.profiler import Profiler
+   from nlsq.utils.profiler_visualization import plot_timeline, create_html_report
 
    # Profile operations
    profiler = Profiler(enable=True)

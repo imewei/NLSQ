@@ -192,6 +192,6 @@ Interactive Notebooks
 See Also
 --------
 
-- :doc:`../tutorials/01_first_fit` : Getting started tutorial
+- :doc:`/tutorials/routine/getting_started/first_fit` : Getting started tutorial
 - :doc:`nlsq.minpack` : Main curve fitting API
 - :doc:`nlsq.bound_inference` : Automatic bounds detection

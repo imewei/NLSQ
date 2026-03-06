@@ -26,7 +26,7 @@ Key Features
 Classes
 -------
 
-.. autoclass:: nlsq.compilation_cache.CompilationCache
+.. autoclass:: nlsq.caching.compilation_cache.CompilationCache
    :members:
    :noindex:
    :undoc-members:
@@ -37,7 +37,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.compilation_cache import CompilationCache
+   from nlsq.caching.compilation_cache import CompilationCache
 
    cache = CompilationCache(maxsize=100)
 

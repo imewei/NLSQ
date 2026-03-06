@@ -59,7 +59,7 @@ Large dataset with automatic chunking::
 See Also
 --------
 
-* :doc:`/tutorials/01_first_fit` - Getting started tutorial
+* :doc:`/tutorials/routine/getting_started/first_fit` - Getting started tutorial
 * :doc:`/howto/handle_large_data` - Large dataset handling guide
 * :doc:`/howto/optimize_performance` - Performance optimization
 * :doc:`/howto/migration` - Migration Guide

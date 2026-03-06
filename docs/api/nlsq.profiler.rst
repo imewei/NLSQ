@@ -23,7 +23,7 @@ Key Features
 Classes
 -------
 
-.. autoclass:: nlsq.profiler.Profiler
+.. autoclass:: nlsq.utils.profiler.Profiler
    :members:
    :noindex:
    :undoc-members:
@@ -34,7 +34,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.profiler import Profiler
+   from nlsq.utils.profiler import Profiler
    from nlsq import curve_fit
    import jax.numpy as jnp
 

@@ -24,7 +24,7 @@ Key Features
 Classes
 -------
 
-.. autoclass:: nlsq.smart_cache.SmartCache
+.. autoclass:: nlsq.caching.smart_cache.SmartCache
    :members:
    :noindex:
    :undoc-members:
@@ -33,7 +33,7 @@ Classes
 Functions
 ---------
 
-.. autofunction:: nlsq.smart_cache.cached_function
+.. autofunction:: nlsq.caching.smart_cache.cached_function
    :noindex:
 
 Example Usage
@@ -41,7 +41,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.smart_cache import SmartCache, cached_function
+   from nlsq.caching.smart_cache import SmartCache, cached_function
    from nlsq import curve_fit
    import jax.numpy as jnp
 

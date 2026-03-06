@@ -58,7 +58,7 @@ Validate inputs before curve fitting:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
     import numpy as np
 
     # Create validator
@@ -98,7 +98,7 @@ Skip expensive checks for performance:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
 
     # Fast mode skips function callable tests and data quality checks
     fast_validator = InputValidator(fast_mode=True)
@@ -116,7 +116,7 @@ Automatically validate function inputs:
 
 .. code-block:: python
 
-    from nlsq.validators import validate_inputs
+    from nlsq.utils.validators import validate_inputs
     import numpy as np
 
 
@@ -144,7 +144,7 @@ Validate least squares inputs:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
 
     validator = InputValidator()
 
@@ -180,7 +180,7 @@ See what validation detects:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
     import numpy as np
 
     validator = InputValidator(fast_mode=False)
@@ -209,7 +209,7 @@ Detect potential data quality issues:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
     import numpy as np
 
     validator = InputValidator(fast_mode=False)
@@ -238,7 +238,7 @@ Check parameter bounds:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
     import numpy as np
 
     validator = InputValidator()
@@ -278,7 +278,7 @@ Validate uncertainty parameters:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
     import numpy as np
 
     validator = InputValidator()
@@ -312,7 +312,7 @@ Detect problematic data patterns:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
     import numpy as np
 
     validator = InputValidator()
@@ -343,7 +343,7 @@ Validate convergence tolerances:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
 
     validator = InputValidator()
 
@@ -368,7 +368,7 @@ Build custom validation logic:
 
 .. code-block:: python
 
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
     import numpy as np
 
 
@@ -408,7 +408,7 @@ and detect malformed inputs early:
 
 .. code-block:: python
 
-   from nlsq.validators import InputValidator, validate_security_constraints
+   from nlsq.utils.validators import InputValidator, validate_security_constraints
 
    validator = InputValidator()
 
@@ -554,7 +554,7 @@ With curve_fit
 .. code-block:: python
 
     from nlsq import curve_fit
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
 
 
     def safe_curve_fit(f, xdata, ydata, **kwargs):
@@ -587,7 +587,7 @@ With least_squares
 .. code-block:: python
 
     from nlsq import LeastSquares
-    from nlsq.validators import InputValidator
+    from nlsq.utils.validators import InputValidator
 
 
     def safe_least_squares(fun, x0, **kwargs):

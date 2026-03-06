@@ -76,7 +76,7 @@ Manually infer and inspect bounds before fitting:
 
 .. code-block:: python
 
-    from nlsq.bound_inference import infer_bounds
+    from nlsq.precision.bound_inference import infer_bounds
 
     # Infer bounds from data
     bounds = infer_bounds(exponential, x, y, p0=[1.0, 0.5])
@@ -97,7 +97,7 @@ Combine automatic inference with user-specified constraints:
 
 .. code-block:: python
 
-    from nlsq.bound_inference import infer_bounds, merge_bounds
+    from nlsq.precision.bound_inference import infer_bounds, merge_bounds
 
     # Infer bounds
     auto_bounds = infer_bounds(exponential, x, y, p0=[1.0, 0.5])
@@ -118,7 +118,7 @@ For known model types, inference uses domain knowledge:
 .. code-block:: python
 
     from nlsq.core.functions import gaussian
-    from nlsq.bound_inference import infer_bounds
+    from nlsq.precision.bound_inference import infer_bounds
 
     # For Gaussian, inference knows:
     # - Amplitude should be ~ max(y)
@@ -135,7 +135,7 @@ Enforce physical constraints (positivity, ranges):
 
 .. code-block:: python
 
-    from nlsq.bound_inference import BoundsInference
+    from nlsq.precision.bound_inference import BoundsInference
 
     inference = BoundsInference(
         enforce_positivity=["amplitude", "rate"],  # These must be > 0
@@ -153,7 +153,7 @@ Use data statistics for bounds estimation:
 
 .. code-block:: python
 
-    from nlsq.bound_inference import infer_bounds
+    from nlsq.precision.bound_inference import infer_bounds
 
     # Uses data statistics (min, max, mean, std)
     bounds = infer_bounds(
@@ -174,7 +174,7 @@ Validate inferred or user-provided bounds:
 
 .. code-block:: python
 
-    from nlsq.bound_inference import validate_bounds
+    from nlsq.precision.bound_inference import validate_bounds
 
     # Check if bounds are reasonable
     validation_result = validate_bounds(
@@ -236,7 +236,7 @@ Configure bounds inference behavior:
 
 .. code-block:: python
 
-    from nlsq.bound_inference import BoundsInference
+    from nlsq.precision.bound_inference import BoundsInference
 
     inference = BoundsInference(
         default_margin=0.2,  # 20% margin around data range

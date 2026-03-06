@@ -30,7 +30,7 @@ Performance Targets
 Classes
 -------
 
-.. autoclass:: nlsq.memory_pool.MemoryPool
+.. autoclass:: nlsq.caching.memory_pool.MemoryPool
    :members:
    :noindex:
    :undoc-members:
@@ -39,7 +39,7 @@ Classes
 Functions
 ---------
 
-.. autofunction:: nlsq.memory_pool.round_to_bucket
+.. autofunction:: nlsq.caching.memory_pool.round_to_bucket
    :noindex:
 
 Example Usage
@@ -47,7 +47,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.memory_pool import MemoryPool
+   from nlsq.caching.memory_pool import MemoryPool
    import jax.numpy as jnp
 
    # Create memory pool with statistics tracking
@@ -80,7 +80,7 @@ The memory pool uses tiered bucketing for better reuse:
 
 .. code-block:: python
 
-   from nlsq.memory_pool import round_to_bucket
+   from nlsq.caching.memory_pool import round_to_bucket
 
    print(round_to_bucket(800))  # Small: 1024 (1KB)
    print(round_to_bucket(8500))  # Medium: 10240 (10KB)

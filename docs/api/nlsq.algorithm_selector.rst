@@ -30,7 +30,7 @@ Supported Algorithms
 Classes
 -------
 
-.. autoclass:: nlsq.algorithm_selector.AlgorithmSelector
+.. autoclass:: nlsq.precision.algorithm_selector.AlgorithmSelector
    :members:
    :noindex:
    :undoc-members:
@@ -39,7 +39,7 @@ Classes
 Functions
 ---------
 
-.. autofunction:: nlsq.algorithm_selector.auto_select_algorithm
+.. autofunction:: nlsq.precision.algorithm_selector.auto_select_algorithm
    :noindex:
 
 Example Usage
@@ -47,7 +47,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.algorithm_selector import auto_select_algorithm
+   from nlsq.precision.algorithm_selector import auto_select_algorithm
    from nlsq import curve_fit
    import jax.numpy as jnp
 
@@ -89,7 +89,7 @@ Advanced Usage
 
 .. code-block:: python
 
-   from nlsq.algorithm_selector import AlgorithmSelector
+   from nlsq.precision.algorithm_selector import AlgorithmSelector
 
    # Create selector with custom settings
    selector = AlgorithmSelector(enable_diagnostics=True, robustness_test=True)

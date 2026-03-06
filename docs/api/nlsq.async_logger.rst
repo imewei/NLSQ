@@ -41,14 +41,14 @@ Basic usage with curve fitting::
 
 Integration with TRF optimizer::
 
-    from nlsq.async_logger import log_iteration_async
+    from nlsq.utils.async_logger import log_iteration_async
 
     # Called automatically by TRF when verbose > 0
     # No manual integration needed
 
 Type Detection::
 
-    from nlsq.async_logger import is_jax_array
+    from nlsq.utils.async_logger import is_jax_array
     import jax.numpy as jnp
     import numpy as np
 

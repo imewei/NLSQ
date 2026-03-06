@@ -330,6 +330,6 @@ See Also
 --------
 
 - :doc:`nlsq.config` : Configuration management
-- :doc:`../tutorials/01_first_fit` : Getting started with GPU setup
+- :doc:`/tutorials/routine/getting_started/first_fit` : Getting started with GPU setup
 - :doc:`../howto/optimize_performance` : Performance optimization guide
 - `JAX Installation Guide <https://jax.readthedocs.io/en/latest/installation.html>`_ : JAX GPU setup

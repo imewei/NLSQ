@@ -22,7 +22,7 @@ Performance Targets (Task Group 2)
 Classes
 -------
 
-.. autoclass:: nlsq.profiling.TransferProfiler
+.. autoclass:: nlsq.utils.profiling.TransferProfiler
    :members:
    :noindex:
    :undoc-members:
@@ -33,7 +33,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.profiling import TransferProfiler
+   from nlsq.utils.profiling import TransferProfiler
 
    # Create profiler (requires JAX profiler)
    profiler = TransferProfiler(enable=True)

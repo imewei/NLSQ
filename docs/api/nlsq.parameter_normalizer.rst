@@ -53,7 +53,7 @@ meaningful parameter bounds:
 .. code-block:: python
 
     import jax.numpy as jnp
-    from nlsq.parameter_normalizer import ParameterNormalizer
+    from nlsq.precision.parameter_normalizer import ParameterNormalizer
 
     # Parameters: amplitude in [10, 100], decay in [0, 1]
     p0 = jnp.array([50.0, 0.5])
@@ -130,7 +130,10 @@ Use ``NormalizedModelWrapper`` to transparently work in normalized space:
 .. code-block:: python
 
     import jax.numpy as jnp
-    from nlsq.parameter_normalizer import ParameterNormalizer, NormalizedModelWrapper
+    from nlsq.precision.parameter_normalizer import (
+        ParameterNormalizer,
+        NormalizedModelWrapper,
+    )
 
 
     # Define model in original parameter space
@@ -162,7 +165,10 @@ All operations are JAX JIT-compatible:
 .. code-block:: python
 
     import jax
-    from nlsq.parameter_normalizer import ParameterNormalizer, NormalizedModelWrapper
+    from nlsq.precision.parameter_normalizer import (
+        ParameterNormalizer,
+        NormalizedModelWrapper,
+    )
 
 
     def model(x, a, b):

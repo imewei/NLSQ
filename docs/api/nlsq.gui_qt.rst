@@ -134,5 +134,5 @@ Theme
 See Also
 --------
 
-- :doc:`/gui/index` - GUI user guide
-- :doc:`/gui/user_guide` - Complete GUI reference
+- :doc:`/gui/index` - GUI overview
+- :doc:`/tutorials/routine/gui_desktop/index` - Complete GUI guide
