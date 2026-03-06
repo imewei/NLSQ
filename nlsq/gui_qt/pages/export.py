@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from scipy import stats
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
@@ -466,8 +467,6 @@ class ExportPage(QWidget):
             pcov = getattr(result, "pcov", None)
 
             # Compute t-value for 95% CI
-            from scipy import stats
-
             n_data = len(state.ydata) if state.ydata is not None else 0
             dof = max(n_data - len(param_names), 1)
             t_val = stats.t.ppf(0.975, dof)
@@ -667,8 +666,6 @@ class ExportPage(QWidget):
 
             if popt is not None:
                 # Compute t-value for 95% CI
-                from scipy import stats
-
                 n_data = len(state.ydata) if state.ydata is not None else 0
                 dof = max(n_data - len(param_names), 1)
                 t_val = stats.t.ppf(0.975, dof)

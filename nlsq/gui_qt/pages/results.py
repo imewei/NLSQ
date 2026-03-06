@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from scipy import stats
 
 from nlsq.gui_qt.plots.fit_plot import FitPlotWidget
 from nlsq.gui_qt.plots.histogram_plot import HistogramPlotWidget
@@ -228,8 +229,6 @@ class ResultsPage(QWidget):
             # Compute confidence intervals using t-distribution (correct for small n)
             ci = None
             if perr is not None:
-                from scipy import stats
-
                 n_data = len(state.ydata) if state.ydata is not None else 0
                 n_params = len(values)
                 dof = max(n_data - n_params, 1)
@@ -573,8 +572,6 @@ class ResultsPage(QWidget):
         std = np.sqrt(np.maximum(var, 0))
 
         # 95% confidence using t-distribution (consistent with parameter CIs)
-        from scipy import stats
-
         dof = max((n_data if n_data is not None else n_points) - n_params, 1)
         t_val = stats.t.ppf(0.975, dof)
         conf_lower = y_base - t_val * std
