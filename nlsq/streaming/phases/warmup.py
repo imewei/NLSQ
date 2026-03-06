@@ -249,6 +249,9 @@ class WarmupPhase:
         cost_history = [initial_loss]
 
         prev_loss = initial_loss
+        loss_value = (
+            initial_loss  # guard: used after loop (in case max_warmup_iterations==0)
+        )
         self._clip_count = 0
 
         # Warmup loop

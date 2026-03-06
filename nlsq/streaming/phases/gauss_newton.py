@@ -216,6 +216,9 @@ class GaussNewtonPhase:
         # Initialize stall detection
         self._consecutive_rejections = 0
         gradient_norm = 0.0
+        new_cost = float(
+            final_residual_sum_sq
+        )  # guard: used after loop; set to initial cost
 
         # Gauss-Newton loop
         for iteration in range(self.config.gauss_newton_max_iterations):
@@ -366,12 +369,15 @@ class GaussNewtonPhase:
                     "gn_result": gn_result,
                 }
 
-        # Maximum iterations reached
+        # Maximum iterations reached.
+        # Use prev_cost when steps were accepted, otherwise fall back to new_cost
+        # (prev_cost stays jnp.inf when every step was rejected).
+        reported_final_cost = prev_cost if jnp.isfinite(prev_cost) else new_cost
         phase_record = {
             "phase": 2,
             "name": "gauss_newton",
             "iterations": self.config.gauss_newton_max_iterations,
-            "final_cost": prev_cost,
+            "final_cost": reported_final_cost,
             "best_cost": best_cost,
             "convergence_reason": "Maximum iterations reached",
             "gradient_norm": gradient_norm,
@@ -390,7 +396,7 @@ class GaussNewtonPhase:
             "final_params": best_params,
             "best_params": best_params,
             "best_cost": best_cost,
-            "final_cost": prev_cost,
+            "final_cost": reported_final_cost,
             "iterations": self.config.gauss_newton_max_iterations,
             "convergence_reason": "Maximum iterations reached",
             "gradient_norm": gradient_norm,
