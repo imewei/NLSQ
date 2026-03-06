@@ -64,7 +64,7 @@ NLSQ is already highly optimized and should provide excellent performance out of
 - 10000-point fit: ~134ms
 - 50000-point fit: ~120ms
 
-**Scaling**: 50x more data → only 1.2x slower ✅
+**Scaling**: 50x more data → only 1.2x slower [PASS]
 
 ---
 
@@ -311,7 +311,7 @@ pytest test_performance.py --benchmark-only
 
 **Cause**: JIT compilation overhead
 
-**Solution**: ✅ This is normal and expected
+**Solution**: [PASS] This is normal and expected
 - Subsequent calls will be much faster (~10-50ms)
 - Use `CurveFit` class to reuse compiled functions
 - Consider warming up the JIT cache on startup
@@ -523,11 +523,11 @@ print(f"Expected: First ~400ms, Second ~30ms")
 
 **Key Takeaways**:
 
-1. ✅ **NLSQ is already fast** - Well-optimized, excellent scaling
-2. ✅ **Use CurveFit class** - Reuse compiled functions (biggest impact)
-3. ✅ **Good initial guesses** - Faster convergence
-4. ✅ **Profile before optimizing** - Identify actual bottlenecks
-5. ✅ **GPU for large problems** - Automatic acceleration when beneficial
+1. [PASS] **NLSQ is already fast** - Well-optimized, excellent scaling
+2. [PASS] **Use CurveFit class** - Reuse compiled functions (biggest impact)
+3. [PASS] **Good initial guesses** - Faster convergence
+4. [PASS] **Profile before optimizing** - Identify actual bottlenecks
+5. [PASS] **GPU for large problems** - Automatic acceleration when beneficial
 
 **Remember**: Premature optimization is the root of all evil. Profile first, optimize only what matters.
 

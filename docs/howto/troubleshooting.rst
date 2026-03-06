@@ -3,18 +3,6 @@ Troubleshooting Guide
 
 This guide helps you diagnose and fix common issues when using NLSQ.
 
-Table of Contents
------------------
-
-1. `Installation Issues <#installation-issues>`__
-2. `GPU/TPU Issues <#gputpu-issues>`__
-3. `Convergence Problems <#convergence-problems>`__
-4. `Performance Issues <#performance-issues>`__
-5. `Memory Issues <#memory-issues>`__
-6. `Numerical Stability Issues <#numerical-stability-issues>`__
-7. `API and Usage Errors <#api-and-usage-errors>`__
-8. `JAX-Specific Issues <#jax-specific-issues>`__
-
 --------------
 
 Installation Issues

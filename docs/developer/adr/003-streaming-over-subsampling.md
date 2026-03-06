@@ -41,19 +41,19 @@ NLSQ v0.1.x included a subsampling feature for large datasets that randomly samp
 ## Consequences
 
 ### Positive
-✅ **100% Data Utilization**: No accuracy loss from random sampling
-✅ **Deterministic Results**: Same data always produces same fit
-✅ **Simpler Code**: 250 fewer lines to maintain
-✅ **Better Science**: Processes all data for maximum statistical power
-✅ **Streaming Integration**: Reuses existing chunked fitting infrastructure
-✅ **Clear API**: Fewer confusing parameters
+[PASS] **100% Data Utilization**: No accuracy loss from random sampling
+[PASS] **Deterministic Results**: Same data always produces same fit
+[PASS] **Simpler Code**: 250 fewer lines to maintain
+[PASS] **Better Science**: Processes all data for maximum statistical power
+[PASS] **Streaming Integration**: Reuses existing chunked fitting infrastructure
+[PASS] **Clear API**: Fewer confusing parameters
 
 ### Negative
-❌ **Breaking Change**: Old parameters now raise `TypeError`
+[FAIL] **Breaking Change**: Old parameters now raise `TypeError`
   - **Mitigation**: Clear migration path documented above
-❌ **Slightly Slower**: Processing 100% of data takes longer than sampling 85%
+[FAIL] **Slightly Slower**: Processing 100% of data takes longer than sampling 85%
   - **Mitigation**: Minimal impact due to efficient streaming implementation
-❌ **Requires h5py**: Now a required dependency instead of optional
+[FAIL] **Requires h5py**: Now a required dependency instead of optional
   - **Mitigation**: h5py is standard in scientific Python ecosystem
 
 ### Performance Impact

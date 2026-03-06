@@ -5,18 +5,6 @@ This guide provides practical strategies for maximizing NLSQ’s
 performance through GPU/TPU acceleration, JIT compilation, batch
 processing, and memory optimization.
 
-Table of Contents
------------------
-
-1. `Quick Performance Wins <#quick-performance-wins>`__
-2. `GPU/TPU Acceleration <#gputpu-acceleration>`__
-3. `JIT Compilation Optimization <#jit-compilation-optimization>`__
-4. `Batch Processing <#batch-processing>`__
-5. `Memory Optimization <#memory-optimization>`__
-6. `Algorithm and Solver Selection <#algorithm-and-solver-selection>`__
-7. `Profiling and Benchmarking <#profiling-and-benchmarking>`__
-8. `Performance Troubleshooting <#performance-troubleshooting>`__
-
 --------------
 
 Quick Performance Wins
@@ -859,10 +847,10 @@ Troubleshooting
 
 .. code:: python
 
-   # ✗ Wrong
+   # [FAIL] Wrong
    curve_fit(model, x, y, jacobian_mode="reverse")  # ValueError
 
-   # ✓ Correct
+   # [OK] Correct
    curve_fit(model, x, y, jacobian_mode="rev")
 
 **Issue**: Performance doesn't match expectations

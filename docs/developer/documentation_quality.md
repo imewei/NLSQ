@@ -8,7 +8,7 @@ NLSQ enforces a **zero warnings policy** for Sphinx documentation builds. All do
 
 ### Status
 
-- **Current State**: ✅ 0 warnings (as of 2025-10-31)
+- **Current State**: [PASS] 0 warnings (as of 2025-10-31)
 - **Enforcement**: Enabled in CI/CD via `-W` flag
 - **Last Major Fix**: Mixed precision documentation ambiguity resolution
 
@@ -220,10 +220,10 @@ cd docs && make html SPHINXOPTS="-W --keep-going -n -q"
 
 | Metric | Target | Current | Status |
 |--------|--------|---------|--------|
-| Sphinx Warnings | 0 | 0 | ✅ |
-| Broken Links | 0 | 0 | ✅ |
-| Doc Coverage | >80% | ~70% | 🟡 |
-| Docstring Style | 100% | ~95% | 🟡 |
+| Sphinx Warnings | 0 | 0 | [PASS] |
+| Broken Links | 0 | 0 | [PASS] |
+| Doc Coverage | >80% | ~70% | [PARTIAL] |
+| Docstring Style | 100% | ~95% | [PARTIAL] |
 
 ### Historical Context
 

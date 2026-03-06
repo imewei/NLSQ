@@ -49,17 +49,17 @@ return jnp.where(data_mask, func_eval, 0)
 ## Consequences
 
 ### Positive
-✅ **95% Code Reduction**: 100 lines → 5 lines
-✅ **Improved Readability**: Immediately clear what the code does
-✅ **Better Performance**: 5-10% faster for >10 parameters
-✅ **Unlimited Parameters**: No artificial 15-parameter limit
-✅ **Easier Maintenance**: Single implementation instead of 15+ branches
-✅ **Modern JAX**: Leverages JAX 0.8.0+ improvements
+[PASS] **95% Code Reduction**: 100 lines → 5 lines
+[PASS] **Improved Readability**: Immediately clear what the code does
+[PASS] **Better Performance**: 5-10% faster for >10 parameters
+[PASS] **Unlimited Parameters**: No artificial 15-parameter limit
+[PASS] **Easier Maintenance**: Single implementation instead of 15+ branches
+[PASS] **Modern JAX**: Leverages JAX 0.8.0+ improvements
 
 ### Negative
-❌ **Requires JAX 0.8.0+**: Older JAX versions may have issues
+[FAIL] **Requires JAX 0.8.0+**: Older JAX versions may have issues
   - **Mitigation**: NLSQ already requires JAX 0.8.0+ (tested with 0.8.0)
-❌ **Loss of Explicit Branches**: Debugging slightly less granular
+[FAIL] **Loss of Explicit Branches**: Debugging slightly less granular
   - **Mitigation**: Actual impact minimal, error messages still clear
 
 ### Performance Impact
@@ -70,10 +70,10 @@ return jnp.where(data_mask, func_eval, 0)
 ## Testing
 
 Comprehensive testing validates the change:
-- ✅ 18/18 minpack tests passing (covers 1-15 parameters)
-- ✅ 14/14 TRF tests passing
-- ✅ 32/32 total tests passing
-- ✅ No performance regression detected
+- [PASS] 18/18 minpack tests passing (covers 1-15 parameters)
+- [PASS] 14/14 TRF tests passing
+- [PASS] 32/32 total tests passing
+- [PASS] No performance regression detected
 
 ## References
 

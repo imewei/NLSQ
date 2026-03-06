@@ -133,8 +133,8 @@ Problem Size    Total Time    TRF Time    Scaling
 ────────────────────────────────────────────────
 100 pts         1,598ms       600ms       Baseline
 1,000 pts       511ms         259ms       Excellent
-10,000 pts      642ms         312ms       ✅ 50x data → 1.2x time
-50,000 pts      609ms         326ms       ✅ 500x data → 1.3x time
+10,000 pts      642ms         312ms       [PASS] 50x data → 1.2x time
+50,000 pts      609ms         326ms       [PASS] 500x data → 1.3x time
 ```
 
 **Conclusion**: Code is already **extremely well-optimized** with excellent scaling characteristics.
@@ -146,20 +146,20 @@ Problem Size    Total Time    TRF Time    Scaling
 
 ### Phase 1 Work Completed
 
-#### 1. Benchmark Infrastructure ✅
+#### 1. Benchmark Infrastructure [PASS]
 Created `benchmarks/test_performance_regression.py`:
 - 9 benchmark groups covering different scenarios
 - pytest-benchmark integration for CI/CD
 - Baseline measurements established
 
-#### 2. Code Complexity Reduction ✅
+#### 2. Code Complexity Reduction [PASS]
 Refactored `nlsq/validators.py`:
 - **Before**: `validate_curve_fit_inputs` complexity 62
 - **After**: Complexity ~12 (extracted 12 helper methods)
 - **Result**: Much more maintainable and testable
 - **Tests**: All 36 validation tests pass
 
-#### 3. Profiling and Analysis ✅
+#### 3. Profiling and Analysis [PASS]
 Created comprehensive profiling suite:
 - Hot path identification
 - Conversion point mapping
@@ -207,10 +207,10 @@ return OptimizeResult(
 - Same pattern applied to bounded optimization variant
 
 #### Testing Strategy:
-1. ✅ All 18 minpack tests pass
-2. ✅ All 14 TRF tests pass
-3. ✅ Numerical results identical (within floating-point precision)
-4. ✅ Zero regressions detected
+1. [PASS] All 18 minpack tests pass
+2. [PASS] All 14 TRF tests pass
+3. [PASS] Numerical results identical (within floating-point precision)
+4. [PASS] Zero regressions detected
 
 ---
 
@@ -255,11 +255,11 @@ After:
 ```
 Optimization          Effort    Total Gain    ROI (per day)
 ────────────────────────────────────────────────────────────
-NumPy↔JAX (DONE)      1 day     8%           ✅ 8% per day
-lax.scan inner loop   5 days    2-5%         ❌ 0.4-1% per day
+NumPy↔JAX (DONE)      1 day     8%           [PASS] 8% per day
+lax.scan inner loop   5 days    2-5%         [FAIL] 0.4-1% per day
 @vmap large dataset   3 days    0-30%*       ⚠️ Conditional
-Multi-GPU             5 days    0-Nx*        ❌ Requires hardware
-Distributed           10 days   0-100x*      ❌ High risk
+Multi-GPU             5 days    0-Nx*        [FAIL] Requires hardware
+Distributed           10 days   0-100x*      [FAIL] High risk
 
 * Highly dependent on user workload patterns
 ```
@@ -280,7 +280,7 @@ Distributed           10 days   0-100x*      ❌ High risk
 - **Expected**: 1.2-1.5x speedup on 40ms inner loop = 8-20ms saved
 - **Total improvement**: 1-3% on total time
 - **Effort**: 4-5 days
-- **ROI**: **0.2-0.6% per day** ❌
+- **ROI**: **0.2-0.6% per day** [FAIL]
 
 **Complexity Trade-off**:
 ```python
@@ -310,16 +310,16 @@ def inner_body(carry, _):
 #### 2. Code Quality Matters
 
 **Current State**:
-- ✅ Clean, readable code
-- ✅ Easy to debug
-- ✅ Well-tested (100% pass rate)
-- ✅ Maintainable
+- [PASS] Clean, readable code
+- [PASS] Easy to debug
+- [PASS] Well-tested (100% pass rate)
+- [PASS] Maintainable
 
 **After lax.scan**:
-- ❌ Complex conditional logic
-- ❌ Harder to debug (masked operations)
-- ❌ Error messages less clear
-- ❌ Higher maintenance burden
+- [FAIL] Complex conditional logic
+- [FAIL] Harder to debug (masked operations)
+- [FAIL] Error messages less clear
+- [FAIL] Higher maintenance burden
 
 **Trade-off**: 2-3% speed gain vs significant maintainability loss
 
@@ -331,10 +331,10 @@ def inner_body(carry, _):
 - No user complaints about speed
 
 **Likely User Needs**:
-1. ✅ Better error messages (high value)
-2. ✅ More examples and documentation (high value)
-3. ✅ Edge case handling (high value)
-4. ❌ 2-3% faster runtime (low value)
+1. [PASS] Better error messages (high value)
+2. [PASS] More examples and documentation (high value)
+3. [PASS] Edge case handling (high value)
+4. [FAIL] 2-3% faster runtime (low value)
 
 #### 4. Opportunity Cost
 
@@ -357,7 +357,7 @@ def inner_body(carry, _):
 (lessons-learned)=
 ## Lessons Learned
 
-### 1. Profile Before Planning ✅
+### 1. Profile Before Planning [PASS]
 
 **Lesson**: Multi-agent analysis made assumptions about optimization potential. Profiling revealed the truth.
 
@@ -366,7 +366,7 @@ def inner_body(carry, _):
 - Don't assume there's low-hanging fruit
 - Measure, don't guess
 
-### 2. Recognize Well-Optimized Code ✅
+### 2. Recognize Well-Optimized Code [PASS]
 
 **Signs NLSQ Was Already Optimized**:
 - 51 @jit decorators (extensive JIT coverage)
@@ -376,7 +376,7 @@ def inner_body(carry, _):
 
 **Lesson**: Some code is "done" - further optimization has diminishing returns.
 
-### 3. Total Time vs Optimizable Time ✅
+### 3. Total Time vs Optimizable Time [PASS]
 
 **Mistake**: Focusing on % of total time instead of % of optimizable time
 
@@ -386,22 +386,22 @@ def inner_body(carry, _):
 - User functions: 60ms (cannot optimize)
 - **Optimizable**: 40ms
 
-**Achievement**: Saved 5ms out of 40ms optimizable = **12.5% of what's possible** ✅
+**Achievement**: Saved 5ms out of 40ms optimizable = **12.5% of what's possible** [PASS]
 
-### 4. ROI-Driven Decisions ✅
+### 4. ROI-Driven Decisions [PASS]
 
 **Framework**:
 ```
 ROI = (Expected Improvement %) / (Effort in Days)
 
-NumPy↔JAX:  8% / 1 day  = 8% per day  ✅ Excellent
-lax.scan:   3% / 5 days = 0.6% per day ❌ Poor
+NumPy↔JAX:  8% / 1 day  = 8% per day  [PASS] Excellent
+lax.scan:   3% / 5 days = 0.6% per day [FAIL] Poor
 @vmap:      ?% / 3 days = ??? per day  ⚠️ Unknown (need user data)
 ```
 
 **Decision Rule**: Only pursue optimizations with >2% ROI per day
 
-### 5. Complexity Is a Cost ✅
+### 5. Complexity Is a Cost [PASS]
 
 **Current Code**:
 ```python
@@ -424,7 +424,7 @@ def scan_body(carry, _):
 
 **Lesson**: Simplicity has value. Don't sacrifice it for marginal gains.
 
-### 6. Know When to Stop ✅
+### 6. Know When to Stop [PASS]
 
 **Optimization Red Flags**:
 1. ROI < 1% per day
@@ -435,7 +435,7 @@ def scan_body(carry, _):
 
 **NLSQ Hit All Five** → Time to stop and declare victory.
 
-### 7. Conditional Optimizations ✅
+### 7. Conditional Optimizations [PASS]
 
 **Smart Approach**:
 ```
@@ -458,7 +458,7 @@ ELSE:
 
 ### For NLSQ Project
 
-#### 1. Accept the 8% Win ✅
+#### 1. Accept the 8% Win [PASS]
 
 **Accomplished**:
 - Meaningful performance improvement
@@ -468,7 +468,7 @@ ELSE:
 
 **Action**: Mark optimization work as complete
 
-#### 2. Document the Journey ✅
+#### 2. Document the Journey [PASS]
 
 **This Document**: Captures the entire optimization story
 
@@ -477,7 +477,7 @@ ELSE:
 - Create Performance Tuning Guide for users
 - Share lessons learned
 
-#### 3. User-Centric Focus 🎯
+#### 3. User-Centric Focus [TARGET]
 
 **High-Value Work**:
 1. **Error Messages**: Add helpful suggestions and context
@@ -490,7 +490,7 @@ ELSE:
 - Implement ONLY what data supports
 - Focus on specific high-value cases (sparse, batch, etc.)
 
-#### 4. Keep Options Open ⏸️
+#### 4. Keep Options Open [PAUSE]
 
 **Maintain**:
 - Benchmark infrastructure (track performance over time)
@@ -506,14 +506,14 @@ ELSE:
 
 #### When to Optimize
 
-**Green Lights** ✅:
+**Green Lights** [PASS]:
 - User complaints about performance
 - Profiling shows clear bottlenecks (>20% of time)
 - High ROI (>5% per day of effort)
 - Low complexity increase
 - Clear business value
 
-**Red Lights** ❌:
+**Red Lights** [FAIL]:
 - No performance complaints
 - Already achieving millisecond-level latency
 - ROI < 1% per day
@@ -543,7 +543,7 @@ ELSE:
 - Teaches valuable techniques
 - Documents journey (helps others)
 
-**NLSQ Achievement**: Good optimization (8% in 1 day, maintainable, no regressions) ✅
+**NLSQ Achievement**: Good optimization (8% in 1 day, maintainable, no regressions) [PASS]
 
 ---
 
@@ -575,10 +575,10 @@ Why?
 **Optimization is about achieving sufficient performance at reasonable cost.**
 
 NLSQ is:
-- ✅ 150-270x faster than baseline
-- ✅ Excellent scaling characteristics
-- ✅ Well-optimized with JAX primitives
-- ✅ Clean, maintainable codebase
+- [PASS] 150-270x faster than baseline
+- [PASS] Excellent scaling characteristics
+- [PASS] Well-optimized with JAX primitives
+- [PASS] Clean, maintainable codebase
 
 **Further optimization has diminishing returns. Time to focus on users.**
 

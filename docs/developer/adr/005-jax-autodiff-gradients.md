@@ -98,19 +98,19 @@ class StreamingOptimizer:
 ## Consequences
 
 ### Positive
-✅ **50-100x Speedup**: Single forward+backward pass instead of n_params evaluations
-✅ **Exact Gradients**: No numerical approximation errors
-✅ **JIT Compilation**: Cached for even faster repeated calls
-✅ **Scalability**: Enables 100+ parameter models
-✅ **Better Science**: Exact derivatives improve optimization convergence
-✅ **Code Simplicity**: JAX handles differentiation automatically
+[PASS] **50-100x Speedup**: Single forward+backward pass instead of n_params evaluations
+[PASS] **Exact Gradients**: No numerical approximation errors
+[PASS] **JIT Compilation**: Cached for even faster repeated calls
+[PASS] **Scalability**: Enables 100+ parameter models
+[PASS] **Better Science**: Exact derivatives improve optimization convergence
+[PASS] **Code Simplicity**: JAX handles differentiation automatically
 
 ### Negative
-❌ **JAX Dependency**: Requires JAX for streaming optimizer
+[FAIL] **JAX Dependency**: Requires JAX for streaming optimizer
   - **Mitigation**: NLSQ already requires JAX 0.8.0+ as core dependency
-❌ **First Call Overhead**: JIT compilation takes ~100-500ms
+[FAIL] **First Call Overhead**: JIT compilation takes ~100-500ms
   - **Mitigation**: Amortized over many batches in streaming optimization
-❌ **Memory**: Autodiff requires storing intermediate values
+[FAIL] **Memory**: Autodiff requires storing intermediate values
   - **Mitigation**: Negligible for typical parameter counts (<1000)
 
 ### Performance Impact
@@ -122,10 +122,10 @@ class StreamingOptimizer:
 ## Testing
 
 Comprehensive testing validates the change:
-- ✅ 21/21 streaming optimizer tests passing
-- ✅ Gradient computation verified numerically correct
-- ✅ No regression in functionality
-- ✅ Supports unlimited parameter counts
+- [PASS] 21/21 streaming optimizer tests passing
+- [PASS] Gradient computation verified numerically correct
+- [PASS] No regression in functionality
+- [PASS] Supports unlimited parameter counts
 
 ## References
 
