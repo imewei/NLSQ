@@ -69,6 +69,8 @@ requires-python = ">=3.12"
 #
 #   IMPORTANT: Never install both cuda12 and cuda13 plugins simultaneously.
 #   Only ONE CUDA plugin set can be active — having both causes PJRT registration conflicts.
+#   The [tool.uv] conflicts declaration prevents `uv sync --all-extras` from
+#   installing both. Use `uv sync --extra gpu_cuda13` or `--extra gpu_cuda12`.
 #
 #   GPU Compatibility:
 #     CUDA 13 (SM 7.5+): RTX 20xx/30xx/40xx, T4, A100, H100, L40
@@ -97,88 +99,75 @@ dependencies = [
     # IMPORTANT: CUDA plugin versions must exactly match jaxlib version
     "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.9.1)
     "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.9.1)
-                               # Platform-specific extras installed separately:
-                               #   Linux CPU:  pip install "jax[cpu]>=0.8.0"
-                               #   Linux GPU:  make install-jax-gpu (recommended)
-                               #   macOS:      pip install "jax[cpu]>=0.8.0" (CPU only)
-                               #   Windows:    pip install "jax[cpu]>=0.8.0" (CPU only)
     "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.6)
 
     # Visualization and monitoring
     "matplotlib>=3.10.0",     # Tested on 3.10.8
-    "psutil>=7.0.0",          # For memory monitoring (tested on 7.2.1)
+    "psutil>=7.2.0",          # For memory monitoring (tested on 7.2.1)
     "tqdm>=4.67.0",           # For progress bars (tested on 4.67.1)
 
     # Large dataset support
     "h5py>=3.15.0",           # Required for streaming large datasets (tested on 3.15.1)
 
-    # Type checking
-    "mypy>=1.19.0",           # Static type checker (tested on 1.19.1)
-]
+    # Performance
+    "xxhash>=3.6.0",          # 10x faster hashing for cache keys (tested on 3.6.0)
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=9.0.0",         # Tested on 9.0.2
-    "pytest-cov>=7.0.0",     # Tested on 7.0.0
-    "pytest-xdist>=3.8.0",   # Tested on 3.8.0
+    # Configuration
+    "pyyaml>=6.0.3",          # YAML configuration file support (tested on 6.0.3)
+
+    # Global optimization
+    "evosax>=0.2.0,<0.3.0",   # JAX-based CMA-ES with built-in BIPOP restart conditions
+
+    # Development tools
+    "pytest>=9.0.0",          # Tested on 9.0.2
+    "pytest-cov>=7.0.0",      # Tested on 7.0.0
+    "pytest-xdist>=3.8.0",    # Tested on 3.8.0
     "pytest-benchmark>=5.2.3", # Tested on 5.2.3
     "pytest-rerunfailures>=16.0",  # Retry flaky tests (tested on 16.1)
-    "black>=25.0.0",         # Tested on 25.12.0 (CalVer)
-    "ruff>=0.14.0",          # Tested on 0.14.14
-    "mypy>=1.19.0",          # Tested on 1.19.1
-    "pre-commit>=4.5.0",     # Tested on 4.5.1
-    "ipython>=9.0.0",        # Tested on 9.8.0
-    "bandit>=1.9.0",         # Tested on 1.9.3
-    "pyupgrade>=3.21.0",     # Tested on 3.21.2
-]
-docs = [
+    "pytest-timeout>=2.4.0",  # Tested on 2.4.0
+    "pytest-qt>=4.5.0",       # Qt widget testing (tested on 4.5.0)
+    "hypothesis>=6.148.0",    # Property-based testing (tested on 6.148.12)
+    "black>=25.0.0",          # Tested on 25.12.0 (CalVer)
+    "ruff>=0.14.0",           # Tested on 0.14.14
+    "mypy>=1.19.0",           # Static type checker (tested on 1.19.1)
+    "pre-commit>=4.5.0",      # Tested on 4.5.1
+    "ipython>=9.0.0",         # Tested on 9.8.0
+    "bandit>=1.9.0",          # Tested on 1.9.3
+    "pyupgrade>=3.21.0",      # Tested on 3.21.2
+
+    # Documentation
     "sphinx>=8.0.0",                    # Tested on 8.2.3
     "furo>=2025.0.0",                   # Modern Sphinx theme (tested on 2025.12.19)
     "sphinx-copybutton>=0.5.2",         # Copy button for code blocks
     "sphinx-autodoc-typehints>=3.5.0",  # Tested on 3.5.2
     "sphinx-design>=0.6.0",             # For grid cards and tabs (tested on 0.6.1)
-    "ipython>=9.0.0",                   # Tested on 9.8.0
     "myst-parser>=4.0.0",               # Tested on 4.0.1
-]
-test = [
-    "pytest>=9.0.0",         # Tested on 9.0.2
-    "pytest-cov>=7.0.0",     # Tested on 7.0.0
-    "pytest-xdist>=3.8.0",   # Tested on 3.8.0
-    "pytest-timeout>=2.4.0", # Tested on 2.4.0
-    "pytest-rerunfailures>=16.0",  # Retry flaky tests (tested on 16.1)
-    "hypothesis>=6.148.0",   # Tested on 6.148.12
-]
-benchmark = [
-    "pytest-benchmark>=5.2.3", # Tested on 5.2.3
-    "asv>=0.6.5",              # Tested on 0.6.5
+
+    # Benchmark
+    "asv>=0.6.5",             # Tested on 0.6.5
     "memory-profiler>=0.61.0", # Tested on 0.61.0
-    "psutil>=7.2.0",           # Tested on 7.2.0
+
+    # Jupyter
+    "jupyterlab>=4.5.0",      # Tested on 4.5.1
+    "ipykernel>=7.0.0",       # Tested on 7.1.0
+    "notebook>=7.5.0",        # Tested on 7.5.1
+
+    # Build tools
+    "build>=1.3.0",           # Build frontend (tested on 1.3.0)
+    "twine>=6.2.0",           # PyPI upload tool (tested on 6.2.0)
+    "setuptools>=80.0.0",     # Build backend (tested on 80.9.0)
+    "setuptools-scm>=9.2.0",  # Version management (tested on 9.2.2)
+    "wheel>=0.46.2",          # Wheel builder (tested on 0.46.2)
+
+    # Qt GUI (native desktop application)
+    "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.1)
+    "pyqtgraph>=0.14.0",      # GPU-accelerated scientific plotting (tested on 0.14.0)
 ]
-performance = [
-    "xxhash>=3.6.0",           # 10x faster hashing for cache keys (tested on 3.6.0)
-]
-yaml = [
-    "pyyaml>=6.0.3",           # YAML configuration file support (tested on 6.0.3)
-]
-jupyter = [
-    "jupyterlab>=4.5.0",       # Tested on 4.5.1
-    "ipykernel>=7.0.0",        # Tested on 7.1.0
-    "notebook>=7.5.0",         # Tested on 7.5.1
-]
-build = [
-    "build>=1.3.0",            # Build frontend (tested on 1.3.0)
-    "twine>=6.2.0",            # PyPI upload tool (tested on 6.2.0)
-    "setuptools>=80.0.0",      # Build backend (tested on 80.9.0)
-    "setuptools-scm>=9.2.0",   # Version management (tested on 9.2.2)
-    "wheel>=0.46.2",           # Wheel builder (tested on 0.46.2)
-]
-gui_qt = [
-    # PySide6 Qt GUI dependencies for native desktop application
-    "PySide6>=6.10.0",             # Qt bindings (LGPL license, tested on 6.10.1)
-    "pyqtgraph>=0.14.0",           # GPU-accelerated scientific plotting (tested on 0.14.0)
-    "pyyaml>=6.0.3",               # YAML configuration support
-    "pytest-qt>=4.5.0",            # Qt widget testing (tested on 4.5.0)
-]
+
+# GPU extras remain optional — they are mutually exclusive (only ONE can be active).
+# Use: pip install "nlsq[gpu_cuda13]" or pip install "nlsq[gpu_cuda12]"
+# Or:  make install-jax-gpu (auto-detects system CUDA)
+[project.optional-dependencies]
 gpu_cuda13 = [
     # CUDA 13 GPU support — versions must match jaxlib
     "jax-cuda13-plugin>=0.8.0",    # CUDA 13 plugin (must match jaxlib version)
@@ -188,59 +177,6 @@ gpu_cuda12 = [
     # CUDA 12 GPU support — versions must match jaxlib
     "jax-cuda12-plugin>=0.8.0",    # CUDA 12 plugin (must match jaxlib version)
     "jax-cuda12-pjrt>=0.8.0",     # CUDA 12 PJRT runtime (must match jaxlib version)
-]
-global = [
-    # CMA-ES global optimization using evosax (JAX-native evolution strategies)
-    "evosax>=0.2.0,<0.3.0",        # JAX-based CMA-ES with built-in BIPOP restart conditions
-]
-all = [
-    # Development dependencies
-    "pytest>=9.0.0",
-    "pytest-cov>=7.0.0",
-    "pytest-xdist>=3.8.0",
-    "pytest-rerunfailures>=16.0",
-    "black>=25.0.0",
-    "ruff>=0.14.0",
-    "mypy>=1.19.0",
-    "pre-commit>=4.5.0",
-    "ipython>=9.0.0",
-    "bandit>=1.9.0",
-    "pyupgrade>=3.21.0",
-    # Documentation dependencies
-    "sphinx>=8.0.0",
-    "furo>=2025.0.0",
-    "sphinx-copybutton>=0.5.2",
-    "sphinx-autodoc-typehints>=3.5.0",
-    "sphinx-design>=0.6.0",
-    "myst-parser>=4.0.0",
-    # Test dependencies
-    "hypothesis>=6.148.0",
-    "pytest-timeout>=2.4.0",
-    # Benchmark dependencies
-    "pytest-benchmark>=5.2.3",
-    "asv>=0.6.5",
-    "memory-profiler>=0.61.0",
-    "psutil>=7.2.0",
-    # Performance dependencies
-    "xxhash>=3.6.0",
-    # YAML configuration support
-    "pyyaml>=6.0.3",
-    # Jupyter dependencies
-    "jupyterlab>=4.5.0",
-    "ipykernel>=7.0.0",
-    "notebook>=7.5.0",
-    # Build dependencies
-    "build>=1.3.0",
-    "twine>=6.2.0",
-    "setuptools>=80.0.0",
-    "setuptools-scm>=9.2.0",
-    "wheel>=0.45.0",
-    # Qt GUI dependencies
-    "PySide6>=6.10.0",
-    "pyqtgraph>=0.14.0",
-    "pytest-qt>=4.5.0",
-    # Global optimization (CMA-ES)
-    "evosax>=0.2.0,<0.3.0",
 ]
 
 [project.urls]
@@ -272,6 +208,16 @@ tag_regex = "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
 # UV-specific configuration for faster builds and better caching
 # Note: Use dependency-groups for dev dependencies (modern approach)
 package = true  # Enable package mode for proper editable installs
+
+# GPU extras are mutually exclusive — only ONE CUDA plugin set can be active.
+# Without this, `uv sync --all-extras` installs both cuda12 and cuda13 plugins
+# simultaneously, causing PJRT_Api ALREADY_EXISTS registration conflicts.
+conflicts = [
+    [
+        { extra = "gpu-cuda12" },
+        { extra = "gpu-cuda13" },
+    ],
+]
 
 [tool.black]
 line-length = 88
