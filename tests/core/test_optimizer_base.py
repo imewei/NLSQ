@@ -296,10 +296,8 @@ class TestOptimizerBaseCheckConvergence(unittest.TestCase):
             xtol=1e-8,
         )
 
-        # Should return 2 (ftol) since it's checked first, unless both are needed for status 4
-        # Looking at the code: status 4 requires BOTH conditions in an AND check
-        # But status 2 and 3 are checked first, so this should return 2
-        self.assertEqual(status, 2)
+        # Status 4 = both ftol and xtol satisfied simultaneously
+        self.assertEqual(status, 4)
 
     def test_no_convergence(self):
         """Test when no convergence criteria are met."""

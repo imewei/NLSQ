@@ -190,8 +190,16 @@ class OptimizerBase(ABC):
         int or None
             Termination status code if converged, None otherwise
         """
+        ftol_satisfied = actual_reduction < ftol * cost
+        xtol_satisfied = step_norm < xtol * (xtol + x_norm)
+
+        # Check combined criteria first (status 4 takes priority over 2 or 3)
+        if ftol_satisfied and xtol_satisfied:
+            self.logger.debug("Convergence: both tolerances satisfied")
+            return 4
+
         # Check function tolerance
-        if actual_reduction < ftol * cost:
+        if ftol_satisfied:
             self.logger.debug(
                 "Convergence: function tolerance satisfied",
                 actual_reduction=actual_reduction,
@@ -201,7 +209,7 @@ class OptimizerBase(ABC):
             return 2
 
         # Check parameter tolerance
-        if step_norm < xtol * (xtol + x_norm):
+        if xtol_satisfied:
             self.logger.debug(
                 "Convergence: parameter tolerance satisfied",
                 step_norm=step_norm,
@@ -209,11 +217,6 @@ class OptimizerBase(ABC):
                 x_norm=x_norm,
             )
             return 3
-
-        # Check combined criteria
-        if actual_reduction < ftol * cost and step_norm < xtol * (xtol + x_norm):
-            self.logger.debug("Convergence: both tolerances satisfied")
-            return 4
 
         return None
 
