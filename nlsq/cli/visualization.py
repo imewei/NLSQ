@@ -632,14 +632,19 @@ class FitVisualizer:
         # Overlay normal distribution fit
         if histogram_config.get("show_normal_fit", True):
             mu, std = stats.norm.fit(residuals)
-            x_norm = np.linspace(residuals.min(), residuals.max(), 100)
-            y_norm = stats.norm.pdf(x_norm, mu, std)
+            # Guard against std == 0 (e.g. perfect fit, all residuals identical),
+            # which would cause norm.pdf to return inf/nan.
+            if std > 0:
+                x_norm = np.linspace(residuals.min(), residuals.max(), 100)
+                y_norm = stats.norm.pdf(x_norm, mu, std)
 
-            normal_color = histogram_config.get(
-                "normal_color", colors.get("fit", "#d62728")
-            )
-            ax.plot(x_norm, y_norm, color=normal_color, linewidth=2, label="Normal fit")
-            ax.legend()
+                normal_color = histogram_config.get(
+                    "normal_color", colors.get("fit", "#d62728")
+                )
+                ax.plot(
+                    x_norm, y_norm, color=normal_color, linewidth=2, label="Normal fit"
+                )
+                ax.legend()
 
         # Labels
         ax.set_xlabel(histogram_config.get("x_label", "Residual"))
