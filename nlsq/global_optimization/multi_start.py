@@ -366,14 +366,11 @@ class MultiStartOrchestrator:
 
         Returns
         -------
-        tuple[list, dict]
-            A 2-tuple of:
-            - List of (params, loss, result) tuples sorted by loss (ascending).
-              Each tuple contains params (np.ndarray, fitted parameters),
-              loss (float, sum of squared residuals), result (CurveFitResult
-              or None, full result if optimization succeeded).
-            - Parallel diagnostics dict with keys 'parallel', 'n_workers',
-              'wall_time_sec'.
+        results : list[tuple[np.ndarray, float, CurveFitResult | None]]
+            List of (params, loss, result) tuples sorted by loss (ascending).
+        diagnostics : dict[str, Any]
+            Parallel diagnostics with keys ``parallel``, ``n_workers``,
+            ``wall_time_sec``.
         """
         if len(starting_points) == 0:
             return [], {"parallel": False, "n_workers": 0, "wall_time_sec": 0.0}

@@ -75,7 +75,7 @@ class TestCheckGPUAvailability:
 
                 # Verify warning was printed with actual format from _print_gpu_warning
                 output_str = output.getvalue()
-                assert "GPU ACCELERATION AVAILABLE" in output_str
+                assert "GPU AVAILABLE BUT NOT USED" in output_str
                 assert "===========================" in output_str
                 assert "GPU: Tesla V100-SXM2-16GB (SM 7.0)" in output_str
                 assert "JAX backend: CPU-only" in output_str
@@ -282,7 +282,7 @@ class TestGPUNameSanitization:
 
             # Verify warning printed with the GPU name as-is
             output_str = output.getvalue()
-            assert "GPU ACCELERATION AVAILABLE" in output_str
+            assert "GPU AVAILABLE BUT NOT USED" in output_str
             assert (
                 "GPU: Tesla V100 <script>alert('xss')</script> (SM 7.0)" in output_str
             )
@@ -328,7 +328,7 @@ class TestGPUNameSanitization:
 
             # Verify warning printed with the full GPU name (no truncation)
             output_str = output.getvalue()
-            assert "GPU ACCELERATION AVAILABLE" in output_str
+            assert "GPU AVAILABLE BUT NOT USED" in output_str
             # GPU name is printed as-is (no truncation in current implementation)
             assert f"GPU: {long_name} (SM 7.0)" in output_str
 
@@ -384,7 +384,7 @@ class TestImportIntegration:
 
             # Verify warning was printed (proving function is callable)
             output_str = output.getvalue()
-            assert "GPU ACCELERATION AVAILABLE" in output_str
+            assert "GPU AVAILABLE BUT NOT USED" in output_str
 
         # Note: The actual import-time call is in nlsq/__init__.py
         # and is tested by the fact that importing nlsq doesn't crash
@@ -507,7 +507,7 @@ class TestGPUDetectionWithMultipleDevices:
 
             # Verify warning printed (no GPU in device list)
             output_str = output.getvalue()
-            assert "GPU ACCELERATION AVAILABLE" in output_str
+            assert "GPU AVAILABLE BUT NOT USED" in output_str
 
     def test_mixed_cpu_and_gpu_devices(self):
         """Test mixed CPU and GPU devices.
