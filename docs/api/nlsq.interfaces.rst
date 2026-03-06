@@ -77,3 +77,14 @@ Protocol for optimization result containers.
    :undoc-members:
    :show-inheritance:
    :no-index:
+
+Orchestration Protocols
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Protocols for the decomposed CurveFit orchestration components.
+
+.. automodule:: nlsq.interfaces.orchestration_protocol
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:

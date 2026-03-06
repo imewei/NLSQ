@@ -44,7 +44,7 @@ The GUI provides a 5-page workflow: Data Loading → Model Selection → Fitting
 
 .. code-block:: bash
 
-   pip install "nlsq[gui_qt]"
+   pip install nlsq
 
 nlsq fit
 ~~~~~~~~

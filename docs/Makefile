@@ -7,7 +7,7 @@ SPHINXOPTS    ?=
 
 # Detect uv for virtual environment management
 ifneq ($(shell command -v uv 2>/dev/null),)
-    SPHINXBUILD   ?= uv run --extra docs sphinx-build
+    SPHINXBUILD   ?= uv run sphinx-build
 else
     SPHINXBUILD   ?= sphinx-build
 endif

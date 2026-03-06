@@ -27,8 +27,9 @@ Key Features
 - **Linux-only GPU detection** via nvidia-smi hardware query
 - **Platform-aware guards** — non-Linux platforms skip detection entirely
 - **JAX device inspection** to check current compute backend
+- **Plugin conflict detection** for dual cuda12/cuda13 and version mismatches
 - **User-friendly warnings** with actionable installation instructions
-- **150-270x speedup recommendations** for GPU-enabled configurations
+- **20-100x speedup recommendations** for GPU-enabled configurations
 - **Silent failure handling** to avoid disrupting workflow
 - **Environment variable control** for CI/CD and intentional CPU-only usage
 - **Minimal overhead** (~6ms total: 5ms nvidia-smi + 1ms JAX query)
@@ -40,6 +41,11 @@ Functions
    :toctree: generated/
 
    check_gpu_availability
+   check_plugin_conflicts
+   get_system_cuda_version
+   get_gpu_info
+   get_recommended_package
+   get_device_info
 
 Usage Examples
 --------------
@@ -57,22 +63,18 @@ If an NVIDIA GPU is detected but JAX is using CPU, you'll see:
 
 .. code-block:: text
 
-    ⚠️  GPU ACCELERATION AVAILABLE
-    ═══════════════════════════════
-    NVIDIA GPU detected: Tesla V100-SXM2-16GB
-    JAX is currently using: CPU-only
+    GPU AVAILABLE BUT NOT USED
+    ===========================
+      GPU: Tesla V100-SXM2-16GB (SM 7.0)
+      System CUDA: 12.6
+      JAX backend: CPU-only
 
-    Enable 150-270x speedup with GPU acceleration:
-      make install-jax-gpu
+      Fix: make install-jax-gpu
+      Or:  pip uninstall -y jax-cuda13-plugin jax-cuda13-pjrt jax-cuda12-plugin jax-cuda12-pjrt
+           pip uninstall -y jax jaxlib
+           pip install "jax[cuda12-local]"
 
-    Or manually:
-      pip uninstall -y jax jaxlib
-      pip install "jax[cuda12-local]>=0.6.0"
-
-    See README.md GPU Installation section for details.
-
-    To suppress this warning:
-      export NLSQ_SKIP_GPU_CHECK=1
+    To suppress this warning: export NLSQ_SKIP_GPU_CHECK=1
 
 Suppressing GPU Warnings
 ~~~~~~~~~~~~~~~~~~~~~~~~~

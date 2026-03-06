@@ -30,7 +30,7 @@ optional ``evosax`` dependency:
 
 .. code-block:: bash
 
-   pip install "nlsq[global]"
+   pip install nlsq
 
 CMA-ES Global Optimization
 --------------------------

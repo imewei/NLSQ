@@ -29,7 +29,7 @@ Quick Start
 .. code-block:: bash
 
    # Install with GUI support
-   pip install "nlsq[gui_qt]"
+   pip install nlsq
 
    # Launch the application
    nlsq-gui

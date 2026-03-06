@@ -11,6 +11,27 @@ and configuration objects with sensible defaults.
    :undoc-members:
    :show-inheritance:
 
+Classes
+-------
+
+OptimizerConfig
+~~~~~~~~~~~~~~~
+
+Configuration dataclass for optimizer creation.
+
+.. autoclass:: nlsq.core.factories.OptimizerConfig
+   :members:
+   :no-index:
+
+ConfiguredOptimizer
+~~~~~~~~~~~~~~~~~~~
+
+Pre-configured optimizer that encapsulates curve fitting settings.
+
+.. autoclass:: nlsq.core.factories.ConfiguredOptimizer
+   :members:
+   :no-index:
+
 Functions
 ---------
 

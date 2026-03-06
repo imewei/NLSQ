@@ -143,6 +143,7 @@ New features added in version 0.1.1:
 
    nlsq.callbacks
    nlsq.stability
+   nlsq.stability.guard
    nlsq.fallback
    nlsq.recovery
    nlsq.bound_inference
@@ -189,6 +190,7 @@ Support modules for configuration, caching, and diagnostics:
    nlsq.device
    nlsq.validators
    nlsq.diagnostics
+   nlsq.utils.diagnostics
    nlsq.caching
    nlsq.unified_cache
    nlsq.compilation_cache
@@ -237,6 +239,7 @@ Complete Module Listing
 - :doc:`nlsq.functions` - Pre-built fit functions (NEW in v0.1.1)
 - :doc:`nlsq.callbacks` - Progress monitoring & early stopping (NEW in v0.1.1)
 - :doc:`nlsq.stability` - Numerical stability analysis (NEW in v0.1.1)
+- :doc:`nlsq.stability.guard` - Stability guard, condition estimation, collinearity detection
 - :doc:`nlsq.fallback` - Automatic retry strategies (NEW in v0.1.1)
 - :doc:`nlsq.recovery` - Optimization failure recovery (NEW in v0.1.1)
 - :doc:`nlsq.bound_inference` - Smart parameter bounds (NEW in v0.1.1)
@@ -285,6 +288,7 @@ Complete Module Listing
 - :doc:`nlsq.device` - GPU detection and warnings (NEW in v0.1.6)
 - :doc:`nlsq.validators` - Input validation (NEW in v0.1.1)
 - :doc:`nlsq.diagnostics` - Model Health Diagnostics System (identifiability, gradient health, parameter sensitivity)
+- :doc:`nlsq.utils.diagnostics` - Convergence monitoring (ConvergenceMonitor, OptimizationDiagnostics)
 - :doc:`nlsq.caching` - JIT and result caching
 - :doc:`nlsq.unified_cache` - Unified compilation cache (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.compilation_cache` - Legacy compilation cache

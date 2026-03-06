@@ -31,6 +31,9 @@ Classes
    :toctree: generated/
    :template: class.rst
 
+   CallbackBase
+   CallbackChain
+   StopOptimization
    ProgressBar
    EarlyStopping
    IterationLogger

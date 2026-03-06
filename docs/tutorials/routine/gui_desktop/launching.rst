@@ -10,7 +10,7 @@ Install NLSQ with GUI support:
 
 .. code-block:: bash
 
-   pip install "nlsq[gui_qt]"
+   pip install nlsq
 
 This installs:
 
@@ -108,7 +108,7 @@ Troubleshooting Launch Issues
 
 .. code-block:: bash
 
-   pip install "nlsq[gui_qt]"
+   pip install nlsq
 
 **"Cannot find OpenGL":**
 

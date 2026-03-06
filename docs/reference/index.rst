@@ -57,7 +57,7 @@ Quick Links
 
 - :doc:`/api/nlsq.large_dataset` - Large dataset handling
 - :doc:`/api/nlsq.adaptive_hybrid_streaming` - Streaming optimization
-- :doc:`/api/nlsq.adaptive_hybrid_streaming` - Hybrid optimizer
+- :doc:`/api/nlsq.hybrid_streaming_config` - Hybrid streaming configuration
 
 **Utilities**
 

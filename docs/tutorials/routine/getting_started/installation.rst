@@ -85,7 +85,7 @@ To use the interactive desktop application:
 
 .. code-block:: bash
 
-   pip install "nlsq[gui_qt]"
+   pip install nlsq
 
 Launch with:
 
@@ -102,7 +102,7 @@ For development with all optional dependencies:
 
    git clone https://github.com/imewei/NLSQ.git
    cd NLSQ
-   pip install -e ".[dev,test,docs,gui_qt]"
+   pip install -e .
 
 Common Installation Issues
 --------------------------

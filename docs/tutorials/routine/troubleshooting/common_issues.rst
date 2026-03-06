@@ -237,7 +237,7 @@ Import Errors
 
 .. code-block:: bash
 
-   pip install "nlsq[gui_qt]"
+   pip install nlsq
 
 Model Function Errors
 ---------------------
