@@ -20,7 +20,10 @@ def _build_env() -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault(
         "PYTHONWARNINGS",
-        "error,ignore:Jupyter is migrating its paths:DeprecationWarning,ignore:Unable to import Axes3D:UserWarning",
+        "error,"
+        "ignore:Jupyter is migrating its paths:DeprecationWarning,"
+        "ignore:Unable to import Axes3D:UserWarning,"
+        "ignore:Setting `jax_pmap_shmap_merge`:DeprecationWarning",
     )
     env.setdefault("NLSQ_EXAMPLES_QUICK", "1")
     return env

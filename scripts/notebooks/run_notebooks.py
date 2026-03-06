@@ -39,7 +39,8 @@ def _kernel_env() -> dict[str, str]:
         "error,ignore:There is no current event loop:DeprecationWarning,"
         "ignore::PendingDeprecationWarning,"
         "ignore:Jupyter is migrating its paths:DeprecationWarning,"
-        "ignore:Unable to import Axes3D:UserWarning"
+        "ignore:Unable to import Axes3D:UserWarning,"
+        "ignore:Setting `jax_pmap_shmap_merge`:DeprecationWarning"
     )
     return env
 

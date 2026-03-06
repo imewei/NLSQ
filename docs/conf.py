@@ -480,13 +480,16 @@ copybutton_prompt_text = r">>> |\.\.\. |\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: 
 copybutton_prompt_is_regexp = True
 
 # -- Options for LaTeX output ------------------------------------------------
+latex_engine = "xelatex"
 latex_elements = {
     "papersize": "letterpaper",
     "pointsize": "11pt",
+    "cmappkg": "",
     "preamble": r"""
-\usepackage{amsmath}
-\usepackage{amssymb}
+\usepackage{unicode-math}
 \usepackage{bm}
+\setlength{\headheight}{13.6pt}
+\addtolength{\topmargin}{-1.6pt}
 """,
 }
 
