@@ -16,7 +16,7 @@ from collections import defaultdict
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import cache, lru_cache
+from functools import cache
 from logging import Logger
 from typing import TYPE_CHECKING, Literal
 
@@ -1041,7 +1041,7 @@ class LargeDatasetFitter:
         # Statistics tracking
         self.last_stats: DatasetStats | None = None
         self.fit_history: list[dict] = []
-        self._error_log_timestamps: defaultdict = defaultdict(list)
+        self._error_log_timestamps: defaultdict[str, list[float]] = defaultdict(list)
 
         # Task Group 7 (5.1a): Model validation caching
         # Cache validated functions by (id(func), id(func.__code__)) to avoid
@@ -1069,7 +1069,6 @@ class LargeDatasetFitter:
             self._buffer_pool = ChunkBufferPool(bucket_size)
         return self._buffer_pool
 
-    @lru_cache(maxsize=100)
     def _should_log_error(self, error_signature: str, current_time: float) -> bool:
         """Rate-limit error logging to prevent log flooding (max once per 60s per error type).
 
@@ -1078,24 +1077,21 @@ class LargeDatasetFitter:
         error_signature : str
             Unique signature identifying the error type
         current_time : float
-            Current timestamp (rounded to 60s bucket)
+            Current timestamp
 
         Returns
         -------
         bool
             True if error should be logged, False if rate-limited
-
-        Notes
-        -----
-        Uses LRU cache to track recent errors. Each error type can be logged
-        at most once per 60-second window, preventing log flooding attacks
-        or excessive logging during systematic failures.
         """
-        time_bucket = int(current_time // 60)
-        f"{error_signature}_{time_bucket}"
-        # LRU cache will return True first time, then cache hit returns True
-        # This effectively rate-limits to once per time bucket
-        return True
+        cutoff_time = current_time - 60.0
+        recent_timestamps = self._error_log_timestamps[error_signature]
+        # Remove timestamps older than 60 seconds
+        self._error_log_timestamps[error_signature] = [
+            t for t in recent_timestamps if t > cutoff_time
+        ]
+        # Allow logging only if no recent occurrence in the last 60 seconds
+        return len(self._error_log_timestamps[error_signature]) == 0
 
     def _log_validation_error(self, error: Exception) -> None:
         """Log validation error with rate limiting.

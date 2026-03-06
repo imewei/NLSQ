@@ -24,7 +24,7 @@ import logging
 import time
 import unittest
 from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import jax.numpy as jnp
 import numpy as np
@@ -435,28 +435,24 @@ class TestLoggerIntegration(unittest.TestCase):
 
 
 class TestErrorRateLimiting(unittest.TestCase):
-    """Test LRU cache for error rate limiting."""
+    """Test dict-based error rate limiting."""
 
-    @patch("nlsq.streaming.large_dataset.lru_cache")
-    def test_error_rate_limiting_cache(self, mock_lru):
-        """Test that error rate limiting uses LRU cache."""
-
-        # This test verifies the LRU cache is used for error limiting
-        # (Implementation detail - may need adjustment based on actual code)
-
-        def model(xdata, a, b):
-            return a * xdata + b
-
-        xdata = jnp.linspace(0, 10, 1000)
-        ydata = 2.0 * xdata + 1.0
-
+    def test_error_rate_limiting(self):
+        """Test that error rate limiting suppresses duplicate errors within 60s."""
         config = LDMemoryConfig(memory_limit_gb=0.01)
         fitter = LargeDatasetFitter(config=config)
 
-        fitter.fit(model, xdata, ydata, p0=[2.0, 1.0])
+        # First call should allow logging
+        self.assertTrue(fitter._should_log_error("TestError", 1000.0))
 
-        # Verify LRU cache was used somewhere in the module
-        # (This test may need refinement based on actual implementation)
+        # Simulate a logged error by adding a timestamp
+        fitter._error_log_timestamps["TestError"].append(1000.0)
+
+        # Second call within 60s should suppress
+        self.assertFalse(fitter._should_log_error("TestError", 1050.0))
+
+        # Call after 60s should allow again
+        self.assertTrue(fitter._should_log_error("TestError", 1061.0))
 
 
 if __name__ == "__main__":
