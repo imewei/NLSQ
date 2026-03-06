@@ -2614,15 +2614,13 @@ class CurveFit:
             ~30% overhead so it's separate from other stability features.
 
         cache_config : dict, optional
-            Configuration for the unified JIT compilation cache. Supported keys:
-
-            - 'maxsize' : int, default=128
-                Maximum number of compiled functions to cache
-            - 'enable_stats' : bool, default=True
-                Track cache statistics (hits, misses, compile_time_ms)
-            - 'disk_cache_enabled' : bool, default=False
-                Enable disk caching tier (Phase 2 feature)
-
+            Configuration for the unified JIT compilation cache.
+            Supported keys: ``'maxsize'`` (int, default 128) — maximum
+            number of compiled functions to cache;
+            ``'enable_stats'`` (bool, default True) — track cache
+            statistics (hits, misses, compile_time_ms);
+            ``'disk_cache_enabled'`` (bool, default False) — enable
+            disk caching tier (Phase 2 feature).
             If None, uses global cache with default settings.
 
         max_jacobian_elements_for_svd : int, default 10_000_000

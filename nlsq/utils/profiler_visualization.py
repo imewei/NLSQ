@@ -347,7 +347,7 @@ class ProfilerVisualization:
 
             for i, metrics in enumerate(metrics_list, 1):
                 success_class = "success" if metrics["success"] else "failure"
-                success_text = "✓" if metrics["success"] else "✗"
+                success_text = "OK" if metrics["success"] else "FAIL"
                 html_parts.append(
                     f"<tr>"
                     f"<td>{i}</td>"

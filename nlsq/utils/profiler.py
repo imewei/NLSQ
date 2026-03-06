@@ -330,7 +330,7 @@ class PerformanceProfiler:
                 lines.append(
                     f"  Run {i}: {m.total_time:.3f}s, "
                     f"{m.n_iterations} iter, "
-                    f"{'✓' if m.success else '✗'}"
+                    f"{'OK' if m.success else 'FAIL'}"
                 )
 
         return "\n".join(lines)

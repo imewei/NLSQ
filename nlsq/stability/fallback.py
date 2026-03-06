@@ -422,11 +422,11 @@ class FallbackOrchestrator:
         try:
             result = curve_fit(f, xdata, ydata, **kwargs)
             if self.verbose:
-                print("✅ Success with original parameters!")
+                print("Success with original parameters!")
             return FallbackResult(result, strategy_used=None, attempts=1)
         except Exception as e:
             if self.verbose:
-                print(f"❌ Failed: {type(e).__name__}: {e}")
+                print(f"[FAIL] Failed: {type(e).__name__}: {e}")
             last_exception = e
 
         # Try fallback strategies
@@ -461,7 +461,7 @@ class FallbackOrchestrator:
                 )
 
                 if self.verbose:
-                    print(f"✅ Success with {strategy.name}!")
+                    print(f"[OK] Success with {strategy.name}!")
 
                 return FallbackResult(
                     result, strategy_used=strategy.name, attempts=self.total_attempts
@@ -469,7 +469,7 @@ class FallbackOrchestrator:
 
             except Exception as e:
                 if self.verbose:
-                    print(f"❌ Failed: {type(e).__name__}")
+                    print(f"[FAIL] Failed: {type(e).__name__}")
                 last_exception = e
                 continue
 
