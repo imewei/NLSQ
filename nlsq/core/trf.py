@@ -2522,7 +2522,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             )
 
             # theta controls step back step ratio from the bounds
-            theta = jnp.maximum(jnp.float64(0.995), 1.0 - g_norm)
+            theta = jnp.maximum(0.995, 1.0 - g_norm)
 
             # Evaluate inner loop using helper
             inner_result = self._evaluate_bounds_inner_loop(

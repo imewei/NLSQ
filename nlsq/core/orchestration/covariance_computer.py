@@ -311,7 +311,7 @@ class CovarianceComputer:
         # 2-D sigma: covariance matrix, define transform = L such that L L^T = C
         elif sigma.shape == (ysize, ysize):
             try:
-                if len_diff >= 0:
+                if len_diff > 0:
                     sigma_padded = np.identity(m + len_diff)
                     sigma_padded[:m, :m] = sigma
                     sigma = sigma_padded

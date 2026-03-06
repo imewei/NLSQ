@@ -2458,7 +2458,7 @@ def curve_fit(
         # we just fall through to standard path
 
     # Handle multi-start optimization
-    if multistart and n_starts > 0:
+    if multistart and n_starts is not None and n_starts > 0:
         return _run_multistart_optimization(
             f, xdata, ydata, p0, n_starts, sampler, center_on_p0, scale_factor, kwargs
         )
