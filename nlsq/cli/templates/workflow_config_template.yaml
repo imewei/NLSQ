@@ -296,7 +296,7 @@ global_optimization:
   elimination_rounds: 3      # Number of elimination rounds
   elimination_fraction: 0.5  # Fraction eliminated per round
 
-  # CMA-ES configuration (requires: pip install 'nlsq[global]')
+  # CMA-ES configuration (requires: pip install nlsq)
   # Automatically used when bounds span > 3 orders of magnitude
   cmaes:
     # Preset: "cmaes-fast" (50 gens), "cmaes" (100 gens), "cmaes-global" (200 gens)

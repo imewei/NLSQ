@@ -1,7 +1,7 @@
 # ReadTheDocs configuration for NLSQ
 # Updated: 2026-01-27
 # Requires: Python 3.12+ (tested on 3.13), NumPy 2.4.1, JAX 0.9.0
-# Dependencies managed via pyproject.toml[docs]
+# All dependencies (including docs) are in pyproject.toml[dependencies]
 #
 # Features documented:
 #   - Adaptive Hybrid Streaming Optimizer with Parameter Normalization (v0.3.0+)
@@ -40,6 +40,4 @@ formats:
 python:
   install:
     - method: pip
-      path: .
-      extra_requirements:
-        - docs  # Installs from pyproject.toml[project.optional-dependencies.docs]
+      path: .  # All deps (including docs) are in main dependencies

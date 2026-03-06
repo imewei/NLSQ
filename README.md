@@ -137,8 +137,11 @@ pip install "jax[cuda12-local]"  # or cuda13-local
 
 ### With GUI Support
 
+GUI dependencies (PySide6, pyqtgraph) are included in the main package:
+
 ```bash
-pip install nlsq[gui]
+pip install nlsq    # GUI included
+nlsq-gui            # Launch the desktop application
 ```
 
 ## Quick Start
@@ -325,7 +328,7 @@ config = CMAESConfig(
 optimizer = CMAESOptimizer(config=config)
 ```
 
-Requires: `pip install "nlsq[global]"`
+Requires: `pip install nlsq`
 
 </details>
 

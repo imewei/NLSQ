@@ -3,7 +3,7 @@
 # GPU-Accelerated Nonlinear Least Squares Curve Fitting
 # Built on JAX for datasets up to 100M+ points
 
-.PHONY: help install install-dev install-jax-gpu install-jax-gpu-cuda12 install-jax-gpu-cuda13 gpu-check env-info \
+.PHONY: help install install-dev install-jax-gpu install-jax-gpu-cuda12 install-jax-gpu-cuda13 gpu-check gpu-diagnose env-info \
         test test-fast test-slow test-parallel test-all-parallel test-coverage \
         test-cpu test-debug test-large test-modules test-comprehensive \
         clean clean-all clean-pyc clean-build clean-test clean-venv \
@@ -111,6 +111,7 @@ help:
 	@echo "  $(CYAN)install-jax-gpu-cuda13$(RESET)  Install JAX with system CUDA 13 (requires CUDA 13.x installed)"
 	@echo "  $(CYAN)install-jax-gpu-cuda12$(RESET)  Install JAX with system CUDA 12 (requires CUDA 12.x installed)"
 	@echo "  $(CYAN)gpu-check$(RESET)               Check GPU availability and CUDA setup"
+	@echo "  $(CYAN)gpu-diagnose$(RESET)            Diagnose common GPU issues (plugin conflicts, version mismatches)"
 	@echo "  $(CYAN)env-info$(RESET)                Show detailed environment information"
 	@echo ""
 	@echo "$(BOLD)$(GREEN)TESTING$(RESET)"
@@ -174,13 +175,13 @@ install:
 
 install-dev: install
 	@echo "$(BOLD)$(BLUE)Installing development dependencies...$(RESET)"
-	@$(INSTALL_CMD) -e ".[dev,test,docs]"
+	@$(INSTALL_CMD) -e .
 	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ Dev dependencies installed!$(RESET)"
 
 install-all: install
-	@echo "$(BOLD)$(BLUE)Installing ALL dependencies (dev, test, docs, benchmark)...$(RESET)"
-	@$(INSTALL_CMD) -e ".[all]"
+	@echo "$(BOLD)$(BLUE)Installing ALL dependencies...$(RESET)"
+	@$(INSTALL_CMD) -e .
 	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ All dependencies installed!$(RESET)"
 
@@ -299,13 +300,22 @@ ifeq ($(PLATFORM),linux)
 	fi; \
 	echo "GPU SM version: $$SM_DISPLAY (compatible with CUDA 13)"
 	@echo ""
-	@echo "Step 1/2: Uninstalling existing JAX and CUDA plugins..."
-	@$(UNINSTALL_CMD) jax jaxlib jax-cuda12-plugin jax-cuda12-pjrt jax-cuda13-plugin jax-cuda13-pjrt 2>/dev/null || true
+	@echo "Step 1/3: Removing incompatible CUDA plugins..."
+	@$(UNINSTALL_CMD) jax-cuda12-plugin jax-cuda12-pjrt jax-cuda13-plugin jax-cuda13-pjrt 2>/dev/null || true
 	@echo ""
-	@echo "Step 2/2: Installing JAX with system CUDA 13..."
+	@echo "Step 2/3: Removing old jax/jaxlib (prevents version mismatch)..."
+	@$(UNINSTALL_CMD) jax jaxlib 2>/dev/null || true
+	@echo ""
+	@echo "Step 3/3: Installing JAX with system CUDA 13..."
 	@echo "Command: $(INSTALL_CMD) $(JAX_GPU_CUDA13_PKG)"
 	@$(INSTALL_CMD) $(JAX_GPU_CUDA13_PKG)
 	@echo ""
+	@# Verify no conflicting plugin remains
+	@CONFLICT=$$($(RUN_CMD) $(PYTHON) -m pip list 2>/dev/null | grep -c "jax-cuda12-plugin"); \
+	if [ "$$CONFLICT" -gt 0 ]; then \
+		echo "$(RED)Warning: cuda12 plugin still present after cuda13 install$(RESET)"; \
+		echo "  Run: $(UNINSTALL_CMD) jax-cuda12-plugin jax-cuda12-pjrt"; \
+	fi
 	@$(MAKE) gpu-check
 	@echo ""
 	@echo "$(BOLD)$(GREEN)JAX GPU support installed successfully$(RESET)"
@@ -351,13 +361,22 @@ ifeq ($(PLATFORM),linux)
 	fi; \
 	echo "GPU SM version: $$SM_DISPLAY (compatible with CUDA 12)"
 	@echo ""
-	@echo "Step 1/2: Uninstalling existing JAX and CUDA plugins..."
-	@$(UNINSTALL_CMD) jax jaxlib jax-cuda12-plugin jax-cuda12-pjrt jax-cuda13-plugin jax-cuda13-pjrt 2>/dev/null || true
+	@echo "Step 1/3: Removing incompatible CUDA plugins..."
+	@$(UNINSTALL_CMD) jax-cuda12-plugin jax-cuda12-pjrt jax-cuda13-plugin jax-cuda13-pjrt 2>/dev/null || true
 	@echo ""
-	@echo "Step 2/2: Installing JAX with system CUDA 12..."
+	@echo "Step 2/3: Removing old jax/jaxlib (prevents version mismatch)..."
+	@$(UNINSTALL_CMD) jax jaxlib 2>/dev/null || true
+	@echo ""
+	@echo "Step 3/3: Installing JAX with system CUDA 12..."
 	@echo "Command: $(INSTALL_CMD) $(JAX_GPU_CUDA12_PKG)"
 	@$(INSTALL_CMD) $(JAX_GPU_CUDA12_PKG)
 	@echo ""
+	@# Verify no conflicting plugin remains
+	@CONFLICT=$$($(RUN_CMD) $(PYTHON) -m pip list 2>/dev/null | grep -c "jax-cuda13-plugin"); \
+	if [ "$$CONFLICT" -gt 0 ]; then \
+		echo "$(RED)Warning: cuda13 plugin still present after cuda12 install$(RESET)"; \
+		echo "  Run: $(UNINSTALL_CMD) jax-cuda13-plugin jax-cuda13-pjrt"; \
+	fi
 	@$(MAKE) gpu-check
 	@echo ""
 	@echo "$(BOLD)$(GREEN)JAX GPU support installed successfully$(RESET)"
@@ -381,6 +400,44 @@ devices = jax.devices(); \
 print(f'Devices: {devices}'); \
 gpu_count = sum(1 for d in devices if 'cuda' in str(d).lower()); \
 print(f'GPU detected: {gpu_count} device(s)') if gpu_count else print('No GPU detected - using CPU')"
+
+gpu-diagnose:
+	@echo "$(BOLD)$(BLUE)GPU Diagnostics$(RESET)"
+	@echo "==============="
+	@echo ""
+	@echo "1. Installed JAX/CUDA packages:"
+	@$(RUN_CMD) $(PYTHON) -m pip list 2>/dev/null | grep -iE "^(jax|cuda)" || echo "  (none found)"
+	@echo ""
+	@echo "2. Plugin conflict check:"
+	@HAS12=$$($(RUN_CMD) $(PYTHON) -m pip list 2>/dev/null | grep -c "jax-cuda12-plugin"); \
+	HAS13=$$($(RUN_CMD) $(PYTHON) -m pip list 2>/dev/null | grep -c "jax-cuda13-plugin"); \
+	if [ "$$HAS12" -gt 0 ] && [ "$$HAS13" -gt 0 ]; then \
+		echo "  $(RED)CONFLICT: Both cuda12 and cuda13 plugins installed!$(RESET)"; \
+		echo "  Fix: make install-jax-gpu (will clean and reinstall)"; \
+	elif [ "$$HAS12" -gt 0 ] || [ "$$HAS13" -gt 0 ]; then \
+		echo "  $(GREEN)OK: Single plugin set installed$(RESET)"; \
+	else \
+		echo "  No CUDA plugins installed (CPU-only mode)"; \
+	fi
+	@echo ""
+	@echo "3. Version match check:"
+	@$(RUN_CMD) $(PYTHON) -c "\
+import importlib.metadata as md; \
+jaxlib_v = md.version('jaxlib'); \
+print(f'  jaxlib: {jaxlib_v}'); \
+for pkg in ['jax-cuda12-plugin','jax-cuda13-plugin','jax-cuda12-pjrt','jax-cuda13-pjrt']: \
+    try: \
+        v = md.version(pkg); \
+        match = 'OK' if v == jaxlib_v else 'MISMATCH'; \
+        print(f'  {pkg}: {v} [{match}]'); \
+    except md.PackageNotFoundError: pass" 2>/dev/null || echo "  (could not check)"
+	@echo ""
+	@echo "4. System CUDA:"
+	@nvcc --version 2>/dev/null | grep "release" || echo "  nvcc not found"
+	@echo ""
+	@echo "5. GPU hardware:"
+	@nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader 2>/dev/null \
+		|| echo "  nvidia-smi not found"
 
 # ===================
 # Environment info (comprehensive)

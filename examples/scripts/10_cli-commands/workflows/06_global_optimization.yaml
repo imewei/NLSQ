@@ -17,7 +17,7 @@
 #   - Optional NLSQ refinement for maximum precision
 #   - Memory-efficient batching for large datasets
 #
-# Requires: pip install 'nlsq[global]'  (installs evosax)
+# Requires: pip install nlsq  (installs evosax)
 # ==============================================================================
 
 metadata:
@@ -107,7 +107,7 @@ global_optimization:
   center_on_p0: true
   scale_factor: 1.0
 
-  # CMA-ES configuration (requires evosax: pip install 'nlsq[global]')
+  # CMA-ES configuration (requires evosax: pip install nlsq)
   cmaes:
     # Preset options: "cmaes-fast" (50 gens), "cmaes" (100 gens), "cmaes-global" (200 gens)
     # Set to null to use custom settings below
