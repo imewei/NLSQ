@@ -235,4 +235,4 @@ See Also
 
 - :doc:`trust_region` - Trust Region Reflective algorithm details
 - :doc:`jax_autodiff` - How automatic differentiation works
-- :doc:`/tutorials/02_understanding_results` - Practical result interpretation
+- :doc:`/tutorials/routine/getting_started/understanding_results` - Practical result interpretation

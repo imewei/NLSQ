@@ -382,4 +382,4 @@ See Also
 
 - :doc:`troubleshooting` - General troubleshooting guide
 - :doc:`choose_model` - Model selection
-- :doc:`/tutorials/02_understanding_results` - Interpreting results
+- :doc:`/tutorials/routine/getting_started/understanding_results` - Interpreting results

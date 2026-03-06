@@ -277,5 +277,5 @@ See Also
 --------
 
 - :doc:`jax_autodiff` - How JAX enables GPU
-- :doc:`/tutorials/06_gpu_acceleration` - GPU setup tutorial
+- :doc:`/tutorials/routine/gpu_acceleration/gpu_usage` - GPU setup tutorial
 - :doc:`/howto/optimize_performance` - Performance guide

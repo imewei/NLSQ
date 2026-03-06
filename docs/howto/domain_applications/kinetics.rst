@@ -175,4 +175,4 @@ See Also
 --------
 
 - :doc:`/howto/choose_model` - Model selection
-- :doc:`/tutorials/02_understanding_results` - Result interpretation
+- :doc:`/tutorials/routine/getting_started/understanding_results` - Result interpretation

@@ -180,4 +180,4 @@ See Also
 --------
 
 - :doc:`/howto/choose_model` - Model selection
-- :doc:`/tutorials/03_fitting_with_bounds` - Using bounds
+- :doc:`/tutorials/routine/data_handling/bounds` - Using bounds

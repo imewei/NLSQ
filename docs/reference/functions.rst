@@ -309,6 +309,6 @@ Custom model functions must use JAX operations:
 See Also
 --------
 
-- :doc:`/tutorials/01_first_fit` - Basic usage examples
+- :doc:`/tutorials/routine/getting_started/first_fit` - Basic usage examples
 - :doc:`/explanation/jax_autodiff` - Why JAX is required
 - :doc:`/howto/choose_model` - Model selection guide

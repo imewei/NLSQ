@@ -187,6 +187,6 @@ For multi-GPU systems:
 See Also
 --------
 
-- :doc:`/tutorials/05_large_datasets` - Tutorial on large data handling
+- :doc:`/tutorials/routine/data_handling/large_datasets` - Tutorial on large data handling
 - :doc:`/howto/streaming_checkpoints` - Checkpoint and resume guide
 - :doc:`/explanation/streaming` - Streaming concepts

@@ -272,5 +272,5 @@ See Also
 --------
 
 - :doc:`handle_large_data` - Large dataset handling
-- :doc:`/tutorials/05_large_datasets` - Large dataset tutorial
+- :doc:`/tutorials/routine/data_handling/large_datasets` - Large dataset tutorial
 - :doc:`/explanation/streaming` - How streaming works

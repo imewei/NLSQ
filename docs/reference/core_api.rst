@@ -226,6 +226,6 @@ NLSQ raises informative exceptions:
 See Also
 --------
 
-- :doc:`/tutorials/01_first_fit` - Getting started tutorial
+- :doc:`/tutorials/routine/getting_started/first_fit` - Getting started tutorial
 - :doc:`/howto/migration` - Migration Guide
 - :doc:`large_data` - Large dataset APIs

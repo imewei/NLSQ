@@ -151,5 +151,5 @@ Tips for Image Fitting
 See Also
 --------
 
-- :doc:`/tutorials/05_large_datasets` - Large dataset tutorial
+- :doc:`/tutorials/routine/data_handling/large_datasets` - Large dataset tutorial
 - :doc:`/howto/handle_large_data` - Large data guide
