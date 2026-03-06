@@ -559,11 +559,13 @@ class CMAESOptimizer:
         convergence_reason = "max_generations"
 
         # Progress milestones for logging (25%, 50%, 75%)
-        milestones = {
-            int(self.config.max_generations * 0.25): "25%",
-            int(self.config.max_generations * 0.50): "50%",
-            int(self.config.max_generations * 0.75): "75%",
-        }
+        # Build the dict from a list so later entries don't silently overwrite
+        # earlier ones when max_generations is small (e.g. <=3 causes collisions).
+        milestones: dict[int, str] = {}
+        for pct, label in ((0.25, "25%"), (0.50, "50%"), (0.75, "75%")):
+            gen_idx = int(self.config.max_generations * pct)
+            if gen_idx not in milestones:
+                milestones[gen_idx] = label
 
         # Main optimization loop
         gen = -1
@@ -793,7 +795,7 @@ class CMAESOptimizer:
         best_solution, best_fitness = restarter.get_best()
         if best_solution is None:
             best_solution = initial_solution
-            best_fitness = -jnp.inf
+            best_fitness = float("-inf")
 
         logger.info(
             f"BIPOP completed: {restarter.restart_count} restarts, "

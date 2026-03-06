@@ -329,7 +329,11 @@ class IdentifiabilityAnalyzer:
             condition_number = float(max_sv / min_sv)
 
             # Compute numerical rank with relative tolerance
-            tol = max_sv * max(fim.shape) * np.finfo(fim.dtype).eps
+            # Use float64 eps if FIM has an integer dtype to avoid ValueError
+            float_dtype = (
+                fim.dtype if np.issubdtype(fim.dtype, np.floating) else np.float64
+            )
+            tol = max_sv * max(fim.shape) * np.finfo(float_dtype).eps
             numerical_rank = int(np.sum(singular_values > tol))
 
         return singular_values, condition_number, numerical_rank

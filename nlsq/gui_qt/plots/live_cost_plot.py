@@ -33,6 +33,7 @@ class LiveCostPlotWidget(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
+        self._max_points: int = 10_000  # cap to prevent unbounded growth
         self._iterations: list[int] = []
         self._costs: list[float] = []
         self._setup_ui()
@@ -74,6 +75,11 @@ class LiveCostPlotWidget(QWidget):
         """
         self._iterations.append(iteration)
         self._costs.append(cost)
+
+        # Enforce cap to prevent unbounded growth during long fits
+        if len(self._iterations) > self._max_points:
+            self._iterations = self._iterations[-self._max_points :]
+            self._costs = self._costs[-self._max_points :]
 
         # Update plot
         self._line.setData(self._iterations, self._costs)
