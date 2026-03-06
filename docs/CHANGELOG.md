@@ -1,5 +1,18 @@
 # Documentation Changelog
 
+## v0.6.10 (2026-03-06)
+- Added `check_plugin_conflicts()` for CUDA plugin dual-install and version-mismatch detection in `device.py`
+- Fixed misleading GPU warning header; expanded uninstall command to include CUDA plugin packages
+- Promoted xxhash, pyyaml, evosax, psutil, and dev/test tools to core dependencies (single `uv sync`)
+- Removed `extra_requirements: [docs]` from `.readthedocs.yaml`; docs deps covered by core
+- Added `gpu-diagnose` Makefile target and 3-step CUDA 13 install with conflict verification
+- Major `architecture.rst` overhaul reflecting v0.6.4+ orchestration components and facades
+- Trimmed ~1500 lines of redundant inline code blocks from tutorials 01–06
+- Refreshed 18 autodoc RST stubs and added 5 new API stubs (stability.guard, utils.diagnostics, callbacks, core.factories, interfaces)
+- Clarified mixed-precision fallback log message; added streaming docstring note
+- Moved deferred `scipy.stats` imports to module level in GUI export/results pages
+- Security: cryptography 46.0.4 → 46.0.5 (CVE-2026-26007), pillow 12.1.0 → 12.1.1 (CVE-2026-25990)
+
 ## v0.6.9 (2026-02-14)
 - Bump version to 0.6.9
 

@@ -7,23 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Security
+## [0.6.10] - 2026-03-06
 
-- **Dependency Security Upgrade**: Refreshed `uv.lock` to resolve 2 CVEs (failing daily audit since 2026-02-11)
-  - **cryptography**: 46.0.4 → 46.0.5 — fixes CVE-2026-26007 (ECDSA/ECDH missing subgroup validation on SECT curves)
-  - **pillow**: 12.1.0 → 12.1.1 — fixes CVE-2026-25990 (out-of-bounds write in PSD image loading)
+### Added
+
+- **CUDA Plugin Conflict Detection**: New `check_plugin_conflicts()` function in `nlsq/device.py`
+  - Detects simultaneous `jax-cuda12-plugin` + `jax-cuda13-plugin` installs (PJRT registration conflict)
+  - Detects plugin/jaxlib version mismatches via `importlib.metadata`
+  - Conflict warnings surfaced in `check_gpu_availability()` even when GPU is working
+  - `get_device_info()` now includes a `plugin_issues` field
+- **`gpu-diagnose` Makefile target**: Dedicated target for diagnosing CUDA plugin and version mismatch issues
+- **New Sphinx API stubs**: Added `nlsq.stability.guard`, `nlsq.utils.diagnostics`, `nlsq.callbacks`,
+  `nlsq.core.factories`, and `nlsq.interfaces` autodoc RST pages
 
 ### Fixed
 
-- **GUI Cache Cleanup**: Ensured `.nlsq_cache` is removed on clean shutdown
-- **Logging Isolation**: Fixed test isolation for logging handlers
+- **GPU Warning Message**: Fixed misleading header "GPU ACCELERATION AVAILABLE" → "GPU AVAILABLE BUT NOT USED";
+  indented detail lines; expanded `pip uninstall` command to include CUDA plugin packages
+- **GUI `scipy.stats` imports**: Moved deferred `from scipy import stats` calls in `export.py` and
+  `results.py` from inside hot-path CI computation methods to module level (eliminates repeated import overhead)
+- **Mixed-precision fallback log**: Clarified log message wording to accurately describe the fallback trigger
+- **Streaming docstring**: Added missing `get_available_memory` docstring note in `streaming_coordinator.py`
 
 ### Changed
 
-- **Dependency Hardening**: Added `pytest-benchmark` and updated locked dependencies
-- **Documentation**: Clarified platform-specific GPU support (macOS/Windows enforcement)
-- **Test Suite**: Hardened against environment variability and JIT timeouts
-- **Infrastructure**: Hardened Makefile execution with unified `$(RUN_CMD)` wrappers
+- **Dependency Consolidation**: Promoted `xxhash`, `pyyaml`, `evosax`, `psutil` (≥7.2.0), and dev/test tools
+  from optional extras to core `pyproject.toml` dependencies; `uv sync` now installs a fully functional environment
+- **`mypy` removed from core deps**: Moved to dev-only tool (not needed at runtime)
+- **`uv.lock` synchronized**: Lockfile updated to reflect new consolidated dependency set
+- **`pyproject.toml` extras cleanup**: Consolidated `all` extra; removed now-redundant `performance`,
+  `yaml`, and over-specified optional groups (covered by core deps)
+- **ReadTheDocs**: Removed `extra_requirements: [docs]` from `.readthedocs.yaml`; docs deps now in core
+- **Makefile GPU install flow**: Splits CUDA 13 install into 3 explicit steps with post-install conflict verification
+- **Architecture docs**: Major `architecture.rst` overhaul reflecting v0.6.4 orchestration layer
+  (DataPreprocessor, OptimizationSelector, CovarianceComputer, StreamingCoordinator, facades,
+  CMAESOptimizer, MethodSelector; updated AdaptiveHybrid line count to 4550L)
+- **Tutorial docs**: Removed ~1500 lines of redundant inline code blocks from tutorials 01–06;
+  retains conceptual narrative with API doc references
+- **API ref stubs**: Refreshed 18 autodoc RST stubs for renamed/reorganized modules
+- **TRF bounds pre-conversion**: `lb_jnp`/`ub_jnp` now accepted as pre-converted JAX arrays
+  in TRF initialization, eliminating repeated `jnp.array()` conversion overhead
+- **Security Upgrade**: Refreshed `uv.lock` to resolve 2 CVEs
+  - **cryptography** 46.0.4 → 46.0.5 — fixes CVE-2026-26007 (ECDSA/ECDH subgroup validation)
+  - **pillow** 12.1.0 → 12.1.1 — fixes CVE-2026-25990 (PSD out-of-bounds write)
 
 ## [0.6.7] - 2026-01-26
 
