@@ -60,13 +60,13 @@ def test_cached_function_ttl_expiration() -> None:
     cache = SmartCache(disk_cache_enabled=False)
     calls = {"count": 0}
 
-    @cached_function(cache=cache, ttl=0.01)
+    @cached_function(cache=cache, ttl=0.1)
     def add_one(x: int) -> int:
         calls["count"] += 1
         return x + 1
 
     assert add_one(1) == 2
-    time.sleep(0.02)
+    time.sleep(0.3)  # 3x TTL for reliable expiration on slow CI
     assert add_one(1) == 2
     assert calls["count"] == 2
 

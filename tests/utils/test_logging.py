@@ -3,7 +3,6 @@
 import logging
 import os
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -337,7 +336,6 @@ class TestLoggerIntegration(unittest.TestCase):
                     step_size=0.1,
                     nfev=i * 2,
                 )
-                time.sleep(0.001)
 
             logger.convergence(
                 reason="ftol satisfied",
