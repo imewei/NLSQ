@@ -5,10 +5,12 @@ NLSQ provides a native desktop GUI built with PySide6 (Qt) and pyqtgraph
 for GPU-accelerated scientific plotting. The GUI allows you to fit data
 without writing code.
 
+The complete GUI documentation lives in the structured tutorial:
+
 .. toctree::
    :maxdepth: 2
 
-   user_guide
+   /tutorials/routine/gui_desktop/index
 
 Quick Start
 -----------
@@ -27,15 +29,6 @@ Or from Python:
 
    run_desktop()
 
-Features
---------
-
-- **Data Import**: Load CSV, Excel, or paste data directly
-- **Model Selection**: Choose from built-in models or define custom functions
-- **Interactive Fitting**: Adjust initial guesses and bounds with sliders
-- **Visualization**: Real-time plots of data, fit, and residuals
-- **Results Export**: Download fitted parameters and statistics
-
 When to Use the GUI
 -------------------
 
@@ -52,6 +45,6 @@ use the Python API instead (see :doc:`/tutorials/index`).
 See Also
 --------
 
-- :doc:`user_guide` - Complete GUI reference
-- :doc:`/tutorials/01_first_fit` - Python API tutorial
+- :doc:`/tutorials/routine/gui_desktop/index` - Complete GUI guide
+- :doc:`/tutorials/routine/getting_started/first_fit` - Python API tutorial
 - :doc:`/reference/index` - API reference
