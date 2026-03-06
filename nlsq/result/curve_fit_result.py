@@ -141,9 +141,11 @@ class CurveFitResult(OptimizeResult):
         """Initialize enhanced curve fit result."""
         super().__init__(*args, **kwargs)
 
-        # Cache for computed properties
-        self._predictions_cache = None
-        self._residuals_cache = None
+        # Cache for computed properties - must use object.__setattr__ because
+        # OptimizeResult sets __setattr__ = dict.__setitem__, which would store
+        # these as public dict keys and pollute the result dict.
+        object.__setattr__(self, "_predictions_cache", None)
+        object.__setattr__(self, "_residuals_cache", None)
 
     def __iter__(self):
         """Support tuple unpacking: popt, pcov = curve_fit(...)"""
@@ -221,10 +223,18 @@ class CurveFitResult(OptimizeResult):
         """
         if self._predictions_cache is None:
             if hasattr(self, "model") and hasattr(self, "xdata"):
-                self._predictions_cache = np.array(self.model(self.xdata, *self.popt))
+                object.__setattr__(
+                    self,
+                    "_predictions_cache",
+                    np.array(self.model(self.xdata, *self.popt)),
+                )
             # Fallback: use fun (residuals) to back-calculate
             elif hasattr(self, "ydata") and hasattr(self, "fun"):
-                self._predictions_cache = np.array(self.ydata) - np.array(self.fun)
+                object.__setattr__(
+                    self,
+                    "_predictions_cache",
+                    np.array(self.ydata) - np.array(self.fun),
+                )
             else:
                 raise AttributeError(
                     "Cannot compute predictions: model and xdata not available. "
@@ -249,10 +259,14 @@ class CurveFitResult(OptimizeResult):
         if self._residuals_cache is None:
             if hasattr(self, "fun"):
                 # fun is the residual vector from optimization
-                self._residuals_cache = np.array(self.fun)
+                object.__setattr__(self, "_residuals_cache", np.array(self.fun))
             elif hasattr(self, "ydata"):
                 # Calculate from predictions
-                self._residuals_cache = np.array(self.ydata) - self.predictions
+                object.__setattr__(
+                    self,
+                    "_residuals_cache",
+                    np.array(self.ydata) - self.predictions,
+                )
             else:
                 raise AttributeError(
                     "Cannot compute residuals: neither fun nor ydata available"
@@ -501,7 +515,7 @@ class CurveFitResult(OptimizeResult):
             raise AttributeError(
                 "Cannot compute prediction interval: model not available"
             )
-        if not hasattr(self, "pcov"):
+        if self.get("pcov") is None:
             raise AttributeError(
                 "Cannot compute prediction interval: pcov not available"
             )
