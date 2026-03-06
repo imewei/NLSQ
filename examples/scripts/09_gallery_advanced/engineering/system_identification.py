@@ -283,8 +283,8 @@ print(f"  RMSE/Range: {rmse / (output_measured.max() - output_measured.min()):.2
 dw = np.sum(np.diff(residuals) ** 2) / np.sum(residuals**2)
 print(f"  Durbin-Watson: {dw:.2f} (2.0 = no autocorrelation)")
 
-# Check residual normality
-_, p_value_normality = stats.normaltest(residuals)
+# Check residual normality (convert to NumPy for SciPy compatibility on GPU)
+_, p_value_normality = stats.normaltest(np.asarray(residuals))
 print(
     f"  Residuals normal? p = {p_value_normality:.3f} "
     + f"({'Yes' if p_value_normality > 0.05 else 'No'} at alpha=0.05)"
