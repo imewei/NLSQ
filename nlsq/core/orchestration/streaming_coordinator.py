@@ -174,6 +174,8 @@ class StreamingCoordinator:
     def get_available_memory(self) -> float:
         """Get available system memory in MB.
 
+        Cached once per coordinator lifetime (one streaming decision per fit).
+
         Returns:
             Available memory in MB
         """
