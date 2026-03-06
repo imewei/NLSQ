@@ -169,14 +169,9 @@ class TestFunctionCache(unittest.TestCase):
 
         func_hash = self.cache.cache_function(test_func)
 
-        # Clear the lru_cache to ensure clean state for testing
-        self.cache.get_compiled_function.cache_clear()
-
         # First call - should compile (miss)
         self.cache.get_compiled_function(func_hash)
 
-        # The lru_cache decorator doesn't update our internal counters the same way
-        # Let's just check the basic stats structure
         stats = self.cache.get_stats()
 
         # Verify stats structure

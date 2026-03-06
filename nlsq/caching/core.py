@@ -5,7 +5,7 @@ import inspect
 import logging
 import weakref
 from collections.abc import Callable
-from functools import cache, wraps
+from functools import wraps
 from typing import Any
 
 # Initialize JAX configuration through central config
@@ -78,7 +78,6 @@ class FunctionCache:
             except (AttributeError, TypeError, ValueError):
                 return f"id_{id(func)}"
 
-    @cache
     def get_compiled_function(
         self,
         func_hash: str,
@@ -160,7 +159,6 @@ class FunctionCache:
         self._cache.clear()
         self._compiled_funcs.clear()
         self._func_refs.clear()
-        self.get_compiled_function.cache_clear()
         self._hit_count = 0
         self._miss_count = 0
         logger.info("Function cache cleared")

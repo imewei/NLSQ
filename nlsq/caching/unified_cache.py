@@ -26,7 +26,6 @@ import hashlib
 import logging
 import threading
 import time
-import weakref
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
@@ -94,9 +93,6 @@ class UnifiedCache:
 
         # LRU cache: OrderedDict preserves insertion order for efficient eviction
         self._cache: OrderedDict[str, Callable] = OrderedDict()
-
-        # Weak references to functions to avoid memory leaks
-        self._func_refs: dict[str, weakref.ref] = {}
 
         # Compilation time tracking per cache key (ms)
         self._compile_times: dict[str, float] = {}
@@ -310,9 +306,6 @@ class UnifiedCache:
         )
         compile_time_ms = (time.time() - start_time) * 1000
 
-        # Pre-compute function hash outside lock (avoid inspect.getsource inside lock)
-        func_hash = self._get_function_hash(func)
-
         # Store under lock (re-check to avoid duplicate compilation)
         with self._lock:
             # Another thread may have stored while we compiled
@@ -333,9 +326,6 @@ class UnifiedCache:
                 logger.debug(f"Evicted cache entry {oldest_key[:8]}... (LRU)")
 
             self._cache[cache_key] = compiled_func
-
-            if func_hash not in self._func_refs:
-                self._func_refs[func_hash] = weakref.ref(func)
 
             if self.enable_stats:
                 self._stats["cache_size"] = len(self._cache)
@@ -377,7 +367,6 @@ class UnifiedCache:
         """Clear all cached compilations and reset statistics."""
         with self._lock:
             self._cache.clear()
-            self._func_refs.clear()
             self._compile_times.clear()
 
             if self.enable_stats:
