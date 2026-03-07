@@ -12,6 +12,7 @@ import unittest
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -301,6 +302,7 @@ class TestProblemAnalysis(unittest.TestCase):
         self.assertEqual(analysis["size_class"], "medium")
         self.assertEqual(analysis["n_points"], 5000)
 
+    @pytest.mark.serial
     def test_analyze_large_problem(self):
         """Test analysis of large problem."""
 
@@ -315,6 +317,7 @@ class TestProblemAnalysis(unittest.TestCase):
 
         self.assertEqual(analysis["size_class"], "large")
 
+    @pytest.mark.serial
     def test_analyze_very_large_problem(self):
         """Test analysis of very large problem."""
 
@@ -344,6 +347,7 @@ class TestProblemAnalysis(unittest.TestCase):
 
         self.assertTrue(analysis["has_bounds"])
 
+    @pytest.mark.serial
     def test_analyze_with_memory_limit(self):
         """Test analysis with memory constraint."""
 

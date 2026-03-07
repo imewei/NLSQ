@@ -779,17 +779,28 @@ def make_strictly_feasible_jax(
 ) -> jnp.ndarray:
     """JIT-compiled strict feasibility projection for rstep=0 case.
 
-    Shifts boundary points to the interior using jnp.nextafter.
+    Shifts boundary points to the interior using jnp.nextafter, with a
+    guard against XLA's DAZ (Denormals-Are-Zero) behavior on CPU where
+    nextafter(0, x) produces a denormal that compares equal to zero.
     Only supports rstep=0 (the only value used in trf.py hot path).
     """
     # find_active_constraints with rtol=0 inlined
     lower_mask = x <= lb
     upper_mask = x >= ub
 
+    lower_nudge = jnp.nextafter(lb, ub)
+    upper_nudge = jnp.nextafter(ub, lb)
+
+    # Guard against DAZ: if nextafter produced a denormal that XLA treats as
+    # equal to the bound, use the smallest normal float as a minimum offset.
+    tiny = jnp.finfo(x.dtype).tiny
+    lower_nudge = jnp.where(lower_nudge <= lb, lb + tiny, lower_nudge)
+    upper_nudge = jnp.where(upper_nudge >= ub, ub - tiny, upper_nudge)
+
     x_new = jnp.where(
         lower_mask,
-        jnp.nextafter(lb, ub),
-        jnp.where(upper_mask, jnp.nextafter(ub, lb), x),
+        lower_nudge,
+        jnp.where(upper_mask, upper_nudge, x),
     )
 
     # Handle tight bounds where nextafter still violates

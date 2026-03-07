@@ -9,6 +9,21 @@ import importlib
 import os
 import shutil
 
+# CRITICAL: Set JAX environment variables BEFORE importing JAX.
+# JAX initializes its backend on first import. If these are set in a fixture
+# (after import), they have no effect — JAX will use GPU by default, causing:
+#   - 4 xdist workers each preallocating 75% of GPU VRAM (48GB from 16GB GPU)
+#   - XLA OOM crashes killing the system
+# See: https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
+os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
+# NLSQ requires float64 for numerical accuracy. On CPU backend, JAX defaults
+# to float32 unless explicitly configured. On GPU, float64 is available by default.
+# This must be set before JAX import to ensure consistent behavior.
+os.environ.setdefault("JAX_ENABLE_X64", "true")
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -27,31 +42,18 @@ if importlib.util.find_spec("pytestqt") is None:
 @pytest.fixture(scope="session", autouse=True)
 def configure_jax_for_tests():
     """
-    Configure JAX environment for optimal test performance.
+    Configure JAX compilation cache for test performance.
 
-    Phase 1 Test Optimization:
-    - Disables GPU pre-allocation to reduce memory usage
-    - Sets platform-specific memory allocation
-    - Enables persistent compilation cache across test sessions
-    - Suppresses GPU warnings for CPU-only tests
+    Note: JAX platform and memory settings are configured via os.environ
+    at module level (above), BEFORE JAX is imported. This is critical because
+    JAX initializes its backend on first import.
 
-    Expected Impact: 5-8% reduction (13-33 seconds)
+    This fixture only handles the compilation cache, which doesn't need
+    to be set before import.
     """
-    # Disable JAX GPU pre-allocation (reduces memory usage in tests)
-    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
-    # Use platform-specific allocator for faster memory operations
-    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
     # Enable persistent JAX compilation cache across test sessions
     cache_dir = "/tmp/nlsq_jax_test_cache"
     os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_dir
-
-    # Force CPU for test consistency (GPU tests use explicit markers)
-    os.environ["JAX_PLATFORMS"] = "cpu"
-
-    # Suppress GPU warning in tests (already configured via NLSQ_SKIP_GPU_CHECK)
-    os.environ["NLSQ_SKIP_GPU_CHECK"] = "1"
 
     yield
 
@@ -68,33 +70,23 @@ def configure_jax_for_tests():
 @pytest.fixture(autouse=True)
 def cleanup_jax_memory():
     """
-    Clean up JAX memory after each test to prevent OOM crashes.
+    Clean up Python references to large JAX arrays after each test.
 
-    Root Cause Analysis (2025-12-26):
-    - Parallel test execution with many workers accumulates JAX state
-    - AdaptiveHybridStreamingOptimizer holds O(p²) accumulators
-    - JIT compilation caches grow unbounded across tests
-    - Without cleanup, cumulative memory can exceed 60GB on large test suites
+    This runs gc.collect() to release Python objects holding JAX arrays.
+    The XLA runtime then reclaims the device memory.
 
-    This fixture runs after EVERY test to:
-    1. Force Python garbage collection
-    2. Clear JAX compilation caches
-    3. Release XLA device memory
-
-    Impact: Prevents OOM killer (exit code 137) during full test suite runs.
+    Note: We intentionally do NOT call jax.clear_caches() per test.
+    That function only clears the Python-level JIT trace cache, not XLA
+    device memory. Clearing it forces every subsequent test to re-trigger
+    JIT compilation (~40-50ms per new function shape), wasting significant
+    time across 3600+ tests without actually reducing memory usage.
+    The JIT cache should persist across tests for performance.
     """
-    # Let the test run
     yield
 
-    # Cleanup after test completes
     import gc
 
-    # Force garbage collection to release Python objects
     gc.collect()
-
-    # Clear JAX compilation caches to free XLA memory
-    # This is safe because tests should not depend on cached compilations
-    jax.clear_caches()
 
 
 # ============================================================================
@@ -724,13 +716,6 @@ def wait_for(
 # ============================================================================
 # Cleanup Fixtures
 # ============================================================================
-
-
-@pytest.fixture(autouse=True)
-def cleanup_jax_cache():
-    """Clean up JAX compilation cache after tests"""
-    yield
-    # Let JAX manage its own cache
 
 
 @pytest.fixture

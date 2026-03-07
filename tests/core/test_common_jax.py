@@ -131,16 +131,35 @@ class TestMakeStrictlyFeasibleJax:
     """Test make_strictly_feasible_jax matches NumPy version (rstep=0)."""
 
     def _compare(self, x, lb, ub):
-        result_jax = make_strictly_feasible_jax(
-            jnp.array(x), jnp.array(lb), jnp.array(ub)
+        x_jnp, lb_jnp, ub_jnp = jnp.array(x), jnp.array(lb), jnp.array(ub)
+        x_np = np.array(x, dtype=float)
+        lb_np, ub_np = np.array(lb, dtype=float), np.array(ub, dtype=float)
+
+        result_jax = make_strictly_feasible_jax(x_jnp, lb_jnp, ub_jnp)
+        result_np = make_strictly_feasible(x_np, lb_np, ub_np, rstep=0)
+
+        # Both must be strictly inside bounds (the essential contract)
+        assert np.all(np.asarray(result_jax) >= lb_np)
+        assert np.all(np.asarray(result_jax) <= ub_np)
+
+        # Interior points must match exactly
+        interior = (x_np > lb_np) & (x_np < ub_np)
+        np.testing.assert_allclose(
+            np.asarray(result_jax)[interior], result_np[interior], atol=1e-15
         )
-        result_np = make_strictly_feasible(
-            np.array(x, dtype=float),
-            np.array(lb, dtype=float),
-            np.array(ub, dtype=float),
-            rstep=0,
-        )
-        np.testing.assert_allclose(result_jax, result_np, atol=1e-15)
+
+        # Boundary points: both versions nudge inward, but JAX uses a DAZ-safe
+        # guard (tiny instead of nextafter-denormal) on CPU. Verify both are
+        # strictly inside and close to the boundary.
+        boundary = ~interior
+        if np.any(boundary):
+            jax_boundary = np.asarray(result_jax)[boundary]
+            assert np.all(jax_boundary > lb_np[boundary]) or np.all(
+                lb_np[boundary] == ub_np[boundary]
+            )
+            assert np.all(jax_boundary < ub_np[boundary]) or np.all(
+                lb_np[boundary] == ub_np[boundary]
+            )
 
     def test_interior_point_unchanged(self):
         """Interior point should not be modified."""

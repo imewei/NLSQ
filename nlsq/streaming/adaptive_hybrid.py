@@ -701,6 +701,15 @@ class AdaptiveHybridStreamingOptimizer:
         )
         return x_padded, y_padded, n_points, n_chunks
 
+    def clear_cache(self) -> None:
+        """Release cached padded arrays to free memory.
+
+        Call this after optimization completes or when reusing the optimizer
+        with different data. The cache is automatically invalidated when
+        data identity changes, but explicit clearing frees memory sooner.
+        """
+        self._padded_cache = None
+
     def _accumulate_jtj_jtr_scan(
         self,
         x_data: jnp.ndarray,

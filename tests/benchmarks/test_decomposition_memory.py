@@ -45,6 +45,7 @@ def get_process_memory_mb() -> float:
 # =============================================================================
 
 
+@pytest.mark.serial
 class TestDecompositionMemory:
     """Memory regression tests for decomposed CurveFit."""
 

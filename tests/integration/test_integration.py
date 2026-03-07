@@ -10,6 +10,7 @@ import warnings
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from nlsq import (
     LargeDatasetFitter,
@@ -236,6 +237,7 @@ class TestEndToEndValidation(unittest.TestCase):
         self.assertIsNotNone(_pcov)
         self.assertEqual(_pcov.shape, (2, 2))
 
+    @pytest.mark.serial
     def test_curve_fit_large_big_dataset(self):
         """Test curve_fit_large with dataset that triggers chunking."""
 
