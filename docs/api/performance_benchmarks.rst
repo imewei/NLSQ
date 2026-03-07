@@ -280,7 +280,6 @@ Planned optimizations:
 
 1. **Multi-GPU support** for distributed fitting
 2. **Adaptive chunking** based on convergence
-3. **Mixed precision** for faster GPU computation
 4. **Compiled kernels** for common fit functions
 5. **Parallel chunk processing** for independent fits
 
@@ -288,7 +287,6 @@ Expected improvements:
 
 - Multi-GPU: 3-4x speedup on 4 GPUs
 - Adaptive chunking: 20-30% reduction in iterations
-- Mixed precision: 2x speedup with minimal accuracy loss
 
 Conclusion
 ----------

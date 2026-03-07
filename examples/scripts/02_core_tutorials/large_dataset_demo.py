@@ -156,9 +156,6 @@ def demo_advanced_configuration():
     current_config = get_memory_config()
     print("Current memory configuration:")
     print(f"  Memory limit: {current_config.memory_limit_gb} GB")
-    print(
-        f"  Mixed precision fallback: {current_config.enable_mixed_precision_fallback}"
-    )
 
     # Automatically configure for large datasets
     print("\nConfiguring for large dataset processing...")
@@ -311,13 +308,11 @@ def demo_context_managers():
     print("\n--- Test 1: Memory-constrained fitting ---")
     constrained_config = MemoryConfig(
         memory_limit_gb=0.5,  # Very low limit
-        enable_mixed_precision_fallback=True,
     )
 
     with memory_context(constrained_config):
         temp_config = get_memory_config()
         print(f"Inside context memory limit: {temp_config.memory_limit_gb} GB")
-        print(f"Mixed precision enabled: {temp_config.enable_mixed_precision_fallback}")
 
         start_time = time.time()
         result1 = fit_large_dataset(
@@ -368,7 +363,7 @@ def demo_context_managers():
 
     # Use CurveFit with recommended settings
     optimized_config = MemoryConfig(
-        memory_limit_gb=2.0, enable_mixed_precision_fallback=True
+        memory_limit_gb=2.0,
     )
 
     with memory_context(optimized_config):

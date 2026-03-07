@@ -128,11 +128,10 @@ class TestHybridStreamingConfigDefaults:
         assert config.max_retries_per_batch == 2
         assert config.min_success_rate == 0.5
 
-    def test_default_precision(self):
-        """Test default precision settings."""
+    def test_default_multi_device(self):
+        """Test default multi-device settings."""
         config = HybridStreamingConfig()
 
-        assert config.precision == "auto"
         assert config.enable_multi_device is False
 
     def test_default_progress(self):
@@ -318,12 +317,6 @@ class TestMemoryOptimizedProfile:
         assert config.warmup_iterations == 40
         assert config.max_warmup_iterations == 100
 
-    def test_memory_optimized_precision(self):
-        """Test memory optimized precision."""
-        config = HybridStreamingConfig.memory_optimized()
-
-        assert config.precision == "float32"
-
     def test_memory_optimized_checkpoints(self):
         """Test memory optimized checkpoint settings."""
         config = HybridStreamingConfig.memory_optimized()
@@ -360,13 +353,11 @@ class TestWithMultistartProfile:
         config = HybridStreamingConfig.with_multistart(
             n_starts=15,
             chunk_size=5000,
-            precision="float64",
         )
 
         assert config.enable_multistart is True
         assert config.n_starts == 15
         assert config.chunk_size == 5000
-        assert config.precision == "float64"
 
 
 class TestDefenseStrictProfile:
@@ -476,12 +467,6 @@ class TestScientificDefaultProfile:
         assert config.enable_cost_guard is True
         assert config.enable_step_clipping is True
 
-    def test_scientific_default_precision(self):
-        """Test scientific default precision."""
-        config = HybridStreamingConfig.scientific_default()
-
-        assert config.precision == "float64"
-
     def test_scientific_default_thresholds(self):
         """Test scientific default threshold values."""
         config = HybridStreamingConfig.scientific_default()
@@ -512,11 +497,6 @@ class TestValidation:
         """Test that invalid normalization_strategy raises ValueError."""
         with pytest.raises(ValueError, match="normalization_strategy"):
             HybridStreamingConfig(normalization_strategy="invalid")
-
-    def test_invalid_precision(self):
-        """Test that invalid precision raises ValueError."""
-        with pytest.raises(ValueError, match="precision"):
-            HybridStreamingConfig(precision="float128")
 
     def test_invalid_loop_strategy(self):
         """Test that invalid loop_strategy raises ValueError."""
@@ -714,14 +694,6 @@ class TestProfileComparison:
         memory = HybridStreamingConfig.memory_optimized()
 
         assert memory.chunk_size < default.chunk_size
-
-    def test_scientific_default_higher_precision(self):
-        """Test that scientific default uses higher precision than memory optimized."""
-        scientific = HybridStreamingConfig.scientific_default()
-        memory = HybridStreamingConfig.memory_optimized()
-
-        assert scientific.precision == "float64"
-        assert memory.precision == "float32"
 
     def test_defense_strict_vs_relaxed_thresholds(self):
         """Test that strict has tighter thresholds than relaxed."""

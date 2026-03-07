@@ -413,7 +413,7 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
         y = self.model(x, *self.true_params)
         y = np.array(y) + np.random.normal(0, 0.05, n_points)
 
-        config = MemoryConfig(memory_limit_gb=2.0, enable_mixed_precision_fallback=True)
+        config = MemoryConfig(memory_limit_gb=2.0)
 
         with memory_context(config):
             # Fit within the context

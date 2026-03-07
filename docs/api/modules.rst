@@ -39,7 +39,6 @@ Tools for fitting very large datasets (10M+ points):
    nlsq.large_dataset
    nlsq.memory_manager
    nlsq.memory_pool
-   nlsq.mixed_precision
    large_datasets_api
 
 Adaptive Hybrid Streaming (v0.3.0+)
@@ -250,7 +249,6 @@ Complete Module Listing
 - :doc:`nlsq.large_dataset` - Chunked fitting for large data
 - :doc:`nlsq.memory_manager` - Intelligent memory management (NEW in v0.1.1)
 - :doc:`nlsq.memory_pool` - Memory pool allocation (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.mixed_precision` - Automatic mixed precision management (NEW in v0.1.6)
 - :doc:`large_datasets_api` - Comprehensive large dataset guide
 
 **Adaptive Hybrid Streaming Modules** (NEW in v0.3.0+):

@@ -1,4 +1,4 @@
-"""Tests for TRF dataclasses (TRFConfig, StepContext, BoundsContext, FallbackContext).
+"""Tests for TRF dataclasses (TRFConfig, StepContext, BoundsContext).
 
 These dataclasses encapsulate TRF algorithm parameters and state.
 """
@@ -10,7 +10,6 @@ import pytest
 
 from nlsq.core.trf import (
     BoundsContext,
-    FallbackContext,
     StepContext,
     TRFConfig,
 )
@@ -244,50 +243,3 @@ class TestBoundsContext:
         assert jnp.isinf(ctx.ub[0])
         assert ctx.lb[1] == 0.0
         assert ctx.ub[1] == 1.0
-
-
-class TestFallbackContext:
-    """Tests for FallbackContext dataclass."""
-
-    def test_default_values(self):
-        """Test default FallbackContext values."""
-        ctx = FallbackContext(original_dtype=jnp.float32)
-        assert ctx.original_dtype == jnp.float32
-        assert ctx.fallback_triggered is False
-        assert ctx.fallback_reason == ""
-        assert ctx.step_context is None
-
-    def test_mutable(self):
-        """Test that FallbackContext is mutable."""
-        ctx = FallbackContext(original_dtype=jnp.float32)
-        ctx.fallback_triggered = True
-        ctx.fallback_reason = "Numerical instability"
-        assert ctx.fallback_triggered is True
-        assert ctx.fallback_reason == "Numerical instability"
-
-    def test_with_step_context(self):
-        """Test FallbackContext with step_context."""
-        step_ctx = StepContext(
-            x=jnp.array([1.0]),
-            f=jnp.array([0.0]),
-            J=jnp.array([[1.0]]),
-            cost=0.0,
-            g=jnp.array([0.0]),
-            trust_radius=1.0,
-            iteration=0,
-            scale=jnp.array([1.0]),
-            scale_inv=jnp.array([1.0]),
-        )
-        ctx = FallbackContext(
-            original_dtype=jnp.float32,
-            fallback_triggered=True,
-            fallback_reason="SVD failed",
-            step_context=step_ctx,
-        )
-        assert ctx.step_context is not None
-        assert ctx.step_context.iteration == 0
-
-    def test_float64_dtype(self):
-        """Test FallbackContext with float64 dtype."""
-        ctx = FallbackContext(original_dtype=jnp.float64)
-        assert ctx.original_dtype == jnp.float64

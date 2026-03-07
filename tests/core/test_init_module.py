@@ -40,7 +40,6 @@ class TestInitModule(unittest.TestCase):
             LargeDatasetConfig,
             MemoryConfig,
             configure_for_large_datasets,
-            enable_mixed_precision_fallback,
             get_large_dataset_config,
             get_memory_config,
             large_dataset_context,
@@ -52,7 +51,6 @@ class TestInitModule(unittest.TestCase):
         self.assertTrue(callable(LargeDatasetConfig))
         self.assertTrue(callable(MemoryConfig))
         self.assertTrue(callable(configure_for_large_datasets))
-        self.assertTrue(callable(enable_mixed_precision_fallback))
         self.assertTrue(callable(get_large_dataset_config))
         self.assertTrue(callable(get_memory_config))
         self.assertTrue(callable(large_dataset_context))
@@ -144,10 +142,9 @@ class TestInitModule(unittest.TestCase):
         from nlsq import MemoryConfig, get_memory_config, set_memory_limits
 
         # Test creating config
-        config = MemoryConfig(memory_limit_gb=4.0, enable_mixed_precision_fallback=True)
+        config = MemoryConfig(memory_limit_gb=4.0)
 
         self.assertEqual(config.memory_limit_gb, 4.0)
-        self.assertTrue(config.enable_mixed_precision_fallback)
 
         # Test getting global config
         global_config = get_memory_config()
@@ -259,15 +256,6 @@ class TestInitModule(unittest.TestCase):
         config = get_large_dataset_config()
         # Should have configured appropriately
         self.assertIsNotNone(config)
-
-    def test_enable_mixed_precision_fallback(self):
-        """Test mixed precision fallback configuration."""
-        from nlsq import enable_mixed_precision_fallback, get_memory_config
-
-        enable_mixed_precision_fallback(enable=True)
-
-        config = get_memory_config()
-        self.assertTrue(config.enable_mixed_precision_fallback)
 
     def test_large_dataset_fitter_class(self):
         """Test LargeDatasetFitter class."""

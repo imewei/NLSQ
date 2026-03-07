@@ -196,10 +196,6 @@ class AdaptiveHybridStreamingOptimizer:
         self.device_info: dict[str, Any] | None = None
         self.multi_device_config: dict[str, Any] | None = None
 
-        # Mixed precision support
-        self.current_precision: jnp.dtype = jnp.float64  # Default to float64
-        self.phase_precisions: dict[int, jnp.dtype] = {}  # Precision per phase
-        self.precision_upgrade_triggered: bool = False  # Track if upgrade occurred
         # Multi-start optimization with tournament selection
         self.multistart_candidates: jnp.ndarray | None = None
         self.tournament_selector = None
@@ -2146,13 +2142,6 @@ class AdaptiveHybridStreamingOptimizer:
             if cost_guard_exit:
                 return cost_guard_result
 
-            # Check for precision upgrade if NaN/Inf detected
-            self._upgrade_precision_if_needed(
-                params=current_params,
-                loss=loss_value,
-                gradients=None,  # gradient not directly available
-            )
-
             # Save checkpoint periodically if enabled
             if (
                 hasattr(self.config, "enable_checkpoints")
@@ -3219,13 +3208,6 @@ class AdaptiveHybridStreamingOptimizer:
                 self.best_cost_global = new_cost
                 self.best_params_global = new_params
 
-            # Check for precision upgrade if NaN/Inf detected
-            self._upgrade_precision_if_needed(
-                params=new_params,
-                loss=new_cost,
-                gradients=iter_result.get("gradient"),
-            )
-
             # Save checkpoint periodically if enabled
             if self._should_save_checkpoint(iteration):
                 checkpoint_path = (
@@ -4121,240 +4103,6 @@ class AdaptiveHybridStreamingOptimizer:
         # Single-device case or fallback: return unchanged
         return JTJ_local
 
-    def _setup_precision(self) -> None:
-        """Setup precision strategy based on config.
-
-        Determines precision for each phase:
-        - precision='auto': Phase 0 float64, Phase 1 float32, Phase 2+ float64
-        - precision='float32': float32 throughout
-        - precision='float64': float64 throughout
-
-        Notes
-        -----
-        Phase 0 (normalization) always uses float64 for accuracy.
-        Phase 1 (L-BFGS warmup) can use float32 for memory efficiency with 'auto'.
-        Phase 2+ (Gauss-Newton, covariance) use float64 for numerical stability.
-
-        Sets self.current_precision and self.phase_precisions.
-        Immediately transitions to Phase 1 precision for 'auto' mode after setup.
-        """
-        if self.config.precision == "auto":
-            # Auto mode: float32 for Phase 1, float64 for others
-            self.phase_precisions = {
-                0: jnp.float64,  # Normalization: always float64
-                1: jnp.float32,  # Warmup: float32 for memory
-                2: jnp.float64,  # Gauss-Newton: float64 for stability
-                3: jnp.float64,  # Covariance: float64 for accuracy
-            }
-            # Phase 0 is just setup, start in Phase 1 precision (float32)
-            self.current_precision = jnp.float32
-
-        elif self.config.precision == "float32":
-            # User forces float32 throughout
-            self.phase_precisions = {
-                0: jnp.float32,
-                1: jnp.float32,
-                2: jnp.float32,
-                3: jnp.float64,  # Covariance always float64 for accuracy
-            }
-            self.current_precision = jnp.float32
-
-        elif self.config.precision == "float64":
-            # User forces float64 throughout
-            self.phase_precisions = {
-                0: jnp.float64,
-                1: jnp.float64,
-                2: jnp.float64,
-                3: jnp.float64,
-            }
-            self.current_precision = jnp.float64
-
-        else:
-            raise ValueError(
-                f"Invalid precision: {self.config.precision}. "
-                "Must be 'auto', 'float32', or 'float64'."
-            )
-
-    def _convert_precision(self, target_dtype: jnp.dtype) -> None:
-        """Convert arrays and optimizer state to target precision.
-
-        Parameters
-        ----------
-        target_dtype : jnp.dtype
-            Target data type (jnp.float32 or jnp.float64)
-
-        Notes
-        -----
-        Converts:
-        - self.normalized_params
-        - self.phase1_optimizer_state (if exists)
-        - self.phase2_JTJ_accumulator (if exists)
-        - self.phase2_JTr_accumulator (if exists)
-        - self.best_params_global (if exists)
-
-        Uses JAX device_put for zero-copy conversion where possible.
-        """
-        if self.current_precision == target_dtype:
-            # Already at target precision
-            return
-
-        # Convert normalized parameters
-        if self.normalized_params is not None:
-            self.normalized_params = self.normalized_params.astype(target_dtype)
-
-        # Convert Phase 1 optimizer state (Optax L-BFGS)
-        if self.phase1_optimizer_state is not None:
-            try:
-                inner_state = self.phase1_optimizer_state[0]
-
-                if hasattr(inner_state, "diff_params_memory"):
-                    # L-BFGS state conversion
-                    from optax._src.transform import (  # type: ignore[import-not-found]
-                        ScaleByLBFGSState,
-                    )
-
-                    new_lbfgs_state = ScaleByLBFGSState(
-                        count=inner_state.count,
-                        params=inner_state.params.astype(target_dtype),
-                        updates=inner_state.updates.astype(target_dtype),
-                        diff_params_memory=inner_state.diff_params_memory.astype(
-                            target_dtype
-                        ),
-                        diff_updates_memory=inner_state.diff_updates_memory.astype(
-                            target_dtype
-                        ),
-                        weights_memory=inner_state.weights_memory.astype(target_dtype),
-                    )
-                    self.phase1_optimizer_state = (new_lbfgs_state, optax.EmptyState())
-            except Exception:
-                # If conversion fails, reset optimizer state
-                self.phase1_optimizer_state = None
-
-        # Convert Phase 2 accumulators
-        if self.phase2_JTJ_accumulator is not None:
-            self.phase2_JTJ_accumulator = self.phase2_JTJ_accumulator.astype(
-                target_dtype
-            )
-
-        if self.phase2_JTr_accumulator is not None:
-            self.phase2_JTr_accumulator = self.phase2_JTr_accumulator.astype(
-                target_dtype
-            )
-
-        # Convert best parameters tracking
-        if self.best_params_global is not None:
-            self.best_params_global = self.best_params_global.astype(target_dtype)
-
-        # Update current precision
-        self.current_precision = target_dtype
-
-    def _check_precision_upgrade_needed(
-        self,
-        params: jnp.ndarray | None = None,
-        loss: float | None = None,
-        gradients: jnp.ndarray | None = None,
-    ) -> bool:
-        """Check if precision upgrade is needed due to numerical issues.
-
-        Parameters
-        ----------
-        params : array_like, optional
-            Current parameters to check
-        loss : float, optional
-            Current loss value to check
-        gradients : array_like, optional
-            Current gradients to check
-
-        Returns
-        -------
-        needs_upgrade : bool
-            True if precision upgrade recommended
-
-        Notes
-        -----
-        Checks for:
-        - NaN/Inf in parameters, loss, or gradients
-        - Only triggers upgrade if current precision is float32
-        - Only triggers upgrade once (self.precision_upgrade_triggered)
-        """
-        # Only upgrade from float32 to float64
-        if self.current_precision != jnp.float32:
-            return False
-
-        # Only upgrade once
-        if self.precision_upgrade_triggered:
-            return False
-
-        # Check parameters for NaN/Inf
-        if params is not None and not jnp.all(jnp.isfinite(params)):
-            return True
-
-        # Check loss for NaN/Inf
-        if loss is not None and not jnp.isfinite(loss):
-            return True
-
-        # Check gradients for NaN/Inf
-        return bool(gradients is not None and not jnp.all(jnp.isfinite(gradients)))
-
-    def _upgrade_precision_if_needed(
-        self,
-        params: jnp.ndarray | None = None,
-        loss: float | None = None,
-        gradients: jnp.ndarray | None = None,
-    ) -> None:
-        """Upgrade precision if numerical issues detected.
-
-        Parameters
-        ----------
-        params : array_like, optional
-            Current parameters to check
-        loss : float, optional
-            Current loss value to check
-        gradients : array_like, optional
-            Current gradients to check
-
-        Notes
-        -----
-        If upgrade is needed, converts all state to float64 and marks
-        precision_upgrade_triggered to prevent repeated upgrades.
-        """
-        if self._check_precision_upgrade_needed(params, loss, gradients):
-            # Log upgrade
-            if hasattr(self.config, "verbose") and self.config.verbose:
-                print(
-                    "WARNING: Numerical issues detected in float32. Upgrading to float64."
-                )
-
-            # Convert to float64
-            self._convert_precision(jnp.float64)
-
-            # Mark upgrade triggered
-            self.precision_upgrade_triggered = True
-
-    def _handle_phase_transition_precision(self, new_phase: int) -> None:
-        """Handle precision changes at phase transitions.
-
-        Parameters
-        ----------
-        new_phase : int
-            Phase number transitioning to (1, 2, or 3)
-
-        Notes
-        -----
-        For precision='auto':
-        - Phase 0 -> Phase 1: Convert to float32 (memory efficiency)
-        - Phase 1 -> Phase 2: Convert to float64 (numerical stability)
-        - Phase 2 -> Phase 3: Already float64
-
-        For user-specified precision, respects user choice.
-        """
-        # Get target precision for new phase
-        target_precision = self.phase_precisions.get(new_phase, jnp.float64)
-
-        # Convert if different from current
-        if target_precision != self.current_precision:
-            self._convert_precision(target_precision)
-
     def fit(
         self,
         data_source: Any,
@@ -4436,7 +4184,7 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
         # ============================================================
-        # Phase 0: Setup Normalization and Precision
+        # Phase 0: Setup Normalization
         # ============================================================
         if verbose >= 1:
             print("=" * 60)
@@ -4445,30 +4193,23 @@ class AdaptiveHybridStreamingOptimizer:
             print(f"Dataset size: {n_points:,} points")
             print(f"Parameters: {len(p0_array)}")
             print(f"Normalization: {self.config.normalization_strategy}")
-            print(f"Precision: {self.config.precision}")
             print()
 
         phase0_start = time.time()
         self._setup_normalization(func, p0_array, bounds)
-        self._setup_precision()  # Setup precision strategy
         phase0_duration = time.time() - phase0_start
         phase_timings["phase0_normalization"] = phase0_duration
 
         if verbose >= 1:
             print(f"Phase 0: Normalization setup complete ({phase0_duration:.3f}s)")
             print(f"  Strategy: {self.normalizer.strategy}")
-            print(f"  Precision: {self.current_precision}")
             print()
 
         # ============================================================
         # Phase 1: L-BFGS warmup
         # ============================================================
-        # Handle precision transition to Phase 1
-        self._handle_phase_transition_precision(1)
-
         if verbose >= 1:
             print("Phase 1: L-BFGS warmup...")
-            print(f"  Precision: {self.current_precision}")
 
         phase1_start = time.time()
         phase1_result = self._run_phase1_warmup(
@@ -4495,12 +4236,8 @@ class AdaptiveHybridStreamingOptimizer:
         # ============================================================
         # Phase 2: Streaming Gauss-Newton
         # ============================================================
-        # Handle precision transition to Phase 2
-        self._handle_phase_transition_precision(2)
-
         if verbose >= 1:
             print("Phase 2: Streaming Gauss-Newton...")
-            print(f"  Precision: {self.current_precision}")
 
         phase2_start = time.time()
         phase2_result = self._run_phase2_gauss_newton(
@@ -4523,12 +4260,8 @@ class AdaptiveHybridStreamingOptimizer:
         # ============================================================
         # Phase 3: Denormalization and Covariance
         # ============================================================
-        # Handle precision transition to Phase 3 (always float64 for covariance)
-        self._handle_phase_transition_precision(3)
-
         if verbose >= 1:
             print("Phase 3: Computing covariance...")
-            print(f"  Precision: {self.current_precision}")
 
         phase3_start = time.time()
         phase3_result = self._run_phase3_finalize(

@@ -193,7 +193,6 @@ class TestBackwardCompatibility:
             chunk_size=10000,
             loop_strategy="auto",
             # Other settings
-            precision="float64",
             enable_multi_device=False,
         )
 

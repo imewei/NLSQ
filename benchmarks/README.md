@@ -20,7 +20,6 @@ benchmarks/
 │   ├── cache_benchmark.py       # JIT compilation cache
 │   ├── jacobian_benchmark.py    # Jacobian mode auto-switching
 │   ├── memory_benchmark.py      # Memory pool optimization
-│   ├── precision_benchmark.py   # Mixed precision fallback
 │   ├── sparse_benchmark.py      # Sparse solver detection
 │   ├── stability_benchmark.py   # Stability guard overhead
 │   └── transfer_benchmark.py    # Host-device transfers
@@ -120,7 +119,6 @@ Standalone scripts for specific NLSQ components:
 | `cache_benchmark.py` | JIT compilation cache | >80% hit rate, 2-5x speedup |
 | `jacobian_benchmark.py` | jacfwd vs jacrev | 10-100x on high-param problems |
 | `memory_benchmark.py` | Memory pool reuse | 10-20% memory reduction |
-| `precision_benchmark.py` | Float32/64 fallback | Automatic precision upgrade |
 | `sparse_benchmark.py` | Sparse solver detection | 3-10x speedup on sparse |
 | `stability_benchmark.py` | Stability guard overhead | <5% overhead |
 | `transfer_benchmark.py` | GPU/CPU transfers | 80% transfer reduction |

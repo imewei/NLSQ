@@ -81,13 +81,14 @@ Force a specific memory limit:
 Large Dataset Tips
 ------------------
 
-**1. Use float32 for very large data:**
+**1. Use the streaming optimizer for very large data:**
 
 .. code-block:: python
 
-   x = x.astype(np.float32)
-   y = y.astype(np.float32)
-   # Halves memory usage
+   from nlsq import curve_fit_large
+
+   popt, pcov = curve_fit_large(model, x, y, p0=p0)
+   # Memory-efficient chunked processing
 
 **2. Start with a subset:**
 
@@ -216,7 +217,7 @@ Troubleshooting Large Data
 **Out of memory:**
 
 - Reduce ``memory_limit_gb``
-- Use float32 data
+- Use streaming optimizer
 - Close other applications
 
 **Very slow:**

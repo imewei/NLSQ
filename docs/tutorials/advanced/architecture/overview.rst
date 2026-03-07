@@ -53,7 +53,6 @@ Module Hierarchy
    │   └── condition_monitor.py    # Condition tracking
    │
    ├── precision/             # Precision control
-   │   ├── mixed_precision.py
    │   └── parameter_normalizer.py
    │
    ├── facades/               # Lazy loading

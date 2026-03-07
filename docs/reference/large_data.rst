@@ -97,7 +97,7 @@ Production-grade optimizer with four-phase optimization:
    from nlsq import AdaptiveHybridStreamingOptimizer
    from nlsq import HybridStreamingConfig
 
-   config = HybridStreamingConfig.from_preset("production")
+   config = HybridStreamingConfig.scientific_default()
 
    optimizer = AdaptiveHybridStreamingOptimizer(config)
 
@@ -114,10 +114,11 @@ Configuration for the hybrid streaming optimizer.
 
 **Presets:**
 
-- ``"fast"``: Quick convergence, lower precision
-- ``"balanced"``: Good balance of speed and accuracy
-- ``"production"``: Maximum reliability
-- ``"research"``: Highest precision
+- ``scientific_default()``: High precision for scientific computing
+- ``memory_optimized()``: Reduced memory footprint
+- ``aggressive()``: Fast convergence, less conservative
+- ``conservative()``: Maximum reliability
+- ``defense_strict()``: Strict numerical guards
 
 **Example:**
 
@@ -126,7 +127,7 @@ Configuration for the hybrid streaming optimizer.
    from nlsq import HybridStreamingConfig
 
    # From preset
-   config = HybridStreamingConfig.from_preset("production")
+   config = HybridStreamingConfig.scientific_default()
 
    # Custom configuration
    config = HybridStreamingConfig(

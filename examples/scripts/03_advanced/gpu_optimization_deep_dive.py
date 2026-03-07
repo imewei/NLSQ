@@ -377,15 +377,7 @@ print("Memory Optimization Strategies:")
 print("=" * 60)
 print()
 
-print("1. Use float32 instead of float64:")
-x_f64 = jnp.array([1.0, 2.0, 3.0], dtype=jnp.float64)
-x_f32 = jnp.array([1.0, 2.0, 3.0], dtype=jnp.float32)
-print(f"   float64 memory: {x_f64.nbytes} bytes per element")
-print(f"   float32 memory: {x_f32.nbytes} bytes per element")
-print(f"   Savings: {(1 - x_f32.nbytes / x_f64.nbytes) * 100:.0f}%")
-print("   → Use float32 unless high precision is critical\n")
-
-print("2. Process data in chunks (streaming):")
+print("1. Process data in chunks (streaming):")
 print("   # For very large datasets (millions of points)")
 print("   chunk_size = 100000")
 print("   for i in range(0, len(data), chunk_size):")
@@ -545,7 +537,7 @@ print("  - Superlinear scaling: May indicate memory issues or poor caching")
 #
 # 1. ✅ **Use GPU** if available (5-50x speedup for large problems)
 # 2. ✅ **Keep array shapes consistent** to avoid recompilation
-# 3. ✅ **Use float32** unless high precision is needed (2x memory savings)
+# 3. ✅ **Use streaming optimizer** for large datasets (memory-efficient)
 # 4. ✅ **Batch process** with `vmap` for multiple datasets (10-100x faster)
 # 5. ✅ **Warm up JIT** with small dataset before benchmarking
 # 6. ✅ **Use `block_until_ready()`** when timing (JAX is async)
@@ -576,7 +568,7 @@ print("  - Superlinear scaling: May indicate memory issues or poor caching")
 # - **Solution**: Check if recompiling each time (varying shapes/dtypes)
 #
 # **Problem**: Out of memory errors
-# - **Solution**: Use float32, chunk data, or downsample
+# - **Solution**: Use streaming optimizer, chunk data, or downsample
 #
 # **Problem**: GPU not being used
 # - **Solution**: Check `jax.devices()`, install jax[cuda] or jax[rocm]
@@ -609,7 +601,7 @@ print("  - Superlinear scaling: May indicate memory issues or poor caching")
 # from nlsq import CurveFit
 #
 # # Configure JAX for production
-# jax.config.update('jax_enable_x64', False)  # Use float32
+# jax.config.update('jax_enable_x64', True)  # Use float64 (required)
 #
 # # Pre-warm JIT cache at startup
 # cf = CurveFit()

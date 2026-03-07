@@ -398,12 +398,7 @@ print("  n_bins = 10000")
 print("  x_binned = np.array([x_data[i::n_bins].mean() for i in range(n_bins)])")
 print("  y_binned = np.array([y_data[i::n_bins].mean() for i in range(n_bins)])\n")
 
-print("Option C: Use float32 instead of float64")
-print("  # Halves memory usage, often sufficient precision")
-print("  x_data = jnp.array(x_data, dtype=jnp.float32)")
-print("  y_data = jnp.array(y_data, dtype=jnp.float32)\n")
-
-print("Option D: Streaming/chunked fitting (advanced)")
+print("Option C: Streaming/chunked fitting")
 print("  # For distributed data, fit chunks separately then combine")
 print("  # See: examples/streaming/ directory")
 

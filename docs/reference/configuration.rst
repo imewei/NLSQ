@@ -119,8 +119,7 @@ precision
 .. code-block:: yaml
 
    precision:
-     dtype: float64        # float32 or float64
-     mixed_precision: false
+     dtype: float64        # NLSQ requires float64 for numerical accuracy
      jax_enable_x64: true  # Enable 64-bit in JAX
 
 streaming
@@ -311,7 +310,6 @@ Complete list of defaults:
 
    precision:
      dtype: float64
-     mixed_precision: false
      jax_enable_x64: true
 
    streaming:

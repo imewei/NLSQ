@@ -523,13 +523,13 @@ Issue: ``MemoryError`` during fit
 
    popt, pcov = curve_fit(model, x, y, p0=[2, 1], solver="minibatch", batch_size=50_000)
 
-3. **Reduce precision (not recommended for production):**
+3. **Use streaming optimizer for very large datasets:**
 
 .. code:: python
 
-   from jax import config
+   from nlsq import curve_fit_large
 
-   config.update("jax_enable_x64", False)  # Use float32 instead of float64
+   popt, pcov = curve_fit_large(model, x, y, p0=p0)
 
 --------------
 

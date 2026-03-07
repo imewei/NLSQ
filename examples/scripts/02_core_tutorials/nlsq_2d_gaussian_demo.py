@@ -422,7 +422,7 @@ for size in large_sizes:
 
         with memory_context(
             MemoryConfig(
-                memory_limit_gb=memory_limit, enable_mixed_precision_fallback=True
+                memory_limit_gb=memory_limit,
             )
         ):
             # Generate noisy data

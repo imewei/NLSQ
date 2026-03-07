@@ -19,7 +19,6 @@ from nlsq.streaming.validators import (
     validate_lr_schedule_config,
     validate_multistart_config,
     validate_normalization_strategy,
-    validate_precision,
     validate_residual_weighting_config,
     validate_streaming_config,
     validate_warmup_config,
@@ -200,13 +199,6 @@ class HybridStreamingConfig:
     validate_numerics : bool, default=True
         Enable NaN/Inf validation at gradient, parameter, and loss computation points.
 
-    precision : str, default='auto'
-        Numerical precision strategy. Options:
-
-        - **'auto'**: float32 for Phase 1 warmup, float64 for Phase 2+ (recommended)
-        - **'float32'**: Use float32 throughout (faster, less memory)
-        - **'float64'**: Use float64 throughout (more stable)
-
     enable_multi_device : bool, default=False
         Enable multi-GPU/TPU parallelism for Jacobian computation.
         Uses JAX pmap for data-parallel computation across devices.
@@ -272,7 +264,6 @@ class HybridStreamingConfig:
     ...     warmup_iterations=50,
     ...     lbfgs_history_size=15,
     ...     chunk_size=5000,
-    ...     precision='float64'
     ... )
 
     With multi-start tournament selection:
@@ -398,9 +389,6 @@ class HybridStreamingConfig:
     max_retries_per_batch: int = 2
     min_success_rate: float = 0.5
 
-    # Precision control
-    precision: str = "auto"
-
     # Multi-device support
     enable_multi_device: bool = False
 
@@ -435,7 +423,6 @@ class HybridStreamingConfig:
         try:
             # Validate enum-like parameters
             validate_normalization_strategy(self.normalization_strategy)
-            validate_precision(self.precision)
             validate_loop_strategy(self.loop_strategy)
 
             # Validate Phase 1 warmup configuration
@@ -624,7 +611,6 @@ class HybridStreamingConfig:
         - Smaller chunks to reduce memory usage
         - L-BFGS warmup with reduced iterations
         - Enable checkpoints for recovery (important when memory is tight)
-        - float32 precision for 50% memory reduction
         - Lower CG threshold for more aggressive CG usage (avoids O(p^2) J^T J)
 
         Returns
@@ -648,8 +634,6 @@ class HybridStreamingConfig:
             # L-BFGS warmup with reduced iterations
             warmup_iterations=40,
             max_warmup_iterations=100,
-            # Use float32 for 50% memory reduction
-            precision="float32",
             # Enable checkpoints (important when memory tight)
             enable_checkpoints=True,
             checkpoint_frequency=50,  # More frequent saves
@@ -841,7 +825,6 @@ class HybridStreamingConfig:
         This preset is tuned for scientific fitting scenarios like spectroscopy,
         decay curves, and other physics-based models:
         - Balanced defense layers that protect without being too aggressive
-        - Float64 precision for numerical accuracy
         - L-BFGS warmup with moderate iterations
         - Enabled checkpoints for long-running fits
 
@@ -859,8 +842,6 @@ class HybridStreamingConfig:
         Examples
         --------
         >>> config = HybridStreamingConfig.scientific_default()
-        >>> config.precision
-        'float64'
         >>> config.warmup_iterations
         35
         """
@@ -884,7 +865,6 @@ class HybridStreamingConfig:
             warmup_iterations=35,
             max_warmup_iterations=100,
             # Scientific computing settings
-            precision="float64",
             gauss_newton_tol=1e-10,
             gauss_newton_max_iterations=200,
             # Enable checkpoints for long jobs

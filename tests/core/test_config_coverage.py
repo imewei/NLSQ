@@ -7,7 +7,6 @@ from nlsq.config import (
     LargeDatasetConfig,
     MemoryConfig,
     configure_for_large_datasets,
-    enable_mixed_precision_fallback,
     get_large_dataset_config,
     get_memory_config,
     large_dataset_context,
@@ -54,12 +53,6 @@ class TestConfigCoverage(unittest.TestCase):
     def test_configure_for_large_datasets_simple(self):
         """Test configuring for large datasets."""
         configure_for_large_datasets(memory_limit_gb=4.0)
-        # Just check it doesn't crash
-        self.assertTrue(True)
-
-    def test_enable_mixed_precision_simple(self):
-        """Test enabling mixed precision."""
-        enable_mixed_precision_fallback()
         # Just check it doesn't crash
         self.assertTrue(True)
 

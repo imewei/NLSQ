@@ -156,12 +156,13 @@ Memory Errors
 
       popt, pcov = fit(model, x, y, p0=p0, memory_limit_gb=4.0)
 
-2. **Use float32:**
+2. **Use streaming optimizer:**
 
    .. code-block:: python
 
-      x = x.astype(np.float32)
-      y = y.astype(np.float32)
+      from nlsq import curve_fit_large
+
+      popt, pcov = curve_fit_large(model, x, y, p0=p0)
 
 3. **Test on subset first:**
 

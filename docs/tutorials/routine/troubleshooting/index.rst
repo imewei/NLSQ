@@ -27,7 +27,7 @@ Quick Fixes
 **Memory errors:**
 
 - Reduce ``memory_limit_gb``
-- Use float32 data for large datasets
+- Use streaming optimizer for large datasets
 - Close other applications
 
 **Slow performance:**

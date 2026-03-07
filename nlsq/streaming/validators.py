@@ -158,11 +158,6 @@ def validate_normalization_strategy(strategy: str) -> None:
     )
 
 
-def validate_precision(precision: str) -> None:
-    """Validate precision parameter."""
-    validate_enum_value(precision, ("float32", "float64", "auto"), "precision")
-
-
 def validate_loop_strategy(strategy: str) -> None:
     """Validate loop strategy parameter."""
     validate_enum_value(strategy, ("auto", "scan", "loop"), "loop_strategy")

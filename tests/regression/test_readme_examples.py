@@ -215,7 +215,6 @@ def test_memory_management():
     # Configure memory settings
     config = MemoryConfig(
         memory_limit_gb=8.0,
-        enable_mixed_precision_fallback=True,
         safety_factor=0.8,
         progress_reporting=True,
     )
@@ -229,7 +228,7 @@ def test_memory_management():
     # Check current memory configuration
     current_config = get_memory_config()
     print(f"Memory limit: {current_config.memory_limit_gb} GB")
-    print(f"Mixed precision fallback: {current_config.enable_mixed_precision_fallback}")
+    print(f"Safety factor: {current_config.safety_factor}")
     print("✅ Memory Management example passed")
 
 

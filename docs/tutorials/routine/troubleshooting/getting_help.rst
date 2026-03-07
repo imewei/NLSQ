@@ -164,7 +164,7 @@ Common Solutions Summary
    * - Wrong results
      - Check model uses jnp, plot data
    * - Memory error
-     - Set memory_limit_gb, use float32
+     - Set memory_limit_gb, use streaming optimizer
    * - Slow
      - Use GPU, loosen tolerances
    * - Covariance inf

@@ -351,9 +351,6 @@ runtime:
   # Device: "cpu" or "gpu" (GPU requires Linux + NVIDIA + CUDA 12.x)
   device: "cpu"
 
-  # Numerical precision: "float64" (recommended) or "float32"
-  precision: "float64"
-
   # Random seed for reproducibility (affects multi-start, CMA-ES)
   random_seed: 42
 
@@ -386,34 +383,6 @@ memory:
 
   # Maximum chunk size (null = auto based on memory)
   max_chunk_size: null
-
-# ==============================================================================
-# MIXED PRECISION
-# ==============================================================================
-# Automatic precision fallback for numerical stability.
-# When enabled, NLSQ will fall back to float64 if float32 encounters issues.
-
-mixed_precision:
-  # Enable automatic precision fallback
-  enable_fallback: true
-
-  # Maximum iterations with degraded precision before switching
-  max_degradation_iterations: 5
-
-  # Threshold for detecting gradient explosion
-  gradient_explosion_threshold: 1.0e10
-
-  # Minimum precision improvement required
-  precision_limit_threshold: 1.0e-7
-
-  # Window size for stall detection
-  stall_window: 10
-
-  # Tolerance relaxation factor when falling back
-  tolerance_relaxation_factor: 10.0
-
-  # Verbose logging of precision changes
-  verbose: false
 
 # ==============================================================================
 # STREAMING OPTIMIZER (Advanced)

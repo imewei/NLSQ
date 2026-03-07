@@ -194,7 +194,6 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 | **Bounded optimization** | Trust Region Reflective and Levenberg-Marquardt |
 | **Large datasets** | Chunked and streaming optimizers for 100M+ points |
 | **Multi-start** | Global optimization with LHS/Sobol sampling |
-| **Mixed precision** | Automatic float32→float64 upgrade when needed |
 | **Workflow system** | 3 smart workflows: `auto`, `auto_global`, `hpc` with memory-aware strategy |
 | **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |
 | **Interactive GUI** | No-code curve fitting with Qt desktop application |
@@ -232,8 +231,8 @@ NLSQ is organized into well-separated layers (~75,000 lines):
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                          SUPPORT SUBSYSTEMS                                 │
 │  stability/           precision/          caching/          diagnostics/    │
-│  ├── NumericalGuard   ├── MixedPrecision  ├── UnifiedCache  ├── Identifiab. │
-│  ├── SVD fallback     ├── AlgorithmSel.   ├── SmartCache    ├── GradientMon │
+│  ├── NumericalGuard   ├── AlgorithmSel.   ├── UnifiedCache  ├── Identifiab. │
+│  ├── SVD fallback     ├── ParamNormalizer  ├── SmartCache    ├── GradientMon │
 │  └── Recovery         └── BoundsInfer.    └── MemoryMgr     └── PluginSys.  │
 │  facades/ (v0.6.4)                                                          │
 │  ├── OptimizationFacade  ├── StabilityFacade  └── DiagnosticsFacade         │
@@ -409,7 +408,7 @@ popt, pcov = curve_fit(model, x, y, p0=p0, stability="auto")
 ```python
 from nlsq import MemoryConfig, memory_context, CurveFit
 
-config = MemoryConfig(memory_limit_gb=8.0, enable_mixed_precision_fallback=True)
+config = MemoryConfig(memory_limit_gb=8.0)
 
 with memory_context(config):
     cf = CurveFit()

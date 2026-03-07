@@ -237,11 +237,13 @@ Performance Tips
       batched_model = jax.vmap(model, in_axes=(0, None, None))
       results = batched_model(x_batch, a, b)
 
-3. **Use float32 for larger datasets**
+3. **Use streaming optimizer for larger datasets**
 
    .. code-block:: python
 
-      x = x.astype(jnp.float32)  # Half the memory, faster
+      from nlsq import curve_fit_large
+
+      popt, pcov = curve_fit_large(model, x, y, p0=p0)  # Memory-efficient
 
 Summary
 -------

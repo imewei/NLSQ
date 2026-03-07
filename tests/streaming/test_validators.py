@@ -6,7 +6,7 @@ HybridStreamingConfig and other streaming components.
 Coverage targets:
 - ConfigValidationError: Custom exception class
 - Primitive validators: validate_positive, validate_non_negative, validate_range, etc.
-- Enum validators: validate_normalization_strategy, validate_precision, etc.
+- Enum validators: validate_normalization_strategy, etc.
 - Composite validators: validate_warmup_config, validate_lbfgs_config, etc.
 """
 
@@ -30,7 +30,6 @@ from nlsq.streaming.validators import (
     validate_non_negative,
     validate_normalization_strategy,
     validate_positive,
-    validate_precision,
     validate_range,
     validate_streaming_config,
     validate_warmup_config,
@@ -205,23 +204,6 @@ class TestValidateNormalizationStrategy:
         """Test invalid strategy."""
         with pytest.raises(ConfigValidationError, match="normalization_strategy"):
             validate_normalization_strategy("invalid")
-
-
-class TestValidatePrecision:
-    """Tests for validate_precision function."""
-
-    def test_valid_precisions(self):
-        """Test all valid precision values."""
-        for precision in ("float32", "float64", "auto"):
-            validate_precision(precision)
-
-    def test_invalid_precision(self):
-        """Test invalid precision."""
-        with pytest.raises(ConfigValidationError, match="precision"):
-            validate_precision("float16")
-
-        with pytest.raises(ConfigValidationError, match="precision"):
-            validate_precision("double")
 
 
 class TestValidateLoopStrategy:

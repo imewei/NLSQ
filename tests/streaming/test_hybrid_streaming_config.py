@@ -47,9 +47,6 @@ class TestHybridStreamingConfigDefaults:
         assert config.checkpoint_frequency == 100
         assert config.validate_numerics is True
 
-        # Precision defaults
-        assert config.precision == "auto"
-
         # Multi-device defaults
         assert config.enable_multi_device is False
 
@@ -121,11 +118,6 @@ class TestHybridStreamingConfigValidation:
         with pytest.raises(ValueError, match="normalization_strategy"):
             HybridStreamingConfig(normalization_strategy="invalid")
 
-    def test_invalid_precision(self):
-        """Test that invalid precision raises error."""
-        with pytest.raises(ValueError, match="precision"):
-            HybridStreamingConfig(precision="float16")
-
     def test_invalid_loop_strategy(self):
         """Test that invalid loop_strategy raises error."""
         with pytest.raises(ValueError, match="loop_strategy"):
@@ -193,7 +185,6 @@ class TestHybridStreamingConfigParameterRanges:
             max_warmup_iterations=300,
             warmup_learning_rate=0.01,
             chunk_size=5000,
-            precision="float64",
             enable_multi_device=True,
         )
 
@@ -203,5 +194,4 @@ class TestHybridStreamingConfigParameterRanges:
         assert config.max_warmup_iterations == 300
         assert config.warmup_learning_rate == 0.01
         assert config.chunk_size == 5000
-        assert config.precision == "float64"
         assert config.enable_multi_device is True

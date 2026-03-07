@@ -164,20 +164,6 @@ NLSQ minimizes transfers by:
 2. Only transferring results at the end
 3. Using JAX's lazy evaluation
 
-Mixed Precision
----------------
-
-Modern GPUs have Tensor Cores for fast float16/bfloat16:
-
-.. code-block:: python
-
-   # Use float32 for larger datasets with acceptable precision
-   x = x.astype(jnp.float32)
-   y = y.astype(jnp.float32)
-
-   # NLSQ uses float64 by default for numerical accuracy
-   # but float32 can be 2x faster with half the memory
-
 When GPU Doesn't Help
 ---------------------
 

@@ -69,7 +69,6 @@ _MODULE_ALIASES = {
     "nlsq.compilation_cache": "nlsq.caching.compilation_cache",
     "nlsq.trf": "nlsq.core.trf",
     "nlsq.robust_decomposition": "nlsq.stability.robust_decomposition",
-    "nlsq.mixed_precision": "nlsq.precision.mixed_precision",
     "nlsq.profiler_visualization": "nlsq.utils.profiler_visualization",
     "nlsq.validators": "nlsq.utils.validators",
     "nlsq.stability": "nlsq.stability.guard",
@@ -183,7 +182,6 @@ nitpick_ignore = [
     ("py:class", "OptimizationGoal"),
     ("py:class", "LDMemoryConfig"),
     ("py:class", "MultiGPUConfig"),
-    ("py:class", "MixedPrecisionConfig"),
     ("py:class", "UnifiedCache"),
     ("py:class", "CheckpointInfo"),
     ("py:class", "AggregateStats"),
@@ -260,7 +258,6 @@ nitpick_ignore += [
     # Internal optimizer classes
     ("py:class", "AutoDiffJacobian"),
     ("py:class", "ConvergenceMetrics"),
-    ("py:class", "MixedPrecisionManager"),
     ("py:class", "LinearOperator"),
     ("py:class", "LogLevel"),
     # Single-letter type hints from math notation
@@ -278,8 +275,6 @@ nitpick_ignore += [
     ("py:class", "CurveFitResult"),
     ("py:class", "BestParameterTracker"),
     ("py:class", "nlsq.result.CurveFitResult"),
-    ("py:class", "nlsq.mixed_precision.OptimizationState"),
-    ("py:class", "nlsq.mixed_precision.ConvergenceMonitor"),
     # Descriptive types
     ("py:class", "file-like object"),
     ("py:class", "2-tuple"),

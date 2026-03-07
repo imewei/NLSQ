@@ -237,21 +237,6 @@ class TestMemoryUsageReduction(unittest.TestCase):
         self.assertGreater(reduction, 0.10)  # At least 10%
         self.assertLess(reduction, 0.20)  # No more than 20%
 
-    def test_mixed_precision_memory_savings(self):
-        """Test mixed precision provides additional 50% memory savings."""
-        # float64 baseline
-        memory_f64 = self.manager_original.predict_memory_requirement(
-            n_points=10000, n_params=10, algorithm="trf", dtype=jnp.float64
-        )
-
-        # float32 should be ~50% smaller
-        memory_f32 = self.manager_original.predict_memory_requirement(
-            n_points=10000, n_params=10, algorithm="trf", dtype=jnp.float32
-        )
-
-        reduction = (memory_f64 - memory_f32) / memory_f64
-        self.assertAlmostEqual(reduction, 0.5, delta=0.05)  # ~50% reduction
-
 
 class TestMemoryReuseIntegration(unittest.TestCase):
     """Integration tests for memory reuse across components."""

@@ -8,10 +8,7 @@ import threading
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    from nlsq.precision.mixed_precision import MixedPrecisionConfig
+from typing import Optional
 
 
 @dataclass(slots=True)
@@ -24,8 +21,6 @@ class MemoryConfig:
         Maximum memory limit in GB (default: 8.0)
     gpu_memory_fraction : Optional[float]
         Fraction of GPU memory to use (0.0-1.0, None for automatic)
-    enable_mixed_precision_fallback : bool
-        Enable automatic mixed precision fallback for large datasets
     chunk_size_mb : Optional[int]
         Default chunk size in MB for data processing
     out_of_memory_strategy : str
@@ -44,7 +39,6 @@ class MemoryConfig:
 
     memory_limit_gb: float = 8.0
     gpu_memory_fraction: float | None = None
-    enable_mixed_precision_fallback: bool = True
     chunk_size_mb: int | None = None
     out_of_memory_strategy: str = "fallback"
     safety_factor: float = 0.8
@@ -115,8 +109,7 @@ class JAXConfig:
 
     This class ensures that JAX configuration is set once and consistently
     across all NLSQ modules, avoiding duplicate configuration calls. It also
-    manages memory settings, large dataset configuration, and mixed precision
-    configuration.
+    manages memory settings and large dataset configuration.
     """
 
     _instance: Optional["JAXConfig"] = None
@@ -125,7 +118,6 @@ class JAXConfig:
     _initialized: bool = False
     _memory_config: MemoryConfig | None = None
     _large_dataset_config: LargeDatasetConfig | None = None
-    _mixed_precision_config: "MixedPrecisionConfig | None" = None
     _gpu_memory_configured: bool = False
 
     def __new__(cls) -> "JAXConfig":
@@ -142,7 +134,6 @@ class JAXConfig:
                 self._initialize_jax()
                 self._initialize_memory_config()
                 self._initialize_large_dataset_config()
-                self._initialize_mixed_precision_config()
                 self._initialized = True
 
     def _initialize_jax(self):
@@ -269,9 +260,6 @@ class JAXConfig:
                     f"Invalid NLSQ_GPU_MEMORY_FRACTION: {fraction}", stacklevel=2
                 )
 
-        if os.getenv("NLSQ_DISABLE_MIXED_PRECISION_FALLBACK") == "1":
-            overrides["enable_mixed_precision_fallback"] = False
-
         chunk_size = os.getenv("NLSQ_CHUNK_SIZE_MB")
         if chunk_size:
             try:
@@ -316,100 +304,6 @@ class JAXConfig:
             large_dataset_config.enable_automatic_solver_selection = False
 
         self._large_dataset_config = large_dataset_config
-
-    def _initialize_mixed_precision_config(self):
-        """Initialize mixed precision configuration from environment variables."""
-        if self._mixed_precision_config is not None:
-            return
-
-        # Import here to avoid circular imports
-        from nlsq.precision.mixed_precision import MixedPrecisionConfig
-
-        # Load defaults
-        mp_config = MixedPrecisionConfig()
-
-        # Override from environment variables
-        if os.getenv("NLSQ_MIXED_PRECISION_VERBOSE") == "1":
-            mp_config.verbose = True
-            logging.info(
-                "Mixed precision verbose mode enabled via NLSQ_MIXED_PRECISION_VERBOSE"
-            )
-
-        # Gradient explosion threshold
-        grad_threshold = os.getenv("NLSQ_GRADIENT_EXPLOSION_THRESHOLD")
-        if grad_threshold:
-            try:
-                mp_config.gradient_explosion_threshold = float(grad_threshold)
-                logging.info(
-                    f"Custom gradient explosion threshold: {mp_config.gradient_explosion_threshold:.2e}"
-                )
-            except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_GRADIENT_EXPLOSION_THRESHOLD: {grad_threshold}",
-                    stacklevel=2,
-                )
-
-        # Precision limit threshold
-        prec_threshold = os.getenv("NLSQ_PRECISION_LIMIT_THRESHOLD")
-        if prec_threshold:
-            try:
-                mp_config.precision_limit_threshold = float(prec_threshold)
-                logging.info(
-                    f"Custom precision limit threshold: {mp_config.precision_limit_threshold:.2e}"
-                )
-            except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_PRECISION_LIMIT_THRESHOLD: {prec_threshold}",
-                    stacklevel=2,
-                )
-
-        # Stall window
-        stall_window = os.getenv("NLSQ_STALL_WINDOW")
-        if stall_window:
-            try:
-                mp_config.stall_window = int(stall_window)
-                logging.info(
-                    f"Custom stall window: {mp_config.stall_window} iterations"
-                )
-            except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_STALL_WINDOW: {stall_window}", stacklevel=2
-                )
-
-        # Max degradation iterations
-        max_degrad = os.getenv("NLSQ_MAX_DEGRADATION_ITERATIONS")
-        if max_degrad:
-            try:
-                mp_config.max_degradation_iterations = int(max_degrad)
-                logging.info(
-                    f"Custom max degradation iterations: {mp_config.max_degradation_iterations}"
-                )
-            except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_MAX_DEGRADATION_ITERATIONS: {max_degrad}",
-                    stacklevel=2,
-                )
-
-        # Tolerance relaxation factor
-        relax_factor = os.getenv("NLSQ_TOLERANCE_RELAXATION_FACTOR")
-        if relax_factor:
-            try:
-                mp_config.tolerance_relaxation_factor = float(relax_factor)
-                logging.info(
-                    f"Custom tolerance relaxation factor: {mp_config.tolerance_relaxation_factor:.1f}x"
-                )
-            except ValueError:
-                warnings.warn(
-                    f"Invalid NLSQ_TOLERANCE_RELAXATION_FACTOR: {relax_factor}",
-                    stacklevel=2,
-                )
-
-        # Enable/disable mixed precision
-        if os.getenv("NLSQ_DISABLE_MIXED_PRECISION") == "1":
-            mp_config.enable_mixed_precision_fallback = False
-            logging.info("Mixed precision disabled via NLSQ_DISABLE_MIXED_PRECISION")
-
-        self._mixed_precision_config = mp_config
 
     @classmethod
     def enable_x64(cls, enable: bool = True):
@@ -544,36 +438,6 @@ class JAXConfig:
             instance._large_dataset_config = config
 
     @classmethod
-    def get_mixed_precision_config(cls):
-        """Get the current mixed precision configuration.
-
-        Returns
-        -------
-        MixedPrecisionConfig
-            Current mixed precision configuration
-        """
-        instance = cls()
-        if instance._mixed_precision_config is None:
-            instance._initialize_mixed_precision_config()
-        # Explicit validation after initialization (not assert - can be optimized away)
-        if instance._mixed_precision_config is None:
-            raise RuntimeError("Mixed precision config initialization failed")
-        return instance._mixed_precision_config
-
-    @classmethod
-    def set_mixed_precision_config(cls, config):
-        """Set the mixed precision configuration.
-
-        Parameters
-        ----------
-        config : MixedPrecisionConfig
-            New mixed precision configuration
-        """
-        instance = cls()
-        with cls._lock:
-            instance._mixed_precision_config = config
-
-    @classmethod
     @contextmanager
     def memory_context(cls, memory_config: MemoryConfig):
         """Context manager for temporarily changing memory configuration.
@@ -627,39 +491,6 @@ class JAXConfig:
             else:
                 instance._large_dataset_config = None
                 instance._initialize_large_dataset_config()
-
-    @classmethod
-    @contextmanager
-    def mixed_precision_context(cls, mixed_precision_config):
-        """Context manager for temporarily changing mixed precision configuration.
-
-        Parameters
-        ----------
-        mixed_precision_config : MixedPrecisionConfig
-            Temporary mixed precision configuration
-
-        Examples
-        --------
-        >>> from nlsq.config import JAXConfig
-        >>> from nlsq.precision.mixed_precision import MixedPrecisionConfig
-        >>> temp_config = MixedPrecisionConfig(verbose=True, max_degradation_iterations=2)
-        >>> with JAXConfig.mixed_precision_context(temp_config):
-        ...     # Code here runs with custom mixed precision settings
-        ...     result = curve_fit(func, x, y)
-        >>> # Back to previous mixed precision settings
-        """
-        instance = cls()
-        original_config = instance._mixed_precision_config
-
-        try:
-            cls.set_mixed_precision_config(mixed_precision_config)
-            yield
-        finally:
-            if original_config is not None:
-                cls.set_mixed_precision_config(original_config)
-            else:
-                instance._mixed_precision_config = None
-                instance._initialize_mixed_precision_config()
 
 
 # Initialize configuration on module import
@@ -753,42 +584,8 @@ def set_memory_limits(
             else current_config.gpu_memory_fraction
         ),
         safety_factor=safety_factor,
-        enable_mixed_precision_fallback=current_config.enable_mixed_precision_fallback,
         chunk_size_mb=current_config.chunk_size_mb,
         out_of_memory_strategy=current_config.out_of_memory_strategy,
-        auto_chunk_threshold_gb=current_config.auto_chunk_threshold_gb,
-        progress_reporting=current_config.progress_reporting,
-        min_chunk_size=current_config.min_chunk_size,
-        max_chunk_size=current_config.max_chunk_size,
-    )
-    JAXConfig.set_memory_config(new_config)
-
-
-def enable_mixed_precision_fallback(enable: bool = True):
-    """Enable or disable mixed precision fallback for large datasets.
-
-    When enabled, NLSQ will automatically fall back to mixed precision
-    (float32) computation for very large datasets to conserve memory.
-
-    Parameters
-    ----------
-    enable : bool, optional
-        Whether to enable mixed precision fallback (default: True)
-
-    Examples
-    --------
-    >>> from nlsq.config import enable_mixed_precision_fallback
-    >>> # Enable mixed precision fallback
-    >>> enable_mixed_precision_fallback(True)
-    """
-    current_config = get_memory_config()
-    new_config = MemoryConfig(
-        memory_limit_gb=current_config.memory_limit_gb,
-        gpu_memory_fraction=current_config.gpu_memory_fraction,
-        enable_mixed_precision_fallback=enable,
-        chunk_size_mb=current_config.chunk_size_mb,
-        out_of_memory_strategy=current_config.out_of_memory_strategy,
-        safety_factor=current_config.safety_factor,
         auto_chunk_threshold_gb=current_config.auto_chunk_threshold_gb,
         progress_reporting=current_config.progress_reporting,
         min_chunk_size=current_config.min_chunk_size,
@@ -801,7 +598,6 @@ def configure_for_large_datasets(
     memory_limit_gb: float = 8.0,
     enable_chunking: bool = True,
     progress_reporting: bool = True,
-    mixed_precision_fallback: bool = True,
 ):
     """Configure NLSQ for optimal large dataset performance.
 
@@ -816,8 +612,6 @@ def configure_for_large_datasets(
         Enable automatic data chunking (default: True)
     progress_reporting : bool, optional
         Enable progress reporting for long operations (default: True)
-    mixed_precision_fallback : bool, optional
-        Enable mixed precision fallback (default: True)
 
     Notes
     -----
@@ -835,7 +629,6 @@ def configure_for_large_datasets(
     # Configure memory settings
     memory_config = MemoryConfig(
         memory_limit_gb=memory_limit_gb,
-        enable_mixed_precision_fallback=mixed_precision_fallback,
         auto_chunk_threshold_gb=memory_limit_gb * 0.5
         if enable_chunking
         else float("inf"),
@@ -855,9 +648,6 @@ def configure_for_large_datasets(
     logging.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
     logging.info(
         f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}"
-    )
-    logging.info(
-        f"  Mixed precision fallback: {'enabled' if mixed_precision_fallback else 'disabled'}"
     )
 
 
@@ -909,158 +699,6 @@ def large_dataset_context(large_dataset_config: LargeDatasetConfig):
     ...     result = fit_large_dataset(func, x, y)
     """
     return JAXConfig.large_dataset_context(large_dataset_config)
-
-
-# Mixed precision convenience functions
-def get_mixed_precision_config():
-    """Get the current mixed precision configuration.
-
-    Returns
-    -------
-    MixedPrecisionConfig
-        Current mixed precision configuration
-
-    Examples
-    --------
-    >>> from nlsq.config import get_mixed_precision_config
-    >>> config = get_mixed_precision_config()
-    >>> print(config.gradient_explosion_threshold)
-    10000000000.0
-    """
-    return JAXConfig.get_mixed_precision_config()
-
-
-def set_mixed_precision_config(config):
-    """Set the mixed precision configuration.
-
-    Parameters
-    ----------
-    config : MixedPrecisionConfig
-        New mixed precision configuration
-
-    Examples
-    --------
-    >>> from nlsq.config import set_mixed_precision_config
-    >>> from nlsq.precision.mixed_precision import MixedPrecisionConfig
-    >>> config = MixedPrecisionConfig(verbose=True, max_degradation_iterations=10)
-    >>> set_mixed_precision_config(config)
-    """
-    JAXConfig.set_mixed_precision_config(config)
-
-
-def configure_mixed_precision(
-    enable: bool = True,
-    max_degradation_iterations: int = 5,
-    gradient_explosion_threshold: float = 1e10,
-    precision_limit_threshold: float = 1e-7,
-    stall_window: int = 10,
-    tolerance_relaxation_factor: float = 10.0,
-    verbose: bool = False,
-):
-    """Configure mixed precision optimization behavior.
-
-    This function provides a convenient way to customize mixed precision
-    settings without directly constructing a MixedPrecisionConfig object.
-
-    Parameters
-    ----------
-    enable : bool, optional
-        Enable automatic mixed precision fallback (default: True)
-    max_degradation_iterations : int, optional
-        Number of iterations with issues before upgrading (default: 5)
-    gradient_explosion_threshold : float, optional
-        Gradient norm threshold for explosion detection (default: 1e10)
-    precision_limit_threshold : float, optional
-        Minimum parameter change in float32 (default: 1e-7)
-    stall_window : int, optional
-        Iterations to track for stall detection (default: 10)
-    tolerance_relaxation_factor : float, optional
-        Factor to multiply tolerances in fallback (default: 10.0)
-    verbose : bool, optional
-        Enable verbose logging (default: False)
-
-    Examples
-    --------
-    Conservative configuration (upgrades quickly):
-
-    >>> from nlsq.config import configure_mixed_precision
-    >>> configure_mixed_precision(
-    ...     max_degradation_iterations=2,
-    ...     gradient_explosion_threshold=1e8,
-    ...     verbose=True
-    ... )
-
-    Aggressive configuration (stays in float32 longer):
-
-    >>> configure_mixed_precision(
-    ...     max_degradation_iterations=10,
-    ...     gradient_explosion_threshold=1e12,
-    ...     precision_limit_threshold=1e-8
-    ... )
-
-    Disable mixed precision (pure float64):
-
-    >>> configure_mixed_precision(enable=False)
-
-    Notes
-    -----
-    Environment variables can override these settings:
-
-    - NLSQ_MIXED_PRECISION_VERBOSE=1
-    - NLSQ_GRADIENT_EXPLOSION_THRESHOLD=1e8
-    - NLSQ_PRECISION_LIMIT_THRESHOLD=1e-8
-    - NLSQ_STALL_WINDOW=15
-    - NLSQ_MAX_DEGRADATION_ITERATIONS=3
-    - NLSQ_TOLERANCE_RELAXATION_FACTOR=5.0
-    - NLSQ_DISABLE_MIXED_PRECISION=1
-    """
-    from nlsq.precision.mixed_precision import MixedPrecisionConfig
-
-    config = MixedPrecisionConfig(
-        enable_mixed_precision_fallback=enable,
-        max_degradation_iterations=max_degradation_iterations,
-        gradient_explosion_threshold=gradient_explosion_threshold,
-        precision_limit_threshold=precision_limit_threshold,
-        stall_window=stall_window,
-        tolerance_relaxation_factor=tolerance_relaxation_factor,
-        verbose=verbose,
-    )
-    JAXConfig.set_mixed_precision_config(config)
-
-    logging.info("Configured mixed precision optimization:")
-    logging.info(f"  Enabled: {enable}")
-    if enable:
-        logging.info(f"  Max degradation iterations: {max_degradation_iterations}")
-        logging.info(
-            f"  Gradient explosion threshold: {gradient_explosion_threshold:.2e}"
-        )
-        logging.info(f"  Precision limit threshold: {precision_limit_threshold:.2e}")
-        logging.info(f"  Stall window: {stall_window} iterations")
-        logging.info(
-            f"  Tolerance relaxation factor: {tolerance_relaxation_factor:.1f}x"
-        )
-        logging.info(f"  Verbose logging: {verbose}")
-
-
-def mixed_precision_context(mixed_precision_config):
-    """Context manager for temporarily changing mixed precision configuration.
-
-    Parameters
-    ----------
-    mixed_precision_config : MixedPrecisionConfig
-        Temporary mixed precision configuration
-
-    Examples
-    --------
-    >>> from nlsq.config import mixed_precision_context
-    >>> from nlsq.precision.mixed_precision import MixedPrecisionConfig
-    >>> temp_config = MixedPrecisionConfig(verbose=True, max_degradation_iterations=2)
-    >>> with mixed_precision_context(temp_config):
-    ...     # Code here runs with custom mixed precision settings
-    ...     result = curve_fit(func, x, y)
-    >>> # Back to previous mixed precision settings
-    """
-    return JAXConfig.mixed_precision_context(mixed_precision_config)
 
 
 # Jacobian mode configuration functions

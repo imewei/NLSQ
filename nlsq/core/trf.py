@@ -169,15 +169,6 @@ from nlsq.core.profiler import NullProfiler, TRFProfiler
 
 # JIT-compiled helper functions (extracted for modularity)
 from nlsq.core.trf_jit import TrustRegionJITFunctions
-
-# Mixed precision support
-from nlsq.precision.mixed_precision import (
-    ConvergenceMetrics,
-    MixedPrecisionConfig,
-    MixedPrecisionManager,
-    OptimizationState,
-    PrecisionState,
-)
 from nlsq.result import OptimizeResult
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.utils.diagnostics import OptimizationDiagnostics
@@ -412,30 +403,6 @@ class BoundsContext:
             lb_scaled=lb_scaled,
             ub_scaled=ub_scaled,
         )
-
-
-@dataclass(slots=True)
-class FallbackContext:
-    """Context for float64 fallback during mixed-precision optimization.
-
-    Tracks the state when falling back from float32 to float64.
-
-    Attributes
-    ----------
-    original_dtype : jnp.dtype
-        Original data type before fallback.
-    fallback_triggered : bool
-        Whether fallback was activated.
-    fallback_reason : str
-        Why fallback was needed.
-    step_context : StepContext or None
-        Step state at fallback point.
-    """
-
-    original_dtype: jnp.dtype
-    fallback_triggered: bool = False
-    fallback_reason: str = ""
-    step_context: StepContext | None = None
 
 
 # Algorithm constants
@@ -1198,115 +1165,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         return result
 
-    def _handle_mixed_precision_update(
-        self,
-        mixed_precision_manager: MixedPrecisionManager,
-        x: jnp.ndarray,
-        f: jnp.ndarray,
-        J: jnp.ndarray,
-        g: jnp.ndarray,
-        cost: float,
-        Delta: float,
-        alpha: float,
-        iteration: int,
-        d_jnp: jnp.ndarray,
-        step_norm: float | None,
-        g_norm: float,
-    ) -> dict | None:
-        """Handle mixed precision monitoring and potential upgrade.
-
-        This helper extracts mixed precision handling logic from trf_no_bounds,
-        reducing complexity.
-
-        Parameters
-        ----------
-        mixed_precision_manager : MixedPrecisionManager
-            The mixed precision manager instance
-        x : jnp.ndarray
-            Current parameter values
-        f : jnp.ndarray
-            Current residuals
-        J : jnp.ndarray
-            Current Jacobian
-        g : jnp.ndarray
-            Current gradient
-        cost : float
-            Current cost value
-        Delta : float
-            Trust region radius
-        alpha : float
-            Levenberg-Marquardt parameter
-        iteration : int
-            Current iteration number
-        d_jnp : jnp.ndarray
-            Scaling vector
-        step_norm : float | None
-            Step norm (None if not computed)
-        g_norm : float
-            Gradient norm
-
-        Returns
-        -------
-        dict | None
-            If upgrade occurred, returns dict with upgraded state:
-            - x, f, J, g, cost, Delta, iteration, alpha
-            Otherwise returns None.
-        """
-        # Compute parameter change for precision monitoring
-        param_change = jnorm(d_jnp) if step_norm is not None else 0.0
-
-        # Check for NaN/Inf in current state (fused into single device op)
-        has_nan_inf = bool(
-            ~jnp.isfinite(f).all() | ~jnp.isfinite(J).all() | ~jnp.isfinite(g).all()
-        )
-
-        # Report metrics to manager
-        metrics = ConvergenceMetrics(
-            iteration=iteration,
-            residual_norm=float(jnorm(f)),
-            gradient_norm=float(g_norm),
-            parameter_change=float(param_change),
-            cost=float(cost),
-            trust_radius=float(Delta),
-            has_nan_inf=has_nan_inf,
-        )
-        mixed_precision_manager.report_metrics(metrics)
-
-        # Update best parameters
-        mixed_precision_manager.update_best(x, float(cost), iteration)
-
-        # Check if precision upgrade needed
-        if mixed_precision_manager.should_upgrade():
-            # Create optimization state for upgrade
-            opt_state = OptimizationState(
-                x=x,
-                f=f,
-                J=J,
-                g=g,
-                cost=float(cost),
-                trust_radius=float(Delta),
-                iteration=iteration,
-                dtype=x.dtype,
-                algorithm_specific={"alpha": alpha},
-            )
-
-            # Perform upgrade
-            upgraded_state = mixed_precision_manager.upgrade_precision(opt_state)
-
-            # Return upgraded state
-            return {
-                "x": upgraded_state.x,
-                "f": upgraded_state.f,
-                "J": upgraded_state.J,
-                "g": upgraded_state.g,
-                "cost": upgraded_state.cost,
-                "Delta": upgraded_state.trust_radius,
-                "iteration": upgraded_state.iteration,
-                "alpha": upgraded_state.algorithm_specific["alpha"],
-            }
-
-        return None
-
     def _invoke_callback(
         self,
         callback: Callable,
@@ -1855,8 +1713,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         solver: str = "exact",
         callback: Callable | None = None,
         profiler: TRFProfiler | NullProfiler | None = None,
-        mixed_precision_manager: MixedPrecisionManager | None = None,
-        mixed_precision_config: MixedPrecisionConfig | None = None,
         **kwargs,
     ) -> dict:
         """Unbounded version of the trust-region reflective algorithm.
@@ -1916,14 +1772,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 * 0 (default) : work silently.
                 * 1 : display a termination report.
 
-        mixed_precision_manager : MixedPrecisionManager, optional
-            Pre-initialized mixed precision manager. If provided, mixed_precision_config
-            is ignored. Use when sharing manager across multiple optimizations.
-        mixed_precision_config : MixedPrecisionConfig, optional
-            Configuration for automatic mixed precision fallback. If provided and
-            mixed_precision_manager is None, a new manager is created with this config.
-            Default is None (mixed precision disabled).
-
         Returns
         -------
         result : OptimizeResult
@@ -1948,15 +1796,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Initialize profiler (NullProfiler if not provided for zero overhead)
         if profiler is None:
             profiler = NullProfiler()
-
-        # Initialize mixed precision manager if configured
-        if mixed_precision_manager is None and mixed_precision_config is not None:
-            mixed_precision_manager = MixedPrecisionManager(
-                mixed_precision_config, verbose=(verbose > 0)
-            )
-
-        # Store original tolerances for potential fallback
-        original_tolerances = {"ftol": ftol, "xtol": xtol, "gtol": gtol}
 
         # Initialize optimization state using helper
         state = self._initialize_trf_state(
@@ -2132,45 +1971,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     termination_status = acceptance_result["termination_status"]
                 iteration += 1
 
-                # Mixed precision monitoring and upgrade using helper
-                if (
-                    mixed_precision_manager is not None
-                    and acceptance_result["accepted"]
-                ):
-                    upgrade_result = self._handle_mixed_precision_update(
-                        mixed_precision_manager=mixed_precision_manager,
-                        x=x,
-                        f=f,
-                        J=J,
-                        g=g_jnp,
-                        cost=cost,
-                        Delta=Delta,
-                        alpha=alpha,
-                        iteration=iteration,
-                        d_jnp=d_jnp,
-                        step_norm=step_norm,
-                        g_norm=g_norm,
-                    )
-
-                    if upgrade_result is not None:
-                        # Update optimization variables with upgraded state
-                        x = upgrade_result["x"]
-                        f = upgrade_result["f"]
-                        J = upgrade_result["J"]
-                        g = upgrade_result["g"]
-                        g_jnp = g
-                        cost = upgrade_result["cost"]
-                        Delta = upgrade_result["Delta"]
-                        iteration = upgrade_result["iteration"]
-                        alpha = upgrade_result["alpha"]
-
-                        # Continue optimization in float64
-                        self.logger.info(
-                            "Continuing optimization in float64",
-                            iteration=iteration,
-                            cost=float(cost),
-                        )
-
                 # Invoke user callback if provided using helper
                 if callback is not None:
                     callback_status = self._invoke_callback(
@@ -2190,33 +1990,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if termination_status is None:
             termination_status = 0
 
-        # Float64 failure fallback: If float64 optimization failed to converge,
-        # fall back to relaxed float32 with best parameters from history
-        if (
-            mixed_precision_manager is not None
-            and mixed_precision_manager.state == PrecisionState.FLOAT64_ACTIVE
-            and termination_status == 0  # Max iterations reached without convergence
-        ):
-            x, cost, termination_status = self._handle_float64_fallback(
-                mixed_precision_manager=mixed_precision_manager,
-                fun=fun,
-                xdata=xdata,
-                ydata=ydata,
-                jac=jac,
-                data_mask=data_mask,
-                loss_function=loss_function,
-                f_scale=f_scale,
-                original_tolerances=original_tolerances,
-                solver=solver,
-                tr_options=tr_options,
-                max_nfev=max_nfev,
-                f=f,
-                J=J,
-                g=g,
-                Delta=Delta,
-                alpha=alpha,
-            )
-
         # Build and return final result using helper
         return self._build_optimize_result(
             x=x,
@@ -2230,116 +2003,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             iteration=iteration,
             termination_status=termination_status,
         )
-
-    def _handle_float64_fallback(
-        self,
-        mixed_precision_manager: MixedPrecisionManager,
-        fun: Callable,
-        xdata: np.ndarray,
-        ydata: np.ndarray,
-        jac: Callable,
-        data_mask: jnp.ndarray,
-        loss_function: Callable | None,
-        f_scale: float,
-        original_tolerances: dict,
-        solver: str,
-        tr_options: dict,
-        max_nfev: int,
-        f: jnp.ndarray,
-        J: jnp.ndarray,
-        g: jnp.ndarray,
-        Delta: float,
-        alpha: float,
-    ) -> tuple:
-        """Handle float64 failure fallback with relaxed tolerances.
-
-        This helper extracts the float64 fallback logic from trf_no_bounds,
-        reducing complexity.
-
-        Parameters
-        ----------
-        mixed_precision_manager : MixedPrecisionManager
-            The mixed precision manager
-        fun : Callable
-            Residual function
-        xdata, ydata : Data arrays
-        jac : Callable
-            Jacobian function
-        data_mask : Data mask
-        loss_function : Loss function
-        f_scale : Residual scale
-        original_tolerances : dict
-            Original ftol, xtol, gtol
-        solver : str
-            Solver type
-        tr_options : dict
-            Trust region options
-        max_nfev : int
-            Maximum function evaluations
-        f, J, g : Current state arrays
-        Delta : Trust region radius
-        alpha : LM parameter
-
-        Returns
-        -------
-        tuple
-            (x, cost, termination_status) after fallback
-        """
-        self.logger.info(
-            "Float64 optimization failed to converge, applying relaxed float32 fallback"
-        )
-
-        # Get best state from entire optimization history
-        best_params = mixed_precision_manager.get_best_parameters()
-        best_cost = mixed_precision_manager.tracker.get_best_cost()
-        best_iteration = mixed_precision_manager.tracker.best_iteration
-
-        # Create state with best parameters
-        fallback_state = OptimizationState(
-            x=best_params,
-            f=f,  # Will be recomputed
-            J=J,  # Will be recomputed
-            g=g,  # Will be recomputed
-            cost=best_cost,
-            trust_radius=float(Delta),
-            iteration=best_iteration,
-            dtype=jnp.float64,
-            algorithm_specific={"alpha": alpha},
-        )
-
-        # Apply relaxed fallback (converts to float32, relaxes tolerances)
-        fallback_state, relaxed_tol = mixed_precision_manager.apply_relaxed_fallback(
-            fallback_state, original_tolerances
-        )
-
-        self.logger.info(
-            f"Retrying with relaxed tolerances: "
-            f"gtol={relaxed_tol['gtol']:.2e}, "
-            f"ftol={relaxed_tol['ftol']:.2e}, "
-            f"xtol={relaxed_tol['xtol']:.2e}"
-        )
-
-        # Return best parameters tracked during optimization.
-        # The retry loop previously called non-existent methods; the best
-        # parameters from the mixed-precision tracker are already the best
-        # result available from the float64 fallback phase.
-        termination_status = 0  # Best tracked params (no independent convergence)
-
-        # Log final fallback result
-        final_best_params = mixed_precision_manager.get_best_parameters()
-        final_best_cost = mixed_precision_manager.tracker.get_best_cost()
-        self.logger.info(
-            f"Mixed-precision fallback complete: returning best tracked parameters "
-            f"(cost={final_best_cost:.6e}, status={termination_status}). "
-            f"The optimizer did not independently converge during the float64 "
-            f"fallback phase; result quality depends on the primary optimization."
-        )
-
-        # Use best parameters from entire history for final result
-        x = final_best_params
-        cost = final_best_cost
-
-        return x, cost, termination_status
 
     def trf_bounds(
         self,

@@ -104,5 +104,4 @@ See Also
 
 - :doc:`nlsq.robust_decomposition` - Robust decomposition algorithms
 - :doc:`nlsq.stability` - Numerical stability utilities
-- :doc:`nlsq.mixed_precision` - Mixed precision management
 - :doc:`../howto/troubleshooting` - Stability and troubleshooting guide

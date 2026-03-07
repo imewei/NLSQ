@@ -359,16 +359,10 @@ Reducing Memory Footprint
 
 .. code:: python
 
-   # Use float32 instead of float64 (2x memory reduction)
-   # WARNING: May reduce accuracy
-   from jax import config
+   # Use streaming optimizer for memory-efficient large dataset fitting
+   from nlsq import curve_fit_large
 
-   config.update("jax_enable_x64", False)  # Use float32
-
-   popt, pcov = curve_fit(model, x, y, p0=[2, 1, 0])
-
-   # Re-enable float64 for production
-   config.update("jax_enable_x64", True)
+   popt, pcov = curve_fit_large(model, x, y, p0=[2, 1, 0])
 
 --------------
 
@@ -603,7 +597,6 @@ Before deploying NLSQ in production, verify:
 -  ☐ JIT compilation cached (warm-up run completed)
 -  ☐ Batch processing used when fitting multiple datasets
 -  ☐ Appropriate bounds set (improves convergence speed)
--  ☐ Mixed precision enabled (default: float32 → float64 upgrade)
 -  ☐ Profiling confirms GPU kernels are executing
 -  ☐ No memory warnings or OOM errors
 

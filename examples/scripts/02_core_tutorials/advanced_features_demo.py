@@ -606,7 +606,6 @@ def demonstrate_memory_management():
     print("\n--- Current Memory Configuration ---")
     current_config = get_memory_config()
     print(f"Memory limit: {current_config.memory_limit_gb} GB")
-    print(f"Mixed precision fallback: {current_config.enable_mixed_precision_fallback}")
 
     # Test memory estimation
     print("\n--- Memory Estimation ---")
@@ -642,15 +641,15 @@ def demonstrate_memory_management():
     memory_configs = [
         (
             "High memory",
-            MemoryConfig(memory_limit_gb=8.0, enable_mixed_precision_fallback=False),
+            MemoryConfig(memory_limit_gb=8.0),
         ),
         (
             "Low memory",
-            MemoryConfig(memory_limit_gb=1.0, enable_mixed_precision_fallback=True),
+            MemoryConfig(memory_limit_gb=1.0),
         ),
         (
             "Very low memory",
-            MemoryConfig(memory_limit_gb=0.1, enable_mixed_precision_fallback=True),
+            MemoryConfig(memory_limit_gb=0.1),
         ),
     ]
 

@@ -26,7 +26,7 @@ The ``nlsq`` package is organized into logical subpackages:
    ├── global_optimization/ 4,256 lines - CMA-ES, multi-start, tournament selection
    ├── diagnostics/     4,039 lines - Model health analysis, plugin system
    ├── caching/         3,481 lines - JIT caching, memory management, pooling
-   ├── precision/       3,338 lines - Mixed precision, algorithm selection
+   ├── precision/       3,338 lines - Algorithm selection, parameter normalization
    ├── stability/       2,760 lines - Numerical robustness, fallbacks, recovery
    ├── interfaces/      1,306 lines - Protocol definitions for DI
    ├── result/          1,221 lines - OptimizeResult, CurveFitResult
@@ -75,12 +75,12 @@ The following diagram illustrates the layered architecture of NLSQ:
    │                          SUPPORT SUBSYSTEMS                                  │
    ├──────────────────────────────────────────────────────────────────────────────┤
    │  stability/           precision/          caching/          diagnostics/     │
-   │  ├── guard.py         ├── mixed_precision ├── unified_cache ├── identifiab.  │
-   │  │   NumericalStab.   │   5-state machine │   Shape-relaxed ├── gradient     │
-   │  │   Guard (3 modes)  │   float32→float64 │   LRU, weak refs├── param_sens.  │
-   │  ├── svd_fallback     ├── algorithm_sel   ├── smart_cache   ├── health_rep.  │
-   │  ├── recovery         ├── bound_inference ├── memory_mgr    └── plugin sys.  │
-   │  └── robust_decomp    └── normalizer      ├── memory_pool                    │
+   │  ├── guard.py         ├── algorithm_sel   ├── unified_cache ├── identifiab.  │
+   │  │   NumericalStab.   │   Problem-size    │   Shape-relaxed ├── gradient     │
+   │  │   Guard (3 modes)  │   aware selection │   LRU, weak refs├── param_sens.  │
+   │  ├── svd_fallback     ├── bound_inference ├── smart_cache   ├── health_rep.  │
+   │  ├── recovery         └── normalizer      ├── memory_mgr    └── plugin sys.  │
+   │  └── robust_decomp                        ├── memory_pool                    │
    │                                           └── compilation                    │
    ├──────────────────────────────────────────────────────────────────────────────┤
    │                            INFRASTRUCTURE                                    │
@@ -90,7 +90,7 @@ The following diagram illustrates the layered architecture of NLSQ:
    │  ├── CurveFitProtocol        │   (x64, GPU config)    │   (JSON-based)       │
    │  ├── CacheProtocol           ├── MemoryConfig         ├── model_validation   │
    │  ├── DataSourceProtocol      ├── LargeDatasetConfig   │   (AST-based)        │
-   │  ├── JacobianProtocol        └── MixedPrecisionCfg    └── resource limits    │
+   │  ├── JacobianProtocol        └── LargeDatasetConfig   └── resource limits    │
    │  ├── Orchestration Protocols                                                 │
    │  │   (DataPreprocessor,      Feature Flags                                   │
    │  │    OptimizationSelector,  ├── NLSQ_*_IMPL envvars                         │
@@ -402,7 +402,6 @@ Multi-Tier Caching
 - LRU array pooling via OrderedDict
 - psutil for system memory detection
 - Telemetry circular buffer (deque maxlen=1000) for multi-day runs
-- Mixed precision coordination
 
 **MemoryPool** (``memory_pool.py``, 421 lines):
 
@@ -449,25 +448,10 @@ Additional stability components:
 - **Robust Decomposition** (``robust_decomposition.py``, 480 lines): Numerically robust matrix decompositions
 
 
-Mixed Precision
----------------
+Precision Modules
+-----------------
 
-The ``MixedPrecisionManager`` (``precision/mixed_precision.py``, 1,222 lines) implements
-a 5-state machine for automatic precision management:
-
-.. code-block:: text
-
-   FLOAT32_ACTIVE → MONITORING_DEGRADATION → UPGRADING_TO_FLOAT64 → FLOAT64_ACTIVE
-                                                                          │
-                                              RELAXED_FLOAT32_FALLBACK ←──┘
-
-Key features:
-
-- 50% memory savings when using float32
-- Monitors 5 convergence metrics
-- Zero-iteration-loss state transfer during upgrades
-
-Additional precision modules:
+The ``precision/`` package provides solver selection and parameter management:
 
 - **AlgorithmSelector** (``algorithm_selector.py``, 625 lines): Problem-size-aware solver selection
 - **BoundInference** (``bound_inference.py``, 548 lines): Automatic bound inference
@@ -676,7 +660,7 @@ Design Patterns
    * - Singleton
      - ``JAXConfig``, ``FeatureFlags``, global caches
    * - State Machine
-     - ``PrecisionState`` for mixed precision management
+     - ``PrecisionState`` for optimization state tracking
    * - Phased Pipeline
      - 4-phase streaming optimizer
    * - Lazy Loading
@@ -807,7 +791,6 @@ The ``config.py`` module (1,159 lines) provides a singleton ``JAXConfig`` that m
 - **JAX initialization**: x64 enabled, GPU memory configuration
 - **MemoryConfig**: Memory limits, chunk sizes, out-of-memory strategies
 - **LargeDatasetConfig**: Solver selection thresholds (direct: 100K, iterative: 10M, chunked: 100M)
-- **MixedPrecisionConfig**: Precision management settings
 
 All configuration is validated at instantiation time with descriptive error messages.
 

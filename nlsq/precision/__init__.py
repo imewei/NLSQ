@@ -2,7 +2,6 @@
 """Precision and parameter handling modules.
 
 This subpackage contains numerical precision utilities:
-- mixed_precision: Mixed precision optimization
 - parameter_normalizer: Parameter normalization
 - parameter_estimation: Parameter estimation utilities
 - bound_inference: Automatic bounds inference

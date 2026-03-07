@@ -10,7 +10,7 @@ NLSQ enforces a **zero warnings policy** for Sphinx documentation builds. All do
 
 - **Current State**: [PASS] 0 warnings (as of 2025-10-31)
 - **Enforcement**: Enabled in CI/CD via `-W` flag
-- **Last Major Fix**: Mixed precision documentation ambiguity resolution
+- **Last Major Fix**: Documentation ambiguity resolution
 
 ## Automated Checks
 
@@ -90,7 +90,7 @@ Large datasets (>100K points)   # Now fits
 class ConvergenceMonitor: ...
 
 
-# nlsq/mixed_precision.py
+# nlsq/utils/diagnostics.py
 class ConvergenceMonitor: ...  # Same name!
 
 
@@ -100,7 +100,7 @@ class ConvergenceMonitor: ...  # Same name!
 
 **Solution:** Use fully-qualified names
 ```python
-"""Uses :class:`nlsq.mixed_precision.ConvergenceMonitor` to track progress."""
+"""Uses :class:`nlsq.utils.diagnostics.ConvergenceMonitor` to track progress."""
 ```
 
 ### 3. Broken Internal Links
@@ -122,7 +122,7 @@ make html SPHINXOPTS="-n"
 1. **Use fully-qualified class references** when ambiguity exists
    ```rst
    .. Good
-   :class:`nlsq.mixed_precision.ConvergenceMonitor`
+   :class:`nlsq.utils.diagnostics.ConvergenceMonitor`
 
    .. Avoid (if ambiguous)
    :class:`ConvergenceMonitor`

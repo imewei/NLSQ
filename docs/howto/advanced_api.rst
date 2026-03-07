@@ -57,57 +57,6 @@ Create custom callbacks by defining a function with signature:
        exponential, x, y, p0=[2, 1], callback=custom_callback, max_nfev=100
    )
 
-Mixed Precision Fallback
-------------------------
-
-NLSQ includes automatic mixed precision management that can reduce memory
-usage by starting optimization in float32 and upgrading to float64 when
-convergence stalls.
-
-Enabling mixed precision
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code:: python
-
-   from nlsq import curve_fit
-   from nlsq.config import configure_mixed_precision
-   import jax.numpy as jnp
-   import numpy as np
-
-   configure_mixed_precision(enable=True)
-
-
-   def exponential(x, a, b):
-       return a * jnp.exp(-b * x)
-
-
-   x = np.linspace(0, 10, 100000)
-   y = 2.5 * np.exp(-0.8 * x) + np.random.normal(0, 0.1, 100000)
-
-   popt, pcov = curve_fit(exponential, x, y, p0=[2.0, 0.5])
-
-Custom configuration
-~~~~~~~~~~~~~~~~~~~~
-
-.. code:: python
-
-   configure_mixed_precision(
-       enable=True,
-       max_degradation_iterations=5,
-       gradient_explosion_threshold=1e10,
-       verbose=True,
-   )
-
-Environment variables
-~~~~~~~~~~~~~~~~~~~~~
-
-.. code:: bash
-
-   export NLSQ_MIXED_PRECISION_ENABLE=true
-   export NLSQ_MIXED_PRECISION_MAX_DEGRADATION_ITERATIONS=3
-   export NLSQ_MIXED_PRECISION_GRADIENT_EXPLOSION_THRESHOLD=1e8
-   export NLSQ_MIXED_PRECISION_VERBOSE=true
-
 Diagnostic Monitoring
 ---------------------
 
@@ -170,4 +119,3 @@ Related documentation
 - :doc:`../reference/configuration` - Configuration reference
 - :doc:`../api/index` - Complete API documentation
 - :doc:`../api/nlsq.adaptive_hybrid_streaming` - Streaming optimizer API
-- :doc:`../api/nlsq.mixed_precision` - Mixed precision API

@@ -1749,7 +1749,6 @@ class TestDefenseLayerPresets:
         assert config.enable_step_clipping is True
 
         # Scientific computing settings
-        assert config.precision == "float64"
         assert config.gauss_newton_tol == 1e-10
         assert config.gauss_newton_max_iterations == 200
         assert config.enable_checkpoints is True

@@ -109,7 +109,6 @@ plt.close()
 # Check current memory configuration
 current_config = get_memory_config()
 print(f"Current memory limit: {current_config.memory_limit_gb} GB")
-print(f"Mixed precision fallback: {current_config.enable_mixed_precision_fallback}")
 
 # Estimate memory requirements for our dataset
 n_points = len(x)
@@ -125,7 +124,7 @@ print(f"  Number of chunks needed: {memory_stats.n_chunks}")
 print("Default memory limit:", get_memory_config().memory_limit_gb, "GB")
 
 # Use a temporary memory configuration
-temp_config = MemoryConfig(memory_limit_gb=4.0, enable_mixed_precision_fallback=True)
+temp_config = MemoryConfig(memory_limit_gb=4.0)
 with memory_context(temp_config):
     print("Inside context memory limit:", get_memory_config().memory_limit_gb, "GB")
 

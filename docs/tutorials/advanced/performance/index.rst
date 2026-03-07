@@ -31,7 +31,7 @@ Performance Quick Tips
 
 1. **Use GPU**: 10-20x speedup for large datasets
 2. **Reuse CurveFit**: JIT cached between calls
-3. **Use float32**: Half memory for very large data
+3. **Use streaming**: Memory-efficient for very large data
 4. **Loosen tolerances**: Trade precision for speed
 5. **Profile first**: Identify actual bottlenecks
 
