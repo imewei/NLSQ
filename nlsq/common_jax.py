@@ -795,3 +795,135 @@ def make_strictly_feasible_jax(
     # Handle tight bounds where nextafter still violates
     tight = (x_new < lb) | (x_new > ub)
     return jnp.where(tight, 0.5 * (lb + ub), x_new)
+
+
+# =====================================================================
+# JAX-compiled bounded-path helpers (B004 optimization)
+# These replace NumPy versions from common_scipy.py in the hot path
+# to avoid implicit device-to-host transfers.
+# =====================================================================
+
+
+@jit
+def step_size_to_bound_jax(
+    x: jnp.ndarray, s: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Compute min step size to reach a bound (JAX version).
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Current parameter vector.
+    s : jnp.ndarray
+        Step direction.
+    lb : jnp.ndarray
+        Lower bounds.
+    ub : jnp.ndarray
+        Upper bounds.
+
+    Returns
+    -------
+    min_step : jnp.ndarray
+        Scalar minimum step to reach any bound.
+    hits : jnp.ndarray
+        Array indicating which bounds are hit (-1=lower, 0=none, 1=upper).
+    """
+    # Compute step to each bound, handling division by zero
+    non_zero = s != 0
+    steps_lb = jnp.where(non_zero, (lb - x) / jnp.where(non_zero, s, 1.0), jnp.inf)
+    steps_ub = jnp.where(non_zero, (ub - x) / jnp.where(non_zero, s, 1.0), jnp.inf)
+    # For each component, the relevant bound step is the positive one
+    steps = jnp.maximum(steps_lb, steps_ub)
+    min_step = jnp.min(steps)
+    hits = jnp.where(steps == min_step, jnp.sign(s).astype(jnp.int32), 0)
+    return min_step, hits
+
+
+@jit
+def intersect_trust_region_jax(
+    x: jnp.ndarray, s: jnp.ndarray, Delta: float
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Find intersection of a line with trust region boundary (JAX version).
+
+    Solves ||(x + s*t)||^2 = Delta^2 for t.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Starting point.
+    s : jnp.ndarray
+        Direction.
+    Delta : float
+        Trust region radius.
+
+    Returns
+    -------
+    t_neg : jnp.ndarray
+        Negative root.
+    t_pos : jnp.ndarray
+        Positive root.
+    """
+    a = jnp.dot(s, s)
+    b = jnp.dot(x, s)
+    c = jnp.dot(x, x) - Delta**2
+
+    d = jnp.sqrt(jnp.maximum(b * b - a * c, 0.0))
+
+    # Avoid loss of significance (Numerical Recipes)
+    q = -(b + jnp.sign(b) * d)
+    # Guard against a == 0 or q == 0
+    t1 = jnp.where(a != 0, q / jnp.where(a != 0, a, 1.0), 0.0)
+    t2 = jnp.where(q != 0, c / jnp.where(q != 0, q, 1.0), 0.0)
+
+    t_neg = jnp.minimum(t1, t2)
+    t_pos = jnp.maximum(t1, t2)
+    return t_neg, t_pos
+
+
+@jit
+def minimize_quadratic_1d_jax(
+    a: jnp.ndarray, b: jnp.ndarray, lb: float, ub: float, c: float | jnp.ndarray = 0.0
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Minimize 1-D quadratic function subject to bounds (JAX version).
+
+    Minimizes f(t) = a*t^2 + b*t + c on [lb, ub].
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        Quadratic coefficient.
+    b : jnp.ndarray
+        Linear coefficient.
+    lb : float
+        Lower bound.
+    ub : float
+        Upper bound.
+    c : jnp.ndarray
+        Constant term (default 0).
+
+    Returns
+    -------
+    t_min : jnp.ndarray
+        Minimizing point.
+    y_min : jnp.ndarray
+        Minimum value.
+    """
+    # Evaluate at endpoints
+    y_lb = lb * (a * lb + b) + c
+    y_ub = ub * (a * ub + b) + c
+
+    # Check if extremum is in bounds
+    extremum = -0.5 * b / jnp.where(a != 0, a, 1.0)
+    y_ext = extremum * (a * extremum + b) + c
+    ext_valid = (a != 0) & (lb < extremum) & (extremum < ub)
+
+    # Select minimum among valid candidates
+    # Start with lb vs ub
+    t_min = jnp.where(y_lb <= y_ub, lb, ub)
+    y_min = jnp.minimum(y_lb, y_ub)
+
+    # Consider extremum if valid
+    t_min = jnp.where(ext_valid & (y_ext < y_min), extremum, t_min)
+    y_min = jnp.where(ext_valid & (y_ext < y_min), y_ext, y_min)
+
+    return t_min, y_min
