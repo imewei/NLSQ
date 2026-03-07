@@ -55,7 +55,7 @@ The module implements multiple fallback strategies for numerical stability:
 
 1. **Standard decomposition** (JAX native)
 2. **Regularized decomposition** (add small diagonal term)
-4. **Iterative refinement** (improve solution accuracy)
+3. **Iterative refinement** (improve solution accuracy)
 
 .. code-block:: python
 

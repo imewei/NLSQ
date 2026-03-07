@@ -280,8 +280,8 @@ Planned optimizations:
 
 1. **Multi-GPU support** for distributed fitting
 2. **Adaptive chunking** based on convergence
-4. **Compiled kernels** for common fit functions
-5. **Parallel chunk processing** for independent fits
+3. **Compiled kernels** for common fit functions
+4. **Parallel chunk processing** for independent fits
 
 Expected improvements:
 
