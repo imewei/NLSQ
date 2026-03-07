@@ -114,7 +114,10 @@ from nlsq.stability.svd_fallback import (
 )
 
 # Setup logging
-from nlsq.utils.logging import get_logger
+from nlsq.utils.logging import LogLevel, get_logger
+
+# Cache the performance log level for fast guard checks in hot loops
+PERFORMANCE_LEVEL = LogLevel.PERFORMANCE
 
 logger = get_logger("trf")
 
@@ -132,8 +135,11 @@ from nlsq.common_jax import (
     CommonJIT,
     check_termination_jax,
     in_bounds_jax,
+    intersect_trust_region_jax,
     make_strictly_feasible_jax,
+    minimize_quadratic_1d_jax,
     solve_lsq_trust_region_jax,
+    step_size_to_bound_jax,
     update_tr_radius_jax,
 )
 from nlsq.common_scipy import (
@@ -1048,7 +1054,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             - njev : int - Jacobian evaluation count (1 if accepted, 0 otherwise)
         """
         n, m = len(x), len(f)
-        actual_reduction = -1
+        actual_reduction = -1.0  # Python float, avoids JAX sync in while condition
         inner_loop_count = 0
         max_inner_iterations = 100
         termination_status = None
@@ -1114,7 +1120,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             )
 
             # Single GPU→CPU sync per inner iteration: materialize term_code
+            # This sync also implicitly materializes actual_reduction and Delta_new
             term_code_int = int(term_code)
+            # Materialize actual_reduction as Python float to avoid repeated JAX syncs
+            # in the while-loop condition and the acceptance check below
+            actual_reduction = float(actual_reduction)
+
             if term_code_int != 0:
                 termination_status = term_code_int
                 break
@@ -1612,7 +1623,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         dict
             Inner loop result
         """
-        actual_reduction = -1
+        actual_reduction = -1.0  # Python float, avoids JAX sync in while condition
         inner_loop_count = 0
         max_inner_iterations = 100
         termination_status = None
@@ -1680,8 +1691,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             term_code = check_termination_jax(
                 actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
             )
-            # Single GPU→CPU sync per inner iteration
+            # Single GPU→CPU sync per inner iteration: materialize term_code
             term_code_int = int(term_code)
+            # Piggyback float materialization to avoid JAX sync in while/if checks
+            actual_reduction = float(actual_reduction)
+
             if term_code_int != 0:
                 termination_status = term_code_int
                 break
@@ -2025,14 +2039,15 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         )
                     break
 
-                # Log iteration details
-                self.logger.optimization_step(
-                    iteration=iteration,
-                    cost=cost,
-                    gradient_norm=g_norm,
-                    step_size=Delta if iteration > 0 else None,
-                    nfev=nfev,
-                )
+                # Log iteration details (call-site guard avoids kwargs construction)
+                if self.logger.logger.isEnabledFor(PERFORMANCE_LEVEL):
+                    self.logger.optimization_step(
+                        iteration=iteration,
+                        cost=cost,
+                        gradient_norm=g_norm,
+                        step_size=Delta if iteration > 0 else None,
+                        nfev=nfev,
+                    )
 
                 # Solve trust region subproblem using helper
                 subproblem_result = self._solve_trust_region_subproblem(
@@ -2694,25 +2709,34 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             p_value = self.cJIT.evaluate_quadratic(J_h, g_h, p_h, diag=diag_h)
             return p, p_h, -p_value
 
-        p_stride, hits = step_size_to_bound(x, p, lb, ub)
+        # B004: Use JAX-compiled versions to avoid D2H array transfers.
+        # Convert inputs to JAX arrays for on-device computation.
+        x_jnp = jnp.asarray(x)
+        p_jnp = jnp.asarray(p)
+        d_jnp = jnp.asarray(d)
+        lb_j = lb_jnp if lb_jnp is not None else jnp.asarray(lb)
+        ub_j = ub_jnp if ub_jnp is not None else jnp.asarray(ub)
+
+        p_stride_jax, hits = step_size_to_bound_jax(x_jnp, p_jnp, lb_j, ub_j)
+        p_stride = float(p_stride_jax)
 
         # Compute the reflected direction.
-        # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
         r_h = jnp.asarray(p_h)
-        # Use JAX .at[] syntax for immutable array updates
-        hits_mask = hits.astype(bool)
-        r_h = r_h.at[hits_mask].set(r_h[hits_mask] * -1)
-        r = d * r_h
+        # Negate components that hit bounds
+        r_h = jnp.where(hits != 0, -r_h, r_h)
+        r = d_jnp * r_h
 
         # Restrict trust-region step, such that it hits the bound.
-        p *= p_stride
-        p_h *= p_stride
-        x_on_bound = x + p
+        p_h_scaled = jnp.asarray(p_h) * p_stride
+        x_on_bound = x_jnp + p_jnp * p_stride
 
         # Reflected direction will cross first either feasible region or trust
         # region boundary.
-        _, to_tr = intersect_trust_region(p_h, r_h, Delta)
-        to_bound, _ = step_size_to_bound(x_on_bound, r, lb, ub)
+        _, to_tr_jax = intersect_trust_region_jax(p_h_scaled, r_h, Delta)
+        to_bound_jax, _ = step_size_to_bound_jax(x_on_bound, r, lb_j, ub_j)
+        # Materialize scalars for host-side branching
+        to_tr = float(to_tr_jax)
+        to_bound = float(to_bound_jax)
 
         # Find lower and upper bounds on a step size along the reflected
         # direction, considering the strict feasibility requirement. There is no
@@ -2728,38 +2752,48 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         # Check if reflection step is available.
         if r_stride_l <= r_stride_u:
-            a, b, c = self.cJIT.build_quadratic_1d(J_h, g_h, r_h, s0=p_h, diag=diag_h)
+            a, b, c = self.cJIT.build_quadratic_1d(
+                J_h, g_h, r_h, s0=p_h_scaled, diag=diag_h
+            )
 
-            r_stride, r_value = minimize_quadratic_1d(a, b, r_stride_l, r_stride_u, c=c)
-            r_h *= r_stride
-            r_h += p_h
-            r = r_h * d
+            r_stride_jax, r_value = minimize_quadratic_1d_jax(
+                a, b, r_stride_l, r_stride_u, c=c
+            )
+            r_stride = float(r_stride_jax)
+            r_h = r_h * r_stride + p_h_scaled
+            r = r_h * d_jnp
         else:
-            r_value = jnp.inf  # JAX infinity instead of NumPy
+            r_value = jnp.inf
 
         # Now correct p_h to make it strictly interior.
-        p *= theta
-        p_h *= theta
+        p = np.asarray(p_jnp * p_stride * theta)
+        p_h = p_h_scaled * theta
         p_value = self.cJIT.evaluate_quadratic(J_h, g_h, p_h, diag=diag_h)
 
         ag_h = -g_h
-        ag = d * ag_h
+        ag = d_jnp * ag_h
 
-        to_tr = Delta / jnorm(ag_h)
-        to_bound, _ = step_size_to_bound(x, ag, lb, ub)
+        to_tr = float(Delta / jnorm(ag_h))
+        to_bound_jax, _ = step_size_to_bound_jax(x_jnp, ag, lb_j, ub_j)
+        to_bound = float(to_bound_jax)
         ag_stride = theta * to_bound if to_bound < to_tr else to_tr
 
         a, b = self.cJIT.build_quadratic_1d(J_h, g_h, ag_h, diag=diag_h)
-        ag_stride, ag_value = minimize_quadratic_1d(a, b, 0, ag_stride)
-        ag_h *= ag_stride
-        ag *= ag_stride
+        ag_stride_jax, ag_value = minimize_quadratic_1d_jax(a, b, 0, ag_stride)
+        ag_h = ag_h * ag_stride_jax
+        ag = ag * ag_stride_jax
+
+        # Materialize reduction values for host-side comparison
+        p_value = float(p_value)
+        r_value = float(r_value)
+        ag_value = float(ag_value)
 
         if p_value < r_value and p_value < ag_value:
-            return p, p_h, -p_value
+            return np.asarray(p), p_h, -p_value
         elif r_value < p_value and r_value < ag_value:
-            return r, r_h, -r_value
+            return np.asarray(r), r_h, -r_value
         else:
-            return ag, ag_h, -ag_value
+            return np.asarray(ag), ag_h, -ag_value
 
     def optimize(
         self,

@@ -1136,27 +1136,17 @@ class LeastSquares:
         )
 
         # Step 4: Setup residual and Jacobian functions
-        # First, do a preliminary evaluation to determine problem dimensions
-        # for Jacobian mode selection (if using autodiff)
+        # Use ydata length as proxy for n_residuals to avoid redundant forward pass.
+        # This is correct because for standard NLSQ, n_residuals == len(ydata).
+        # The actual m is verified after initial evaluation at Step 5.
         if jac is None and xdata is not None and ydata is not None:
-            # Quick dimension check for auto mode selection
-            # We need to know m (number of residuals) for mode selection
-            # Create a temporary residual function for dimension check
-            # Note: Uses @jit (not cached_jit) because this closure captures
-            # different fun/xdata/ydata each call, so caching wouldn't help
-            @jit
-            def temp_residual(args_temp):
-                func_eval = fun(xdata, *args_temp) - ydata
-                return jnp.where(
-                    data_mask if data_mask is not None else True, func_eval, 0
-                )
-
-            f0_temp = temp_residual(x0)
-            m_temp = f0_temp.size
+            m_estimate = (
+                len(ydata) if hasattr(ydata, "__len__") else np.asarray(ydata).size
+            )
 
             # Select Jacobian mode based on problem dimensions
             jacobian_mode_selected, jacobian_rationale = jacobian_mode_selector(
-                n, m_temp, mode=jacobian_mode_config
+                n, m_estimate, mode=jacobian_mode_config
             )
 
             # Log Jacobian mode selection in debug mode
@@ -1203,7 +1193,13 @@ class LeastSquares:
         is_sparse_problem = False
         sparse_solver_selected = False
 
-        if xdata is not None and ydata is not None and fun is not None:
+        # Skip sparsity detection for small problems where it adds overhead
+        # without benefit (sparse solver requires m > 10K to be worthwhile)
+        should_detect_sparsity = (
+            m > 10000 and xdata is not None and ydata is not None and fun is not None
+        )
+
+        if should_detect_sparsity:
             # Import sparsity detection function
             from nlsq.core.sparse_jacobian import detect_sparsity_at_p0
 
@@ -1218,32 +1214,18 @@ class LeastSquares:
                     sample_size=min(100, m),
                 )
 
-                # Auto-selection logic:
-                # 1. Must have high sparsity (>50%)
-                # 2. Must have large problem size (>10K residuals)
-                # 3. User has not explicitly set tr_solver (tr_solver is None)
-                if is_sparse_problem and m > 10000 and tr_solver is None:
-                    # Activate sparse solver
+                # Auto-select sparse solver only if user hasn't specified one
+                if is_sparse_problem and tr_solver is None:
                     tr_solver = "sparse"
                     sparse_solver_selected = True
                     self.logger.info(
                         f"Sparse solver activated: sparsity={sparsity_ratio:.1%}, "
                         f"n_residuals={m}, n_params={n}"
                     )
-                else:
-                    # Use dense solver (default)
-                    if tr_solver is None:
-                        tr_solver = "exact"  # Default dense solver
-                    reason = []
-                    if not is_sparse_problem:
-                        reason.append(f"low sparsity ({sparsity_ratio:.1%})")
-                    if m <= 10000:
-                        reason.append(f"small problem (n_residuals={m})")
-                    if tr_solver is not None:
-                        reason.append("user-specified tr_solver")
-
+                elif tr_solver is None:
+                    tr_solver = "exact"
                     self.logger.debug(
-                        f"Dense solver selected: {', '.join(reason) if reason else 'default'}"
+                        f"Dense solver selected: low sparsity ({sparsity_ratio:.1%})"
                     )
 
             except Exception as e:
@@ -1253,6 +1235,8 @@ class LeastSquares:
                 )
                 if tr_solver is None:
                     tr_solver = "exact"
+        elif tr_solver is None:
+            tr_solver = "exact"
 
         # Step 9: Check memory and adjust solver if needed
         tr_solver = self._check_memory_and_adjust_solver(m, n, method, tr_solver)
