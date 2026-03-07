@@ -351,3 +351,4 @@ code_quality_fixes_summary.md
 
 # CLI demo output
 examples/scripts/10_cli-commands/output/
+.worktrees/
