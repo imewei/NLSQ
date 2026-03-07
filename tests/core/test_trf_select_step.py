@@ -64,25 +64,33 @@ def test_select_step_reflection_branch(monkeypatch: pytest.MonkeyPatch) -> None:
 
     call_count = {"step_size": 0}
 
-    def _step_size_to_bound(*_a, **_k):
+    def _step_size_to_bound_jax(*_a, **_k):
         call_count["step_size"] += 1
         if call_count["step_size"] == 1:
-            return 0.5, np.array([True, False])
+            return jnp.float32(0.5), jnp.array([1, 0], dtype=jnp.int32)
         if call_count["step_size"] == 2:
-            return 0.8, np.array([False, False])
-        return 0.2, np.array([False, False])
+            return jnp.float32(0.8), jnp.array([0, 0], dtype=jnp.int32)
+        return jnp.float32(0.2), jnp.array([0, 0], dtype=jnp.int32)
 
-    monkeypatch.setattr(trf_module, "step_size_to_bound", _step_size_to_bound)
+    monkeypatch.setattr(trf_module, "step_size_to_bound_jax", _step_size_to_bound_jax)
     monkeypatch.setattr(
-        trf_module, "intersect_trust_region", lambda *_a, **_k: (0.0, 0.6)
+        trf_module,
+        "intersect_trust_region_jax",
+        lambda *_a, **_k: (jnp.float32(0.0), jnp.float32(0.6)),
     )
 
-    def _minimize_quadratic_1d(_a, _b, _l, _u, c=None):
-        if c is not None:
-            return 0.4, 1.0
-        return 0.1, 2.0
+    minimize_count = {"n": 0}
 
-    monkeypatch.setattr(trf_module, "minimize_quadratic_1d", _minimize_quadratic_1d)
+    def _minimize_quadratic_1d_jax(_a, _b, _l, _u, c=0.0):
+        minimize_count["n"] += 1
+        # First call is the reflection step (with c from build_quadratic_1d with s0)
+        if minimize_count["n"] == 1:
+            return jnp.float32(0.4), jnp.float32(1.0)
+        return jnp.float32(0.1), jnp.float32(2.0)
+
+    monkeypatch.setattr(
+        trf_module, "minimize_quadratic_1d_jax", _minimize_quadratic_1d_jax
+    )
 
     x = np.array([0.0, 0.0])
     J_h = jnp.eye(2)

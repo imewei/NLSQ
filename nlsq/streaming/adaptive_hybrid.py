@@ -650,6 +650,61 @@ class AdaptiveHybridStreamingOptimizer:
 
         return x_chunks, y_chunks, mask_chunks, n_points
 
+    def _get_padded_data(
+        self,
+        x_data: jnp.ndarray,
+        y_data: jnp.ndarray,
+        chunk_size: int,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, int, int]:
+        """Get padded flat arrays for dynamic_slice-based scan, with caching.
+
+        B006: Avoids pre-stacking data into (n_chunks, chunk_size, ...) arrays.
+        Instead, pads flat arrays minimally and caches them for reuse across
+        iterations (x/y data is constant, only params change).
+
+        Returns
+        -------
+        x_padded : array_like
+            Padded x data, flat (padded_size,) or (padded_size, n_features)
+        y_padded : array_like
+            Padded y data, flat (padded_size,)
+        n_points : int
+            Number of valid (non-padded) points
+        n_chunks : int
+            Number of chunks
+        """
+        # Check cache validity (same data pointer and chunk_size)
+        cache = getattr(self, "_padded_cache", None)
+        if cache is not None:
+            c_id_x, c_id_y, c_cs, c_xp, c_yp, c_np, c_nc = cache
+            if c_id_x == id(x_data) and c_id_y == id(y_data) and c_cs == chunk_size:
+                return c_xp, c_yp, c_np, c_nc
+
+        n_points = x_data.shape[0]
+        n_chunks = (n_points + chunk_size - 1) // chunk_size
+        pad_size = n_chunks * chunk_size - n_points
+
+        if pad_size > 0:
+            if x_data.ndim == 1:
+                x_padded = jnp.pad(x_data, (0, pad_size))
+            else:
+                x_padded = jnp.pad(x_data, ((0, pad_size), (0, 0)))
+            y_padded = jnp.pad(y_data, (0, pad_size))
+        else:
+            x_padded = x_data
+            y_padded = y_data
+
+        self._padded_cache = (
+            id(x_data),
+            id(y_data),
+            chunk_size,
+            x_padded,
+            y_padded,
+            n_points,
+            n_chunks,
+        )
+        return x_padded, y_padded, n_points, n_chunks
+
     def _accumulate_jtj_jtr_scan(
         self,
         x_data: jnp.ndarray,
@@ -688,19 +743,35 @@ class AdaptiveHybridStreamingOptimizer:
         chunk_size = self.config.chunk_size
         n_params = len(params)
 
-        # Prepare chunked data with mask
-        x_chunks, y_chunks, mask_chunks, _ = self._prepare_chunked_data(
+        # B006: Use cached padded flat arrays + dynamic_slice instead of
+        # pre-stacking into (n_chunks, chunk_size, ...) arrays.
+        x_padded, y_padded, n_points, n_chunks = self._get_padded_data(
             x_data, y_data, chunk_size
         )
 
-        # Capture functions for scan body
+        # Capture functions and data for scan body closure
         normalized_model = self.normalized_model
         jacobian_fn = self._jacobian_fn_compiled
+        x_ndim = x_padded.ndim
 
-        def scan_body(carry, chunk_data):
-            """Scan body for masked J^T J accumulation."""
+        chunk_indices = jnp.arange(n_chunks)
+
+        def scan_body(carry, chunk_idx):
+            """Scan body using dynamic_slice from flat padded arrays."""
             JTJ, JTr, total_cost = carry
-            x_chunk, y_chunk, mask = chunk_data
+            start = chunk_idx * chunk_size
+
+            # Dynamic slice from flat padded arrays (no pre-stacking needed)
+            if x_ndim == 1:
+                x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
+            else:
+                x_chunk = jax.lax.dynamic_slice(
+                    x_padded, (start, 0), (chunk_size, x_padded.shape[1])
+                )
+            y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
+
+            # Compute mask on-the-fly (tiny chunk_size array, not full n_points)
+            mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
 
             # Compute predictions and residuals
             predictions = normalized_model(x_chunk, *params)
@@ -722,7 +793,6 @@ class AdaptiveHybridStreamingOptimizer:
                 )(x_chunk)
 
             # Apply mask to Jacobian rows (zero out padded point gradients)
-            # Shape: J_chunk is (chunk_size, n_params), mask is (chunk_size,)
             masked_J = J_chunk * mask[:, None]
 
             # Accumulate with masked values
@@ -739,11 +809,11 @@ class AdaptiveHybridStreamingOptimizer:
             jnp.array(0.0),
         )
 
-        # Run scan with masked data
+        # Run scan over chunk indices (not pre-stacked data arrays)
         (JTJ, JTr, total_cost), _ = jax.lax.scan(
             scan_body,
             init_carry,
-            (x_chunks, y_chunks, mask_chunks),
+            chunk_indices,
         )
 
         # Store accumulators for checkpointing
@@ -783,31 +853,44 @@ class AdaptiveHybridStreamingOptimizer:
         """
         chunk_size = self.config.chunk_size
 
-        # Prepare chunked data with mask
-        x_chunks, y_chunks, mask_chunks, _ = self._prepare_chunked_data(
+        # B006: Use cached padded flat arrays + dynamic_slice
+        x_padded, y_padded, n_points, n_chunks = self._get_padded_data(
             x_data, y_data, chunk_size
         )
 
-        # Capture model for scan body
+        # Capture model and data for scan body closure
         normalized_model = self.normalized_model
+        x_ndim = x_padded.ndim
 
-        def scan_body(carry, chunk_data):
-            """Scan body for masked cost computation."""
-            x_chunk, y_chunk, mask = chunk_data
+        chunk_indices = jnp.arange(n_chunks)
+
+        def scan_body(carry, chunk_idx):
+            """Scan body for masked cost computation using dynamic_slice."""
+            start = chunk_idx * chunk_size
+
+            if x_ndim == 1:
+                x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
+            else:
+                x_chunk = jax.lax.dynamic_slice(
+                    x_padded, (start, 0), (chunk_size, x_padded.shape[1])
+                )
+            y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
+
+            mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
+
             predictions = normalized_model(x_chunk, *params)
             residuals = y_chunk - predictions
-            # Apply mask (zero out padded points)
             masked_residuals = residuals * mask
             return carry + jnp.sum(masked_residuals**2), None
 
         # Initialize carry
         init_carry = jnp.array(0.0)
 
-        # Run scan with masked data
+        # Run scan over chunk indices
         total_cost, _ = jax.lax.scan(
             scan_body,
             init_carry,
-            (x_chunks, y_chunks, mask_chunks),
+            chunk_indices,
         )
 
         return float(total_cost)
