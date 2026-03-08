@@ -197,21 +197,34 @@ class JAXConfig:
             )
 
     def _configure_gpu_memory(self, config):
-        """Configure GPU memory settings."""
+        """Configure GPU memory settings via XLA environment variables.
+
+        Sets XLA_PYTHON_CLIENT_PREALLOCATE and XLA_PYTHON_CLIENT_MEM_FRACTION
+        to prevent XLA from consuming all GPU memory. These must be set before
+        JAX initializes the GPU backend, so we set them as early as possible.
+
+        Without these defaults, XLA preallocates 75% of GPU memory at startup
+        and never releases it, which combined with unbounded compilation cache
+        growth can cause OOM for long-running sessions.
+        """
         if self._gpu_memory_configured:
             return
 
-        # Check environment variables for GPU memory settings
+        # Default: disable preallocation to allow memory to grow/shrink
+        # This prevents XLA from grabbing 75% of GPU memory at startup.
+        # Users can override via XLA_PYTHON_CLIENT_PREALLOCATE=true.
+        if "XLA_PYTHON_CLIENT_PREALLOCATE" not in os.environ:
+            os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+            logging.debug("Set XLA_PYTHON_CLIENT_PREALLOCATE=false (default for NLSQ)")
+
+        # Check for NLSQ-specific GPU memory fraction setting
         gpu_memory_fraction = os.getenv("NLSQ_GPU_MEMORY_FRACTION")
         if gpu_memory_fraction:
             try:
                 fraction = float(gpu_memory_fraction)
                 if 0.0 < fraction <= 1.0:
-                    # Note: JAX memory fraction is handled differently and may not have a direct config option
-                    # This is stored in our config for use by downstream components
-                    logging.info(
-                        f"Set GPU memory fraction to {fraction} (stored for downstream use)"
-                    )
+                    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(fraction)
+                    logging.info(f"Set XLA_PYTHON_CLIENT_MEM_FRACTION={fraction}")
                 else:
                     warnings.warn(
                         f"Invalid NLSQ_GPU_MEMORY_FRACTION: {gpu_memory_fraction}. Must be between 0.0 and 1.0.",
@@ -223,11 +236,11 @@ class JAXConfig:
                     stacklevel=2,
                 )
 
-        # Configure memory preallocation
+        # Configure memory preallocation via JAX config if explicitly requested
         if os.getenv("NLSQ_DISABLE_GPU_PREALLOCATION") == "1":
             try:
                 config.update("jax_preallocate_gpu_memory", False)
-                logging.info("Disabled GPU memory preallocation")
+                logging.info("Disabled GPU memory preallocation via JAX config")
             except AttributeError:
                 # JAX version may not support this option
                 logging.warning(

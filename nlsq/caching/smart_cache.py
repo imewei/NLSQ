@@ -17,6 +17,7 @@ import os
 import threading
 import time
 import warnings
+from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
@@ -602,20 +603,28 @@ def cached_jacobian(cache: SmartCache | None = None):
 
 
 class JITCompilationCache:
-    """Cache for JAX JIT-compiled functions.
+    """Cache for JAX JIT-compiled functions with LRU eviction.
 
     This cache stores compiled functions to avoid recompilation
-    when function signatures match.
+    when function signatures match. Uses OrderedDict for LRU eviction
+    to prevent unbounded XLA compilation cache growth.
 
     All dict operations are protected by a per-instance ``threading.Lock``
     so that concurrent threads can safely call ``get_or_compile``/``clear``.
+
+    Parameters
+    ----------
+    max_cache_size : int
+        Maximum number of compiled functions to cache (default 256).
+        Oldest entries are evicted when capacity is reached.
     """
 
-    def __init__(self):
-        """Initialize JIT compilation cache."""
+    def __init__(self, max_cache_size: int = 256):
+        """Initialize JIT compilation cache with LRU eviction."""
         self._lock = threading.Lock()
-        self.compiled_functions = {}
-        self.compilation_times = {}
+        self.compiled_functions: OrderedDict = OrderedDict()
+        self.compilation_times: OrderedDict = OrderedDict()
+        self.max_cache_size = max_cache_size
 
     def get_or_compile(self, func: Callable, static_argnums: tuple = ()) -> Callable:
         """Get cached compilation or compile and cache.
@@ -640,6 +649,7 @@ class JITCompilationCache:
         # Check cache under lock
         with self._lock:
             if key in self.compiled_functions:
+                self.compiled_functions.move_to_end(key)
                 return self.compiled_functions[key]
 
         # Compile outside lock (jit can be slow)
@@ -650,10 +660,15 @@ class JITCompilationCache:
         # Store under lock (double-check to avoid overwriting a concurrent compile)
         with self._lock:
             if key not in self.compiled_functions:
+                # Evict oldest entry if at capacity
+                if len(self.compiled_functions) >= self.max_cache_size:
+                    evicted_key, _ = self.compiled_functions.popitem(last=False)
+                    self.compilation_times.pop(evicted_key, None)
                 self.compiled_functions[key] = compiled_func
                 self.compilation_times[key] = compilation_time
             else:
                 # Another thread already stored it; use that one
+                self.compiled_functions.move_to_end(key)
                 compiled_func = self.compiled_functions[key]
 
         return compiled_func
@@ -675,6 +690,7 @@ class JITCompilationCache:
         with self._lock:
             return {
                 "cached_functions": len(self.compiled_functions),
+                "max_cache_size": self.max_cache_size,
                 "total_compilation_time": sum(self.compilation_times.values()),
                 "functions": list(self.compiled_functions.keys()),
             }

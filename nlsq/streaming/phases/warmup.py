@@ -376,6 +376,12 @@ class WarmupPhase:
     def _create_loss_fn(self) -> Callable:
         """Create loss function for warmup phase.
 
+        Returns a single JIT-compiled closure that handles all combinations of
+        variance regularization and residual weighting. Python-level branching
+        selects the code path at trace time; the variance penalty uses
+        ``lax.fori_loop`` with padded group extraction instead of a Python
+        for-loop to prevent re-tracing when the number of groups changes.
+
         Returns
         -------
         loss_fn : callable
@@ -383,79 +389,76 @@ class WarmupPhase:
         """
         normalized_model = self.normalized_model
 
-        enable_var_reg = self.config.enable_group_variance_regularization
+        enable_var_reg = (
+            self.config.enable_group_variance_regularization
+            and self.config.group_variance_indices
+        )
         var_lambda = self.config.group_variance_lambda
-        var_indices = self.config.group_variance_indices
 
         enable_weighting = (
             self.config.enable_residual_weighting and self._residual_weights is not None
         )
         residual_weights = self._residual_weights
 
-        if enable_var_reg and var_indices and enable_weighting:
-            group_slices = [(start, end) for start, end in var_indices]
-
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> jnp.ndarray:
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-                group_idx = x_batch[:, 0].astype(jnp.int32)
-                assert residual_weights is not None
-                weights = residual_weights[group_idx]
-                wmse = jnp.sum(weights * residuals**2) / jnp.sum(weights)
-
-                variance_penalty: jnp.ndarray = jnp.array(0.0)
-                for start, end in group_slices:
-                    group_params = params[start:end]
-                    group_var = jnp.var(group_params)
-                    variance_penalty = variance_penalty + group_var
-
-                return wmse + var_lambda * variance_penalty
-
-        elif enable_var_reg and var_indices:
-            group_slices = [(start, end) for start, end in var_indices]
-
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> jnp.ndarray:
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-                mse = jnp.mean(residuals**2)
-
-                variance_penalty: jnp.ndarray = jnp.array(0.0)
-                for start, end in group_slices:
-                    group_params = params[start:end]
-                    group_var = jnp.var(group_params)
-                    variance_penalty = variance_penalty + group_var
-
-                return mse + var_lambda * variance_penalty
-
-        elif enable_weighting:
-
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> jnp.ndarray:
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-                group_idx = x_batch[:, 0].astype(jnp.int32)
-                assert residual_weights is not None
-                weights = residual_weights[group_idx]
-                wmse = jnp.sum(weights * residuals**2) / jnp.sum(weights)
-                return wmse
-
+        # Pre-convert group indices to JAX arrays for lax.fori_loop.
+        # Each group is extracted via dynamic_slice with a fixed max_group_size,
+        # then masked to the actual group size for correct variance computation.
+        if enable_var_reg and self.config.group_variance_indices:
+            group_starts = jnp.array(
+                [s for s, _e in self.config.group_variance_indices], dtype=jnp.int32
+            )
+            group_sizes = jnp.array(
+                [e - s for s, e in self.config.group_variance_indices], dtype=jnp.int32
+            )
+            n_groups = len(self.config.group_variance_indices)
+            max_group_size = max(e - s for s, e in self.config.group_variance_indices)
         else:
+            group_starts = jnp.zeros(0, dtype=jnp.int32)
+            group_sizes = jnp.zeros(0, dtype=jnp.int32)
+            n_groups = 0
+            max_group_size = 0
 
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> jnp.ndarray:
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-                return jnp.mean(residuals**2)
+        @jax.jit
+        def loss_fn(
+            params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+        ) -> jnp.ndarray:
+            predictions = normalized_model(x_batch, *params)
+            residuals = y_batch - predictions
+
+            # Base loss: weighted or unweighted MSE
+            if enable_weighting:
+                group_idx = x_batch[:, 0].astype(jnp.int32)
+                assert residual_weights is not None
+                weights = residual_weights[group_idx]
+                base_loss = jnp.sum(weights * residuals**2) / jnp.sum(weights)
+            else:
+                base_loss = jnp.mean(residuals**2)
+
+            # Variance regularization via lax.fori_loop (fixed XLA trace
+            # regardless of number of groups)
+            if enable_var_reg:
+
+                def var_body(i, penalty):
+                    start = group_starts[i]
+                    size = group_sizes[i]
+                    # Extract with fixed max_group_size, mask to actual size
+                    group_params = jax.lax.dynamic_slice(
+                        params, (start,), (max_group_size,)
+                    )
+                    mask = jnp.arange(max_group_size) < size
+                    # Masked variance: Var = E[x^2] - E[x]^2 over valid elements
+                    n = jnp.maximum(size, 1)  # avoid division by zero
+                    mean_val = jnp.sum(jnp.where(mask, group_params, 0.0)) / n
+                    sq_diff = jnp.where(mask, (group_params - mean_val) ** 2, 0.0)
+                    group_var = jnp.sum(sq_diff) / n
+                    return penalty + group_var
+
+                variance_penalty = jax.lax.fori_loop(
+                    0, n_groups, var_body, jnp.array(0.0)
+                )
+                return base_loss + var_lambda * variance_penalty
+
+            return base_loss
 
         return loss_fn
 

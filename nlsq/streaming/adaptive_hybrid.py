@@ -1448,158 +1448,61 @@ class AdaptiveHybridStreamingOptimizer:
         )
         residual_weights = self._residual_weights_jax
 
-        # Determine which loss function variant to create
-        # There are 4 cases based on (var_reg, weighting) combination
-
-        if enable_var_reg and var_indices and enable_weighting:
-            # Case 1: Both group variance regularization AND residual weighting
-            group_slices = [(start, end) for start, end in var_indices]
-
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> float:
-                """Compute weighted MSE + group variance regularization.
-
-                Parameters
-                ----------
-                params : array_like
-                    Parameters in normalized space
-                x_batch : array_like
-                    Independent variable batch. First column contains group indices.
-                y_batch : array_like
-                    Dependent variable batch
-
-                Returns
-                -------
-                loss : float
-                    wMSE + lambda * sum(Var(group_i))
-                """
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-
-                # Extract group indices from x_batch (first column contains group index)
-                group_idx = x_batch[:, 0].astype(jnp.int32)
-
-                # Lookup weights for each data point
-                assert residual_weights is not None
-                weights = residual_weights[group_idx]
-
-                # Weighted mean: sum(w * r^2) / sum(w)
-                wmse = jnp.sum(weights * residuals**2) / jnp.sum(weights)
-
-                # Compute group variance penalty
-                variance_penalty = 0.0
-                for start, end in group_slices:
-                    group_params = params[start:end]
-                    group_var = jnp.var(group_params)
-                    variance_penalty = variance_penalty + group_var
-
-                return wmse + var_lambda * variance_penalty
-
-        elif enable_var_reg and var_indices:
-            # Case 2: Only group variance regularization (no residual weighting)
-            group_slices = [(start, end) for start, end in var_indices]
-
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> float:
-                """Compute MSE + group variance regularization.
-
-                Parameters
-                ----------
-                params : array_like
-                    Parameters in normalized space
-                x_batch : array_like
-                    Independent variable batch
-                y_batch : array_like
-                    Dependent variable batch
-
-                Returns
-                -------
-                loss : float
-                    MSE + lambda * sum(Var(group_i))
-                """
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-                mse = jnp.mean(residuals**2)
-
-                # Compute group variance penalty
-                variance_penalty = 0.0
-                for start, end in group_slices:
-                    group_params = params[start:end]
-                    group_var = jnp.var(group_params)
-                    variance_penalty = variance_penalty + group_var
-
-                return mse + var_lambda * variance_penalty
-
-        elif enable_weighting:
-            # Case 3: Only residual weighting (no group variance regularization)
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> float:
-                """Compute weighted mean squared residuals in normalized space.
-
-                This loss function uses per-group weights for weighted least squares.
-                The group index for each data point is determined by the first
-                column of x_batch.
-
-                Parameters
-                ----------
-                params : array_like
-                    Parameters in normalized space
-                x_batch : array_like
-                    Independent variable batch. First column contains group indices.
-                y_batch : array_like
-                    Dependent variable batch
-
-                Returns
-                -------
-                loss : float
-                    Weighted mean squared residuals
-                """
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-
-                # Extract group indices from x_batch (first column contains group index)
-                group_idx = x_batch[:, 0].astype(jnp.int32)
-
-                # Lookup weights for each data point
-                assert residual_weights is not None
-                weights = residual_weights[group_idx]
-
-                # Weighted mean: sum(w * r^2) / sum(w)
-                wmse = jnp.sum(weights * residuals**2) / jnp.sum(weights)
-
-                return wmse
-
+        # Pre-convert group indices to JAX arrays for lax.fori_loop.
+        # Each group is extracted via dynamic_slice with a fixed max_group_size,
+        # then masked to the actual group size for correct variance computation.
+        if enable_var_reg and var_indices:
+            group_starts = jnp.array([s for s, _e in var_indices], dtype=jnp.int32)
+            group_sizes = jnp.array([e - s for s, e in var_indices], dtype=jnp.int32)
+            n_groups = len(var_indices)
+            max_group_size = max(e - s for s, e in var_indices)
         else:
-            # Case 4: Standard MSE loss (no regularization, no weighting)
-            @jax.jit
-            def loss_fn(
-                params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
-            ) -> float:
-                """Compute mean squared residuals in normalized space.
+            group_starts = jnp.zeros(0, dtype=jnp.int32)
+            group_sizes = jnp.zeros(0, dtype=jnp.int32)
+            n_groups = 0
+            max_group_size = 0
 
-                Parameters
-                ----------
-                params : array_like
-                    Parameters in normalized space
-                x_batch : array_like
-                    Independent variable batch
-                y_batch : array_like
-                    Dependent variable batch
+        @jax.jit
+        def loss_fn(
+            params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+        ) -> jnp.ndarray:
+            predictions = normalized_model(x_batch, *params)
+            residuals = y_batch - predictions
 
-                Returns
-                -------
-                loss : float
-                    Mean squared residuals
-                """
-                predictions = normalized_model(x_batch, *params)
-                residuals = y_batch - predictions
-                return jnp.mean(residuals**2)
+            # Base loss: weighted or unweighted MSE
+            if enable_weighting:
+                group_idx = x_batch[:, 0].astype(jnp.int32)
+                assert residual_weights is not None
+                weights = residual_weights[group_idx]
+                base_loss = jnp.sum(weights * residuals**2) / jnp.sum(weights)
+            else:
+                base_loss = jnp.mean(residuals**2)
+
+            # Variance regularization via lax.fori_loop (fixed XLA trace
+            # regardless of number of groups)
+            if enable_var_reg and var_indices:
+
+                def var_body(i, penalty):
+                    start = group_starts[i]
+                    size = group_sizes[i]
+                    # Extract with fixed max_group_size, mask to actual size
+                    group_params = jax.lax.dynamic_slice(
+                        params, (start,), (max_group_size,)
+                    )
+                    mask = jnp.arange(max_group_size) < size
+                    # Masked variance: Var = E[x^2] - E[x]^2 over valid elements
+                    n = jnp.maximum(size, 1)  # avoid division by zero
+                    mean_val = jnp.sum(jnp.where(mask, group_params, 0.0)) / n
+                    sq_diff = jnp.where(mask, (group_params - mean_val) ** 2, 0.0)
+                    group_var = jnp.sum(sq_diff) / n
+                    return penalty + group_var
+
+                variance_penalty = jax.lax.fori_loop(
+                    0, n_groups, var_body, jnp.array(0.0)
+                )
+                return base_loss + var_lambda * variance_penalty
+
+            return base_loss
 
         return loss_fn
 

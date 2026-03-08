@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 import jax
 import jax.numpy as jnp
 
+from nlsq.streaming.large_dataset import get_bucket_size
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -26,6 +27,49 @@ if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 _logger = get_logger("gauss_newton_phase")
+
+
+def _pad_chunk_to_bucket(
+    x_chunk: jnp.ndarray, y_chunk: jnp.ndarray, actual_size: int
+) -> tuple[jnp.ndarray, jnp.ndarray, int]:
+    """Pad a chunk to the nearest power-of-2 bucket size.
+
+    This prevents XLA recompilation when the last chunk has fewer points
+    than the configured chunk_size. Padded elements are zeroed out.
+
+    Parameters
+    ----------
+    x_chunk : array_like
+        Independent variable chunk.
+    y_chunk : array_like
+        Dependent variable chunk.
+    actual_size : int
+        Number of valid (non-padded) points in the chunk.
+
+    Returns
+    -------
+    x_padded : array_like
+        Padded x chunk with shape (bucket_size,) or (bucket_size, features).
+    y_padded : array_like
+        Padded y chunk with shape (bucket_size,).
+    actual_size : int
+        Number of valid points (unchanged, for unpadding results).
+    """
+    bucket_size = get_bucket_size(actual_size)
+    if actual_size == bucket_size:
+        return x_chunk, y_chunk, actual_size
+
+    # Pad with zeros to bucket size
+    if x_chunk.ndim == 1:
+        x_padded = jnp.zeros(bucket_size, dtype=x_chunk.dtype)
+        x_padded = x_padded.at[:actual_size].set(x_chunk)
+    else:
+        x_padded = jnp.zeros((bucket_size, x_chunk.shape[1]), dtype=x_chunk.dtype)
+        x_padded = x_padded.at[:actual_size].set(x_chunk)
+    y_padded = jnp.zeros(bucket_size, dtype=y_chunk.dtype)
+    y_padded = y_padded.at[:actual_size].set(y_chunk)
+
+    return x_padded, y_padded, actual_size
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,9 +233,20 @@ class GaussNewtonPhase:
         for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
             x_chunk = x_data[i : i + chunk_size]
             y_chunk = y_data[i : i + chunk_size]
+            actual_size = len(x_chunk)
+
+            # Pad last chunk to bucket size to prevent XLA recompilation
+            x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
+                x_chunk, y_chunk, actual_size
+            )
 
             final_JTJ, final_JTr, res_sq = self._accumulate_jtj_jtr(
-                x_chunk, y_chunk, current_params, final_JTJ, final_JTr
+                x_chunk,
+                y_chunk,
+                current_params,
+                final_JTJ,
+                final_JTr,
+                valid_size=actual_size,
             )
             final_residual_sum_sq += res_sq
 
@@ -277,9 +332,18 @@ class GaussNewtonPhase:
                 for i in range(0, n_points, chunk_size):
                     x_chunk = x_data[i : i + chunk_size]
                     y_chunk = y_data[i : i + chunk_size]
+                    actual_size = len(x_chunk)
+                    x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
+                        x_chunk, y_chunk, actual_size
+                    )
 
                     JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
-                        x_chunk, y_chunk, current_params, JTJ, JTr
+                        x_chunk,
+                        y_chunk,
+                        current_params,
+                        JTJ,
+                        JTr,
+                        valid_size=actual_size,
                     )
                     residual_sum_sq += res_sq
 
@@ -441,8 +505,17 @@ class GaussNewtonPhase:
         for i in range(0, n_points, chunk_size):
             x_chunk = x_data[i : i + chunk_size]
             y_chunk = y_data[i : i + chunk_size]
+            actual_size = len(x_chunk)
+            x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
+                x_chunk, y_chunk, actual_size
+            )
             JTJ, JTr, chunk_cost = self._accumulate_jtj_jtr(
-                x_chunk, y_chunk, current_params, JTJ, JTr
+                x_chunk,
+                y_chunk,
+                current_params,
+                JTJ,
+                JTr,
+                valid_size=actual_size,
             )
             total_cost += chunk_cost
 
@@ -530,21 +603,24 @@ class GaussNewtonPhase:
         params: jnp.ndarray,
         JTJ_prev: jnp.ndarray,
         JTr_prev: jnp.ndarray,
+        valid_size: int | None = None,
     ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
         """Accumulate J^T J and J^T r for a data chunk.
 
         Parameters
         ----------
         x_chunk : array_like
-            Independent variable chunk.
+            Independent variable chunk (may be padded to bucket size).
         y_chunk : array_like
-            Dependent variable chunk.
+            Dependent variable chunk (may be padded to bucket size).
         params : array_like
             Current parameters in normalized space.
         JTJ_prev : array_like
             Previous accumulated J^T J.
         JTr_prev : array_like
             Previous accumulated J^T r.
+        valid_size : int, optional
+            Number of valid (non-padded) points. If None, all points are valid.
 
         Returns
         -------
@@ -561,6 +637,12 @@ class GaussNewtonPhase:
 
         # Compute Jacobian for this chunk
         J_chunk = self._compute_jacobian_chunk(x_chunk, params)
+
+        # Mask out padded elements if chunk was padded to bucket size
+        if valid_size is not None and valid_size < len(x_chunk):
+            mask = jnp.arange(len(x_chunk)) < valid_size
+            residuals = jnp.where(mask, residuals, 0.0)
+            J_chunk = jnp.where(mask[:, None], J_chunk, 0.0)
 
         # Accumulate
         JTJ_new = JTJ_prev + J_chunk.T @ J_chunk
@@ -685,12 +767,26 @@ class GaussNewtonPhase:
         for i in range(0, n_points, chunk_size):
             x_chunk = x_data[i : i + chunk_size]
             y_chunk = y_data[i : i + chunk_size]
+            actual_size = len(x_chunk)
+            x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
+                x_chunk, y_chunk, actual_size
+            )
 
             if self._cost_fn_compiled is not None:
-                chunk_cost = self._cost_fn_compiled(params, x_chunk, y_chunk)
+                if actual_size < len(x_chunk):
+                    # Mask padded elements for correct cost computation
+                    mask = jnp.arange(len(x_chunk)) < actual_size
+                    predictions = self.normalized_model(x_chunk, *params)
+                    residuals = jnp.where(mask, y_chunk - predictions, 0.0)
+                    chunk_cost = float(jnp.sum(residuals**2))
+                else:
+                    chunk_cost = self._cost_fn_compiled(params, x_chunk, y_chunk)
             else:
                 predictions = self.normalized_model(x_chunk, *params)
                 residuals = y_chunk - predictions
+                if actual_size < len(x_chunk):
+                    mask = jnp.arange(len(x_chunk)) < actual_size
+                    residuals = jnp.where(mask, residuals, 0.0)
                 chunk_cost = float(jnp.sum(residuals**2))
 
             total_cost += chunk_cost

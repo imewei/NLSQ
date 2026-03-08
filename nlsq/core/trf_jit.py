@@ -2,6 +2,13 @@
 
 This module contains JAX JIT-compiled helper functions for the TRF algorithm,
 providing GPU/TPU-accelerated implementations of core mathematical operations.
+
+XLA Memory Optimization
+-----------------------
+All JIT functions are defined at module level as singletons. This ensures each
+function is compiled only once per unique input shape, regardless of how many
+TrustRegionJITFunctions instances are created. Previously, each instance created
+10+ new @jit closures, causing unbounded XLA compilation cache growth.
 """
 
 from __future__ import annotations
@@ -18,15 +25,270 @@ __all__ = ["TrustRegionJITFunctions"]
 LOSS_FUNCTION_COEFF = 0.5  # Coefficient for loss function (0.5 * ||f||^2)
 NUMERICAL_ZERO_THRESHOLD = 1e-14  # Threshold for values considered numerically zero
 DEFAULT_TOLERANCE = 1e-6  # Default tolerance for iterative solvers
+# Fixed CG iteration limit — prevents shape-dependent recompilation.
+# The while_loop convergence check provides early exit for small problems.
+CG_MAX_ITERATIONS = 100
+
+
+# ---------------------------------------------------------------------------
+# Module-level JIT-compiled functions (singletons — compiled once per shape)
+# ---------------------------------------------------------------------------
+
+
+@jit
+def _default_loss_func(f: jnp.ndarray) -> jnp.ndarray:
+    """Default loss: 0.5 * ||f||^2."""
+    return LOSS_FUNCTION_COEFF * jnp.dot(f, f)
+
+
+@jit
+def _compute_grad(J: jnp.ndarray, f: jnp.ndarray) -> jnp.ndarray:
+    """Compute gradient of loss function: f^T J."""
+    return f.dot(J)
+
+
+@jit
+def _compute_grad_hat(g: jnp.ndarray, d: jnp.ndarray) -> jnp.ndarray:
+    """Compute gradient in hat space: d * g."""
+    return d * g
+
+
+@jit
+def _svd_no_bounds_jit(
+    J: jnp.ndarray, d: jnp.ndarray, f: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    J_h = J * d
+    U, s, Vt = jax_svd(J_h, full_matrices=False)
+    uf = U.T.dot(f)
+    return J_h, U, s, Vt.T, uf
+
+
+@jit
+def _svd_bounds_jit(
+    f: jnp.ndarray,
+    J: jnp.ndarray,
+    d: jnp.ndarray,
+    J_diag: jnp.ndarray,
+    f_zeros: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    J_h = J * d
+    J_augmented = jnp.concatenate([J_h, J_diag])
+    f_augmented = jnp.concatenate([f, f_zeros])
+    U, s, Vt = jax_svd(J_augmented, full_matrices=False)
+    uf = U.T.dot(f_augmented)
+    return J_h, U, s, Vt.T, uf
+
+
+@jit
+def _conjugate_gradient_solve(
+    J: jnp.ndarray,
+    f: jnp.ndarray,
+    d: jnp.ndarray,
+    alpha: float = 0.0,
+    tol: float = DEFAULT_TOLERANCE,
+) -> tuple[jnp.ndarray, jnp.ndarray, int]:
+    """Solve (J^T J + alpha*I) p = -J^T f using CG.
+
+    Uses jax.lax.while_loop for 3-8x GPU acceleration.
+
+    Parameters
+    ----------
+    J : jnp.ndarray
+        Jacobian matrix (m x n)
+    f : jnp.ndarray
+        Residual vector (m,)
+    d : jnp.ndarray
+        Scaling diagonal (n,)
+    alpha : float
+        Regularization parameter
+    tol : float
+        Convergence tolerance
+
+    Returns
+    -------
+    p : jnp.ndarray
+        Solution vector (n,)
+    residual_norm : jnp.ndarray
+        Final residual norm
+    n_iter : int
+        Number of CG iterations
+
+    Notes
+    -----
+    Uses fixed CG_MAX_ITERATIONS (100) to prevent shape-dependent XLA
+    recompilation. The while_loop convergence check exits early for
+    small problems (n < 100).
+    """
+    _m, n = J.shape
+
+    J_scaled = J * d[None, :]
+    b = -J_scaled.T @ f
+
+    x0 = jnp.zeros(n)
+    r0 = b
+    p0 = r0
+    rsold0 = jnp.dot(r0, r0)
+    tol_sq = tol * tol
+
+    init_state = (x0, r0, p0, rsold0, 0)
+
+    def cond_fn(state):
+        _x, _r, _p, rsold, i = state
+        return (i < CG_MAX_ITERATIONS) & (rsold >= tol_sq)
+
+    def body_fn(state):
+        x, r, p, rsold, i = state
+
+        Jp = J_scaled @ p
+        JTJp = J_scaled.T @ Jp
+        Ap = JTJp + alpha * p
+
+        pAp = jnp.dot(p, Ap)
+        safe_pAp = jnp.where(
+            pAp > NUMERICAL_ZERO_THRESHOLD, pAp, NUMERICAL_ZERO_THRESHOLD
+        )
+        alpha_cg = rsold / safe_pAp
+
+        x_new = x + alpha_cg * p
+        r_new = r - alpha_cg * Ap
+        rsnew = jnp.dot(r_new, r_new)
+
+        beta = rsnew / (rsold + NUMERICAL_ZERO_THRESHOLD)
+        p_new = r_new + beta * p
+
+        return (x_new, r_new, p_new, rsnew, i + 1)
+
+    final_state = lax.while_loop(cond_fn, body_fn, init_state)
+    x_final, _r_final, _p_final, rsold_final, n_iter = final_state
+
+    return x_final, jnp.sqrt(rsold_final), n_iter
+
+
+@jit
+def _solve_tr_subproblem_cg(
+    J: jnp.ndarray,
+    f: jnp.ndarray,
+    d: jnp.ndarray,
+    Delta: float,
+    alpha: float = 0.0,
+) -> jnp.ndarray:
+    """Solve trust region subproblem using conjugate gradient."""
+    p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(J, f, d, 0.0)
+
+    p_gn_norm = jnp.linalg.norm(p_gn)
+
+    def compute_regularized():
+        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, alpha)
+        p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
+        return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
+
+    return lax.cond(
+        p_gn_norm <= Delta,
+        lambda: p_gn,
+        compute_regularized,
+    )
+
+
+@jit
+def _solve_tr_subproblem_cg_bounds(
+    J: jnp.ndarray,
+    f: jnp.ndarray,
+    d: jnp.ndarray,
+    J_diag: jnp.ndarray,
+    f_zeros: jnp.ndarray,
+    Delta: float,
+    alpha: float = 0.0,
+) -> jnp.ndarray:
+    """Solve trust region subproblem with bounds using conjugate gradient."""
+    J_augmented = jnp.concatenate([J * d[None, :], J_diag])
+    f_augmented = jnp.concatenate([f, f_zeros])
+    d_augmented = jnp.ones(J_augmented.shape[1])
+
+    p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(
+        J_augmented, f_augmented, d_augmented, 0.0
+    )
+
+    p_gn_norm = jnp.linalg.norm(p_gn)
+
+    def compute_regularized():
+        p_reg, _, _ = _conjugate_gradient_solve(
+            J_augmented, f_augmented, d_augmented, alpha
+        )
+        p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
+        return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
+
+    return lax.cond(
+        p_gn_norm <= Delta,
+        lambda: p_gn,
+        compute_regularized,
+    )
+
+
+@jit
+def _calculate_cost(rho, data_mask):
+    """Calculate cost: 0.5 * sum(masked rho[0])."""
+    cost_array = jnp.where(data_mask, rho[0], 0)
+    return LOSS_FUNCTION_COEFF * jnp.sum(cost_array)
+
+
+@jit
+def _check_isfinite(f_new: jnp.ndarray) -> jnp.ndarray:
+    """Check if all residuals are finite."""
+    return jnp.all(jnp.isfinite(f_new))
+
+
+# ---------------------------------------------------------------------------
+# Python wrappers for SVD with GPU/CPU fallback (can't be fully JIT-compiled)
+# ---------------------------------------------------------------------------
+
+
+def _svd_no_bounds(
+    J: jnp.ndarray, d: jnp.ndarray, f: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Compute SVD of J in hat space (unbounded variant) with GPU fallback."""
+    try:
+        return _svd_no_bounds_jit(J, d, f)
+    except Exception as e:
+        if _is_gpu_error(str(e)):
+            J_h = J * d
+            U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
+            uf = U.T.dot(f)
+            return J_h, U, s, V, uf
+        raise
+
+
+def _svd_bounds(
+    f: jnp.ndarray,
+    J: jnp.ndarray,
+    d: jnp.ndarray,
+    J_diag: jnp.ndarray,
+    f_zeros: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Compute SVD of J in hat space (bounded variant) with GPU fallback."""
+    try:
+        return _svd_bounds_jit(f, J, d, J_diag, f_zeros)
+    except Exception as e:
+        if _is_gpu_error(str(e)):
+            J_h = J * d
+            J_augmented = jnp.concatenate([J_h, J_diag])
+            f_augmented = jnp.concatenate([f, f_zeros])
+            U, s, V = compute_svd_with_fallback(J_augmented, full_matrices=False)
+            uf = U.T.dot(f_augmented)
+            return J_h, U, s, V, uf
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Class interface (backward-compatible, delegates to module-level singletons)
+# ---------------------------------------------------------------------------
 
 
 class TrustRegionJITFunctions:
     """JIT-compiled functions for Trust Region Reflective optimization algorithm.
 
-    This class contains all JAX JIT-compiled functions required for the Trust Region
-    Reflective algorithm. It provides optimized GPU/TPU-accelerated implementations
-    of core mathematical operations including gradient computation, SVD decomposition,
-    iterative solvers, and quadratic evaluations.
+    All JIT functions are module-level singletons to prevent XLA compilation cache
+    bloat. Each function is compiled once per unique input shape, shared across all
+    TrustRegionJITFunctions instances.
 
     Core Operations
     ---------------
@@ -36,425 +298,23 @@ class TrustRegionJITFunctions:
     - **Cost Function Evaluation**: Loss function computation with masking support
     - **Hat Space Transformation**: Scaled variable transformations for bounds handling
 
-    JIT Compilation Benefits
-    ------------------------
-    - **GPU Acceleration**: All operations optimized for GPU/TPU hardware
-    - **Memory Efficiency**: Reduced memory allocations through compilation
-    - **Automatic Differentiation**: JAX autodiff for exact Jacobian computation
-    - **XLA Optimization**: Advanced compiler optimizations for performance
-
-    Algorithm Integration
-    ---------------------
-    The class implements two solution methods:
-    1. **Exact SVD**: Uses singular value decomposition for small to medium problems
-    2. **Conjugate Gradient**: Iterative method for large sparse problems
-
-    Memory Management
-    -----------------
-    - Bounded Problems: Augmented system handling for constraint optimization
-    - Unbounded Problems: Direct system solving for unconstrained optimization
-    - Scaling Matrices: Efficient diagonal matrix operations in hat space
-
-    Technical Implementation
-    ------------------------
-    All functions use JAX JIT compilation for performance. The class automatically
-    creates optimized versions during initialization. Functions handle both bounded
-    and unbounded optimization variants with appropriate augmentation strategies.
-
     Performance Characteristics
     ---------------------------
     - **Small Problems**: Direct SVD solution O(mn^2 + n^3)
     - **Large Problems**: CG iteration O(k*mn) where k is iteration count
-    - **GPU Memory**: Optimized for batch processing and memory reuse
+    - **GPU Memory**: Module-level singletons prevent per-instance recompilation
     - **Numerical Stability**: Double precision arithmetic with condition monitoring
     """
 
     def __init__(self):
-        """Call all of the create functions which create the JAX/JIT functions
-        that are members of the class."""
-        self.create_grad_func()
-        self.create_grad_hat()
-        self.create_svd_funcs()
-        self.create_iterative_solvers()
-        self.create_default_loss_func()
-        self.create_calculate_cost()
-        self.create_check_isfinite()
-
-    def create_default_loss_func(self):
-        """Create the default loss function which is simply the sum of the
-        squares of the residuals."""
-
-        @jit
-        def loss_function(f: jnp.ndarray) -> jnp.ndarray:
-            """The default loss function is the sum of the squares of the
-            residuals divided by two.
-
-            Parameters
-            ----------
-            f : jnp.ndarray
-                The residuals.
-
-            Returns
-            -------
-            jnp.ndarray
-                The loss function value.
-            """
-            return LOSS_FUNCTION_COEFF * jnp.dot(f, f)
-
-        self.default_loss_func = loss_function
-
-    def create_grad_func(self):
-        """Create the function to compute the gradient of the loss function
-        which is simply the function evaluation dotted with the Jacobian."""
-
-        @jit
-        def compute_grad(J: jnp.ndarray, f: jnp.ndarray) -> jnp.ndarray:
-            """Compute the gradient of the loss function.
-
-            Parameters
-            ----------
-            J : jnp.ndarray
-                The Jacobian matrix.
-            f : jnp.ndarray
-                The residuals.
-
-            Returns
-            -------
-            jnp.ndarray
-                The gradient of the loss function.
-            """
-            return f.dot(J)
-
-        self.compute_grad = compute_grad
-
-    def create_grad_hat(self):
-        """Calculate the gradient in the "hat" space, which is just multiplying
-        the gradient by the diagonal matrix D. This is used in the trust region
-        algorithm. Here we only use the diagonals of D, since D is diagonal.
-        """
-
-        @jit
-        def compute_grad_hat(g: jnp.ndarray, d: jnp.ndarray) -> jnp.ndarray:
-            """Compute the gradient in the "hat" space.
-
-            Parameters
-            ----------
-            g : jnp.ndarray
-                The gradient of the loss function.
-            d : jnp.ndarray
-                The diagonal of the diagonal matrix D.
-
-            Returns
-            -------
-            jnp.ndarray
-                The gradient in the "hat" space.
-            """
-            return d * g
-
-        self.compute_grad_hat = compute_grad_hat
-
-    def create_svd_funcs(self):
-        """Create the functions to compute the SVD of the Jacobian matrix.
-        There are two versions, one for problems with bounds and one for
-        problems without bounds. The version for problems with bounds is
-        slightly more complicated.
-
-        Each version has a JIT-compiled inner function that uses jax_svd directly
-        (enabling proper XLA compilation), wrapped by a Python outer function that
-        handles the GPU/CPU/NumPy fallback chain via try/except.
-        """
-
-        @jit
-        def _svd_no_bounds_jit(
-            J: jnp.ndarray, d: jnp.ndarray, f: jnp.ndarray
-        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-            J_h = J * d
-            U, s, Vt = jax_svd(J_h, full_matrices=False)
-            uf = U.T.dot(f)
-            return J_h, U, s, Vt.T, uf
-
-        def svd_no_bounds(
-            J: jnp.ndarray, d: jnp.ndarray, f: jnp.ndarray
-        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-            """Compute the SVD of J in hat space (unbounded variant).
-
-            Uses JIT-compiled jax_svd with GPU/CPU/NumPy fallback chain.
-            """
-            try:
-                return _svd_no_bounds_jit(J, d, f)
-            except Exception as e:
-                if _is_gpu_error(str(e)):
-                    J_h = J * d
-                    U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
-                    uf = U.T.dot(f)
-                    return J_h, U, s, V, uf
-                raise
-
-        @jit
-        def _svd_bounds_jit(
-            f: jnp.ndarray,
-            J: jnp.ndarray,
-            d: jnp.ndarray,
-            J_diag: jnp.ndarray,
-            f_zeros: jnp.ndarray,
-        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-            J_h = J * d
-            J_augmented = jnp.concatenate([J_h, J_diag])
-            f_augmented = jnp.concatenate([f, f_zeros])
-            U, s, Vt = jax_svd(J_augmented, full_matrices=False)
-            uf = U.T.dot(f_augmented)
-            return J_h, U, s, Vt.T, uf
-
-        def svd_bounds(
-            f: jnp.ndarray,
-            J: jnp.ndarray,
-            d: jnp.ndarray,
-            J_diag: jnp.ndarray,
-            f_zeros: jnp.ndarray,
-        ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-            """Compute the SVD of J in hat space (bounded variant).
-
-            Uses JIT-compiled jax_svd with GPU/CPU/NumPy fallback chain.
-            """
-            try:
-                return _svd_bounds_jit(f, J, d, J_diag, f_zeros)
-            except Exception as e:
-                if _is_gpu_error(str(e)):
-                    J_h = J * d
-                    J_augmented = jnp.concatenate([J_h, J_diag])
-                    f_augmented = jnp.concatenate([f, f_zeros])
-                    U, s, V = compute_svd_with_fallback(
-                        J_augmented, full_matrices=False
-                    )
-                    uf = U.T.dot(f_augmented)
-                    return J_h, U, s, V, uf
-                raise
-
-        self.svd_no_bounds = svd_no_bounds
-        self.svd_bounds = svd_bounds
-
-    def create_iterative_solvers(self):
-        """Create iterative solvers for trust region subproblems as alternatives to SVD."""
-
-        @jit
-        def conjugate_gradient_solve(
-            J: jnp.ndarray,
-            f: jnp.ndarray,
-            d: jnp.ndarray,
-            alpha: float = 0.0,
-            max_iter: int | None = None,
-            tol: float = DEFAULT_TOLERANCE,
-        ) -> tuple[jnp.ndarray, jnp.ndarray, int]:
-            """Solve the normal equations using conjugate gradient method.
-
-            Solves (J^T J + alpha*I) p = -J^T f using CG without forming J^T J explicitly.
-            Uses jax.lax.while_loop for 3-8x GPU acceleration.
-
-            Parameters
-            ----------
-            J : jnp.ndarray
-                Jacobian matrix (m x n)
-            f : jnp.ndarray
-                Residual vector (m,)
-            d : jnp.ndarray
-                Scaling diagonal (n,)
-            alpha : float
-                Regularization parameter
-            max_iter : int, optional
-                Maximum CG iterations (default: min(n, 100))
-            tol : float
-                Convergence tolerance
-
-            Returns
-            -------
-            p : jnp.ndarray
-                Solution vector (n,)
-            residual_norm : jnp.ndarray
-                Final residual norm
-            n_iter : int
-                Number of CG iterations
-            """
-            # Solve (J^T J + alpha I) x = -J^T f using conjugate gradient
-            _m, n = J.shape
-            if max_iter is None:
-                max_iter = min(n, 100)
-
-            # Scale Jacobian and setup RHS
-            J_scaled = J * d[None, :]
-            b = -J_scaled.T @ f
-
-            # Initialize CG state: (x, r, p, rsold, iteration, converged)
-            x0 = jnp.zeros(n)
-            r0 = b
-            p0 = r0
-            rsold0 = jnp.dot(r0, r0)
-            tol_sq = tol * tol  # Compare squared norms for efficiency
-
-            # State tuple: (x, r, p, rsold, iteration)
-            init_state = (x0, r0, p0, rsold0, 0)
-
-            def cond_fn(state):
-                """Continue while not converged and iterations remain."""
-                _x, _r, _p, rsold, i = state
-                return (i < max_iter) & (rsold >= tol_sq)
-
-            def body_fn(state):
-                """Single CG iteration."""
-                x, r, p, rsold, i = state
-
-                # Matrix-vector product: (J^T J + alpha I) p
-                Jp = J_scaled @ p
-                JTJp = J_scaled.T @ Jp
-                Ap = JTJp + alpha * p
-
-                # Step size with numerical stability
-                # When pAp <= 0 (negative curvature), use a large step to hit
-                # the trust region boundary (which clips in the outer solver)
-                pAp = jnp.dot(p, Ap)
-                safe_pAp = jnp.where(
-                    pAp > NUMERICAL_ZERO_THRESHOLD, pAp, NUMERICAL_ZERO_THRESHOLD
-                )
-                alpha_cg = rsold / safe_pAp
-
-                # Update solution and residual
-                x_new = x + alpha_cg * p
-                r_new = r - alpha_cg * Ap
-                rsnew = jnp.dot(r_new, r_new)
-
-                # Update search direction
-                beta = rsnew / (rsold + NUMERICAL_ZERO_THRESHOLD)
-                p_new = r_new + beta * p
-
-                return (x_new, r_new, p_new, rsnew, i + 1)
-
-            # Run CG loop using JAX while_loop (3-8x faster on GPU)
-            final_state = lax.while_loop(cond_fn, body_fn, init_state)
-            x_final, _r_final, _p_final, rsold_final, n_iter = final_state
-
-            return x_final, jnp.sqrt(rsold_final), n_iter
-
-        @jit
-        def solve_tr_subproblem_cg(
-            J: jnp.ndarray,
-            f: jnp.ndarray,
-            d: jnp.ndarray,
-            Delta: float,
-            alpha: float = 0.0,
-            max_iter: int | None = None,
-        ) -> jnp.ndarray:
-            """Solve trust region subproblem using conjugate gradient.
-
-            This replaces the SVD-based solve_lsq_trust_region function.
-            The regularized CG solve is deferred into the lax.cond false branch
-            so it is only computed when the GN step exceeds the trust region.
-            """
-            # First try to solve without regularization (alpha=0)
-            p_gn, _residual_norm, _n_iter = conjugate_gradient_solve(
-                J, f, d, 0.0, max_iter
-            )
-
-            # Check if Gauss-Newton step is within trust region
-            p_gn_norm = jnp.linalg.norm(p_gn)
-
-            def compute_regularized():
-                p_reg, _, _ = conjugate_gradient_solve(J, f, d, alpha, max_iter)
-                p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
-                return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
-
-            return lax.cond(
-                p_gn_norm <= Delta,
-                lambda: p_gn,
-                compute_regularized,
-            )
-
-        @jit
-        def solve_tr_subproblem_cg_bounds(
-            J: jnp.ndarray,
-            f: jnp.ndarray,
-            d: jnp.ndarray,
-            J_diag: jnp.ndarray,
-            f_zeros: jnp.ndarray,
-            Delta: float,
-            alpha: float = 0.0,
-            max_iter: int | None = None,
-        ) -> jnp.ndarray:
-            """Solve trust region subproblem with bounds using conjugate gradient.
-
-            The regularized CG solve is deferred into the lax.cond false branch
-            so it is only computed when the GN step exceeds the trust region.
-            """
-            # Augment the system for bounds
-            J_augmented = jnp.concatenate([J * d[None, :], J_diag])
-            f_augmented = jnp.concatenate([f, f_zeros])
-            d_augmented = jnp.ones(J_augmented.shape[1])  # Already scaled
-
-            # First try to solve without regularization (alpha=0)
-            p_gn, _residual_norm, _n_iter = conjugate_gradient_solve(
-                J_augmented, f_augmented, d_augmented, 0.0, max_iter
-            )
-
-            # Check if Gauss-Newton step is within trust region
-            p_gn_norm = jnp.linalg.norm(p_gn)
-
-            def compute_regularized():
-                p_reg, _, _ = conjugate_gradient_solve(
-                    J_augmented, f_augmented, d_augmented, alpha, max_iter
-                )
-                p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
-                return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
-
-            return lax.cond(
-                p_gn_norm <= Delta,
-                lambda: p_gn,
-                compute_regularized,
-            )
-
-        # Store the iterative solver functions
-        self.conjugate_gradient_solve = conjugate_gradient_solve
-        self.solve_tr_subproblem_cg = solve_tr_subproblem_cg
-        self.solve_tr_subproblem_cg_bounds = solve_tr_subproblem_cg_bounds
-
-    def create_calculate_cost(self):
-        """Create the function to calculate the cost function."""
-
-        @jit
-        def calculate_cost(rho, data_mask):
-            """Calculate the cost function.
-
-            Parameters
-            ----------
-            rho : jnp.ndarray
-                The per element cost times two.
-            data_mask : jnp.ndarray
-                The mask for the data.
-
-            Returns
-            -------
-            jnp.ndarray
-                The cost function.
-            """
-            cost_array = jnp.where(data_mask, rho[0], 0)
-            return LOSS_FUNCTION_COEFF * jnp.sum(cost_array)
-
-        self.calculate_cost = calculate_cost
-
-    def create_check_isfinite(self):
-        """Create the function to check if the evaluated residuals are finite."""
-
-        @jit
-        def isfinite(f_new: jnp.ndarray) -> jnp.ndarray:
-            """Check if the evaluated residuals are finite.
-
-            Parameters
-            ----------
-            f_new : jnp.ndarray
-                The evaluated residuals.
-
-            Returns
-            -------
-            jnp.ndarray
-                Scalar array that is True if all residuals are finite, False otherwise.
-            """
-            return jnp.all(jnp.isfinite(f_new))
-
-        self.check_isfinite = isfinite
+        """Bind module-level JIT singletons to instance attributes."""
+        self.default_loss_func = _default_loss_func
+        self.compute_grad = _compute_grad
+        self.compute_grad_hat = _compute_grad_hat
+        self.svd_no_bounds = _svd_no_bounds
+        self.svd_bounds = _svd_bounds
+        self.conjugate_gradient_solve = _conjugate_gradient_solve
+        self.solve_tr_subproblem_cg = _solve_tr_subproblem_cg
+        self.solve_tr_subproblem_cg_bounds = _solve_tr_subproblem_cg_bounds
+        self.calculate_cost = _calculate_cost
+        self.check_isfinite = _check_isfinite

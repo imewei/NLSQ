@@ -371,21 +371,22 @@ class TestConjugateGradientSolve:
         assert p2.shape == (2,)
 
     def test_cg_max_iterations(self, trf_funcs, random_key):
-        """Test that CG respects max iterations."""
+        """Test that CG respects the fixed CG_MAX_ITERATIONS limit."""
         key1, key2 = random.split(random_key)
         J = random.normal(key1, (10, 5))
         f = random.normal(key2, (10,))
         d = jnp.ones(5)
 
+        from nlsq.core.trf_jit import CG_MAX_ITERATIONS
+
         _, _, n_iter = trf_funcs.conjugate_gradient_solve(
             J,
             f,
             d,
-            max_iter=3,
             tol=1e-20,  # Tight tolerance forces max iters
         )
 
-        assert n_iter <= 3
+        assert n_iter <= CG_MAX_ITERATIONS
 
 
 class TestSolveTrSubproblemCG:
