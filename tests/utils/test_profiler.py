@@ -231,7 +231,7 @@ class TestPerformanceProfiler:
         assert "Per-Run Details:" in report
         assert "Run 1:" in report
         assert "Run 2:" in report
-        assert "✓" in report  # Success indicators
+        assert "OK" in report  # Success indicators
 
     def test_get_report_empty(self):
         """Test report with no data."""
