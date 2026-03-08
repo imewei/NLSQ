@@ -1,16 +1,7 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2026-01-27
-# Requires: Python 3.12+ (tested on 3.13), NumPy 2.4.1, JAX 0.9.0
+# Updated: 2026-03-07
+# Requires: Python 3.12+ (tested on 3.13), JAX 0.9.1, NumPy 2.4.2, SciPy 1.17.1
 # All dependencies (including docs) are in pyproject.toml[dependencies]
-#
-# Features documented:
-#   - Adaptive Hybrid Streaming Optimizer with Parameter Normalization (v0.3.0+)
-#   - 4-phase optimization: normalization → L-BFGS warmup → Gauss-Newton → covariance
-#   - Model Health Diagnostics System (v0.4.3+):
-#     - Identifiability analysis (FIM condition, rank, correlations)
-#     - Gradient health monitoring (vanishing, imbalance, stagnation)
-#     - Sloppy model analysis (eigenvalue spectrum, stiff/sloppy directions)
-#     - Plugin system for domain-specific diagnostic extensions
 #
 # Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
 
@@ -25,7 +16,7 @@ build:
   jobs:
     pre_build:
       - echo "Building NLSQ documentation..."
-      - echo "This build requires NumPy 2.4.1, JAX 0.9.0"
+      - echo "This build requires JAX 0.9.1, NumPy 2.4.2, SciPy 1.17.1"
     post_build:
       - echo "Documentation build complete"
 

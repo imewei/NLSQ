@@ -23,7 +23,7 @@ def _make_optimizer(monkeypatch: pytest.MonkeyPatch, trf_module):
                 return 1.0, 0.0, 0.0
             return 1.0, 0.0
 
-    monkeypatch.setattr(trf_module, "CommonJIT", lambda: DummyCjit())
+    monkeypatch.setattr(trf_module, "CommonJIT", DummyCjit)
     return trf_module.TrustRegionReflective()
 
 

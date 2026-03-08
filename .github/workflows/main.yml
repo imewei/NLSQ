@@ -2,13 +2,13 @@ name: Main CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION_DEFAULT: "3.12"
+  PYTHON_VERSION_DEFAULT: "3.13"
   COVERAGE_THRESHOLD: 79
   CACHE_VERSION: v1
   PYTHONIOENCODING: utf-8  # Fix Windows Unicode encoding for emoji in scripts
@@ -46,7 +46,7 @@ jobs:
             docs:
               - 'docs/**'
               - '*.md'
-              - '.readthedocs.yml'
+              - '.readthedocs.yaml'
             notebooks:
               - 'examples/**/*.ipynb'
             workflows:
@@ -97,7 +97,7 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync
 
       - name: Run pre-commit hooks
         run: |
@@ -167,7 +167,7 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync
 
       - name: Validate notebook structure
         run: |
@@ -198,7 +198,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -219,7 +219,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync
 
       - name: Run tests with coverage
         shell: bash
@@ -314,7 +314,7 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync
 
       - name: Build Sphinx documentation
         working-directory: docs
@@ -358,7 +358,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -392,8 +392,7 @@ jobs:
           source .venv/bin/activate || . .venv/Scripts/activate
           pytest tests/ -v -n auto \
             -m "not slow" \
-            --ignore=tests/unit/ \
-            --ignore=tests/gui/  # GUI tests require streamlit (optional dependency)
+            --ignore=tests/gui_qt/  # GUI tests require display (Xvfb)
 
       - name: Verify installation
         shell: bash

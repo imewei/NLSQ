@@ -799,9 +799,9 @@ class TestLayer4StepClipping:
         max_norm = 0.1
 
         # JIT compile the static method
-        clipped_jit = jax.jit(
-            lambda u, m: AdaptiveHybridStreamingOptimizer._clip_update_norm(u, m)
-        )(updates, max_norm)
+        clipped_jit = jax.jit(AdaptiveHybridStreamingOptimizer._clip_update_norm)(
+            updates, max_norm
+        )
 
         clipped_norm = float(jnp.linalg.norm(clipped_jit))
         assert clipped_norm <= max_norm + 1e-6

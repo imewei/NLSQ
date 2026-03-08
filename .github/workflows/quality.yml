@@ -2,12 +2,12 @@ name: Code Quality Gates
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.13"
   MAX_COMPLEXITY: 15
   MAX_FILE_LINES: 2000
 
@@ -29,7 +29,7 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync
 
       # T037: Cyclomatic complexity check (fails on CC > 15)
       - name: Check cyclomatic complexity

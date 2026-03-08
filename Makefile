@@ -118,7 +118,7 @@ help:
 	@echo "  $(CYAN)test$(RESET)             Run all tests"
 	@echo "  $(CYAN)test-fast$(RESET)        Run tests excluding slow tests (-m 'not slow')"
 	@echo "  $(CYAN)test-slow$(RESET)        Run only slow optimization tests"
-	@echo "  $(CYAN)test-parallel$(RESET)    Run tests in parallel (-n auto)"
+	@echo "  $(CYAN)test-parallel$(RESET)    Run tests in parallel (-n 4)"
 	@echo "  $(CYAN)test-all-parallel$(RESET) Run all tests in parallel"
 	@echo "  $(CYAN)test-coverage$(RESET)    Run tests with coverage report"
 	@echo "  $(CYAN)test-cpu$(RESET)         Run tests with CPU backend"
@@ -542,11 +542,11 @@ test-slow:
 
 test-parallel:
 	@echo "$(BOLD)$(BLUE)Running tests in parallel...$(RESET)"
-	$(RUN_CMD) $(PYTEST) -n auto
+	$(RUN_CMD) $(PYTEST)
 
 test-all-parallel:
 	@echo "$(BOLD)$(BLUE)Running all tests in parallel...$(RESET)"
-	$(RUN_CMD) $(PYTEST) -n auto
+	$(RUN_CMD) $(PYTEST)
 	@echo "$(BOLD)$(GREEN)✓ All tests passed!$(RESET)"
 
 test-all-parallell: test-all-parallel
@@ -571,11 +571,11 @@ test-large:
 
 test-modules:
 	@echo "$(BOLD)$(BLUE)Running module-specific tests...$(RESET)"
-	$(RUN_CMD) $(PYTEST) tests/test_stability.py tests/test_stability_extended.py tests/test_init_module.py -v
+	$(RUN_CMD) $(PYTEST) tests/stability/ tests/core/test_init_module.py -v
 
 test-comprehensive:
 	@echo "$(BOLD)$(BLUE)Running comprehensive test suite...$(RESET)"
-	$(RUN_CMD) $(PYTEST) tests/test_comprehensive_coverage.py tests/test_target_coverage.py tests/test_final_coverage.py -v
+	$(RUN_CMD) $(PYTEST) tests/core/test_comprehensive_coverage.py tests/core/test_target_coverage.py tests/core/test_final_coverage.py -v
 
 test-memory:
 	@echo "$(BOLD)$(BLUE)Running memory tests...$(RESET)"
@@ -862,7 +862,7 @@ verify:
 	@$(RUN_CMD) bandit -r $(PACKAGE_NAME)/ -ll --skip B101,B601,B602,B607 || (echo "$(RED)Security scan failed!$(RESET)" && exit 1)
 	@echo ""
 	@echo "$(BOLD)Step 4/4: Full test suite$(RESET)"
-	@$(RUN_CMD) $(PYTEST) -n auto -m "not slow" || (echo "$(RED)Tests failed!$(RESET)" && exit 1)
+	@$(RUN_CMD) $(PYTEST) -m "not slow" || (echo "$(RED)Tests failed!$(RESET)" && exit 1)
 	@echo ""
 	@echo "$(BOLD)$(GREEN)======================================$(RESET)"
 	@echo "$(BOLD)$(GREEN)  ALL CHECKS PASSED - SAFE TO PUSH$(RESET)"
@@ -880,7 +880,7 @@ verify-fast:
 	@$(RUN_CMD) mypy $(PACKAGE_NAME) || (echo "$(RED)Type check failed!$(RESET)" && exit 1)
 	@echo ""
 	@echo "$(BOLD)Step 3/3: Fast tests$(RESET)"
-	@$(RUN_CMD) $(PYTEST) -n auto -m "not slow" -q || (echo "$(RED)Tests failed!$(RESET)" && exit 1)
+	@$(RUN_CMD) $(PYTEST) -m "not slow" -q || (echo "$(RED)Tests failed!$(RESET)" && exit 1)
 	@echo ""
 	@echo "$(BOLD)$(GREEN)======================================$(RESET)"
 	@echo "$(BOLD)$(GREEN)  QUICK CHECKS PASSED$(RESET)"

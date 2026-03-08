@@ -21,7 +21,7 @@ permissions:
   id-token: write  # Required for PyPI trusted publishing
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.13"
 
 jobs:
   # Validate Release
@@ -91,38 +91,37 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine check-wheel-contents
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Build distributions
-        run: python -m build
+        run: uv build
 
       - name: Check distributions
         run: |
-          twine check dist/*
-          check-wheel-contents dist/*.whl
+          uvx twine check dist/*
+          uvx check-wheel-contents dist/*.whl
 
       - name: Verify version in package
         run: |
-          pip install dist/*.whl
-          PACKAGE_VERSION=$(python -c "import nlsq; print(nlsq.__version__)")
+          uv venv /tmp/verify-env
+          VIRTUAL_ENV=/tmp/verify-env uv pip install dist/*.whl
+          PACKAGE_VERSION=$(/tmp/verify-env/bin/python -c "import nlsq; print(nlsq.__version__)")
           EXPECTED_VERSION="${{ needs.validate-release.outputs.version }}"
 
           echo "Package version: $PACKAGE_VERSION"
           echo "Expected version: $EXPECTED_VERSION"
 
           if [ "$PACKAGE_VERSION" != "$EXPECTED_VERSION" ]; then
-            echo "❌ Version mismatch!"
+            echo "Version mismatch!"
             exit 1
           fi
-          echo "✅ Version matches"
+          echo "Version matches"
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -139,10 +138,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Download distributions
         uses: actions/download-artifact@v4
@@ -151,11 +153,13 @@ jobs:
           path: dist/
 
       - name: Install from wheel
-        run: pip install dist/*.whl
+        run: |
+          uv venv
+          uv pip install dist/*.whl
 
       - name: Run smoke tests
         run: |
-          python -c "
+          uv run python -c "
           import nlsq
           import jax.numpy as jnp
           import numpy as np

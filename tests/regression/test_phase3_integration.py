@@ -476,9 +476,9 @@ class TestRealWorldScenarios:
         )
 
         result = curve_fit(
-            lambda t, A, gamma, omega, phi: A
-            * jnp.exp(-gamma * t)
-            * jnp.sin(omega * t + phi),
+            lambda t, A, gamma, omega, phi: (
+                A * jnp.exp(-gamma * t) * jnp.sin(omega * t + phi)
+            ),
             t,
             y,
             p0=[3, 0.1, 1.5, 0],  # Mediocre guess

@@ -1,20 +1,17 @@
 # Pre-commit configuration
-# Updated: 2026-01-27
+# Updated: 2026-03-07
 # Python 3.13, uv package manager
 # Aligned with pyproject.toml and uv.lock
 #
-# New modules (v0.3.0+):
-#   - adaptive_hybrid_streaming.py: 4-phase hybrid optimizer
-#   - hybrid_streaming_config.py: Configuration dataclasses
-#   - parameter_normalizer.py: Parameter normalization utilities
-#
-# New subpackage (v0.4.3+):
-#   - nlsq/diagnostics/: Model Health Diagnostics System
-#     - identifiability.py: FIM-based identifiability analysis
-#     - gradient_health.py: Gradient monitoring (vanishing, imbalance)
-#     - sloppy_model.py: Eigenvalue spectrum analysis
-#     - plugin.py: Domain-specific diagnostic extensions
-#     - health_report.py: Unified health report generation
+# Package structure (v0.6.4+):
+#   nlsq/core/          - Optimization pipeline (minpack, trf, least_squares)
+#   nlsq/streaming/     - Large dataset handling (large_dataset, adaptive_hybrid)
+#   nlsq/caching/       - Memory and JIT caching (smart_cache, memory_manager)
+#   nlsq/stability/     - Numerical stability (guard, svd_fallback, recovery)
+#   nlsq/precision/     - Precision controls (parameter_normalizer, algorithm_selector)
+#   nlsq/utils/         - Utilities (validators, diagnostics, logging)
+#   nlsq/diagnostics/   - Model Health Diagnostics System
+#   nlsq/gui_qt/        - Native Qt desktop application (PySide6)
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -42,7 +39,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14  # Aligned with local ruff 0.14.14 and pyproject.toml >=0.14.0
+    rev: v0.15.5  # Aligned with local ruff 0.15.5 and pyproject.toml >=0.14.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -60,12 +57,12 @@ repos:
         exclude: ^(tests/|examples/|benchmarks/)
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.36.1
+    rev: 0.37.0
     hooks:
       - id: check-github-workflows
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.2
     hooks:
       - id: codespell
         args: ['--skip=*.ipynb,*.html', '--ignore-words-list=nd,coo,assertIn,deques']
@@ -78,7 +75,7 @@ repos:
         exclude: ^(docs/archive/|benchmarks/docs/|examples/_templates/|PERFORMANCE_ANALYSIS\.md)
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.9.3  # Security linting (low-level checks only)
+    rev: 1.9.4  # Security linting (low-level checks only)
     hooks:
       - id: bandit
         args: ['-ll', '--skip=B101,B601,B602,B607']
