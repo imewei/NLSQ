@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 
 __all__ = [
     "DefenseLayerTelemetry",
@@ -65,8 +66,8 @@ class DefenseLayerTelemetry:
         self.lbfgs_line_search_failures: int = 0
 
         # Detailed event log (last N events)
-        self._event_log: list[dict] = []
         self._max_events: int = 1000
+        self._event_log: deque[dict] = deque(maxlen=self._max_events)
 
     def record_warmup_start(self) -> None:
         """Record start of a warmup phase."""
@@ -189,10 +190,6 @@ class DefenseLayerTelemetry:
         event = {"type": event_type, "timestamp": time.time(), "data": data}
         self._event_log.append(event)
 
-        # Trim if over limit
-        if len(self._event_log) > self._max_events:
-            self._event_log = self._event_log[-self._max_events :]
-
     def get_trigger_rates(self) -> dict[str, float]:
         """Get trigger rates as percentage of total warmup calls.
 
@@ -285,7 +282,7 @@ class DefenseLayerTelemetry:
         list[dict]
             Most recent events
         """
-        return self._event_log[-n:]
+        return list(self._event_log)[-n:]
 
     def export_metrics(self) -> dict:
         """Export metrics in a format suitable for monitoring systems.

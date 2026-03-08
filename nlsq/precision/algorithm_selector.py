@@ -168,7 +168,7 @@ class AlgorithmSelector:
             sig = signature(f)
             # Count parameters excluding x
             return len(sig.parameters) - 1
-        except Exception:
+        except (TypeError, ValueError):
             # Default guess
             return 3
 
@@ -188,6 +188,9 @@ class AlgorithmSelector:
             Data characteristics
         """
         results = {}
+
+        if len(ydata) == 0:
+            return {"outlier_fraction": 0.0, "has_outliers": False}
 
         # Check for outliers using IQR method
         q1, q3 = np.percentile(ydata, [25, 75])

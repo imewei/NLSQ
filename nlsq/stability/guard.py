@@ -592,8 +592,10 @@ class NumericalStabilityGuard:
                 shift = min_eigenvalue - min_eig + self.eps
                 H = H + shift * jnp.eye(n)
 
-        except Exception:
-            # Fallback: add small diagonal
+        except Exception as e:
+            warnings.warn(
+                f"regularize_hessian: eigendecomposition failed ({e}), applying fallback diagonal shift"
+            )
             H = H + min_eigenvalue * jnp.eye(n)
 
         return H

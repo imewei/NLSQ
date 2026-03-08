@@ -233,10 +233,13 @@ class CheckpointManager:
         opt_state_group.create_dataset("count", data=int(inner_state.count))
 
         if not hasattr(inner_state, "diff_params_memory"):
-            raise ValueError(
+            import logging
+
+            logging.getLogger(__name__).warning(
                 "Unsupported Phase 1 optimizer state for checkpointing. "
-                "Expected L-BFGS (ScaleByLBFGSState)."
+                "Expected L-BFGS (ScaleByLBFGSState). Skipping optimizer state."
             )
+            return
 
         opt_state_group.attrs["optimizer_type"] = "lbfgs"
         opt_state_group.create_dataset("params", data=inner_state.params)

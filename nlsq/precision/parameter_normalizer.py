@@ -129,6 +129,13 @@ class ParameterNormalizer:
         self.n_params = len(self.p0)
         self.original_bounds = bounds
 
+        # Validate strategy
+        valid_strategies = ("bounds", "p0", "none", "auto")
+        if strategy not in valid_strategies:
+            raise ValueError(
+                f"strategy must be one of {valid_strategies}, got: {strategy}"
+            )
+
         # Determine strategy
         if strategy == "auto":
             # Auto-select: use bounds if provided, else p0-based
@@ -138,13 +145,6 @@ class ParameterNormalizer:
                 self.strategy = "p0"
         else:
             self.strategy = strategy
-
-        # Validate strategy
-        valid_strategies = ("bounds", "p0", "none", "auto")
-        if strategy not in valid_strategies:
-            raise ValueError(
-                f"strategy must be one of {valid_strategies}, got: {strategy}"
-            )
 
         # Compute scales and offsets based on strategy
         self._compute_normalization_parameters()

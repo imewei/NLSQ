@@ -173,7 +173,7 @@ class AdaptiveHybridStreamingOptimizer:
         self.normalization_jacobian: jnp.ndarray | None = None
 
         # Store original model and parameters (for reference)
-        self.original_model: callable | None = None
+        self.original_model: Callable | None = None
         self.original_p0: jnp.ndarray | None = None
         self.original_bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None
 
@@ -222,12 +222,12 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Pre-compiled scan functions (set up in _setup_scan_functions)
         # Used for efficient chunk-based accumulation with JAX lax.scan
-        self._jtj_scan_body_compiled: Callable | None = None
-        self._cost_scan_body_compiled: Callable | None = None
+        self._jtj_scan_body_compiled: bool = False
+        self._cost_scan_body_compiled: bool = False
 
     def _setup_normalization(
         self,
-        model: callable,
+        model: Callable,
         p0: jnp.ndarray,
         bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     ) -> None:
@@ -240,7 +240,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         Parameters
         ----------
-        model : callable
+        model : Callable
             User model function with signature: ``model(x, *params) -> predictions``
         p0 : array_like
             Initial parameter guess of shape (n_params,)
@@ -1070,7 +1070,7 @@ class AdaptiveHybridStreamingOptimizer:
     def _run_tournament_selection(
         self,
         data_source: tuple[jnp.ndarray, jnp.ndarray],
-        model: callable,
+        model: Callable,
     ) -> jnp.ndarray:
         """Run tournament selection to find the best starting candidate.
 
@@ -1078,7 +1078,7 @@ class AdaptiveHybridStreamingOptimizer:
         ----------
         data_source : tuple
             Data as (x_data, y_data).
-        model : callable
+        model : Callable
             Model function.
 
         Returns
@@ -1277,7 +1277,7 @@ class AdaptiveHybridStreamingOptimizer:
             Current optimizer state
         optimizer : optax.GradientTransformationExtraArgs
             L-BFGS optimizer instance
-        loss_fn : callable
+        loss_fn : Callable
             Loss function
         x_batch : array_like
             Independent variable batch
@@ -1413,7 +1413,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         Returns
         -------
-        loss_fn : callable
+        loss_fn : Callable
             Loss function with signature: loss_fn(params, x_batch, y_batch) -> scalar_loss
             Operates in normalized parameter space and returns mean squared residuals.
 
@@ -1890,6 +1890,9 @@ class AdaptiveHybridStreamingOptimizer:
         if not self.config.enable_cost_guard or iteration <= 0:
             return False, None
 
+        if self._warmup_initial_loss == 0:
+            return False, None
+
         cost_increase_ratio = loss_value / self._warmup_initial_loss
         cost_threshold = 1.0 + self.config.cost_increase_tolerance
 
@@ -2029,7 +2032,7 @@ class AdaptiveHybridStreamingOptimizer:
         ----------
         data_source : various types
             Data source (tuple of arrays for now)
-        model : callable
+        model : Callable
             User model function
         p0 : array_like
             Initial parameter guess
@@ -3240,7 +3243,7 @@ class AdaptiveHybridStreamingOptimizer:
                     else new_cost + actual_reduction
                 )
                 prev_cost = new_cost
-                consecutive_rejections = 0  # Reset rejection counter on success
+                self._consecutive_rejections = 0  # Reset rejection counter on success
 
                 # Recompute J^T J at new params for Phase 3
                 # This ensures we have J^T J at the final parameters
@@ -4115,12 +4118,12 @@ class AdaptiveHybridStreamingOptimizer:
     def fit(
         self,
         data_source: Any,
-        func: callable,
+        func: Callable,
         p0: jnp.ndarray,
         bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
         sigma: jnp.ndarray | None = None,
         absolute_sigma: bool = False,
-        callback: callable | None = None,
+        callback: Callable | None = None,
         verbose: int = 1,
     ) -> dict[str, Any]:
         """Fit model parameters using four-phase hybrid optimization.
@@ -4138,7 +4141,7 @@ class AdaptiveHybridStreamingOptimizer:
             - Tuple of arrays: (x_data, y_data)
             - Generator yielding (x_batch, y_batch)
             - HDF5 file path with datasets
-        func : callable
+        func : Callable
             Model function with signature: ``func(x, *params) -> predictions``
         p0 : array_like
             Initial parameter guess of shape (n_params,)
@@ -4148,7 +4151,7 @@ class AdaptiveHybridStreamingOptimizer:
             Uncertainties in y_data for weighted least squares
         absolute_sigma : bool, default=False
             If True, sigma is used in absolute sense (pcov not scaled)
-        callback : callable, optional
+        callback : Callable, optional
             Callback with signature callback(params, loss, iteration)
             Called every config.callback_frequency iterations
         verbose : int, default=1

@@ -182,7 +182,7 @@ class GaussNewtonPhase:
         n_chunks = (n_points + chunk_size - 1) // chunk_size
         init_start_time = time.time()
         if verbose >= 1:
-            print(
+            _logger.info(
                 f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)..."
             )
 
@@ -201,14 +201,14 @@ class GaussNewtonPhase:
             ):
                 elapsed = time.time() - init_start_time
                 pct = (chunk_idx + 1) / n_chunks * 100
-                print(
+                _logger.info(
                     f"  Initial JTJ: {chunk_idx + 1}/{n_chunks} chunks "
                     f"({pct:.0f}%), elapsed={elapsed:.1f}s"
                 )
 
         if verbose >= 1:
             init_elapsed = time.time() - init_start_time
-            print(
+            _logger.info(
                 f"  Initial JTJ complete: cost={final_residual_sum_sq:.6e}, "
                 f"time={init_elapsed:.1f}s"
             )
@@ -239,7 +239,7 @@ class GaussNewtonPhase:
             # Progress logging
             if verbose >= 1 and (iteration + 1) % log_frequency == 0:
                 max_iter = self.config.gauss_newton_max_iterations
-                print(
+                _logger.info(
                     f"  GN iter {iteration + 1}/{max_iter}: "
                     f"cost={new_cost:.6e}, grad={gradient_norm:.6e}, "
                     f"red={actual_reduction:.6e}, Δ={trust_radius:.4f}, "
@@ -293,7 +293,7 @@ class GaussNewtonPhase:
                     trust_radius = self.config.trust_region_initial
                     self._consecutive_rejections = 0
                     if verbose >= 1:
-                        print(
+                        _logger.info(
                             f"  Stall detected: resetting trust radius to "
                             f"{trust_radius:.4f}"
                         )

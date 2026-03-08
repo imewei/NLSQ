@@ -178,10 +178,14 @@ class RobustDecomposition:
 
     def _jax_gpu_decomp(self, matrix: jnp.ndarray, decomp_type: str, *args):
         """Try decomposition on GPU using JAX."""
-        if not jax.devices("gpu"):
+        try:
+            gpu_devices = jax.devices("gpu")
+        except RuntimeError:
+            return None
+        if not gpu_devices:
             return None
 
-        gpu_device = jax.devices("gpu")[0]
+        gpu_device = gpu_devices[0]
         with jax.default_device(gpu_device):
             if decomp_type == "svd":
                 full_matrices = args[0] if args else False

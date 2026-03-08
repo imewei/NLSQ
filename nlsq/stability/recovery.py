@@ -55,6 +55,7 @@ class OptimizationRecovery:
         self.max_retries = max_retries
         self.enable_diagnostics = enable_diagnostics
 
+        self.diagnostics = None
         if enable_diagnostics:
             self.diagnostics = OptimizationDiagnostics()
 
@@ -118,7 +119,7 @@ class OptimizationRecovery:
 
                     # Check if recovery succeeded
                     if self._check_recovery_success(result):
-                        if self.enable_diagnostics:
+                        if self.enable_diagnostics and self.diagnostics is not None:
                             self.diagnostics.record_event(
                                 "recovery_success",
                                 {"strategy": strategy.__name__, "retry": retry},
@@ -130,7 +131,7 @@ class OptimizationRecovery:
                     continue
 
         # All recovery attempts failed
-        if self.enable_diagnostics:
+        if self.enable_diagnostics and self.diagnostics is not None:
             self.diagnostics.record_event(
                 "recovery_failed", {"attempts": self.max_retries * len(self.strategies)}
             )

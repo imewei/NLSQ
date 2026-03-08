@@ -97,7 +97,9 @@ class AlternativeMethodStrategy(FallbackStrategy):
             description="Try alternative optimization method",
             priority=10,  # High priority - cheap to try
         )
-        self.method_sequence = ["trf"]  # Currently only trf supported
+        # Placeholder: only "trf" is currently supported, so this strategy is a no-op
+        # when TRF is already in use. Extend method_sequence to add alternatives.
+        self.method_sequence = ["trf"]
         self.current_index = 0
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -128,9 +130,9 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
         p0 = np.array(modified.get("p0", [1.0]))
 
         if self.perturbation_count < self.max_perturbations:
-            # Add random noise scaled by parameter magnitude
+            # Add random noise scaled by parameter magnitude (additive for p0=0)
             noise = np.random.randn(*p0.shape) * self.perturbation_scale
-            perturbed_p0 = p0 * (1 + noise)
+            perturbed_p0 = p0 + noise * np.maximum(np.abs(p0), 1e-3)
 
             # Ensure p0 stays within bounds if provided
             bounds = modified.get("bounds", (-np.inf, np.inf))
