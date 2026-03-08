@@ -135,9 +135,11 @@ jobs:
           uvx bandit -r nlsq/ -c pyproject.toml -ll
 
       - name: Run pip-audit
+        shell: bash
         run: |
           uv pip list --format=json > requirements-all.json
-          uvx pip-audit --requirement <(uv pip freeze) --desc || true
+          uv pip freeze > /tmp/requirements-frozen.txt
+          uvx pip-audit --requirement /tmp/requirements-frozen.txt --desc || true
 
       - name: Upload security reports
         if: always()
@@ -170,11 +172,21 @@ jobs:
         run: uv sync
 
       - name: Validate notebook structure
+        shell: bash
         run: |
-          uv run python -m nbformat.validator examples/**/*.ipynb
+          shopt -s globstar
+          notebooks=(examples/**/*.ipynb)
+          echo "Found ${#notebooks[@]} notebooks"
+          if [ ${#notebooks[@]} -eq 0 ]; then
+            echo "::error::No notebooks found - check glob pattern"
+            exit 1
+          fi
+          uv run python -m nbformat.validator "${notebooks[@]}"
 
       - name: Execute notebooks
+        shell: bash
         run: |
+          shopt -s globstar
           for notebook in examples/**/*.ipynb; do
             echo "Executing $notebook..."
             uv run jupyter nbconvert --to notebook --execute \
@@ -320,17 +332,16 @@ jobs:
         working-directory: docs
         run: |
           uv run make clean
-          uv run make html SPHINXOPTS="--keep-going -n"
+          uv run make html SPHINXOPTS="--keep-going -n" 2>&1 | tee sphinx-output.log
 
       - name: Check for warnings
         id: check-warnings
         working-directory: docs
         run: |
-          warnings=$(uv run make html 2>&1 | grep -c "WARNING" || echo "0")
-          warnings_count=$(echo "$warnings" | tr -cd '0-9')
-          echo "warnings=${warnings_count:-0}" >> $GITHUB_OUTPUT
+          warnings_count=$(grep -c "WARNING" sphinx-output.log || echo "0")
+          echo "warnings=${warnings_count}" >> $GITHUB_OUTPUT
 
-          if [ "${warnings_count:-0}" -gt 0 ]; then
+          if [ "$warnings_count" -gt 0 ]; then
             echo "::warning::Found ${warnings_count} Sphinx warnings"
           fi
 
@@ -363,6 +374,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Qt system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -381,9 +398,11 @@ jobs:
         shell: bash
         run: |
           wheel_file=$(ls dist/*.whl | head -n 1)
-          # Create virtual environment and install wheel + test dependencies
+          # Create virtual environment and install wheel
+          # All test dependencies (pytest, hypothesis, etc.) are included
+          # in the package's main dependencies
           uv venv
-          uv pip install "$wheel_file" pytest pytest-cov pytest-xdist hypothesis pytest-benchmark nbformat pyyaml nbclient jupyter_client ipykernel pytest-rerunfailures
+          uv pip install "$wheel_file"
 
       - name: Run integration tests
         shell: bash
@@ -397,8 +416,9 @@ jobs:
       - name: Verify installation
         shell: bash
         run: |
-          uv run python -c "import nlsq; print(f'NLSQ version: {nlsq.__version__}')"
-          uv run python -c "from nlsq import curve_fit; print('Import successful')"
+          source .venv/bin/activate || . .venv/Scripts/activate
+          python -c "import nlsq; print(f'NLSQ version: {nlsq.__version__}')"
+          python -c "from nlsq import curve_fit; print('Import successful')"
 
   # ============================================================================
   # WAVE 6: Final Summary

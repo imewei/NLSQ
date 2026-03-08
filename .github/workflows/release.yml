@@ -20,6 +20,10 @@ permissions:
   contents: write
   id-token: write  # Required for PyPI trusted publishing
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false  # Never cancel in-progress releases
+
 env:
   PYTHON_VERSION: "3.13"
 
@@ -158,8 +162,10 @@ jobs:
           uv pip install dist/*.whl
 
       - name: Run smoke tests
+        shell: bash
         run: |
-          uv run python -c "
+          source .venv/bin/activate || . .venv/Scripts/activate
+          python -c "
           import nlsq
           import jax.numpy as jnp
           import numpy as np

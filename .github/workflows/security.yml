@@ -17,6 +17,10 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PYTHON_VERSION: "3.13"
 
@@ -39,16 +43,15 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Install pip-audit
-        run: uv pip install pip-audit
-
       - name: Run pip-audit
+        shell: bash
         run: |
           echo "## Dependency Security Audit" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          uv pip freeze > /tmp/requirements-frozen.txt
           # Ignore CVE-2025-53000 (nbconvert) - no fix available, documented in CHANGELOG.md
           # Ignore CVE-2026-0994 (protobuf) - no fix available in v6.33.4, required by orbax
-          uv run pip-audit --format markdown --ignore-vuln CVE-2025-53000 --ignore-vuln CVE-2026-0994 >> $GITHUB_STEP_SUMMARY 2>&1 || {
+          uvx pip-audit --requirement /tmp/requirements-frozen.txt --format markdown --ignore-vuln CVE-2025-53000 --ignore-vuln CVE-2026-0994 >> $GITHUB_STEP_SUMMARY 2>&1 || {
             EXIT_CODE=$?
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Vulnerabilities found!** See details above." >> $GITHUB_STEP_SUMMARY
@@ -59,10 +62,12 @@ jobs:
 
       - name: Run pip-audit (JSON for artifacts)
         if: always()
+        shell: bash
         run: |
           # Ignore CVE-2025-53000 (nbconvert) - no fix available
           # Ignore CVE-2026-0994 (protobuf) - no fix available
-          uv run pip-audit --format json --ignore-vuln CVE-2025-53000 --ignore-vuln CVE-2026-0994 --output audit-report.json || true
+          uv pip freeze > /tmp/requirements-frozen.txt
+          uvx pip-audit --requirement /tmp/requirements-frozen.txt --format json --ignore-vuln CVE-2025-53000 --ignore-vuln CVE-2026-0994 --output audit-report.json || true
 
       - name: Upload audit report
         if: always()
