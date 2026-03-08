@@ -1,5 +1,7 @@
 """Central configuration management for NLSQ package."""
 
+from __future__ import annotations
+
 import copy
 import json
 import logging
@@ -8,7 +10,6 @@ import threading
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass(slots=True)
@@ -19,9 +20,9 @@ class MemoryConfig:
     ----------
     memory_limit_gb : float
         Maximum memory limit in GB (default: 8.0)
-    gpu_memory_fraction : Optional[float]
+    gpu_memory_fraction : float | None
         Fraction of GPU memory to use (0.0-1.0, None for automatic)
-    chunk_size_mb : Optional[int]
+    chunk_size_mb : int | None
         Default chunk size in MB for data processing
     out_of_memory_strategy : str
         Strategy when out of memory: 'fallback', 'reduce', 'error'
@@ -112,7 +113,7 @@ class JAXConfig:
     manages memory settings and large dataset configuration.
     """
 
-    _instance: Optional["JAXConfig"] = None
+    _instance: JAXConfig | None = None
     _lock: threading.RLock = threading.RLock()
     _x64_enabled: bool = False
     _initialized: bool = False
@@ -120,7 +121,7 @@ class JAXConfig:
     _large_dataset_config: LargeDatasetConfig | None = None
     _gpu_memory_configured: bool = False
 
-    def __new__(cls) -> "JAXConfig":
+    def __new__(cls) -> JAXConfig:
         """Ensure singleton pattern (thread-safe)."""
         with cls._lock:
             if cls._instance is None:
@@ -457,7 +458,8 @@ class JAXConfig:
         >>> # Back to previous memory settings
         """
         instance = cls()
-        original_config = instance._memory_config
+        with cls._lock:
+            original_config = copy.deepcopy(instance._memory_config)
 
         try:
             cls.set_memory_config(memory_config)
@@ -480,7 +482,8 @@ class JAXConfig:
             Temporary large dataset configuration
         """
         instance = cls()
-        original_config = instance._large_dataset_config
+        with cls._lock:
+            original_config = copy.deepcopy(instance._large_dataset_config)
 
         try:
             cls.set_large_dataset_config(large_dataset_config)

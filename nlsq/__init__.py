@@ -252,9 +252,8 @@ def __getattr__(name: str) -> Any:
 
             module = importlib.import_module(module_path)
             attr = getattr(module, name)
-            # Cache for future access
-            _LAZY_CACHE[name] = attr
-            return attr
+            # Cache for future access (setdefault is atomic under GIL)
+            return _LAZY_CACHE.setdefault(name, attr)
         except ImportError as e:
             # Handle missing optional dependencies gracefully
             raise ImportError(
@@ -834,8 +833,6 @@ def curve_fit_large(
     >>> result = fitter.fit(model_func, xdata, ydata, p0=[1, 2])
     >>> # Chunk failures now appear in myapp's logs
     """
-    import numpy as np
-
     # Handle global_search shorthand
     if global_search:
         multistart = True

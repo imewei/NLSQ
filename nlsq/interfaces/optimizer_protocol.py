@@ -120,7 +120,7 @@ class CurveFitProtocol(Protocol):
         sigma: np.ndarray | None = None,
         bounds: tuple[np.ndarray, np.ndarray] | None = None,
         **kwargs: Any,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray] | Any:
         """Fit a function to data.
 
         Parameters

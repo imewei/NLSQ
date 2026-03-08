@@ -77,6 +77,9 @@ def _format_kwargs(kwargs: dict[str, Any]) -> str:
                 parts.append(f"{k}={v:.4e}")
             else:
                 parts.append(f"{k}={v:.4f}")
+        elif isinstance(v, np.floating):
+            fv = float(v)
+            parts.append(f"{k}={fv:.6g}")
         elif isinstance(v, (list, tuple)) and len(v) > 5:
             parts.append(f"{k}=[{len(v)} items]")
         elif isinstance(v, np.ndarray):
@@ -705,6 +708,10 @@ def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
         return _loggers[name]
     with _loggers_lock:
         if name not in _loggers:  # Double-check under lock
+            if len(_loggers) >= 1000:
+                # Safety cap: evict all entries if an unexpectedly large number of
+                # distinct logger names accumulates (e.g. dynamic name generation).
+                _loggers.clear()
             _loggers[name] = NLSQLogger(name, level)
         return _loggers[name]
 

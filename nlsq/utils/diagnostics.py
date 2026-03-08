@@ -261,13 +261,11 @@ class OptimizationDiagnostics:
     - Numerical stability indicators
     """
 
-    def __init__(self, enable_plotting: bool = False, verbosity: int = 1):
+    def __init__(self, verbosity: int = 1):
         """Initialize diagnostics system.
 
         Parameters
         ----------
-        enable_plotting : bool
-            Whether to enable real-time plotting (requires matplotlib)
         verbosity : int
             Verbosity level:
             - 0: Minimal diagnostics (no condition number computation)
@@ -277,7 +275,6 @@ class OptimizationDiagnostics:
         self.iteration_data: deque[dict[str, Any]] = deque(maxlen=10_000)
         self.convergence_monitor = ConvergenceMonitor()
         self.start_time: float | None = None
-        self.enable_plotting = enable_plotting
         self.verbosity = verbosity
 
         # Problem detection

@@ -325,6 +325,9 @@ class EarlyStopping(CallbackBase):
         info: dict[str, Any],
     ) -> None:
         """Check for improvement and stop if patience exceeded."""
+        # NaN cost must not count as improvement or patience increment
+        if not np.isfinite(cost):
+            return
         # Check if we have improvement
         if cost < self.best_cost - self.min_delta:
             self.best_cost = cost

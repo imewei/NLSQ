@@ -487,6 +487,7 @@ class AuditLogger:
 
 # Global audit logger instance
 _audit_logger: AuditLogger | None = None
+_audit_logger_lock = threading.Lock()
 
 
 def get_audit_logger() -> AuditLogger:
@@ -499,5 +500,7 @@ def get_audit_logger() -> AuditLogger:
     """
     global _audit_logger  # noqa: PLW0603 - singleton pattern
     if _audit_logger is None:
-        _audit_logger = AuditLogger()
+        with _audit_logger_lock:
+            if _audit_logger is None:
+                _audit_logger = AuditLogger()
     return _audit_logger

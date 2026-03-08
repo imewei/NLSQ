@@ -15,7 +15,7 @@ imported without JAX being available.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, TypedDict, Union
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, TypedDict
 
 import numpy as np
 
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 else:
     # Runtime definitions - avoid JAX import
     # Use Any as a stand-in for jax.numpy.ndarray
-    ArrayLike: TypeAlias = Union[np.ndarray, Any, list, tuple]
+    ArrayLike: TypeAlias = np.ndarray | Any | list | tuple
     JAXArray: TypeAlias = Any
 
 # NumPy array of floating point numbers.

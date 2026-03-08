@@ -217,15 +217,6 @@ class ModelRegistry:
             self._builtin_cache[model_name] = model
             return model
 
-        # Verify it has the expected methods (estimate_p0, bounds)
-        if not hasattr(model, "estimate_p0"):
-            # This shouldn't happen for builtin models, but log a warning
-            pass
-
-        if not hasattr(model, "bounds"):
-            # This shouldn't happen for builtin models
-            pass
-
         # Cache and return
         self._builtin_cache[model_name] = model
         return model
