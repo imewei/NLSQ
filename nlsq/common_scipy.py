@@ -38,7 +38,7 @@ def intersect_trust_region(x, s, Delta):
     b = np.dot(x, s)
 
     c = np.dot(x, x) - Delta**2
-    if c > 0:
+    if c >= 0:
         raise ValueError("`x` is not within the trust region.")
 
     d = np.sqrt(b * b - a * c)  # Root from one fourth of the discriminant.
@@ -545,11 +545,12 @@ def print_iteration_nonlinear(
 def print_header_linear():
     """Print column headers for linear optimization progress display."""
     logger.info(
-        "{:^15}{:^15}{:^15}{:^15}".format(
+        "{:^15}{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
             "Cost",
             "Cost reduction",
             "Step norm",
+            "Optimality",
         )
     )
 
@@ -560,75 +561,9 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimalit
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
-    logger.info(f"{iteration:^15}{cost:^15.4e}{cost_reduction}{step_norm}")
-
-
-# Simple helper functions.
-
-
-#     if scale_inv_old is None:
-#         scale_inv[scale_inv == 0] = 1
-#     else:
-#         scale_inv = np.maximum(scale_inv, scale_inv_old)
-
-#     return 1 / scale_inv, scale_inv
-
-
-#     def matvec(x):
-#         return d * J.matvec(x)
-
-#     def matmat(X):
-#         return d[:, np.newaxis] * J.matmat(X)
-
-#     def rmatvec(x):
-#         return J.rmatvec(x.ravel() * d)
-
-#     return LinearOperator(J.shape, matvec=matvec, matmat=matmat,
-#                           rmatvec=rmatvec)
-
-
-#     def matvec(x):
-#         return J.matvec(np.ravel(x) * d)
-
-#     def matmat(X):
-#         return J.matmat(X * d[:, np.newaxis])
-
-#     def rmatvec(x):
-#         return d * J.rmatvec(x)
-
-#     return LinearOperator(J.shape, matvec=matvec, matmat=matmat,
-#                           rmatvec=rmatvec)
-
-
-#     def matvec(x):
-#         return np.hstack((J.matvec(x), diag * x))
-
-#     def rmatvec(x):
-#         x1 = x[:m]
-#         x2 = x[m:]
-#         return J.rmatvec(x1) + diag * x2
-
-#     return LinearOperator((m + n, n), matvec=matvec, rmatvec=rmatvec)
-
-
-#     if issparse(J):
-#         J.data *= d.take(J.indices, mode='clip')  # scikit-learn recipe.
-#     elif isinstance(J, LinearOperator):
-#         J = right_multiplied_operator(J, d)
-#     else:
-#         J *= d
-
-#     return J
-
-
-#     if issparse(J):
-#         J.data *= np.repeat(d, np.diff(J.indptr))  # scikit-learn recipe.
-#     elif isinstance(J, LinearOperator):
-#         J = left_multiplied_operator(J, d)
-#     else:
-#         J *= d[:, np.newaxis]
-
-#     return J
+    logger.info(
+        f"{iteration:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}"
+    )
 
 
 def check_termination(dF, F, dx_norm, x_norm, ratio, ftol, xtol):
@@ -644,8 +579,3 @@ def check_termination(dF, F, dx_norm, x_norm, ratio, ftol, xtol):
         return 3
     else:
         return None
-
-
-#     f *= rho[1] / J_scale
-
-#     return left_multiply(J, J_scale, copy=False), f

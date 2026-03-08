@@ -215,8 +215,9 @@ class LossFunctionsJIT:
 
         @jit
         def huber2(z, mask):
-            rho1 = jnp.where(mask, 1, z**-0.5)
-            rho2 = jnp.where(mask, 0, -0.5 * z**-1.5)
+            safe_z = jnp.where(mask, 1.0, z)
+            rho1 = jnp.where(mask, 1, safe_z**-0.5)
+            rho2 = jnp.where(mask, 0, -0.5 * safe_z**-1.5)
             return rho1, rho2
 
         self.huber1 = huber1

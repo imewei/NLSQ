@@ -881,7 +881,7 @@ def intersect_trust_region_jax(
     d = jnp.sqrt(jnp.maximum(b * b - a * c, 0.0))
 
     # Avoid loss of significance (Numerical Recipes)
-    q = -(b + jnp.sign(b) * d)
+    q = -(b + jnp.where(b != 0, jnp.sign(b), 1.0) * d)
     # Guard against a == 0 or q == 0
     t1 = jnp.where(a != 0, q / jnp.where(a != 0, a, 1.0), 0.0)
     t2 = jnp.where(q != 0, c / jnp.where(q != 0, q, 1.0), 0.0)

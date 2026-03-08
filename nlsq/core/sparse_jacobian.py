@@ -111,11 +111,12 @@ class SparseJacobianComputer:
 
         for i in range(n_params):
             # OPT-6: Use JAX functional update instead of copy + mutate
-            x_perturb = jnp.asarray(x0).at[i].add(eps)
+            step = eps * max(1.0, abs(float(x0[i])))
+            x_perturb = jnp.asarray(x0).at[i].add(step)
             f_perturb = func(xdata_sliced, *x_perturb)
 
             # Compute finite difference
-            jac_col = (f_perturb - f0) / eps
+            jac_col = (f_perturb - f0) / step
 
             # Mark non-zero elements
             pattern[:, i] = np.abs(jac_col) > self.sparsity_threshold
@@ -275,13 +276,14 @@ class SparseJacobianComputer:
         # Compute finite differences
         for j in range(n_params):
             # OPT-6: Use JAX functional update instead of copy + mutate
-            x_perturb = jnp.asarray(x).at[j].add(eps)
+            step = eps * max(1.0, abs(float(x[j])))
+            x_perturb = jnp.asarray(x).at[j].add(step)
 
             f_perturb = func(xdata, *x_perturb)
             f_perturb = f_perturb - ydata
             f_perturb = np.where(data_mask, f_perturb, 0)
 
-            J[:, j] = (f_perturb - f0) / eps
+            J[:, j] = (f_perturb - f0) / step
 
         return J
 

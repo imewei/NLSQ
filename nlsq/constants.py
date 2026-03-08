@@ -96,6 +96,8 @@ TERMINATION_FTOL = 2  # Function tolerance satisfied
 
 TERMINATION_XTOL = 3  # Parameter tolerance satisfied
 
+TERMINATION_FTOL_AND_XTOL = 4  # Both ftol and xtol satisfied
+
 TERMINATION_MAX_NFEV = 0  # Maximum function evaluations reached
 
 # =============================================================================

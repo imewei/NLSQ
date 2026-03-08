@@ -17,6 +17,9 @@ from jax.numpy.linalg import cholesky as jax_cholesky
 from jax.numpy.linalg import svd as jax_svd
 
 from nlsq.interfaces.orchestration_protocol import CovarianceResult
+from nlsq.utils.logging import get_logger
+
+_logger = get_logger("covariance_computer")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -331,7 +334,10 @@ class CovarianceComputer:
                         )
                         raise ValueError(msg) from e
                 except (np.linalg.LinAlgError, ValueError):
-                    pass  # eigenvalue analysis failed; fall through to generic error
+                    _logger.logger.warning(
+                        "Eigenvalue analysis of sigma failed", exc_info=True
+                    )
+                    # fall through to generic error
                 msg = (
                     "Failed to compute Cholesky decomposition of `sigma`. "
                     "The covariance matrix must be symmetric and positive definite."

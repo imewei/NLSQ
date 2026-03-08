@@ -45,6 +45,7 @@ See Also:
 
 from __future__ import annotations
 
+import logging
 import time
 import warnings
 from collections.abc import Callable
@@ -83,17 +84,6 @@ from nlsq.types import ArrayLike, ModelFunction
 from nlsq.utils.error_messages import OptimizationError
 from nlsq.utils.logging import get_logger
 from nlsq.utils.validators import InputValidator
-
-# Feature flags for component extraction (lazy import to avoid circular deps)
-# from nlsq.core.feature_flags import get_feature_flags  # Imported at function level
-
-# Lazy imports: these are imported at function level to reduce module dependencies
-# from nlsq.diagnostics.types import DiagnosticsReport
-# from nlsq.precision.algorithm_selector import auto_select_algorithm
-# from nlsq.precision.parameter_estimation import estimate_initial_parameters
-# from nlsq.stability.guard import NumericalStabilityGuard
-# from nlsq.stability.recovery import OptimizationRecovery
-# from nlsq.utils.diagnostics import OptimizationDiagnostics
 
 __all__ = ["CurveFit", "curve_fit", "fit"]
 
@@ -461,7 +451,7 @@ def fit(  # noqa: C901
             except Exception as e:
                 # Log debug warning but continue to fallback.
                 # Note: We don't want to crash here if estimation fails, just fallback.
-                if "_logger" in globals():
+                if _logger.logger.isEnabledFor(logging.DEBUG):
                     _logger.debug(f"Automatic p0 estimation failed: {e}")
 
         if not estimated_success:
@@ -2885,7 +2875,7 @@ class CurveFit:
         # define transform = L such that L L^T = C
         elif sigma.shape == (ysize, ysize):
             try:
-                if len_diff >= 0:
+                if len_diff > 0:
                     sigma_padded = np.identity(m + len_diff)
                     sigma_padded[:m, :m] = sigma
                     sigma = sigma_padded
@@ -2947,18 +2937,16 @@ class CurveFit:
         outputs = self.covariance_svd(res.jac)
         # Convert JAX arrays to NumPy more efficiently using np.asarray
         s, VT = (np.asarray(output) for output in outputs)
+        if len(s) == 0:
+            n_params = res.jac.shape[1]
+            return np.full((n_params, n_params), np.inf), True
         threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
         s = s[s > threshold]
         VT = VT[: s.size]
         pcov = np.dot(VT.T / s**2, VT)
 
         warn_cov = False
-        if pcov is None:
-            # indeterminate covariance
-            pcov = np.zeros((len(res.x), len(res.x)), dtype=float)
-            pcov.fill(np.inf)
-            warn_cov = True
-        elif not absolute_sigma:
+        if not absolute_sigma:
             if ysize > p0.size:
                 s_sq = cost / (ysize - p0.size)
                 pcov = pcov * s_sq

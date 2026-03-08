@@ -99,7 +99,6 @@ from collections.abc import Callable
 
 import numpy as np
 
-# REMOVED: from numpy.linalg import norm  # Use JAX norm (jnorm) instead
 # Initialize JAX configuration through central config
 from nlsq.config import JAXConfig
 
@@ -146,7 +145,6 @@ from nlsq.common_scipy import (
     check_termination,
     find_active_constraints,
     in_bounds,
-    intersect_trust_region,
     minimize_quadratic_1d,
     print_header_nonlinear,
     print_iteration_nonlinear,
@@ -514,7 +512,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         diagnostics: OptimizationDiagnostics | None = None,
         callback: Callable | None = None,
         **kwargs,
-    ) -> dict:
+    ) -> OptimizeResult:
         """Minimize a scalar function of one or more variables using the
         trust-region reflective algorithm. Although I think this is not good
         coding style, I maintained the original code format from SciPy such
@@ -1026,6 +1024,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         max_inner_iterations = 100
         termination_status = None
         step_norm = 0
+        x_new = x
+        f_new = f
+        cost_new = cost
 
         while (
             actual_reduction <= 0
@@ -1097,7 +1098,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 termination_status = term_code_int
                 break
 
-            alpha *= Delta / Delta_new
+            if Delta_new > 0:
+                alpha *= Delta / Delta_new
             Delta = Delta_new
 
             # Exit inner loop if we have a successful step
@@ -1114,7 +1116,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             termination_status = -3  # Inner loop limit exceeded
 
         # Prepare result
-        result = {
+        result: dict[str, Any] = {
             "accepted": actual_reduction > 0,
             "actual_reduction": actual_reduction,
             "step_norm": step_norm if actual_reduction > 0 else 0,
@@ -1486,6 +1488,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         max_inner_iterations = 100
         termination_status = None
         step_norm = 0
+        x_new = x
+        f_new = f
+        cost_new = cost
 
         while (
             actual_reduction <= 0
@@ -1558,7 +1563,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 termination_status = term_code_int
                 break
 
-            alpha *= Delta / Delta_new
+            if Delta_new > 0:
+                alpha *= Delta / Delta_new
             Delta = Delta_new
 
         # Check inner loop limit
@@ -1714,7 +1720,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         callback: Callable | None = None,
         profiler: TRFProfiler | NullProfiler | None = None,
         **kwargs,
-    ) -> dict:
+    ) -> OptimizeResult:
         """Unbounded version of the trust-region reflective algorithm.
 
         Parameters
@@ -1814,7 +1820,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         J = state["J"]
         cost = state["cost"]
         g = state["g"]
-        g_jnp = g  # Keep as JAX array for performance
         scale = state["scale"]
         scale_inv = state["scale_inv"]
         Delta = state["Delta"]
@@ -1955,7 +1960,6 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     J = step_update["J"]
                     cost = step_update["cost"]
                     g = step_update["g"]
-                    g_jnp = g
                     njev = step_update["njev"]
                     if "scale" in step_update:
                         scale = step_update["scale"]
@@ -2029,7 +2033,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         solver: str = "exact",
         callback: Callable | None = None,
         **kwargs,
-    ) -> dict:
+    ) -> OptimizeResult:
         """Bounded version of the trust-region reflective algorithm.
 
         Parameters
@@ -2436,7 +2440,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         ag_h = -g_h
         ag = d_jnp * ag_h
 
-        to_tr = float(Delta / jnorm(ag_h))
+        ag_h_norm = jnorm(ag_h)
+        to_tr = float(Delta / ag_h_norm) if float(ag_h_norm) > 0 else 1.0
         to_bound_jax, _ = step_size_to_bound_jax(x_jnp, ag, lb_j, ub_j)
         to_bound = float(to_bound_jax)
         ag_stride = theta * to_bound if to_bound < to_tr else to_tr

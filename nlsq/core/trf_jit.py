@@ -308,13 +308,13 @@ class TrustRegionJITFunctions:
                 Ap = JTJp + alpha * p
 
                 # Step size with numerical stability
+                # When pAp <= 0 (negative curvature), use a large step to hit
+                # the trust region boundary (which clips in the outer solver)
                 pAp = jnp.dot(p, Ap)
-                pAp = jnp.where(
-                    jnp.abs(pAp) < NUMERICAL_ZERO_THRESHOLD,
-                    NUMERICAL_ZERO_THRESHOLD,
-                    pAp,
+                safe_pAp = jnp.where(
+                    pAp > NUMERICAL_ZERO_THRESHOLD, pAp, NUMERICAL_ZERO_THRESHOLD
                 )
-                alpha_cg = rsold / pAp
+                alpha_cg = rsold / safe_pAp
 
                 # Update solution and residual
                 x_new = x + alpha_cg * p
