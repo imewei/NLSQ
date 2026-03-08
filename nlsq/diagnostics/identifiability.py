@@ -14,6 +14,7 @@ The analyzer generates actionable issues:
 - CORR-001: Highly correlated parameters
 """
 
+import logging
 import time
 
 import numpy as np
@@ -27,6 +28,8 @@ from nlsq.diagnostics.types import (
     IssueSeverity,
     ModelHealthIssue,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class IdentifiabilityAnalyzer:
@@ -374,6 +377,7 @@ class IdentifiabilityAnalyzer:
             return correlation
 
         except Exception:
+            _logger.warning("Correlation matrix computation failed", exc_info=True)
             return None
 
     def _detect_highly_correlated_pairs(

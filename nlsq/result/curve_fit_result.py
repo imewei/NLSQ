@@ -300,7 +300,7 @@ class CurveFitResult(OptimizeResult):
         ss_res = np.sum(self.residuals**2)
         ss_tot = np.sum((y - np.mean(y)) ** 2)
 
-        if not np.isfinite(ss_tot) or ss_tot == 0:
+        if not np.isfinite(ss_tot) or ss_tot < np.finfo(float).tiny:
             warnings.warn(
                 "Total sum of squares is zero or NaN (constant/NaN data). R² undefined."
             )
@@ -470,6 +470,13 @@ class CurveFitResult(OptimizeResult):
         p = len(self.popt)
 
         # Degrees of freedom
+        if n <= p:
+            warnings.warn(
+                f"Underdetermined fit: {n} data points and {p} parameters. "
+                "Confidence intervals are unreliable (dof forced to 1).",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         dof = max(n - p, 1)
 
         # t-value for confidence level
@@ -719,7 +726,11 @@ class CurveFitResult(OptimizeResult):
                     x_dense, lower, upper, color=fit_color, alpha=0.2, label="95% CI"
                 )
             except Exception:
-                pass  # Fail gracefully if band calculation fails
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Confidence band calculation failed", exc_info=True
+                )
 
         # Plot fitted curve
         ax1.plot(

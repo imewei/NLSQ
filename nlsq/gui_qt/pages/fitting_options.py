@@ -75,7 +75,7 @@ class FitWorker(QObject):
                 self.finished.emit(result)
 
         except Exception as e:
-            self.error.emit(str(e))
+            self.error.emit(f"{type(e).__name__}: {e}")
 
     def abort(self) -> None:
         """Request abort of the fit."""
@@ -409,6 +409,8 @@ class FittingOptionsPage(QWidget):
             message: Error message
         """
         self._set_running_state(False)
+
+        self._app_state.set_fit_running(False)
 
         if "aborted" in message.lower():
             self._status_label.setText("Fit aborted")

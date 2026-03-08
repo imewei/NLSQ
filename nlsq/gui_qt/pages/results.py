@@ -357,6 +357,9 @@ class ResultsPage(QWidget):
                 f"Figures exported to:\n{output_dir}\n\nGenerated {len(paths)} files.",
             )
         except Exception as e:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning("Export failed", exc_info=True)
             QMessageBox.critical(self, "Export Failed", f"An error occurred:\n{e!s}")
 
     def _get_param_names(self) -> list[str]:
@@ -405,7 +408,11 @@ class ResultsPage(QWidget):
         # R² (coefficient of determination)
         ss_res = np.sum(residuals**2)
         ss_tot = np.sum((ydata - np.mean(ydata)) ** 2)
-        r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+        r_squared = (
+            1.0 - (ss_res / ss_tot)
+            if (np.isfinite(ss_tot) and ss_tot >= np.finfo(float).tiny)
+            else 0.0
+        )
 
         # RMSE (root mean square error)
         rmse = np.sqrt(np.mean(residuals**2))

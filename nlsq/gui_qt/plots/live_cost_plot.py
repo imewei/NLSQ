@@ -6,6 +6,7 @@ This widget displays a real-time plot of the cost function during fitting.
 
 from __future__ import annotations
 
+from collections import deque
 from typing import TYPE_CHECKING
 
 import pyqtgraph as pg
@@ -34,8 +35,8 @@ class LiveCostPlotWidget(QWidget):
         """
         super().__init__(parent)
         self._max_points: int = 10_000  # cap to prevent unbounded growth
-        self._iterations: list[int] = []
-        self._costs: list[float] = []
+        self._iterations: deque[int] = deque(maxlen=self._max_points)
+        self._costs: deque[float] = deque(maxlen=self._max_points)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -76,21 +77,16 @@ class LiveCostPlotWidget(QWidget):
         self._iterations.append(iteration)
         self._costs.append(cost)
 
-        # Enforce cap to prevent unbounded growth during long fits
-        if len(self._iterations) > self._max_points:
-            self._iterations = self._iterations[-self._max_points :]
-            self._costs = self._costs[-self._max_points :]
-
         # Update plot
-        self._line.setData(self._iterations, self._costs)
+        self._line.setData(list(self._iterations), list(self._costs))
 
         # Auto-range on new data
         self._plot_widget.enableAutoRange()
 
     def reset(self) -> None:
         """Reset the plot to empty state."""
-        self._iterations = []
-        self._costs = []
+        self._iterations.clear()
+        self._costs.clear()
         self._line.setData([], [])
 
     def set_log_scale(self, enabled: bool) -> None:

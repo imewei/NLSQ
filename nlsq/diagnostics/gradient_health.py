@@ -328,30 +328,17 @@ class GradientMonitor:
                 # Direct gradient available
                 gradient = np.asarray(info["gradient"])
             elif info is not None and "gradient_norm" in info:
-                # Only gradient norm available - estimate gradient direction
-                # from parameter changes
+                # Only gradient norm available — do not estimate per-component
+                # direction from parameter steps (step direction != gradient
+                # direction for trust-region methods).  Use a uniform proxy
+                # that preserves the norm without fabricating component ratios.
                 gradient_norm = info["gradient_norm"]
-                if self._last_params is not None and gradient_norm > 0:
-                    # Estimate gradient direction from parameter change
-                    delta_params = params - self._last_params
-                    delta_norm = np.linalg.norm(delta_params)
-                    if delta_norm > 0:
-                        # Scale to match gradient norm (rough estimate)
-                        gradient = -delta_params * (gradient_norm / delta_norm)
-                    else:
-                        # No parameter change - use uniform gradient
-                        n_params = len(params)
-                        gradient = np.ones(n_params) * (
-                            gradient_norm / np.sqrt(n_params)
-                        )
-                else:
-                    # First iteration or no norm - use uniform gradient
-                    n_params = len(params)
-                    gradient = (
-                        np.ones(n_params) * (gradient_norm / np.sqrt(n_params))
-                        if gradient_norm > 0
-                        else np.ones(n_params)
-                    )
+                n_params = len(params)
+                gradient = (
+                    np.ones(n_params) * (gradient_norm / np.sqrt(n_params))
+                    if gradient_norm > 0
+                    else np.ones(n_params)
+                )
             # No gradient info - estimate from parameters
             elif self._last_params is not None:
                 gradient = -(params - self._last_params)

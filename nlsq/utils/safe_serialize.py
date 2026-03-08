@@ -153,6 +153,9 @@ def _convert_from_serializable(obj: Any) -> Any:
                     return float("inf")
                 if value == "-inf":
                     return float("-inf")
+                raise SafeSerializationError(
+                    f"Unknown float value in serialized data: {value!r}"
+                )
 
             if type_name == "ndarray":
                 dtype = np.dtype(obj["dtype"])

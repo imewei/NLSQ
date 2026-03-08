@@ -117,7 +117,7 @@ class AutosaveManager(QObject):
                 encoding="utf-8",
             )
             self.autosave_completed.emit()
-        except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        except (OSError, ValueError, TypeError, RecursionError):
             # Silently fail - autosave is best-effort
             pass
 
@@ -133,12 +133,13 @@ class AutosaveManager(QObject):
             "version": "1.0",
         }
 
-        # Serialize data arrays
-        if state.xdata is not None:
+        # Serialize data arrays (skip large datasets to avoid OOM)
+        max_autosave_points = 100_000
+        if state.xdata is not None and len(state.xdata) <= max_autosave_points:
             data["xdata"] = state.xdata.tolist()
-        if state.ydata is not None:
+        if state.ydata is not None and len(state.ydata) <= max_autosave_points:
             data["ydata"] = state.ydata.tolist()
-        if state.sigma is not None:
+        if state.sigma is not None and len(state.sigma) <= max_autosave_points:
             data["sigma"] = state.sigma.tolist()
 
         # Serialize model config

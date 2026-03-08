@@ -106,7 +106,9 @@ def transform_from_bounds(
     Array([0., 0., 0.], dtype=float32)
     """
     # Normalize to [0, 1]
-    ratio = (x_bounded - lower_bounds) / (upper_bounds - lower_bounds)
+    range_val = upper_bounds - lower_bounds
+    safe_range = jnp.where(range_val == 0, 1.0, range_val)
+    ratio = (x_bounded - lower_bounds) / safe_range
 
     # Clamp to avoid log(0) or log(inf)
     ratio_clamped = jnp.clip(ratio, epsilon, 1.0 - epsilon)
