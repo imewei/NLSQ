@@ -1,7 +1,7 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 6.0 (NLSQ v0.6.4 - Comprehensive Configuration)
+# Version: 6.5 (NLSQ v0.6.9 - Comprehensive Configuration)
 #
 # This template provides configuration options for NLSQ curve fitting workflows.
 # Copy this file to your project and customize as needed.
@@ -32,6 +32,7 @@
 #   export:
 #     results_file: "results.json"
 #
+# Requirements: Python >=3.12, JAX >=0.8.0, NumPy >=2.2, SciPy >=1.16.0
 # Documentation: https://nlsq.readthedocs.io/
 # ==============================================================================
 
@@ -103,7 +104,7 @@
 metadata:
   workflow_name: "example_workflow"
   description: "NLSQ workflow configuration"
-  version: "6.0"
+  version: "6.5"
   author: ""
 
 # ==============================================================================
@@ -296,7 +297,7 @@ global_optimization:
   elimination_rounds: 3      # Number of elimination rounds
   elimination_fraction: 0.5  # Fraction eliminated per round
 
-  # CMA-ES configuration (requires: pip install nlsq)
+  # CMA-ES configuration (evosax>=0.2.0 included in nlsq dependencies)
   # Automatically used when bounds span > 3 orders of magnitude
   cmaes:
     # Preset: "cmaes-fast" (50 gens), "cmaes" (100 gens), "cmaes-global" (200 gens)
@@ -348,7 +349,7 @@ checkpointing:
 # Execution environment settings.
 
 runtime:
-  # Device: "cpu" or "gpu" (GPU requires Linux + NVIDIA + CUDA 12.x)
+  # Device: "cpu" or "gpu" (GPU requires Linux + NVIDIA + CUDA 12.x/13.x)
   device: "cpu"
 
   # Random seed for reproducibility (affects multi-start, CMA-ES)
