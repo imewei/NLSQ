@@ -9,6 +9,10 @@ Tests cover:
 
 import pytest
 
+# Run on single xdist worker to prevent PluginRegistry race conditions
+# (see tests/diagnostics/conftest.py for details)
+pytestmark = pytest.mark.serial
+
 from nlsq.diagnostics.types import (
     AnalysisResult,
     DiagnosticLevel,

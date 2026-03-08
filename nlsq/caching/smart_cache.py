@@ -343,7 +343,7 @@ class SmartCache:
                 self.memory_cache.clear()
                 self.access_count.clear()
 
-            if self.disk_cache_enabled:
+            if self.disk_cache_enabled and os.path.isdir(self.cache_dir):
                 try:
                     for file in os.listdir(self.cache_dir):
                         if file.endswith(".npz"):

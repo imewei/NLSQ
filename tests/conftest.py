@@ -24,10 +24,30 @@ os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
 # This must be set before JAX import to ensure consistent behavior.
 os.environ.setdefault("JAX_ENABLE_X64", "true")
 
+import sys
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+
+
+def _release_heap_to_os() -> None:
+    """Release freed heap memory back to the OS via malloc_trim (Linux only).
+
+    glibc malloc doesn't automatically return freed memory to the OS, causing
+    RSS to stay high even after Python objects are freed. malloc_trim(0) forces
+    the release of free heap pages, actually reducing process RSS.
+    """
+    if sys.platform == "linux":
+        import ctypes
+
+        try:
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)
+        except OSError:
+            pass  # Not glibc (e.g., musl) — skip silently
+
 
 # Dynamically skip gui_qt tests when pytest-qt is not installed
 collect_ignore_glob = []
@@ -75,18 +95,32 @@ def cleanup_jax_memory():
     This runs gc.collect() to release Python objects holding JAX arrays.
     The XLA runtime then reclaims the device memory.
 
-    Note: We intentionally do NOT call jax.clear_caches() per test.
-    That function only clears the Python-level JIT trace cache, not XLA
-    device memory. Clearing it forces every subsequent test to re-trigger
-    JIT compilation (~40-50ms per new function shape), wasting significant
-    time across 3600+ tests without actually reducing memory usage.
-    The JIT cache should persist across tests for performance.
+    Additionally, every CACHE_CLEAR_INTERVAL tests, we call jax.clear_caches()
+    to prevent unbounded growth of the JIT compilation cache. Without this,
+    each xdist worker grows to 10-16GB RSS across 900+ tests, exhausting
+    the 62GB system RAM and crashing the machine.
+
+    After clearing, we call libc malloc_trim(0) on Linux to return freed heap
+    memory to the OS (glibc malloc doesn't do this automatically, causing RSS
+    to stay high even after Python objects are freed).
     """
     yield
 
     import gc
 
     gc.collect()
+
+    # Periodically clear JIT caches to prevent OOM from unbounded cache growth.
+    # Each worker runs ~1800 tests; without clearing, RSS grows to 10-16GB/worker.
+    _CACHE_CLEAR_INTERVAL = 100
+    cleanup_jax_memory._call_count = getattr(cleanup_jax_memory, "_call_count", 0) + 1
+    if cleanup_jax_memory._call_count % _CACHE_CLEAR_INTERVAL == 0:
+        jax.clear_caches()
+        gc.collect()
+        # On Linux, glibc malloc doesn't return freed memory to the OS by default.
+        # malloc_trim(0) forces it to release free heap pages back to the kernel,
+        # actually reducing RSS instead of just freeing Python objects.
+        _release_heap_to_os()
 
 
 # ============================================================================

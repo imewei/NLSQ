@@ -16,6 +16,10 @@ import warnings
 import numpy as np
 import pytest
 
+# Run on single xdist worker to prevent PluginRegistry race conditions
+# (see tests/diagnostics/conftest.py for details)
+pytestmark = pytest.mark.serial
+
 from nlsq.diagnostics.parameter_sensitivity import ParameterSensitivityAnalyzer
 from nlsq.diagnostics.types import (
     DiagnosticsConfig,

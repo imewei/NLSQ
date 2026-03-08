@@ -23,6 +23,10 @@ from nlsq.diagnostics.types import (
     IssueCategory,
 )
 
+# Run on single xdist worker to prevent PluginRegistry race conditions
+# (see tests/diagnostics/conftest.py for details)
+pytestmark = pytest.mark.serial
+
 
 class TestCurveFitDiagnosticsIntegration:
     """Integration tests for curve_fit with diagnostics."""

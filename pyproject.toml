@@ -496,9 +496,10 @@ addopts = [
     # Parallel execution optimizations (Phase 1: Test Suite Performance Optimization)
     # NOTE: Using fixed worker count to prevent OOM crashes on systems with many cores.
     # With -n auto on 20-core systems, 20 workers × JAX overhead (~500MB each) = 10GB+
-    # baseline before tests run. Large-p tests (5000 params) can push total > 60GB.
-    # Using 4 workers: 4 × 2GB = 8GB max, leaving headroom for large tests.
-    "-n", "4",  # Fixed 4 workers to prevent memory exhaustion (was: auto)
+    # baseline before tests run. XLA JIT compilation caches grow ~10-16GB per worker
+    # across 900+ tests, even with periodic cache clearing (every 200 tests).
+    # Using 2 workers: 2 × 4-6GB = 8-12GB max, leaving headroom for the OS and tools.
+    "-n", "2",  # Fixed 2 workers to prevent memory exhaustion (was: 4)
     "--dist", "loadscope",  # Group by test module/class for better isolation
     # Coverage disabled for faster CI (enable locally with pytest --cov)
     # Test suite: 3,285 tests (as of 2026-01-09)
