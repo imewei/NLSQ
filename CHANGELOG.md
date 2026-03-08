@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **JAX-compiled bounded-path helpers**: New `step_size_to_bound_jax`, `intersect_trust_region_jax`,
+  and `minimize_quadratic_1d_jax` in `common_jax.py` — replaces NumPy/SciPy counterparts to
+  eliminate device-to-host transfers on the hot path (B004)
+- **Streaming `dynamic_slice` scan**: New `_get_padded_data()` helper in `adaptive_hybrid.py` pads
+  input arrays once and caches by identity; scan bodies use `dynamic_slice` over flat padded arrays
+  instead of pre-stacked chunk tensors, reducing peak device memory from O(n_points) to O(chunk_size)
+  (B006)
+- **Streaming cache clearing**: `adaptive_hybrid.clear_cache()` releases `_padded_cache` to free
+  device memory after optimization completes
+- **Test memory management**: Periodic JIT cache clearing and `malloc_trim` heap release in test
+  conftest to prevent OOM under parallel execution
+
+### Fixed
+
+- **TRF numerical stability**: Guard division-by-zero in alpha update and initial trust region ratio;
+  initialize `x_new`/`f_new`/`cost_new` before inner loops (NameError guard)
+- **`intersect_trust_region_jax`**: Fix wrong roots when `b=0` (`jnp.sign` → `jnp.where`);
+  fix boundary case `c>=0` instead of `c>0`
+- **Huber loss NaN propagation**: Use `safe_z` pattern through `jnp.where` to prevent NaN
+  in gradient computation
+- **Sparse Jacobian scale invariance**: Use relative finite-difference step instead of absolute
+- **Covariance computation**: Handle empty singular values (IndexError guard); warn on
+  underdetermined confidence intervals (`n <= p`)
+- **Off-by-one in 2D sigma padding**: Corrected `>=` to `>` condition
+- **DAZ-safe `make_strictly_feasible_jax`**: Guard against XLA Denormals-Are-Zero behavior on CPU
+  where `nextafter(lb, ub)` can return a denormal equal to `lb`; falls back to `lb + tiny`
+- **Streaming error handling**: Fix `AttributeError` when `enable_diagnostics=False`; guard
+  division-by-zero when warmup initial loss is zero; initialize loop variables before warmup/GN
+  loops; reset `_consecutive_rejections` on step acceptance (was local variable)
+- **GUI fit state**: Fix `fit_running` not cleared on fit error (permanent UI block); include
+  exception type in FitWorker error signal
+- **GUI results**: Float-safe threshold for R-squared (`ss_tot < tiny` instead of `== 0`);
+  log confidence band and export failures instead of silent pass
+- **Autosave safety**: Cap dataset size to 100K points to prevent OOM; fix exception clause
+  (remove `JSONDecodeError`, add `RecursionError`)
+- **Thread safety**: Atomic `setdefault` for lazy module cache; double-checked locking for
+  audit logger singleton; `copy.deepcopy` under lock for config context managers
+- **EarlyStopping callback**: Skip NaN/Inf iterations instead of corrupting state
+- **Example scripts**: Convert JAX residuals to NumPy before `scipy.stats.normaltest` (GPU
+  compatibility)
+- **Profiler test**: Update assertion to match ASCII "OK" indicator (was emoji)
+- **Docs**: Renumber RST lists after mixed precision item removal
+
+### Changed
+
+- **TRF `_select_step` migrated to JAX**: Replace scipy-backed `step_size_to_bound`,
+  `intersect_trust_region`, and `minimize_quadratic_1d` calls with JAX-compiled variants,
+  eliminating implicit D2H transfers on the hot path (B004)
+- **Streaming JAX modernization**: Replace Python loops with `jax.lax.fori_loop` for variance
+  regularization warmup; pre-allocate dynamic masks replacing condition branches in adaptive
+  hybrid; update conjugate gradient constraint checks for JIT compatibility
+- **ASCII status indicators**: Replace emoji markers (`✅`/`❌`/`✓`/`✗`) with ASCII equivalents
+  (`[OK]`/`[FAIL]`/`OK`/`FAIL`) in profiler, SVD fallback, and visualization for terminal
+  compatibility and log parsability
+- **Live cost plot**: Use `deque(maxlen=)` for O(1) append (was O(n) slice); same for streaming
+  telemetry event log
+- **Type modernization**: `Optional` → `X | None`, `Union` → `|` syntax across config, types,
+  and streaming modules (Python 3.12+)
+- **Pytest workers**: Reduced from 4 to 2 to avoid memory exhaustion from parallel XLA caches
+- **Test environment variables**: Moved JAX env vars (`JAX_ENABLE_X64`, `XLA_PYTHON_CLIENT_*`)
+  to module level before JAX import (was firing too late in fixtures)
+
+### Removed
+
+- **Dead mixed precision system** (~4,700 lines): Removed `nlsq/precision/mixed_precision.py`
+  (1,222 lines), `tests/precision/test_mixed_precision.py` (1,495 lines), and
+  `benchmarks/components/precision_benchmark.py` (437 lines). NLSQ requires float64 everywhere;
+  the float32→float64 auto-upgrade system was dead infrastructure. Kept `enable_x64()`,
+  `is_x64_enabled()`, and `precision_context()` for x64 management
+- **Dead code cleanup**: Removed unused `g_jnp` assignments, commented-out imports, unreachable
+  `pcov` checks, no-op `hasattr` checks, redundant numpy imports, and unused `enable_plotting`
+  parameter
+- **Stale test fixtures**: Removed per-test `jax.clear_caches()` call (only purges Python-level
+  JIT trace cache, forces ~40-50ms recompilation per function, no OOM benefit)
+
+### Infrastructure
+
+- **CI/CD**: Updated GitHub Actions (main, quality, release, security) environments and Python
+  versions; added concurrency groups to prevent parallel workflow collisions
+- **Pre-commit hooks**: Updated all hooks to latest versions (ruff 0.15.5, mypy 1.19.1,
+  pyupgrade 3.21.2, pre-commit-hooks v6.0.0)
+- **ReadTheDocs**: Updated to ubuntu-24.04 and Python 3.13
+- **pip-audit**: Updated to use `uv pip freeze` for accurate dependency scanning
+- **Sphinx**: Switched LaTeX engine to XeLaTeX with unicode-math; suppressed JAX `pmap`
+  deprecation warnings in notebook runners
+- **pyproject.toml**: Updated ruff configurations and mypy override paths for new module structure
+- **`.gitignore`**: Added `.worktrees/` directory
+
+### Documentation
+
+- **Developer docs**: Updated ADRs 003/004/005, performance tuning guide, and optimization case
+  study to reflect v0.6.x API (`workflow="auto"`, `CMAESConfig`)
+- **Troubleshooting**: Removed stale workarounds; trimmed to current issues
+- **CLI templates**: Bumped workflow config template to v6.5 with updated engine requirements
+
 ## [0.6.10] - 2026-03-06
 
 ### Added
