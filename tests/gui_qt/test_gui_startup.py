@@ -23,41 +23,51 @@ import pytest
 class TestImportGuards:
     """Verify defensive environment variables are set before JAX loads."""
 
-    def test_jax_cpu_enforcement_on_non_linux(self):
-        """nlsq.__init__ must set JAX CPU vars on non-Linux platforms."""
-        if sys.platform == "linux":
-            pytest.skip("Non-Linux guard (macOS/Windows only)")
-
-        # Importing nlsq triggers the hotfix
+    def test_jax_platform_enforcement(self):
+        """nlsq.__init__ must enforce platform-appropriate JAX backend."""
         import nlsq
 
-        assert os.environ.get("JAX_PLATFORM_NAME") == "cpu"
-        assert os.environ.get("JAX_PLATFORMS") == "cpu"
-        assert os.environ.get("NLSQ_FORCE_CPU") == "1"
+        if sys.platform == "linux":
+            # Linux allows GPU — must NOT force CPU
+            assert (
+                os.environ.get("NLSQ_FORCE_CPU") != "1"
+                or os.environ.get("NLSQ_FORCE_CPU") is None
+            )
+        else:
+            # macOS/Windows must force CPU
+            assert os.environ.get("JAX_PLATFORM_NAME") == "cpu"
+            assert os.environ.get("JAX_PLATFORMS") == "cpu"
+            assert os.environ.get("NLSQ_FORCE_CPU") == "1"
 
-    def test_macos_specific_env_vars(self):
-        """nlsq.__init__ must set macOS-specific stability vars on Darwin."""
-        if sys.platform != "darwin":
-            pytest.skip("macOS-only guard")
-
+    def test_platform_specific_env_vars(self):
+        """nlsq.__init__ must set platform-appropriate environment variables."""
         import nlsq
 
-        assert os.environ.get("OMP_NUM_THREADS") == "1"
-        assert os.environ.get("MPLBACKEND") == "Agg"
-        assert os.environ.get("QT_MAC_WANTS_LAYER") == "1"
-        assert os.environ.get("QT_API") == "pyside6"
-        assert os.environ.get("PYQTGRAPH_QT_LIB") == "PySide6"
-        assert os.environ.get("QT_OPENGL") == "software"
-        assert os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1"
+        if sys.platform == "darwin":
+            # macOS needs SIGBUS prevention
+            assert os.environ.get("OMP_NUM_THREADS") == "1"
+            assert os.environ.get("MPLBACKEND") == "Agg"
+            assert os.environ.get("QT_MAC_WANTS_LAYER") == "1"
+            assert os.environ.get("QT_API") == "pyside6"
+            assert os.environ.get("PYQTGRAPH_QT_LIB") == "PySide6"
+            assert os.environ.get("QT_OPENGL") == "software"
+            assert os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1"
+        else:
+            # Linux/Windows must not set macOS-specific vars
+            # (unless user set them explicitly, which we don't test)
+            pass  # No macOS vars to assert on other platforms
 
-    def test_jax_backend_is_cpu(self):
-        """JAX must resolve to CPU backend on non-Linux platforms."""
-        if sys.platform == "linux":
-            pytest.skip("Linux may use GPU backend; this guard is for macOS/Windows")
-
+    def test_jax_backend_is_valid(self):
+        """JAX must resolve to a valid backend for the platform."""
         import jax
 
-        assert jax.default_backend() == "cpu"
+        backend = jax.default_backend()
+        if sys.platform == "linux":
+            # Linux can use CPU or GPU
+            assert backend in {"cpu", "gpu", "cuda", "tpu"}
+        else:
+            # Non-Linux must be CPU-only
+            assert backend == "cpu"
 
     def test_matplotlib_non_interactive_backend_after_gui_import(self):
         """gui_qt must use a non-interactive matplotlib backend."""
@@ -69,11 +79,8 @@ class TestImportGuards:
         # Accept any Agg-based backend (agg, qtagg, etc.)
         assert "agg" in backend, f"Expected Agg-based backend, got {backend}"
 
-    def test_pyqtgraph_opengl_disabled_on_macos(self, qtbot):
-        """pyqtgraph must default to useOpenGL=False on macOS."""
-        if sys.platform != "darwin":
-            pytest.skip("macOS-only guard")
-
+    def test_pyqtgraph_opengl_platform_default(self, qtbot):
+        """pyqtgraph OpenGL must match platform default (off on macOS, on elsewhere)."""
         from nlsq.gui_qt.plots import _configure_pyqtgraph, _pg_state
 
         _pg_state["configured"] = False
@@ -81,7 +88,11 @@ class TestImportGuards:
 
         import pyqtgraph as pg
 
-        assert pg.getConfigOption("useOpenGL") is False
+        if sys.platform == "darwin":
+            assert pg.getConfigOption("useOpenGL") is False
+        else:
+            # Linux/Windows: OpenGL enabled by default
+            assert pg.getConfigOption("useOpenGL") is True
 
     def test_pyqtgraph_opengl_env_override(self, qtbot, monkeypatch):
         """NLSQ_GUI_USE_OPENGL=1 must force OpenGL on."""
