@@ -479,6 +479,110 @@ _attach_methods(
 
 
 # ============================================================================
+# Lorentzian (Cauchy) Functions
+# ============================================================================
+
+
+def lorentzian(x: ArrayLike, amp: float, x0: float, gamma: float) -> ArrayReturn:
+    """Lorentzian (Cauchy) peak function: y = amp / (1 + ((x - x0) / gamma)²)
+
+    Common for spectral line shapes (NMR, IR, Raman), resonance curves,
+    and natural line broadening.
+
+    Parameters
+    ----------
+    x : array_like
+        Independent variable
+    amp : float
+        Amplitude (peak height)
+    x0 : float
+        Center position (peak location)
+    gamma : float
+        Half-width at half-maximum (HWHM, positive)
+
+    Returns
+    -------
+    y : array_like
+        Dependent variable
+
+    Notes
+    -----
+    - Peak position: x = x0
+    - Peak height: y = amp
+    - FWHM (Full Width at Half Maximum): FWHM = 2 * gamma
+    - Integral: ∫ lorentzian dx = amp * gamma * π
+    - Heavier tails than Gaussian (decays as 1/x² vs exp(-x²))
+
+    Examples
+    --------
+    >>> from nlsq import curve_fit
+    >>> from nlsq.core.functions import lorentzian
+    >>> import numpy as np
+    >>>
+    >>> # Spectral peak at x=5 with FWHM = 2
+    >>> x = np.linspace(0, 10, 200)
+    >>> y = 10 / (1 + ((x - 5) / 1)**2) + np.random.normal(0, 0.2, 200)
+    >>> popt, pcov = curve_fit(lorentzian, x, y, p0='auto')
+    >>> print(f"Peak at {popt[1]:.2f}, FWHM = {2*popt[2]:.2f}")
+    """
+    return amp / (1 + ((x - x0) / gamma) ** 2)
+
+
+def estimate_p0_lorentzian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
+    """Estimate initial parameters for Lorentzian function.
+
+    Strategy:
+    - Amplitude: peak height (max - min)
+    - x0: location of maximum
+    - gamma: estimated from FWHM / 2
+
+    Parameters
+    ----------
+    xdata : ndarray
+        Independent variable data
+    ydata : ndarray
+        Dependent variable data
+
+    Returns
+    -------
+    p0 : list
+        [amplitude, x0, gamma]
+    """
+    xdata = np.asarray(xdata)
+    ydata = np.asarray(ydata)
+
+    y_min = np.min(ydata)
+    y_max = np.max(ydata)
+
+    amp = y_max - y_min
+    x0 = xdata[np.argmax(ydata)]
+
+    # Estimate gamma from FWHM (Full Width at Half Maximum)
+    half_max = (y_max + y_min) / 2
+    indices = np.where(ydata > half_max)[0]
+
+    if len(indices) > 1:
+        fwhm = xdata[indices[-1]] - xdata[indices[0]]
+        # FWHM = 2 * gamma → gamma = FWHM / 2
+        gamma = fwhm / 2
+    else:
+        # Fallback: use data range / 4 as rough estimate
+        gamma = (np.max(xdata) - np.min(xdata)) / 4
+
+    # Ensure gamma is positive
+    gamma = max(gamma, 0.01)
+
+    return [float(amp), float(x0), float(gamma)]
+
+
+_attach_methods(
+    lorentzian,
+    estimate_p0_lorentzian,
+    lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf]),
+)
+
+
+# ============================================================================
 # Sigmoid Functions
 # ============================================================================
 
@@ -766,6 +870,7 @@ __all__ = [
     "exponential_growth",
     "gaussian",
     "linear",
+    "lorentzian",
     "polynomial",
     "power_law",
     "sigmoid",

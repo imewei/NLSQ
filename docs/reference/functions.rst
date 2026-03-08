@@ -3,21 +3,21 @@ Model Functions Reference
 
 NLSQ provides built-in model functions for common curve fitting scenarios.
 
-.. module:: nlsq.functions
+.. module:: nlsq.core.functions
 
 Using Built-in Functions
 ------------------------
 
-Import from ``nlsq.functions`` or directly from ``nlsq``:
+Import from ``nlsq.core.functions``:
 
 .. code-block:: python
 
-   from nlsq.core.functions import gaussian, exponential_decay
+   from nlsq.core.functions import gaussian, exponential_decay, lorentzian
 
-   # or
-   from nlsq import gaussian, exponential_decay
+All functions are JAX-compatible and JIT-compilable. Each function includes:
 
-All functions are JAX-compatible and JIT-compilable.
+- Automatic p0 estimation via ``.estimate_p0(xdata, ydata)``
+- Reasonable default bounds via ``.bounds()``
 
 Peak Functions
 --------------
@@ -25,62 +25,14 @@ Peak Functions
 gaussian
 ~~~~~~~~
 
-.. autofunction:: nlsq.functions.gaussian
+.. autofunction:: nlsq.core.functions.gaussian
    :no-index:
-
-Gaussian peak function.
-
-**Formula:**
-
-.. math::
-
-   f(x) = a \cdot \exp\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)
-
-**Parameters:**
-
-- ``x``: Independent variable
-- ``a``: Amplitude (peak height)
-- ``mu``: Center position
-- ``sigma``: Standard deviation (width)
-
-**Example:**
-
-.. code-block:: python
-
-   from nlsq import fit
-   from nlsq.core.functions import gaussian
-
-   popt, pcov = fit(gaussian, x, y, p0=[1.0, 0.0, 1.0])
-   amplitude, center, width = popt
 
 lorentzian
 ~~~~~~~~~~
 
-.. autofunction:: nlsq.functions.lorentzian
+.. autofunction:: nlsq.core.functions.lorentzian
    :no-index:
-
-Lorentzian (Cauchy) peak function.
-
-**Formula:**
-
-.. math::
-
-   f(x) = \frac{a \cdot \gamma^2}{(x - x_0)^2 + \gamma^2}
-
-**Parameters:**
-
-- ``x``: Independent variable
-- ``a``: Amplitude
-- ``x0``: Center position
-- ``gamma``: Half-width at half-maximum (HWHM)
-
-voigt
-~~~~~
-
-.. autofunction:: nlsq.functions.voigt
-   :no-index:
-
-Voigt profile (convolution of Gaussian and Lorentzian).
 
 Exponential Functions
 ---------------------
@@ -88,67 +40,14 @@ Exponential Functions
 exponential_decay
 ~~~~~~~~~~~~~~~~~
 
-.. autofunction:: nlsq.functions.exponential_decay
+.. autofunction:: nlsq.core.functions.exponential_decay
    :no-index:
-
-Single exponential decay.
-
-**Formula:**
-
-.. math::
-
-   f(t) = a \cdot \exp\left(-\frac{t}{\tau}\right) + c
-
-**Parameters:**
-
-- ``t``: Time (independent variable)
-- ``a``: Initial amplitude
-- ``tau``: Decay time constant
-- ``c``: Offset (baseline)
-
-**Example:**
-
-.. code-block:: python
-
-   from nlsq import fit
-   from nlsq.core.functions import exponential_decay
-
-   popt, pcov = fit(
-       exponential_decay,
-       time,
-       signal,
-       p0=[1.0, 10.0, 0.0],
-       bounds=([0, 0, -0.1], [10, 100, 0.1]),
-   )
-   amplitude, tau, offset = popt
 
 exponential_growth
 ~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: nlsq.functions.exponential_growth
+.. autofunction:: nlsq.core.functions.exponential_growth
    :no-index:
-
-Exponential growth function.
-
-**Formula:**
-
-.. math::
-
-   f(t) = a \cdot \exp\left(\frac{t}{\tau}\right) + c
-
-double_exponential
-~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: nlsq.functions.double_exponential
-   :no-index:
-
-Biexponential decay (sum of two exponentials).
-
-**Formula:**
-
-.. math::
-
-   f(t) = a_1 \cdot \exp\left(-\frac{t}{\tau_1}\right) + a_2 \cdot \exp\left(-\frac{t}{\tau_2}\right) + c
 
 Sigmoid Functions
 -----------------
@@ -156,47 +55,8 @@ Sigmoid Functions
 sigmoid
 ~~~~~~~
 
-.. autofunction:: nlsq.functions.sigmoid
+.. autofunction:: nlsq.core.functions.sigmoid
    :no-index:
-
-Logistic sigmoid function.
-
-**Formula:**
-
-.. math::
-
-   f(x) = \frac{L}{1 + \exp(-k(x - x_0))}
-
-**Parameters:**
-
-- ``x``: Independent variable
-- ``L``: Maximum value (upper asymptote)
-- ``k``: Steepness (growth rate)
-- ``x0``: Midpoint (x value at half maximum)
-
-**Example:**
-
-.. code-block:: python
-
-   from nlsq import fit
-   from nlsq.core.functions import sigmoid
-
-   popt, pcov = fit(sigmoid, x, y, p0=[1.0, 1.0, 0.0])
-   maximum, steepness, midpoint = popt
-
-hill
-~~~~
-
-.. autofunction:: nlsq.functions.hill
-   :no-index:
-
-Hill equation for dose-response curves.
-
-**Formula:**
-
-.. math::
-
-   f(x) = \frac{V_{max} \cdot x^n}{K^n + x^n}
 
 Power Functions
 ---------------
@@ -204,80 +64,33 @@ Power Functions
 power_law
 ~~~~~~~~~
 
-.. autofunction:: nlsq.functions.power_law
+.. autofunction:: nlsq.core.functions.power_law
    :no-index:
 
-Power law function.
+linear
+~~~~~~
 
-**Formula:**
-
-.. math::
-
-   f(x) = a \cdot x^b
-
-**Parameters:**
-
-- ``x``: Independent variable
-- ``a``: Coefficient
-- ``b``: Exponent
+.. autofunction:: nlsq.core.functions.linear
+   :no-index:
 
 polynomial
 ~~~~~~~~~~
 
-.. autofunction:: nlsq.functions.polynomial
+.. autofunction:: nlsq.core.functions.polynomial
    :no-index:
 
-Polynomial function of arbitrary degree.
-
-**Formula:**
-
-.. math::
-
-   f(x) = \sum_{i=0}^{n} a_i x^i
+Polynomial function factory for arbitrary degree.
 
 **Example:**
 
 .. code-block:: python
 
-   from nlsq.core.functions import polynomial
+   import jax.numpy as jnp
 
 
-   # Quadratic: a + b*x + c*x^2
+   # Define directly for curve fitting
    def quadratic(x, a, b, c):
-       return polynomial(x, a, b, c)
-
-Special Functions
------------------
-
-sine
-~~~~
-
-.. autofunction:: nlsq.functions.sine
-   :no-index:
-
-Sinusoidal function.
-
-**Formula:**
-
-.. math::
-
-   f(x) = a \cdot \sin(2\pi f x + \phi) + c
-
-**Parameters:**
-
-- ``x``: Independent variable
-- ``a``: Amplitude
-- ``f``: Frequency
-- ``phi``: Phase
-- ``c``: Offset
-
-damped_sine
-~~~~~~~~~~~
-
-.. autofunction:: nlsq.functions.damped_sine
-   :no-index:
-
-Damped sinusoidal oscillation.
+       return a + b * x + c * x**2
 
 Creating Custom Functions
 -------------------------

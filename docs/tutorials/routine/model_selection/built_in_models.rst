@@ -6,17 +6,17 @@ NLSQ provides commonly used mathematical models ready for curve fitting.
 Available Models
 ----------------
 
-Import models from ``nlsq.functions``:
+Import models from ``nlsq.core.functions``:
 
 .. code-block:: python
 
-   from nlsq.functions import (
+   from nlsq.core.functions import (
        exponential_decay,
        gaussian,
        lorentzian,
        polynomial,
        power_law,
-       logistic,
+       sigmoid,
    )
 
 Exponential Decay
@@ -24,76 +24,76 @@ Exponential Decay
 
 .. math::
 
-   f(x) = A \cdot e^{-k \cdot x} + c
+   f(x) = a \cdot e^{-b \cdot x} + c
 
 .. code-block:: python
 
    from nlsq import fit
-   from nlsq.functions import exponential_decay
+   from nlsq.core.functions import exponential_decay
 
    # Parameters: amplitude, decay_rate, offset
    popt, pcov = fit(exponential_decay, x, y, p0=[2.0, 0.5, 0.0])
-   A, k, c = popt
+   a, b, c = popt
 
 Gaussian (Normal Distribution)
 ------------------------------
 
 .. math::
 
-   f(x) = A \cdot e^{-\frac{(x - \mu)^2}{2\sigma^2}} + c
+   f(x) = A \cdot e^{-\frac{(x - \mu)^2}{2\sigma^2}}
 
 .. code-block:: python
 
-   from nlsq.functions import gaussian
+   from nlsq.core.functions import gaussian
 
-   # Parameters: amplitude, center, width, offset
-   popt, pcov = fit(gaussian, x, y, p0=[5.0, 0.0, 1.0, 0.0])
-   A, mu, sigma, c = popt
+   # Parameters: amplitude, center, width
+   popt, pcov = fit(gaussian, x, y, p0=[5.0, 0.0, 1.0])
+   amp, mu, sigma = popt
 
 Lorentzian (Cauchy Distribution)
 --------------------------------
 
 .. math::
 
-   f(x) = \frac{A \cdot \gamma^2}{(x - x_0)^2 + \gamma^2} + c
+   f(x) = \frac{A}{1 + \left(\frac{x - x_0}{\gamma}\right)^2}
 
 .. code-block:: python
 
-   from nlsq.functions import lorentzian
+   from nlsq.core.functions import lorentzian
 
-   # Parameters: amplitude, center, width, offset
-   popt, pcov = fit(lorentzian, x, y, p0=[5.0, 0.0, 1.0, 0.0])
-   A, x0, gamma, c = popt
+   # Parameters: amplitude, center, half-width
+   popt, pcov = fit(lorentzian, x, y, p0=[5.0, 0.0, 1.0])
+   amp, x0, gamma = popt
 
 Power Law
 ---------
 
 .. math::
 
-   f(x) = A \cdot x^n + c
+   f(x) = a \cdot x^b
 
 .. code-block:: python
 
-   from nlsq.functions import power_law
+   from nlsq.core.functions import power_law
 
-   # Parameters: amplitude, exponent, offset
-   popt, pcov = fit(power_law, x, y, p0=[1.0, 2.0, 0.0])
-   A, n, c = popt
+   # Parameters: coefficient, exponent
+   popt, pcov = fit(power_law, x, y, p0=[1.0, 2.0])
+   a, b = popt
 
-Logistic Function
------------------
+Sigmoid (Logistic Function)
+----------------------------
 
 .. math::
 
-   f(x) = \frac{L}{1 + e^{-k(x - x_0)}} + c
+   f(x) = \frac{L}{1 + e^{-k(x - x_0)}} + b
 
 .. code-block:: python
 
-   from nlsq.functions import logistic
+   from nlsq.core.functions import sigmoid
 
-   # Parameters: max_value, steepness, midpoint, offset
-   popt, pcov = fit(logistic, x, y, p0=[1.0, 1.0, 0.0, 0.0])
-   L, k, x0, c = popt
+   # Parameters: max_value, midpoint, steepness, baseline
+   popt, pcov = fit(sigmoid, x, y, p0=[1.0, 0.0, 1.0, 0.0])
+   L, x0, k, b = popt
 
 Polynomial
 ----------
@@ -102,15 +102,10 @@ Polynomials of any degree:
 
 .. code-block:: python
 
-   from nlsq.functions import polynomial
-
-   # Quadratic: y = a + b*x + c*x^2
-   popt, pcov = fit(lambda x, a, b, c: polynomial(x, [a, b, c]), x, y, p0=[0, 1, 0])
-
-   # Or define directly
    import jax.numpy as jnp
 
 
+   # Define directly for curve fitting
    def quadratic(x, a, b, c):
        return a + b * x + c * x**2
 
@@ -124,22 +119,21 @@ Complete Example
 
    import numpy as np
    from nlsq import fit
-   from nlsq.functions import gaussian
+   from nlsq.core.functions import gaussian
 
    # Generate data: Gaussian peak with noise
    np.random.seed(42)
    x = np.linspace(-5, 5, 100)
-   y_true = 3.0 * np.exp(-0.5 * ((x - 1.0) / 0.8) ** 2) + 0.5
+   y_true = 3.0 * np.exp(-0.5 * ((x - 1.0) / 0.8) ** 2)
    y = y_true + 0.2 * np.random.normal(size=len(x))
 
    # Fit using built-in Gaussian
-   popt, pcov = fit(gaussian, x, y, p0=[2.5, 0.5, 1.0, 0.0])
+   popt, pcov = fit(gaussian, x, y, p0=[2.5, 0.5, 1.0])
 
    print("Fitted parameters:")
    print(f"  Amplitude: {popt[0]:.3f} (true: 3.0)")
    print(f"  Center:    {popt[1]:.3f} (true: 1.0)")
    print(f"  Width:     {popt[2]:.3f} (true: 0.8)")
-   print(f"  Offset:    {popt[3]:.3f} (true: 0.5)")
 
 Choosing the Right Model
 ------------------------
@@ -155,18 +149,18 @@ Choosing the Right Model
    * - Bell-shaped peak
      - ``gaussian`` or ``lorentzian``
    * - S-shaped curve
-     - ``logistic``
+     - ``sigmoid``
    * - Power relationship
      - ``power_law``
    * - General trend
-     - ``polynomial``
+     - ``polynomial`` (define inline)
 
 Tips:
 
 - Gaussian peaks are narrower at the base
 - Lorentzian peaks have heavier tails
 - Use ``exponential_decay`` for radioactive decay, chemical reactions
-- Use ``logistic`` for growth curves, dose-response
+- Use ``sigmoid`` for growth curves, dose-response
 
 Next Steps
 ----------
