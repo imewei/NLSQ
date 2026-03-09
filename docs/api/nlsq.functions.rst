@@ -13,13 +13,10 @@ The ``nlsq.functions`` module provides a library of commonly used fit functions 
 automatic parameter estimation. These pre-built functions eliminate the need to write
 custom models for common curve fitting tasks.
 
-**New in version 0.1.1**: Complete function library with 10+ pre-built models and automatic
-parameter estimation.
-
 Key Features
 ------------
 
-- **10+ pre-built models** for common curve fitting tasks
+- **8 pre-built models** for common curve fitting tasks
 - **Automatic initial parameter estimation** from data
 - **JAX-optimized implementations** for GPU/TPU acceleration
 - **Comprehensive parameter bounds** for robust fitting
@@ -31,7 +28,9 @@ Available Functions
 .. autosummary::
    :toctree: generated/
 
+   linear
    gaussian
+   lorentzian
    exponential_decay
    exponential_growth
    sigmoid
@@ -126,27 +125,26 @@ Fit a power law relationship:
     print(f"Scale: {popt[0]:.2f}")
     print(f"Exponent: {popt[1]:.2f}")
 
-Sinusoidal Function
+Lorentzian Function
 ~~~~~~~~~~~~~~~~~~~
 
-Fit a sinusoidal (periodic) function:
+Fit a Lorentzian (Cauchy) peak to spectral data:
 
 .. code-block:: python
 
-    from nlsq.core.functions import sinusoidal
+    from nlsq.core.functions import lorentzian
 
-    # Generate periodic data
-    x = np.linspace(0, 4 * np.pi, 100)
-    y_true = sinusoidal(x, amplitude=3, frequency=2, phase=0, offset=1)
-    y = y_true + np.random.normal(0, 0.2, len(x))
+    # Generate Lorentzian peak data
+    x = np.linspace(-10, 10, 200)
+    y_true = lorentzian(x, amp=5, x0=1.0, gamma=2.0)
+    y = y_true + np.random.normal(0, 0.1, len(x))
 
-    # Fit sinusoid
-    popt, pcov = curve_fit(sinusoidal, x, y)
+    # Fit Lorentzian
+    popt, pcov = curve_fit(lorentzian, x, y)
 
     print(f"Amplitude: {popt[0]:.2f}")
-    print(f"Frequency: {popt[1]:.2f}")
-    print(f"Phase: {popt[2]:.2f}")
-    print(f"Offset: {popt[3]:.2f}")
+    print(f"Center: {popt[1]:.2f}")
+    print(f"Half-width: {popt[2]:.2f}")
 
 Automatic Parameter Estimation
 -------------------------------
@@ -169,10 +167,19 @@ Function Parameters
 
 Each function has well-defined parameters with physical meaning:
 
+**linear(x, a, b)**
+    - ``a``: Slope
+    - ``b``: Intercept
+
 **gaussian(x, amplitude, mean, std)**
     - ``amplitude``: Height of the peak
     - ``mean``: Center of the distribution
     - ``std``: Standard deviation (width)
+
+**lorentzian(x, amp, x0, gamma)**
+    - ``amp``: Peak amplitude
+    - ``x0``: Peak center position
+    - ``gamma``: Half-width at half-maximum (HWHM)
 
 **exponential_decay(x, amplitude, rate, offset)**
     - ``amplitude``: Initial value

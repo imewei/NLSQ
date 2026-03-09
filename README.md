@@ -179,7 +179,7 @@ nlsq-gui
 
 The GUI provides:
 - **Data Loading**: Import CSV, ASCII, NPZ, or HDF5 files, or paste from clipboard
-- **Model Selection**: Choose from 7 built-in models, polynomials, or custom Python functions
+- **Model Selection**: Choose from 8 built-in models, polynomials, or custom Python functions
 - **Fitting Options**: Guided presets (Fast/Robust/Quality) or advanced parameter control
 - **Interactive Results**: GPU-accelerated pyqtgraph plots with confidence bands and residuals
 - **Export**: Session bundles (ZIP), JSON/CSV results, and reproducible Python code
@@ -201,7 +201,7 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 
 ## Architecture
 
-NLSQ is organized into well-separated layers (~75,000 lines):
+NLSQ is organized into well-separated layers (~74,000 lines):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -243,7 +243,7 @@ NLSQ is organized into well-separated layers (~75,000 lines):
 │  ├── CurveFitProtocol        ├── MemoryConfig         ├── model_validation  │
 │  └── CacheProtocol           └── LargeDatasetConfig   └── resource_limits   │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                         JAX RUNTIME (0.8.0)                                 │
+│                         JAX RUNTIME (≥0.8.0)                                │
 │  x64 enabled │ JIT compilation │ Autodiff │ GPU/TPU backend (optional)      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -510,7 +510,7 @@ See [examples/README.md](examples/README.md) for the full index.
 - NumPy 2.2+
 - SciPy 1.16.0+
 
-**GUI requirements**: PySide6 6.6+, pyqtgraph 0.13+
+**GUI requirements**: PySide6 6.10.0+, pyqtgraph 0.14.0+
 
 **GPU support** (Linux only): CUDA 12.x-13.x, NVIDIA driver >= 525
 

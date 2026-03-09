@@ -7,22 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-03-09
+
 ### Added
 
+- **Lorentzian function**: New `lorentzian()` and `estimate_p0_lorentzian()` in built-in model
+  functions library with automatic initial parameter estimation
 - **JAX-compiled bounded-path helpers**: New `step_size_to_bound_jax`, `intersect_trust_region_jax`,
   and `minimize_quadratic_1d_jax` in `common_jax.py` — replaces NumPy/SciPy counterparts to
   eliminate device-to-host transfers on the hot path (B004)
 - **Streaming `dynamic_slice` scan**: New `_get_padded_data()` helper in `adaptive_hybrid.py` pads
-  input arrays once and caches by identity; scan bodies use `dynamic_slice` over flat padded arrays
-  instead of pre-stacked chunk tensors, reducing peak device memory from O(n_points) to O(chunk_size)
-  (B006)
+  input arrays once and caches by content fingerprint; scan bodies use `dynamic_slice` over flat
+  padded arrays instead of pre-stacked chunk tensors, reducing peak device memory from O(n_points)
+  to O(chunk_size) (B006)
 - **Streaming cache clearing**: `adaptive_hybrid.clear_cache()` releases `_padded_cache` to free
   device memory after optimization completes
+- **CUDA Plugin Conflict Detection**: New `check_plugin_conflicts()` function in `nlsq/device.py`
+  - Detects simultaneous `jax-cuda12-plugin` + `jax-cuda13-plugin` installs (PJRT registration conflict)
+  - Detects plugin/jaxlib version mismatches via `importlib.metadata`
+  - Conflict warnings surfaced in `check_gpu_availability()` even when GPU is working
+  - `get_device_info()` now includes a `plugin_issues` field
+- **`gpu-diagnose` Makefile target**: Dedicated target for diagnosing CUDA plugin and version mismatch issues
+- **New Sphinx API stubs**: Added `nlsq.stability.guard`, `nlsq.utils.diagnostics`, `nlsq.callbacks`,
+  `nlsq.core.factories`, and `nlsq.interfaces` autodoc RST pages
 - **Test memory management**: Periodic JIT cache clearing and `malloc_trim` heap release in test
   conftest to prevent OOM under parallel execution
 
 ### Fixed
 
+- **Bounded TRF rank threshold**: Pass augmented system row count (`m+n`) to
+  `solve_lsq_trust_region_jax` in bounded SVD path, fixing rank threshold that was too permissive
+  for near-singular bounded problems
+- **CG trust region step**: Replace arbitrary `[0.1, 10.0]` step norm clamping with proper trust
+  region enforcement — use regularized step within Delta, scale to boundary otherwise
+- **`safe_norm` ord parameter**: Fix silent drop of non-default `ord` values when overflow scaling
+  was active; uses JIT path for L2 norm and non-JIT fallback for other norms
+- **SVD fallback error logging**: Capture and include exception message in warning instead of
+  bare `except Exception`
+- **`safe_serialize` silent data loss**: Non-string dict keys now use prefix encoding
+  (`__int_key__`, `__float_key__`) to preserve key types through JSON round-trip; previously
+  int key `1` and string key `'1'` would silently collide
+- **`safe_serialize` namespace collision**: Rename internal type marker from `__type__` to
+  `__nlsq_type__` to prevent collision with user dicts containing `__type__` as a natural key;
+  backward-compatible deserialization
+- **`safe_serialize` deque/JAX arrays**: Add `deque` support (serializes as list) and JAX array
+  support (converts to numpy) to prevent errors when checkpointing optimizer state
+- **Streaming `id()`-based caches**: Replace `id()`-based cache key in `_get_padded_data` with
+  content fingerprint (`shape+first+last+sum`) to prevent stale cache hits after GC recycles
+  memory addresses; bound `phase_history` to `deque(maxlen=100)`
+- **Streaming cyclic padding bias**: Replace cyclic `np.resize` padding with zero-padding and
+  `valid_length` slicing, fixing biased parameter estimates from duplicated data points
+- **CLI `memory_mb` enforcement**: `resource_limits()` now enforces `memory_mb` via `RLIMIT_AS`,
+  respecting existing soft/hard limits; previously documented but never enforced
+- **`exponential_decay` bounds**: Allow negative amplitude (`a < 0`) to support
+  rising-to-asymptote fits; rate `b >= 0` preserved to distinguish from `exponential_growth`
 - **TRF numerical stability**: Guard division-by-zero in alpha update and initial trust region ratio;
   initialize `x_new`/`f_new`/`cost_new` before inner loops (NameError guard)
 - **`intersect_trust_region_jax`**: Fix wrong roots when `b=0` (`jnp.sign` → `jnp.where`);
@@ -49,8 +87,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **EarlyStopping callback**: Skip NaN/Inf iterations instead of corrupting state
 - **Example scripts**: Convert JAX residuals to NumPy before `scipy.stats.normaltest` (GPU
   compatibility)
-- **Profiler test**: Update assertion to match ASCII "OK" indicator (was emoji)
-- **Docs**: Renumber RST lists after mixed precision item removal
+- **GPU Warning Message**: Fixed misleading header "GPU ACCELERATION AVAILABLE" → "GPU AVAILABLE BUT NOT USED";
+  indented detail lines; expanded `pip uninstall` command to include CUDA plugin packages
+- **GUI `scipy.stats` imports**: Moved deferred `from scipy import stats` calls in `export.py` and
+  `results.py` from inside hot-path CI computation methods to module level (eliminates repeated import overhead)
+- **Mixed-precision fallback log**: Clarified log message wording to accurately describe the fallback trigger
+- **Streaming docstring**: Added missing `get_available_memory` docstring note in `streaming_coordinator.py`
+- **Built-in model docs**: Fixed parameter names in Gaussian, exponential decay, and sigmoid
+  documentation to match actual function signatures; replaced `logistic` with `sigmoid`
 
 ### Changed
 
@@ -60,6 +104,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Streaming JAX modernization**: Replace Python loops with `jax.lax.fori_loop` for variance
   regularization warmup; pre-allocate dynamic masks replacing condition branches in adaptive
   hybrid; update conjugate gradient constraint checks for JIT compatibility
+- **Dependency Consolidation**: Promoted `xxhash`, `pyyaml`, `evosax`, `psutil` (≥7.2.0), and dev/test tools
+  from optional extras to core `pyproject.toml` dependencies; `uv sync` now installs a fully functional environment
+- **Dependency constraints**: Pinned tested versions in `pyproject.toml` comments to mirror CI matrix
+  (NumPy 2.4.2, SciPy 1.17.1, JAX 0.9.1, ruff 0.15.5)
 - **ASCII status indicators**: Replace emoji markers (`✅`/`❌`/`✓`/`✗`) with ASCII equivalents
   (`[OK]`/`[FAIL]`/`OK`/`FAIL`) in profiler, SVD fallback, and visualization for terminal
   compatibility and log parsability
@@ -67,6 +115,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   telemetry event log
 - **Type modernization**: `Optional` → `X | None`, `Union` → `|` syntax across config, types,
   and streaming modules (Python 3.12+)
+- **`mypy` removed from core deps**: Moved to dev-only tool (not needed at runtime)
+- **`pyproject.toml` extras cleanup**: Consolidated `all` extra; removed now-redundant `performance`,
+  `yaml`, and over-specified optional groups (covered by core deps)
+- **ReadTheDocs**: Removed `extra_requirements: [docs]` from `.readthedocs.yaml`; docs deps now in core
+- **Makefile GPU install flow**: Splits CUDA 13 install into 3 explicit steps with post-install conflict verification
+- **Architecture docs**: Major `architecture.rst` overhaul reflecting v0.6.4 orchestration layer
+  (DataPreprocessor, OptimizationSelector, CovarianceComputer, StreamingCoordinator, facades,
+  CMAESOptimizer, MethodSelector; updated AdaptiveHybrid line count to 4550L)
+- **Tutorial docs**: Removed ~1500 lines of redundant inline code blocks from tutorials 01–06;
+  retains conceptual narrative with API doc references
+- **API ref stubs**: Refreshed 18 autodoc RST stubs for renamed/reorganized modules
+- **TRF bounds pre-conversion**: `lb_jnp`/`ub_jnp` now accepted as pre-converted JAX arrays
+  in TRF initialization, eliminating repeated `jnp.array()` conversion overhead
+- **Security Upgrade**: Refreshed `uv.lock` to resolve 2 CVEs
+  - **cryptography** 46.0.4 → 46.0.5 — fixes CVE-2026-26007 (ECDSA/ECDH subgroup validation)
+  - **pillow** 12.1.0 → 12.1.1 — fixes CVE-2026-25990 (PSD out-of-bounds write)
 - **Pytest workers**: Reduced from 4 to 2 to avoid memory exhaustion from parallel XLA caches
 - **Test environment variables**: Moved JAX env vars (`JAX_ENABLE_X64`, `XLA_PYTHON_CLIENT_*`)
   to module level before JAX import (was firing too late in fixtures)
@@ -86,8 +150,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Infrastructure
 
-- **CI/CD**: Updated GitHub Actions (main, quality, release, security) environments and Python
-  versions; added concurrency groups to prevent parallel workflow collisions
+- **CI/CD restructuring**: Consolidated `main.yml` + `security.yml` into `ci.yml` (lint + type-check
+  + test matrix) and `docs.yml` (Sphinx build with path-filtered triggers); streamlined `quality.yml`
+  and `release.yml`; added concurrency groups to prevent parallel workflow collisions
+- **setup-uv action**: Upgraded to `astral-sh/setup-uv@v6`
+- **uvloop Windows**: Added `uvloop` platform marker (`sys_platform != "win32"`) to prevent
+  install failures on Windows CI
+- **Python 3.14**: Dropped from test matrix (JAX does not yet support Python 3.14)
+- **uv pinned**: Pinned `uv` 0.8.23 in CI for reproducible builds
 - **Pre-commit hooks**: Updated all hooks to latest versions (ruff 0.15.5, mypy 1.19.1,
   pyupgrade 3.21.2, pre-commit-hooks v6.0.0)
 - **ReadTheDocs**: Updated to ubuntu-24.04 and Python 3.13
@@ -96,6 +166,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deprecation warnings in notebook runners
 - **pyproject.toml**: Updated ruff configurations and mypy override paths for new module structure
 - **`.gitignore`**: Added `.worktrees/` directory
+- **Test reliability**: Fixed flaky timing-dependent tests in benchmark memory, smart cache,
+  and profiler modules by replacing wall-clock assertions with correctness checks
 
 ### Documentation
 
@@ -103,50 +175,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   study to reflect v0.6.x API (`workflow="auto"`, `CMAESConfig`)
 - **Troubleshooting**: Removed stale workarounds; trimmed to current issues
 - **CLI templates**: Bumped workflow config template to v6.5 with updated engine requirements
-
-## [0.6.10] - 2026-03-06
-
-### Added
-
-- **CUDA Plugin Conflict Detection**: New `check_plugin_conflicts()` function in `nlsq/device.py`
-  - Detects simultaneous `jax-cuda12-plugin` + `jax-cuda13-plugin` installs (PJRT registration conflict)
-  - Detects plugin/jaxlib version mismatches via `importlib.metadata`
-  - Conflict warnings surfaced in `check_gpu_availability()` even when GPU is working
-  - `get_device_info()` now includes a `plugin_issues` field
-- **`gpu-diagnose` Makefile target**: Dedicated target for diagnosing CUDA plugin and version mismatch issues
-- **New Sphinx API stubs**: Added `nlsq.stability.guard`, `nlsq.utils.diagnostics`, `nlsq.callbacks`,
-  `nlsq.core.factories`, and `nlsq.interfaces` autodoc RST pages
-
-### Fixed
-
-- **GPU Warning Message**: Fixed misleading header "GPU ACCELERATION AVAILABLE" → "GPU AVAILABLE BUT NOT USED";
-  indented detail lines; expanded `pip uninstall` command to include CUDA plugin packages
-- **GUI `scipy.stats` imports**: Moved deferred `from scipy import stats` calls in `export.py` and
-  `results.py` from inside hot-path CI computation methods to module level (eliminates repeated import overhead)
-- **Mixed-precision fallback log**: Clarified log message wording to accurately describe the fallback trigger
-- **Streaming docstring**: Added missing `get_available_memory` docstring note in `streaming_coordinator.py`
-
-### Changed
-
-- **Dependency Consolidation**: Promoted `xxhash`, `pyyaml`, `evosax`, `psutil` (≥7.2.0), and dev/test tools
-  from optional extras to core `pyproject.toml` dependencies; `uv sync` now installs a fully functional environment
-- **`mypy` removed from core deps**: Moved to dev-only tool (not needed at runtime)
-- **`uv.lock` synchronized**: Lockfile updated to reflect new consolidated dependency set
-- **`pyproject.toml` extras cleanup**: Consolidated `all` extra; removed now-redundant `performance`,
-  `yaml`, and over-specified optional groups (covered by core deps)
-- **ReadTheDocs**: Removed `extra_requirements: [docs]` from `.readthedocs.yaml`; docs deps now in core
-- **Makefile GPU install flow**: Splits CUDA 13 install into 3 explicit steps with post-install conflict verification
-- **Architecture docs**: Major `architecture.rst` overhaul reflecting v0.6.4 orchestration layer
-  (DataPreprocessor, OptimizationSelector, CovarianceComputer, StreamingCoordinator, facades,
-  CMAESOptimizer, MethodSelector; updated AdaptiveHybrid line count to 4550L)
-- **Tutorial docs**: Removed ~1500 lines of redundant inline code blocks from tutorials 01–06;
-  retains conceptual narrative with API doc references
-- **API ref stubs**: Refreshed 18 autodoc RST stubs for renamed/reorganized modules
-- **TRF bounds pre-conversion**: `lb_jnp`/`ub_jnp` now accepted as pre-converted JAX arrays
-  in TRF initialization, eliminating repeated `jnp.array()` conversion overhead
-- **Security Upgrade**: Refreshed `uv.lock` to resolve 2 CVEs
-  - **cryptography** 46.0.4 → 46.0.5 — fixes CVE-2026-26007 (ECDSA/ECDH subgroup validation)
-  - **pillow** 12.1.0 → 12.1.1 — fixes CVE-2026-25990 (PSD out-of-bounds write)
 
 ## [0.6.7] - 2026-01-26
 
