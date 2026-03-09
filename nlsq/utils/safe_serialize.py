@@ -29,6 +29,26 @@ class SafeSerializationError(Exception):
     pass
 
 
+def _serialize_dict_key(key: Any) -> str:
+    """Convert a dict key to a collision-resistant string for JSON serialization."""
+    if isinstance(key, str):
+        return key
+    if isinstance(key, int):
+        return f"__int_key__{key}"
+    if isinstance(key, float):
+        return f"__float_key__{key}"
+    return f"__key_{type(key).__name__}__{key}"
+
+
+def _deserialize_dict_key(key: str) -> str | int | float:
+    """Restore original dict key type from serialized string form."""
+    if key.startswith("__int_key__"):
+        return int(key[len("__int_key__") :])
+    if key.startswith("__float_key__"):
+        return float(key[len("__float_key__") :])
+    return key
+
+
 def _convert_to_serializable(obj: Any) -> Any:
     """Convert object to JSON-serializable form.
 
@@ -64,15 +84,15 @@ def _convert_to_serializable(obj: Any) -> Any:
         value = float(obj)
         # Handle special float values
         if np.isnan(value):
-            return {"__type__": "float", "value": "nan"}
+            return {"__nlsq_type__": "float", "value": "nan"}
         if np.isinf(value):
-            return {"__type__": "float", "value": "inf" if value > 0 else "-inf"}
+            return {"__nlsq_type__": "float", "value": "inf" if value > 0 else "-inf"}
         return value
 
     # Handle tuples (convert to list with marker)
     if isinstance(obj, tuple):
         return {
-            "__type__": "tuple",
+            "__nlsq_type__": "tuple",
             "value": [_convert_to_serializable(item) for item in obj],
         }
 
@@ -84,8 +104,12 @@ def _convert_to_serializable(obj: Any) -> Any:
     if isinstance(obj, dict):
         result = {}
         for key, value in obj.items():
-            # JSON requires string keys
-            str_key = str(key) if not isinstance(key, str) else key
+            str_key = _serialize_dict_key(key)
+            if str_key in result:
+                raise SafeSerializationError(
+                    f"Key collision during serialization: {key!r} maps to "
+                    f"existing key {str_key!r}"
+                )
             result[str_key] = _convert_to_serializable(value)
         return result
 
@@ -97,7 +121,7 @@ def _convert_to_serializable(obj: Any) -> Any:
                 "Use HDF5 storage for large arrays."
             )
         return {
-            "__type__": "ndarray",
+            "__nlsq_type__": "ndarray",
             "dtype": str(obj.dtype),
             "shape": list(obj.shape),
             "data": obj.tolist(),
@@ -138,9 +162,9 @@ def _convert_from_serializable(obj: Any) -> Any:
 
     # Handle dicts (may contain type markers)
     if isinstance(obj, dict):
-        # Check for type markers
-        if "__type__" in obj:
-            type_name = obj["__type__"]
+        # Check for type markers (support both new and legacy key for backward compat)
+        if "__nlsq_type__" in obj or "__type__" in obj:
+            type_name = obj.get("__nlsq_type__") or obj.get("__type__")
 
             if type_name == "tuple":
                 return tuple(_convert_from_serializable(item) for item in obj["value"])
@@ -163,8 +187,11 @@ def _convert_from_serializable(obj: Any) -> Any:
                 shape = tuple(obj["shape"])
                 return np.array(data, dtype=dtype).reshape(shape)
 
-        # Regular dict
-        return {key: _convert_from_serializable(value) for key, value in obj.items()}
+        # Regular dict — restore non-string keys from prefixed encoding
+        return {
+            _deserialize_dict_key(key): _convert_from_serializable(value)
+            for key, value in obj.items()
+        }
 
     return obj
 
