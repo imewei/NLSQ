@@ -178,6 +178,7 @@ class TestSciPyCompatibility:
         )
 
 
+@pytest.mark.serial
 class TestCovarianceAccuracy:
     """Verify covariance matrix accuracy against analytical solutions."""
 
@@ -436,6 +437,7 @@ class TestBackwardCompatibility:
         assert pcov.shape == (2, 2), "Default curve_fit broken"
 
 
+@pytest.mark.serial
 class TestCheckpointResume:
     """Test checkpoint save/resume functionality across phases."""
 

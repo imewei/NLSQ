@@ -15,6 +15,10 @@ import sys
 
 import pytest
 
+# GUI tests crash xdist workers on headless CI (Qt/pyqtgraph segfault).
+# Run single-threaded to prevent worker crashes.
+pytestmark = pytest.mark.serial
+
 # ---------------------------------------------------------------------------
 # 1. Import-order guards (no Qt/GUI imports at module level)
 # ---------------------------------------------------------------------------

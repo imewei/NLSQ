@@ -1250,6 +1250,7 @@ class TestAPIIntegration:
             assert "timestamp" in phase_history[i]
 
 
+@pytest.mark.serial
 class TestAPIIntegrationCurveFit:
     """Tests for Task Group 7: API Integration with curve_fit."""
 
