@@ -16,6 +16,7 @@ serializing through this module.
 from __future__ import annotations
 
 import json
+from collections import deque
 from typing import Any
 
 import numpy as np
@@ -96,8 +97,8 @@ def _convert_to_serializable(obj: Any) -> Any:
             "value": [_convert_to_serializable(item) for item in obj],
         }
 
-    # Handle lists
-    if isinstance(obj, list):
+    # Handle lists and deques (deque serializes as list)
+    if isinstance(obj, (list, deque)):
         return [_convert_to_serializable(item) for item in obj]
 
     # Handle dicts
@@ -126,6 +127,10 @@ def _convert_to_serializable(obj: Any) -> Any:
             "shape": list(obj.shape),
             "data": obj.tolist(),
         }
+
+    # Handle JAX arrays (convert to numpy first, then serialize)
+    if type(obj).__module__.startswith("jax"):
+        return _convert_to_serializable(np.asarray(obj))
 
     # Reject unknown types
     raise SafeSerializationError(

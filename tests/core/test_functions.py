@@ -105,8 +105,8 @@ class TestExponentialDecay:
 
         assert len(lb) == 3
         assert len(ub) == 3
-        assert lb[0] == 0  # a >= 0
-        assert lb[1] == 0  # b >= 0
+        assert np.isneginf(lb[0])  # a unconstrained (supports negative amplitude)
+        assert lb[1] == 0  # b >= 0 (decay rate)
 
 
 class TestExponentialGrowth:

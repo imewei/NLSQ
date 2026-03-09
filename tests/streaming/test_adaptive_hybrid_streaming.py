@@ -193,8 +193,7 @@ class TestPhaseTrackingInfrastructure:
         # Verify initial phase is 0
         assert optimizer.current_phase == 0
 
-        # Verify phase history is empty list
-        assert isinstance(optimizer.phase_history, list)
+        # Verify phase history is empty (bounded deque)
         assert len(optimizer.phase_history) == 0
 
         # Verify phase start time is None initially
