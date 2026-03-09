@@ -17,7 +17,14 @@ import pytest
 
 # GUI tests crash xdist workers on headless CI (Qt/pyqtgraph segfault).
 # Run single-threaded to prevent worker crashes.
-pytestmark = pytest.mark.serial
+# Skip entirely on headless Linux CI (no display server → SIGABRT on OpenGL init).
+_has_display = sys.platform != "linux" or bool(os.environ.get("DISPLAY"))
+pytestmark = [
+    pytest.mark.serial,
+    pytest.mark.skipif(
+        not _has_display, reason="No display server (headless Linux CI)"
+    ),
+]
 
 # ---------------------------------------------------------------------------
 # 1. Import-order guards (no Qt/GUI imports at module level)
