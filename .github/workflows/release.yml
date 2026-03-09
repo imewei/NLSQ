@@ -3,342 +3,234 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 0.1.4)'
+        description: "Release version (e.g., v1.2.3)"
         required: true
         type: string
-      publish_to_pypi:
-        description: 'Publish to PyPI'
-        required: true
-        type: boolean
-        default: false
-
-permissions:
-  contents: write
-  id-token: write  # Required for PyPI trusted publishing
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false  # Never cancel in-progress releases
 
 env:
-  PYTHON_VERSION: "3.13"
+  JAX_ENABLE_X64: "1"
 
 jobs:
-  # Validate Release
-  validate-release:
+  validate:
     name: Validate Release
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
-      version: ${{ steps.get-version.outputs.version }}
-      is_prerelease: ${{ steps.check-version.outputs.is_prerelease }}
+      version: ${{ steps.version.outputs.version }}
+      pypi-version: ${{ steps.version.outputs.pypi-version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get version from tag or input
-        id: get-version
+      - name: Extract version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            VERSION="$REF_NAME"
           else
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            VERSION="$INPUT_VERSION"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Release version: $VERSION"
 
-      - name: Check version format
-        id: check-version
-        run: |
-          VERSION="${{ steps.get-version.outputs.version }}"
+          echo "Release version: $VERSION"
 
-          # Check if version matches semver pattern
-          if ! echo "$VERSION" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
-            echo "❌ Invalid version format: $VERSION"
-            echo "Expected format: X.Y.Z or X.Y.Z-prerelease"
+          # Validate version format (vX.Y.Z only)
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format: $VERSION"
+            echo "Expected format: vX.Y.Z (pre-release tags not supported)"
             exit 1
           fi
 
-          # Check if it's a prerelease
-          if echo "$VERSION" | grep -E '-'; then
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
-            echo "⚠️  Pre-release version detected"
-          else
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            echo "✅ Stable release version"
-          fi
+          PYPI_VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "pypi-version=$PYPI_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Verify CHANGELOG entry
-        run: |
-          VERSION="${{ steps.get-version.outputs.version }}"
-          if [ -f CHANGELOG.md ]; then
-            if ! grep -q "## \[$VERSION\]" CHANGELOG.md && ! grep -q "## $VERSION" CHANGELOG.md; then
-              echo "⚠️  Warning: No CHANGELOG entry found for version $VERSION"
-            else
-              echo "✅ CHANGELOG entry found"
-            fi
-          else
-            echo "⚠️  No CHANGELOG.md file found"
-          fi
-
-  # Build Distribution
-  build-distribution:
-    name: Build Distribution
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
-    needs: validate-release
+    timeout-minutes: 45
+    needs: validate
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
-      - name: Set up Python
-        run: uv python install ${{ env.PYTHON_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
-      - name: Build distributions
+      - name: Install Qt system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: |
+          uv run pytest tests/ \
+            -v \
+            --tb=short \
+            -m "not slow" \
+            --cov=nlsq \
+            --cov-report=term
+
+      - name: Verify import
+        run: uv run python -c "import nlsq; print('Version:', nlsq.__version__)"
+
+  build:
+    name: Build Distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build package
         run: uv build
 
-      - name: Check distributions
-        run: |
-          uvx twine check dist/*
-          uvx check-wheel-contents dist/*.whl
+      - name: Check distribution
+        run: uvx twine check dist/*
 
-      - name: Verify version in package
-        run: |
-          uv venv /tmp/verify-env
-          VIRTUAL_ENV=/tmp/verify-env uv pip install dist/*.whl
-          PACKAGE_VERSION=$(/tmp/verify-env/bin/python -c "import nlsq; print(nlsq.__version__)")
-          EXPECTED_VERSION="${{ needs.validate-release.outputs.version }}"
-
-          echo "Package version: $PACKAGE_VERSION"
-          echo "Expected version: $EXPECTED_VERSION"
-
-          if [ "$PACKAGE_VERSION" != "$EXPECTED_VERSION" ]; then
-            echo "Version mismatch!"
-            exit 1
-          fi
-          echo "Version matches"
-
-      - name: Upload distributions
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: distributions
+          name: dist
           path: dist/
           retention-days: 30
 
-  # Run Full Test Suite
-  test-release:
-    name: Test Release
-    runs-on: ubuntu-latest
-    needs: build-distribution
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install ${{ env.PYTHON_VERSION }}
-
-      - name: Download distributions
-        uses: actions/download-artifact@v4
-        with:
-          name: distributions
-          path: dist/
-
-      - name: Install from wheel
-        run: |
-          uv venv
-          uv pip install dist/*.whl
-
-      - name: Run smoke tests
-        shell: bash
-        run: |
-          source .venv/bin/activate || . .venv/Scripts/activate
-          python -c "
-          import nlsq
-          import jax.numpy as jnp
-          import numpy as np
-
-          print(f'✅ NLSQ version: {nlsq.__version__}')
-
-          # Test basic curve fitting
-          def exponential(x, a, b):
-              return a * jnp.exp(-b * x)
-
-          x = jnp.linspace(0, 4, 50)
-          y = 2.5 * jnp.exp(-1.3 * x) + 0.1 * np.random.randn(50)
-
-          popt, pcov = nlsq.curve_fit(exponential, x, y)
-          print(f'✅ curve_fit test passed: a={popt[0]:.2f}, b={popt[1]:.2f}')
-
-          # Test reusable fitter
-          fitter = nlsq.CurveFit()
-          popt2, pcov2 = fitter.curve_fit(exponential, x, y)
-          print(f'✅ CurveFit test passed: a={popt2[0]:.2f}, b={popt2[1]:.2f}')
-          "
-
-  # Publish to PyPI
   publish-pypi:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: [validate-release, build-distribution, test-release]
-    if: |
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_pypi == 'true')
-    environment:
-      name: pypi
-      url: https://pypi.org/p/nlsq
+    timeout-minutes: 10
+    needs: [validate, build]
+    permissions:
+      id-token: write
+    environment: release
     steps:
-      - name: Download distributions
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: distributions
+          name: dist
           path: dist/
 
       - name: Check if version exists on PyPI
         id: check-pypi
+        env:
+          PYPI_VERSION: ${{ needs.validate.outputs.pypi-version }}
         run: |
-          VERSION="${{ needs.validate-release.outputs.version }}"
-          echo "Checking if nlsq==$VERSION exists on PyPI..."
-
-          # Query PyPI API for this version
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/nlsq/$VERSION/json")
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/nlsq/$PYPI_VERSION/json")
 
           if [ "$HTTP_STATUS" = "200" ]; then
             echo "version_exists=true" >> $GITHUB_OUTPUT
-            echo "⚠️  Version $VERSION already exists on PyPI"
-            echo "Skipping publication to prevent duplicate upload error"
+            echo "Version $PYPI_VERSION already exists on PyPI - skipping"
           else
             echo "version_exists=false" >> $GITHUB_OUTPUT
-            echo "✅ Version $VERSION does not exist on PyPI"
-            echo "Proceeding with publication"
           fi
 
       - name: Publish to PyPI
         if: steps.check-pypi.outputs.version_exists == 'false'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
         with:
           print-hash: true
-          verbose: true
 
-      - name: Skip publication (version exists)
-        if: steps.check-pypi.outputs.version_exists == 'true'
-        run: |
-          echo "⚠️  Skipping PyPI publication"
-          echo "Version ${{ needs.validate-release.outputs.version }} already exists on PyPI"
-          echo "This is expected if the tag was moved or the workflow re-ran"
-          echo "View existing version: https://pypi.org/project/nlsq/${{ needs.validate-release.outputs.version }}/"
-
-  # Create GitHub Release
-  create-github-release:
+  github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [validate-release, publish-pypi]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 10
+    needs: [validate, publish-pypi]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Download distributions
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: distributions
+          name: dist
           path: dist/
 
-      - name: Check if GitHub release exists
-        id: check-release
+      - name: Generate changelog
+        id: changelog
         env:
-          GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ needs.validate.outputs.version }}
         run: |
-          VERSION="${{ needs.validate-release.outputs.version }}"
-          echo "Checking if GitHub release v$VERSION already exists..."
-
-          if gh release view "v$VERSION" &>/dev/null; then
-            echo "release_exists=true" >> $GITHUB_OUTPUT
-            echo "⚠️  GitHub release v$VERSION already exists"
-            echo "Skipping release creation to prevent duplicate"
+          PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -v "^${CURRENT_TAG}$" | head -1)
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG="Initial release"
           else
-            echo "release_exists=false" >> $GITHUB_OUTPUT
-            echo "✅ GitHub release v$VERSION does not exist"
-            echo "Proceeding with release creation"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "${PREVIOUS_TAG}..HEAD")
           fi
 
-      - name: Generate release notes
-        if: steps.check-release.outputs.release_exists == 'false'
-        id: release-notes
-        run: |
-          VERSION="${{ needs.validate-release.outputs.version }}"
+          DELIMITER=$(openssl rand -hex 16)
+          echo "changelog<<${DELIMITER}" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "${DELIMITER}" >> $GITHUB_OUTPUT
 
-          # Extract changelog section for this version
-          if [ -f CHANGELOG.md ]; then
-            NOTES=$(awk "/## \[$VERSION\]|## $VERSION/,/## \[|## [0-9]/" CHANGELOG.md | head -n -1)
-            if [ -z "$NOTES" ]; then
-              NOTES="Release $VERSION"
-            fi
-          else
-            NOTES="Release $VERSION"
-          fi
+      - name: Create Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        with:
+          name: Release ${{ needs.validate.outputs.version }}
+          body: |
+            # Release ${{ needs.validate.outputs.version }}
 
-          # Save to file for gh release create
-          echo "$NOTES" > release-notes.md
+            ## What's Changed
+            ${{ steps.changelog.outputs.changelog }}
 
-      - name: Create GitHub Release
-        if: steps.check-release.outputs.release_exists == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="${{ needs.validate-release.outputs.version }}"
-          PRERELEASE="${{ needs.validate-release.outputs.is_prerelease }}"
+            ## Installation
+            ```bash
+            pip install nlsq==${{ needs.validate.outputs.pypi-version }}
+            ```
 
-          gh release create "v$VERSION" \
-            dist/* \
-            --title "Release v$VERSION" \
-            --notes-file release-notes.md \
-            $([ "$PRERELEASE" = "true" ] && echo "--prerelease" || echo "")
+            ## Artifacts
+            - Source distribution (.tar.gz)
+            - Wheel distribution (.whl)
+          files: dist/*
+          draft: false
+          prerelease: false
 
-      - name: Skip release creation (already exists)
-        if: steps.check-release.outputs.release_exists == 'true'
-        run: |
-          echo "⚠️  Skipping GitHub release creation"
-          echo "Release v${{ needs.validate-release.outputs.version }} already exists"
-          echo "This is expected if the tag was moved or the workflow re-ran"
-          echo "View existing release: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.validate-release.outputs.version }}"
-
-  # Release Summary
-  release-summary:
-    name: Release Summary
+  announce:
+    name: Post-Release
     runs-on: ubuntu-latest
-    needs: [validate-release, build-distribution, test-release, publish-pypi, create-github-release]
-    if: always()
+    needs: [validate, github-release]
+    permissions:
+      contents: read
+    if: always() && needs.github-release.result == 'success'
     steps:
-      - name: Print release status
+      - name: Summary
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          PYPI_VERSION: ${{ needs.validate.outputs.pypi-version }}
         run: |
-          VERSION="${{ needs.validate-release.outputs.version }}"
-
-          echo "📊 Release Summary for v$VERSION:"
-          echo "  Validation: ${{ needs.validate-release.result }}"
-          echo "  Build: ${{ needs.build-distribution.result }}"
-          echo "  Tests: ${{ needs.test-release.result }}"
-          echo "  PyPI: ${{ needs.publish-pypi.result }}"
-          echo "  GitHub Release: ${{ needs.create-github-release.result }}"
-
-          if [[ "${{ needs.publish-pypi.result }}" == "success" ]]; then
-            echo "✅ Successfully published to PyPI!"
-            echo "📦 Install with: pip install nlsq==$VERSION"
-          fi
-
-          if [[ "${{ needs.create-github-release.result }}" == "success" ]]; then
-            echo "✅ GitHub release created!"
-          fi
+          echo "## Release $VERSION Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tests:** Passed" >> $GITHUB_STEP_SUMMARY
+          echo "**PyPI:** Published" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub:** Released" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Install:** \`pip install nlsq==$PYPI_VERSION\`" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAX_ENABLE_X64: "1"
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Check formatting
+        run: uv run ruff format --check nlsq/ tests/
+
+      - name: Lint code
+        run: uv run ruff check nlsq/ tests/ --output-format=github
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run mypy
+        run: uv run mypy nlsq/ --show-error-codes
+
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    env:
+      # Limit pytest-xdist workers on ubuntu to prevent OOM (JAX per-worker memory
+      # exceeds runner RAM with auto workers). macOS/Windows use auto.
+      PYTEST_XDIST_WORKERS: ${{ matrix.os == 'ubuntu-latest' && '2' || 'auto' }}
+      # Override pyproject.toml addopts (-q conflicts with -v, hiding CI failures).
+      PYTEST_ADDOPTS: "-ra --strict-markers --strict-config --durations=10"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Verify JAX installation
+        run: |
+          uv run python -c "import jax; print(f'JAX version: {jax.__version__}'); print(f'JAX devices: {jax.devices()}')"
+
+      - name: Run unit tests
+        run: |
+          uv run pytest tests/ \
+            -v \
+            -n "$PYTEST_XDIST_WORKERS" \
+            -o "addopts=$PYTEST_ADDOPTS" \
+            --tb=short \
+            --maxfail=10 \
+            -m "not slow and not serial" \
+            --cov=nlsq \
+            --cov-report=xml \
+            --cov-report=term
+
+      - name: Run serial tests
+        run: |
+          uv run pytest tests/ \
+            -v \
+            -o "addopts=$PYTEST_ADDOPTS" \
+            --tb=short \
+            -m "serial and not slow" \
+          || {
+            echo "::warning::Serial tests failed on first attempt, retrying..."
+            sleep 2
+            uv run pytest tests/ \
+              -v \
+              -o "addopts=$PYTEST_ADDOPTS" \
+              --tb=short \
+              -m "serial and not slow"
+          }
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
+
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint, type-check, test]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build package
+        run: uv build
+
+      - name: Check package
+        run: uvx twine check dist/*
+
+      - name: Test installation from wheel
+        run: |
+          uv venv .venv-test
+          VIRTUAL_ENV=.venv-test uv pip install dist/*.whl
+          VIRTUAL_ENV=.venv-test uv run python -c "import nlsq; print(f'NLSQ version: {nlsq.__version__}')"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 7

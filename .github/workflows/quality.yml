@@ -1,81 +1,177 @@
-name: Code Quality Gates
+name: Code Quality
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  schedule:
+    # Run weekly on Sundays at 3 AM UTC
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
 
 env:
-  PYTHON_VERSION: "3.13"
-  MAX_COMPLEXITY: 15
-  MAX_FILE_LINES: 2000
+  JAX_ENABLE_X64: "1"
 
 jobs:
-  quality-gates:
-    name: Quality Gates
+  security:
+    name: Security Scan
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
 
-      - name: Set up Python
-        run: uv python install ${{ env.PYTHON_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: Install dependencies
         run: uv sync
 
-      # T037: Cyclomatic complexity check (fails on CC > 15)
+      - name: Run Bandit security scan
+        run: |
+          uvx bandit -r nlsq/ \
+            -c pyproject.toml \
+            -f json \
+            -o bandit-report.json \
+            -ll || true
+          uvx bandit -r nlsq/ -c pyproject.toml -ll
+
+      - name: Check dependency vulnerabilities
+        run: |
+          uv export --no-dev --format requirements-txt > /tmp/requirements.txt
+          uvx pip-audit -r /tmp/requirements.txt \
+            --ignore-vuln CVE-2025-53000 \
+            --ignore-vuln CVE-2026-0994
+        continue-on-error: true
+
+      - name: Upload security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: bandit-report.json
+          retention-days: 30
+
+  type-check:
+    name: Type Checking
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run mypy
+        run: |
+          uv run mypy nlsq/ \
+            --config-file=pyproject.toml \
+            --show-error-codes \
+            --pretty
+
+  complexity:
+    name: Complexity Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
       - name: Check cyclomatic complexity
         run: |
-          echo "Checking cyclomatic complexity (max: ${{ env.MAX_COMPLEXITY }})..."
-          if uv run ruff check nlsq/ --select=C901 --output-format=github 2>&1 | grep -q "C901"; then
-            echo "::error::Functions with complexity > ${{ env.MAX_COMPLEXITY }} detected"
-            uv run ruff check nlsq/ --select=C901
-            exit 1
-          fi
-          echo "All functions have complexity <= ${{ env.MAX_COMPLEXITY }}"
+          uv run ruff check nlsq/ --select=C901 --output-format=github
 
-      # T038: mypy type checking for core files
-      - name: Type check with mypy
+      - name: Check code complexity metrics
         run: |
-          echo "Running mypy type checking..."
-          uv run mypy nlsq/ --show-error-codes
+          uvx radon cc nlsq/ -a -nb
+          uvx radon mi nlsq/ -nb
 
-      # T039: File size warning (non-blocking)
-      - name: Check file sizes
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Qt system dependencies
         run: |
-          echo "Checking for files > ${{ env.MAX_FILE_LINES }} lines..."
-          large_files=$(find nlsq -name "*.py" -exec wc -l {} \; | awk -v max=${{ env.MAX_FILE_LINES }} '$1 > max {print $0}' | sort -rn)
-          if [ -n "$large_files" ]; then
-            echo "::warning::Files exceeding ${{ env.MAX_FILE_LINES }} lines:"
-            echo "$large_files" | while read line; do
-              count=$(echo "$line" | awk '{print $1}')
-              file=$(echo "$line" | awk '{print $2}')
-              echo "::warning file=$file::$file has $count lines (limit: ${{ env.MAX_FILE_LINES }})"
-            done
-          else
-            echo "All files are within size limits"
-          fi
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
 
-      # Summary report
-      - name: Quality Summary
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest tests/ \
+            --cov=nlsq \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            -n 2 \
+            -m "not slow and not serial"
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          flags: quality
+          fail_ci_if_error: false
+
+      - name: Upload coverage HTML
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 30
+
+  summary:
+    name: Quality Summary
+    runs-on: ubuntu-latest
+    needs: [security, type-check, complexity, coverage]
+    if: always()
+    steps:
+      - name: Generate summary
         run: |
-          echo "## Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Code Quality Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Complexity (CC <= ${{ env.MAX_COMPLEXITY }}) | ${{ job.status == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| mypy Type Check | ${{ job.status == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| File Size (warning only) | N/A |" >> $GITHUB_STEP_SUMMARY
+          echo "**Security Scan:** ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Type Checking:** ${{ needs.type-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Complexity:** ${{ needs.complexity.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Coverage:** ${{ needs.coverage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Quality checks complete. See artifacts for detailed reports._" >> $GITHUB_STEP_SUMMARY

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=80.0", "setuptools-scm>=9.0"]  # Tested on 80.9.0, 9.2.1
+requires = ["setuptools>=80.0", "setuptools-scm>=9.0"]  # Tested on 82.0.0, 9.2.2
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -91,23 +91,23 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.1)
-    "scipy>=1.16.0",          # Tested on 1.16.3
+    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.2)
+    "scipy>=1.16.0",          # Tested on 1.17.1
 
     # JAX ecosystem (>=0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
     # IMPORTANT: CUDA plugin versions must exactly match jaxlib version
     "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.9.1)
     "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.9.1)
-    "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.6)
+    "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.7)
 
     # Visualization and monitoring
     "matplotlib>=3.10.0",     # Tested on 3.10.8
-    "psutil>=7.2.0",          # For memory monitoring (tested on 7.2.1)
-    "tqdm>=4.67.0",           # For progress bars (tested on 4.67.1)
+    "psutil>=7.2.0",          # For memory monitoring (tested on 7.2.2)
+    "tqdm>=4.67.0",           # For progress bars (tested on 4.67.3)
 
     # Large dataset support
-    "h5py>=3.15.0",           # Required for streaming large datasets (tested on 3.15.1)
+    "h5py>=3.15.0",           # Required for streaming large datasets (tested on 3.16.0)
 
     # Performance
     "xxhash>=3.6.0",          # 10x faster hashing for cache keys (tested on 3.6.0)
@@ -126,41 +126,41 @@ dependencies = [
     "pytest-rerunfailures>=16.0",  # Retry flaky tests (tested on 16.1)
     "pytest-timeout>=2.4.0",  # Tested on 2.4.0
     "pytest-qt>=4.5.0",       # Qt widget testing (tested on 4.5.0)
-    "hypothesis>=6.148.0",    # Property-based testing (tested on 6.148.12)
-    "black>=25.0.0",          # Tested on 25.12.0 (CalVer)
-    "ruff>=0.14.0",           # Tested on 0.14.14
+    "hypothesis>=6.148.0",    # Property-based testing (tested on 6.151.9)
+    "black>=25.0.0",          # Tested on 26.3.0 (CalVer)
+    "ruff>=0.14.0",           # Tested on 0.15.5
     "mypy>=1.19.0",           # Static type checker (tested on 1.19.1)
     "pre-commit>=4.5.0",      # Tested on 4.5.1
-    "ipython>=9.0.0",         # Tested on 9.8.0
+    "ipython>=9.0.0",         # Tested on 9.11.0
     "bandit>=1.9.0",          # Tested on 1.9.3
     "pyupgrade>=3.21.0",      # Tested on 3.21.2
 
     # Documentation
-    "sphinx>=8.0.0",                    # Tested on 8.2.3
+    "sphinx>=9.0.0",                    # Tested on 9.1.0
     "furo>=2025.0.0",                   # Modern Sphinx theme (tested on 2025.12.19)
     "sphinx-copybutton>=0.5.2",         # Copy button for code blocks
-    "sphinx-autodoc-typehints>=3.5.0",  # Tested on 3.5.2
-    "sphinx-design>=0.6.0",             # For grid cards and tabs (tested on 0.6.1)
-    "myst-parser>=4.0.0",               # Tested on 4.0.1
+    "sphinx-autodoc-typehints>=3.5.0",  # Tested on 3.9.7
+    "sphinx-design>=0.6.0",             # For grid cards and tabs (tested on 0.7.0)
+    "myst-parser>=5.0.0",               # Tested on 5.0.0
 
     # Benchmark
     "asv>=0.6.5",             # Tested on 0.6.5
     "memory-profiler>=0.61.0", # Tested on 0.61.0
 
     # Jupyter
-    "jupyterlab>=4.5.0",      # Tested on 4.5.1
-    "ipykernel>=7.0.0",       # Tested on 7.1.0
-    "notebook>=7.5.0",        # Tested on 7.5.1
+    "jupyterlab>=4.5.0",      # Tested on 4.5.5
+    "ipykernel>=7.0.0",       # Tested on 7.2.0
+    "notebook>=7.5.0",        # Tested on 7.5.4
 
     # Build tools
-    "build>=1.3.0",           # Build frontend (tested on 1.3.0)
+    "build>=1.3.0",           # Build frontend (tested on 1.4.0)
     "twine>=6.2.0",           # PyPI upload tool (tested on 6.2.0)
-    "setuptools>=80.0.0",     # Build backend (tested on 80.9.0)
+    "setuptools>=80.0.0",     # Build backend (tested on 82.0.0)
     "setuptools-scm>=9.2.0",  # Version management (tested on 9.2.2)
-    "wheel>=0.46.2",          # Wheel builder (tested on 0.46.2)
+    "wheel>=0.46.2",          # Wheel builder (tested on 0.46.3)
 
     # Qt GUI (native desktop application)
-    "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.1)
+    "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.2)
     "pyqtgraph>=0.14.0",      # GPU-accelerated scientific plotting (tested on 0.14.0)
 ]
 

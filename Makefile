@@ -3,7 +3,7 @@
 # GPU-Accelerated Nonlinear Least Squares Curve Fitting
 # Built on JAX for datasets up to 100M+ points
 
-.PHONY: help install install-dev install-jax-gpu install-jax-gpu-cuda12 install-jax-gpu-cuda13 gpu-check gpu-diagnose env-info \
+.PHONY: help install dev install-dev install-jax-gpu install-jax-gpu-cuda12 install-jax-gpu-cuda13 gpu-check gpu-diagnose env-info \
         test test-fast test-slow test-parallel test-all-parallel test-coverage \
         test-cpu test-debug test-large test-modules test-comprehensive \
         clean clean-all clean-pyc clean-build clean-test clean-venv \
@@ -104,7 +104,8 @@ help:
 	@echo ""
 	@echo "$(BOLD)$(GREEN)INSTALLATION$(RESET)"
 	@echo "  $(CYAN)install$(RESET)          Install package in editable mode (CPU-only JAX)"
-	@echo "  $(CYAN)install-dev$(RESET)      Install with development dependencies"
+	@echo "  $(CYAN)dev$(RESET)              Install dev dependencies + pre-commit hooks"
+	@echo "  $(CYAN)install-dev$(RESET)      Same as dev"
 	@echo ""
 	@echo "$(BOLD)$(GREEN)GPU COMMANDS (System CUDA)$(RESET)"
 	@echo "  $(CYAN)install-jax-gpu$(RESET)         Auto-detect system CUDA and install JAX (Linux only)"
@@ -172,6 +173,8 @@ install:
 	@echo "$(BOLD)$(BLUE)Installing $(PACKAGE_NAME) in editable mode...$(RESET)"
 	@$(INSTALL_CMD) -e .
 	@echo "$(BOLD)$(GREEN)✓ Package installed!$(RESET)"
+
+dev: install-dev  ## Alias for install-dev (referenced in CLAUDE.md)
 
 install-dev: install
 	@echo "$(BOLD)$(BLUE)Installing development dependencies...$(RESET)"

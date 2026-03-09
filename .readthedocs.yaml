@@ -1,6 +1,6 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2026-03-07
-# Requires: Python 3.12+ (tested on 3.13), JAX 0.9.1, NumPy 2.4.2, SciPy 1.17.1
+# Updated: 2026-03-09
+# Requires: Python 3.12+ (tested on 3.13), Sphinx 9.1.0, JAX 0.9.1, NumPy 2.4.2, SciPy 1.17.1
 # All dependencies (including docs) are in pyproject.toml[dependencies]
 #
 # Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
@@ -16,7 +16,7 @@ build:
   jobs:
     pre_build:
       - echo "Building NLSQ documentation..."
-      - echo "This build requires JAX 0.9.1, NumPy 2.4.2, SciPy 1.17.1"
+      - echo "This build requires Sphinx 9.1.0, JAX 0.9.1, NumPy 2.4.2, SciPy 1.17.1"
     post_build:
       - echo "Documentation build complete"
 

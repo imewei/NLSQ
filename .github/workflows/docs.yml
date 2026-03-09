@@ -1,0 +1,108 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "nlsq/**"
+      - ".github/workflows/docs.yml"
+      - "pyproject.toml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "nlsq/**"
+      - ".github/workflows/docs.yml"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build Documentation
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install package
+        run: uv sync
+
+      - name: Build documentation with Sphinx
+        run: |
+          cd docs
+          uv run make clean
+          uv run make html
+
+      - name: Run link checker
+        continue-on-error: true
+        run: |
+          cd docs
+          uv run make linkcheck
+
+      - name: Upload HTML build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: documentation-html
+          path: docs/_build/html/
+          retention-days: 7
+
+      - name: Upload linkcheck results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linkcheck-results
+          path: docs/_build/linkcheck/
+          retention-days: 7
+
+      - name: Check build quality
+        run: |
+          if [ -f "docs/_build/html/index.html" ]; then
+            echo "Documentation built successfully"
+          else
+            echo "Documentation build failed: index.html not found"
+            exit 1
+          fi
+
+  comment:
+    name: Post PR Comment
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'pull_request' && always()
+    permissions:
+      pull-requests: write
+    timeout-minutes: 5
+    steps:
+      - name: Comment PR with build status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ needs.build.result }}' === 'success' ? 'pass' : 'fail';
+            const message = `**Documentation Build** - ${status}`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
