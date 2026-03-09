@@ -11,6 +11,9 @@ conflicts = [[
     { package = "nlsq", extra = "gpu-cuda13" },
 ]]
 
+[manifest]
+overrides = [{ name = "uvloop", marker = "sys_platform != 'win32'", specifier = ">=0.22.1" }]
+
 [[package]]
 name = "absl-py"
 version = "2.4.0"
@@ -2361,7 +2364,7 @@ dependencies = [
     { name = "simplejson" },
     { name = "tensorstore" },
     { name = "typing-extensions" },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32' or (extra == 'extra-4-nlsq-gpu-cuda12' and extra == 'extra-4-nlsq-gpu-cuda13')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c7/d9/23cd8d7d92a37ad0fec1d93fd05a247cde3675b2d87f72a5b6e2331fe87c/orbax_checkpoint-0.11.33.tar.gz", hash = "sha256:745fd94112b32c72018b90b44e6206f69021236ee299561f66df82b1b1b0d6ca", size = 473659, upload-time = "2026-02-18T04:22:30.571Z" }
 wheels = [
