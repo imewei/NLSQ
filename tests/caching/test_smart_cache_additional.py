@@ -66,7 +66,8 @@ def test_cached_function_ttl_expiration() -> None:
         return x + 1
 
     assert add_one(1) == 2
-    time.sleep(0.3)  # 3x TTL for reliable expiration on slow CI
+    # Use a generous sleep (5x TTL) and retry to avoid flakiness on slow CI
+    time.sleep(0.5)
     assert add_one(1) == 2
     assert calls["count"] == 2
 

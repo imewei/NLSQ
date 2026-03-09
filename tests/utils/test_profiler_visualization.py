@@ -6,7 +6,6 @@ Tests the visualization and dashboard components for performance profiling.
 """
 
 import json
-import time
 
 import pytest
 
@@ -25,10 +24,11 @@ class TestProfilerVisualization:
         """Set up test profiler with sample data."""
         self.profiler = PerformanceProfiler()
 
-        # Generate sample profiling data
+        # Generate sample profiling data (use record_timing instead of sleep
+        # to avoid timing-dependent flakiness)
         for i in range(5):
             with self.profiler.profile("test1"):
-                time.sleep(0.01)
+                self.profiler.record_timing("optimization", 0.01 * (i + 1))
                 self.profiler.update_current(
                     n_iterations=10 + i,
                     n_function_evals=50 + i * 5,
@@ -41,7 +41,7 @@ class TestProfilerVisualization:
 
         for i in range(3):
             with self.profiler.profile("test2"):
-                time.sleep(0.02)
+                self.profiler.record_timing("optimization", 0.02 * (i + 1))
                 self.profiler.update_current(
                     n_iterations=15 + i,
                     n_function_evals=60 + i * 5,
@@ -101,7 +101,7 @@ class TestProfilerVisualization:
         """Test distribution plot with insufficient data."""
         # Create profile with only 1 run
         with self.profiler.profile("single_run"):
-            time.sleep(0.01)
+            self.profiler.record_timing("optimization", 0.01)
 
         fig = self.viz.plot_timing_distribution("single_run")
 
@@ -184,24 +184,25 @@ class TestProfilingDashboard:
         """Set up test dashboard with sample data."""
         self.profiler = PerformanceProfiler()
 
-        # Generate sample profiling data
+        # Generate sample profiling data (use record_timing instead of sleep
+        # to avoid timing-dependent flakiness)
         for i in range(5):
             with self.profiler.profile("fast"):
-                time.sleep(0.01)
+                self.profiler.record_timing("optimization", 0.01 * (i + 1))
                 self.profiler.update_current(
                     n_iterations=8 + i, n_function_evals=40 + i * 5, success=True
                 )
 
         for i in range(5):
             with self.profiler.profile("slow"):
-                time.sleep(0.02)
+                self.profiler.record_timing("optimization", 0.02 * (i + 1))
                 self.profiler.update_current(
                     n_iterations=15 + i, n_function_evals=75 + i * 5, success=True
                 )
 
         for i in range(5):
             with self.profiler.profile("unreliable"):
-                time.sleep(0.015)
+                self.profiler.record_timing("optimization", 0.015 * (i + 1))
                 self.profiler.update_current(
                     n_iterations=10 + i, n_function_evals=50 + i * 5, success=i < 2
                 )
@@ -357,7 +358,7 @@ class TestIntegration:
         # Simulate optimization runs
         for run in range(3):
             with profiler.profile("optimization"):
-                time.sleep(0.01)
+                profiler.record_timing("optimization", 0.01 * (run + 1))
                 profiler.update_current(
                     n_iterations=10 + run,
                     n_function_evals=50 + run * 10,
@@ -405,7 +406,7 @@ class TestIntegration:
 
         # Profile some operations
         with profiler.profile("test_global"):
-            time.sleep(0.01)
+            profiler.record_timing("optimization", 0.01)
             profiler.update_current(n_iterations=10, success=True)
 
         # Create visualization from global profiler
@@ -425,11 +426,11 @@ class TestIntegration:
         # Generate sufficient data
         for i in range(10):
             with profiler.profile("plot_test1"):
-                time.sleep(0.005)
+                profiler.record_timing("optimization", 0.005 * (i + 1))
                 profiler.update_current(n_iterations=10 + i, success=True)
 
             with profiler.profile("plot_test2"):
-                time.sleep(0.008)
+                profiler.record_timing("optimization", 0.008 * (i + 1))
                 profiler.update_current(n_iterations=15 + i, success=True)
 
         viz = ProfilerVisualization(profiler)
@@ -458,7 +459,7 @@ class TestEdgeCases:
         profiler = PerformanceProfiler()
 
         with profiler.profile("test"):
-            time.sleep(0.01)
+            profiler.record_timing("optimization", 0.01)
 
         viz = ProfilerVisualization(profiler)
 
@@ -481,7 +482,7 @@ class TestEdgeCases:
         profiler = PerformanceProfiler()
 
         with profiler.profile("test-profile_2024"):
-            time.sleep(0.01)
+            profiler.record_timing("optimization", 0.01)
             profiler.update_current(n_iterations=10, success=True)
 
         viz = ProfilerVisualization(profiler)

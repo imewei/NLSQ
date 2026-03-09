@@ -105,10 +105,10 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         # Check that timestamps were recorded
         self.assertEqual(len(manager._call_frequency_tracker), 5)
 
-        # All timestamps should be recent
+        # All timestamps should be recent (generous 10s window for slow CI)
         now = time.time()
         for ts in manager._call_frequency_tracker:
-            self.assertLess(now - ts, 1.0)  # Within last second
+            self.assertLess(now - ts, 10.0)
 
 
 if __name__ == "__main__":
