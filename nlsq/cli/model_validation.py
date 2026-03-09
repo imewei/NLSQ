@@ -35,6 +35,7 @@ from typing import Any
 _HAS_RESOURCE_LIMITS = sys.platform != "win32"
 
 if _HAS_RESOURCE_LIMITS:
+    import resource
     import signal
 
 logger = logging.getLogger("nlsq.cli.security")
@@ -375,7 +376,18 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
         if callable(old_handler):
             old_handler(signum, frame)
 
+    # Enforce memory limit via RLIMIT_AS (virtual address space)
+    old_soft, old_hard = resource.getrlimit(resource.RLIMIT_AS)
+    limit_bytes = memory_mb * 1024 * 1024
+    # Only tighten the limit, never loosen it
+    effective_limit = limit_bytes
+    if old_hard != resource.RLIM_INFINITY:
+        effective_limit = min(effective_limit, old_hard)
+    if old_soft != resource.RLIM_INFINITY:
+        effective_limit = min(effective_limit, old_soft)
+
     try:
+        resource.setrlimit(resource.RLIMIT_AS, (effective_limit, old_hard))
         old_handler = signal.signal(signal.SIGALRM, signal_handler)  # type: ignore[assignment]
         timer = threading.Timer(timeout, timeout_handler)
         timer.start()
@@ -385,6 +397,8 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     except MemoryError as err:
         raise ResourceLimitError(f"Memory limit ({memory_mb}MB) exceeded") from err
     finally:
+        # Restore memory limit
+        resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
         # Cancel timer and disarm signal before restoring handler
         if timer is not None:
             timer.cancel()

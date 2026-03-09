@@ -275,7 +275,7 @@ def bounds_exponential_decay() -> BoundsTuple:
     bounds : tuple
         ([lower_a, lower_b, lower_c], [upper_a, upper_b, upper_c])
     """
-    return ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
+    return ([-np.inf, 0, -np.inf], [np.inf, np.inf, np.inf])
 
 
 _attach_methods(
