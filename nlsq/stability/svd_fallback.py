@@ -85,10 +85,11 @@ def compute_svd_with_fallback(J_h, full_matrices=False):
                     J_h_cpu = jax.device_put(J_h, cpu_device)
                     U, s, Vt = jax_svd(J_h_cpu, full_matrices=full_matrices)
                     return U, s, Vt.T
-            except Exception:
+            except Exception as cpu_error:
                 # Third attempt: Use numpy as last resort
                 warnings.warn(
-                    "CPU JAX SVD also failed, using NumPy SVD", RuntimeWarning
+                    f"CPU JAX SVD also failed ({cpu_error}), using NumPy SVD",
+                    RuntimeWarning,
                 )
                 import numpy as np
 

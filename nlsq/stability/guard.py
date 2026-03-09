@@ -276,10 +276,10 @@ class NumericalStabilityGuard:
             has_invalid = jnp.any(~is_finite_mask)
             return gradient_fixed, has_invalid, needs_clipping, grad_norm
 
-        # JIT-compiled safe norm
+        # JIT-compiled safe norm (L2 only — ord is not a valid traced arg for jnp.linalg.norm)
         @jit
         def _safe_norm_jit(x, scale_factor):
-            """JIT-compiled safe norm with pre-computed scale."""
+            """JIT-compiled safe norm with pre-computed scale (L2 norm)."""
             x_scaled = x / scale_factor
             return jnp.linalg.norm(x_scaled) * scale_factor
 
@@ -661,7 +661,11 @@ class NumericalStabilityGuard:
 
         # Use JIT-compiled safe norm when scaling is needed (2-5x faster)
         if max_val > 1e100 or (max_val < 1e-100 and max_val > 0):
-            return float(self._safe_norm_jit(x, max_val))
+            if ord == 2:
+                return float(self._safe_norm_jit(x, max_val))
+            # Non-L2 norms: scale manually without JIT (rare path)
+            x_scaled = x / max_val
+            return float(jnp.linalg.norm(x_scaled, ord=ord) * max_val)
         else:
             return float(jnp.linalg.norm(x, ord=ord))
 
