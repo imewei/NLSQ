@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   JAX_ENABLE_X64: "1"
 
@@ -141,6 +145,7 @@ jobs:
             --cov-report=html \
             --cov-report=term-missing \
             -n 2 \
+            --timeout=300 --timeout-method=thread \
             -m "not slow and not serial"
         continue-on-error: true
 
