@@ -117,6 +117,7 @@ jobs:
             -o "addopts=$PYTEST_ADDOPTS" \
             --tb=short \
             --maxfail=10 \
+            --timeout=300 \
             -m "not slow and not serial" \
             --cov=nlsq \
             --cov-report=xml \
@@ -128,6 +129,7 @@ jobs:
             -v \
             -o "addopts=$PYTEST_ADDOPTS" \
             --tb=short \
+            --timeout=300 \
             -m "serial and not slow" \
           || {
             echo "::warning::Serial tests failed on first attempt, retrying..."
@@ -136,6 +138,7 @@ jobs:
               -v \
               -o "addopts=$PYTEST_ADDOPTS" \
               --tb=short \
+              --timeout=300 \
               -m "serial and not slow"
           }
 
