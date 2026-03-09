@@ -98,6 +98,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.8.23"
           enable-cache: true
 
       - name: Set up Python
@@ -145,6 +146,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.8.23"
           enable-cache: true
 
       - name: Set up Python
