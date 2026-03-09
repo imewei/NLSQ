@@ -180,7 +180,10 @@ def _solve_tr_subproblem_cg(
     def compute_regularized():
         p_reg, _, _ = _conjugate_gradient_solve(J, f, d, alpha)
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
-        return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
+        # If regularized step is within trust region, use it directly;
+        # otherwise scale to trust region boundary (no arbitrary clamping)
+        scale = jnp.where(p_reg_norm <= Delta, 1.0, Delta / p_reg_norm)
+        return scale * p_reg
 
     return lax.cond(
         p_gn_norm <= Delta,
@@ -215,7 +218,10 @@ def _solve_tr_subproblem_cg_bounds(
             J_augmented, f_augmented, d_augmented, alpha
         )
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
-        return jnp.clip(Delta / p_reg_norm, 0.1, 10.0) * p_reg
+        # If regularized step is within trust region, use it directly;
+        # otherwise scale to trust region boundary (no arbitrary clamping)
+        scale = jnp.where(p_reg_norm <= Delta, 1.0, Delta / p_reg_norm)
+        return scale * p_reg
 
     return lax.cond(
         p_gn_norm <= Delta,

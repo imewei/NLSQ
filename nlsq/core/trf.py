@@ -1506,8 +1506,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     )
                 _n_iter = 1
             else:
+                # Use m + n for the augmented system row count (J_augmented is (m+n) x n)
                 p_h, alpha, _n_iter = solve_lsq_trust_region_jax(
-                    n, m, uf, s, V, Delta, initial_alpha=alpha
+                    n, m + n, uf, s, V, Delta, initial_alpha=alpha
                 )
 
             p = d * p_h
