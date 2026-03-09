@@ -123,7 +123,7 @@ class TestModelValidationCaching:
         assert isinstance(fitter._validated_functions, dict)
 
     def test_validation_cache_uses_composite_key(self):
-        """Test that validation caching uses (id(func), id(func.__code__)) key."""
+        """Test that validation caching uses content-based key (name, bytecode, consts)."""
         from nlsq.streaming.large_dataset import LargeDatasetFitter
 
         fitter = LargeDatasetFitter()
@@ -138,10 +138,14 @@ class TestModelValidationCaching:
 
         fitter._validate_model_function(model, x, y, p0)
 
-        # Check that validation cache has the composite key
-        expected_key = (id(model), id(model.__code__))
+        # Check that validation cache has the content-based key
+        expected_key = (
+            model.__name__,
+            model.__code__.co_code,
+            model.__code__.co_consts,
+        )
         assert expected_key in fitter._validated_functions, (
-            f"Expected composite key {expected_key} in _validated_functions"
+            "Expected content-based key in _validated_functions"
         )
 
     def test_validation_skipped_for_same_function(self):
@@ -248,11 +252,9 @@ class TestDataChunkerPaddingOptimization:
         assert len(x_chunk) == expected_bucket
         assert valid_len == 50
 
-        # Verify cyclic pattern in the padded portion
-        for i in range(50):
-            assert x_chunk[50 + i] == x_chunk[i % 50], (
-                f"Expected cyclic repetition at index {50 + i}"
-            )
+        # Verify zero-padding in the padded portion
+        for i in range(expected_bucket - 50):
+            assert x_chunk[50 + i] == 0, f"Expected zero padding at index {50 + i}"
 
     def test_bucket_padding_memory_allocation(self):
         """Test that bucket padding allocates to power-of-2 sizes."""
@@ -353,8 +355,8 @@ class TestIntegration:
         assert cache_size_2 == 1, "Second validation should use cache (no new entry)"
         assert cache_size_3 == 1, "Third validation should use cache (no new entry)"
 
-        # Verify the function is in the cache
-        func_key = (id(model), id(model.__code__))
+        # Verify the function is in the cache (content-based key)
+        func_key = (model.__name__, model.__code__.co_code, model.__code__.co_consts)
         assert func_key in fitter._validated_functions, (
             "Model function should be in validation cache"
         )

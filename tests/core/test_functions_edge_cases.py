@@ -213,10 +213,10 @@ class TestExponentialDecay:
         lower, upper = bounds_exponential_decay()
         assert len(lower) == 3
         assert len(upper) == 3
-        # a >= 0, b >= 0, c unconstrained
-        assert lower[0] == 0
+        # a unconstrained, b >= 0 (decay rate), c unconstrained
+        assert np.isneginf(lower[0])
         assert lower[1] == 0
-        assert np.isinf(lower[2])
+        assert np.isneginf(lower[2])
 
 
 class TestExponentialGrowth:

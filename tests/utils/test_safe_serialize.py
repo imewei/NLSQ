@@ -324,13 +324,13 @@ class TestEdgeCases:
         data = {"key1": None, "key2": "value"}
         assert safe_loads(safe_dumps(data)) == data
 
-    def test_numeric_string_keys_preserved(self):
-        """Test that dict keys are converted to strings."""
+    def test_numeric_keys_round_trip(self):
+        """Test that non-string dict keys round-trip correctly."""
         data = {1: "one", 2: "two"}
         result = safe_loads(safe_dumps(data))
-        # Keys converted to strings
-        assert result["1"] == "one"
-        assert result["2"] == "two"
+        # Integer keys are preserved through serialization
+        assert result[1] == "one"
+        assert result[2] == "two"
 
 
 class TestErrorHandling:
