@@ -760,9 +760,11 @@ class DataChunker:
             bucket_size = get_bucket_size(current_chunk_size)
 
             if current_chunk_size < bucket_size:
-                # Use cyclic padding (np.resize) to fill bucket - this is mathematically
-                # safe for least-squares as repeated points don't change the solution
-                chunk_indices = np.resize(chunk_indices, bucket_size)
+                # Zero-pad indices to bucket size for JIT cache efficiency.
+                # The yielded valid_length lets consumers use only real data points.
+                pad_indices = np.zeros(bucket_size, dtype=chunk_indices.dtype)
+                pad_indices[:current_chunk_size] = chunk_indices
+                chunk_indices = pad_indices
 
             # FR-006: Use buffer pool if provided to reduce allocation overhead
             if buffer_pool is not None:
@@ -1186,14 +1188,14 @@ class LargeDatasetFitter:
 
         Notes
         -----
-        Task Group 7 (5.1a): Uses validation caching by function identity.
+        Task Group 7 (5.1a): Uses validation caching by function content.
         Validation is skipped for functions that have already been validated,
-        using composite key (id(func), id(func.__code__)) for cache lookup.
+        using content-based key (name, bytecode, consts) for cache lookup.
         Provides 1-5% performance gain in chunked processing.
         """
         # Task Group 7 (5.1a): Check validation cache
-        # Use composite key for robust function identity
-        func_key = (id(f), id(f.__code__))
+        # Use function object and its code object directly (not id() which can be recycled by GC)
+        func_key = (f.__name__, f.__code__.co_code, f.__code__.co_consts)
         if func_key in self._validated_functions:
             self.logger.debug("Model validation skipped (cached)")
             return
@@ -2260,17 +2262,18 @@ class LargeDatasetFitter:
 
         try:
             # Process dataset in chunks with sequential parameter refinement
-            # Note: create_chunks yields (x, y, idx, valid_length) - we ignore valid_length
-            # here since the cyclic padding doesn't affect least-squares solutions
-            for x_chunk, y_chunk, chunk_idx, _valid_length in DataChunker.create_chunks(
+            for x_chunk, y_chunk, chunk_idx, valid_length in DataChunker.create_chunks(
                 xdata, ydata, stats.recommended_chunk_size, buffer_pool=buffer_pool
             ):
                 chunk_start_time = time.time()
                 try:
+                    # Use only valid data points (exclude zero-padding)
+                    x_valid = x_chunk[:valid_length]
+                    y_valid = y_chunk[:valid_length]
                     popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
                         f,
-                        x_chunk,
-                        y_chunk,
+                        x_valid,
+                        y_valid,
                         p0=current_params,
                         bounds=bounds,
                         method=method,

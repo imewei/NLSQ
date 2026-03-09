@@ -23,6 +23,7 @@ This implementation focuses on Phase 0 setup logic and phase tracking infrastruc
 from __future__ import annotations
 
 import time
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -162,7 +163,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Phase tracking infrastructure
         self.current_phase: int = 0
-        self.phase_history: list[dict[str, Any]] = []
+        self.phase_history: deque[dict[str, Any]] = deque(maxlen=100)
         self.phase_start_time: float | None = None
         self.normalized_params: jnp.ndarray | None = None
 
@@ -669,11 +670,25 @@ class AdaptiveHybridStreamingOptimizer:
         n_chunks : int
             Number of chunks
         """
-        # Check cache validity (same data pointer and chunk_size)
+        # Check cache validity using data content hash (not id() which can be recycled by GC)
         cache = getattr(self, "_padded_cache", None)
         if cache is not None:
-            c_id_x, c_id_y, c_cs, c_xp, c_yp, c_np, c_nc = cache
-            if c_id_x == id(x_data) and c_id_y == id(y_data) and c_cs == chunk_size:
+            c_hash_x, c_hash_y, c_cs, c_xp, c_yp, c_np, c_nc = cache
+            # Use shape + first/last/sum as a fast content fingerprint
+            x_flat = x_data.ravel()
+            x_hash = (
+                x_data.shape,
+                float(x_flat[0]),
+                float(x_flat[-1]),
+                float(jnp.sum(x_data)),
+            )
+            y_hash = (
+                y_data.shape,
+                float(y_data.ravel()[0]),
+                float(y_data.ravel()[-1]),
+                float(jnp.sum(y_data)),
+            )
+            if c_hash_x == x_hash and c_hash_y == y_hash and c_cs == chunk_size:
                 return c_xp, c_yp, c_np, c_nc
 
         n_points = x_data.shape[0]
@@ -690,9 +705,11 @@ class AdaptiveHybridStreamingOptimizer:
             x_padded = x_data
             y_padded = y_data
 
+        x_hash = (x_data.shape, float(x_data.ravel()[0]), float(x_data.ravel()[-1]))
+        y_hash = (y_data.shape, float(y_data.ravel()[0]), float(y_data.ravel()[-1]))
         self._padded_cache = (
-            id(x_data),
-            id(y_data),
+            x_hash,
+            y_hash,
             chunk_size,
             x_padded,
             y_padded,
