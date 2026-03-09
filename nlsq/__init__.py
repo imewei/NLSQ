@@ -45,6 +45,11 @@ def _dbg(msg: str) -> None:
 
 _dbg("faulthandler enabled")
 
+# Suppress noisy XLA/PJRT C++ warnings (e.g. "Assume version compatibility.
+# PjRt-IFRT does not track XLA executable versions.") that are harmless on
+# JAX >=0.8 and clutter stderr.  Level 2 = ERROR-only (suppress INFO+WARNING).
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
 # =============================================================================
 # PLATFORM-SPECIFIC ENVIRONMENT LOCK
 # GPU acceleration (CUDA) is supported ONLY on Linux.
