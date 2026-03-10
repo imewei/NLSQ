@@ -46,11 +46,13 @@ class StatCard(QFrame):
         layout.addWidget(self._value_label)
 
         # Apply default (dark) styling before any theme is propagated
+        from nlsq.gui_qt.theme import DARK_THEME
+
         self._apply_card_style(
-            surface_variant="#383838",
-            border="#4a4a4a",
-            text_secondary="#b0b0b0",
-            text_primary="#ffffff",
+            surface_variant=DARK_THEME.surface_variant,
+            border=DARK_THEME.border,
+            text_secondary=DARK_THEME.text_secondary,
+            text_primary=DARK_THEME.text_primary,
         )
 
     def _apply_card_style(
