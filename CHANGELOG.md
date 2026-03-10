@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Dynamic light/dark theme system**: All GUI components (plots, code editor, stat cards, pages)
+  now respond dynamically to theme changes via Qt signal/slot connections. Previously, theme was
+  only applied at startup. `ThemeManager` emits `theme_changed` signal; `MainWindow` propagates
+  to all pages, plots, and widgets. Includes `ThemeConfig.plot_colors()` helper returning
+  theme-appropriate foreground/background/grid/accent colors for pyqtgraph plots
+- **Themed code editor**: `CodeEditor` widget adapts syntax highlighting colors, line number area,
+  and current-line highlight to active theme
+
+### Changed
+
+- **StatCard styling**: Use `ThemeConfig` constants for initial card styling instead of hardcoded
+  color values, ensuring consistency with the theme system
+
 ## [0.6.10] - 2026-03-09
 
 ### Added
