@@ -133,6 +133,7 @@ dependencies = [
     "pre-commit>=4.5.0",      # Tested on 4.5.1
     "ipython>=9.0.0",         # Tested on 9.11.0
     "bandit>=1.9.0",          # Tested on 1.9.3
+    "pip-audit>=2.9.0",       # Dependency vulnerability scanning (tested on 2.9.0)
     "pyupgrade>=3.21.0",      # Tested on 3.21.2
 
     # Documentation
@@ -328,6 +329,7 @@ max-complexity = 15
 "nlsq/cli/*" = ["C901"]  # CLI modules (known tech debt)
 # Example scripts, test utilities, and dev scripts (complexity acceptable for standalone tools)
 "examples/scripts/*" = ["C901"]
+"examples/notebooks/*" = ["C901", "F404"]
 "scripts/*" = ["C901"]
 "tests/architecture/utils.py" = ["C901"]
 
