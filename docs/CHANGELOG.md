@@ -1,6 +1,6 @@
 # Documentation Changelog
 
-## v0.6.10 (2026-03-06)
+## v0.6.10 (2026-03-09)
 - Added `check_plugin_conflicts()` for CUDA plugin dual-install and version-mismatch detection in `device.py`
 - Fixed misleading GPU warning header; expanded uninstall command to include CUDA plugin packages
 - Promoted xxhash, pyyaml, evosax, psutil, and dev/test tools to core dependencies (single `uv sync`)

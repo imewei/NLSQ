@@ -126,8 +126,8 @@ NLSQ relies on JAX, NumPy, and SciPy. Keep these dependencies updated:
 pip install pip-audit
 pip-audit
 
-# Update dependencies (ensure NumPy 2.0+, JAX 0.6.0+)
-pip install --upgrade nlsq "jax>=0.6.0" "jaxlib>=0.6.0" "numpy>=2.0.0" "scipy>=1.14.0"
+# Update dependencies (ensure NumPy 2.2+, JAX 0.8.0+)
+pip install --upgrade nlsq "jax>=0.8.0" "jaxlib>=0.8.0" "numpy>=2.2.0" "scipy>=1.16.0"
 
 # Verify versions
 python -c "import numpy; import jax; print(f'NumPy: {numpy.__version__}, JAX: {jax.__version__}')"

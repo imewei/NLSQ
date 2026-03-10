@@ -474,14 +474,14 @@ class TournamentSelector:
         Returns
         -------
         dict
-            Checkpoint state that can be pickled and saved.
+            Checkpoint state that can be serialized and saved.
 
         Examples
         --------
-        >>> import pickle
+        >>> from nlsq.utils.safe_serialize import safe_dumps
         >>> checkpoint = selector.to_checkpoint()
-        >>> with open('tournament_checkpoint.pkl', 'wb') as f:
-        ...     pickle.dump(checkpoint, f)
+        >>> with open('tournament_checkpoint.json', 'w') as f:
+        ...     f.write(safe_dumps(checkpoint))
         """
         return {
             "candidates": self.candidates.copy(),
@@ -518,9 +518,9 @@ class TournamentSelector:
 
         Examples
         --------
-        >>> import pickle
-        >>> with open('tournament_checkpoint.pkl', 'rb') as f:
-        ...     checkpoint = pickle.load(f)
+        >>> from nlsq.utils.safe_serialize import safe_loads
+        >>> with open('tournament_checkpoint.json') as f:
+        ...     checkpoint = safe_loads(f.read())
         >>> selector = TournamentSelector.from_checkpoint(checkpoint, config)
         """
         candidates = checkpoint["candidates"]
