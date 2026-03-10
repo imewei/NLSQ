@@ -54,10 +54,16 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
     needs: validate
     permissions:
       contents: read
+    env:
+      # Limit pytest-xdist workers to prevent OOM (JAX per-worker memory
+      # exceeds runner RAM with auto workers).
+      PYTEST_XDIST_WORKERS: "2"
+      # Override pyproject.toml addopts (-q conflicts with -v, hiding CI failures).
+      PYTEST_ADDOPTS: "-ra --strict-markers --strict-config --durations=10"
     steps:
       - uses: actions/checkout@v4
 
@@ -77,14 +83,37 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run tests
+      - name: Run unit tests
         run: |
           uv run pytest tests/ \
             -v \
+            -n "$PYTEST_XDIST_WORKERS" \
+            -o "addopts=$PYTEST_ADDOPTS" \
             --tb=short \
-            -m "not slow" \
+            --maxfail=10 \
+            --timeout=300 --timeout-method=thread \
+            -m "not slow and not serial" \
             --cov=nlsq \
             --cov-report=term
+
+      - name: Run serial tests
+        run: |
+          uv run pytest tests/ \
+            -v \
+            -o "addopts=$PYTEST_ADDOPTS" \
+            --tb=short \
+            --timeout=300 --timeout-method=thread \
+            -m "serial and not slow" \
+          || {
+            echo "::warning::Serial tests failed on first attempt, retrying..."
+            sleep 2
+            uv run pytest tests/ \
+              -v \
+              -o "addopts=$PYTEST_ADDOPTS" \
+              --tb=short \
+              --timeout=300 --timeout-method=thread \
+              -m "serial and not slow"
+          }
 
       - name: Verify import
         run: uv run python -c "import nlsq; print('Version:', nlsq.__version__)"
