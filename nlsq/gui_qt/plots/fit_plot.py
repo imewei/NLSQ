@@ -54,6 +54,11 @@ class FitPlotWidget(QWidget):
         self._conf_lower: NDArray | None = None
         self._conf_upper: NDArray | None = None
 
+        # Import here to avoid a circular import at module level
+        from nlsq.gui_qt.theme import DARK_THEME
+
+        self._theme: ThemeConfig = DARK_THEME
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -61,9 +66,9 @@ class FitPlotWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Create plot widget
+        # Create plot widget — background set properly in set_theme()
         self._plot_widget = pg.PlotWidget()
-        self._plot_widget.setBackground("w")
+        self._plot_widget.setBackground(self._theme.plot_background)
         self._plot_widget.showGrid(x=True, y=True, alpha=0.3)
         self._plot_widget.setLabel("left", "Y")
         self._plot_widget.setLabel("bottom", "X")
@@ -126,12 +131,14 @@ class FitPlotWidget(QWidget):
         # Downsample if needed
         plot_x, plot_y = self._downsample(self._data_x, self._data_y)
 
-        # Create scatter plot
+        # Create scatter plot — color from theme
+        marker_color = pg.mkColor(self._theme.data_marker)
+        marker_color.setAlpha(160)
         self._data_scatter = pg.ScatterPlotItem(
             x=plot_x,
             y=plot_y,
             pen=pg.mkPen(None),
-            brush=pg.mkBrush(33, 150, 243, 150),  # Blue with alpha
+            brush=pg.mkBrush(marker_color),
             size=6,
             symbol="o",
         )
@@ -176,11 +183,11 @@ class FitPlotWidget(QWidget):
             self._plot_widget.removeItem(self._conf_band_lower)
             self._conf_band_lower = None
 
-        # Create fit curve
+        # Create fit curve — color from theme
         self._fit_curve = pg.PlotDataItem(
             x=self._fit_x,
             y=self._fit_y,
-            pen=pg.mkPen(color=(244, 67, 54), width=2),  # Red line
+            pen=pg.mkPen(color=self._theme.fit_line, width=2),
         )
         self._plot_widget.addItem(self._fit_curve)
         self._fit_curve.setVisible(self._show_fit_cb.isChecked())
@@ -204,11 +211,13 @@ class FitPlotWidget(QWidget):
             self._plot_widget.addItem(self._conf_band_lower)
             self._plot_widget.addItem(self._conf_band_upper)
 
-            # Create fill between bands
+            # Create fill between bands — use fit_line color at low opacity
+            band_color = pg.mkColor(self._theme.fit_line)
+            band_color.setAlpha(50)
             self._conf_fill = pg.FillBetweenItem(
                 self._conf_band_lower,
                 self._conf_band_upper,
-                brush=pg.mkBrush(244, 67, 54, 50),  # Red with alpha
+                brush=pg.mkBrush(band_color),
             )
             self._plot_widget.addItem(self._conf_fill)
 
@@ -290,19 +299,32 @@ class FitPlotWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        if theme.is_dark:
-            self._plot_widget.setBackground("#1e1e1e")
-            # Update text colors
-            for axis in ["left", "bottom"]:
-                axis_item = self._plot_widget.getAxis(axis)
-                if axis_item is not None:
-                    axis_item.setTextPen(pg.mkPen(color="w"))
-        else:
-            self._plot_widget.setBackground("w")
-            for axis in ["left", "bottom"]:
-                axis_item = self._plot_widget.getAxis(axis)
-                if axis_item is not None:
-                    axis_item.setTextPen(pg.mkPen(color="k"))
+        self._theme = theme
+
+        # Plot background and axes
+        self._plot_widget.setBackground(theme.plot_background)
+        axis_pen = pg.mkPen(color=theme.plot_foreground)
+        for axis in ["left", "bottom"]:
+            axis_item = self._plot_widget.getAxis(axis)
+            if axis_item is not None:
+                axis_item.setPen(axis_pen)
+                axis_item.setTextPen(axis_pen)
+
+        # Update existing scatter if present
+        if self._data_scatter is not None:
+            marker_color = pg.mkColor(theme.data_marker)
+            marker_color.setAlpha(160)
+            self._data_scatter.setBrush(pg.mkBrush(marker_color))
+
+        # Update existing fit curve if present
+        if self._fit_curve is not None:
+            self._fit_curve.setPen(pg.mkPen(color=theme.fit_line, width=2))
+
+        # Update confidence band fill if present
+        if self._conf_fill is not None:
+            band_color = pg.mkColor(theme.fit_line)
+            band_color.setAlpha(50)
+            self._conf_fill.setBrush(pg.mkBrush(band_color))
 
     def export_image(self, path: str) -> None:
         """Export the plot as an image.

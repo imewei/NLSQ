@@ -37,6 +37,10 @@ class LiveCostPlotWidget(QWidget):
         self._max_points: int = 10_000  # cap to prevent unbounded growth
         self._iterations: deque[int] = deque(maxlen=self._max_points)
         self._costs: deque[float] = deque(maxlen=self._max_points)
+
+        from nlsq.gui_qt.theme import DARK_THEME
+
+        self._theme: ThemeConfig = DARK_THEME
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -44,8 +48,9 @@ class LiveCostPlotWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Create plot widget
+        # Create plot widget — background from default theme
         self._plot_widget = pg.PlotWidget()
+        self._plot_widget.setBackground(self._theme.plot_background)
         self._plot_widget.setLabel("left", "Cost")
         self._plot_widget.setLabel("bottom", "Iteration")
         self._plot_widget.setTitle("Cost Function Progress")
@@ -55,14 +60,14 @@ class LiveCostPlotWidget(QWidget):
         self._plot_widget.setDownsampling(auto=True, mode="peak")
         self._plot_widget.setClipToView(True)
 
-        # Create the line plot item
+        # Create the line plot item — initial color from default theme
         self._line = self._plot_widget.plot(
             [],
             [],
-            pen=pg.mkPen(color="#2196F3", width=2),
+            pen=pg.mkPen(color=self._theme.data_marker, width=2),
             symbol="o",
             symbolSize=5,
-            symbolBrush="#2196F3",
+            symbolBrush=self._theme.data_marker,
         )
 
         layout.addWidget(self._plot_widget)
@@ -103,6 +108,8 @@ class LiveCostPlotWidget(QWidget):
         Args:
             theme: Theme configuration
         """
+        self._theme = theme
+
         # Update plot colors based on theme
         self._plot_widget.setBackground(theme.plot_background)
 
@@ -117,5 +124,5 @@ class LiveCostPlotWidget(QWidget):
             axis.setPen(axis_pen)
             axis.setTextPen(axis_pen)
 
-        # Update grid color
+        # Refresh grid
         self._plot_widget.showGrid(x=True, y=True, alpha=0.3)

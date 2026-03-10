@@ -54,6 +54,10 @@ class ResidualsPlotWidget(QWidget):
         self._std_residuals: NDArray | None = None
         self._confidence_interval: NDArray | None = None
 
+        from nlsq.gui_qt.theme import DARK_THEME
+
+        self._theme: ThemeConfig = DARK_THEME
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -80,9 +84,9 @@ class ResidualsPlotWidget(QWidget):
 
         layout.addLayout(selector_row)
 
-        # Create plot widget
+        # Create plot widget — background from default theme
         self._plot_widget = pg.PlotWidget()
-        self._plot_widget.setBackground("w")
+        self._plot_widget.setBackground(self._theme.plot_background)
         self._plot_widget.showGrid(x=True, y=True, alpha=0.3)
         self._plot_widget.setLabel("left", "Residuals")
         self._plot_widget.setLabel("bottom", "X")
@@ -182,32 +186,39 @@ class ResidualsPlotWidget(QWidget):
             curve_lower = pg.PlotDataItem(plot_x, band_lower_ds, pen=pg.mkPen(None))
             curve_upper = pg.PlotDataItem(plot_x, band_upper_ds, pen=pg.mkPen(None))
 
+            # Confidence band fill — use fit_line color at very low alpha
+            band_color = pg.mkColor(self._theme.fit_line)
+            band_color.setAlpha(30)
             fill = pg.FillBetweenItem(
                 curve_lower,
                 curve_upper,
-                brush=pg.mkBrush(244, 67, 54, 30),  # Red with low alpha
+                brush=pg.mkBrush(band_color),
             )
             self._plot_widget.addItem(curve_lower)
             self._plot_widget.addItem(curve_upper)
             self._plot_widget.addItem(fill)
 
-        # Draw warning lines for standardized residuals
+        # Draw warning lines for standardized residuals — use theme warning color
         if plot_type >= 2:
             for y_val in [-2, 2]:
                 line = pg.InfiniteLine(
                     pos=y_val,
                     angle=0,
                     pen=pg.mkPen(
-                        color=(255, 152, 0), width=1, style=pg.QtCore.Qt.DashLine
+                        color=self._theme.warning,
+                        width=1,
+                        style=pg.QtCore.Qt.DashLine,
                     ),
                 )
                 self._plot_widget.addItem(line)
 
-        # Add zero reference line
+        # Add zero reference line — use muted foreground
+        zero_color = pg.mkColor(self._theme.plot_foreground)
+        zero_color.setAlpha(100)
         self._zero_line = pg.InfiniteLine(
             pos=0,
             angle=0,
-            pen=pg.mkPen(color=(128, 128, 128), width=1, style=pg.QtCore.Qt.DashLine),
+            pen=pg.mkPen(color=zero_color, width=1, style=pg.QtCore.Qt.DashLine),
         )
         self._plot_widget.addItem(self._zero_line)
 
@@ -235,6 +246,9 @@ class ResidualsPlotWidget(QWidget):
     def _get_residual_colors(self, residuals: NDArray) -> list:
         """Get colors for residuals based on magnitude.
 
+        Colors transition from the theme's 'stat_good' (small residuals) through
+        'stat_warning' to 'stat_bad' (large residuals).
+
         Args:
             residuals: Residual values
 
@@ -254,21 +268,27 @@ class ResidualsPlotWidget(QWidget):
         # Clip to [0, 1]
         normalized = np.clip(normalized, 0, 1)
 
-        # Create color gradient: green (small) -> yellow -> red (large)
+        # Parse theme semantic colors for the gradient endpoints
+        c_good = pg.mkColor(self._theme.stat_good)
+        c_warn = pg.mkColor(self._theme.stat_warning)
+        c_bad = pg.mkColor(self._theme.stat_bad)
+
+        def _lerp(a: int, b: int, t: float) -> int:
+            return int(a + (b - a) * t)
+
         colors = []
         for n in normalized:
             if n < 0.5:
-                # Green to yellow
-                r = int(255 * (2 * n))
-                g = 200
-                b = 50
+                t = n * 2.0
+                r = _lerp(c_good.red(), c_warn.red(), t)
+                g = _lerp(c_good.green(), c_warn.green(), t)
+                b = _lerp(c_good.blue(), c_warn.blue(), t)
             else:
-                # Yellow to red
-                r = 255
-                g = int(200 * (2 * (1 - n)))
-                b = 50
-
-            colors.append(pg.mkBrush(r, g, b, 150))
+                t = (n - 0.5) * 2.0
+                r = _lerp(c_warn.red(), c_bad.red(), t)
+                g = _lerp(c_warn.green(), c_bad.green(), t)
+                b = _lerp(c_warn.blue(), c_bad.blue(), t)
+            colors.append(pg.mkBrush(r, g, b, 160))
 
         return colors
 
@@ -328,18 +348,19 @@ class ResidualsPlotWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        if theme.is_dark:
-            self._plot_widget.setBackground("#1e1e1e")
-            for axis in ["left", "bottom"]:
-                axis_item = self._plot_widget.getAxis(axis)
-                if axis_item is not None:
-                    axis_item.setTextPen(pg.mkPen(color="w"))
-        else:
-            self._plot_widget.setBackground("w")
-            for axis in ["left", "bottom"]:
-                axis_item = self._plot_widget.getAxis(axis)
-                if axis_item is not None:
-                    axis_item.setTextPen(pg.mkPen(color="k"))
+        self._theme = theme
+
+        self._plot_widget.setBackground(theme.plot_background)
+        axis_pen = pg.mkPen(color=theme.plot_foreground)
+        for axis in ["left", "bottom"]:
+            axis_item = self._plot_widget.getAxis(axis)
+            if axis_item is not None:
+                axis_item.setPen(axis_pen)
+                axis_item.setTextPen(axis_pen)
+
+        # Re-draw with new theme colors if data is present
+        if self._residuals is not None:
+            self._update_plot()
 
     def export_image(self, path: str) -> None:
         """Export the plot as an image.

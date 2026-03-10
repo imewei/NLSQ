@@ -87,7 +87,7 @@ class ModelSelectionPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        # Title
+        # Title — 24px bold, consistent across all pages
         title = QLabel("Model Selection")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(title)
@@ -103,8 +103,8 @@ class ModelSelectionPage(QWidget):
         right_panel = self._create_right_panel()
         splitter.addWidget(right_panel)
 
-        # Set splitter proportions (50% left, 50% right)
-        splitter.setSizes([500, 500])
+        # Standard 40/60 split: config panel / preview panel
+        splitter.setSizes([400, 600])
         layout.addWidget(splitter, 1)
 
         # Action buttons
@@ -115,6 +115,7 @@ class ModelSelectionPage(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 8, 0)
+        layout.setSpacing(8)
 
         # Model type selector
         type_group = QGroupBox("Model Type")
@@ -213,6 +214,7 @@ class ModelSelectionPage(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 0, 0, 0)
+        layout.setSpacing(8)
 
         # Equation preview
         eq_group = QGroupBox("Equation")
@@ -261,6 +263,7 @@ class ModelSelectionPage(QWidget):
     def _create_action_buttons(self, parent_layout: QVBoxLayout) -> None:
         """Create action buttons row."""
         button_row = QHBoxLayout()
+        button_row.setSpacing(8)
         button_row.addStretch()
 
         self._reset_btn = QPushButton("Reset")

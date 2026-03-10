@@ -121,7 +121,7 @@ class FittingOptionsPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        # Title
+        # Title — 24px bold, consistent across all pages
         title = QLabel("Fitting Options")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(title)
@@ -153,7 +153,8 @@ class FittingOptionsPage(QWidget):
         right_panel = self._create_right_panel()
         splitter.addWidget(right_panel)
 
-        splitter.setSizes([500, 500])
+        # Standard 40/60 split: config panel / live visualization
+        splitter.setSizes([400, 600])
         layout.addWidget(splitter, 1)
 
         # Action buttons and progress
@@ -164,6 +165,7 @@ class FittingOptionsPage(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 8, 0)
+        layout.setSpacing(8)
 
         # Preset selector (Guided mode)
         self._preset_group = QGroupBox("Preset")
@@ -200,6 +202,7 @@ class FittingOptionsPage(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 0, 0, 0)
+        layout.setSpacing(8)
 
         # Live cost plot
         plot_group = QGroupBox("Cost Function")
@@ -233,6 +236,7 @@ class FittingOptionsPage(QWidget):
 
         # Buttons
         button_row = QHBoxLayout()
+        button_row.setSpacing(8)
         button_row.addStretch()
 
         self._reset_btn = QPushButton("Reset")

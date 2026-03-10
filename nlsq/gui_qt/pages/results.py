@@ -69,9 +69,9 @@ class ResultsPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        # Title
-        # Header row with title and export button
+        # Header row with title and export button — 24px bold, consistent across pages
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)
         title = QLabel("Results")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         header_layout.addWidget(title)
@@ -96,6 +96,7 @@ class ResultsPage(QWidget):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 8, 0)
+        left_layout.setSpacing(8)
 
         # Parameter results table
         param_group = QGroupBox("Fitted Parameters")
@@ -119,6 +120,7 @@ class ResultsPage(QWidget):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(8, 0, 0, 0)
+        right_layout.setSpacing(8)
 
         self._plot_tabs = QTabWidget()
 

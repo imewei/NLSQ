@@ -160,36 +160,89 @@ class PythonHighlighter(QSyntaxHighlighter):
     """Syntax highlighter for Python code."""
 
     def __init__(self, document: QTextDocument) -> None:
-        """Initialize the syntax highlighter.
+        """Initialize the syntax highlighter with default (dark) colors.
+
+        Call :meth:`set_theme_colors` to switch to a different palette.
 
         Args:
             document: The QTextDocument to highlight
         """
         super().__init__(document)
+        # Set default dark-theme colors; overridden by set_theme_colors()
+        self._build_formats(
+            keyword="#569CD6",
+            builtin="#4EC9B0",
+            string="#CE9178",
+            comment="#6A9955",
+            number="#B5CEA8",
+            function="#DCDCAA",
+            decorator="#C586C0",
+        )
 
-        # Create text formats
+    def _build_formats(
+        self,
+        keyword: str,
+        builtin: str,
+        string: str,
+        comment: str,
+        number: str,
+        function: str,
+        decorator: str,
+    ) -> None:
+        """Build QTextCharFormat objects from color strings.
+
+        Args:
+            keyword: Color for language keywords
+            builtin: Color for built-in functions
+            string: Color for string literals
+            comment: Color for comments
+            number: Color for numeric literals
+            function: Color for function-definition names and scientific identifiers
+            decorator: Color for decorators
+        """
         self._keyword_format = QTextCharFormat()
-        self._keyword_format.setForeground(QColor("#569CD6"))  # Blue
+        self._keyword_format.setForeground(QColor(keyword))
         self._keyword_format.setFontWeight(QFont.Weight.Bold)
 
         self._builtin_format = QTextCharFormat()
-        self._builtin_format.setForeground(QColor("#4EC9B0"))  # Cyan
+        self._builtin_format.setForeground(QColor(builtin))
 
         self._numpy_format = QTextCharFormat()
-        self._numpy_format.setForeground(QColor("#DCDCAA"))  # Yellow
+        self._numpy_format.setForeground(QColor(function))
 
         self._string_format = QTextCharFormat()
-        self._string_format.setForeground(QColor("#CE9178"))  # Orange
+        self._string_format.setForeground(QColor(string))
 
         self._comment_format = QTextCharFormat()
-        self._comment_format.setForeground(QColor("#6A9955"))  # Green
+        self._comment_format.setForeground(QColor(comment))
         self._comment_format.setFontItalic(True)
 
         self._number_format = QTextCharFormat()
-        self._number_format.setForeground(QColor("#B5CEA8"))  # Light green
+        self._number_format.setForeground(QColor(number))
 
         self._function_format = QTextCharFormat()
-        self._function_format.setForeground(QColor("#DCDCAA"))  # Yellow
+        self._function_format.setForeground(QColor(function))
+
+        self._decorator_format = QTextCharFormat()
+        self._decorator_format.setForeground(QColor(decorator))
+
+    def set_theme_colors(self, theme: ThemeConfig) -> None:
+        """Update all format colors from a ThemeConfig and force re-highlight.
+
+        Args:
+            theme: Theme configuration carrying syntax_* color fields
+        """
+        self._build_formats(
+            keyword=theme.syntax_keyword,
+            builtin=theme.syntax_builtin,
+            string=theme.syntax_string,
+            comment=theme.syntax_comment,
+            number=theme.syntax_number,
+            function=theme.syntax_function,
+            decorator=theme.syntax_decorator,
+        )
+        # Trigger a full re-highlight pass
+        self.rehighlight()
 
     def highlightBlock(self, text: str) -> None:
         """Apply highlighting to a block of text.
@@ -214,6 +267,9 @@ class PythonHighlighter(QSyntaxHighlighter):
 
         # Highlight strings (single and double quotes)
         self._highlight_strings(text)
+
+        # Highlight decorators (@jit, @partial, …)
+        self._highlight_decorators(text)
 
         # Highlight comments (must be last to override other highlighting)
         self._highlight_comments(text)
@@ -266,6 +322,15 @@ class PythonHighlighter(QSyntaxHighlighter):
                 match.start(), match.end() - match.start(), self._string_format
             )
 
+    def _highlight_decorators(self, text: str) -> None:
+        """Highlight decorator lines (@jit, @partial, etc.)."""
+        import re
+
+        for match in re.finditer(r"@\w+", text):
+            self.setFormat(
+                match.start(), match.end() - match.start(), self._decorator_format
+            )
+
     def _highlight_comments(self, text: str) -> None:
         """Highlight comments."""
         import re
@@ -297,6 +362,10 @@ class CodeEditorWidget(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
+
+        from nlsq.gui_qt.theme import DARK_THEME
+
+        self._theme: ThemeConfig = DARK_THEME
         self._setup_ui()
         self._connect_signals()
 
@@ -365,13 +434,32 @@ class CodeEditorWidget(QWidget):
             funcs = self.get_function_names()
             if funcs:
                 self._validation_label.setText(f"Functions found: {', '.join(funcs)}")
-                self._validation_label.setStyleSheet("color: #4CAF50;")
+                self._validation_label.setStyleSheet(f"color: {self._theme.stat_good};")
             else:
                 self._validation_label.setText("No functions defined")
-                self._validation_label.setStyleSheet("color: #FF9800;")
+                self._validation_label.setStyleSheet(
+                    f"color: {self._theme.stat_warning};"
+                )
         else:
             self._validation_label.setText(f"Error: {message}")
-            self._validation_label.setStyleSheet("color: #f44336;")
+            self._validation_label.setStyleSheet(f"color: {self._theme.stat_bad};")
+
+    def _reapply_validation_color(self, theme: ThemeConfig) -> None:
+        """Refresh the validation label color after a theme change.
+
+        Args:
+            theme: New theme configuration
+        """
+        current_text = self._validation_label.text()
+        if not current_text:
+            return
+
+        if current_text.startswith("Functions found"):
+            self._validation_label.setStyleSheet(f"color: {theme.stat_good};")
+        elif current_text.startswith("No functions"):
+            self._validation_label.setStyleSheet(f"color: {theme.stat_warning};")
+        elif current_text.startswith("Error"):
+            self._validation_label.setStyleSheet(f"color: {theme.stat_bad};")
 
     def get_code(self) -> str:
         """Get the current code.
@@ -428,19 +516,21 @@ class CodeEditorWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        # Update editor colors based on theme
-        if theme.name == "dark":
-            self._editor.setStyleSheet(
-                f"background-color: {theme.surface}; "
-                f"color: {theme.text_primary}; "
-                "border: 1px solid #3d3d3d;"
-            )
-        else:
-            self._editor.setStyleSheet(
-                f"background-color: {theme.background}; "
-                f"color: {theme.text_primary}; "
-                "border: 1px solid #e0e0e0;"
-            )
+        self._theme = theme
+
+        # Editor background and base text color
+        bg = theme.surface if theme.is_dark else theme.background
+        self._editor.setStyleSheet(
+            f"background-color: {bg}; "
+            f"color: {theme.text_primary}; "
+            f"border: 1px solid {theme.border};"
+        )
+
+        # Update syntax highlighter colors
+        self._highlighter.set_theme_colors(theme)
+
+        # Re-apply validation display so its color uses theme too
+        self._reapply_validation_color(theme)
 
     def setReadOnly(self, read_only: bool) -> None:
         """Set read-only mode.

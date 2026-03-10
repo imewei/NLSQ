@@ -34,6 +34,16 @@ if TYPE_CHECKING:
 
 __all__ = ["MainWindow"]
 
+# Spacing system — 4px base grid
+SPACING_XS = 4
+SPACING_SM = 8
+SPACING_MD = 16
+SPACING_LG = 24
+SPACING_XL = 32
+
+# Sidebar width — wider for legibility
+SIDEBAR_WIDTH = 220
+
 # Page configuration: (name, display_label, QStyle.StandardPixmap enum name)
 # NOTE: Emoji characters in QListWidgetItem text cause SIGBUS on
 # PySide6 6.10.1 + macOS 26 + Apple Silicon (Qt text-shaping bug).
@@ -105,6 +115,58 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("NLSQ Curve Fitting")
         self.setMinimumSize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.resize(1200, 800)
+        self._apply_app_stylesheet()
+
+    def _apply_app_stylesheet(self) -> None:
+        """Apply global hover/focus styles for buttons and navigation items.
+
+        These rules layer on top of the Fusion palette applied by ThemeManager.
+        They provide subtle interactive feedback without overriding the palette's
+        background/foreground colors for the base (non-hovered) state.
+        """
+        self.setStyleSheet(
+            # --- Push buttons ---
+            "QPushButton {"
+            "  border-radius: 4px;"
+            "  padding: 4px 12px;"
+            "  outline: none;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: rgba(33, 150, 243, 0.18);"
+            "  border: 1px solid rgba(33, 150, 243, 0.55);"
+            "}"
+            "QPushButton:focus {"
+            "  border: 2px solid #2196F3;"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: rgba(33, 150, 243, 0.32);"
+            "}"
+            # --- Sidebar navigation list ---
+            "QListWidget#navList::item {"
+            "  border-radius: 4px;"
+            "  padding: 6px 8px;"
+            "}"
+            "QListWidget#navList::item:hover:enabled {"
+            "  background-color: rgba(33, 150, 243, 0.15);"
+            "}"
+            "QListWidget#navList::item:selected:enabled {"
+            "  background-color: rgba(33, 150, 243, 0.30);"
+            "}"
+            # Visually dim navigation items that are not yet accessible
+            "QListWidget#navList::item:disabled {"
+            "  color: rgba(128, 128, 128, 0.5);"
+            "}"
+            # --- Check boxes (theme toggle, plot options) ---
+            "QCheckBox::indicator {"
+            "  border-radius: 3px;"
+            "  width: 14px;"
+            "  height: 14px;"
+            "}"
+            "QCheckBox:focus {"
+            "  outline: 2px solid #2196F3;"
+            "  outline-offset: 1px;"
+            "}"
+        )
 
     def _setup_ui(self) -> None:
         """Set up the main UI layout."""
@@ -132,24 +194,26 @@ class MainWindow(QMainWindow):
     def _create_sidebar(self) -> QWidget:
         """Create the sidebar widget with navigation and theme toggle."""
         sidebar = QWidget()
-        sidebar.setFixedWidth(200)
+        sidebar.setFixedWidth(SIDEBAR_WIDTH)
         sidebar.setObjectName("sidebar")
 
         layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(SPACING_SM, SPACING_MD, SPACING_SM, SPACING_MD)
+        layout.setSpacing(SPACING_SM)
 
-        # App title
+        # App title — 20px to distinguish from 24px page titles
         title = QLabel("NLSQ")
         title.setObjectName("sidebarTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: bold; padding: 16px 0;")
+        title.setStyleSheet(
+            f"font-size: 20px; font-weight: bold; padding: {SPACING_MD}px 0;"
+        )
         layout.addWidget(title)
 
         # Navigation list
         self._nav_list = QListWidget()
         self._nav_list.setObjectName("navList")
-        self._nav_list.setSpacing(4)
+        self._nav_list.setSpacing(SPACING_XS)
 
         from PySide6.QtWidgets import QStyle
 
@@ -166,10 +230,14 @@ class MainWindow(QMainWindow):
         self._nav_list.setCurrentRow(0)
         layout.addWidget(self._nav_list, stretch=1)
 
+        # Spacer between nav list and theme toggle
+        layout.addSpacing(SPACING_MD)
+
         # Theme toggle
         theme_container = QWidget()
         theme_layout = QHBoxLayout(theme_container)
-        theme_layout.setContentsMargins(0, 8, 0, 0)
+        theme_layout.setContentsMargins(0, 0, 0, 0)
+        theme_layout.setSpacing(SPACING_SM)
 
         theme_label = QLabel("Dark Mode")
         self._theme_toggle = QCheckBox()

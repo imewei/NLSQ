@@ -70,7 +70,7 @@ class ExportPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        # Title
+        # Title — 24px bold, consistent across all pages
         title = QLabel("Export")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(title)
@@ -102,6 +102,7 @@ class ExportPage(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 8, 0)
+        layout.setSpacing(8)
 
         # Session bundle export
         bundle_group = QGroupBox("Session Bundle (ZIP)")
@@ -205,6 +206,7 @@ class ExportPage(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 0, 0, 0)
+        layout.setSpacing(8)
 
         code_group = QGroupBox("Code Preview")
         code_layout = QVBoxLayout(code_group)

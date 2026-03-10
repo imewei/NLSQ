@@ -98,7 +98,7 @@ class DataLoadingPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        # Title
+        # Title — 24px bold, consistent across all pages
         title = QLabel("Data Loading")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(title)
@@ -106,10 +106,11 @@ class DataLoadingPage(QWidget):
         # Main content with splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left panel - Data input
+        # Left panel - Data input (40% config, 60% visualization is the standard)
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 8, 0)
+        left_layout.setSpacing(8)
 
         # File upload section
         self._create_file_section(left_layout)
@@ -127,6 +128,7 @@ class DataLoadingPage(QWidget):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(8, 0, 0, 0)
+        right_layout.setSpacing(8)
 
         # Data preview
         self._create_preview_section(right_layout)
@@ -136,7 +138,7 @@ class DataLoadingPage(QWidget):
 
         splitter.addWidget(right_panel)
 
-        # Set splitter proportions (40% left, 60% right)
+        # Standard 40/60 split: config panel / data visualization
         splitter.setSizes([400, 600])
         layout.addWidget(splitter, 1)
 
@@ -265,6 +267,7 @@ class DataLoadingPage(QWidget):
     def _create_action_buttons(self, parent_layout: QVBoxLayout) -> None:
         """Create action buttons row."""
         button_row = QHBoxLayout()
+        button_row.setSpacing(8)
         button_row.addStretch()
 
         self._clear_btn = QPushButton("Clear")

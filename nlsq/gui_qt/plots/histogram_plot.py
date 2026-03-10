@@ -48,6 +48,10 @@ class HistogramPlotWidget(QWidget):
         self._data: NDArray | None = None
         self._n_bins = 30
 
+        from nlsq.gui_qt.theme import DARK_THEME
+
+        self._theme: ThemeConfig = DARK_THEME
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -73,9 +77,9 @@ class HistogramPlotWidget(QWidget):
         options_row.addStretch()
         layout.addLayout(options_row)
 
-        # Create plot widget
+        # Create plot widget — background from default theme
         self._plot_widget = pg.PlotWidget()
-        self._plot_widget.setBackground("w")
+        self._plot_widget.setBackground(self._theme.plot_background)
         self._plot_widget.showGrid(x=True, y=True, alpha=0.3)
         self._plot_widget.setLabel("left", "Frequency")
         self._plot_widget.setLabel("bottom", "Residuals")
@@ -121,13 +125,17 @@ class HistogramPlotWidget(QWidget):
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
         bin_width = bin_edges[1] - bin_edges[0]
 
-        # Create bar graph
+        # Create bar graph — color from theme data_marker
+        bar_fill = pg.mkColor(self._theme.data_marker)
+        bar_fill.setAlpha(150)
+        bar_border = pg.mkColor(self._theme.data_marker)
+        bar_border.setAlpha(200)
         self._bar_graph = pg.BarGraphItem(
             x=bin_centers,
             height=counts,
             width=bin_width * 0.9,
-            brush=pg.mkBrush(33, 150, 243, 150),  # Blue with alpha
-            pen=pg.mkPen(33, 150, 243, 200),
+            brush=pg.mkBrush(bar_fill),
+            pen=pg.mkPen(bar_border),
         )
         self._plot_widget.addItem(self._bar_graph)
 
@@ -173,11 +181,11 @@ class HistogramPlotWidget(QWidget):
         n_samples = len(self._data)
         y_scaled = y * n_samples * bin_width
 
-        # Create curve
+        # Create curve — use theme fit_line color for the normal overlay
         self._normal_curve = pg.PlotDataItem(
             x=x,
             y=y_scaled,
-            pen=pg.mkPen(color=(244, 67, 54), width=2),  # Red line
+            pen=pg.mkPen(color=self._theme.fit_line, width=2),
         )
         self._plot_widget.addItem(self._normal_curve)
 
@@ -221,18 +229,19 @@ class HistogramPlotWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        if theme.is_dark:
-            self._plot_widget.setBackground("#1e1e1e")
-            for axis in ["left", "bottom"]:
-                axis_item = self._plot_widget.getAxis(axis)
-                if axis_item is not None:
-                    axis_item.setTextPen(pg.mkPen(color="w"))
-        else:
-            self._plot_widget.setBackground("w")
-            for axis in ["left", "bottom"]:
-                axis_item = self._plot_widget.getAxis(axis)
-                if axis_item is not None:
-                    axis_item.setTextPen(pg.mkPen(color="k"))
+        self._theme = theme
+
+        self._plot_widget.setBackground(theme.plot_background)
+        axis_pen = pg.mkPen(color=theme.plot_foreground)
+        for axis in ["left", "bottom"]:
+            axis_item = self._plot_widget.getAxis(axis)
+            if axis_item is not None:
+                axis_item.setPen(axis_pen)
+                axis_item.setTextPen(axis_pen)
+
+        # Re-draw with new theme colors if data is present
+        if self._data is not None:
+            self._update_plot()
 
     def export_image(self, path: str) -> None:
         """Export the plot as an image.
