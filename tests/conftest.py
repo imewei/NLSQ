@@ -111,8 +111,11 @@ def cleanup_jax_memory():
     gc.collect()
 
     # Periodically clear JIT caches to prevent OOM from unbounded cache growth.
-    # Each worker runs ~1800 tests; without clearing, RSS grows to 10-16GB/worker.
-    _CACHE_CLEAR_INTERVAL = 100
+    # With 20 xdist workers on a 62GB system, each worker's budget is ~3GB.
+    # JIT cache grows ~50-80MB per unique function signature compiled. At interval
+    # 100, workers reach 5-9GB RSS before clearing. Interval 30 keeps peak RSS
+    # under 3GB/worker, staying within the per-worker memory budget.
+    _CACHE_CLEAR_INTERVAL = 30
     cleanup_jax_memory._call_count = getattr(cleanup_jax_memory, "_call_count", 0) + 1
     if cleanup_jax_memory._call_count % _CACHE_CLEAR_INTERVAL == 0:
         jax.clear_caches()
@@ -121,6 +124,34 @@ def cleanup_jax_memory():
         # malloc_trim(0) forces it to release free heap pages back to the kernel,
         # actually reducing RSS instead of just freeing Python objects.
         _release_heap_to_os()
+
+
+# ============================================================================
+# pytest-xdist Auto Worker Count Cap (OOM Prevention)
+# ============================================================================
+
+
+def pytest_xdist_auto_num_workers(config):
+    """Cap xdist worker count based on available system memory.
+
+    Each JAX-based xdist worker can grow to 3-5GB RSS due to JIT compilation
+    caches. With ``-n auto``, pytest-xdist defaults to one worker per CPU core
+    (e.g. 20 on this machine), which exceeds 62GB RAM. This hook caps workers
+    to ``available_memory // budget_per_worker``, ensuring the test suite stays
+    within memory limits even when ``-n auto`` is passed explicitly.
+
+    The hook is only called when ``-n auto`` (or ``-n logical``) is used.
+    Fixed worker counts like ``-n 2`` bypass this hook entirely.
+    """
+    budget_per_worker_gb = 4  # Conservative: peak RSS ~3GB with cache clearing
+    try:
+        mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024**3)
+    except (ValueError, OSError):
+        mem_gb = 16  # Safe fallback
+    # Reserve 4GB for OS + other processes
+    usable_gb = max(mem_gb - 4, budget_per_worker_gb)
+    max_workers = max(1, int(usable_gb // budget_per_worker_gb))
+    return max_workers
 
 
 # ============================================================================
