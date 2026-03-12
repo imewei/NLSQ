@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
@@ -30,8 +31,10 @@ def test_memory_eviction_increments_stats() -> None:
 
 
 @pytest.mark.cache
-def test_disk_save_warning_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Disk cache failures should emit a warning and continue."""
+def test_disk_save_warning_on_failure(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Disk cache failures should log a debug message and continue."""
     cache = SmartCache(max_memory_items=2, disk_cache_enabled=True)
 
     def _raise(*_args: object, **_kwargs: object) -> None:
@@ -39,8 +42,9 @@ def test_disk_save_warning_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(cache, "_save_to_disk", _raise)
 
-    with pytest.warns(UserWarning, match="Could not save to disk cache"):
+    with caplog.at_level(logging.DEBUG, logger="nlsq.caching.smart_cache"):
         cache.set(cache.cache_key(3), np.array([3.0]))
+    assert "Could not save to disk cache" in caplog.text
 
 
 @pytest.mark.cache
@@ -90,7 +94,9 @@ def test_cache_key_large_and_small_arrays(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.cache
-def test_disk_cache_corrupt_file_removed(tmp_path: Path) -> None:
+def test_disk_cache_corrupt_file_removed(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """Corrupted disk cache files should be removed after load failure."""
     cache = SmartCache(cache_dir=str(tmp_path), disk_cache_enabled=True)
     key = cache.cache_key("x")
@@ -102,28 +108,34 @@ def test_disk_cache_corrupt_file_removed(tmp_path: Path) -> None:
 
     cache._load_from_disk = _raise  # type: ignore[assignment]
 
-    with pytest.warns(UserWarning, match="Could not load from disk cache"):
+    with caplog.at_level(logging.DEBUG, logger="nlsq.caching.smart_cache"):
         assert cache.get(key) is None
+    assert "Could not load from disk cache" in caplog.text
 
     assert not cache_file.exists()
 
 
 @pytest.mark.cache
-def test_save_to_disk_unsupported_type_warns(tmp_path: Path) -> None:
-    """Unsupported types should warn and skip disk caching."""
+def test_save_to_disk_unsupported_type_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Unsupported types should log debug and skip disk caching."""
     cache = SmartCache(cache_dir=str(tmp_path), disk_cache_enabled=True)
 
     class BadArray:
         def __array__(self):
             raise ValueError("no array")
 
-    with pytest.warns(UserWarning, match="Cannot safely cache type"):
+    with caplog.at_level(logging.DEBUG, logger="nlsq.caching.smart_cache"):
         cache._save_to_disk(str(tmp_path / "x.npz"), BadArray())
+    assert "Cannot safely cache type" in caplog.text
 
 
 @pytest.mark.cache
-def test_invalidate_warns_on_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
-    """invalidate should warn if disk cache cannot be cleared."""
+def test_invalidate_warns_on_oserror(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """invalidate should log debug if disk cache cannot be cleared."""
     cache = SmartCache(disk_cache_enabled=True)
 
     monkeypatch.setattr(
@@ -132,5 +144,6 @@ def test_invalidate_warns_on_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *_a, **_k: (_ for _ in ()).throw(OSError("nope")),
     )
 
-    with pytest.warns(UserWarning, match="Could not clear disk cache"):
+    with caplog.at_level(logging.DEBUG, logger="nlsq.caching.smart_cache"):
         cache.invalidate()
+    assert "Could not clear disk cache" in caplog.text

@@ -13,10 +13,10 @@ Phase 3 Optimizations (Task Group 9):
 
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
-import warnings
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
@@ -27,6 +27,7 @@ import numpy as np
 from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
+_logger = logging.getLogger(__name__)
 
 
 import contextlib
@@ -125,7 +126,7 @@ class SmartCache:
             try:
                 os.makedirs(cache_dir)
             except OSError:
-                warnings.warn(f"Could not create cache directory {cache_dir}")
+                _logger.debug("Could not create cache directory %s", cache_dir)
                 self.disk_cache_enabled = False
 
     def cache_key(self, *args, **kwargs) -> str:
@@ -263,7 +264,7 @@ class SmartCache:
                     return value
 
                 except Exception as e:
-                    warnings.warn(f"Could not load from disk cache: {e}")
+                    _logger.debug("Could not load from disk cache: %s", e)
                     # Remove corrupted cache file
                     with contextlib.suppress(OSError):
                         os.remove(cache_file)
@@ -293,7 +294,7 @@ class SmartCache:
             try:
                 self._save_to_disk(cache_file, value)
             except Exception as e:
-                warnings.warn(f"Could not save to disk cache: {e}")
+                _logger.debug("Could not save to disk cache: %s", e)
 
     def _add_to_memory_cache(
         self, key: str, value: Any, timestamp: float | None = None
@@ -350,7 +351,7 @@ class SmartCache:
                         if file.endswith(".npz"):
                             os.remove(os.path.join(self.cache_dir, file))
                 except OSError as e:
-                    warnings.warn(f"Could not clear disk cache: {e}")
+                    _logger.debug("Could not clear disk cache: %s", e)
         else:
             # Clear specific key
             with self._lock:
@@ -457,8 +458,9 @@ class SmartCache:
                 arr = np.asarray(value)
                 np.savez_compressed(cache_file, data=arr)
             except (ValueError, TypeError):
-                warnings.warn(
-                    f"Cannot safely cache type {type(value).__name__}, skipping disk cache"
+                _logger.debug(
+                    "Cannot safely cache type %s, skipping disk cache",
+                    type(value).__name__,
                 )
 
     def _load_from_disk(self, cache_file: str) -> Any:
