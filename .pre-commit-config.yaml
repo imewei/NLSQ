@@ -1,5 +1,5 @@
 # Pre-commit configuration
-# Updated: 2026-03-09
+# Updated: 2026-03-12
 # Python 3.13, uv package manager
 # Aligned with pyproject.toml and uv.lock
 #
