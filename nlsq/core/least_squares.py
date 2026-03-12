@@ -1192,10 +1192,15 @@ class LeastSquares:
         is_sparse_problem = False
         sparse_solver_selected = False
 
-        # Skip sparsity detection for small problems where it adds overhead
-        # without benefit (sparse solver requires m > 10K to be worthwhile)
+        # Skip sparsity detection when tr_solver is explicitly set (the caller
+        # already knows what solver to use) or for small problems where the
+        # overhead exceeds any benefit (sparse solver requires m > 10K).
         should_detect_sparsity = (
-            m > 10000 and xdata is not None and ydata is not None and fun is not None
+            tr_solver is None
+            and m > 10000
+            and xdata is not None
+            and ydata is not None
+            and fun is not None
         )
 
         if should_detect_sparsity:
