@@ -1,5 +1,14 @@
 # Documentation Changelog
 
+## v0.6.11 (2026-03-12)
+- Skip sparsity detection when `tr_solver` is already set (7–8ms per-call savings)
+- Fix Windows CI: catch `AttributeError` for POSIX-only `os.sysconf` in xdist worker cap hook
+- Align `release.yml` test step with `ci.yml` to prevent timeout on publish-triggered test runs
+- Replace `warnings.warn()` with `logging.debug()` in SmartCache for operational fallback paths
+- Reduce JIT cache clearing interval and add `pytest_xdist_auto_num_workers` hook for OOM prevention
+- Align config tested-on version comments with local environment
+- Update `uv.lock` for black 26.3.1
+
 ## v0.6.10 (2026-03-09)
 - Added `check_plugin_conflicts()` for CUDA plugin dual-install and version-mismatch detection in `device.py`
 - Fixed misleading GPU warning header; expanded uninstall command to include CUDA plugin packages

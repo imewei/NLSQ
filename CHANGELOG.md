@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-03-12
+
+### Fixed
+
+- **Sparsity detection short-circuit**: Skip sparsity detection when `tr_solver` is already set
+  by the caller, saving 7–8ms per call for explicit solver configurations
+- **Windows CI**: Catch `AttributeError` for `os.sysconf` in xdist worker cap hook —
+  `os.sysconf` is POSIX-only and does not exist on Windows, causing pytest collection failure
+- **Release workflow**: Aligned `release.yml` test step with `ci.yml` to prevent timeout on
+  publish-triggered test runs
+
+### Changed
+
+- **SmartCache logging**: Replaced `warnings.warn()` with `logging.debug()` for operational
+  fallback paths (disk cache failures, unsupported types, eviction). These are expected runtime
+  conditions, not user-facing warnings. Updated corresponding tests to use `caplog` assertions
+- **Test memory management**: Reduced JIT cache clearing interval from 100 to 30 tests per
+  worker (keeps per-worker RSS under 3GB); added `pytest_xdist_auto_num_workers` hook to cap
+  `-n auto` workers based on available system memory (4GB budget per worker)
+
+### Infrastructure
+
+- **Config version alignment**: Updated tested-on version comments in `pyproject.toml`,
+  `.readthedocs.yaml`, and `.pre-commit-config.yaml` to match local environment (NumPy 2.4.3,
+  SciPy 1.17.1, bandit 1.9.4, sphinx-autodoc-typehints 3.9.8, setuptools 82.0.1, black 26.3.1)
+- **Lockfile**: Updated `uv.lock` for black 26.3.1
+
 ## [0.6.10] - 2026-03-09
 
 ### Added
