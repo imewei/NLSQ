@@ -146,7 +146,9 @@ def pytest_xdist_auto_num_workers(config):
     budget_per_worker_gb = 4  # Conservative: peak RSS ~3GB with cache clearing
     try:
         mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024**3)
-    except (ValueError, OSError):
+    except (AttributeError, ValueError, OSError):
+        # AttributeError: os.sysconf unavailable on Windows
+        # ValueError/OSError: invalid sysconf key on some platforms
         mem_gb = 16  # Safe fallback
     # Reserve 4GB for OS + other processes
     usable_gb = max(mem_gb - 4, budget_per_worker_gb)
