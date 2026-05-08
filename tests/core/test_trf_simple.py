@@ -292,19 +292,25 @@ class TestTRFSpecialCases(unittest.TestCase):
         x = np.linspace(0, 10, 100)
         y = 2 * np.exp(0.1 * x) + 3 * np.sin(0.5 * x)
 
-        # Very low iteration limit - should fail
-        with self.assertRaises(RuntimeError) as context:
+        # Very low iteration limit — now issues OptimizeWarning (SciPy-compatible)
+        import warnings
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             _popt, _pcov = curve_fit(
                 slow_converging_model,
                 x,
                 y,
                 p0=[1, 0.05, 1, 1],
                 method="trf",
-                max_nfev=5,  # Very low limit
+                max_nfev=5,
             )
-        # Check that the error message indicates max iterations exceeded
-        self.assertIn(
-            "maximum number of function evaluations", str(context.exception).lower()
+        self.assertTrue(
+            any(
+                "maximum number of function evaluations" in str(w.message).lower()
+                for w in caught
+            ),
+            "Expected OptimizeWarning about max evaluations",
         )
 
 

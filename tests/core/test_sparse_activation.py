@@ -143,7 +143,7 @@ class TestSparseAutoSelection:
             x_data,
             y_data,
             p0=p0,
-            full_output=True,
+            full_output=False,
             maxfev=100,
         )
         result["x"]
@@ -184,7 +184,7 @@ class TestSparseAutoSelection:
             x_data,
             y_data,
             p0=p0,
-            full_output=True,
+            full_output=False,
             maxfev=100,
         )
         result["x"]
@@ -213,7 +213,7 @@ class TestSparseAutoSelection:
 
         # Fit with full_output
         result = curve_fit(
-            dense_exponential_model, x_data, y_data, p0=p0, full_output=True, maxfev=50
+            dense_exponential_model, x_data, y_data, p0=p0, full_output=False, maxfev=50
         )
         result["x"]
         result.get("cov_x", None)
@@ -248,7 +248,7 @@ class TestSparseDiagnostics:
             x_data,
             y_data,
             p0=p0,
-            full_output=True,
+            full_output=False,
             maxfev=50,
         )
         popt = result["x"]

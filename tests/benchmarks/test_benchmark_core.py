@@ -223,7 +223,7 @@ def run_single_benchmark(
     # Timed run
     start = time.perf_counter()
     try:
-        result = curve_fit(model, x, y, p0=p0, full_output=True)
+        result = curve_fit(model, x, y, p0=p0)
         elapsed = time.perf_counter() - start
 
         # Extract results from CurveFitResult object

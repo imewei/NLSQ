@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
+from nlsq.result import OptimizeWarning
 from nlsq.utils.error_messages import (
     OptimizationError,
     analyze_failure,
@@ -16,7 +17,7 @@ class TestEnhancedErrorMessages:
     """Test enhanced error message functionality."""
 
     def test_error_message_max_iterations(self):
-        """Test error message when max iterations reached."""
+        """Test warning message when max iterations reached."""
 
         def difficult_func(x, a, b):
             """Difficult function to fit."""
@@ -25,26 +26,14 @@ class TestEnhancedErrorMessages:
         xdata = np.linspace(0, 1, 10)
         ydata = difficult_func(xdata, 1, -5)
 
-        with pytest.raises(OptimizationError) as exc_info:
+        with pytest.warns(OptimizeWarning) as warn_info:
             curve_fit(difficult_func, xdata, ydata, p0=[0.1, 0.1], max_nfev=5)
 
-        error = exc_info.value
-        error_str = str(error)
-
-        # Check error message contains key information
-        assert "failed to converge" in error_str.lower()
-        assert "max_nfev" in error_str or "maximum" in error_str.lower()
-        assert len(error.recommendations) > 0
-
-        # Check recommendations are actionable
-        recommendations_str = " ".join(error.recommendations)
-        assert (
-            "max_nfev" in recommendations_str
-            or "increase" in recommendations_str.lower()
-        )
+        warn_msg = str(warn_info[0].message).lower()
+        assert "maximum" in warn_msg or "evaluations" in warn_msg
 
     def test_error_message_gradient_tolerance(self):
-        """Test that gradient information is included in error diagnostics."""
+        """Test that max_nfev issues a warning and returns a best-effort result."""
 
         def steep_func(x, a, b):
             """Function with steep gradients."""
@@ -53,20 +42,9 @@ class TestEnhancedErrorMessages:
         xdata = np.linspace(0, 10, 20)
         ydata = steep_func(xdata, 10, 5) + np.random.normal(0, 0.1, 20)
 
-        # Use impossible max_nfev to force failure
-        with pytest.raises(OptimizationError) as exc_info:
+        # max_nfev exceeded now issues OptimizeWarning (SciPy-compatible)
+        with pytest.warns(OptimizeWarning):
             curve_fit(steep_func, xdata, ydata, p0=[8, 3], max_nfev=1)
-
-        error = exc_info.value
-        str(error)
-
-        # Should have diagnostics with gradient information
-        assert error.diagnostics is not None
-        assert len(error.diagnostics) > 0
-
-        # Diagnostics should include gradient info
-        diag_str = str(error.diagnostics)
-        assert "gradient" in diag_str.lower() or "Gradient" in str(error.diagnostics)
 
     def test_error_message_contains_diagnostics(self):
         """Test that error message includes diagnostic information."""
@@ -77,16 +55,11 @@ class TestEnhancedErrorMessages:
         xdata = np.array([1, 2, 3])
         ydata = np.array([1, 0.5, 0.25])
 
-        with pytest.raises(OptimizationError) as exc_info:
-            # Bad p0 + low max_nfev to force failure
+        with pytest.warns(OptimizeWarning) as warn_info:
             curve_fit(simple_exp, xdata, ydata, p0=[0.01, 0.01], max_nfev=3)
 
-        error = exc_info.value
-
-        # Check diagnostics are populated
-        assert (
-            "Function evaluations" in error.diagnostics or "nfev" in str(error).lower()
-        )
+        warn_msg = str(warn_info[0].message).lower()
+        assert "maximum" in warn_msg or "evaluations" in warn_msg or "nfev" in warn_msg
 
     def test_error_message_recommendations(self):
         """Test that recommendations are helpful and actionable."""
@@ -97,21 +70,11 @@ class TestEnhancedErrorMessages:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        with pytest.raises(OptimizationError) as exc_info:
-            # Force failure with max_nfev=1 (impossible to converge)
+        with pytest.warns(OptimizeWarning) as warn_info:
             curve_fit(linear, xdata, ydata, p0=[1, 1], max_nfev=1)
 
-        error = exc_info.value
-
-        # Should have at least one recommendation
-        assert len(error.recommendations) > 0
-
-        # Recommendations should be actionable (contain specific suggestions)
-        rec_text = " ".join(error.recommendations).lower()
-        assert any(
-            keyword in rec_text
-            for keyword in ["try", "increase", "check", "consider", "use"]
-        )
+        warn_msg = str(warn_info[0].message).lower()
+        assert "maximum" in warn_msg or "evaluations" in warn_msg
 
     def test_analyze_failure_function(self):
         """Test analyze_failure utility function."""
@@ -187,15 +150,12 @@ class TestEnhancedErrorMessages:
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 1, 0.5])
 
-        with pytest.raises(OptimizationError) as exc_info:
+        with pytest.warns(OptimizeWarning) as warn_info:
             curve_fit(exp_func, xdata, ydata, p0=[0.1, 0.1], max_nfev=1)
 
-        error_msg = str(exc_info.value)
-
-        # Should include documentation link
-        assert (
-            "nlsq.readthedocs.io" in error_msg or "troubleshooting" in error_msg.lower()
-        )
+        # Warning message should mention max iterations or evaluations
+        warn_msg = str(warn_info[0].message).lower()
+        assert "maximum" in warn_msg or "evaluations" in warn_msg
 
 
 class TestErrorMessageContent:
@@ -210,15 +170,11 @@ class TestErrorMessageContent:
         xdata = np.linspace(0, 10, 20)
         ydata = 2 * xdata**2 + 3 * xdata + 1
 
-        with pytest.raises(OptimizationError) as exc_info:
+        with pytest.warns(OptimizeWarning) as warn_info:
             curve_fit(quadratic, xdata, ydata, p0=[1, 1, 1], max_nfev=1)
 
-        error = exc_info.value
-
-        # Check that at least one recommendation includes specific values
-        rec_text = " ".join(error.recommendations)
-        # Should suggest specific max_nfev value (e.g., "max_nfev=2" or similar)
-        assert "max_nfev" in rec_text
+        warn_msg = str(warn_info[0].message)
+        assert "maximum" in warn_msg.lower() or "evaluations" in warn_msg.lower()
 
     def test_error_message_readability(self):
         """Test that error messages are well-formatted and readable."""
@@ -229,19 +185,11 @@ class TestErrorMessageContent:
         xdata = np.linspace(-5, 5, 30)
         ydata = sigmoid(xdata, 1, 0, 1)
 
-        with pytest.raises(OptimizationError) as exc_info:
+        with pytest.warns(OptimizeWarning) as warn_info:
             curve_fit(sigmoid, xdata, ydata, p0=[0.5, 0, 0.5], max_nfev=3)
 
-        error_msg = str(exc_info.value)
-
-        # Check formatting
-        assert "\n" in error_msg  # Multiple lines
-        assert "  " in error_msg  # Indentation
-
-        # Should have clear sections
-        lines = error_msg.split("\n")
-        assert any("Diagnostics:" in line for line in lines)
-        assert any("Recommendations:" in line for line in lines)
+        warn_msg = str(warn_info[0].message)
+        assert len(warn_msg) > 10  # Non-trivial message
 
     def test_multiple_failure_reasons(self):
         """Test handling of multiple failure reasons."""
