@@ -255,7 +255,7 @@ def _svd_no_bounds(
     try:
         return _svd_no_bounds_jit(J, d, f)
     except Exception as e:
-        if _is_gpu_error(str(e)):
+        if _is_gpu_error(e):
             J_h = J * d
             U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
             uf = U.T.dot(f)
@@ -274,7 +274,7 @@ def _svd_bounds(
     try:
         return _svd_bounds_jit(f, J, d, J_diag, f_zeros)
     except Exception as e:
-        if _is_gpu_error(str(e)):
+        if _is_gpu_error(e):
             J_h = J * d
             J_augmented = jnp.concatenate([J_h, J_diag])
             f_augmented = jnp.concatenate([f, f_zeros])

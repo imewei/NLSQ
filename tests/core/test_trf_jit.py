@@ -75,7 +75,7 @@ class TestModuleConstants:
 
     def test_default_tolerance(self):
         """Test default tolerance value."""
-        assert DEFAULT_TOLERANCE == 1e-6
+        assert DEFAULT_TOLERANCE == 1e-8
 
 
 class TestTrustRegionJITFunctionsInit:

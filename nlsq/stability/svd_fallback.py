@@ -20,20 +20,34 @@ import jax.numpy as jnp
 from jax.scipy.linalg import svd as jax_svd
 
 
-def _is_gpu_error(error_msg: str) -> bool:
-    """Check if an error message indicates a GPU/CUDA-specific failure.
+def _is_gpu_error(error: Exception | str) -> bool:
+    """Check if an exception indicates a GPU/CUDA-specific failure.
 
-    Detects both legacy cuSolver errors and newer JAX CUDA FFI errors:
+    Prefers type-based matching against jaxlib.xla_extension.XlaRuntimeError,
+    which is stable across JAX versions. Falls back to string heuristics for
+    older JAX (<0.8) or error types that don't inherit from XlaRuntimeError:
     - Legacy: "cuSolver internal error" (JAX <0.8)
     - FFI: "No FFI handler registered for cusolver_gesvdj_ffi" (JAX >=0.8)
     - XLA status: "INTERNAL: ..." (gRPC/XLA status code prefix, case-sensitive)
     """
-    msg_lower = error_msg.lower()
+    # Type-based check: robust against JAX error message format changes
+    if not isinstance(error, str):
+        try:
+            from jaxlib.xla_extension import XlaRuntimeError
+
+            if isinstance(error, XlaRuntimeError):
+                return True
+        except (ImportError, AttributeError):
+            pass
+
+    # String fallback: covers older JAX and non-XlaRuntimeError GPU failures
+    msg = str(error)
+    msg_lower = msg.lower()
     return (
         "cusolver" in msg_lower
         or "cublas" in msg_lower
         or ("ffi" in msg_lower and "cuda" in msg_lower)
-        or error_msg.startswith("INTERNAL:")
+        or msg.startswith("INTERNAL:")
     )
 
 
@@ -70,8 +84,7 @@ def compute_svd_with_fallback(J_h, full_matrices=False):
         return U, s, Vt.T
     except Exception as gpu_error:
         # Check if it's a GPU-specific error (cuSolver or CUDA FFI)
-        error_msg = str(gpu_error)
-        if _is_gpu_error(error_msg):
+        if _is_gpu_error(gpu_error):
             warnings.warn(
                 "GPU SVD failed with cuSolver error, attempting CPU fallback",
                 RuntimeWarning,

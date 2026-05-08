@@ -489,6 +489,8 @@ pythonVersion = "3.13"
 typeCheckingMode = "strict"
 reportMissingImports = true
 reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"
 
 [tool.pytest.ini_options]
 minversion = "9.0"  # Updated to match installed version (9.0.2)
