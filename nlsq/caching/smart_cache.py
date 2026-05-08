@@ -200,9 +200,28 @@ class SmartCache:
             else:
                 key_parts.append(str(arg))
 
-        # Add kwargs
+        # Add kwargs with same type-aware hashing as positional args
         for k, v in sorted(kwargs.items()):
-            key_parts.append(f"{k}={v}")
+            if isinstance(v, (np.ndarray, jnp.ndarray)):
+                arr = np.asarray(v)
+                if HAS_XXHASH:
+                    raw = (
+                        arr if arr.flags["C_CONTIGUOUS"] else np.ascontiguousarray(arr)
+                    )
+                    h = xxhash.xxh64(raw).hexdigest()[:16]
+                else:
+                    flat = arr.flatten()
+                    if len(flat) > LARGE_ARRAY_THRESHOLD:
+                        h = hashlib.blake2b(
+                            flat[:: max(1, len(flat) // 1000)].tobytes(), digest_size=16
+                        ).hexdigest()
+                    else:
+                        h = hashlib.blake2b(flat.tobytes(), digest_size=16).hexdigest()
+                key_parts.append(f"{k}=array_{v.shape}_{v.dtype}_{h}")
+            elif callable(v):
+                key_parts.append(f"{k}=func_{v.__module__}_{v.__name__}")
+            else:
+                key_parts.append(f"{k}={v}")
 
         key_str = "|".join(key_parts)
 
@@ -583,8 +602,9 @@ def cached_jacobian(cache: SmartCache | None = None):
     def decorator(func):
         @wraps(func)
         def wrapper(x, *params):
-            # Create cache key from x and params
-            cache_key = cache.cache_key(x, *params)
+            # Include func in key so two different functions sharing one cache
+            # instance don't collide on identical (x, params) inputs.
+            cache_key = cache.cache_key(func, x, *params)
 
             # Check cache
             cached_result = cache.get(cache_key)

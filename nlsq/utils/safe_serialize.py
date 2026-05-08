@@ -23,6 +23,10 @@ import numpy as np
 
 __all__ = ["SafeSerializationError", "safe_dumps", "safe_loads"]
 
+# Hard cap on array elements during deserialization — prevents memory-exhaustion
+# DoS via attacker-controlled shape values in untrusted JSON (e.g. [999999999, 999999999]).
+_MAX_DESERIALIZE_ELEMENTS = 100_000_000  # 100M elements (~800 MB at float64)
+
 
 class SafeSerializationError(Exception):
     """Exception raised when serialization/deserialization fails."""
@@ -167,9 +171,11 @@ def _convert_from_serializable(obj: Any) -> Any:
 
     # Handle dicts (may contain type markers)
     if isinstance(obj, dict):
-        # Check for type markers (support both new and legacy key for backward compat)
-        if "__nlsq_type__" in obj or "__type__" in obj:
-            type_name = obj.get("__nlsq_type__") or obj.get("__type__")
+        # Check for NLSQ type marker (namespaced key only — the legacy "__type__" fallback
+        # was removed because any user dict with that key would incorrectly trigger type
+        # dispatch, and attacker-controlled values could reach unbounded np.reshape).
+        if "__nlsq_type__" in obj:
+            type_name = obj["__nlsq_type__"]
 
             if type_name == "tuple":
                 return tuple(_convert_from_serializable(item) for item in obj["value"])
@@ -190,6 +196,15 @@ def _convert_from_serializable(obj: Any) -> Any:
                 dtype = np.dtype(obj["dtype"])
                 data = obj["data"]
                 shape = tuple(obj["shape"])
+                n_elements = 1
+                for dim in shape:
+                    n_elements *= dim
+                if n_elements > _MAX_DESERIALIZE_ELEMENTS:
+                    raise SafeSerializationError(
+                        f"Refusing to deserialize array with {n_elements:,} elements "
+                        f"(limit: {_MAX_DESERIALIZE_ELEMENTS:,}). "
+                        "Possible DoS via attacker-controlled shape."
+                    )
                 return np.array(data, dtype=dtype).reshape(shape)
 
         # Regular dict — restore non-string keys from prefixed encoding

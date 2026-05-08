@@ -75,8 +75,13 @@ class DataPreprocessor:
             ValueError: If inputs are invalid (wrong shape, non-finite, etc.)
             TypeError: If inputs have wrong types
         """
-        # Step 1: Convert to arrays
-        xdata_arr, ydata_arr = self._convert_to_arrays(xdata, ydata, check_finite)
+        # Step 1: Convert to arrays.
+        # When nan_policy='omit', defer the finite check until after NaN filtering
+        # (step 4) so that np.asarray_chkfinite doesn't raise before omit can act.
+        effective_check_finite = check_finite and nan_policy != "omit"
+        xdata_arr, ydata_arr = self._convert_to_arrays(
+            xdata, ydata, effective_check_finite
+        )
 
         # Step 2: Validate data is not empty
         if ydata_arr.size == 0:
@@ -288,9 +293,22 @@ class DataPreprocessor:
             if len(sigma_arr) != n:
                 msg = f"Sigma length ({len(sigma_arr)}) must match ydata length ({n})"
                 raise ValueError(msg)
+            if not np.all(np.isfinite(sigma_arr)):
+                msg = "Sigma contains non-finite values (NaN or Inf)"
+                raise ValueError(msg)
+            if not np.all(sigma_arr > 0):
+                msg = "Sigma values must be strictly positive (used as 1/sigma weights)"
+                raise ValueError(msg)
         elif sigma_arr.ndim == 2:
             if sigma_arr.shape != (n, n):
                 msg = f"Sigma shape {sigma_arr.shape} must be ({n}, {n})"
+                raise ValueError(msg)
+            if not np.all(np.isfinite(sigma_arr)):
+                msg = "Sigma covariance matrix contains non-finite values (NaN or Inf)"
+                raise ValueError(msg)
+            eigenvalues = np.linalg.eigvalsh(sigma_arr)
+            if not np.all(eigenvalues > 0):
+                msg = "Sigma covariance matrix must be positive definite"
                 raise ValueError(msg)
         else:
             msg = f"Sigma must be 1D or 2D, got {sigma_arr.ndim}D"

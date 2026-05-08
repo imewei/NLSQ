@@ -611,7 +611,7 @@ class AdaptiveHybridStreamingOptimizer:
         pad_size = padded_size - n_points
 
         # Create validity mask (1.0 for valid, 0.0 for padded)
-        mask = jnp.ones(n_points)
+        mask = jnp.ones(n_points, dtype=jnp.float64)
 
         if pad_size > 0:
             # Pad x_data with zeros
@@ -705,8 +705,20 @@ class AdaptiveHybridStreamingOptimizer:
             x_padded = x_data
             y_padded = y_data
 
-        x_hash = (x_data.shape, float(x_data.ravel()[0]), float(x_data.ravel()[-1]))
-        y_hash = (y_data.shape, float(y_data.ravel()[0]), float(y_data.ravel()[-1]))
+        x_flat_w = x_data.ravel()
+        x_hash = (
+            x_data.shape,
+            float(x_flat_w[0]),
+            float(x_flat_w[-1]),
+            float(jnp.sum(x_data)),
+        )
+        y_flat_w = y_data.ravel()
+        y_hash = (
+            y_data.shape,
+            float(y_flat_w[0]),
+            float(y_flat_w[-1]),
+            float(jnp.sum(y_data)),
+        )
         self._padded_cache = (
             x_hash,
             y_hash,
@@ -1013,7 +1025,11 @@ class AdaptiveHybridStreamingOptimizer:
             for start, end in self.config.group_variance_indices:
                 group_params = params[start:end]
                 group_var = jnp.var(group_params)
-                total_cost += var_lambda * float(group_var) * n_points
+                total_cost += (
+                    var_lambda
+                    * float(jnp.where(jnp.isfinite(group_var), group_var, 0.0))
+                    * n_points
+                )
 
         return total_cost
 
@@ -2292,7 +2308,7 @@ class AdaptiveHybridStreamingOptimizer:
         n_params = JTJ.shape[0]
 
         # Add Tikhonov regularization for numerical stability
-        JTJ_reg = JTJ + regularization * jnp.eye(n_params)
+        JTJ_reg = JTJ + regularization * jnp.eye(n_params, dtype=jnp.float64)
 
         # Compute SVD of regularized J^T J
         U, s, Vt = jnp.linalg.svd(JTJ_reg, full_matrices=False)
@@ -2321,17 +2337,15 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Apply trust region constraint
         step_norm = jnp.linalg.norm(step)
-
-        if step_norm > trust_radius:
-            # Scale step to trust region boundary
-            step = step * (trust_radius / step_norm)
+        step = step * jnp.where(step_norm > trust_radius, trust_radius / step_norm, 1.0)
 
         # Compute predicted reduction: -g^T δ - 0.5 δ^T H δ
         # where g = -J^T r (gradient) and H = J^T J (Hessian approx)
         # Since g = -JTr, we have: -g^T δ = JTr^T δ
         # predicted_reduction = JTr^T δ - 0.5 δ^T (J^T J) δ
-        predicted_reduction = jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step)
-        predicted_reduction = float(jnp.maximum(predicted_reduction, 0.0))
+        predicted_reduction = jnp.maximum(
+            jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step), 0.0
+        )
 
         return step, predicted_reduction
 
@@ -2553,10 +2567,6 @@ class AdaptiveHybridStreamingOptimizer:
         r = JTr
         r_norm_initial = jnp.linalg.norm(r)
 
-        # Handle zero right-hand side
-        if r_norm_initial < atol:
-            return step, 0, True
-
         # Convergence threshold (Inexact Newton strategy)
         tol = jnp.maximum(rtol * r_norm_initial, atol)
 
@@ -2602,8 +2612,11 @@ class AdaptiveHybridStreamingOptimizer:
             _, _, _, _, iteration, converged = state
             return jnp.logical_and(iteration < max_iter, jnp.logical_not(converged))
 
-        # Run CG iterations using while_loop for GPU efficiency
-        init_state = (step, r, p, r_dot_r, 0, False)
+        # Run CG iterations using while_loop for GPU efficiency.
+        # Seeding converged=True when r_norm_initial < atol makes cg_cond return
+        # False on the first check, so the loop body never executes — avoids a
+        # Python `if` on a traced value which would raise ConcretizationTypeError.
+        init_state = (step, r, p, r_dot_r, jnp.array(0), r_norm_initial < atol)
         final_state = jax.lax.while_loop(cg_cond, cg_body, init_state)
 
         step_final, _r_final, _, _, iterations, converged = final_state
@@ -2810,9 +2823,9 @@ class AdaptiveHybridStreamingOptimizer:
 
                 # Hessian of variance: H = (2/n) * (I - (1/n)*11^T)
                 # This is a dense (n_group x n_group) matrix
-                diag_term = (2.0 / n_group) * jnp.eye(n_group)
+                diag_term = (2.0 / n_group) * jnp.eye(n_group, dtype=jnp.float64)
                 off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
-                    (n_group, n_group)
+                    (n_group, n_group), dtype=jnp.float64
                 )
                 H_var = diag_term - off_diag_term
 
@@ -2821,7 +2834,11 @@ class AdaptiveHybridStreamingOptimizer:
 
                 # Add variance cost to total
                 group_var = jnp.var(group_params)
-                total_cost += var_lambda * float(group_var) * n_points
+                total_cost += (
+                    var_lambda
+                    * float(jnp.where(jnp.isfinite(group_var), group_var, 0.0))
+                    * n_points
+                )
 
         # Compute gradient norm for convergence check
         gradient_norm = float(jnp.linalg.norm(JTr))

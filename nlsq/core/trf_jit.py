@@ -24,7 +24,7 @@ __all__ = ["TrustRegionJITFunctions"]
 # Algorithm constants
 LOSS_FUNCTION_COEFF = 0.5  # Coefficient for loss function (0.5 * ||f||^2)
 NUMERICAL_ZERO_THRESHOLD = 1e-14  # Threshold for values considered numerically zero
-DEFAULT_TOLERANCE = 1e-6  # Default tolerance for iterative solvers
+DEFAULT_TOLERANCE = 1e-8  # Default tolerance for iterative solvers (matches outer ftol/gtol/xtol defaults)
 # Fixed CG iteration limit — prevents shape-dependent recompilation.
 # The while_loop convergence check provides early exit for small problems.
 CG_MAX_ITERATIONS = 100
@@ -124,7 +124,7 @@ def _conjugate_gradient_solve(
     J_scaled = J * d[None, :]
     b = -J_scaled.T @ f
 
-    x0 = jnp.zeros(n)
+    x0 = jnp.zeros(n, dtype=jnp.float64)
     r0 = b
     p0 = r0
     rsold0 = jnp.dot(r0, r0)
@@ -205,7 +205,7 @@ def _solve_tr_subproblem_cg_bounds(
     """Solve trust region subproblem with bounds using conjugate gradient."""
     J_augmented = jnp.concatenate([J * d[None, :], J_diag])
     f_augmented = jnp.concatenate([f, f_zeros])
-    d_augmented = jnp.ones(J_augmented.shape[1])
+    d_augmented = jnp.ones(J_augmented.shape[1], dtype=jnp.float64)
 
     p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(
         J_augmented, f_augmented, d_augmented, 0.0

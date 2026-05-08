@@ -1353,7 +1353,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         J_diag = jnp.diag(jnp.sqrt(jnp.maximum(diag_h, 0.0)))
         # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
         d_jnp = jnp.asarray(d)
-        f_zeros = jnp.zeros([n])
+        f_zeros = jnp.zeros(n, dtype=jnp.float64)
 
         if solver == "cg":
             J_h = J * d_jnp

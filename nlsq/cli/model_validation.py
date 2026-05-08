@@ -73,6 +73,13 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "vars",
         "__builtins__",
         "__subclasses__",
+        # Dunder attribute chain traversal (used in sandbox escape: ().__class__.__bases__...)
+        "__class__",
+        "__bases__",
+        "__mro__",
+        "__dict__",
+        "__globals__",
+        "__code__",
     }
 )
 
@@ -172,6 +179,16 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                         self.violations.append(
                             f"File write operation: open(..., mode='{keyword.value.value}')"
                         )
+
+    def visit_Attribute(self, node: ast.Attribute) -> Any:
+        """Check for dangerous attribute accesses, including uncalled dunder chains.
+
+        visit_Call only catches .attr() calls; this catches .attr access as a
+        value (e.g. x.__subclasses__ stored in a variable, then called via [0]()).
+        """
+        if node.attr in DANGEROUS_PATTERNS:
+            self.violations.append(f"Dangerous attribute access: .{node.attr}")
+        self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> Any:
         """Check for dangerous module imports."""
