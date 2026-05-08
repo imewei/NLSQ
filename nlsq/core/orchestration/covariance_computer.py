@@ -168,7 +168,7 @@ class CovarianceComputer:
         # Filter out near-zero singular values
         valid_mask = s_np > threshold
         s_valid = s_np[valid_mask]
-        VT_valid = VT_np[: len(s_valid)]
+        VT_valid = VT_np[valid_mask]  # boolean mask — correct for non-tail near-zeros
 
         # Check for singularity
         is_singular = len(s_valid) < n_params
@@ -180,8 +180,11 @@ class CovarianceComputer:
         else:
             condition_number = float("inf")
 
-        # Compute covariance matrix
-        if is_singular:
+        # Compute covariance matrix via Moore-Penrose pseudoinverse.
+        # When rank-deficient, use the retained singular values (matches SciPy
+        # TRF/dogbox behavior) rather than filling with inf. All-inf is reserved
+        # for the case where NO singular values survive the threshold.
+        if len(s_valid) == 0:
             pcov = np.full((n_params, n_params), np.inf)
         else:
             pcov = np.dot(VT_valid.T / s_valid**2, VT_valid)

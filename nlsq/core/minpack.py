@@ -1901,11 +1901,20 @@ def _run_cmaes_optimization(
     # Create optimizer
     optimizer = CMAESOptimizer(config=config)
 
-    # Extract sigma from kwargs if provided
+    # Extract sigma and absolute_sigma from kwargs if provided
     sigma = kwargs.get("sigma")
+    absolute_sigma = kwargs.get("absolute_sigma", False)
 
     # Run CMA-ES optimization
-    result_dict = optimizer.fit(f, xdata, ydata, p0=p0, bounds=bounds, sigma=sigma)
+    result_dict = optimizer.fit(
+        f,
+        xdata,
+        ydata,
+        p0=p0,
+        bounds=bounds,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+    )
 
     # Convert dict result to CurveFitResult-like structure
     # CMAESOptimizer returns {"popt": ..., "pcov": ..., ...}
@@ -2860,10 +2869,16 @@ class CurveFit:
         if sigma is None:
             return None
 
+        # Convert scalar/list sigma to ndarray before shape checks.
+        # SciPy accepts scalar sigma as sigma * ones(m).
         if not isinstance(sigma, np.ndarray):
-            raise ValueError("Sigma must be numpy array.")
+            sigma = np.asarray(sigma, dtype=float)
 
         ysize = ydata.size - len_diff
+
+        if sigma.ndim == 0:
+            # Scalar sigma: expand to 1-D array matching data length
+            sigma = np.full(ysize, float(sigma))
 
         # if 1-D, sigma are errors, define transform = 1/sigma
         if sigma.shape == (ysize,):
@@ -2940,9 +2955,12 @@ class CurveFit:
         if len(s) == 0:
             n_params = res.jac.shape[1]
             return np.full((n_params, n_params), np.inf), True
-        threshold = np.finfo(float).eps * max(res.jac.shape) * s[0]
-        s = s[s > threshold]
-        VT = VT[: s.size]
+        # Use ysize (true data count) not res.jac.shape[0] (may be padded) for
+        # the threshold, so padding doesn't cause over-aggressive SV truncation.
+        threshold = np.finfo(float).eps * max(ysize, res.jac.shape[1]) * s[0]
+        valid_mask = s > threshold
+        s = s[valid_mask]
+        VT = VT[valid_mask]
         pcov = np.dot(VT.T / s**2, VT)
 
         warn_cov = False
@@ -3337,6 +3355,7 @@ class CurveFit:
         ydata: np.ndarray,
         p0: np.ndarray,
         check_finite: bool,
+        nan_policy: str = "raise",
     ) -> tuple[np.ndarray, np.ndarray, int, int]:
         """Preprocess input data with optional feature flag routing.
 
@@ -3382,6 +3401,7 @@ class CurveFit:
                 xdata=xdata,
                 ydata=ydata,
                 check_finite=check_finite,
+                nan_policy=nan_policy,
             )
 
             # Convert JAX arrays back to numpy for compatibility with rest of pipeline
@@ -3551,7 +3571,12 @@ class CurveFit:
         # Steps 6-8: Preprocess data (validation, conversion, length check)
         # Use new DataPreprocessor when feature flag enabled
         xdata, ydata, m, xdims = self._preprocess_input_data(
-            f, xdata, ydata, p0, check_finite
+            f,
+            xdata,
+            ydata,
+            p0,
+            check_finite,
+            nan_policy=kwargs.get("nan_policy", "raise"),
         )
 
         # Step 9: Setup data mask and padding parameters
@@ -4063,17 +4088,27 @@ class CurveFit:
                     raise
 
         if not res.success:
-            self.logger.error(
-                "Optimization failed", reason=res.message, status=res.status
-            )
-            # Extract tolerances for enhanced error message
-            gtol = kwargs.get("gtol", 1e-8)
-            ftol = kwargs.get("ftol", 1e-8)
-            xtol = kwargs.get("xtol", 1e-8)
-            max_nfev = kwargs.get("max_nfev")
-            if max_nfev is None:
-                max_nfev = len(p0) * 100  # Default estimate
-            raise OptimizationError(res, gtol, ftol, xtol, max_nfev)
+            if res.status == 0:
+                # Maximum iterations reached: warn and return best-effort result.
+                # Matches SciPy curve_fit behavior (OptimizeWarning, not exception).
+                max_nfev = kwargs.get("max_nfev") or len(p0) * 100
+                import warnings
+
+                warnings.warn(
+                    f"Optimal parameters not found: maximum number of function "
+                    f"evaluations ({max_nfev}) exceeded.",
+                    OptimizeWarning,
+                    stacklevel=3,
+                )
+            else:
+                self.logger.error(
+                    "Optimization failed", reason=res.message, status=res.status
+                )
+                gtol = kwargs.get("gtol", 1e-8)
+                ftol = kwargs.get("ftol", 1e-8)
+                xtol = kwargs.get("xtol", 1e-8)
+                max_nfev = kwargs.get("max_nfev") or len(p0) * 100
+                raise OptimizationError(res, gtol, ftol, xtol, max_nfev)
 
         return res, jnp_xdata, ctime
 
@@ -4094,6 +4129,7 @@ class CurveFit:
         data_mask: np.ndarray | None = None,
         timeit: bool = False,
         return_eval: bool = False,
+        full_output: bool = False,
         callback: Callable | None = None,
         compute_diagnostics: bool = False,
         diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
@@ -4380,7 +4416,7 @@ class CurveFit:
         pcov, warn_cov = self._compute_covariance(res, ysize, p0, absolute_sigma)
         _pcov = pcov
 
-        return_full = False
+        return_full = full_output
 
         # self.res = res
         post_time = time.time() - st
@@ -4404,8 +4440,16 @@ class CurveFit:
                 return popt, _pcov, feval
 
         if return_full:
-            raise RuntimeError("Return full only works for LM")
-            # return popt, _pcov, infodict, errmsg, ier
+            # SciPy-compatible 5-tuple: (popt, pcov, infodict, mesg, ier)
+            # fjac/ipvt/qtf are LM-only and not available for TRF/dogbox.
+            infodict = {
+                "nfev": res.nfev,
+                "fvec": np.asarray(res.fun) if res.get("fun") is not None else None,
+            }
+            mesg = res.message if hasattr(res, "message") else ""
+            # SciPy ier convention: 1-4 = converged, 5 = max iterations
+            ier = 1 if (res.success and res.status > 0) else 5
+            return popt, _pcov, infodict, mesg, ier
         elif timeit:
             # lower GPU memory usage before returning raw res
             res.pop("jac", None)
