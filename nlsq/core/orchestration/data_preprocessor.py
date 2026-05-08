@@ -239,6 +239,11 @@ class DataPreprocessor:
             else:
                 # 2D covariance matrix - need to extract submatrix
                 sigma_clean = sigma_arr[np.ix_(valid_mask, valid_mask)]
+                if not np.all(np.isfinite(sigma_clean)):
+                    raise ValueError(
+                        "Sigma covariance matrix contains non-finite values in "
+                        "valid data rows/columns after NaN filtering"
+                    )
 
         # Create mask for clean data (all True since we filtered)
         mask = np.ones(len(ydata_clean), dtype=bool)

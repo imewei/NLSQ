@@ -1692,6 +1692,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             njev=njev,
             nit=iteration,  # Number of iterations performed
             status=termination_status,
+            success=termination_status > 0,
             all_times={},
         )
 
@@ -2165,7 +2166,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             v, dv = CL_scaling_vector_jax(x, g, lb_jnp, ub_jnp)
 
             g_norm = jnorm(g * v, ord=jnp.inf)
-            if g_norm < gtol:
+            if termination_status is None and g_norm < gtol:
                 termination_status = 1
 
             if verbose == 2:
@@ -2311,6 +2312,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             njev=njev,
             nit=iteration,
             status=termination_status,
+            success=termination_status > 0,
         )
 
     def select_step(
