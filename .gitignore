@@ -263,6 +263,7 @@ GEMINI.md
 
 # Graphify Knowledge Graph
 graphify-out/
+three-brain-out/
 .graphify_*.json
 .graphify_*.txt
 _COMMUNITY_*.md
