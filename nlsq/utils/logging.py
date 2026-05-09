@@ -225,10 +225,12 @@ class NLSQLogger:
         if self.logger.isEnabledFor(logging.INFO):
             self.logger.info(self._format_message(message, **kwargs))
 
-    def warning(self, message: str, **kwargs):
+    def warning(self, message: str, exc_info: bool = False, **kwargs):
         """Log warning message with optional structured data."""
         if self.logger.isEnabledFor(logging.WARNING):
-            self.logger.warning(self._format_message(message, **kwargs))
+            self.logger.warning(
+                self._format_message(message, **kwargs), exc_info=exc_info
+            )
 
     def error(self, message: str, exc_info: bool = False, **kwargs):
         """Log error message with optional exception info."""

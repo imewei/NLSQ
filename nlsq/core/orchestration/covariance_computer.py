@@ -59,14 +59,11 @@ class CovarianceComputer:
         """Create JIT-compiled 1D sigma transform."""
 
         @jit
-        def sigma_transform1d(
-            sigma: jnp.ndarray, data_mask: jnp.ndarray
-        ) -> jnp.ndarray:
+        def sigma_transform1d(sigma: jnp.ndarray) -> jnp.ndarray:
             """Compute the sigma transform for 1D data.
 
             Args:
                 sigma: The standard deviation of the data.
-                data_mask: A binary mask indicating which data points to use.
 
             Returns:
                 The sigma transform (1/sigma).
@@ -79,14 +76,11 @@ class CovarianceComputer:
         """Create JIT-compiled 2D sigma transform."""
 
         @jit
-        def sigma_transform2d(
-            sigma: jnp.ndarray, data_mask: jnp.ndarray
-        ) -> jnp.ndarray:
+        def sigma_transform2d(sigma: jnp.ndarray) -> jnp.ndarray:
             """Compute the sigma transform for 2D covariance matrix.
 
             Args:
-                sigma: The covariance matrix.
-                data_mask: A binary mask indicating which data points to use.
+                sigma: The covariance matrix (must be positive definite).
 
             Returns:
                 The Cholesky decomposition (lower triangular).
@@ -302,32 +296,27 @@ class CovarianceComputer:
         if sigma is None:
             return None
 
-        if not isinstance(sigma, np.ndarray):
-            msg = "Sigma must be numpy array."
-            raise ValueError(msg)
-
+        sigma_np = np.asarray(sigma)
         ysize = ydata.size - len_diff
 
         # 1-D sigma: errors, define transform = 1/sigma
-        if sigma.shape == (ysize,):
+        if sigma_np.shape == (ysize,):
             if len_diff > 0:
-                sigma = np.concatenate([sigma, np.ones([len_diff])])
-            return self._sigma_transform1d(jnp.asarray(sigma), jnp.asarray(data_mask))
+                sigma_np = np.concatenate([sigma_np, np.ones([len_diff])])
+            return self._sigma_transform1d(jnp.asarray(sigma_np))
 
         # 2-D sigma: covariance matrix, define transform = L such that L L^T = C
-        elif sigma.shape == (ysize, ysize):
+        elif sigma_np.shape == (ysize, ysize):
             try:
                 if len_diff > 0:
                     sigma_padded = np.identity(m + len_diff)
-                    sigma_padded[:m, :m] = sigma
-                    sigma = sigma_padded
-                return self._sigma_transform2d(
-                    jnp.asarray(sigma), jnp.asarray(data_mask)
-                )
+                    sigma_padded[:m, :m] = sigma_np
+                    sigma_np = sigma_padded
+                return self._sigma_transform2d(jnp.asarray(sigma_np))
             except Exception as e:
                 # Check eigenvalues for better error message
                 try:
-                    eigenvalues = np.linalg.eigvalsh(sigma[:ysize, :ysize])
+                    eigenvalues = np.linalg.eigvalsh(sigma_np[:ysize, :ysize])
                     min_eig = np.min(eigenvalues)
                     if min_eig <= 0:
                         msg = (
@@ -337,7 +326,7 @@ class CovarianceComputer:
                         )
                         raise ValueError(msg) from e
                 except (np.linalg.LinAlgError, ValueError):
-                    _logger.logger.warning(
+                    _logger.warning(
                         "Eigenvalue analysis of sigma failed", exc_info=True
                     )
                     # fall through to generic error

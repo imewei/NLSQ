@@ -142,20 +142,14 @@ from nlsq.common_jax import (
     update_tr_radius_jax,
 )
 from nlsq.common_scipy import (
-    check_termination,
     find_active_constraints,
     in_bounds,
-    minimize_quadratic_1d,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    step_size_to_bound,
-    update_tr_radius,
 )
 from nlsq.constants import (
     DEFAULT_MAX_NFEV_MULTIPLIER,
     INITIAL_LEVENBERG_MARQUARDT_LAMBDA,
-    MAX_TRUST_RADIUS,
-    MIN_TRUST_RADIUS,
 )
 
 # Logging support
@@ -443,8 +437,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     @staticmethod
     def _log_iteration_callback(
-        iteration, nfev, cost, actual_reduction, step_norm, g_norm
-    ):
+        iteration: Any,
+        nfev: Any,
+        cost: Any,
+        actual_reduction: Any,
+        step_norm: Any,
+        g_norm: Any,
+    ) -> None:
         """Wrapper for logging callback that converts JAX arrays to Python scalars.
 
         This function is called by jax.debug.callback and ensures all arguments
@@ -487,10 +486,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def trf(
         self,
-        fun: Callable,
+        fun: Callable[..., Any],
         xdata: jnp.ndarray | tuple[jnp.ndarray],
         ydata: jnp.ndarray,
-        jac: Callable,
+        jac: Callable[..., Any],
         data_mask: jnp.ndarray,
         transform: jnp.ndarray,
         x0: np.ndarray,
@@ -504,14 +503,14 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         max_nfev: int,
         f_scale: float,
         x_scale: np.ndarray,
-        loss_function: None | Callable,
-        tr_options: dict,
+        loss_function: None | Callable[..., Any],
+        tr_options: dict[str, Any],
         verbose: int,
         timeit: bool = False,
         solver: str = "exact",
         diagnostics: OptimizationDiagnostics | None = None,
-        callback: Callable | None = None,
-        **kwargs,
+        callback: Callable[..., Any] | None = None,
+        **kwargs: Any,
     ) -> OptimizeResult:
         """Minimize a scalar function of one or more variables using the
         trust-region reflective algorithm. Although I think this is not good
@@ -671,11 +670,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         x0: np.ndarray,
         f: jnp.ndarray,
         J: jnp.ndarray,
-        loss_function: Callable | None,
+        loss_function: Callable[..., Any] | None,
         x_scale: np.ndarray | str,
         f_scale: float,
         data_mask: jnp.ndarray,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Initialize optimization state for TRF algorithm.
 
         This helper extracts the initialization logic from trf_no_bounds,
@@ -799,7 +798,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         Delta: float,
         alpha: float,
         solver: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Solve the trust region subproblem.
 
         This helper extracts the subproblem setup and solving logic,
@@ -901,8 +900,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def _evaluate_step_acceptance(
         self,
-        fun: Callable,
-        jac: Callable,
+        fun: Callable[..., Any],
+        jac: Callable[..., Any],
         x: np.ndarray,
         f: jnp.ndarray,
         J: jnp.ndarray,
@@ -920,8 +919,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         xdata: np.ndarray,
         ydata: np.ndarray,
         data_mask: jnp.ndarray,
-        transform: Callable | None,
-        loss_function: Callable | None,
+        transform: Callable[..., Any] | None,
+        loss_function: Callable[..., Any] | None,
         f_scale: float,
         scale_inv: np.ndarray,
         jac_scale: bool,
@@ -930,7 +929,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         xtol: float,
         max_nfev: int,
         nfev: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Evaluate step acceptance through inner trust region loop.
 
         This method implements the inner loop of the TRF algorithm, which
@@ -1099,7 +1098,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 break
 
             if Delta_new > 0:
-                alpha *= Delta / Delta_new
+                raw_alpha = alpha * Delta / Delta_new
+                alpha = min(raw_alpha if math.isfinite(raw_alpha) else 1e30, 1e30)
             Delta = Delta_new
 
             # Exit inner loop if we have a successful step
@@ -1169,7 +1169,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def _invoke_callback(
         self,
-        callback: Callable,
+        callback: Callable[..., Any],
         iteration: int,
         cost: float,
         x: np.ndarray,
@@ -1240,7 +1240,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         lb_jnp: jnp.ndarray,
         ub_jnp: jnp.ndarray,
         x_scale: np.ndarray | str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Initialize bounds-specific state for TRF algorithm.
 
         This helper extracts bounds initialization logic from trf_bounds,
@@ -1306,7 +1306,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         alpha: float,
         solver: str,
         n: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Solve trust region subproblem with bounds.
 
         This helper extracts bounds subproblem logic from trf_bounds,
@@ -1390,7 +1390,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def _evaluate_bounds_inner_loop(
         self,
-        fun: Callable,
+        fun: Callable[..., Any],
         x: np.ndarray,
         f: jnp.ndarray,
         J: jnp.ndarray,
@@ -1411,8 +1411,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         xdata: np.ndarray,
         ydata: np.ndarray,
         data_mask: jnp.ndarray,
-        transform: Callable | None,
-        loss_function: Callable | None,
+        transform: Callable[..., Any] | None,
+        loss_function: Callable[..., Any] | None,
         f_scale: float,
         lb: np.ndarray,
         ub: np.ndarray,
@@ -1426,7 +1426,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         nfev: int,
         n: int,
         m: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Evaluate inner loop for bounds optimization.
 
         This helper extracts the inner loop logic from trf_bounds,
@@ -1565,7 +1565,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 break
 
             if Delta_new > 0:
-                alpha *= Delta / Delta_new
+                raw_alpha = alpha * Delta / Delta_new
+                alpha = min(raw_alpha if math.isfinite(raw_alpha) else 1e30, 1e30)
             Delta = Delta_new
 
         # Check inner loop limit
@@ -1592,10 +1593,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def _apply_accepted_step(
         self,
-        acceptance_result: dict,
+        acceptance_result: dict[str, Any],
         jac_scale: bool,
         njev: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Apply accepted step updates to optimization state.
 
         This helper extracts the state update logic after step acceptance
@@ -1698,10 +1699,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def trf_no_bounds(
         self,
-        fun: Callable,
+        fun: Callable[..., Any],
         xdata: jnp.ndarray | tuple[jnp.ndarray],
         ydata: jnp.ndarray,
-        jac: Callable,
+        jac: Callable[..., Any],
         data_mask: jnp.ndarray,
         transform: jnp.ndarray,
         x0: np.ndarray,
@@ -1715,13 +1716,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         max_nfev: int,
         f_scale: float,
         x_scale: np.ndarray,
-        loss_function: None | Callable,
-        tr_options: dict,
+        loss_function: None | Callable[..., Any],
+        tr_options: dict[str, Any],
         verbose: int,
         solver: str = "exact",
-        callback: Callable | None = None,
+        callback: Callable[..., Any] | None = None,
         profiler: TRFProfiler | NullProfiler | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> OptimizeResult:
         """Unbounded version of the trust-region reflective algorithm.
 
@@ -2012,10 +2013,10 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def trf_bounds(
         self,
-        fun: Callable,
+        fun: Callable[..., Any],
         xdata: jnp.ndarray | tuple[jnp.ndarray],
         ydata: jnp.ndarray,
-        jac: Callable,
+        jac: Callable[..., Any],
         data_mask: jnp.ndarray,
         transform: jnp.ndarray,
         x0: np.ndarray,
@@ -2029,12 +2030,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         max_nfev: int,
         f_scale: float,
         x_scale: np.ndarray,
-        loss_function: None | Callable,
-        tr_options: dict,
+        loss_function: None | Callable[..., Any],
+        tr_options: dict[str, Any],
         verbose: int,
         solver: str = "exact",
-        callback: Callable | None = None,
-        **kwargs,
+        callback: Callable[..., Any] | None = None,
+        **kwargs: Any,
     ) -> OptimizeResult:
         """Bounded version of the trust-region reflective algorithm.
 
@@ -2202,8 +2203,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 n=n,
             )
 
-            # theta controls step back step ratio from the bounds
-            theta = jnp.maximum(0.995, 1.0 - g_norm)
+            # theta controls step back step ratio from the bounds; must be < 1
+            # to maintain strict interior feasibility required by TRF bounds mode
+            theta = jnp.minimum(jnp.maximum(0.995, 1.0 - g_norm), 1.0 - 1e-8)
 
             # Evaluate inner loop using helper
             inner_result = self._evaluate_bounds_inner_loop(
@@ -2275,7 +2277,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     scale, scale_inv = self.cJIT.compute_jac_scale(J, scale_inv)
             else:
                 step_norm = 0
-                actual_reduction = 0
+                # actual_reduction is already set from inner_result (negative value);
+                # retaining it lets callbacks report true optimization state
 
             iteration += 1
 
@@ -2468,11 +2471,11 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
     def optimize(
         self,
-        fun: Callable,
+        fun: Callable[..., Any],
         x0: np.ndarray,
-        jac: Callable | None = None,
-        bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
-        **kwargs,
+        jac: Callable[..., Any] | None = None,
+        bounds: tuple[np.ndarray, np.ndarray] | tuple[float, float] = (-np.inf, np.inf),
+        **kwargs: Any,
     ) -> OptimizeResult:
         """Perform optimization using trust region reflective algorithm.
 

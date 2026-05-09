@@ -20,7 +20,7 @@ import jax.numpy as jnp
 from jax.scipy.linalg import svd as jax_svd
 
 
-def _is_gpu_error(error: Exception | str) -> bool:
+def is_gpu_error(error: Exception | str) -> bool:
     """Check if an exception indicates a GPU/CUDA-specific failure.
 
     Prefers type-based matching against jaxlib.xla_extension.XlaRuntimeError,
@@ -51,7 +51,13 @@ def _is_gpu_error(error: Exception | str) -> bool:
     )
 
 
-def compute_svd_with_fallback(J_h, full_matrices=False):
+# Backwards-compatible private alias used by tests
+_is_gpu_error = is_gpu_error
+
+
+def compute_svd_with_fallback(
+    J_h: jnp.ndarray, full_matrices: bool = False
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Compute full deterministic SVD with multiple fallback strategies.
 
     This is the primary SVD function for NLSQ. It uses full (exact) SVD
@@ -84,7 +90,7 @@ def compute_svd_with_fallback(J_h, full_matrices=False):
         return U, s, Vt.T
     except Exception as gpu_error:
         # Check if it's a GPU-specific error (cuSolver or CUDA FFI)
-        if _is_gpu_error(gpu_error):
+        if is_gpu_error(gpu_error):
             warnings.warn(
                 "GPU SVD failed with cuSolver error, attempting CPU fallback",
                 RuntimeWarning,

@@ -17,7 +17,7 @@ import jax.numpy as jnp
 from jax import jit, lax
 from jax.scipy.linalg import svd as jax_svd
 
-from nlsq.stability.svd_fallback import _is_gpu_error, compute_svd_with_fallback
+from nlsq.stability.svd_fallback import compute_svd_with_fallback, is_gpu_error
 
 __all__ = ["TrustRegionJITFunctions"]
 
@@ -124,7 +124,7 @@ def _conjugate_gradient_solve(
     J_scaled = J * d[None, :]
     b = -J_scaled.T @ f
 
-    x0 = jnp.zeros(n, dtype=jnp.float64)
+    x0 = jnp.zeros(n, dtype=b.dtype)
     r0 = b
     p0 = r0
     rsold0 = jnp.dot(r0, r0)
@@ -132,11 +132,11 @@ def _conjugate_gradient_solve(
 
     init_state = (x0, r0, p0, rsold0, 0)
 
-    def cond_fn(state):
+    def cond_fn(state: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, int]):
         _x, _r, _p, rsold, i = state
         return (i < CG_MAX_ITERATIONS) & (rsold >= tol_sq)
 
-    def body_fn(state):
+    def body_fn(state: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, int]):
         x, r, p, rsold, i = state
 
         Jp = J_scaled @ p
@@ -153,7 +153,8 @@ def _conjugate_gradient_solve(
         r_new = r - alpha_cg * Ap
         rsnew = jnp.dot(r_new, r_new)
 
-        beta = rsnew / (rsold + NUMERICAL_ZERO_THRESHOLD)
+        safe_rsold = jnp.where(rsold > 1e-30, rsold, 1.0)
+        beta = jnp.where(rsold > 1e-30, rsnew / safe_rsold, 0.0)
         p_new = r_new + beta * p
 
         return (x_new, r_new, p_new, rsnew, i + 1)
@@ -205,7 +206,7 @@ def _solve_tr_subproblem_cg_bounds(
     """Solve trust region subproblem with bounds using conjugate gradient."""
     J_augmented = jnp.concatenate([J * d[None, :], J_diag])
     f_augmented = jnp.concatenate([f, f_zeros])
-    d_augmented = jnp.ones(J_augmented.shape[1], dtype=jnp.float64)
+    d_augmented = jnp.ones(J_augmented.shape[1], dtype=J_augmented.dtype)
 
     p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(
         J_augmented, f_augmented, d_augmented, 0.0
@@ -231,7 +232,7 @@ def _solve_tr_subproblem_cg_bounds(
 
 
 @jit
-def _calculate_cost(rho, data_mask):
+def _calculate_cost(rho: jnp.ndarray, data_mask: jnp.ndarray) -> jnp.ndarray:
     """Calculate cost: 0.5 * sum(masked rho[0])."""
     cost_array = jnp.where(data_mask, rho[0], 0)
     return LOSS_FUNCTION_COEFF * jnp.sum(cost_array)
@@ -255,7 +256,7 @@ def _svd_no_bounds(
     try:
         return _svd_no_bounds_jit(J, d, f)
     except Exception as e:
-        if _is_gpu_error(e):
+        if is_gpu_error(e):
             J_h = J * d
             U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
             uf = U.T.dot(f)
@@ -274,7 +275,7 @@ def _svd_bounds(
     try:
         return _svd_bounds_jit(f, J, d, J_diag, f_zeros)
     except Exception as e:
-        if _is_gpu_error(e):
+        if is_gpu_error(e):
             J_h = J * d
             J_augmented = jnp.concatenate([J_h, J_diag])
             f_augmented = jnp.concatenate([f, f_zeros])

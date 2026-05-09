@@ -366,10 +366,10 @@ class TestSigmaTransform:
         sigma = jnp.array([0.5, 1.0, 2.0])
         transform, _is_2d = computer.create_sigma_transform(sigma, n_data=3)
 
-        # For 1D, transform should be 1/sigma
+        # For 1D, transform should be 1/sigma (data_mask not needed — filtering
+        # happens upstream in DataPreprocessor before sigma reaches this function)
         expected = 1.0 / sigma
-        mask = jnp.ones(3, dtype=bool)
-        result = transform(sigma, mask)
+        result = transform(sigma)
         assert_allclose(np.asarray(result), np.asarray(expected))
 
 

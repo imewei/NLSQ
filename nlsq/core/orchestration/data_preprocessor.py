@@ -76,9 +76,12 @@ class DataPreprocessor:
             TypeError: If inputs have wrong types
         """
         # Step 1: Convert to arrays.
-        # When nan_policy='omit', defer the finite check until after NaN filtering
-        # (step 4) so that np.asarray_chkfinite doesn't raise before omit can act.
-        effective_check_finite = check_finite and nan_policy != "omit"
+        # Defer finite check for 'omit' and 'propagate': 'omit' filters invalids in
+        # step 4; 'propagate' intentionally keeps NaN/Inf without raising.
+        effective_check_finite = check_finite and nan_policy not in (
+            "omit",
+            "propagate",
+        )
         xdata_arr, ydata_arr = self._convert_to_arrays(
             xdata, ydata, effective_check_finite
         )
@@ -152,15 +155,16 @@ class DataPreprocessor:
             ydata_arr = np.asarray(ydata, float)
 
         # Convert xdata
-        if hasattr(xdata, "__array__") or isinstance(
-            xdata, (list, tuple, np.ndarray, jnp.ndarray)
-        ):
+        if hasattr(xdata, "__array__") or isinstance(xdata, (list, tuple, np.ndarray)):
             if check_finite:
                 xdata_arr = np.asarray_chkfinite(xdata, float)
             else:
                 xdata_arr = np.asarray(xdata, float)
         else:
-            msg = "X needs arrays"
+            msg = (
+                f"xdata must be array-like (list, tuple, ndarray, or JAX array), "
+                f"got {type(xdata).__name__!r}"
+            )
             raise ValueError(msg)
 
         return xdata_arr, ydata_arr

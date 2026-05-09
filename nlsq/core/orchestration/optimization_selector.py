@@ -34,7 +34,7 @@ def prepare_bounds(bounds: tuple | None, n: int) -> tuple[np.ndarray, np.ndarray
     Returns:
         Tuple of (lower_bounds, upper_bounds) arrays
     """
-    if bounds is None or bounds == (-np.inf, np.inf):
+    if bounds is None:
         lb = np.full(n, -np.inf)
         ub = np.full(n, np.inf)
     else:
@@ -155,8 +155,8 @@ class OptimizationSelector:
             bounds, n_params, p0_validated
         )
 
-        # Step 3: Select method
-        selected_method = self._select_method(method)
+        # Step 3: Select method (pass bounds so lm+finite-bounds is rejected)
+        selected_method = self._select_method(method, lb=lb, ub=ub)
 
         # Step 4: Select trust region solver
         m = len(ydata_np)
@@ -257,9 +257,14 @@ class OptimizationSelector:
         Returns:
             Tuple of (n_params, validated_p0)
         """
-        # If p0 is explicitly provided, use it
+        # If p0 is explicitly provided, use it (enforce float64 and finiteness)
         if p0 is not None:
-            p0_arr = np.atleast_1d(np.asarray(p0))
+            p0_arr = np.atleast_1d(np.asarray(p0, dtype=float))
+            if not np.all(np.isfinite(p0_arr)):
+                msg = (
+                    "Initial guess p0 must contain only finite values (no NaN or Inf)."
+                )
+                raise ValueError(msg)
             n = p0_arr.size
             return n, p0_arr
 
@@ -285,8 +290,22 @@ class OptimizationSelector:
 
         Returns:
             Tuple of (lb, ub, p0)
+
+        Raises:
+            ValueError: If any lower bound >= upper bound
         """
         lb, ub = prepare_bounds(bounds, n)
+
+        # Validate bound ordering
+        invalid = lb >= ub
+        if np.any(invalid):
+            bad = np.where(invalid)[0].tolist()
+            msg = (
+                f"Lower bound must be strictly less than upper bound for all "
+                f"parameters. Violated at indices: {bad}"
+            )
+            raise ValueError(msg)
+
         if p0 is None:
             p0 = _initialize_feasible(lb, ub)
         else:
@@ -295,14 +314,24 @@ class OptimizationSelector:
 
         return lb, ub, p0
 
-    def _select_method(self, method: str | None) -> Literal["trf", "lm", "dogbox"]:
+    def _select_method(
+        self,
+        method: str | None,
+        lb: np.ndarray | None = None,
+        ub: np.ndarray | None = None,
+    ) -> Literal["trf", "lm", "dogbox"]:
         """Select optimization method.
 
         Args:
             method: Requested method or None for auto
+            lb: Lower bounds (used to reject lm+bounds combination)
+            ub: Upper bounds (used to reject lm+bounds combination)
 
         Returns:
             Selected method ('trf', 'lm', or 'dogbox')
+
+        Raises:
+            ValueError: If method='lm' is used with finite bounds
         """
         if method is None:
             return "trf"
@@ -311,6 +340,16 @@ class OptimizationSelector:
         if method not in valid_methods:
             msg = f"Invalid method '{method}'. Must be one of {valid_methods}."
             raise ValueError(msg)
+
+        if method == "lm" and lb is not None and ub is not None:
+            has_finite_lb = np.any(np.isfinite(lb))
+            has_finite_ub = np.any(np.isfinite(ub))
+            if has_finite_lb or has_finite_ub:
+                msg = (
+                    "method='lm' (Levenberg-Marquardt) does not support bounds. "
+                    "Use method='trf' or method='dogbox' for bounded problems."
+                )
+                raise ValueError(msg)
 
         return cast(Literal["trf", "lm", "dogbox"], method)
 

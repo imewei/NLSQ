@@ -17,9 +17,9 @@ __pycache__/
 # Distribution / Packaging
 # ----------------------------------------------------------------------------
 .Python
-build/
+/build/
 develop-eggs/
-dist/
+/dist/
 downloads/
 eggs/
 .eggs/
@@ -143,10 +143,11 @@ docs/coverage_report.json
 # NLSQ Specific
 # ----------------------------------------------------------------------------
 # Debug and profiling logs
-nlsq_debug_*.log
+# (Generic *.log handles these, listed here for reference)
+# nlsq_debug_*.log
+# optimization.log
+# combined.log
 nlsq_profile_*.txt
-optimization.log
-combined.log
 
 # Cache directories
 nlsq_cache/
@@ -157,8 +158,6 @@ nlsq_checkpoints/
 # Checkpoint files
 checkpoints/
 checkpoints_*/
-checkpoint_iter_*.npz
-checkpoint_iter_*.h5
 test_checkpoints_fast_mode/
 
 # Streaming diagnostics
@@ -199,7 +198,7 @@ benchmark_results/
 benchmarks/results/*.json
 benchmarks/results/*.csv
 benchmarks/results/*.png
-benchmarks/*.prof
+# benchmarks/*.prof (Covered by generic *.prof)
 benchmarks/benchmark_results/
 benchmark_results.json
 .notebook_transforms.json
@@ -245,20 +244,27 @@ dmypy.json
 # ----------------------------------------------------------------------------
 .agent/
 .claude/
+.claude-progress.md
 .code/
-.specify/
 .codex/
-.gemini/
-agent-os/
-specs/
 .cursor/
 .cursorignore
 .cursorindexingignore
+.gemini/
 .serena/
+.specify/
 .abstra/
+agent-os/
+specs/
 AGENTS.md
 CLAUDE.md
 GEMINI.md
+
+# Graphify Knowledge Graph
+graphify-out/
+.graphify_*.json
+.graphify_*.txt
+_COMMUNITY_*.md
 
 # ----------------------------------------------------------------------------
 # Operating System
@@ -352,14 +358,3 @@ code_quality_fixes_summary.md
 # CLI demo output
 examples/scripts/10_cli-commands/output/
 .worktrees/
-# Graphify semantic cache (ephemeral build artifacts)
-graphify-out/cache/
-
-# Claude session scratch files in docs
-docs/.claude-progress.md
-
-# Graphify internal working state files
-graphify-out/.graphify_*.json
-graphify-out/.graphify_*.txt
-graphify-out/.obsidian/
-graphify-out/_COMMUNITY_*.md

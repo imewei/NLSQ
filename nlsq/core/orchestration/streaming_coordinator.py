@@ -222,8 +222,9 @@ class StreamingCoordinator:
         else:
             chunk_size = n_data
 
-        # Ensure chunk_size is reasonable
-        chunk_size = max(1000, min(chunk_size, n_data, 100_000))
+        # Clamp to [1000, 100_000] then cap at n_data so chunk never exceeds data size
+        chunk_size = max(1000, min(chunk_size, 100_000))
+        chunk_size = min(chunk_size, n_data)
 
         return HybridStreamingConfig(
             chunk_size=chunk_size,
