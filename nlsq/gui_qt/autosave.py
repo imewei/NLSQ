@@ -184,6 +184,8 @@ class AutosaveManager(QObject):
                 state.ydata = arr
         if "sigma" in data:
             arr = np.array(data["sigma"], dtype=np.float64)
+            # arr > 0 accepts +inf (SciPy convention: sigma=inf = no weight on point)
+            # and rejects NaN, 0, and negative values.
             if arr.ndim == 1 and np.all(arr > 0):
                 state.sigma = arr
 

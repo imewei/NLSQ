@@ -456,3 +456,168 @@ def bounds():
         # This should raise a ModelError due to invalid model name
         with pytest.raises(ModelError):
             runner.run(config)
+
+
+class TestSanitizeNonfinite:
+    """Tests for _sanitize_nonfinite helper — RFC 8259 compliance."""
+
+    def test_finite_float_unchanged(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        assert _sanitize_nonfinite(1.5) == 1.5
+
+    def test_nan_float_becomes_none(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        assert _sanitize_nonfinite(float("nan")) is None
+
+    def test_inf_float_becomes_none(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        assert _sanitize_nonfinite(float("inf")) is None
+        assert _sanitize_nonfinite(float("-inf")) is None
+
+    def test_numpy_scalar_nan_becomes_none(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        assert _sanitize_nonfinite(np.float64("nan")) is None
+        assert _sanitize_nonfinite(np.float32("nan")) is None
+
+    def test_numpy_scalar_inf_becomes_none(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        assert _sanitize_nonfinite(np.float64("inf")) is None
+
+    def test_numpy_scalar_finite_unchanged(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        result = _sanitize_nonfinite(np.float64(3.14))
+        assert result == pytest.approx(3.14)
+
+    def test_numpy_array_with_nan_sanitized(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        arr = np.array([1.0, float("nan"), 3.0])
+        result = _sanitize_nonfinite(arr)
+        assert result == [1.0, None, 3.0]
+
+    def test_numpy_2d_array_with_nan_sanitized(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        arr = np.array([[1.0, float("nan")], [float("inf"), 4.0]])
+        result = _sanitize_nonfinite(arr)
+        assert result == [[1.0, None], [None, 4.0]]
+
+    def test_nested_dict_with_nan_sanitized(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        data = {"a": 1.0, "b": float("nan"), "nested": {"c": float("inf")}}
+        result = _sanitize_nonfinite(data)
+        assert result == {"a": 1.0, "b": None, "nested": {"c": None}}
+
+    def test_list_with_nan_sanitized(self):
+        from nlsq.cli.result_exporter import _sanitize_nonfinite
+
+        assert _sanitize_nonfinite([1.0, float("nan"), 2.0]) == [1.0, None, 2.0]
+
+    def test_json_output_valid_with_nan_pcov(self, tmp_path):
+        """Ensure export produces valid JSON even with NaN in covariance."""
+        from nlsq.cli.result_exporter import ResultExporter
+
+        result = {
+            "popt": [1.0, 2.0],
+            "pcov": [[float("nan"), 0.0], [0.0, float("nan")]],
+            "success": True,
+            "message": "converged",
+            "nfev": 10,
+        }
+        config = {
+            "export": {"results_file": str(tmp_path / "out.json"), "format": "json"},
+        }
+        exporter = ResultExporter()
+        exporter.export(result, config)
+
+        # Must parse as valid JSON (allow_nan=False would raise otherwise)
+        with open(tmp_path / "out.json") as f:
+            data = json.load(f)
+
+        # NaN covariance entries become null
+        assert data["pcov"][0][0] is None
+        assert data["pcov"][1][1] is None
+
+
+class TestCalculateStatisticsNonfinite:
+    """Tests for _calculate_statistics with non-finite residuals."""
+
+    def test_nonfinite_residuals_produce_warning_not_stats(self):
+        from nlsq.cli.result_exporter import ResultExporter
+
+        exporter = ResultExporter()
+        result = {"fun": [1.0, float("nan"), 0.5]}
+        stats = exporter._calculate_statistics(result)
+
+        assert "statistics_warnings" in stats
+        assert "rmse" not in stats
+        assert "chi_squared" not in stats
+        assert "r_squared" not in stats
+
+    def test_finite_residuals_produce_stats(self):
+        from nlsq.cli.result_exporter import ResultExporter
+
+        exporter = ResultExporter()
+        result = {"fun": [0.1, -0.1, 0.1, -0.1], "ydata": [1.0, 2.0, 3.0, 4.0]}
+        stats = exporter._calculate_statistics(result)
+
+        assert "rmse" in stats
+        assert "chi_squared" in stats
+        assert "r_squared" in stats
+        assert "statistics_warnings" not in stats
+
+    def test_inf_residuals_produce_warning_not_r_squared(self):
+        """R-squared must not be computed when residuals are non-finite."""
+        from nlsq.cli.result_exporter import ResultExporter
+
+        exporter = ResultExporter()
+        result = {
+            "fun": [1.0, float("inf"), 0.5],
+            "ydata": [1.0, 2.0, 3.0],
+        }
+        stats = exporter._calculate_statistics(result)
+
+        assert "statistics_warnings" in stats
+        assert "r_squared" not in stats
+
+
+class TestWorkflowRunnerLastData:
+    """Tests for WorkflowRunner.last_data caching."""
+
+    def test_last_data_populated_after_run(self, tmp_path):
+        import numpy as np
+
+        from nlsq.cli.workflow_runner import WorkflowRunner
+
+        # Create a minimal ASCII data file
+        data_file = tmp_path / "data.txt"
+        x = np.linspace(0, 5, 20)
+        y = 2.0 * x + 1.0
+        np.savetxt(data_file, np.column_stack([x, y]))
+
+        config = {
+            "data": {
+                "input_file": str(data_file),
+                "format": "ascii",
+                "columns": {"x": 0, "y": 1},
+            },
+            "model": {"type": "builtin", "name": "linear"},
+            "fitting": {"p0": [1.0, 0.0], "method": "trf"},
+        }
+
+        runner = WorkflowRunner()
+        assert runner.last_data is None  # not set before run()
+
+        runner.run(config)
+
+        assert runner.last_data is not None
+        xdata, _ydata, sigma = runner.last_data
+        assert len(xdata) == 20
+        assert sigma is None

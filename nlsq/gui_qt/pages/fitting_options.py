@@ -7,6 +7,7 @@ the curve fitting operation with real-time progress feedback.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -470,6 +471,13 @@ class FittingOptionsPage(QWidget):
                 def _deferred_delete(
                     t: QThread = thread, w: FitWorker | None = worker
                 ) -> None:
+                    # Disconnect first to guard against double-firing if both
+                    # worker.finished and worker.error somehow both led here
+                    # before the C++ thread finished. deleteLater() is
+                    # idempotent, but two calls would still fire two events.
+                    # Disconnect to guard against double-firing — idempotent.
+                    with contextlib.suppress(RuntimeError):
+                        t.finished.disconnect(_deferred_delete)
                     self._pending_threads.discard(t)
                     if w is not None:
                         w.deleteLater()

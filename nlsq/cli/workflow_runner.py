@@ -71,7 +71,9 @@ class WorkflowRunner:
         self.data_loader = DataLoader()
         self.model_registry = ModelRegistry()
         self.result_exporter = ResultExporter()
-        # Cached after run() so visualization can reuse without re-loading the file.
+        # Cached by run() so _generate_visualization can reuse the loaded data
+        # without a second file read. Semantics: reflects the most recent run()
+        # call only — do not rely on this across multiple run() invocations.
         self.last_data: tuple[np.ndarray, np.ndarray, np.ndarray | None] | None = None
 
     def run(self, config: dict[str, Any]) -> dict[str, Any]:

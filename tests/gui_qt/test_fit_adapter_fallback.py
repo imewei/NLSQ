@@ -76,3 +76,66 @@ def test_execute_fit_auto_global_with_bounds_preserved():
         assert kwargs["workflow"] == "auto_global", (
             "Should keep 'auto_global' when bounds are present"
         )
+
+
+class TestSnapshotForFit:
+    """Tests for SessionState.snapshot_for_fit() deep-copy guarantee."""
+
+    def _make_state(self):
+        from nlsq.gui_qt.session_state import SessionState
+
+        s = SessionState()
+        s.xdata = np.array([1.0, 2.0, 3.0])
+        s.ydata = np.array([2.0, 4.0, 6.0])
+        s.sigma = np.array([0.1, 0.1, 0.1])
+        s.p0 = [1.0, 0.0]
+        s.bounds = ([0.0, -1.0], [10.0, 1.0])
+        s.model_config = {"name": "linear", "params": [1]}
+        return s
+
+    def test_snapshot_arrays_are_independent_copies(self):
+        """Mutating original arrays after snapshot must not affect snapshot."""
+        state = self._make_state()
+        snap = state.snapshot_for_fit()
+
+        original_x = snap.xdata.copy()
+        state.xdata[0] = 999.0  # mutate original in-place
+
+        np.testing.assert_array_equal(snap.xdata, original_x)
+
+    def test_snapshot_model_config_is_deep_copy(self):
+        """Mutating model_config after snapshot must not affect snapshot."""
+        state = self._make_state()
+        snap = state.snapshot_for_fit()
+
+        state.model_config["name"] = "changed"
+        assert snap.model_config["name"] == "linear"
+
+    def test_snapshot_p0_is_independent_list(self):
+        state = self._make_state()
+        snap = state.snapshot_for_fit()
+
+        state.p0[0] = 999.0
+        assert snap.p0[0] == 1.0
+
+    def test_snapshot_bounds_are_independent_lists(self):
+        state = self._make_state()
+        snap = state.snapshot_for_fit()
+
+        state.bounds[0][0] = 999.0
+        assert snap.bounds[0][0] == 0.0
+
+    def test_snapshot_clears_fit_result(self):
+        """fit_result is not needed by the worker — snapshot must be None."""
+        state = self._make_state()
+        state.fit_result = {"popt": np.array([1.0, 2.0]), "pcov": np.eye(2)}
+        snap = state.snapshot_for_fit()
+
+        assert snap.fit_result is None
+
+    def test_snapshot_sigma_none_stays_none(self):
+        state = self._make_state()
+        state.sigma = None
+        snap = state.snapshot_for_fit()
+
+        assert snap.sigma is None

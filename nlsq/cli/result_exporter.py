@@ -35,9 +35,19 @@ def _sanitize_nonfinite(obj: Any) -> Any:
 
     JSON RFC 8259 does not allow NaN or Infinity literals. Python's json module
     emits them by default (allow_nan=True), which breaks strict parsers.
+
+    Handles: Python float, numpy scalars (np.floating), numpy arrays (converted
+    to list first so elements are walked), dicts, and lists.
+    Does not handle other numpy types (np.integer etc.) — those serialize cleanly.
     """
     if isinstance(obj, float) and not math.isfinite(obj):
         return None
+    # numpy scalar floats (np.float32, np.float64, …)
+    if isinstance(obj, np.floating) and not math.isfinite(float(obj)):
+        return None
+    # numpy arrays — convert to list so element-level walk applies
+    if isinstance(obj, np.ndarray):
+        return _sanitize_nonfinite(obj.tolist())
     if isinstance(obj, dict):
         return {k: _sanitize_nonfinite(v) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -287,14 +297,15 @@ class ResultExporter:
                 # Chi-squared (sum of squared residuals)
                 statistics["chi_squared"] = float(np.sum(residuals**2))
 
-            # R-squared if ydata is available
-            ydata = result.get("ydata")
-            if ydata is not None:
-                y = np.asarray(ydata)
-                ss_res = np.sum(residuals**2)
-                ss_tot = np.sum((y - np.mean(y)) ** 2)
-                if ss_tot > 0:
-                    statistics["r_squared"] = float(1 - ss_res / ss_tot)
+                # R-squared if ydata is available — gated here so NaN residuals
+                # don't silently produce a NaN r_squared outside the warning path.
+                ydata = result.get("ydata")
+                if ydata is not None:
+                    y = np.asarray(ydata)
+                    ss_res = np.sum(residuals**2)
+                    ss_tot = np.sum((y - np.mean(y)) ** 2)
+                    if ss_tot > 0:
+                        statistics["r_squared"] = float(1 - ss_res / ss_tot)
 
         # Copy any existing statistics
         if "r_squared" in result:

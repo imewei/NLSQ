@@ -276,6 +276,9 @@ class SessionState:
             snap.p0 = list(snap.p0)
         if snap.bounds is not None:
             snap.bounds = (list(snap.bounds[0]), list(snap.bounds[1]))
+        # Drop prior fit_result — the worker never reads it and copying it would
+        # needlessly duplicate potentially large result arrays (pcov, residuals).
+        snap.fit_result = None
         return snap
 
 
