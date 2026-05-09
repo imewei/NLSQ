@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import curve_fit
+from nlsq.core.functions import lorentzian
 
 # Set random seed
 np.random.seed(42)
@@ -56,31 +57,6 @@ def gaussian(x, amplitude, center, width):
         Gaussian profile
     """
     return amplitude * jnp.exp(-((x - center) ** 2) / (2 * width**2))
-
-
-def lorentzian(x, amplitude, center, width):
-    """
-    Lorentzian peak profile (Cauchy distribution).
-
-    Common in spectroscopy for broadened lines.
-
-    Parameters
-    ----------
-    x : array_like
-        Energy/wavelength axis
-    amplitude : float
-        Peak amplitude (max height)
-    center : float
-        Peak center position
-    width : float
-        Peak width (half-width at half-maximum, HWHM)
-
-    Returns
-    -------
-    y : array_like
-        Lorentzian profile
-    """
-    return amplitude * width**2 / ((x - center) ** 2 + width**2)
 
 
 def multi_peak_model(

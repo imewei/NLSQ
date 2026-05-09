@@ -32,7 +32,7 @@ Expected output:
 
 .. code-block:: text
 
-   NLSQ version: 0.6.11
+   NLSQ version: 0.6.12
    Device: cpu  # or 'cuda:0' if GPU is available
 
 GPU Support (Optional)

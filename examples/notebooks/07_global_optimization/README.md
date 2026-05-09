@@ -1,6 +1,6 @@
 # Section 07: Global Optimization (Notebooks)
 
-**Global optimization with the unified `fit()` API (v0.6.3).**
+**Global optimization with the unified `fit()` API (v0.6.12).**
 
 ---
 
@@ -11,7 +11,7 @@ optimizers can get trapped in a local minimum, returning suboptimal parameter es
 Global optimization techniques address this by exploring the parameter space from multiple
 starting points.
 
-NLSQ v0.6.3 provides global optimization through the `workflow='auto_global'` parameter:
+NLSQ v0.6.12 provides global optimization through the `workflow='auto_global'` parameter:
 
 - **Multi-Start optimization**: Run curve fitting from multiple starting points
 - **CMA-ES**: Covariance Matrix Adaptation for multi-scale problems
@@ -171,5 +171,5 @@ if is_evosax_available():
 ---
 
 <p align="center">
-<i>NLSQ v0.6.3 | Last updated: 2026-01-11</i>
+<i>NLSQ v0.6.12 | Last updated: 2026-05-09</i>
 </p>

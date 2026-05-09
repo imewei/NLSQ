@@ -1,7 +1,7 @@
 # 09 - Advanced Gallery (fit() API + workflow System)
 
 This gallery contains the same examples as `04_gallery/` but updated to use NLSQ's
-v0.6.3 3-workflow system:
+v0.6.12 3-workflow system:
 
 - **`fit()` API**: Unified entry point with automatic memory-based strategy selection
 - **Three Workflows**: `'auto'`, `'auto_global'`, `'hpc'` for all use cases

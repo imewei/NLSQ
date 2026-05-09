@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nlsq import fit
+from nlsq.core.functions import lorentzian
 
 # Keep quick-mode runs light for CI/automation
 QUICK_MODE = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
@@ -40,11 +41,6 @@ np.random.seed(42)
 def gaussian(x, amplitude, center, width):
     """Gaussian peak profile."""
     return amplitude * jnp.exp(-((x - center) ** 2) / (2 * width**2))
-
-
-def lorentzian(x, amplitude, center, width):
-    """Lorentzian peak profile (Cauchy distribution)."""
-    return amplitude * width**2 / ((x - center) ** 2 + width**2)
 
 
 def multi_peak_model(
