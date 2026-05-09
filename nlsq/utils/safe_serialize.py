@@ -171,6 +171,14 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
             f"Refusing to deserialize array with non-numeric dtype "
             f"{dtype!r}. Only numeric dtypes are allowed."
         )
+    # Validate each dimension is a non-negative integer. A zero dimension
+    # makes n_elements=0 which bypasses the limit check while allowing
+    # an arbitrarily large logical shape through reshape.
+    for i, dim in enumerate(shape):
+        if not isinstance(dim, int) or dim < 0:
+            raise SafeSerializationError(
+                f"Array shape[{i}]={dim!r} must be a non-negative integer"
+            )
     n_elements = 1
     for dim in shape:
         n_elements *= dim

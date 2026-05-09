@@ -81,6 +81,11 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "__dict__",
         "__globals__",
         "__code__",
+        # Attribute-access bypass routes not covered by __class__ chain
+        "__getattribute__",
+        "__getattr__",
+        "__base__",
+        "mro",
         # Interactive debugger (can execute arbitrary code interactively)
         "breakpoint",
     }
@@ -389,10 +394,11 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
         yield
         return
 
-    # Timer for timeout
+    # Timer for timeout (uses threading.Timer + SIGALRM, not signal.alarm())
     timer = None
     timeout_occurred = False
     old_handler = signal.SIG_DFL
+    signal_installed = False
 
     def timeout_handler():
         nonlocal timeout_occurred
@@ -420,6 +426,7 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     try:
         resource.setrlimit(resource.RLIMIT_AS, (effective_limit, old_hard))
         old_handler = signal.signal(signal.SIGALRM, signal_handler)  # type: ignore[assignment]
+        signal_installed = True
         timer = threading.Timer(timeout, timeout_handler)
         timer.start()
 
@@ -428,13 +435,16 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     except MemoryError as err:
         raise ResourceLimitError(f"Memory limit ({memory_mb}MB) exceeded") from err
     finally:
-        # Restore memory limit
-        resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
-        # Cancel timer and disarm signal before restoring handler
+        # Cancel timer first to prevent spurious SIGALRM after cleanup
         if timer is not None:
             timer.cancel()
-        # Clear any pending alarm
-        signal.alarm(0)
+        # Restore original SIGALRM handler (only if we installed ours)
+        # Do NOT call signal.alarm(0) — we use threading.Timer, not signal.alarm(),
+        # so clearing alarm() would cancel the caller's pre-existing alarm instead.
+        if signal_installed:
+            signal.signal(signal.SIGALRM, old_handler)  # type: ignore[arg-type]
+        # Restore memory limit last
+        resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
 
 
 class AuditLogger:

@@ -131,5 +131,8 @@ class AutodiffJacobian:
         def fun_x(params: jnp.ndarray):
             return fun(params, *args)
 
-        jacobian = jax.jacfwd(fun_x)(x_jax)
+        # Forward mode (jacfwd) is efficient when n_params << n_residuals.
+        # Reverse mode (jacrev) is efficient when n_params >> n_residuals.
+        jac_fn = jax.jacfwd if self._use_forward_mode else jax.jacrev
+        jacobian = jac_fn(fun_x)(x_jax)
         return np.asarray(jacobian)

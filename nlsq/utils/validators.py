@@ -6,19 +6,16 @@ and provide helpful error messages to users.
 
 import logging
 import warnings
+import weakref
 from collections.abc import Callable
 from contextlib import suppress
 from functools import wraps
 from inspect import signature
 from typing import Any
 
-import numpy as np
-
-from nlsq.config import JAXConfig
-
-_jax_config = JAXConfig()
-
+import jax
 import jax.numpy as jnp
+import numpy as np
 
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
 
@@ -38,7 +35,10 @@ class InputValidator:
             If False, perform all validation checks.
         """
         self.fast_mode = fast_mode
-        self._function_cache: dict[int, bool] = {}  # Cache function test results
+        # WeakKeyDictionary prevents stale id() reuse when functions are GC'd
+        self._function_cache: weakref.WeakKeyDictionary[Callable, bool] = (
+            weakref.WeakKeyDictionary()
+        )
 
     def _validate_and_convert_arrays(
         self, xdata: Any, ydata: Any
@@ -84,7 +84,7 @@ class InputValidator:
         else:
             # Convert to numpy arrays and check types
             try:
-                if not isinstance(xdata, (np.ndarray, jnp.ndarray)):
+                if not isinstance(xdata, (np.ndarray, jax.Array)):
                     xdata = np.asarray(xdata)
                     warnings_list.append("xdata converted to numpy array")
             except Exception as e:
@@ -106,7 +106,7 @@ class InputValidator:
 
         # Convert and validate ydata
         try:
-            if not isinstance(ydata, (np.ndarray, jnp.ndarray)):
+            if not isinstance(ydata, (np.ndarray, jax.Array)):
                 ydata = np.asarray(ydata)
                 warnings_list.append("ydata converted to numpy array")
         except Exception as e:
@@ -477,9 +477,14 @@ class InputValidator:
         warnings: list[str] = []
 
         try:
-            # Cache function test results to avoid repeated calls
-            func_id = id(f)
-            if func_id not in self._function_cache:
+            # Cache function test results to avoid repeated calls.
+            # Use the function object directly (WeakKeyDictionary auto-expires on GC).
+            # Fall back to always-test if f is not weakly referenceable (e.g., builtins).
+            try:
+                already_tested = f in self._function_cache
+            except TypeError:
+                already_tested = False
+            if not already_tested:
                 if isinstance(xdata, tuple):
                     # For tuple xdata, sample from each array
                     test_x = tuple(arr[: min(10, len(arr))] for arr in xdata)
@@ -498,8 +503,9 @@ class InputValidator:
                     dummy_params = np.ones(n_params)
                     test_result = f(test_x, *dummy_params)
 
-                # Cache the result
-                self._function_cache[func_id] = True
+                # Cache the result (suppress TypeError for non-referenceable callables)
+                with suppress(TypeError):
+                    self._function_cache[f] = True
 
                 # Check output shape/length
                 if hasattr(test_result, "__len__"):

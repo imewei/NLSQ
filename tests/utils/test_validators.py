@@ -22,10 +22,12 @@ class TestInputValidatorInit(unittest.TestCase):
 
     def test_default_initialization(self):
         """Test InputValidator with default fast_mode=True."""
+        import weakref
+
         validator = InputValidator()
 
         self.assertTrue(validator.fast_mode)
-        self.assertIsInstance(validator._function_cache, dict)
+        self.assertIsInstance(validator._function_cache, weakref.WeakKeyDictionary)
         self.assertEqual(len(validator._function_cache), 0)
 
     def test_fast_mode_true(self):
@@ -672,9 +674,8 @@ class TestValidatorFunctionCache(unittest.TestCase):
             linear, xdata, ydata, p0=[1.0, 0.0]
         )
 
-        # Cache should be populated
-        func_id = id(linear)
-        self.assertIn(func_id, validator._function_cache)
+        # Cache should be populated — keyed by function object, not id()
+        self.assertIn(linear, validator._function_cache)
 
         # Second call should use cache
         errors2, _warnings2, _x2, _y2 = validator.validate_curve_fit_inputs(

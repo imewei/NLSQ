@@ -104,6 +104,28 @@ class LargeDatasetConfig:
         }
     )
 
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        required_keys = {"direct", "iterative", "chunked"}
+        missing = required_keys - set(self.solver_selection_thresholds)
+        if missing:
+            raise ValueError(
+                f"solver_selection_thresholds missing required keys: {missing}"
+            )
+        thresholds = self.solver_selection_thresholds
+        if not (thresholds["direct"] < thresholds["iterative"] < thresholds["chunked"]):
+            raise ValueError(
+                "solver_selection_thresholds must be monotonically increasing: "
+                f"direct={thresholds['direct']} < iterative={thresholds['iterative']} "
+                f"< chunked={thresholds['chunked']}"
+            )
+        for key, val in thresholds.items():
+            if val <= 0:
+                raise ValueError(
+                    f"solver_selection_thresholds['{key}'] must be positive, "
+                    f"got {val!r}"
+                )
+
 
 class JAXConfig:
     """Singleton configuration manager for JAX and memory settings.
