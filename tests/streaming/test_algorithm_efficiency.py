@@ -1042,6 +1042,7 @@ class TestEndToEndIntegration:
         assert "phase_history" in diag
         assert len(diag["phase_history"]) >= 2  # At least normalization and warmup
 
+    @pytest.mark.serial
     def test_defense_layers_tracked_in_full_fit(self):
         """Test that all defense layer telemetry is tracked during full fit."""
 

@@ -673,6 +673,7 @@ class TestDefenseLayersCurveFitIntegration:
         assert jnp.abs(popt[1] - true_params[1]) < 0.3  # mean
         assert jnp.abs(popt[2] - true_params[2]) < 0.5  # sigma
 
+    @pytest.mark.serial
     def test_defense_layers_disabled_via_curve_fit(self):
         """Test that all defense layers can be disabled via curve_fit."""
 
