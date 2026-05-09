@@ -139,3 +139,112 @@ class TestSnapshotForFit:
         snap = state.snapshot_for_fit()
 
         assert snap.sigma is None
+
+
+class TestPendingThreadsDeferred:
+    """Smoke tests for _pending_threads deferred cleanup in FittingOptionsPage.
+
+    Uses __new__ + MagicMock to bypass Qt widget construction entirely,
+    so these run without a QApplication and without @pytest.mark.serial.
+    """
+
+    def _make_page_stub(self):
+        from nlsq.gui_qt.pages.fitting_options import FittingOptionsPage
+
+        page = FittingOptionsPage.__new__(FittingOptionsPage)
+        page._pending_threads = set()
+        return page
+
+    def test_thread_added_to_pending_on_timeout(self):
+        """When wait(100) times out, the thread ref must be in _pending_threads."""
+        from unittest.mock import MagicMock
+
+        page = self._make_page_stub()
+        mock_thread = MagicMock()
+        mock_thread.wait.return_value = False  # simulate timeout — thread still running
+
+        page._fit_thread = mock_thread
+        page._fit_worker = MagicMock()
+
+        page._cleanup_thread()
+
+        assert mock_thread in page._pending_threads, (
+            "_pending_threads must hold the thread ref until finished fires"
+        )
+
+    def test_fit_thread_ref_cleared_while_thread_still_pending(self):
+        """_fit_thread / _fit_worker must be None after deferred cleanup
+        so that run_fit() can start a new fit immediately."""
+        from unittest.mock import MagicMock
+
+        page = self._make_page_stub()
+        mock_thread = MagicMock()
+        mock_thread.wait.return_value = False
+
+        page._fit_thread = mock_thread
+        page._fit_worker = MagicMock()
+
+        page._cleanup_thread()
+
+        assert page._fit_thread is None
+        assert page._fit_worker is None
+
+    def test_thread_removed_from_pending_when_finished_fires(self):
+        """Calling _deferred_delete (via thread.finished) must remove the ref
+        from _pending_threads — the Python strong reference is released."""
+        from unittest.mock import MagicMock
+
+        page = self._make_page_stub()
+        mock_thread = MagicMock()
+        mock_thread.wait.return_value = False
+
+        page._fit_thread = mock_thread
+        page._fit_worker = MagicMock()
+
+        # Capture the slot that gets connected to thread.finished
+        connected_slot = None
+
+        def capture_connect(slot):
+            nonlocal connected_slot
+            connected_slot = slot
+
+        mock_thread.finished.connect.side_effect = capture_connect
+
+        page._cleanup_thread()
+
+        assert mock_thread in page._pending_threads
+        assert connected_slot is not None, "A slot must be connected to thread.finished"
+
+        # Simulate the C++ thread finishing → fires thread.finished → calls slot
+        connected_slot()
+
+        assert mock_thread not in page._pending_threads, (
+            "_pending_threads must be empty after _deferred_delete fires"
+        )
+
+    def test_double_fire_is_safe(self):
+        """Calling _deferred_delete twice (double-connection edge case) must not crash."""
+        from unittest.mock import MagicMock
+
+        page = self._make_page_stub()
+        mock_thread = MagicMock()
+        mock_thread.wait.return_value = False
+
+        page._fit_thread = mock_thread
+        page._fit_worker = MagicMock()
+
+        connected_slot = None
+
+        def capture_connect(slot):
+            nonlocal connected_slot
+            connected_slot = slot
+
+        mock_thread.finished.connect.side_effect = capture_connect
+
+        page._cleanup_thread()
+
+        # Fire twice — must not raise
+        connected_slot()
+        connected_slot()  # second call after discard — safe no-op
+
+        assert mock_thread not in page._pending_threads
