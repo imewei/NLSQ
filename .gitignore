@@ -191,6 +191,12 @@ outputs/
 *.jpg
 *.pdf
 
+# Documentation assets
+!docs/_static/*.png
+!docs/_static/*.jpg
+!docs/_static/*.ico
+!docs/_static/*.svg
+
 # ----------------------------------------------------------------------------
 # Benchmark Results
 # ----------------------------------------------------------------------------
