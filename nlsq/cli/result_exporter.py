@@ -21,12 +21,28 @@ Example Usage
 
 import csv
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from nlsq.cli.errors import CLIError
+
+
+def _sanitize_nonfinite(obj: Any) -> Any:
+    """Recursively replace non-finite floats with None for spec-compliant JSON.
+
+    JSON RFC 8259 does not allow NaN or Infinity literals. Python's json module
+    emits them by default (allow_nan=True), which breaks strict parsers.
+    """
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_nonfinite(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_nonfinite(v) for v in obj]
+    return obj
 
 
 class NumpyJSONEncoder(json.JSONEncoder):
@@ -183,10 +199,16 @@ class ResultExporter:
 
         # Calculate uncertainties from covariance diagonal
         uncertainties = []
-        if pcov:
+        if pcov is not None:
             pcov_arr = np.asarray(pcov)
-            if pcov_arr.ndim == 2:
-                uncertainties = np.sqrt(np.diag(pcov_arr)).tolist()
+            # `if pcov:` on an ndarray raises ValueError — use explicit None check.
+            # Also guard against singular/negative-diagonal covariance (produces NaN).
+            if pcov_arr.ndim == 2 and pcov_arr.size > 0:
+                diag = np.diag(pcov_arr)
+                if np.any(diag < 0) or not np.all(np.isfinite(diag)):
+                    uncertainties = [float("nan")] * len(diag)
+                else:
+                    uncertainties = np.sqrt(diag).tolist()
 
         # Calculate statistics
         statistics = self._calculate_statistics(result)
@@ -254,11 +276,16 @@ class ResultExporter:
         if fun is not None:
             residuals = np.asarray(fun)
 
-            # RMSE
-            statistics["rmse"] = float(np.sqrt(np.mean(residuals**2)))
+            if not np.all(np.isfinite(residuals)):
+                statistics["statistics_warnings"] = (
+                    "residuals contain non-finite values"
+                )
+            else:
+                # RMSE
+                statistics["rmse"] = float(np.sqrt(np.mean(residuals**2)))
 
-            # Chi-squared (sum of squared residuals)
-            statistics["chi_squared"] = float(np.sum(residuals**2))
+                # Chi-squared (sum of squared residuals)
+                statistics["chi_squared"] = float(np.sum(residuals**2))
 
             # R-squared if ydata is available
             ydata = result.get("ydata")
@@ -296,7 +323,13 @@ class ResultExporter:
         """
         try:
             with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, cls=NumpyJSONEncoder, indent=2)
+                json.dump(
+                    _sanitize_nonfinite(data),
+                    f,
+                    cls=NumpyJSONEncoder,
+                    indent=2,
+                    allow_nan=False,
+                )
         except (OSError, TypeError) as e:
             raise CLIError(
                 f"Failed to write JSON file: {e}",
@@ -317,17 +350,18 @@ class ResultExporter:
             Output file path.
         """
         popt = data.get("popt", [])
-        uncertainties = data.get("uncertainties", [])
+        # Copy to avoid mutating the caller's dict in-place
+        uncertainties = list(data.get("uncertainties", []))
         statistics = data.get("statistics", {})
-        param_names = data.get("parameter_names", [])
+        param_names = list(data.get("parameter_names", []))
 
-        # Ensure uncertainties list matches popt length
+        # Pad uncertainties to match popt length
         while len(uncertainties) < len(popt):
             uncertainties.append(float("nan"))
 
-        # Generate parameter names if not provided
-        if len(param_names) < len(popt):
-            param_names = [f"p{i}" for i in range(len(popt))]
+        # Extend (not replace) param names — preserve any names already provided
+        while len(param_names) < len(popt):
+            param_names.append(f"p{len(param_names)}")
 
         try:
             with open(output_path, "w", encoding="utf-8", newline="") as f:
@@ -370,5 +404,7 @@ class ResultExporter:
         data : dict
             Export data dictionary.
         """
-        json_str = json.dumps(data, cls=NumpyJSONEncoder, indent=2)
+        json_str = json.dumps(
+            _sanitize_nonfinite(data), cls=NumpyJSONEncoder, indent=2, allow_nan=False
+        )
         print(json_str)

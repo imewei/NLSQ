@@ -649,9 +649,9 @@ class DataLoader:
                         )
                     sigma = data[sigma_key].astype(np.float64).flatten()
 
+        except DataLoadError:
+            raise
         except (ValueError, OSError) as e:
-            if isinstance(e, DataLoadError):
-                raise
             raise DataLoadError(
                 f"Failed to load NPZ file: {e}",
                 file_path=file_path,
@@ -771,9 +771,9 @@ class DataLoader:
                         )
                     sigma = np.asarray(f[sigma_path], dtype=np.float64).flatten()
 
+        except DataLoadError:
+            raise
         except (ValueError, OSError) as e:
-            if isinstance(e, DataLoadError):
-                raise
             raise DataLoadError(
                 f"Failed to load HDF5 file: {e}",
                 file_path=file_path,

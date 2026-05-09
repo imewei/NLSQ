@@ -111,6 +111,9 @@ class FittingOptionsPage(QWidget):
         self._app_state = app_state
         self._fit_thread: QThread | None = None
         self._fit_worker: FitWorker | None = None
+        # Keeps strong Python refs to threads in deferred cleanup so GC can't
+        # destroy the QThread wrapper while the C++ thread is still running.
+        self._pending_threads: set[QThread] = set()
 
         self._setup_ui()
         self._connect_signals()
@@ -355,9 +358,10 @@ class FittingOptionsPage(QWidget):
         self._set_running_state(True)
 
         # Create and start worker thread
-        # Pass a snapshot of state to avoid TOCTOU race between UI and worker thread
+        # snapshot_for_fit() deep-copies arrays so UI mutations can't race with
+        # the worker reading the same ndarray objects.
         self._fit_thread = QThread()
-        self._fit_worker = FitWorker(state.copy())
+        self._fit_worker = FitWorker(state.snapshot_for_fit())
         self._fit_worker.moveToThread(self._fit_thread)
 
         # Connect signals
@@ -457,9 +461,21 @@ class FittingOptionsPage(QWidget):
                 )
                 thread = self._fit_thread
                 worker = self._fit_worker
-                thread.finished.connect(thread.deleteLater)
-                if worker is not None:
-                    thread.finished.connect(worker.deleteLater)
+                # Hold strong Python refs in _pending_threads until the C++
+                # thread actually finishes. Without this, GC may destroy the
+                # Python wrapper before C++ is done → "QThread: Destroyed
+                # while thread is still running" SIGABRT.
+                self._pending_threads.add(thread)
+
+                def _deferred_delete(
+                    t: QThread = thread, w: FitWorker | None = worker
+                ) -> None:
+                    self._pending_threads.discard(t)
+                    if w is not None:
+                        w.deleteLater()
+                    t.deleteLater()
+
+                thread.finished.connect(_deferred_delete)
                 self._fit_thread = None
                 self._fit_worker = None
 

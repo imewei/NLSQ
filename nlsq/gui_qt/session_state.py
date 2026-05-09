@@ -8,8 +8,11 @@ The SessionState dataclass contains all fields needed to configure a curve
 fitting workflow, matching the fields from workflow_config_template.yaml.
 """
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
+
+import numpy as np
 
 
 @dataclass(slots=True)
@@ -248,6 +251,32 @@ class SessionState:
             fit_running=self.fit_running,
             fit_aborted=self.fit_aborted,
         )
+
+    def snapshot_for_fit(self) -> "SessionState":
+        """Create an immutable-safe snapshot for the background fit worker.
+
+        Unlike copy(), this deep-copies all mutable fields (numpy arrays,
+        lists, dicts) so the worker thread sees a stable view even if the UI
+        thread reassigns or mutates state fields while the fit is running.
+        """
+        snap = self.copy()
+        # Deep-copy numpy arrays — copy() shares the same ndarray objects
+        if snap.xdata is not None:
+            snap.xdata = np.array(snap.xdata, copy=True)
+        if snap.ydata is not None:
+            snap.ydata = np.array(snap.ydata, copy=True)
+        if snap.zdata is not None:
+            snap.zdata = np.array(snap.zdata, copy=True)
+        if snap.sigma is not None:
+            snap.sigma = np.array(snap.sigma, copy=True)
+        # Deep-copy mutable config objects
+        if snap.model_config is not None:
+            snap.model_config = copy.deepcopy(snap.model_config)
+        if snap.p0 is not None:
+            snap.p0 = list(snap.p0)
+        if snap.bounds is not None:
+            snap.bounds = (list(snap.bounds[0]), list(snap.bounds[1]))
+        return snap
 
 
 def initialize_state(**kwargs: Any) -> SessionState:

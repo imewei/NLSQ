@@ -654,6 +654,11 @@ def run_fit(
     if state.model_func is None:
         raise ValueError("Model not selected. Please select a model before fitting.")
 
+    if not callable(state.model_func):
+        raise TypeError(
+            f"model_func must be callable, got {type(state.model_func).__name__}"
+        )
+
     # Extract data
     xdata = np.asarray(state.xdata)
     ydata = np.asarray(state.ydata)
