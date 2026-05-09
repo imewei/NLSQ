@@ -440,7 +440,7 @@ html_show_copyright = True
 html_last_updated_fmt = "%b %d, %Y"
 
 # Logo and favicon
-html_logo = "_static/NLSQ_logo.png"
+# html_logo = "_static/NLSQ_logo.png"  # File not yet in repo
 # html_favicon = "_static/favicon.ico"
 
 # -- Linkcheck configuration -------------------------------------------------

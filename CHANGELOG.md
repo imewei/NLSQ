@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+**GUI / Qt (P0–P1)**
+
+- **QThread GC crash (P0)**: `FittingOptionsPage` now holds strong Python references to completed
+  `QThread` objects in `_pending_threads` until the page is destroyed, preventing the C++
+  destructor from running while the thread is still alive inside the Qt event loop
+  (`ad6fefa`)
+- **Shallow FitWorker snapshot (P1)**: `SessionState.snapshot_for_fit()` now deep-copies all
+  mutable fields — NumPy arrays (`xdata`, `ydata`, `zdata`, `sigma`), `model_config`, `p0`, and
+  `bounds` — so the background fit worker sees a stable view even if the UI thread reassigns
+  fields mid-run; prior `copy()` shared ndarray objects and caused data races (`ad6fefa`)
+- **Result exporter NaN/Inf serialisation (P1)**: Replaced bare `json.dumps` with
+  `safe_serialize` in `result_exporter.py` so NaN and Inf parameter values serialise to JSON
+  `null` instead of raising `ValueError`; fixed in-place dict mutation that corrupted the result
+  object; stopped emitting partial parameter names when the fit result has fewer names than
+  parameters (`ad6fefa`)
+- **Autosave atomicity (P2)**: `AutosaveManager._do_autosave()` now writes to a temporary file
+  and renames atomically, preventing a corrupt autosave JSON if the process crashes mid-write
+  (`629d93f`)
+- **Bounds serialisation (P2)**: Bounds tuples now round-trip correctly through `safe_serialize`;
+  list-of-floats bounds no longer raise `TypeError` during autosave (`629d93f`)
+- **Array validation (P2)**: `InputValidator._validate_and_convert_arrays()` accepts
+  `jax.Array` inputs in addition to NumPy arrays, fixing a spurious validation error when
+  passing GPU-resident data (`629d93f`)
+
+**Core / Orchestration (P0–P2)**
+
+- **fit() workflow deep RCA**: Fixed 11 correctness bugs across the core fit path: dtype
+  promotion for integer inputs, conjugate-gradient CG bias, alpha overflow in trust-region step,
+  theta bound clamp, and API-compatibility edge cases introduced in v0.6.10 refactor
+  (`c837bd4`)
+- **Orchestration subsystem**: Corrected `data_preprocessor` sigma shape handling, fixed
+  `optimization_selector` method selection logic for bounded problems, fixed
+  `covariance_computer` SVD rank threshold, corrected `streaming_coordinator` memory budget
+  heuristic (`7409f03`)
+- **TRF / trf_jit**: Fixed SVD fallback path returning wrong shapes under GPU memory pressure;
+  corrected `svd_fallback.py` CPU-side threshold comparison that caused unnecessary fallback
+  on healthy GPUs (`7409f03`)
+
+**Security / Infrastructure (P0–P1)**
+
+- **JIT-safety P0**: Moved runtime `isinstance` guards outside JIT-traced code paths in
+  `trf_jit.py` and `common_jax.py`; previously caused `ConcretizationTypeError` on second call
+  with a different model function (`a43c8c0`)
+- **Dtype / cache / sigma (P1)**: Fixed sigma dtype coercion discarding the user-supplied
+  precision; fixed compilation cache key collision when two models share the same function name
+  but different signatures; fixed covariance computation when sigma is a scalar float
+  (`a43c8c0`)
+- **Safe-serialize data integrity (P0)**: `safe_serialize` now preserves `collections.deque` and
+  JAX device arrays without silent truncation or namespace collision; error paths raise
+  `SafeSerializationError` instead of falling through to `str()` (`b12d846`)
+- **Security hardening (P1)**: Tightened `model_validation.py` AST allowlist (no `__import__`
+  calls); added path-traversal check to `model_registry.py`; validated `config.py` version
+  field against an explicit allowlist (`7b49046`, `b12d846`)
+- **Caching / facade / adapter (P0–P2)**: Fixed `MemoryManager` TTL not resetting on cache
+  hits; fixed `StabilityFacade` re-raising non-fatal condition warnings as exceptions; fixed
+  `CurveFitAdapter` passing stale `method` override after solver selection (`1583b5b`)
+- **GPU fallback (P2)**: `svd_fallback.py` now correctly falls back to CPU SVD when the GPU
+  OOM error text contains a locale-specific string (non-English CUDA error messages were
+  previously not caught) (`f69ccd1`)
+
+### Tests
+
+- **QThread deferred-cleanup smoke tests**: New `tests/gui_qt/test_fit_adapter_fallback.py`
+  tests verify that `_pending_threads` grows on fit completion and is cleared on explicit
+  cleanup, preventing regression of the P0 GC crash (`7c6a418`, `8e7bf7f`)
+- **Validator and exporter coverage**: Added missing tests for `bounds` serialisation roundtrip,
+  `safe_serialize` with JAX arrays, NaN result export, and partial parameter-name handling;
+  8 additional assertions from code-review audit (`8e7bf7f`)
+
+### Infrastructure
+
+- **CI: graphify-out/ exclusions**: Added `graphify-out/` to codespell and detect-secrets hook
+  ignore lists so generated knowledge-graph artefacts do not trigger false positives (`85e6efa`)
+- **Dependencies**: Updated `uv.lock` with minor dependency bumps; upgraded JAX-adjacent
+  packages to tested versions (`07c18eb`, `132c9fe`)
+
 ## [0.6.11] - 2026-03-12
 
 ### Fixed
