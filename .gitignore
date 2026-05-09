@@ -259,6 +259,7 @@ specs/
 AGENTS.md
 CLAUDE.md
 GEMINI.md
+.research-log.jsonl
 
 # Graphify Knowledge Graph
 graphify-out/

@@ -152,7 +152,7 @@ class CompilationCache:
             # Get argument shapes and dtypes
             arg_info = []
             for arg in args:
-                if isinstance(arg, (jnp.ndarray, jax.Array)):
+                if isinstance(arg, jax.Array):
                     arg_info.append(f"{arg.shape}_{arg.dtype}")
                 elif isinstance(arg, (int, float, str, bool)):
                     arg_info.append(f"{type(arg).__name__}_{arg}")

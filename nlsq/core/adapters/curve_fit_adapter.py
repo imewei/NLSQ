@@ -97,13 +97,9 @@ class CurveFitAdapter:
         # Import here to avoid circular dependency
         from nlsq.core.minpack import curve_fit as _curve_fit
 
-        # Inject dependencies if provided
-        if self._cache is not None:
-            kwargs.setdefault("_cache", self._cache)
-        if self._stability_guard is not None:
-            kwargs.setdefault("_stability_guard", self._stability_guard)
+        # Map diagnostics_config to the named parameter curve_fit accepts
         if self._diagnostics_config is not None:
-            kwargs.setdefault("diagnostics", self._diagnostics_config)
+            kwargs.setdefault("diagnostics_config", self._diagnostics_config)
 
         return _curve_fit(
             f,

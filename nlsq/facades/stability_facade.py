@@ -12,7 +12,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import jax.numpy as jnp
+    import jax
+    import numpy as np
 
     from nlsq.stability.fallback import FallbackOrchestrator
     from nlsq.stability.guard import NumericalStabilityGuard
@@ -34,7 +35,7 @@ class StabilityFacade:
 
     def get_fallback_svd(
         self,
-    ) -> Callable[[jnp.ndarray, bool], tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
+    ) -> Callable[[jax.Array, bool], tuple[jax.Array, jax.Array, jax.Array]]:
         """Get the SVD function with GPU/CPU fallback.
 
         Returns
@@ -61,13 +62,14 @@ class StabilityFacade:
 
     def get_condition_monitor(
         self,
-    ) -> Callable[[Any], float]:
+    ) -> Callable[[np.ndarray], float]:
         """Get the condition number estimation function.
 
         Returns
         -------
         Callable
-            Function to estimate condition number of a matrix.
+            Function estimating condition number of xdata:
+            ``estimate_condition_number(xdata: np.ndarray) -> float``
         """
         from nlsq.stability.guard import estimate_condition_number
 
