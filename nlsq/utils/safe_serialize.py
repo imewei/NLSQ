@@ -48,9 +48,19 @@ def _serialize_dict_key(key: Any) -> str:
 def _deserialize_dict_key(key: str) -> str | int | float:
     """Restore original dict key type from serialized string form."""
     if key.startswith("__int_key__"):
-        return int(key[len("__int_key__") :])
+        try:
+            return int(key[len("__int_key__") :])
+        except ValueError as e:
+            raise SafeSerializationError(
+                f"Malformed integer key in serialized data: {key!r}"
+            ) from e
     if key.startswith("__float_key__"):
-        return float(key[len("__float_key__") :])
+        try:
+            return float(key[len("__float_key__") :])
+        except ValueError as e:
+            raise SafeSerializationError(
+                f"Malformed float key in serialized data: {key!r}"
+            ) from e
     return key
 
 
@@ -144,6 +154,35 @@ def _convert_to_serializable(obj: Any) -> Any:
     )
 
 
+def _deserialize_ndarray(obj: dict) -> np.ndarray:
+    """Reconstruct a numpy array from its serialized dict representation."""
+    try:
+        dtype = np.dtype(obj["dtype"])
+        data = obj["data"]
+        shape = tuple(obj["shape"])
+    except KeyError as e:
+        raise SafeSerializationError(
+            f"Malformed ndarray in serialized data: missing key {e}"
+        ) from e
+    # Only allow numeric dtypes — object dtype arrays can hold arbitrary Python
+    # objects, defeating the security guarantee of this module
+    if dtype.kind not in ("b", "i", "u", "f", "c"):
+        raise SafeSerializationError(
+            f"Refusing to deserialize array with non-numeric dtype "
+            f"{dtype!r}. Only numeric dtypes are allowed."
+        )
+    n_elements = 1
+    for dim in shape:
+        n_elements *= dim
+    if n_elements > _MAX_DESERIALIZE_ELEMENTS:
+        raise SafeSerializationError(
+            f"Refusing to deserialize array with {n_elements:,} elements "
+            f"(limit: {_MAX_DESERIALIZE_ELEMENTS:,}). "
+            "Possible DoS via attacker-controlled shape."
+        )
+    return np.array(data, dtype=dtype).reshape(shape)
+
+
 def _convert_from_serializable(obj: Any) -> Any:
     """Convert JSON-deserialized object back to Python types.
 
@@ -193,19 +232,7 @@ def _convert_from_serializable(obj: Any) -> Any:
                 )
 
             if type_name == "ndarray":
-                dtype = np.dtype(obj["dtype"])
-                data = obj["data"]
-                shape = tuple(obj["shape"])
-                n_elements = 1
-                for dim in shape:
-                    n_elements *= dim
-                if n_elements > _MAX_DESERIALIZE_ELEMENTS:
-                    raise SafeSerializationError(
-                        f"Refusing to deserialize array with {n_elements:,} elements "
-                        f"(limit: {_MAX_DESERIALIZE_ELEMENTS:,}). "
-                        "Possible DoS via attacker-controlled shape."
-                    )
-                return np.array(data, dtype=dtype).reshape(shape)
+                return _deserialize_ndarray(obj)
 
         # Regular dict — restore non-string keys from prefixed encoding
         return {
@@ -290,3 +317,8 @@ def safe_loads(data: bytes) -> Any:
         return _convert_from_serializable(parsed)
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         raise SafeSerializationError(f"Deserialization failed: {e}") from e
+    except RecursionError as e:
+        raise SafeSerializationError(
+            "Deserialization failed: input is too deeply nested "
+            "(possible DoS via deeply nested JSON)"
+        ) from e

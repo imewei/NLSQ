@@ -18,6 +18,7 @@ Dangerous Patterns Blocked
 - File modification: open with write mode
 - Network access: socket connections
 - Memory manipulation: ctypes operations
+- Serialization code execution: pickle, marshal, shelve, dill
 """
 
 import ast
@@ -80,10 +81,12 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "__dict__",
         "__globals__",
         "__code__",
+        # Interactive debugger (can execute arbitrary code interactively)
+        "breakpoint",
     }
 )
 
-# Dangerous module prefixes
+# Dangerous module prefixes that trigger blocking on import
 DANGEROUS_MODULES: frozenset[str] = frozenset(
     {
         "os",
@@ -99,6 +102,17 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "cffi",
         "multiprocessing",
         "concurrent",
+        # Serialization modules that execute arbitrary code during deserialization
+        "pickle",
+        "marshal",
+        "shelve",
+        "dill",
+        "cloudpickle",
+        # Introspection / sandbox-escape helpers
+        "inspect",
+        "dis",
+        "code",
+        "codeop",
     }
 )
 
@@ -421,9 +435,6 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
             timer.cancel()
         # Clear any pending alarm
         signal.alarm(0)
-
-        # Restore original signal handler
-        signal.signal(signal.SIGALRM, old_handler)
 
 
 class AuditLogger:
