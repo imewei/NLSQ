@@ -71,6 +71,8 @@ class WorkflowRunner:
         self.data_loader = DataLoader()
         self.model_registry = ModelRegistry()
         self.result_exporter = ResultExporter()
+        # Cached after run() so visualization can reuse without re-loading the file.
+        self.last_data: tuple[np.ndarray, np.ndarray, np.ndarray | None] | None = None
 
     def run(self, config: dict[str, Any]) -> dict[str, Any]:
         """Execute complete curve fitting workflow.
@@ -110,6 +112,7 @@ class WorkflowRunner:
         """
         # Step 1: Load data
         xdata, ydata, sigma = self._load_data(config)
+        self.last_data = (xdata, ydata, sigma)
 
         # Step 2: Resolve model
         model = self._resolve_model(config)

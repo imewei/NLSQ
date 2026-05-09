@@ -7,7 +7,9 @@ functionality for the Qt GUI application.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -112,10 +114,11 @@ class AutosaveManager(QObject):
         """Perform the autosave operation."""
         try:
             data = self._serialize_state()
-            AUTOSAVE_FILE.write_text(
-                json.dumps(data, indent=2),
-                encoding="utf-8",
-            )
+            # Atomic write: write to a sibling temp file then os.replace()
+            # so the recovery file is never left in a partially-written state.
+            tmp_path = AUTOSAVE_FILE.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            os.replace(tmp_path, AUTOSAVE_FILE)
             self.autosave_completed.emit()
         except (OSError, ValueError, TypeError, RecursionError):
             # Silently fail - autosave is best-effort
@@ -148,9 +151,13 @@ class AutosaveManager(QObject):
 
         # Serialize fitting options
         if state.p0 is not None:
-            data["p0"] = list(state.p0)
+            data["p0"] = [float(v) for v in state.p0]
         if state.bounds is not None:
-            data["bounds"] = state.bounds
+            with contextlib.suppress(TypeError, ValueError):
+                data["bounds"] = [
+                    [float(v) for v in state.bounds[0]],
+                    [float(v) for v in state.bounds[1]],
+                ]
 
         # Serialize other state attributes
         data["auto_p0"] = getattr(state, "auto_p0", True)
@@ -165,13 +172,20 @@ class AutosaveManager(QObject):
         """
         state = self._app_state.state
 
-        # Restore data arrays
+        # Restore data arrays — validate before accepting to avoid emitting
+        # data_changed with NaN/Inf-contaminated or malformed arrays.
         if "xdata" in data:
-            state.xdata = np.array(data["xdata"])
+            arr = np.array(data["xdata"], dtype=np.float64)
+            if arr.ndim == 1 and np.all(np.isfinite(arr)):
+                state.xdata = arr
         if "ydata" in data:
-            state.ydata = np.array(data["ydata"])
+            arr = np.array(data["ydata"], dtype=np.float64)
+            if arr.ndim == 1 and np.all(np.isfinite(arr)):
+                state.ydata = arr
         if "sigma" in data:
-            state.sigma = np.array(data["sigma"])
+            arr = np.array(data["sigma"], dtype=np.float64)
+            if arr.ndim == 1 and np.all(arr > 0):
+                state.sigma = arr
 
         # Restore model config
         if "model_config" in data:
@@ -181,7 +195,11 @@ class AutosaveManager(QObject):
         if "p0" in data:
             state.p0 = data["p0"]
         if "bounds" in data:
-            state.bounds = data["bounds"]
+            try:
+                lb, ub = data["bounds"]
+                state.bounds = ([float(v) for v in lb], [float(v) for v in ub])
+            except (TypeError, ValueError, IndexError):
+                pass
 
         # Restore other attributes
         if "auto_p0" in data:

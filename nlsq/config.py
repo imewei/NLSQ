@@ -106,6 +106,8 @@ class LargeDatasetConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration values."""
+        if not self.solver_selection_thresholds:
+            return  # Empty dict means "apply no threshold overrides" — valid.
         required_keys = {"direct", "iterative", "chunked"}
         missing = required_keys - set(self.solver_selection_thresholds)
         if missing:

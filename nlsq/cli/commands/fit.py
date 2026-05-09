@@ -170,12 +170,16 @@ def _generate_visualization(
         Logger instance.
     """
     try:
-        # Re-load data for visualization
-        data_config = config.get("data", {})
-        xdata, ydata, sigma = runner.data_loader.load(
-            data_config.get("input_file", ""),
-            data_config,
-        )
+        # Use data already loaded by runner.run() — avoids a second file read
+        # and prevents failures if the source file was moved after fitting.
+        if runner.last_data is not None:
+            xdata, ydata, sigma = runner.last_data
+        else:
+            data_config = config.get("data", {})
+            xdata, ydata, sigma = runner.data_loader.load(
+                data_config.get("input_file", ""),
+                data_config,
+            )
 
         # Prepare data dict for visualizer
         data_dict = {
