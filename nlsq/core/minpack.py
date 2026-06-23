@@ -3177,6 +3177,8 @@ class CurveFit:
         xdata: np.ndarray,
         ydata: np.ndarray,
         p0: np.ndarray,
+        bounds: tuple | None = None,
+        check_finite: bool = True,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Validate and sanitize curve fit inputs if stability is enabled.
 
@@ -3201,7 +3203,14 @@ class CurveFit:
         if self.enable_stability:
             try:
                 errors, warnings_list, xdata_clean, ydata_clean = (
-                    self.validator.validate_curve_fit_inputs(f, xdata, ydata, p0)
+                    self.validator.validate_curve_fit_inputs(
+                        f,
+                        xdata,
+                        ydata,
+                        p0,
+                        bounds=bounds,
+                        check_finite=check_finite,
+                    )
                 )
 
                 if errors:
@@ -3356,6 +3365,7 @@ class CurveFit:
         p0: np.ndarray,
         check_finite: bool,
         nan_policy: str = "raise",
+        bounds: tuple | None = None,
     ) -> tuple[np.ndarray, np.ndarray, int, int]:
         """Preprocess input data with optional feature flag routing.
 
@@ -3413,8 +3423,12 @@ class CurveFit:
             return xdata, ydata, m, xdims
 
         # Original implementation (old code path)
-        # Step 6: Validate and sanitize inputs (if stability enabled)
-        xdata, ydata = self._validate_and_sanitize_inputs(f, xdata, ydata, p0)
+        # Step 6: Validate and sanitize inputs (if stability enabled).
+        # Forward bounds + check_finite so bounds-consistency and finiteness
+        # checks are actually exercised (previously they were silently dropped).
+        xdata, ydata = self._validate_and_sanitize_inputs(
+            f, xdata, ydata, p0, bounds=bounds, check_finite=check_finite
+        )
 
         # Step 7: Convert to arrays and validate finiteness
         xdata, ydata = self._convert_and_validate_arrays(xdata, ydata, check_finite)
@@ -3577,6 +3591,10 @@ class CurveFit:
             p0,
             check_finite,
             nan_policy=kwargs.get("nan_policy", "raise"),
+            # Pass the *normalized* (lb, ub) arrays (not the raw bounds tuple,
+            # which may be scalar (-inf, inf)) so the validator's bounds checks
+            # receive per-parameter arrays of the expected shape.
+            bounds=(lb, ub),
         )
 
         # Step 9: Setup data mask and padding parameters
