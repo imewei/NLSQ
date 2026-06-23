@@ -665,8 +665,16 @@ class JITCompilationCache:
         """
         from jax import jit
 
-        # Create key from function and static args
-        key = (func.__module__, func.__name__, static_argnums)
+        # Create key from function and static args. Include function code
+        # identity (bytecode hash): without it, two distinct functions sharing
+        # __module__ + __name__ (e.g. two `model` closures) collide to one key
+        # and the second silently reuses the first's compiled function — a
+        # wrong-result bug.
+        try:
+            code_hash = hashlib.sha256(func.__code__.co_code).hexdigest()[:8]
+        except (AttributeError, TypeError):
+            code_hash = str(id(func))
+        key = (func.__module__, func.__name__, code_hash, static_argnums)
 
         # Check cache under lock
         with self._lock:
