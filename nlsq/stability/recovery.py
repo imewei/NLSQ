@@ -289,27 +289,14 @@ class OptimizationRecovery:
         """
         modified_state = state.copy()
 
-        # Scale variables for better conditioning
-        if "xdata" in state and "ydata" in state:
-            xdata = np.asarray(state["xdata"])
-            ydata = np.asarray(state["ydata"])
-
-            # Normalize data
-            x_mean = np.mean(xdata, axis=0)
-            x_std = np.std(xdata, axis=0) + 1e-10
-            y_mean = np.mean(ydata)
-            y_std = np.std(ydata) + 1e-10
-
-            modified_state["xdata"] = (xdata - x_mean) / x_std
-            modified_state["ydata"] = (ydata - y_mean) / y_std
-
-            # Store transformation for later
-            modified_state["data_transform"] = {
-                "x_mean": x_mean,
-                "x_std": x_std,
-                "y_mean": y_mean,
-                "y_std": y_std,
-            }
+        # NOTE: data normalization was intentionally removed here. Normalizing
+        # xdata/ydata changes the fitted parameters in a model-dependent way, and
+        # there is no general inverse to map them back to physical scale. The
+        # previous code stored a "data_transform" that was never applied, so a
+        # successful reformulated fit returned parameters in normalized space —
+        # i.e. silently wrong results. Conditioning is handled correctly inside
+        # the solver (ParameterNormalizer / NumericalStabilityGuard) instead.
+        # Bounds relaxation below is a valid, scale-preserving reformulation.
 
         # Adjust bounds if present
         if "bounds" in state and state["bounds"] is not None:

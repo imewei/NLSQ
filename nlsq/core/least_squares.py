@@ -571,8 +571,26 @@ class LeastSquares:
             # Check if fit function needs updating
             func_update = False
             try:
-                if hasattr(self.f, "__code__") and hasattr(fun, "__code__"):
-                    func_update = self.f.__code__.co_code != fun.__code__.co_code
+                if self.f is fun:
+                    func_update = False
+                elif hasattr(self.f, "__code__") and hasattr(fun, "__code__"):
+                    old_code, new_code = self.f.__code__, fun.__code__
+                    old_closure = tuple(
+                        cell.cell_contents for cell in (self.f.__closure__ or ())
+                    )
+                    new_closure = tuple(
+                        cell.cell_contents for cell in (fun.__closure__ or ())
+                    )
+                    # Bytecode alone is not function identity: two functions can
+                    # share co_code but differ in captured constants (co_consts)
+                    # or closure cells, behaving differently. Compare all three so
+                    # reusing an optimizer instance with a new function cannot
+                    # silently keep the stale one.
+                    func_update = (
+                        old_code.co_code != new_code.co_code
+                        or old_code.co_consts != new_code.co_consts
+                        or old_closure != new_closure
+                    )
                 else:
                     func_update = self.f != fun
             except Exception:

@@ -368,7 +368,7 @@ class GaussNewtonPhase:
                     "phase": 2,
                     "name": "gauss_newton",
                     "iterations": iteration + 1,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "best_cost": best_cost,
                     "convergence_reason": "Gradient norm below tolerance",
                     "gradient_norm": gradient_norm,
@@ -376,18 +376,21 @@ class GaussNewtonPhase:
                 }
                 phase_history.append(phase_record)
 
+                # Return the best accepted point, not the last trial point: if
+                # the final step was rejected (actual_reduction <= 0), new_params
+                # is strictly worse than best_params.
                 gn_result = GNResult(
-                    params=new_params,
-                    cost=new_cost,
+                    params=best_params,
+                    cost=best_cost,
                     iterations=iteration + 1,
                     converged=True,
                 )
 
                 return {
-                    "final_params": new_params,
+                    "final_params": best_params,
                     "best_params": best_params,
                     "best_cost": best_cost,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "iterations": iteration + 1,
                     "convergence_reason": "Gradient norm below tolerance",
                     "gradient_norm": gradient_norm,
@@ -405,7 +408,7 @@ class GaussNewtonPhase:
                     "phase": 2,
                     "name": "gauss_newton",
                     "iterations": iteration + 1,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "best_cost": best_cost,
                     "convergence_reason": "Cost change below tolerance",
                     "gradient_norm": gradient_norm,
@@ -413,18 +416,20 @@ class GaussNewtonPhase:
                 }
                 phase_history.append(phase_record)
 
+                # Return the best accepted point, not the last trial point: a
+                # rejected final step leaves new_params worse than best_params.
                 gn_result = GNResult(
-                    params=new_params,
-                    cost=new_cost,
+                    params=best_params,
+                    cost=best_cost,
                     iterations=iteration + 1,
                     converged=True,
                 )
 
                 return {
-                    "final_params": new_params,
+                    "final_params": best_params,
                     "best_params": best_params,
                     "best_cost": best_cost,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "iterations": iteration + 1,
                     "convergence_reason": "Cost change below tolerance",
                     "gradient_norm": gradient_norm,
@@ -564,9 +569,15 @@ class GaussNewtonPhase:
         # Compute actual reduction
         actual_reduction = total_cost - new_cost
 
-        # Update trust region
+        # Update trust region.
+        # actual_reduction is a full sum-of-squares reduction (||r||^2), while
+        # predicted_reduction is for the 0.5*||r||^2 Gauss-Newton model. Halve
+        # the actual side here so the ratio is ~1 for a good step (previously it
+        # was ~2, which over-expanded / under-shrank the trust radius). Only the
+        # ratio is rescaled; the returned actual_reduction stays full-SSR because
+        # the outer loop reconstructs cost_before_step from it.
         if predicted_reduction > 0:
-            reduction_ratio = actual_reduction / predicted_reduction
+            reduction_ratio = (0.5 * actual_reduction) / predicted_reduction
         else:
             reduction_ratio = 0.0
 

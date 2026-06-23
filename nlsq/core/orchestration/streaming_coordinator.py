@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-import numpy as np
-
 from nlsq.interfaces.orchestration_protocol import StreamingDecision
 
 if TYPE_CHECKING:
@@ -83,9 +81,9 @@ class StreamingCoordinator:
         Raises:
             MemoryError: If dataset too large even for streaming
         """
-        # Convert to numpy for size calculations
-        ydata_np = np.asarray(ydata)
-        n_data = len(ydata_np)
+        # Dataset size only — read it from array metadata without forcing a
+        # device->host copy of the (potentially huge) data array.
+        n_data = ydata.shape[0] if hasattr(ydata, "shape") else len(ydata)
 
         # Estimate memory requirements
         estimated_mb = self.estimate_memory(n_data, n_params)

@@ -136,10 +136,16 @@ class InputValidator:
         n_params = 2  # Default estimate
         try:
             sig = signature(f)
-            # Count parameters excluding x
-            params = list(sig.parameters.keys())
-            if params:
-                n_params = len(params) - 1
+            sig_params = list(sig.parameters.values())
+            # A variadic model (e.g. ``def f(x, *params)``) exposes only two
+            # named slots in its signature, so counting names would wrongly give
+            # n_params == 1 and reject a valid longer p0. Trust p0's length when
+            # the model uses *args.
+            has_varargs = any(p.kind == p.VAR_POSITIONAL for p in sig_params)
+            if has_varargs and p0 is not None:
+                n_params = len(p0)
+            elif sig_params:
+                n_params = len(sig_params) - 1  # exclude the independent variable
         except Exception:
             if p0 is not None:
                 with suppress(Exception):

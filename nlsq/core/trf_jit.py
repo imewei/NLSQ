@@ -13,6 +13,7 @@ TrustRegionJITFunctions instances are created. Previously, each instance created
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 from jax import jit, lax
 from jax.scipy.linalg import svd as jax_svd
@@ -254,7 +255,12 @@ def _svd_no_bounds(
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Compute SVD of J in hat space (unbounded variant) with GPU fallback."""
     try:
-        return _svd_no_bounds_jit(J, d, f)
+        result = _svd_no_bounds_jit(J, d, f)
+        # Force materialization so an async GPU/cuSolver failure is raised HERE,
+        # inside this try, rather than later at a downstream blocking op where it
+        # would bypass the CPU fallback below.
+        jax.block_until_ready(result)
+        return result
     except Exception as e:
         if is_gpu_error(e):
             J_h = J * d
@@ -273,7 +279,12 @@ def _svd_bounds(
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Compute SVD of J in hat space (bounded variant) with GPU fallback."""
     try:
-        return _svd_bounds_jit(f, J, d, J_diag, f_zeros)
+        result = _svd_bounds_jit(f, J, d, J_diag, f_zeros)
+        # Force materialization so an async GPU/cuSolver failure is raised HERE,
+        # inside this try, rather than later at a downstream blocking op where it
+        # would bypass the CPU fallback below.
+        jax.block_until_ready(result)
+        return result
     except Exception as e:
         if is_gpu_error(e):
             J_h = J * d

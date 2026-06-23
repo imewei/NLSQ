@@ -1752,62 +1752,127 @@ class LargeDatasetFitter:
             result["pcov"] = np.eye(len(result.x))
             return result
 
+    @staticmethod
+    def _chunk_precision(
+        pcov_chunk: np.ndarray | None, n_params: int
+    ) -> np.ndarray | None:
+        """Compute a usable precision (inverse-covariance) matrix for a chunk.
+
+        Returns None when the chunk covariance is missing, wrong-shaped, or not
+        invertible to a finite positive contribution. Falls back to a diagonal
+        precision when the full matrix is singular but its diagonal is usable.
+
+        Args:
+            pcov_chunk: Per-chunk parameter covariance from curve_fit, or None.
+            n_params: Expected number of parameters.
+
+        Returns:
+            An (n_params, n_params) precision matrix, or None if unusable.
+        """
+        if pcov_chunk is None:
+            return None
+        pcov = np.asarray(pcov_chunk, dtype=float)
+        if pcov.shape != (n_params, n_params):
+            return None
+
+        if np.all(np.isfinite(pcov)):
+            try:
+                prec = np.linalg.inv(pcov)
+            except np.linalg.LinAlgError:
+                prec = None
+            if prec is not None:
+                prec = 0.5 * (prec + prec.T)  # symmetrize
+                if np.all(np.isfinite(prec)):
+                    return prec
+
+        # Fall back to a diagonal precision from finite, positive variances.
+        diag = np.diag(pcov)
+        if np.all(np.isfinite(diag)) and np.all(diag > 0):
+            return np.diag(1.0 / diag)
+        return None
+
     def _update_parameters_convergence(
         self,
         current_params: np.ndarray | None,
         popt_chunk: np.ndarray,
+        pcov_chunk: np.ndarray | None,
         param_history: list,
         convergence_metric: float,
         chunk_idx: int,
         n_chunks: int,
     ) -> tuple[np.ndarray, list, float, bool]:
-        """Update parameters with sequential refinement and convergence checking.
+        """Combine the chunk fit into the full-dataset precision-weighted estimate.
+
+        Each chunk yields an estimate ``theta_k`` with covariance ``C_k``. The
+        full-dataset estimate is the precision-weighted (BLUE/GLS) combination
+        ``theta = (sum_k C_k^{-1})^{-1} (sum_k C_k^{-1} theta_k)``, which equals
+        the exact full-batch least-squares solution for a linear model and is the
+        standard Laplace approximation for a nonlinear one. This replaces the old
+        "last chunk wins" overwrite, which discarded every chunk but the last.
+
+        When a chunk has no usable covariance, it contributes no information and
+        the running combined estimate is preserved (the latest fit is used only
+        until the first usable covariance arrives). No early stopping is done: all
+        chunks are processed so the full dataset informs the result.
 
         Args:
-            current_params: Current parameter estimates (None on first chunk)
-            popt_chunk: Newly fitted parameters from current chunk
-            param_history: List of parameter estimates from previous chunks
-            convergence_metric: Current convergence metric value
-            chunk_idx: Index of current chunk (0-based)
-            n_chunks: Total number of chunks
+            current_params: Running combined estimate (None on first chunk).
+            popt_chunk: Newly fitted parameters from current chunk.
+            pcov_chunk: Covariance of the current chunk fit, or None.
+            param_history: List of combined estimates from previous chunks.
+            convergence_metric: Current convergence metric value.
+            chunk_idx: Index of current chunk (0-based).
+            n_chunks: Total number of chunks.
 
         Returns:
             tuple: (updated_params, updated_history, new_convergence_metric, should_stop)
-                - updated_params: New current parameter estimates
-                - updated_history: Updated parameter history
-                - new_convergence_metric: Updated convergence metric
-                - should_stop: True if early stopping criteria met
         """
-        # Initialize on first chunk
+        popt_chunk = np.asarray(popt_chunk, dtype=float)
+        n_params = len(popt_chunk)
+
+        # Accumulate this chunk's information (inverse covariance).
+        prec = self._chunk_precision(pcov_chunk, n_params)
+        if prec is not None:
+            contrib_vec = prec @ popt_chunk
+            if self._accum_information is None:
+                self._accum_information = prec.copy()
+                self._accum_info_vector = contrib_vec.copy()
+            else:
+                self._accum_information = self._accum_information + prec
+                self._accum_info_vector = self._accum_info_vector + contrib_vec
+
+        # Combined full-dataset estimate from all usable chunks so far.
+        if self._accum_information is not None:
+            try:
+                combined = np.linalg.solve(
+                    self._accum_information, self._accum_info_vector
+                )
+            except np.linalg.LinAlgError:
+                combined = popt_chunk.copy()
+            if not np.all(np.isfinite(combined)):
+                combined = popt_chunk.copy()
+        elif current_params is not None:
+            # No usable covariance from any chunk yet: keep the running estimate.
+            combined = np.asarray(current_params, dtype=float).copy()
+        else:
+            combined = popt_chunk.copy()
+
+        # Initialize history on the first chunk.
         if current_params is None:
-            return (
-                popt_chunk.copy(),
-                [popt_chunk.copy()],
-                np.inf,
-                False,
-            )
+            return combined, [combined.copy()], np.inf, False
 
-        # Update parameters with sequential refinement
-        previous_params = current_params.copy()
-        updated_params = popt_chunk.copy()
+        previous_params = np.asarray(current_params, dtype=float)
+        updated_history = [*param_history, combined.copy()]
 
-        # Update parameter history
-        updated_history = [*param_history, updated_params.copy()]
-
-        # Calculate convergence metric
         new_convergence_metric = convergence_metric
         if len(updated_history) > 2:
-            param_change = np.linalg.norm(updated_params - previous_params)
-            relative_change = param_change / (np.linalg.norm(updated_params) + 1e-10)
+            param_change = np.linalg.norm(combined - previous_params)
+            relative_change = param_change / (np.linalg.norm(combined) + 1e-10)
             new_convergence_metric = relative_change
 
-            # Check early stopping criteria
-            # Stop if parameters stabilized and we've processed enough chunks
-            if new_convergence_metric < 0.001 and chunk_idx >= min(n_chunks - 1, 3):
-                self.logger.info(f"Parameters converged after {chunk_idx + 1} chunks")
-                return (updated_params, updated_history, new_convergence_metric, True)
-
-        return (updated_params, updated_history, new_convergence_metric, False)
+        # No early stopping: stopping before all chunks are processed would
+        # silently discard data and bias the result toward early chunks.
+        return combined, updated_history, new_convergence_metric, False
 
     def _initialize_chunked_fit_state(
         self,
@@ -2254,6 +2319,12 @@ class LargeDatasetFitter:
         ) = self._initialize_chunked_fit_state(p0, show_progress, stats)
         chunk_times = []  # Track processing time per chunk
 
+        # Precision-weighted accumulators for full-dataset parameter estimation.
+        # Each chunk contributes its inverse-covariance (information) so the final
+        # estimate combines ALL chunks rather than keeping the last chunk's fit.
+        self._accum_information = None  # Sum_k C_k^{-1}  (n_params x n_params)
+        self._accum_info_vector = None  # Sum_k C_k^{-1} theta_k  (n_params,)
+
         # Get gc_chunk_interval from config (FR-007)
         gc_chunk_interval = self.config.gc_chunk_interval
 
@@ -2270,7 +2341,7 @@ class LargeDatasetFitter:
                     # Use only valid data points (exclude zero-padding)
                     x_valid = x_chunk[:valid_length]
                     y_valid = y_chunk[:valid_length]
-                    popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
+                    popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                         f,
                         x_valid,
                         y_valid,
@@ -2281,7 +2352,8 @@ class LargeDatasetFitter:
                         **kwargs,
                     )
 
-                    # Update parameters with sequential refinement and check convergence
+                    # Accumulate this chunk's information into the full-dataset
+                    # precision-weighted estimate and check convergence.
                     (
                         current_params,
                         param_history,
@@ -2290,6 +2362,7 @@ class LargeDatasetFitter:
                     ) = self._update_parameters_convergence(
                         current_params,
                         popt_chunk,
+                        pcov_chunk,
                         param_history,
                         convergence_metric,
                         chunk_idx,
@@ -2330,8 +2403,12 @@ class LargeDatasetFitter:
                         solver=solver,
                         **kwargs,
                     )
-                    # Update params if retry succeeded
-                    if retry_params is not None:
+                    # Update params if retry succeeded. Only adopt the retry
+                    # chunk's params outright when we have no accumulated
+                    # information yet; otherwise keep the precision-weighted
+                    # estimate so a single retried chunk cannot clobber the
+                    # full-dataset fit.
+                    if retry_params is not None and self._accum_information is None:
                         current_params = retry_params
 
                 chunk_results.append(chunk_result)
