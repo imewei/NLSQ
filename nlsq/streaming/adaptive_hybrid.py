@@ -2865,9 +2865,15 @@ class AdaptiveHybridStreamingOptimizer:
         # Compute actual reduction
         actual_reduction = total_cost - new_cost
 
-        # Update trust region based on reduction ratio
+        # Update trust region based on reduction ratio.
+        # actual_reduction is a full sum-of-squares reduction (||r||^2), while
+        # predicted_reduction is for the 0.5*||r||^2 Gauss-Newton model. Halve
+        # the actual side here so the ratio is ~1 for a good step (previously ~2,
+        # which over-expanded / under-shrank the trust radius). Only the ratio is
+        # rescaled; the stored actual_reduction stays full-SSR because the outer
+        # loop reconstructs cost_before_step from it.
         if predicted_reduction > 0:
-            reduction_ratio = actual_reduction / predicted_reduction
+            reduction_ratio = (0.5 * actual_reduction) / predicted_reduction
         else:
             reduction_ratio = 0.0
 
@@ -3229,7 +3235,7 @@ class AdaptiveHybridStreamingOptimizer:
                     "phase": 2,
                     "name": "gauss_newton",
                     "iterations": iteration + 1,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "best_cost": best_cost,
                     "convergence_reason": "Gradient norm below tolerance",
                     "gradient_norm": gradient_norm,
@@ -3237,11 +3243,13 @@ class AdaptiveHybridStreamingOptimizer:
                 }
                 self.phase_history.append(phase_record)
 
+                # Return the best accepted point, not the last trial point: a
+                # rejected final step leaves new_params worse than best_params.
                 return {
-                    "final_params": new_params,
+                    "final_params": best_params,
                     "best_params": best_params,
                     "best_cost": best_cost,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "iterations": iteration + 1,
                     "convergence_reason": "Gradient norm below tolerance",
                     "gradient_norm": gradient_norm,
@@ -3258,7 +3266,7 @@ class AdaptiveHybridStreamingOptimizer:
                     "phase": 2,
                     "name": "gauss_newton",
                     "iterations": iteration + 1,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "best_cost": best_cost,
                     "convergence_reason": "Cost change below tolerance",
                     "gradient_norm": gradient_norm,
@@ -3266,11 +3274,13 @@ class AdaptiveHybridStreamingOptimizer:
                 }
                 self.phase_history.append(phase_record)
 
+                # Return the best accepted point, not the last trial point: a
+                # rejected final step leaves new_params worse than best_params.
                 return {
-                    "final_params": new_params,
+                    "final_params": best_params,
                     "best_params": best_params,
                     "best_cost": best_cost,
-                    "final_cost": new_cost,
+                    "final_cost": best_cost,
                     "iterations": iteration + 1,
                     "convergence_reason": "Cost change below tolerance",
                     "gradient_norm": gradient_norm,
@@ -3278,12 +3288,19 @@ class AdaptiveHybridStreamingOptimizer:
                     "residual_sum_sq": final_residual_sum_sq,
                 }
 
-        # Maximum iterations reached
+        # Maximum iterations reached.
+        # final_params is best_params, so final_cost must match best_cost. Using
+        # prev_cost here returned inf when every step was rejected (prev_cost is
+        # only assigned on an accepted step); fall back to the finite initial
+        # residual sum of squares in the degenerate all-rejected case.
+        reported_final_cost = (
+            best_cost if jnp.isfinite(best_cost) else final_residual_sum_sq
+        )
         phase_record = {
             "phase": 2,
             "name": "gauss_newton",
             "iterations": self.config.gauss_newton_max_iterations,
-            "final_cost": prev_cost,
+            "final_cost": reported_final_cost,
             "best_cost": best_cost,
             "convergence_reason": "Maximum iterations reached",
             "gradient_norm": gradient_norm,
@@ -3295,7 +3312,7 @@ class AdaptiveHybridStreamingOptimizer:
             "final_params": best_params,  # Use best, not current
             "best_params": best_params,
             "best_cost": best_cost,
-            "final_cost": prev_cost,
+            "final_cost": reported_final_cost,
             "iterations": self.config.gauss_newton_max_iterations,
             "convergence_reason": "Maximum iterations reached",
             "gradient_norm": gradient_norm,
