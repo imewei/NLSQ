@@ -7,7 +7,7 @@
 # Python Bytecode & Compiled Files
 # ----------------------------------------------------------------------------
 __pycache__/
-*.py[cod]
+*.py[codz]
 *$py.class
 *.so
 *.dylib
@@ -61,14 +61,16 @@ coverage.xml
 coverage.json
 *.cover
 *.py,cover
+*.py.cover
 .hypothesis/
 .pytest_cache/
 cover/
 .benchmarks/
 test_report.html
 test_reports/
-bandit_re*.json
-bandit-re*.json
+test-results.xml
+.test-runs/
+bandit*re*.json
 pip_audit_report.json
 coverage_baseline.txt
 
@@ -249,22 +251,34 @@ dmypy.json
 # AI-Powered Development Tools
 # ----------------------------------------------------------------------------
 .agent/
+.agents/
+.antigravitycli/
 .claude/
 .claude-progress.md
+.claude-scratch
 .code/
 .codex/
 .cursor/
 .cursorignore
 .cursorindexingignore
+.firecrawl/
 .gemini/
+.remember/
 .serena/
 .specify/
+.ultra-think/
+.ultracode/
 .abstra/
 agent-os/
 specs/
 AGENTS.md
 CLAUDE.md
 GEMINI.md
+WARP.md
+GROK.md
+HERMES.md
+OPENROUTER.md
+codex.md
 .research-log.jsonl
 
 # Graphify Knowledge Graph
@@ -309,6 +323,7 @@ tmp/
 *.prof
 *.lprof
 .prof/
+profiling/
 
 # ----------------------------------------------------------------------------
 # Cython
@@ -354,6 +369,9 @@ target/
 scripts/dev_cleanup/
 fix-imports/
 validators_refactoring.patch
+
+# subagent-driven-development scaffolding (briefs/reports/diffs) — never commit
+/sdd/
 
 # ----------------------------------------------------------------------------
 # Code Review & Analysis Artifacts (temporary)
