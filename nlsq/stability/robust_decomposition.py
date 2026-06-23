@@ -366,9 +366,24 @@ class RobustDecomposition:
             # Ensure all eigenvalues are positive
             eigenvalues = jnp.maximum(eigenvalues, self.eps)
 
-            # Reconstruct: A = V * diag(lambda) * V^T
-            # So L = V * sqrt(diag(lambda))
-            L = eigenvectors @ jnp.diag(jnp.sqrt(eigenvalues))
+            # NOTE: V @ sqrt(diag(lambda)) is a valid *symmetric square root* M
+            # (it satisfies M @ M.T = A_reg) but it is NOT lower-triangular, so
+            # it violates the Cholesky-factor contract that downstream
+            # triangular solves and any external caller of `cholesky()` rely on.
+            # Triangularize it robustly via QR: with M.T = Q R, the factor
+            # L = R.T is lower-triangular and L @ L.T = R.T @ R = M @ M.T = A_reg.
+            # Unlike a second jnp.linalg.cholesky, QR needs no positive-definite
+            # margin, so it stays finite even when an eigenvalue sits at eps.
+            M = eigenvectors * jnp.sqrt(eigenvalues)  # columns scaled: V @ sqrt(Λ)
+            _, R = jnp.linalg.qr(M.T)
+            L = R.T
+
+            # Normalize column signs so the diagonal is non-negative (the
+            # standard Cholesky convention). Flipping a column's sign leaves
+            # L @ L.T unchanged since (±1)^2 = 1.
+            diag_signs = jnp.sign(jnp.diagonal(L))
+            diag_signs = jnp.where(diag_signs == 0.0, 1.0, diag_signs)
+            L = L * diag_signs
 
             if lower:
                 return L

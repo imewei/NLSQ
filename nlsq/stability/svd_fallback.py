@@ -128,21 +128,26 @@ def compute_svd_with_fallback(
 
 
 def initialize_gpu_safely():
-    """Initialize GPU with proper memory settings to avoid cuSolver issues."""
+    """Configure GPU memory env vars to avoid cuSolver fragmentation.
+
+    The authoritative configuration now happens in ``nlsq/__init__.py`` *before*
+    JAX is imported, because the XLA PJRT GPU client only reads these variables
+    at backend-initialization time. This function is retained for backward
+    compatibility and best-effort use by callers that invoke it very early, but
+    note: by the time it runs from ``nlsq.core.trf`` (module import) JAX is
+    already imported, so any value set here may be ignored. It uses the
+    *correct* XLA variable names — earlier code wrote non-existent
+    ``JAX_PREALLOCATE_GPU_MEMORY`` / ``JAX_GPU_MEMORY_FRACTION`` names that XLA
+    never reads, so the settings had no effect at all.
+    """
     try:
-        # Set memory preallocation to avoid fragmentation
         import os
 
-        if "JAX_PREALLOCATE_GPU_MEMORY" not in os.environ:
-            os.environ["JAX_PREALLOCATE_GPU_MEMORY"] = "false"
-
-        # Try to configure XLA to be more conservative with memory
-        if "XLA_PYTHON_CLIENT_PREALLOCATE" not in os.environ:
-            os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
-        # Set memory fraction if not already set
-        if "JAX_GPU_MEMORY_FRACTION" not in os.environ:
-            os.environ["JAX_GPU_MEMORY_FRACTION"] = "0.8"
+        # Disable preallocation to avoid fragmentation (correct XLA var name).
+        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+        # Cap device-memory fraction (correct XLA var name; replaces the
+        # non-existent JAX_GPU_MEMORY_FRACTION used previously).
+        os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.8")
 
     except Exception as e:
         warnings.warn(f"Could not configure GPU memory settings: {e}")

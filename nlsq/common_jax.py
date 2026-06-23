@@ -172,8 +172,22 @@ def _solve_lsq_trust_region_jax_impl(
         loop_cond, loop_body, init_state
     )
 
-    # Compute final solution p
-    p_iterative = -V @ (suf / (s**2 + final_alpha))
+    # Detect a (numerically) zero Jacobian. Since singular values are returned
+    # in descending order, s[0] <= 0 implies every singular value is zero, i.e.
+    # J has no descent direction. In that degenerate case the secular-equation
+    # branch divides 0 / (0 + 0) = NaN (alpha_upper, default_alpha and the whole
+    # loop collapse to 0), which would otherwise propagate a NaN step into every
+    # downstream TRF solve. The gradient J^T f is also zero here, so the only
+    # correct step is the zero step (stay put and let TRF's gtol converge).
+    jac_is_zero = s[0] <= 0.0
+
+    # Guard the denominator so the zero-Jacobian path produces 0/tiny = 0 rather
+    # than 0/0 = NaN before the explicit override below.
+    denom_final = s**2 + final_alpha
+    safe_denom_final = jnp.where(
+        denom_final > 0.0, denom_final, jnp.finfo(denom_final.dtype).tiny
+    )
+    p_iterative = -V @ (suf / safe_denom_final)
 
     # Normalize p to exactly Delta to prevent numerical drift
     p_iterative_norm = jnp.linalg.norm(p_iterative)
@@ -198,6 +212,10 @@ def _solve_lsq_trust_region_jax_impl(
         lambda: jnp.array(0),
         lambda: n_iter_final,
     )
+
+    # Override the degenerate zero-Jacobian case with a finite zero step.
+    p_final = jnp.where(jac_is_zero, jnp.zeros_like(p_final), p_final)
+    alpha_final = jnp.where(jac_is_zero, jnp.array(0.0), alpha_final)
 
     return p_final, alpha_final, n_iter_out
 

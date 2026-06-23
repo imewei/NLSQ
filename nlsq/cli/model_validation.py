@@ -341,6 +341,27 @@ class ResourceLimitError(Exception):
     """Raised when a resource limit is exceeded during model execution."""
 
 
+def _accelerator_backend_active() -> bool:
+    """Return True if JAX is already initialized on a GPU/TPU backend.
+
+    Used to decide whether enforcing an ``RLIMIT_AS`` (virtual address-space)
+    memory cap is safe. CUDA and other accelerator runtimes reserve huge
+    amounts of virtual address space, so an AS cap is both ineffective and
+    crash-prone around accelerator code. We only probe an *already-imported*
+    JAX module (``sys.modules``) so this check never forces JAX initialization
+    or imports JAX as a hard dependency of the validator.
+    """
+    jax_mod = sys.modules.get("jax")
+    if jax_mod is None:
+        return False
+    try:
+        return jax_mod.default_backend() in ("gpu", "tpu")
+    except Exception:
+        # Any failure probing the backend -> conservatively report no
+        # accelerator so the (safe) CPU memory cap path is taken.
+        return False
+
+
 @contextmanager
 def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     """Context manager for resource-limited execution.
@@ -413,18 +434,42 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
         if callable(old_handler):
             old_handler(signum, frame)
 
-    # Enforce memory limit via RLIMIT_AS (virtual address space)
-    old_soft, old_hard = resource.getrlimit(resource.RLIMIT_AS)
-    limit_bytes = memory_mb * 1024 * 1024
-    # Only tighten the limit, never loosen it
-    effective_limit = limit_bytes
-    if old_hard != resource.RLIM_INFINITY:
-        effective_limit = min(effective_limit, old_hard)
-    if old_soft != resource.RLIM_INFINITY:
-        effective_limit = min(effective_limit, old_soft)
+    # Enforce memory limit via RLIMIT_AS (virtual address space).
+    #
+    # IMPORTANT: RLIMIT_AS caps *virtual* address space, which GPU/TPU runtimes
+    # (CUDA especially) reserve in enormous amounts — tens of GB — regardless of
+    # actual physical usage. Capping AS around accelerator code makes the limit
+    # both ineffective and crash-prone: CUDA initialization aborts hard (often
+    # SIGABRT / cudaErrorMemoryAllocation) instead of raising a catchable
+    # MemoryError, which would take down the whole process rather than sandbox
+    # it. So when a JAX accelerator backend is already active we skip the AS cap
+    # and rely on the timeout alone.
+    enforce_mem = not _accelerator_backend_active()
+    # Placeholders (ints) so mypy sees a concrete tuple type for setrlimit; they
+    # are always reassigned from getrlimit before use when enforce_mem is True,
+    # and only read inside `if enforce_mem` guards.
+    old_soft = old_hard = 0
+    effective_limit = 0
+    if enforce_mem:
+        old_soft, old_hard = resource.getrlimit(resource.RLIMIT_AS)
+        limit_bytes = memory_mb * 1024 * 1024
+        # Only tighten the limit, never loosen it
+        effective_limit = limit_bytes
+        if old_hard != resource.RLIM_INFINITY:
+            effective_limit = min(effective_limit, old_hard)
+        if old_soft != resource.RLIM_INFINITY:
+            effective_limit = min(effective_limit, old_soft)
+    else:
+        logger.warning(
+            "JAX accelerator backend active; skipping RLIMIT_AS memory cap "
+            "(virtual address-space limits are incompatible with GPU/TPU "
+            "runtimes and crash CUDA initialization). Timeout enforcement still "
+            "applies."
+        )
 
     try:
-        resource.setrlimit(resource.RLIMIT_AS, (effective_limit, old_hard))
+        if enforce_mem:
+            resource.setrlimit(resource.RLIMIT_AS, (effective_limit, old_hard))
         old_handler = signal.signal(signal.SIGALRM, signal_handler)  # type: ignore[assignment]
         signal_installed = True
         timer = threading.Timer(timeout, timeout_handler)
@@ -443,8 +488,9 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
         # so clearing alarm() would cancel the caller's pre-existing alarm instead.
         if signal_installed:
             signal.signal(signal.SIGALRM, old_handler)  # type: ignore[arg-type]
-        # Restore memory limit last
-        resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
+        # Restore memory limit last (only if we set it)
+        if enforce_mem:
+            resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
 
 
 class AuditLogger:
