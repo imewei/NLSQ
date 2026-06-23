@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Python 3.14 support**: Added `Programming Language :: Python :: 3.14` classifier and
+  extended the CI test matrix to `["3.12", "3.13", "3.14"]` across Ubuntu, macOS, and Windows.
+  `requires-python` remains `>=3.12`. Verified that the full runtime dependency tree provides
+  cp314 wheels (jax/jaxlib 0.10.2, numpy 2.5, scipy 1.18, h5py 3.16, PySide6 6.11, matplotlib
+  3.11, optax 0.2.8, evosax) and that `curve_fit` converges correctly on Python 3.14.
+
 ## [0.6.12] - 2026-05-09
 
 ### Fixed
