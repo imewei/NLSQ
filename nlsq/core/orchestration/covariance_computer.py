@@ -13,8 +13,14 @@ from typing import TYPE_CHECKING
 import jax.numpy as jnp
 import numpy as np
 from jax import jit
-from jax.numpy.linalg import cholesky as jax_cholesky
+
+# Use jax.scipy.linalg.cholesky (NOT jax.numpy.linalg.cholesky): only the scipy
+# variant accepts the `lower=` keyword used by _sigma_transform2d. The numpy
+# variant has signature (a, *, upper=False, ...) and raises TypeError on
+# `lower=True`, crashing every 2D full-covariance sigma fit routed here. This
+# matches the legacy path in core/minpack.py.
 from jax.numpy.linalg import svd as jax_svd
+from jax.scipy.linalg import cholesky as jax_cholesky
 
 from nlsq.interfaces.orchestration_protocol import CovarianceResult
 from nlsq.utils.logging import get_logger
