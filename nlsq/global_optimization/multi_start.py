@@ -51,6 +51,7 @@ TournamentSelector : Tournament selection for large datasets (Task Group 4)
 
 import logging
 import os
+import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -69,7 +70,7 @@ from nlsq.global_optimization.sampling import (
 )
 from nlsq.precision.bound_inference import infer_bounds_for_multistart
 from nlsq.precision.parameter_estimation import estimate_initial_parameters
-from nlsq.result import CurveFitResult
+from nlsq.result import CurveFitResult, OptimizeWarning
 from nlsq.utils.logging import get_logger
 
 __all__ = ["MultiStartOrchestrator"]
@@ -392,43 +393,54 @@ class MultiStartOrchestrator:
             None  # type: ignore[list-item]
         ] * n_starts
 
-        if n_workers <= 1:
-            # Sequential fallback (1 start or 1 worker)
-            for i, p0 in enumerate(starting_points):
-                results[i] = _fit_single_start(
-                    f, xdata, ydata, p0, bounds, kwargs.copy()
-                )
-                _params, loss, _ = results[i]
-                self.logger.debug(
-                    f"Starting point {i + 1}/{n_starts}: loss={loss:.6f}",
-                    starting_point_idx=i,
-                    loss=loss,
-                )
-        else:
-            # Parallel execution
-            futures = {}
-            with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        # Per-start non-convergence is an expected, internal outcome of multi-start
+        # search: many starts are deliberately spread across the basin and the
+        # orchestrator aggregates them, reporting the best result (and its own status
+        # if every start fails). Suppress the per-start OptimizeWarning here so it
+        # does not surface to the user once per failed start. The filter is set on
+        # the main thread before any worker thread is spawned and held until the pool
+        # has fully joined, so concurrent workers observe a stable filter state
+        # (single writer) -- worker threads cannot safely use catch_warnings of their
+        # own because warnings.filters is process-global.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", OptimizeWarning)
+            if n_workers <= 1:
+                # Sequential fallback (1 start or 1 worker)
                 for i, p0 in enumerate(starting_points):
-                    future = executor.submit(
-                        _fit_single_start,
-                        f,
-                        xdata,
-                        ydata,
-                        p0,
-                        bounds,
-                        kwargs.copy(),
+                    results[i] = _fit_single_start(
+                        f, xdata, ydata, p0, bounds, kwargs.copy()
                     )
-                    futures[future] = i
-
-                for future in as_completed(futures):
-                    i = futures[future]
-                    results[i] = future.result()
                     _params, loss, _ = results[i]
                     self.logger.debug(
                         f"Starting point {i + 1}/{n_starts}: loss={loss:.6f}",
                         starting_point_idx=i,
                         loss=loss,
                     )
+            else:
+                # Parallel execution
+                futures = {}
+                with ThreadPoolExecutor(max_workers=n_workers) as executor:
+                    for i, p0 in enumerate(starting_points):
+                        future = executor.submit(
+                            _fit_single_start,
+                            f,
+                            xdata,
+                            ydata,
+                            p0,
+                            bounds,
+                            kwargs.copy(),
+                        )
+                        futures[future] = i
+
+                    for future in as_completed(futures):
+                        i = futures[future]
+                        results[i] = future.result()
+                        _params, loss, _ = results[i]
+                        self.logger.debug(
+                            f"Starting point {i + 1}/{n_starts}: loss={loss:.6f}",
+                            starting_point_idx=i,
+                            loss=loss,
+                        )
 
         wall_time = _time.monotonic() - start_wall
 
