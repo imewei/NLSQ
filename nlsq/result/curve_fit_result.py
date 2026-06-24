@@ -257,19 +257,31 @@ class CurveFitResult(OptimizeResult):
         with no systematic patterns.
         """
         if self._residuals_cache is None:
-            if hasattr(self, "fun"):
-                # fun is the residual vector from optimization
-                object.__setattr__(self, "_residuals_cache", np.array(self.fun))
-            elif hasattr(self, "ydata"):
-                # Calculate from predictions
+            # Goodness-of-fit residuals are the RAW residuals (observed -
+            # predicted), NOT the optimizer's `fun` vector. When sigma weighting
+            # is used, `fun` is the *weighted* residual (model - ydata)/sigma,
+            # which would scale every downstream statistic (R^2, RMSE, MAE, AIC,
+            # BIC, prediction/confidence intervals) by 1/sigma and also carries
+            # the opposite sign. Recompute from the model so the documented
+            # "ydata - predictions" definition holds regardless of weighting.
+            if (
+                hasattr(self, "model")
+                and hasattr(self, "xdata")
+                and hasattr(self, "ydata")
+            ):
                 object.__setattr__(
                     self,
                     "_residuals_cache",
-                    np.array(self.ydata) - self.predictions,
+                    np.array(self.ydata) - np.array(self.model(self.xdata, *self.popt)),
                 )
+            elif hasattr(self, "ydata") and hasattr(self, "fun"):
+                # No model available: best-effort fallback. This is the
+                # optimizer residual and is only the raw residual when no sigma
+                # weighting was applied.
+                object.__setattr__(self, "_residuals_cache", np.array(self.fun))
             else:
                 raise AttributeError(
-                    "Cannot compute residuals: neither fun nor ydata available"
+                    "Cannot compute residuals: neither model+data nor fun available"
                 )
         return self._residuals_cache
 

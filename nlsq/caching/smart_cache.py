@@ -264,12 +264,23 @@ class SmartCache:
 
                 return value
 
-        # Check disk cache (disk I/O outside lock)
+        # Check disk cache (disk I/O outside lock). Simple types are persisted
+        # as "{key}.json" and arrays as "{key}.npz", so probe BOTH — checking
+        # only .npz made every JSON-persisted entry a silent disk miss.
         if self.disk_cache_enabled:
-            cache_file = os.path.join(self.cache_dir, f"{key}.npz")
-            if os.path.exists(cache_file):
+            npz_file = os.path.join(self.cache_dir, f"{key}.npz")
+            json_file = os.path.join(self.cache_dir, f"{key}.json")
+            if os.path.exists(npz_file):
+                disk_file = npz_file
+            elif os.path.exists(json_file):
+                disk_file = json_file
+            else:
+                disk_file = None
+            if disk_file is not None:
                 try:
-                    value = self._load_from_disk(cache_file)
+                    # _load_from_disk takes the .npz path and resolves the .json
+                    # sibling itself, so passing npz_file works for both.
+                    value = self._load_from_disk(npz_file)
 
                     with self._lock:
                         if self.enable_stats:
@@ -278,15 +289,15 @@ class SmartCache:
 
                     # Add to memory cache, preserving file mtime as timestamp
                     # so TTL checks reflect the original cache time, not load time
-                    disk_mtime = os.path.getmtime(cache_file)
+                    disk_mtime = os.path.getmtime(disk_file)
                     self._add_to_memory_cache(key, value, timestamp=disk_mtime)
                     return value
 
                 except Exception as e:
                     _logger.debug("Could not load from disk cache: %s", e)
-                    # Remove corrupted cache file
+                    # Remove corrupted cache file(s)
                     with contextlib.suppress(OSError):
-                        os.remove(cache_file)
+                        os.remove(disk_file)
 
         with self._lock:
             if self.enable_stats:
@@ -367,7 +378,9 @@ class SmartCache:
             if self.disk_cache_enabled and os.path.isdir(self.cache_dir):
                 try:
                     for file in os.listdir(self.cache_dir):
-                        if file.endswith(".npz"):
+                        # Remove both array (.npz) and simple-type (.json) entries;
+                        # clearing only .npz left JSON entries stale forever.
+                        if file.endswith((".npz", ".json")):
                             os.remove(os.path.join(self.cache_dir, file))
                 except OSError as e:
                     _logger.debug("Could not clear disk cache: %s", e)
@@ -380,10 +393,12 @@ class SmartCache:
                     del self.access_count[key]
 
             if self.disk_cache_enabled:
-                cache_file = os.path.join(self.cache_dir, f"{key}.npz")
-                if os.path.exists(cache_file):
-                    with contextlib.suppress(OSError):
-                        os.remove(cache_file)
+                # Remove both the array (.npz) and simple-type (.json) variants.
+                for ext in (".npz", ".json"):
+                    cache_file = os.path.join(self.cache_dir, f"{key}{ext}")
+                    if os.path.exists(cache_file):
+                        with contextlib.suppress(OSError):
+                            os.remove(cache_file)
 
     def get_stats(self) -> dict:
         """Get cache statistics.
@@ -544,6 +559,7 @@ def cached_function(cache: SmartCache | None = None, ttl: float | None = None):
 
             # Check cache (get value and timestamp atomically under one lock)
             cached_result = None
+            expired = False
             with cache._lock:
                 if cache_key in cache.memory_cache:
                     value, timestamp = cache.memory_cache[cache_key]
@@ -558,11 +574,22 @@ def cached_function(cache: SmartCache | None = None, ttl: float | None = None):
                     cache.memory_cache[cache_key] = (value, timestamp)
                     # TTL check
                     if ttl is not None and time.time() - timestamp > ttl:
-                        value = None  # expired
+                        # Expired: drop the stale entry now. Leaving it in
+                        # memory_cache made the disk fallback below re-serve it
+                        # via cache.get(), which does not enforce TTL.
+                        del cache.memory_cache[cache_key]
+                        cache.access_count.pop(cache_key, None)
+                        value = None
+                        expired = True
                     cached_result = value
 
-            # Disk fallback (outside lock)
-            if cached_result is None and cache.disk_cache_enabled:
+            # Disk fallback (outside lock). Skip it when the entry just expired:
+            # set() writes the memory and disk copies together, so the disk copy
+            # is the same age and equally stale. Invalidate it and recompute
+            # instead of re-serving an expired value.
+            if expired:
+                cache.invalidate(cache_key)
+            elif cached_result is None and cache.disk_cache_enabled:
                 cached_result = cache.get(cache_key)
 
             if cached_result is None:
@@ -665,8 +692,16 @@ class JITCompilationCache:
         """
         from jax import jit
 
-        # Create key from function and static args
-        key = (func.__module__, func.__name__, static_argnums)
+        # Create key from function and static args. Include function code
+        # identity (bytecode hash): without it, two distinct functions sharing
+        # __module__ + __name__ (e.g. two `model` closures) collide to one key
+        # and the second silently reuses the first's compiled function — a
+        # wrong-result bug.
+        try:
+            code_hash = hashlib.sha256(func.__code__.co_code).hexdigest()[:8]
+        except (AttributeError, TypeError):
+            code_hash = str(id(func))
+        key = (func.__module__, func.__name__, code_hash, static_argnums)
 
         # Check cache under lock
         with self._lock:

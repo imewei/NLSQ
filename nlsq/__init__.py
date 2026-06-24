@@ -77,6 +77,20 @@ if sys.platform == "darwin":
     os.environ.setdefault("QT_OPENGL", "software")
     os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
 
+if sys.platform == "linux" and not os.environ.get("NLSQ_FORCE_CPU"):
+    # Configure XLA GPU memory behaviour BEFORE JAX initializes its backend.
+    # The PJRT GPU client reads these at backend-init (first device use), so
+    # they only take effect if set before any `import jax` triggers init — which
+    # is why they live here rather than in a helper called after JAX is already
+    # imported. Disabling preallocation avoids cuSolver fragmentation/OOM during
+    # the SVD fallback path; the mem fraction caps how much device memory JAX
+    # may grab. NOTE: the *correct* XLA variable names are
+    # XLA_PYTHON_CLIENT_PREALLOCATE / XLA_PYTHON_CLIENT_MEM_FRACTION — earlier
+    # code wrote non-existent JAX_PREALLOCATE_GPU_MEMORY / JAX_GPU_MEMORY_FRACTION
+    # names (and did so after JAX import), so the settings were silently ignored.
+    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+    os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.8")
+
 _dbg("env lock applied")
 
 import numpy as np

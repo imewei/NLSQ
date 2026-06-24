@@ -281,7 +281,17 @@ class CompilationCache:
             Function signature
         """
         sig = self._get_function_signature(func, *args, **kwargs)
-        full_key = f"{sig}_s{static_argnums}"
+        # Include function code identity in the key. Without it, two distinct
+        # functions sharing the same __name__ and the same arg shapes/dtypes
+        # (e.g. two model functions both named `model`) collide to one key and
+        # the second silently reuses the first's compiled function — a wrong-
+        # result bug. compile() already keys on _get_function_code_hash; mirror
+        # that here so the public @cached_jit path is equally safe.
+        try:
+            code_hash = self._get_function_code_hash(func)
+        except (AttributeError, TypeError):
+            code_hash = str(id(func))
+        full_key = f"{sig}_{code_hash}_s{static_argnums}"
 
         # Check cache and record miss stats in single lock acquisition
         with self._lock:
