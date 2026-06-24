@@ -1810,10 +1810,12 @@ class LargeDatasetFitter:
         standard Laplace approximation for a nonlinear one. This replaces the old
         "last chunk wins" overwrite, which discarded every chunk but the last.
 
-        When a chunk has no usable covariance, it contributes no information and
-        the running combined estimate is preserved (the latest fit is used only
-        until the first usable covariance arrives). No early stopping is done: all
-        chunks are processed so the full dataset informs the result.
+        When a chunk has no usable covariance, it contributes no information to
+        the precision-weighted accumulators; until the first usable covariance
+        arrives the latest chunk fit is used as the running estimate (never the
+        initial guess, which would silently discard every fitted chunk). No
+        early stopping is done: all chunks are processed so the full dataset
+        informs the result.
 
         Args:
             current_params: Running combined estimate (None on first chunk).
@@ -1851,10 +1853,13 @@ class LargeDatasetFitter:
                 combined = popt_chunk.copy()
             if not np.all(np.isfinite(combined)):
                 combined = popt_chunk.copy()
-        elif current_params is not None:
-            # No usable covariance from any chunk yet: keep the running estimate.
-            combined = np.asarray(current_params, dtype=float).copy()
         else:
+            # No usable covariance from any chunk yet: fall back to the latest
+            # chunk fit. Using ``current_params`` here would discard every
+            # fitted ``popt_chunk`` whenever a user-supplied p0 is present and
+            # all successful chunks have unusable covariance (common for
+            # rank-deficient / underdetermined chunks), returning p0 as a
+            # "successful" fit.
             combined = popt_chunk.copy()
 
         # Initialize history on the first chunk.

@@ -651,6 +651,44 @@ def cached_jacobian(cache: SmartCache | None = None):
     return decorator
 
 
+def _jit_function_identity(func: Callable) -> str:
+    """Collision-resistant identity for the JIT compilation cache key.
+
+    ``func.__code__.co_code`` (raw bytecode) is *not* a sufficient identity:
+
+    * Closures produced by the same factory share identical ``co_code`` and
+      differ only in their closed-over cell values.
+    * Bytecode omits ``co_consts`` (literal constants -- ``LOAD_CONST`` indexes
+      into them) and ``co_names`` (referenced globals/attributes such as ``np``
+      vs ``jnp`` -- ``LOAD_GLOBAL`` indexes into them).
+
+    Two such functions sharing ``__module__`` + ``__name__`` would otherwise
+    collapse to one cache key, so the second call would silently reuse the
+    first's compiled function -- a wrong-result bug.
+
+    Strategy: for closures (``__closure__`` non-empty) fall back to ``id(func)``,
+    which is unique per instance and stable while the cache holds a reference to
+    the function. Otherwise hash the behaviour-determining parts of the code
+    object plus defaults/kwdefaults. Any failure falls back to ``id(func)``.
+    Over-distinguishing only costs a recompile; under-distinguishing is a
+    correctness bug, so we deliberately err toward uniqueness.
+    """
+    code = getattr(func, "__code__", None)
+    if code is None or getattr(func, "__closure__", None):
+        return f"id:{id(func)}"
+    try:
+        parts = (
+            code.co_code,
+            repr(code.co_consts).encode(),
+            repr(code.co_names).encode(),
+            repr(getattr(func, "__defaults__", None)).encode(),
+            repr(getattr(func, "__kwdefaults__", None)).encode(),
+        )
+        return hashlib.sha256(b"\x00".join(parts)).hexdigest()[:16]
+    except Exception:
+        return f"id:{id(func)}"
+
+
 class JITCompilationCache:
     """Cache for JAX JIT-compiled functions with LRU eviction.
 
@@ -692,16 +730,16 @@ class JITCompilationCache:
         """
         from jax import jit
 
-        # Create key from function and static args. Include function code
-        # identity (bytecode hash): without it, two distinct functions sharing
-        # __module__ + __name__ (e.g. two `model` closures) collide to one key
-        # and the second silently reuses the first's compiled function — a
-        # wrong-result bug.
-        try:
-            code_hash = hashlib.sha256(func.__code__.co_code).hexdigest()[:8]
-        except (AttributeError, TypeError):
-            code_hash = str(id(func))
-        key = (func.__module__, func.__name__, code_hash, static_argnums)
+        # Create key from function and static args. Include a collision-resistant
+        # function identity (see ``_jit_function_identity``): bytecode alone lets
+        # distinct closures, or functions differing only in constants/globals,
+        # that share __module__ + __name__ reuse the wrong compiled function.
+        key = (
+            getattr(func, "__module__", None),
+            getattr(func, "__name__", None),
+            _jit_function_identity(func),
+            static_argnums,
+        )
 
         # Check cache under lock
         with self._lock:
