@@ -38,7 +38,11 @@ def intersect_trust_region(x, s, Delta):
     b = np.dot(x, s)
 
     c = np.dot(x, x) - Delta**2
-    if c >= 0:
+    # Use strict `> 0` (matching SciPy and the JAX twin in common_jax): a point
+    # exactly on the boundary (||x|| == Delta, c == 0) is inside the closed
+    # trust region and yields valid roots (one of which is t = 0). `>= 0` would
+    # spuriously raise for that legitimate boundary case.
+    if c > 0:
         raise ValueError("`x` is not within the trust region.")
 
     d = np.sqrt(b * b - a * c)  # Root from one fourth of the discriminant.

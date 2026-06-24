@@ -163,7 +163,10 @@ class CovarianceComputer:
                 sigma_used=sigma is not None,
                 absolute_sigma=absolute_sigma,
             )
-        threshold = np.finfo(float).eps * max(jac.shape) * s_np[0]
+        # Use the true data count (not max(jac.shape)) for the rank threshold:
+        # a row-padded Jacobian (streaming/chunking) would otherwise inflate the
+        # threshold via its padded row count and over-truncate singular values.
+        threshold = np.finfo(float).eps * max(n_data, jac.shape[1]) * s_np[0]
 
         # Filter out near-zero singular values
         valid_mask = s_np > threshold
@@ -189,7 +192,12 @@ class CovarianceComputer:
         else:
             pcov = np.dot(VT_valid.T / s_valid**2, VT_valid)
 
-        # Apply scaling for relative sigma
+        # Apply scaling for relative sigma. NOTE: NLSQ deliberately reports an
+        # all-inf covariance for a rank-deficient (singular) Jacobian under
+        # relative sigma — signalling that the covariance is untrustworthy —
+        # rather than scaling a pseudo-inverse pcov as SciPy does. This is a
+        # conservative safety choice with explicit test coverage; do not relax
+        # the `not is_singular` guard without updating those tests intentionally.
         if not absolute_sigma:
             if n_data > n_params and not is_singular:
                 s_sq = cost / (n_data - n_params)
@@ -304,6 +312,14 @@ class CovarianceComputer:
 
         sigma_np = np.asarray(sigma)
         ysize = ydata.size - len_diff
+
+        # scipy/legacy compatibility: a scalar sigma applies uniformly to every
+        # observation. Broadcast it to a length-ysize vector before the shape
+        # dispatch (the legacy core/minpack.py _setup_sigma_transform does the
+        # same); otherwise a scalar sigma falls through to the "incorrect shape"
+        # error.
+        if sigma_np.ndim == 0:
+            sigma_np = np.full(ysize, float(sigma_np))
 
         # 1-D sigma: errors, define transform = 1/sigma
         if sigma_np.shape == (ysize,):
