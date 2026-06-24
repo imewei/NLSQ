@@ -126,6 +126,36 @@ def cleanup_jax_memory():
         _release_heap_to_os()
 
 
+@pytest.fixture(autouse=True)
+def _suppress_expected_optimize_warnings():
+    """Silence the benign ``OptimizeWarning`` raised on intentional non-convergence.
+
+    Many tests deliberately drive a fit to its evaluation limit (tiny ``max_nfev``,
+    heavy outliers, deliberately hard problems) to exercise failure-handling and
+    robustness paths. NLSQ correctly emits a single ``OptimizeWarning`` ("Optimal
+    parameters not found ...") from ``nlsq/core/minpack.py`` in those cases — it is
+    expected, not a defect.
+
+    A ``[tool.pytest.ini_options] filterwarnings`` entry suppresses this reliably
+    when a directory runs alone, but under the full ``-n 2`` xdist suite it leaks
+    into the warnings summary non-deterministically (pytest's per-location dedup
+    even mis-attributes it to an unrelated test). Applying the filter as an autouse
+    fixture pins it to every test's own execution on the main thread — the same
+    mechanism as a per-test ``filterwarnings`` marker, but one that also covers
+    ``unittest.TestCase`` tests (where markers do not apply) and worker threads
+    spawned during a test (``warnings.filters`` is process-global). Tests that
+    assert this warning use ``pytest.warns`` / ``assertWarns`` / ``recwarn``, which
+    install their own ``simplefilter("always")`` and are therefore unaffected.
+    """
+    import warnings
+
+    from nlsq.result import OptimizeWarning
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", OptimizeWarning)
+        yield
+
+
 # ============================================================================
 # pytest-xdist Auto Worker Count Cap (OOM Prevention)
 # ============================================================================
