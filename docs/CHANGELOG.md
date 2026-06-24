@@ -1,5 +1,19 @@
 # Documentation Changelog
 
+## Unreleased
+- **Python 3.14 support**: added the `Python :: 3.14` classifier and extended the CI test matrix to `3.12`/`3.13`/`3.14` across Ubuntu, macOS, and Windows; `requires-python` stays `>=3.12`. The full runtime dependency tree provides cp314 wheels and `curve_fit` converges correctly on 3.14.
+- Correctness sweep (codex + agy review): fixed bounds validation in `curve_fit` input handling, covariance/SVD-rank edge cases, and several orchestration/result bugs.
+- Fixed `common_jax` over-aggressive denominator guard that broke rank-deficient TRF solves.
+- Fixed chunked-fit fallback path and made JIT cache keys include function code identity to prevent closure collisions across distinct models.
+- Test/CI hygiene: relaxed the too-strict gradient-precision optimality threshold, warmed up before the memory-leak baseline benchmark, and silenced expected non-convergence warnings so `make verify` is clean.
+
+## v0.6.12 (2026-05-09)
+- Multi-subsystem RCA hardening across GUI, core, orchestration, and security/infra.
+- **GUI (Qt/PySide6)**: fixed a `QThread` GC crash (strong refs in `_pending_threads`), replaced the shallow `FitWorker` snapshot with a deep copy, made autosave writes atomic (tmpfile + rename), corrected bounds/array serialisation, and fixed NaN/Inf JSON export via `safe_serialize`.
+- **Core**: 11 `fit()`-workflow correctness fixes (dtype handling, CG bias, alpha overflow, theta bound, API compat).
+- **Orchestration**: corrected `data_preprocessor` sigma handling, `optimization_selector` method selection, `covariance_computer` SVD rank, and `streaming_coordinator` memory budgeting.
+- **Security / infra**: JIT-safety fix, `safe_serialize` data-integrity fix, tightened `model_validation` AST allowlist, GPU-fallback locale handling, and excluded `graphify-out/` from codespell/detect-secrets.
+
 ## v0.6.11 (2026-03-12)
 - Skip sparsity detection when `tr_solver` is already set (7–8ms per-call savings)
 - Fix Windows CI: catch `AttributeError` for POSIX-only `os.sysconf` in xdist worker cap hook
