@@ -181,13 +181,14 @@ def _solve_lsq_trust_region_jax_impl(
     # correct step is the zero step (stay put and let TRF's gtol converge).
     jac_is_zero = s[0] <= 0.0
 
-    # Guard the denominator so the zero-Jacobian path produces 0/tiny = 0 rather
-    # than 0/0 = NaN before the explicit override below.
-    denom_final = s**2 + final_alpha
-    safe_denom_final = jnp.where(
-        denom_final > 0.0, denom_final, jnp.finfo(denom_final.dtype).tiny
-    )
-    p_iterative = -V @ (suf / safe_denom_final)
+    # NOTE: do NOT "guard" this denominator against non-positive values. The LM
+    # parameter final_alpha can legitimately be negative during the secular
+    # root-find, so s**2 + final_alpha < 0 is a valid state that still yields a
+    # finite step. The only genuinely degenerate case (all-zero Jacobian -> 0/0
+    # NaN) is handled by the jac_is_zero override below, which replaces the
+    # resulting NaN step with zeros. Clobbering negative denominators here would
+    # turn valid finite divisions into NaN for rank-deficient Jacobians.
+    p_iterative = -V @ (suf / (s**2 + final_alpha))
 
     # Normalize p to exactly Delta to prevent numerical drift
     p_iterative_norm = jnp.linalg.norm(p_iterative)
