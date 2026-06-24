@@ -281,8 +281,16 @@ OPENROUTER.md
 codex.md
 .research-log.jsonl
 
-# Graphify Knowledge Graph
-graphify-out/
+# ----------------------------------------------------------------------------
+# Graphify (Knowledge Graph & Semantic Cache)
+# ----------------------------------------------------------------------------
+graphify-out/cache/
+graphify-out/.graphify_python
+graphify-out/.graphify_*.json
+graphify-out/.graphify_*.txt
+graphify-out/.obsidian/
+graphify-out/_COMMUNITY_*.md
+graphify-out/20*/
 three-brain-out/
 .graphify_*.json
 .graphify_*.txt
