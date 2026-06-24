@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-24
+
 ### Added
 
 - **Python 3.14 support**: Added `Programming Language :: Python :: 3.14` classifier and
@@ -14,6 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `requires-python` remains `>=3.12`. Verified that the full runtime dependency tree provides
   cp314 wheels (jax/jaxlib 0.10.2, numpy 2.5, scipy 1.18, h5py 3.16, PySide6 6.11, matplotlib
   3.11, optax 0.2.8, evosax) and that `curve_fit` converges correctly on Python 3.14.
+
+### Fixed
+
+- **Correctness sweep (codex + agy review)**: fixed bounds validation in `curve_fit` input
+  handling, covariance/SVD-rank edge cases, and several orchestration/result bugs.
+- **Rank-deficient TRF**: fixed an over-aggressive denominator guard in `common_jax` that broke
+  rank-deficient trust-region solves.
+- **Chunked-fit / JIT cache**: fixed the chunked-fit `p0` fallback path and made JIT cache keys
+  include function code identity to prevent closure collisions across distinct models.
+
+### Changed
+
+- **Test / CI hygiene**: relaxed the too-strict gradient-precision optimality threshold, warmed
+  up before the memory-leak baseline benchmark, and silenced expected non-convergence warnings so
+  `make verify` is clean.
 
 ## [0.6.12] - 2026-05-09
 

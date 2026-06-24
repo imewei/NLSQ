@@ -1,6 +1,8 @@
 # Documentation Changelog
 
 ## Unreleased
+
+## v0.7.0 (2026-06-24)
 - **Python 3.14 support**: added the `Python :: 3.14` classifier and extended the CI test matrix to `3.12`/`3.13`/`3.14` across Ubuntu, macOS, and Windows; `requires-python` stays `>=3.12`. The full runtime dependency tree provides cp314 wheels and `curve_fit` converges correctly on 3.14.
 - Correctness sweep (codex + agy review): fixed bounds validation in `curve_fit` input handling, covariance/SVD-rank edge cases, and several orchestration/result bugs.
 - Fixed `common_jax` over-aggressive denominator guard that broke rank-deficient TRF solves.
