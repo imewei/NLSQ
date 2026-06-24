@@ -76,6 +76,15 @@ class TestDecompositionMemory:
         """
         x, y = benchmark_data_10k
 
+        # Warm up JIT/XLA once BEFORE measuring. This test checks for a *leak*
+        # (steady-state growth across repeated fits), not the one-time
+        # compilation + XLA thread-pool + memory-pool warmup cost of the very
+        # first fit. On hosts with a large XLA/CUDA footprint that cold-start
+        # cost is ~250-300MB and would otherwise be misattributed as a leak;
+        # post-warmup growth across many fits is only ~20MB. Taking the baseline
+        # after warmup measures the property the test actually cares about.
+        curve_fit(exponential_model, x, y, p0=[2.0, 1.0])
+
         # Force garbage collection and get baseline
         gc.collect()
         baseline_mb = get_process_memory_mb()
