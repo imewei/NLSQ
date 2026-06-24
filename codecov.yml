@@ -1,0 +1,55 @@
+# Codecov configuration for NLSQ
+#
+# Why this file exists
+# --------------------
+# A commit whose CI fails (e.g. a dependency bump that breaks the test run)
+# uploads no coverage report, so Codecov has no record for it. When a later
+# commit then has no usable base report, Codecov falls back to measuring its
+# "patch" against the entire accumulated multi-commit diff rather than that
+# commit's own change. Patch coverage can then dip below the project average
+# through no fault of the commit being checked (observed on 0e03bd3, where the
+# preceding dependency-bump commit's CI had failed and uploaded nothing).
+#
+# Two settings below make the patch status resilient to that class of artifact
+# without weakening the real project gate:
+#   * a 5% patch threshold absorbs the accumulated-diff dip, and
+#   * flag carryforward reuses the last known coverage for a flag that a given
+#     commit did not re-upload, keeping the base chain intact across a failed run.
+
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...90"
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%   # tolerate small run-to-run noise; real regressions still fail
+    patch:
+      default:
+        target: auto
+        threshold: 5%   # absorb base-chain / accumulated-diff artifacts
+
+# Reuse a flag's last known coverage when a commit does not re-upload it, so a
+# single failed CI run cannot sever the base chain for downstream commits.
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: unittests
+      carryforward: true
+    - name: quality
+      carryforward: true
+
+# Mirror [tool.coverage.run] omit in pyproject.toml.
+ignore:
+  - "tests/**"
+  - "**/gui_qt/**"
+  - "**/_version.py"
+
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: false
