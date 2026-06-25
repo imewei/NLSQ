@@ -1,0 +1,71 @@
+name: Mirror to OSTI GitLab
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: # Allows manual triggering from the GitHub UI
+
+# Read-only access to repo contents is all the mirror needs.
+permissions:
+  contents: read
+
+# Never run two mirror pushes against the same ref at once — a concurrent
+# push could leave the GitLab remote in an inconsistent state.
+concurrency:
+  group: mirror-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      # 3.1: Check out the repository with full history and LFS.
+      - name: Checkout Source Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches all history for all branches and tags
+          lfs: true      # Ensures Git LFS files are downloaded
+
+      # 3.2: Pull all LFS objects explicitly to guarantee local availability.
+      # No-op today (no LFS-tracked files yet) but keeps the mirror correct the
+      # moment .gitattributes starts tracking large files. git-lfs ships
+      # preinstalled on ubuntu-latest runners.
+      - name: Fetch all Git LFS components
+        run: git lfs fetch --all
+
+      # 3.3: Configure authentication and push to the OSTI GitLab instance.
+      - name: Push Mirror to OSTI GitLab
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          # Username is ignored for Personal/Project Access Tokens but must be
+          # non-empty. "oauth2" works for both PAT and project tokens. (Use
+          # "gitlab-ci-token" only for GitLab CI job tokens, which do not apply
+          # to a push originating from GitHub.)
+          GITLAB_USER: "oauth2"
+          GITLAB_HOST: "gitlab.osti.gov"
+          GL_PROJECT_PATH: "wchen/nlsq" # https://gitlab.osti.gov/wchen/nlsq
+        run: |
+          set -euo pipefail
+
+          # Fail fast with a clear message if the token secret is not configured.
+          if [ -z "${GITLAB_TOKEN}" ]; then
+            echo "::error::Secret GITLAB_TOKEN is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          # 1. Construct the authenticated remote URL.
+          TARGET_URL="https://${GITLAB_USER}:${GITLAB_TOKEN}@${GITLAB_HOST}/${GL_PROJECT_PATH}.git"
+
+          # 2. Add the GitLab instance as a new remote called 'target'.
+          #    Use set-url-or-add so re-runs on a warm checkout do not fail.
+          git remote add target "$TARGET_URL" 2>/dev/null || git remote set-url target "$TARGET_URL"
+
+          # 3. Push standard git objects, branches, and tags. The refspec maps
+          #    GitHub's remote-tracking branches onto GitLab heads; --prune keeps
+          #    the mirror from accumulating deleted branches.
+          echo "Pushing code repositories..."
+          git push --prune target "+refs/remotes/origin/*:refs/heads/*" --tags
+
+          # 4. Push all tracked LFS objects to the remote.
+          echo "Pushing LFS assets..."
+          git lfs push target --all
