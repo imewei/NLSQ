@@ -1,6 +1,10 @@
 # Documentation Changelog
 
 ## Unreleased
+- Fixed packaging: dev/docs/build tooling now lives in a `[dev]` extra instead of core
+  `dependencies`, so `pip install nlsq` only pulls the 14 runtime deps it actually needs.
+  Contributors should install with `pip install -e ".[dev]"` (or `make dev`) to get
+  pytest/sphinx/lint tooling.
 
 ## v0.7.0 (2026-06-24)
 - **Python 3.14 support**: added the `Python :: 3.14` classifier and extended the CI test matrix to `3.12`/`3.13`/`3.14` across Ubuntu, macOS, and Windows; `requires-python` stays `>=3.12`. The full runtime dependency tree provides cp314 wheels and `curve_fit` converges correctly on 3.14.

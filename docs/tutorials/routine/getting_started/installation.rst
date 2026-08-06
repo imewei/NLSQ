@@ -96,13 +96,13 @@ Launch with:
 Development Installation
 ------------------------
 
-For development with all optional dependencies:
+For development, with test/lint/docs/build tooling:
 
 .. code-block:: bash
 
    git clone https://github.com/imewei/NLSQ.git
    cd NLSQ
-   pip install -e .
+   pip install -e ".[dev]"
 
 Common Installation Issues
 --------------------------
