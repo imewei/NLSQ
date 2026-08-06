@@ -1,12 +1,12 @@
 # Section 08: Workflow System (Notebooks)
 
-**The unified `fit()` API with automatic memory-based strategy selection (v0.7.0).**
+**The unified `fit()` API with automatic memory-based strategy selection (v0.7.1).**
 
 ---
 
 ## Overview
 
-NLSQ v0.7.0 simplifies the workflow system to **three smart workflows** that automatically
+NLSQ v0.7.1 simplifies the workflow system to **three smart workflows** that automatically
 select the optimal fitting strategy based on your dataset size, available memory, and
 optimization requirements.
 
@@ -182,5 +182,5 @@ The following presets have been removed in v0.6.3. Use these equivalents:
 ---
 
 <p align="center">
-<i>NLSQ v0.7.0 | Last updated: 2026-06-24</i>
+<i>NLSQ v0.7.1 | Last updated: 2026-08-06</i>
 </p>

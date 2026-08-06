@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-06
+
 ### Fixed
 - Dev/docs/build tooling (pytest, sphinx, jupyterlab, build backend, etc.) moved out of core
   `dependencies` into a `[dev]` extra — `pip install nlsq` now installs only the 14 genuine
