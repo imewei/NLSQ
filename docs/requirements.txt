@@ -1,11 +1,11 @@
 # Documentation dependencies for local development
 #
-# All dependencies (including docs) are in pyproject.toml[dependencies]
+# Sphinx and friends live in pyproject.toml's [dev] extra, not core dependencies.
 #
 # For local documentation builds:
-#   pip install -e .
+#   pip install -e ".[dev]"
 #
 # Or use this requirements file:
 #   pip install -r docs/requirements.txt
 
--e .
+-e .[dev]

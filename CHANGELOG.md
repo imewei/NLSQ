@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Dev/docs/build tooling (pytest, sphinx, jupyterlab, build backend, etc.) moved out of core
+  `dependencies` into a `[dev]` extra — `pip install nlsq` now installs only the 14 genuine
+  runtime deps instead of ~30 dev packages, fixing `pip check` for users without dev tools
+  installed. `make install-dev`/`install-all` and CI now request `--extra dev` / `.[dev]`
+  explicitly.
+
+### Added
+- `graphify` knowledge graph output (`graphify-out/`) for codebase navigation
+
 ## [0.7.0] - 2026-06-24
 
 ### Added

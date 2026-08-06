@@ -1,7 +1,7 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2026-03-12
+# Updated: 2026-08-06
 # Requires: Python 3.12+ (tested on 3.13), Sphinx 9.1.0, JAX 0.9.1, NumPy 2.4.3, SciPy 1.17.1
-# All dependencies (including docs) are in pyproject.toml[dependencies]
+# Sphinx and other doc/build tooling live in pyproject.toml's [dev] extra
 #
 # Documentation Quality: Zero warnings policy enforced (fail_on_warning: true)
 
@@ -31,4 +31,6 @@ formats:
 python:
   install:
     - method: pip
-      path: .  # All deps (including docs) are in main dependencies
+      path: .
+      extra_requirements:
+        - dev  # Sphinx and other doc tooling live here, not in core dependencies
