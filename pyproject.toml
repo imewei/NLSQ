@@ -119,7 +119,26 @@ dependencies = [
     # Global optimization
     "evosax>=0.2.0,<0.3.0",   # JAX-based CMA-ES with built-in BIPOP restart conditions
 
-    # Development tools
+    # Qt GUI (native desktop application) -- shipped in the default install;
+    # README documents `pip install nlsq` as "GUI included".
+    "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.2)
+    "pyqtgraph>=0.14.0",      # GPU-accelerated scientific plotting (tested on 0.14.0)
+]
+
+# Dev/docs/benchmark/jupyter/build tooling lives in the `dev` extra below, not
+# in `dependencies`, so `pip install nlsq` only pulls the runtime deps above.
+# Kept as a [project.optional-dependencies] extra (not a PEP 735
+# dependency-group) so `pip install -e ".[dev]"` keeps working for the
+# Makefile's plain-pip/conda fallback path (dependency-groups aren't
+# pip-installable). A prior revision had all of this flattened into
+# `dependencies` unconditionally -- that made every `pip install nlsq` also
+# install pytest/sphinx/jupyterlab/build tooling, and made `pip check`
+# permanently fail for anyone who didn't have every dev tool installed.
+# `make install-dev`/`install-all` and CI's `uv sync` steps were updated to
+# request this extra explicitly (see Makefile and .github/workflows/).
+[project.optional-dependencies]
+dev = [
+    # Testing
     "pytest>=9.0.0",          # Tested on 9.0.2
     "pytest-cov>=7.0.0",      # Tested on 7.0.0
     "pytest-xdist>=3.8.0",    # Tested on 3.8.0
@@ -128,6 +147,8 @@ dependencies = [
     "pytest-timeout>=2.4.0",  # Tested on 2.4.0
     "pytest-qt>=4.5.0",       # Qt widget testing (tested on 4.5.0)
     "hypothesis>=6.148.0",    # Property-based testing (tested on 6.151.9)
+
+    # Lint / type-check / hooks
     "black>=25.0.0",          # Tested on 26.3.1 (CalVer)
     "ruff>=0.14.0",           # Tested on 0.15.5
     "mypy>=1.19.0",           # Static type checker (tested on 1.19.1)
@@ -160,16 +181,11 @@ dependencies = [
     "setuptools>=80.0.0",     # Build backend (tested on 82.0.1)
     "setuptools-scm>=9.2.0",  # Version management (tested on 9.2.2)
     "wheel>=0.46.2",          # Wheel builder (tested on 0.46.3)
-
-    # Qt GUI (native desktop application)
-    "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.2)
-    "pyqtgraph>=0.14.0",      # GPU-accelerated scientific plotting (tested on 0.14.0)
 ]
 
 # GPU extras remain optional — they are mutually exclusive (only ONE can be active).
 # Use: pip install "nlsq[gpu_cuda13]" or pip install "nlsq[gpu_cuda12]"
 # Or:  make install-jax-gpu (auto-detects system CUDA)
-[project.optional-dependencies]
 gpu_cuda13 = [
     # CUDA 13 GPU support — versions must match jaxlib
     "jax-cuda13-plugin>=0.8.0",    # CUDA 13 plugin (must match jaxlib version)

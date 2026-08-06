@@ -178,13 +178,13 @@ dev: install-dev  ## Alias for install-dev (referenced in CLAUDE.md)
 
 install-dev: install
 	@echo "$(BOLD)$(BLUE)Installing development dependencies...$(RESET)"
-	@$(INSTALL_CMD) -e .
+	@$(INSTALL_CMD) -e ".[dev]"
 	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ Dev dependencies installed!$(RESET)"
 
 install-all: install
 	@echo "$(BOLD)$(BLUE)Installing ALL dependencies...$(RESET)"
-	@$(INSTALL_CMD) -e .
+	@$(INSTALL_CMD) -e ".[dev]"
 	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ All dependencies installed!$(RESET)"
 
