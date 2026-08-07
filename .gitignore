@@ -254,6 +254,7 @@ dmypy.json
 .agents/
 .antigravitycli/
 .claude/
+.claude-flow/
 .claude-progress.md
 .claude-scratch
 .code/
