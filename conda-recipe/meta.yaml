@@ -1,0 +1,73 @@
+{% set name = "nlsq" %}
+{% set version = "0.7.1" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://files.pythonhosted.org/packages/c6/2a/f7ce6c46ea8d42140f613ff585947c81447fd17fce9f8e4a20471f057afb/nlsq-{{ version }}.tar.gz
+  sha256: 2450145a29cdd1f33de6fa250f759fb0d6d4e79f90fc830f367695a59e36d136
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  entry_points:
+    - nlsq = nlsq.cli.main:main
+    - nlsq-gui = nlsq.gui_qt:run_desktop
+  # Install pip-only runtime deps that are not on conda-forge
+  post-link: post-link.sh
+
+requirements:
+  host:
+    - python >=3.12
+    - pip
+    - setuptools >=80
+    - setuptools-scm >=9.2
+    - wheel
+  run:
+    # Core scientific computing
+    - python >=3.12
+    - numpy >=2.2
+    - scipy >=1.16.0
+    # JAX ecosystem (available on conda-forge)
+    - jax >=0.8.0
+    - jaxlib >=0.8.0
+    - optax >=0.2.6
+    # Visualization and monitoring
+    - matplotlib-base >=3.10.0
+    - psutil >=7.2.0
+    - tqdm >=4.67.0
+    # Large dataset support
+    - h5py >=3.15.0
+    # Performance
+    - python-xxhash >=3.6.0
+    # Configuration
+    - pyyaml >=6.0.3
+  run_constrained:
+    # pip-only packages (not on conda-forge) -- installed via post-link.sh
+    # Users can also install manually: pip install evosax PySide6 pyqtgraph
+    - evosax >=0.2.0
+
+test:
+  imports:
+    - nlsq
+  # pip check is intentionally omitted: the installed METADATA lists dev/docs/GUI
+  # extras as unconditional Requires-Dist (upstream pyproject.toml includes dev
+  # deps in core dependencies). pip check would always fail on conda-only envs.
+  commands:
+    - nlsq --help
+
+about:
+  home: https://github.com/imewei/NLSQ
+  summary: GPU/TPU accelerated nonlinear least-squares curve fitting using JAX
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  doc_url: https://nlsq.readthedocs.io
+  dev_url: https://github.com/imewei/NLSQ
+
+extra:
+  recipe-maintainers:
+    - imewei

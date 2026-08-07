@@ -9,7 +9,8 @@
         clean clean-all clean-pyc clean-build clean-test clean-venv \
         format lint type-check check quick docs build publish info version \
         benchmark benchmark-large security-check pre-commit-all validate-install \
-        verify verify-fast install-hooks
+        verify verify-fast install-hooks \
+        conda-install-tools conda-build conda-upload
 
 # ===================
 # Configuration
@@ -902,3 +903,25 @@ install-hooks:
 	@echo "  git commit -m 'msg'  → runs pre-commit hooks"
 	@echo "  git push             → triggers GitHub Actions CI"
 	@echo "  make verify-fast     → full local verification (optional)"
+
+# ===================
+# Conda packaging
+# ===================
+CONDA_BUILD := $(HOME)/miniforge3/bin/conda-build
+ANACONDA := $(HOME)/miniforge3/bin/anaconda
+CONDA_RECIPE := conda-recipe
+
+conda-install-tools:  ## Install conda-build and anaconda-client into the base env
+	@echo "$(BOLD)$(BLUE)Installing conda-build and anaconda-client...$(RESET)"
+	conda install -n base -y conda-build anaconda-client
+	@echo "$(BOLD)$(GREEN)✓ conda-build and anaconda-client installed!$(RESET)"
+
+conda-build: ## Build the conda package from conda-recipe/meta.yaml
+	@echo "$(BOLD)$(BLUE)Building conda package...$(RESET)"
+	$(CONDA_BUILD) $(CONDA_RECIPE) --output-folder conda-bld/
+	@echo "$(BOLD)$(GREEN)✓ Conda package built in conda-bld/$(RESET)"
+
+conda-upload: ## Upload the built conda package to anaconda.org/imewei
+	@echo "$(BOLD)$(BLUE)Uploading conda package to anaconda.org/imewei...$(RESET)"
+	$(ANACONDA) upload --user imewei $$($(CONDA_BUILD) $(CONDA_RECIPE) --output-folder conda-bld/ --output 2>/dev/null | tail -1)
+	@echo "$(BOLD)$(GREEN)✓ Package uploaded to https://anaconda.org/imewei/nlsq$(RESET)"
