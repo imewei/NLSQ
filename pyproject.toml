@@ -123,21 +123,7 @@ dependencies = [
     # README documents `pip install nlsq` as "GUI included".
     "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.2)
     "pyqtgraph>=0.14.0",      # GPU-accelerated scientific plotting (tested on 0.14.0)
-]
 
-# Dev/docs/benchmark/jupyter/build tooling lives in the `dev` extra below, not
-# in `dependencies`, so `pip install nlsq` only pulls the runtime deps above.
-# Kept as a [project.optional-dependencies] extra (not a PEP 735
-# dependency-group) so `pip install -e ".[dev]"` keeps working for the
-# Makefile's plain-pip/conda fallback path (dependency-groups aren't
-# pip-installable). A prior revision had all of this flattened into
-# `dependencies` unconditionally -- that made every `pip install nlsq` also
-# install pytest/sphinx/jupyterlab/build tooling, and made `pip check`
-# permanently fail for anyone who didn't have every dev tool installed.
-# `make install-dev`/`install-all` and CI's `uv sync` steps were updated to
-# request this extra explicitly (see Makefile and .github/workflows/).
-[project.optional-dependencies]
-dev = [
     # Testing
     "pytest>=9.0.0",          # Tested on 9.0.2
     "pytest-cov>=7.0.0",      # Tested on 7.0.0
@@ -186,6 +172,7 @@ dev = [
 # GPU extras remain optional — they are mutually exclusive (only ONE can be active).
 # Use: pip install "nlsq[gpu_cuda13]" or pip install "nlsq[gpu_cuda12]"
 # Or:  make install-jax-gpu (auto-detects system CUDA)
+[project.optional-dependencies]
 gpu_cuda13 = [
     # CUDA 13 GPU support — versions must match jaxlib
     "jax-cuda13-plugin>=0.8.0",    # CUDA 13 plugin (must match jaxlib version)
@@ -303,7 +290,7 @@ select = [
     "FURB", # Refurb (modern Python patterns)
 ]
 
-ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PLC0415", "RUF001", "RUF002", "RUF013", "SIM102", "SIM108", "SIM113", "UP007", "UP028", "UP031", "F401", "F821", "F841", "NPY002", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+ignore = ["E501", "E402", "E722", "E741", "B007", "B019", "B028", "PLR2004", "PLC0415", "RUF001", "RUF002", "RUF013", "SIM102", "SIM108", "SIM113", "UP007", "UP028", "UP031", "F401", "F821", "F841", "NPY002", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR0917"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15

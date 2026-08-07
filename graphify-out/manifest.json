@@ -35,9 +35,9 @@
     "semantic_hash": "3b99448ab1b5a63f29fc9b5277a9d0f5"
   },
   "nlsq/_version.py": {
-    "mtime": 1782250830.6776032,
-    "ast_hash": "e433b56bdffd511e3f29632dc6269b18",
-    "semantic_hash": "e433b56bdffd511e3f29632dc6269b18"
+    "mtime": 1786066710.9138668,
+    "ast_hash": "e281fd94729436b4a5ba4c191c84a638",
+    "semantic_hash": ""
   },
   "nlsq/common_scipy.py": {
     "mtime": 1782311289.4600904,
@@ -680,14 +680,14 @@
     "semantic_hash": "06222eb72bfc3cdb6786a688ed3e790c"
   },
   "nlsq/core/trf.py": {
-    "mtime": 1778278459.1763098,
-    "ast_hash": "d0d807761035f10025975110d26fbbed",
-    "semantic_hash": "d0d807761035f10025975110d26fbbed"
+    "mtime": 1786066704.866829,
+    "ast_hash": "9dc76718e6bc4067c84dfbdadf05a7d1",
+    "semantic_hash": ""
   },
   "nlsq/core/minpack.py": {
-    "mtime": 1782311288.2870927,
-    "ast_hash": "b8390ba5c0d3afa8be31434eff58ee64",
-    "semantic_hash": "b8390ba5c0d3afa8be31434eff58ee64"
+    "mtime": 1786066704.8948293,
+    "ast_hash": "c5a0c1c50694e62fc00c56fd345377ed",
+    "semantic_hash": ""
   },
   "nlsq/core/workflow.py": {
     "mtime": 1767715829.1226661,
@@ -2250,14 +2250,14 @@
     "semantic_hash": "ee431613ee5697725888f06df2855533"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1782324793.6272988,
-    "ast_hash": "5f21a071ddb4bfac7b42bed1da1f7378",
-    "semantic_hash": "5f21a071ddb4bfac7b42bed1da1f7378"
+    "mtime": 1786019250.779836,
+    "ast_hash": "ff8babaf9c686b691ab57cf366c12c36",
+    "semantic_hash": ""
   },
   "docs/requirements.txt": {
-    "mtime": 1772819996.9876945,
-    "ast_hash": "35b3592b20e8682fa5c6aaf2b3c954be",
-    "semantic_hash": "35b3592b20e8682fa5c6aaf2b3c954be"
+    "mtime": 1786018635.0662608,
+    "ast_hash": "f3e13abfb07e29607ad32d9995ccaf0f",
+    "semantic_hash": ""
   },
   "docs/gui/user_guide.rst": {
     "mtime": 1772814404.435062,
@@ -2470,9 +2470,9 @@
     "semantic_hash": "519ec9fa74b1e6a32e23354df9b6184e"
   },
   "docs/tutorials/routine/getting_started/installation.rst": {
-    "mtime": 1782324801.986267,
-    "ast_hash": "d5135808c1961a54d160afd9ff3f1a9c",
-    "semantic_hash": "d5135808c1961a54d160afd9ff3f1a9c"
+    "mtime": 1786019270.605812,
+    "ast_hash": "60d0486fefc4a88f82cf8da93ebd020d",
+    "semantic_hash": ""
   },
   "docs/tutorials/routine/getting_started/index.rst": {
     "mtime": 1768308668.5457523,
@@ -2510,9 +2510,9 @@
     "semantic_hash": "a67fe7e275056169576c1d006e1c1690"
   },
   "docs/tutorials/routine/troubleshooting/getting_help.rst": {
-    "mtime": 1782324816.766211,
-    "ast_hash": "56a57f79cbb6ccc61dc0321c55e5f036",
-    "semantic_hash": "56a57f79cbb6ccc61dc0321c55e5f036"
+    "mtime": 1786019270.605812,
+    "ast_hash": "c9b2ba316405cb3972a529924833d9fe",
+    "semantic_hash": ""
   },
   "docs/tutorials/routine/troubleshooting/index.rst": {
     "mtime": 1772901060.770752,
@@ -2665,9 +2665,9 @@
     "semantic_hash": "dcc851db19a70d0b01b5e8302c97e328"
   },
   "docs/reference/cli.rst": {
-    "mtime": 1782324809.5142386,
-    "ast_hash": "5cc6a60b16d6f5981885ffe2be4dc0e7",
-    "semantic_hash": "5cc6a60b16d6f5981885ffe2be4dc0e7"
+    "mtime": 1786019270.601812,
+    "ast_hash": "5cc92825042c4cf0098a0b559540ef35",
+    "semantic_hash": ""
   },
   "docs/reference/large_data.rst": {
     "mtime": 1772901060.7697518,
@@ -3550,14 +3550,14 @@
     "semantic_hash": "4b9408d69f2f0896502657810ed2edc9"
   },
   "examples/notebooks/07_global_optimization/README.md": {
-    "mtime": 1782324848.8260891,
-    "ast_hash": "2e24c324c907e62eb7c8fdb0d369111a",
-    "semantic_hash": "2e24c324c907e62eb7c8fdb0d369111a"
+    "mtime": 1786019276.5558047,
+    "ast_hash": "f3ca46b739199aa75f9e283dc5cfc70d",
+    "semantic_hash": ""
   },
   "examples/notebooks/08_workflow_system/README.md": {
-    "mtime": 1782324858.388053,
-    "ast_hash": "bf92d53301d3a6e8508b885911986452",
-    "semantic_hash": "bf92d53301d3a6e8508b885911986452"
+    "mtime": 1786019276.5608046,
+    "ast_hash": "eaca7de0a9c8f0693616168f82b1c74f",
+    "semantic_hash": ""
   },
   "examples/notebooks/09_gallery_advanced/README.md": {
     "mtime": 1766210788.6977842,
@@ -3565,14 +3565,14 @@
     "semantic_hash": "cc2bdd875dbf6d13678d3415ddd40ae4"
   },
   "examples/scripts/07_global_optimization/README.md": {
-    "mtime": 1782324866.8880205,
-    "ast_hash": "7fb1ba068cb93e22fcf692fcac95bd65",
-    "semantic_hash": "7fb1ba068cb93e22fcf692fcac95bd65"
+    "mtime": 1786019276.5688047,
+    "ast_hash": "5cfeb156cb4ff740da5c1ec7ebb56c4f",
+    "semantic_hash": ""
   },
   "examples/scripts/08_workflow_system/README.md": {
-    "mtime": 1782324876.5979836,
-    "ast_hash": "6cdae45ceba964f78da8c2c1f5d90111",
-    "semantic_hash": "6cdae45ceba964f78da8c2c1f5d90111"
+    "mtime": 1786019276.5738046,
+    "ast_hash": "46c3613a123fd96d70e4774beb794a6e",
+    "semantic_hash": ""
   },
   "examples/scripts/10_cli-commands/README.md": {
     "mtime": 1766576525.4799762,
@@ -3650,9 +3650,9 @@
     "semantic_hash": "434f44cca96482259f29ce5b608e46a1"
   },
   "examples/scripts/09_gallery_advanced/README.md": {
-    "mtime": 1782324882.9269595,
-    "ast_hash": "1fe58272d450c118bbe2689d1f3d8f70",
-    "semantic_hash": "1fe58272d450c118bbe2689d1f3d8f70"
+    "mtime": 1786019276.5818048,
+    "ast_hash": "f55a2f0c7c0cf72c2187572cd3a373b4",
+    "semantic_hash": ""
   },
   "examples/_templates/02_CORE_TUTORIALS_TEMPLATE.md": {
     "mtime": 1763563242.8156087,

@@ -2988,7 +2988,7 @@ class CurveFit:
     def _determine_parameter_count(
         self,
         f: Callable,
-        p0: np.ndarray | None | str,
+        p0: np.ndarray | str | None,
         xdata: np.ndarray | None = None,
         ydata: np.ndarray | None = None,
     ) -> tuple[int, np.ndarray | None]:
