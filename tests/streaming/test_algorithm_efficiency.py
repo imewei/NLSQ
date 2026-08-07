@@ -998,6 +998,8 @@ class TestEndToEndIntegration:
         assert jnp.all(popt >= bounds[0]), "Parameters should be >= lower bounds"
         assert jnp.all(popt <= bounds[1]), "Parameters should be <= upper bounds"
 
+    @pytest.mark.slow
+    @pytest.mark.serial  # Memory-intensive: AdaptiveHybrid JIT compile can OOM xdist workers
     def test_diagnostics_contain_all_phases(self):
         """Test that streaming diagnostics contain all phase information."""
 
