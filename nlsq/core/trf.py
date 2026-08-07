@@ -249,15 +249,15 @@ class TRFConfig:
         """Validate configuration values."""
         if self.ftol < 0 or not math.isfinite(self.ftol):
             raise ValueError(
-                f"ftol must be a finite non-negative number, got {self.ftol}"
+                f"ftol must be a finite non-negative number, got {self.ftol}",
             )
         if self.xtol < 0 or not math.isfinite(self.xtol):
             raise ValueError(
-                f"xtol must be a finite non-negative number, got {self.xtol}"
+                f"xtol must be a finite non-negative number, got {self.xtol}",
             )
         if self.gtol < 0 or not math.isfinite(self.gtol):
             raise ValueError(
-                f"gtol must be a finite non-negative number, got {self.gtol}"
+                f"gtol must be a finite non-negative number, got {self.gtol}",
             )
         if self.max_nfev is not None and self.max_nfev <= 0:
             raise ValueError(f"max_nfev must be positive, got {self.max_nfev}")
@@ -267,7 +267,7 @@ class TRFConfig:
         valid_solvers = {"exact", "lsmr", "cg"}
         if self.tr_solver not in valid_solvers:
             raise ValueError(
-                f"tr_solver must be one of {valid_solvers}, got {self.tr_solver}"
+                f"tr_solver must be one of {valid_solvers}, got {self.tr_solver}",
             )
 
 
@@ -481,7 +481,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             step_norm = float(step_norm) if hasattr(step_norm, "item") else step_norm
 
         print_iteration_nonlinear(
-            iteration, nfev, cost, actual_reduction, step_norm, g_norm
+            iteration,
+            nfev,
+            cost,
+            actual_reduction,
+            step_norm,
+            g_norm,
         )
 
     def trf(
@@ -612,34 +617,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     callback,
                     **kwargs,
                 )
-            else:
-                return self.trf_no_bounds(
-                    fun,
-                    xdata,
-                    ydata,
-                    jac,
-                    data_mask,
-                    transform,
-                    x0,
-                    f0,
-                    J0,
-                    lb,
-                    ub,
-                    ftol,
-                    xtol,
-                    gtol,
-                    max_nfev,
-                    f_scale,
-                    x_scale,
-                    loss_function,
-                    tr_options,
-                    verbose,
-                    solver,
-                    callback,
-                    profiler=TRFProfiler(),
-                )
-        else:
-            return self.trf_bounds(
+            return self.trf_no_bounds(
                 fun,
                 xdata,
                 ydata,
@@ -662,8 +640,33 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 verbose,
                 solver,
                 callback,
-                **kwargs,
+                profiler=TRFProfiler(),
             )
+        return self.trf_bounds(
+            fun,
+            xdata,
+            ydata,
+            jac,
+            data_mask,
+            transform,
+            x0,
+            f0,
+            J0,
+            lb,
+            ub,
+            ftol,
+            xtol,
+            gtol,
+            max_nfev,
+            f_scale,
+            x_scale,
+            loss_function,
+            tr_options,
+            verbose,
+            solver,
+            callback,
+            **kwargs,
+        )
 
     def _initialize_trf_state(
         self,
@@ -855,7 +858,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     "s": None,
                     "V": None,
                     "uf": None,
-                }
+                },
             )
         elif solver == "sparse":
             # Sparse solver path (Task 6.4: Sparse Activation)
@@ -876,7 +879,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     "s": s,
                     "V": V,
                     "uf": uf,
-                }
+                },
             )
         else:
             # SVD-based exact solver (default dense)
@@ -893,7 +896,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     "s": s,
                     "V": V,
                     "uf": uf,
-                }
+                },
             )
 
         return result
@@ -1041,12 +1044,20 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 _n_iter = 1  # Dummy value for compatibility
             else:
                 step_h, alpha, _n_iter = solve_lsq_trust_region_jax(
-                    n, m, uf, s, V, Delta, initial_alpha=alpha
+                    n,
+                    m,
+                    uf,
+                    s,
+                    V,
+                    Delta,
+                    initial_alpha=alpha,
                 )
 
             # Compute predicted reduction
             predicted_reduction_jnp = -self.cJIT.evaluate_quadratic(
-                J_h, g_h_jnp, step_h
+                J_h,
+                g_h_jnp,
+                step_h,
             )
             predicted_reduction = predicted_reduction_jnp
 
@@ -1083,7 +1094,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             # Check termination criteria (JIT-compiled, stays on device)
             step_norm = jnorm(step)
             term_code = check_termination_jax(
-                actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
+                actual_reduction,
+                cost,
+                step_norm,
+                jnorm(x),
+                ratio,
+                ftol,
+                xtol,
             )
 
             # Single GPU→CPU sync per inner iteration: materialize term_code
@@ -1135,7 +1152,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     "f_new": f_new,
                     "cost_new": cost_new,
                     "njev": 1,
-                }
+                },
             )
 
             # Compute new Jacobian
@@ -1145,7 +1162,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             if loss_function is not None:
                 rho = loss_function(f_new, f_scale)
                 J_new, f_new_scaled = self.cJIT.scale_for_robust_loss_function(
-                    J_new, f_new, rho
+                    J_new,
+                    f_new,
+                    rho,
                 )
                 result["f_new"] = f_new_scaled  # Scaled residuals for optimization
                 result["f_true_new"] = f_new  # Unscaled residuals for res.fun
@@ -1358,7 +1377,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if solver == "cg":
             J_h = J * d_jnp
             p_h = self.solve_tr_subproblem_cg_bounds(
-                J, f, d_jnp, J_diag, f_zeros, Delta, alpha
+                J,
+                f,
+                d_jnp,
+                J_diag,
+                f_zeros,
+                Delta,
+                alpha,
             )
             s, V, uf = None, None, None
         elif solver == "sparse":
@@ -1502,13 +1527,25 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             if solver == "cg":
                 if inner_loop_count > 1:
                     p_h = self.solve_tr_subproblem_cg_bounds(
-                        J, f, d_jnp, J_diag, f_zeros, Delta, alpha
+                        J,
+                        f,
+                        d_jnp,
+                        J_diag,
+                        f_zeros,
+                        Delta,
+                        alpha,
                     )
                 _n_iter = 1
             else:
                 # Use m + n for the augmented system row count (J_augmented is (m+n) x n)
                 p_h, alpha, _n_iter = solve_lsq_trust_region_jax(
-                    n, m + n, uf, s, V, Delta, initial_alpha=alpha
+                    n,
+                    m + n,
+                    uf,
+                    s,
+                    V,
+                    Delta,
+                    initial_alpha=alpha,
                 )
 
             p = d * p_h
@@ -1553,7 +1590,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             step_norm = jnorm(step)
             term_code = check_termination_jax(
-                actual_reduction, cost, step_norm, jnorm(x), ratio, ftol, xtol
+                actual_reduction,
+                cost,
+                step_norm,
+                jnorm(x),
+                ratio,
+                ftol,
+                xtol,
             )
             # Single GPU→CPU sync per inner iteration: materialize term_code
             term_code_int = int(term_code)
@@ -1862,7 +1905,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 # OPT-8: Get g_norm from convergence check to avoid redundant computation
                 if termination_status is None:
                     termination_status, g_norm = self._check_convergence_criteria(
-                        g, gtol
+                        g,
+                        gtol,
                     )
                 else:
                     g_norm = jnorm(g, ord=jnp.inf)  # Only compute if already terminated
@@ -1882,7 +1926,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 if termination_status is not None or nfev == max_nfev:
                     if nfev == max_nfev:
                         self.logger.warning(
-                            "Maximum number of function evaluations reached", nfev=nfev
+                            "Maximum number of function evaluations reached",
+                            nfev=nfev,
                         )
                     break
 
@@ -2138,7 +2183,13 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         # Initialize bounds state using helper
         bounds_state = self._initialize_bounds_state(
-            x0, f, J, g, lb_jnp, ub_jnp, x_scale
+            x0,
+            f,
+            J,
+            g,
+            lb_jnp,
+            ub_jnp,
+            x_scale,
         )
         v = bounds_state["v"]
         dv = bounds_state["dv"]
@@ -2426,11 +2477,19 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         # Check if reflection step is available.
         if r_stride_l <= r_stride_u:
             a, b, c = self.cJIT.build_quadratic_1d(
-                J_h, g_h, r_h, s0=p_h_scaled, diag=diag_h
+                J_h,
+                g_h,
+                r_h,
+                s0=p_h_scaled,
+                diag=diag_h,
             )
 
             r_stride_jax, r_value = minimize_quadratic_1d_jax(
-                a, b, r_stride_l, r_stride_u, c=c
+                a,
+                b,
+                r_stride_l,
+                r_stride_u,
+                c=c,
             )
             r_stride = float(r_stride_jax)
             r_h = r_h * r_stride + p_h_scaled
@@ -2464,10 +2523,9 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         if p_value < r_value and p_value < ag_value:
             return np.asarray(p), p_h, -p_value
-        elif r_value < p_value and r_value < ag_value:
+        if r_value < p_value and r_value < ag_value:
             return np.asarray(r), r_h, -r_value
-        else:
-            return np.asarray(ag), ag_h, -ag_value
+        return np.asarray(ag), ag_h, -ag_value
 
     def optimize(
         self,
@@ -2510,5 +2568,5 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             "The simplified optimize() interface is not yet implemented for TrustRegionReflective. "
             "This class is designed for curve fitting applications. "
             "Use the `trf()` method directly, or use the higher-level interfaces in "
-            "`nlsq.curve_fit()` or `LeastSquares.least_squares()`."
+            "`nlsq.curve_fit()` or `LeastSquares.least_squares()`.",
         )

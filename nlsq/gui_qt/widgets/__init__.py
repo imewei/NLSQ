@@ -28,31 +28,31 @@ def __getattr__(name: str):
         from nlsq.gui_qt.widgets.column_selector import ColumnSelectorWidget
 
         return ColumnSelectorWidget
-    elif name in ("CodeEditor", "CodeEditorWidget"):
+    if name in ("CodeEditor", "CodeEditorWidget"):
         from nlsq.gui_qt.widgets.code_editor import CodeEditorWidget
 
         return CodeEditorWidget
-    elif name == "PythonHighlighter":
+    if name == "PythonHighlighter":
         from nlsq.gui_qt.widgets.code_editor import PythonHighlighter
 
         return PythonHighlighter
-    elif name == "ParamConfigWidget":
+    if name == "ParamConfigWidget":
         from nlsq.gui_qt.widgets.param_config import ParamConfigWidget
 
         return ParamConfigWidget
-    elif name == "AdvancedOptionsWidget":
+    if name == "AdvancedOptionsWidget":
         from nlsq.gui_qt.widgets.advanced_options import AdvancedOptionsWidget
 
         return AdvancedOptionsWidget
-    elif name == "IterationTableWidget":
+    if name == "IterationTableWidget":
         from nlsq.gui_qt.widgets.iteration_table import IterationTableWidget
 
         return IterationTableWidget
-    elif name == "ParamResultsWidget":
+    if name == "ParamResultsWidget":
         from nlsq.gui_qt.widgets.param_results import ParamResultsWidget
 
         return ParamResultsWidget
-    elif name == "FitStatisticsWidget":
+    if name == "FitStatisticsWidget":
         from nlsq.gui_qt.widgets.fit_statistics import FitStatisticsWidget
 
         return FitStatisticsWidget

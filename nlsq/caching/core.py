@@ -72,9 +72,8 @@ class FunctionCache:
                     code = func.__code__
                     code_hash = hashlib.sha256(code.co_code).hexdigest()[:8]
                     return f"code_{code_hash}_{code.co_argcount}"
-                else:
-                    # Last resort: use object ID (not ideal for persistence)
-                    return f"id_{id(func)}"
+                # Last resort: use object ID (not ideal for persistence)
+                return f"id_{id(func)}"
             except (AttributeError, TypeError, ValueError):
                 return f"id_{id(func)}"
 
@@ -117,7 +116,9 @@ class FunctionCache:
 
                 # Compile the function
                 compiled = jax.jit(
-                    func, static_argnums=static_argnums, static_argnames=static_argnames
+                    func,
+                    static_argnums=static_argnums,
+                    static_argnames=static_argnames,
                 )
                 self._compiled_funcs[cache_key] = compiled
                 return compiled
@@ -218,12 +219,15 @@ def get_cached_jit(
     """
     func_hash = _function_cache.cache_function(func)
     return _function_cache.get_compiled_function(
-        func_hash, static_argnums, static_argnames
+        func_hash,
+        static_argnums,
+        static_argnames,
     )
 
 
 def cached_jit(
-    static_argnums: tuple[int, ...] = (), static_argnames: tuple[str, ...] = ()
+    static_argnums: tuple[int, ...] = (),
+    static_argnames: tuple[str, ...] = (),
 ):
     """Decorator for cached JIT compilation.
 

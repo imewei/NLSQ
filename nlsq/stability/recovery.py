@@ -105,7 +105,7 @@ class OptimizationRecovery:
                 "failure_type": failure_type,
                 "iteration": optimization_state.get("iteration", 0),
                 "cost": optimization_state.get("cost", np.inf),
-            }
+            },
         )
 
         for retry in range(self.max_retries):
@@ -133,7 +133,8 @@ class OptimizationRecovery:
         # All recovery attempts failed
         if self.enable_diagnostics and self.diagnostics is not None:
             self.diagnostics.record_event(
-                "recovery_failed", {"attempts": self.max_retries * len(self.strategies)}
+                "recovery_failed",
+                {"attempts": self.max_retries * len(self.strategies)},
             )
 
         return False, {"error": f"Recovery failed for {failure_type}"}
@@ -225,7 +226,10 @@ class OptimizationRecovery:
         return modified_state
 
     def _adjust_regularization(
-        self, failure_type: str, state: dict, retry: int
+        self,
+        failure_type: str,
+        state: dict,
+        retry: int,
     ) -> dict:
         """Adjust regularization parameters.
 

@@ -19,7 +19,10 @@ EPS = np.finfo(float).eps
 
 @jit
 def phi_and_derivative_jax(
-    alpha: float, suf: jnp.ndarray, s: jnp.ndarray, Delta: float
+    alpha: float,
+    suf: jnp.ndarray,
+    s: jnp.ndarray,
+    Delta: float,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """JAX-compiled phi function for trust region subproblem.
 
@@ -103,7 +106,9 @@ def _solve_lsq_trust_region_jax_impl(
     def compute_alpha_lower_full_rank():
         phi_val, phi_prime_val = phi_and_derivative_jax(0.0, suf, s, Delta)
         safe_phi_prime = jnp.where(
-            phi_prime_val == 0.0, jnp.finfo(phi_prime_val.dtype).tiny, phi_prime_val
+            phi_prime_val == 0.0,
+            jnp.finfo(phi_prime_val.dtype).tiny,
+            phi_prime_val,
         )
         return -phi_val / safe_phi_prime
 
@@ -115,7 +120,8 @@ def _solve_lsq_trust_region_jax_impl(
 
     # Compute default alpha
     default_alpha = jnp.maximum(
-        0.001 * alpha_upper, jnp.sqrt(alpha_lower * alpha_upper)
+        0.001 * alpha_upper,
+        jnp.sqrt(alpha_lower * alpha_upper),
     )
 
     # Use provided initial_alpha only if valid
@@ -139,7 +145,8 @@ def _solve_lsq_trust_region_jax_impl(
         alpha = lax.cond(
             (alpha < alpha_lower) | (alpha > alpha_upper),
             lambda: jnp.maximum(
-                0.001 * alpha_upper, jnp.sqrt(alpha_lower * alpha_upper)
+                0.001 * alpha_upper,
+                jnp.sqrt(alpha_lower * alpha_upper),
             ),
             lambda: alpha,
         )
@@ -155,7 +162,9 @@ def _solve_lsq_trust_region_jax_impl(
 
         # Update alpha using Newton step (guard phi_prime_val == 0)
         safe_phi_prime = jnp.where(
-            phi_prime_val == 0.0, jnp.finfo(phi_prime_val.dtype).tiny, phi_prime_val
+            phi_prime_val == 0.0,
+            jnp.finfo(phi_prime_val.dtype).tiny,
+            phi_prime_val,
         )
         ratio = phi_val / safe_phi_prime
         alpha_lower_new = jnp.maximum(alpha_lower, alpha - ratio)
@@ -169,7 +178,9 @@ def _solve_lsq_trust_region_jax_impl(
     # Run the while loop
     init_state = (alpha_start, alpha_lower, alpha_upper, jnp.array(0), jnp.array(False))
     final_alpha, _, _, n_iter_final, _ = lax.while_loop(
-        loop_cond, loop_body, init_state
+        loop_cond,
+        loop_body,
+        init_state,
     )
 
     # Detect a (numerically) zero Jacobian. Since singular values are returned
@@ -223,7 +234,8 @@ def _solve_lsq_trust_region_jax_impl(
 
 # Create a JIT-compiled version of the implementation
 _solve_lsq_trust_region_jax_jit = jit(
-    _solve_lsq_trust_region_jax_impl, static_argnums=(0, 1, 8, 9)
+    _solve_lsq_trust_region_jax_impl,
+    static_argnums=(0, 1, 8, 9),
 )
 
 
@@ -293,7 +305,16 @@ def solve_lsq_trust_region_jax(
         has_initial_alpha = True
 
     return _solve_lsq_trust_region_jax_jit(
-        n, m, uf, s, V, Delta, init_alpha_val, has_initial_alpha, rtol, max_iter
+        n,
+        m,
+        uf,
+        s,
+        V,
+        Delta,
+        init_alpha_val,
+        has_initial_alpha,
+        rtol,
+        max_iter,
     )
 
 
@@ -415,7 +436,9 @@ class CommonJIT:
 
         @jit
         def scale_for_robust_loss_function(
-            J: jnp.ndarray, f: jnp.ndarray, rho: jnp.ndarray
+            J: jnp.ndarray,
+            f: jnp.ndarray,
+            rho: jnp.ndarray,
         ) -> tuple[jnp.ndarray, jnp.ndarray]:
             """Scale Jacobian and residuals for a robust loss function.
             Arrays are modified in place.
@@ -508,11 +531,12 @@ class CommonJIT:
                 b += np.dot(s0 * diag, s)
                 c += 0.5 * np.dot(s0 * diag, s0)
             return a, b, c
-        else:
-            return a, b
+        return a, b
 
     def compute_jac_scale(
-        self, J: jnp.ndarray, scale_inv_old: jnp.ndarray | np.ndarray | None = None
+        self,
+        J: jnp.ndarray,
+        scale_inv_old: jnp.ndarray | np.ndarray | None = None,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute variables scale based on the Jacobian matrix.
 
@@ -592,12 +616,10 @@ class CommonJIT:
         if s.ndim == 1:
             if diag is None:
                 return self.evaluate_quadratic1(J, g, s)
-            else:
-                return self.evaluate_quadratic_diagonal1(J, g, s, diag)
-        elif diag is None:
+            return self.evaluate_quadratic_diagonal1(J, g, s, diag)
+        if diag is None:
             return self.evaluate_quadratic2(J, g, s)
-        else:
-            return self.evaluate_quadratic_diagonal2(J, g, s, diag)
+        return self.evaluate_quadratic_diagonal2(J, g, s, diag)
 
     def create_quadratic_funcs(self):
         @jit
@@ -765,7 +787,10 @@ def check_termination_jax(
 
 @jit
 def CL_scaling_vector_jax(
-    x: jnp.ndarray, g: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray
+    x: jnp.ndarray,
+    g: jnp.ndarray,
+    lb: jnp.ndarray,
+    ub: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """JIT-compiled Coleman-Li scaling vector (replaces common_scipy.CL_scaling_vector).
 
@@ -794,7 +819,9 @@ def in_bounds_jax(x: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray) -> jnp.ndarr
 
 @jit
 def make_strictly_feasible_jax(
-    x: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray
+    x: jnp.ndarray,
+    lb: jnp.ndarray,
+    ub: jnp.ndarray,
 ) -> jnp.ndarray:
     """JIT-compiled strict feasibility projection for rstep=0 case.
 
@@ -836,7 +863,10 @@ def make_strictly_feasible_jax(
 
 @jit
 def step_size_to_bound_jax(
-    x: jnp.ndarray, s: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray
+    x: jnp.ndarray,
+    s: jnp.ndarray,
+    lb: jnp.ndarray,
+    ub: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute min step size to reach a bound (JAX version).
 
@@ -871,7 +901,9 @@ def step_size_to_bound_jax(
 
 @jit
 def intersect_trust_region_jax(
-    x: jnp.ndarray, s: jnp.ndarray, Delta: float
+    x: jnp.ndarray,
+    s: jnp.ndarray,
+    Delta: float,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Find intersection of a line with trust region boundary (JAX version).
 
@@ -912,7 +944,11 @@ def intersect_trust_region_jax(
 
 @jit
 def minimize_quadratic_1d_jax(
-    a: jnp.ndarray, b: jnp.ndarray, lb: float, ub: float, c: float | jnp.ndarray = 0.0
+    a: jnp.ndarray,
+    b: jnp.ndarray,
+    lb: float,
+    ub: float,
+    c: float | jnp.ndarray = 0.0,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Minimize 1-D quadratic function subject to bounds (JAX version).
 

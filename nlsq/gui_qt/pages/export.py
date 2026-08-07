@@ -110,7 +110,7 @@ class ExportPage(QWidget):
 
         bundle_desc = QLabel(
             "Export complete session including data, configuration, "
-            "fit results, and plots as a ZIP archive."
+            "fit results, and plots as a ZIP archive.",
         )
         bundle_desc.setWordWrap(True)
         bundle_desc.setStyleSheet("color: gray; font-size: 11px;")
@@ -128,7 +128,7 @@ class ExportPage(QWidget):
 
         json_desc = QLabel(
             "Export fit results as structured JSON for programmatic access "
-            "or integration with other tools."
+            "or integration with other tools.",
         )
         json_desc.setWordWrap(True)
         json_desc.setStyleSheet("color: gray; font-size: 11px;")
@@ -152,7 +152,7 @@ class ExportPage(QWidget):
 
         csv_desc = QLabel(
             "Export fitted parameters and data as CSV for spreadsheet "
-            "applications like Excel or Google Sheets."
+            "applications like Excel or Google Sheets.",
         )
         csv_desc.setWordWrap(True)
         csv_desc.setStyleSheet("color: gray; font-size: 11px;")
@@ -176,7 +176,7 @@ class ExportPage(QWidget):
 
         code_desc = QLabel(
             "Generate reproducible Python code that recreates this fit "
-            "using NLSQ library."
+            "using NLSQ library.",
         )
         code_desc.setWordWrap(True)
         code_desc.setStyleSheet("color: gray; font-size: 11px;")
@@ -216,10 +216,10 @@ class ExportPage(QWidget):
         fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
         family = fixed_font.family()
         self._code_preview.setStyleSheet(
-            f"font-family: '{family}', monospace; font-size: 12px;"
+            f"font-family: '{family}', monospace; font-size: 12px;",
         )
         self._code_preview.setPlaceholderText(
-            "Click 'Generate Code' to preview Python code..."
+            "Click 'Generate Code' to preview Python code...",
         )
         code_layout.addWidget(self._code_preview)
 
@@ -380,7 +380,7 @@ class ExportPage(QWidget):
             self._code_preview.setStyleSheet(
                 f"font-family: '{family}', monospace; "
                 "font-size: 12px; "
-                "background-color: #1e1e1e; color: #d4d4d4;"
+                "background-color: #1e1e1e; color: #d4d4d4;",
             )
         else:
             fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
@@ -388,7 +388,7 @@ class ExportPage(QWidget):
             self._code_preview.setStyleSheet(
                 f"font-family: '{family}', monospace; "
                 "font-size: 12px; "
-                "background-color: #ffffff; color: #000000;"
+                "background-color: #ffffff; color: #000000;",
             )
 
     def export_session_bundle(self, path: str) -> None:
@@ -525,7 +525,7 @@ class ExportPage(QWidget):
                         f"from nlsq.core.functions import {model_name}",
                         f"model = {model_name}",
                         "",
-                    ]
+                    ],
                 )
             elif model_type == "polynomial":
                 degree = state.model_config.get("degree", 2)
@@ -541,7 +541,7 @@ class ExportPage(QWidget):
                         f"# degree = {degree}",
                         "model = polynomial",
                         "",
-                    ]
+                    ],
                 )
             elif model_type == "custom":
                 code = state.model_config.get("code", "")
@@ -550,7 +550,7 @@ class ExportPage(QWidget):
                         "# Custom model function",
                         code,
                         "",
-                    ]
+                    ],
                 )
         else:
             lines.extend(
@@ -559,7 +559,7 @@ class ExportPage(QWidget):
                     "def model(x, a, b):",
                     "    return a * x + b",
                     "",
-                ]
+                ],
             )
 
         # Add data
@@ -575,7 +575,7 @@ class ExportPage(QWidget):
                         f"xdata = np.array({x_str})",
                         f"ydata = np.array({y_str})",
                         "",
-                    ]
+                    ],
                 )
             else:
                 lines.extend(
@@ -586,7 +586,7 @@ class ExportPage(QWidget):
                         f"xdata = np.linspace(0, 10, {n})  # Replace with your data",
                         f"ydata = np.zeros({n})  # Replace with your data",
                         "",
-                    ]
+                    ],
                 )
 
         # Determine workflow (3-workflow system v0.6.3)
@@ -596,7 +596,7 @@ class ExportPage(QWidget):
         lines.extend(
             [
                 "# Fitting options",
-            ]
+            ],
         )
 
         if state.p0:
@@ -639,7 +639,7 @@ class ExportPage(QWidget):
                 'print(f"R-squared: {result.r_squared:.6f}")',
                 'print(f"RMSE: {result.rmse:.6g}")',
                 'print(f"Converged: {result.success}")',
-            ]
+            ],
         )
 
         return "\n".join(lines)
@@ -742,7 +742,7 @@ class ExportPage(QWidget):
         lines.append(f"  ftol: {state.ftol if hasattr(state, 'ftol') else 1e-8}")
         lines.append(f"  xtol: {state.xtol if hasattr(state, 'xtol') else 1e-8}")
         lines.append(
-            f"  max_iterations: {state.max_iterations if hasattr(state, 'max_iterations') else 200}"
+            f"  max_iterations: {state.max_iterations if hasattr(state, 'max_iterations') else 200}",
         )
 
         return "\n".join(lines)

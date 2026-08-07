@@ -90,7 +90,8 @@ __all__ = [
 
 
 def solve_with_cholesky_fallback(
-    A: jnp.ndarray, b: jnp.ndarray
+    A: jnp.ndarray,
+    b: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Solve linear system Ax = b using Cholesky with eigenvalue fallback.
 
@@ -237,7 +238,9 @@ class NumericalStabilityGuard:
         def _safe_divide_jit(numerator, denominator):
             """JIT-compiled safe division."""
             safe_denom = jnp.where(
-                jnp.abs(denominator) < self.eps, self.eps, denominator
+                jnp.abs(denominator) < self.eps,
+                self.eps,
+                denominator,
             )
             return numerator / safe_denom
 
@@ -323,7 +326,7 @@ class NumericalStabilityGuard:
             J_fixed, has_invalid = self._check_jacobian_fast_jit(J)
             if has_invalid:
                 warnings.warn(
-                    "Jacobian contains NaN or Inf values, replacing with zeros"
+                    "Jacobian contains NaN or Inf values, replacing with zeros",
                 )
             issues: dict[str, object] = {
                 "has_nan": bool(has_invalid),
@@ -390,7 +393,7 @@ class NumericalStabilityGuard:
 
         if condition_number > self.condition_threshold:
             warnings.warn(
-                f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})"
+                f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})",
             )
             # Efficient diagonal regularization - 99% memory reduction vs jnp.eye(m, n)
             J = J.at[diag_indices, diag_indices].add(self.regularization_factor)
@@ -472,7 +475,9 @@ class NumericalStabilityGuard:
         return self._safe_log_jit(x)
 
     def safe_divide(
-        self, numerator: jnp.ndarray, denominator: jnp.ndarray
+        self,
+        numerator: jnp.ndarray,
+        denominator: jnp.ndarray,
     ) -> jnp.ndarray:
         """Division with zero-protection.
 
@@ -561,7 +566,9 @@ class NumericalStabilityGuard:
         return gradient_fixed
 
     def regularize_hessian(
-        self, H: jnp.ndarray, min_eigenvalue: float = 1e-8
+        self,
+        H: jnp.ndarray,
+        min_eigenvalue: float = 1e-8,
     ) -> jnp.ndarray:
         """Regularize Hessian to ensure positive definiteness.
 
@@ -594,7 +601,7 @@ class NumericalStabilityGuard:
 
         except Exception as e:
             warnings.warn(
-                f"regularize_hessian: eigendecomposition failed ({e}), applying fallback diagonal shift"
+                f"regularize_hessian: eigendecomposition failed ({e}), applying fallback diagonal shift",
             )
             H = H + min_eigenvalue * jnp.eye(n)
 
@@ -666,8 +673,7 @@ class NumericalStabilityGuard:
             # Non-L2 norms: scale manually without JIT (rare path)
             x_scaled = x / max_val
             return float(jnp.linalg.norm(x_scaled, ord=ord) * max_val)
-        else:
-            return float(jnp.linalg.norm(x, ord=ord))
+        return float(jnp.linalg.norm(x, ord=ord))
 
     def detect_numerical_issues(self, x: jnp.ndarray) -> dict:
         """Detect numerical issues in array.
@@ -740,7 +746,8 @@ def estimate_condition_number(xdata: np.ndarray) -> float:
 
 
 def detect_parameter_scale_mismatch(
-    p0: np.ndarray, threshold: float = 1e6
+    p0: np.ndarray,
+    threshold: float = 1e6,
 ) -> tuple[bool, float]:
     """
     Detect if parameter scales differ by too many orders of magnitude.
@@ -788,7 +795,8 @@ def detect_parameter_scale_mismatch(
 
 
 def detect_collinearity(
-    xdata: np.ndarray, threshold: float = 0.95
+    xdata: np.ndarray,
+    threshold: float = 0.95,
 ) -> tuple[bool, list]:
     """
     Detect collinearity in multidimensional input data.
@@ -925,10 +933,10 @@ def check_problem_stability(
                 "ill_conditioned_data",
                 f"xdata is ill-conditioned (cond={cond:.2e})",
                 "critical",
-            )
+            ),
         )
         recommendations.append(
-            "Rescale xdata to a smaller range (e.g., [0, 1] or [-1, 1])"
+            "Rescale xdata to a smaller range (e.g., [0, 1] or [-1, 1])",
         )
     elif cond > 1e10:
         issues.append(
@@ -936,7 +944,7 @@ def check_problem_stability(
                 "poor_conditioning",
                 f"xdata has poor conditioning (cond={cond:.2e})",
                 "warning",
-            )
+            ),
         )
         recommendations.append("Consider rescaling xdata")
 
@@ -955,13 +963,13 @@ def check_problem_stability(
     # Extreme ranges
     if x_range > 1e6:
         issues.append(
-            ("large_x_range", f"xdata spans large range ({x_range:.2e})", "warning")
+            ("large_x_range", f"xdata spans large range ({x_range:.2e})", "warning"),
         )
         recommendations.append("Consider normalizing xdata")
 
     if y_range > 1e6:
         issues.append(
-            ("large_y_range", f"ydata spans large range ({y_range:.2e})", "warning")
+            ("large_y_range", f"ydata spans large range ({y_range:.2e})", "warning"),
         )
         recommendations.append("Consider normalizing ydata")
 
@@ -975,10 +983,10 @@ def check_problem_stability(
                     "parameter_scale_mismatch",
                     f"Parameter scales differ by {param_scale_ratio:.2e}",
                     "warning",
-                )
+                ),
             )
             recommendations.append(
-                "Use x_scale parameter or rescale p0 to similar magnitudes"
+                "Use x_scale parameter or rescale p0 to similar magnitudes",
             )
 
     # Check 5: Collinearity (for multidimensional data)
@@ -988,17 +996,17 @@ def check_problem_stability(
         has_collinearity, collinear_pairs = detect_collinearity(xdata)
         if has_collinearity:
             pair_info = ", ".join(
-                [f"({i},{j}): {corr:.3f}" for i, j, corr in collinear_pairs[:3]]
+                [f"({i},{j}): {corr:.3f}" for i, j, corr in collinear_pairs[:3]],
             )
             issues.append(
                 (
                     "collinear_data",
                     f"Collinear predictors detected: {pair_info}",
                     "warning",
-                )
+                ),
             )
             recommendations.append(
-                "Remove or combine highly correlated predictors, or use regularization"
+                "Remove or combine highly correlated predictors, or use regularization",
             )
 
     # Determine overall severity
@@ -1111,7 +1119,7 @@ def apply_automatic_fixes(
                 fix_info["x_scale"] = x_range
                 fix_info["x_offset"] = x_min
                 applied_fixes.append(
-                    f"Rescaled xdata from [{x_min:.2e}, {x_max:.2e}] to [0, 1]"
+                    f"Rescaled xdata from [{x_min:.2e}, {x_max:.2e}] to [0, 1]",
                 )
 
         # Fix 2: Rescale ydata if large range
@@ -1124,7 +1132,7 @@ def apply_automatic_fixes(
             fix_info["y_scale"] = y_range
             fix_info["y_offset"] = y_min
             applied_fixes.append(
-                f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]"
+                f"Rescaled ydata from [{y_min:.2e}, {y_max:.2e}] to [0, 1]",
             )
 
     # Fix 3: Replace NaN/Inf in data

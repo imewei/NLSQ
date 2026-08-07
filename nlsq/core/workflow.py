@@ -397,11 +397,11 @@ class MemoryBudgetSelector:
         if verbose:
             logger.info(
                 f"[NLSQ] Memory budget: available={budget.available_gb:.1f} GB, "
-                f"threshold={budget.threshold_gb:.1f} GB"
+                f"threshold={budget.threshold_gb:.1f} GB",
             )
             logger.info(
                 f"[NLSQ] Estimates: data={budget.data_gb:.3f} GB, "
-                f"jacobian={budget.jacobian_gb:.3f} GB, peak={budget.peak_gb:.3f} GB"
+                f"jacobian={budget.jacobian_gb:.3f} GB, peak={budget.peak_gb:.3f} GB",
             )
 
         # Decision tree (FR-003):
@@ -410,7 +410,7 @@ class MemoryBudgetSelector:
             if verbose:
                 logger.info(
                     f"[NLSQ] Strategy: streaming (data {budget.data_gb:.2f} GB > "
-                    f"threshold {budget.threshold_gb:.2f} GB)"
+                    f"threshold {budget.threshold_gb:.2f} GB)",
                 )
             return self._create_streaming_config(budget, n_params, goal)
 
@@ -421,7 +421,7 @@ class MemoryBudgetSelector:
             if verbose:
                 logger.info(
                     f"[NLSQ] Strategy: chunked (peak {budget.peak_gb:.2f} GB > "
-                    f"safety threshold {safety_margin_threshold:.2f} GB)"
+                    f"safety threshold {safety_margin_threshold:.2f} GB)",
                 )
             return self._create_chunked_config(budget, n_params, goal)
 
@@ -429,7 +429,7 @@ class MemoryBudgetSelector:
         if verbose:
             logger.info(
                 f"[NLSQ] Strategy: standard (peak {budget.peak_gb:.2f} GB < "
-                f"threshold {budget.threshold_gb:.2f} GB)"
+                f"threshold {budget.threshold_gb:.2f} GB)",
             )
         return ("standard", None)
 
@@ -620,10 +620,9 @@ def _get_tolerance_by_index(index: int) -> float:
     """
     if index < 0:
         return _SIZE_TOLERANCE_TABLE[0][1]  # Tightest
-    elif index >= len(_SIZE_TOLERANCE_TABLE):
+    if index >= len(_SIZE_TOLERANCE_TABLE):
         return _MASSIVE_TOLERANCE  # Loosest
-    else:
-        return _SIZE_TOLERANCE_TABLE[index][1]
+    return _SIZE_TOLERANCE_TABLE[index][1]
 
 
 def calculate_adaptive_tolerances(

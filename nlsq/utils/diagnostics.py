@@ -24,7 +24,8 @@ try:
 except ImportError:
     HAS_PSUTIL = False
     warnings.warn(
-        "psutil not installed, memory monitoring will be limited", UserWarning
+        "psutil not installed, memory monitoring will be limited",
+        UserWarning,
     )
 
 
@@ -142,7 +143,7 @@ class ConvergenceMonitor:
                     np.sum(np.diff(np.sign(param_diffs[:, i])) != 0)
                     / max(1, len(param_diffs) - 1)
                     for i in range(params.shape[1])
-                ]
+                ],
             )
             oscillation_score = max(oscillation_score, param_sign_changes)
 
@@ -211,7 +212,8 @@ class ConvergenceMonitor:
                 divergence_ratio = mean_recent / mean_older
                 is_diverging = divergence_ratio > self.divergence_threshold
                 divergence_score = min(
-                    1.0, (divergence_ratio - 1.0) / self.divergence_threshold
+                    1.0,
+                    (divergence_ratio - 1.0) / self.divergence_threshold,
                 )
             else:
                 is_diverging = mean_recent > mean_older * self.divergence_threshold
@@ -400,11 +402,11 @@ class OptimizationDiagnostics:
             # Check for numerical issues
             if not np.all(np.isfinite(gradient)):
                 self.numerical_issues.append(
-                    f"Iteration {iteration}: Non-finite gradient"
+                    f"Iteration {iteration}: Non-finite gradient",
                 )
             elif grad_norm > 1e10:
                 self.numerical_issues.append(
-                    f"Iteration {iteration}: Extremely large gradient"
+                    f"Iteration {iteration}: Extremely large gradient",
                 )
 
         # Jacobian information
@@ -425,7 +427,7 @@ class OptimizationDiagnostics:
 
                     if condition_number > 1e12:
                         self.numerical_issues.append(
-                            f"Iteration {iteration}: Ill-conditioned Jacobian (cond={condition_number:.2e})"
+                            f"Iteration {iteration}: Ill-conditioned Jacobian (cond={condition_number:.2e})",
                         )
                 except (np.linalg.LinAlgError, ValueError):
                     data["jacobian_condition"] = np.inf
@@ -623,7 +625,7 @@ class OptimizationDiagnostics:
         lines.append(f"Final cost: {stats.get('final_cost', 0):.6e}")
         lines.append(f"Absolute reduction: {stats.get('cost_reduction', 0):.6e}")
         lines.append(
-            f"Relative reduction: {stats.get('relative_cost_reduction', 0) * 100:.2f}%"
+            f"Relative reduction: {stats.get('relative_cost_reduction', 0) * 100:.2f}%",
         )
 
         # Convergence
@@ -650,7 +652,7 @@ class OptimizationDiagnostics:
             lines.append("\n--- Timing ---")
             lines.append(f"Total time: {stats['total_time_seconds']:.2f} seconds")
             lines.append(
-                f"Time per iteration: {stats['time_per_iteration'] * 1000:.1f} ms"
+                f"Time per iteration: {stats['time_per_iteration'] * 1000:.1f} ms",
             )
 
         # Memory
@@ -731,7 +733,7 @@ class OptimizationDiagnostics:
         axes[1, 1].grid(True)
 
         plt.suptitle(
-            f"Optimization Convergence: {getattr(self, 'problem_name', 'Unknown')}"
+            f"Optimization Convergence: {getattr(self, 'problem_name', 'Unknown')}",
         )
         plt.tight_layout()
 
@@ -765,7 +767,7 @@ def get_diagnostics(verbosity: int | None = None) -> OptimizationDiagnostics:
         with _global_diagnostics_lock:
             if _global_diagnostics is None:
                 _global_diagnostics = OptimizationDiagnostics(
-                    verbosity=verbosity if verbosity is not None else 1
+                    verbosity=verbosity if verbosity is not None else 1,
                 )
     return _global_diagnostics
 

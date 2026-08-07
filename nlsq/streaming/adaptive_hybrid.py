@@ -279,12 +279,15 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Create ParameterNormalizer
         self.normalizer = ParameterNormalizer(
-            p0=self.original_p0, bounds=bounds, strategy=strategy
+            p0=self.original_p0,
+            bounds=bounds,
+            strategy=strategy,
         )
 
         # Create NormalizedModelWrapper
         self.normalized_model = NormalizedModelWrapper(
-            model_fn=model, normalizer=self.normalizer
+            model_fn=model,
+            normalizer=self.normalizer,
         )
 
         # Transform bounds to normalized space
@@ -344,19 +347,20 @@ class AdaptiveHybridStreamingOptimizer:
         if self.config.residual_weights is None:
             _logger.warning(
                 "Residual weighting enabled but no weights provided. "
-                "Residual weighting will be disabled."
+                "Residual weighting will be disabled.",
             )
             return
 
         # Convert to JAX arrays for efficient computation
         self._residual_weights_jax = jnp.asarray(
-            self.config.residual_weights, dtype=jnp.float64
+            self.config.residual_weights,
+            dtype=jnp.float64,
         )
 
         _logger.info(
             f"Residual weighting enabled: n_weights={len(self._residual_weights_jax)}, "
             f"weight_range=[{float(self._residual_weights_jax.min()):.3f}, "
-            f"{float(self._residual_weights_jax.max()):.3f}]"
+            f"{float(self._residual_weights_jax.max()):.3f}]",
         )
 
     def set_residual_weights(self, weights: np.ndarray) -> None:
@@ -381,7 +385,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         _logger.debug(
             f"Updated residual weights: range=[{float(self._residual_weights_jax.min()):.3f}, "
-            f"{float(self._residual_weights_jax.max()):.3f}]"
+            f"{float(self._residual_weights_jax.max()):.3f}]",
         )
 
     def _setup_jacobian_fn(self) -> None:
@@ -403,14 +407,15 @@ class AdaptiveHybridStreamingOptimizer:
         """
         if self.normalized_model is None:
             raise RuntimeError(
-                "_setup_jacobian_fn must be called after _setup_normalization"
+                "_setup_jacobian_fn must be called after _setup_normalization",
             )
 
         # Capture normalized_model in closure at setup time
         normalized_model = self.normalized_model
 
         def compute_jacobian_core(
-            params: jnp.ndarray, x_chunk: jnp.ndarray
+            params: jnp.ndarray,
+            x_chunk: jnp.ndarray,
         ) -> jnp.ndarray:
             """Core Jacobian computation using vmap + jacrev.
 
@@ -433,7 +438,7 @@ class AdaptiveHybridStreamingOptimizer:
             # jacrev computes gradient w.r.t. first argument (params)
             # vmap over x_chunk to get Jacobian row for each point
             return jax.vmap(lambda x: jax.jacrev(model_at_point, argnums=0)(params, x))(
-                x_chunk
+                x_chunk,
             )
 
         # JIT compile the Jacobian function
@@ -469,14 +474,16 @@ class AdaptiveHybridStreamingOptimizer:
         """
         if self.normalized_model is None:
             raise RuntimeError(
-                "_setup_cost_fn must be called after _setup_normalization"
+                "_setup_cost_fn must be called after _setup_normalization",
             )
 
         # Capture normalized_model in closure at setup time
         normalized_model = self.normalized_model
 
         def compute_chunk_cost(
-            params: jnp.ndarray, x_chunk: jnp.ndarray, y_chunk: jnp.ndarray
+            params: jnp.ndarray,
+            x_chunk: jnp.ndarray,
+            y_chunk: jnp.ndarray,
         ) -> float:
             """Compute cost for a single chunk.
 
@@ -526,7 +533,7 @@ class AdaptiveHybridStreamingOptimizer:
         """
         if self.normalized_model is None:
             raise RuntimeError(
-                "_setup_scan_functions must be called after _setup_normalization"
+                "_setup_scan_functions must be called after _setup_normalization",
             )
 
         # Mark scan functions as available (bodies created inline in each method)
@@ -561,16 +568,16 @@ class AdaptiveHybridStreamingOptimizer:
 
         if strategy == "scan":
             return True
-        elif strategy == "loop":
+        if strategy == "loop":
             return False
-        else:  # 'auto'
-            # Detect backend from first device
-            devices = jax.devices()
-            if devices:
-                platform = devices[0].platform
-                # Use scan on GPU/TPU, loops on CPU
-                return platform in ("gpu", "cuda", "rocm", "tpu")
-            return False  # Default to loops if no devices detected
+        # 'auto'
+        # Detect backend from first device
+        devices = jax.devices()
+        if devices:
+            platform = devices[0].platform
+            # Use scan on GPU/TPU, loops on CPU
+            return platform in ("gpu", "cuda", "rocm", "tpu")
+        return False  # Default to loops if no devices detected
 
     def _prepare_chunked_data(
         self,
@@ -617,16 +624,25 @@ class AdaptiveHybridStreamingOptimizer:
             # Pad x_data with zeros
             if x_data.ndim == 1:
                 x_padded = jnp.pad(
-                    x_data, (0, pad_size), mode="constant", constant_values=0
+                    x_data,
+                    (0, pad_size),
+                    mode="constant",
+                    constant_values=0,
                 )
             else:
                 x_padded = jnp.pad(
-                    x_data, ((0, pad_size), (0, 0)), mode="constant", constant_values=0
+                    x_data,
+                    ((0, pad_size), (0, 0)),
+                    mode="constant",
+                    constant_values=0,
                 )
 
             # Pad y_data with zeros (mask will exclude these)
             y_padded = jnp.pad(
-                y_data, (0, pad_size), mode="constant", constant_values=0
+                y_data,
+                (0, pad_size),
+                mode="constant",
+                constant_values=0,
             )
 
             # Pad mask with zeros (invalid)
@@ -780,7 +796,9 @@ class AdaptiveHybridStreamingOptimizer:
         # B006: Use cached padded flat arrays + dynamic_slice instead of
         # pre-stacking into (n_chunks, chunk_size, ...) arrays.
         x_padded, y_padded, n_points, n_chunks = self._get_padded_data(
-            x_data, y_data, chunk_size
+            x_data,
+            y_data,
+            chunk_size,
         )
 
         # Capture functions and data for scan body closure
@@ -800,7 +818,9 @@ class AdaptiveHybridStreamingOptimizer:
                 x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
             else:
                 x_chunk = jax.lax.dynamic_slice(
-                    x_padded, (start, 0), (chunk_size, x_padded.shape[1])
+                    x_padded,
+                    (start, 0),
+                    (chunk_size, x_padded.shape[1]),
                 )
             y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
 
@@ -823,7 +843,7 @@ class AdaptiveHybridStreamingOptimizer:
                     return normalized_model(x_single, *p)
 
                 J_chunk = jax.vmap(
-                    lambda x: jax.jacrev(model_at_x, argnums=0)(params, x)
+                    lambda x: jax.jacrev(model_at_x, argnums=0)(params, x),
                 )(x_chunk)
 
             # Apply mask to Jacobian rows (zero out padded point gradients)
@@ -889,7 +909,9 @@ class AdaptiveHybridStreamingOptimizer:
 
         # B006: Use cached padded flat arrays + dynamic_slice
         x_padded, y_padded, n_points, n_chunks = self._get_padded_data(
-            x_data, y_data, chunk_size
+            x_data,
+            y_data,
+            chunk_size,
         )
 
         # Capture model and data for scan body closure
@@ -906,7 +928,9 @@ class AdaptiveHybridStreamingOptimizer:
                 x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
             else:
                 x_chunk = jax.lax.dynamic_slice(
-                    x_padded, (start, 0), (chunk_size, x_padded.shape[1])
+                    x_padded,
+                    (start, 0),
+                    (chunk_size, x_padded.shape[1]),
                 )
             y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
 
@@ -1134,7 +1158,7 @@ class AdaptiveHybridStreamingOptimizer:
             [
                 np.asarray(self.normalizer.normalize(jnp.asarray(c)))
                 for c in self.multistart_candidates
-            ]
+            ],
         )
 
         # Create tournament selector
@@ -1163,7 +1187,7 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Repeat if needed for more rounds
             for _ in range(
-                self.config.elimination_rounds * self.config.batches_per_round
+                self.config.elimination_rounds * self.config.batches_per_round,
             ):
                 np.random.shuffle(indices)
                 for i in range(0, n_points, chunk_size):
@@ -1192,7 +1216,7 @@ class AdaptiveHybridStreamingOptimizer:
             import warnings
 
             warnings.warn(
-                f"Tournament selection failed: {e}. Using p0 as starting point."
+                f"Tournament selection failed: {e}. Using p0 as starting point.",
             )
             self.multistart_diagnostics = {"error": str(e), "fallback": True}
             return self.normalized_params
@@ -1349,7 +1373,10 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Validate loss and gradients
         if not self._validate_numerics(
-            params, loss=float(loss_value), gradients=grads, context="in L-BFGS step"
+            params,
+            loss=float(loss_value),
+            gradients=grads,
+            context="in L-BFGS step",
         ):
             # Handle numerical issues
             if (
@@ -1358,8 +1385,7 @@ class AdaptiveHybridStreamingOptimizer:
             ):
                 # Return current params unchanged (fallback)
                 return params, float("inf"), float("inf"), opt_state, True
-            else:
-                raise ValueError("Numerical issues detected in L-BFGS step")
+            raise ValueError("Numerical issues detected in L-BFGS step")
 
         # Compute gradient norm
         grad_norm = jnp.linalg.norm(grads)
@@ -1404,7 +1430,8 @@ class AdaptiveHybridStreamingOptimizer:
             if original_update_norm > max_norm:
                 telemetry = get_defense_telemetry()
                 telemetry.record_layer4_clip(
-                    original_norm=original_update_norm, max_norm=max_norm
+                    original_norm=original_update_norm,
+                    max_norm=max_norm,
                 )
 
         new_params = optax.apply_updates(params, updates)
@@ -1417,8 +1444,7 @@ class AdaptiveHybridStreamingOptimizer:
                 and self.config.enable_fault_tolerance
             ):
                 return params, float(loss_value), float(grad_norm), opt_state, True
-            else:
-                raise ValueError("NaN/Inf in parameters after L-BFGS update")
+            raise ValueError("NaN/Inf in parameters after L-BFGS update")
 
         # Track best parameters globally
         if float(loss_value) < self.best_cost_global:
@@ -1497,7 +1523,9 @@ class AdaptiveHybridStreamingOptimizer:
 
         @jax.jit
         def loss_fn(
-            params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+            params: jnp.ndarray,
+            x_batch: jnp.ndarray,
+            y_batch: jnp.ndarray,
         ) -> jnp.ndarray:
             predictions = normalized_model(x_batch, *params)
             residuals = y_batch - predictions
@@ -1520,7 +1548,9 @@ class AdaptiveHybridStreamingOptimizer:
                     size = group_sizes[i]
                     # Extract with fixed max_group_size, mask to actual size
                     group_params = jax.lax.dynamic_slice(
-                        params, (start,), (max_group_size,)
+                        params,
+                        (start,),
+                        (max_group_size,),
                     )
                     mask = jnp.arange(max_group_size) < size
                     # Masked variance: Var = E[x^2] - E[x]^2 over valid elements
@@ -1531,7 +1561,10 @@ class AdaptiveHybridStreamingOptimizer:
                     return penalty + group_var
 
                 variance_penalty = jax.lax.fori_loop(
-                    0, n_groups, var_body, jnp.array(0.0)
+                    0,
+                    n_groups,
+                    var_body,
+                    jnp.array(0.0),
                 )
                 return base_loss + var_lambda * variance_penalty
 
@@ -1683,7 +1716,7 @@ class AdaptiveHybridStreamingOptimizer:
         if self.config.verbose >= 2:
             _logger.debug(
                 f"Phase 1 initial assessment: loss={initial_loss:.6e}, "
-                f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}"
+                f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}",
             )
 
         # Check warm start threshold
@@ -1693,7 +1726,8 @@ class AdaptiveHybridStreamingOptimizer:
         ):
             # Record Layer 1 telemetry
             telemetry.record_layer1_trigger(
-                relative_loss=relative_loss, threshold=self.config.warm_start_threshold
+                relative_loss=relative_loss,
+                threshold=self.config.warm_start_threshold,
             )
 
             phase_record = {
@@ -1716,7 +1750,7 @@ class AdaptiveHybridStreamingOptimizer:
             if self.config.verbose >= 1:
                 _logger.info(
                     f"Phase 1: Skipping L-BFGS warmup - warm start detected "
-                    f"(relative_loss={relative_loss:.4e})"
+                    f"(relative_loss={relative_loss:.4e})",
                 )
 
             result = {
@@ -1776,7 +1810,7 @@ class AdaptiveHybridStreamingOptimizer:
             if self.config.verbose >= 2:
                 _logger.debug(
                     f"Phase 1 L-BFGS adaptive step: mode={lr_mode}, step={initial_step:.2f}, "
-                    f"relative_loss={relative_loss:.4e}"
+                    f"relative_loss={relative_loss:.4e}",
                 )
         else:
             initial_step = self.config.lbfgs_initial_step_size
@@ -1846,7 +1880,7 @@ class AdaptiveHybridStreamingOptimizer:
                     f"Phase 1: Cost increase guard triggered at iteration "
                     f"{iteration + 1}. Loss {loss_value:.6e} > "
                     f"{self._warmup_initial_loss:.6e} * {cost_threshold:.2f}. "
-                    f"Reverting to best params (loss={best_loss:.6e})."
+                    f"Reverting to best params (loss={best_loss:.6e}).",
                 )
 
             phase_record = {
@@ -2002,7 +2036,7 @@ class AdaptiveHybridStreamingOptimizer:
             y_data = jnp.asarray(y_data, dtype=jnp.float64)
         else:
             raise NotImplementedError(
-                "Only tuple data sources (x_data, y_data) supported in Phase 1 warmup"
+                "Only tuple data sources (x_data, y_data) supported in Phase 1 warmup",
             )
 
         # Initialize parameters in normalized space
@@ -2344,7 +2378,8 @@ class AdaptiveHybridStreamingOptimizer:
         # Since g = -JTr, we have: -g^T δ = JTr^T δ
         # predicted_reduction = JTr^T δ - 0.5 δ^T (J^T J) δ
         predicted_reduction = jnp.maximum(
-            jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step), 0.0
+            jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step),
+            0.0,
         )
 
         return step, predicted_reduction
@@ -2389,7 +2424,7 @@ class AdaptiveHybridStreamingOptimizer:
         if self.config.verbose >= 2:
             _logger.debug(
                 f"GN solver selection: p={n_params}, threshold={threshold}, "
-                f"selected={solver_type}"
+                f"selected={solver_type}",
             )
 
         return solver_type
@@ -2671,7 +2706,11 @@ class AdaptiveHybridStreamingOptimizer:
         """
         # Solve using CG with implicit matvec
         step, cg_iterations, converged = self._cg_solve_implicit(
-            JTr, params, x_data, y_data, trust_radius
+            JTr,
+            params,
+            x_data,
+            y_data,
+            trust_radius,
         )
 
         # Log CG diagnostics
@@ -2688,7 +2727,7 @@ class AdaptiveHybridStreamingOptimizer:
             if self.config.verbose >= 1:
                 _logger.warning(
                     f"CG solver hit iteration limit ({cg_iterations}). "
-                    "Using incomplete solution as descent direction."
+                    "Using incomplete solution as descent direction.",
                 )
 
         # Compute predicted reduction: JTr^T @ step - 0.5 * step^T @ (J^T J) @ step
@@ -2732,9 +2771,8 @@ class AdaptiveHybridStreamingOptimizer:
         if step_norm <= trust_radius:
             # Step is within trust region
             return step
-        else:
-            # Scale step to trust region boundary
-            return step * (trust_radius / step_norm)
+        # Scale step to trust region boundary
+        return step * (trust_radius / step_norm)
 
     def _gauss_newton_iteration(
         self,
@@ -2786,7 +2824,9 @@ class AdaptiveHybridStreamingOptimizer:
         if self._use_scan_for_accumulation():
             # Use JAX scan for GPU/TPU (better XLA fusion, reduced kernel launches)
             JTJ, JTr, total_cost = self._accumulate_jtj_jtr_scan(
-                x_data, y_data, current_params
+                x_data,
+                y_data,
+                current_params,
             )
         else:
             # Use Python loops for CPU (lower tracing overhead)
@@ -2798,7 +2838,11 @@ class AdaptiveHybridStreamingOptimizer:
                 x_chunk = x_data[i : i + chunk_size]
                 y_chunk = y_data[i : i + chunk_size]
                 JTJ, JTr, chunk_cost = self._accumulate_jtj_jtr(
-                    x_chunk, y_chunk, current_params, JTJ, JTr
+                    x_chunk,
+                    y_chunk,
+                    current_params,
+                    JTJ,
+                    JTr,
                 )
                 total_cost += chunk_cost
 
@@ -2825,7 +2869,8 @@ class AdaptiveHybridStreamingOptimizer:
                 # This is a dense (n_group x n_group) matrix
                 diag_term = (2.0 / n_group) * jnp.eye(n_group, dtype=jnp.float64)
                 off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
-                    (n_group, n_group), dtype=jnp.float64
+                    (n_group, n_group),
+                    dtype=jnp.float64,
                 )
                 H_var = diag_term - off_diag_term
 
@@ -2845,7 +2890,9 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Solve for Gauss-Newton step
         step, predicted_reduction = self._solve_gauss_newton_step(
-            JTJ, JTr, trust_radius
+            JTJ,
+            JTr,
+            trust_radius,
         )
 
         # Apply step to get new parameters
@@ -2859,7 +2906,9 @@ class AdaptiveHybridStreamingOptimizer:
         # Evaluate cost at new parameters using optimized pre-compiled function
         # This provides 20-30% speedup compared to inline computation
         new_cost = self._compute_cost_with_variance_regularization(
-            new_params, x_data, y_data
+            new_params,
+            x_data,
+            y_data,
         )
 
         # Compute actual reduction
@@ -2894,7 +2943,8 @@ class AdaptiveHybridStreamingOptimizer:
             if new_trust_radius < min_trust_radius and gradient_norm > 1e-4:
                 # Reset to gradient-scaled value for recovery
                 new_trust_radius = min(
-                    0.1 * gradient_norm / max(1.0, gradient_norm), 1.0
+                    0.1 * gradient_norm / max(1.0, gradient_norm),
+                    1.0,
                 )
         elif reduction_ratio > 0.75 and step_norm >= 0.9 * trust_radius:
             # Good agreement and step at boundary: expand trust region
@@ -2951,7 +3001,9 @@ class AdaptiveHybridStreamingOptimizer:
         for retry_attempt in range(max_retries + 1):
             try:
                 iter_result = self._gauss_newton_iteration(
-                    data_source, current_params, trust_radius
+                    data_source,
+                    current_params,
+                    trust_radius,
                 )
                 new_params = iter_result["new_params"]
                 new_cost = iter_result["new_cost"]
@@ -3086,7 +3138,9 @@ class AdaptiveHybridStreamingOptimizer:
         # Get verbosity from config or default to 1 for progress output
         verbose = getattr(self.config, "verbose", 1)
         log_frequency = getattr(
-            self.config, "log_frequency", 1
+            self.config,
+            "log_frequency",
+            1,
         )  # Log every N iterations
 
         # Compute initial JTJ with progress reporting
@@ -3094,7 +3148,7 @@ class AdaptiveHybridStreamingOptimizer:
         init_start_time = time.time()
         if verbose >= 1:
             print(
-                f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)..."
+                f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)...",
             )
 
         for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
@@ -3102,7 +3156,11 @@ class AdaptiveHybridStreamingOptimizer:
             y_chunk = y_data[i : i + chunk_size]
 
             final_JTJ, final_JTr, res_sq = self._accumulate_jtj_jtr(
-                x_chunk, y_chunk, current_params, final_JTJ, final_JTr
+                x_chunk,
+                y_chunk,
+                current_params,
+                final_JTJ,
+                final_JTr,
             )
             final_residual_sum_sq += res_sq
 
@@ -3115,13 +3173,13 @@ class AdaptiveHybridStreamingOptimizer:
                 pct = (chunk_idx + 1) / n_chunks * 100
                 print(
                     f"  Initial JTJ: {chunk_idx + 1}/{n_chunks} chunks "
-                    f"({pct:.0f}%), elapsed={elapsed:.1f}s"
+                    f"({pct:.0f}%), elapsed={elapsed:.1f}s",
                 )
 
         if verbose >= 1:
             init_elapsed = time.time() - init_start_time
             print(
-                f"  Initial JTJ complete: cost={final_residual_sum_sq:.6e}, time={init_elapsed:.1f}s"
+                f"  Initial JTJ complete: cost={final_residual_sum_sq:.6e}, time={init_elapsed:.1f}s",
             )
 
         # Gauss-Newton loop
@@ -3133,7 +3191,11 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Perform one Gauss-Newton iteration with retry logic
             iter_result, trust_radius = self._gn_iteration_with_retry(
-                data_source, current_params, trust_radius, best_params, best_cost
+                data_source,
+                current_params,
+                trust_radius,
+                best_params,
+                best_cost,
             )
 
             # Extract results
@@ -3150,7 +3212,7 @@ class AdaptiveHybridStreamingOptimizer:
                     f"  GN iter {iteration + 1}/{self.config.gauss_newton_max_iterations}: "
                     f"cost={new_cost:.6e}, grad_norm={gradient_norm:.6e}, "
                     f"reduction={actual_reduction:.6e}, Δ={trust_radius:.4f}, "
-                    f"time={iter_time:.1f}s"
+                    f"time={iter_time:.1f}s",
                 )
 
             # Update best parameters
@@ -3204,7 +3266,11 @@ class AdaptiveHybridStreamingOptimizer:
                     y_chunk = y_data[i : i + chunk_size]
 
                     JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
-                        x_chunk, y_chunk, current_params, JTJ, JTr
+                        x_chunk,
+                        y_chunk,
+                        current_params,
+                        JTJ,
+                        JTr,
                     )
                     residual_sum_sq += res_sq
 
@@ -3225,7 +3291,7 @@ class AdaptiveHybridStreamingOptimizer:
                     if verbose >= 1:
                         print(
                             f"  Stall detected: resetting trust radius to "
-                            f"{trust_radius:.4f}"
+                            f"{trust_radius:.4f}",
                         )
 
             # Check convergence: gradient norm
@@ -3350,7 +3416,7 @@ class AdaptiveHybridStreamingOptimizer:
         """
         if self.normalizer is None:
             raise RuntimeError(
-                "Normalizer not initialized. Call _setup_normalization first."
+                "Normalizer not initialized. Call _setup_normalization first.",
             )
 
         return self.normalizer.denormalize(normalized_params)
@@ -3430,7 +3496,7 @@ class AdaptiveHybridStreamingOptimizer:
         """
         if self.normalization_jacobian is None:
             raise RuntimeError(
-                "Normalization Jacobian not available. Call _setup_normalization first."
+                "Normalization Jacobian not available. Call _setup_normalization first.",
             )
 
         # Get denormalization Jacobian (diagonal matrix with scales)
@@ -3610,7 +3676,9 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Step 4: Apply residual variance scaling
         pcov, sigma_sq = self._apply_residual_variance(
-            cov_orig, residual_sum_sq, n_points
+            cov_orig,
+            residual_sum_sq,
+            n_points,
         )
 
         # Step 5: Compute standard errors
@@ -3682,8 +3750,7 @@ class AdaptiveHybridStreamingOptimizer:
             ):
                 # Log warning but continue
                 return False
-            else:
-                raise ValueError(f"NaN/Inf detected in parameters {context}")
+            raise ValueError(f"NaN/Inf detected in parameters {context}")
 
         # Check loss
         if loss is not None and not jnp.isfinite(loss):
@@ -3692,8 +3759,7 @@ class AdaptiveHybridStreamingOptimizer:
                 and self.config.enable_fault_tolerance
             ):
                 return False
-            else:
-                raise ValueError(f"NaN/Inf detected in loss {context}")
+            raise ValueError(f"NaN/Inf detected in loss {context}")
 
         # Check gradients
         if gradients is not None and not jnp.all(jnp.isfinite(gradients)):
@@ -3702,8 +3768,7 @@ class AdaptiveHybridStreamingOptimizer:
                 and self.config.enable_fault_tolerance
             ):
                 return False
-            else:
-                raise ValueError(f"NaN/Inf detected in gradients {context}")
+            raise ValueError(f"NaN/Inf detected in gradients {context}")
 
         return True
 
@@ -4005,7 +4070,7 @@ class AdaptiveHybridStreamingOptimizer:
         """
         raise NotImplementedError(
             "pmap Jacobian computation not yet implemented. "
-            "Use single-device computation via _compute_jacobian_chunk()."
+            "Use single-device computation via _compute_jacobian_chunk().",
         )
 
     def _aggregate_jtj_across_devices(self, JTJ_local: jnp.ndarray) -> jnp.ndarray:
@@ -4050,7 +4115,8 @@ class AdaptiveHybridStreamingOptimizer:
         """
         # Check if multi-device is configured and enabled
         if self.multi_device_config is not None and self.multi_device_config.get(
-            "use_multi_device", False
+            "use_multi_device",
+            False,
         ):
             # Multi-device aggregation would use psum
             # For now, we just return the local matrix (single-device fallback)
@@ -4146,7 +4212,7 @@ class AdaptiveHybridStreamingOptimizer:
             n_points = len(x_data)
         else:
             raise NotImplementedError(
-                "Only tuple data sources (x_data, y_data) currently supported"
+                "Only tuple data sources (x_data, y_data) currently supported",
             )
 
         # ============================================================
@@ -4190,7 +4256,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         if verbose >= 1:
             print(
-                f"Phase 1 complete: {phase1_result['iterations']} iterations ({phase1_duration:.3f}s)"
+                f"Phase 1 complete: {phase1_result['iterations']} iterations ({phase1_duration:.3f}s)",
             )
             print(f"  Best loss: {phase1_result['best_loss']:.6e}")
             print(f"  Switch reason: {phase1_result['switch_reason']}")
@@ -4216,7 +4282,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         if verbose >= 1:
             print(
-                f"Phase 2 complete: {phase2_result['iterations']} iterations ({phase2_duration:.3f}s)"
+                f"Phase 2 complete: {phase2_result['iterations']} iterations ({phase2_duration:.3f}s)",
             )
             print(f"  Final cost: {phase2_result['final_cost']:.6e}")
             print(f"  Convergence: {phase2_result['convergence_reason']}")

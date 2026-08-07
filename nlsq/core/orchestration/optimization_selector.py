@@ -152,7 +152,9 @@ class OptimizationSelector:
 
         # Step 2: Prepare bounds and initial guess
         lb, ub, p0_final = self._prepare_bounds_and_initial_guess(
-            bounds, n_params, p0_validated
+            bounds,
+            n_params,
+            p0_validated,
         )
 
         # Step 3: Select method (pass bounds so lm+finite-bounds is rejected)
@@ -279,7 +281,10 @@ class OptimizationSelector:
         return n, None
 
     def _prepare_bounds_and_initial_guess(
-        self, bounds: tuple | None, n: int, p0: np.ndarray | None
+        self,
+        bounds: tuple | None,
+        n: int,
+        p0: np.ndarray | None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Prepare bounds and initialize p0 if needed.
 
@@ -351,10 +356,13 @@ class OptimizationSelector:
                 )
                 raise ValueError(msg)
 
-        return cast(Literal["trf", "lm", "dogbox"], method)
+        return cast("Literal['trf', 'lm', 'dogbox']", method)
 
     def _select_tr_solver(
-        self, tr_solver: str | None, m: int, n: int
+        self,
+        tr_solver: str | None,
+        m: int,
+        n: int,
     ) -> Literal["exact", "lsmr"] | None:
         """Select trust region solver based on problem size.
 
@@ -373,10 +381,9 @@ class OptimizationSelector:
                     f"Invalid tr_solver '{tr_solver}'. Must be one of {valid_solvers}."
                 )
                 raise ValueError(msg)
-            return cast(Literal["exact", "lsmr"], tr_solver)
+            return cast("Literal['exact', 'lsmr']", tr_solver)
 
         # Auto-select based on problem size
         if m * n < 10000:
             return "exact"  # SVD-based for small problems
-        else:
-            return "lsmr"  # Iterative for large problems
+        return "lsmr"  # Iterative for large problems

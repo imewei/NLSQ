@@ -203,7 +203,7 @@ class HistogramPlotWidget(QWidget):
         # Normality test
         try:
             _, p_value = stats.shapiro(
-                self._data[:5000] if len(self._data) > 5000 else self._data
+                self._data[:5000] if len(self._data) > 5000 else self._data,
             )
         except Exception:
             p_value = None

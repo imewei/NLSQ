@@ -179,7 +179,7 @@ def estimate_initial_parameters(
         # If signature inspection fails, raise error
         raise ValueError(
             "Cannot automatically determine number of parameters. "
-            "Please provide p0 explicitly."
+            "Please provide p0 explicitly.",
         ) from None
 
     # If we have VAR_POSITIONAL or VAR_KEYWORD, we can't determine n_params
@@ -193,7 +193,7 @@ def estimate_initial_parameters(
             raise ValueError(
                 "Cannot automatically determine number of parameters "
                 "for functions with *args or **kwargs. "
-                "Please provide p0 explicitly."
+                "Please provide p0 explicitly.",
             )
     except NameError:
         # sig doesn't exist (caught above already)
@@ -202,7 +202,7 @@ def estimate_initial_parameters(
     if n_params <= 0:
         raise ValueError(
             "Function must have at least one parameter besides x. "
-            "Please provide p0 explicitly."
+            "Please provide p0 explicitly.",
         )
 
     # Calculate data statistics for heuristics
@@ -364,7 +364,10 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
 
 
 def estimate_p0_for_pattern(
-    pattern: str, xdata: np.ndarray, ydata: np.ndarray, n_params: int
+    pattern: str,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    n_params: int,
 ) -> np.ndarray:
     """Estimate p0 based on detected pattern.
 

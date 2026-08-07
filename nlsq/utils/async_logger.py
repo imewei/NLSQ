@@ -105,7 +105,7 @@ def log_iteration_async(
         logger.info(
             f"Optimization: iter={int(iter_val)} | "
             f"cost={float(cost_val):.6e} | "
-            f"‖∇f‖={float(norm_val):.6e}" + (f" | {msg_val}" if msg_val else "")
+            f"‖∇f‖={float(norm_val):.6e}" + (f" | {msg_val}" if msg_val else ""),
         )
 
     # Ensure all numeric values are JAX arrays (lightweight operation)
@@ -164,7 +164,7 @@ def log_convergence_async(
             f"iterations={int(iter_val)} | "
             f"final_cost={float(cost_val):.6e} | "
             f"time={float(time_val):.3f}s | "
-            f"final_gradient_norm={float(norm_val):.6e}"
+            f"final_gradient_norm={float(norm_val):.6e}",
         )
 
     # Convert to JAX arrays

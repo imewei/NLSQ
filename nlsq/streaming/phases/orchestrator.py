@@ -116,7 +116,9 @@ class PhaseOrchestrator:
 
         self.warmup_phase = WarmupPhase(self.config, normalized_model)
         self.gn_phase = GaussNewtonPhase(
-            self.config, normalized_model, normalized_bounds
+            self.config,
+            normalized_model,
+            normalized_bounds,
         )
 
     def run(
@@ -193,7 +195,7 @@ class PhaseOrchestrator:
                 _logger.info(
                     f"Phase 1 complete: {phase1_result['iterations']} iterations, "
                     f"loss={phase1_result['best_loss']:.6e}, "
-                    f"reason: {phase1_result['switch_reason']}"
+                    f"reason: {phase1_result['switch_reason']}",
                 )
         else:
             # Skip warmup if no phase handler
@@ -207,7 +209,7 @@ class PhaseOrchestrator:
                     "switch_reason": "Warmup phase not initialized",
                     "timestamp": time.time(),
                     "skipped": True,
-                }
+                },
             )
 
         # =====================================================
@@ -237,7 +239,7 @@ class PhaseOrchestrator:
                 _logger.info(
                     f"Phase 2 complete: {phase2_result['iterations']} iterations, "
                     f"cost={phase2_result['best_cost']:.6e}, "
-                    f"reason: {phase2_result['convergence_reason']}"
+                    f"reason: {phase2_result['convergence_reason']}",
                 )
         else:
             # Skip GN if no phase handler
@@ -251,7 +253,7 @@ class PhaseOrchestrator:
                     "convergence_reason": "GN phase not initialized",
                     "timestamp": time.time(),
                     "skipped": True,
-                }
+                },
             )
 
         # =====================================================
@@ -282,14 +284,14 @@ class PhaseOrchestrator:
                 "final_cost": self._best_tracker["best_cost_global"],
                 "timestamp": time.time(),
                 "total_time": total_time,
-            }
+            },
         )
 
         if verbose >= 1:
             best_cost = self._best_tracker["best_cost_global"]
             _logger.info(
                 f"Optimization complete: cost={best_cost:.6e}, "
-                f"total_time={total_time:.1f}s"
+                f"total_time={total_time:.1f}s",
             )
 
         return {

@@ -38,7 +38,7 @@ class ColumnSelectorWidget(QWidget):
 
     # Signal emitted when column selection changes
     selection_changed = Signal(
-        dict
+        dict,
     )  # {"x": int, "y": int, "sigma": int|None, "z": int|None}
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -75,27 +75,27 @@ class ColumnSelectorWidget(QWidget):
         columns_group = QGroupBox("Column Assignment")
         columns_layout = QFormLayout(columns_group)
         columns_layout.setFieldGrowthPolicy(
-            QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+            QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow,
         )
 
         # X column selector
         self._x_combo = QComboBox()
         self._x_combo.setToolTip(
-            "Select the column containing X values (independent variable)"
+            "Select the column containing X values (independent variable)",
         )
         columns_layout.addRow("X Column:", self._x_combo)
 
         # Y column selector
         self._y_combo = QComboBox()
         self._y_combo.setToolTip(
-            "Select the column containing Y values (dependent variable for 1D, second coordinate for 2D)"
+            "Select the column containing Y values (dependent variable for 1D, second coordinate for 2D)",
         )
         columns_layout.addRow("Y Column:", self._y_combo)
 
         # Z column selector (2D mode only)
         self._z_combo = QComboBox()
         self._z_combo.setToolTip(
-            "Select the column containing Z values (dependent variable for 2D surface)"
+            "Select the column containing Z values (dependent variable for 2D surface)",
         )
         self._z_label = QLabel("Z Column:")
         columns_layout.addRow(self._z_label, self._z_combo)
@@ -103,7 +103,7 @@ class ColumnSelectorWidget(QWidget):
         # Sigma column selector (optional)
         self._sigma_combo = QComboBox()
         self._sigma_combo.setToolTip(
-            "Select the column containing measurement uncertainties (optional)"
+            "Select the column containing measurement uncertainties (optional)",
         )
         columns_layout.addRow("Sigma (optional):", self._sigma_combo)
 
@@ -144,11 +144,11 @@ class ColumnSelectorWidget(QWidget):
         # Update Y column tooltip based on mode
         if is_2d:
             self._y_combo.setToolTip(
-                "Select the column containing Y coordinates (second independent variable)"
+                "Select the column containing Y coordinates (second independent variable)",
             )
         else:
             self._y_combo.setToolTip(
-                "Select the column containing Y values (dependent variable)"
+                "Select the column containing Y values (dependent variable)",
             )
 
     def _on_selection_changed(self) -> None:
@@ -303,4 +303,4 @@ class ColumnSelectorWidget(QWidget):
         """
         # Update validation label color based on theme
         # Warning color is consistent across themes
-        pass  # Theme is applied globally via Qt color scheme
+        # Theme is applied globally via Qt color scheme

@@ -115,7 +115,7 @@ RECOMMENDATIONS = Recommendations(
             "bounds, (2) Checking the model formulation, or (3) Examining the data "
             "for outliers or systematic errors."
         ),
-    }
+    },
 )
 
 
@@ -140,5 +140,6 @@ def get_recommendation(code: str) -> str:
     'No specific recommendation available for this issue.'
     """
     return RECOMMENDATIONS.get(
-        code, "No specific recommendation available for this issue."
+        code,
+        "No specific recommendation available for this issue.",
     )

@@ -81,7 +81,9 @@ class DiagnosticsFacade:
         return DiagnosticsConfig(**kwargs)
 
     def create_convergence_monitor(
-        self, window_size: int = 10, sensitivity: float = 1.0
+        self,
+        window_size: int = 10,
+        sensitivity: float = 1.0,
     ) -> ConvergenceMonitor:
         """Create a ConvergenceMonitor instance.
 

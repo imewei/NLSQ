@@ -88,7 +88,7 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "mro",
         # Interactive debugger (can execute arbitrary code interactively)
         "breakpoint",
-    }
+    },
 )
 
 # Dangerous module prefixes that trigger blocking on import
@@ -118,7 +118,7 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "dis",
         "code",
         "codeop",
-    }
+    },
 )
 
 
@@ -186,17 +186,18 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             if isinstance(mode_arg, ast.Constant) and isinstance(mode_arg.value, str):
                 if any(c in mode_arg.value for c in "wax"):
                     self.violations.append(
-                        f"File write operation: open(..., '{mode_arg.value}')"
+                        f"File write operation: open(..., '{mode_arg.value}')",
                     )
         # Check keyword mode argument
         for keyword in node.keywords:
             if keyword.arg == "mode":
                 if isinstance(keyword.value, ast.Constant) and isinstance(
-                    keyword.value.value, str
+                    keyword.value.value,
+                    str,
                 ):
                     if any(c in keyword.value.value for c in "wax"):
                         self.violations.append(
-                            f"File write operation: open(..., mode='{keyword.value.value}')"
+                            f"File write operation: open(..., mode='{keyword.value.value}')",
                         )
 
     def visit_Attribute(self, node: ast.Attribute) -> Any:
@@ -223,7 +224,7 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             module_root = node.module.split(".")[0]
             if module_root in DANGEROUS_MODULES:
                 self.violations.append(
-                    f"Dangerous import: from {node.module} import ..."
+                    f"Dangerous import: from {node.module} import ...",
                 )
         self.generic_visit(node)
 
@@ -401,7 +402,7 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     if not _HAS_RESOURCE_LIMITS:
         logger.debug(
             "Resource limits not available on this platform (Windows), "
-            "skipping enforcement"
+            "skipping enforcement",
         )
         yield
         return
@@ -410,7 +411,7 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     # signal.signal() can only be called from the main thread
     if threading.current_thread() is not threading.main_thread():
         logger.debug(
-            "Resource limits not available from non-main thread, skipping enforcement"
+            "Resource limits not available from non-main thread, skipping enforcement",
         )
         yield
         return
@@ -464,7 +465,7 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
             "JAX accelerator backend active; skipping RLIMIT_AS memory cap "
             "(virtual address-space limits are incompatible with GPU/TPU "
             "runtimes and crash CUDA initialization). Timeout enforcement still "
-            "applies."
+            "applies.",
         )
 
     try:

@@ -11,7 +11,7 @@ import os
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
             "QCheckBox:focus {"
             "  outline: 2px solid #2196F3;"
             "  outline-offset: 1px;"
-            "}"
+            "}",
         )
 
     def _setup_ui(self) -> None:
@@ -206,7 +206,7 @@ class MainWindow(QMainWindow):
         title.setObjectName("sidebarTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
-            f"font-size: 20px; font-weight: bold; padding: {SPACING_MD}px 0;"
+            f"font-size: 20px; font-weight: bold; padding: {SPACING_MD}px 0;",
         )
         layout.addWidget(title)
 
@@ -306,7 +306,7 @@ class MainWindow(QMainWindow):
             action = QAction(self)
             action.setShortcut(QKeySequence(f"Ctrl+{i + 1}"))
             action.triggered.connect(
-                lambda checked, idx=i: self._nav_list.setCurrentRow(idx)
+                lambda checked, idx=i: self._nav_list.setCurrentRow(idx),
             )
             self.addAction(action)
 
@@ -402,13 +402,13 @@ class MainWindow(QMainWindow):
                 item.setFlags(
                     item.flags()
                     | Qt.ItemFlag.ItemIsEnabled
-                    | Qt.ItemFlag.ItemIsSelectable
+                    | Qt.ItemFlag.ItemIsSelectable,
                 )
             else:
                 item.setFlags(
                     item.flags()
                     & ~Qt.ItemFlag.ItemIsEnabled
-                    & ~Qt.ItemFlag.ItemIsSelectable
+                    & ~Qt.ItemFlag.ItemIsSelectable,
                 )
 
     def _update_status(self) -> None:

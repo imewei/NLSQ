@@ -148,17 +148,16 @@ class ModelRegistry:
 
         if model_type == "builtin":
             return self._get_builtin_model(config)
-        elif model_type == "custom":
+        if model_type == "custom":
             return self._get_custom_model(config)
-        elif model_type == "polynomial":
+        if model_type == "polynomial":
             return self._get_polynomial_model(config)
-        else:
-            raise ModelError(
-                f"Unknown model type: {model_type!r}",
-                model_type=model_type,
-                context={"valid_types": ["builtin", "custom", "polynomial"]},
-                suggestion="Use type 'builtin', 'custom', or 'polynomial'",
-            )
+        raise ModelError(
+            f"Unknown model type: {model_type!r}",
+            model_type=model_type,
+            context={"valid_types": ["builtin", "custom", "polynomial"]},
+            suggestion="Use type 'builtin', 'custom', or 'polynomial'",
+        )
 
     def _get_builtin_model(self, config: dict[str, Any]) -> ModelFunction:
         """Get a builtin model from nlsq.functions.
@@ -704,5 +703,4 @@ class ModelRegistry:
 
         if suggestions:
             return f"Did you mean: {', '.join(suggestions)}?"
-        else:
-            return f"Available models: {', '.join(available)}"
+        return f"Available models: {', '.join(available)}"

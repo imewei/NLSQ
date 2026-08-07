@@ -30,7 +30,9 @@ _logger = get_logger("gauss_newton_phase")
 
 
 def _pad_chunk_to_bucket(
-    x_chunk: jnp.ndarray, y_chunk: jnp.ndarray, actual_size: int
+    x_chunk: jnp.ndarray,
+    y_chunk: jnp.ndarray,
+    actual_size: int,
 ) -> tuple[jnp.ndarray, jnp.ndarray, int]:
     """Pad a chunk to the nearest power-of-2 bucket size.
 
@@ -227,7 +229,7 @@ class GaussNewtonPhase:
         init_start_time = time.time()
         if verbose >= 1:
             _logger.info(
-                f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)..."
+                f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)...",
             )
 
         for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
@@ -237,7 +239,9 @@ class GaussNewtonPhase:
 
             # Pad last chunk to bucket size to prevent XLA recompilation
             x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
-                x_chunk, y_chunk, actual_size
+                x_chunk,
+                y_chunk,
+                actual_size,
             )
 
             final_JTJ, final_JTr, res_sq = self._accumulate_jtj_jtr(
@@ -258,21 +262,21 @@ class GaussNewtonPhase:
                 pct = (chunk_idx + 1) / n_chunks * 100
                 _logger.info(
                     f"  Initial JTJ: {chunk_idx + 1}/{n_chunks} chunks "
-                    f"({pct:.0f}%), elapsed={elapsed:.1f}s"
+                    f"({pct:.0f}%), elapsed={elapsed:.1f}s",
                 )
 
         if verbose >= 1:
             init_elapsed = time.time() - init_start_time
             _logger.info(
                 f"  Initial JTJ complete: cost={final_residual_sum_sq:.6e}, "
-                f"time={init_elapsed:.1f}s"
+                f"time={init_elapsed:.1f}s",
             )
 
         # Initialize stall detection
         self._consecutive_rejections = 0
         gradient_norm = 0.0
         new_cost = float(
-            final_residual_sum_sq
+            final_residual_sum_sq,
         )  # guard: used after loop; set to initial cost
 
         # Gauss-Newton loop
@@ -281,7 +285,9 @@ class GaussNewtonPhase:
 
             # Perform one Gauss-Newton iteration
             iter_result = self._gauss_newton_iteration(
-                data_source, current_params, trust_radius
+                data_source,
+                current_params,
+                trust_radius,
             )
 
             new_params = iter_result["new_params"]
@@ -298,7 +304,7 @@ class GaussNewtonPhase:
                     f"  GN iter {iteration + 1}/{max_iter}: "
                     f"cost={new_cost:.6e}, grad={gradient_norm:.6e}, "
                     f"red={actual_reduction:.6e}, Δ={trust_radius:.4f}, "
-                    f"time={iter_time:.1f}s"
+                    f"time={iter_time:.1f}s",
                 )
 
             # Update best parameters
@@ -334,7 +340,9 @@ class GaussNewtonPhase:
                     y_chunk = y_data[i : i + chunk_size]
                     actual_size = len(x_chunk)
                     x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
-                        x_chunk, y_chunk, actual_size
+                        x_chunk,
+                        y_chunk,
+                        actual_size,
                     )
 
                     JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
@@ -359,7 +367,7 @@ class GaussNewtonPhase:
                     if verbose >= 1:
                         _logger.info(
                             f"  Stall detected: resetting trust radius to "
-                            f"{trust_radius:.4f}"
+                            f"{trust_radius:.4f}",
                         )
 
             # Check convergence: gradient norm
@@ -512,7 +520,9 @@ class GaussNewtonPhase:
             y_chunk = y_data[i : i + chunk_size]
             actual_size = len(x_chunk)
             x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
-                x_chunk, y_chunk, actual_size
+                x_chunk,
+                y_chunk,
+                actual_size,
             )
             JTJ, JTr, chunk_cost = self._accumulate_jtj_jtr(
                 x_chunk,
@@ -540,7 +550,7 @@ class GaussNewtonPhase:
 
                 diag_term = (2.0 / n_group) * jnp.eye(n_group)
                 off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
-                    (n_group, n_group)
+                    (n_group, n_group),
                 )
                 H_var = diag_term - off_diag_term
                 JTJ = JTJ.at[start:end, start:end].add(var_lambda * H_var)
@@ -552,7 +562,9 @@ class GaussNewtonPhase:
 
         # Solve for Gauss-Newton step
         step, predicted_reduction = self._solve_gauss_newton_step(
-            JTJ, JTr, trust_radius
+            JTJ,
+            JTr,
+            trust_radius,
         )
 
         # Apply step
@@ -780,7 +792,9 @@ class GaussNewtonPhase:
             y_chunk = y_data[i : i + chunk_size]
             actual_size = len(x_chunk)
             x_chunk, y_chunk, actual_size = _pad_chunk_to_bucket(
-                x_chunk, y_chunk, actual_size
+                x_chunk,
+                y_chunk,
+                actual_size,
             )
 
             if self._cost_fn_compiled is not None:

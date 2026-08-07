@@ -190,7 +190,7 @@ class DataLoadingPage(QWidget):
             "Example:\n"
             "1.0    2.5\n"
             "2.0    5.1\n"
-            "3.0    7.8"
+            "3.0    7.8",
         )
         self._clipboard_text.setMaximumHeight(120)
         layout.addWidget(self._clipboard_text)
@@ -286,7 +286,7 @@ class DataLoadingPage(QWidget):
         self._browse_btn.clicked.connect(self._on_browse)
         self._parse_btn.clicked.connect(self._on_parse_clipboard)
         self._column_selector.selection_changed.connect(
-            self._on_column_selection_changed
+            self._on_column_selection_changed,
         )
         self._clear_btn.clicked.connect(self.reset)
         self._apply_btn.clicked.connect(self._on_apply)
@@ -323,11 +323,11 @@ class DataLoadingPage(QWidget):
             # Store raw data for preview
             if sigma is not None:
                 self._raw_data = np.column_stack(
-                    [xdata.T if xdata.ndim == 2 else xdata, ydata, sigma]
+                    [xdata.T if xdata.ndim == 2 else xdata, ydata, sigma],
                 )
             else:
                 self._raw_data = np.column_stack(
-                    [xdata.T if xdata.ndim == 2 else xdata, ydata]
+                    [xdata.T if xdata.ndim == 2 else xdata, ydata],
                 )
 
             # Generate column names
@@ -474,15 +474,15 @@ class DataLoadingPage(QWidget):
         # Update display
         self._stats_points.setText(f"Points: {stats['point_count']:,}")
         self._stats_x_range.setText(
-            f"X Range: [{stats['x_min']:.4g}, {stats['x_max']:.4g}]"
+            f"X Range: [{stats['x_min']:.4g}, {stats['x_max']:.4g}]",
         )
         self._stats_y_range.setText(
-            f"Y Range: [{stats['y_min']:.4g}, {stats['y_max']:.4g}]"
+            f"Y Range: [{stats['y_min']:.4g}, {stats['y_max']:.4g}]",
         )
 
         if stats.get("has_sigma"):
             self._stats_sigma.setText(
-                f"Sigma Range: [{stats['sigma_min']:.4g}, {stats['sigma_max']:.4g}]"
+                f"Sigma Range: [{stats['sigma_min']:.4g}, {stats['sigma_max']:.4g}]",
             )
         else:
             self._stats_sigma.setText("Sigma: (not provided)")
@@ -513,7 +513,7 @@ class DataLoadingPage(QWidget):
                 value = self._raw_data[row_idx, col_idx]
                 item = QStandardItem(f"{value:.6g}")
                 item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                 )
                 row_items.append(item)
             self._preview_model.appendRow(row_items)
@@ -521,7 +521,7 @@ class DataLoadingPage(QWidget):
         # Update info
         if n_rows > preview_rows:
             self._preview_info.setText(
-                f"Showing first {preview_rows} of {n_rows:,} rows"
+                f"Showing first {preview_rows} of {n_rows:,} rows",
             )
         else:
             self._preview_info.setText(f"{n_rows:,} rows, {n_cols} columns")

@@ -192,7 +192,7 @@ class GlobalOptimizationConfig:
         valid_samplers = ("lhs", "sobol", "halton")
         if self.sampler.lower() not in valid_samplers:
             raise ValueError(
-                f"sampler must be one of {valid_samplers}, got '{self.sampler}'"
+                f"sampler must be one of {valid_samplers}, got '{self.sampler}'",
             )
         # Normalize sampler to lowercase
         object.__setattr__(self, "sampler", self.sampler.lower())
@@ -204,19 +204,19 @@ class GlobalOptimizationConfig:
         # Validate elimination_fraction
         if not 0 < self.elimination_fraction < 1:
             raise ValueError(
-                f"elimination_fraction must be in (0, 1), got {self.elimination_fraction}"
+                f"elimination_fraction must be in (0, 1), got {self.elimination_fraction}",
             )
 
         # Validate elimination_rounds
         if self.elimination_rounds < 0:
             raise ValueError(
-                f"elimination_rounds must be non-negative, got {self.elimination_rounds}"
+                f"elimination_rounds must be non-negative, got {self.elimination_rounds}",
             )
 
         # Validate batches_per_round
         if self.batches_per_round <= 0:
             raise ValueError(
-                f"batches_per_round must be positive, got {self.batches_per_round}"
+                f"batches_per_round must be positive, got {self.batches_per_round}",
             )
 
         # Validate parameter combinations
@@ -259,7 +259,7 @@ class GlobalOptimizationConfig:
         if preset_name_lower not in _MULTISTART_PRESETS:
             valid_presets = list(_MULTISTART_PRESETS.keys())
             raise ValueError(
-                f"Unknown preset '{preset_name}'. Valid presets: {valid_presets}"
+                f"Unknown preset '{preset_name}'. Valid presets: {valid_presets}",
             )
 
         preset_values = _MULTISTART_PRESETS[preset_name_lower].copy()

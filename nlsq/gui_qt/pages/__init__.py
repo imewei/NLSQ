@@ -30,19 +30,19 @@ def __getattr__(name: str):
         from nlsq.gui_qt.pages.data_loading import DataLoadingPage
 
         return DataLoadingPage
-    elif name == "ModelSelectionPage":
+    if name == "ModelSelectionPage":
         from nlsq.gui_qt.pages.model_selection import ModelSelectionPage
 
         return ModelSelectionPage
-    elif name == "FittingOptionsPage":
+    if name == "FittingOptionsPage":
         from nlsq.gui_qt.pages.fitting_options import FittingOptionsPage
 
         return FittingOptionsPage
-    elif name == "ResultsPage":
+    if name == "ResultsPage":
         from nlsq.gui_qt.pages.results import ResultsPage
 
         return ResultsPage
-    elif name == "ExportPage":
+    if name == "ExportPage":
         from nlsq.gui_qt.pages.export import ExportPage
 
         return ExportPage

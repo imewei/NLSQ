@@ -275,7 +275,10 @@ class PythonHighlighter(QSyntaxHighlighter):
         self._highlight_comments(text)
 
     def _highlight_words(
-        self, text: str, words: set[str], fmt: QTextCharFormat
+        self,
+        text: str,
+        words: set[str],
+        fmt: QTextCharFormat,
     ) -> None:
         """Highlight specific words in the text."""
         import re
@@ -304,7 +307,9 @@ class PythonHighlighter(QSyntaxHighlighter):
         pattern = r"\b\d+\.?\d*(?:[eE][+-]?\d+)?\b"
         for match in re.finditer(pattern, text):
             self.setFormat(
-                match.start(), match.end() - match.start(), self._number_format
+                match.start(),
+                match.end() - match.start(),
+                self._number_format,
             )
 
     def _highlight_strings(self, text: str) -> None:
@@ -314,12 +319,16 @@ class PythonHighlighter(QSyntaxHighlighter):
         # Single-quoted strings
         for match in re.finditer(r"'[^'\\]*(?:\\.[^'\\]*)*'", text):
             self.setFormat(
-                match.start(), match.end() - match.start(), self._string_format
+                match.start(),
+                match.end() - match.start(),
+                self._string_format,
             )
         # Double-quoted strings
         for match in re.finditer(r'"[^"\\]*(?:\\.[^"\\]*)*"', text):
             self.setFormat(
-                match.start(), match.end() - match.start(), self._string_format
+                match.start(),
+                match.end() - match.start(),
+                self._string_format,
             )
 
     def _highlight_decorators(self, text: str) -> None:
@@ -328,7 +337,9 @@ class PythonHighlighter(QSyntaxHighlighter):
 
         for match in re.finditer(r"@\w+", text):
             self.setFormat(
-                match.start(), match.end() - match.start(), self._decorator_format
+                match.start(),
+                match.end() - match.start(),
+                self._decorator_format,
             )
 
     def _highlight_comments(self, text: str) -> None:
@@ -337,7 +348,9 @@ class PythonHighlighter(QSyntaxHighlighter):
 
         for match in re.finditer(r"#.*$", text):
             self.setFormat(
-                match.start(), match.end() - match.start(), self._comment_format
+                match.start(),
+                match.end() - match.start(),
+                self._comment_format,
             )
 
 
@@ -391,7 +404,7 @@ class CodeEditorWidget(QWidget):
         self._editor.setPlaceholderText(
             "import jax.numpy as jnp\n\n"
             "def model(x, a, b, c):\n"
-            "    return a * jnp.exp(-b * x) + c"
+            "    return a * jnp.exp(-b * x) + c",
         )
 
         # Apply syntax highlighter
@@ -438,7 +451,7 @@ class CodeEditorWidget(QWidget):
             else:
                 self._validation_label.setText("No functions defined")
                 self._validation_label.setStyleSheet(
-                    f"color: {self._theme.stat_warning};"
+                    f"color: {self._theme.stat_warning};",
                 )
         else:
             self._validation_label.setText(f"Error: {message}")
@@ -523,7 +536,7 @@ class CodeEditorWidget(QWidget):
         self._editor.setStyleSheet(
             f"background-color: {bg}; "
             f"color: {theme.text_primary}; "
-            f"border: 1px solid {theme.border};"
+            f"border: 1px solid {theme.border};",
         )
 
         # Update syntax highlighter colors

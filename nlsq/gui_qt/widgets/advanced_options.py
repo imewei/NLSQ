@@ -128,7 +128,7 @@ class AdvancedOptionsWidget(QWidget):
         # Enable checkbox
         self._multistart_check = QCheckBox("Enable Multi-Start Optimization")
         self._multistart_check.setToolTip(
-            "Run optimization from multiple starting points"
+            "Run optimization from multiple starting points",
         )
         layout.addWidget(self._multistart_check)
 
@@ -177,7 +177,7 @@ class AdvancedOptionsWidget(QWidget):
         layout = QVBoxLayout(widget)
 
         info_label = QLabel(
-            "Streaming mode is automatically enabled for large datasets (>500K points)."
+            "Streaming mode is automatically enabled for large datasets (>500K points).",
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: gray;")
@@ -218,7 +218,7 @@ class AdvancedOptionsWidget(QWidget):
         layout = QVBoxLayout(widget)
 
         info_label = QLabel(
-            "Defense layers provide stability for streaming optimization."
+            "Defense layers provide stability for streaming optimization.",
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: gray;")
@@ -229,7 +229,7 @@ class AdvancedOptionsWidget(QWidget):
         preset_label = QLabel("Preset:")
         self._defense_preset = QComboBox()
         self._defense_preset.addItems(
-            ["default", "conservative", "aggressive", "custom"]
+            ["default", "conservative", "aggressive", "custom"],
         )
         self._defense_preset.setToolTip("Defense layer preset configuration")
         preset_layout.addWidget(preset_label)
@@ -380,4 +380,4 @@ class AdvancedOptionsWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        pass  # Theme is applied globally via Qt color scheme
+        # Theme is applied globally via Qt color scheme

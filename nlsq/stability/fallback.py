@@ -225,7 +225,9 @@ class UseRobustLossStrategy(FallbackStrategy):
 
     def __init__(self):
         super().__init__(
-            name="robust_loss", description="Apply Huber loss for outliers", priority=5
+            name="robust_loss",
+            description="Apply Huber loss for outliers",
+            priority=5,
         )
         self.loss_sequence = ["soft_l1", "huber", "cauchy"]
         self.current_index = 0
@@ -442,7 +444,7 @@ class FallbackOrchestrator:
             if self.verbose:
                 print(
                     f"\nAttempt {self.total_attempts}/{self.max_attempts}: "
-                    f"{strategy.description}"
+                    f"{strategy.description}",
                 )
 
             try:
@@ -466,7 +468,9 @@ class FallbackOrchestrator:
                     print(f"[OK] Success with {strategy.name}!")
 
                 return FallbackResult(
-                    result, strategy_used=strategy.name, attempts=self.total_attempts
+                    result,
+                    strategy_used=strategy.name,
+                    attempts=self.total_attempts,
                 )
 
             except Exception as e:
@@ -528,7 +532,7 @@ class FallbackOrchestrator:
             if s["attempts"] > 0:
                 print(
                     f"  {s['name']:20s}: {s['successes']:3d}/{s['attempts']:3d} "
-                    f"({s['success_rate'] * 100:5.1f}%)"
+                    f"({s['success_rate'] * 100:5.1f}%)",
                 )
                 print(f"    └─ {s['description']}")
 

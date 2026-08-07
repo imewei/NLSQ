@@ -152,7 +152,7 @@ class ProgressBar(CallbackBase):
                 "cost": f"{cost:.6e}",
                 "grad": f"{g_norm:.3e}",
                 "iter": iteration,
-            }
+            },
         )
 
         # Update progress bar
@@ -234,7 +234,10 @@ class IterationLogger(CallbackBase):
 
         if self.log_params:
             params_str = np.array2string(
-                params, precision=6, separator=", ", suppress_small=True
+                params,
+                precision=6,
+                separator=", ",
+                suppress_small=True,
             )
             msg += f" | Params: {params_str}"
 
@@ -340,10 +343,10 @@ class EarlyStopping(CallbackBase):
             if self.verbose:
                 print(
                     f"\nEarly stopping triggered at iteration {iteration}. "
-                    f"No improvement for {self.patience} iterations."
+                    f"No improvement for {self.patience} iterations.",
                 )
             raise StopOptimization(
-                f"Early stopping after {self.patience} iterations without improvement"
+                f"Early stopping after {self.patience} iterations without improvement",
             )
 
 

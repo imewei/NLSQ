@@ -117,7 +117,7 @@ def check_plugin_conflicts() -> list[str]:
         if cuda12 and cuda13:
             issues.append(
                 f"Both cuda12 ({cuda12}) and cuda13 ({cuda13}) plugins installed. "
-                "Only ONE can be active — this causes PJRT registration conflicts."
+                "Only ONE can be active — this causes PJRT registration conflicts.",
             )
 
         # Check for version mismatch
@@ -125,7 +125,7 @@ def check_plugin_conflicts() -> list[str]:
             if version and version != jaxlib_v:
                 issues.append(
                     f"jax-{name}-plugin {version} != jaxlib {jaxlib_v}. "
-                    "Plugin version must exactly match jaxlib."
+                    "Plugin version must exactly match jaxlib.",
                 )
 
     except Exception as e:
@@ -162,18 +162,15 @@ def get_recommended_package() -> str | None:
     if cuda_major == 13:
         if sm_version >= 7.5:
             return "jax[cuda13-local]"
-        else:
-            _logger.debug(f"GPU SM {sm_version} doesn't support CUDA 13")
-            return None
-    elif cuda_major == 12:
+        _logger.debug(f"GPU SM {sm_version} doesn't support CUDA 13")
+        return None
+    if cuda_major == 12:
         if sm_version >= 5.2:
             return "jax[cuda12-local]"
-        else:
-            _logger.debug(f"GPU SM {sm_version} too old for CUDA 12")
-            return None
-    else:
-        _logger.debug(f"CUDA {cuda_major} not supported")
+        _logger.debug(f"GPU SM {sm_version} too old for CUDA 12")
         return None
+    _logger.debug(f"CUDA {cuda_major} not supported")
+    return None
 
 
 def check_gpu_availability(warn: bool = True) -> bool:
@@ -239,7 +236,11 @@ def check_gpu_availability(warn: bool = True) -> bool:
         if warn:
             plugin_issues = check_plugin_conflicts()
             _print_gpu_warning(
-                gpu_name, sm_version, cuda_version, cuda_major, plugin_issues
+                gpu_name,
+                sm_version,
+                cuda_version,
+                cuda_major,
+                plugin_issues,
             )
 
         return False
@@ -287,7 +288,7 @@ def _print_gpu_warning(
         print(
             "  pip uninstall -y jax jaxlib "
             "jax-cuda13-plugin jax-cuda13-pjrt "
-            "jax-cuda12-plugin jax-cuda12-pjrt"
+            "jax-cuda12-plugin jax-cuda12-pjrt",
         )
         print(f'  pip install "{pkg}"')
 

@@ -203,7 +203,7 @@ class PluginRegistry:
             if name in cls._plugins:
                 raise ValueError(
                     f"Plugin '{name}' is already registered. "
-                    "Use unregister() first to replace it."
+                    "Use unregister() first to replace it.",
                 )
             cls._plugins[name] = plugin
 

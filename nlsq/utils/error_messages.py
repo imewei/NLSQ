@@ -72,7 +72,11 @@ class OptimizationDiagnostics:
 
 
 def analyze_failure(
-    result, gtol: float, ftol: float, xtol: float, max_nfev: int
+    result,
+    gtol: float,
+    ftol: float,
+    xtol: float,
+    max_nfev: int,
 ) -> tuple[list[str], list[str]]:
     """Analyze why optimization failed and generate recommendations.
 
@@ -105,10 +109,10 @@ def analyze_failure(
         grad_norm = np.linalg.norm(grad, ord=np.inf)
         if grad_norm > gtol:
             reasons.append(
-                f"Gradient norm {grad_norm:.2e} exceeds tolerance {gtol:.2e}"
+                f"Gradient norm {grad_norm:.2e} exceeds tolerance {gtol:.2e}",
             )
             recommendations.append(
-                f"✓ Try looser gradient tolerance: gtol={gtol * 10:.1e}"
+                f"✓ Try looser gradient tolerance: gtol={gtol * 10:.1e}",
             )
             recommendations.append("✓ Check if initial guess p0 is reasonable")
             recommendations.append("✓ Consider parameter scaling with x_scale")
@@ -144,14 +148,16 @@ def analyze_failure(
         recommendations.append("✓ Check residual plot for systematic errors")
         recommendations.append("✓ Verify model function matches data pattern")
         recommendations.append(
-            "✓ Try robust loss function if outliers present (loss='soft_l1')"
+            "✓ Try robust loss function if outliers present (loss='soft_l1')",
         )
 
     return reasons, recommendations
 
 
 def format_error_message(
-    reasons: list[str], recommendations: list[str], diagnostics: dict[str, Any]
+    reasons: list[str],
+    recommendations: list[str],
+    diagnostics: dict[str, Any],
 ) -> str:
     """Format comprehensive error message.
 
@@ -324,7 +330,7 @@ def check_convergence_quality(result, pcov) -> list[str]:
             "  - Parameters are at bounds\n"
             "  - Singular or ill-conditioned Jacobian\n"
             "  - Optimization converged to local minimum\n"
-            "  Try: check bounds, improve p0, or use different method"
+            "  Try: check bounds, improve p0, or use different method",
         )
 
     # Check for parameters at bounds
@@ -335,7 +341,7 @@ def check_convergence_quality(result, pcov) -> list[str]:
             if at_bounds:
                 warnings.append(
                     "⚠ One or more parameters are at bounds. "
-                    "Consider relaxing bounds or checking if model is appropriate."
+                    "Consider relaxing bounds or checking if model is appropriate.",
                 )
 
     # Check residuals if available
@@ -347,7 +353,7 @@ def check_convergence_quality(result, pcov) -> list[str]:
                 "Model may not fit data well. Check:\n"
                 "  - Is the model appropriate for this data?\n"
                 "  - Are there outliers? (try robust loss function)\n"
-                "  - Is data properly scaled?"
+                "  - Is data properly scaled?",
             )
 
     return warnings

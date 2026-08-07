@@ -102,11 +102,15 @@ class DefenseLayerTelemetry:
         if mode in self.layer2_lr_mode_counts:
             self.layer2_lr_mode_counts[mode] += 1
         self._log_event(
-            "layer2_lr_mode", {"mode": mode, "relative_loss": relative_loss}
+            "layer2_lr_mode",
+            {"mode": mode, "relative_loss": relative_loss},
         )
 
     def record_layer3_trigger(
-        self, cost_ratio: float, tolerance: float, iteration: int
+        self,
+        cost_ratio: float,
+        tolerance: float,
+        iteration: int,
     ) -> None:
         """Record Layer 3 cost-increase guard trigger.
 
@@ -137,7 +141,8 @@ class DefenseLayerTelemetry:
         """
         self.layer4_clip_triggers += 1
         self._log_event(
-            "layer4_clip", {"original_norm": original_norm, "max_norm": max_norm}
+            "layer4_clip",
+            {"original_norm": original_norm, "max_norm": max_norm},
         )
 
     def record_lbfgs_history_fill(self, iteration: int) -> None:
@@ -158,7 +163,9 @@ class DefenseLayerTelemetry:
         )
 
     def record_lbfgs_line_search_failure(
-        self, iteration: int, reason: str = ""
+        self,
+        iteration: int,
+        reason: str = "",
     ) -> None:
         """Record L-BFGS line search failure event.
 

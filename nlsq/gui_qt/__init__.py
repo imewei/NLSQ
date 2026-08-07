@@ -96,7 +96,8 @@ def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) ->
                     data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
                     data["crash_info"] = crash_info
                     AUTOSAVE_FILE.write_text(
-                        json.dumps(data, indent=2), encoding="utf-8"
+                        json.dumps(data, indent=2),
+                        encoding="utf-8",
                     )
             except Exception:
                 pass
@@ -110,7 +111,7 @@ def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) ->
                 msg.setText("An unexpected error occurred.")
                 msg.setInformativeText(
                     "The application encountered an error and needs to close.\n\n"
-                    "Your session will be recovered on next launch."
+                    "Your session will be recovered on next launch.",
                 )
                 msg.setDetailedText(tb_str)
                 msg.exec()

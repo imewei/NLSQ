@@ -385,14 +385,13 @@ class LossFunctionsJIT:
 
         if not callable(loss):
             return self.loss_funcs[loss]
-        else:
 
-            def loss_function(f, f_scale, data_mask=None, cost_only=False):
-                z = self.zscale(f, f_scale)
-                rho = loss(z)
-                if cost_only:
-                    return self.calculate_cost(f_scale, rho, data_mask)
-                rho = self.scale_rhos(rho, f_scale)
-                return rho
+        def loss_function(f, f_scale, data_mask=None, cost_only=False):
+            z = self.zscale(f, f_scale)
+            rho = loss(z)
+            if cost_only:
+                return self.calculate_cost(f_scale, rho, data_mask)
+            rho = self.scale_rhos(rho, f_scale)
+            return rho
 
         return loss_function

@@ -324,13 +324,13 @@ class PerformanceProfiler:
                     "",
                     "Per-Run Details:",
                     "-" * 60,
-                ]
+                ],
             )
             for i, m in enumerate(metrics_list, 1):
                 lines.append(
                     f"  Run {i}: {m.total_time:.3f}s, "
                     f"{m.n_iterations} iter, "
-                    f"{'OK' if m.success else 'FAIL'}"
+                    f"{'OK' if m.success else 'FAIL'}",
                 )
 
         return "\n".join(lines)

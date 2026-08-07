@@ -51,12 +51,11 @@ def round_to_bucket(nbytes: int) -> int:
     if nbytes < 10 * KB:
         # Small arrays: round to nearest 1KB
         return ((nbytes + BUCKET_1KB - 1) // BUCKET_1KB) * BUCKET_1KB
-    elif nbytes < 100 * KB:
+    if nbytes < 100 * KB:
         # Medium arrays: round to nearest 10KB
         return ((nbytes + BUCKET_10KB - 1) // BUCKET_10KB) * BUCKET_10KB
-    else:
-        # Large arrays: round to nearest 100KB
-        return ((nbytes + BUCKET_100KB - 1) // BUCKET_100KB) * BUCKET_100KB
+    # Large arrays: round to nearest 100KB
+    return ((nbytes + BUCKET_100KB - 1) // BUCKET_100KB) * BUCKET_100KB
 
 
 class MemoryPool:

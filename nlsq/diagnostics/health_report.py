@@ -215,7 +215,8 @@ def _sort_issues(issues: list[ModelHealthIssue]) -> list[ModelHealthIssue]:
     }
 
     return sorted(
-        issues, key=lambda i: (severity_order.get(i.severity.name, 3), i.code)
+        issues,
+        key=lambda i: (severity_order.get(i.severity.name, 3), i.code),
     )
 
 

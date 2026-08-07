@@ -56,7 +56,8 @@ _is_gpu_error = is_gpu_error
 
 
 def compute_svd_with_fallback(
-    J_h: jnp.ndarray, full_matrices: bool = False
+    J_h: jnp.ndarray,
+    full_matrices: bool = False,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Compute full deterministic SVD with multiple fallback strategies.
 

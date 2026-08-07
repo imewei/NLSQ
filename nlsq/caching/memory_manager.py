@@ -30,7 +30,8 @@ try:
 except ImportError:
     HAS_PSUTIL = False
     warnings.warn(
-        "psutil not installed, memory monitoring will be limited", UserWarning
+        "psutil not installed, memory monitoring will be limited",
+        UserWarning,
     )
 
 
@@ -184,12 +185,11 @@ class MemoryManager:
         if calls_per_sec > 100:
             # High frequency: use 15s TTL (memory is stable)
             return 15.0
-        elif calls_per_sec > 10:
+        if calls_per_sec > 10:
             # Medium frequency: use 10s TTL
             return 10.0
-        else:
-            # Low frequency: use default TTL
-            return self._memory_cache_ttl
+        # Low frequency: use default TTL
+        return self._memory_cache_ttl
 
     def get_available_memory(self) -> float:
         """Get available memory in bytes.
@@ -458,13 +458,13 @@ class MemoryManager:
                     "bytes_requested": bytes_needed,
                     "bytes_used": current_memory - initial_memory,
                     "peak_memory": self._peak_memory,
-                }
+                },
             )
 
             # Track telemetry for adaptive safety factor (Task 5.2)
             self._record_safety_telemetry(bytes_needed, current_memory - initial_memory)
 
-    def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: int | float):
+    def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: float):
         """Record telemetry for adaptive safety factor calculation.
 
         Parameters
@@ -502,7 +502,7 @@ class MemoryManager:
                 "bytes_actual": bytes_actual,
                 "safety_factor_needed": safety_factor_needed,
                 "current_safety_factor": self.safety_factor,
-            }
+            },
         )
 
         # Update adaptive safety factor after warmup
@@ -540,7 +540,7 @@ class MemoryManager:
 
         logger.debug(
             f"Adaptive safety factor: {self.safety_factor:.3f} "
-            f"(p95_needed={p95_safety:.3f}, runs={len(self._safety_telemetry)})"
+            f"(p95_needed={p95_safety:.3f}, runs={len(self._safety_telemetry)})",
         )
 
     def get_safety_telemetry(self) -> dict:
@@ -570,7 +570,7 @@ class MemoryManager:
                 entry["safety_factor_needed"] for entry in self._safety_telemetry
             ]
             telemetry["p95_safety_needed"] = float(
-                np.percentile(safety_factors_needed, 95)
+                np.percentile(safety_factors_needed, 95),
             )
             telemetry["mean_safety_needed"] = float(np.mean(safety_factors_needed))
             telemetry["max_safety_needed"] = float(np.max(safety_factors_needed))
@@ -581,7 +581,10 @@ class MemoryManager:
         return telemetry
 
     def allocate_array(
-        self, shape: tuple[int, ...], dtype: type = np.float64, zero: bool = True
+        self,
+        shape: tuple[int, ...],
+        dtype: type = np.float64,
+        zero: bool = True,
     ) -> np.ndarray:
         """Allocate array with memory pooling and LRU tracking.
 
@@ -795,14 +798,17 @@ class MemoryManager:
                 "chunk_size": n_points,
                 "n_chunks": 1,
                 "memory_per_chunk_gb": self.predict_memory_requirement(
-                    n_points, n_params, algorithm
+                    n_points,
+                    n_params,
+                    algorithm,
                 )
                 / 1e9,
             }
 
         # Calculate chunking parameters
         chunk_size = min(
-            max_points, max(100, n_points // 100)
+            max_points,
+            max(100, n_points // 100),
         )  # At least 100 points per chunk
         n_chunks = (n_points + chunk_size - 1) // chunk_size
 
@@ -811,7 +817,9 @@ class MemoryManager:
             "chunk_size": chunk_size,
             "n_chunks": n_chunks,
             "memory_per_chunk_gb": self.predict_memory_requirement(
-                chunk_size, n_params, algorithm
+                chunk_size,
+                n_params,
+                algorithm,
             )
             / 1e9,
             "total_points": n_points,

@@ -213,7 +213,8 @@ def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayReturn
 
 
 def estimate_p0_exponential_decay(
-    xdata: np.ndarray, ydata: np.ndarray
+    xdata: np.ndarray,
+    ydata: np.ndarray,
 ) -> ParameterList:
     """Estimate initial parameters for exponential decay.
 
@@ -279,7 +280,9 @@ def bounds_exponential_decay() -> BoundsTuple:
 
 
 _attach_methods(
-    exponential_decay, estimate_p0_exponential_decay, bounds_exponential_decay
+    exponential_decay,
+    estimate_p0_exponential_decay,
+    bounds_exponential_decay,
 )
 
 
@@ -326,7 +329,8 @@ def exponential_growth(x: ArrayLike, a: float, b: float, c: float) -> ArrayRetur
 
 
 def estimate_p0_exponential_growth(
-    xdata: np.ndarray, ydata: np.ndarray
+    xdata: np.ndarray,
+    ydata: np.ndarray,
 ) -> ParameterList:
     """Estimate initial parameters for exponential growth.
 

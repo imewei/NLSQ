@@ -177,7 +177,7 @@ class WarmupPhase:
         if self.config.verbose >= 2:
             _logger.debug(
                 f"Phase 1 initial assessment: loss={initial_loss:.6e}, "
-                f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}"
+                f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}",
             )
 
         # Check warm start threshold
@@ -186,7 +186,8 @@ class WarmupPhase:
             and relative_loss < self.config.warm_start_threshold
         ):
             telemetry.record_layer1_trigger(
-                relative_loss=relative_loss, threshold=self.config.warm_start_threshold
+                relative_loss=relative_loss,
+                threshold=self.config.warm_start_threshold,
             )
 
             phase_record = {
@@ -209,7 +210,7 @@ class WarmupPhase:
             if self.config.verbose >= 1:
                 _logger.info(
                     f"Phase 1: Skipping L-BFGS warmup - warm start detected "
-                    f"(relative_loss={relative_loss:.4e})"
+                    f"(relative_loss={relative_loss:.4e})",
                 )
 
             warmup_result = WarmupResult(
@@ -240,7 +241,8 @@ class WarmupPhase:
 
         # Create L-BFGS optimizer
         optimizer, opt_state = self._create_lbfgs_optimizer(
-            current_params, initial_step
+            current_params,
+            initial_step,
         )
 
         # Best parameter tracking
@@ -405,10 +407,12 @@ class WarmupPhase:
         # then masked to the actual group size for correct variance computation.
         if enable_var_reg and self.config.group_variance_indices:
             group_starts = jnp.array(
-                [s for s, _e in self.config.group_variance_indices], dtype=jnp.int32
+                [s for s, _e in self.config.group_variance_indices],
+                dtype=jnp.int32,
             )
             group_sizes = jnp.array(
-                [e - s for s, e in self.config.group_variance_indices], dtype=jnp.int32
+                [e - s for s, e in self.config.group_variance_indices],
+                dtype=jnp.int32,
             )
             n_groups = len(self.config.group_variance_indices)
             max_group_size = max(e - s for s, e in self.config.group_variance_indices)
@@ -420,7 +424,9 @@ class WarmupPhase:
 
         @jax.jit
         def loss_fn(
-            params: jnp.ndarray, x_batch: jnp.ndarray, y_batch: jnp.ndarray
+            params: jnp.ndarray,
+            x_batch: jnp.ndarray,
+            y_batch: jnp.ndarray,
         ) -> jnp.ndarray:
             predictions = normalized_model(x_batch, *params)
             residuals = y_batch - predictions
@@ -443,7 +449,9 @@ class WarmupPhase:
                     size = group_sizes[i]
                     # Extract with fixed max_group_size, mask to actual size
                     group_params = jax.lax.dynamic_slice(
-                        params, (start,), (max_group_size,)
+                        params,
+                        (start,),
+                        (max_group_size,),
                     )
                     mask = jnp.arange(max_group_size) < size
                     # Masked variance: Var = E[x^2] - E[x]^2 over valid elements
@@ -454,7 +462,10 @@ class WarmupPhase:
                     return penalty + group_var
 
                 variance_penalty = jax.lax.fori_loop(
-                    0, n_groups, var_body, jnp.array(0.0)
+                    0,
+                    n_groups,
+                    var_body,
+                    jnp.array(0.0),
                 )
                 return base_loss + var_lambda * variance_penalty
 
@@ -463,7 +474,9 @@ class WarmupPhase:
         return loss_fn
 
     def _select_initial_step_size(
-        self, relative_loss: float, telemetry: Any
+        self,
+        relative_loss: float,
+        telemetry: Any,
     ) -> tuple[float, str]:
         """Select initial step size based on relative loss (Layer 2).
 
@@ -497,7 +510,7 @@ class WarmupPhase:
             if self.config.verbose >= 2:
                 _logger.debug(
                     f"L-BFGS adaptive: mode={lr_mode}, step={initial_step:.2f}, "
-                    f"rel_loss={relative_loss:.4e}"
+                    f"rel_loss={relative_loss:.4e}",
                 )
         else:
             initial_step = self.config.lbfgs_initial_step_size
@@ -507,7 +520,9 @@ class WarmupPhase:
         return initial_step, lr_mode
 
     def _create_lbfgs_optimizer(
-        self, params: jnp.ndarray, initial_step_size: float
+        self,
+        params: jnp.ndarray,
+        initial_step_size: float,
     ) -> tuple[optax.GradientTransformationExtraArgs, optax.OptState]:
         """Create L-BFGS optimizer with optax.
 
@@ -612,7 +627,10 @@ class WarmupPhase:
 
         # Validate loss and gradients
         if not self._validate_numerics(
-            params, loss=float(loss_value), gradients=grads, context="in L-BFGS step"
+            params,
+            loss=float(loss_value),
+            gradients=grads,
+            context="in L-BFGS step",
         ):
             if self.config.enable_fault_tolerance:
                 return params, float("inf"), float("inf"), opt_state, True
@@ -653,7 +671,8 @@ class WarmupPhase:
                 self._clip_count += 1
                 telemetry = get_defense_telemetry()
                 telemetry.record_layer4_clip(
-                    original_norm=original_update_norm, max_norm=max_norm
+                    original_norm=original_update_norm,
+                    max_norm=max_norm,
                 )
 
         new_params = optax.apply_updates(params, updates)
@@ -841,7 +860,7 @@ class WarmupPhase:
                     f"Phase 1: Cost increase guard triggered at iteration "
                     f"{iteration + 1}. Loss {loss_value:.6e} > "
                     f"{self._initial_loss:.6e} * {cost_threshold:.2f}. "
-                    f"Reverting to best params (loss={best_loss:.6e})."
+                    f"Reverting to best params (loss={best_loss:.6e}).",
                 )
 
             phase_record = {

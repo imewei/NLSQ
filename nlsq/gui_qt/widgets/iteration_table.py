@@ -52,7 +52,7 @@ class IterationTableWidget(QWidget):
         self._table = QTableWidget()
         self._table.setColumnCount(4)
         self._table.setHorizontalHeaderLabels(
-            ["Iteration", "Cost", "Step Norm", "Gradient Norm"]
+            ["Iteration", "Cost", "Step Norm", "Gradient Norm"],
         )
 
         # Configure header
@@ -98,7 +98,7 @@ class IterationTableWidget(QWidget):
         # Cost
         cost_item = QTableWidgetItem(f"{cost:.6g}")
         cost_item.setTextAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
         )
         self._table.setItem(row, 1, cost_item)
 
@@ -106,7 +106,7 @@ class IterationTableWidget(QWidget):
         step_text = f"{step_norm:.6g}" if step_norm is not None else "-"
         step_item = QTableWidgetItem(step_text)
         step_item.setTextAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
         )
         self._table.setItem(row, 2, step_item)
 
@@ -114,7 +114,7 @@ class IterationTableWidget(QWidget):
         grad_text = f"{gradient_norm:.6g}" if gradient_norm is not None else "-"
         grad_item = QTableWidgetItem(grad_text)
         grad_item.setTextAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
         )
         self._table.setItem(row, 3, grad_item)
 
@@ -131,4 +131,4 @@ class IterationTableWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        pass  # Theme is applied globally via Qt color scheme
+        # Theme is applied globally via Qt color scheme

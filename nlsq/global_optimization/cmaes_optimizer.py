@@ -138,7 +138,9 @@ def _create_fitness_function(  # noqa: C901
         def fitness_single_streaming(params_unbounded: jax.Array) -> jax.Array:
             """Compute fitness by streaming over data chunks."""
             params_bounded = transform_to_bounds(
-                params_unbounded, lower_bounds, upper_bounds
+                params_unbounded,
+                lower_bounds,
+                upper_bounds,
             )
 
             # Accumulate SSR over chunks
@@ -158,7 +160,11 @@ def _create_fitness_function(  # noqa: C901
                     valid_mask = jnp.ones(data_chunk_size, dtype=bool)
 
                 ssr_total = ssr_total + compute_chunk_ssr(
-                    params_bounded, x_chunk, y_chunk, sigma_chunk, valid_mask
+                    params_bounded,
+                    x_chunk,
+                    y_chunk,
+                    sigma_chunk,
+                    valid_mask,
                 )
 
             return jnp.where(jnp.isfinite(ssr_total), -ssr_total, -jnp.inf)
@@ -166,7 +172,7 @@ def _create_fitness_function(  # noqa: C901
         fitness_single = fitness_single_streaming
 
         logger.debug(
-            f"Data streaming enabled: {n_data} points -> {n_chunks} chunks of {data_chunk_size}"
+            f"Data streaming enabled: {n_data} points -> {n_chunks} chunks of {data_chunk_size}",
         )
     else:
         # Original non-streaming fitness function
@@ -175,7 +181,9 @@ def _create_fitness_function(  # noqa: C901
             """Compute fitness for a single parameter set."""
             # Transform to bounded space
             params_bounded = transform_to_bounds(
-                params_unbounded, lower_bounds, upper_bounds
+                params_unbounded,
+                lower_bounds,
+                upper_bounds,
             )
 
             # Compute predictions
@@ -270,7 +278,7 @@ class CMAESOptimizer:
         if not is_evosax_available():
             raise ImportError(
                 "evosax is required for CMA-ES optimization. "
-                "Install with: pip install 'nlsq[global]'"
+                "Install with: pip install 'nlsq[global]'",
             )
 
     @classmethod
@@ -342,7 +350,7 @@ class CMAESOptimizer:
         if bounds is None:
             raise ValueError(
                 "CMA-ES requires explicit bounds. "
-                "Provide bounds as (lower_bounds, upper_bounds)."
+                "Provide bounds as (lower_bounds, upper_bounds).",
             )
 
         # Convert inputs to JAX arrays
@@ -358,11 +366,11 @@ class CMAESOptimizer:
         # Log initialization
         logger.info(
             f"CMA-ES optimizer initialized: n_params={n_params}, n_data={n_data}, "
-            f"restart_strategy={self.config.restart_strategy}"
+            f"restart_strategy={self.config.restart_strategy}",
         )
         logger.debug(
             f"CMA-ES bounds: lower={np.asarray(lower_bounds)}, "
-            f"upper={np.asarray(upper_bounds)}"
+            f"upper={np.asarray(upper_bounds)}",
         )
 
         # Determine population size
@@ -383,12 +391,12 @@ class CMAESOptimizer:
         if self.config.population_batch_size is not None:
             logger.info(
                 f"CMA-ES memory optimization: population_batch_size="
-                f"{self.config.population_batch_size}"
+                f"{self.config.population_batch_size}",
             )
         if self.config.data_chunk_size is not None:
             logger.info(
                 f"CMA-ES memory optimization: data_chunk_size="
-                f"{self.config.data_chunk_size} (data streaming enabled)"
+                f"{self.config.data_chunk_size} (data streaming enabled)",
             )
 
         # Determine initial solution
@@ -425,7 +433,11 @@ class CMAESOptimizer:
 
         # Run CMA-ES optimization (diagnostics updated in place)
         best_params_unbounded, best_fitness, generations = self._run_cmaes(
-            fitness_fn, initial_solution, popsize, n_params, diagnostics
+            fitness_fn,
+            initial_solution,
+            popsize,
+            n_params,
+            diagnostics,
         )
 
         # Update diagnostics
@@ -435,19 +447,27 @@ class CMAESOptimizer:
 
         # Transform best solution back to bounded space
         best_params = transform_to_bounds(
-            best_params_unbounded, lower_bounds, upper_bounds
+            best_params_unbounded,
+            lower_bounds,
+            upper_bounds,
         )
 
         logger.info(
             f"CMA-ES optimization completed: {generations} generations, "
             f"best_fitness={float(best_fitness):.6e}, "
-            f"wall_time={diagnostics.wall_time:.2f}s"
+            f"wall_time={diagnostics.wall_time:.2f}s",
         )
 
         # NLSQ refinement phase for proper pcov estimation
         if self.config.refine_with_nlsq:
             result = self._nlsq_refinement(
-                f, xdata, ydata, best_params, bounds, sigma, **kwargs
+                f,
+                xdata,
+                ydata,
+                best_params,
+                bounds,
+                sigma,
+                **kwargs,
             )
             diagnostics.nlsq_refinement = True
         else:
@@ -493,12 +513,19 @@ class CMAESOptimizer:
         """
         if self.config.restart_strategy == "bipop":
             return self._run_cmaes_with_bipop(
-                fitness_fn, initial_solution, popsize, n_params, diagnostics
+                fitness_fn,
+                initial_solution,
+                popsize,
+                n_params,
+                diagnostics,
             )
-        else:
-            return self._run_cmaes_single(
-                fitness_fn, initial_solution, popsize, n_params, diagnostics
-            )
+        return self._run_cmaes_single(
+            fitness_fn,
+            initial_solution,
+            popsize,
+            n_params,
+            diagnostics,
+        )
 
     def _run_cmaes_single(
         self,
@@ -533,7 +560,7 @@ class CMAESOptimizer:
         )
 
         logger.info(
-            f"Starting CMA-ES: popsize={popsize}, max_gen={self.config.max_generations}"
+            f"Starting CMA-ES: popsize={popsize}, max_gen={self.config.max_generations}",
         )
 
         # Initialize CMA-ES
@@ -593,7 +620,7 @@ class CMAESOptimizer:
             if float(state.std) < self.config.tol_x:
                 logger.info(
                     f"CMA-ES converged at generation {gen + 1}: "
-                    f"std={float(state.std):.2e} < tol_x={self.config.tol_x:.2e}"
+                    f"std={float(state.std):.2e} < tol_x={self.config.tol_x:.2e}",
                 )
                 convergence_reason = "xtol"
                 break
@@ -603,14 +630,14 @@ class CMAESOptimizer:
                 logger.info(
                     f"CMA-ES progress {milestones[gen + 1]}: "
                     f"gen={gen + 1}/{self.config.max_generations}, "
-                    f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.2e}"
+                    f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.2e}",
                 )
 
             # Log detailed progress at debug level
             if logger.isEnabledFor(logging.DEBUG) and (gen + 1) % 10 == 0:
                 logger.debug(
                     f"Generation {gen + 1}/{self.config.max_generations}: "
-                    f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.6e}"
+                    f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.6e}",
                 )
 
         # Update diagnostics
@@ -659,7 +686,7 @@ class CMAESOptimizer:
 
         logger.info(
             f"Starting CMA-ES with BIPOP: base_popsize={base_popsize}, "
-            f"max_restarts={self.config.max_restarts}, max_gen={self.config.max_generations}"
+            f"max_restarts={self.config.max_restarts}, max_gen={self.config.max_generations}",
         )
 
         # Initialize BIPOP restarter
@@ -688,7 +715,7 @@ class CMAESOptimizer:
             logger.info(
                 f"BIPOP restart #{restarter.restart_count + 1}: "
                 f"popsize={popsize} ({run_type}), "
-                f"max_gen={self.config.max_generations}"
+                f"max_gen={self.config.max_generations}",
             )
 
             # Initialize CMA-ES for this run
@@ -732,7 +759,7 @@ class CMAESOptimizer:
                 if stagnation_counter >= 5:
                     logger.info(
                         f"BIPOP run #{restarter.restart_count + 1}: "
-                        f"stagnation at gen {gen + 1}, fitness_spread={fitness_spread:.2e}"
+                        f"stagnation at gen {gen + 1}, fitness_spread={fitness_spread:.2e}",
                     )
                     break
 
@@ -740,7 +767,7 @@ class CMAESOptimizer:
                 if float(state.std) < self.config.tol_x:
                     logger.info(
                         f"BIPOP run #{restarter.restart_count + 1}: "
-                        f"converged at gen {gen + 1}, std={float(state.std):.2e}"
+                        f"converged at gen {gen + 1}, std={float(state.std):.2e}",
                     )
                     break
 
@@ -750,7 +777,7 @@ class CMAESOptimizer:
                         f"BIPOP Run {restarter.restart_count + 1}: "
                         f"gen {gen + 1}/{self.config.max_generations}, "
                         f"best_fitness={float(run_best_fitness):.6e}, "
-                        f"std={float(state.std):.6e}"
+                        f"std={float(state.std):.6e}",
                     )
 
             total_generations += gen + 1
@@ -758,7 +785,7 @@ class CMAESOptimizer:
 
             logger.info(
                 f"BIPOP run #{restarter.restart_count + 1} completed: "
-                f"{gen + 1} generations, best_fitness={float(run_best_fitness):.6e}"
+                f"{gen + 1} generations, best_fitness={float(run_best_fitness):.6e}",
             )
 
             # Record restart info
@@ -768,7 +795,7 @@ class CMAESOptimizer:
                     "generations": gen + 1,
                     "best_fitness": float(run_best_fitness),
                     "final_sigma": final_sigma,
-                }
+                },
             )
 
             # Update global best
@@ -799,7 +826,7 @@ class CMAESOptimizer:
 
         logger.info(
             f"BIPOP completed: {restarter.restart_count} restarts, "
-            f"{total_generations} total generations"
+            f"{total_generations} total generations",
         )
 
         # Update diagnostics
@@ -852,7 +879,7 @@ class CMAESOptimizer:
 
         logger.info(
             f"Starting NLSQ Trust Region Reflective refinement "
-            f"(n_params={len(p0_numpy)})"
+            f"(n_params={len(p0_numpy)})",
         )
         logger.debug(f"NLSQ refinement starting from: {p0_numpy}")
 
@@ -868,12 +895,13 @@ class CMAESOptimizer:
             # during the CMA-ES evolutionary phase
             refinement_kwargs = {**kwargs}
             refinement_kwargs.pop(
-                "workflow", None
+                "workflow",
+                None,
             )  # Remove if present to avoid conflict
 
             n_points = len(ydata_np)
             logger.debug(
-                f"NLSQ refinement using workflow='auto' for {n_points:,} points"
+                f"NLSQ refinement using workflow='auto' for {n_points:,} points",
             )
 
             result = curve_fit(
@@ -895,7 +923,7 @@ class CMAESOptimizer:
             param_change = np.linalg.norm(popt - p0_numpy)
             logger.info(
                 f"NLSQ refinement completed: "
-                f"parameter adjustment norm={param_change:.6e}"
+                f"parameter adjustment norm={param_change:.6e}",
             )
             logger.debug(f"NLSQ refined popt={popt}")
 

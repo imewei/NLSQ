@@ -246,12 +246,11 @@ class CovarianceComputer:
         if sigma_np.ndim == 1:
             # 1D sigma: errors, transform is 1/sigma
             return self._sigma_transform1d, False
-        elif sigma_np.ndim == 2:
+        if sigma_np.ndim == 2:
             # 2D sigma: covariance matrix, transform is Cholesky
             return self._sigma_transform2d, True
-        else:
-            msg = f"Sigma must be 1D or 2D, got {sigma_np.ndim}D"
-            raise ValueError(msg)
+        msg = f"Sigma must be 1D or 2D, got {sigma_np.ndim}D"
+        raise ValueError(msg)
 
     def compute_condition_number(
         self,
@@ -328,7 +327,7 @@ class CovarianceComputer:
             return self._sigma_transform1d(jnp.asarray(sigma_np))
 
         # 2-D sigma: covariance matrix, define transform = L such that L L^T = C
-        elif sigma_np.shape == (ysize, ysize):
+        if sigma_np.shape == (ysize, ysize):
             try:
                 if len_diff > 0:
                     sigma_padded = np.identity(m + len_diff)
@@ -349,7 +348,8 @@ class CovarianceComputer:
                         raise ValueError(msg) from e
                 except (np.linalg.LinAlgError, ValueError):
                     _logger.warning(
-                        "Eigenvalue analysis of sigma failed", exc_info=True
+                        "Eigenvalue analysis of sigma failed",
+                        exc_info=True,
                     )
                     # fall through to generic error
                 msg = (

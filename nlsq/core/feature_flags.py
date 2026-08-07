@@ -98,15 +98,15 @@ class FeatureFlags:
             ValueError: If environment variable has invalid value.
         """
         preprocessor = cls._parse_impl_choice(
-            os.environ.get(ENV_PREPROCESSOR, DEFAULT_IMPL)
+            os.environ.get(ENV_PREPROCESSOR, DEFAULT_IMPL),
         )
         selector = cls._parse_impl_choice(os.environ.get(ENV_SELECTOR, DEFAULT_IMPL))
         covariance = cls._parse_impl_choice(
-            os.environ.get(ENV_COVARIANCE, DEFAULT_IMPL)
+            os.environ.get(ENV_COVARIANCE, DEFAULT_IMPL),
         )
         streaming = cls._parse_impl_choice(os.environ.get(ENV_STREAMING, DEFAULT_IMPL))
         rollout = cls._parse_rollout_percent(
-            os.environ.get(ENV_ROLLOUT_PERCENT, str(DEFAULT_ROLLOUT_PERCENT))
+            os.environ.get(ENV_ROLLOUT_PERCENT, str(DEFAULT_ROLLOUT_PERCENT)),
         )
 
         return cls(

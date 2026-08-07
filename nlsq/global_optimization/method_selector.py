@@ -70,7 +70,9 @@ class MethodSelector:
         self.scale_threshold = scale_threshold
 
     def compute_scale_ratio(
-        self, lower_bounds: ArrayLike, upper_bounds: ArrayLike
+        self,
+        lower_bounds: ArrayLike,
+        upper_bounds: ArrayLike,
     ) -> float:
         """Compute the scale ratio from parameter bounds.
 
@@ -153,13 +155,12 @@ class MethodSelector:
             if evosax_available:
                 logger.debug("CMA-ES requested and evosax available")
                 return "cmaes"
-            else:
-                logger.info(
-                    "CMA-ES requested but evosax not installed. "
-                    "Falling back to multi-start optimization. "
-                    "Install evosax with: pip install 'nlsq[global]'"
-                )
-                return "multi-start"
+            logger.info(
+                "CMA-ES requested but evosax not installed. "
+                "Falling back to multi-start optimization. "
+                "Install evosax with: pip install 'nlsq[global]'",
+            )
+            return "multi-start"
 
         # Explicit multi-start request
         if requested_method == "multi-start":
@@ -175,19 +176,17 @@ class MethodSelector:
                 logger.info(
                     f"Scale ratio {scale_ratio:.0f}x exceeds threshold "
                     f"({self.scale_threshold:.0f}x). Using CMA-ES for "
-                    "multi-scale optimization."
+                    "multi-scale optimization.",
                 )
                 return "cmaes"
-            else:
-                logger.info(
-                    f"Scale ratio {scale_ratio:.0f}x suggests CMA-ES would be "
-                    "beneficial, but evosax not installed. Using multi-start. "
-                    "Install evosax with: pip install 'nlsq[global]'"
-                )
-                return "multi-start"
-        else:
-            logger.debug(
-                f"Scale ratio {scale_ratio:.0f}x below threshold "
-                f"({self.scale_threshold:.0f}x). Using multi-start."
+            logger.info(
+                f"Scale ratio {scale_ratio:.0f}x suggests CMA-ES would be "
+                "beneficial, but evosax not installed. Using multi-start. "
+                "Install evosax with: pip install 'nlsq[global]'",
             )
             return "multi-start"
+        logger.debug(
+            f"Scale ratio {scale_ratio:.0f}x below threshold "
+            f"({self.scale_threshold:.0f}x). Using multi-start.",
+        )
+        return "multi-start"

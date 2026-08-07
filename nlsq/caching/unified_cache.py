@@ -148,18 +148,19 @@ class UnifiedCache:
                     code = func.__code__
                     code_hash = hashlib.sha256(code.co_code).hexdigest()[:8]
                     return f"code_{code_hash}_{code.co_argcount}"
-                else:
-                    # Use qualified name for a persistent key instead of id()
-                    name = getattr(
-                        func,
-                        "__qualname__",
-                        getattr(func, "__name__", "unknown"),
-                    )
-                    module = getattr(func, "__module__", "unknown")
-                    return hashlib.sha256(f"{module}.{name}".encode()).hexdigest()[:16]
+                # Use qualified name for a persistent key instead of id()
+                name = getattr(
+                    func,
+                    "__qualname__",
+                    getattr(func, "__name__", "unknown"),
+                )
+                module = getattr(func, "__module__", "unknown")
+                return hashlib.sha256(f"{module}.{name}".encode()).hexdigest()[:16]
             except (AttributeError, TypeError, ValueError):
                 name = getattr(
-                    func, "__qualname__", getattr(func, "__name__", "unknown")
+                    func,
+                    "__qualname__",
+                    getattr(func, "__name__", "unknown"),
                 )
                 return hashlib.sha256(name.encode()).hexdigest()[:16]
 
@@ -183,9 +184,8 @@ class UnifiedCache:
             dtype = str(arr.dtype)
             rank = len(arr.shape)
             return f"{dtype}_rank{rank}"
-        else:
-            # For non-arrays (scalars, etc.), use type name
-            return type(arr).__name__
+        # For non-arrays (scalars, etc.), use type name
+        return type(arr).__name__
 
     def _generate_cache_key(
         self,
@@ -302,7 +302,9 @@ class UnifiedCache:
         logger.debug(f"Cache miss for key {cache_key[:8]}..., compiling")
         start_time = time.time()
         compiled_func = jax.jit(
-            func, static_argnums=static_argnums, donate_argnums=donate_argnums
+            func,
+            static_argnums=static_argnums,
+            donate_argnums=donate_argnums,
         )
         compile_time_ms = (time.time() - start_time) * 1000
 
@@ -389,10 +391,9 @@ class UnifiedCache:
                 f"hit_rate={stats['hit_rate']:.2%}, "
                 f"compilations={stats['compilations']})"
             )
-        else:
-            with self._lock:
-                size = len(self._cache)
-            return f"UnifiedCache(size={size}/{self.maxsize})"
+        with self._lock:
+            size = len(self._cache)
+        return f"UnifiedCache(size={size}/{self.maxsize})"
 
 
 # Global unified cache instance
@@ -480,9 +481,8 @@ def cached_jit(
     if func is None:
         # Called with arguments: @cached_jit(static_argnums=(1,))
         return decorator
-    else:
-        # Called without arguments: @cached_jit
-        return decorator(func)
+    # Called without arguments: @cached_jit
+    return decorator(func)
 
 
 def get_cache_stats() -> dict[str, Any]:

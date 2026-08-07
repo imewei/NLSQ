@@ -257,12 +257,12 @@ class ResultsPage(QWidget):
         n_iter = getattr(result, "nfev", 0)
         if converged:
             self._status_label.setText(
-                f"Fit completed successfully ({n_iter} evaluations)"
+                f"Fit completed successfully ({n_iter} evaluations)",
             )
             self._status_label.setStyleSheet("color: #4CAF50;")
         else:
             self._status_label.setText(
-                f"Fit completed with warnings ({n_iter} evaluations)"
+                f"Fit completed with warnings ({n_iter} evaluations)",
             )
             self._status_label.setStyleSheet("color: #FF9800;")
 
@@ -277,7 +277,12 @@ class ResultsPage(QWidget):
         # Select style preset
         presets = list(STYLE_PRESETS.keys())
         style, ok = QInputDialog.getItem(
-            self, "Select Style", "Visualization Preset:", presets, 0, False
+            self,
+            "Select Style",
+            "Visualization Preset:",
+            presets,
+            0,
+            False,
         )
         if not ok or not style:
             return
@@ -341,7 +346,7 @@ class ResultsPage(QWidget):
                 },
                 "residuals_plot": {"enabled": True},
                 "histogram": {"enabled": True},
-            }
+            },
         }
 
         try:
@@ -500,7 +505,11 @@ class ResultsPage(QWidget):
             try:
                 # Use delta method for confidence bands
                 conf_lower, conf_upper = self._compute_confidence_bands(
-                    x_dense, popt, pcov, state.model_func, n_data=len(xdata)
+                    x_dense,
+                    popt,
+                    pcov,
+                    state.model_func,
+                    n_data=len(xdata),
                 )
             except Exception as e:
                 # Log error but don't crash UI
@@ -521,7 +530,10 @@ class ResultsPage(QWidget):
             try:
                 # Calculate CI at original data points
                 c_low, c_high = self._compute_confidence_bands(
-                    xdata, popt, pcov, state.model_func
+                    xdata,
+                    popt,
+                    pcov,
+                    state.model_func,
                 )
                 conf_interval_resid = (c_high - c_low) / 2
             except Exception:
@@ -530,7 +542,10 @@ class ResultsPage(QWidget):
 
         # Update residuals plot
         self._residuals_plot.set_residuals(
-            xdata, residuals, y_fit, confidence_interval=conf_interval_resid
+            xdata,
+            residuals,
+            y_fit,
+            confidence_interval=conf_interval_resid,
         )
 
         # Update histogram

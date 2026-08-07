@@ -14,7 +14,6 @@ from inspect import signature
 from typing import Any
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
@@ -41,7 +40,9 @@ class InputValidator:
         )
 
     def _validate_and_convert_arrays(
-        self, xdata: Any, ydata: Any
+        self,
+        xdata: Any,
+        ydata: Any,
     ) -> tuple[list[str], list[str], Any, Any, int]:
         """Validate and convert xdata/ydata to arrays.
 
@@ -153,7 +154,10 @@ class InputValidator:
         return n_params
 
     def _validate_data_shapes(
-        self, n_points: int, ydata: np.ndarray, n_params: int
+        self,
+        n_points: int,
+        ydata: np.ndarray,
+        n_params: int,
     ) -> tuple[list[str], list[str]]:
         """Validate data shapes and minimum requirements.
 
@@ -179,7 +183,7 @@ class InputValidator:
         # Check shapes match
         if len(ydata) != n_points:
             errors.append(
-                f"xdata ({n_points} points) and ydata ({len(ydata)} points) must have same length"
+                f"xdata ({n_points} points) and ydata ({len(ydata)} points) must have same length",
             )
 
         # Check for minimum data points
@@ -188,13 +192,15 @@ class InputValidator:
 
         if n_points <= n_params:
             errors.append(
-                f"Need more data points ({n_points}) than parameters ({n_params}) for fitting"
+                f"Need more data points ({n_points}) than parameters ({n_params}) for fitting",
             )
 
         return errors, warnings_list
 
     def _validate_finite_values(
-        self, xdata: Any, ydata: np.ndarray
+        self,
+        xdata: Any,
+        ydata: np.ndarray,
     ) -> tuple[list[str], list[str]]:
         """Validate that arrays contain only finite values (no NaN/Inf).
 
@@ -234,7 +240,9 @@ class InputValidator:
         return errors, warnings_list
 
     def _validate_initial_guess(
-        self, p0: Any | None, n_params: int
+        self,
+        p0: Any | None,
+        n_params: int,
     ) -> tuple[list[str], list[str]]:
         """Validate initial parameter guess.
 
@@ -263,7 +271,7 @@ class InputValidator:
             if len(p0) != n_params:
                 errors.append(
                     f"Initial guess p0 has {len(p0)} parameters, "
-                    f"but function expects {n_params}"
+                    f"but function expects {n_params}",
                 )
 
             if not np.all(np.isfinite(p0)):
@@ -275,7 +283,10 @@ class InputValidator:
         return errors, warnings_list
 
     def _validate_bounds(
-        self, bounds: tuple | None, n_params: int, p0: Any | None
+        self,
+        bounds: tuple | None,
+        n_params: int,
+        p0: Any | None,
     ) -> tuple[list[str], list[str]]:
         """Validate parameter bounds.
 
@@ -312,7 +323,7 @@ class InputValidator:
 
                     if len(lb) != n_params or len(ub) != n_params:
                         errors.append(
-                            f"bounds must have length {n_params} to match parameters"
+                            f"bounds must have length {n_params} to match parameters",
                         )
 
                     if np.any(lb >= ub):
@@ -330,7 +341,9 @@ class InputValidator:
         return errors, warnings_list
 
     def _validate_sigma(
-        self, sigma: Any | None, ydata: np.ndarray
+        self,
+        sigma: Any | None,
+        ydata: np.ndarray,
     ) -> tuple[list[str], list[str]]:
         """Validate uncertainty (sigma) parameters.
 
@@ -410,13 +423,13 @@ class InputValidator:
         x_range = np.ptp(xdata)
         if x_range < 1e-10 and x_range > 0:
             warnings.append(
-                f"x data range is very small ({x_range:.2e}) - consider rescaling"
+                f"x data range is very small ({x_range:.2e}) - consider rescaling",
             )
 
         # Check for very large range
         if x_range > 1e10:
             warnings.append(
-                f"x data range is very large ({x_range:.2e}) - consider rescaling"
+                f"x data range is very large ({x_range:.2e}) - consider rescaling",
             )
 
         return errors, warnings
@@ -455,7 +468,12 @@ class InputValidator:
         return warnings
 
     def _check_function_callable(
-        self, f: Callable, xdata: Any, ydata: np.ndarray, p0: Any, n_params: int
+        self,
+        f: Callable,
+        xdata: Any,
+        ydata: np.ndarray,
+        p0: Any,
+        n_params: int,
     ) -> tuple[list[str], list[str]]:
         """Check if function can be called with test data.
 
@@ -518,7 +536,7 @@ class InputValidator:
                     if len(test_result) != expected_len:
                         warnings.append(
                             f"Function output length {len(test_result)} doesn't match "
-                            f"expected length {expected_len}"
+                            f"expected length {expected_len}",
                         )
 
         except Exception as e:
@@ -560,7 +578,7 @@ class InputValidator:
             if n_outliers > 0:
                 warnings.append(
                     f"ydata may contain {n_outliers} outliers - "
-                    "consider using robust loss function"
+                    "consider using robust loss function",
                 )
 
         return warnings
@@ -628,7 +646,10 @@ class InputValidator:
 
         # Step 2.5: Security validation (array size limits, bounds ranges)
         security_errors, security_warnings = self.validate_security_constraints(
-            n_points, n_params, bounds, p0
+            n_points,
+            n_params,
+            bounds,
+            p0,
         )
         errors.extend(security_errors)
         warnings_list.extend(security_warnings)
@@ -638,7 +659,9 @@ class InputValidator:
 
         # Step 3: Validate data shapes
         shape_errors, shape_warnings = self._validate_data_shapes(
-            n_points, ydata, n_params
+            n_points,
+            ydata,
+            n_params,
         )
         errors.extend(shape_errors)
         warnings_list.extend(shape_warnings)
@@ -676,7 +699,11 @@ class InputValidator:
         # Step 10: Check function can be called (skip in fast mode)
         if not self.fast_mode:
             func_errors, func_warnings = self._check_function_callable(
-                f, xdata, ydata, p0, n_params
+                f,
+                xdata,
+                ydata,
+                p0,
+                n_params,
             )
             errors.extend(func_errors)
             warnings_list.extend(func_warnings)
@@ -749,7 +776,10 @@ class InputValidator:
         return errors
 
     def _validate_tolerances(
-        self, ftol: float, xtol: float, gtol: float
+        self,
+        ftol: float,
+        xtol: float,
+        gtol: float,
     ) -> tuple[list[str], list[str]]:
         """Validate convergence tolerances.
 
@@ -789,7 +819,9 @@ class InputValidator:
         return errors, warnings
 
     def _validate_max_nfev(
-        self, max_nfev: int | None, n_params: int
+        self,
+        max_nfev: int | None,
+        n_params: int,
     ) -> tuple[list[str], list[str]]:
         """Validate maximum function evaluations.
 
@@ -815,13 +847,16 @@ class InputValidator:
                 errors.append(f"max_nfev must be positive, got {max_nfev}")
             elif max_nfev < n_params:
                 warnings.append(
-                    f"max_nfev={max_nfev} is less than number of parameters {n_params}"
+                    f"max_nfev={max_nfev} is less than number of parameters {n_params}",
                 )
 
         return errors, warnings
 
     def _validate_bounds_and_x0(
-        self, bounds: tuple | None, x0: np.ndarray, method: str
+        self,
+        bounds: tuple | None,
+        x0: np.ndarray,
+        method: str,
     ) -> list[str]:
         """Validate bounds and check x0 within bounds.
 
@@ -871,7 +906,9 @@ class InputValidator:
         return errors
 
     def _validate_function_at_x0(
-        self, fun: Callable, x0: np.ndarray
+        self,
+        fun: Callable,
+        x0: np.ndarray,
     ) -> tuple[list[str], list[str]]:
         """Validate function can be evaluated at x0.
 
@@ -948,7 +985,7 @@ class InputValidator:
         if n_points > max_data_points:
             errors.append(
                 f"Dataset size ({n_points:,} points) exceeds maximum allowed "
-                f"({max_data_points:,} points). This limit prevents memory exhaustion."
+                f"({max_data_points:,} points). This limit prevents memory exhaustion.",
             )
 
         if n_points < 0:
@@ -965,12 +1002,12 @@ class InputValidator:
                 errors.append(
                     f"Jacobian size ({n_points:,} x {n_params:,} = {jacobian_elements:,} elements) "
                     f"exceeds maximum allowed ({max_jacobian_elements:,} elements). "
-                    "Consider using streaming optimization or reducing dataset size."
+                    "Consider using streaming optimization or reducing dataset size.",
                 )
         except OverflowError:
             errors.append(
                 f"Integer overflow computing Jacobian size: {n_points} x {n_params}. "
-                "Dataset is too large."
+                "Dataset is too large.",
             )
 
         # Memory estimation warning (assuming float64)
@@ -978,11 +1015,11 @@ class InputValidator:
         if estimated_memory_gb > 100:
             warnings_list.append(
                 f"Estimated Jacobian memory usage: {estimated_memory_gb:.1f} GB. "
-                "Consider using streaming optimization."
+                "Consider using streaming optimization.",
             )
         elif estimated_memory_gb > 10:
             warnings_list.append(
-                f"Large Jacobian estimated at {estimated_memory_gb:.1f} GB memory."
+                f"Large Jacobian estimated at {estimated_memory_gb:.1f} GB memory.",
             )
 
         return errors, warnings_list
@@ -1026,22 +1063,22 @@ class InputValidator:
                 # Check for extreme values (excluding inf which is valid)
                 finite_lb = lb_arr[np.isfinite(lb_arr)]
                 if len(finite_lb) > 0 and np.any(
-                    np.abs(finite_lb) > max_bound_magnitude
+                    np.abs(finite_lb) > max_bound_magnitude,
                 ):
                     warnings_list.append(
                         f"Lower bounds contain very large values (|lb| > {max_bound_magnitude:.0e}). "
-                        "This may cause numerical issues."
+                        "This may cause numerical issues.",
                     )
 
             if ub is not None:
                 ub_arr = np.asarray(ub)
                 finite_ub = ub_arr[np.isfinite(ub_arr)]
                 if len(finite_ub) > 0 and np.any(
-                    np.abs(finite_ub) > max_bound_magnitude
+                    np.abs(finite_ub) > max_bound_magnitude,
                 ):
                     warnings_list.append(
                         f"Upper bounds contain very large values (|ub| > {max_bound_magnitude:.0e}). "
-                        "This may cause numerical issues."
+                        "This may cause numerical issues.",
                     )
 
             # Check for NaN in bounds (invalid)
@@ -1093,7 +1130,7 @@ class InputValidator:
                 max_val = np.max(np.abs(p0_arr))
                 warnings_list.append(
                     f"Initial parameters contain very large values (max |p0| = {max_val:.2e}). "
-                    "This may cause numerical overflow."
+                    "This may cause numerical overflow.",
                 )
 
             # Check for subnormal values that might cause underflow
@@ -1103,7 +1140,7 @@ class InputValidator:
                 if min_abs < 1e-300:
                     warnings_list.append(
                         f"Initial parameters contain very small values (min |p0| = {min_abs:.2e}). "
-                        "This may cause numerical underflow."
+                        "This may cause numerical underflow.",
                     )
 
         except Exception as e:
@@ -1145,7 +1182,8 @@ class InputValidator:
 
         # Check array size limits
         size_errors, size_warnings = self._validate_array_size_limits(
-            n_points, n_params
+            n_points,
+            n_params,
         )
         errors.extend(size_errors)
         warnings_list.extend(size_warnings)
@@ -1264,7 +1302,7 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                 # Extract arguments
                 if len(args) < 3:
                     raise ValueError(
-                        "curve_fit requires at least 3 arguments (f, xdata, ydata)"
+                        "curve_fit requires at least 3 arguments (f, xdata, ydata)",
                     )
 
                 f, xdata, ydata = args[:3]
@@ -1280,7 +1318,14 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                 # Validate
                 errors, warnings_list, xdata_clean, ydata_clean = (
                     validator.validate_curve_fit_inputs(
-                        f, xdata, ydata, p0, bounds, sigma, absolute_sigma, check_finite
+                        f,
+                        xdata,
+                        ydata,
+                        p0,
+                        bounds,
+                        sigma,
+                        absolute_sigma,
+                        check_finite,
                     )
                 )
 
@@ -1298,7 +1343,7 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                 # Extract arguments
                 if len(args) < 2:
                     raise ValueError(
-                        "least_squares requires at least 2 arguments (fun, x0)"
+                        "least_squares requires at least 2 arguments (fun, x0)",
                     )
 
                 fun, x0 = args[:2]
@@ -1315,7 +1360,14 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                 # Validate
                 errors, warnings_list, x0_clean = (
                     validator.validate_least_squares_inputs(
-                        fun, x0, bounds, method, ftol, xtol, gtol, max_nfev
+                        fun,
+                        x0,
+                        bounds,
+                        method,
+                        ftol,
+                        xtol,
+                        gtol,
+                        max_nfev,
                     )
                 )
 

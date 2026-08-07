@@ -133,7 +133,7 @@ class ParameterNormalizer:
         valid_strategies = ("bounds", "p0", "none", "auto")
         if strategy not in valid_strategies:
             raise ValueError(
-                f"strategy must be one of {valid_strategies}, got: {strategy}"
+                f"strategy must be one of {valid_strategies}, got: {strategy}",
             )
 
         # Determine strategy
@@ -170,7 +170,9 @@ class ParameterNormalizer:
             # Handle zero range (constant parameter)
             eps = jnp.finfo(jnp.float64).eps
             self.scales = jnp.where(
-                jnp.abs(self.scales) < eps, jnp.ones_like(self.scales), self.scales
+                jnp.abs(self.scales) < eps,
+                jnp.ones_like(self.scales),
+                self.scales,
             )
 
             self.offsets = lb
@@ -348,7 +350,9 @@ class NormalizedModelWrapper:
     """
 
     def __init__(
-        self, model_fn: Callable[..., jnp.ndarray], normalizer: ParameterNormalizer
+        self,
+        model_fn: Callable[..., jnp.ndarray],
+        normalizer: ParameterNormalizer,
     ):
         """Initialize normalized model wrapper.
 

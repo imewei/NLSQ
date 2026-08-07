@@ -154,7 +154,7 @@ def analyze_source_transfers(source_code: str) -> dict:
     """
     if not isinstance(source_code, str):
         raise TypeError(
-            f"source_code must be a string, got {type(source_code).__name__}"
+            f"source_code must be a string, got {type(source_code).__name__}",
         )
 
     # Count only NumPy conversions (not JAX operations like jnp.array)
@@ -176,7 +176,9 @@ def analyze_source_transfers(source_code: str) -> dict:
 
 
 def compare_transfer_reduction(
-    source_before: str, source_after: str, module_name: str = "module"
+    source_before: str,
+    source_after: str,
+    module_name: str = "module",
 ) -> dict:
     """Compare transfer patterns before and after optimization.
 
@@ -205,15 +207,15 @@ def compare_transfer_reduction(
     """
     if not isinstance(source_before, str):
         raise TypeError(
-            f"source_before must be a string, got {type(source_before).__name__}"
+            f"source_before must be a string, got {type(source_before).__name__}",
         )
     if not isinstance(source_after, str):
         raise TypeError(
-            f"source_after must be a string, got {type(source_after).__name__}"
+            f"source_after must be a string, got {type(source_after).__name__}",
         )
     if not isinstance(module_name, str):
         raise TypeError(
-            f"module_name must be a string, got {type(module_name).__name__}"
+            f"module_name must be a string, got {type(module_name).__name__}",
         )
 
     before = analyze_source_transfers(source_before)
@@ -289,7 +291,7 @@ def profile_transfers_runtime(
         raise TypeError(f"func must be callable, got {type(func).__name__}")
     if trace_dir is not None and not isinstance(trace_dir, str):
         raise TypeError(
-            f"trace_dir must be a string or None, got {type(trace_dir).__name__}"
+            f"trace_dir must be a string or None, got {type(trace_dir).__name__}",
         )
 
     import tempfile

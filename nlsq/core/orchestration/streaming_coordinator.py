@@ -109,12 +109,18 @@ class StreamingCoordinator:
         elif workflow == "streaming":
             strategy, reason, chunk_size, n_chunks, hybrid_config = (
                 self._decide_streaming_hint(
-                    n_data, n_params, usable_mb, memory_pressure
+                    n_data,
+                    n_params,
+                    usable_mb,
+                    memory_pressure,
                 )
             )
         else:
             strategy, reason, chunk_size, n_chunks, hybrid_config = self._decide_auto(
-                n_data, n_params, usable_mb, memory_pressure
+                n_data,
+                n_params,
+                usable_mb,
+                memory_pressure,
             )
 
         return StreamingDecision(
@@ -263,7 +269,7 @@ class StreamingCoordinator:
                 n_chunks,
                 config,
             )
-        elif peak_mb > usable_mb:
+        if peak_mb > usable_mb:
             # Peak memory (with Jacobian) exceeds memory -> chunked
             config = self.configure_hybrid(n_data, n_params, usable_mb)
             n_chunks = (n_data + config.chunk_size - 1) // config.chunk_size
@@ -274,15 +280,14 @@ class StreamingCoordinator:
                 n_chunks,
                 config,
             )
-        else:
-            # Everything fits -> direct
-            return (
-                "direct",
-                f"Data fits in memory (peak {peak_mb:.1f}MB < usable {usable_mb:.1f}MB)",
-                None,
-                None,
-                None,
-            )
+        # Everything fits -> direct
+        return (
+            "direct",
+            f"Data fits in memory (peak {peak_mb:.1f}MB < usable {usable_mb:.1f}MB)",
+            None,
+            None,
+            None,
+        )
 
     def _decide_forced_streaming(
         self,

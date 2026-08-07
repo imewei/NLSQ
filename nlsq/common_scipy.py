@@ -54,12 +54,19 @@ def intersect_trust_region(x, s, Delta):
 
     if t1 < t2:
         return t1, t2
-    else:
-        return t2, t1
+    return t2, t1
 
 
 def solve_lsq_trust_region(
-    n, m, uf, s, V, Delta, initial_alpha=None, rtol=0.01, max_iter=10
+    n,
+    m,
+    uf,
+    s,
+    V,
+    Delta,
+    initial_alpha=None,
+    rtol=0.01,
+    max_iter=10,
 ):
     """Solve a trust-region problem arising in least-squares minimization.
     This function implements a method described by J. J. More [12]_ and used
@@ -228,7 +235,11 @@ def solve_trust_region_2d(B, g, Delta):
 
 
 def update_tr_radius(
-    Delta, actual_reduction, predicted_reduction, step_norm, bound_hit
+    Delta,
+    actual_reduction,
+    predicted_reduction,
+    step_norm,
+    bound_hit,
 ):
     """Update the radius of a trust region based on the cost reduction.
 
@@ -366,7 +377,8 @@ def step_size_to_bound(x, s, lb, ub):
     steps.fill(np.inf)
     with np.errstate(over="ignore"):
         steps[non_zero] = np.maximum(
-            (lb - x)[non_zero] / s_non_zero, (ub - x)[non_zero] / s_non_zero
+            (lb - x)[non_zero] / s_non_zero,
+            (ub - x)[non_zero] / s_non_zero,
         )
     min_step = np.min(steps)
     return min_step, np.equal(steps, min_step) * np.sign(s).astype(int)
@@ -431,10 +443,12 @@ def make_strictly_feasible(x, lb, ub, rstep=1e-10):
         x_new[upper_mask] = np.nextafter(ub[upper_mask], lb[upper_mask])
     else:
         x_new[lower_mask] = lb[lower_mask] + rstep * np.maximum(
-            1, np.abs(lb[lower_mask])
+            1,
+            np.abs(lb[lower_mask]),
         )
         x_new[upper_mask] = ub[upper_mask] - rstep * np.maximum(
-            1, np.abs(ub[upper_mask])
+            1,
+            np.abs(ub[upper_mask]),
         )
 
     tight_bounds = (x_new < lb) | (x_new > ub)
@@ -529,12 +543,17 @@ def print_header_nonlinear():
             "Cost reduction",
             "Step norm",
             "Optimality",
-        )
+        ),
     )
 
 
 def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality
+    iteration,
+    nfev,
+    cost,
+    cost_reduction,
+    step_norm,
+    optimality,
 ):
     """Print a single iteration row for nonlinear optimization progress."""
     cost_reduction = " " * 15 if cost_reduction is None else f"{cost_reduction:^15.2e}"
@@ -542,7 +561,7 @@ def print_iteration_nonlinear(
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
     logger.info(
-        f"{iteration:^15}{nfev:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}"
+        f"{iteration:^15}{nfev:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}",
     )
 
 
@@ -555,7 +574,7 @@ def print_header_linear():
             "Cost reduction",
             "Step norm",
             "Optimality",
-        )
+        ),
     )
 
 
@@ -566,7 +585,7 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimalit
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
     logger.info(
-        f"{iteration:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}"
+        f"{iteration:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}",
     )
 
 
@@ -577,9 +596,8 @@ def check_termination(dF, F, dx_norm, x_norm, ratio, ftol, xtol):
 
     if ftol_satisfied and xtol_satisfied:
         return 4
-    elif ftol_satisfied:
+    if ftol_satisfied:
         return 2
-    elif xtol_satisfied:
+    if xtol_satisfied:
         return 3
-    else:
-        return None
+    return None

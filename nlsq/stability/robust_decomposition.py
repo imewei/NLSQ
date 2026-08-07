@@ -67,7 +67,9 @@ class RobustDecomposition:
         self.regularization_factor = 1e-10
 
     def svd(
-        self, matrix: jnp.ndarray, full_matrices: bool = False
+        self,
+        matrix: jnp.ndarray,
+        full_matrices: bool = False,
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """Compute SVD with automatic fallback.
 
@@ -105,7 +107,9 @@ class RobustDecomposition:
         raise RuntimeError("All SVD methods failed")
 
     def qr(
-        self, matrix: jnp.ndarray, mode: str = "reduced"
+        self,
+        matrix: jnp.ndarray,
+        mode: str = "reduced",
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute QR decomposition with fallback.
 
@@ -191,14 +195,15 @@ class RobustDecomposition:
                 full_matrices = args[0] if args else False
                 U, s, Vt = jax_svd(matrix, full_matrices=full_matrices)
                 return U, s, Vt
-            elif decomp_type == "qr":
+            if decomp_type == "qr":
                 mode = args[0] if args else "reduced"
                 qr_result = cast(
-                    tuple[jnp.ndarray, jnp.ndarray], jax_qr(matrix, mode=mode)
+                    "tuple[jnp.ndarray, jnp.ndarray]",
+                    jax_qr(matrix, mode=mode),
                 )
                 Q, R = qr_result
                 return Q, R
-            elif decomp_type == "cholesky":
+            if decomp_type == "cholesky":
                 lower = args[0] if args else True
                 L = jax_cholesky(matrix, lower=lower)
                 return L
@@ -218,14 +223,15 @@ class RobustDecomposition:
                 full_matrices = args[0] if args else False
                 U, s, Vt = jax_svd(matrix_cpu, full_matrices=full_matrices)
                 return U, s, Vt
-            elif decomp_type == "qr":
+            if decomp_type == "qr":
                 mode = args[0] if args else "reduced"
                 qr_result = cast(
-                    tuple[jnp.ndarray, jnp.ndarray], jax_qr(matrix_cpu, mode=mode)
+                    "tuple[jnp.ndarray, jnp.ndarray]",
+                    jax_qr(matrix_cpu, mode=mode),
                 )
                 Q, R = qr_result
                 return Q, R
-            elif decomp_type == "cholesky":
+            if decomp_type == "cholesky":
                 lower = args[0] if args else True
                 L = jax_cholesky(matrix_cpu, lower=lower)
                 return L
@@ -244,11 +250,11 @@ class RobustDecomposition:
             full_matrices = args[0] if args else False
             U, s, Vt = scipy.linalg.svd(matrix_np, full_matrices=full_matrices)
             return jnp.array(U), jnp.array(s), jnp.array(Vt)
-        elif decomp_type == "qr":
+        if decomp_type == "qr":
             mode = args[0] if args else "reduced"
             Q, R = scipy.linalg.qr(matrix_np, mode=mode)
             return jnp.array(Q), jnp.array(R)
-        elif decomp_type == "cholesky":
+        if decomp_type == "cholesky":
             lower = args[0] if args else True
             L = scipy.linalg.cholesky(matrix_np, lower=lower)
             return jnp.array(L)
@@ -262,12 +268,12 @@ class RobustDecomposition:
             full_matrices = args[0] if args else False
             U, s, Vt = np.linalg.svd(matrix_np, full_matrices=full_matrices)
             return jnp.array(U), jnp.array(s), jnp.array(Vt)
-        elif decomp_type == "qr":
+        if decomp_type == "qr":
             mode = args[0] if args else "reduced"
-            mode = cast(Literal["reduced", "complete", "r", "raw"], mode)
+            mode = cast("Literal['reduced', 'complete', 'r', 'raw']", mode)
             Q, R = np.linalg.qr(matrix_np, mode=mode)
             return jnp.array(Q), jnp.array(R)
-        elif decomp_type == "cholesky":
+        if decomp_type == "cholesky":
             L = np.linalg.cholesky(matrix_np)
             return jnp.array(L)
 
@@ -280,7 +286,7 @@ class RobustDecomposition:
             reg_matrix = matrix + self.regularization_factor * jnp.eye(m, n)
             return self._numpy_decomp(reg_matrix, "svd", *args)
 
-        elif decomp_type == "qr":
+        if decomp_type == "qr":
             # QR with column pivoting for stability
             matrix_np = np.array(matrix)
             try:
@@ -298,12 +304,15 @@ class RobustDecomposition:
         elif decomp_type == "cholesky":
             # Ensure positive definite with stronger regularization
             matrix = self._ensure_positive_definite(
-                matrix, factor=self.regularization_factor * 100
+                matrix,
+                factor=self.regularization_factor * 100,
             )
             return self._numpy_decomp(matrix, "cholesky", *args)
 
     def _ensure_positive_definite(
-        self, matrix: jnp.ndarray, factor: float | None = None
+        self,
+        matrix: jnp.ndarray,
+        factor: float | None = None,
     ) -> jnp.ndarray:
         """Make matrix positive definite.
 
@@ -343,7 +352,9 @@ class RobustDecomposition:
         return matrix
 
     def _cholesky_via_eigen(
-        self, matrix: jnp.ndarray, lower: bool = True
+        self,
+        matrix: jnp.ndarray,
+        lower: bool = True,
     ) -> jnp.ndarray:
         """Compute Cholesky via eigendecomposition.
 
@@ -387,8 +398,7 @@ class RobustDecomposition:
 
             if lower:
                 return L
-            else:
-                return L.T
+            return L.T
         except Exception as e:
             raise RuntimeError(f"Cholesky via eigendecomposition failed: {e}") from e
 
@@ -473,7 +483,7 @@ class RobustDecomposition:
 
             except Exception as e2:
                 self.logger.warning(
-                    f"QR failed for least squares, using normal equations: {e2}"
+                    f"QR failed for least squares, using normal equations: {e2}",
                 )
 
                 # Last resort: normal equations (less stable)

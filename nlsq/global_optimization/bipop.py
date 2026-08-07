@@ -125,7 +125,7 @@ class BIPOPRestarter:
 
         logger.debug(
             f"BIPOP: Restart {self.restart_count}/{self.max_restarts}, "
-            f"next run: {'large' if self._use_large_pop else 'small'}"
+            f"next run: {'large' if self._use_large_pop else 'small'}",
         )
 
     def check_stagnation(self, fitness_spread: float) -> bool:

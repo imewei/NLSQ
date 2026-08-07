@@ -164,7 +164,7 @@ def _raise_removed_preset_error(preset_name: str) -> None:
     raise ValueError(
         f"Workflow preset '{preset_name}' was removed in v0.6.3.\n\n"
         f"{migration_hint}\n\n"
-        f"See migration guide: {_MIGRATION_DOCS_URL}"
+        f"See migration guide: {_MIGRATION_DOCS_URL}",
     )
 
 
@@ -202,7 +202,7 @@ def _parse_goal_parameter(goal: str | Any | None) -> Any:
         }
         if goal_lower not in goal_map:
             raise ValueError(
-                f"Unknown goal '{goal}'. Must be one of: {list(goal_map.keys())}"
+                f"Unknown goal '{goal}'. Must be one of: {list(goal_map.keys())}",
             )
         return goal_map[goal_lower]
 
@@ -215,7 +215,7 @@ def _parse_goal_parameter(goal: str | Any | None) -> Any:
         return OptimizationGoal[goal.name]
 
     raise ValueError(
-        f"goal must be a string or OptimizationGoal enum, got {type(goal)}"
+        f"goal must be a string or OptimizationGoal enum, got {type(goal)}",
     )
 
 
@@ -472,7 +472,8 @@ def fit(  # noqa: C901
     from nlsq.streaming.large_dataset import LDMemoryConfig
 
     if isinstance(
-        workflow, (LDMemoryConfig, HybridStreamingConfig, GlobalOptimizationConfig)
+        workflow,
+        (LDMemoryConfig, HybridStreamingConfig, GlobalOptimizationConfig),
     ):
         # Custom config object path - route directly to appropriate backend
         return _fit_with_config(
@@ -500,7 +501,7 @@ def fit(  # noqa: C901
         if workflow_lower == "auto":
             # Auto-select workflow based on memory budget
             _logger.info(
-                f"workflow='auto' starting: n_points={n_points:,}, n_params={n_params}"
+                f"workflow='auto' starting: n_points={n_points:,}, n_params={n_params}",
             )
 
             selector = MemoryBudgetSelector()
@@ -518,7 +519,7 @@ def fit(  # noqa: C901
                 f"workflow='auto' memory budget: "
                 f"available={budget.available_gb:.1f}GB, "
                 f"threshold={budget.threshold_gb:.1f}GB, "
-                f"peak_estimate={budget.peak_gb:.2f}GB"
+                f"peak_estimate={budget.peak_gb:.2f}GB",
             )
 
             _strategy, config = selector.select(
@@ -532,17 +533,17 @@ def fit(  # noqa: C901
             if _strategy == "streaming":
                 _logger.info(
                     f"workflow='auto' selected: STREAMING "
-                    f"(data {budget.data_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+                    f"(data {budget.data_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)",
                 )
             elif _strategy == "chunked":
                 _logger.info(
                     f"workflow='auto' selected: CHUNKED "
-                    f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+                    f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)",
                 )
             else:
                 _logger.info(
                     f"workflow='auto' selected: STANDARD "
-                    f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)"
+                    f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)",
                 )
 
             # Log bounds info if provided
@@ -550,7 +551,7 @@ def fit(  # noqa: C901
                 lb, ub = prepare_bounds(bounds, n_params)
                 has_bounds = not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
                 _logger.debug(
-                    f"workflow='auto' bounds: {'provided' if has_bounds else 'unbounded'}"
+                    f"workflow='auto' bounds: {'provided' if has_bounds else 'unbounded'}",
                 )
             return _fit_with_config(
                 f=f,
@@ -567,7 +568,7 @@ def fit(  # noqa: C901
                 **kwargs,
             )
 
-        elif workflow_lower == "auto_global":
+        if workflow_lower == "auto_global":
             # Memory-aware global optimization (requires bounds)
             return _fit_with_auto_global(
                 f=f,
@@ -584,7 +585,7 @@ def fit(  # noqa: C901
                 **kwargs,
             )
 
-        elif workflow_lower == "hpc":
+        if workflow_lower == "hpc":
             # HPC workflow with checkpointing (wraps auto_global)
             return _fit_with_hpc(
                 f=f,
@@ -601,7 +602,7 @@ def fit(  # noqa: C901
                 **kwargs,
             )
 
-        elif workflow_lower in WORKFLOW_PRESETS:
+        if workflow_lower in WORKFLOW_PRESETS:
             # Named workflow path - apply preset configuration
             preset = WORKFLOW_PRESETS[workflow_lower]
             return _fit_with_preset(
@@ -619,14 +620,13 @@ def fit(  # noqa: C901
                 n_points=n_points,
                 **kwargs,
             )
-        else:
-            raise ValueError(
-                f"Unknown workflow '{workflow}'. Must be 'auto', one of "
-                f"{list(WORKFLOW_PRESETS.keys())}, or a config object."
-            )
+        raise ValueError(
+            f"Unknown workflow '{workflow}'. Must be 'auto', one of "
+            f"{list(WORKFLOW_PRESETS.keys())}, or a config object.",
+        )
 
     raise ValueError(
-        f"workflow must be a string or config object, got {type(workflow)}"
+        f"workflow must be a string or config object, got {type(workflow)}",
     )
 
 
@@ -678,7 +678,7 @@ def _fit_with_config(
         )
         return result
 
-    elif isinstance(config, HybridStreamingConfig):
+    if isinstance(config, HybridStreamingConfig):
         # Streaming optimization path
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 
@@ -718,11 +718,12 @@ def _fit_with_config(
         result["xdata"] = xdata
         result["ydata"] = ydata
         result["pcov"] = result_dict.get(
-            "pcov", np.full((len(p0_arr), len(p0_arr)), np.inf)
+            "pcov",
+            np.full((len(p0_arr), len(p0_arr)), np.inf),
         )
         return result
 
-    elif isinstance(config, LDMemoryConfig):
+    if isinstance(config, LDMemoryConfig):
         # Chunked processing path - use standard curve_fit for small datasets
         # or LargeDatasetFitter for large ones
         if n_points < 1_000_000:
@@ -739,46 +740,44 @@ def _fit_with_config(
                 method=method,
                 **kwargs,
             )
-        else:
-            # Large dataset, use LargeDatasetFitter
-            fitter = LargeDatasetFitter(
-                memory_limit_gb=config.memory_limit_gb,
-                config=config,
-            )
-            result = fitter.fit(
-                f,
-                xdata,
-                ydata,
-                p0=np.asarray(p0) if p0 is not None else None,
-                bounds=bounds,
-                method=method or "trf",
-                **kwargs,
-            )
-
-            # Ensure we have a CurveFitResult
-            if not isinstance(result, CurveFitResult):
-                # Convert from dict or OptimizeResult
-                result = CurveFitResult(result)
-                result["model"] = f
-                result["xdata"] = xdata
-                result["ydata"] = ydata
-
-            return result
-
-    else:
-        # Unknown config type - fall back to curve_fit
-        return curve_fit(
-            f=f,
-            xdata=xdata,
-            ydata=ydata,
-            p0=p0,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            check_finite=check_finite,
+        # Large dataset, use LargeDatasetFitter
+        fitter = LargeDatasetFitter(
+            memory_limit_gb=config.memory_limit_gb,
+            config=config,
+        )
+        result = fitter.fit(
+            f,
+            xdata,
+            ydata,
+            p0=np.asarray(p0) if p0 is not None else None,
             bounds=bounds,
-            method=method,
+            method=method or "trf",
             **kwargs,
         )
+
+        # Ensure we have a CurveFitResult
+        if not isinstance(result, CurveFitResult):
+            # Convert from dict or OptimizeResult
+            result = CurveFitResult(result)
+            result["model"] = f
+            result["xdata"] = xdata
+            result["ydata"] = ydata
+
+        return result
+
+    # Unknown config type - fall back to curve_fit
+    return curve_fit(
+        f=f,
+        xdata=xdata,
+        ydata=ydata,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
+        bounds=bounds,
+        method=method,
+        **kwargs,
+    )
 
 
 def _fit_with_preset(  # noqa: C901
@@ -885,22 +884,21 @@ def _fit_with_preset(  # noqa: C901
                 cmaes_config=cmaes_config,
                 **kwargs,
             )
-        else:
-            # Fall back to multi-start TRF
-            return curve_fit(
-                f=f,
-                xdata=xdata,
-                ydata=ydata,
-                p0=p0,
-                sigma=sigma,
-                absolute_sigma=absolute_sigma,
-                check_finite=check_finite,
-                bounds=bounds,
-                method=method,  # Use specified or default
-                multistart=enable_multistart,
-                n_starts=n_starts if enable_multistart else 0,
-                **kwargs,
-            )
+        # Fall back to multi-start TRF
+        return curve_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,  # Use specified or default
+            multistart=enable_multistart,
+            n_starts=n_starts if enable_multistart else 0,
+            **kwargs,
+        )
 
     if strategy == "standard":
         # Standard curve_fit path
@@ -919,21 +917,20 @@ def _fit_with_preset(  # noqa: C901
                 n_starts=n_starts,
                 **kwargs,
             )
-        else:
-            return curve_fit(
-                f=f,
-                xdata=xdata,
-                ydata=ydata,
-                p0=p0,
-                sigma=sigma,
-                absolute_sigma=absolute_sigma,
-                check_finite=check_finite,
-                bounds=bounds,
-                method=method,
-                **kwargs,
-            )
+        return curve_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=method,
+            **kwargs,
+        )
 
-    elif strategy == "chunked":
+    if strategy == "chunked":
         # Large dataset with chunking
         from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
@@ -959,32 +956,31 @@ def _fit_with_preset(  # noqa: C901
                 n_starts=n_starts if enable_multistart else 0,
                 **kwargs,
             )
-        else:
-            fitter = LargeDatasetFitter(
-                memory_limit_gb=config.memory_limit_gb,
-                config=config,
-            )
-            result = fitter.fit(
-                f,
-                xdata,
-                ydata,
-                p0=np.asarray(p0) if p0 is not None else None,
-                bounds=bounds,
-                method=method or "trf",
-                multistart=enable_multistart,
-                n_starts=n_starts if enable_multistart else 0,
-                **kwargs,
-            )
+        fitter = LargeDatasetFitter(
+            memory_limit_gb=config.memory_limit_gb,
+            config=config,
+        )
+        result = fitter.fit(
+            f,
+            xdata,
+            ydata,
+            p0=np.asarray(p0) if p0 is not None else None,
+            bounds=bounds,
+            method=method or "trf",
+            multistart=enable_multistart,
+            n_starts=n_starts if enable_multistart else 0,
+            **kwargs,
+        )
 
-            if not isinstance(result, CurveFitResult):
-                result = CurveFitResult(result)
-                result["model"] = f
-                result["xdata"] = xdata
-                result["ydata"] = ydata
+        if not isinstance(result, CurveFitResult):
+            result = CurveFitResult(result)
+            result["model"] = f
+            result["xdata"] = xdata
+            result["ydata"] = ydata
 
-            return result
+        return result
 
-    elif strategy == "streaming":
+    if strategy == "streaming":
         # Streaming optimization path
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
@@ -1008,7 +1004,8 @@ def _fit_with_preset(  # noqa: C901
         )
 
         enable_checkpoints = preset.get(
-            "enable_checkpoints", tier_str == "STREAMING_CHECKPOINT"
+            "enable_checkpoints",
+            tier_str == "STREAMING_CHECKPOINT",
         )
 
         config = HybridStreamingConfig(
@@ -1037,24 +1034,24 @@ def _fit_with_preset(  # noqa: C901
         result["xdata"] = xdata
         result["ydata"] = ydata
         result["pcov"] = result_dict.get(
-            "pcov", np.full((len(p0_arr), len(p0_arr)), np.inf)
+            "pcov",
+            np.full((len(p0_arr), len(p0_arr)), np.inf),
         )
         return result
 
-    else:
-        # Fallback to standard curve_fit
-        return curve_fit(
-            f=f,
-            xdata=xdata,
-            ydata=ydata,
-            p0=p0,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            check_finite=check_finite,
-            bounds=bounds,
-            method=method,
-            **kwargs,
-        )
+    # Fallback to standard curve_fit
+    return curve_fit(
+        f=f,
+        xdata=xdata,
+        ydata=ydata,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
+        bounds=bounds,
+        method=method,
+        **kwargs,
+    )
 
 
 # =============================================================================
@@ -1133,7 +1130,7 @@ def _fit_with_auto_global(
 
     # Log workflow initialization
     _logger.info(
-        f"workflow='auto_global' starting: n_points={n_points:,}, n_params={n_params}"
+        f"workflow='auto_global' starting: n_points={n_points:,}, n_params={n_params}",
     )
 
     # FR-002: Validate bounds are provided
@@ -1142,7 +1139,7 @@ def _fit_with_auto_global(
         raise ValueError(
             "workflow='auto_global' requires bounds. "
             "Provide bounds as (lower, upper) arrays:\n"
-            "    fit(model, x, y, workflow='auto_global', bounds=([0, 0], [10, 10]))"
+            "    fit(model, x, y, workflow='auto_global', bounds=([0, 0], [10, 10]))",
         )
 
     # Log bounds information
@@ -1175,7 +1172,7 @@ def _fit_with_auto_global(
         f"workflow='auto_global' memory budget: "
         f"available={budget.available_gb:.1f}GB, "
         f"threshold={budget.threshold_gb:.1f}GB, "
-        f"peak_estimate={budget.peak_gb:.2f}GB"
+        f"peak_estimate={budget.peak_gb:.2f}GB",
     )
 
     strategy, _memory_config = selector.select(
@@ -1189,17 +1186,17 @@ def _fit_with_auto_global(
     if strategy == "streaming":
         _logger.info(
             f"workflow='auto_global' memory strategy: STREAMING "
-            f"(data {budget.data_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+            f"(data {budget.data_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)",
         )
     elif strategy == "chunked":
         _logger.info(
             f"workflow='auto_global' memory strategy: CHUNKED "
-            f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)"
+            f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)",
         )
     else:
         _logger.info(
             f"workflow='auto_global' memory strategy: STANDARD "
-            f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)"
+            f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)",
         )
 
     # FR-005: Select global method (CMA-ES vs Multi-Start)
@@ -1214,12 +1211,12 @@ def _fit_with_auto_global(
     if global_method == "cmaes":
         _logger.info(
             f"workflow='auto_global' global method: CMA-ES "
-            f"(scale_ratio={scale_ratio:.1f} > 1000 or evosax available)"
+            f"(scale_ratio={scale_ratio:.1f} > 1000 or evosax available)",
         )
     else:
         _logger.info(
             f"workflow='auto_global' global method: Multi-Start "
-            f"(n_starts={n_starts}, scale_ratio={scale_ratio:.1f})"
+            f"(n_starts={n_starts}, scale_ratio={scale_ratio:.1f})",
         )
 
     # Apply adaptive tolerances if goal is specified
@@ -1243,21 +1240,20 @@ def _fit_with_auto_global(
             cmaes_config=cmaes_config,
             **kwargs,
         )
-    else:
-        # Multi-start path
-        return _fit_global_multistart(
-            f=f,
-            xdata=xdata,
-            ydata=ydata,
-            p0=p0,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            check_finite=check_finite,
-            bounds=(lb, ub),
-            strategy=strategy,
-            n_starts=n_starts,
-            **kwargs,
-        )
+    # Multi-start path
+    return _fit_global_multistart(
+        f=f,
+        xdata=xdata,
+        ydata=ydata,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
+        bounds=(lb, ub),
+        strategy=strategy,
+        n_starts=n_starts,
+        **kwargs,
+    )
 
 
 def _fit_with_hpc(
@@ -1323,7 +1319,7 @@ def _fit_with_hpc(
         raise ValueError(
             "workflow='hpc' requires bounds. "
             "Provide bounds as (lower, upper) arrays:\n"
-            "    fit(model, x, y, workflow='hpc', bounds=([0, 0], [10, 10]))"
+            "    fit(model, x, y, workflow='hpc', bounds=([0, 0], [10, 10]))",
         )
 
     # Extract HPC-specific parameters
@@ -1333,7 +1329,7 @@ def _fit_with_hpc(
     # Log HPC configuration
     _logger.info(
         f"workflow='hpc' checkpointing enabled: "
-        f"dir={checkpoint_dir or 'auto'}, interval={checkpoint_interval}"
+        f"dir={checkpoint_dir or 'auto'}, interval={checkpoint_interval}",
     )
 
     # Detect cluster environment
@@ -1347,7 +1343,7 @@ def _fit_with_hpc(
             f"workflow='hpc' cluster detected: "
             f"scheduler={cluster_info.scheduler}, "
             f"nodes={cluster_info.node_count}, "
-            f"gpus={cluster_info.total_gpus}"
+            f"gpus={cluster_info.total_gpus}",
         )
         if cluster_info.job_id:
             _logger.debug(f"workflow='hpc' job_id={cluster_info.job_id}")
@@ -1409,7 +1405,7 @@ def _fit_global_cmaes(
                 **{
                     **cmaes_config.__dict__,
                     "data_chunk_size": min(100_000, max(10_000, n_points // 10)),
-                }
+                },
             )
     elif strategy == "chunked":
         if cmaes_config.data_chunk_size is None:
@@ -1418,7 +1414,7 @@ def _fit_global_cmaes(
                 **{
                     **cmaes_config.__dict__,
                     "data_chunk_size": min(500_000, max(50_000, n_points // 5)),
-                }
+                },
             )
 
     optimizer = CMAESOptimizer(config=cmaes_config)
@@ -1444,7 +1440,7 @@ def _fit_global_cmaes(
             "model": f,
             "xdata": xdata,
             "ydata": ydata,
-        }
+        },
     )
     if "cmaes_diagnostics" in result_dict:
         result["cmaes_diagnostics"] = result_dict["cmaes_diagnostics"]
@@ -1489,7 +1485,7 @@ def _fit_global_multistart(
             n_starts=n_starts,
             **kwargs,
         )
-    elif strategy == "chunked":
+    if strategy == "chunked":
         # Chunked processing with multi-start
         from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
@@ -1519,47 +1515,47 @@ def _fit_global_multistart(
             result["xdata"] = xdata
             result["ydata"] = ydata
         return result
-    else:
-        # Streaming with multi-start (FR-004)
-        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
-        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+    # Streaming with multi-start (FR-004)
+    from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+    from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
-        # Prepare p0
-        if p0 is None:
-            sig = signature(f)
-            args = sig.parameters
-            n_params = len(args) - 1
-            p0 = np.ones(n_params)
-        p0_arr = np.atleast_1d(p0)
+    # Prepare p0
+    if p0 is None:
+        sig = signature(f)
+        args = sig.parameters
+        n_params = len(args) - 1
+        p0 = np.ones(n_params)
+    p0_arr = np.atleast_1d(p0)
 
-        config = HybridStreamingConfig(
-            normalize=True,
-            warmup_iterations=200,
-            gauss_newton_tol=kwargs.get("gtol", 1e-8),
-            enable_multistart=True,
-            n_starts=n_starts,
-        )
+    config = HybridStreamingConfig(
+        normalize=True,
+        warmup_iterations=200,
+        gauss_newton_tol=kwargs.get("gtol", 1e-8),
+        enable_multistart=True,
+        n_starts=n_starts,
+    )
 
-        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
-        result_dict = optimizer.fit(
-            data_source=(xdata, ydata),
-            func=f,
-            p0=p0_arr,
-            bounds=bounds,
-            sigma=np.asarray(sigma) if sigma is not None else None,
-            absolute_sigma=absolute_sigma,
-            callback=kwargs.get("callback"),
-            verbose=kwargs.get("verbose", 1),
-        )
+    optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+    result_dict = optimizer.fit(
+        data_source=(xdata, ydata),
+        func=f,
+        p0=p0_arr,
+        bounds=bounds,
+        sigma=np.asarray(sigma) if sigma is not None else None,
+        absolute_sigma=absolute_sigma,
+        callback=kwargs.get("callback"),
+        verbose=kwargs.get("verbose", 1),
+    )
 
-        result = CurveFitResult(result_dict)
-        result["model"] = f
-        result["xdata"] = xdata
-        result["ydata"] = ydata
-        result["pcov"] = result_dict.get(
-            "pcov", np.full((len(p0_arr), len(p0_arr)), np.inf)
-        )
-        return result
+    result = CurveFitResult(result_dict)
+    result["model"] = f
+    result["xdata"] = xdata
+    result["ydata"] = ydata
+    result["pcov"] = result_dict.get(
+        "pcov",
+        np.full((len(p0_arr), len(p0_arr)), np.inf),
+    )
+    return result
 
 
 # =============================================================================
@@ -1634,16 +1630,16 @@ def _log_memory_budget_diagnostics(
 
         logger.info(
             f"[NLSQ] Memory budget: available={budget.available_gb:.1f} GB, "
-            f"threshold={budget.threshold_gb:.1f} GB"
+            f"threshold={budget.threshold_gb:.1f} GB",
         )
         logger.info(
             f"[NLSQ] Estimates: data={budget.data_gb:.2f} GB, "
-            f"jacobian={budget.jacobian_gb:.2f} GB, peak={budget.peak_gb:.2f} GB"
+            f"jacobian={budget.jacobian_gb:.2f} GB, peak={budget.peak_gb:.2f} GB",
         )
         logger.info(
             f"[NLSQ] Strategy: {strategy} "
             f"(peak {budget.peak_gb:.2f} GB {'<' if budget.fits_in_memory else '>'} "
-            f"threshold {budget.threshold_gb:.1f} GB)"
+            f"threshold {budget.threshold_gb:.1f} GB)",
         )
     except Exception as e:
         logger.debug(f"[NLSQ] Memory budget diagnostics unavailable: {e}")
@@ -1679,7 +1675,10 @@ def _apply_auto_bounds(
     if p0 is not None:
         # Infer bounds from data
         inferred_bounds = infer_bounds(
-            xdata, ydata, p0, safety_factor=bounds_safety_factor
+            xdata,
+            ydata,
+            p0,
+            safety_factor=bounds_safety_factor,
         )
 
         # Get user-provided bounds if any
@@ -1744,7 +1743,7 @@ def _apply_stability_checks(
         # Just check and warn
         if stability_report["severity"] == "critical":
             logger.warning(
-                f"Critical stability issues detected ({len(stability_report['issues'])} issues):"
+                f"Critical stability issues detected ({len(stability_report['issues'])} issues):",
             )
             for issue_type, message, severity in stability_report["issues"]:
                 logger.warning(f"  [{severity.upper()}] {message}")
@@ -1754,7 +1753,7 @@ def _apply_stability_checks(
                     logger.info(f"  - {rec}")
         elif stability_report["severity"] == "warning":
             logger.warning(
-                f"Stability warnings detected ({len(stability_report['issues'])} issues)"
+                f"Stability warnings detected ({len(stability_report['issues'])} issues)",
             )
             for issue_type, message, severity in stability_report["issues"]:
                 logger.warning(f"  [{severity.upper()}] {message}")
@@ -1763,11 +1762,11 @@ def _apply_stability_checks(
         # Apply automatic fixes if issues detected
         if stability_report["severity"] in ["warning", "critical"]:
             logger.info(
-                f"Applying automatic fixes for {len(stability_report['issues'])} stability issues..."
+                f"Applying automatic fixes for {len(stability_report['issues'])} stability issues...",
             )
             if not rescale_data:
                 logger.info(
-                    "  (rescale_data=False: data rescaling disabled for applications requiring unit preservation)"
+                    "  (rescale_data=False: data rescaling disabled for applications requiring unit preservation)",
                 )
 
             xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
@@ -2069,7 +2068,8 @@ def _run_fallback_optimization(
     from nlsq.stability.fallback import FallbackOrchestrator
 
     orchestrator = FallbackOrchestrator(
-        max_attempts=max_fallback_attempts, verbose=fallback_verbose
+        max_attempts=max_fallback_attempts,
+        verbose=fallback_verbose,
     )
 
     # Build kwargs for fallback
@@ -2439,7 +2439,14 @@ def curve_fit(
     # Handle numerical stability checks and fixes
     if stability:
         xdata, ydata, args = _apply_stability_checks(
-            xdata, ydata, p0, f, stability, rescale_data, args, kwargs
+            xdata,
+            ydata,
+            p0,
+            f,
+            stability,
+            rescale_data,
+            args,
+            kwargs,
         )
         # Re-extract p0 in case it was updated
         p0 = _extract_p0_from_args(args, kwargs)
@@ -2449,7 +2456,14 @@ def curve_fit(
         bounds = kwargs.get("bounds")
         if bounds is not None:
             result = _run_cmaes_optimization(
-                f, xdata, ydata, p0, bounds, method, cmaes_config, kwargs
+                f,
+                xdata,
+                ydata,
+                p0,
+                bounds,
+                method,
+                cmaes_config,
+                kwargs,
             )
             if result is not None:
                 return result
@@ -2459,7 +2473,15 @@ def curve_fit(
     # Handle multi-start optimization
     if multistart and n_starts is not None and n_starts > 0:
         return _run_multistart_optimization(
-            f, xdata, ydata, p0, n_starts, sampler, center_on_p0, scale_factor, kwargs
+            f,
+            xdata,
+            ydata,
+            p0,
+            n_starts,
+            sampler,
+            center_on_p0,
+            scale_factor,
+            kwargs,
         )
 
     # Use fallback orchestrator if requested
@@ -2658,7 +2680,7 @@ class CurveFit:
             from nlsq.stability.guard import NumericalStabilityGuard
 
             self.stability_guard = NumericalStabilityGuard(
-                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd
+                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
             )
             # Use fast validation mode by default for performance
             self.validator = InputValidator(fast_mode=True)
@@ -2693,7 +2715,8 @@ class CurveFit:
 
         @jit
         def sigma_transform1d(
-            sigma: jnp.ndarray, data_mask: jnp.ndarray
+            sigma: jnp.ndarray,
+            data_mask: jnp.ndarray,
         ) -> jnp.ndarray:
             """Compute the sigma transform for 1D data.
 
@@ -2714,7 +2737,8 @@ class CurveFit:
 
         @jit
         def sigma_transform2d(
-            sigma: jnp.ndarray, data_mask: jnp.ndarray
+            sigma: jnp.ndarray,
+            data_mask: jnp.ndarray,
         ) -> jnp.ndarray:
             """Compute the sigma transform for 2D data.
 
@@ -2750,7 +2774,11 @@ class CurveFit:
         self.covariance_svd = covariance_svd
 
     def _select_tr_solver(
-        self, solver: str, m: int, n: int, batch_size: int | None = None
+        self,
+        solver: str,
+        m: int,
+        n: int,
+        batch_size: int | None = None,
     ) -> str | None:
         """Select appropriate trust region solver based on solver type and problem size.
 
@@ -2774,15 +2802,15 @@ class CurveFit:
             # Auto-select based on problem size
             if m * n < 10000:  # Small problems
                 return "exact"  # Use SVD-based exact solver
-            else:  # Large problems
-                return "lsmr"  # Use iterative LSMR solver
-        elif solver == "svd":
+            # Large problems
+            return "lsmr"  # Use iterative LSMR solver
+        if solver == "svd":
             return "exact"  # SVD-based exact solver
-        elif solver == "cg":
+        if solver == "cg":
             return "lsmr"  # LSMR is the closest to CG in current implementation
-        elif solver == "lsqr":
+        if solver == "lsqr":
             return "lsmr"  # Direct mapping
-        elif solver == "minibatch":
+        if solver == "minibatch":
             # For minibatch, we'll use lsmr but need to handle batching separately
             # This is a placeholder - full minibatch implementation would require
             # more substantial changes to the optimization loop
@@ -2791,11 +2819,14 @@ class CurveFit:
                 requested_batch_size=batch_size,
             )
             return "lsmr"
-        else:
-            return None  # Use default
+        return None  # Use default
 
     def pad_fit_data(
-        self, xdata: np.ndarray, ydata: np.ndarray, xdims: int, len_diff: int
+        self,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        xdims: int,
+        len_diff: int,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Pad fit data to match the fixed input data length.
 
@@ -2888,7 +2919,7 @@ class CurveFit:
 
         # if 2-D, sigma is the covariance matrix,
         # define transform = L such that L L^T = C
-        elif sigma.shape == (ysize, ysize):
+        if sigma.shape == (ysize, ysize):
             try:
                 if len_diff > 0:
                     sigma_padded = np.identity(m + len_diff)
@@ -2905,16 +2936,16 @@ class CurveFit:
                         raise ValueError(
                             f"Covariance matrix `sigma` is not positive definite. "
                             f"Minimum eigenvalue: {min_eig:.6e}. "
-                            "All eigenvalues must be positive."
+                            "All eigenvalues must be positive.",
                         ) from e
                 except Exception as eigenvalue_error:
                     # If eigenvalue check fails, provide generic error (log for debugging)
                     self.logger.debug(
-                        f"Eigenvalue check failed (non-critical): {eigenvalue_error}"
+                        f"Eigenvalue check failed (non-critical): {eigenvalue_error}",
                     )
                 raise ValueError(
                     "Failed to compute Cholesky decomposition of `sigma`. "
-                    "The covariance matrix must be symmetric and positive definite."
+                    "The covariance matrix must be symmetric and positive definite.",
                 ) from e
         else:
             raise ValueError("`sigma` has incorrect shape.")
@@ -3078,14 +3109,17 @@ class CurveFit:
         valid_solvers = {"auto", "svd", "cg", "lsqr", "minibatch"}
         if solver not in valid_solvers:
             raise ValueError(
-                f"Invalid solver '{solver}'. Must be one of {valid_solvers}."
+                f"Invalid solver '{solver}'. Must be one of {valid_solvers}.",
             )
 
         if solver == "minibatch" and batch_size is not None and batch_size <= 0:
             raise ValueError("batch_size must be positive when using minibatch solver.")
 
     def _prepare_bounds_and_initial_guess(
-        self, bounds: tuple, n: int, p0: np.ndarray | None
+        self,
+        bounds: tuple,
+        n: int,
+        p0: np.ndarray | None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Prepare bounds and initialize p0 if needed.
 
@@ -3263,7 +3297,8 @@ class CurveFit:
 
         # Convert xdata
         if hasattr(xdata, "__array__") or isinstance(
-            xdata, (list, tuple, np.ndarray, jnp.ndarray)
+            xdata,
+            (list, tuple, np.ndarray, jnp.ndarray),
         ):
             if check_finite:
                 xdata = np.asarray_chkfinite(xdata, float)
@@ -3278,7 +3313,9 @@ class CurveFit:
         return xdata, ydata
 
     def _validate_data_lengths(
-        self, xdata: np.ndarray, ydata: np.ndarray
+        self,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
     ) -> tuple[int, int]:
         """Validate that X and Y data lengths match.
 
@@ -3310,7 +3347,9 @@ class CurveFit:
         return m, xdims
 
     def _setup_data_mask_and_padding(
-        self, data_mask: np.ndarray | None, m: int
+        self,
+        data_mask: np.ndarray | None,
+        m: int,
     ) -> tuple[np.ndarray, bool, int, bool]:
         """Setup data mask and compute padding parameters.
 
@@ -3350,7 +3389,7 @@ class CurveFit:
                 data_mask = np.ones(m, dtype=bool)
                 if should_pad and len_diff > 0:
                     data_mask = np.concatenate(
-                        [data_mask, np.zeros(len_diff, dtype=bool)]
+                        [data_mask, np.zeros(len_diff, dtype=bool)],
                     )
         else:
             data_mask = np.ones(m, dtype=bool)
@@ -3427,7 +3466,12 @@ class CurveFit:
         # Forward bounds + check_finite so bounds-consistency and finiteness
         # checks are actually exercised (previously they were silently dropped).
         xdata, ydata = self._validate_and_sanitize_inputs(
-            f, xdata, ydata, p0, bounds=bounds, check_finite=check_finite
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds=bounds,
+            check_finite=check_finite,
         )
 
         # Step 7: Convert to arrays and validate finiteness
@@ -3579,7 +3623,13 @@ class CurveFit:
 
         # Step 5: Select optimization method
         method = self._select_optimization_method(
-            method, f, xdata, ydata, p0, bounds, kwargs
+            method,
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds,
+            kwargs,
         )
 
         # Steps 6-8: Preprocess data (validation, conversion, length check)
@@ -3599,12 +3649,18 @@ class CurveFit:
 
         # Step 9: Setup data mask and padding parameters
         data_mask, none_mask, len_diff, should_pad = self._setup_data_mask_and_padding(
-            data_mask, m
+            data_mask,
+            m,
         )
 
         # Step 10: Apply padding if needed
         xdata, ydata, len_diff = self._apply_padding_if_needed(
-            xdata, ydata, xdims, m, len_diff, should_pad
+            xdata,
+            ydata,
+            xdims,
+            m,
+            len_diff,
+            should_pad,
         )
 
         return (
@@ -3714,7 +3770,7 @@ class CurveFit:
             )
         elif not isinstance(config, HybridStreamingConfig):
             raise TypeError(
-                f"config must be a HybridStreamingConfig, got {type(config).__name__}"
+                f"config must be a HybridStreamingConfig, got {type(config).__name__}",
             )
 
         # Create optimizer
@@ -3875,7 +3931,7 @@ class CurveFit:
                 **kwargs,
             )
 
-        elif strategy == "chunked":
+        if strategy == "chunked":
             # Delegate to LargeDatasetFitter
             from nlsq.streaming.large_dataset import LargeDatasetFitter
 
@@ -3902,43 +3958,41 @@ class CurveFit:
             if timeit:
                 ctime = result.get("execution_time", 0)
                 return popt, pcov, result, 0, ctime
-            elif return_eval:
+            if return_eval:
                 feval = f(np.asarray(xdata, float), *popt)
                 return popt, pcov, np.array(feval)
-            else:
-                # Return CurveFitResult for consistency
-                curve_fit_result = CurveFitResult(result)
-                curve_fit_result["model"] = f
-                curve_fit_result["xdata"] = xdata
-                curve_fit_result["ydata"] = ydata
-                curve_fit_result["pcov"] = pcov
-                return curve_fit_result
+            # Return CurveFitResult for consistency
+            curve_fit_result = CurveFitResult(result)
+            curve_fit_result["model"] = f
+            curve_fit_result["xdata"] = xdata
+            curve_fit_result["ydata"] = ydata
+            curve_fit_result["pcov"] = pcov
+            return curve_fit_result
 
-        else:
-            # Standard curve_fit path (strategy == "standard")
-            # Call curve_fit with method=None to use default TRF
-            return self.curve_fit(
-                f=f,
-                xdata=xdata,
-                ydata=ydata,
-                p0=p0,
-                sigma=sigma,
-                absolute_sigma=absolute_sigma,
-                check_finite=check_finite,
-                bounds=bounds,
-                method=None,  # Use default TRF
-                solver=solver,
-                batch_size=batch_size,
-                jac=jac,
-                data_mask=data_mask,
-                timeit=timeit,
-                return_eval=return_eval,
-                callback=callback,
-                compute_diagnostics=compute_diagnostics,
-                diagnostics_level=diagnostics_level,
-                diagnostics_config=diagnostics_config,
-                **kwargs,
-            )
+        # Standard curve_fit path (strategy == "standard")
+        # Call curve_fit with method=None to use default TRF
+        return self.curve_fit(
+            f=f,
+            xdata=xdata,
+            ydata=ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            method=None,  # Use default TRF
+            solver=solver,
+            batch_size=batch_size,
+            jac=jac,
+            data_mask=data_mask,
+            timeit=timeit,
+            return_eval=return_eval,
+            callback=callback,
+            compute_diagnostics=compute_diagnostics,
+            diagnostics_level=diagnostics_level,
+            diagnostics_config=diagnostics_config,
+            **kwargs,
+        )
 
     def _run_optimization(
         self,
@@ -4013,10 +4067,12 @@ class CurveFit:
         # Check memory requirements if stability is enabled
         if self.enable_stability:
             memory_required = self.memory_manager.predict_memory_requirement(
-                m, n, method
+                m,
+                n,
+                method,
             )
             is_available, msg = self.memory_manager.check_memory_availability(
-                memory_required
+                memory_required,
             )
             if not is_available:
                 self.logger.warning("Memory constraint detected", details=msg)
@@ -4067,7 +4123,8 @@ class CurveFit:
             except Exception as e:
                 if self.enable_recovery:
                     self.logger.warning(
-                        "Optimization failed, attempting recovery", error=str(e)
+                        "Optimization failed, attempting recovery",
+                        error=str(e),
                     )
                     recovery_state = {
                         "params": p0,
@@ -4100,7 +4157,7 @@ class CurveFit:
                         res = result
                     else:
                         raise RuntimeError(
-                            f"Optimization failed and recovery unsuccessful: {e}"
+                            f"Optimization failed and recovery unsuccessful: {e}",
                         ) from e
                 else:
                     raise
@@ -4120,7 +4177,9 @@ class CurveFit:
                 )
             else:
                 self.logger.error(
-                    "Optimization failed", reason=res.message, status=res.status
+                    "Optimization failed",
+                    reason=res.message,
+                    status=res.status,
                 )
                 gtol = kwargs.get("gtol", 1e-8)
                 ftol = kwargs.get("ftol", 1e-8)
@@ -4454,8 +4513,7 @@ class CurveFit:
             if none_mask:
                 # data_mask = np.ndarray.astype(data_mask, bool)
                 return popt, _pcov, feval[data_mask]
-            else:
-                return popt, _pcov, feval
+            return popt, _pcov, feval
 
         if return_full:
             # SciPy-compatible 5-tuple: (popt, pcov, infodict, mesg, ier)
@@ -4468,122 +4526,120 @@ class CurveFit:
             # SciPy ier convention: 1-4 = converged, 5 = max iterations
             ier = 1 if (res.success and res.status > 0) else 5
             return popt, _pcov, infodict, mesg, ier
-        elif timeit:
+        if timeit:
             # lower GPU memory usage before returning raw res
             res.pop("jac", None)
             res.pop("fun", None)
             return popt, _pcov, res, post_time, ctime
-        else:
-            # Create enhanced result object that supports tuple unpacking
-            # for backward compatibility: popt, pcov = curve_fit(...)
-            # Keep 'fun' (residuals) and 'jac' for statistical computations
-            result = CurveFitResult(res)
-            result["model"] = f
-            result["xdata"] = xdata
-            result["ydata"] = ydata
-            result["pcov"] = _pcov
+        # Create enhanced result object that supports tuple unpacking
+        # for backward compatibility: popt, pcov = curve_fit(...)
+        # Keep 'fun' (residuals) and 'jac' for statistical computations
+        result = CurveFitResult(res)
+        result["model"] = f
+        result["xdata"] = xdata
+        result["ydata"] = ydata
+        result["pcov"] = _pcov
 
-            # Compute diagnostics if requested
-            if compute_diagnostics:
-                try:
-                    from nlsq.diagnostics.health_report import create_health_report
-                    from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
+        # Compute diagnostics if requested
+        if compute_diagnostics:
+            try:
+                from nlsq.diagnostics.health_report import create_health_report
+                from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
 
-                    # Use provided config or create default (with verbose=False to
-                    # avoid double printing - we handle logging separately)
-                    # If diagnostics_level is FULL, we need to include it in the config
-                    if diagnostics_config is not None:
-                        config = diagnostics_config
-                    else:
-                        config = DiagnosticsConfig(
-                            level=diagnostics_level,
-                            verbose=False,
-                            emit_warnings=True,
-                        )
+                # Use provided config or create default (with verbose=False to
+                # avoid double printing - we handle logging separately)
+                # If diagnostics_level is FULL, we need to include it in the config
+                if diagnostics_config is not None:
+                    config = diagnostics_config
+                else:
+                    config = DiagnosticsConfig(
+                        level=diagnostics_level,
+                        verbose=False,
+                        emit_warnings=True,
+                    )
 
-                    # Get Jacobian from result
-                    jacobian = np.asarray(res.jac)
+                # Get Jacobian from result
+                jacobian = np.asarray(res.jac)
 
-                    # Run identifiability analysis
-                    analyzer = IdentifiabilityAnalyzer(config=config)
-                    ident_report = analyzer.analyze(jacobian)
+                # Run identifiability analysis
+                analyzer = IdentifiabilityAnalyzer(config=config)
+                ident_report = analyzer.analyze(jacobian)
 
-                    # Get gradient health report if available from optimization
-                    gradient_health_report = res.get("gradient_health_report")
+                # Get gradient health report if available from optimization
+                gradient_health_report = res.get("gradient_health_report")
 
-                    # Run parameter sensitivity analysis if diagnostics_level is FULL (User Story 4)
-                    sloppy_model_report = None
-                    if config.level == DiagnosticLevel.FULL:
-                        from nlsq.diagnostics import ParameterSensitivityAnalyzer
+                # Run parameter sensitivity analysis if diagnostics_level is FULL (User Story 4)
+                sloppy_model_report = None
+                if config.level == DiagnosticLevel.FULL:
+                    from nlsq.diagnostics import ParameterSensitivityAnalyzer
 
-                        sensitivity_analyzer = ParameterSensitivityAnalyzer(
-                            config=config
-                        )
-                        sloppy_model_report = sensitivity_analyzer.analyze(jacobian)
-
-                    # Create aggregated health report using factory function
-                    # Note: verbose and emit_warnings are handled by create_health_report
-                    health_report = create_health_report(
-                        identifiability=ident_report,
-                        gradient_health=gradient_health_report,
-                        sloppy_model=sloppy_model_report,
-                        plugin_results=None,  # Plugin system not yet implemented
+                    sensitivity_analyzer = ParameterSensitivityAnalyzer(
                         config=config,
                     )
+                    sloppy_model_report = sensitivity_analyzer.analyze(jacobian)
 
-                    # Attach to result
-                    result["_diagnostics_report"] = health_report
+                # Create aggregated health report using factory function
+                # Note: verbose and emit_warnings are handled by create_health_report
+                health_report = create_health_report(
+                    identifiability=ident_report,
+                    gradient_health=gradient_health_report,
+                    sloppy_model=sloppy_model_report,
+                    plugin_results=None,  # Plugin system not yet implemented
+                    config=config,
+                )
 
-                    # Log diagnostics summary if user requested verbose
-                    if diagnostics_config and diagnostics_config.verbose:
-                        self.logger.info(
-                            "Diagnostics computed",
-                            health_status=health_report.status.name,
-                            health_score=f"{health_report.health_score:.2f}",
-                            n_issues=len(health_report.all_issues),
-                        )
+                # Attach to result
+                result["_diagnostics_report"] = health_report
 
-                except Exception as e:
-                    self.logger.warning(
-                        "Failed to compute diagnostics",
-                        error=str(e),
+                # Log diagnostics summary if user requested verbose
+                if diagnostics_config and diagnostics_config.verbose:
+                    self.logger.info(
+                        "Diagnostics computed",
+                        health_status=health_report.status.name,
+                        health_score=f"{health_report.health_score:.2f}",
+                        n_issues=len(health_report.all_issues),
                     )
-                    # Create unavailable diagnostics report
-                    from nlsq.diagnostics.health_report import create_health_report
-                    from nlsq.diagnostics.types import (
-                        HealthStatus,
-                        IdentifiabilityReport,
-                    )
 
-                    unavailable_ident = IdentifiabilityReport(
-                        available=False,
-                        error_message=str(e),
-                        n_params=n,
-                        health_status=HealthStatus.CRITICAL,
-                    )
-                    health_report = create_health_report(
-                        identifiability=unavailable_ident,
-                        config=DiagnosticsConfig(verbose=False, emit_warnings=False),
-                    )
-                    result["_diagnostics_report"] = health_report
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to compute diagnostics",
+                    error=str(e),
+                )
+                # Create unavailable diagnostics report
+                from nlsq.diagnostics.health_report import create_health_report
+                from nlsq.diagnostics.types import (
+                    HealthStatus,
+                    IdentifiabilityReport,
+                )
 
-            # Add cache statistics if available
-            try:
-                cache_stats = self.cache.get_stats()
-                if cache_stats.get("enabled", True):
-                    # Extract relevant cache metrics
-                    result["cache_stats"] = {
-                        "hit": cache_stats.get("hits", 0)
-                        > cache_stats.get("misses", 0),
-                        "compile_time_ms": cache_stats.get("compile_time_ms", 0.0),
-                        "hit_rate": cache_stats.get("hit_rate", 0.0),
-                        "total_hits": cache_stats.get("hits", 0),
-                        "total_misses": cache_stats.get("misses", 0),
-                        "total_compilations": cache_stats.get("compilations", 0),
-                        "cache_size": cache_stats.get("cache_size", 0),
-                    }
-            except (AttributeError, KeyError) as e:
-                # Cache not available or statistics disabled - log and continue
-                self.logger.debug(f"Cache statistics not available: {e}")
+                unavailable_ident = IdentifiabilityReport(
+                    available=False,
+                    error_message=str(e),
+                    n_params=n,
+                    health_status=HealthStatus.CRITICAL,
+                )
+                health_report = create_health_report(
+                    identifiability=unavailable_ident,
+                    config=DiagnosticsConfig(verbose=False, emit_warnings=False),
+                )
+                result["_diagnostics_report"] = health_report
 
-            return result
+        # Add cache statistics if available
+        try:
+            cache_stats = self.cache.get_stats()
+            if cache_stats.get("enabled", True):
+                # Extract relevant cache metrics
+                result["cache_stats"] = {
+                    "hit": cache_stats.get("hits", 0) > cache_stats.get("misses", 0),
+                    "compile_time_ms": cache_stats.get("compile_time_ms", 0.0),
+                    "hit_rate": cache_stats.get("hit_rate", 0.0),
+                    "total_hits": cache_stats.get("hits", 0),
+                    "total_misses": cache_stats.get("misses", 0),
+                    "total_compilations": cache_stats.get("compilations", 0),
+                    "cache_size": cache_stats.get("cache_size", 0),
+                }
+        except (AttributeError, KeyError) as e:
+            # Cache not available or statistics disabled - log and continue
+            self.logger.debug(f"Cache statistics not available: {e}")
+
+        return result

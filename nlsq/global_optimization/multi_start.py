@@ -119,7 +119,12 @@ def _fit_single_start(
     cf = CurveFit()
     try:
         result: CurveFitResult = cf.curve_fit(  # type: ignore[assignment]
-            f, xdata, ydata, p0=p0, bounds=bounds, **kwargs
+            f,
+            xdata,
+            ydata,
+            p0=p0,
+            bounds=bounds,
+            **kwargs,
         )
         if hasattr(result, "cost"):
             loss = 2 * result.cost  # cost is half sum of squares
@@ -156,10 +161,9 @@ def _select_worker_count(n_starts: int) -> int:
     n_devices = len(jax.devices())
     if n_devices > 1:
         return min(n_starts, n_devices)
-    elif n_devices == 1:
+    if n_devices == 1:
         return min(n_starts, 4)
-    else:
-        return min(n_starts, os.cpu_count() or 4, 16)
+    return min(n_starts, os.cpu_count() or 4, 16)
 
 
 class MultiStartOrchestrator:
@@ -227,7 +231,9 @@ class MultiStartOrchestrator:
 
     @classmethod
     def from_preset(
-        cls, preset_name: str, curve_fit_instance: "CurveFit | None" = None
+        cls,
+        preset_name: str,
+        curve_fit_instance: "CurveFit | None" = None,
     ) -> "MultiStartOrchestrator":
         """Create orchestrator from a named preset.
 
@@ -320,16 +326,15 @@ class MultiStartOrchestrator:
                 ub_jnp,
             )
             return np.asarray(scaled)
-        else:
-            # Scale to full bounds
-            import jax.numpy as jnp
+        # Scale to full bounds
+        import jax.numpy as jnp
 
-            samples_jnp = jnp.asarray(samples_raw)
-            lb_jnp = jnp.asarray(lb)
-            ub_jnp = jnp.asarray(ub)
+        samples_jnp = jnp.asarray(samples_raw)
+        lb_jnp = jnp.asarray(lb)
+        ub_jnp = jnp.asarray(ub)
 
-            scaled = scale_samples_to_bounds(samples_jnp, lb_jnp, ub_jnp)
-            return np.asarray(scaled)
+        scaled = scale_samples_to_bounds(samples_jnp, lb_jnp, ub_jnp)
+        return np.asarray(scaled)
 
     def evaluate_starting_points(
         self,
@@ -390,7 +395,7 @@ class MultiStartOrchestrator:
 
         start_wall = _time.monotonic()
         results: list[tuple[np.ndarray, float, CurveFitResult | None]] = [
-            None  # type: ignore[list-item]
+            None,  # type: ignore[list-item]
         ] * n_starts
 
         # Per-start non-convergence is an expected, internal outcome of multi-start
@@ -408,7 +413,12 @@ class MultiStartOrchestrator:
                 # Sequential fallback (1 start or 1 worker)
                 for i, p0 in enumerate(starting_points):
                     results[i] = _fit_single_start(
-                        f, xdata, ydata, p0, bounds, kwargs.copy()
+                        f,
+                        xdata,
+                        ydata,
+                        p0,
+                        bounds,
+                        kwargs.copy(),
                     )
                     _params, loss, _ = results[i]
                     self.logger.debug(
@@ -587,7 +597,10 @@ class MultiStartOrchestrator:
             if not np.all(np.isfinite(lb)) or not np.all(np.isfinite(ub)):
                 self.logger.debug("Some bounds are infinite, inferring finite bounds")
                 lb_inferred, ub_inferred = infer_bounds_for_multistart(
-                    xdata, ydata, p0, user_bounds=(lb, ub)
+                    xdata,
+                    ydata,
+                    p0,
+                    user_bounds=(lb, ub),
                 )
                 lb = lb_inferred
                 ub = ub_inferred
@@ -636,7 +649,7 @@ class MultiStartOrchestrator:
         # Select best result
         if n_successful == 0:
             self.logger.warning(
-                "All starting points failed, falling back to single-start"
+                "All starting points failed, falling back to single-start",
             )
             # Fall back to single-start with original p0
             result = self.curve_fit.curve_fit(  # type: ignore[assignment]

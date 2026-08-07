@@ -376,6 +376,9 @@ class TrustRegionOptimizerBase(OptimizerBase):
         """
         accepted = ratio > threshold
         self.logger.debug(
-            "Step acceptance check", ratio=ratio, threshold=threshold, accepted=accepted
+            "Step acceptance check",
+            ratio=ratio,
+            threshold=threshold,
+            accepted=accepted,
         )
         return accepted

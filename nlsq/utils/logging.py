@@ -229,7 +229,8 @@ class NLSQLogger:
         """Log warning message with optional structured data."""
         if self.logger.isEnabledFor(logging.WARNING):
             self.logger.warning(
-                self._format_message(message, **kwargs), exc_info=exc_info
+                self._format_message(message, **kwargs),
+                exc_info=exc_info,
             )
 
     def error(self, message: str, exc_info: bool = False, **kwargs):
@@ -551,7 +552,10 @@ class NLSQLogger:
                 self.performance(f"Timer: {name}", elapsed=f"{elapsed:.6f}s")
 
     def matrix_info(
-        self, name: str, matrix: np.ndarray, compute_condition: bool = False
+        self,
+        name: str,
+        matrix: np.ndarray,
+        compute_condition: bool = False,
     ):
         """Log information about a matrix.
 

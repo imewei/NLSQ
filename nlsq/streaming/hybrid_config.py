@@ -518,7 +518,7 @@ class HybridStreamingConfig:
             # Validate gc_chunk_interval (FR-007)
             if self.gc_chunk_interval < 1:
                 raise ValueError(
-                    f"gc_chunk_interval must be >= 1, got {self.gc_chunk_interval}"
+                    f"gc_chunk_interval must be >= 1, got {self.gc_chunk_interval}",
                 )
 
         except ConfigValidationError as e:

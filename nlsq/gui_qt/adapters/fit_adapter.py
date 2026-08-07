@@ -172,7 +172,7 @@ def validate_fit_inputs(
     if len(xdata) != len(ydata):
         raise ValueError(
             f"xdata and ydata must have the same length: "
-            f"got {len(xdata)} and {len(ydata)}"
+            f"got {len(xdata)} and {len(ydata)}",
         )
 
     # Check for NaN/Inf in xdata
@@ -189,7 +189,7 @@ def validate_fit_inputs(
         if len(sigma) != len(ydata):
             raise ValueError(
                 f"sigma must have the same length as ydata: "
-                f"got {len(sigma)} and {len(ydata)}"
+                f"got {len(sigma)} and {len(ydata)}",
             )
         if np.any(~np.isfinite(sigma)):
             raise ValueError("sigma contains NaN or Inf values")
@@ -213,7 +213,11 @@ class _CallbackWrapper:
         self._aborted = False
 
     def __call__(
-        self, iteration: int, cost: float, params: np.ndarray, info: dict
+        self,
+        iteration: int,
+        cost: float,
+        params: np.ndarray,
+        info: dict,
     ) -> bool | None:
         """Handle callback from optimizer.
 
@@ -656,7 +660,7 @@ def run_fit(
 
     if not callable(state.model_func):
         raise TypeError(
-            f"model_func must be callable, got {type(state.model_func).__name__}"
+            f"model_func must be callable, got {type(state.model_func).__name__}",
         )
 
     # Extract data

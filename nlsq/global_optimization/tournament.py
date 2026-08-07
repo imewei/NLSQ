@@ -213,7 +213,7 @@ class TournamentSelector:
         self.logger.info(
             f"Starting tournament with {self.n_candidates} candidates, "
             f"{self.config.elimination_rounds} rounds, "
-            f"elimination_fraction={self.config.elimination_fraction}"
+            f"elimination_fraction={self.config.elimination_fraction}",
         )
 
         # Handle edge case: no elimination rounds
@@ -227,7 +227,7 @@ class TournamentSelector:
             if self.n_survivors <= top_m:
                 self.logger.info(
                     f"Round {round_num}: Only {self.n_survivors} survivors, "
-                    f"stopping early (need {top_m})"
+                    f"stopping early (need {top_m})",
                 )
                 break
 
@@ -235,7 +235,7 @@ class TournamentSelector:
                 self._run_single_round(data_batch_iterator, model, round_num)
             except StopIteration:
                 self.logger.warning(
-                    f"Data exhausted during round {round_num}, returning best so far"
+                    f"Data exhausted during round {round_num}, returning best so far",
                 )
                 break
 
@@ -243,7 +243,7 @@ class TournamentSelector:
 
         self.logger.info(
             f"Tournament complete: {self.n_survivors} survivors from "
-            f"{self.n_candidates} candidates"
+            f"{self.n_candidates} candidates",
         )
 
         return self.get_top_candidates(top_m)
@@ -269,7 +269,7 @@ class TournamentSelector:
 
         self.logger.debug(
             f"Round {round_number}: Evaluating {n_survivors_before} survivors "
-            f"on {self.config.batches_per_round} batches"
+            f"on {self.config.batches_per_round} batches",
         )
 
         # Reset losses for this round
@@ -326,11 +326,11 @@ class TournamentSelector:
                 "mean_loss": float(np.mean(avg_round_losses[self.survival_mask]))
                 if self.n_survivors > 0
                 else np.inf,
-            }
+            },
         )
 
         self.logger.debug(
-            f"Round {round_number} complete: {n_survivors_before} -> {self.n_survivors} survivors"
+            f"Round {round_number} complete: {n_survivors_before} -> {self.n_survivors} survivors",
         )
 
     def _evaluate_initial_round(
@@ -449,7 +449,7 @@ class TournamentSelector:
         """
         # Get survivors with finite cumulative loss
         valid_indices = np.where(
-            self.survival_mask & np.isfinite(self.cumulative_losses)
+            self.survival_mask & np.isfinite(self.cumulative_losses),
         )[0]
 
         if len(valid_indices) == 0:

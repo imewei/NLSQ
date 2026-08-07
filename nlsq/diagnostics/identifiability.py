@@ -205,7 +205,10 @@ class IdentifiabilityAnalyzer:
         return jacobian.T @ jacobian
 
     def _analyze_fim(
-        self, fim: np.ndarray, n_params: int, start_time: float
+        self,
+        fim: np.ndarray,
+        n_params: int,
+        start_time: float,
     ) -> IdentifiabilityReport:
         """Analyze the Fisher Information Matrix.
 
@@ -252,7 +255,7 @@ class IdentifiabilityAnalyzer:
 
         # Detect highly correlated pairs
         highly_correlated_pairs = self._detect_highly_correlated_pairs(
-            correlation_matrix
+            correlation_matrix,
         )
 
         # Check for structural unidentifiability (IDENT-001)
@@ -381,7 +384,8 @@ class IdentifiabilityAnalyzer:
             return None
 
     def _detect_highly_correlated_pairs(
-        self, correlation_matrix: np.ndarray | None
+        self,
+        correlation_matrix: np.ndarray | None,
     ) -> list[tuple[int, int, float]]:
         """Detect pairs of parameters with high correlation.
 
@@ -411,7 +415,9 @@ class IdentifiabilityAnalyzer:
         return pairs
 
     def _create_ident_001_issue(
-        self, numerical_rank: int, n_params: int
+        self,
+        numerical_rank: int,
+        n_params: int,
     ) -> ModelHealthIssue:
         """Create IDENT-001 issue for structural unidentifiability.
 
@@ -477,7 +483,8 @@ class IdentifiabilityAnalyzer:
         )
 
     def _create_corr_001_issue(
-        self, correlated_pairs: list[tuple[int, int, float]]
+        self,
+        correlated_pairs: list[tuple[int, int, float]],
     ) -> ModelHealthIssue:
         """Create CORR-001 issue for highly correlated parameters.
 

@@ -318,7 +318,7 @@ def halton_sample(
         raise ValueError(f"n_dims must be positive, got {n_dims}")
     if n_dims > len(_PRIMES):
         raise ValueError(
-            f"n_dims must be <= {len(_PRIMES)} for Halton sequence, got {n_dims}"
+            f"n_dims must be <= {len(_PRIMES)} for Halton sequence, got {n_dims}",
         )
 
     samples = []
@@ -510,7 +510,7 @@ def get_sampler(sampler_type: str) -> Callable[..., jax.Array]:
     if sampler_type_lower not in samplers:
         valid_types = list(samplers.keys())
         raise ValueError(
-            f"Unknown sampler type '{sampler_type}'. Valid types: {valid_types}"
+            f"Unknown sampler type '{sampler_type}'. Valid types: {valid_types}",
         )
 
     return samplers[sampler_type_lower]

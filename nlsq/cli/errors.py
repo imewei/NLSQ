@@ -577,7 +577,7 @@ def setup_logging(
                 logging.Formatter(
                     fmt="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S",
-                )
+                ),
             )
 
         file_handler.setLevel(logging.DEBUG)  # File gets all messages

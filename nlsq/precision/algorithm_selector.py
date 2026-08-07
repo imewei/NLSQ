@@ -130,7 +130,9 @@ class AlgorithmSelector:
         # Memory requirements
         if memory_limit_gb is not None:
             analysis["memory_constrained"] = self._check_memory_constraints(
-                n_points, n_params, memory_limit_gb
+                n_points,
+                n_params,
+                memory_limit_gb,
             )
         else:
             analysis["memory_constrained"] = False
@@ -283,7 +285,10 @@ class AlgorithmSelector:
             return np.inf
 
     def _check_memory_constraints(
-        self, n_points: int, n_params: int, memory_limit_gb: float
+        self,
+        n_points: int,
+        n_params: int,
+        memory_limit_gb: float,
     ) -> bool:
         """Check if problem fits in memory limit.
 
@@ -307,7 +312,9 @@ class AlgorithmSelector:
         return memory_needed_gb > memory_limit_gb
 
     def _apply_user_preferences(
-        self, recommendations: dict, user_preferences: dict | None
+        self,
+        recommendations: dict,
+        user_preferences: dict | None,
     ) -> None:
         """Apply user preferences to recommendations.
 
@@ -333,7 +340,9 @@ class AlgorithmSelector:
                 recommendations["gtol"] = 1e-10
 
     def _adjust_for_condition_number(
-        self, recommendations: dict, condition_estimate: float
+        self,
+        recommendations: dict,
+        condition_estimate: float,
     ) -> None:
         """Adjust parameters for ill-conditioned problems.
 
@@ -350,7 +359,10 @@ class AlgorithmSelector:
             recommendations["xtol"] = 1e-6
 
     def _select_trust_region_solver(
-        self, recommendations: dict, n_points: int, n_params: int
+        self,
+        recommendations: dict,
+        n_points: int,
+        n_params: int,
     ) -> None:
         """Select appropriate trust region solver.
 
@@ -372,7 +384,10 @@ class AlgorithmSelector:
             recommendations["tr_solver"] = "lsmr"
 
     def _select_loss_function(
-        self, recommendations: dict, has_outliers: bool, outlier_fraction: float
+        self,
+        recommendations: dict,
+        has_outliers: bool,
+        outlier_fraction: float,
     ) -> None:
         """Select appropriate loss function based on outliers.
 
@@ -413,7 +428,9 @@ class AlgorithmSelector:
             recommendations["xtol"] = max(recommendations["xtol"], 1e-6)
 
     def _adjust_for_memory_constraints(
-        self, recommendations: dict, memory_constrained: bool
+        self,
+        recommendations: dict,
+        memory_constrained: bool,
     ) -> None:
         """Adjust for memory-constrained environments.
 
@@ -464,7 +481,9 @@ class AlgorithmSelector:
             recommendations["x_scale"] = 1.0
 
     def select_algorithm(
-        self, problem_analysis: dict, user_preferences: dict | None = None
+        self,
+        problem_analysis: dict,
+        user_preferences: dict | None = None,
     ) -> dict:
         """Select best algorithm based on problem analysis.
 
@@ -552,7 +571,7 @@ class AlgorithmSelector:
         alg = recommendations["algorithm"]
         if alg == "trf":
             explanation.append(
-                "Trust Region Reflective (TRF) algorithm selected (currently the only supported algorithm in NLSQ)"
+                "Trust Region Reflective (TRF) algorithm selected (currently the only supported algorithm in NLSQ)",
             )
         # Future support for other algorithms
         # elif alg == 'lm':
@@ -620,7 +639,12 @@ def auto_select_algorithm(
         Algorithm recommendations
     """
     analysis = _algorithm_selector.analyze_problem(
-        f, xdata, ydata, p0, bounds, memory_limit_gb
+        f,
+        xdata,
+        ydata,
+        p0,
+        bounds,
+        memory_limit_gb,
     )
 
     recommendations = _algorithm_selector.select_algorithm(analysis, user_preferences)

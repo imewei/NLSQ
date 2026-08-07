@@ -35,7 +35,9 @@ from nlsq.utils.logging import get_logger
 
 
 def jacobian_mode_selector(
-    n_params: int, n_residuals: int, mode: str = "auto"
+    n_params: int,
+    n_residuals: int,
+    mode: str = "auto",
 ) -> tuple[str, str]:
     """Select Jacobian automatic differentiation mode based on problem dimensions.
 
@@ -106,14 +108,12 @@ def jacobian_mode_selector(
         # because reverse-mode is O(n_residuals) vs forward-mode O(n_params)
         if n_params > n_residuals:
             return "rev", f"jacrev ({n_params} params > {n_residuals} residuals)"
-        else:
-            return "fwd", f"jacfwd ({n_params} params <= {n_residuals} residuals)"
-    elif mode in ("fwd", "rev"):
+        return "fwd", f"jacfwd ({n_params} params <= {n_residuals} residuals)"
+    if mode in ("fwd", "rev"):
         return mode, f"explicit override: {mode}"
-    else:
-        raise ValueError(
-            f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'"
-        )
+    raise ValueError(
+        f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'",
+    )
 
 
 TERMINATION_MESSAGES = {
@@ -158,7 +158,10 @@ def prepare_bounds(bounds, n) -> tuple[np.ndarray, np.ndarray]:
 
 
 def check_tolerance(
-    ftol: float, xtol: float, gtol: float, method: str
+    ftol: float,
+    xtol: float,
+    gtol: float,
+    method: str,
 ) -> tuple[float, float, float]:
     """Check and prepare tolerance values for optimization.
 
@@ -203,14 +206,15 @@ def check_tolerance(
     if ftol < EPS and xtol < EPS and gtol < EPS:
         raise ValueError(
             "At least one of the tolerances must be higher than "
-            f"machine epsilon ({EPS:.2e})."
+            f"machine epsilon ({EPS:.2e}).",
         )
 
     return ftol, xtol, gtol
 
 
 def check_x_scale(
-    x_scale: str | Sequence[float] | np.ndarray, x0: np.ndarray
+    x_scale: str | Sequence[float] | np.ndarray,
+    x0: np.ndarray,
 ) -> str | np.ndarray:
     """Check and prepare the `x_scale` parameter for optimization.
 
@@ -261,7 +265,11 @@ class AutoDiffJacobian:
     """
 
     def create_ad_jacobian(
-        self, func: Callable, num_args: int, masked: bool = True, mode: str = "fwd"
+        self,
+        func: Callable,
+        num_args: int,
+        masked: bool = True,
+        mode: str = "fwd",
     ) -> Callable:
         """Creates a function that returns the autodiff jacobian of the
         residual fit function. The Jacobian of the residual fit function is
@@ -439,7 +447,7 @@ class LeastSquares:
 
         if enable_stability:
             self.stability_guard = NumericalStabilityGuard(
-                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd
+                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
             )
             self.memory_manager = get_memory_manager()
 
@@ -490,7 +498,7 @@ class LeastSquares:
         # Validate loss function
         if loss not in self.ls.IMPLEMENTED_LOSSES and not callable(loss):
             raise ValueError(
-                f"`loss` must be one of {self.ls.IMPLEMENTED_LOSSES.keys()} or a callable."
+                f"`loss` must be one of {self.ls.IMPLEMENTED_LOSSES.keys()} or a callable.",
             )
 
         # Validate method
@@ -533,7 +541,7 @@ class LeastSquares:
 
         if np.any(lb >= ub):
             raise ValueError(
-                "Each lower bound must be strictly less than each upper bound."
+                "Each lower bound must be strictly less than each upper bound.",
             )
 
         if not in_bounds(x0, lb, ub):
@@ -631,7 +639,10 @@ class LeastSquares:
             if jac is None:
                 adj = AutoDiffJacobian()
                 jac_func = adj.create_ad_jacobian(
-                    wrap_func, x0.size, masked=False, mode=jacobian_mode_selected
+                    wrap_func,
+                    x0.size,
+                    masked=False,
+                    mode=jacobian_mode_selected,
                 )
             else:
                 # Capture jac in closure with proper type narrowing
@@ -690,7 +701,7 @@ class LeastSquares:
 
         if f0.ndim != 1:
             raise ValueError(
-                f"`fun` must return at most 1-d array_like. f0.shape: {f0.shape}"
+                f"`fun` must return at most 1-d array_like. f0.shape: {f0.shape}",
             )
 
         if not np.all(np.isfinite(f0)):
@@ -705,7 +716,10 @@ class LeastSquares:
         return f0, J0
 
     def _check_and_fix_initial_jacobian(
-        self, J0: jnp.ndarray, m: int, n: int
+        self,
+        J0: jnp.ndarray,
+        m: int,
+        n: int,
     ) -> jnp.ndarray:
         """Check and fix initial Jacobian if stability is enabled.
 
@@ -741,7 +755,8 @@ class LeastSquares:
                 )
                 if has_problem:
                     self.logger.warning(
-                        "Jacobian issues detected and fixed", issues=issues
+                        "Jacobian issues detected and fixed",
+                        issues=issues,
                     )
                 elif issues.get("svd_skipped"):
                     self.logger.debug(
@@ -753,7 +768,7 @@ class LeastSquares:
         if J0 is not None and J0.shape != (m, n):
             raise ValueError(
                 f"The return value of `jac` has wrong shape: expected {(m, n)}, "
-                f"actual {J0.shape}."
+                f"actual {J0.shape}.",
             )
 
         return J0
@@ -803,7 +818,10 @@ class LeastSquares:
             initial_cost_jnp = self.trf.calculate_cost(rho, data_mask)
         elif loss_function is not None:
             initial_cost_jnp = loss_function(
-                f0, f_scale, data_mask=data_mask, cost_only=True
+                f0,
+                f_scale,
+                data_mask=data_mask,
+                cost_only=True,
             )
         else:
             initial_cost_jnp = self.trf.default_loss_func(f0)
@@ -811,7 +829,11 @@ class LeastSquares:
         return float(initial_cost_jnp)
 
     def _check_memory_and_adjust_solver(
-        self, m: int, n: int, method: str, tr_solver: str | None
+        self,
+        m: int,
+        n: int,
+        method: str,
+        tr_solver: str | None,
     ) -> str | None:
         """Check memory requirements and adjust solver if needed.
 
@@ -833,10 +855,12 @@ class LeastSquares:
         """
         if self.enable_stability:
             memory_required = self.memory_manager.predict_memory_requirement(
-                m, n, method
+                m,
+                n,
+                method,
             )
             is_available, msg = self.memory_manager.check_memory_availability(
-                memory_required
+                memory_required,
             )
             if not is_available:
                 self.logger.warning("Memory constraint detected", details=msg)
@@ -846,7 +870,9 @@ class LeastSquares:
         return tr_solver
 
     def _create_stable_wrappers(
-        self, rfunc: Callable, jac_func: Callable
+        self,
+        rfunc: Callable,
+        jac_func: Callable,
     ) -> tuple[Callable, Callable]:
         """Create stability wrapper functions for residuals and Jacobian.
 
@@ -877,7 +903,9 @@ class LeastSquares:
             def stable_rfunc(x, xd, yd, dm, tf):
                 result = original_rfunc(x, xd, yd, dm, tf)
                 result = jnp.where(
-                    jnp.isfinite(result), result, jnp.clip(result, -1e10, 1e10)
+                    jnp.isfinite(result),
+                    result,
+                    jnp.clip(result, -1e10, 1e10),
                 )
                 return result
 
@@ -933,7 +961,10 @@ class LeastSquares:
             # Initialize diagnostics if enabled
             if self.enable_diagnostics:
                 self.diagnostics.start_optimization(
-                    n_params=n, n_data=m, method=method, loss=loss
+                    n_params=n,
+                    n_data=m,
+                    method=method,
+                    loss=loss,
                 )
 
             result = self.trf.trf(
@@ -999,7 +1030,7 @@ class LeastSquares:
             self.logger.info(result.message)
             self.logger.info(
                 f"Function evaluations {result.nfev}, initial cost {initial_cost:.4e}, final cost "
-                f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}."
+                f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}.",
             )
 
         return result
@@ -1163,28 +1194,44 @@ class LeastSquares:
 
             # Select Jacobian mode based on problem dimensions
             jacobian_mode_selected, jacobian_rationale = jacobian_mode_selector(
-                n, m_estimate, mode=jacobian_mode_config
+                n,
+                m_estimate,
+                mode=jacobian_mode_config,
             )
 
             # Log Jacobian mode selection in debug mode
             self.logger.debug(
-                f"Jacobian mode: '{jacobian_mode_selected}' (from {jacobian_mode_source}). Rationale: {jacobian_rationale}"
+                f"Jacobian mode: '{jacobian_mode_selected}' (from {jacobian_mode_source}). Rationale: {jacobian_rationale}",
             )
         else:
             # Analytical Jacobian or SciPy mode - use default forward mode
             jacobian_mode_selected = "fwd"
             jacobian_rationale = "analytical Jacobian or SciPy compatibility mode"
             self.logger.debug(
-                f"Jacobian mode: '{jacobian_mode_selected}'. Rationale: {jacobian_rationale}"
+                f"Jacobian mode: '{jacobian_mode_selected}'. Rationale: {jacobian_rationale}",
             )
 
         rfunc, jac_func = self._setup_functions(
-            fun, jac, xdata, ydata, transform, x0, args, kwargs, jacobian_mode_selected
+            fun,
+            jac,
+            xdata,
+            ydata,
+            transform,
+            x0,
+            args,
+            kwargs,
+            jacobian_mode_selected,
         )
 
         # Step 5: Evaluate initial residuals and Jacobian
         f0, J0 = self._evaluate_initial_residuals_and_jacobian(
-            rfunc, jac_func, x0, xdata, ydata, data_mask, transform
+            rfunc,
+            jac_func,
+            x0,
+            xdata,
+            ydata,
+            data_mask,
+            transform,
         )
 
         m = f0.size
@@ -1200,7 +1247,11 @@ class LeastSquares:
 
         # Step 8: Compute initial cost
         initial_cost = self._compute_initial_cost(
-            f0, loss, loss_function, f_scale, data_mask
+            f0,
+            loss,
+            loss_function,
+            f_scale,
+            data_mask,
         )
 
         # Step 8.5: Detect sparsity and auto-select sparse solver if beneficial
@@ -1242,18 +1293,18 @@ class LeastSquares:
                     sparse_solver_selected = True
                     self.logger.info(
                         f"Sparse solver activated: sparsity={sparsity_ratio:.1%}, "
-                        f"n_residuals={m}, n_params={n}"
+                        f"n_residuals={m}, n_params={n}",
                     )
                 elif tr_solver is None:
                     tr_solver = "exact"
                     self.logger.debug(
-                        f"Dense solver selected: low sparsity ({sparsity_ratio:.1%})"
+                        f"Dense solver selected: low sparsity ({sparsity_ratio:.1%})",
                     )
 
             except Exception as e:
                 # If sparsity detection fails, fall back to dense solver
                 self.logger.warning(
-                    f"Sparsity detection failed: {e}. Using dense solver."
+                    f"Sparsity detection failed: {e}. Using dense solver.",
                 )
                 if tr_solver is None:
                     tr_solver = "exact"
@@ -1315,7 +1366,7 @@ class LeastSquares:
         # Log sparsity info in debug mode
         self.logger.debug(
             f"Sparsity diagnostics: detected={is_sparse_problem}, "
-            f"ratio={sparsity_ratio:.1%}, solver={'sparse' if sparse_solver_selected else 'dense'}"
+            f"ratio={sparsity_ratio:.1%}, solver={'sparse' if sparse_solver_selected else 'dense'}",
         )
 
         return result
@@ -1497,7 +1548,13 @@ class LeastSquares:
                 jac_fwd = jac(coords, args[0], args[1], args[2], args[3], args[4])
             elif args.size == 6:
                 jac_fwd = jac(
-                    coords, args[0], args[1], args[2], args[3], args[4], args[5]
+                    coords,
+                    args[0],
+                    args[1],
+                    args[2],
+                    args[3],
+                    args[4],
+                    args[5],
                 )
             else:
                 # For more parameters, use a more generic approach
@@ -1507,7 +1564,9 @@ class LeastSquares:
 
         @jit
         def masked_jac(
-            coords: jnp.ndarray, args: jnp.ndarray, data_mask: jnp.ndarray
+            coords: jnp.ndarray,
+            args: jnp.ndarray,
+            data_mask: jnp.ndarray,
         ) -> jnp.ndarray:
             """Compute the wrapped Jacobian but masks out the padded elements
             with 0s"""
@@ -1553,7 +1612,7 @@ class LeastSquares:
 
             J = masked_jac(coords, args, data_mask)
             return jnp.atleast_2d(
-                jax_solve_triangular(atransform, jnp.asarray(J), lower=True)
+                jax_solve_triangular(atransform, jnp.asarray(J), lower=True),
             )
 
         # we need all three versions of the Jacobian function to allow for

@@ -98,7 +98,7 @@ def list_builtin_models() -> list[dict[str, Any]]:
                     "has_estimate_p0": True,  # Generated polynomials have estimate_p0
                     "has_bounds": True,  # Generated polynomials have bounds
                     "is_factory": True,
-                }
+                },
             )
             continue
 
@@ -113,10 +113,10 @@ def list_builtin_models() -> list[dict[str, Any]]:
 
         # Check for estimate_p0 and bounds methods
         has_estimate_p0 = hasattr(model_func, "estimate_p0") and callable(
-            getattr(model_func, "estimate_p0", None)
+            getattr(model_func, "estimate_p0", None),
         )
         has_bounds = hasattr(model_func, "bounds") and callable(
-            getattr(model_func, "bounds", None)
+            getattr(model_func, "bounds", None),
         )
 
         result.append(
@@ -126,7 +126,7 @@ def list_builtin_models() -> list[dict[str, Any]]:
                 "has_estimate_p0": has_estimate_p0,
                 "has_bounds": has_bounds,
                 "is_factory": False,
-            }
+            },
         )
 
     return result
@@ -164,12 +164,13 @@ def get_model(model_type: str, config: dict[str, Any]) -> Callable:
 
     if model_type == "builtin":
         return registry.get_model(
-            config.get("name", ""), {"type": "builtin", "name": config.get("name", "")}
+            config.get("name", ""),
+            {"type": "builtin", "name": config.get("name", "")},
         )
-    elif model_type == "polynomial":
+    if model_type == "polynomial":
         degree = config.get("degree", 1)
         return registry.get_model("poly", {"type": "polynomial", "degree": degree})
-    elif model_type == "custom":
+    if model_type == "custom":
         if "path" in config:
             return registry.get_model(
                 config["path"],
@@ -179,15 +180,14 @@ def get_model(model_type: str, config: dict[str, Any]) -> Callable:
                     "function": config.get("function", ""),
                 },
             )
-        elif "code" in config:
+        if "code" in config:
             func, _ = parse_custom_model_string(
-                config["code"], config.get("function", "model")
+                config["code"],
+                config.get("function", "model"),
             )
             return func
-        else:
-            raise ValueError("Custom model requires 'path' or 'code' in config")
-    else:
-        raise ValueError(f"Unknown model type: {model_type!r}")
+        raise ValueError("Custom model requires 'path' or 'code' in config")
+    raise ValueError(f"Unknown model type: {model_type!r}")
 
 
 def get_model_info(model: Callable) -> dict[str, Any]:
@@ -254,7 +254,7 @@ def get_model_info(model: Callable) -> dict[str, Any]:
 
     # Check for estimate_p0 and bounds
     has_estimate_p0 = hasattr(model, "estimate_p0") and callable(
-        getattr(model, "estimate_p0", None)
+        getattr(model, "estimate_p0", None),
     )
     has_bounds = hasattr(model, "bounds") and callable(getattr(model, "bounds", None))
 
@@ -300,7 +300,7 @@ class _SafeASTValidator(ast.NodeVisitor):
             "jnp",
             "scipy",
             "scipy.special",
-        }
+        },
     )
 
     # Modules that are explicitly dangerous
@@ -330,7 +330,7 @@ class _SafeASTValidator(ast.NodeVisitor):
             "threading",
             "concurrent",
             "asyncio",
-        }
+        },
     )
 
     # Built-in functions that are dangerous
@@ -350,7 +350,7 @@ class _SafeASTValidator(ast.NodeVisitor):
             "setattr",
             "delattr",
             "breakpoint",
-        }
+        },
     )
 
     def __init__(self) -> None:
@@ -362,7 +362,7 @@ class _SafeASTValidator(ast.NodeVisitor):
             module_name = alias.name.split(".")[0]
             if module_name in self.DANGEROUS_MODULES:
                 self.errors.append(
-                    f"Import of dangerous module '{alias.name}' is not allowed"
+                    f"Import of dangerous module '{alias.name}' is not allowed",
                 )
         self.generic_visit(node)
 
@@ -372,7 +372,7 @@ class _SafeASTValidator(ast.NodeVisitor):
             module_name = node.module.split(".")[0]
             if module_name in self.DANGEROUS_MODULES:
                 self.errors.append(
-                    f"Import from dangerous module '{node.module}' is not allowed"
+                    f"Import from dangerous module '{node.module}' is not allowed",
                 )
         self.generic_visit(node)
 
@@ -381,14 +381,14 @@ class _SafeASTValidator(ast.NodeVisitor):
         if isinstance(node.func, ast.Name):
             if node.func.id in self.DANGEROUS_BUILTINS:
                 self.errors.append(
-                    f"Call to dangerous built-in '{node.func.id}' is not allowed"
+                    f"Call to dangerous built-in '{node.func.id}' is not allowed",
                 )
         elif isinstance(node.func, ast.Attribute):
             # Check for dangerous method calls on blocked modules
             if isinstance(node.func.value, ast.Name):
                 if node.func.value.id in self.DANGEROUS_MODULES:
                     self.errors.append(
-                        f"Call to '{node.func.value.id}.{node.func.attr}' is not allowed"
+                        f"Call to '{node.func.value.id}.{node.func.attr}' is not allowed",
                     )
         self.generic_visit(node)
 
@@ -413,8 +413,6 @@ class _SafeASTValidator(ast.NodeVisitor):
 
 class SecurityError(Exception):
     """Exception raised when unsafe code is detected."""
-
-    pass
 
 
 def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
@@ -456,7 +454,8 @@ def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
 
 
 def parse_custom_model_string(
-    code: str, function_name: str
+    code: str,
+    function_name: str,
 ) -> tuple[Callable, list[str]]:
     """Parse inline Python code to create a model function.
 
@@ -734,21 +733,20 @@ def get_polynomial_latex(degree: int) -> str:
     """
     if degree == 0:
         return r"y = c_0"
-    elif degree == 1:
+    if degree == 1:
         return r"y = c_0 x + c_1"
-    elif degree == 2:
+    if degree == 2:
         return r"y = c_0 x^2 + c_1 x + c_2"
-    elif degree == 3:
+    if degree == 3:
         return r"y = c_0 x^3 + c_1 x^2 + c_2 x + c_3"
-    else:
-        # General form for higher degrees
-        terms = []
-        for i in range(degree + 1):
-            power = degree - i
-            if power == 0:
-                terms.append(f"c_{{{i}}}")
-            elif power == 1:
-                terms.append(f"c_{{{i}}} x")
-            else:
-                terms.append(f"c_{{{i}}} x^{{{power}}}")
-        return "y = " + " + ".join(terms)
+    # General form for higher degrees
+    terms = []
+    for i in range(degree + 1):
+        power = degree - i
+        if power == 0:
+            terms.append(f"c_{{{i}}}")
+        elif power == 1:
+            terms.append(f"c_{{{i}}} x")
+        else:
+            terms.append(f"c_{{{i}}} x^{{{power}}}")
+    return "y = " + " + ".join(terms)

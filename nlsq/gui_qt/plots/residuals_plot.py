@@ -76,7 +76,7 @@ class ResidualsPlotWidget(QWidget):
                 "Residuals vs Fitted",
                 "Standardized Residuals vs X",
                 "Standardized Residuals vs Fitted",
-            ]
+            ],
         )
         self._plot_type_combo.currentIndexChanged.connect(self._update_plot)
         selector_row.addWidget(self._plot_type_combo)

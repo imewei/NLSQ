@@ -180,7 +180,9 @@ class ParameterSensitivityAnalyzer:
         return self._analyze_eigenvalue_spectrum(fim, n_params, start_time)
 
     def _validate_jacobian(
-        self, jacobian: np.ndarray, start_time: float
+        self,
+        jacobian: np.ndarray,
+        start_time: float,
     ) -> ParameterSensitivityReport | None:
         """Validate the Jacobian matrix.
 
@@ -282,7 +284,10 @@ class ParameterSensitivityAnalyzer:
         return jacobian.T @ jacobian
 
     def _analyze_eigenvalue_spectrum(
-        self, fim: np.ndarray, n_params: int, start_time: float
+        self,
+        fim: np.ndarray,
+        n_params: int,
+        start_time: float,
     ) -> ParameterSensitivityReport:
         """Analyze the eigenvalue spectrum of the FIM.
 
@@ -333,7 +338,8 @@ class ParameterSensitivityAnalyzer:
         # identifies significant eigenvalue spread (at least 2 orders of magnitude).
         sloppy_threshold_log = -np.log10(self.config.sloppy_threshold)
         sloppy_detection_threshold = max(
-            sloppy_threshold_log / 3.0, self.DEFAULT_SLOPPY_DETECTION_ORDERS
+            sloppy_threshold_log / 3.0,
+            self.DEFAULT_SLOPPY_DETECTION_ORDERS,
         )
 
         # Check for wide eigenvalue spread (SENS-001)
@@ -343,7 +349,8 @@ class ParameterSensitivityAnalyzer:
         # Classify stiff vs poorly-determined directions
         # Pass is_sloppy to use adaptive thresholds when model has wide spread
         stiff_indices, sloppy_indices = self._classify_directions(
-            eigenvalues, is_sloppy
+            eigenvalues,
+            is_sloppy,
         )
 
         # Compute effective dimensionality using participation ratio
@@ -351,7 +358,8 @@ class ParameterSensitivityAnalyzer:
 
         if is_sloppy:
             issue = self._create_sens_001_issue(
-                eigenvalue_range, sloppy_detection_threshold
+                eigenvalue_range,
+                sloppy_detection_threshold,
             )
             issues.append(issue)
             health_status = HealthStatus.WARNING
@@ -381,7 +389,8 @@ class ParameterSensitivityAnalyzer:
         )
 
     def _compute_eigendecomposition(
-        self, fim: np.ndarray
+        self,
+        fim: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Compute eigenvalue decomposition of the FIM.
 
@@ -459,11 +468,12 @@ class ParameterSensitivityAnalyzer:
         # Compute log10 ratio
         if min_eigenvalue > 0:
             return float(np.log10(max_eigenvalue / min_eigenvalue))
-        else:
-            return float("inf")
+        return float("inf")
 
     def _classify_directions(
-        self, eigenvalues: np.ndarray, is_sloppy: bool
+        self,
+        eigenvalues: np.ndarray,
+        is_sloppy: bool,
     ) -> tuple[list[int], list[int]]:
         """Classify directions as stiff or poorly-determined based on eigenvalues.
 
@@ -566,7 +576,9 @@ class ParameterSensitivityAnalyzer:
         return float(effective_dim)
 
     def _create_sens_001_issue(
-        self, eigenvalue_range: float, threshold: float
+        self,
+        eigenvalue_range: float,
+        threshold: float,
     ) -> ModelHealthIssue:
         """Create SENS-001 issue for wide eigenvalue spread detection.
 
@@ -600,7 +612,9 @@ class ParameterSensitivityAnalyzer:
         )
 
     def _create_sens_002_issue(
-        self, effective_dimensionality: float, n_params: int
+        self,
+        effective_dimensionality: float,
+        n_params: int,
     ) -> ModelHealthIssue:
         """Create SENS-002 issue for low effective dimensionality.
 

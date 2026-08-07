@@ -284,7 +284,7 @@ class IdentifiabilityReport(AnalysisResult):
 
         if self.highly_correlated_pairs:
             lines.append(
-                f"\nHighly Correlated Pairs ({len(self.highly_correlated_pairs)}):"
+                f"\nHighly Correlated Pairs ({len(self.highly_correlated_pairs)}):",
             )
             for i, j, corr in self.highly_correlated_pairs:
                 lines.append(f"  Parameters {i} and {j}: {corr:.4f}")
@@ -379,7 +379,7 @@ class GradientHealthReport(AnalysisResult):
     final_gradient_norm: float = 0.0
     mean_gradient_magnitudes: np.ndarray = field(default_factory=lambda: np.array([]))
     variance_gradient_magnitudes: np.ndarray = field(
-        default_factory=lambda: np.array([])
+        default_factory=lambda: np.array([]),
     )
     max_imbalance_ratio: float = 1.0
     has_numerical_issues: bool = False
@@ -781,7 +781,8 @@ class ModelHealthReport:
 
 
 def _format_model_health_summary(
-    report: ModelHealthReport, verbose: bool = True
+    report: ModelHealthReport,
+    verbose: bool = True,
 ) -> str:
     """Format the health report as a human-readable summary.
 
@@ -834,7 +835,7 @@ def _format_model_health_summary(
                 is_structural and report.identifiability.condition_number < 1e8
             )
             lines.append(
-                f"Structurally identifiable: {'Yes' if is_structural else 'No'}"
+                f"Structurally identifiable: {'Yes' if is_structural else 'No'}",
             )
             lines.append(f"Practically identifiable: {'Yes' if is_practical else 'No'}")
 
@@ -864,10 +865,10 @@ def _format_model_health_summary(
         if report.gradient_health.available:
             lines.append(f"Health score: {report.gradient_health.health_score:.2f}")
             lines.append(
-                f"Vanishing gradients: {'Yes' if report.gradient_health.vanishing_detected else 'No'}"
+                f"Vanishing gradients: {'Yes' if report.gradient_health.vanishing_detected else 'No'}",
             )
             lines.append(
-                f"Gradient imbalance: {'Yes' if report.gradient_health.imbalance_detected else 'No'}"
+                f"Gradient imbalance: {'Yes' if report.gradient_health.imbalance_detected else 'No'}",
             )
         else:
             lines.append(f"UNAVAILABLE: {report.gradient_health.error_message}")
@@ -879,13 +880,13 @@ def _format_model_health_summary(
         lines.append("--- Sloppy Model ---")
         if report.sloppy_model.available:
             lines.append(
-                f"Is sloppy: {'Yes' if report.sloppy_model.is_sloppy else 'No'}"
+                f"Is sloppy: {'Yes' if report.sloppy_model.is_sloppy else 'No'}",
             )
             lines.append(
-                f"Eigenvalue range: {report.sloppy_model.eigenvalue_range:.1f} orders of magnitude"
+                f"Eigenvalue range: {report.sloppy_model.eigenvalue_range:.1f} orders of magnitude",
             )
             lines.append(
-                f"Effective dimensionality: {report.sloppy_model.effective_dimensionality:.1f}"
+                f"Effective dimensionality: {report.sloppy_model.effective_dimensionality:.1f}",
             )
         else:
             lines.append(f"UNAVAILABLE: {report.sloppy_model.error_message}")

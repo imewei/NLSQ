@@ -277,11 +277,11 @@ def __getattr__(name: str) -> Any:
             # Handle missing optional dependencies gracefully
             raise ImportError(
                 f"Cannot import '{name}' from '{module_path}'. "
-                f"This may require an optional dependency. Error: {e}"
+                f"This may require an optional dependency. Error: {e}",
             ) from e
         except AttributeError as e:
             raise AttributeError(
-                f"Module '{module_path}' does not have attribute '{name}'"
+                f"Module '{module_path}' does not have attribute '{name}'",
             ) from e
 
     # Not found - raise standard AttributeError
@@ -666,7 +666,7 @@ def fit(
         }
         return result
 
-    elif use_large_dataset or n_points >= size_threshold:
+    if use_large_dataset or n_points >= size_threshold:
         # Use curve_fit_large for large datasets
         return curve_fit_large(
             f,
@@ -690,25 +690,24 @@ def fit(
             **kwargs,
         )
 
-    else:
-        # Use standard curve_fit
-        return curve_fit(
-            f,
-            xdata,
-            ydata,
-            p0=p0,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            check_finite=check_finite,
-            bounds=bounds,
-            method=method,  # type: ignore[arg-type]
-            multistart=effective_multistart,
-            n_starts=effective_n_starts,
-            sampler=sampler,
-            center_on_p0=center_on_p0,
-            scale_factor=scale_factor,
-            **kwargs,
-        )
+    # Use standard curve_fit
+    return curve_fit(
+        f,
+        xdata,
+        ydata,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
+        bounds=bounds,
+        method=method,  # type: ignore[arg-type]
+        multistart=effective_multistart,
+        n_starts=effective_n_starts,
+        sampler=sampler,
+        center_on_p0=center_on_p0,
+        scale_factor=scale_factor,
+        **kwargs,
+    )
 
 
 # Convenience function for large dataset curve fitting
@@ -863,7 +862,7 @@ def curve_fit_large(
         if param in kwargs:
             raise TypeError(
                 f"curve_fit_large() got an unexpected keyword argument '{param}'. "
-                "This parameter was removed in v0.2.0. Use streaming instead."
+                "This parameter was removed in v0.2.0. Use streaming instead.",
             )
 
     # Input validation
@@ -877,7 +876,7 @@ def curve_fit_large(
         raise ValueError("`ydata` cannot be empty.")
     if len(xdata) != len(ydata):
         raise ValueError(
-            f"`xdata` and `ydata` must have the same length: {len(xdata)} vs {len(ydata)}."
+            f"`xdata` and `ydata` must have the same length: {len(xdata)} vs {len(ydata)}.",
         )
     if len(xdata) < 2:
         raise ValueError(f"Need at least 2 data points for fitting, got {len(xdata)}.")
@@ -1073,16 +1072,15 @@ def curve_fit_large(
         # Extract popt and pcov from result
         if hasattr(result, "popt") and hasattr(result, "pcov"):
             return result.popt, result.pcov
-        elif hasattr(result, "x"):
+        if hasattr(result, "x"):
             # Fallback: construct basic covariance matrix
             popt = result.x
             # Create identity covariance matrix if not available
             pcov = np.eye(len(popt))
             return popt, pcov
-        else:
-            raise RuntimeError(
-                f"Unexpected result format from large dataset fitter: {result}"
-            )
+        raise RuntimeError(
+            f"Unexpected result format from large dataset fitter: {result}",
+        )
 
 
 # Optional: Provide convenience access to submodules for advanced users

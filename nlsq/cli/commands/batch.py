@@ -229,7 +229,7 @@ def _collect_batch_results(
                         "context": {},
                         "suggestion": None,
                     },
-                }
+                },
             )
             logger.warning(f"FAILED: {workflow_path} - Executor error: {e}")
 
@@ -347,7 +347,7 @@ def _print_batch_summary(
             if r["status"] == "failed":
                 error_info = r.get("error", {})
                 print(
-                    f"  - {r['workflow_path']}: {error_info.get('message', 'Unknown error')}"
+                    f"  - {r['workflow_path']}: {error_info.get('message', 'Unknown error')}",
                 )
 
 

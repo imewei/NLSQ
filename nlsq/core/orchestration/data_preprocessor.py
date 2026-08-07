@@ -83,7 +83,9 @@ class DataPreprocessor:
             "propagate",
         )
         xdata_arr, ydata_arr = self._convert_to_arrays(
-            xdata, ydata, effective_check_finite
+            xdata,
+            ydata,
+            effective_check_finite,
         )
 
         # Step 2: Validate data is not empty
@@ -170,7 +172,9 @@ class DataPreprocessor:
         return xdata_arr, ydata_arr
 
     def _validate_lengths(
-        self, xdata: np.ndarray, ydata: np.ndarray
+        self,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
     ) -> tuple[int, int]:
         """Validate that X and Y data lengths match.
 
@@ -246,7 +250,7 @@ class DataPreprocessor:
                 if not np.all(np.isfinite(sigma_clean)):
                     raise ValueError(
                         "Sigma covariance matrix contains non-finite values in "
-                        "valid data rows/columns after NaN filtering"
+                        "valid data rows/columns after NaN filtering",
                     )
 
         # Create mask for clean data (all True since we filtered)

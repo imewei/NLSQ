@@ -188,7 +188,8 @@ class CheckpointManager:
             best_params, best_cost = self._read_best_params(phase_state)
             phase_history = self._read_phase_history(phase_state)
             tournament_selector = self._read_tournament_state(
-                phase_state, global_config
+                phase_state,
+                global_config,
             )
             multistart_candidates = self._read_multistart_candidates(phase_state)
 
@@ -212,17 +213,22 @@ class CheckpointManager:
         f.attrs["timestamp"] = time.time()
 
     def _write_phase_state(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write current phase and normalized parameters."""
         phase_state.create_dataset("current_phase", data=state.current_phase)
         if state.normalized_params is not None:
             phase_state.create_dataset(
-                "normalized_params", data=state.normalized_params
+                "normalized_params",
+                data=state.normalized_params,
             )
 
     def _write_optimizer_state(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write Phase 1 optimizer state (Optax L-BFGS)."""
         if state.phase1_optimizer_state is None:
@@ -237,7 +243,7 @@ class CheckpointManager:
 
             logging.getLogger(__name__).warning(
                 "Unsupported Phase 1 optimizer state for checkpointing. "
-                "Expected L-BFGS (ScaleByLBFGSState). Skipping optimizer state."
+                "Expected L-BFGS (ScaleByLBFGSState). Skipping optimizer state.",
             )
             return
 
@@ -245,35 +251,45 @@ class CheckpointManager:
         opt_state_group.create_dataset("params", data=inner_state.params)
         opt_state_group.create_dataset("updates", data=inner_state.updates)
         opt_state_group.create_dataset(
-            "diff_params_memory", data=inner_state.diff_params_memory
+            "diff_params_memory",
+            data=inner_state.diff_params_memory,
         )
         opt_state_group.create_dataset(
-            "diff_updates_memory", data=inner_state.diff_updates_memory
+            "diff_updates_memory",
+            data=inner_state.diff_updates_memory,
         )
         opt_state_group.create_dataset(
-            "weights_memory", data=inner_state.weights_memory
+            "weights_memory",
+            data=inner_state.weights_memory,
         )
 
     def _write_accumulators(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write Phase 2 accumulators."""
         if state.phase2_JTJ_accumulator is not None:
             phase_state.create_dataset(
-                "phase2_jtj_accumulator", data=state.phase2_JTJ_accumulator
+                "phase2_jtj_accumulator",
+                data=state.phase2_JTJ_accumulator,
             )
         if state.phase2_JTr_accumulator is not None:
             phase_state.create_dataset(
-                "phase2_jtr_accumulator", data=state.phase2_JTr_accumulator
+                "phase2_jtr_accumulator",
+                data=state.phase2_JTr_accumulator,
             )
 
     def _write_best_params(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write best parameters tracking."""
         if state.best_params_global is not None:
             phase_state.create_dataset(
-                "best_params_global", data=state.best_params_global
+                "best_params_global",
+                data=state.best_params_global,
             )
         phase_state.create_dataset("best_cost_global", data=state.best_cost_global)
 
@@ -303,7 +319,9 @@ class CheckpointManager:
         return obj
 
     def _write_phase_history(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write phase history using safe JSON serialization."""
         if not state.phase_history:
@@ -315,7 +333,9 @@ class CheckpointManager:
         phase_state.create_dataset("phase_history", data=np.void(phase_history_bytes))
 
     def _write_normalizer_state(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write normalization state."""
         if state.normalizer is None:
@@ -329,7 +349,9 @@ class CheckpointManager:
             norm_group.create_dataset("offsets", data=state.normalizer.offsets)
 
     def _write_tournament_state(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write tournament selector state."""
         if state.tournament_selector is None:
@@ -351,12 +373,15 @@ class CheckpointManager:
                     tournament_group.create_dataset(key, data=np.void(tournament_bytes))
 
     def _write_multistart_candidates(
-        self, phase_state: h5py.Group, state: CheckpointState
+        self,
+        phase_state: h5py.Group,
+        state: CheckpointState,
     ) -> None:
         """Write multi-start candidates."""
         if state.multistart_candidates is not None:
             phase_state.create_dataset(
-                "multistart_candidates", data=state.multistart_candidates
+                "multistart_candidates",
+                data=state.multistart_candidates,
             )
 
     def _validate_version(self, f: h5py.File) -> None:
@@ -364,7 +389,7 @@ class CheckpointManager:
         version = f.attrs.get("version", "1.0")
         if not version.startswith("3."):
             raise ValueError(
-                f"Incompatible checkpoint version: {version} (expected 3.x)"
+                f"Incompatible checkpoint version: {version} (expected 3.x)",
             )
 
     def _read_normalized_params(self, phase_state: h5py.Group) -> Array | None:
@@ -385,7 +410,7 @@ class CheckpointManager:
         if optimizer_type != "lbfgs":
             raise ValueError(
                 "Unsupported Phase 1 optimizer state in checkpoint. "
-                "Expected L-BFGS state."
+                "Expected L-BFGS state.",
             )
 
         from optax._src.transform import (  # type: ignore[import-not-found,import-untyped]
@@ -403,7 +428,8 @@ class CheckpointManager:
         return (lbfgs_state, optax.EmptyState())
 
     def _read_accumulators(
-        self, phase_state: h5py.Group
+        self,
+        phase_state: h5py.Group,
     ) -> tuple[Array | None, Array | None]:
         """Read Phase 2 accumulators."""
         phase2_JTJ = None

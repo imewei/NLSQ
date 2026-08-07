@@ -54,7 +54,7 @@ def is_evosax_available() -> bool:
             _EVOSAX_IMPORT_ERROR = str(e)
             logger.info(
                 "evosax not available - CMA-ES will fall back to multi-start. "
-                "Install with: pip install 'nlsq[global]'"
+                "Install with: pip install 'nlsq[global]'",
             )
 
     return _EVOSAX_AVAILABLE
@@ -157,7 +157,7 @@ class CMAESConfig:
 
         if self.max_generations < 1:
             raise ValueError(
-                f"max_generations must be >= 1, got {self.max_generations}"
+                f"max_generations must be >= 1, got {self.max_generations}",
             )
 
         if self.sigma <= 0:
@@ -175,18 +175,18 @@ class CMAESConfig:
         if self.restart_strategy not in ("none", "bipop"):
             raise ValueError(
                 f"restart_strategy must be 'none' or 'bipop', "
-                f"got '{self.restart_strategy}'"
+                f"got '{self.restart_strategy}'",
             )
 
         if self.population_batch_size is not None and self.population_batch_size < 1:
             raise ValueError(
-                f"population_batch_size must be >= 1, got {self.population_batch_size}"
+                f"population_batch_size must be >= 1, got {self.population_batch_size}",
             )
 
         if self.data_chunk_size is not None and self.data_chunk_size < 1024:
             raise ValueError(
                 f"data_chunk_size must be >= 1024 for numerical stability, "
-                f"got {self.data_chunk_size}"
+                f"got {self.data_chunk_size}",
             )
 
     @classmethod
@@ -217,7 +217,7 @@ class CMAESConfig:
         if preset_name not in CMAES_PRESETS:
             available = ", ".join(sorted(CMAES_PRESETS.keys()))
             raise ValueError(
-                f"Unknown preset '{preset_name}'. Available presets: {available}"
+                f"Unknown preset '{preset_name}'. Available presets: {available}",
             )
 
         preset_config = CMAES_PRESETS[preset_name]

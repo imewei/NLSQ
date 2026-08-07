@@ -182,7 +182,9 @@ class ResultExporter:
                 )
 
     def _prepare_export_data(
-        self, result: dict[str, Any], config: dict[str, Any]
+        self,
+        result: dict[str, Any],
+        config: dict[str, Any],
     ) -> dict[str, Any]:
         """Prepare export data with full metadata.
 
@@ -245,7 +247,8 @@ class ResultExporter:
             "workflow_name": metadata_config.get("workflow_name", "unknown"),
             "dataset_id": metadata_config.get("dataset_id", "unknown"),
             "model_id": model_config.get(
-                "name", model_config.get("function", "custom")
+                "name",
+                model_config.get("function", "custom"),
             ),
         }
 
@@ -383,7 +386,7 @@ class ResultExporter:
 
                 # Write parameter rows
                 for i, (name, value, uncertainty) in enumerate(
-                    zip(param_names, popt, uncertainties, strict=False)
+                    zip(param_names, popt, uncertainties, strict=False),
                 ):
                     writer.writerow([name, value, uncertainty, "parameter"])
 
@@ -416,6 +419,9 @@ class ResultExporter:
             Export data dictionary.
         """
         json_str = json.dumps(
-            _sanitize_nonfinite(data), cls=NumpyJSONEncoder, indent=2, allow_nan=False
+            _sanitize_nonfinite(data),
+            cls=NumpyJSONEncoder,
+            indent=2,
+            allow_nan=False,
         )
         print(json_str)

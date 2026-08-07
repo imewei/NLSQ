@@ -184,14 +184,16 @@ class SmartCache:
                         sample = arr_flat[::stride]
                         # Use BLAKE2b for the sample hash
                         sample_hash = hashlib.blake2b(
-                            sample.tobytes(), digest_size=16
+                            sample.tobytes(),
+                            digest_size=16,
                         ).hexdigest()
                         key_parts.append(f"array_{arg.shape}_{arg.dtype}_{sample_hash}")
                     else:
                         # Small/medium array: hash full array directly (no sampling overhead)
                         # This is the optimized path - removes redundant sampling
                         full_hash = hashlib.blake2b(
-                            arr_flat.tobytes(), digest_size=16
+                            arr_flat.tobytes(),
+                            digest_size=16,
                         ).hexdigest()
                         key_parts.append(f"array_{arg.shape}_{arg.dtype}_{full_hash}")
             elif callable(arg):
@@ -213,7 +215,8 @@ class SmartCache:
                     flat = arr.flatten()
                     if len(flat) > LARGE_ARRAY_THRESHOLD:
                         h = hashlib.blake2b(
-                            flat[:: max(1, len(flat) // 1000)].tobytes(), digest_size=16
+                            flat[:: max(1, len(flat) // 1000)].tobytes(),
+                            digest_size=16,
                         ).hexdigest()
                     else:
                         h = hashlib.blake2b(flat.tobytes(), digest_size=16).hexdigest()
@@ -327,7 +330,10 @@ class SmartCache:
                 _logger.debug("Could not save to disk cache: %s", e)
 
     def _add_to_memory_cache(
-        self, key: str, value: Any, timestamp: float | None = None
+        self,
+        key: str,
+        value: Any,
+        timestamp: float | None = None,
     ):
         """Add item to memory cache with LRU eviction.
 
@@ -526,11 +532,10 @@ class SmartCache:
                 length = int(data["_length"])
                 return tuple(data[f"arr_{i}"] for i in range(length))
             # Single array
-            elif "data" in data.files:
+            if "data" in data.files:
                 return data["data"]
-            else:
-                # Legacy format or unknown structure
-                raise ValueError(f"Unknown cache file structure: {data.files}")
+            # Legacy format or unknown structure
+            raise ValueError(f"Unknown cache file structure: {data.files}")
 
 
 def cached_function(cache: SmartCache | None = None, ttl: float | None = None):

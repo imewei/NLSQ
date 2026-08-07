@@ -184,7 +184,7 @@ class ModelSelectionPage(QWidget):
 
         info_label = QLabel(
             "Define a model function using JAX-compatible NumPy operations.\n"
-            "The first parameter must be x (independent variable)."
+            "The first parameter must be x (independent variable).",
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: gray;")

@@ -11,8 +11,6 @@ from typing import Any
 class ConfigValidationError(ValueError):
     """Exception raised when configuration validation fails."""
 
-    pass
-
 
 def validate_enum_value(
     value: Any,
@@ -37,11 +35,11 @@ def validate_enum_value(
     """
     if value not in valid_options:
         raise ConfigValidationError(
-            f"{param_name} must be one of: {valid_options}, got: {value}"
+            f"{param_name} must be one of: {valid_options}, got: {value}",
         )
 
 
-def validate_positive(value: float | int, param_name: str) -> None:
+def validate_positive(value: float, param_name: str) -> None:
     """Validate that value is strictly positive.
 
     Parameters
@@ -60,7 +58,7 @@ def validate_positive(value: float | int, param_name: str) -> None:
         raise ConfigValidationError(f"{param_name} must be positive")
 
 
-def validate_non_negative(value: float | int, param_name: str) -> None:
+def validate_non_negative(value: float, param_name: str) -> None:
     """Validate that value is non-negative.
 
     Parameters
@@ -117,13 +115,13 @@ def validate_range(
         max_bracket = "]" if inclusive_max else ")"
         raise ConfigValidationError(
             f"{param_name} must be in {min_bracket}{min_val}, {max_val}{max_bracket}, "
-            f"got {value}"
+            f"got {value}",
         )
 
 
 def validate_less_than_or_equal(
-    value1: float | int,
-    value2: float | int,
+    value1: float,
+    value2: float,
     name1: str,
     name2: str,
 ) -> None:
@@ -342,26 +340,26 @@ def validate_group_variance_config(
 
     if not isinstance(indices, list):
         raise ConfigValidationError(
-            "group_variance_indices must be a list of (start, end) tuples"
+            "group_variance_indices must be a list of (start, end) tuples",
         )
 
     for idx, item in enumerate(indices):
         if not isinstance(item, (tuple, list)) or len(item) != 2:
             raise ConfigValidationError(
-                f"group_variance_indices[{idx}] must be a (start, end) tuple"
+                f"group_variance_indices[{idx}] must be a (start, end) tuple",
             )
         start, end = item
         if not isinstance(start, int) or not isinstance(end, int):
             raise ConfigValidationError(
-                f"group_variance_indices[{idx}] start/end must be integers"
+                f"group_variance_indices[{idx}] start/end must be integers",
             )
         if start < 0:
             raise ConfigValidationError(
-                f"group_variance_indices[{idx}] start must be non-negative"
+                f"group_variance_indices[{idx}] start must be non-negative",
             )
         if end <= start:
             raise ConfigValidationError(
-                f"group_variance_indices[{idx}] end ({end}) must be > start ({start})"
+                f"group_variance_indices[{idx}] end ({end}) must be > start ({start})",
             )
 
 
@@ -498,10 +496,16 @@ def validate_defense_layer_config(
         validate_positive(lr_refinement, "warmup_lr_refinement")
         validate_positive(lr_careful, "warmup_lr_careful")
         validate_less_than_or_equal(
-            lr_refinement, lr_careful, "warmup_lr_refinement", "warmup_lr_careful"
+            lr_refinement,
+            lr_careful,
+            "warmup_lr_refinement",
+            "warmup_lr_careful",
         )
         validate_less_than_or_equal(
-            lr_careful, lr_default, "warmup_lr_careful", "warmup_learning_rate"
+            lr_careful,
+            lr_default,
+            "warmup_lr_careful",
+            "warmup_learning_rate",
         )
 
     # Layer 3: Cost-increase guard
@@ -553,7 +557,7 @@ def validate_residual_weighting_config(
 
     if weights is None:
         raise ConfigValidationError(
-            "residual_weights must be provided when enable_residual_weighting=True"
+            "residual_weights must be provided when enable_residual_weighting=True",
         )
 
     # Check that weights is array-like with positive values
@@ -566,7 +570,7 @@ def validate_residual_weighting_config(
 
     if weights_arr.ndim != 1:
         raise ConfigValidationError(
-            f"residual_weights must be 1D array, got {weights_arr.ndim}D"
+            f"residual_weights must be 1D array, got {weights_arr.ndim}D",
         )
 
     if len(weights_arr) == 0:

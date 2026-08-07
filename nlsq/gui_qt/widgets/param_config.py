@@ -62,7 +62,7 @@ class ParamConfigWidget(QWidget):
         self._auto_p0_check = QCheckBox("Auto-estimate initial values")
         self._auto_p0_check.setChecked(True)
         self._auto_p0_check.setToolTip(
-            "Use model's built-in p0 estimation if available"
+            "Use model's built-in p0 estimation if available",
         )
         auto_row.addWidget(self._auto_p0_check)
         auto_row.addStretch()
@@ -72,7 +72,7 @@ class ParamConfigWidget(QWidget):
         self._table = QTableWidget()
         self._table.setColumnCount(4)
         self._table.setHorizontalHeaderLabels(
-            ["Parameter", "Initial Value", "Lower Bound", "Upper Bound"]
+            ["Parameter", "Initial Value", "Lower Bound", "Upper Bound"],
         )
 
         # Configure header
@@ -153,7 +153,9 @@ class ParamConfigWidget(QWidget):
         self._emit_config()
 
     def set_values(
-        self, p0: list[float], bounds: tuple[list[float], list[float]] | None
+        self,
+        p0: list[float],
+        bounds: tuple[list[float], list[float]] | None,
     ) -> None:
         """Set the parameter values.
 
@@ -227,4 +229,4 @@ class ParamConfigWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        pass  # Theme is applied globally via Qt color scheme
+        # Theme is applied globally via Qt color scheme

@@ -238,7 +238,7 @@ class CurveFitResult(OptimizeResult):
             else:
                 raise AttributeError(
                     "Cannot compute predictions: model and xdata not available. "
-                    "This may occur if result was created without these attributes."
+                    "This may occur if result was created without these attributes.",
                 )
         return self._predictions_cache
 
@@ -281,7 +281,7 @@ class CurveFitResult(OptimizeResult):
                 object.__setattr__(self, "_residuals_cache", np.array(self.fun))
             else:
                 raise AttributeError(
-                    "Cannot compute residuals: neither model+data nor fun available"
+                    "Cannot compute residuals: neither model+data nor fun available",
                 )
         return self._residuals_cache
 
@@ -314,7 +314,7 @@ class CurveFitResult(OptimizeResult):
 
         if not np.isfinite(ss_tot) or ss_tot < np.finfo(float).tiny:
             warnings.warn(
-                "Total sum of squares is zero or NaN (constant/NaN data). R² undefined."
+                "Total sum of squares is zero or NaN (constant/NaN data). R² undefined.",
             )
             return np.nan
 
@@ -473,7 +473,7 @@ class CurveFitResult(OptimizeResult):
         if self.pcov is None:
             raise AttributeError(
                 "Cannot compute confidence intervals: pcov not available. "
-                "Try setting full_output=True in curve_fit."
+                "Try setting full_output=True in curve_fit.",
             )
 
         from scipy import stats
@@ -532,11 +532,11 @@ class CurveFitResult(OptimizeResult):
         """
         if not hasattr(self, "model"):
             raise AttributeError(
-                "Cannot compute prediction interval: model not available"
+                "Cannot compute prediction interval: model not available",
             )
         if self.get("pcov") is None:
             raise AttributeError(
-                "Cannot compute prediction interval: pcov not available"
+                "Cannot compute prediction interval: pcov not available",
             )
 
         from scipy import stats
@@ -546,7 +546,7 @@ class CurveFitResult(OptimizeResult):
             if not hasattr(self, "xdata"):
                 raise AttributeError(
                     "Cannot compute prediction interval: xdata not available. "
-                    "Either pass x explicitly or ensure xdata is stored in result."
+                    "Either pass x explicitly or ensure xdata is stored in result.",
                 )
             x = self.xdata
 
@@ -606,7 +606,7 @@ class CurveFitResult(OptimizeResult):
         if x is None:
             if not hasattr(self, "xdata"):
                 raise AttributeError(
-                    "Cannot compute confidence band: xdata not available"
+                    "Cannot compute confidence band: xdata not available",
                 )
             x = self.xdata
 
@@ -683,7 +683,7 @@ class CurveFitResult(OptimizeResult):
         except ImportError:
             raise ImportError(
                 "matplotlib is required for plotting. "
-                "Install with: pip install matplotlib"
+                "Install with: pip install matplotlib",
             ) from None
 
         if not hasattr(self, "xdata") or not hasattr(self, "ydata"):
@@ -693,7 +693,10 @@ class CurveFitResult(OptimizeResult):
         if ax is None:
             if show_residuals:
                 fig, (ax1, ax2) = plt.subplots(
-                    2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [3, 1]}
+                    2,
+                    1,
+                    figsize=(10, 8),
+                    gridspec_kw={"height_ratios": [3, 1]},
                 )
             else:
                 fig, ax1 = plt.subplots(figsize=(10, 6))
@@ -735,13 +738,19 @@ class CurveFitResult(OptimizeResult):
             try:
                 lower, upper = self.confidence_band(x_dense, alpha=0.95)
                 ax1.fill_between(
-                    x_dense, lower, upper, color=fit_color, alpha=0.2, label="95% CI"
+                    x_dense,
+                    lower,
+                    upper,
+                    color=fit_color,
+                    alpha=0.2,
+                    label="95% CI",
                 )
             except Exception:
                 import logging
 
                 logging.getLogger(__name__).warning(
-                    "Confidence band calculation failed", exc_info=True
+                    "Confidence band calculation failed",
+                    exc_info=True,
                 )
 
         # Plot fitted curve
@@ -774,8 +783,7 @@ class CurveFitResult(OptimizeResult):
 
         if ax2 is not None:
             return fig, (ax1, ax2)
-        else:
-            return fig, ax1
+        return fig, ax1
 
     def summary(self):
         """Print statistical summary of fit.
@@ -807,11 +815,11 @@ class CurveFitResult(OptimizeResult):
 
             ci = self.confidence_intervals(alpha=0.95)
             for i, (val, err, (ci_low, ci_high)) in enumerate(
-                zip(self.popt, perr, ci, strict=False)
+                zip(self.popt, perr, ci, strict=False),
             ):
                 print(
                     f"{'p' + str(i):<15} {val:>12.6f} {err:>12.6f} "
-                    f"[{ci_low:>10.6f}, {ci_high:>10.6f}]"
+                    f"[{ci_low:>10.6f}, {ci_high:>10.6f}]",
                 )
         else:
             print(f"{'Parameter':<15} {'Value':>12}")
@@ -841,7 +849,7 @@ class CurveFitResult(OptimizeResult):
         print(f"Iterations        : {self.nfev if hasattr(self, 'nfev') else 'N/A'}")
         print(f"Final cost        : {self.cost if hasattr(self, 'cost') else 'N/A'}")
         print(
-            f"Optimality        : {self.optimality if hasattr(self, 'optimality') else 'N/A':.6e}"
+            f"Optimality        : {self.optimality if hasattr(self, 'optimality') else 'N/A':.6e}",
         )
 
         # Diagnostics summary (if available)

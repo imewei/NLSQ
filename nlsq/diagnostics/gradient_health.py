@@ -158,7 +158,7 @@ class GradientMonitor:
 
         # Sliding window for gradient norms (bounded memory)
         self._gradient_norm_history: deque[float] = deque(
-            maxlen=config.gradient_window_size
+            maxlen=config.gradient_window_size,
         )
         self._cost_history: deque[float] = deque(maxlen=config.gradient_window_size)
 
@@ -356,7 +356,11 @@ class GradientMonitor:
             # Call user callback if provided
             if user_callback is not None:
                 user_callback(
-                    iteration=iteration, cost=cost, params=params, info=info, **kwargs
+                    iteration=iteration,
+                    cost=cost,
+                    params=params,
+                    info=info,
+                    **kwargs,
                 )
 
         return gradient_monitor_callback
@@ -409,7 +413,8 @@ class GradientMonitor:
 
         # Check for vanishing gradients (GRAD-001)
         vanishing_detected = self._detect_vanishing_gradients(
-            norm_history, cost_history
+            norm_history,
+            cost_history,
         )
         if vanishing_detected:
             issues.append(self._create_grad_001_issue(norm_history, cost_history))
@@ -426,7 +431,9 @@ class GradientMonitor:
 
         # Compute health score
         health_score = self._compute_health_score(
-            vanishing_detected, imbalance_detected, stagnation_detected
+            vanishing_detected,
+            imbalance_detected,
+            stagnation_detected,
         )
 
         # Determine overall health status

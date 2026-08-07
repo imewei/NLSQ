@@ -72,15 +72,15 @@ class StatCard(QFrame):
         """
         self.setStyleSheet(
             f"StatCard {{ background-color: {surface_variant}; "
-            f"border: 1px solid {border}; border-radius: 6px; }}"
+            f"border: 1px solid {border}; border-radius: 6px; }}",
         )
         self._title_label.setStyleSheet(
             f"font-size: 10px; font-weight: 600; letter-spacing: 0.5px; "
-            f"color: {text_secondary}; border: none; background: transparent;"
+            f"color: {text_secondary}; border: none; background: transparent;",
         )
         self._value_label.setStyleSheet(
             f"font-size: 20px; font-weight: bold; color: {text_primary}; "
-            "border: none; background: transparent;"
+            "border: none; background: transparent;",
         )
 
     def set_value(self, value: str) -> None:
@@ -99,7 +99,7 @@ class StatCard(QFrame):
         """
         self._value_label.setStyleSheet(
             f"font-size: 20px; font-weight: bold; color: {color}; "
-            "border: none; background: transparent;"
+            "border: none; background: transparent;",
         )
 
     def apply_theme(self, theme: ThemeConfig) -> None:

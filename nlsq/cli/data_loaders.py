@@ -295,7 +295,8 @@ class DataLoader:
         """
         ascii_config = config.get("ascii", {})
         columns_config = config.get(
-            "columns", {"x": 0, "y": 1, "z": None, "sigma": None}
+            "columns",
+            {"x": 0, "y": 1, "z": None, "sigma": None},
         )
 
         delimiter = ascii_config.get("delimiter", None)  # None = whitespace
@@ -405,7 +406,8 @@ class DataLoader:
         """
         csv_config = config.get("csv", {})
         columns_config = config.get(
-            "columns", {"x": 0, "y": 1, "z": None, "sigma": None}
+            "columns",
+            {"x": 0, "y": 1, "z": None, "sigma": None},
         )
 
         delimiter = csv_config.get("delimiter", ",")

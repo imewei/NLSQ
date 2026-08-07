@@ -31,8 +31,6 @@ _MAX_DESERIALIZE_ELEMENTS = 100_000_000  # 100M elements (~800 MB at float64)
 class SafeSerializationError(Exception):
     """Exception raised when serialization/deserialization fails."""
 
-    pass
-
 
 def _serialize_dict_key(key: Any) -> str:
     """Convert a dict key to a collision-resistant string for JSON serialization."""
@@ -52,14 +50,14 @@ def _deserialize_dict_key(key: str) -> str | int | float:
             return int(key[len("__int_key__") :])
         except ValueError as e:
             raise SafeSerializationError(
-                f"Malformed integer key in serialized data: {key!r}"
+                f"Malformed integer key in serialized data: {key!r}",
             ) from e
     if key.startswith("__float_key__"):
         try:
             return float(key[len("__float_key__") :])
         except ValueError as e:
             raise SafeSerializationError(
-                f"Malformed float key in serialized data: {key!r}"
+                f"Malformed float key in serialized data: {key!r}",
             ) from e
     return key
 
@@ -123,7 +121,7 @@ def _convert_to_serializable(obj: Any) -> Any:
             if str_key in result:
                 raise SafeSerializationError(
                     f"Key collision during serialization: {key!r} maps to "
-                    f"existing key {str_key!r}"
+                    f"existing key {str_key!r}",
                 )
             result[str_key] = _convert_to_serializable(value)
         return result
@@ -133,7 +131,7 @@ def _convert_to_serializable(obj: Any) -> Any:
         if obj.size > 10_000:
             raise SafeSerializationError(
                 f"NumPy array too large for JSON serialization ({obj.size} elements). "
-                "Use HDF5 storage for large arrays."
+                "Use HDF5 storage for large arrays.",
             )
         return {
             "__nlsq_type__": "ndarray",
@@ -150,7 +148,7 @@ def _convert_to_serializable(obj: Any) -> Any:
     raise SafeSerializationError(
         f"Cannot safely serialize object of type {type(obj).__name__}. "
         "Only basic types (str, int, float, bool, None, list, dict, tuple) "
-        "and small numpy arrays are supported."
+        "and small numpy arrays are supported.",
     )
 
 
@@ -162,14 +160,14 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
         shape = tuple(obj["shape"])
     except KeyError as e:
         raise SafeSerializationError(
-            f"Malformed ndarray in serialized data: missing key {e}"
+            f"Malformed ndarray in serialized data: missing key {e}",
         ) from e
     # Only allow numeric dtypes — object dtype arrays can hold arbitrary Python
     # objects, defeating the security guarantee of this module
     if dtype.kind not in ("b", "i", "u", "f", "c"):
         raise SafeSerializationError(
             f"Refusing to deserialize array with non-numeric dtype "
-            f"{dtype!r}. Only numeric dtypes are allowed."
+            f"{dtype!r}. Only numeric dtypes are allowed.",
         )
     # Validate each dimension is a non-negative integer. A zero dimension
     # makes n_elements=0 which bypasses the limit check while allowing
@@ -177,7 +175,7 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
     for i, dim in enumerate(shape):
         if not isinstance(dim, int) or dim < 0:
             raise SafeSerializationError(
-                f"Array shape[{i}]={dim!r} must be a non-negative integer"
+                f"Array shape[{i}]={dim!r} must be a non-negative integer",
             )
     n_elements = 1
     for dim in shape:
@@ -186,7 +184,7 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
         raise SafeSerializationError(
             f"Refusing to deserialize array with {n_elements:,} elements "
             f"(limit: {_MAX_DESERIALIZE_ELEMENTS:,}). "
-            "Possible DoS via attacker-controlled shape."
+            "Possible DoS via attacker-controlled shape.",
         )
     return np.array(data, dtype=dtype).reshape(shape)
 
@@ -236,7 +234,7 @@ def _convert_from_serializable(obj: Any) -> Any:
                 if value == "-inf":
                     return float("-inf")
                 raise SafeSerializationError(
-                    f"Unknown float value in serialized data: {value!r}"
+                    f"Unknown float value in serialized data: {value!r}",
                 )
 
             if type_name == "ndarray":
@@ -285,7 +283,7 @@ def safe_dumps(obj: Any) -> bytes:
         return json.dumps(serializable, separators=(",", ":")).encode("utf-8")
     except RecursionError as e:
         raise SafeSerializationError(
-            "Serialization failed: circular reference detected"
+            "Serialization failed: circular reference detected",
         ) from e
     except (TypeError, ValueError) as e:
         raise SafeSerializationError(f"Serialization failed: {e}") from e
@@ -328,5 +326,5 @@ def safe_loads(data: bytes) -> Any:
     except RecursionError as e:
         raise SafeSerializationError(
             "Deserialization failed: input is too deeply nested "
-            "(possible DoS via deeply nested JSON)"
+            "(possible DoS via deeply nested JSON)",
         ) from e

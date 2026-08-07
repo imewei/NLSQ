@@ -196,7 +196,11 @@ class FitVisualizer:
         # Generate combined plot (main + residuals)
         fig_combined = self._create_combined_figure(result, data, model, vis_config)
         combined_paths = self._save_figure(
-            fig_combined, output_dir, f"{filename_prefix}_combined", formats, vis_config
+            fig_combined,
+            output_dir,
+            f"{filename_prefix}_combined",
+            formats,
+            vis_config,
         )
         output_paths.extend(combined_paths)
         plt.close(fig_combined)
@@ -340,7 +344,16 @@ class FitVisualizer:
 
         # Plot main figure
         self._plot_main(
-            ax_main, xdata, ydata, sigma, popt, pcov, model, config, colors, result
+            ax_main,
+            xdata,
+            ydata,
+            sigma,
+            popt,
+            pcov,
+            model,
+            config,
+            colors,
+            result,
         )
 
         # Plot residuals if enabled
@@ -446,12 +459,17 @@ class FitVisualizer:
             if confidence_config.get("enabled", False) and pcov is not None:
                 confidence_level = confidence_config.get("level", 0.95)
                 confidence_color = confidence_config.get(
-                    "color", colors.get("confidence", fit_color)
+                    "color",
+                    colors.get("confidence", fit_color),
                 )
                 confidence_alpha = confidence_config.get("alpha", 0.2)
 
                 lower, upper = self._calculate_confidence_band(
-                    model, x_fit, popt, pcov, confidence_level
+                    model,
+                    x_fit,
+                    popt,
+                    pcov,
+                    confidence_level,
                 )
                 ax.fill_between(
                     x_fit,
@@ -524,7 +542,8 @@ class FitVisualizer:
 
         # Get color from config or scheme
         residual_color = residuals_config.get(
-            "color", colors.get("residuals", "#2ca02c")
+            "color",
+            colors.get("residuals", "#2ca02c"),
         )
 
         # Plot residuals
@@ -535,7 +554,12 @@ class FitVisualizer:
 
         if plot_type == "scatter":
             ax.scatter(
-                xdata, residuals, marker=marker, s=size, c=residual_color, alpha=alpha
+                xdata,
+                residuals,
+                marker=marker,
+                s=size,
+                c=residual_color,
+                alpha=alpha,
             )
         elif plot_type == "stem":
             markerline, stemlines, baseline = ax.stem(xdata, residuals)
@@ -639,10 +663,15 @@ class FitVisualizer:
                 y_norm = stats.norm.pdf(x_norm, mu, std)
 
                 normal_color = histogram_config.get(
-                    "normal_color", colors.get("fit", "#d62728")
+                    "normal_color",
+                    colors.get("fit", "#d62728"),
                 )
                 ax.plot(
-                    x_norm, y_norm, color=normal_color, linewidth=2, label="Normal fit"
+                    x_norm,
+                    y_norm,
+                    color=normal_color,
+                    linewidth=2,
+                    label="Normal fit",
                 )
                 ax.legend()
 

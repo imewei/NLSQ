@@ -27,7 +27,8 @@ def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
 
     if "polynomial" in model:
         state.polynomial_degree = model["polynomial"].get(
-            "degree", state.polynomial_degree
+            "degree",
+            state.polynomial_degree,
         )
 
     if "custom" in model:
@@ -39,7 +40,8 @@ def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
 
 
 def _parse_model_parameters(
-    parameters: list[dict[str, Any]], state: SessionState
+    parameters: list[dict[str, Any]],
+    state: SessionState,
 ) -> None:
     """Parse model parameters from YAML config."""
     p0_values = []
@@ -83,7 +85,8 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.xtol = term.get("xtol", state.xtol)
         state.max_iterations = term.get("max_iterations", state.max_iterations)
         state.max_function_evals = term.get(
-            "max_function_evals", state.max_function_evals
+            "max_function_evals",
+            state.max_function_evals,
         )
 
     if "multistart" in fitting:
@@ -97,7 +100,8 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
 
 
 def _parse_hybrid_streaming_section(
-    config: dict[str, Any], state: SessionState
+    config: dict[str, Any],
+    state: SessionState,
 ) -> None:
     """Parse hybrid streaming section of YAML config into state."""
     if "hybrid_streaming" not in config:
@@ -107,7 +111,8 @@ def _parse_hybrid_streaming_section(
     state.normalize = hs.get("normalize", state.normalize)
     state.warmup_iterations = hs.get("warmup_iterations", state.warmup_iterations)
     state.max_warmup_iterations = hs.get(
-        "max_warmup_iterations", state.max_warmup_iterations
+        "max_warmup_iterations",
+        state.max_warmup_iterations,
     )
     state.chunk_size = hs.get("chunk_size", state.chunk_size)
     state.enable_checkpoints = hs.get("enable_checkpoints", state.enable_checkpoints)
@@ -129,7 +134,8 @@ def _parse_defense_layers(dl: dict[str, Any], state: SessionState) -> None:
 
     if "layer2_adaptive_lr" in dl:
         state.layer2_enabled = dl["layer2_adaptive_lr"].get(
-            "enabled", state.layer2_enabled
+            "enabled",
+            state.layer2_enabled,
         )
 
     if "layer3_cost_guard" in dl:
@@ -151,13 +157,15 @@ def _parse_batch_section(config: dict[str, Any], state: SessionState) -> None:
     batch = config["batch"]
     state.batch_max_workers = batch.get("max_workers", state.batch_max_workers)
     state.batch_continue_on_error = batch.get(
-        "continue_on_error", state.batch_continue_on_error
+        "continue_on_error",
+        state.batch_continue_on_error,
     )
     state.batch_summary_format = batch.get("summary_format", state.batch_summary_format)
 
 
 def _parse_global_optimization_section(
-    config: dict[str, Any], state: SessionState
+    config: dict[str, Any],
+    state: SessionState,
 ) -> None:
     """Parse global optimization section of YAML config into state."""
     if "global_optimization" not in config:
@@ -345,7 +353,9 @@ def validate_yaml_config(yaml_content: str) -> tuple[bool, str | None]:
 
 
 def merge_configs(
-    base: SessionState, overlay: SessionState, fields: list[str] | None = None
+    base: SessionState,
+    overlay: SessionState,
+    fields: list[str] | None = None,
 ) -> SessionState:
     """Merge two SessionState instances.
 

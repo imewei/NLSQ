@@ -54,7 +54,7 @@ def _configure_pyqtgraph() -> None:
         if not use_opengl and sys.platform == "darwin":
             _log.info(
                 "pyqtgraph OpenGL disabled on macOS (Apple deprecated OpenGL). "
-                "Set NLSQ_GUI_USE_OPENGL=1 to override."
+                "Set NLSQ_GUI_USE_OPENGL=1 to override.",
             )
 
         pg.setConfigOptions(
@@ -81,19 +81,19 @@ def __getattr__(name: str):
         from nlsq.gui_qt.plots.base_plot import BasePlotWidget
 
         return BasePlotWidget
-    elif name in {"LiveCostPlot", "LiveCostPlotWidget"}:
+    if name in {"LiveCostPlot", "LiveCostPlotWidget"}:
         from nlsq.gui_qt.plots.live_cost_plot import LiveCostPlotWidget
 
         return LiveCostPlotWidget
-    elif name == "FitPlotWidget":
+    if name == "FitPlotWidget":
         from nlsq.gui_qt.plots.fit_plot import FitPlotWidget
 
         return FitPlotWidget
-    elif name == "ResidualsPlotWidget":
+    if name == "ResidualsPlotWidget":
         from nlsq.gui_qt.plots.residuals_plot import ResidualsPlotWidget
 
         return ResidualsPlotWidget
-    elif name == "HistogramPlotWidget":
+    if name == "HistogramPlotWidget":
         from nlsq.gui_qt.plots.histogram_plot import HistogramPlotWidget
 
         return HistogramPlotWidget

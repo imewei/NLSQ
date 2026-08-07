@@ -106,7 +106,7 @@ class SparseJacobianComputer:
             raise ValueError(
                 f"Function output size ({f0.shape[0]}) does not match "
                 f"xdata sample size ({n_data}). The function may use "
-                f"closure-captured data instead of xdata."
+                f"closure-captured data instead of xdata.",
             )
 
         for i in range(n_params):
@@ -196,10 +196,14 @@ class SparseJacobianComputer:
                 # Fallback to finite differences if no jac_func
                 if func is None:
                     raise ValueError(
-                        "func parameter required for finite difference fallback"
+                        "func parameter required for finite difference fallback",
                     )
                 J_chunk = self._finite_diff_jacobian(
-                    func, x, x_chunk, y_chunk, mask_chunk
+                    func,
+                    x,
+                    x_chunk,
+                    y_chunk,
+                    mask_chunk,
                 )
 
             # Convert to numpy if needed
@@ -288,7 +292,9 @@ class SparseJacobianComputer:
         return J
 
     def sparse_matrix_vector_product(
-        self, J_sparse: csr_matrix, v: np.ndarray
+        self,
+        J_sparse: csr_matrix,
+        v: np.ndarray,
     ) -> np.ndarray:
         """Efficient sparse matrix-vector product.
 
@@ -307,7 +313,9 @@ class SparseJacobianComputer:
         return J_sparse @ v
 
     def sparse_normal_equations(
-        self, J_sparse: csr_matrix, f: np.ndarray
+        self,
+        J_sparse: csr_matrix,
+        f: np.ndarray,
     ) -> tuple[Callable, np.ndarray]:
         """Set up normal equations with sparse Jacobian.
 
@@ -338,7 +346,10 @@ class SparseJacobianComputer:
         return matvec, rhs
 
     def estimate_memory_usage(
-        self, n_data: int, n_params: int, sparsity: float = 0.99
+        self,
+        n_data: int,
+        n_params: int,
+        sparsity: float = 0.99,
     ) -> dict:
         """Estimate memory usage for sparse vs dense Jacobian.
 
@@ -413,7 +424,10 @@ class SparseOptimizer:
         self._detected_sparsity = 0.0
 
     def should_use_sparse(
-        self, n_data: int, n_params: int, force_check: bool = False
+        self,
+        n_data: int,
+        n_params: int,
+        force_check: bool = False,
     ) -> bool:
         """Determine if sparse methods should be used.
 
@@ -483,14 +497,17 @@ class SparseOptimizer:
 
         if self._use_sparse:
             logger.info(
-                f"Using sparse Jacobian methods for {n_data}×{n_params} problem"
+                f"Using sparse Jacobian methods for {n_data}×{n_params} problem",
             )
 
             # Detect sparsity pattern from samples
             sample_size = min(1000, n_data)
             sample_indices = np.random.choice(n_data, sample_size, replace=False)
             _pattern, sparsity = self.sparse_computer.detect_sparsity_pattern(
-                func, x0, xdata[sample_indices], sample_size
+                func,
+                x0,
+                xdata[sample_indices],
+                sample_size,
             )
 
             self._detected_sparsity = sparsity
@@ -498,11 +515,13 @@ class SparseOptimizer:
 
             # Estimate memory savings
             memory_info = self.sparse_computer.estimate_memory_usage(
-                n_data, n_params, sparsity
+                n_data,
+                n_params,
+                sparsity,
             )
             logger.info(f"Memory savings: {memory_info['savings_percent']:.1f}%")
             logger.info(
-                f"Dense: {memory_info['dense_gb']:.2f}GB → Sparse: {memory_info['sparse_gb']:.2f}GB"
+                f"Dense: {memory_info['dense_gb']:.2f}GB → Sparse: {memory_info['sparse_gb']:.2f}GB",
             )
 
             # Use sparse methods if beneficial
@@ -581,7 +600,10 @@ def detect_jacobian_sparsity(
 
     computer = SparseJacobianComputer(threshold)
     pattern, sparsity = computer.detect_sparsity_pattern(
-        func, x0, xdata_sample, min(100, n_data_points)
+        func,
+        x0,
+        xdata_sample,
+        min(100, n_data_points),
     )
 
     # Analyze pattern
@@ -676,7 +698,10 @@ def detect_sparsity_at_p0(
         actual_sample_size = min(sample_size, n_residuals, n_data_points)
         if actual_sample_size < n_data_points:
             sample_indices = np.linspace(
-                0, n_data_points - 1, actual_sample_size, dtype=int
+                0,
+                n_data_points - 1,
+                actual_sample_size,
+                dtype=int,
             )
             xdata_sample = [coord[sample_indices] for coord in xdata]
         else:
@@ -688,7 +713,10 @@ def detect_sparsity_at_p0(
         actual_sample_size = min(sample_size, n_residuals, n_data_points)
         if actual_sample_size < n_data_points:
             sample_indices = np.linspace(
-                0, n_data_points - 1, actual_sample_size, dtype=int
+                0,
+                n_data_points - 1,
+                actual_sample_size,
+                dtype=int,
             )
             xdata_sample = xdata_arr[:, sample_indices]
         else:
@@ -699,7 +727,10 @@ def detect_sparsity_at_p0(
         actual_sample_size = min(sample_size, n_residuals, n_data_points)
         if actual_sample_size < n_data_points:
             sample_indices = np.linspace(
-                0, n_data_points - 1, actual_sample_size, dtype=int
+                0,
+                n_data_points - 1,
+                actual_sample_size,
+                dtype=int,
             )
             xdata_sample = xdata_arr[sample_indices]
         else:
@@ -707,7 +738,10 @@ def detect_sparsity_at_p0(
 
     # Use existing detection function
     sparsity_ratio, _info = detect_jacobian_sparsity(
-        func, p0, xdata_sample, threshold=threshold
+        func,
+        p0,
+        xdata_sample,
+        threshold=threshold,
     )
 
     # Determine if sparse based on sparsity threshold
@@ -715,7 +749,7 @@ def detect_sparsity_at_p0(
 
     logger.debug(
         f"Sparsity detection at p0: {sparsity_ratio:.1%} "
-        f"({'sparse' if is_sparse else 'dense'})"
+        f"({'sparse' if is_sparse else 'dense'})",
     )
 
     return sparsity_ratio, is_sparse

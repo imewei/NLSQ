@@ -17,7 +17,6 @@ from collections.abc import Callable
 from functools import wraps
 
 import jax
-import jax.numpy as jnp
 
 
 class CompilationCache:
@@ -237,7 +236,9 @@ class CompilationCache:
 
         # Compile function outside lock (jax.jit can be slow)
         compiled_func = jax.jit(
-            func, static_argnums=static_argnums, donate_argnums=donate_argnums
+            func,
+            static_argnums=static_argnums,
+            donate_argnums=donate_argnums,
         )
 
         # Store in cache under lock (re-check to avoid duplicate)
@@ -258,7 +259,11 @@ class CompilationCache:
         return compiled_func
 
     def get_or_compile(
-        self, func: Callable, *args, static_argnums: tuple[int, ...] = (), **kwargs
+        self,
+        func: Callable,
+        *args,
+        static_argnums: tuple[int, ...] = (),
+        **kwargs,
     ) -> tuple[Callable, str]:
         """Get cached compiled function or compile if not cached.
 
@@ -439,7 +444,10 @@ def cached_jit(
         @wraps(f)
         def wrapper(*args, **kwargs):
             compiled_func, _ = cache.get_or_compile(
-                f, *args, static_argnums=static_argnums, **kwargs
+                f,
+                *args,
+                static_argnums=static_argnums,
+                **kwargs,
             )
             return compiled_func(*args, **kwargs)
 
@@ -448,9 +456,8 @@ def cached_jit(
     if func is None:
         # Called with arguments: @cached_jit(static_argnums=(1,))
         return decorator
-    else:
-        # Called without arguments: @cached_jit
-        return decorator(func)
+    # Called without arguments: @cached_jit
+    return decorator(func)
 
 
 def clear_compilation_cache():

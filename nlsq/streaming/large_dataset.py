@@ -374,12 +374,12 @@ class GPUMemoryEstimator:
                             self._logger.debug(
                                 f"GPU device {device}: "
                                 f"{available / (1024**3):.2f} GB available "
-                                f"({bytes_in_use / (1024**3):.2f} GB in use)"
+                                f"({bytes_in_use / (1024**3):.2f} GB in use)",
                             )
                 except Exception as e:
                     # Individual device query failed - continue with others
                     self._logger.debug(
-                        f"GPU memory query failed for device {device}: {e}"
+                        f"GPU memory query failed for device {device}: {e}",
                     )
                     continue
 
@@ -521,7 +521,9 @@ class MemoryEstimator:
 
     @staticmethod
     def estimate_maximum_memory_usage_gb(
-        n_points: int, n_params: int, safety_factor: float = 1.2
+        n_points: int,
+        n_params: int,
+        safety_factor: float = 1.2,
     ) -> float:
         """Estimate maximum memory usage to prevent crashes.
 
@@ -550,7 +552,9 @@ class MemoryEstimator:
 
     @staticmethod
     def calculate_optimal_chunk_size(
-        n_points: int, n_params: int, memory_config: LDMemoryConfig
+        n_points: int,
+        n_params: int,
+        memory_config: LDMemoryConfig,
     ) -> tuple[int, DatasetStats]:
         """Calculate optimal chunk size based on memory constraints.
 
@@ -687,7 +691,7 @@ class ProgressReporter:
 
         self.logger.info(
             f"Progress: {self.completed_chunks}/{self.total_chunks} chunks "
-            f"({progress_pct:.1f}%) - ETA: {eta:.1f}s"
+            f"({progress_pct:.1f}%) - ETA: {eta:.1f}s",
         )
 
         if chunk_result:
@@ -1107,7 +1111,9 @@ class LargeDatasetFitter:
             ]
 
     def _compute_chunk_stats(
-        self, x_chunk: np.ndarray, y_chunk: np.ndarray
+        self,
+        x_chunk: np.ndarray,
+        y_chunk: np.ndarray,
     ) -> dict[str, float]:
         """Compute diagnostic statistics for a data chunk.
 
@@ -1131,7 +1137,9 @@ class LargeDatasetFitter:
         }
 
     def _compute_failed_chunk_stats(
-        self, x_chunk: np.ndarray, y_chunk: np.ndarray
+        self,
+        x_chunk: np.ndarray,
+        y_chunk: np.ndarray,
     ) -> dict[str, float | tuple]:
         """Compute detailed statistics for failed chunks (includes ranges).
 
@@ -1221,7 +1229,7 @@ class LargeDatasetFitter:
                     # Fallback to 2 parameters
                     p0_test = np.ones(2)
                     self.logger.warning(
-                        "Could not infer parameter count, using 2 parameters for validation"
+                        "Could not infer parameter count, using 2 parameters for validation",
                     )
             else:
                 p0_test = np.array(p0)
@@ -1237,7 +1245,7 @@ class LargeDatasetFitter:
                     f"Ensure your model:\n"
                     f"  1. Uses JAX operations (jax.numpy, not numpy)\n"
                     f"  2. Doesn't use Python control flow that breaks JIT\n"
-                    f"  3. Returns numeric array, not scalar or other type\n"
+                    f"  3. Returns numeric array, not scalar or other type\n",
                 ) from e
 
             # Validate return type - check if it's array-like (numpy or JAX)
@@ -1249,7 +1257,7 @@ class LargeDatasetFitter:
                     f"Model function must return array, got {type(output_test)}\n"
                     f"\n"
                     f"Your model returned: {type(output_test).__name__}\n"
-                    f"Expected: numpy.ndarray or jax.Array\n"
+                    f"Expected: numpy.ndarray or jax.Array\n",
                 )
 
             # Validate shapes match
@@ -1281,12 +1289,12 @@ class LargeDatasetFitter:
                     f"      indices = xdata.astype(jnp.int32)  # Use JAX operations\n"
                     f"      return y_full[indices]  # Shape matches xdata\n"
                     f"\n"
-                    f"See NLSQ documentation for more details on chunking-compatible models.\n"
+                    f"See NLSQ documentation for more details on chunking-compatible models.\n",
                 )
 
             self.logger.debug(
                 f"Model validation passed: "
-                f"f({x_test.shape}, {len(p0_test)} params) -> {output_test.shape}"
+                f"f({x_test.shape}, {len(p0_test)} params) -> {output_test.shape}",
             )
 
             # Task Group 7 (5.1a): Cache successful validation
@@ -1301,7 +1309,7 @@ class LargeDatasetFitter:
             # Unexpected error during validation
             self.logger.warning(
                 f"Model validation encountered unexpected error: {type(e).__name__}: {e}\n"
-                f"Proceeding with chunked fitting, but errors may occur."
+                f"Proceeding with chunked fitting, but errors may occur.",
             )
             # Don't fail here - let chunking proceed and catch real errors
 
@@ -1353,7 +1361,7 @@ class LargeDatasetFitter:
 
         self.logger.info(
             f"Running multi-start exploration with {self.n_starts} starting points "
-            f"on {len(xdata):,} points using {self.sampler} sampling"
+            f"on {len(xdata):,} points using {self.sampler} sampling",
         )
 
         # Run exploration on full data
@@ -1378,7 +1386,7 @@ class LargeDatasetFitter:
 
         self.logger.info(
             f"Multi-start exploration completed in {exploration_time:.2f}s. "
-            f"Best loss: {diagnostics.get('best_loss', 'N/A')}"
+            f"Best loss: {diagnostics.get('best_loss', 'N/A')}",
         )
 
         return np.asarray(best_params), diagnostics
@@ -1399,20 +1407,22 @@ class LargeDatasetFitter:
             Detailed statistics and recommendations
         """
         _, stats = MemoryEstimator.calculate_optimal_chunk_size(
-            n_points, n_params, self.config
+            n_points,
+            n_params,
+            self.config,
         )
 
         self.last_stats = stats
 
         # Log recommendations
         self.logger.info(
-            f"Dataset analysis for {n_points:,} points, {n_params} parameters:"
+            f"Dataset analysis for {n_points:,} points, {n_params} parameters:",
         )
         self.logger.info(
-            f"  Estimated memory per point: {stats.memory_per_point_bytes:.1f} bytes"
+            f"  Estimated memory per point: {stats.memory_per_point_bytes:.1f} bytes",
         )
         self.logger.info(
-            f"  Total memory estimate: {stats.total_memory_estimate_gb:.2f} GB"
+            f"  Total memory estimate: {stats.total_memory_estimate_gb:.2f} GB",
         )
         self.logger.info(f"  Recommended chunk size: {stats.recommended_chunk_size:,}")
         self.logger.info(f"  Number of chunks: {stats.n_chunks}")
@@ -1457,7 +1467,15 @@ class LargeDatasetFitter:
             Optimization result with fitted parameters and statistics
         """
         return self._fit_implementation(
-            f, xdata, ydata, p0, bounds, method, solver, show_progress=False, **kwargs
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds,
+            method,
+            solver,
+            show_progress=False,
+            **kwargs,
         )
 
     def fit_with_progress(
@@ -1498,7 +1516,15 @@ class LargeDatasetFitter:
             Optimization result with fitted parameters and statistics
         """
         return self._fit_implementation(
-            f, xdata, ydata, p0, bounds, method, solver, show_progress=True, **kwargs
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds,
+            method,
+            solver,
+            show_progress=True,
+            **kwargs,
         )
 
     def _fit_implementation(
@@ -1575,7 +1601,7 @@ class LargeDatasetFitter:
             )
 
             self.logger.info(
-                f"Using best starting point from multi-start exploration: {best_p0}"
+                f"Using best starting point from multi-start exploration: {best_p0}",
             )
         elif self.multistart and self.n_starts == 0:
             # Multi-start enabled but n_starts=0 means skip
@@ -1695,7 +1721,7 @@ class LargeDatasetFitter:
             "Using adaptive hybrid streaming optimization for unlimited data "
             f"({len(xdata):,} points). "
             f"Chunk size: {self.config.streaming_batch_size:,}, "
-            f"Max iterations: {self.config.streaming_max_epochs}"
+            f"Max iterations: {self.config.streaming_max_epochs}",
         )
 
         # Create adaptive hybrid streaming config
@@ -1736,7 +1762,7 @@ class LargeDatasetFitter:
 
             self.logger.info(
                 "Streaming fit completed. "
-                f"Final loss: {result_dict.get('streaming_diagnostics', {}).get('gauss_newton_diagnostics', {}).get('final_cost', 'N/A')}"
+                f"Final loss: {result_dict.get('streaming_diagnostics', {}).get('gauss_newton_diagnostics', {}).get('final_cost', 'N/A')}",
             )
 
             return result
@@ -1754,7 +1780,8 @@ class LargeDatasetFitter:
 
     @staticmethod
     def _chunk_precision(
-        pcov_chunk: np.ndarray | None, n_params: int
+        pcov_chunk: np.ndarray | None,
+        n_params: int,
     ) -> np.ndarray | None:
         """Compute a usable precision (inverse-covariance) matrix for a chunk.
 
@@ -1847,7 +1874,8 @@ class LargeDatasetFitter:
         if self._accum_information is not None:
             try:
                 combined = np.linalg.solve(
-                    self._accum_information, self._accum_info_vector
+                    self._accum_information,
+                    self._accum_info_vector,
                 )
             except np.linalg.LinAlgError:
                 combined = popt_chunk.copy()
@@ -2131,7 +2159,7 @@ class LargeDatasetFitter:
                 else 0.0,
                 "failed_chunk_times": [r.get("duration", 0.0) for r in failed_chunks],
                 "mean_failed_chunk_time": float(
-                    np.mean([r.get("duration", 0.0) for r in failed_chunks])
+                    np.mean([r.get("duration", 0.0) for r in failed_chunks]),
                 )
                 if failed_chunks
                 else 0.0,
@@ -2148,7 +2176,9 @@ class LargeDatasetFitter:
         # Identify most common errors (top 3)
         if failure_summary["error_types"]:
             sorted_errors = sorted(
-                failure_summary["error_types"].items(), key=lambda x: x[1], reverse=True
+                failure_summary["error_types"].items(),
+                key=lambda x: x[1],
+                reverse=True,
             )
             failure_summary["common_errors"] = [
                 {"type": err_type, "count": count}
@@ -2232,7 +2262,8 @@ class LargeDatasetFitter:
 
         # Create approximate covariance matrix from parameter history
         result["pcov"] = self._compute_covariance_from_history(
-            param_history, current_params
+            param_history,
+            current_params,
         )
 
         # Add diagnostic information
@@ -2270,7 +2301,7 @@ class LargeDatasetFitter:
         if success_rate < self.config.min_success_rate:
             self.logger.error(
                 f"Too many chunks failed ({success_rate:.1%} success rate, "
-                f"minimum required: {self.config.min_success_rate:.1%})"
+                f"minimum required: {self.config.min_success_rate:.1%})",
             )
             result = OptimizeResult(
                 x=current_params if current_params is not None else np.ones(2),
@@ -2339,7 +2370,10 @@ class LargeDatasetFitter:
         try:
             # Process dataset in chunks with sequential parameter refinement
             for x_chunk, y_chunk, chunk_idx, valid_length in DataChunker.create_chunks(
-                xdata, ydata, stats.recommended_chunk_size, buffer_pool=buffer_pool
+                xdata,
+                ydata,
+                stats.recommended_chunk_size,
+                buffer_pool=buffer_pool,
             ):
                 chunk_start_time = time.time()
                 try:
@@ -2462,7 +2496,7 @@ class LargeDatasetFitter:
                 final_memory = process.memory_info().rss / (1024**3)  # GB
                 memory_delta = final_memory - initial_memory
                 self.logger.debug(
-                    f"Final memory usage: {final_memory:.2f} GB (delta: {memory_delta:+.2f} GB)"
+                    f"Final memory usage: {final_memory:.2f} GB (delta: {memory_delta:+.2f} GB)",
                 )
             except Exception as e:
                 # Memory monitoring is best effort - log but don't fail
@@ -2596,8 +2630,7 @@ def fit_large_dataset(
 
     if show_progress:
         return fitter.fit_with_progress(f, xdata, ydata, p0=p0, **kwargs)
-    else:
-        return fitter.fit(f, xdata, ydata, p0=p0, **kwargs)
+    return fitter.fit(f, xdata, ydata, p0=p0, **kwargs)
 
 
 def estimate_memory_requirements(n_points: int, n_params: int) -> DatasetStats:

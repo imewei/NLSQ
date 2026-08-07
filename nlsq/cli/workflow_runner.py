@@ -140,7 +140,8 @@ class WorkflowRunner:
         return result
 
     def _load_data(
-        self, config: dict[str, Any]
+        self,
+        config: dict[str, Any],
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """Load data from configured source.
 
@@ -176,7 +177,8 @@ class WorkflowRunner:
 
         try:
             xdata, ydata, sigma = self.data_loader.load(
-                input_file, data_config_with_validation
+                input_file,
+                data_config_with_validation,
             )
             return xdata, ydata, sigma
         except DataLoadError:

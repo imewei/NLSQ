@@ -51,7 +51,7 @@ class ParamResultsWidget(QWidget):
         self._table = QTableWidget()
         self._table.setColumnCount(4)
         self._table.setHorizontalHeaderLabels(
-            ["Parameter", "Value", "Uncertainty", "95% CI"]
+            ["Parameter", "Value", "Uncertainty", "95% CI"],
         )
 
         # Configure header
@@ -96,7 +96,7 @@ class ParamResultsWidget(QWidget):
             value = values[row] if row < len(values) else 0.0
             value_item = QTableWidgetItem(f"{value:.6g}")
             value_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             )
             self._table.setItem(row, 1, value_item)
 
@@ -104,7 +104,7 @@ class ParamResultsWidget(QWidget):
             uncert = uncertainties[row] if row < len(uncertainties) else 0.0
             uncert_item = QTableWidgetItem(f"\u00b1 {uncert:.6g}")  # ± symbol
             uncert_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             )
             self._table.setItem(row, 2, uncert_item)
 
@@ -116,7 +116,7 @@ class ParamResultsWidget(QWidget):
                 ci_text = "-"
             ci_item = QTableWidgetItem(ci_text)
             ci_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             )
             self._table.setItem(row, 3, ci_item)
 
@@ -130,4 +130,4 @@ class ParamResultsWidget(QWidget):
         Args:
             theme: Theme configuration
         """
-        pass  # Theme is applied globally via Qt color scheme
+        # Theme is applied globally via Qt color scheme

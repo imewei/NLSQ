@@ -109,7 +109,7 @@ def load_from_file(
     # Check if this is a file-like object
     if hasattr(file_path_or_uploaded, "read"):
         # It's a file-like object - write to temp file
-        file_obj: BinaryIO = cast(BinaryIO, file_path_or_uploaded)
+        file_obj: BinaryIO = cast("BinaryIO", file_path_or_uploaded)
 
         # Get the filename if available (file-like objects often have .name)
         filename = getattr(file_obj, "name", "uploaded_data.txt")
@@ -222,7 +222,7 @@ def load_from_clipboard(
                 rows.append(row)
         except ValueError as e:
             raise ValueError(
-                f"Cannot parse line {line_num} as numeric data: '{stripped_line}'"
+                f"Cannot parse line {line_num} as numeric data: '{stripped_line}'",
             ) from e
 
     if not rows:
@@ -256,7 +256,7 @@ def load_from_clipboard(
     except IndexError as e:
         num_cols = data.shape[1] if data.ndim > 1 else 1
         raise ValueError(
-            f"Column index out of range. Data has {num_cols} columns."
+            f"Column index out of range. Data has {num_cols} columns.",
         ) from e
 
     return xdata, ydata, sigma

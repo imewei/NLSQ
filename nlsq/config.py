@@ -52,28 +52,28 @@ class MemoryConfig:
         """Validate configuration values."""
         if not 0.1 <= self.memory_limit_gb <= 1024:
             raise ValueError(
-                f"memory_limit_gb must be between 0.1 and 1024, got {self.memory_limit_gb}"
+                f"memory_limit_gb must be between 0.1 and 1024, got {self.memory_limit_gb}",
             )
 
         if self.gpu_memory_fraction is not None:
             if not 0.0 < self.gpu_memory_fraction <= 1.0:
                 raise ValueError(
-                    f"gpu_memory_fraction must be between 0.0 and 1.0, got {self.gpu_memory_fraction}"
+                    f"gpu_memory_fraction must be between 0.0 and 1.0, got {self.gpu_memory_fraction}",
                 )
 
         if not 0.1 <= self.safety_factor <= 1.0:
             raise ValueError(
-                f"safety_factor must be between 0.1 and 1.0, got {self.safety_factor}"
+                f"safety_factor must be between 0.1 and 1.0, got {self.safety_factor}",
             )
 
         if self.out_of_memory_strategy not in ["fallback", "reduce", "error"]:
             raise ValueError(
-                f"out_of_memory_strategy must be 'fallback', 'reduce', or 'error', got {self.out_of_memory_strategy}"
+                f"out_of_memory_strategy must be 'fallback', 'reduce', or 'error', got {self.out_of_memory_strategy}",
             )
 
         if self.min_chunk_size > self.max_chunk_size:
             raise ValueError(
-                f"min_chunk_size ({self.min_chunk_size}) cannot be larger than max_chunk_size ({self.max_chunk_size})"
+                f"min_chunk_size ({self.min_chunk_size}) cannot be larger than max_chunk_size ({self.max_chunk_size})",
             )
 
 
@@ -101,7 +101,7 @@ class LargeDatasetConfig:
             "direct": 100_000,  # Use direct solver below this size
             "iterative": 10_000_000,  # Use iterative solver below this size
             "chunked": 100_000_000,  # Use chunked processing above this size
-        }
+        },
     )
 
     def __post_init__(self) -> None:
@@ -112,20 +112,20 @@ class LargeDatasetConfig:
         missing = required_keys - set(self.solver_selection_thresholds)
         if missing:
             raise ValueError(
-                f"solver_selection_thresholds missing required keys: {missing}"
+                f"solver_selection_thresholds missing required keys: {missing}",
             )
         thresholds = self.solver_selection_thresholds
         if not (thresholds["direct"] < thresholds["iterative"] < thresholds["chunked"]):
             raise ValueError(
                 "solver_selection_thresholds must be monotonically increasing: "
                 f"direct={thresholds['direct']} < iterative={thresholds['iterative']} "
-                f"< chunked={thresholds['chunked']}"
+                f"< chunked={thresholds['chunked']}",
             )
         for key, val in thresholds.items():
             if val <= 0:
                 raise ValueError(
                     f"solver_selection_thresholds['{key}'] must be positive, "
-                    f"got {val!r}"
+                    f"got {val!r}",
                 )
 
 
@@ -196,7 +196,8 @@ class JAXConfig:
 
         # Set cache directory
         cache_dir = os.getenv(
-            "NLSQ_JAX_CACHE_DIR", os.path.expanduser("~/.cache/nlsq/jax_cache")
+            "NLSQ_JAX_CACHE_DIR",
+            os.path.expanduser("~/.cache/nlsq/jax_cache"),
         )
 
         try:
@@ -209,7 +210,8 @@ class JAXConfig:
             # Only cache compilations that take at least 1 second
             min_compile_time = float(os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS", "1"))
             config.update(
-                "jax_persistent_cache_min_compile_time_secs", min_compile_time
+                "jax_persistent_cache_min_compile_time_secs",
+                min_compile_time,
             )
 
             logging.debug(f"JAX persistent cache enabled at {cache_dir}")
@@ -217,7 +219,7 @@ class JAXConfig:
             # Non-fatal: log warning and continue without persistent cache
             logging.warning(
                 f"Failed to enable JAX persistent compilation cache: {e}. "
-                "Cold-start may be slower."
+                "Cold-start may be slower.",
             )
 
     def _configure_gpu_memory(self, config):
@@ -268,7 +270,7 @@ class JAXConfig:
             except AttributeError:
                 # JAX version may not support this option
                 logging.warning(
-                    "JAX version does not support jax_preallocate_gpu_memory option"
+                    "JAX version does not support jax_preallocate_gpu_memory option",
                 )
 
         self._gpu_memory_configured = True
@@ -295,7 +297,8 @@ class JAXConfig:
                 overrides["gpu_memory_fraction"] = float(fraction)
             except ValueError:
                 warnings.warn(
-                    f"Invalid NLSQ_GPU_MEMORY_FRACTION: {fraction}", stacklevel=2
+                    f"Invalid NLSQ_GPU_MEMORY_FRACTION: {fraction}",
+                    stacklevel=2,
                 )
 
         chunk_size = os.getenv("NLSQ_CHUNK_SIZE_MB")
@@ -321,7 +324,8 @@ class JAXConfig:
                 overrides["safety_factor"] = float(safety_factor)
             except ValueError:
                 warnings.warn(
-                    f"Invalid NLSQ_SAFETY_FACTOR: {safety_factor}", stacklevel=2
+                    f"Invalid NLSQ_SAFETY_FACTOR: {safety_factor}",
+                    stacklevel=2,
                 )
 
         if os.getenv("NLSQ_DISABLE_PROGRESS_REPORTING") == "1":
@@ -440,7 +444,7 @@ class JAXConfig:
                 # Note: JAX memory fraction handling varies by version and backend
                 # This is stored in our config for use by downstream components
                 logging.info(
-                    f"Updated GPU memory fraction to {config.gpu_memory_fraction} (stored for downstream use)"
+                    f"Updated GPU memory fraction to {config.gpu_memory_fraction} (stored for downstream use)",
                 )
         except ImportError:
             pass  # JAX not available
@@ -687,7 +691,7 @@ def configure_for_large_datasets(
     logging.info("  Streaming: enabled (always available)")
     logging.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
     logging.info(
-        f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}"
+        f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}",
     )
 
 
@@ -776,11 +780,10 @@ def get_jacobian_mode() -> tuple[str, str]:
     if env_mode:
         if env_mode in ("auto", "fwd", "rev"):
             return env_mode, "environment variable"
-        else:
-            warnings.warn(
-                f"Invalid NLSQ_JACOBIAN_MODE: {env_mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
-                stacklevel=2,
-            )
+        warnings.warn(
+            f"Invalid NLSQ_JACOBIAN_MODE: {env_mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
+            stacklevel=2,
+        )
 
     # Check config file
     config_path = os.path.expanduser("~/.nlsq/config.json")
@@ -792,11 +795,10 @@ def get_jacobian_mode() -> tuple[str, str]:
                     mode = config["jacobian_mode"]
                     if mode in ("auto", "fwd", "rev"):
                         return mode, "config file"
-                    else:
-                        warnings.warn(
-                            f"Invalid jacobian_mode in config file: {mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
-                            stacklevel=2,
-                        )
+                    warnings.warn(
+                        f"Invalid jacobian_mode in config file: {mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
+                        stacklevel=2,
+                    )
         except (OSError, json.JSONDecodeError) as e:
             warnings.warn(
                 f"Failed to read Jacobian mode from config file: {e}. Using auto-default.",
@@ -830,7 +832,7 @@ def set_jacobian_mode(mode: str):
     """
     if mode not in ("auto", "fwd", "rev"):
         raise ValueError(
-            f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'."
+            f"Invalid jacobian_mode: {mode}. Must be 'auto', 'fwd', or 'rev'.",
         )
 
     os.environ["NLSQ_JACOBIAN_MODE"] = mode

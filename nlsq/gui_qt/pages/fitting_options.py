@@ -458,7 +458,7 @@ class FittingOptionsPage(QWidget):
 
                 logging.getLogger(__name__).warning(
                     "Fit thread did not stop within timeout; "
-                    "allowing it to finish in background"
+                    "allowing it to finish in background",
                 )
                 thread = self._fit_thread
                 worker = self._fit_worker
@@ -469,7 +469,8 @@ class FittingOptionsPage(QWidget):
                 self._pending_threads.add(thread)
 
                 def _deferred_delete(
-                    t: QThread = thread, w: FitWorker | None = worker
+                    t: QThread = thread,
+                    w: FitWorker | None = worker,
                 ) -> None:
                     # Disconnect first to guard against double-firing if both
                     # worker.finished and worker.error somehow both led here
