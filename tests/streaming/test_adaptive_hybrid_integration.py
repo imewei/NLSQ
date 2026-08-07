@@ -634,6 +634,8 @@ class TestDefenseLayersCurveFitIntegration:
         param_errors = jnp.abs(popt - true_params)
         assert jnp.all(param_errors < 1.5)
 
+    @pytest.mark.slow
+    @pytest.mark.serial  # Memory-intensive: 4-layer defense + curve_fit OOM xdist workers
     def test_all_defense_layers_via_curve_fit(self):
         """Test all 4 defense layers together through curve_fit API."""
 

@@ -1097,6 +1097,8 @@ class TestFullFeatureSuite:
     These tests run comprehensive scenarios that exercise all major features.
     """
 
+    @pytest.mark.slow
+    @pytest.mark.serial  # Memory-intensive: streaming + JIT compile can OOM xdist workers
     def test_complete_optimization_workflow(self):
         """Run complete optimization workflow with all features enabled."""
 
@@ -1173,6 +1175,8 @@ class TestFullFeatureSuite:
             err_msg="Should recover true parameters",
         )
 
+    @pytest.mark.slow
+    @pytest.mark.serial  # Memory-intensive: streaming + curve_fit path can OOM xdist workers
     def test_no_regressions_basic_functionality(self):
         """Verify no regressions in basic curve_fit functionality."""
         from nlsq import curve_fit
