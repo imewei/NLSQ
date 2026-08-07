@@ -53,7 +53,7 @@ Before contributing:
 
 3. **Install development dependencies**:
    ```bash
-   pip install -e ".[dev]"
+   pip install -e "."
    ```
 
 4. **Install pre-commit hooks**:

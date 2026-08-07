@@ -10,11 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.1] - 2026-08-06
 
 ### Fixed
-- Dev/docs/build tooling (pytest, sphinx, jupyterlab, build backend, etc.) moved out of core
-  `dependencies` into a `[dev]` extra — `pip install nlsq` now installs only the 14 genuine
-  runtime deps instead of ~30 dev packages, fixing `pip check` for users without dev tools
-  installed. `make install-dev`/`install-all` and CI now request `--extra dev` / `.[dev]`
-  explicitly.
+- **Reverted the `[dev]`-extra packaging split.** An earlier iteration of v0.7.1 moved
+  dev/docs/build tooling (pytest, sphinx, jupyterlab, build backend, etc.) out of core
+  `dependencies` into a `[dev]` extra. The split was rolled back within the release window
+  because it left `make install-dev`/`install-all`, `.readthedocs.yaml`, `docs/requirements.txt`,
+  `CONTRIBUTING.md`, and the installation tutorial referring to a `[dev]` extra that no longer
+  existed, breaking local dev installs and ReadTheDocs builds. All dev/docs/build/test/lint
+  dependencies are now back in core `dependencies`; there is no `[dev]` extra. `pip install nlsq`
+  installs the same set of packages as before the split. The stale `.[dev]` references in the
+  Makefile, `.readthedocs.yaml`, `docs/requirements.txt`, `CONTRIBUTING.md`, and
+  `docs/tutorials/routine/getting_started/installation.rst` were corrected to install the package
+  itself.
 
 ### Added
 - `graphify` knowledge graph output (`graphify-out/`) for codebase navigation

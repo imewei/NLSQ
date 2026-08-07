@@ -3,10 +3,13 @@
 ## Unreleased
 
 ## v0.7.1 (2026-08-06)
-- Fixed packaging: dev/docs/build tooling now lives in a `[dev]` extra instead of core
-  `dependencies`, so `pip install nlsq` only pulls the 14 runtime deps it actually needs.
-  Contributors should install with `pip install -e ".[dev]"` (or `make dev`) to get
-  pytest/sphinx/lint tooling.
+- **Reverted the `[dev]`-extra packaging split.** An earlier iteration of v0.7.1 moved
+  dev/docs/build tooling into a `[dev]` extra to slim down `pip install nlsq`. The split was
+  rolled back within the release window because it left Makefile / `.readthedocs.yaml` /
+  `docs/requirements.txt` / `CONTRIBUTING.md` / installation tutorial references pointing at a
+  `[dev]` extra that no longer existed, breaking local dev installs and ReadTheDocs builds.
+  Dev/docs/build/test/lint deps are once again in core `dependencies`; there is no `[dev]` extra.
+  Stale `.[dev]` references were corrected to install the package itself.
 - Added `graphify` knowledge graph output (`graphify-out/`) for codebase navigation.
 
 ## v0.7.0 (2026-06-24)

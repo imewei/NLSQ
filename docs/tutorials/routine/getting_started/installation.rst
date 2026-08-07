@@ -102,7 +102,7 @@ For development, with test/lint/docs/build tooling:
 
    git clone https://github.com/imewei/NLSQ.git
    cd NLSQ
-   pip install -e ".[dev]"
+   pip install -e "."
 
 Common Installation Issues
 --------------------------
