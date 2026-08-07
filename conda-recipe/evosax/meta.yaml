@@ -1,0 +1,51 @@
+{% set name = "evosax" %}
+{% set version = "0.2.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://files.pythonhosted.org/packages/61/1f/93fc7c5db0f71f7fc7b47586c83ad6d865528c5a98f36707796fb3ebf2d9/evosax-{{ version }}.tar.gz
+  sha256: 7fefc9be3ea3f18a8346bd473a34d722723644a6096609b6ec9030e9fa4ebdd6
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=61
+    - wheel
+  run:
+    - python >=3.10
+    - numpy >=1.25
+    - jax >=0.5.0
+    - flax >=0.10.0
+    - dotmap
+    - matplotlib-base
+
+test:
+  imports:
+    - evosax
+  # pip check omitted: evosax's METADATA lists dev/examples extras (pytest,
+  # torch, brax, gymnax) as conditional Requires-Dist; pip check would flag
+  # those absent packages even though they are not runtime requirements.
+
+about:
+  home: https://github.com/RobertTLange/evosax
+  summary: Evolution Strategies in JAX
+  license: Apache-2.0
+  license_family: APACHE
+  # evosax 0.2.0's sdist ships no LICENSE file (verified: absent from the
+  # tarball); license_file omitted rather than pointed at a path that
+  # doesn't exist.
+  doc_url: https://github.com/RobertTLange/evosax
+  dev_url: https://github.com/RobertTLange/evosax
+
+extra:
+  recipe-maintainers:
+    - imewei
