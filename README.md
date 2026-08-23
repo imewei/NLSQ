@@ -523,7 +523,7 @@ If you use NLSQ in your research, please cite:
   title={NLSQ: Nonlinear Least Squares Curve Fitting for GPU/TPU},
   author={Chen, Wei and Hofer, Lucas R and Krstaji{\'c}, Milan and Smith, Robert P},
   year={2025},
-  url={https://github.com/imewei/NLSQ}
+  url={https://gitlab.osti.gov/wchen/nlsq}
 }
 
 @article{jaxfit2022,
