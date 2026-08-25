@@ -2443,7 +2443,20 @@ def curve_fit(
         "solver",
         "batch_size",
         "jac",
+        "data_mask",
+        "timeit",
+        "return_eval",
+        "full_output",
+        "callback",
+        "compute_diagnostics",
+        "diagnostics_level",
+        "diagnostics_config",
     )
+    if len(args) > len(_positional_names):
+        raise TypeError(
+            f"curve_fit() takes at most {len(_positional_names)} positional "
+            f"arguments after (f, xdata, ydata) but {len(args)} were given",
+        )
     for _name, _value in zip(_positional_names, args, strict=False):
         kwargs.setdefault(_name, _value)
     args = ()
