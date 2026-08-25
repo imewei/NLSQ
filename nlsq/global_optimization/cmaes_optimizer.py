@@ -356,8 +356,17 @@ class CMAESOptimizer:
         # Convert inputs to JAX arrays
         xdata_jax = jnp.asarray(xdata)
         ydata_jax = jnp.asarray(ydata)
-        lower_bounds = jnp.asarray(bounds[0])
-        upper_bounds = jnp.asarray(bounds[1])
+        # bounds may be SciPy-style scalars (e.g. (0, 10)) meant to broadcast
+        # to every parameter. Resize using p0's length when available -- same
+        # convention prepare_bounds() uses elsewhere in this codebase.
+        lower_bounds = jnp.asarray(bounds[0], dtype=float)
+        upper_bounds = jnp.asarray(bounds[1], dtype=float)
+        if p0 is not None:
+            n_params_hint = len(jnp.atleast_1d(jnp.asarray(p0)))
+            if lower_bounds.ndim == 0:
+                lower_bounds = jnp.full(n_params_hint, lower_bounds)
+            if upper_bounds.ndim == 0:
+                upper_bounds = jnp.full(n_params_hint, upper_bounds)
         sigma_jax = jnp.asarray(sigma) if sigma is not None else None
 
         n_params = len(lower_bounds)

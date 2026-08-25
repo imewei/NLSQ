@@ -284,6 +284,14 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     save_diagnostics: bool = False
     gc_chunk_interval: int = 10
 
+    def __post_init__(self) -> None:
+        """Validate configuration after initialization."""
+        if self.gc_chunk_interval < 1:
+            raise ValueError(
+                f"gc_chunk_interval must be >= 1, got {self.gc_chunk_interval} "
+                "(it is used as a modulo divisor during chunked fitting)",
+            )
+
 
 @dataclass(slots=True)
 class DatasetStats:
@@ -1044,22 +1052,34 @@ class LargeDatasetFitter:
         # FR-006: Buffer pool for chunk reuse (initialized lazily)
         self._buffer_pool: ChunkBufferPool | None = None
 
-    def _get_or_create_buffer_pool(self, chunk_size: int) -> ChunkBufferPool:
-        """Get existing buffer pool or create new one if size changed.
+    def _get_or_create_buffer_pool(
+        self,
+        chunk_size: int,
+        dtype: np.dtype = np.float64,
+    ) -> ChunkBufferPool:
+        """Get existing buffer pool or create new one if size or dtype changed.
 
         Parameters
         ----------
         chunk_size : int
             Required chunk size
+        dtype : np.dtype
+            Data type the pooled buffers must match (e.g. the input data's
+            dtype). A pool allocated for the wrong dtype would silently
+            upcast/downcast every chunk copied into it.
 
         Returns
         -------
         ChunkBufferPool
-            Buffer pool with appropriate size
+            Buffer pool with appropriate size and dtype
         """
         bucket_size = get_bucket_size(chunk_size)
-        if self._buffer_pool is None or self._buffer_pool.chunk_size < bucket_size:
-            self._buffer_pool = ChunkBufferPool(bucket_size)
+        if (
+            self._buffer_pool is None
+            or self._buffer_pool.chunk_size < bucket_size
+            or self._buffer_pool.dtype != dtype
+        ):
+            self._buffer_pool = ChunkBufferPool(bucket_size, dtype=dtype)
         return self._buffer_pool
 
     def _should_log_error(self, error_signature: str, current_time: float) -> bool:
@@ -1557,13 +1577,9 @@ class LargeDatasetFitter:
             except Exception:
                 n_params = 2  # Conservative default
 
-        # Normalize initial guess and apply heuristics for stability
+        # Normalize initial guess dtype
         if p0 is not None:
             p0 = np.asarray(p0, dtype=float)
-            if self.multistart and p0.size > 0 and p0[0] < 0.5:
-                heuristic_amp = max(float(np.ptp(ydata)), 0.5)
-                p0 = p0.copy()
-                p0[0] = heuristic_amp
 
         # Get processing statistics and strategy
         stats = self.estimate_requirements(n_points, n_params)
@@ -2207,7 +2223,10 @@ class LargeDatasetFitter:
         if len(param_history) > 1:
             # Use last 10 parameter estimates for covariance estimation
             param_variations = np.array(param_history[-min(10, len(param_history)) :])
-            pcov = np.cov(param_variations.T)
+            # np.cov collapses to a 0-d scalar for a single parameter (1 "variable"
+            # row after .T) -- atleast_2d keeps it a proper (1, 1) matrix so callers
+            # doing pcov[0, 0] or np.diag(pcov) don't break.
+            pcov = np.atleast_2d(np.cov(param_variations.T))
         else:
             # Fallback: identity matrix scaled by parameter magnitudes
             # This provides a reasonable uncertainty estimate when we have no history
@@ -2345,6 +2364,16 @@ class LargeDatasetFitter:
         # Validate model function shape compatibility
         self._validate_model_function(f, xdata, ydata, p0)
 
+        # sigma is aligned with the full xdata/ydata, not any one chunk -- pop
+        # it out and re-slice per chunk below instead of forwarding it whole
+        # via **kwargs (which would raise a per-chunk shape mismatch). Retry
+        # attempts (_retry_failed_chunk) fit against the un-sliced, possibly
+        # zero-padded x_chunk/y_chunk, so sigma is intentionally left out of
+        # their kwargs -- an unweighted retry is safer than a wrong-length one.
+        full_sigma = kwargs.pop("sigma", None)
+        if full_sigma is not None:
+            full_sigma = np.asarray(full_sigma)
+
         # Initialize state variables
         (
             progress,
@@ -2365,7 +2394,10 @@ class LargeDatasetFitter:
         gc_chunk_interval = self.config.gc_chunk_interval
 
         # FR-006: Initialize buffer pool for chunk reuse
-        buffer_pool = self._get_or_create_buffer_pool(stats.recommended_chunk_size)
+        buffer_pool = self._get_or_create_buffer_pool(
+            stats.recommended_chunk_size,
+            dtype=np.asarray(xdata).dtype,
+        )
 
         try:
             # Process dataset in chunks with sequential parameter refinement
@@ -2380,6 +2412,11 @@ class LargeDatasetFitter:
                     # Use only valid data points (exclude zero-padding)
                     x_valid = x_chunk[:valid_length]
                     y_valid = y_chunk[:valid_length]
+                    chunk_kwargs = kwargs
+                    if full_sigma is not None:
+                        start_idx = chunk_idx * stats.recommended_chunk_size
+                        sigma_valid = full_sigma[start_idx : start_idx + valid_length]
+                        chunk_kwargs = {**kwargs, "sigma": sigma_valid}
                     popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                         f,
                         x_valid,
@@ -2388,7 +2425,7 @@ class LargeDatasetFitter:
                         bounds=bounds,
                         method=method,
                         solver=solver,
-                        **kwargs,
+                        **chunk_kwargs,
                     )
 
                     # Accumulate this chunk's information into the full-dataset

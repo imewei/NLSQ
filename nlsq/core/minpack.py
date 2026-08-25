@@ -752,6 +752,9 @@ def _fit_with_config(
             p0=np.asarray(p0) if p0 is not None else None,
             bounds=bounds,
             method=method or "trf",
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
             **kwargs,
         )
 
@@ -1389,6 +1392,8 @@ def _fit_global_cmaes(
     cmaes_config : CMAESConfig | None
         CMA-ES configuration override.
     """
+    import dataclasses
+
     from nlsq.global_optimization.cmaes_config import CMAESConfig
     from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
 
@@ -1401,20 +1406,16 @@ def _fit_global_cmaes(
         if cmaes_config.data_chunk_size is None:
             # Calculate appropriate chunk size
             n_points = len(ydata)
-            cmaes_config = CMAESConfig(
-                **{
-                    **cmaes_config.__dict__,
-                    "data_chunk_size": min(100_000, max(10_000, n_points // 10)),
-                },
+            cmaes_config = dataclasses.replace(
+                cmaes_config,
+                data_chunk_size=min(100_000, max(10_000, n_points // 10)),
             )
     elif strategy == "chunked":
         if cmaes_config.data_chunk_size is None:
             n_points = len(ydata)
-            cmaes_config = CMAESConfig(
-                **{
-                    **cmaes_config.__dict__,
-                    "data_chunk_size": min(500_000, max(50_000, n_points // 5)),
-                },
+            cmaes_config = dataclasses.replace(
+                cmaes_config,
+                data_chunk_size=min(500_000, max(50_000, n_points // 5)),
             )
 
     optimizer = CMAESOptimizer(config=cmaes_config)
@@ -1838,9 +1839,14 @@ def _run_cmaes_optimization(
     )
     from nlsq.global_optimization.method_selector import MethodSelector
 
-    # Convert bounds to numpy arrays for scale ratio computation
-    lower = np.asarray(bounds[0])
-    upper = np.asarray(bounds[1])
+    # Convert bounds to numpy arrays for scale ratio computation. bounds may
+    # be SciPy-style scalars (e.g. (0, 10)) meant to broadcast to every
+    # parameter -- prepare_bounds() resizes 0-d bounds to length n_params
+    # (same convention as the p0-is-None fallback used elsewhere in this file).
+    lower, upper = prepare_bounds(
+        bounds,
+        len(np.atleast_1d(p0)) if p0 is not None else 1,
+    )
 
     # Use MethodSelector to decide if CMA-ES should be used
     selector = MethodSelector()
@@ -2419,6 +2425,29 @@ def curve_fit(
     ...     fallback=True
     ... )
     """
+    # Normalize positional args to keyword args immediately. Downstream code
+    # (stability auto-fixes) mutates kwargs["p0"] and previously sliced the
+    # raw `args` tuple to drop the old p0 -- but that silently reindexed any
+    # positional sigma/absolute_sigma/... that followed it, corrupting the
+    # positional mapping when the fixed args were later forwarded to
+    # CurveFit.curve_fit / FallbackOrchestrator. Binding everything to
+    # kwargs up front (matching CurveFit.curve_fit's own positional order)
+    # makes that reindexing impossible.
+    _positional_names = (
+        "p0",
+        "sigma",
+        "absolute_sigma",
+        "check_finite",
+        "bounds",
+        "method",
+        "solver",
+        "batch_size",
+        "jac",
+    )
+    for _name, _value in zip(_positional_names, args, strict=False):
+        kwargs.setdefault(_name, _value)
+    args = ()
+
     # Handle global_search shorthand
     if global_search:
         multistart = True
