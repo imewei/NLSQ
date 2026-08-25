@@ -48,9 +48,54 @@ class StreamingCoordinator:
 
         Args:
             safety_factor: Memory safety factor (0.75 means use 75% of available)
+
+        Raises:
+            ValueError: If safety_factor is not in (0, 1]
         """
+        if not (0 < safety_factor <= 1):
+            msg = f"safety_factor must be in (0, 1], got {safety_factor}"
+            raise ValueError(msg)
         self.safety_factor = safety_factor
         self._cached_available_memory: float | None = None
+
+    @staticmethod
+    def _data_and_jacobian_bytes(
+        n_data: int,
+        n_params: int,
+        dtype_bytes: int = 8,
+        x_multiplier: int = 1,
+    ) -> tuple[int, int]:
+        """Shared byte-sizing for the data and Jacobian arrays.
+
+        Used by both `estimate_memory` (reporting) and `_decide_auto`
+        (strategy selection) so the two can't silently drift apart.
+
+        x_multiplier accounts for multi-dimensional xdata: shape
+        (k, n_data) contributes k * n_data elements, not n_data, so a
+        multi-output x isn't silently undercounted.
+
+        Raises:
+            ValueError: If x_multiplier < 1 (would shrink/corrupt data_bytes)
+        """
+        if x_multiplier < 1:
+            msg = f"x_multiplier must be >= 1, got {x_multiplier}"
+            raise ValueError(msg)
+        data_bytes = (x_multiplier + 2) * n_data * dtype_bytes  # x, y, residuals
+        jacobian_bytes = n_data * n_params * dtype_bytes
+        return data_bytes, jacobian_bytes
+
+    @staticmethod
+    def _x_multiplier(xdata: jax.Array, n_data: int) -> int:
+        """Ratio of xdata's total element count to n_data, rounded up.
+
+        1 for ordinary 1-D xdata; >1 for multi-dimensional/multi-output x
+        (e.g. shape (k, n_data)). Reads only array metadata (`.size`), no
+        device->host transfer.
+        """
+        if n_data <= 0:
+            return 1
+        x_elems = int(xdata.size) if hasattr(xdata, "size") else n_data
+        return max(1, -(-x_elems // n_data))  # ceil division
 
     def decide(
         self,
@@ -79,14 +124,23 @@ class StreamingCoordinator:
             StreamingDecision with strategy and configuration
 
         Raises:
+            ValueError: If n_params is negative or memory_limit_mb is not positive
             MemoryError: If dataset too large even for streaming
         """
+        if n_params < 0:
+            msg = f"n_params must be non-negative, got {n_params}"
+            raise ValueError(msg)
+        if memory_limit_mb is not None and memory_limit_mb <= 0:
+            msg = f"memory_limit_mb must be positive, got {memory_limit_mb}"
+            raise ValueError(msg)
+
         # Dataset size only — read it from array metadata without forcing a
         # device->host copy of the (potentially huge) data array.
         n_data = ydata.shape[0] if hasattr(ydata, "shape") else len(ydata)
+        x_multiplier = self._x_multiplier(xdata, n_data)
 
         # Estimate memory requirements
-        estimated_mb = self.estimate_memory(n_data, n_params)
+        estimated_mb = self.estimate_memory(n_data, n_params, x_multiplier=x_multiplier)
 
         # Get available memory
         if memory_limit_mb is not None:
@@ -115,12 +169,30 @@ class StreamingCoordinator:
                     memory_pressure,
                 )
             )
+        elif workflow == "hybrid":
+            strategy, reason, chunk_size, n_chunks, hybrid_config = (
+                self._decide_forced_streaming(
+                    n_data,
+                    n_params,
+                    usable_mb,
+                    reason="Hybrid strategy requested via workflow='hybrid'",
+                )
+            )
+        elif workflow == "normal":
+            strategy, reason, chunk_size, n_chunks, hybrid_config = (
+                "direct",
+                "Direct execution forced by workflow='normal'",
+                None,
+                None,
+                None,
+            )
         else:
             strategy, reason, chunk_size, n_chunks, hybrid_config = self._decide_auto(
                 n_data,
                 n_params,
                 usable_mb,
                 memory_pressure,
+                x_multiplier=x_multiplier,
             )
 
         return StreamingDecision(
@@ -139,6 +211,7 @@ class StreamingCoordinator:
         n_data: int,
         n_params: int,
         dtype_bytes: int = 8,
+        x_multiplier: int = 1,
     ) -> float:
         """Estimate memory requirement in MB.
 
@@ -152,15 +225,15 @@ class StreamingCoordinator:
             n_data: Number of data points
             n_params: Number of parameters
             dtype_bytes: Bytes per element (8 for float64)
+            x_multiplier: xdata element count as a multiple of n_data (>1
+                for multi-dimensional/multi-output x); see `_x_multiplier`
 
         Returns:
             Estimated memory in MB
         """
-        # Data arrays: x, y, residuals (3 arrays of n_data)
-        data_bytes = 3 * n_data * dtype_bytes
-
-        # Jacobian: n_data x n_params
-        jacobian_bytes = n_data * n_params * dtype_bytes
+        data_bytes, jacobian_bytes = self._data_and_jacobian_bytes(
+            n_data, n_params, dtype_bytes, x_multiplier
+        )
 
         # Working arrays for optimization (estimate: 5x parameter arrays)
         working_bytes = 5 * n_params * n_params * dtype_bytes
@@ -228,7 +301,7 @@ class StreamingCoordinator:
 
         # Clamp to [1000, 100_000] then cap at n_data so chunk never exceeds data size
         chunk_size = max(1000, min(chunk_size, 100_000))
-        chunk_size = min(chunk_size, n_data)
+        chunk_size = max(1, min(chunk_size, n_data))
 
         return HybridStreamingConfig(
             chunk_size=chunk_size,
@@ -240,6 +313,7 @@ class StreamingCoordinator:
         n_params: int,
         usable_mb: float,
         memory_pressure: float,
+        x_multiplier: int = 1,
     ) -> tuple[
         Literal["direct", "chunked", "hybrid", "auto_memory"],
         str,
@@ -252,10 +326,16 @@ class StreamingCoordinator:
         Returns:
             Tuple of (strategy, reason, chunk_size, n_chunks, hybrid_config)
         """
-        # Calculate data and peak memory requirements
-        data_mb = (3 * n_data * 8) / (1024 * 1024)
-        jacobian_mb = (n_data * n_params * 8) / (1024 * 1024)
+        # Calculate data and peak memory requirements. Shares the same
+        # byte-sizing helper as estimate_memory() so the two can't drift
+        # apart into inconsistent formulas.
+        data_bytes, jacobian_bytes = self._data_and_jacobian_bytes(
+            n_data, n_params, x_multiplier=x_multiplier
+        )
+        data_mb = data_bytes / (1024 * 1024)
+        jacobian_mb = jacobian_bytes / (1024 * 1024)
         peak_mb = data_mb + jacobian_mb
+        pressure_note = f" (memory pressure {memory_pressure:.2f})"
 
         # Decision tree from MemoryBudgetSelector
         if data_mb > usable_mb:
@@ -264,7 +344,8 @@ class StreamingCoordinator:
             n_chunks = (n_data + config.chunk_size - 1) // config.chunk_size
             return (
                 "hybrid",
-                f"Data ({data_mb:.1f}MB) exceeds usable memory ({usable_mb:.1f}MB)",
+                f"Data ({data_mb:.1f}MB) exceeds usable memory "
+                f"({usable_mb:.1f}MB){pressure_note}",
                 config.chunk_size,
                 n_chunks,
                 config,
@@ -275,7 +356,8 @@ class StreamingCoordinator:
             n_chunks = (n_data + config.chunk_size - 1) // config.chunk_size
             return (
                 "chunked",
-                f"Peak memory ({peak_mb:.1f}MB) exceeds usable memory ({usable_mb:.1f}MB)",
+                f"Peak memory ({peak_mb:.1f}MB) exceeds usable memory "
+                f"({usable_mb:.1f}MB){pressure_note}",
                 config.chunk_size,
                 n_chunks,
                 config,
@@ -283,7 +365,8 @@ class StreamingCoordinator:
         # Everything fits -> direct
         return (
             "direct",
-            f"Data fits in memory (peak {peak_mb:.1f}MB < usable {usable_mb:.1f}MB)",
+            f"Data fits in memory (peak {peak_mb:.1f}MB < usable "
+            f"{usable_mb:.1f}MB){pressure_note}",
             None,
             None,
             None,
@@ -294,6 +377,7 @@ class StreamingCoordinator:
         n_data: int,
         n_params: int,
         usable_mb: float,
+        reason: str = "Streaming forced by user request",
     ) -> tuple[
         Literal["direct", "chunked", "hybrid", "auto_memory"],
         str,
@@ -303,6 +387,14 @@ class StreamingCoordinator:
     ]:
         """Decide strategy when streaming is forced.
 
+        Args:
+            n_data: Number of data points
+            n_params: Number of parameters
+            usable_mb: Usable memory budget
+            reason: Human-readable reason string, overridable so
+                `workflow='hybrid'` (a soft request) and `force_streaming=True`
+                (a hard requirement) report distinct reasons.
+
         Returns:
             Tuple of (strategy, reason, chunk_size, n_chunks, hybrid_config)
         """
@@ -311,7 +403,7 @@ class StreamingCoordinator:
 
         return (
             "hybrid",
-            "Streaming forced by user request",
+            reason,
             config.chunk_size,
             n_chunks,
             config,
@@ -341,7 +433,8 @@ class StreamingCoordinator:
         if n_data < 1000:
             return (
                 "direct",
-                "Data too small for streaming (< 1000 points)",
+                f"Data too small for streaming (< 1000 points, memory "
+                f"pressure {memory_pressure:.2f})",
                 None,
                 None,
                 None,
@@ -353,7 +446,8 @@ class StreamingCoordinator:
 
         return (
             "hybrid",
-            "Streaming strategy requested via workflow hint",
+            f"Streaming strategy requested via workflow hint (memory "
+            f"pressure {memory_pressure:.2f})",
             config.chunk_size,
             n_chunks,
             config,

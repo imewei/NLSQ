@@ -355,6 +355,23 @@ class TestSigmaHandling:
                 sigma=sigma,
             )
 
+    def test_rejects_asymmetric_2d_sigma(
+        self, preprocessor: DataPreprocessor, linear_model, simple_data
+    ) -> None:
+        """A non-symmetric 2D sigma must be rejected, not silently one-triangled."""
+        x, y = simple_data
+        n = len(y)
+        sigma = np.eye(n)
+        sigma[0, 1] = 5.0  # break symmetry without breaking eigvalsh(lower)
+
+        with pytest.raises(ValueError, match="symmetric"):
+            preprocessor.preprocess(
+                f=linear_model,
+                xdata=x,
+                ydata=y,
+                sigma=sigma,
+            )
+
 
 # =============================================================================
 # Test Mask Generation
@@ -423,6 +440,22 @@ class TestNanPolicy:
         assert result.n_points == 4
         assert result.has_nans_removed  # Could be np.True_ or True
 
+    def test_nan_policy_omit_all_points_raises(
+        self, preprocessor: DataPreprocessor, linear_model
+    ) -> None:
+        """omit must raise, not return an empty dataset, when every row is NaN."""
+        x = np.array([1.0, 2.0, 3.0])
+        y = np.array([np.nan, np.nan, np.nan])
+
+        with pytest.raises(ValueError, match="removed all data points"):
+            preprocessor.preprocess(
+                f=linear_model,
+                xdata=x,
+                ydata=y,
+                nan_policy="omit",
+                check_finite=False,
+            )
+
 
 # =============================================================================
 # Test Immutability
@@ -470,6 +503,32 @@ class TestEdgeCases:
         )
 
         assert result.n_points == 1
+
+    def test_scalar_ydata_does_not_crash(
+        self, preprocessor: DataPreprocessor, linear_model
+    ) -> None:
+        """A bare scalar ydata/xdata must become a 1-point fit, not crash len()."""
+        result = preprocessor.preprocess(
+            f=linear_model,
+            xdata=np.float64(1.0),
+            ydata=np.float64(2.5),
+        )
+
+        assert result.n_points == 1
+
+    def test_rejects_2d_ydata(
+        self, preprocessor: DataPreprocessor, linear_model
+    ) -> None:
+        """ydata must be 1-D; a 2D array should raise, not silently misbehave."""
+        x = np.array([1.0, 2.0, 3.0])
+        y = np.ones((3, 2))
+
+        with pytest.raises(ValueError, match="1-dimensional"):
+            preprocessor.preprocess(
+                f=linear_model,
+                xdata=x,
+                ydata=y,
+            )
 
     def test_large_dataset(self, preprocessor: DataPreprocessor, linear_model) -> None:
         """Test preprocessing large dataset."""

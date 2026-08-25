@@ -191,6 +191,84 @@ class TestMemoryEstimation:
         # Estimated should be at least Jacobian size
         assert estimated >= jacobian_mb * 0.9  # Allow 10% tolerance
 
+    def test_estimate_memory_accounts_for_multidim_xdata(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """Multi-row xdata (shape (k, n_data)) must not be undercounted as 1 row."""
+        n_data, n_params = 10_000, 5
+
+        mem_1d_x = coordinator.estimate_memory(n_data, n_params, x_multiplier=1)
+        mem_5d_x = coordinator.estimate_memory(n_data, n_params, x_multiplier=5)
+
+        assert mem_5d_x > mem_1d_x
+
+    def test_decide_accounts_for_multidim_xdata(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """decide() must derive x_multiplier from xdata's actual shape."""
+        n_data, n_params = 10_000, 5
+        y = jnp.zeros(n_data)
+
+        result_1d = coordinator.decide(
+            xdata=jnp.zeros(n_data), ydata=y, n_params=n_params
+        )
+        result_multi_x = coordinator.decide(
+            xdata=jnp.zeros((20, n_data)), ydata=y, n_params=n_params
+        )
+
+        assert result_multi_x.estimated_memory_mb > result_1d.estimated_memory_mb
+
+    def test_estimate_memory_rejects_invalid_x_multiplier(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """x_multiplier < 1 must raise, not silently shrink/corrupt data_bytes."""
+        with pytest.raises(ValueError, match="x_multiplier"):
+            coordinator.estimate_memory(1000, 5, x_multiplier=0)
+
+        with pytest.raises(ValueError, match="x_multiplier"):
+            coordinator.estimate_memory(1000, 5, x_multiplier=-1)
+
+    def test_estimate_memory_and_decide_share_data_jacobian_sizing(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """estimate_memory() (reporting) and _decide_auto() (strategy
+        selection) must derive data+Jacobian size from the same shared
+        helper — proving they can't silently drift into two different
+        formulas the way they did before the fix."""
+        n_data, n_params, x_mult = 10_000, 5, 2
+
+        data_bytes, jacobian_bytes = StreamingCoordinator._data_and_jacobian_bytes(
+            n_data, n_params, x_multiplier=x_mult
+        )
+        core_mb = (data_bytes + jacobian_bytes) / (1024 * 1024)
+
+        # estimate_memory() reports core size plus working-array + overhead
+        # terms on top, so it must be strictly larger than core_mb.
+        est_mb = coordinator.estimate_memory(n_data, n_params, x_multiplier=x_mult)
+        assert est_mb > core_mb
+
+        # _decide_auto()'s actual decision boundary must sit exactly at
+        # core_mb (not est_mb) — proving it uses the SAME shared
+        # data+jacobian sizing as estimate_memory(), not an independently
+        # hand-written (and potentially diverging) formula.
+        strategy_below, *_ = coordinator._decide_auto(
+            n_data,
+            n_params,
+            usable_mb=core_mb - 0.01,
+            memory_pressure=0.5,
+            x_multiplier=x_mult,
+        )
+        strategy_above, *_ = coordinator._decide_auto(
+            n_data,
+            n_params,
+            usable_mb=core_mb + 0.01,
+            memory_pressure=0.5,
+            x_multiplier=x_mult,
+        )
+
+        assert strategy_below in ("chunked", "hybrid")
+        assert strategy_above == "direct"
+
 
 # =============================================================================
 # Test Available Memory Detection
@@ -295,6 +373,58 @@ class TestWorkflowHints:
         # Streaming hint should use streaming-compatible strategy
         assert result.strategy in ("hybrid", "chunked", "direct")
 
+    def test_workflow_hybrid_forces_hybrid(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """workflow='hybrid' must actually select hybrid, not silently fall to auto."""
+        x, y = small_data
+
+        result = coordinator.decide(
+            xdata=jnp.asarray(x),
+            ydata=jnp.asarray(y),
+            n_params=2,
+            workflow="hybrid",
+        )
+
+        assert result.strategy == "hybrid"
+
+    def test_workflow_hybrid_reason_distinct_from_force_streaming(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """workflow='hybrid' (a soft hint) must report a distinct reason
+        from force_streaming=True (a hard requirement), not the same
+        hardcoded 'forced by user request' string for both."""
+        x, y = small_data
+
+        hint_result = coordinator.decide(
+            xdata=jnp.asarray(x), ydata=jnp.asarray(y), n_params=2, workflow="hybrid"
+        )
+        forced_result = coordinator.decide(
+            xdata=jnp.asarray(x),
+            ydata=jnp.asarray(y),
+            n_params=2,
+            force_streaming=True,
+        )
+
+        assert hint_result.reason != forced_result.reason
+        assert "hybrid" in hint_result.reason.lower()
+
+    def test_workflow_normal_forces_direct(
+        self, coordinator: StreamingCoordinator, medium_data
+    ) -> None:
+        """workflow='normal' must force direct execution regardless of size."""
+        x, y = medium_data
+
+        result = coordinator.decide(
+            xdata=jnp.asarray(x),
+            ydata=jnp.asarray(y),
+            n_params=10,
+            memory_limit_mb=1.0,  # would otherwise trigger chunked/hybrid
+            workflow="normal",
+        )
+
+        assert result.strategy == "direct"
+
 
 # =============================================================================
 # Test Memory Limit Override
@@ -319,6 +449,46 @@ class TestMemoryLimitOverride:
 
         # With very low limit, should use chunked/hybrid
         assert result.strategy in ("chunked", "hybrid")
+
+
+# =============================================================================
+# Test Input Validation
+# =============================================================================
+
+
+class TestInputValidation:
+    """Tests for constructor/decide() input validation."""
+
+    def test_invalid_safety_factor_raises(self) -> None:
+        """safety_factor outside (0, 1] must raise, not silently misbehave."""
+        with pytest.raises(ValueError, match="safety_factor"):
+            StreamingCoordinator(safety_factor=0.0)
+
+        with pytest.raises(ValueError, match="safety_factor"):
+            StreamingCoordinator(safety_factor=1.5)
+
+    def test_negative_n_params_raises(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """A negative n_params must raise instead of producing a nonsense budget."""
+        x, y = small_data
+
+        with pytest.raises(ValueError, match="n_params"):
+            coordinator.decide(xdata=jnp.asarray(x), ydata=jnp.asarray(y), n_params=-1)
+
+    def test_non_positive_memory_limit_raises(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """A non-positive memory_limit_mb must raise instead of a zero/negative budget."""
+        x, y = small_data
+
+        with pytest.raises(ValueError, match="memory_limit_mb"):
+            coordinator.decide(
+                xdata=jnp.asarray(x),
+                ydata=jnp.asarray(y),
+                n_params=2,
+                memory_limit_mb=0.0,
+            )
 
 
 # =============================================================================
@@ -373,6 +543,18 @@ class TestHybridConfiguration:
         """Test configured chunk size is positive."""
         config = coordinator.configure_hybrid(
             n_data=100_000,
+            n_params=10,
+            available_memory_mb=8000.0,
+        )
+
+        assert config.chunk_size > 0
+
+    def test_configure_hybrid_empty_data_no_division_by_zero(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """n_data=0 must not produce a zero chunk_size (n_chunks divide-by-zero)."""
+        config = coordinator.configure_hybrid(
+            n_data=0,
             n_params=10,
             available_memory_mb=8000.0,
         )

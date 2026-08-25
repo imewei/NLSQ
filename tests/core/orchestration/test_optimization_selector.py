@@ -201,6 +201,36 @@ class TestParameterCountDetection:
                 xdata=x,
             )
 
+    def test_raises_on_keyword_only_params(
+        self, selector: OptimizationSelector, simple_data
+    ) -> None:
+        """Keyword-only fit params can't be bound by the solver's positional call."""
+        x, _y = simple_data
+
+        def kwonly_model(x, *, a, b):
+            return a * x + b
+
+        with pytest.raises(ValueError, match="positionally"):
+            selector.detect_parameter_count(
+                f=kwonly_model,
+                xdata=x,
+            )
+
+    def test_raises_on_var_positional_params(
+        self, selector: OptimizationSelector, simple_data
+    ) -> None:
+        """*args fit params have no fixed count and can't be auto-detected."""
+        x, _y = simple_data
+
+        def varargs_model(x, *params):
+            return sum(params)
+
+        with pytest.raises(ValueError, match="positionally"):
+            selector.detect_parameter_count(
+                f=varargs_model,
+                xdata=x,
+            )
+
 
 # =============================================================================
 # Test Method Selection
@@ -316,6 +346,34 @@ class TestBoundsHandling:
         p0_result = np.asarray(result.p0)
         assert p0_result[0] <= 10.0  # Should be clipped to upper bound
         assert p0_result[1] == 5.0  # Should be unchanged
+
+    def test_bounds_length_mismatch_raises(
+        self, selector: OptimizationSelector, linear_model, simple_data
+    ) -> None:
+        """Bounds whose length doesn't match n_params must raise, not broadcast wrong."""
+        x, y = simple_data
+
+        with pytest.raises(ValueError, match="length mismatch"):
+            selector.select(
+                f=linear_model,
+                xdata=x,
+                ydata=y,
+                bounds=([0.0, 0.0], [1.0, 1.0, 1.0]),
+            )
+
+    def test_nan_bounds_raise(
+        self, selector: OptimizationSelector, linear_model, simple_data
+    ) -> None:
+        """NaN in bounds must raise instead of silently reaching the optimizer."""
+        x, y = simple_data
+
+        with pytest.raises(ValueError, match="NaN"):
+            selector.select(
+                f=linear_model,
+                xdata=x,
+                ydata=y,
+                bounds=([np.nan, 0.0], [1.0, 1.0]),
+            )
 
 
 # =============================================================================
