@@ -100,6 +100,17 @@ _MULTISTART_PRESETS: dict[str, dict[str, Any]] = {
 PRESETS: dict[str, dict[str, Any]] = {**_MULTISTART_PRESETS, **CMAES_PRESETS}
 
 
+def _require_int(name: str, value: Any) -> None:
+    """Raise TypeError unless ``value`` is a real ``int`` (not a ``bool``).
+
+    ``bool`` is a subclass of ``int`` in Python, so an explicit exclusion is
+    needed or ``True``/``False`` would silently pass an ``isinstance(x, int)``
+    check.
+    """
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{name} must be an int, got {type(value)}")
+
+
 @dataclass(slots=True)
 class GlobalOptimizationConfig:
     """Configuration for multi-start global optimization.
@@ -186,8 +197,7 @@ class GlobalOptimizationConfig:
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Validate n_starts
-        if not isinstance(self.n_starts, int) or isinstance(self.n_starts, bool):
-            raise TypeError(f"n_starts must be an int, got {type(self.n_starts)}")
+        _require_int("n_starts", self.n_starts)
         if self.n_starts < 0:
             raise ValueError(f"n_starts must be non-negative, got {self.n_starts}")
 
@@ -215,26 +225,14 @@ class GlobalOptimizationConfig:
             )
 
         # Validate elimination_rounds
-        if not isinstance(self.elimination_rounds, int) or isinstance(
-            self.elimination_rounds,
-            bool,
-        ):
-            raise TypeError(
-                f"elimination_rounds must be an int, got {type(self.elimination_rounds)}",
-            )
+        _require_int("elimination_rounds", self.elimination_rounds)
         if self.elimination_rounds < 0:
             raise ValueError(
                 f"elimination_rounds must be non-negative, got {self.elimination_rounds}",
             )
 
         # Validate batches_per_round
-        if not isinstance(self.batches_per_round, int) or isinstance(
-            self.batches_per_round,
-            bool,
-        ):
-            raise TypeError(
-                f"batches_per_round must be an int, got {type(self.batches_per_round)}",
-            )
+        _require_int("batches_per_round", self.batches_per_round)
         if self.batches_per_round <= 0:
             raise ValueError(
                 f"batches_per_round must be positive, got {self.batches_per_round}",

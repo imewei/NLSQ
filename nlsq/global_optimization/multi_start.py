@@ -142,7 +142,15 @@ def _fit_single_start(
         # NaN must not be able to sort ahead of a genuinely successful,
         # finite-loss fit -- coerce any non-finite loss (NaN included) to
         # +inf so it always sorts last and is excluded from n_successful.
+        # A NaN cost specifically (as opposed to an ordinary large-but-finite
+        # cost) usually signals numerical blowup/divergence at this starting
+        # point, worth a distinct log line for diagnosability.
         if not np.isfinite(loss):
+            _worker_logger.debug(
+                "Starting point %s produced non-finite loss (%s); coercing to inf",
+                p0,
+                loss,
+            )
             loss = float("inf")
         return (result.popt, loss, result)
     except Exception as e:
@@ -254,16 +262,13 @@ class MultiStartOrchestrator:
         """
         cf = self.curve_fit
         return {
-            "flength": getattr(cf, "flength", None),
-            "use_dynamic_sizing": getattr(cf, "use_dynamic_sizing", False),
-            "enable_stability": getattr(cf, "enable_stability", False),
-            "enable_recovery": getattr(cf, "enable_recovery", False),
-            "enable_overflow_check": getattr(cf, "enable_overflow_check", False),
-            "max_jacobian_elements_for_svd": getattr(
-                cf,
-                "max_jacobian_elements_for_svd",
-                10_000_000,
-            ),
+            "flength": cf.flength,
+            "use_dynamic_sizing": cf.use_dynamic_sizing,
+            "enable_stability": cf.enable_stability,
+            "enable_recovery": cf.enable_recovery,
+            "enable_overflow_check": cf.enable_overflow_check,
+            "cache_config": cf.cache_config,
+            "max_jacobian_elements_for_svd": cf.max_jacobian_elements_for_svd,
         }
 
     @classmethod

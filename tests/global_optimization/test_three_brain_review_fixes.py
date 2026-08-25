@@ -1,18 +1,25 @@
 """Regression tests for the three-brain review fixes to global_optimization.
 
 Covers: Sobol direction-number correctness, LHS reused-seed bug, NaN-loss
-selection, ignored curve_fit_instance config, tournament batch-count/top_m/
-empty-candidates edge cases, and config validation of NaN/inf/non-int values.
+selection, ignored curve_fit_instance config (including cache_config),
+tournament batch-count/top_m/empty-candidates edge cases, and config
+validation of NaN/inf/non-int/bool values.
 """
+
+import inspect
 
 import numpy as np
 import pytest
 
 from nlsq.core.minpack import CurveFit
 from nlsq.global_optimization.config import GlobalOptimizationConfig
-from nlsq.global_optimization.multi_start import MultiStartOrchestrator
+from nlsq.global_optimization.multi_start import (
+    MultiStartOrchestrator,
+    _fit_single_start,
+)
 from nlsq.global_optimization.sampling import sobol_sample
 from nlsq.global_optimization.tournament import TournamentSelector
+from nlsq.result.curve_fit_result import CurveFitResult
 
 
 class TestSobolCorrectness:
@@ -30,6 +37,14 @@ class TestSobolCorrectness:
         once the Gray-code index exceeded 2**16."""
         x = np.asarray(sobol_sample(2000, 1))
         assert len(np.unique(x)) == len(x)
+
+    def test_no_duplicate_points_multi_dim_polynomial_branch(self):
+        """The 16-entry truncation applied to every dimension, not just
+        dimension 1 -- verify the polynomial-recurrence branch (dims >= 2)
+        also stays duplicate-free."""
+        x = np.asarray(sobol_sample(3000, 5))
+        unique_rows = {tuple(row) for row in x}
+        assert len(unique_rows) == len(x)
 
     def test_max_dims_still_supported(self):
         y = sobol_sample(4, 21)
@@ -69,6 +84,102 @@ class TestCurveFitInstancePropagation:
         assert cfg["enable_stability"] is True
         assert cfg["flength"] == 128
 
+    def test_cache_config_propagates(self):
+        """cache_config is a real CurveFit.__init__ param that CurveFit didn't
+        even store on self -- it was structurally impossible to recover
+        until CurveFit.__init__ started keeping self.cache_config."""
+        cf = CurveFit(cache_config={"maxsize": 7})
+        orch = MultiStartOrchestrator(
+            GlobalOptimizationConfig(n_starts=2),
+            curve_fit_instance=cf,
+        )
+        cfg = orch._curve_fit_config()
+        assert cfg["cache_config"] == {"maxsize": 7}
+
+    def test_curve_fit_config_keyset_matches_constructor_signature(self):
+        """A hand-maintained dict silently drops new CurveFit.__init__
+        params (as happened with cache_config) -- pin the keyset against
+        the real signature so future drift is a loud test failure."""
+        expected = set(inspect.signature(CurveFit.__init__).parameters) - {"self"}
+        orch = MultiStartOrchestrator(GlobalOptimizationConfig(n_starts=2))
+        assert set(orch._curve_fit_config().keys()) == expected
+
+    @pytest.mark.parametrize("forced_workers", [1, 2])
+    def test_worker_threads_actually_receive_custom_config(
+        self,
+        monkeypatch,
+        forced_workers,
+    ):
+        """Regression for the actual bug: workers used to always build a
+        bare default CurveFit(), silently ignoring curve_fit_instance.
+        Exercises both the sequential (n_workers<=1) and parallel
+        (ThreadPoolExecutor) code paths in evaluate_starting_points."""
+        received_kwargs = []
+
+        class _RecordingCurveFit(CurveFit):
+            def __init__(self, **kwargs):
+                received_kwargs.append(kwargs)
+                super().__init__(**kwargs)
+
+        monkeypatch.setattr("nlsq.core.minpack.CurveFit", _RecordingCurveFit)
+        monkeypatch.setattr(
+            "nlsq.global_optimization.multi_start._select_worker_count",
+            lambda n_starts: forced_workers,
+        )
+
+        def model(x, a, b):
+            return a * x + b
+
+        x = np.linspace(0, 5, 20)
+        y = 2 * x + 1
+        starting_points = np.tile([1.0, 1.0], (2, 1))
+        bounds = (np.array([-10.0, -10.0]), np.array([10.0, 10.0]))
+
+        cf = CurveFit(enable_stability=True)
+        orch = MultiStartOrchestrator(
+            GlobalOptimizationConfig(n_starts=2),
+            curve_fit_instance=cf,
+        )
+        received_kwargs.clear()  # drop the constructor call for `cf` itself
+        orch.evaluate_starting_points(model, x, y, starting_points, bounds)
+
+        assert len(received_kwargs) == 2
+        assert all(k.get("enable_stability") is True for k in received_kwargs)
+
+
+class TestNaNLossClamp:
+    def test_nan_cost_is_clamped_to_inf_not_left_as_nan(self, monkeypatch):
+        """A NaN loss must not be able to sort ahead of a genuinely
+        successful finite-loss fit (Python's sort gives no useful ordering
+        for NaN)."""
+
+        class _NaNCostCurveFit:
+            def __init__(self, **kwargs):
+                pass
+
+            def curve_fit(self, f, xdata, ydata, p0, bounds, **kwargs):
+                result = CurveFitResult()
+                result.popt = np.asarray(p0)
+                result.cost = float("nan")
+                return result
+
+        monkeypatch.setattr("nlsq.core.minpack.CurveFit", _NaNCostCurveFit)
+
+        def model(x, a):
+            return a * x
+
+        _params, loss, result = _fit_single_start(
+            model,
+            np.array([1.0, 2.0]),
+            np.array([1.0, 2.0]),
+            np.array([1.0]),
+            (np.array([-10.0]), np.array([10.0])),
+            {},
+        )
+        assert loss == float("inf")
+        assert not np.isnan(loss)
+        assert result is not None  # the fit "succeeded", just with NaN cost
+
 
 class TestTournamentEdgeCases:
     def test_rejects_empty_candidates(self):
@@ -85,6 +196,30 @@ class TestTournamentEdgeCases:
             selector.get_top_candidates(-1)
         with pytest.raises(ValueError):
             selector.get_top_candidates(0)
+
+    def test_batch_count_not_overcounted_on_partial_round(self):
+        """The old `min(batch_idx + 1, batches_per_round)` overcounted by
+        one whenever the data iterator was exhausted mid-round (the failed
+        fetch attempt got counted as a batch)."""
+
+        def model(x, a):
+            return a * x
+
+        def two_batch_iterator():
+            yield np.array([1.0, 2.0]), np.array([1.0, 2.0])
+            yield np.array([1.0, 2.0]), np.array([1.0, 2.0])
+            # exhausted after 2 batches; batches_per_round asks for 5
+
+        candidates = np.array([[1.0], [2.0], [3.0], [4.0]])
+        config = GlobalOptimizationConfig(
+            n_starts=4,
+            elimination_rounds=1,
+            elimination_fraction=0.5,
+            batches_per_round=5,
+        )
+        selector = TournamentSelector(candidates, config)
+        selector.run_tournament(two_batch_iterator(), model, top_m=1)
+        assert selector.round_history[0]["batches_evaluated"] == 2
 
 
 class TestConfigValidation:
@@ -109,5 +244,19 @@ class TestConfigValidation:
         ],
     )
     def test_rejects_non_integer_counts(self, kwargs):
+        with pytest.raises(TypeError):
+            GlobalOptimizationConfig(**kwargs)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"n_starts": True},
+            {"elimination_rounds": False},
+            {"batches_per_round": True},
+        ],
+    )
+    def test_rejects_bool_for_int_fields(self, kwargs):
+        """bool is an int subclass in Python -- True/False must not
+        silently pass as valid n_starts/elimination_rounds/batches_per_round."""
         with pytest.raises(TypeError):
             GlobalOptimizationConfig(**kwargs)
