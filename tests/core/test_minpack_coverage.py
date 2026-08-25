@@ -333,6 +333,98 @@ class TestBugFixRegressions(unittest.TestCase):
         result = curve_fit(lambda x, a, b: a * x + b, x, y, p0=[1.5, 0.5])
         self.assertIn("multistart_diagnostics", result)
 
+    def test_fit_with_config_chunked_uses_fitter_below_1m_points(self):
+        """_fit_with_config used to re-decide the strategy by n_points alone,
+        silently falling back to plain curve_fit() (no chunking) whenever
+        n_points < 1_000_000 -- even though MemoryBudgetSelector already
+        chose 'chunked' because peak memory (n_params-scaled Jacobian)
+        exceeded the safe threshold. That defeated the memory-based
+        decision for small-n_points/huge-n_params problems and risked OOM.
+        Verify LargeDatasetFitter (not plain curve_fit) is used regardless
+        of n_points once an LDMemoryConfig has been selected."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_with_config
+        from nlsq.streaming.large_dataset import LDMemoryConfig
+
+        x = np.linspace(0, 10, 500)  # well under 1_000_000 points
+        y = 2.0 * x + 1.0
+        config = LDMemoryConfig(memory_limit_gb=4.0)
+
+        with (
+            patch("nlsq.core.minpack.curve_fit") as mock_curve_fit,
+            patch(
+                "nlsq.streaming.large_dataset.LargeDatasetFitter.fit"
+            ) as mock_fitter_fit,
+        ):
+            mock_fitter_fit.return_value = {
+                "popt": np.array([2.0, 1.0]),
+                "pcov": np.eye(2),
+                "success": True,
+            }
+            _fit_with_config(
+                f=lambda x, a, b: a * x + b,
+                xdata=x,
+                ydata=y,
+                p0=[1.5, 0.5],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(-np.inf, np.inf),
+                method=None,
+                config=config,
+                goal=None,
+            )
+
+        mock_fitter_fit.assert_called_once()
+        mock_curve_fit.assert_not_called()
+
+    def test_auto_global_multistart_chunked_uses_real_memory_config(self):
+        """_fit_global_multistart's 'chunked' branch used to hardcode a
+        fresh LDMemoryConfig(memory_limit_gb=8.0, ...), discarding the
+        config MemoryBudgetSelector actually computed from the real
+        (detected or overridden) memory budget in _fit_with_auto_global.
+        Verify LargeDatasetFitter is now built from the selector's real
+        config, not a hardcoded 8.0 GB default."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_global_multistart
+        from nlsq.streaming.large_dataset import LDMemoryConfig
+
+        x = np.linspace(0, 10, 500)
+        y = 2.0 * x + 1.0
+        # A distinctive value that must survive through to LargeDatasetFitter.
+        real_config = LDMemoryConfig(memory_limit_gb=33.0)
+
+        with patch(
+            "nlsq.streaming.large_dataset.LargeDatasetFitter"
+        ) as mock_fitter_cls:
+            mock_fitter_cls.return_value.fit.return_value = {
+                "popt": np.array([2.0, 1.0]),
+                "pcov": np.eye(2),
+                "success": True,
+            }
+            _fit_global_multistart(
+                f=lambda x, a, b: a * x + b,
+                xdata=x,
+                ydata=y,
+                p0=[1.5, 0.5],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(np.array([0.0, 0.0]), np.array([10.0, 5.0])),
+                strategy="chunked",
+                n_starts=5,
+                memory_config=real_config,
+            )
+
+        mock_fitter_cls.assert_called_once()
+        # The fitter must have been constructed with the real selected budget,
+        # not a hardcoded 8.0 GB default.
+        _args, ctor_kwargs = mock_fitter_cls.call_args
+        self.assertIs(ctor_kwargs["config"], real_config)
+        self.assertEqual(ctor_kwargs["memory_limit_gb"], 33.0)
+
 
 if __name__ == "__main__":
     unittest.main()

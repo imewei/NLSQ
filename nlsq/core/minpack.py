@@ -724,23 +724,12 @@ def _fit_with_config(
         return result
 
     if isinstance(config, LDMemoryConfig):
-        # Chunked processing path - use standard curve_fit for small datasets
-        # or LargeDatasetFitter for large ones
-        if n_points < 1_000_000:
-            # Small dataset, use standard curve_fit
-            return curve_fit(
-                f=f,
-                xdata=xdata,
-                ydata=ydata,
-                p0=p0,
-                sigma=sigma,
-                absolute_sigma=absolute_sigma,
-                check_finite=check_finite,
-                bounds=bounds,
-                method=method,
-                **kwargs,
-            )
-        # Large dataset, use LargeDatasetFitter
+        # Chunked processing path. MemoryBudgetSelector already decided
+        # chunking is needed because peak memory (data + n_params-scaled
+        # Jacobian) exceeds the safe threshold -- that can happen at any
+        # n_points when n_params is large, so don't second-guess it by
+        # n_points alone here (that used to silently fall back to plain
+        # curve_fit() and defeat the memory-based decision).
         fitter = LargeDatasetFitter(
             memory_limit_gb=config.memory_limit_gb,
             config=config,
@@ -1178,7 +1167,7 @@ def _fit_with_auto_global(
         f"peak_estimate={budget.peak_gb:.2f}GB",
     )
 
-    strategy, _memory_config = selector.select(
+    strategy, memory_config = selector.select(
         n_points=n_points,
         n_params=n_params,
         memory_limit_gb=memory_limit_gb,
@@ -1229,7 +1218,11 @@ def _fit_with_auto_global(
             if tol_key not in kwargs:
                 kwargs[tol_key] = adaptive_tols[tol_key]
 
-    # Route to appropriate backend based on strategy x method combination
+    # Route to appropriate backend based on strategy x method combination.
+    # memory_config carries the budget MemoryBudgetSelector actually computed
+    # (real detected memory, or the caller's memory_limit_gb override) so the
+    # chunked/streaming backends don't have to re-derive (and potentially
+    # mis-derive) their own sizing from n_points alone.
     if global_method == "cmaes":
         return _fit_global_cmaes(
             f=f,
@@ -1240,6 +1233,7 @@ def _fit_with_auto_global(
             absolute_sigma=absolute_sigma,
             bounds=(lb, ub),
             strategy=strategy,
+            memory_config=memory_config,
             cmaes_config=cmaes_config,
             **kwargs,
         )
@@ -1254,6 +1248,7 @@ def _fit_with_auto_global(
         check_finite=check_finite,
         bounds=(lb, ub),
         strategy=strategy,
+        memory_config=memory_config,
         n_starts=n_starts,
         **kwargs,
     )
@@ -1381,6 +1376,7 @@ def _fit_global_cmaes(
     bounds: tuple[np.ndarray, np.ndarray],
     strategy: str,
     cmaes_config: Any | None,
+    memory_config: Any | None = None,
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run CMA-ES global optimization with memory-aware strategy.
@@ -1389,6 +1385,10 @@ def _fit_global_cmaes(
     ----------
     strategy : str
         Memory strategy: 'standard', 'chunked', or 'streaming'.
+    memory_config : HybridStreamingConfig | LDMemoryConfig | None
+        The config MemoryBudgetSelector actually computed from the real
+        (detected or overridden) memory budget. Preferred over re-deriving
+        a chunk size from n_points alone when available.
     cmaes_config : CMAESConfig | None
         CMA-ES configuration override.
     """
@@ -1401,21 +1401,28 @@ def _fit_global_cmaes(
     if cmaes_config is None:
         cmaes_config = CMAESConfig()
 
+    # Budget-derived chunk size (HybridStreamingConfig.chunk_size for
+    # streaming, LDMemoryConfig.streaming_batch_size for chunked).
+    budget_chunk_size = getattr(memory_config, "chunk_size", None) or getattr(
+        memory_config, "streaming_batch_size", None
+    )
+
     # FR-003: Set data_chunk_size for streaming/chunked strategies
     if strategy == "streaming":
         if cmaes_config.data_chunk_size is None:
-            # Calculate appropriate chunk size
             n_points = len(ydata)
+            chunk_size = budget_chunk_size or min(100_000, max(10_000, n_points // 10))
             cmaes_config = dataclasses.replace(
                 cmaes_config,
-                data_chunk_size=min(100_000, max(10_000, n_points // 10)),
+                data_chunk_size=chunk_size,
             )
     elif strategy == "chunked":
         if cmaes_config.data_chunk_size is None:
             n_points = len(ydata)
+            chunk_size = budget_chunk_size or min(500_000, max(50_000, n_points // 5))
             cmaes_config = dataclasses.replace(
                 cmaes_config,
-                data_chunk_size=min(500_000, max(50_000, n_points // 5)),
+                data_chunk_size=chunk_size,
             )
 
     optimizer = CMAESOptimizer(config=cmaes_config)
@@ -1460,6 +1467,7 @@ def _fit_global_multistart(
     bounds: tuple[np.ndarray, np.ndarray],
     strategy: str,
     n_starts: int,
+    memory_config: Any | None = None,
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run multi-start optimization with memory-aware strategy.
@@ -1468,6 +1476,11 @@ def _fit_global_multistart(
     ----------
     strategy : str
         Memory strategy: 'standard', 'chunked', or 'streaming'.
+    memory_config : LDMemoryConfig | HybridStreamingConfig | None
+        The config MemoryBudgetSelector actually computed from the real
+        (detected or overridden) memory budget. Used as-is when it matches
+        the selected strategy so the real budget isn't silently replaced by
+        a hardcoded default.
     n_starts : int
         Number of multi-start runs.
     """
@@ -1490,10 +1503,17 @@ def _fit_global_multistart(
         # Chunked processing with multi-start
         from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
-        config = LDMemoryConfig(
-            memory_limit_gb=8.0,
-            min_chunk_size=1000,
-            max_chunk_size=1_000_000,
+        # Use the selector's real budget-derived config when present;
+        # only fall back to a default if this was reached without one
+        # (e.g. a direct/legacy caller of this function).
+        config = (
+            memory_config
+            if isinstance(memory_config, LDMemoryConfig)
+            else LDMemoryConfig(
+                memory_limit_gb=8.0,
+                min_chunk_size=1000,
+                max_chunk_size=1_000_000,
+            )
         )
         fitter = LargeDatasetFitter(
             memory_limit_gb=config.memory_limit_gb,
@@ -1528,7 +1548,18 @@ def _fit_global_multistart(
         p0 = np.ones(n_params)
     p0_arr = np.atleast_1d(p0)
 
-    config = HybridStreamingConfig(
+    import dataclasses
+
+    # Reuse the selector's budget-derived chunk_size (real detected/
+    # overridden memory) when available; only build a fresh default
+    # config if this was reached without one.
+    base_config = (
+        memory_config
+        if isinstance(memory_config, HybridStreamingConfig)
+        else HybridStreamingConfig()
+    )
+    config = dataclasses.replace(
+        base_config,
         normalize=True,
         warmup_iterations=200,
         gauss_newton_tol=kwargs.get("gtol", 1e-8),
