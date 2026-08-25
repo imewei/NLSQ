@@ -904,7 +904,17 @@ class TestEndToEndIntegration:
         )
 
     def test_full_fit_with_cg_solver_large_params(self):
-        """Test full fit workflow with CG solver for large parameter count."""
+        """Test full fit workflow with a large parameter count.
+
+        NOTE: despite the name/original intent, the CG solver was never
+        actually wired into the live Phase 2 loop (fit() always used the
+        materialized SVD solver regardless of cg_param_threshold) -- this
+        test's cg_param_threshold=50 setting was a no-op all along. fit()
+        now raises NotImplementedError instead of silently ignoring it (see
+        AdaptiveHybridStreamingOptimizer.fit()), so cg_param_threshold is
+        set above n_params here to keep exercising the real behavior this
+        test cares about: fit() converging with a large parameter count.
+        """
         n_params = 100
         n_points = 200
 
@@ -935,7 +945,7 @@ class TestEndToEndIntegration:
             warmup_iterations=10,
             max_warmup_iterations=30,
             gauss_newton_max_iterations=10,
-            cg_param_threshold=50,  # Force CG for p >= 50
+            cg_param_threshold=200,  # above n_params=100; CG isn't wired in (see docstring)
             cg_max_iterations=30,
             verbose=0,
         )

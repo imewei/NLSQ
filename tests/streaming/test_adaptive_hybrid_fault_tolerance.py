@@ -90,7 +90,15 @@ class TestFaultToleranceCheckpoints:
                     assert jtr.shape == (2,)  # n_params
 
     def test_checkpoint_resume_from_any_phase(self):
-        """Test checkpoint resume can restart from any phase."""
+        """resume_from_checkpoint is documented but fit() never actually
+        resumes from a saved checkpoint (it always starts from p0);
+        checkpoints are write-only. This test previously "passed" only
+        because that silent no-op made run 2 just an independent full fit
+        from the same p0 as run 1, which coincidentally converges to a
+        similar answer -- it never validated resume behavior. fit() now
+        raises NotImplementedError instead of silently ignoring the setting;
+        assert that instead.
+        """
         config = HybridStreamingConfig(
             normalize=True,
             warmup_iterations=3,
@@ -114,7 +122,7 @@ class TestFaultToleranceCheckpoints:
 
             # Run first optimizer (will save checkpoints)
             optimizer1 = AdaptiveHybridStreamingOptimizer(config)
-            result1 = optimizer1.fit((x_data, y_data), model, p0, verbose=0)
+            _result1 = optimizer1.fit((x_data, y_data), model, p0, verbose=0)
 
             # Find latest checkpoint
             checkpoint_files = sorted(Path(tmpdir).glob("checkpoint_*.h5"))
@@ -127,17 +135,14 @@ class TestFaultToleranceCheckpoints:
                 saved_phase = int(f["phase_state/current_phase"][()])
                 saved_params = jnp.array(f["phase_state/normalized_params"])
 
-            # Create new optimizer and resume from checkpoint
+            # Create new optimizer configured to resume from checkpoint
             config2 = config
             config2.resume_from_checkpoint = str(latest_checkpoint)
             optimizer2 = AdaptiveHybridStreamingOptimizer(config2)
 
-            # Resume optimization
-            result2 = optimizer2.fit((x_data, y_data), model, p0, verbose=0)
-
-            # Verify results are similar (resumed optimization should complete)
-            assert result2["success"]
-            assert jnp.allclose(result2["x"], result1["x"], rtol=0.1)
+            # fit() must refuse rather than silently starting over from p0
+            with pytest.raises(NotImplementedError, match="resume_from_checkpoint"):
+                optimizer2.fit((x_data, y_data), model, p0, verbose=0)
 
     def test_best_parameter_tracking_across_phases(self):
         """Test best parameters are tracked across all phases."""
@@ -344,7 +349,11 @@ class TestFaultToleranceIntegration:
     """Integration tests for complete fault tolerance system."""
 
     def test_checkpoint_and_resume_preserves_best_params(self):
-        """Test that checkpoint/resume preserves best parameter tracking."""
+        """resume_from_checkpoint is not implemented (see
+        test_checkpoint_resume_from_any_phase for why the old version of
+        this test passed vacuously); fit() now raises instead of silently
+        re-running from p0.
+        """
         config = HybridStreamingConfig(
             normalize=True,
             warmup_iterations=5,
@@ -368,22 +377,24 @@ class TestFaultToleranceIntegration:
 
             # First run
             optimizer1 = AdaptiveHybridStreamingOptimizer(config)
-            result1 = optimizer1.fit(
+            _result1 = optimizer1.fit(
                 (x_data, y_data), model, p0, bounds=bounds, verbose=0
             )
 
             # Get checkpoint
             checkpoints = sorted(Path(tmpdir).glob("checkpoint_*.h5"))
             if len(checkpoints) > 0:
-                # Resume from checkpoint
+                # Configure to resume from checkpoint -- fit() must refuse
+                # rather than silently starting over from p0
                 config.resume_from_checkpoint = str(checkpoints[-1])
                 optimizer2 = AdaptiveHybridStreamingOptimizer(config)
-                result2 = optimizer2.fit(
-                    (x_data, y_data), model, p0, bounds=bounds, verbose=0
-                )
-
-                # Results should be similar (best params preserved)
-                assert jnp.allclose(result2["x"], result1["x"], rtol=0.15)
+                with pytest.raises(
+                    NotImplementedError,
+                    match="resume_from_checkpoint",
+                ):
+                    optimizer2.fit(
+                        (x_data, y_data), model, p0, bounds=bounds, verbose=0
+                    )
 
     def test_validation_with_checkpoints(self):
         """Test NaN/Inf validation works with checkpoint save/resume."""

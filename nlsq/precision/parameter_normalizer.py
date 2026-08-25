@@ -165,17 +165,33 @@ class ParameterNormalizer:
 
             # Scale = (ub - lb), offset = lb
             # Normalized: (params - lb) / (ub - lb)
-            self.scales = ub - lb
+            raw_scales = ub - lb
+
+            # A parameter bounded on only one side (or neither) has an infinite
+            # ub - lb range, which would make normalize()'s (params - offset) /
+            # scale produce NaN/Inf (offset=-inf or scale=inf). Fall back to
+            # p0-magnitude scaling with zero offset for those dimensions, same
+            # as the 'p0' strategy, instead of a bounds-relative transform.
+            finite_range = jnp.isfinite(raw_scales)
 
             # Handle zero range (constant parameter)
             eps = jnp.finfo(jnp.float64).eps
-            self.scales = jnp.where(
-                jnp.abs(self.scales) < eps,
-                jnp.ones_like(self.scales),
-                self.scales,
+            bounded_scales = jnp.where(
+                jnp.abs(raw_scales) < eps,
+                jnp.ones_like(raw_scales),
+                raw_scales,
             )
 
-            self.offsets = lb
+            abs_p0 = jnp.abs(self.p0)
+            p0_eps = jnp.finfo(jnp.float64).eps * 10
+            unbounded_scales = jnp.where(
+                abs_p0 < p0_eps,
+                jnp.ones_like(abs_p0),
+                abs_p0,
+            )
+
+            self.scales = jnp.where(finite_range, bounded_scales, unbounded_scales)
+            self.offsets = jnp.where(finite_range, lb, jnp.zeros_like(lb))
 
         elif self.strategy == "p0":
             # p0-based: scale by parameter magnitudes
