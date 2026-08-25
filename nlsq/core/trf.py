@@ -847,7 +847,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         }
 
         # Solve trust region subproblem
-        if solver == "cg":
+        if solver in ("cg", "lsmr"):
             # Conjugate gradient solver
             J_h = J * d
             step_h = self.solve_tr_subproblem_cg(J, f, d, Delta, alpha)
@@ -1038,7 +1038,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             inner_loop_count += 1
 
             # Solve subproblem (reuse step or compute new one)
-            if solver == "cg":
+            if solver in ("cg", "lsmr"):
                 if inner_loop_count > 1:
                     step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
                 _n_iter = 1  # Dummy value for compatibility
@@ -1374,7 +1374,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         d_jnp = jnp.asarray(d)
         f_zeros = jnp.zeros(n, dtype=jnp.float64)
 
-        if solver == "cg":
+        if solver in ("cg", "lsmr"):
             J_h = J * d_jnp
             p_h = self.solve_tr_subproblem_cg_bounds(
                 J,
@@ -1524,7 +1524,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         ):
             inner_loop_count += 1
 
-            if solver == "cg":
+            if solver in ("cg", "lsmr"):
                 if inner_loop_count > 1:
                     p_h = self.solve_tr_subproblem_cg_bounds(
                         J,

@@ -3438,6 +3438,9 @@ class CurveFit:
                     data_mask = np.concatenate(
                         [data_mask, np.zeros(len_diff, dtype=bool)],
                     )
+        elif data_mask is not None:
+            if len(data_mask) != m:
+                raise ValueError("Data mask doesn't match data lengths.")
         else:
             data_mask = np.ones(m, dtype=bool)
 

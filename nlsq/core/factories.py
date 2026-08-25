@@ -211,6 +211,11 @@ class ConfiguredOptimizer:
         """Perform standard curve fitting."""
         from nlsq.core.minpack import curve_fit
 
+        # curve_fit()'s own default bounds is (-inf, inf), never None; passing
+        # bounds=None through unconditionally crashes in prepare_bounds().
+        if bounds is None:
+            bounds = (np.asarray(-np.inf), np.asarray(np.inf))
+
         return curve_fit(
             f,
             xdata,
@@ -235,6 +240,15 @@ class ConfiguredOptimizer:
         from nlsq.global_optimization.config import GlobalOptimizationConfig
         from nlsq.global_optimization.multi_start import MultiStartOrchestrator
 
+        # MultiStartOrchestrator.fit() has no sigma parameter today; silently
+        # dropping a caller-supplied sigma would fit unweighted data without
+        # telling anyone, so fail loud instead.
+        if sigma is not None:
+            raise ValueError(
+                "create_optimizer(global_optimization=True) does not support "
+                "sigma-weighted fitting yet; pass sigma=None or fit locally."
+            )
+
         config = GlobalOptimizationConfig(n_starts=self._config.n_starts)
         optimizer = MultiStartOrchestrator(config=config)
         # Infer p0 shape from function signature if not provided
@@ -252,6 +266,7 @@ class ConfiguredOptimizer:
             xdata,
             ydata,
             p0=p0,
+            bounds=bounds,
             **kwargs,
         )
 
@@ -305,11 +320,16 @@ def configure_curve_fit(
         # Merge defaults with call kwargs
         merged = {**default_kwargs, **kwargs}
 
-        # Apply configuration
-        if enable_diagnostics and "diagnostics" not in merged:
-            from nlsq.diagnostics.types import DiagnosticsConfig
+        # Apply configuration. curve_fit()'s diagnostics flag is named
+        # `compute_diagnostics`; a bare `diagnostics` kwarg is absorbed by
+        # curve_fit's **kwargs and silently does nothing.
+        if enable_diagnostics and "compute_diagnostics" not in merged:
+            merged["compute_diagnostics"] = True
 
-            merged["diagnostics"] = DiagnosticsConfig()
+        # curve_fit()'s own default bounds is (-inf, inf), never None; passing
+        # bounds=None through unconditionally crashes in prepare_bounds().
+        if bounds is None:
+            bounds = (np.asarray(-np.inf), np.asarray(np.inf))
 
         return curve_fit(
             f,

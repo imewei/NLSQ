@@ -387,5 +387,38 @@ class TestGlobalCompilationCache(unittest.TestCase):
         self.assertEqual(len(cache2.cache), 0)
 
 
+class TestCompilationCacheClosureCollisionRegression(unittest.TestCase):
+    """Regression: _get_function_code_hash used to hash only co_code, so
+    two closures sharing bytecode but differing in captured constants
+    collided on the same cache key -- the second closure's compiled
+    function silently reused the first closure's cached result."""
+
+    def setUp(self):
+        self.cache = CompilationCache(enable_stats=True)
+
+    def tearDown(self):
+        self.cache.clear()
+
+    def test_closures_with_same_bytecode_different_constants_dont_collide(self):
+        def make_adder(captured):
+            def adder(x):
+                return x + captured
+
+            return adder
+
+        add_one = make_adder(1.0)
+        add_two = make_adder(2.0)
+
+        compiled_add_one = self.cache.compile(add_one)
+        compiled_add_two = self.cache.compile(add_two)
+
+        result_one = compiled_add_one(jnp.array(10.0))
+        result_two = compiled_add_two(jnp.array(10.0))
+
+        self.assertEqual(len(self.cache.cache), 2)
+        self.assertAlmostEqual(float(result_one), 11.0)
+        self.assertAlmostEqual(float(result_two), 12.0)
+
+
 if __name__ == "__main__":
     unittest.main()

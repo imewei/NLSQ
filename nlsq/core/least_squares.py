@@ -612,10 +612,27 @@ class LeastSquares:
 
             # Handle analytical Jacobian
             if jac is not None:
-                if (
-                    self.jac is None
-                    or self.jac.__code__.co_code != jac.__code__.co_code
-                ):
+                jac_update = self.jac is None
+                if not jac_update:
+                    try:
+                        old_code, new_code = self.jac.__code__, jac.__code__
+                        old_closure = tuple(
+                            cell.cell_contents for cell in (self.jac.__closure__ or ())
+                        )
+                        new_closure = tuple(
+                            cell.cell_contents for cell in (jac.__closure__ or ())
+                        )
+                        # Same rationale as the fun check above: co_code alone
+                        # cannot distinguish closures with different captured
+                        # constants, which would silently keep a stale Jacobian.
+                        jac_update = (
+                            old_code.co_code != new_code.co_code
+                            or old_code.co_consts != new_code.co_consts
+                            or old_closure != new_closure
+                        )
+                    except Exception:
+                        jac_update = True
+                if jac_update:
                     self.wrap_jac(jac)
             elif self.jac is not None and not func_update:
                 self.autdiff_jac(jac, mode=jacobian_mode_selected)

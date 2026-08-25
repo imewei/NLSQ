@@ -115,8 +115,16 @@ class CompilationCache:
 
         # Compute hash outside lock (no shared state access)
         try:
-            func_code = func.__code__.co_code if hasattr(func, "__code__") else b""
-            code_hash = hashlib.sha256(func_code).hexdigest()[:8]
+            code = func.__code__
+            # co_code alone is not function identity: two closures can share
+            # bytecode but differ in captured constants (co_consts) or closure
+            # cell contents, and would otherwise collide on the same cache key.
+            # id(func) (rather than hashing closure cell values) keeps this
+            # stable even if the closure's captured state mutates after this
+            # first-touch computation, since the result is memoized per
+            # function object below and never recomputed for that object.
+            hash_input = repr((code.co_code, code.co_consts, id(func))).encode()
+            code_hash = hashlib.sha256(hash_input).hexdigest()[:8]
         except (AttributeError, TypeError):
             # Fallback: hash the function's qualified name
             name = getattr(func, "__qualname__", getattr(func, "__name__", "unknown"))

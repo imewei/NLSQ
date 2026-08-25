@@ -255,6 +255,32 @@ class TestSolveTrustRegionSubproblem:
         assert result["V"] is not None
         assert result["uf"] is not None
 
+    def test_subproblem_lsmr_solver_uses_iterative_path(self):
+        """Regression: the public curve_fit(solver=...) API maps
+        'auto'/'cg'/'lsqr'/'minibatch' to the internal name 'lsmr', but
+        _solve_trust_region_subproblem had no 'lsmr' branch and silently
+        fell through to the dense SVD path -- defeating the purpose of
+        selecting an iterative solver for memory reasons. 'lsmr' must now
+        route through the same iterative (CG) path as 'cg'."""
+        trf = TrustRegionReflective()
+
+        J = jnp.array([[1.0, 0.0], [0.0, 1.0]])
+        f = jnp.array([1.0, 2.0])
+        g = J.T @ f
+        scale = np.ones(2)
+        Delta = 1.0
+        alpha = 0.01
+
+        result = trf._solve_trust_region_subproblem(
+            J, f, g, scale, Delta, alpha, solver="lsmr"
+        )
+
+        # Iterative path: step_h is computed directly, no SVD components.
+        assert result["step_h"] is not None
+        assert result["s"] is None
+        assert result["V"] is None
+        assert result["uf"] is None
+
     def test_subproblem_scaling(self):
         """Test that scaling is applied correctly."""
         trf = TrustRegionReflective()

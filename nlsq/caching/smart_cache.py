@@ -50,6 +50,25 @@ except ImportError:
     HAS_XXHASH = False
 
 
+def _callable_identity(func: Callable) -> str:
+    """Short hash disambiguating closures that share module+name.
+
+    ``co_code`` alone is not function identity: two closures can share
+    bytecode but differ in captured constants or closure cell contents.
+    Uses ``id(func)`` rather than hashing closure cell values directly:
+    id() is stable across repeated calls to the *same* closure object even
+    when its captured state legitimately mutates between calls (e.g. a
+    counter), while still being distinct for two different closure objects
+    built from the same factory.
+    """
+    try:
+        code = func.__code__
+        payload = repr((code.co_code, code.co_consts, id(func))).encode()
+        return hashlib.blake2b(payload, digest_size=8).hexdigest()
+    except AttributeError:
+        return "nocode"
+
+
 class SmartCache:
     """Intelligent caching system for optimization computations.
 
@@ -197,8 +216,12 @@ class SmartCache:
                         ).hexdigest()
                         key_parts.append(f"array_{arg.shape}_{arg.dtype}_{full_hash}")
             elif callable(arg):
-                # For functions, use their name and module
-                key_parts.append(f"func_{arg.__module__}_{arg.__name__}")
+                # Module+name alone collides for distinct closures sharing a
+                # name (e.g. two `jac` closures from different factory calls);
+                # fold in a code/closure identity hash to disambiguate them.
+                key_parts.append(
+                    f"func_{arg.__module__}_{arg.__name__}_{_callable_identity(arg)}"
+                )
             else:
                 key_parts.append(str(arg))
 
@@ -222,7 +245,9 @@ class SmartCache:
                         h = hashlib.blake2b(flat.tobytes(), digest_size=16).hexdigest()
                 key_parts.append(f"{k}=array_{v.shape}_{v.dtype}_{h}")
             elif callable(v):
-                key_parts.append(f"{k}=func_{v.__module__}_{v.__name__}")
+                key_parts.append(
+                    f"{k}=func_{v.__module__}_{v.__name__}_{_callable_identity(v)}"
+                )
             else:
                 key_parts.append(f"{k}={v}")
 

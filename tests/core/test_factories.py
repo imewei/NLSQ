@@ -426,3 +426,72 @@ class TestIntegration:
 
         assert popt1 is not None
         assert popt2 is not None
+
+
+class TestBoundsNoneDefaultRegression:
+    """Regression: bounds=None (the documented default) must not crash.
+
+    curve_fit()'s own default is (-inf, inf), never None; the factory
+    wrappers used to pass bounds=None straight through, crashing in
+    prepare_bounds()'s ``for b in bounds`` on the default no-bounds call.
+    """
+
+    def test_create_optimizer_fit_no_bounds(self, simple_model, sample_data):
+        x, y = sample_data
+        optimizer = create_optimizer()
+        popt, pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
+        assert popt is not None
+        assert pcov is not None
+
+    def test_configure_curve_fit_no_bounds(self, simple_model, sample_data):
+        x, y = sample_data
+        curve_fit = configure_curve_fit()
+        popt, pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
+        assert popt is not None
+        assert pcov is not None
+
+
+class TestGlobalFitSigmaAndBoundsRegression:
+    """Regression: global fit used to silently drop sigma and bounds."""
+
+    def test_global_fit_sigma_raises_instead_of_silently_ignored(
+        self, simple_model, sample_data
+    ):
+        x, y = sample_data
+        optimizer = create_optimizer(global_optimization=True, n_starts=3)
+        with pytest.raises(ValueError, match="sigma"):
+            optimizer.fit(
+                simple_model,
+                x,
+                y,
+                p0=np.array([1.0, 0.0]),
+                sigma=np.ones_like(y),
+            )
+
+    @pytest.mark.slow
+    def test_global_fit_bounds_are_forwarded(self, simple_model, sample_data):
+        x, y = sample_data
+        optimizer = create_optimizer(global_optimization=True, n_starts=3)
+        bounds = (np.array([0.0, -10.0]), np.array([10.0, 10.0]))
+        result = optimizer.fit(
+            simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds
+        )
+        assert result is not None
+
+
+class TestDiagnosticsKwargRegression:
+    """Regression: enable_diagnostics=True used to set the wrong kwarg name
+    (`diagnostics` instead of `compute_diagnostics`), so curve_fit's
+    **kwargs silently absorbed it and diagnostics never actually ran."""
+
+    def test_enable_diagnostics_sets_compute_diagnostics(self, simple_model):
+        curve_fit = configure_curve_fit(enable_diagnostics=True)
+        x = np.linspace(0, 10, 20)
+        y = 2.5 * x + 1.0
+        result = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
+        # compute_diagnostics=True makes curve_fit return a CurveFitResult
+        # (with a .diagnostics attribute) instead of a bare (popt, pcov)
+        # tuple. Under the old `diagnostics=DiagnosticsConfig()` kwarg this
+        # never triggered, so the result stayed a bare tuple.
+        assert hasattr(result, "diagnostics")
+        assert result.diagnostics is not None
