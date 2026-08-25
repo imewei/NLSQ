@@ -588,3 +588,60 @@ class TestCMAESDiagnostics:
         assert len(rate) == 2
         # Rates: (-50) - (-100) = 50, (-10) - (-50) = 40
         np.testing.assert_allclose(rate, [50.0, 40.0], rtol=0.01)
+
+
+class TestCMAESBugFixRegressions:
+    """Regression tests for bugs found in the 2026-08-25 three-brain review."""
+
+    def test_scalar_bounds_broadcast_with_p0(self, simple_model) -> None:
+        """Scalar SciPy-style bounds (e.g. (0, 10)) used to crash with
+        'len() of unsized object' -- verify they broadcast correctly."""
+        from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        x = np.linspace(0, 5, 30)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+
+        optimizer = CMAESOptimizer()
+        result = optimizer.fit(
+            simple_model, x, y, p0=np.array([1.0, 1.0]), bounds=(0, 10)
+        )
+
+        popt = np.asarray(result["popt"])
+        assert popt.shape == (2,)
+        np.testing.assert_allclose(popt, [2.0, 0.5], atol=0.2)
+
+    def test_scalar_bounds_broadcast_without_p0(self, simple_model) -> None:
+        """p0=None + scalar bounds used to always crash, despite the
+        docstring's 'uses center of bounds' promise -- n_params is now
+        inferred from the model function's signature."""
+        from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        x = np.linspace(0, 5, 30)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+
+        optimizer = CMAESOptimizer()
+        result = optimizer.fit(simple_model, x, y, bounds=(0, 10))
+
+        popt = np.asarray(result["popt"])
+        assert popt.shape == (2,)
+        np.testing.assert_allclose(popt, [2.0, 0.5], atol=0.5)
+
+    def test_scalar_bounds_without_p0_or_introspectable_signature_raises(
+        self, simple_model
+    ) -> None:
+        """When p0 is None, bounds are scalar, and f's signature genuinely
+        can't be inspected, raise a clear ValueError instead of the old
+        opaque 'len() of unsized object' TypeError."""
+        from unittest.mock import patch
+
+        from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        x = np.linspace(0, 5, 30)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+
+        optimizer = CMAESOptimizer()
+        with (
+            patch("inspect.signature", side_effect=TypeError("not introspectable")),
+            pytest.raises(ValueError, match="number of parameters"),
+        ):
+            optimizer.fit(simple_model, x, y, bounds=(0, 10))

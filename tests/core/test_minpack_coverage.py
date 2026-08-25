@@ -212,5 +212,127 @@ class TestMinpackCoverage(unittest.TestCase):
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
 
+class TestBugFixRegressions(unittest.TestCase):
+    """Regression tests for bugs found in the 2026-08-25 three-brain review.
+
+    Each test asserts the fixed behavior directly (not just "doesn't
+    crash") so a future regression fails meaningfully.
+    """
+
+    def test_cmaes_config_chunked_strategy_does_not_crash(self):
+        """CMAESConfig is slots=True (no __dict__); rebuilding it via
+        **{**cfg.__dict__, ...} crashed every auto-chunked/streaming CMA-ES
+        run with AttributeError. Verify the chunked strategy now sets
+        data_chunk_size and completes successfully."""
+        from nlsq.global_optimization.cmaes_config import (
+            CMAESConfig,
+            is_evosax_available,
+        )
+
+        if not is_evosax_available():
+            self.skipTest("evosax not installed")
+
+        from nlsq.core.minpack import _fit_global_cmaes
+
+        def model(x, a, b):
+            return a * jnp.exp(-b * x)
+
+        x = np.linspace(0, 5, 200)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+        config = CMAESConfig(data_chunk_size=None)
+
+        result = _fit_global_cmaes(
+            f=model,
+            xdata=x,
+            ydata=y,
+            p0=np.array([1.0, 1.0]),
+            sigma=None,
+            absolute_sigma=False,
+            bounds=(np.array([0.0, 0.0]), np.array([10.0, 5.0])),
+            strategy="chunked",
+            cmaes_config=config,
+        )
+        self.assertTrue(result["success"])
+        self.assertAlmostEqual(float(result["popt"][0]), 2.0, delta=0.5)
+
+    def test_stability_auto_fix_does_not_corrupt_positional_sigma(self):
+        """stability='auto' p0 fixes used to move p0 into kwargs and slice
+        the raw positional args tuple to drop it, silently reindexing any
+        positional sigma/absolute_sigma that followed -- corrupting the
+        weighting or crashing with 'multiple values for p0'."""
+        x = np.linspace(0, 10, 50)
+        rng = np.random.default_rng(1)
+        y = 2.0 * x + 1.0 + rng.normal(0, 0.1, 50)
+        sigma = np.full(50, 0.1)
+
+        popt, _pcov = curve_fit(
+            lambda x, a, b: a * x + b,
+            x,
+            y,
+            [1.5, 0.5],  # positional p0
+            sigma,  # positional sigma
+            stability="auto",
+        )
+        np.testing.assert_allclose(popt, [2.0, 1.0], atol=0.15)
+
+    def test_curve_fit_rejects_positional_arg_overflow(self):
+        """The positional-to-keyword normalization used to silently drop
+        any positional arg past the 9th (jac) via zip()'s shorter-sequence
+        truncation. Overflow must now raise, not silently discard."""
+        with self.assertRaises(TypeError):
+            curve_fit(lambda x, a: a * x, [1, 2], [1, 2], *([None] * 18))
+
+    def test_curve_fit_eleventh_positional_arg_is_applied(self):
+        """timeit is the 11th positional parameter of CurveFit.curve_fit;
+        verify it's actually forwarded now, not silently dropped."""
+        x = np.linspace(0, 10, 30)
+        y = 2.0 * x + 1.0
+
+        result = curve_fit(
+            lambda x, a, b: a * x + b,
+            x,
+            y,
+            [1.5, 0.5],  # p0
+            None,  # sigma
+            False,  # absolute_sigma
+            True,  # check_finite
+            (-np.inf, np.inf),  # bounds
+            None,  # method
+            "auto",  # solver
+            None,  # batch_size
+            None,  # jac
+            None,  # data_mask
+            True,  # timeit  (11th positional)
+        )
+        # timeit=True makes CurveFit.curve_fit return a plain tuple
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 5)  # popt, pcov, res, post_time, ctime
+
+    def test_curve_fit_special_output_modes_do_not_crash(self):
+        """CurveFit.curve_fit intentionally returns a plain tuple (not a
+        CurveFitResult) for timeit/return_eval/full_output -- the
+        module-level curve_fit() wrapper used to unconditionally do
+        result['multistart_diagnostics'] = {...} on whatever came back,
+        crashing with TypeError: 'tuple' object does not support item
+        assignment for all three modes."""
+        x = np.linspace(0, 10, 30)
+        y = 2.0 * x + 1.0
+
+        for kwargs in (
+            {"timeit": True},
+            {"return_eval": True},
+            {"full_output": True},
+        ):
+            with self.subTest(**kwargs):
+                result = curve_fit(
+                    lambda x, a, b: a * x + b, x, y, p0=[1.5, 0.5], **kwargs
+                )
+                self.assertIsInstance(result, tuple)
+
+        # Normal calls must still get multistart_diagnostics
+        result = curve_fit(lambda x, a, b: a * x + b, x, y, p0=[1.5, 0.5])
+        self.assertIn("multistart_diagnostics", result)
+
+
 if __name__ == "__main__":
     unittest.main()

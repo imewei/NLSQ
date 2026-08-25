@@ -22,6 +22,7 @@ from nlsq import (
     fit_large_dataset,
 )
 from nlsq.streaming.large_dataset import (
+    ChunkBufferPool,
     DataChunker,
     DatasetStats,
     LDMemoryConfig,
@@ -554,6 +555,109 @@ class TestErrorHandling(unittest.TestCase):
         # Verify parameters are close to truth
         self.assertAlmostEqual(result.popt[0], 2.0, delta=0.5)
         self.assertAlmostEqual(result.popt[1], 1.0, delta=0.5)
+
+
+class TestBugFixRegressions(unittest.TestCase):
+    """Regression tests for bugs found in the 2026-08-25 three-brain review.
+
+    Each test asserts the fixed behavior directly (not just "doesn't
+    crash") so a future regression fails meaningfully.
+    """
+
+    def test_gc_chunk_interval_zero_rejected(self):
+        """LDMemoryConfig(gc_chunk_interval=0) used to ZeroDivisionError
+        mid-fit (masked as a generic chunk failure); now rejected eagerly."""
+        with self.assertRaises(ValueError):
+            LDMemoryConfig(gc_chunk_interval=0)
+
+    def test_chunked_fit_respects_sigma_weighting(self):
+        """sigma used to be silently dropped when LargeDatasetFitter chunked
+        the fit -- verify a chunked, sigma-weighted fit is dominated by the
+        low-sigma (high-confidence) points, not the unweighted mean. Garbage
+        and good points are interleaved (not split first-half/second-half)
+        so every chunk carries the signal, independent of chunk-processing
+        order or early-stopping heuristics."""
+
+        def model(x, a):
+            return a * jnp.ones_like(x)
+
+        n = 2000
+        x = np.arange(n, dtype=float)
+        y = np.full(n, 5.0)
+        sigma = np.full(n, 1e-6)  # trust every point heavily by default
+        # Every 4th point is a high-magnitude, effectively-ignored outlier.
+        y[::4] = 1000.0
+        sigma[::4] = 1e6
+
+        config = LDMemoryConfig(
+            memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500
+        )
+        fitter = LargeDatasetFitter(config=config)
+        result = fitter.fit(model, x, y, p0=[0.0], sigma=sigma)
+
+        self.assertTrue(result.success)
+        # Weighted fit should recover ~5.0; unweighted mean would be ~253.75
+        self.assertAlmostEqual(result.popt[0], 5.0, delta=1.0)
+
+    def test_single_param_chunked_pcov_is_2d(self):
+        """np.cov() collapses to a 0-d scalar for a single fit parameter;
+        pcov must stay a proper (1, 1) matrix for pcov[0, 0] callers."""
+
+        def model(x, a):
+            return a * jnp.ones_like(x)
+
+        n = 2000
+        x = np.arange(n, dtype=float)
+        rng = np.random.default_rng(0)
+        y = 3.0 + rng.normal(0, 0.01, n)
+
+        config = LDMemoryConfig(
+            memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500
+        )
+        fitter = LargeDatasetFitter(config=config)
+        result = fitter.fit(model, x, y, p0=[1.0])
+
+        self.assertTrue(result.success)
+        pcov = np.asarray(result.pcov)
+        self.assertEqual(pcov.shape, (1, 1))
+
+    def test_buffer_pool_preserves_input_dtype(self):
+        """ChunkBufferPool used to always allocate float64 regardless of
+        the requested dtype, silently upcasting float32 input."""
+        x32 = np.arange(1500, dtype=np.float32)
+        y32 = np.arange(1500, dtype=np.float32)
+
+        pool = ChunkBufferPool(chunk_size=2048, dtype=x32.dtype)
+        for x_chunk, y_chunk, _idx, _valid in DataChunker.create_chunks(
+            x32, y32, 1500, buffer_pool=pool
+        ):
+            self.assertEqual(x_chunk.dtype, np.float32)
+            self.assertEqual(y_chunk.dtype, np.float32)
+
+    def test_multistart_does_not_corrupt_non_amplitude_first_param(self):
+        """The old heuristic assumed the first fit parameter was always an
+        amplitude and silently overwrote it when < 0.5. Use a model whose
+        first parameter is a rate (not an amplitude) with a genuine initial
+        guess < 0.5, and confirm the fit converges to it rather than to a
+        heuristic value derived from ydata's range."""
+
+        def model(x, rate, amp):
+            return amp * jnp.exp(-rate * x)
+
+        np.random.seed(7)
+        x = np.linspace(0, 5, 3000)
+        true_rate, true_amp = 0.3, 4.0
+        y = np.array(model(x, true_rate, true_amp)) + np.random.normal(0, 0.02, len(x))
+
+        fitter = LargeDatasetFitter(memory_limit_gb=0.01, multistart=True, n_starts=3)
+        # rate's genuine initial guess (0.2) is < 0.5, the old heuristic's
+        # trigger condition -- it would have been overwritten with
+        # ptp(ydata) (~4), derailing convergence on the rate parameter.
+        result = fitter.fit(model, x, y, p0=[0.2, 3.0])
+
+        self.assertTrue(result.success)
+        self.assertAlmostEqual(result.popt[0], true_rate, delta=0.1)
+        self.assertAlmostEqual(result.popt[1], true_amp, delta=0.5)
 
 
 if __name__ == "__main__":
