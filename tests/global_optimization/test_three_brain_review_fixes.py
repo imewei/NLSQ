@@ -33,16 +33,22 @@ class TestSobolCorrectness:
         assert not np.allclose(x[:, 1], x[:, 0])
 
     def test_no_duplicate_points_past_16_bit_boundary(self):
-        """The old truncated (16-entry) table degenerated into duplicate points
-        once the Gray-code index exceeded 2**16."""
-        x = np.asarray(sobol_sample(2000, 1))
+        """The old truncated (16-entry) table degenerated into duplicate
+        points once the Gray-code index exceeded 2**16 -- n_samples must
+        actually cross that boundary (bit position 16) or this test would
+        pass against the pre-fix buggy table too."""
+        n_samples = 70_000
+        assert (n_samples - 1).bit_length() > 16
+        x = np.asarray(sobol_sample(n_samples, 1))
         assert len(np.unique(x)) == len(x)
 
     def test_no_duplicate_points_multi_dim_polynomial_branch(self):
         """The 16-entry truncation applied to every dimension, not just
         dimension 1 -- verify the polynomial-recurrence branch (dims >= 2)
-        also stays duplicate-free."""
-        x = np.asarray(sobol_sample(3000, 5))
+        also stays duplicate-free past the same 2**16 boundary."""
+        n_samples = 70_000
+        assert (n_samples - 1).bit_length() > 16
+        x = np.asarray(sobol_sample(n_samples, 5))
         unique_rows = {tuple(row) for row in x}
         assert len(unique_rows) == len(x)
 
@@ -186,6 +192,14 @@ class TestTournamentEdgeCases:
         with pytest.raises(ValueError):
             TournamentSelector(np.empty((0, 2)), GlobalOptimizationConfig(n_starts=0))
 
+    def test_rejects_empty_1d_candidates(self):
+        """A 1-D empty array (ndim==1) used to reshape to (1, 0) *before*
+        the old post-reshape `shape[0] == 0` check ran, so it slipped
+        through as a degenerate single zero-parameter candidate instead of
+        raising."""
+        with pytest.raises(ValueError):
+            TournamentSelector(np.array([]), GlobalOptimizationConfig(n_starts=0))
+
     def test_rejects_non_positive_top_m(self):
         candidates = np.arange(6).reshape(3, 2)
         selector = TournamentSelector(
@@ -196,6 +210,18 @@ class TestTournamentEdgeCases:
             selector.get_top_candidates(-1)
         with pytest.raises(ValueError):
             selector.get_top_candidates(0)
+
+    def test_rejects_non_integer_top_m(self):
+        """A fractional top_m used to slip past the `top_m < 1` check and
+        die downstream with a confusing TypeError from slicing instead of
+        the intended ValueError."""
+        candidates = np.arange(6).reshape(3, 2)
+        selector = TournamentSelector(
+            candidates,
+            GlobalOptimizationConfig(n_starts=3, elimination_rounds=0),
+        )
+        with pytest.raises(ValueError):
+            selector.get_top_candidates(2.5)
 
     def test_batch_count_not_overcounted_on_partial_round(self):
         """The old `min(batch_idx + 1, batches_per_round)` overcounted by

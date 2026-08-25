@@ -154,13 +154,17 @@ class TournamentSelector:
         self.config = config
         self.logger = get_logger("tournament")
 
+        # Checked before the ndim==1 reshape below: a 1-D empty array (e.g.
+        # np.array([])) would otherwise reshape to shape (1, 0) and slip
+        # past a post-reshape `shape[0] == 0` check as a single degenerate
+        # zero-parameter candidate.
+        if self.candidates.size == 0:
+            raise ValueError("candidates must contain at least one row")
+
         # Validate candidates shape
         if self.candidates.ndim == 1:
             # Single candidate
             self.candidates = self.candidates.reshape(1, -1)
-
-        if self.candidates.shape[0] == 0:
-            raise ValueError("candidates must contain at least one row")
 
         self.n_candidates = self.candidates.shape[0]
         self.n_params = self.candidates.shape[1]
@@ -452,7 +456,7 @@ class TournamentSelector:
         list[np.ndarray]
             List of top candidate parameter arrays, sorted by loss (best first).
         """
-        if top_m < 1:
+        if not isinstance(top_m, int) or isinstance(top_m, bool) or top_m < 1:
             raise ValueError(f"top_m must be a positive integer, got {top_m}")
 
         # Get survivors with finite cumulative loss
