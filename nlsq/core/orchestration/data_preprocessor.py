@@ -59,14 +59,19 @@ class DataPreprocessor:
         """Validate and preprocess input data for curve fitting.
 
         Args:
-            f: Model function to fit (used for parameter count detection)
+            f: Model function to fit. Accepted for interface parity with
+                DataPreprocessorProtocol; not used here (parameter-count
+                detection is OptimizationSelector's responsibility)
             xdata: Independent variable data
             ydata: Dependent variable data (observations)
             sigma: Uncertainty/weights for observations
-            absolute_sigma: If True, sigma is absolute; else relative
+            absolute_sigma: Accepted for interface parity; absolute vs.
+                relative sigma scaling is applied by CovarianceComputer,
+                not during preprocessing
             check_finite: If True, raise on NaN/Inf values
             nan_policy: How to handle NaN: 'raise', 'omit', or 'propagate'
-            stability_check: If True, run additional stability checks
+            stability_check: Accepted for interface parity; not currently
+                implemented (reserved for a future stability-guard pass)
 
         Returns:
             PreprocessedData with validated, converted arrays
@@ -150,18 +155,19 @@ class DataPreprocessor:
         Raises:
             ValueError: If check_finite=True and data contains NaN/Inf
         """
-        # Convert ydata
+        # Convert ydata. atleast_1d turns a bare scalar into a valid 1-point
+        # dataset instead of a 0-d array that crashes len() downstream.
         if check_finite:
-            ydata_arr = np.asarray_chkfinite(ydata, float)
+            ydata_arr = np.atleast_1d(np.asarray_chkfinite(ydata, float))
         else:
-            ydata_arr = np.asarray(ydata, float)
+            ydata_arr = np.atleast_1d(np.asarray(ydata, float))
 
         # Convert xdata
         if hasattr(xdata, "__array__") or isinstance(xdata, (list, tuple, np.ndarray)):
             if check_finite:
-                xdata_arr = np.asarray_chkfinite(xdata, float)
+                xdata_arr = np.atleast_1d(np.asarray_chkfinite(xdata, float))
             else:
-                xdata_arr = np.asarray(xdata, float)
+                xdata_arr = np.atleast_1d(np.asarray(xdata, float))
         else:
             msg = (
                 f"xdata must be array-like (list, tuple, ndarray, or JAX array), "
@@ -186,8 +192,12 @@ class DataPreprocessor:
             Tuple of (data_length, x_dimensions)
 
         Raises:
-            ValueError: If X and Y lengths don't match
+            ValueError: If X and Y lengths don't match, or ydata is not 1-D
         """
+        if ydata.ndim != 1:
+            msg = f"`ydata` must be 1-dimensional, got shape {ydata.shape}"
+            raise ValueError(msg)
+
         m = len(ydata)
         xdims = xdata.ndim
         xlen = len(xdata) if xdims == 1 else len(xdata[0])

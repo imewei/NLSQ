@@ -191,6 +191,33 @@ class TestMemoryEstimation:
         # Estimated should be at least Jacobian size
         assert estimated >= jacobian_mb * 0.9  # Allow 10% tolerance
 
+    def test_estimate_memory_accounts_for_multidim_xdata(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """Multi-row xdata (shape (k, n_data)) must not be undercounted as 1 row."""
+        n_data, n_params = 10_000, 5
+
+        mem_1d_x = coordinator.estimate_memory(n_data, n_params, x_multiplier=1)
+        mem_5d_x = coordinator.estimate_memory(n_data, n_params, x_multiplier=5)
+
+        assert mem_5d_x > mem_1d_x
+
+    def test_decide_accounts_for_multidim_xdata(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """decide() must derive x_multiplier from xdata's actual shape."""
+        n_data, n_params = 10_000, 5
+        y = jnp.zeros(n_data)
+
+        result_1d = coordinator.decide(
+            xdata=jnp.zeros(n_data), ydata=y, n_params=n_params
+        )
+        result_multi_x = coordinator.decide(
+            xdata=jnp.zeros((20, n_data)), ydata=y, n_params=n_params
+        )
+
+        assert result_multi_x.estimated_memory_mb > result_1d.estimated_memory_mb
+
 
 # =============================================================================
 # Test Available Memory Detection
@@ -350,6 +377,46 @@ class TestMemoryLimitOverride:
 
         # With very low limit, should use chunked/hybrid
         assert result.strategy in ("chunked", "hybrid")
+
+
+# =============================================================================
+# Test Input Validation
+# =============================================================================
+
+
+class TestInputValidation:
+    """Tests for constructor/decide() input validation."""
+
+    def test_invalid_safety_factor_raises(self) -> None:
+        """safety_factor outside (0, 1] must raise, not silently misbehave."""
+        with pytest.raises(ValueError, match="safety_factor"):
+            StreamingCoordinator(safety_factor=0.0)
+
+        with pytest.raises(ValueError, match="safety_factor"):
+            StreamingCoordinator(safety_factor=1.5)
+
+    def test_negative_n_params_raises(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """A negative n_params must raise instead of producing a nonsense budget."""
+        x, y = small_data
+
+        with pytest.raises(ValueError, match="n_params"):
+            coordinator.decide(xdata=jnp.asarray(x), ydata=jnp.asarray(y), n_params=-1)
+
+    def test_non_positive_memory_limit_raises(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """A non-positive memory_limit_mb must raise instead of a zero/negative budget."""
+        x, y = small_data
+
+        with pytest.raises(ValueError, match="memory_limit_mb"):
+            coordinator.decide(
+                xdata=jnp.asarray(x),
+                ydata=jnp.asarray(y),
+                n_params=2,
+                memory_limit_mb=0.0,
+            )
 
 
 # =============================================================================

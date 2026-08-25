@@ -504,6 +504,32 @@ class TestEdgeCases:
 
         assert result.n_points == 1
 
+    def test_scalar_ydata_does_not_crash(
+        self, preprocessor: DataPreprocessor, linear_model
+    ) -> None:
+        """A bare scalar ydata/xdata must become a 1-point fit, not crash len()."""
+        result = preprocessor.preprocess(
+            f=linear_model,
+            xdata=np.float64(1.0),
+            ydata=np.float64(2.5),
+        )
+
+        assert result.n_points == 1
+
+    def test_rejects_2d_ydata(
+        self, preprocessor: DataPreprocessor, linear_model
+    ) -> None:
+        """ydata must be 1-D; a 2D array should raise, not silently misbehave."""
+        x = np.array([1.0, 2.0, 3.0])
+        y = np.ones((3, 2))
+
+        with pytest.raises(ValueError, match="1-dimensional"):
+            preprocessor.preprocess(
+                f=linear_model,
+                xdata=x,
+                ydata=y,
+            )
+
     def test_large_dataset(self, preprocessor: DataPreprocessor, linear_model) -> None:
         """Test preprocessing large dataset."""
         n = 10000

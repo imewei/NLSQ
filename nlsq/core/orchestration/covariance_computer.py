@@ -135,7 +135,11 @@ class CovarianceComputer:
             n_data: Number of data points
             sigma: Observation uncertainties/weights
             absolute_sigma: If True, sigma is absolute uncertainty
-            full_output: If True, include additional diagnostics
+            full_output: Accepted for interface parity with
+                CovarianceComputerProtocol; this implementation always
+                returns the same CovarianceResult fields regardless of
+                this flag (no additional diagnostics are currently gated
+                behind it)
 
         Returns:
             CovarianceResult with covariance matrix and metadata
@@ -144,6 +148,13 @@ class CovarianceComputer:
             ValueError: If Jacobian is unavailable or invalid
         """
         jac = result.jac
+        if jac is None or np.ndim(jac) != 2:
+            msg = (
+                "result.jac must be a 2-D Jacobian matrix to compute "
+                f"covariance, got {jac!r}"
+            )
+            raise ValueError(msg)
+
         n_params = len(result.x)
         cost = 2 * result.cost  # result.cost is half sum of squares
 
@@ -240,13 +251,32 @@ class CovarianceComputer:
             Tuple of (transform_func, is_2d)
             - transform_func: Function to apply sigma weighting
             - is_2d: True if sigma is full covariance matrix
+
+        Raises:
+            ValueError: If sigma's shape doesn't match n_data, contains
+                non-finite values, or (1D) contains non-positive values
         """
         sigma_np = np.asarray(sigma)
 
         if sigma_np.ndim == 1:
+            if sigma_np.shape != (n_data,):
+                msg = f"Sigma length ({sigma_np.size}) must match n_data ({n_data})"
+                raise ValueError(msg)
+            if not np.all(np.isfinite(sigma_np)):
+                msg = "Sigma contains non-finite values (NaN or Inf)"
+                raise ValueError(msg)
+            if not np.all(sigma_np > 0):
+                msg = "Sigma values must be strictly positive (used as 1/sigma weights)"
+                raise ValueError(msg)
             # 1D sigma: errors, transform is 1/sigma
             return self._sigma_transform1d, False
         if sigma_np.ndim == 2:
+            if sigma_np.shape != (n_data, n_data):
+                msg = f"Sigma shape {sigma_np.shape} must be ({n_data}, {n_data})"
+                raise ValueError(msg)
+            if not np.all(np.isfinite(sigma_np)):
+                msg = "Sigma covariance matrix contains non-finite values (NaN or Inf)"
+                raise ValueError(msg)
             # 2D sigma: covariance matrix, transform is Cholesky
             return self._sigma_transform2d, True
         msg = f"Sigma must be 1D or 2D, got {sigma_np.ndim}D"
@@ -255,6 +285,7 @@ class CovarianceComputer:
     def compute_condition_number(
         self,
         jacobian: jax.Array,
+        n_data: int | None = None,
     ) -> float:
         """Compute condition number of Jacobian.
 
@@ -262,6 +293,12 @@ class CovarianceComputer:
 
         Args:
             jacobian: Jacobian matrix at solution
+            n_data: True (unpadded) data point count. When given, the
+                near-zero singular-value threshold matches `compute()`'s
+                (eps * max(n_data, n_params) * s_max) so a row-padded
+                Jacobian (streaming/chunking) reports the same condition
+                number here as it does from `compute()`. Defaults to
+                eps * max(jacobian.shape) * s_max when omitted.
 
         Returns:
             Condition number (inf if singular)
@@ -273,7 +310,12 @@ class CovarianceComputer:
             return float("inf")
 
         # Filter near-zero singular values
-        threshold = np.finfo(float).eps * max(jacobian.shape) * s_np[0]
+        threshold_dim = (
+            max(n_data, jacobian.shape[1])
+            if n_data is not None
+            else max(jacobian.shape)
+        )
+        threshold = np.finfo(float).eps * threshold_dim * s_np[0]
         s_valid = s_np[s_np > threshold]
 
         if len(s_valid) == 0:
@@ -322,6 +364,12 @@ class CovarianceComputer:
 
         # 1-D sigma: errors, define transform = 1/sigma
         if sigma_np.shape == (ysize,):
+            if not np.all(np.isfinite(sigma_np)):
+                msg = "Sigma contains non-finite values (NaN or Inf)"
+                raise ValueError(msg)
+            if not np.all(sigma_np > 0):
+                msg = "Sigma values must be strictly positive (used as 1/sigma weights)"
+                raise ValueError(msg)
             if len_diff > 0:
                 sigma_np = np.concatenate([sigma_np, np.ones([len_diff])])
             return self._sigma_transform1d(jnp.asarray(sigma_np))
@@ -333,7 +381,17 @@ class CovarianceComputer:
                     sigma_padded = np.identity(m + len_diff)
                     sigma_padded[:m, :m] = sigma_np
                     sigma_np = sigma_padded
-                return self._sigma_transform2d(jnp.asarray(sigma_np))
+                transform = self._sigma_transform2d(jnp.asarray(sigma_np))
+                if not bool(jnp.all(jnp.isfinite(transform))):
+                    # jax.scipy.linalg.cholesky returns NaNs for a
+                    # non-positive-definite input instead of raising.
+                    msg = (
+                        "Failed to compute Cholesky decomposition of `sigma`. "
+                        "The covariance matrix must be symmetric and "
+                        "positive definite."
+                    )
+                    raise ValueError(msg)
+                return transform
             except Exception as e:
                 # Check eigenvalues for better error message
                 try:

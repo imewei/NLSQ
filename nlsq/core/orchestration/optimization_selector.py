@@ -8,7 +8,7 @@ Reference: specs/017-curve-fit-decomposition/spec.md FR-002
 
 from __future__ import annotations
 
-from inspect import signature
+from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Literal, cast
 
 import jax.numpy as jnp
@@ -33,6 +33,10 @@ def prepare_bounds(bounds: tuple | None, n: int) -> tuple[np.ndarray, np.ndarray
 
     Returns:
         Tuple of (lower_bounds, upper_bounds) arrays
+
+    Raises:
+        ValueError: If a non-scalar bound's length doesn't match n, or a
+            bound contains NaN
     """
     if bounds is None:
         lb = np.full(n, -np.inf)
@@ -47,7 +51,53 @@ def prepare_bounds(bounds: tuple | None, n: int) -> tuple[np.ndarray, np.ndarray
         if ub.size == 1 and n > 1:
             ub = np.full(n, ub[0])
 
+        if lb.size != n or ub.size != n:
+            msg = (
+                f"bounds length mismatch: expected {n} parameters, got "
+                f"lower bound of size {lb.size} and upper bound of size {ub.size}"
+            )
+            raise ValueError(msg)
+
+        if np.any(np.isnan(lb)) or np.any(np.isnan(ub)):
+            msg = "bounds must not contain NaN"
+            raise ValueError(msg)
+
     return lb, ub
+
+
+def _count_params_from_signature(f: Callable) -> int:
+    """Count fit parameters from a model function's signature.
+
+    The solver always calls ``f(x, *params)`` positionally, so every
+    parameter after the first (x) must be usable positionally and must
+    have a fixed count.
+
+    Args:
+        f: Model function to analyze
+
+    Returns:
+        Number of parameters (excluding x)
+
+    Raises:
+        ValueError: If the parameter count can't be determined (too few
+            parameters, or a *args/**kwargs/keyword-only parameter that
+            the solver cannot bind positionally)
+    """
+    params = list(signature(f).parameters.values())
+    if len(params) < 2:
+        msg = "Unable to determine number of fit parameters."
+        raise ValueError(msg)
+
+    for p in params[1:]:
+        if p.kind not in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.POSITIONAL_ONLY):
+            msg = (
+                f"Cannot auto-detect parameter count: model function has a "
+                f"{p.kind.description} parameter {p.name!r}, which the solver "
+                "cannot bind positionally. Pass p0 explicitly instead."
+            )
+            raise ValueError(msg)
+
+    return len(params) - 1
 
 
 def _initialize_feasible(lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
@@ -212,12 +262,7 @@ class OptimizationSelector:
         Raises:
             ValueError: If parameter count cannot be determined
         """
-        sig = signature(f)
-        args = sig.parameters
-        if len(args) < 2:
-            msg = "Unable to determine number of fit parameters."
-            raise ValueError(msg)
-        return len(args) - 1
+        return _count_params_from_signature(f)
 
     def auto_initial_guess(
         self,
@@ -271,14 +316,7 @@ class OptimizationSelector:
             return n, p0_arr
 
         # Fall back: determine n from function signature
-        sig = signature(f)
-        args = sig.parameters
-        if len(args) < 2:
-            msg = "Unable to determine number of fit parameters."
-            raise ValueError(msg)
-        n = len(args) - 1
-
-        return n, None
+        return _count_params_from_signature(f), None
 
     def _prepare_bounds_and_initial_guess(
         self,

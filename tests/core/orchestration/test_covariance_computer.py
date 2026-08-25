@@ -190,6 +190,30 @@ class TestCovarianceComputation:
 
         assert result.method == "svd"
 
+    def test_none_jac_raises(self, computer: CovarianceComputer) -> None:
+        """A missing Jacobian must raise, not crash deep inside JAX."""
+        bad_result = MockOptimizeResult(
+            x=jnp.array([1.0, 1.0]),
+            cost=0.1,
+            jac=None,
+            fun=jnp.array([0.1]),
+        )
+
+        with pytest.raises(ValueError, match="2-D Jacobian"):
+            computer.compute(result=bad_result, n_data=5)
+
+    def test_1d_jac_raises(self, computer: CovarianceComputer) -> None:
+        """A 1-D 'Jacobian' must raise, not silently misbehave."""
+        bad_result = MockOptimizeResult(
+            x=jnp.array([1.0]),
+            cost=0.1,
+            jac=jnp.array([1.0, 2.0, 3.0]),
+            fun=jnp.array([0.1]),
+        )
+
+        with pytest.raises(ValueError, match="2-D Jacobian"):
+            computer.compute(result=bad_result, n_data=3)
+
 
 # =============================================================================
 # Test Relative vs Absolute Sigma
@@ -372,6 +396,33 @@ class TestSigmaTransform:
         result = transform(sigma)
         assert_allclose(np.asarray(result), np.asarray(expected))
 
+    def test_create_sigma_transform_rejects_length_mismatch(
+        self, computer: CovarianceComputer, sigma_1d: jax.Array
+    ) -> None:
+        """sigma length must match n_data, not silently be accepted."""
+        with pytest.raises(ValueError, match="must match n_data"):
+            computer.create_sigma_transform(sigma=sigma_1d, n_data=999)
+
+    def test_create_sigma_transform_rejects_non_positive_1d(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A zero/negative 1D sigma must raise instead of producing inf weights."""
+        sigma = jnp.array([0.1, 0.0, 0.2])
+
+        with pytest.raises(ValueError, match="positive"):
+            computer.create_sigma_transform(sigma=sigma, n_data=3)
+
+    def test_setup_sigma_transform_rejects_non_positive_1d(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """Legacy setup_sigma_transform must also reject non-positive sigma."""
+        sigma = np.array([0.1, -1.0, 0.2])
+        ydata = np.zeros(3)
+        mask = np.ones(3, dtype=bool)
+
+        with pytest.raises(ValueError, match="positive"):
+            computer.setup_sigma_transform(sigma, ydata, mask, len_diff=0, m=3)
+
 
 # =============================================================================
 # Test Condition Number Computation
@@ -402,6 +453,15 @@ class TestConditionNumberComputation:
 
         assert cond >= 1.0
         assert np.isfinite(cond)
+
+    def test_condition_number_n_data_matches_compute_threshold(
+        self, computer: CovarianceComputer, simple_result: MockOptimizeResult
+    ) -> None:
+        """With n_data given, the threshold must match compute()'s condition_number."""
+        computed = computer.compute(result=simple_result, n_data=5)
+        cond = computer.compute_condition_number(simple_result.jac, n_data=5)
+
+        assert_allclose(cond, computed.condition_number, rtol=1e-10)
 
 
 # =============================================================================
