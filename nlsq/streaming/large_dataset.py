@@ -2414,7 +2414,22 @@ class LargeDatasetFitter:
                     y_valid = y_chunk[:valid_length]
                     chunk_kwargs = kwargs
                     if full_sigma is not None:
+                        # Reconstructs the chunk boundary DataChunker.create_chunks
+                        # used, which is only valid because this call passes
+                        # shuffle=False (the default, above). If shuffle is ever
+                        # enabled here, x_valid stops matching this slice of
+                        # xdata and sigma would silently misalign with the data
+                        # it's meant to weight -- fail loudly instead.
                         start_idx = chunk_idx * stats.recommended_chunk_size
+                        if not np.array_equal(
+                            x_valid,
+                            np.asarray(xdata)[start_idx : start_idx + valid_length],
+                        ):
+                            raise RuntimeError(
+                                "sigma chunk-slicing assumes "
+                                "DataChunker.create_chunks(shuffle=False); "
+                                "chunk boundary mismatch detected",
+                            )
                         sigma_valid = full_sigma[start_idx : start_idx + valid_length]
                         chunk_kwargs = {**kwargs, "sigma": sigma_valid}
                     popt_chunk, pcov_chunk = self.curve_fit.curve_fit(

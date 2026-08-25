@@ -361,8 +361,27 @@ class CMAESOptimizer:
         # convention prepare_bounds() uses elsewhere in this codebase.
         lower_bounds = jnp.asarray(bounds[0], dtype=float)
         upper_bounds = jnp.asarray(bounds[1], dtype=float)
+        n_params_hint = None
         if p0 is not None:
             n_params_hint = len(jnp.atleast_1d(jnp.asarray(p0)))
+        elif lower_bounds.ndim == 0 or upper_bounds.ndim == 0:
+            # p0 is None and bounds are scalar: this method's docstring
+            # promises p0 defaults to the bounds center, which needs
+            # n_params from somewhere. Infer it from f's signature (same
+            # pattern used in large_dataset.py's LargeDatasetFitter).
+            try:
+                from inspect import signature
+
+                n_params_hint = len(signature(f).parameters) - 1
+            except (TypeError, ValueError):
+                n_params_hint = None
+            if n_params_hint is None or n_params_hint < 1:
+                raise ValueError(
+                    "CMA-ES needs p0 or array-shaped bounds to determine "
+                    "the number of parameters (got scalar bounds, no p0, "
+                    "and f's signature could not be inspected)",
+                )
+        if n_params_hint is not None:
             if lower_bounds.ndim == 0:
                 lower_bounds = jnp.full(n_params_hint, lower_bounds)
             if upper_bounds.ndim == 0:
