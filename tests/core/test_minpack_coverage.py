@@ -425,6 +425,162 @@ class TestBugFixRegressions(unittest.TestCase):
         self.assertIs(ctor_kwargs["config"], real_config)
         self.assertEqual(ctor_kwargs["memory_limit_gb"], 33.0)
 
+    def test_fit_global_cmaes_reuses_real_memory_config_chunk_size(self):
+        """_fit_global_cmaes derives data_chunk_size from n_points alone
+        whenever cmaes_config.data_chunk_size is None -- verify a supplied
+        memory_config's budget-derived chunk size (chunk_size for streaming,
+        streaming_batch_size for chunked) actually overrides that fallback
+        instead of being ignored, for both strategies."""
+        from unittest.mock import MagicMock, patch
+
+        from nlsq.global_optimization.cmaes_config import CMAESConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
+
+        x = np.linspace(0, 5, 50)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+        bounds = (np.array([0.0, 0.0]), np.array([10.0, 5.0]))
+
+        cases = [
+            ("streaming", HybridStreamingConfig(chunk_size=12_345), 12_345),
+            ("chunked", LDMemoryConfig(streaming_batch_size=54_321), 54_321),
+        ]
+        for strategy, memory_config, expected_chunk_size in cases:
+            with self.subTest(strategy=strategy):
+                from nlsq.core.minpack import _fit_global_cmaes
+
+                with patch(
+                    "nlsq.global_optimization.cmaes_optimizer.CMAESOptimizer"
+                ) as mock_optimizer_cls:
+                    mock_optimizer_cls.return_value.fit.return_value = {
+                        "popt": np.array([2.0, 0.5]),
+                        "pcov": np.eye(2),
+                    }
+                    _fit_global_cmaes(
+                        f=lambda x, a, b: a * jnp.exp(-b * x),
+                        xdata=x,
+                        ydata=y,
+                        p0=np.array([1.0, 1.0]),
+                        sigma=None,
+                        absolute_sigma=False,
+                        bounds=bounds,
+                        strategy=strategy,
+                        cmaes_config=CMAESConfig(data_chunk_size=None),
+                        memory_config=memory_config,
+                    )
+
+                mock_optimizer_cls.assert_called_once()
+                _args, ctor_kwargs = mock_optimizer_cls.call_args
+                used_config = ctor_kwargs.get("config") or (_args[0] if _args else None)
+                self.assertIsNotNone(used_config)
+                self.assertEqual(used_config.data_chunk_size, expected_chunk_size)
+
+    def test_fit_global_multistart_streaming_reuses_real_memory_config(self):
+        """_fit_global_multistart's streaming branch (strategy not
+        'standard' or 'chunked') builds a fresh HybridStreamingConfig()
+        default when no memory_config is given. Verify a supplied
+        memory_config's fields (e.g. chunk_size) survive the
+        dataclasses.replace() call into the optimizer instead of being
+        silently dropped for a default config."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_global_multistart
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        x = np.linspace(0, 10, 500)
+        y = 2.0 * x + 1.0
+        real_config = HybridStreamingConfig(chunk_size=98_765, normalize=False)
+
+        with patch(
+            "nlsq.streaming.adaptive_hybrid.AdaptiveHybridStreamingOptimizer"
+        ) as mock_optimizer_cls:
+            mock_optimizer_cls.return_value.fit.return_value = {
+                "popt": np.array([2.0, 1.0]),
+                "pcov": np.eye(2),
+                "success": True,
+            }
+            _fit_global_multistart(
+                f=lambda x, a, b: a * x + b,
+                xdata=x,
+                ydata=y,
+                p0=[1.5, 0.5],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(np.array([0.0, 0.0]), np.array([10.0, 5.0])),
+                strategy="streaming",
+                n_starts=5,
+                memory_config=real_config,
+            )
+
+        mock_optimizer_cls.assert_called_once()
+        _args, ctor_kwargs = mock_optimizer_cls.call_args
+        used_config = ctor_kwargs.get("config") or (_args[0] if _args else None)
+        self.assertIsNotNone(used_config)
+        self.assertEqual(used_config.chunk_size, 98_765)
+        # Multistart-specific overrides must still apply on top of the reused config.
+        self.assertTrue(used_config.enable_multistart)
+        self.assertEqual(used_config.n_starts, 5)
+
+    def test_fit_with_auto_global_reuses_precomputed_budget(self):
+        """_fit_with_auto_global computes a MemoryBudget for logging and
+        used to let selector.select() silently redetect memory a second
+        time. Verify MemoryBudget.compute() is called exactly once (not
+        twice) for this workflow, proving the budget=budget wiring is
+        actually exercised end-to-end, not just at the unit level."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_with_auto_global
+        from nlsq.core.workflow import MemoryBudget
+
+        x = np.linspace(0, 10, 30)
+        y = 2.0 * x + 1.0
+
+        with (
+            patch.object(
+                MemoryBudget, "compute", wraps=MemoryBudget.compute
+            ) as mock_compute,
+            patch("nlsq.core.minpack._fit_global_multistart") as mock_multistart,
+            patch("nlsq.core.minpack._fit_global_cmaes") as mock_cmaes,
+        ):
+            mock_multistart.return_value = {"success": True}
+            mock_cmaes.return_value = {"success": True}
+            _fit_with_auto_global(
+                f=lambda x, a, b: a * x + b,
+                xdata=x,
+                ydata=y,
+                p0=[1.5, 0.5],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=([0.0, 0.0], [10.0, 5.0]),
+                n_points=30,
+                n_params=2,
+                goal=None,
+            )
+
+        mock_compute.assert_called_once()
+
+    def test_log_memory_budget_diagnostics_reuses_precomputed_budget(self):
+        """_log_memory_budget_diagnostics computes a MemoryBudget then used
+        to let selector.select() redetect memory again internally. Verify
+        MemoryBudget.compute() is called exactly once."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _log_memory_budget_diagnostics
+        from nlsq.core.workflow import MemoryBudget
+
+        with patch.object(
+            MemoryBudget, "compute", wraps=MemoryBudget.compute
+        ) as mock_compute:
+            _log_memory_budget_diagnostics(
+                xdata=np.linspace(0, 10, 30),
+                ydata=np.linspace(0, 20, 30),
+                p0=np.array([1.5, 0.5]),
+            )
+
+        mock_compute.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

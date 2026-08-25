@@ -178,7 +178,14 @@ class MemoryBudget:
 
     @property
     def fits_in_memory(self) -> bool:
-        """Check if estimated peak memory fits within safe threshold.
+        """Check if estimated peak memory fits within the raw safe threshold.
+
+        This is a general "does it fit at all" check against threshold_gb
+        with no margin -- it is NOT the chunked-vs-standard boundary
+        MemoryBudgetSelector.select() actually decides on (that's
+        `chunked_threshold_gb`, which applies a 10% margin). Do not use
+        this property to predict or report which strategy select() will
+        choose; use `chunked_threshold_gb` for that comparison instead.
 
         Returns
         -------

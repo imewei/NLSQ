@@ -1388,7 +1388,7 @@ def _fit_global_cmaes(
     bounds: tuple[np.ndarray, np.ndarray],
     strategy: str,
     cmaes_config: Any | None,
-    memory_config: Any | None = None,
+    memory_config: HybridStreamingConfig | LDMemoryConfig | None = None,
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run CMA-ES global optimization with memory-aware strategy.
@@ -1479,7 +1479,7 @@ def _fit_global_multistart(
     bounds: tuple[np.ndarray, np.ndarray],
     strategy: str,
     n_starts: int,
-    memory_config: Any | None = None,
+    memory_config: LDMemoryConfig | HybridStreamingConfig | None = None,
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run multi-start optimization with memory-aware strategy.
