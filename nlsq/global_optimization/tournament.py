@@ -159,6 +159,9 @@ class TournamentSelector:
             # Single candidate
             self.candidates = self.candidates.reshape(1, -1)
 
+        if self.candidates.shape[0] == 0:
+            raise ValueError("candidates must contain at least one row")
+
         self.n_candidates = self.candidates.shape[0]
         self.n_params = self.candidates.shape[1]
 
@@ -275,6 +278,7 @@ class TournamentSelector:
         # Reset losses for this round
         round_losses = np.zeros(self.n_candidates)
         round_loss_counts = np.zeros(self.n_candidates, dtype=int)
+        batches_this_round = 0
 
         # Evaluate on batches
         for batch_idx in range(self.config.batches_per_round):
@@ -294,6 +298,7 @@ class TournamentSelector:
                     round_loss_counts[i] += 1
 
             self.total_batches_evaluated += 1
+            batches_this_round += 1
 
         # Compute average loss for this round (avoid division by zero)
         # Use safe division with masked array to prevent warning
@@ -322,7 +327,7 @@ class TournamentSelector:
                 "n_survivors_before": n_survivors_before,
                 "n_survivors_after": self.n_survivors,
                 "n_eliminated": n_survivors_before - self.n_survivors,
-                "batches_evaluated": min(batch_idx + 1, self.config.batches_per_round),
+                "batches_evaluated": batches_this_round,
                 "mean_loss": float(np.mean(avg_round_losses[self.survival_mask]))
                 if self.n_survivors > 0
                 else np.inf,
@@ -447,6 +452,9 @@ class TournamentSelector:
         list[np.ndarray]
             List of top candidate parameter arrays, sorted by loss (best first).
         """
+        if top_m < 1:
+            raise ValueError(f"top_m must be a positive integer, got {top_m}")
+
         # Get survivors with finite cumulative loss
         valid_indices = np.where(
             self.survival_mask & np.isfinite(self.cumulative_losses),

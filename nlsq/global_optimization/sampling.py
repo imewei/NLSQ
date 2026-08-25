@@ -60,53 +60,67 @@ __all__ = [
 # First 20 prime numbers for Halton sequence bases
 _PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71]
 
-# Sobol direction numbers for first 21 dimensions
-# These are standard direction numbers from Joe and Kuo (2008)
-# Each row contains m_j values for that dimension, which generate direction numbers v_j = m_j / 2^j
-_SOBOL_DIRECTION_NUMBERS = [
-    # Dimension 1 (index 0): binary van der Corput
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    # Dimension 2 (index 1): a=0, s=1, m_1=1
-    [1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3],
-    # Dimension 3 (index 2): a=1, s=2, m_1=1, m_2=1
-    [1, 1, 3, 3, 5, 5, 7, 7, 9, 9, 11, 11, 13, 13, 15, 15],
-    # Dimension 4 (index 3): a=1, s=3, m_1=1, m_2=3, m_3=1
-    [1, 3, 5, 7, 9, 11, 13, 15, 1, 3, 5, 7, 9, 11, 13, 15],
-    # Dimension 5 (index 4): a=2, s=3, m_1=1, m_2=1, m_3=1
-    [1, 1, 1, 7, 7, 7, 15, 15, 15, 17, 17, 17, 31, 31, 31, 33],
-    # Dimension 6 (index 5)
-    [1, 3, 3, 5, 5, 13, 13, 21, 21, 29, 29, 37, 37, 45, 45, 53],
-    # Dimension 7 (index 6)
-    [1, 1, 5, 5, 9, 9, 29, 29, 33, 33, 53, 53, 57, 57, 61, 61],
-    # Dimension 8 (index 7)
-    [1, 3, 7, 5, 15, 11, 25, 21, 47, 43, 57, 53, 95, 91, 105, 101],
-    # Dimension 9 (index 8)
-    [1, 1, 3, 3, 13, 13, 23, 23, 45, 45, 55, 55, 77, 77, 87, 87],
-    # Dimension 10 (index 9)
-    [1, 3, 1, 7, 5, 15, 9, 31, 13, 47, 17, 63, 21, 79, 25, 95],
-    # Dimension 11 (index 10)
-    [1, 1, 7, 3, 13, 9, 31, 27, 45, 41, 63, 59, 77, 73, 95, 91],
-    # Dimension 12 (index 11)
-    [1, 3, 5, 5, 9, 9, 21, 21, 33, 33, 45, 45, 57, 57, 69, 69],
-    # Dimension 13 (index 12)
-    [1, 1, 1, 1, 17, 17, 17, 17, 49, 49, 49, 49, 81, 81, 81, 81],
-    # Dimension 14 (index 13)
-    [1, 3, 3, 7, 11, 15, 19, 23, 51, 55, 59, 63, 83, 87, 91, 95],
-    # Dimension 15 (index 14)
-    [1, 1, 5, 3, 9, 7, 29, 27, 33, 31, 53, 51, 57, 55, 93, 91],
-    # Dimension 16 (index 15)
-    [1, 3, 7, 1, 15, 9, 27, 17, 47, 37, 63, 49, 79, 65, 95, 81],
-    # Dimension 17 (index 16)
-    [1, 1, 3, 7, 5, 11, 13, 31, 17, 23, 25, 63, 33, 39, 41, 95],
-    # Dimension 18 (index 17)
-    [1, 3, 1, 5, 9, 15, 17, 21, 49, 55, 57, 61, 81, 87, 89, 93],
-    # Dimension 19 (index 18)
-    [1, 1, 7, 7, 13, 13, 27, 27, 49, 49, 63, 63, 77, 77, 91, 91],
-    # Dimension 20 (index 19)
-    [1, 3, 5, 3, 15, 13, 31, 29, 33, 31, 63, 61, 79, 77, 95, 93],
-    # Dimension 21 (index 20)
-    [1, 1, 1, 5, 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45],
+# Sobol primitive-polynomial parameters for dimensions 2-21, from the real
+# Joe & Kuo (2008) direction-number table
+# (https://web.maths.unsw.edu.au/~fkuo/sobol/new-joe-kuo-6.21201).
+# Dimension 1 needs no entry: it is the plain base-2 van der Corput sequence.
+# Each tuple is (degree s, polynomial coefficient a, initial values m_1..m_s).
+_SOBOL_POLY_PARAMS: list[tuple[int, int, list[int]]] = [
+    (1, 0, [1]),
+    (2, 1, [1, 3]),
+    (3, 1, [1, 3, 1]),
+    (3, 2, [1, 1, 1]),
+    (4, 1, [1, 1, 3, 3]),
+    (4, 4, [1, 3, 5, 13]),
+    (5, 2, [1, 1, 5, 5, 17]),
+    (5, 4, [1, 1, 5, 5, 5]),
+    (5, 7, [1, 1, 7, 11, 19]),
+    (5, 11, [1, 1, 5, 1, 1]),
+    (5, 13, [1, 1, 1, 3, 11]),
+    (5, 14, [1, 3, 5, 5, 31]),
+    (6, 1, [1, 3, 3, 9, 7, 49]),
+    (6, 13, [1, 1, 1, 15, 21, 21]),
+    (6, 16, [1, 3, 1, 13, 27, 49]),
+    (6, 19, [1, 1, 1, 15, 7, 5]),
+    (6, 22, [1, 3, 1, 15, 13, 25]),
+    (6, 25, [1, 1, 5, 5, 19, 61]),
+    (7, 1, [1, 3, 7, 11, 23, 15, 103]),
+    (7, 4, [1, 3, 7, 13, 13, 15, 69]),
 ]
+
+
+def _sobol_direction_numbers(n_dims: int, max_bits: int) -> list[list[int]]:
+    """Compute scaled Sobol direction numbers via the Joe & Kuo recurrence.
+
+    For dimension d with primitive polynomial degree ``s``, coefficient
+    ``a`` and initial values ``m_1..m_s``:
+
+        V[i] = m[i] << (max_bits - i)                     for i in 1..s
+        V[i] = V[i-s] ^ (V[i-s] >> s) ^ sum_k bit_k * V[i-k]   for i in s+1..max_bits
+
+    where ``bit_k = (a >> (s-1-k)) & 1`` for k in 1..s-1. Dimension 1 uses
+    the trivial degree-0 case (plain van der Corput): V[i] = 1 << (max_bits - i).
+    """
+    v: list[list[int]] = []
+    mask = (1 << max_bits) - 1
+    for dim in range(n_dims):
+        v_dim = [0] * max_bits
+        if dim == 0:
+            for i in range(1, max_bits + 1):
+                v_dim[i - 1] = (1 << (max_bits - i)) & mask
+        else:
+            s, a, m = _SOBOL_POLY_PARAMS[dim - 1]
+            for i in range(1, s + 1):
+                v_dim[i - 1] = (m[i - 1] << (max_bits - i)) & mask
+            for i in range(s + 1, max_bits + 1):
+                val = v_dim[i - 1 - s] ^ (v_dim[i - 1 - s] >> s)
+                for k in range(1, s):
+                    bit = (a >> (s - 1 - k)) & 1
+                    if bit:
+                        val ^= v_dim[i - 1 - k]
+                v_dim[i - 1] = val & mask
+        v.append(v_dim)
+    return v
 
 
 def latin_hypercube_sample(
@@ -234,24 +248,14 @@ def sobol_sample(
     # Use 32-bit precision for integer operations
     max_bits = 32
 
-    # Initialize direction numbers: v[dim][j] = m[j] * 2^(max_bits - j - 1)
-    v = []
-    for dim in range(n_dims):
-        v_dim = [0] * max_bits
-        if dim < len(_SOBOL_DIRECTION_NUMBERS):
-            m = _SOBOL_DIRECTION_NUMBERS[dim]
-            for j in range(min(len(m), max_bits)):
-                # v_j = m_j * 2^(max_bits - j - 1)
-                v_dim[j] = m[j] << (max_bits - j - 1)
-        else:
-            # Fallback for dimensions beyond table
-            for j in range(max_bits):
-                v_dim[j] = 1 << (max_bits - j - 1)
-        v.append(v_dim)
+    v = _sobol_direction_numbers(n_dims, max_bits)
 
     samples = []
 
-    # Gray code counter approach
+    # Gray code counter approach (Antonov-Saleev ordering): point i is
+    # obtained from point i-1 by XORing direction number v[c], where c is
+    # the position of the rightmost zero bit of (i-1) -- i.e. of the index
+    # of the point *just emitted*, not of the point about to be produced.
     x = [0] * n_dims  # Current state
 
     for i in range(skip + n_samples):
@@ -260,10 +264,9 @@ def sobol_sample(
             sample = [x[dim] / (2.0**max_bits) for dim in range(n_dims)]
             samples.append(sample)
 
-        # Find position of rightmost zero bit in (i+1)
-        # This is the c value in Gray code
+        # Find position of rightmost zero bit in i (the just-emitted index)
         c = 0
-        temp = i + 1
+        temp = i
         while temp & 1:
             c += 1
             temp >>= 1

@@ -37,6 +37,7 @@ Custom configuration:
 ... )
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -185,6 +186,8 @@ class GlobalOptimizationConfig:
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Validate n_starts
+        if not isinstance(self.n_starts, int) or isinstance(self.n_starts, bool):
+            raise TypeError(f"n_starts must be an int, got {type(self.n_starts)}")
         if self.n_starts < 0:
             raise ValueError(f"n_starts must be non-negative, got {self.n_starts}")
 
@@ -198,22 +201,40 @@ class GlobalOptimizationConfig:
         object.__setattr__(self, "sampler", self.sampler.lower())
 
         # Validate scale_factor
-        if self.scale_factor <= 0:
-            raise ValueError(f"scale_factor must be positive, got {self.scale_factor}")
+        if not math.isfinite(self.scale_factor) or self.scale_factor <= 0:
+            raise ValueError(
+                f"scale_factor must be finite and positive, got {self.scale_factor}",
+            )
 
         # Validate elimination_fraction
-        if not 0 < self.elimination_fraction < 1:
+        if not math.isfinite(self.elimination_fraction) or not (
+            0 < self.elimination_fraction < 1
+        ):
             raise ValueError(
                 f"elimination_fraction must be in (0, 1), got {self.elimination_fraction}",
             )
 
         # Validate elimination_rounds
+        if not isinstance(self.elimination_rounds, int) or isinstance(
+            self.elimination_rounds,
+            bool,
+        ):
+            raise TypeError(
+                f"elimination_rounds must be an int, got {type(self.elimination_rounds)}",
+            )
         if self.elimination_rounds < 0:
             raise ValueError(
                 f"elimination_rounds must be non-negative, got {self.elimination_rounds}",
             )
 
         # Validate batches_per_round
+        if not isinstance(self.batches_per_round, int) or isinstance(
+            self.batches_per_round,
+            bool,
+        ):
+            raise TypeError(
+                f"batches_per_round must be an int, got {type(self.batches_per_round)}",
+            )
         if self.batches_per_round <= 0:
             raise ValueError(
                 f"batches_per_round must be positive, got {self.batches_per_round}",
