@@ -333,6 +333,87 @@ class TestBugFixRegressions(unittest.TestCase):
         result = curve_fit(lambda x, a, b: a * x + b, x, y, p0=[1.5, 0.5])
         self.assertIn("multistart_diagnostics", result)
 
+    def test_data_mask_respected_when_flength_is_none(self):
+        """_setup_data_mask_and_padding's flength-is-None branch used to
+        unconditionally overwrite a caller-supplied data_mask with an
+        all-True mask, silently including points the caller asked to
+        exclude. With CurveFit(flength=None) (the default), a mask that
+        excludes the outlier point must still be honored."""
+        fitter = CurveFit(flength=None)
+        m = 3
+        mask = np.array([True, True, False])
+
+        data_mask, none_mask, _len_diff, _should_pad = (
+            fitter._setup_data_mask_and_padding(mask, m)
+        )
+
+        np.testing.assert_array_equal(data_mask, mask)
+        self.assertFalse(none_mask)
+
+    def test_data_mask_excludes_outlier_from_fit(self):
+        """End-to-end: fitting a*x with a data_mask that excludes an
+        outlier must produce the masked-in slope, not the slope pulled
+        toward the outlier.
+
+        The outlier point (300, 900) implies slope 3, well off the
+        masked-in points' slope of 1 (verified: unmasked WLS solution is
+        exactly a=1.0 for (1,1),(2,2); including (300,900) pulls it to
+        ~3.0). A collinear outlier would make this test pass even with the
+        data_mask fix reverted, since masking it out or not changes
+        nothing about the optimal slope."""
+
+        def model(x, a):
+            return a * x
+
+        x = np.array([1.0, 2.0, 300.0])
+        y = np.array([1.0, 2.0, 900.0])
+        mask = np.array([True, True, False])
+
+        fitter = CurveFit(flength=None)
+        popt, _pcov = fitter.curve_fit(model, x, y, data_mask=mask, p0=[0.5])
+
+        self.assertAlmostEqual(float(popt[0]), 1.0, places=2)
+
+    def test_reused_fitter_picks_up_new_jac_closure(self):
+        """Regression: LeastSquares.update_function()'s analytical-Jacobian
+        reuse check compared only jac.__code__.co_code, unlike the fun
+        check right above it (which already compares co_consts and closure
+        cells). Two `jac` closures built by the same factory share
+        bytecode but capture different scale constants; reusing a CurveFit
+        instance across both fits used to silently keep self.jac pointing
+        at the *first* closure whenever a same-bytecode replacement came
+        in, instead of picking up the newly supplied one."""
+
+        def make_jac(scale):
+            def jac(x, a):
+                return scale * jnp.ones((1, x.shape[0]))
+
+            return jac
+
+        def model(x, a):
+            return a * x
+
+        x = np.linspace(1.0, 5.0, 20)
+        y = 3.0 * x
+
+        fitter = CurveFit(flength=None)
+
+        jac_a = make_jac(1.0)
+        fitter.curve_fit(model, x, y, jac=jac_a, p0=[1.0])
+        self.assertIs(fitter.ls.jac, jac_a)
+
+        # A different closure (same bytecode, different captured scale)
+        # must replace self.jac, not be silently treated as "unchanged".
+        jac_b = make_jac(9.0)
+        fitter.curve_fit(model, x, y, jac=jac_b, p0=[1.0])
+        self.assertIs(
+            fitter.ls.jac,
+            jac_b,
+            "a jac closure with different captured constants must "
+            "replace the stale wrapper, not be treated as identical "
+            "just because co_code matches",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

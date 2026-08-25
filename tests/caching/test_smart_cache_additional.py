@@ -147,3 +147,56 @@ def test_invalidate_warns_on_oserror(
     with caplog.at_level(logging.DEBUG, logger="nlsq.caching.smart_cache"):
         cache.invalidate()
     assert "Could not clear disk cache" in caplog.text
+
+
+@pytest.mark.cache
+def test_cache_key_distinguishes_same_named_closures() -> None:
+    """Regression: cache_key() used to identify a callable argument only
+    by __module__ and __name__, so two distinct closures sharing that name
+    (e.g. two `jac` closures built by different factory calls) collided on
+    the same cache key.
+
+    Both closures are kept alive (assigned to locals) for the duration of
+    the test: that mirrors real usage -- a cached callable is, by
+    definition, held onto and called again later -- and avoids CPython
+    reusing a GC'd closure's id() for the next one, which would otherwise
+    make an id()-based identity check spuriously collide.
+    """
+    cache = SmartCache(disk_cache_enabled=False)
+
+    def make_jac(scale):
+        def jac(x):
+            return scale * x
+
+        return jac
+
+    jac_scale_1 = make_jac(1.0)
+    jac_scale_9 = make_jac(9.0)
+
+    key_scale_1 = cache.cache_key(jac_scale_1)
+    key_scale_9 = cache.cache_key(jac_scale_9)
+
+    assert key_scale_1 != key_scale_9
+
+
+@pytest.mark.cache
+def test_cache_key_distinguishes_same_named_closures_in_kwargs() -> None:
+    """Same regression as test_cache_key_distinguishes_same_named_closures,
+    but for a callable passed as a keyword argument -- cache_key() applies
+    _callable_identity() at two separate call sites (the positional-args
+    loop and the kwargs loop), and only the positional one was covered."""
+    cache = SmartCache(disk_cache_enabled=False)
+
+    def make_jac(scale):
+        def jac(x):
+            return scale * x
+
+        return jac
+
+    jac_scale_1 = make_jac(1.0)
+    jac_scale_9 = make_jac(9.0)
+
+    key_scale_1 = cache.cache_key(jac=jac_scale_1)
+    key_scale_9 = cache.cache_key(jac=jac_scale_9)
+
+    assert key_scale_1 != key_scale_9

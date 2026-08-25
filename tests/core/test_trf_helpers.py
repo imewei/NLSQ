@@ -255,6 +255,32 @@ class TestSolveTrustRegionSubproblem:
         assert result["V"] is not None
         assert result["uf"] is not None
 
+    def test_subproblem_lsmr_solver_uses_iterative_path(self):
+        """Regression: the public curve_fit(solver=...) API maps
+        'auto'/'cg'/'lsqr'/'minibatch' to the internal name 'lsmr', but
+        _solve_trust_region_subproblem had no 'lsmr' branch and silently
+        fell through to the dense SVD path -- defeating the purpose of
+        selecting an iterative solver for memory reasons. 'lsmr' must now
+        route through the same iterative (CG) path as 'cg'."""
+        trf = TrustRegionReflective()
+
+        J = jnp.array([[1.0, 0.0], [0.0, 1.0]])
+        f = jnp.array([1.0, 2.0])
+        g = J.T @ f
+        scale = np.ones(2)
+        Delta = 1.0
+        alpha = 0.01
+
+        result = trf._solve_trust_region_subproblem(
+            J, f, g, scale, Delta, alpha, solver="lsmr"
+        )
+
+        # Iterative path: step_h is computed directly, no SVD components.
+        assert result["step_h"] is not None
+        assert result["s"] is None
+        assert result["V"] is None
+        assert result["uf"] is None
+
     def test_subproblem_scaling(self):
         """Test that scaling is applied correctly."""
         trf = TrustRegionReflective()
@@ -523,6 +549,53 @@ class TestHelperMethodsIntegration:
         assert state["Delta"] > 0
         assert len(state["g"]) == 2
         assert state["cost"] > 0
+
+
+class TestSolverLsmrEndToEnd:
+    """Regression: solver='lsmr' was tested at only the unbounded exact/CG
+    dispatch site (_solve_trust_region_subproblem, above). The public
+    curve_fit(solver=...) API maps 'auto'/'cg'/'lsqr'/'minibatch' onto the
+    same internal 'lsmr' name at 4 separate dispatch sites in trf.py --
+    _solve_trust_region_subproblem and _evaluate_step_acceptance for
+    unbounded fits, _solve_bounds_subproblem and _evaluate_bounds_inner_loop
+    for bounded fits -- and all 4 needed the identical fix. These two tests
+    exercise the remaining 3 sites end-to-end via curve_fit(). 'lsmr' is
+    only the *internal* dispatch name; solver='lsqr' is the public value
+    that maps onto it (see minpack.py's valid public solver set)."""
+
+    def test_lsmr_solver_unbounded_fit_converges(self):
+        """Unbounded fit exercises _evaluate_step_acceptance's lsmr branch
+        (trf_no_bounds's inner loop) in addition to the already-unit-tested
+        _solve_trust_region_subproblem."""
+        from nlsq.core.minpack import curve_fit
+
+        x = np.linspace(0, 10, 30)
+        y = 2.0 * x + 1.0
+
+        popt, _pcov = curve_fit(
+            lambda x, a, b: a * x + b, x, y, p0=[1.5, 0.5], solver="lsqr"
+        )
+        np.testing.assert_allclose(popt, [2.0, 1.0], atol=1e-3)
+
+    def test_lsmr_solver_bounded_fit_converges(self):
+        """A fit with finite bounds routes through trf_bounds(), exercising
+        _solve_bounds_subproblem's and _evaluate_bounds_inner_loop's lsmr
+        branches -- neither is reachable from an unbounded fit or from the
+        low-level _solve_trust_region_subproblem unit test."""
+        from nlsq.core.minpack import curve_fit
+
+        x = np.linspace(0, 10, 30)
+        y = 2.0 * x + 1.0
+
+        popt, _pcov = curve_fit(
+            lambda x, a, b: a * x + b,
+            x,
+            y,
+            p0=[1.5, 0.5],
+            bounds=([0.0, 0.0], [10.0, 10.0]),
+            solver="lsqr",
+        )
+        np.testing.assert_allclose(popt, [2.0, 1.0], atol=1e-3)
 
 
 if __name__ == "__main__":

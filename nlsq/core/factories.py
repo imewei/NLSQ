@@ -211,6 +211,11 @@ class ConfiguredOptimizer:
         """Perform standard curve fitting."""
         from nlsq.core.minpack import curve_fit
 
+        # curve_fit()'s own default bounds is (-inf, inf), never None; passing
+        # bounds=None through unconditionally crashes in prepare_bounds().
+        if bounds is None:
+            bounds = (np.asarray(-np.inf), np.asarray(np.inf))
+
         return curve_fit(
             f,
             xdata,
@@ -246,12 +251,20 @@ class ConfiguredOptimizer:
             n_params = max(len(sig.parameters) - 1, 1)
             p0 = np.ones(n_params)
 
+        # sigma isn't a named parameter of MultiStartOrchestrator.fit(), but
+        # it forwards **kwargs straight through to each per-start curve_fit()
+        # call, so it works correctly if passed via kwargs -- must not be
+        # silently dropped just because fit()'s signature doesn't name it.
+        if sigma is not None:
+            kwargs["sigma"] = sigma
+
         # MultiStartOrchestrator.fit() returns dict, not tuple
         return optimizer.fit(
             f,
             xdata,
             ydata,
             p0=p0,
+            bounds=bounds,
             **kwargs,
         )
 
@@ -305,11 +318,16 @@ def configure_curve_fit(
         # Merge defaults with call kwargs
         merged = {**default_kwargs, **kwargs}
 
-        # Apply configuration
-        if enable_diagnostics and "diagnostics" not in merged:
-            from nlsq.diagnostics.types import DiagnosticsConfig
+        # Apply configuration. curve_fit()'s diagnostics flag is named
+        # `compute_diagnostics`; a bare `diagnostics` kwarg is absorbed by
+        # curve_fit's **kwargs and silently does nothing.
+        if enable_diagnostics and "compute_diagnostics" not in merged:
+            merged["compute_diagnostics"] = True
 
-            merged["diagnostics"] = DiagnosticsConfig()
+        # curve_fit()'s own default bounds is (-inf, inf), never None; passing
+        # bounds=None through unconditionally crashes in prepare_bounds().
+        if bounds is None:
+            bounds = (np.asarray(-np.inf), np.asarray(np.inf))
 
         return curve_fit(
             f,
