@@ -711,3 +711,62 @@ class TestMemoryBudgetSelectorDiagnostics:
         assert strategy3 == "chunked"
         assert budget3.data_fits is True
         assert budget3.fits_in_memory is False
+
+
+class TestMemoryBudgetSelectorRegressions:
+    """Regression tests for the 2026-08-25 three-brain review of
+    MemoryBudgetSelector / STANDARD-CHUNKED-STREAMING routing."""
+
+    def test_chunked_threshold_gb_matches_selectors_margin(self):
+        """select() gates chunked-vs-standard on threshold_gb * 0.9 (FR-010),
+        but the docstring/decision-tree comment and several log messages
+        used to reference the un-margined threshold_gb, so a "peak < X"
+        log line could disagree with the strategy actually chosen.
+        chunked_threshold_gb must equal the margin select() applies, and
+        must be the actual decision boundary (not just a reporting number)."""
+        from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+
+        # peak_gb=9.5 sits below the raw threshold (10.0) but above the
+        # margined one (9.0) -- this is exactly the window where the old
+        # unmargined comparison and the real decision disagreed.
+        budget = MemoryBudget(
+            available_gb=10.0,
+            threshold_gb=10.0,
+            data_gb=1.0,
+            jacobian_gb=1.0,
+            peak_gb=9.5,
+        )
+        assert budget.chunked_threshold_gb == pytest.approx(9.0)
+
+        selector = MemoryBudgetSelector()
+        strategy, _ = selector.select(n_points=1000, n_params=5, budget=budget)
+        assert strategy == "chunked"
+
+    def test_select_reuses_precomputed_budget_without_redetecting_memory(self):
+        """Callers that already computed a MemoryBudget for logging used to
+        call select() again with no way to reuse it, so select() silently
+        re-detected available memory (a live psutil/GPU read) a second
+        time. Under memory pressure the two reads can disagree, so the
+        logged budget could describe different numbers than the strategy
+        actually selected. select(budget=...) must skip re-detection."""
+        from unittest.mock import patch
+
+        from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+
+        selector = MemoryBudgetSelector(safety_factor=0.75)
+        precomputed = MemoryBudget.compute(
+            n_points=10_000, n_params=5, memory_limit_gb=8.0
+        )
+
+        with patch.object(
+            MemoryBudget, "compute", wraps=MemoryBudget.compute
+        ) as mock_compute:
+            strategy, _ = selector.select(
+                n_points=10_000,
+                n_params=5,
+                memory_limit_gb=8.0,
+                budget=precomputed,
+            )
+            mock_compute.assert_not_called()
+
+        assert strategy == "standard"

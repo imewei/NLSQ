@@ -117,6 +117,12 @@ class OptimizationGoal(Enum):
 # Memory Budget API (new unified memory-based optimizer selection)
 # ============================================================================
 
+# Extra safety margin applied to the peak-memory (chunked-vs-standard) check
+# only -- FR-010. The data-only (streaming) check has no margin. Shared
+# between MemoryBudget.chunked_threshold_gb and MemoryBudgetSelector.select()
+# so the decision and any logging of it can't drift apart.
+_CHUNKED_SAFETY_MARGIN = 0.9
+
 
 @dataclass(slots=True, frozen=True)
 class MemoryBudget:
@@ -152,6 +158,23 @@ class MemoryBudget:
     data_gb: float
     jacobian_gb: float
     peak_gb: float
+
+    @property
+    def chunked_threshold_gb(self) -> float:
+        """Effective threshold for the chunked-vs-standard check.
+
+        MemoryBudgetSelector.select() applies an extra 10% safety margin
+        (FR-010) to the peak-memory check only, so "standard" actually
+        requires peak_gb <= threshold_gb * 0.9, not <= threshold_gb. Use
+        this (not `threshold_gb`) wherever code reports or re-derives that
+        specific comparison, so logs and the actual decision can't disagree.
+
+        Returns
+        -------
+        float
+            threshold_gb * 0.9.
+        """
+        return self.threshold_gb * _CHUNKED_SAFETY_MARGIN
 
     @property
     def fits_in_memory(self) -> bool:
@@ -306,8 +329,9 @@ class MemoryBudgetSelector:
 
     Decision Tree:
         1. data_gb > threshold_gb → STREAMING (data doesn't fit)
-        2. peak_gb > threshold_gb → CHUNKED (Jacobian doesn't fit)
-        3. else → STANDARD (everything fits)
+        2. peak_gb > threshold_gb * 0.9 → CHUNKED (Jacobian doesn't fit,
+           with a 10% safety margin, FR-010)
+        3. else → STANDARD (everything fits, with margin)
 
     Parameters
     ----------
@@ -348,6 +372,7 @@ class MemoryBudgetSelector:
         goal: "OptimizationGoal | None" = None,
         use_gpu: bool = False,
         verbose: bool = False,
+        budget: "MemoryBudget | None" = None,
     ) -> tuple[str, "HybridStreamingConfig | LDMemoryConfig | None"]:
         """Select optimal optimizer strategy based on memory budget.
 
@@ -367,6 +392,14 @@ class MemoryBudgetSelector:
             If True, use GPU memory instead of CPU memory.
         verbose : bool, default=False
             If True, log memory budget details and strategy selection reason.
+        budget : MemoryBudget | None, default=None
+            A budget already computed via `MemoryBudget.compute()` for this
+            same (n_points, n_params, memory_limit_gb) call. When provided,
+            it is used as-is instead of detecting available memory again --
+            callers that already computed a budget for logging should pass
+            it here so the logged numbers and the actual decision can't
+            disagree (memory detection is a live psutil/GPU read and isn't
+            guaranteed identical across two calls).
 
         Returns
         -------
@@ -383,15 +416,16 @@ class MemoryBudgetSelector:
 
         logger = logging.getLogger("nlsq")
 
-        # Compute memory budget
-        budget = MemoryBudget.compute(
-            n_points=n_points,
-            n_params=n_params,
-            n_features=n_features,
-            safety_factor=self.safety_factor,
-            memory_limit_gb=memory_limit_gb,
-            use_gpu=use_gpu,
-        )
+        # Compute memory budget (unless the caller already computed one)
+        if budget is None:
+            budget = MemoryBudget.compute(
+                n_points=n_points,
+                n_params=n_params,
+                n_features=n_features,
+                safety_factor=self.safety_factor,
+                memory_limit_gb=memory_limit_gb,
+                use_gpu=use_gpu,
+            )
 
         # Log memory budget details if verbose
         if verbose:
@@ -414,14 +448,13 @@ class MemoryBudgetSelector:
                 )
             return self._create_streaming_config(budget, n_params, goal)
 
-        # 2. peak_gb > threshold_gb → CHUNKED (but data fits)
-        # Also apply 10% safety margin (FR-010)
-        safety_margin_threshold = budget.threshold_gb * 0.9
-        if budget.peak_gb > safety_margin_threshold:
+        # 2. peak_gb > threshold_gb * 0.9 → CHUNKED (but data fits, 10%
+        # safety margin, FR-010)
+        if budget.peak_gb > budget.chunked_threshold_gb:
             if verbose:
                 logger.info(
                     f"[NLSQ] Strategy: chunked (peak {budget.peak_gb:.2f} GB > "
-                    f"safety threshold {safety_margin_threshold:.2f} GB)",
+                    f"safety threshold {budget.chunked_threshold_gb:.2f} GB)",
                 )
             return self._create_chunked_config(budget, n_params, goal)
 
@@ -429,7 +462,7 @@ class MemoryBudgetSelector:
         if verbose:
             logger.info(
                 f"[NLSQ] Strategy: standard (peak {budget.peak_gb:.2f} GB < "
-                f"threshold {budget.threshold_gb:.2f} GB)",
+                f"safety threshold {budget.chunked_threshold_gb:.2f} GB)",
             )
         return ("standard", None)
 

@@ -527,9 +527,13 @@ def fit(  # noqa: C901
                 n_params=n_params,
                 memory_limit_gb=memory_limit_gb,
                 goal=goal_enum,
+                budget=budget,
             )
 
-            # Log strategy selection with reasoning
+            # Log strategy selection with reasoning. The chunked/standard
+            # boundary applies a 10% safety margin (budget.chunked_threshold_gb)
+            # -- log against that, not the raw threshold, so this message
+            # can't disagree with what selector.select() actually decided.
             if _strategy == "streaming":
                 _logger.info(
                     f"workflow='auto' selected: STREAMING "
@@ -538,12 +542,14 @@ def fit(  # noqa: C901
             elif _strategy == "chunked":
                 _logger.info(
                     f"workflow='auto' selected: CHUNKED "
-                    f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)",
+                    f"(peak {budget.peak_gb:.2f}GB > safety threshold "
+                    f"{budget.chunked_threshold_gb:.1f}GB)",
                 )
             else:
                 _logger.info(
                     f"workflow='auto' selected: STANDARD "
-                    f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)",
+                    f"(peak {budget.peak_gb:.2f}GB fits in "
+                    f"{budget.chunked_threshold_gb:.1f}GB)",
                 )
 
             # Log bounds info if provided
@@ -1172,9 +1178,13 @@ def _fit_with_auto_global(
         n_params=n_params,
         memory_limit_gb=memory_limit_gb,
         goal=goal,
+        budget=budget,
     )
 
-    # Log strategy selection with reasoning
+    # Log strategy selection with reasoning. The chunked/standard boundary
+    # applies a 10% safety margin (budget.chunked_threshold_gb) -- log
+    # against that, not the raw threshold, so this can't disagree with
+    # what selector.select() actually decided.
     if strategy == "streaming":
         _logger.info(
             f"workflow='auto_global' memory strategy: STREAMING "
@@ -1183,12 +1193,14 @@ def _fit_with_auto_global(
     elif strategy == "chunked":
         _logger.info(
             f"workflow='auto_global' memory strategy: CHUNKED "
-            f"(peak {budget.peak_gb:.2f}GB > threshold {budget.threshold_gb:.1f}GB)",
+            f"(peak {budget.peak_gb:.2f}GB > safety threshold "
+            f"{budget.chunked_threshold_gb:.1f}GB)",
         )
     else:
         _logger.info(
             f"workflow='auto_global' memory strategy: STANDARD "
-            f"(peak {budget.peak_gb:.2f}GB fits in {budget.threshold_gb:.1f}GB)",
+            f"(peak {budget.peak_gb:.2f}GB fits in "
+            f"{budget.chunked_threshold_gb:.1f}GB)",
         )
 
     # FR-005: Select global method (CMA-ES vs Multi-Start)
@@ -1648,7 +1660,9 @@ def _log_memory_budget_diagnostics(
 
     n_points = len(np.asarray(xdata))
 
-    # Compute memory budget
+    # Compute memory budget once and reuse it for selection so the logged
+    # numbers can't disagree with the actual decision (memory detection is
+    # a live psutil/GPU read, not guaranteed identical across two calls).
     try:
         budget = MemoryBudget.compute(n_points=n_points, n_params=n_params)
 
@@ -1658,6 +1672,7 @@ def _log_memory_budget_diagnostics(
             n_points=n_points,
             n_params=n_params,
             verbose=False,  # Already logging here
+            budget=budget,
         )
 
         logger.info(
@@ -1668,10 +1683,14 @@ def _log_memory_budget_diagnostics(
             f"[NLSQ] Estimates: data={budget.data_gb:.2f} GB, "
             f"jacobian={budget.jacobian_gb:.2f} GB, peak={budget.peak_gb:.2f} GB",
         )
+        # The chunked/standard boundary applies a 10% safety margin
+        # (budget.chunked_threshold_gb, FR-010) -- compare against that,
+        # not the raw threshold, to match what select() actually decided.
         logger.info(
             f"[NLSQ] Strategy: {strategy} "
-            f"(peak {budget.peak_gb:.2f} GB {'<' if budget.fits_in_memory else '>'} "
-            f"threshold {budget.threshold_gb:.1f} GB)",
+            f"(peak {budget.peak_gb:.2f} GB "
+            f"{'<' if budget.peak_gb <= budget.chunked_threshold_gb else '>'} "
+            f"safety threshold {budget.chunked_threshold_gb:.1f} GB)",
         )
     except Exception as e:
         logger.debug(f"[NLSQ] Memory budget diagnostics unavailable: {e}")
