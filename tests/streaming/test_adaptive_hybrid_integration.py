@@ -319,6 +319,7 @@ class TestLargeDatasetPerformance:
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
+    @pytest.mark.serial
     def test_all_parameters_at_bounds(self):
         """Test optimization when optimal parameters are at bounds."""
 

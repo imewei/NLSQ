@@ -126,6 +126,7 @@ def large_param_data(large_param_model):
 class TestCGSolverCorrectness:
     """Test CG solver produces correct solutions."""
 
+    @pytest.mark.serial
     def test_cg_solver_matches_direct_solve_small_system(
         self, simple_model, small_system_data
     ):
