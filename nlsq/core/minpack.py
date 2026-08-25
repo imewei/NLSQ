@@ -2562,11 +2562,16 @@ def curve_fit(
         kwargs["method"] = method
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
-    # Add empty multi-start diagnostics for consistency
-    result["multistart_diagnostics"] = {
-        "n_starts_configured": n_starts if multistart else 0,
-        "bypassed": True,  # Bypassed because n_starts was 0 or multistart was False
-    }
+    # timeit=True, return_eval=True, and full_output=True each make
+    # CurveFit.curve_fit return a plain tuple instead of a CurveFitResult
+    # (SciPy-style special output modes) -- only a CurveFitResult supports
+    # the dict-style assignment below.
+    if isinstance(result, CurveFitResult):
+        # Add empty multi-start diagnostics for consistency
+        result["multistart_diagnostics"] = {
+            "n_starts_configured": n_starts if multistart else 0,
+            "bypassed": True,  # Bypassed because n_starts was 0 or multistart was False
+        }
 
     # Return enhanced result object that supports both tuple unpacking
     # (popt, pcov = curve_fit(...)) and direct use (result = curve_fit(...))
