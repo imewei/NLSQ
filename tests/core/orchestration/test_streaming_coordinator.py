@@ -218,6 +218,57 @@ class TestMemoryEstimation:
 
         assert result_multi_x.estimated_memory_mb > result_1d.estimated_memory_mb
 
+    def test_estimate_memory_rejects_invalid_x_multiplier(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """x_multiplier < 1 must raise, not silently shrink/corrupt data_bytes."""
+        with pytest.raises(ValueError, match="x_multiplier"):
+            coordinator.estimate_memory(1000, 5, x_multiplier=0)
+
+        with pytest.raises(ValueError, match="x_multiplier"):
+            coordinator.estimate_memory(1000, 5, x_multiplier=-1)
+
+    def test_estimate_memory_and_decide_share_data_jacobian_sizing(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """estimate_memory() (reporting) and _decide_auto() (strategy
+        selection) must derive data+Jacobian size from the same shared
+        helper — proving they can't silently drift into two different
+        formulas the way they did before the fix."""
+        n_data, n_params, x_mult = 10_000, 5, 2
+
+        data_bytes, jacobian_bytes = StreamingCoordinator._data_and_jacobian_bytes(
+            n_data, n_params, x_multiplier=x_mult
+        )
+        core_mb = (data_bytes + jacobian_bytes) / (1024 * 1024)
+
+        # estimate_memory() reports core size plus working-array + overhead
+        # terms on top, so it must be strictly larger than core_mb.
+        est_mb = coordinator.estimate_memory(n_data, n_params, x_multiplier=x_mult)
+        assert est_mb > core_mb
+
+        # _decide_auto()'s actual decision boundary must sit exactly at
+        # core_mb (not est_mb) — proving it uses the SAME shared
+        # data+jacobian sizing as estimate_memory(), not an independently
+        # hand-written (and potentially diverging) formula.
+        strategy_below, *_ = coordinator._decide_auto(
+            n_data,
+            n_params,
+            usable_mb=core_mb - 0.01,
+            memory_pressure=0.5,
+            x_multiplier=x_mult,
+        )
+        strategy_above, *_ = coordinator._decide_auto(
+            n_data,
+            n_params,
+            usable_mb=core_mb + 0.01,
+            memory_pressure=0.5,
+            x_multiplier=x_mult,
+        )
+
+        assert strategy_below in ("chunked", "hybrid")
+        assert strategy_above == "direct"
+
 
 # =============================================================================
 # Test Available Memory Detection
@@ -336,6 +387,27 @@ class TestWorkflowHints:
         )
 
         assert result.strategy == "hybrid"
+
+    def test_workflow_hybrid_reason_distinct_from_force_streaming(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """workflow='hybrid' (a soft hint) must report a distinct reason
+        from force_streaming=True (a hard requirement), not the same
+        hardcoded 'forced by user request' string for both."""
+        x, y = small_data
+
+        hint_result = coordinator.decide(
+            xdata=jnp.asarray(x), ydata=jnp.asarray(y), n_params=2, workflow="hybrid"
+        )
+        forced_result = coordinator.decide(
+            xdata=jnp.asarray(x),
+            ydata=jnp.asarray(y),
+            n_params=2,
+            force_streaming=True,
+        )
+
+        assert hint_result.reason != forced_result.reason
+        assert "hybrid" in hint_result.reason.lower()
 
     def test_workflow_normal_forces_direct(
         self, coordinator: StreamingCoordinator, medium_data

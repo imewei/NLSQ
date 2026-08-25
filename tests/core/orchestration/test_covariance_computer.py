@@ -423,6 +423,77 @@ class TestSigmaTransform:
         with pytest.raises(ValueError, match="positive"):
             computer.setup_sigma_transform(sigma, ydata, mask, len_diff=0, m=3)
 
+    def test_create_sigma_transform_rejects_non_positive_definite_2d(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A finite, correctly-shaped but non-PD 2D sigma must be rejected
+        up front — not returned as a transform that silently produces NaN
+        when the caller later runs Cholesky on it."""
+        sigma = jnp.array([[1.0, 2.0], [2.0, 1.0]])  # symmetric, eigenvalues -1 and 3
+
+        with pytest.raises(ValueError, match="positive definite"):
+            computer.create_sigma_transform(sigma=sigma, n_data=2)
+
+    def test_create_sigma_transform_rejects_asymmetric_2d(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A non-symmetric 2D sigma must be rejected."""
+        sigma = jnp.array([[1.0, 5.0], [0.0, 1.0]])
+
+        with pytest.raises(ValueError, match="symmetric"):
+            computer.create_sigma_transform(sigma=sigma, n_data=2)
+
+    def test_create_sigma_transform_rejects_2d_shape_mismatch(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A 2D sigma whose shape doesn't match (n_data, n_data) must raise."""
+        sigma = jnp.eye(3)
+
+        with pytest.raises(ValueError, match="must be"):
+            computer.create_sigma_transform(sigma=sigma, n_data=5)
+
+    def test_create_sigma_transform_rejects_2d_non_finite(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A 2D sigma containing NaN/Inf must raise."""
+        sigma = jnp.array([[1.0, 0.0], [0.0, jnp.nan]])
+
+        with pytest.raises(ValueError, match="non-finite"):
+            computer.create_sigma_transform(sigma=sigma, n_data=2)
+
+    def test_create_sigma_transform_rejects_1d_non_finite(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A 1D sigma containing NaN/Inf must raise."""
+        sigma = jnp.array([0.1, jnp.nan, 0.2])
+
+        with pytest.raises(ValueError, match="non-finite"):
+            computer.create_sigma_transform(sigma=sigma, n_data=3)
+
+    def test_setup_sigma_transform_non_pd_2d_reports_min_eigenvalue(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A non-PD 2D sigma routed through the legacy padded path must
+        surface the precise min-eigenvalue message, not a generic one
+        swallowed by a self-catching except block."""
+        sigma = np.array([[1.0, 2.0], [2.0, 1.0]])  # eigenvalues -1, 3
+        ydata = np.zeros(2)
+        mask = np.ones(2, dtype=bool)
+
+        with pytest.raises(ValueError, match="Minimum eigenvalue"):
+            computer.setup_sigma_transform(sigma, ydata, mask, len_diff=0, m=2)
+
+    def test_setup_sigma_transform_non_pd_2d_with_padding_raises(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """The padded (len_diff > 0) 2D path must also reject a non-PD sigma."""
+        sigma = np.array([[1.0, 2.0], [2.0, 1.0]])
+        ydata = np.zeros(3)  # padded: 2 real points + 1 pad row
+        mask = np.array([True, True, False])
+
+        with pytest.raises(ValueError, match="positive definite"):
+            computer.setup_sigma_transform(sigma, ydata, mask, len_diff=1, m=2)
+
 
 # =============================================================================
 # Test Condition Number Computation
@@ -462,6 +533,40 @@ class TestConditionNumberComputation:
         cond = computer.compute_condition_number(simple_result.jac, n_data=5)
 
         assert_allclose(cond, computed.condition_number, rtol=1e-10)
+
+    def test_condition_number_n_data_changes_threshold_for_padded_jacobian(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """n_data must actually change which singular values survive the
+        threshold for a row-padded Jacobian — not just be accepted and
+        ignored. Without n_data, the threshold scales with the padded
+        jac.shape[0]; with the true (smaller) n_data, it doesn't."""
+        # s0=1.0, s1=1e-13. Row-padded to 10_000 rows (streaming/chunking
+        # style) but only 5 rows are real data.
+        n_data = 5
+        jac = jnp.zeros((10_000, 2))
+        jac = jac.at[0, 0].set(1.0)
+        jac = jac.at[1, 1].set(1e-13)
+
+        # eps*5*1.0 ≈ 1.11e-15 < 1e-13: s1 survives -> both singular values used
+        cond_with_n_data = computer.compute_condition_number(jac, n_data=n_data)
+        # eps*10_000*1.0 ≈ 2.22e-12 > 1e-13: s1 filtered out -> only s0 survives
+        cond_without_n_data = computer.compute_condition_number(jac)
+
+        assert cond_with_n_data > 1e10
+        assert_allclose(cond_without_n_data, 1.0, rtol=1e-6)
+
+    def test_condition_number_none_jac_raises(
+        self, computer: CovarianceComputer
+    ) -> None:
+        """A missing Jacobian must raise, not crash deep inside JAX."""
+        with pytest.raises(ValueError, match="2-D"):
+            computer.compute_condition_number(None)
+
+    def test_condition_number_1d_jac_raises(self, computer: CovarianceComputer) -> None:
+        """A 1-D 'Jacobian' must raise instead of an unguarded IndexError."""
+        with pytest.raises(ValueError, match="2-D"):
+            computer.compute_condition_number(jnp.array([1.0, 2.0, 3.0]))
 
 
 # =============================================================================

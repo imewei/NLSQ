@@ -73,7 +73,13 @@ class StreamingCoordinator:
         x_multiplier accounts for multi-dimensional xdata: shape
         (k, n_data) contributes k * n_data elements, not n_data, so a
         multi-output x isn't silently undercounted.
+
+        Raises:
+            ValueError: If x_multiplier < 1 (would shrink/corrupt data_bytes)
         """
+        if x_multiplier < 1:
+            msg = f"x_multiplier must be >= 1, got {x_multiplier}"
+            raise ValueError(msg)
         data_bytes = (x_multiplier + 2) * n_data * dtype_bytes  # x, y, residuals
         jacobian_bytes = n_data * n_params * dtype_bytes
         return data_bytes, jacobian_bytes
@@ -165,7 +171,12 @@ class StreamingCoordinator:
             )
         elif workflow == "hybrid":
             strategy, reason, chunk_size, n_chunks, hybrid_config = (
-                self._decide_forced_streaming(n_data, n_params, usable_mb)
+                self._decide_forced_streaming(
+                    n_data,
+                    n_params,
+                    usable_mb,
+                    reason="Hybrid strategy requested via workflow='hybrid'",
+                )
             )
         elif workflow == "normal":
             strategy, reason, chunk_size, n_chunks, hybrid_config = (
@@ -366,6 +377,7 @@ class StreamingCoordinator:
         n_data: int,
         n_params: int,
         usable_mb: float,
+        reason: str = "Streaming forced by user request",
     ) -> tuple[
         Literal["direct", "chunked", "hybrid", "auto_memory"],
         str,
@@ -375,6 +387,14 @@ class StreamingCoordinator:
     ]:
         """Decide strategy when streaming is forced.
 
+        Args:
+            n_data: Number of data points
+            n_params: Number of parameters
+            usable_mb: Usable memory budget
+            reason: Human-readable reason string, overridable so
+                `workflow='hybrid'` (a soft request) and `force_streaming=True`
+                (a hard requirement) report distinct reasons.
+
         Returns:
             Tuple of (strategy, reason, chunk_size, n_chunks, hybrid_config)
         """
@@ -383,7 +403,7 @@ class StreamingCoordinator:
 
         return (
             "hybrid",
-            "Streaming forced by user request",
+            reason,
             config.chunk_size,
             n_chunks,
             config,
