@@ -78,6 +78,48 @@ class TestMultiStartRngVariation:
         b = orch._generate_starting_points(2, np.zeros(2), np.ones(2), rng_key=key)
         np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
 
+    def test_concurrent_calls_never_hand_out_duplicate_rng_counts(
+        self,
+        monkeypatch,
+    ):
+        """The counter read-then-increment used to be two separate,
+        non-atomic Python statements: two threads calling
+        _generate_starting_points() on the same orchestrator concurrently
+        could both read the same self._rng_call_count value before either
+        incremented it, deriving an identical rng_key (and identical LHS
+        samples). Now guarded by self._rng_lock -- every concurrent caller
+        must get a distinct counter value, never a repeat."""
+        import threading
+
+        import jax
+
+        orch = MultiStartOrchestrator(GlobalOptimizationConfig(n_starts=6))
+        seen_counts = []
+        seen_lock = threading.Lock()
+        real_fold_in = jax.random.fold_in
+
+        def recording_fold_in(key, data):
+            with seen_lock:
+                seen_counts.append(int(data))
+            return real_fold_in(key, data)
+
+        monkeypatch.setattr(jax.random, "fold_in", recording_fold_in)
+
+        n_threads = 16
+        barrier = threading.Barrier(n_threads)
+
+        def worker():
+            barrier.wait()  # maximize contention on the shared counter
+            orch._generate_starting_points(2, np.zeros(2), np.ones(2))
+
+        threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert sorted(seen_counts) == list(range(n_threads))
+
 
 class TestCurveFitInstancePropagation:
     def test_custom_instance_config_propagates_to_workers(self):
