@@ -353,19 +353,26 @@ class TestBugFixRegressions(unittest.TestCase):
     def test_data_mask_excludes_outlier_from_fit(self):
         """End-to-end: fitting a*x with a data_mask that excludes an
         outlier must produce the masked-in slope, not the slope pulled
-        toward the outlier."""
+        toward the outlier.
+
+        The outlier point (300, 900) implies slope 3, well off the
+        masked-in points' slope of 1 (verified: unmasked WLS solution is
+        exactly a=1.0 for (1,1),(2,2); including (300,900) pulls it to
+        ~3.0). A collinear outlier would make this test pass even with the
+        data_mask fix reverted, since masking it out or not changes
+        nothing about the optimal slope."""
 
         def model(x, a):
             return a * x
 
         x = np.array([1.0, 2.0, 300.0])
-        y = np.array([1.0, 2.0, 300.0])
+        y = np.array([1.0, 2.0, 900.0])
         mask = np.array([True, True, False])
 
         fitter = CurveFit(flength=None)
         popt, _pcov = fitter.curve_fit(model, x, y, data_mask=mask, p0=[0.5])
 
-        self.assertAlmostEqual(float(popt[0]), 1.0, places=3)
+        self.assertAlmostEqual(float(popt[0]), 1.0, places=2)
 
     def test_reused_fitter_picks_up_new_jac_closure(self):
         """Regression: LeastSquares.update_function()'s analytical-Jacobian

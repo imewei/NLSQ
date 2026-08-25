@@ -177,3 +177,26 @@ def test_cache_key_distinguishes_same_named_closures() -> None:
     key_scale_9 = cache.cache_key(jac_scale_9)
 
     assert key_scale_1 != key_scale_9
+
+
+@pytest.mark.cache
+def test_cache_key_distinguishes_same_named_closures_in_kwargs() -> None:
+    """Same regression as test_cache_key_distinguishes_same_named_closures,
+    but for a callable passed as a keyword argument -- cache_key() applies
+    _callable_identity() at two separate call sites (the positional-args
+    loop and the kwargs loop), and only the positional one was covered."""
+    cache = SmartCache(disk_cache_enabled=False)
+
+    def make_jac(scale):
+        def jac(x):
+            return scale * x
+
+        return jac
+
+    jac_scale_1 = make_jac(1.0)
+    jac_scale_9 = make_jac(9.0)
+
+    key_scale_1 = cache.cache_key(jac=jac_scale_1)
+    key_scale_9 = cache.cache_key(jac=jac_scale_9)
+
+    assert key_scale_1 != key_scale_9

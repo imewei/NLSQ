@@ -551,5 +551,52 @@ class TestHelperMethodsIntegration:
         assert state["cost"] > 0
 
 
+class TestSolverLsmrEndToEnd:
+    """Regression: solver='lsmr' was tested at only the unbounded exact/CG
+    dispatch site (_solve_trust_region_subproblem, above). The public
+    curve_fit(solver=...) API maps 'auto'/'cg'/'lsqr'/'minibatch' onto the
+    same internal 'lsmr' name at 4 separate dispatch sites in trf.py --
+    _solve_trust_region_subproblem and _evaluate_step_acceptance for
+    unbounded fits, _solve_bounds_subproblem and _evaluate_bounds_inner_loop
+    for bounded fits -- and all 4 needed the identical fix. These two tests
+    exercise the remaining 3 sites end-to-end via curve_fit(). 'lsmr' is
+    only the *internal* dispatch name; solver='lsqr' is the public value
+    that maps onto it (see minpack.py's valid public solver set)."""
+
+    def test_lsmr_solver_unbounded_fit_converges(self):
+        """Unbounded fit exercises _evaluate_step_acceptance's lsmr branch
+        (trf_no_bounds's inner loop) in addition to the already-unit-tested
+        _solve_trust_region_subproblem."""
+        from nlsq.core.minpack import curve_fit
+
+        x = np.linspace(0, 10, 30)
+        y = 2.0 * x + 1.0
+
+        popt, _pcov = curve_fit(
+            lambda x, a, b: a * x + b, x, y, p0=[1.5, 0.5], solver="lsqr"
+        )
+        np.testing.assert_allclose(popt, [2.0, 1.0], atol=1e-3)
+
+    def test_lsmr_solver_bounded_fit_converges(self):
+        """A fit with finite bounds routes through trf_bounds(), exercising
+        _solve_bounds_subproblem's and _evaluate_bounds_inner_loop's lsmr
+        branches -- neither is reachable from an unbounded fit or from the
+        low-level _solve_trust_region_subproblem unit test."""
+        from nlsq.core.minpack import curve_fit
+
+        x = np.linspace(0, 10, 30)
+        y = 2.0 * x + 1.0
+
+        popt, _pcov = curve_fit(
+            lambda x, a, b: a * x + b,
+            x,
+            y,
+            p0=[1.5, 0.5],
+            bounds=([0.0, 0.0], [10.0, 10.0]),
+            solver="lsqr",
+        )
+        np.testing.assert_allclose(popt, [2.0, 1.0], atol=1e-3)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

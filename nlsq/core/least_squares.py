@@ -365,6 +365,41 @@ class AutoDiffJacobian:
         return self.jac
 
 
+def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
+    """Return True if ``new_fn`` differs from ``old_fn`` in a way that means
+    a cached wrapper built from ``old_fn`` can no longer be reused.
+
+    Bytecode (``co_code``) alone is not function identity: two functions can
+    share ``co_code`` but differ in captured constants (``co_consts``) or
+    closure cells, behaving differently. Comparing all three means reusing
+    an optimizer instance with a new function/Jacobian cannot silently keep
+    the stale one. Any comparison failure (e.g. non-code callables, or
+    closure cells holding array-valued content that can't be compared with
+    a plain ``!=``) fails safe by reporting a change, forcing a rewrap.
+    """
+    if old_fn is None:
+        return True
+    if old_fn is new_fn:
+        return False
+    try:
+        if hasattr(old_fn, "__code__") and hasattr(new_fn, "__code__"):
+            old_code, new_code = old_fn.__code__, new_fn.__code__
+            old_closure = tuple(
+                cell.cell_contents for cell in (old_fn.__closure__ or ())
+            )
+            new_closure = tuple(
+                cell.cell_contents for cell in (new_fn.__closure__ or ())
+            )
+            return (
+                old_code.co_code != new_code.co_code
+                or old_code.co_consts != new_code.co_consts
+                or old_closure != new_closure
+            )
+        return old_fn != new_fn
+    except Exception:
+        return True
+
+
 class LeastSquares:
     """Core least squares optimization engine with JAX acceleration.
 
@@ -577,32 +612,7 @@ class LeastSquares:
         """
         if xdata is not None and ydata is not None:
             # Check if fit function needs updating
-            func_update = False
-            try:
-                if self.f is fun:
-                    func_update = False
-                elif hasattr(self.f, "__code__") and hasattr(fun, "__code__"):
-                    old_code, new_code = self.f.__code__, fun.__code__
-                    old_closure = tuple(
-                        cell.cell_contents for cell in (self.f.__closure__ or ())
-                    )
-                    new_closure = tuple(
-                        cell.cell_contents for cell in (fun.__closure__ or ())
-                    )
-                    # Bytecode alone is not function identity: two functions can
-                    # share co_code but differ in captured constants (co_consts)
-                    # or closure cells, behaving differently. Compare all three so
-                    # reusing an optimizer instance with a new function cannot
-                    # silently keep the stale one.
-                    func_update = (
-                        old_code.co_code != new_code.co_code
-                        or old_code.co_consts != new_code.co_consts
-                        or old_closure != new_closure
-                    )
-                else:
-                    func_update = self.f != fun
-            except Exception:
-                func_update = True
+            func_update = _closure_aware_changed(self.f, fun)
 
             # Update function if needed
             if func_update:
@@ -612,27 +622,7 @@ class LeastSquares:
 
             # Handle analytical Jacobian
             if jac is not None:
-                jac_update = self.jac is None
-                if not jac_update:
-                    try:
-                        old_code, new_code = self.jac.__code__, jac.__code__
-                        old_closure = tuple(
-                            cell.cell_contents for cell in (self.jac.__closure__ or ())
-                        )
-                        new_closure = tuple(
-                            cell.cell_contents for cell in (jac.__closure__ or ())
-                        )
-                        # Same rationale as the fun check above: co_code alone
-                        # cannot distinguish closures with different captured
-                        # constants, which would silently keep a stale Jacobian.
-                        jac_update = (
-                            old_code.co_code != new_code.co_code
-                            or old_code.co_consts != new_code.co_consts
-                            or old_closure != new_closure
-                        )
-                    except Exception:
-                        jac_update = True
-                if jac_update:
+                if _closure_aware_changed(self.jac, jac):
                     self.wrap_jac(jac)
             elif self.jac is not None and not func_update:
                 self.autdiff_jac(jac, mode=jacobian_mode_selected)

@@ -12,6 +12,7 @@ Phase 3 Optimizations (Task Group 9):
 """
 
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
+from weakref import WeakKeyDictionary
 
 import numpy as np
 
@@ -50,21 +52,50 @@ except ImportError:
     HAS_XXHASH = False
 
 
+_closure_serial_counter = itertools.count()
+_closure_serial_registry: "WeakKeyDictionary[Callable, int]" = WeakKeyDictionary()
+_closure_serial_lock = threading.Lock()
+
+
+def _closure_serial(func: Callable) -> int:
+    """Return a stable, per-object, never-reused serial number for ``func``.
+
+    Plain ``id(func)`` is only unique while the object is alive: once a
+    closure is garbage-collected, CPython is free to reuse its address for
+    an unrelated object created immediately after, which would let a fresh
+    closure collide with a stale cache entry keyed off the old id(). The
+    WeakKeyDictionary registry assigns each *live* function object a serial
+    the first time it's seen and never reassigns that serial to a different
+    object, even if id() gets reused after GC -- a genuinely new object
+    always misses the lookup and gets a fresh, higher serial.
+    """
+    with _closure_serial_lock:
+        serial = _closure_serial_registry.get(func)
+        if serial is None:
+            serial = next(_closure_serial_counter)
+            _closure_serial_registry[func] = serial
+        return serial
+
+
 def _callable_identity(func: Callable) -> str:
     """Short hash disambiguating closures that share module+name.
 
     ``co_code`` alone is not function identity: two closures can share
     bytecode but differ in captured constants or closure cell contents.
-    Uses ``id(func)`` rather than hashing closure cell values directly:
-    id() is stable across repeated calls to the *same* closure object even
-    when its captured state legitimately mutates between calls (e.g. a
-    counter), while still being distinct for two different closure objects
-    built from the same factory.
+    Uses a per-object serial number (see ``_closure_serial``) rather than
+    hashing closure cell values directly: the serial is stable across
+    repeated calls to the *same* closure object even when its captured
+    state legitimately mutates between calls (e.g. a counter), while still
+    being distinct for two different closure objects built from the same
+    factory -- including two objects that happen to reuse the same id().
     """
     try:
         code = func.__code__
-        payload = repr((code.co_code, code.co_consts, id(func))).encode()
+        payload = repr((code.co_code, code.co_consts, _closure_serial(func))).encode()
         return hashlib.blake2b(payload, digest_size=8).hexdigest()
+    except TypeError:
+        # func isn't weakly referenceable (e.g. some C-implemented callables)
+        return "noweakref"
     except AttributeError:
         return "nocode"
 

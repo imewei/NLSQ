@@ -240,15 +240,6 @@ class ConfiguredOptimizer:
         from nlsq.global_optimization.config import GlobalOptimizationConfig
         from nlsq.global_optimization.multi_start import MultiStartOrchestrator
 
-        # MultiStartOrchestrator.fit() has no sigma parameter today; silently
-        # dropping a caller-supplied sigma would fit unweighted data without
-        # telling anyone, so fail loud instead.
-        if sigma is not None:
-            raise ValueError(
-                "create_optimizer(global_optimization=True) does not support "
-                "sigma-weighted fitting yet; pass sigma=None or fit locally."
-            )
-
         config = GlobalOptimizationConfig(n_starts=self._config.n_starts)
         optimizer = MultiStartOrchestrator(config=config)
         # Infer p0 shape from function signature if not provided
@@ -259,6 +250,13 @@ class ConfiguredOptimizer:
             # Subtract 1 for the x parameter
             n_params = max(len(sig.parameters) - 1, 1)
             p0 = np.ones(n_params)
+
+        # sigma isn't a named parameter of MultiStartOrchestrator.fit(), but
+        # it forwards **kwargs straight through to each per-start curve_fit()
+        # call, so it works correctly if passed via kwargs -- must not be
+        # silently dropped just because fit()'s signature doesn't name it.
+        if sigma is not None:
+            kwargs["sigma"] = sigma
 
         # MultiStartOrchestrator.fit() returns dict, not tuple
         return optimizer.fit(

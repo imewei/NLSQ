@@ -109,6 +109,12 @@ class CurveFitAdapter:
             from nlsq.global_optimization.multi_start import MultiStartOrchestrator
 
             optimizer = MultiStartOrchestrator(config=self._global_config)
+            # sigma isn't a named parameter of MultiStartOrchestrator.fit(),
+            # but it forwards **kwargs straight through to each per-start
+            # curve_fit() call, so it works correctly if passed via kwargs --
+            # must not be silently dropped just because fit() doesn't name it.
+            if sigma is not None:
+                kwargs["sigma"] = sigma
             return optimizer.fit(f, xdata, ydata, p0=p0, bounds=bounds, **kwargs)
 
         # Import here to avoid circular dependency

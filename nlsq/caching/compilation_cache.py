@@ -9,6 +9,7 @@ Phase 3 Optimizations (Task Group 9):
 """
 
 import hashlib
+import itertools
 import threading
 import warnings
 import weakref
@@ -17,6 +18,36 @@ from collections.abc import Callable
 from functools import wraps
 
 import jax
+
+_closure_serial_counter = itertools.count()
+_closure_serial_registry: "weakref.WeakKeyDictionary[Callable, int]" = (
+    weakref.WeakKeyDictionary()
+)
+_closure_serial_lock = threading.Lock()
+
+
+def _closure_serial(func: Callable) -> int:
+    """Return a stable, per-object, never-reused serial number for ``func``.
+
+    Plain ``id(func)`` is only unique while the object is alive: once a
+    closure is garbage-collected, CPython is free to reuse its address for
+    an unrelated object created immediately after. A hash keyed on id(func)
+    computed for that new object would then collide with a still-cached
+    ``self.cache`` entry meant for the old, GC'd object -- the memoization
+    of this method's result per function object (see ``_func_hash_cache``
+    below) only protects the hash *computation*, not the downstream
+    compiled-function cache the hash is used to look up. The
+    WeakKeyDictionary registry assigns each live function object a serial
+    the first time it's seen and never reassigns it to a different object,
+    so a genuinely new object always misses the lookup and gets a fresh,
+    higher serial even if its id() happens to match a dead one's.
+    """
+    with _closure_serial_lock:
+        serial = _closure_serial_registry.get(func)
+        if serial is None:
+            serial = next(_closure_serial_counter)
+            _closure_serial_registry[func] = serial
+        return serial
 
 
 class CompilationCache:
@@ -119,11 +150,15 @@ class CompilationCache:
             # co_code alone is not function identity: two closures can share
             # bytecode but differ in captured constants (co_consts) or closure
             # cell contents, and would otherwise collide on the same cache key.
-            # id(func) (rather than hashing closure cell values) keeps this
-            # stable even if the closure's captured state mutates after this
-            # first-touch computation, since the result is memoized per
-            # function object below and never recomputed for that object.
-            hash_input = repr((code.co_code, code.co_consts, id(func))).encode()
+            # _closure_serial(func) (rather than id(func) or hashing closure
+            # cell values) keeps this both stable if the closure's captured
+            # state mutates, and safe against a GC'd object's id() being
+            # reused by an unrelated new object -- see _closure_serial's
+            # docstring for why raw id() is unsafe for the downstream
+            # self.cache lookup even though this hash itself is memoized.
+            hash_input = repr(
+                (code.co_code, code.co_consts, _closure_serial(func))
+            ).encode()
             code_hash = hashlib.sha256(hash_input).hexdigest()[:8]
         except (AttributeError, TypeError):
             # Fallback: hash the function's qualified name
