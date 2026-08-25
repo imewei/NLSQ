@@ -295,6 +295,37 @@ class TestWorkflowHints:
         # Streaming hint should use streaming-compatible strategy
         assert result.strategy in ("hybrid", "chunked", "direct")
 
+    def test_workflow_hybrid_forces_hybrid(
+        self, coordinator: StreamingCoordinator, small_data
+    ) -> None:
+        """workflow='hybrid' must actually select hybrid, not silently fall to auto."""
+        x, y = small_data
+
+        result = coordinator.decide(
+            xdata=jnp.asarray(x),
+            ydata=jnp.asarray(y),
+            n_params=2,
+            workflow="hybrid",
+        )
+
+        assert result.strategy == "hybrid"
+
+    def test_workflow_normal_forces_direct(
+        self, coordinator: StreamingCoordinator, medium_data
+    ) -> None:
+        """workflow='normal' must force direct execution regardless of size."""
+        x, y = medium_data
+
+        result = coordinator.decide(
+            xdata=jnp.asarray(x),
+            ydata=jnp.asarray(y),
+            n_params=10,
+            memory_limit_mb=1.0,  # would otherwise trigger chunked/hybrid
+            workflow="normal",
+        )
+
+        assert result.strategy == "direct"
+
 
 # =============================================================================
 # Test Memory Limit Override
@@ -373,6 +404,18 @@ class TestHybridConfiguration:
         """Test configured chunk size is positive."""
         config = coordinator.configure_hybrid(
             n_data=100_000,
+            n_params=10,
+            available_memory_mb=8000.0,
+        )
+
+        assert config.chunk_size > 0
+
+    def test_configure_hybrid_empty_data_no_division_by_zero(
+        self, coordinator: StreamingCoordinator
+    ) -> None:
+        """n_data=0 must not produce a zero chunk_size (n_chunks divide-by-zero)."""
+        config = coordinator.configure_hybrid(
+            n_data=0,
             n_params=10,
             available_memory_mb=8000.0,
         )

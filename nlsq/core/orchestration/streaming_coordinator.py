@@ -115,6 +115,18 @@ class StreamingCoordinator:
                     memory_pressure,
                 )
             )
+        elif workflow == "hybrid":
+            strategy, reason, chunk_size, n_chunks, hybrid_config = (
+                self._decide_forced_streaming(n_data, n_params, usable_mb)
+            )
+        elif workflow == "normal":
+            strategy, reason, chunk_size, n_chunks, hybrid_config = (
+                "direct",
+                "Direct execution forced by workflow='normal'",
+                None,
+                None,
+                None,
+            )
         else:
             strategy, reason, chunk_size, n_chunks, hybrid_config = self._decide_auto(
                 n_data,
@@ -228,7 +240,7 @@ class StreamingCoordinator:
 
         # Clamp to [1000, 100_000] then cap at n_data so chunk never exceeds data size
         chunk_size = max(1000, min(chunk_size, 100_000))
-        chunk_size = min(chunk_size, n_data)
+        chunk_size = max(1, min(chunk_size, n_data))
 
         return HybridStreamingConfig(
             chunk_size=chunk_size,

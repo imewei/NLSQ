@@ -253,6 +253,13 @@ class DataPreprocessor:
                         "valid data rows/columns after NaN filtering",
                     )
 
+        if len(ydata_clean) == 0:
+            msg = (
+                "nan_policy='omit' removed all data points "
+                "(every row contained NaN/Inf)."
+            )
+            raise ValueError(msg)
+
         # Create mask for clean data (all True since we filtered)
         mask = np.ones(len(ydata_clean), dtype=bool)
 
@@ -318,6 +325,9 @@ class DataPreprocessor:
                 raise ValueError(msg)
             if not np.all(np.isfinite(sigma_arr)):
                 msg = "Sigma covariance matrix contains non-finite values (NaN or Inf)"
+                raise ValueError(msg)
+            if not np.allclose(sigma_arr, sigma_arr.T):
+                msg = "Sigma covariance matrix must be symmetric"
                 raise ValueError(msg)
             eigenvalues = np.linalg.eigvalsh(sigma_arr)
             if not np.all(eigenvalues > 0):
