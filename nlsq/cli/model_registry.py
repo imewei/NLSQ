@@ -38,6 +38,7 @@ Example Usage
 import importlib.util
 import inspect
 import logging
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -430,7 +431,12 @@ class ModelRegistry:
             If module cannot be loaded.
         """
         try:
-            spec = importlib.util.spec_from_file_location("custom_model", path)
+            # A unique module name per load (not a fixed literal) avoids any
+            # risk of import-machinery identity collisions between two
+            # custom models loaded in the same process (e.g. sys.modules
+            # keyed by name, coverage/tracer bookkeeping keyed by module).
+            module_name = f"nlsq_custom_model_{uuid.uuid4().hex}"
+            spec = importlib.util.spec_from_file_location(module_name, path)
             if spec is None or spec.loader is None:
                 raise ModelError(
                     f"Failed to load custom model file: {path}",

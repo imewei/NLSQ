@@ -159,11 +159,21 @@ class TestModelRegistryCustomModels:
         resource_limits() so the documented timeout/memory security feature
         is not dead code (three-brain review finding).
 
-        Marked serial: this spies on resource_limits via monkeypatch, which
-        proved flaky specifically under full-suite parallel xdist runs (passes
-        reliably standalone and in smaller parallel subsets) — the documented
-        pattern in this repo for exactly that failure mode.
-        """
+        Marked serial: this test monkeypatches the module-level
+        `nlsq.cli.model_registry.resource_limits` name and asserts the spy
+        actually fires. It passes reliably standalone and in every small
+        local group tried, but fails intermittently only in the full
+        ~2000-test xdist-parallel CI run (confirmed pre-existing on `main`
+        at commit f5013d6, independent of this branch's changes) with
+        `entered` staying empty -- i.e. `_load_module_from_path` reaches
+        `get_model()` without ever executing its `with resource_limits():`
+        line. The mechanism wasn't pinned down (no `sys.modules` swap,
+        `importlib.reload`, or leaked `unittest.mock.patch` was found), but
+        every candidate is consistent with xdist worker/test-ordering
+        interaction with this test's own module-global monkeypatch rather
+        than a bug in the code under test. Serial isolation removes the
+        parallel-ordering variable and gets the CI job's built-in
+        automatic once-retry on the serial pass."""
         monkeypatch.chdir(tmp_path)
         model_file = tmp_path / "resource_limited_model.py"
         model_file.write_text(
@@ -310,6 +320,43 @@ class TestModelRegistryCustomModels:
             registry.get_model(str(model_file), config)
 
         assert "nonexistent_function" in str(exc_info.value)
+
+    def test_sequential_custom_model_loads_get_distinct_module_identity(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """Every custom model load used to spec_from_file_location() the
+        literal name "custom_model" (not unique per file), so all
+        dynamically-loaded models shared one module identity. Verify two
+        different custom models loaded in the same process are distinct
+        module objects with distinct names, not the same one reused."""
+        monkeypatch.chdir(tmp_path)
+
+        def make_model(filename: str, coefficient: float) -> Path:
+            model_file = tmp_path / filename
+            model_file.write_text(
+                textwrap.dedent(f"""
+                def my_model(x, a):
+                    return a * x * {coefficient}
+            """)
+            )
+            return model_file
+
+        registry = ModelRegistry()
+        file_a = make_model("model_a.py", 1.0)
+        file_b = make_model("model_b.py", 2.0)
+
+        module_a = registry.get_model(
+            str(file_a),
+            {"type": "custom", "path": str(file_a), "function": "my_model"},
+        ).__module__
+        module_b = registry.get_model(
+            str(file_b),
+            {"type": "custom", "path": str(file_b), "function": "my_model"},
+        ).__module__
+
+        assert module_a != module_b, (
+            "sequential custom-model loads must not share module identity"
+        )
 
 
 class TestModelRegistryPolynomial:
