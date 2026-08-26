@@ -89,6 +89,21 @@ class TestCurveFitDiagnosticsIntegration:
         assert hasattr(result, "diagnostics")
         assert result.diagnostics is not None
 
+    def test_curve_fit_with_diagnostics_populates_gradient_health(
+        self, simple_model, well_conditioned_data
+    ) -> None:
+        """compute_diagnostics=True must populate gradient_health, not leave it None.
+
+        Regression test: the GradientMonitor was never wired into curve_fit's
+        optimizer callback, so gradient_health silently stayed None even with
+        compute_diagnostics=True.
+        """
+        x, y = well_conditioned_data
+        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
+        assert result.diagnostics.gradient_health is not None
+        assert result.diagnostics.gradient_health.available is True
+        assert result.diagnostics.gradient_health.n_iterations > 0
+
     def test_curve_fit_with_diagnostics_level(
         self, simple_model, well_conditioned_data
     ) -> None:

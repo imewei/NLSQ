@@ -341,6 +341,8 @@ class GradientHealthReport(AnalysisResult):
         Whether NaN or Inf values were detected in gradients.
     vanishing_detected : bool
         Whether vanishing gradients were detected.
+    exploding_detected : bool
+        Whether exploding gradients were detected.
     imbalance_detected : bool
         Whether gradient imbalance was detected.
     stagnation_detected : bool
@@ -629,6 +631,10 @@ class DiagnosticsConfig:
     vanishing_threshold : float
         Relative gradient magnitude threshold for vanishing detection.
         Default: 1e-6.
+    exploding_threshold : float
+        Absolute gradient magnitude threshold for exploding-gradient
+        detection.
+        Default: 1e8.
     sloppy_threshold : float
         Eigenvalue ratio threshold for sensitivity classification.
         Default: 1e-6.
@@ -992,6 +998,7 @@ def _model_health_to_dict(report: ModelHealthReport) -> dict[str, Any]:
             "max_imbalance_ratio": report.gradient_health.max_imbalance_ratio,
             "has_numerical_issues": report.gradient_health.has_numerical_issues,
             "vanishing_detected": report.gradient_health.vanishing_detected,
+            "exploding_detected": report.gradient_health.exploding_detected,
             "imbalance_detected": report.gradient_health.imbalance_detected,
             "stagnation_detected": report.gradient_health.stagnation_detected,
             "health_status": report.gradient_health.health_status.name,
@@ -1040,6 +1047,7 @@ def _model_health_to_dict(report: ModelHealthReport) -> dict[str, Any]:
             "correlation_threshold": report.config.correlation_threshold,
             "imbalance_threshold": report.config.imbalance_threshold,
             "vanishing_threshold": report.config.vanishing_threshold,
+            "exploding_threshold": report.config.exploding_threshold,
             "sloppy_threshold": report.config.sloppy_threshold,
             "verbose": report.config.verbose,
             "emit_warnings": report.config.emit_warnings,

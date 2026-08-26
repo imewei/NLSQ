@@ -2373,25 +2373,29 @@ class LargeDatasetFitter:
         full_sigma = kwargs.pop("sigma", None)
         if full_sigma is not None:
             full_sigma = np.asarray(full_sigma)
+            if len(full_sigma) != len(xdata):
+                raise ValueError(
+                    f"sigma length ({len(full_sigma)}) does not match "
+                    f"xdata length ({len(xdata)})",
+                )
 
-        # Chunking processes contiguous index ranges. For ordered/monotonic x
-        # (time series, sensor sweeps -- the common shape of "large scientific
-        # dataset"), that means each chunk only covers a narrow, unrepresentative
-        # x-window. Each chunk's local optimum can then land on a different
-        # point of a degenerate manifold for weakly-identified nonlinear
-        # models, and the precision-weighted GLS combination across chunks is
-        # only valid when every chunk is estimating the same thing. Shuffling
-        # once here (a fixed seed keeps fits reproducible per CLAUDE.md) makes
-        # every chunk a representative sample of the full x-range and fixes
-        # this silently-biased-fit failure mode; xdata/ydata/full_sigma are
-        # permuted together so they stay aligned, and the sigma re-slicing
-        # below can keep assuming contiguous chunk boundaries.
+        # Contiguous chunking biases fits on ordered/monotonic x (each chunk
+        # covers only a narrow x-window, so per-chunk local optima can land
+        # on different points of a degenerate manifold for weakly-identified
+        # models). Shuffle once (fixed seed for reproducibility) so every
+        # chunk is a representative sample of the full x-range; xdata/ydata/
+        # full_sigma are permuted together to stay aligned, so the sigma
+        # re-slicing below can keep assuming contiguous chunk boundaries.
         n_points = len(xdata)
         shuffle_idx = np.random.default_rng(0).permutation(n_points)
         xdata = np.asarray(xdata)[shuffle_idx]
         ydata = np.asarray(ydata)[shuffle_idx]
         if full_sigma is not None:
             full_sigma = full_sigma[shuffle_idx]
+        self.logger.debug(
+            f"Shuffled {n_points} points before chunking (seed=0) to avoid "
+            "biased per-chunk fits on ordered x",
+        )
 
         # Initialize state variables
         (
