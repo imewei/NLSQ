@@ -170,15 +170,25 @@ class RobustDecomposition:
         for name, method in self.fallback_chain:
             try:
                 result = method(matrix, "cholesky", lower)
-                if result is not None:
+                if result is not None and self._validate_cholesky(result):
                     self.logger.debug(f"Cholesky succeeded with {name}")
                     return result
             except Exception as e:
                 self.logger.debug(f"{name} Cholesky failed: {e}")
                 continue
 
-        # Last resort: eigendecomposition
-        return self._cholesky_via_eigen(matrix, lower)
+        # Last resort: eigendecomposition. Still validated: an input matrix
+        # that is itself non-finite (e.g. NaN slipped through
+        # _ensure_positive_definite, whose `min_eig < factor` check is False
+        # for NaN) cannot be factored into anything real, and the class's
+        # documented contract is to raise rather than return NaN silently.
+        result = self._cholesky_via_eigen(matrix, lower)
+        if not self._validate_cholesky(result):
+            raise RuntimeError(
+                "All Cholesky methods failed (including eigendecomposition "
+                "fallback, which returned a non-finite factor)",
+            )
+        return result
 
     def _jax_gpu_decomp(self, matrix: jnp.ndarray, decomp_type: str, *args):
         """Try decomposition on GPU using JAX."""
@@ -443,6 +453,28 @@ class RobustDecomposition:
         try:
             Q, R = result
             return bool(jnp.all(jnp.isfinite(Q))) and bool(jnp.all(jnp.isfinite(R)))
+        except (ValueError, TypeError, AttributeError):
+            return False
+
+    def _validate_cholesky(self, result: jnp.ndarray) -> bool:
+        """Validate Cholesky factor.
+
+        JAX's Cholesky commonly returns NaN (rather than raising) on a
+        non-positive-definite input, so `result is not None` alone is not
+        sufficient to accept a tier's output -- it must also be finite.
+
+        Parameters
+        ----------
+        result : jnp.ndarray
+            Cholesky factor (L or U) from decomposition.
+
+        Returns
+        -------
+        valid : bool
+            Whether the result is valid.
+        """
+        try:
+            return bool(jnp.all(jnp.isfinite(result)))
         except (ValueError, TypeError, AttributeError):
             return False
 
