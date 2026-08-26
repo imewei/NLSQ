@@ -577,14 +577,15 @@ class TestCMAESDiagnostics:
         from nlsq.global_optimization.cmaes_diagnostics import CMAESDiagnostics
 
         # Not enough history
-        diag1 = CMAESDiagnostics(fitness_history=[-100.0])
+        diag1 = CMAESDiagnostics(fitness_history=[100.0])
         assert diag1.get_fitness_improvement() is None
 
-        # Valid history (fitness improves from -100 to -10)
-        diag2 = CMAESDiagnostics(fitness_history=[-100.0, -50.0, -10.0])
+        # Valid history: fitness is raw (positive) SSR, lower is better, so
+        # improving from 100 to 10 is a genuine improvement.
+        diag2 = CMAESDiagnostics(fitness_history=[100.0, 50.0, 10.0])
         improvement = diag2.get_fitness_improvement()
         assert improvement is not None
-        # Improvement is (final - initial) / |initial| = (-10 - (-100)) / 100 = 0.9
+        # Improvement is (initial - final) / |initial| = (100 - 10) / 100 = 0.9
         np.testing.assert_allclose(improvement, 0.9, rtol=0.01)
 
     def test_diagnostics_convergence_rate(self) -> None:

@@ -153,9 +153,12 @@ class CMAESDiagnostics:
         if initial == 0:
             return None
 
-        # Fitness is negative SSR, so improvement is (final - initial) / |initial|
-        # Higher (less negative) fitness is better
-        return (final - initial) / abs(initial)
+        # Fitness is raw (positive) SSR -- evosax minimizes it directly, it is
+        # never negated (see create_fitness_function's docstring). Lower is
+        # better, so improvement is (initial - final) / |initial|: positive
+        # when SSR decreased (a genuine improvement), matching what a caller
+        # intuitively expects from "improvement".
+        return (initial - final) / abs(initial)
 
     def get_convergence_rate(self) -> NDArray[np.floating[Any]] | None:
         """Compute per-generation convergence rate.

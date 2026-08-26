@@ -408,14 +408,17 @@ class CMAESOptimizer:
         if popsize is None:
             popsize = compute_default_popsize(n_params)
 
-        # Double population for cmaes-global preset
-        # (detected by max_generations == 200 and bipop)
-        if (
-            self.config.max_generations == 200
-            and self.config.restart_strategy == "bipop"
-        ):
-            popsize = popsize * 2
-            logger.debug("CMA-ES: Using 2x population for cmaes-global preset")
+            # Double population for cmaes-global preset
+            # (detected by max_generations == 200 and bipop). Only applies
+            # to the auto-computed default -- an explicit user popsize must
+            # never be silently doubled (matches the reference logic in
+            # nlsq/core/minpack.py's own auto-memory popsize estimate).
+            if (
+                self.config.max_generations == 200
+                and self.config.restart_strategy == "bipop"
+            ):
+                popsize = popsize * 2
+                logger.debug("CMA-ES: Using 2x population for cmaes-global preset")
 
         # Log memory optimization settings
         if self.config.population_batch_size is not None:

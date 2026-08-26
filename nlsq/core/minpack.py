@@ -1141,18 +1141,25 @@ def _fit_with_auto_global(
             "Provide bounds as (lower, upper) arrays:\n"
             "    fit(model, x, y, workflow='auto_global', bounds=([0, 0], [10, 10]))",
         )
+    # Partially-unbounded (e.g. one parameter's upper bound left at +inf)
+    # previously slipped past the fully-unbounded check above, then fed an
+    # infinite range into the CMA-ES sigmoid bounds transform
+    # (lb + (ub-lb)*sigmoid(x)): inf * (a sufficiently negative x's sigmoid,
+    # which underflows to exactly 0.0) is nan. Require every bound finite.
+    if not (np.all(np.isfinite(lb)) and np.all(np.isfinite(ub))):
+        raise ValueError(
+            "workflow='auto_global' requires every parameter to have a "
+            "finite lower AND upper bound (no +/-inf). "
+            f"Got lower={lb}, upper={ub}.",
+        )
+    if np.any(lb > ub):
+        raise ValueError(
+            f"workflow='auto_global' bounds are inverted: lower={lb} must "
+            f"be <= upper={ub} for every parameter.",
+        )
 
     # Log bounds information
     _logger.debug(f"workflow='auto_global' bounds: lower={lb}, upper={ub}")
-
-    # Compute parameter scale ratio for method selection logging
-    scale_range = ub - lb
-    scale_ratio = (
-        float(np.max(scale_range) / np.min(scale_range))
-        if np.min(scale_range) > 0
-        else 1.0
-    )
-    _logger.debug(f"workflow='auto_global' parameter scale ratio: {scale_ratio:.1f}")
 
     # Extract optional parameters
     n_starts = kwargs.pop("n_starts", 10)
@@ -1207,6 +1214,12 @@ def _fit_with_auto_global(
 
     # FR-005: Select global method (CMA-ES vs Multi-Start)
     method_selector = MethodSelector()
+    # Compute via the same helper .select() uses internally, so this
+    # logged ratio can never diverge from the one that actually drove
+    # the method decision (a hand-rolled re-derivation here previously
+    # collapsed to 1.0 for any zero/negative-width bound instead of
+    # filtering it out the way compute_scale_ratio does).
+    scale_ratio = method_selector.compute_scale_ratio(lb, ub)
     global_method = method_selector.select(
         requested_method="auto",
         lower_bounds=lb,
@@ -1468,6 +1481,10 @@ def _fit_global_cmaes(
         p0=np.asarray(p0) if p0 is not None else None,
         bounds=bounds,
         sigma=np.asarray(sigma) if sigma is not None else None,
+        # absolute_sigma has no dedicated param on CMAESOptimizer.fit(), but
+        # its **kwargs flows through to _nlsq_refinement's curve_fit() call,
+        # which does accept it -- forward it there instead of dropping it.
+        absolute_sigma=absolute_sigma,
         **kwargs,
     )
 
@@ -1534,6 +1551,20 @@ def _fit_global_multistart(
             **kwargs,
         )
     if strategy == "chunked":
+        # sigma would need to be sliced consistently with each chunk, which
+        # LargeDatasetFitter's chunked-fit dispatch (each chunk goes through
+        # its own curve_fit() call) doesn't do -- fail loudly instead of
+        # silently returning an unweighted fit. Matches the identical fix
+        # already applied to _curve_fit_auto_memory's chunked strategy.
+        if sigma is not None:
+            raise NotImplementedError(
+                "workflow='auto_global' chunked multi-start strategy does "
+                "not support the 'sigma' parameter yet (chunking splits the "
+                "data and sigma is not sliced consistently across chunks). "
+                "Use a memory_limit_gb override that avoids the chunked "
+                "strategy, or omit sigma.",
+            )
+
         # Chunked processing with multi-start
         from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
@@ -1562,6 +1593,7 @@ def _fit_global_multistart(
             method="trf",
             multistart=True,
             n_starts=n_starts,
+            check_finite=check_finite,
             **kwargs,
         )
         if not isinstance(result, CurveFitResult):

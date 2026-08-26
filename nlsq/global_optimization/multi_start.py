@@ -122,8 +122,8 @@ def _fit_single_start(
     """
     from nlsq.core.minpack import CurveFit
 
-    cf = CurveFit(**(curve_fit_kwargs or {}))
     try:
+        cf = CurveFit(**(curve_fit_kwargs or {}))
         result: CurveFitResult = cf.curve_fit(  # type: ignore[assignment]
             f,
             xdata,
@@ -519,6 +519,25 @@ class MultiStartOrchestrator:
 
         # Sort by loss (ascending)
         results.sort(key=lambda x: x[1])
+
+        # The per-start OptimizeWarning suppression above is scoped to
+        # "expected, internal" non-convergence noise from the N-1 losing
+        # starts -- it must not also swallow a genuine warning that applies
+        # to the WINNING start, since that's the result actually returned
+        # to the caller. Re-derive (outside the ignore filter, so it's no
+        # longer suppressed) whether the winner's covariance could not be
+        # estimated -- the same all-inf-pcov condition _compute_covariance
+        # uses to decide warn_cov -- and re-raise it if so.
+        if results:
+            _best_params, _best_loss, best_result = results[0]
+            best_pcov = getattr(best_result, "pcov", None)
+            if best_pcov is not None and np.all(np.isinf(np.asarray(best_pcov))):
+                warnings.warn(
+                    "Covariance of the parameters could not be estimated",
+                    OptimizeWarning,
+                    stacklevel=2,
+                )
+
         return results, parallel_diagnostics
 
     def fit(
