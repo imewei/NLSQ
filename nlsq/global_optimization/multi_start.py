@@ -51,6 +51,7 @@ TournamentSelector : Tournament selection for large datasets (Task Group 4)
 
 import logging
 import os
+import threading
 import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -85,6 +86,7 @@ def _fit_single_start(
     p0: np.ndarray,
     bounds: tuple,
     kwargs: dict,
+    curve_fit_kwargs: dict | None = None,
 ) -> tuple[np.ndarray, float, Any]:
     """Thread worker -- isolated CurveFit instance per call.
 
@@ -106,6 +108,10 @@ def _fit_single_start(
         Parameter bounds (lower, upper).
     kwargs : dict
         Additional arguments passed to curve_fit.
+    curve_fit_kwargs : dict, optional
+        Constructor kwargs mirroring the orchestrator's ``curve_fit``
+        instance (flength, enable_stability, etc.), so a custom instance
+        passed to ``MultiStartOrchestrator`` actually takes effect.
 
     Returns
     -------
@@ -116,7 +122,7 @@ def _fit_single_start(
     """
     from nlsq.core.minpack import CurveFit
 
-    cf = CurveFit()
+    cf = CurveFit(**(curve_fit_kwargs or {}))
     try:
         result: CurveFitResult = cf.curve_fit(  # type: ignore[assignment]
             f,
@@ -134,6 +140,19 @@ def _fit_single_start(
             # Fallback: compute from residuals
             predictions = f(xdata, *result.popt)
             loss = float(np.sum((ydata - np.asarray(predictions)) ** 2))
+        # NaN must not be able to sort ahead of a genuinely successful,
+        # finite-loss fit -- coerce any non-finite loss (NaN included) to
+        # +inf so it always sorts last and is excluded from n_successful.
+        # A NaN cost specifically (as opposed to an ordinary large-but-finite
+        # cost) usually signals numerical blowup/divergence at this starting
+        # point, worth a distinct log line for diagnosability.
+        if not np.isfinite(loss):
+            _worker_logger.debug(
+                "Starting point %s produced non-finite loss (%s); coercing to inf",
+                p0,
+                loss,
+            )
+            loss = float("inf")
         return (result.popt, loss, result)
     except Exception as e:
         _worker_logger.debug("Starting point failed: %s", e, exc_info=True)
@@ -228,6 +247,34 @@ class MultiStartOrchestrator:
 
             self.curve_fit = CurveFit()
         self.logger = get_logger("multi_start")
+        # Advances on every call that generates LHS samples without an
+        # explicit rng_key, so repeated fit() calls on the same orchestrator
+        # don't silently reuse the same starting points. Guarded by a lock:
+        # concurrent fit() calls on the same orchestrator would otherwise be
+        # able to read-then-increment the same counter value and derive an
+        # identical rng_key (the read-increment isn't atomic in Python).
+        self._rng_call_count = 0
+        self._rng_lock = threading.Lock()
+
+    def _curve_fit_config(self) -> dict[str, Any]:
+        """Extract constructor kwargs mirroring ``self.curve_fit``.
+
+        Worker threads must build their own ``CurveFit()`` for thread
+        safety (mutable per-fit state), but a caller-supplied
+        ``curve_fit_instance`` should still control worker behavior
+        (e.g. ``enable_stability``, ``flength``) rather than being silently
+        dropped in favor of all-default construction.
+        """
+        cf = self.curve_fit
+        return {
+            "flength": cf.flength,
+            "use_dynamic_sizing": cf.use_dynamic_sizing,
+            "enable_stability": cf.enable_stability,
+            "enable_recovery": cf.enable_recovery,
+            "enable_overflow_check": cf.enable_overflow_check,
+            "cache_config": cf.cache_config,
+            "max_jacobian_elements_for_svd": cf.max_jacobian_elements_for_svd,
+        }
 
     @classmethod
     def from_preset(
@@ -302,7 +349,14 @@ class MultiStartOrchestrator:
 
         # Generate samples in [0, 1]^n
         if self.config.sampler == "lhs":
-            # LHS accepts rng_key
+            # LHS accepts rng_key. If the caller didn't supply one, advance
+            # a per-orchestrator counter so successive fit() calls don't
+            # silently reuse the exact same starting points.
+            if rng_key is None:
+                with self._rng_lock:
+                    call_count = self._rng_call_count
+                    self._rng_call_count += 1
+                rng_key = jax.random.fold_in(jax.random.PRNGKey(0), call_count)
             samples_raw = sampler(n_starts, n_params, rng_key=rng_key)
         else:
             # Sobol and Halton are deterministic
@@ -397,6 +451,7 @@ class MultiStartOrchestrator:
         results: list[tuple[np.ndarray, float, CurveFitResult | None]] = [
             None,  # type: ignore[list-item]
         ] * n_starts
+        curve_fit_kwargs = self._curve_fit_config()
 
         # Per-start non-convergence is an expected, internal outcome of multi-start
         # search: many starts are deliberately spread across the basin and the
@@ -419,6 +474,7 @@ class MultiStartOrchestrator:
                         p0,
                         bounds,
                         kwargs.copy(),
+                        curve_fit_kwargs,
                     )
                     _params, loss, _ = results[i]
                     self.logger.debug(
@@ -439,6 +495,7 @@ class MultiStartOrchestrator:
                             p0,
                             bounds,
                             kwargs.copy(),
+                            curve_fit_kwargs,
                         )
                         futures[future] = i
 

@@ -2705,6 +2705,7 @@ class CurveFit:
         """
         self.flength = flength
         self.use_dynamic_sizing = use_dynamic_sizing
+        self.cache_config = cache_config
         self.logger = get_logger("curve_fit")
         self.create_sigma_transform_funcs()
         self.create_covariance_svd()
