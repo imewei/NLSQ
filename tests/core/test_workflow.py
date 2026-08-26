@@ -711,3 +711,111 @@ class TestMemoryBudgetSelectorDiagnostics:
         assert strategy3 == "chunked"
         assert budget3.data_fits is True
         assert budget3.fits_in_memory is False
+
+
+class TestMemoryBudgetSelectorRegressions:
+    """Regression tests for the 2026-08-25 three-brain review of
+    MemoryBudgetSelector / STANDARD-CHUNKED-STREAMING routing."""
+
+    def test_chunked_threshold_gb_matches_selectors_margin(self):
+        """select() gates chunked-vs-standard on threshold_gb * 0.9 (FR-010),
+        but the docstring/decision-tree comment and several log messages
+        used to reference the un-margined threshold_gb, so a "peak < X"
+        log line could disagree with the strategy actually chosen.
+        chunked_threshold_gb must equal the margin select() applies, and
+        must be the actual decision boundary (not just a reporting number)."""
+        from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+
+        # peak_gb=9.5 sits below the raw threshold (10.0) but above the
+        # margined one (9.0) -- this is exactly the window where the old
+        # unmargined comparison and the real decision disagreed.
+        budget = MemoryBudget(
+            available_gb=10.0,
+            threshold_gb=10.0,
+            data_gb=1.0,
+            jacobian_gb=1.0,
+            peak_gb=9.5,
+        )
+        assert budget.chunked_threshold_gb == pytest.approx(9.0)
+
+        selector = MemoryBudgetSelector()
+        strategy, _ = selector.select(n_points=1000, n_params=5, budget=budget)
+        assert strategy == "chunked"
+
+    def test_select_reuses_precomputed_budget_without_redetecting_memory(self):
+        """Callers that already computed a MemoryBudget for logging used to
+        call select() again with no way to reuse it, so select() silently
+        re-detected available memory (a live psutil/GPU read) a second
+        time. Under memory pressure the two reads can disagree, so the
+        logged budget could describe different numbers than the strategy
+        actually selected. select(budget=...) must skip re-detection."""
+        from unittest.mock import patch
+
+        from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+
+        selector = MemoryBudgetSelector(safety_factor=0.75)
+        precomputed = MemoryBudget.compute(
+            n_points=10_000, n_params=5, memory_limit_gb=8.0
+        )
+
+        with patch.object(
+            MemoryBudget, "compute", wraps=MemoryBudget.compute
+        ) as mock_compute:
+            strategy, _ = selector.select(
+                n_points=10_000,
+                n_params=5,
+                memory_limit_gb=8.0,
+                budget=precomputed,
+            )
+            mock_compute.assert_not_called()
+
+        assert strategy == "standard"
+
+    def test_chunked_config_min_chunk_size_never_exceeds_n_points(self):
+        """MemoryBudgetSelector._create_chunked_config hardcoded
+        min_chunk_size=1_000 in the LDMemoryConfig it returns, regardless
+        of n_points. LargeDatasetFitter.calculate_optimal_chunk_size floors
+        its own chunk size at that same min_chunk_size -- so whenever
+        n_points < 1_000 (a case only reachable now that _fit_with_config
+        no longer bypasses LargeDatasetFitter below 1M points, per PR #8),
+        the fitter had no valid chunk size below n_points and silently
+        collapsed to a single unchunked fit of the whole (small-n_points,
+        huge-n_params) dataset -- exactly defeating the memory-based
+        'chunked' decision this PR exists to enforce (found by an
+        independent Codex review pass on PR #8).
+
+        min_chunk_size must scale down for small n_points so real
+        chunking stays possible, while staying exactly 1_000 (unchanged)
+        for n_points large enough that the floor was never the problem."""
+        from nlsq.core.workflow import MemoryBudgetSelector
+        from nlsq.streaming.large_dataset import LargeDatasetFitter
+
+        selector = MemoryBudgetSelector(safety_factor=0.75)
+
+        # Small n_points, huge n_params, tight memory limit -- the exact
+        # reproduction from the Codex review.
+        strategy, config = selector.select(
+            n_points=500, n_params=20_000, memory_limit_gb=0.25
+        )
+        assert strategy == "chunked"
+        assert config.min_chunk_size <= 500
+        assert config.min_chunk_size < 1_000  # the old hardcoded floor
+
+        # LargeDatasetFitter's own (independent) chunk-size estimate must
+        # now actually split the dataset instead of collapsing to 1 chunk.
+        fitter = LargeDatasetFitter(
+            memory_limit_gb=config.memory_limit_gb, config=config
+        )
+        stats = fitter.estimate_requirements(500, 20_000)
+        assert stats.n_chunks > 1, (
+            f"expected real chunking, got n_chunks={stats.n_chunks} "
+            f"(chunk_size={stats.recommended_chunk_size})"
+        )
+
+        # Existing large-n_points behavior must be unchanged: the floor
+        # stays exactly 1_000 once n_points is large enough that it was
+        # never the problem (n_points // 10 >= 1_000).
+        _strategy_large, config_large = selector.select(
+            n_points=1_000_000, n_params=100, memory_limit_gb=1.0
+        )
+        assert config_large.min_chunk_size == 1_000
