@@ -170,7 +170,7 @@ class TestBIPOPRestarterBestSolution:
 
         # First solution
         solution1 = jnp.array([1.0, 2.0, 3.0])
-        fitness1 = -10.0  # Lower fitness (CMA-ES maximizes, so more negative is worse)
+        fitness1 = 10.0  # Fitness is raw SSR: lower is better
 
         restarter.update_best(solution1, fitness1)
         assert np.allclose(restarter.best_solution, solution1)
@@ -178,7 +178,7 @@ class TestBIPOPRestarterBestSolution:
 
         # Better solution
         solution2 = jnp.array([1.5, 2.5, 3.5])
-        fitness2 = -5.0  # Better fitness
+        fitness2 = 5.0  # Lower SSR = better fitness
 
         restarter.update_best(solution2, fitness2)
         assert np.allclose(restarter.best_solution, solution2)
@@ -186,7 +186,7 @@ class TestBIPOPRestarterBestSolution:
 
         # Worse solution (should not update)
         solution3 = jnp.array([0.0, 0.0, 0.0])
-        fitness3 = -20.0  # Worse fitness
+        fitness3 = 20.0  # Higher SSR = worse fitness
 
         restarter.update_best(solution3, fitness3)
         assert np.allclose(restarter.best_solution, solution2)  # Still solution2
@@ -199,10 +199,11 @@ class TestBIPOPRestarterBestSolution:
         restarter = BIPOPRestarter(base_popsize=8, n_params=2, max_restarts=3)
 
         # Simulate multiple restarts with different best solutions
+        # (fitness is raw SSR: lower is better)
         solutions = [
-            (jnp.array([1.0, 1.0]), -15.0),
-            (jnp.array([2.0, 2.0]), -8.0),  # Best
-            (jnp.array([3.0, 3.0]), -12.0),
+            (jnp.array([1.0, 1.0]), 15.0),
+            (jnp.array([2.0, 2.0]), 8.0),  # Best
+            (jnp.array([3.0, 3.0]), 12.0),
         ]
 
         for sol, fit in solutions:
@@ -211,4 +212,4 @@ class TestBIPOPRestarterBestSolution:
 
         best_sol, best_fit = restarter.get_best()
         assert np.allclose(best_sol, [2.0, 2.0])
-        assert best_fit == -8.0
+        assert best_fit == 8.0

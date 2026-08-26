@@ -3,17 +3,27 @@ workflow="hpc" - HPC Cluster Optimization
 
 The ``hpc`` workflow is designed for long-running optimization jobs on High
 Performance Computing (HPC) clusters. It wraps ``auto_global`` with automatic
-checkpointing for fault tolerance and crash recovery.
+cluster detection (PBS/SLURM).
+
+.. warning::
+
+   **Checkpointing is not yet implemented.** ``hpc`` currently accepts
+   ``checkpoint_dir``/``checkpoint_interval`` for forward API compatibility
+   and emits a ``UserWarning`` that they are ignored -- no checkpoint file is
+   ever written, and there is no crash recovery. Everything in the
+   "Checkpointing" section below describes planned, not current, behavior.
+   Today, ``hpc`` behaves identically to ``auto_global`` plus the cluster
+   detection described further down this page.
 
 When to Use
 -----------
 
 Use ``hpc`` workflow when:
 
-- Running on HPC clusters (PBS, SLURM, etc.)
-- Jobs may take hours or days to complete
-- You need crash recovery via checkpoints
-- Running on shared/preemptible resources
+- Running on HPC clusters (PBS, SLURM, etc.) and want automatic cluster
+  detection logged for diagnostics
+- Running memory-aware global optimization (same requirements as
+  ``auto_global``)
 
 .. important::
 
@@ -32,7 +42,7 @@ Basic Usage
        return a * jnp.exp(-b * x) + c
 
 
-   # HPC workflow with checkpointing
+   # HPC workflow (bounds required, same as auto_global)
    popt, pcov = fit(
        model,
        xdata,
@@ -40,13 +50,18 @@ Basic Usage
        p0=[1.0, 0.5, 0.0],
        workflow="hpc",
        bounds=([0, 0, -1], [10, 5, 1]),
-       checkpoint_dir="/scratch/my_job/checkpoints",
    )
 
-Checkpointing
--------------
+Checkpointing (planned, not yet implemented)
+---------------------------------------------
 
-Checkpoints are saved periodically during optimization:
+.. warning::
+
+   Nothing in this section works today -- see the warning at the top of this
+   page. ``checkpoint_dir``/``checkpoint_interval`` are accepted but ignored.
+
+The eventual design is for checkpoints to be saved periodically during
+optimization:
 
 .. code-block:: python
 
@@ -57,21 +72,21 @@ Checkpoints are saved periodically during optimization:
        p0=[...],
        workflow="hpc",
        bounds=bounds,
-       checkpoint_dir="/scratch/checkpoints",
-       checkpoint_interval=10,
-   )  # Save every 10 iterations
+       checkpoint_dir="/scratch/checkpoints",  # currently ignored
+       checkpoint_interval=10,  # currently ignored
+   )
 
-**Checkpoint contents:**
+**Planned checkpoint contents:**
 
 - Current best parameters
 - Optimization state
 - Iteration number
 - All explored starting points
 
-**Automatic recovery:**
+**Planned automatic recovery:**
 
-If a job crashes and restarts, NLSQ automatically detects existing checkpoints
-and resumes from the last saved state.
+If a job crashes and restarts, NLSQ would automatically detect existing
+checkpoints and resume from the last saved state. This does not happen yet.
 
 Cluster Detection
 -----------------
@@ -159,7 +174,6 @@ HPC Job Script Example
        p0=[1, 0.5, 0],
        workflow="hpc",
        bounds=([0, 0, -1], [10, 5, 1]),
-       checkpoint_dir="/scratch/$SLURM_JOB_ID/checkpoints",
        n_starts=50,
    )
 
@@ -182,7 +196,6 @@ For jobs with multiple GPUs:
        workflow="hpc",
        bounds=bounds,
        n_starts=100,  # More starts for multi-GPU
-       checkpoint_dir="/scratch/ckpts",
    )
 
 NLSQ automatically distributes starting points across available GPUs.
@@ -190,43 +203,20 @@ NLSQ automatically distributes starting points across available GPUs.
 Best Practices for HPC
 ----------------------
 
-**1. Use scratch storage for checkpoints:**
-
-.. code-block:: python
-
-   # Good: fast local storage
-   checkpoint_dir = "/scratch/user/job_123/ckpts"
-
-   # Bad: network filesystem
-   checkpoint_dir = "/home/user/checkpoints"
-
-**2. Request appropriate walltime:**
+**1. Request appropriate walltime:**
 
 Estimate based on:
 - Dataset size
 - Number of starts
 - Complexity of model
 
-**3. Handle preemption:**
+**2. Handle preemption:**
 
-For preemptible queues, use frequent checkpoints:
-
-.. code-block:: python
-
-   popt, pcov = fit(
-       model, x, y, p0=[...], workflow="hpc", bounds=bounds, checkpoint_interval=5
-   )  # More frequent saves
-
-**4. Clean up checkpoints:**
-
-After successful completion:
-
-.. code-block:: python
-
-   import shutil
-
-   if fit_succeeded:
-       shutil.rmtree(checkpoint_dir)
+There is currently no checkpoint/resume support (see the warning at the top
+of this page) -- on preemptible queues, a preempted job restarts the fit from
+scratch. Prefer non-preemptible queues for long ``hpc`` jobs until
+checkpointing lands, or reduce ``n_starts``/walltime to fit inside a single
+preemption window.
 
 Complete HPC Example
 --------------------
@@ -234,7 +224,7 @@ Complete HPC Example
 .. code-block:: python
 
    #!/usr/bin/env python
-   """HPC curve fitting job with checkpointing."""
+   """HPC curve fitting job."""
 
    import os
    import numpy as np
@@ -248,10 +238,7 @@ Complete HPC Example
 
 
    def main():
-       # Setup paths
        job_id = os.environ.get("SLURM_JOB_ID", os.environ.get("PBS_JOBID", "local"))
-       checkpoint_dir = f"/scratch/{job_id}/checkpoints"
-       os.makedirs(checkpoint_dir, exist_ok=True)
 
        # Load data
        data = np.load("experiment_data.npz")
@@ -274,8 +261,6 @@ Complete HPC Example
            workflow="hpc",
            bounds=bounds,
            n_starts=100,
-           checkpoint_dir=checkpoint_dir,
-           checkpoint_interval=10,
        )
 
        # Save results
@@ -304,10 +289,10 @@ Comparison: auto_global vs hpc
      - ``hpc``
    * - Checkpointing
      - No
-     - Yes
+     - No (planned, not yet implemented)
    * - Crash recovery
      - No
-     - Yes
+     - No (planned, not yet implemented)
    * - Cluster detection
      - No
      - Yes
@@ -325,12 +310,8 @@ Troubleshooting HPC
 
 - Increase walltime
 - Reduce ``n_starts``
-- Enable checkpointing for resume
-
-**Checkpoint corruption:**
-
-- Use atomic writes (NLSQ does this automatically)
-- Check disk space on scratch
+- (Resume-from-checkpoint is not available yet -- see the warning at the top
+  of this page)
 
 **Multi-GPU not detected:**
 

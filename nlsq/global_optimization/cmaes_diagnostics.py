@@ -28,7 +28,7 @@ class CMAESDiagnostics:
     final_sigma : float
         Final step size (standard deviation) at convergence.
     best_fitness : float
-        Best fitness value found (negative SSR, higher is better).
+        Best fitness value found (raw SSR, lower is better).
     fitness_history : list[float]
         History of best fitness values per generation.
     restart_history : list[dict[str, Any]]
@@ -46,7 +46,7 @@ class CMAESDiagnostics:
     ...     total_generations=150,
     ...     total_restarts=3,
     ...     final_sigma=0.01,
-    ...     best_fitness=-1e-10,
+    ...     best_fitness=1e-10,
     ...     convergence_reason="fitness_tolerance",
     ... )
     >>> print(diagnostics.summary())
@@ -83,7 +83,7 @@ class CMAESDiagnostics:
             f"Total generations: {self.total_generations}",
             f"Total restarts: {self.total_restarts}",
             f"Final sigma: {self.final_sigma:.6e}",
-            f"Best fitness (neg SSR): {self.best_fitness:.6e}",
+            f"Best fitness (SSR): {self.best_fitness:.6e}",
             f"Convergence reason: {self.convergence_reason}",
             f"NLSQ refinement: {self.nlsq_refinement}",
             f"Wall time: {self.wall_time:.3f}s",

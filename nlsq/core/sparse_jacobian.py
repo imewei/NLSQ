@@ -544,20 +544,21 @@ class SparseOptimizer:
     ):
         """Internal sparse optimization implementation.
 
-        This would integrate with the existing TRF optimizer but using
-        sparse matrix operations throughout.
+        Not implemented: this would integrate with the existing TRF optimizer
+        using sparse matrix operations throughout, but that integration
+        doesn't exist yet. Raises rather than silently returning `x0`
+        unchanged as a fake "success" result -- returning a placeholder here
+        previously meant a caller with a genuinely sparse problem
+        (sparsity >= min_sparsity) got back an unoptimized `x0` with
+        `success=True` and no indication the fit never ran.
         """
-        # This is a simplified implementation
-        # Full implementation would integrate with TrustRegionReflective
-
-        # For now, return a placeholder indicating sparse methods would be used
-        return {
-            "x": x0,
-            "success": True,
-            "message": "Sparse optimization placeholder",
-            "sparsity": self._detected_sparsity,
-            "method": "sparse",
-        }
+        raise NotImplementedError(
+            "SparseOptimizer's sparse optimization path is not implemented. "
+            "Use nlsq.core.minpack.curve_fit() directly (dense), or set "
+            "min_sparsity=1.1 / auto_detect=False with a low problem-size "
+            "threshold to avoid ever triggering this path via "
+            "optimize_with_sparsity().",
+        )
 
 
 def detect_jacobian_sparsity(

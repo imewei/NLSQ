@@ -384,6 +384,7 @@ class GradientHealthReport(AnalysisResult):
     max_imbalance_ratio: float = 1.0
     has_numerical_issues: bool = False
     vanishing_detected: bool = False
+    exploding_detected: bool = False
     imbalance_detected: bool = False
     stagnation_detected: bool = False
     issues: list[ModelHealthIssue] = field(default_factory=list)
@@ -669,6 +670,7 @@ class DiagnosticsConfig:
     correlation_threshold: float = 0.95
     imbalance_threshold: float = 1e6
     vanishing_threshold: float = 1e-6
+    exploding_threshold: float = 1e8
     sloppy_threshold: float = 1e-6
     gradient_window_size: int = 100
     stagnation_window: int = 10
@@ -687,6 +689,8 @@ class DiagnosticsConfig:
             raise ValueError("imbalance_threshold must be positive")
         if self.vanishing_threshold <= 0:
             raise ValueError("vanishing_threshold must be positive")
+        if self.exploding_threshold <= 0:
+            raise ValueError("exploding_threshold must be positive")
         if self.sloppy_threshold <= 0:
             raise ValueError("sloppy_threshold must be positive")
         if self.gradient_window_size <= 0:
@@ -831,8 +835,12 @@ def _format_model_health_summary(
             is_structural = (
                 report.identifiability.numerical_rank >= report.identifiability.n_params
             )
+            condition_threshold = (
+                report.config.condition_threshold if report.config is not None else 1e8
+            )
             is_practical = (
-                is_structural and report.identifiability.condition_number < 1e8
+                is_structural
+                and report.identifiability.condition_number < condition_threshold
             )
             lines.append(
                 f"Structurally identifiable: {'Yes' if is_structural else 'No'}",

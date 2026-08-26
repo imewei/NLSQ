@@ -356,17 +356,18 @@ def fit(  # noqa: C901
     workflow : str or config object, optional
         Workflow selection:
 
-        - 'auto': Automatically select based on dataset size and memory (default)
-        - 'standard': Basic curve_fit() with defaults
-        - 'quality': Tightest tolerances + multi-start
-        - 'fast': Loose tolerances for speed
-        - 'large_robust': Chunked + multi-start for large datasets
-        - 'streaming': AdaptiveHybridStreamingOptimizer for huge datasets
-        - 'hpc_distributed': Multi-GPU/node configuration
-        - 'global_auto': Auto-selects CMA-ES vs Multi-Start based on scale ratio
-        - 'cmaes': CMA-ES with BIPOP restarts (100 generations)
-        - 'cmaes-global': Thorough CMA-ES exploration (200 gens, 2x population)
+        - 'auto': Memory-aware local optimization; auto-selects standard,
+          chunked, or streaming based on dataset size and memory (default)
+        - 'auto_global': Memory-aware global optimization (requires bounds);
+          auto-selects CMA-ES vs multi-start based on parameter scale ratio
+        - 'hpc': 'auto_global' plus cluster detection for HPC environments
         - Custom config object: LDMemoryConfig, HybridStreamingConfig, or GlobalOptimizationConfig
+
+        The named presets from pre-v0.6.3 ('standard', 'quality', 'fast',
+        'large_robust', 'streaming', 'hpc_distributed', 'cmaes',
+        'cmaes-global', 'global_auto') were removed in v0.6.3 and raise
+        ValueError with migration guidance -- use 'auto'/'auto_global'/'hpc'
+        with explicit ``goal``/``bounds``/tolerance kwargs instead.
     goal : str or OptimizationGoal, optional
         Optimization goal that modifies tolerances:
 
@@ -400,7 +401,7 @@ def fit(  # noqa: C901
 
     Using a named workflow:
 
-    >>> result = fit(model, xdata, ydata, p0=[1, 2], workflow='quality',
+    >>> result = fit(model, xdata, ydata, p0=[1, 2], workflow='auto_global',
     ...              bounds=([0, 0], [10, 10]))
 
     Using a goal to adjust tolerances:
@@ -1337,10 +1338,22 @@ def _fit_with_hpc(
     checkpoint_dir = kwargs.pop("checkpoint_dir", None)
     checkpoint_interval = kwargs.pop("checkpoint_interval", 5)
 
-    # Log HPC configuration
+    # Checkpoint/crash-recovery infrastructure is not yet implemented (Phase 5,
+    # T042-T048) -- these params are accepted for forward API compatibility
+    # but silently discarded below, so a caller relying on them for HPC crash
+    # recovery must be told loudly rather than getting a false sense of safety.
+    if checkpoint_dir is not None:
+        warnings.warn(
+            "workflow='hpc': checkpoint_dir was provided, but checkpoint/crash-recovery "
+            "infrastructure is not yet implemented -- no checkpoint file will be written "
+            "and checkpoint_interval is ignored. workflow='hpc' currently behaves "
+            "identically to workflow='auto_global' plus HPC cluster detection.",
+            UserWarning,
+            stacklevel=2,
+        )
     _logger.info(
-        f"workflow='hpc' checkpointing enabled: "
-        f"dir={checkpoint_dir or 'auto'}, interval={checkpoint_interval}",
+        f"workflow='hpc' checkpointing: NOT IMPLEMENTED "
+        f"(checkpoint_dir={checkpoint_dir!r} ignored, checkpoint_interval ignored)",
     )
 
     # Detect cluster environment
@@ -3252,7 +3265,10 @@ class CurveFit:
         if p0 is None:
             p0 = _initialize_feasible(lb, ub)
         else:
-            # Clip auto-estimated p0 to bounds to ensure feasibility
+            # Clip p0 to bounds to ensure feasibility. This applies to any
+            # p0 (user-supplied or auto-estimated), and is why NLSQ diverges
+            # from scipy here: scipy.optimize.curve_fit raises
+            # ValueError("x0 is infeasible") for an out-of-bounds p0 instead.
             p0 = np.clip(p0, lb, ub)
 
         return lb, ub, p0
@@ -4582,6 +4598,27 @@ class CurveFit:
         # Setup sigma transformation
         transform = self._setup_sigma_transform(sigma, ydata, data_mask, len_diff, m)
 
+        # If gradient-health diagnostics were requested, wire a GradientMonitor
+        # into the optimizer's iteration callback so a real report exists by
+        # the time the diagnostics block below reads it back out. Without this,
+        # `compute_diagnostics=True` silently leaves gradient_health as None.
+        _gradient_monitor = None
+        _resolved_diag_config = None
+        if compute_diagnostics:
+            _resolved_diag_config = (
+                diagnostics_config
+                if diagnostics_config is not None
+                else DiagnosticsConfig(
+                    level=diagnostics_level,
+                    verbose=False,
+                    emit_warnings=True,
+                )
+            )
+            from nlsq.diagnostics.gradient_health import GradientMonitor
+
+            _gradient_monitor = GradientMonitor(_resolved_diag_config)
+            callback = _gradient_monitor.create_callback(user_callback=callback)
+
         # Run optimization (pass prepared bounds to avoid redundant prepare_bounds call)
         res, jnp_xdata, ctime = self._run_optimization(
             f,
@@ -4603,6 +4640,9 @@ class CurveFit:
             kwargs,
             prepared_bounds=(_lb, _ub),
         )
+
+        if _gradient_monitor is not None:
+            res["gradient_health_report"] = _gradient_monitor.get_report()
 
         popt = res.x
         self.logger.debug(
@@ -4673,17 +4713,9 @@ class CurveFit:
                 from nlsq.diagnostics.health_report import create_health_report
                 from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
 
-                # Use provided config or create default (with verbose=False to
-                # avoid double printing - we handle logging separately)
-                # If diagnostics_level is FULL, we need to include it in the config
-                if diagnostics_config is not None:
-                    config = diagnostics_config
-                else:
-                    config = DiagnosticsConfig(
-                        level=diagnostics_level,
-                        verbose=False,
-                        emit_warnings=True,
-                    )
+                # Reuse the config resolved before optimization (needed there
+                # to construct the GradientMonitor) instead of rebuilding it.
+                config = _resolved_diag_config
 
                 # Get Jacobian from result
                 jacobian = np.asarray(res.jac)

@@ -2374,6 +2374,25 @@ class LargeDatasetFitter:
         if full_sigma is not None:
             full_sigma = np.asarray(full_sigma)
 
+        # Chunking processes contiguous index ranges. For ordered/monotonic x
+        # (time series, sensor sweeps -- the common shape of "large scientific
+        # dataset"), that means each chunk only covers a narrow, unrepresentative
+        # x-window. Each chunk's local optimum can then land on a different
+        # point of a degenerate manifold for weakly-identified nonlinear
+        # models, and the precision-weighted GLS combination across chunks is
+        # only valid when every chunk is estimating the same thing. Shuffling
+        # once here (a fixed seed keeps fits reproducible per CLAUDE.md) makes
+        # every chunk a representative sample of the full x-range and fixes
+        # this silently-biased-fit failure mode; xdata/ydata/full_sigma are
+        # permuted together so they stay aligned, and the sigma re-slicing
+        # below can keep assuming contiguous chunk boundaries.
+        n_points = len(xdata)
+        shuffle_idx = np.random.default_rng(0).permutation(n_points)
+        xdata = np.asarray(xdata)[shuffle_idx]
+        ydata = np.asarray(ydata)[shuffle_idx]
+        if full_sigma is not None:
+            full_sigma = full_sigma[shuffle_idx]
+
         # Initialize state variables
         (
             progress,

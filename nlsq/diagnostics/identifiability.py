@@ -110,11 +110,14 @@ class IdentifiabilityAnalyzer:
 
         n_params = jacobian.shape[1]
 
-        # Compute FIM
-        fim = self._compute_fim(jacobian)
-
-        # Analyze FIM
-        return self._analyze_fim(fim, n_params, start_time)
+        # Compute condition number/rank/correlation from SVD(jacobian) directly
+        # rather than forming FIM = J.T @ J first. Forming the normal equations
+        # squares the condition number of J before it's even analyzed (a
+        # near-degenerate model with cond(J) ~ 1e10 reports cond(FIM) ~ 1e21
+        # analytically, but explicit J.T @ J + SVD can lose 5+ orders of
+        # magnitude of that to float64 rounding -- exactly in the
+        # ill-conditioned regime this diagnostic exists to flag).
+        return self._analyze_jacobian_via_svd(jacobian, n_params, start_time)
 
     def analyze_from_fim(self, fim: np.ndarray) -> IdentifiabilityReport:
         """Analyze identifiability from a pre-computed FIM.
@@ -203,6 +206,194 @@ class IdentifiabilityAnalyzer:
             Fisher Information Matrix of shape (n_params, n_params).
         """
         return jacobian.T @ jacobian
+
+    def _compute_svd_from_jacobian(
+        self,
+        jacobian: np.ndarray,
+    ) -> tuple[np.ndarray, float, int, np.ndarray]:
+        """Compute FIM eigenstructure directly from SVD(jacobian).
+
+        FIM = J.T @ J has eigenvalues s**2 and eigenvectors V, where
+        J = U @ diag(s) @ V.T is the SVD of J -- this is analytically
+        exact and avoids ever forming or inverting J.T @ J.
+
+        Parameters
+        ----------
+        jacobian : np.ndarray
+            Jacobian matrix of shape (n_data, n_params).
+
+        Returns
+        -------
+        fim_eigenvalues : np.ndarray
+            Eigenvalues of the FIM (s**2).
+        condition_number : float
+            cond(FIM) = (s_max / s_min)**2.
+        numerical_rank : int
+            Numerical rank of J (equals the rank of FIM).
+        v : np.ndarray
+            Right singular vectors of J, shape (n_params, k) -- used to
+            build the correlation matrix without forming FIM.
+        """
+        try:
+            from nlsq.stability.svd_fallback import compute_svd_with_fallback
+
+            # compute_svd_with_fallback returns V already (not transposed)
+            _, s, v = compute_svd_with_fallback(jacobian)
+            s = np.asarray(s)
+            v = np.asarray(v)
+        except ImportError:
+            _, s, vh = np.linalg.svd(jacobian, full_matrices=False)
+            v = vh.T
+
+        max_s = float(np.max(s)) if s.size else 0.0
+        nonzero_s = s[s > 0]
+
+        if max_s == 0 or len(nonzero_s) == 0:
+            condition_number = float("inf")
+            numerical_rank = 0
+        else:
+            min_s = float(np.min(nonzero_s))
+            condition_number = (max_s / min_s) ** 2
+
+            float_dtype = (
+                jacobian.dtype
+                if np.issubdtype(jacobian.dtype, np.floating)
+                else np.float64
+            )
+            tol = max_s * max(jacobian.shape) * np.finfo(float_dtype).eps
+            numerical_rank = int(np.sum(s > tol))
+
+        return s**2, condition_number, numerical_rank, v
+
+    def _compute_correlation_matrix_from_svd(
+        self,
+        s: np.ndarray,
+        v: np.ndarray,
+    ) -> np.ndarray | None:
+        """Compute the correlation matrix directly from SVD(jacobian).
+
+        Builds the FIM pseudo-inverse (covariance) as V @ diag(1/s**2) @ V.T
+        using the Jacobian's own SVD, rather than calling ``pinv`` on an
+        explicitly-formed ``J.T @ J`` -- this avoids ever squaring J's
+        condition number in an actual matrix product.
+
+        Parameters
+        ----------
+        s : np.ndarray
+            Singular values of the Jacobian (not squared).
+        v : np.ndarray
+            Right singular vectors of the Jacobian, shape (n_params, k).
+
+        Returns
+        -------
+        np.ndarray | None
+            Correlation matrix, or None if computation fails.
+        """
+        try:
+            if s.size == 0:
+                return None
+            tol = float(np.max(s)) * max(v.shape) * np.finfo(np.float64).eps
+            safe_s = np.where(s > 0, s, 1.0)
+            inv_s2 = np.where(s > tol, 1.0 / safe_s**2, 0.0)
+            covariance = (v * inv_s2) @ v.T
+            diag = np.diag(covariance)
+
+            if np.any(diag <= 0):
+                return None
+
+            sqrt_diag = np.sqrt(diag)
+            correlation = covariance / np.outer(sqrt_diag, sqrt_diag)
+            correlation = np.clip(correlation, -1.0, 1.0)
+
+            return correlation
+
+        except Exception:
+            _logger.warning("Correlation matrix computation failed", exc_info=True)
+            return None
+
+    def _analyze_jacobian_via_svd(
+        self,
+        jacobian: np.ndarray,
+        n_params: int,
+        start_time: float,
+    ) -> IdentifiabilityReport:
+        """Analyze identifiability directly from SVD(jacobian).
+
+        Mirrors ``_analyze_fim`` but never forms FIM = J.T @ J.
+
+        Parameters
+        ----------
+        jacobian : np.ndarray
+            Jacobian matrix of shape (n_data, n_params).
+        n_params : int
+            Number of parameters.
+        start_time : float
+            Start time for timing computation.
+
+        Returns
+        -------
+        IdentifiabilityReport
+            Analysis results.
+        """
+        issues: list[ModelHealthIssue] = []
+        health_status = HealthStatus.HEALTHY
+
+        try:
+            fim_eigenvalues, condition_number, numerical_rank, v = (
+                self._compute_svd_from_jacobian(jacobian)
+            )
+            s = np.sqrt(np.abs(fim_eigenvalues))
+        except Exception as e:
+            computation_time = (time.perf_counter() - start_time) * 1000
+            return IdentifiabilityReport(
+                available=False,
+                error_message=f"SVD computation failed: {e!s}",
+                condition_number=float("inf"),
+                numerical_rank=0,
+                n_params=n_params,
+                correlation_matrix=None,
+                highly_correlated_pairs=[],
+                issues=[],
+                health_status=HealthStatus.CRITICAL,
+                computation_time_ms=computation_time,
+            )
+
+        correlation_matrix = self._compute_correlation_matrix_from_svd(s, v)
+
+        highly_correlated_pairs = self._detect_highly_correlated_pairs(
+            correlation_matrix,
+        )
+
+        if numerical_rank < n_params:
+            issue = self._create_ident_001_issue(numerical_rank, n_params)
+            issues.append(issue)
+            health_status = HealthStatus.CRITICAL
+
+        if condition_number > self.config.condition_threshold:
+            issue = self._create_ident_002_issue(condition_number)
+            issues.append(issue)
+            if health_status != HealthStatus.CRITICAL:
+                health_status = HealthStatus.WARNING
+
+        if highly_correlated_pairs:
+            issue = self._create_corr_001_issue(highly_correlated_pairs)
+            issues.append(issue)
+            if health_status != HealthStatus.CRITICAL:
+                health_status = HealthStatus.WARNING
+
+        computation_time = (time.perf_counter() - start_time) * 1000
+
+        return IdentifiabilityReport(
+            available=True,
+            condition_number=condition_number,
+            numerical_rank=numerical_rank,
+            n_params=n_params,
+            correlation_matrix=correlation_matrix,
+            highly_correlated_pairs=highly_correlated_pairs,
+            issues=issues,
+            health_status=health_status,
+            computation_time_ms=computation_time,
+        )
 
     def _analyze_fim(
         self,

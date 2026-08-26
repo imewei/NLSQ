@@ -427,11 +427,14 @@ class MainWindow(QMainWindow):
         self._nav_list.setCurrentRow(3)  # Results page
 
     def navigate_to(self, page_name: str) -> None:
-        """Navigate to a specific page.
+        """Navigate to a specific page, if the current workflow state allows it.
 
         Args:
             page_name: Name of the page to navigate to
         """
+        page_state = PageState.from_session_state(self._app_state.state)
+        if not page_state.can_access(page_name):
+            return
         for i, (name, _, _) in enumerate(PAGE_CONFIG):
             if name == page_name:
                 self._nav_list.setCurrentRow(i)

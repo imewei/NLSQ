@@ -75,7 +75,7 @@ class BIPOPRestarter:
     restart_count: int = field(default=0, init=False)
     _use_large_pop: bool = field(default=True, init=False)
     _best_solution: jax.Array | None = field(default=None, init=False)
-    _best_fitness: float = field(default=-float("inf"), init=False)
+    _best_fitness: float = field(default=float("inf"), init=False)
     _rng: np.random.Generator = field(default_factory=np.random.default_rng, init=False)
 
     @property
@@ -151,9 +151,9 @@ class BIPOPRestarter:
         solution : jax.Array
             Candidate solution.
         fitness : float
-            Fitness value (CMA-ES maximizes, so higher is better).
+            Fitness value (raw SSR: lower is better).
         """
-        if fitness > self._best_fitness:
+        if fitness < self._best_fitness:
             self._best_solution = solution
             self._best_fitness = fitness
             logger.debug(f"BIPOP: New best fitness: {fitness:.6e}")
@@ -164,7 +164,7 @@ class BIPOPRestarter:
         Returns
         -------
         tuple[jax.Array | None, float]
-            Best solution and its fitness, or (None, -inf) if none found.
+            Best solution and its fitness, or (None, inf) if none found.
         """
         return self._best_solution, self._best_fitness
 
@@ -173,4 +173,4 @@ class BIPOPRestarter:
         self.restart_count = 0
         self._use_large_pop = True
         self._best_solution = None
-        self._best_fitness = -float("inf")
+        self._best_fitness = float("inf")

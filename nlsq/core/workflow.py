@@ -258,6 +258,8 @@ class MemoryBudget:
             raise ValueError("n_params must be positive")
         if safety_factor <= 0 or safety_factor > 1.0:
             raise ValueError("safety_factor must be in (0, 1]")
+        if memory_limit_gb is not None and memory_limit_gb <= 0:
+            raise ValueError("memory_limit_gb must be positive")
 
         # Get available memory (lazy import to avoid circular dependency)
         if memory_limit_gb is not None:

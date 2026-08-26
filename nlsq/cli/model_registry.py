@@ -395,12 +395,15 @@ class ModelRegistry:
                     "path": str(path),
                     "violations": validation_result.violations,
                 },
-                suggestion="Remove dangerous patterns or use --trust flag to skip validation",
+                suggestion=(
+                    "Remove dangerous patterns, or set `trusted: true` in the "
+                    "YAML config's `model:` block to skip validation"
+                ),
             )
 
         if is_trusted and validation_result.violations:
             logger.warning(
-                "Loading model %s with --trust flag, bypassing security checks. "
+                "Loading model %s with trusted=true, bypassing security checks. "
                 "Violations that would have blocked: %s",
                 path,
                 "; ".join(validation_result.violations[:3]),

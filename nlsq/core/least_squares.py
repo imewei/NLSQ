@@ -536,9 +536,13 @@ class LeastSquares:
                 f"`loss` must be one of {self.ls.IMPLEMENTED_LOSSES.keys()} or a callable.",
             )
 
-        # Validate method
-        if method != "trf":
-            raise ValueError("`method` must be 'trf'")
+        # Validate method. There is no separate LM algorithm in NLSQ --
+        # trf_no_bounds() (selected automatically below when bounds are
+        # unbounded) is already the same trust-region solver without CL
+        # scaling/reflection, so 'lm' is accepted as an alias for that case
+        # and rejected with bounds, matching scipy's own restriction.
+        if method not in ("trf", "lm"):
+            raise ValueError("`method` must be 'trf' or 'lm'")
 
         # Validate jac parameter
         if jac is not None and not callable(jac):
@@ -573,6 +577,9 @@ class LeastSquares:
 
         if lb.shape != x0.shape or ub.shape != x0.shape:
             raise ValueError("Inconsistent shapes between bounds and `x0`.")
+
+        if method == "lm" and (np.any(np.isfinite(lb)) or np.any(np.isfinite(ub))):
+            raise ValueError("Method 'lm' doesn't work when there are bounds.")
 
         if np.any(lb >= ub):
             raise ValueError(
