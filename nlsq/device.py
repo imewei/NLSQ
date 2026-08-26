@@ -15,6 +15,21 @@ import sys
 _logger = logging.getLogger(__name__)
 
 
+def _is_accelerator_device(d: object) -> bool:
+    """True if a JAX device is a GPU or TPU (any vendor/backend).
+
+    Prefers the real ``.platform`` attribute ("gpu"/"tpu"/"cpu") that JAX
+    devices expose; falls back to substring matching on ``str(d)`` for
+    mocks/older JAX that lack it. The old code only matched "cuda", which
+    silently reported TPU and ROCm devices as CPU-only.
+    """
+    platform = getattr(d, "platform", None)
+    if isinstance(platform, str) and platform:
+        return platform in ("gpu", "tpu")
+    s = str(d).lower()
+    return "cuda" in s or "gpu" in s or "tpu" in s
+
+
 def get_system_cuda_version() -> tuple[str | None, int | None]:
     """Detect system CUDA version from nvcc.
 
@@ -223,7 +238,7 @@ def check_gpu_availability(warn: bool = True) -> bool:
         import jax
 
         devices = jax.devices()
-        using_gpu = any("cuda" in str(d).lower() for d in devices)
+        using_gpu = any(_is_accelerator_device(d) for d in devices)
 
         if using_gpu:
             _logger.debug(f"JAX is using GPU: {devices}")
@@ -337,7 +352,7 @@ def get_device_info() -> dict:
         info["jax_backend"] = jax.default_backend()
         devices = jax.devices()
         info["devices"] = [str(d) for d in devices]
-        info["gpu_count"] = sum(1 for d in devices if "cuda" in str(d).lower())
+        info["gpu_count"] = sum(1 for d in devices if _is_accelerator_device(d))
         info["using_gpu"] = info["gpu_count"] > 0
     except ImportError:
         pass

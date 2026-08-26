@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import logging
@@ -194,11 +195,15 @@ class JAXConfig:
         if os.getenv("NLSQ_DISABLE_PERSISTENT_CACHE") == "1":
             return
 
-        # Set cache directory
-        cache_dir = os.getenv(
-            "NLSQ_JAX_CACHE_DIR",
-            os.path.expanduser("~/.cache/nlsq/jax_cache"),
-        )
+        # Set cache directory. Honor the standard JAX_COMPILATION_CACHE_DIR
+        # if the user already set it, so NLSQ doesn't silently redirect a
+        # pre-existing JAX cache configuration to its own default location.
+        cache_dir = os.getenv("JAX_COMPILATION_CACHE_DIR")
+        if not cache_dir:
+            cache_dir = os.getenv(
+                "NLSQ_JAX_CACHE_DIR",
+                os.path.expanduser("~/.cache/nlsq/jax_cache"),
+            )
 
         try:
             # Create cache directory if it doesn't exist
@@ -262,16 +267,16 @@ class JAXConfig:
                     stacklevel=2,
                 )
 
-        # Configure memory preallocation via JAX config if explicitly requested
+        # Configure memory preallocation if explicitly requested. The
+        # "jax_preallocate_gpu_memory" config key doesn't exist on current
+        # JAX (it's an AttributeError, silently swallowed below) — the only
+        # mechanism that actually works is the XLA env var, so set it
+        # directly (overriding any prior XLA_PYTHON_CLIENT_PREALLOCATE=true).
         if os.getenv("NLSQ_DISABLE_GPU_PREALLOCATION") == "1":
-            try:
+            os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+            logging.info("Disabled GPU memory preallocation via XLA env var")
+            with contextlib.suppress(AttributeError):
                 config.update("jax_preallocate_gpu_memory", False)
-                logging.info("Disabled GPU memory preallocation via JAX config")
-            except AttributeError:
-                # JAX version may not support this option
-                logging.warning(
-                    "JAX version does not support jax_preallocate_gpu_memory option",
-                )
 
         self._gpu_memory_configured = True
 
@@ -400,13 +405,19 @@ class JAXConfig:
         >>> # Back to previous precision setting
         """
         instance = cls()
-        original_state = instance._x64_enabled
 
-        try:
-            cls.enable_x64(use_x64)
-            yield
-        finally:
-            cls.enable_x64(original_state)
+        # Hold the lock for the whole enter/yield/exit span, not just each
+        # enable_x64() call individually. jax_enable_x64 is one process-wide
+        # flag; without this, two overlapping precision_context calls on
+        # different threads can each snapshot the other's transient state
+        # and restore the wrong value on exit.
+        with cls._lock:
+            original_state = instance._x64_enabled
+            try:
+                cls.enable_x64(use_x64)
+                yield
+            finally:
+                cls.enable_x64(original_state)
 
     # Memory configuration methods
     @classmethod

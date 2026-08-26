@@ -163,6 +163,32 @@ class TestJAXConfigIntegration(unittest.TestCase):
         except ImportError:
             self.skipTest("JAX not installed")
 
+    def test_persistent_cache_honors_standard_jax_env_var(self):
+        """A pre-existing JAX_COMPILATION_CACHE_DIR must win over NLSQ's
+        own default, so NLSQ doesn't silently redirect a cache location the
+        user (or embedding process) already configured."""
+        import tempfile
+        from unittest.mock import MagicMock
+
+        config = JAXConfig()
+        mock_jax_config = MagicMock()
+
+        with tempfile.TemporaryDirectory() as standard_dir:
+            with patch.dict(
+                os.environ,
+                {
+                    "JAX_COMPILATION_CACHE_DIR": standard_dir,
+                    "NLSQ_JAX_CACHE_DIR": "/tmp/should-not-be-used",
+                },
+            ):
+                os.environ.pop("NLSQ_DISABLE_PERSISTENT_CACHE", None)
+                config._configure_persistent_cache(mock_jax_config)
+
+            mock_jax_config.update.assert_any_call(
+                "jax_compilation_cache_dir",
+                standard_dir,
+            )
+
 
 class TestMemoryConfig(unittest.TestCase):
     """Tests for MemoryConfig dataclass."""
