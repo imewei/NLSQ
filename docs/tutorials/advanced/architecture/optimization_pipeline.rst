@@ -65,6 +65,15 @@ Pipeline Overview
    └────────────────────┬────────────────────────────┘
                         │
                         ▼
+   ┌─────────────────────────────────────────────────┐
+   │        Diagnostics (optional)                    │
+   │  - IdentifiabilityAnalyzer: parameter            │
+   │    identifiability from J^T J rank/conditioning  │
+   │  - GradientHealthReport: gradient norm, vanishing│
+   │  - ModelHealthIssue aggregation                  │
+   └────────────────────┬────────────────────────────┘
+                        │
+                        ▼
                    (popt, pcov)
 
 Step-by-Step Walkthrough
@@ -175,6 +184,25 @@ Step-by-Step Walkthrough
    cov_result = CovarianceComputer().compute(
        result=optimize_result, n_data=len(y), sigma=None, absolute_sigma=False
    )
+
+**8. Diagnostics (optional)**
+
+.. code-block:: python
+
+   # Enable with compute_diagnostics=True / diagnostics_level=...
+   from nlsq.diagnostics.types import DiagnosticsConfig, DiagnosticLevel
+
+   popt, pcov = fit(
+       model,
+       x,
+       y,
+       p0=[1, 0.5],
+       compute_diagnostics=True,
+       diagnostics_level=DiagnosticLevel.FULL,
+   )
+   # IdentifiabilityAnalyzer flags poorly-conditioned / unidentifiable
+   # parameters; GradientHealthReport flags vanishing/exploding gradients.
+   # Results surface as ModelHealthIssue entries in the fit result.
 
 Jacobian Computation
 --------------------

@@ -9,47 +9,67 @@ Module Hierarchy
 .. code-block:: text
 
    nlsq/
-   ├── __init__.py            # Public API exports
+   ├── __init__.py            # Public API exports (lazy-loaded)
    │
    ├── core/                  # Core optimization
-   │   ├── minpack.py              # 2500+ lines
+   │   ├── minpack.py              # SciPy-compatible curve_fit() API
    │   ├── least_squares.py        # LeastSquares class
-   │   ├── trf.py                  # TRF algorithm (2544 lines)
+   │   ├── trf.py                  # TRF algorithm (~2500 lines)
    │   ├── trf_jit.py              # JIT-compiled helpers
-   │   ├── profiler.py             # TRFProfiler
-   │   ├── workflow.py             # 3-workflow system
+   │   ├── profiler.py             # TRFProfiler / NullProfiler
+   │   ├── workflow.py             # 3-workflow system + MemoryBudgetSelector
    │   ├── functions.py            # Built-in models
    │   ├── factories.py            # Factory functions
    │   ├── sparse_jacobian.py      # Sparse Jacobian support
-   │   ├── orchestration/          # v0.6.4 components
+   │   ├── orchestration/          # CurveFit God Class decomposition (v0.6.4)
    │   │   ├── data_preprocessor.py
    │   │   ├── optimization_selector.py
    │   │   ├── covariance_computer.py
-   │   │   └── streaming_coordinator.py
+   │   │   ├── streaming_coordinator.py
+   │   │   └── entities.py
    │   └── adapters/               # Protocol adapters
    │       └── curve_fit_adapter.py
    │
    ├── interfaces/            # Protocol definitions
-   │   ├── optimizer_protocol.py   # OptimizerProtocol
-   │   ├── cache_protocol.py       # CacheProtocol
+   │   ├── optimizer_protocol.py   # OptimizerProtocol, CurveFitProtocol
+   │   ├── cache_protocol.py       # CacheProtocol, BoundedCacheProtocol
+   │   ├── data_source_protocol.py
+   │   ├── jacobian_protocol.py
    │   ├── orchestration_protocol.py
-   │   └── ...
+   │   └── result_protocol.py
+   │
+   ├── diagnostics/           # Optimization health & identifiability
+   │   ├── types.py                 # DiagnosticsConfig, IdentifiabilityReport
+   │   ├── gradient_health.py       # GradientHealthReport
+   │   ├── identifiability.py       # IdentifiabilityAnalyzer
+   │   ├── parameter_sensitivity.py # ParameterSensitivityAnalyzer
+   │   ├── health_report.py         # ModelHealthIssue aggregation
+   │   └── recommendations.py
+   │
+   ├── result/                # Result types (consolidated)
+   │   ├── optimize_result.py      # OptimizeResult
+   │   ├── optimize_warning.py     # OptimizeWarning
+   │   └── curve_fit_result.py     # CurveFitResult
    │
    ├── streaming/             # Large datasets
    │   ├── optimizer.py            # Base streaming
    │   ├── large_dataset.py        # LargeDatasetFitter
-   │   ├── adaptive_hybrid.py      # Hybrid streaming
-   │   ├── telemetry.py            # Defense monitoring
-   │   └── validators.py           # Config validation
+   │   ├── adaptive_hybrid.py      # AdaptiveHybridStreamingOptimizer
+   │   ├── telemetry.py            # DefenseLayerTelemetry
+   │   ├── validators.py           # Config validation
+   │   ├── hybrid_config.py        # HybridStreamingConfig
+   │   └── phases/                 # Warmup / Gauss-Newton phase pipeline
    │
    ├── caching/               # Performance
    │   ├── memory_manager.py       # Memory pooling
-   │   ├── smart_cache.py          # JIT caching
+   │   ├── smart_cache.py          # JIT caching (xxhash)
    │   └── compilation_cache.py    # Persistent cache
    │
    ├── stability/             # Numerical stability
    │   ├── guard.py                # NumericalStabilityGuard
    │   ├── svd_fallback.py         # SVD fallback
+   │   ├── fallback.py             # FallbackOrchestrator + strategies
+   │   ├── recovery.py             # OptimizationRecovery
    │   └── condition_monitor.py    # Condition tracking
    │
    ├── precision/             # Precision control
@@ -61,9 +81,25 @@ Module Hierarchy
    │   └── diagnostics_facade.py
    │
    ├── global_optimization/   # Global search
-   │   ├── multi_start.py
-   │   ├── cmaes_optimizer.py
-   │   └── method_selector.py
+   │   ├── multi_start.py          # MultiStartOrchestrator
+   │   ├── cmaes_optimizer.py      # CMAESOptimizer
+   │   ├── cmaes_config.py
+   │   ├── bipop.py                # BIPOP restarts
+   │   ├── tournament.py           # TournamentSelector
+   │   └── method_selector.py      # MethodSelector (Multi-Start vs CMA-ES)
+   │
+   ├── utils/                 # Utilities
+   │   ├── validators.py           # Input validation
+   │   ├── diagnostics.py          # OptimizationDiagnostics (convergence monitor)
+   │   ├── safe_serialize.py       # Secure JSON serialization (replaces pickle)
+   │   └── logging.py
+   │
+   ├── cli/                   # Command-line interface
+   │   ├── main.py
+   │   ├── model_registry.py       # Model loading with security validation
+   │   ├── model_validation.py     # AST-based model validation
+   │   ├── workflow_runner.py
+   │   └── result_exporter.py
    │
    └── gui_qt/                # Desktop GUI
        └── ...
@@ -92,6 +128,13 @@ Import Patterns
 
    from nlsq.interfaces.optimizer_protocol import OptimizerProtocol
    from nlsq.interfaces.cache_protocol import CacheProtocol
+
+**Diagnostics:**
+
+.. code-block:: python
+
+   from nlsq.diagnostics.types import DiagnosticsConfig, DiagnosticLevel
+   from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
 
 **Facades (lazy loading):**
 
@@ -134,6 +177,10 @@ Dependency Graph
      │       └──► StreamingCoordinator
      │
      ├──► MemoryBudgetSelector
+     │
+     ├──► Diagnostics (optional, compute_diagnostics=True)
+     │       ├──► IdentifiabilityAnalyzer
+     │       └──► GradientHealthReport
      │
      └──► GlobalOptimization (optional)
              │
