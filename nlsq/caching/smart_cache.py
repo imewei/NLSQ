@@ -12,7 +12,6 @@ Phase 3 Optimizations (Task Group 9):
 """
 
 import hashlib
-import itertools
 import json
 import logging
 import os
@@ -22,10 +21,10 @@ from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
-from weakref import WeakKeyDictionary
 
 import numpy as np
 
+from nlsq.caching._closure_serial import closure_serial as _closure_serial
 from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
@@ -50,31 +49,6 @@ try:
     HAS_XXHASH = True
 except ImportError:
     HAS_XXHASH = False
-
-
-_closure_serial_counter = itertools.count()
-_closure_serial_registry: "WeakKeyDictionary[Callable, int]" = WeakKeyDictionary()
-_closure_serial_lock = threading.Lock()
-
-
-def _closure_serial(func: Callable) -> int:
-    """Return a stable, per-object, never-reused serial number for ``func``.
-
-    Plain ``id(func)`` is only unique while the object is alive: once a
-    closure is garbage-collected, CPython is free to reuse its address for
-    an unrelated object created immediately after, which would let a fresh
-    closure collide with a stale cache entry keyed off the old id(). The
-    WeakKeyDictionary registry assigns each *live* function object a serial
-    the first time it's seen and never reassigns that serial to a different
-    object, even if id() gets reused after GC -- a genuinely new object
-    always misses the lookup and gets a fresh, higher serial.
-    """
-    with _closure_serial_lock:
-        serial = _closure_serial_registry.get(func)
-        if serial is None:
-            serial = next(_closure_serial_counter)
-            _closure_serial_registry[func] = serial
-        return serial
 
 
 def _callable_identity(func: Callable) -> str:

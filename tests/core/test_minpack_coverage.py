@@ -282,6 +282,42 @@ class TestBugFixRegressions(unittest.TestCase):
         with self.assertRaises(TypeError):
             curve_fit(lambda x, a: a * x, [1, 2], [1, 2], *([None] * 18))
 
+    def test_recovery_path_does_not_double_pass_tr_solver(self):
+        """The recovery-lambda's least_squares() call forwards tr_solver
+        (and ftol/xtol/x_scale/loss) explicitly, but the outer kwargs
+        dict already has tr_solver set unconditionally by
+        _select_tr_solver whenever it resolves a value (the default
+        solver='auto' case). A prior version of the fix also spread the
+        raw outer **kwargs at the end, so every recovery attempt raised
+        TypeError: got multiple values for keyword argument 'tr_solver' --
+        silently swallowed by recovery.py's except Exception, masking the
+        real error behind a misleading 'recovery unsuccessful' message.
+        Force the first least_squares() call to fail so recovery actually
+        runs, and assert it converges instead of raising."""
+
+        def model(x, a, b):
+            return a * jnp.exp(b * x)
+
+        x = np.linspace(0, 5, 20)
+        y = np.asarray(model(x, 2.0, 0.3))
+
+        cf = CurveFit(enable_recovery=True)
+        real_least_squares = cf.ls.least_squares
+        calls = {"n": 0}
+
+        def flaky_least_squares(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("forced failure to trigger recovery")
+            return real_least_squares(*args, **kwargs)
+
+        cf.ls.least_squares = flaky_least_squares
+
+        popt, _pcov = cf.curve_fit(model, x, y, p0=[1.0, 0.1])
+
+        self.assertGreaterEqual(calls["n"], 2)  # recovery actually ran
+        np.testing.assert_allclose(popt, [2.0, 0.3], atol=0.05)
+
     def test_curve_fit_eleventh_positional_arg_is_applied(self):
         """timeit is the 11th positional parameter of CurveFit.curve_fit;
         verify it's actually forwarded now, not silently dropped."""
