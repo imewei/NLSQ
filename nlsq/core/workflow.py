@@ -560,7 +560,15 @@ class MemoryBudgetSelector:
             "chunked",
             LDMemoryConfig(
                 memory_limit_gb=budget.threshold_gb,
-                safety_factor=self.safety_factor,
+                # budget.threshold_gb is ALREADY available_gb * safety_factor
+                # (see MemoryBudgetSelector.select()); LargeDatasetFitter's
+                # own chunk-size math re-multiplies memory_limit_gb by
+                # safety_factor again, so passing self.safety_factor here
+                # would silently shrink the effective budget to
+                # available_gb * safety_factor**2 (e.g. 0.75 -> 0.5625),
+                # disagreeing with the budget this selector itself decided
+                # on and logged. 1.0 keeps threshold_gb as the true budget.
+                safety_factor=1.0,
                 min_chunk_size=min_chunk_size,
                 max_chunk_size=1_000_000,
                 streaming_batch_size=chunk_size,
