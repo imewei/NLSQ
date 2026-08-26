@@ -248,23 +248,33 @@ class ResultsPage(QWidget):
             )
 
         # Compute fit statistics
+        n_nonfinite_residuals = 0
         if xdata is not None and ydata is not None and popt is not None:
             self._update_statistics(xdata, ydata, popt, result)
-            self._update_plots(xdata, ydata, popt, result)
+            n_nonfinite_residuals = self._update_plots(xdata, ydata, popt, result)
 
         # Update status
         converged = getattr(result, "success", True)
         n_iter = getattr(result, "nfev", 0)
         if converged:
-            self._status_label.setText(
-                f"Fit completed successfully ({n_iter} evaluations)",
-            )
-            self._status_label.setStyleSheet("color: #4CAF50;")
+            status_text = f"Fit completed successfully ({n_iter} evaluations)"
+            status_color = "#4CAF50"
         else:
-            self._status_label.setText(
-                f"Fit completed with warnings ({n_iter} evaluations)",
+            status_text = f"Fit completed with warnings ({n_iter} evaluations)"
+            status_color = "#FF9800"
+
+        if n_nonfinite_residuals:
+            # The residuals/histogram plots silently drop non-finite points
+            # to avoid crashing (np.histogram can't autorange on NaN/Inf) —
+            # surface that so a partially-diverged fit isn't mistaken for a
+            # clean one just because the plot looks self-consistent.
+            status_text += (
+                f" — {n_nonfinite_residuals} non-finite residual(s) excluded from plots"
             )
-            self._status_label.setStyleSheet("color: #FF9800;")
+            status_color = "#FF9800"
+
+        self._status_label.setText(status_text)
+        self._status_label.setStyleSheet(f"color: {status_color};")
 
         self._export_btn.setEnabled(True)
 
@@ -466,7 +476,7 @@ class ResultsPage(QWidget):
         ydata: np.ndarray,
         popt: np.ndarray,
         result: Any,
-    ) -> None:
+    ) -> int:
         """Update all plots with fit results.
 
         Args:
@@ -474,6 +484,12 @@ class ResultsPage(QWidget):
             ydata: Y data
             popt: Fitted parameters
             result: Fit result object
+
+        Returns:
+            Count of non-finite (NaN/Inf) residuals excluded from the
+            histogram/residuals plots — 0 if none. The plot widgets filter
+            these out to avoid crashing, so this is the caller's only signal
+            that some data points were silently dropped from the plots.
         """
         state = self._app_state.state
 
@@ -550,6 +566,8 @@ class ResultsPage(QWidget):
 
         # Update histogram
         self._histogram_plot.set_data(residuals)
+
+        return int(np.count_nonzero(~np.isfinite(residuals)))
 
     def _compute_confidence_bands(
         self,

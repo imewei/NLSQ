@@ -9,6 +9,7 @@ fields and vice versa.
 
 from typing import Any, TextIO
 
+import numpy as np
 import yaml
 
 from nlsq.gui_qt.session_state import SessionState, initialize_state
@@ -54,8 +55,19 @@ def _parse_model_parameters(
             p0_values.append(param["initial"])
         if "bounds" in param:
             bounds = param["bounds"]
-            lower_bounds.append(bounds[0] if bounds[0] is not None else float("-inf"))
-            upper_bounds.append(bounds[1] if bounds[1] is not None else float("inf"))
+            if len(bounds) != 2:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Parameter 'bounds' expected 2 elements [lower, upper], "
+                    "got %d: %r — malformed entries default to unbounded",
+                    len(bounds),
+                    bounds,
+                )
+            lower = bounds[0] if len(bounds) > 0 and bounds[0] is not None else None
+            upper = bounds[1] if len(bounds) > 1 and bounds[1] is not None else None
+            lower_bounds.append(float("-inf") if lower is None else lower)
+            upper_bounds.append(float("inf") if upper is None else upper)
         if "transform" in param and "name" in param:
             transforms[param["name"]] = param["transform"]
 
@@ -221,6 +233,25 @@ def load_yaml_config(file: TextIO | str) -> SessionState:
 
     if config is None:
         config = {}
+
+    if not isinstance(config, dict):
+        raise ValueError(
+            "Invalid YAML config: expected a mapping at the top level, "
+            f"got {type(config).__name__}",
+        )
+    for _section_key in (
+        "model",
+        "fitting",
+        "hybrid_streaming",
+        "batch",
+        "global_optimization",
+    ):
+        _section_value = config.get(_section_key)
+        if _section_value is not None and not isinstance(_section_value, dict):
+            raise ValueError(
+                f"Invalid YAML config: '{_section_key}' section must be a "
+                f"mapping, got {type(_section_value).__name__}",
+            )
 
     state = initialize_state()
 
@@ -391,7 +422,17 @@ def merge_configs(
             default_state = SessionState()
             default_value = getattr(default_state, field_name)
 
-            if overlay_value != default_value:
+            # Plain `!=` raises on numpy arrays (xdata/ydata/sigma) since their
+            # comparison returns an elementwise array, not a bool.
+            if isinstance(overlay_value, np.ndarray) or isinstance(
+                default_value,
+                np.ndarray,
+            ):
+                changed = not np.array_equal(overlay_value, default_value)
+            else:
+                changed = overlay_value != default_value
+
+            if changed:
                 setattr(result, field_name, overlay_value)
 
     return result

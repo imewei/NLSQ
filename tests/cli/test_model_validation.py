@@ -492,3 +492,76 @@ def estimate_p0(xdata, ydata):
         visitor.visit(tree)
 
         assert visitor.violations == []
+
+    def test_detects_sys_modules_bypass(self):
+        """sys.modules dict-access must not bypass the os/subprocess check.
+
+        Regression for a three-brain-review finding: previously neither
+        `sys` nor `modules` was in the blocklist, so `sys.modules["os"]`
+        reached an already-imported dangerous module without a literal
+        `import os` for visit_Import to catch.
+        """
+        import ast
+
+        source = """
+import sys
+def f(x, a):
+    sys.modules["os"].remove("/tmp/whatever")
+    return a * x
+"""
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("modules" in v for v in visitor.violations)
+
+    def test_detects_format_string_dunder_escape(self):
+        """A dunder chain hidden inside a format-spec string must be caught.
+
+        Regression for a three-brain-review finding: `"{0.__class__...}"
+        .format(x)` resolves the chain at runtime from string data, never
+        producing an ast.Attribute node for visit_Attribute to see.
+        """
+        import ast
+
+        source = (
+            'template = "{0.__class__.__bases__[0].__subclasses__}"\n'
+            "result = template.format(x)\n"
+        )
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("__class__" in v for v in visitor.violations)
+
+    def test_detects_operator_attrgetter_bypass(self):
+        """operator.attrgetter is a string-mediated getattr equivalent."""
+        import ast
+
+        source = """
+import operator
+getter = operator.attrgetter("system")
+"""
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("attrgetter" in v for v in visitor.violations)
+
+    def test_detects_pydoc_locate_bypass(self):
+        """pydoc.locate is a string-mediated import/getattr equivalent."""
+        import ast
+
+        source = """
+import pydoc
+system = pydoc.locate("os.system")
+"""
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("locate" in v for v in visitor.violations)

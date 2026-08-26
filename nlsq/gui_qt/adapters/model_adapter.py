@@ -330,6 +330,20 @@ class _SafeASTValidator(ast.NodeVisitor):
             "threading",
             "concurrent",
             "asyncio",
+            # Parity with cli/model_validation.py's DANGEROUS_MODULES — this
+            # validator had drifted and missed all of these serialization/
+            # introspection/reflection modules (e.g. `pickle.loads(...)`
+            # passed this validator untouched despite being blocked in the
+            # CLI's file-loading path for the exact same "custom model"
+            # concept).
+            "pickle",
+            "dill",
+            "cloudpickle",
+            "inspect",
+            "dis",
+            "operator",
+            "pydoc",
+            "telnetlib",
         },
     )
 
@@ -351,6 +365,54 @@ class _SafeASTValidator(ast.NodeVisitor):
             "delattr",
             "breakpoint",
         },
+    )
+
+    # Dunder/reflection attribute or bare-name chains used in sandbox escapes
+    # such as `().__class__.__bases__[0].__subclasses__()`, which never touch
+    # a Name matching DANGEROUS_MODULES so visit_Call's attribute check above
+    # would otherwise miss them entirely.
+    DANGEROUS_ATTRS = frozenset(
+        {
+            "__class__",
+            "__base__",
+            "__bases__",
+            "__mro__",
+            "__subclasses__",
+            "__globals__",
+            "__dict__",
+            "__code__",
+            "__builtins__",
+            "__getattribute__",
+            "__getattr__",
+            "mro",
+            "system",
+            "popen",
+            "spawn",
+            "Popen",
+            "modules",
+            "attrgetter",
+            "methodcaller",
+            "locate",
+            # pickle/dill/cloudpickle attribute-call parity (see
+            # DANGEROUS_MODULES above)
+            "loads",
+            "load",
+        },
+    )
+
+    # Dunder substrings dangerous even inside a plain string constant, since
+    # str.format()/str.format_map() resolve dotted attribute chains from a
+    # format-spec string at runtime without ever producing an ast.Attribute.
+    _DANGEROUS_STRING_SUBSTRINGS = (
+        "__class__",
+        "__base__",
+        "__mro__",
+        "__subclasses__",
+        "__globals__",
+        "__builtins__",
+        "__code__",
+        "__import__",
+        "__loader__",
     )
 
     def __init__(self) -> None:
@@ -376,6 +438,42 @@ class _SafeASTValidator(ast.NodeVisitor):
                 )
         self.generic_visit(node)
 
+    def visit_Name(self, node: ast.Name) -> None:
+        """Check bare name references (e.g. `getattr` stored, not called).
+
+        Also checks DANGEROUS_ATTRS, not just DANGEROUS_BUILTINS: a module
+        dunder like `__builtins__` is a bare Name at module scope (not an
+        Attribute), so `__builtins__["__import__"]("subprocess")` would
+        otherwise dodge every check above — flagged as an attribute/call
+        target but never as a plain Name reference.
+        """
+        if node.id in self.DANGEROUS_BUILTINS or node.id in self.DANGEROUS_ATTRS:
+            self.errors.append(
+                f"Reference to dangerous name '{node.id}' is not allowed",
+            )
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Check attribute access itself, not just attribute calls.
+
+        Catches dunder-chain traversal stored in a variable before being
+        called (e.g. `x = obj.__class__.__subclasses__; x()[0]()`), which
+        visit_Call alone cannot see.
+        """
+        if node.attr in self.DANGEROUS_ATTRS:
+            self.errors.append(f"Access to '.{node.attr}' is not allowed")
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        """Check string constants for format-string dunder-escape payloads."""
+        if isinstance(node.value, str):
+            for pattern in self._DANGEROUS_STRING_SUBSTRINGS:
+                if pattern in node.value:
+                    self.errors.append(
+                        f"String contains disallowed pattern '{pattern}'",
+                    )
+        self.generic_visit(node)
+
     def visit_Call(self, node: ast.Call) -> None:
         """Check function calls for dangerous built-ins."""
         if isinstance(node.func, ast.Name):
@@ -385,11 +483,18 @@ class _SafeASTValidator(ast.NodeVisitor):
                 )
         elif isinstance(node.func, ast.Attribute):
             # Check for dangerous method calls on blocked modules
-            if isinstance(node.func.value, ast.Name):
-                if node.func.value.id in self.DANGEROUS_MODULES:
-                    self.errors.append(
-                        f"Call to '{node.func.value.id}.{node.func.attr}' is not allowed",
-                    )
+            if (
+                isinstance(node.func.value, ast.Name)
+                and node.func.value.id in self.DANGEROUS_MODULES
+            ):
+                self.errors.append(
+                    f"Call to '{node.func.value.id}.{node.func.attr}' is not allowed",
+                )
+            # No need to also check `node.func.attr in DANGEROUS_ATTRS` here:
+            # generic_visit below descends into node.func, and when node.func
+            # is this same Attribute node, visit_Attribute already checks
+            # `.attr in DANGEROUS_ATTRS` — checking it again here just
+            # duplicated the violation message for the same call site.
         self.generic_visit(node)
 
     def validate(self, code: str) -> None:

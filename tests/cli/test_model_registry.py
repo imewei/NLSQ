@@ -149,6 +149,7 @@ class TestModelRegistryCustomModels:
         result = model(x, 1.0, 1.0, 0.0)
         assert result is not None
 
+    @pytest.mark.serial
     def test_custom_model_loading_enforces_resource_limits(
         self,
         tmp_path: Path,
@@ -156,7 +157,13 @@ class TestModelRegistryCustomModels:
     ):
         """Regression: exec_module() of a custom model must run inside
         resource_limits() so the documented timeout/memory security feature
-        is not dead code (three-brain review finding)."""
+        is not dead code (three-brain review finding).
+
+        Marked serial: this spies on resource_limits via monkeypatch, which
+        proved flaky specifically under full-suite parallel xdist runs (passes
+        reliably standalone and in smaller parallel subsets) — the documented
+        pattern in this repo for exactly that failure mode.
+        """
         monkeypatch.chdir(tmp_path)
         model_file = tmp_path / "resource_limited_model.py"
         model_file.write_text(
@@ -167,12 +174,11 @@ class TestModelRegistryCustomModels:
         )
 
         entered = []
-        real_resource_limits = __import__(
-            "nlsq.cli.model_validation",
-            fromlist=["resource_limits"],
-        ).resource_limits
-
         from contextlib import contextmanager
+
+        import nlsq.cli.model_registry as model_registry_module
+
+        real_resource_limits = model_registry_module.resource_limits
 
         @contextmanager
         def spy_resource_limits(*args, **kwargs):
@@ -180,8 +186,12 @@ class TestModelRegistryCustomModels:
             with real_resource_limits(*args, **kwargs):
                 yield
 
+        # Patch via the already-imported module object (not a dotted string)
+        # so there's no possibility of resolving a different module instance
+        # than the one ModelRegistry actually calls into.
         monkeypatch.setattr(
-            "nlsq.cli.model_registry.resource_limits",
+            model_registry_module,
+            "resource_limits",
             spy_resource_limits,
         )
 
