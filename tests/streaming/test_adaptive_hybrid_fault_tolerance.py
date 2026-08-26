@@ -381,20 +381,20 @@ class TestFaultToleranceIntegration:
                 (x_data, y_data), model, p0, bounds=bounds, verbose=0
             )
 
-            # Get checkpoint
+            # Get checkpoint. Assert (not `if len(checkpoints) > 0:`) --
+            # the NotImplementedError below fires before fit() ever touches
+            # the checkpoint file, so a guarded-but-skipped body here would
+            # silently pass without exercising the refusal at all, exactly
+            # the vacuous-pass failure mode this test's docstring says it fixes.
             checkpoints = sorted(Path(tmpdir).glob("checkpoint_*.h5"))
-            if len(checkpoints) > 0:
-                # Configure to resume from checkpoint -- fit() must refuse
-                # rather than silently starting over from p0
-                config.resume_from_checkpoint = str(checkpoints[-1])
-                optimizer2 = AdaptiveHybridStreamingOptimizer(config)
-                with pytest.raises(
-                    NotImplementedError,
-                    match="resume_from_checkpoint",
-                ):
-                    optimizer2.fit(
-                        (x_data, y_data), model, p0, bounds=bounds, verbose=0
-                    )
+            assert len(checkpoints) > 0
+
+            # Configure to resume from checkpoint -- fit() must refuse
+            # rather than silently starting over from p0
+            config.resume_from_checkpoint = str(checkpoints[-1])
+            optimizer2 = AdaptiveHybridStreamingOptimizer(config)
+            with pytest.raises(NotImplementedError, match="resume_from_checkpoint"):
+                optimizer2.fit((x_data, y_data), model, p0, bounds=bounds, verbose=0)
 
     def test_validation_with_checkpoints(self):
         """Test NaN/Inf validation works with checkpoint save/resume."""

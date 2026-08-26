@@ -195,10 +195,21 @@ class TestLbfgsBestParamsPairing:
         actual_loss_at_input = float(loss_fn(params0, x, y))
         assert loss_value == pytest.approx(actual_loss_at_input, rel=1e-6)
 
-        # best_params_global must be the point best_cost_global was measured at.
-        assert optimizer.best_cost_global == pytest.approx(loss_value, rel=1e-9)
-        recomputed = float(loss_fn(optimizer.best_params_global, x, y))
-        assert recomputed == pytest.approx(optimizer.best_cost_global, rel=1e-6)
+        # best_params_global must be the point best_cost_global was measured
+        # at. best_cost_global is stored as an SSR-equivalent (loss_value is
+        # MSE, converted via * n_points -- see the cross-phase unit-mismatch
+        # fix comment in _lbfgs_step) so it stays comparable with Phase 2's
+        # SSR-based tracking.
+        n_points = len(x)
+        assert optimizer.best_cost_global == pytest.approx(
+            loss_value * n_points,
+            rel=1e-9,
+        )
+        recomputed_mse = float(loss_fn(optimizer.best_params_global, x, y))
+        assert recomputed_mse * n_points == pytest.approx(
+            optimizer.best_cost_global,
+            rel=1e-6,
+        )
 
     def test_phase1_best_params_is_the_point_best_loss_was_measured_at(self):
         optimizer = AdaptiveHybridStreamingOptimizer(
@@ -410,3 +421,177 @@ class TestPhaseFailureFallsBackHonestly:
         assert "simulated Phase 2 failure" in result["message"]
         assert jnp.all(jnp.isfinite(result["x"]))
         assert jnp.all(jnp.isfinite(result["pcov"]))
+
+    def test_phase1_exception_still_returns_a_result(self, monkeypatch):
+        config = HybridStreamingConfig(
+            warmup_iterations=2,
+            max_warmup_iterations=3,
+            gauss_newton_max_iterations=3,
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        def model(x, a, b):
+            return a * x + b
+
+        x = jnp.linspace(0, 1, 20)
+        y = 2.0 * x + 1.0
+
+        def broken_phase1(*args, **kwargs):
+            raise RuntimeError("simulated Phase 1 failure")
+
+        monkeypatch.setattr(optimizer, "_run_phase1_warmup", broken_phase1)
+
+        result = optimizer.fit(
+            data_source=(x, y),
+            func=model,
+            p0=jnp.array([1.0, 1.0]),
+            verbose=0,
+        )
+        assert result["success"] is False
+        assert "simulated Phase 1 failure" in result["message"]
+        assert jnp.all(jnp.isfinite(result["x"]))
+
+
+class TestCrossPhaseBestTrackingUnitsConsistent:
+    """Codex/type-design-analyzer PR review finding: self.best_cost_global was
+    updated from Phase 1's MSE (jnp.mean(residuals**2)) and Phase 2's SSR
+    (jnp.sum(residuals**2)) without unit conversion. For n_points > 1,
+    SSR >> MSE, so once Phase 1 ran, Phase 2's `new_cost < best_cost_global`
+    could essentially never fire -- best_params_global would silently freeze
+    at Phase 1's endpoint, and fit()'s Phase-2 exception-fallback path would
+    discard all of Phase 2's actual progress.
+    """
+
+    def test_best_cost_global_stays_comparable_across_phase1_and_phase2(self):
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(normalize=False),
+        )
+
+        def model(x, a, b):
+            return a * x + b
+
+        # Many points: MSE and SSR differ by a large factor if unconverted.
+        x = jnp.linspace(0, 1, 200)
+        y = 2.0 * x + 1.0
+        optimizer._setup_normalization(model, jnp.array([0.1, 0.1]), None)
+
+        loss_fn = optimizer._create_warmup_loss_fn()
+        params0 = optimizer.normalized_params
+        opt, state = optimizer._create_lbfgs_optimizer(params0)
+
+        # One Phase-1 step populates best_cost_global from MSE-space.
+        optimizer._lbfgs_step(
+            params=params0,
+            opt_state=state,
+            optimizer=opt,
+            loss_fn=loss_fn,
+            x_batch=x,
+            y_batch=y,
+            iteration=0,
+        )
+        phase1_best_cost = optimizer.best_cost_global
+        n_points = len(x)
+
+        # Simulate what Phase 2 would compare: an SSR-space cost that is a
+        # genuine, large improvement in MSE terms but numerically larger in
+        # raw SSR terms purely from not being pre-scaled like Phase 1 used to be.
+        mse_equivalent_improvement = phase1_best_cost / n_points * 0.5  # better
+        ssr_of_improved_point = mse_equivalent_improvement * n_points
+
+        assert ssr_of_improved_point < phase1_best_cost, (
+            "A genuinely better (lower-MSE) Phase 2 point must compare as "
+            "lower than Phase 1's SSR-equivalent best_cost_global, or "
+            "Phase 2 progress can never overwrite Phase 1's frozen value"
+        )
+
+
+class TestPhaseFailureFallbackJTJRecomputeGuarded:
+    """silent-failure-hunter PR review finding: the Phase 2 exception-fallback
+    path's own JTJ recompute had no try/except -- a second failure there
+    (e.g. a degenerate fallback point) would crash fit() entirely instead of
+    degrading to a success=False result.
+    """
+
+    def test_double_failure_still_returns_instead_of_raising(self, monkeypatch):
+        config = HybridStreamingConfig(
+            warmup_iterations=2,
+            max_warmup_iterations=3,
+            gauss_newton_max_iterations=3,
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        def model(x, a, b):
+            return a * x + b
+
+        x = jnp.linspace(0, 1, 20)
+        y = 2.0 * x + 1.0
+
+        def broken_phase2(*args, **kwargs):
+            raise RuntimeError("simulated Phase 2 failure")
+
+        def broken_accumulate(*args, **kwargs):
+            raise RuntimeError("simulated JTJ recompute failure")
+
+        monkeypatch.setattr(optimizer, "_run_phase2_gauss_newton", broken_phase2)
+        monkeypatch.setattr(optimizer, "_accumulate_jtj_jtr", broken_accumulate)
+        monkeypatch.setattr(optimizer, "_accumulate_jtj_jtr_scan", broken_accumulate)
+        monkeypatch.setattr(optimizer, "_use_scan_for_accumulation", lambda: False)
+
+        result = optimizer.fit(
+            data_source=(x, y),
+            func=model,
+            p0=jnp.array([1.0, 1.0]),
+            verbose=0,
+        )
+        assert result["success"] is False
+        assert "simulated Phase 2 failure" in result["message"]
+        assert "simulated JTJ recompute failure" in result["message"]
+
+
+class TestGroupVarianceBestCostSeedIncludesRegularization:
+    """code-reviewer PR review finding (empirically reproduced): Phase 2's
+    local best_cost was seeded from final_residual_sum_sq (data-only SSR),
+    but new_cost inside the loop is SSR + the group-variance penalty. With
+    the penalty non-negative, that made the seed artificially low, so
+    `new_cost < best_cost` could permanently fail to fire and Phase 2 would
+    silently return the UNOPTIMIZED starting point while reporting convergence.
+    """
+
+    def test_phase2_moves_away_from_p0_with_large_group_variance_penalty(self):
+        # Call Phase 2 directly (bypass Phase 1/fit()) so the "before" state
+        # is exactly p0, unaffected by warmup's own regularization-aware loss.
+        config = HybridStreamingConfig(
+            normalize=False,
+            gauss_newton_max_iterations=5,
+            enable_group_variance_regularization=True,
+            group_variance_lambda=1000.0,
+            group_variance_indices=[(0, 2)],
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        def model(x, a, b):
+            return ((a + b) / 2.0) * jnp.ones_like(x)
+
+        x = jnp.linspace(0, 1, 20)
+        y = jnp.full_like(x, 4.0)
+        # mean=4 (SSR~0), but Var([4,0]) is large -- the group-variance
+        # penalty at p0 is large, and shrinking it while preserving
+        # mean(a,b) genuinely reduces the regularized cost.
+        p0 = jnp.array([4.0, 0.0])
+
+        optimizer._setup_normalization(model, p0, None)
+        result = optimizer._run_phase2_gauss_newton(
+            data_source=(x, y),
+            initial_params=optimizer.normalized_params,
+        )
+
+        final_params = np.asarray(result["final_params"])
+        assert not np.allclose(final_params, np.asarray(p0), atol=1e-6), (
+            "Phase 2 returned the unoptimized p0 unchanged -- the "
+            "best_cost seed is missing the group-variance penalty term "
+            "that new_cost includes, so no trial point ever compared as better"
+        )
+        # mean(a, b) must stay ~4 (that's what keeps SSR low); the penalty
+        # should have pulled a and b together from their p0 spread of 4.
+        assert abs(float(jnp.mean(jnp.asarray(final_params))) - 4.0) < 0.5
+        assert abs(final_params[0] - final_params[1]) < abs(p0[0] - p0[1])

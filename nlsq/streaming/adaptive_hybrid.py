@@ -67,6 +67,22 @@ __all__ = [
 ]
 
 
+def _fill_padded_rows(x_chunk: jnp.ndarray, mask: jnp.ndarray) -> jnp.ndarray:
+    """Replace padded rows (mask == 0) with x_chunk[0] before model evaluation.
+
+    Padded rows are x=0 (jnp.pad's default) and only ever occur in the LAST
+    chunk of a lax.scan accumulation (pad_size < chunk_size by construction,
+    so index 0 is always real data). For models singular/undefined at 0
+    (e.g. a/x, log(x)), evaluating them there produces NaN/Inf, and
+    NaN * 0 == NaN, so masking the residual/Jacobian AFTER evaluation would
+    not zero it out and would poison the accumulated JTJ/JTr for the whole
+    scan. x_chunk[0] is used rather than an arbitrary sentinel (e.g. 1.0)
+    because it's guaranteed to be a value the model is actually defined at.
+    """
+    mask_expanded = mask.reshape((-1,) + (1,) * (x_chunk.ndim - 1)) > 0
+    return jnp.where(mask_expanded, x_chunk, x_chunk[0])
+
+
 class AdaptiveHybridStreamingOptimizer:
     """Adaptive hybrid streaming optimizer with four-phase optimization.
 
@@ -248,7 +264,16 @@ class AdaptiveHybridStreamingOptimizer:
         try:
             self._fit_callback(params, loss, iteration)
         except Exception as exc:
-            _logger.warning(f"fit() callback raised at iteration {iteration}: {exc}")
+            # exc_info=True preserves the traceback pointing into the user's
+            # callback -- str(exc) alone (the previous behavior) discarded
+            # exactly the information needed to debug a broken callback
+            # (e.g. a typo in its signature, an exception in the user's own
+            # plotting code). NLSQLogger has no .exception() method, only
+            # .warning(exc_info=...).
+            _logger.warning(
+                f"fit() callback raised at iteration {iteration}: {exc}",
+                exc_info=True,
+            )
 
     def _setup_normalization(
         self,
@@ -851,23 +876,10 @@ class AdaptiveHybridStreamingOptimizer:
             # Compute mask on-the-fly (tiny chunk_size array, not full n_points)
             mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
 
-            # Padded rows are x=0 (jnp.pad default). For models singular/undefined
-            # at 0 (e.g. a/x, log(x)), evaluating them there produces NaN/Inf, and
-            # NaN * 0 == NaN, so masking AFTER evaluation would not zero it out and
-            # would poison JTJ/JTr for the whole scan. Substitute x_chunk[0] --
-            # guaranteed real, valid data (only the LAST chunk can contain
-            # padding, and pad_size < chunk_size by construction, so index 0
-            # is always a real point) -- rather than an arbitrary sentinel
-            # like 1.0, which is itself just another value the model could be
-            # singular at. The mask below still excludes padded rows from the
-            # accumulated sums either way.
-            safe_x_chunk = jnp.where(
-                (mask > 0)[(slice(None),) + (None,) * (x_chunk.ndim - 1)]
-                if x_chunk.ndim > 1
-                else mask > 0,
-                x_chunk,
-                x_chunk[0],
-            )
+            # See _fill_padded_rows: guards NaN/Inf from evaluating the model
+            # at padded rows before masking. The mask below still excludes
+            # padded rows from the accumulated sums either way.
+            safe_x_chunk = _fill_padded_rows(x_chunk, mask)
 
             # Compute predictions and residuals
             predictions = normalized_model(safe_x_chunk, *params)
@@ -978,16 +990,9 @@ class AdaptiveHybridStreamingOptimizer:
 
             mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
 
-            # See _accumulate_jtj_jtr_scan: guard against NaN/Inf from evaluating
-            # the model at padded rows before masking (NaN * 0 == NaN), by
-            # filling padded rows with x_chunk[0] (always real, valid data).
-            safe_x_chunk = jnp.where(
-                (mask > 0)[(slice(None),) + (None,) * (x_chunk.ndim - 1)]
-                if x_chunk.ndim > 1
-                else mask > 0,
-                x_chunk,
-                x_chunk[0],
-            )
+            # See _fill_padded_rows: guards NaN/Inf from evaluating the model
+            # at padded rows before masking.
+            safe_x_chunk = _fill_padded_rows(x_chunk, mask)
             predictions = normalized_model(safe_x_chunk, *params)
             residuals = y_chunk - predictions
             masked_residuals = residuals * mask
@@ -1502,8 +1507,19 @@ class AdaptiveHybridStreamingOptimizer:
         # params (see jax.value_and_grad(loss_fn)(params, ...) above), not at
         # new_params -- pairing it with new_params here mislabeled the just-
         # taken (possibly divergent) step with the previous step's loss.
-        if float(loss_value) < self.best_cost_global:
-            self.best_cost_global = float(loss_value)
+        #
+        # loss_value is Phase 1's MSE (jnp.mean(residuals**2)), but Phase 2
+        # compares SSR (jnp.sum(residuals**2)) into this SAME best_cost_global
+        # (see _run_phase2_gauss_newton below). For n_points > 1, SSR >> MSE,
+        # so without converting units here, Phase 2's `new_cost < best_cost_global`
+        # would essentially never fire once Phase 1 has run -- best_params_global
+        # would silently freeze at wherever Phase 1 left it, and fit()'s
+        # Phase-2 exception-fallback path would return Phase 1's endpoint
+        # while discarding all of Phase 2's actual progress. Convert to an
+        # SSR-equivalent so both phases populate this tracker in the same units.
+        ssr_equivalent = float(loss_value) * len(x_batch)
+        if ssr_equivalent < self.best_cost_global:
+            self.best_cost_global = ssr_equivalent
             self.best_params_global = params
 
         # Store optimizer state for checkpointing
@@ -3143,7 +3159,7 @@ class AdaptiveHybridStreamingOptimizer:
                 iter_result["retry_exhausted"] = True
                 return iter_result, trust_radius
 
-            except Exception:
+            except Exception as exc:
                 if retry_attempt < max_retries:
                     trust_radius *= 0.5
                     continue
@@ -3155,7 +3171,18 @@ class AdaptiveHybridStreamingOptimizer:
                 ):
                     raise
 
-                # Use best parameters as fallback
+                # Use best parameters as fallback. Log unconditionally: this
+                # silently substituted the last-known-good point for a real
+                # Gauss-Newton step with zero diagnostic trace before -- with
+                # fault tolerance on (a real, documented opt-in), a genuine
+                # bug anywhere in _gauss_newton_iteration would otherwise
+                # produce a stalled/degraded fit with no indication why.
+                _logger.warning(
+                    f"_gauss_newton_iteration raised {type(exc).__name__}: "
+                    f"{exc} after {max_retries} retries; falling back to "
+                    "best known parameters for this iteration "
+                    "(config.enable_fault_tolerance=True).",
+                )
                 iter_result = {
                     "new_params": best_params,
                     "new_cost": best_cost,
@@ -3307,8 +3334,25 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
         # Seed best_cost from the initial cost (see comment above best_cost's
-        # declaration) now that it's been computed.
-        best_cost = float(final_residual_sum_sq)
+        # declaration) now that it's been computed. Must use the SAME cost
+        # definition new_cost uses below (_compute_cost_with_variance_regularization,
+        # i.e. SSR + group-variance penalty when enabled) -- seeding from the
+        # data-only final_residual_sum_sq left the penalty term out, making
+        # the seed artificially low whenever enable_group_variance_regularization
+        # is set, so `new_cost < best_cost` could never fire and Phase 2 would
+        # silently return the unoptimized starting point while still reporting
+        # convergence.
+        best_cost = (
+            float(
+                self._compute_cost_with_variance_regularization(
+                    current_params,
+                    x_data,
+                    y_data,
+                ),
+            )
+            if self.config.enable_group_variance_regularization
+            else float(final_residual_sum_sq)
+        )
 
         # Gauss-Newton loop
         # Initialize stall detection counter
@@ -3430,7 +3474,17 @@ class AdaptiveHybridStreamingOptimizer:
 
                 # Stall detection: if many consecutive rejections with large
                 # gradient, the optimizer is stuck. Reset trust radius.
-                if consecutive_rejections >= 10 and gradient_norm > 1e-4:
+                # On a retry_exhausted iteration, gradient_norm is a 0.0
+                # sentinel (not a real measurement, see the convergence-check
+                # comment below), so `gradient_norm > 1e-4` can never be true
+                # and this reset could never fire for repeated numerical
+                # failures -- consecutive_rejections would grow without bound
+                # and the trust radius would stay permanently locked. Skip
+                # the (meaningless, in that case) gradient check instead.
+                should_reset_for_stall = consecutive_rejections >= 10 and (
+                    retry_exhausted or gradient_norm > 1e-4
+                )
+                if should_reset_for_stall:
                     trust_radius = self.config.trust_region_initial
                     self._consecutive_rejections = 0
                     if verbose >= 1:
@@ -4340,18 +4394,6 @@ class AdaptiveHybridStreamingOptimizer:
         The result dictionary is compatible with scipy.optimize.curve_fit
         and can be used interchangeably.
         """
-        # Reset per-fit optimization state. Without this, calling fit() more
-        # than once on the same optimizer instance (a supported pattern --
-        # nothing in __init__ forbids it) leaks best_params_global/
-        # best_cost_global from a PRIOR fit's p0/bounds/model into this one.
-        # That state is stored in normalized coordinates whose scale/offset
-        # depend on the previous call's setup, and it now also feeds the
-        # Phase 1/2 exception-fallback path below, so a stale value there
-        # could silently hand the wrong coordinate system to a different
-        # model/parameter count instead of erroring.
-        self.best_params_global = None
-        self.best_cost_global = float("inf")
-
         # Track total optimization time
         total_start_time = time.time()
 
@@ -4423,8 +4465,27 @@ class AdaptiveHybridStreamingOptimizer:
                 "to run (correctly) on a single device.",
             )
 
+        # Reset per-fit optimization state now that all validation above has
+        # passed. Without this, calling fit() more than once on the same
+        # optimizer instance (a supported pattern -- nothing in __init__
+        # forbids it) leaks best_params_global/best_cost_global from a PRIOR
+        # fit's p0/bounds/model into this one: that state is stored in
+        # normalized coordinates whose scale/offset depend on the previous
+        # call's setup, and it now also feeds the Phase 1/2 exception-fallback
+        # path below, so a stale value there could silently hand the wrong
+        # coordinate system to a different model/parameter count instead of
+        # erroring. Resetting AFTER validation (not before) means a second
+        # fit() call with invalid arguments raises without first wiping the
+        # first call's successful best_params_global/best_cost_global --
+        # e.g. _save_checkpoint() serializes them and could otherwise silently
+        # lose the prior fit's state on an unrelated validation failure.
+        self.best_params_global = None
+        self.best_cost_global = float("inf")
+
         # Progress callback, invoked from Phase 1/2 loops via
         # _invoke_fit_callback() every config.callback_frequency iterations.
+        # Reset alongside best_params_global/best_cost_global above (after
+        # validation, not before) for the same reason.
         self._fit_callback = callback
 
         # ============================================================
@@ -4470,11 +4531,12 @@ class AdaptiveHybridStreamingOptimizer:
             )
         except Exception as exc:
             phase1_failure = f"{type(exc).__name__}: {exc}"
-            if verbose >= 1:
-                _logger.warning(
-                    f"Phase 1 (L-BFGS warmup) raised {phase1_failure}; "
-                    "falling back to best known parameters.",
-                )
+            # Log unconditionally -- see the matching comment on the Phase 2
+            # except-block below for why this must not be gated on verbose.
+            _logger.warning(
+                f"Phase 1 (L-BFGS warmup) raised {phase1_failure}; "
+                "falling back to best known parameters.",
+            )
             fallback_params = (
                 self.best_params_global
                 if self.best_params_global is not None
@@ -4517,40 +4579,72 @@ class AdaptiveHybridStreamingOptimizer:
             )
         except Exception as exc:
             phase2_failure = f"{type(exc).__name__}: {exc}"
-            if verbose >= 1:
-                _logger.warning(
-                    f"Phase 2 (Gauss-Newton) raised {phase2_failure}; "
-                    "falling back to best known parameters for Phase 3.",
-                )
+            # Log unconditionally (not gated on verbose): this is an anomaly
+            # report, not progress output, and verbose=0 is an explicit,
+            # commonly-used mode (e.g. batch/production runs) where a caller
+            # is most likely to consume result["x"] without also checking
+            # result["success"] -- exactly where a silent degraded fit would
+            # otherwise go unnoticed.
+            _logger.warning(
+                f"Phase 2 (Gauss-Newton) raised {phase2_failure}; "
+                "falling back to best known parameters for Phase 3.",
+            )
             fallback_params = (
                 self.best_params_global
                 if self.best_params_global is not None
                 else warmup_params
             )
+            n_params_fb = len(fallback_params)
             # Phase 3 needs JTJ/residual_sum_sq at the fallback point for the
             # covariance transform; recompute it the same way Phase 2 does
             # for its own initial JTJ (this only runs on the failure path).
-            n_params_fb = len(fallback_params)
-            chunk_size_fb = self.config.chunk_size
-            JTJ_fb = jnp.zeros((n_params_fb, n_params_fb))
-            JTr_fb = jnp.zeros(n_params_fb)
-            residual_sum_sq_fb = 0.0
-            for i in range(0, n_points, chunk_size_fb):
-                x_chunk = x_data[i : i + chunk_size_fb]
-                y_chunk = y_data[i : i + chunk_size_fb]
-                JTJ_fb, JTr_fb, res_sq = self._accumulate_jtj_jtr(
-                    x_chunk,
-                    y_chunk,
-                    fallback_params,
-                    JTJ_fb,
-                    JTr_fb,
+            # This recompute has its own try/except: without one, a second
+            # failure here (e.g. fallback_params itself degenerate) would
+            # propagate out of fit() uncaught, defeating the whole point of
+            # this fallback -- fit() would crash instead of degrading
+            # gracefully to a success=False result.
+            try:
+                if self._use_scan_for_accumulation():
+                    JTJ_fb, JTr_fb, residual_sum_sq_fb = self._accumulate_jtj_jtr_scan(
+                        x_data,
+                        y_data,
+                        fallback_params,
+                    )
+                else:
+                    chunk_size_fb = self.config.chunk_size
+                    JTJ_fb = jnp.zeros((n_params_fb, n_params_fb))
+                    JTr_fb = jnp.zeros(n_params_fb)
+                    residual_sum_sq_fb = 0.0
+                    for i in range(0, n_points, chunk_size_fb):
+                        x_chunk = x_data[i : i + chunk_size_fb]
+                        y_chunk = y_data[i : i + chunk_size_fb]
+                        JTJ_fb, JTr_fb, res_sq = self._accumulate_jtj_jtr(
+                            x_chunk,
+                            y_chunk,
+                            fallback_params,
+                            JTJ_fb,
+                            JTr_fb,
+                        )
+                        residual_sum_sq_fb += res_sq
+                residual_sum_sq_fb = float(residual_sum_sq_fb)
+            except Exception as recompute_exc:
+                _logger.warning(
+                    f"JTJ recompute for the Phase 2 fallback also raised "
+                    f"{type(recompute_exc).__name__}: {recompute_exc}; "
+                    "returning fallback_params with an uninformative (zero) "
+                    "covariance instead of crashing fit().",
                 )
-                residual_sum_sq_fb += res_sq
+                JTJ_fb = jnp.zeros((n_params_fb, n_params_fb))
+                residual_sum_sq_fb = float("nan")
+                phase2_failure = (
+                    f"{phase2_failure}; JTJ recompute also failed: "
+                    f"{type(recompute_exc).__name__}: {recompute_exc}"
+                )
             phase2_result = {
                 "final_params": fallback_params,
                 "best_params": fallback_params,
-                "best_cost": float(residual_sum_sq_fb),
-                "final_cost": float(residual_sum_sq_fb),
+                "best_cost": residual_sum_sq_fb,
+                "final_cost": residual_sum_sq_fb,
                 "iterations": 0,
                 "convergence_reason": f"Phase 2 failed: {phase2_failure}",
                 "gradient_norm": float("nan"),

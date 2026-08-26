@@ -152,6 +152,16 @@ class ParameterNormalizer:
         # Compute normalization Jacobian (denormalization Jacobian)
         self._normalization_jacobian = self._compute_jacobian()
 
+    def _p0_magnitude_scale(self) -> jnp.ndarray:
+        """Scale factors from |p0| magnitudes, clamped away from zero.
+
+        Shared by the 'p0' strategy and the 'bounds' strategy's per-dimension
+        fallback for parameters with a one-sided/infinite bound.
+        """
+        abs_p0 = jnp.abs(self.p0)
+        eps = jnp.finfo(jnp.float64).eps * 10
+        return jnp.where(abs_p0 < eps, jnp.ones_like(abs_p0), abs_p0)
+
     def _compute_normalization_parameters(self):
         """Compute scaling factors and offsets based on strategy."""
         if self.strategy == "bounds":
@@ -182,13 +192,7 @@ class ParameterNormalizer:
                 raw_scales,
             )
 
-            abs_p0 = jnp.abs(self.p0)
-            p0_eps = jnp.finfo(jnp.float64).eps * 10
-            unbounded_scales = jnp.where(
-                abs_p0 < p0_eps,
-                jnp.ones_like(abs_p0),
-                abs_p0,
-            )
+            unbounded_scales = self._p0_magnitude_scale()
 
             self.scales = jnp.where(finite_range, bounded_scales, unbounded_scales)
             self.offsets = jnp.where(finite_range, lb, jnp.zeros_like(lb))
@@ -196,12 +200,7 @@ class ParameterNormalizer:
         elif self.strategy == "p0":
             # p0-based: scale by parameter magnitudes
             # Normalized: params / |p0|
-            abs_p0 = jnp.abs(self.p0)
-
-            # Handle zero parameters with small epsilon
-            eps = jnp.finfo(jnp.float64).eps * 10
-            self.scales = jnp.where(abs_p0 < eps, jnp.ones_like(abs_p0), abs_p0)
-
+            self.scales = self._p0_magnitude_scale()
             self.offsets = jnp.zeros(self.n_params, dtype=jnp.float64)
 
         elif self.strategy == "none":
