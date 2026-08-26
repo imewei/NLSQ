@@ -361,18 +361,24 @@ class IdentifiabilityAnalyzer:
             Correlation matrix, or None if computation fails.
         """
         try:
-            # Get diagonal elements for normalization
-            diag = np.diag(fim)
+            # Parameter-estimate correlation comes from the covariance matrix
+            # (inverse of the FIM), not the raw FIM - normalizing the FIM
+            # directly gives cosine similarity of Jacobian columns, a
+            # different quantity that diverges from parameter correlation
+            # exactly in the ill-conditioned regime this diagnostic targets.
+            # Use pinv: the FIM can be near-singular for poorly identifiable
+            # models, where a plain inverse would raise/blow up.
+            covariance = np.linalg.pinv(fim)
+            diag = np.diag(covariance)
 
             # Handle zero or near-zero diagonal elements
             if np.any(diag <= 0):
-                # FIM should be positive semi-definite, but handle edge cases
+                # Covariance should be positive semi-definite, but handle edge cases
                 return None
 
-            # Compute correlation directly from FIM
-            # correlation[i,j] = FIM[i,j] / sqrt(FIM[i,i] * FIM[j,j])
+            # correlation[i,j] = Cov[i,j] / sqrt(Cov[i,i] * Cov[j,j])
             sqrt_diag = np.sqrt(diag)
-            correlation = fim / np.outer(sqrt_diag, sqrt_diag)
+            correlation = covariance / np.outer(sqrt_diag, sqrt_diag)
 
             # Clip to [-1, 1] to handle numerical precision issues
             correlation = np.clip(correlation, -1.0, 1.0)

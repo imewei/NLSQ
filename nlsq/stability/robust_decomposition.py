@@ -274,8 +274,9 @@ class RobustDecomposition:
             Q, R = np.linalg.qr(matrix_np, mode=mode)
             return jnp.array(Q), jnp.array(R)
         if decomp_type == "cholesky":
+            lower = args[0] if args else True
             L = np.linalg.cholesky(matrix_np)
-            return jnp.array(L)
+            return jnp.array(L if lower else L.T)
 
     def _safe_mode_decomp(self, matrix: jnp.ndarray, decomp_type: str, *args):
         """Safe mode decomposition with regularization."""

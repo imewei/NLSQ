@@ -7,10 +7,15 @@ function signatures to generate reasonable starting points.
 Key Features
 ------------
 - **Automatic p0 estimation**: No need to manually guess initial parameters
-- **Pattern detection**: Recognizes common function types (linear, exponential, gaussian, sigmoid)
 - **Smart heuristics**: Uses data statistics (range, mean, peaks) to estimate parameters
 - **Library function support**: Custom functions can provide their own `.estimate_p0()` method
-- **Fallback strategies**: Always provides reasonable defaults if pattern detection fails
+- **Pattern-specific helpers**: ``detect_function_pattern``/``estimate_p0_for_pattern`` provide
+  pattern-aware estimation (linear, exponential, gaussian, sigmoid) for callers that know their
+  model's parameter order matches the assumed convention. Not called automatically by
+  ``estimate_initial_parameters`` - the generic heuristic below has no way to know whether a
+  detected function's parameter order (e.g. amplitude/rate/offset/center) matches what
+  ``estimate_p0_for_pattern`` assumes (amplitude/mean/sigma for "gaussian"), and guessing wrong
+  would silently produce a worse p0 than the conservative generic heuristic.
 
 Examples
 --------
@@ -43,15 +48,18 @@ Notes
 The automatic parameter estimation works as follows:
 
 1. **Custom estimation**: Checks if function has `.estimate_p0(xdata, ydata)` method
-2. **Pattern detection**: Analyzes data shape to detect function type
-3. **Heuristic estimation**: Uses data statistics to estimate parameters:
+2. **Heuristic estimation**: Uses data statistics to estimate parameters:
 
    - First parameter (amplitude): y_range
    - Second parameter (rate/slope): 1/x_range
    - Third parameter (offset): y_mean
    - Fourth parameter (center): x_mean
 
-4. **Fallback**: Returns sensible defaults if all else fails
+   Additional parameters default to 1.0.
+
+For pattern-aware estimation instead of the generic heuristic above, call
+`detect_function_pattern`/`estimate_p0_for_pattern` directly - see their docstrings for the
+parameter-order assumption each pattern makes.
 
 See Also
 --------

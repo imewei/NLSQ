@@ -2,7 +2,9 @@
 
 import hashlib
 import inspect
+import itertools
 import logging
+import threading
 import weakref
 from collections.abc import Callable
 from functools import wraps
@@ -16,6 +18,27 @@ _jax_config = JAXConfig()
 import jax
 
 logger = logging.getLogger(__name__)
+
+_closure_serial_counter = itertools.count()
+_closure_serial_registry: "weakref.WeakKeyDictionary[Callable, int]" = (
+    weakref.WeakKeyDictionary()
+)
+_closure_serial_lock = threading.Lock()
+
+
+def _closure_serial(func: Callable) -> int:
+    """Stable per-object serial for ``func`` (see compilation_cache.py's twin).
+
+    Source text + signature alone collide for two distinct closures built
+    from the same factory (same code, different captured values) - mix in
+    this serial so they hash differently.
+    """
+    with _closure_serial_lock:
+        serial = _closure_serial_registry.get(func)
+        if serial is None:
+            serial = next(_closure_serial_counter)
+            _closure_serial_registry[func] = serial
+        return serial
 
 
 class FunctionCache:
@@ -60,8 +83,18 @@ class FunctionCache:
             module = getattr(func, "__module__", "unknown")
             name = getattr(func, "__name__", "unknown")
 
-            # Combine all identifying information
-            combined = f"{module}.{name}:{signature}\n{source}"
+            # Combine all identifying information. Mix in a per-object serial
+            # only for actual closures (__closure__ is not None): two
+            # distinct closures sharing source text (built by the same
+            # factory, capturing different data) must not collide. A
+            # closure-free top-level function's source fully determines its
+            # behavior, so leave its hash stable across objects/sessions.
+            closure_tag = (
+                f"\n{_closure_serial(func)}"
+                if getattr(func, "__closure__", None)
+                else ""
+            )
+            combined = f"{module}.{name}:{signature}\n{source}{closure_tag}"
             return hashlib.sha256(combined.encode()).hexdigest()[:16]
         except (OSError, TypeError):
             # Fallback for built-in functions, lambdas, or C functions
@@ -71,7 +104,10 @@ class FunctionCache:
                 if hasattr(func, "__code__"):
                     code = func.__code__
                     code_hash = hashlib.sha256(code.co_code).hexdigest()[:8]
-                    return f"code_{code_hash}_{code.co_argcount}"
+                    closure_tag = (
+                        f"_{_closure_serial(func)}" if func.__closure__ else ""
+                    )
+                    return f"code_{code_hash}_{code.co_argcount}{closure_tag}"
                 # Last resort: use object ID (not ideal for persistence)
                 return f"id_{id(func)}"
             except (AttributeError, TypeError, ValueError):

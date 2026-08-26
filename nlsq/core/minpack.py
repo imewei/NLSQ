@@ -75,6 +75,7 @@ from jax.scipy.linalg import svd as jax_svd
 from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.common_scipy import EPS
+from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
 
 # Diagnostics types are needed at module level for function signatures
@@ -4234,6 +4235,7 @@ class CurveFit:
                     )
                     recovery_state = {
                         "params": p0,
+                        "p0": p0,
                         "xdata": xdata,
                         "ydata": ydata,
                         "method": method if method is not None else "trf",
@@ -4245,7 +4247,9 @@ class CurveFit:
                         recovery_state,
                         lambda **state: self.ls.least_squares(
                             f_to_use,
-                            state["params"],
+                            # recovery strategies (e.g. _multi_start) update "p0",
+                            # not "params" - fall back to "params" when absent.
+                            state.get("p0", state["params"]),
                             jac=jac,
                             xdata=jnp.asarray(state["xdata"]),
                             ydata=jnp.asarray(state["ydata"]),
@@ -4253,6 +4257,11 @@ class CurveFit:
                             transform=transform,
                             bounds=state["bounds"],
                             method=state["method"],
+                            ftol=state.get("ftol", DEFAULT_FTOL),
+                            xtol=state.get("xtol", DEFAULT_XTOL),
+                            tr_solver=state.get("tr_solver"),
+                            x_scale=state.get("x_scale", 1.0),
+                            loss=state.get("loss", "linear"),
                             timeit=timeit,
                             callback=callback,
                             **kwargs,

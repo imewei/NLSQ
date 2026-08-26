@@ -400,6 +400,23 @@ class TestEdgeCases:
         lower2, _upper2 = infer_bounds(x, y, p0, enforce_positivity=True)
         assert lower2[0] >= 0  # First param should be non-negative
 
+    def test_negative_p0_bounds_contain_p0(self):
+        """Inferred bounds must always contain p0 itself. For negative
+        p0_val, lower_mag=p0_val/safety_factor was greater than
+        upper_mag=p0_val*safety_factor (division moves toward zero,
+        multiplication moves away from zero for negatives) - the reverse of
+        the positive-p0 case - so the bracket could exclude p0."""
+        x = np.linspace(0, 10, 100)
+        y = np.ones(100)
+        p0 = np.array([1.0, -0.5, 1.0])
+
+        lower, upper = infer_bounds(
+            x, y, p0, safety_factor=10, enforce_positivity=False
+        )
+
+        assert np.all(lower <= p0), f"lower={lower} does not bound p0={p0}"
+        assert np.all(p0 <= upper), f"upper={upper} does not bound p0={p0}"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -192,9 +192,19 @@ class AddParameterBoundsStrategy(FallbackStrategy):
         """Infer reasonable bounds from data and p0."""
         modified = kwargs.copy()
 
-        # Check if bounds already provided
-        if "bounds" in modified and modified["bounds"] != (-np.inf, np.inf):
-            return modified  # Already has bounds
+        # Check if bounds already provided. Bounds may be per-parameter arrays,
+        # so compare scalar-safe instead of `!= (-np.inf, np.inf)` (that tuple
+        # comparison raises ValueError for array bounds: ambiguous truth value).
+        if "bounds" in modified:
+            lower, upper = modified["bounds"]
+            is_default = (
+                np.isscalar(lower)
+                and np.isscalar(upper)
+                and lower == -np.inf
+                and upper == np.inf
+            )
+            if not is_default:
+                return modified  # Already has bounds
 
         p0 = np.array(modified.get("p0", [1.0]))
         xdata = modified.get("_xdata")  # Internal use

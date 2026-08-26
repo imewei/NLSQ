@@ -154,6 +154,24 @@ class TestAddParameterBoundsStrategy:
 
         assert modified["bounds"] == original_bounds
 
+    def test_array_bounds_do_not_crash(self):
+        """Per-parameter array bounds must not raise on the default-bounds
+        check (previously `bounds != (-np.inf, np.inf)` triggered elementwise
+        numpy comparison -> ValueError: ambiguous truth value)."""
+        strategy = AddParameterBoundsStrategy()
+        original_bounds = (np.array([-1.0, -1.0]), np.array([1.0, 1.0]))
+        kwargs = {
+            "p0": np.array([0.5, 0.5]),
+            "bounds": original_bounds,
+            "_xdata": np.linspace(0, 10, 100),
+            "_ydata": np.ones(100),
+        }
+
+        modified = strategy.apply(kwargs)
+
+        assert np.array_equal(modified["bounds"][0], original_bounds[0])
+        assert np.array_equal(modified["bounds"][1], original_bounds[1])
+
 
 class TestUseRobustLossStrategy:
     """Test robust loss function strategy."""
