@@ -143,10 +143,13 @@ class BoundsInference:
 
         # Strategy 1: Bounds based on parameter magnitude
         if p0_val != 0:
-            # Use parameter magnitude as scale
+            # Use parameter magnitude as scale. For negative p0, dividing by
+            # safety_factor (>1) moves toward zero and multiplying moves away
+            # from zero - the opposite of the positive-p0 case - so sort
+            # explicitly instead of assuming p0/sf < p0*sf.
             scale = abs(p0_val)
-            lower_mag = p0_val / self.safety_factor
-            upper_mag = p0_val * self.safety_factor
+            lower_mag = min(p0_val / self.safety_factor, p0_val * self.safety_factor)
+            upper_mag = max(p0_val / self.safety_factor, p0_val * self.safety_factor)
         else:
             # For zero p0, use data range as scale
             scale = max(self.y_range, 1.0)
@@ -188,8 +191,8 @@ class BoundsInference:
         if lower >= upper:
             # Fallback to symmetric bounds around p0
             if p0_val != 0:
-                lower = p0_val / self.safety_factor
-                upper = p0_val * self.safety_factor
+                lower = min(p0_val / self.safety_factor, p0_val * self.safety_factor)
+                upper = max(p0_val / self.safety_factor, p0_val * self.safety_factor)
             else:
                 lower = -self.safety_factor
                 upper = self.safety_factor

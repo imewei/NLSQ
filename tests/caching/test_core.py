@@ -346,14 +346,16 @@ class TestFunctionComparison(unittest.TestCase):
         adder2 = make_adder(1)
         adder3 = make_adder(2)
 
-        # Same closure value - should have same code
-        self.assertTrue(compare_functions(adder1, adder2))
-
-        # Different closure value - different code due to constant
-        # Note: This might actually be True depending on implementation
-        # since the code structure is the same
-        compare_functions(adder1, adder3)
-        # We don't assert here as behavior may vary
+        # get_function_hash keys closures by per-object identity (not just
+        # source text), so two closures never collide even when they
+        # happen to capture the same value - this is what prevents the
+        # real bug this cache exists to avoid: two closures built by the
+        # same factory capturing *different* data silently sharing a
+        # compiled-function cache entry (see test_closures_with_same_bytecode_
+        # different_constants_dont_collide in test_compilation_cache.py for
+        # the regression that motivated this).
+        self.assertFalse(compare_functions(adder1, adder2))
+        self.assertFalse(compare_functions(adder1, adder3))
 
     def test_compare_methods(self):
         """Test comparing class methods."""
