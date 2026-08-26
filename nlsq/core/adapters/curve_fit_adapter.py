@@ -94,12 +94,31 @@ class CurveFitAdapter:
         tuple[np.ndarray, np.ndarray]
             (popt, pcov) - optimal parameters and covariance matrix.
         """
-        # Import here to avoid circular dependency
-        from nlsq.core.minpack import curve_fit as _curve_fit
-
         # Map diagnostics_config to the named parameter curve_fit accepts
         if self._diagnostics_config is not None:
             kwargs.setdefault("diagnostics_config", self._diagnostics_config)
+
+        # curve_fit()'s own default bounds is (-inf, inf), never None; passing
+        # bounds=None through unconditionally crashes in prepare_bounds().
+        if bounds is None:
+            bounds = (np.asarray(-np.inf), np.asarray(np.inf))
+
+        if self._global_config is not None:
+            # with_global_optimization() only stored the config; route through
+            # MultiStartOrchestrator so it's actually used.
+            from nlsq.global_optimization.multi_start import MultiStartOrchestrator
+
+            optimizer = MultiStartOrchestrator(config=self._global_config)
+            # sigma isn't a named parameter of MultiStartOrchestrator.fit(),
+            # but it forwards **kwargs straight through to each per-start
+            # curve_fit() call, so it works correctly if passed via kwargs --
+            # must not be silently dropped just because fit() doesn't name it.
+            if sigma is not None:
+                kwargs["sigma"] = sigma
+            return optimizer.fit(f, xdata, ydata, p0=p0, bounds=bounds, **kwargs)
+
+        # Import here to avoid circular dependency
+        from nlsq.core.minpack import curve_fit as _curve_fit
 
         return _curve_fit(
             f,

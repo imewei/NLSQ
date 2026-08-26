@@ -37,6 +37,7 @@ Custom configuration:
 ... )
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -97,6 +98,17 @@ _MULTISTART_PRESETS: dict[str, dict[str, Any]] = {
 # Multi-start presets: 'fast', 'robust', 'global', 'thorough', 'streaming'
 # CMA-ES presets: 'cmaes-fast', 'cmaes', 'cmaes-global'
 PRESETS: dict[str, dict[str, Any]] = {**_MULTISTART_PRESETS, **CMAES_PRESETS}
+
+
+def _require_int(name: str, value: Any) -> None:
+    """Raise TypeError unless ``value`` is a real ``int`` (not a ``bool``).
+
+    ``bool`` is a subclass of ``int`` in Python, so an explicit exclusion is
+    needed or ``True``/``False`` would silently pass an ``isinstance(x, int)``
+    check.
+    """
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{name} must be an int, got {type(value)}")
 
 
 @dataclass(slots=True)
@@ -185,6 +197,7 @@ class GlobalOptimizationConfig:
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Validate n_starts
+        _require_int("n_starts", self.n_starts)
         if self.n_starts < 0:
             raise ValueError(f"n_starts must be non-negative, got {self.n_starts}")
 
@@ -198,22 +211,28 @@ class GlobalOptimizationConfig:
         object.__setattr__(self, "sampler", self.sampler.lower())
 
         # Validate scale_factor
-        if self.scale_factor <= 0:
-            raise ValueError(f"scale_factor must be positive, got {self.scale_factor}")
+        if not math.isfinite(self.scale_factor) or self.scale_factor <= 0:
+            raise ValueError(
+                f"scale_factor must be finite and positive, got {self.scale_factor}",
+            )
 
         # Validate elimination_fraction
-        if not 0 < self.elimination_fraction < 1:
+        if not math.isfinite(self.elimination_fraction) or not (
+            0 < self.elimination_fraction < 1
+        ):
             raise ValueError(
                 f"elimination_fraction must be in (0, 1), got {self.elimination_fraction}",
             )
 
         # Validate elimination_rounds
+        _require_int("elimination_rounds", self.elimination_rounds)
         if self.elimination_rounds < 0:
             raise ValueError(
                 f"elimination_rounds must be non-negative, got {self.elimination_rounds}",
             )
 
         # Validate batches_per_round
+        _require_int("batches_per_round", self.batches_per_round)
         if self.batches_per_round <= 0:
             raise ValueError(
                 f"batches_per_round must be positive, got {self.batches_per_round}",

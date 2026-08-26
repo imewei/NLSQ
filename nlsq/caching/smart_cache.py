@@ -12,6 +12,7 @@ Phase 3 Optimizations (Task Group 9):
 """
 
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
+from weakref import WeakKeyDictionary
 
 import numpy as np
 
@@ -48,6 +50,54 @@ try:
     HAS_XXHASH = True
 except ImportError:
     HAS_XXHASH = False
+
+
+_closure_serial_counter = itertools.count()
+_closure_serial_registry: "WeakKeyDictionary[Callable, int]" = WeakKeyDictionary()
+_closure_serial_lock = threading.Lock()
+
+
+def _closure_serial(func: Callable) -> int:
+    """Return a stable, per-object, never-reused serial number for ``func``.
+
+    Plain ``id(func)`` is only unique while the object is alive: once a
+    closure is garbage-collected, CPython is free to reuse its address for
+    an unrelated object created immediately after, which would let a fresh
+    closure collide with a stale cache entry keyed off the old id(). The
+    WeakKeyDictionary registry assigns each *live* function object a serial
+    the first time it's seen and never reassigns that serial to a different
+    object, even if id() gets reused after GC -- a genuinely new object
+    always misses the lookup and gets a fresh, higher serial.
+    """
+    with _closure_serial_lock:
+        serial = _closure_serial_registry.get(func)
+        if serial is None:
+            serial = next(_closure_serial_counter)
+            _closure_serial_registry[func] = serial
+        return serial
+
+
+def _callable_identity(func: Callable) -> str:
+    """Short hash disambiguating closures that share module+name.
+
+    ``co_code`` alone is not function identity: two closures can share
+    bytecode but differ in captured constants or closure cell contents.
+    Uses a per-object serial number (see ``_closure_serial``) rather than
+    hashing closure cell values directly: the serial is stable across
+    repeated calls to the *same* closure object even when its captured
+    state legitimately mutates between calls (e.g. a counter), while still
+    being distinct for two different closure objects built from the same
+    factory -- including two objects that happen to reuse the same id().
+    """
+    try:
+        code = func.__code__
+        payload = repr((code.co_code, code.co_consts, _closure_serial(func))).encode()
+        return hashlib.blake2b(payload, digest_size=8).hexdigest()
+    except TypeError:
+        # func isn't weakly referenceable (e.g. some C-implemented callables)
+        return "noweakref"
+    except AttributeError:
+        return "nocode"
 
 
 class SmartCache:
@@ -197,8 +247,12 @@ class SmartCache:
                         ).hexdigest()
                         key_parts.append(f"array_{arg.shape}_{arg.dtype}_{full_hash}")
             elif callable(arg):
-                # For functions, use their name and module
-                key_parts.append(f"func_{arg.__module__}_{arg.__name__}")
+                # Module+name alone collides for distinct closures sharing a
+                # name (e.g. two `jac` closures from different factory calls);
+                # fold in a code/closure identity hash to disambiguate them.
+                key_parts.append(
+                    f"func_{arg.__module__}_{arg.__name__}_{_callable_identity(arg)}"
+                )
             else:
                 key_parts.append(str(arg))
 
@@ -222,7 +276,9 @@ class SmartCache:
                         h = hashlib.blake2b(flat.tobytes(), digest_size=16).hexdigest()
                 key_parts.append(f"{k}=array_{v.shape}_{v.dtype}_{h}")
             elif callable(v):
-                key_parts.append(f"{k}=func_{v.__module__}_{v.__name__}")
+                key_parts.append(
+                    f"{k}=func_{v.__module__}_{v.__name__}_{_callable_identity(v)}"
+                )
             else:
                 key_parts.append(f"{k}={v}")
 

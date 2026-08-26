@@ -76,6 +76,16 @@ reformulated as a 4th order algebraic equation and solved very accurately by
 ``numpy.roots``. The subspace approach allows to solve very large problems
 (up to couple of millions of residuals on a regular PC), provided the Jacobian
 matrix is sufficiently sparse.
+
+.. note::
+   This description is inherited from the reference algorithm. In this
+   implementation, the internal ``solver="lsmr"`` dispatch currently routes
+   through the same conjugate-gradient path as ``solver="cg"`` (see
+   ``_solve_trust_region_subproblem`` and its sibling dispatch sites) rather
+   than the 2-D subspace/``numpy.roots`` approach described above -- it
+   still avoids the dense SVD ``"exact"`` path for large problems, which is
+   the property callers selecting an iterative solver actually rely on.
+
 References
 ----------
 .. [STIR] Branch, M.A., T.F. Coleman, and Y. Li, "A Subspace, Interior,
@@ -847,7 +857,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         }
 
         # Solve trust region subproblem
-        if solver == "cg":
+        if solver in ("cg", "lsmr"):
             # Conjugate gradient solver
             J_h = J * d
             step_h = self.solve_tr_subproblem_cg(J, f, d, Delta, alpha)
@@ -1038,7 +1048,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             inner_loop_count += 1
 
             # Solve subproblem (reuse step or compute new one)
-            if solver == "cg":
+            if solver in ("cg", "lsmr"):
                 if inner_loop_count > 1:
                     step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
                 _n_iter = 1  # Dummy value for compatibility
@@ -1374,7 +1384,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         d_jnp = jnp.asarray(d)
         f_zeros = jnp.zeros(n, dtype=jnp.float64)
 
-        if solver == "cg":
+        if solver in ("cg", "lsmr"):
             J_h = J * d_jnp
             p_h = self.solve_tr_subproblem_cg_bounds(
                 J,
@@ -1524,7 +1534,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         ):
             inner_loop_count += 1
 
-            if solver == "cg":
+            if solver in ("cg", "lsmr"):
                 if inner_loop_count > 1:
                     p_h = self.solve_tr_subproblem_cg_bounds(
                         J,

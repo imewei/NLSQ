@@ -2763,6 +2763,7 @@ class CurveFit:
         """
         self.flength = flength
         self.use_dynamic_sizing = use_dynamic_sizing
+        self.cache_config = cache_config
         self.logger = get_logger("curve_fit")
         self.create_sigma_transform_funcs()
         self.create_covariance_svd()
@@ -3480,6 +3481,9 @@ class CurveFit:
         should_pad = False
         len_diff = 0
 
+        if data_mask is not None and len(data_mask) != m:
+            raise ValueError("Data mask doesn't match data lengths.")
+
         if self.flength is not None:
             len_diff = self.flength - m
             if self.use_dynamic_sizing:
@@ -3487,16 +3491,13 @@ class CurveFit:
             else:
                 should_pad = len_diff >= 0
 
-            if data_mask is not None:
-                if len(data_mask) != m:
-                    raise ValueError("Data mask doesn't match data lengths.")
-            else:
+            if data_mask is None:
                 data_mask = np.ones(m, dtype=bool)
                 if should_pad and len_diff > 0:
                     data_mask = np.concatenate(
                         [data_mask, np.zeros(len_diff, dtype=bool)],
                     )
-        else:
+        elif data_mask is None:
             data_mask = np.ones(m, dtype=bool)
 
         return data_mask, none_mask, len_diff, should_pad

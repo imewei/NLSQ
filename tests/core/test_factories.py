@@ -13,6 +13,8 @@ Note: Streaming workflows are configured via workflow selectors/minpack configs,
 not via factory flags.
 """
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 
@@ -426,3 +428,94 @@ class TestIntegration:
 
         assert popt1 is not None
         assert popt2 is not None
+
+
+class TestBoundsNoneDefaultRegression:
+    """Regression: bounds=None (the documented default) must not crash.
+
+    curve_fit()'s own default is (-inf, inf), never None; the factory
+    wrappers used to pass bounds=None straight through, crashing in
+    prepare_bounds()'s ``for b in bounds`` on the default no-bounds call.
+    """
+
+    def test_create_optimizer_fit_no_bounds(self, simple_model, sample_data):
+        x, y = sample_data
+        optimizer = create_optimizer()
+        popt, pcov = optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
+        assert popt is not None
+        assert pcov is not None
+
+    def test_configure_curve_fit_no_bounds(self, simple_model, sample_data):
+        x, y = sample_data
+        curve_fit = configure_curve_fit()
+        popt, pcov = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
+        assert popt is not None
+        assert pcov is not None
+
+
+class TestGlobalFitSigmaAndBoundsRegression:
+    """Regression: global fit used to silently drop sigma and bounds."""
+
+    def test_global_fit_sigma_is_forwarded(self, simple_model, sample_data):
+        """_fit_global() used to silently drop a caller-supplied sigma:
+        it's a named parameter of _fit_global()'s own signature (so it
+        never lands in **kwargs), and the old code never forwarded it to
+        MultiStartOrchestrator.fit(). MultiStartOrchestrator.fit() has no
+        `sigma` parameter of its own, but it forwards **kwargs straight
+        through to each per-start curve_fit() call -- so sigma genuinely
+        works if forwarded via kwargs; it must not be dropped or rejected."""
+        from nlsq.global_optimization.multi_start import MultiStartOrchestrator
+
+        x, y = sample_data
+        optimizer = create_optimizer(global_optimization=True, n_starts=3)
+        sigma = np.ones_like(y)
+
+        with patch.object(
+            MultiStartOrchestrator, "fit", return_value={"popt": np.array([1.0, 0.0])}
+        ) as mock_fit:
+            optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), sigma=sigma)
+
+        mock_fit.assert_called_once()
+        np.testing.assert_array_equal(mock_fit.call_args.kwargs["sigma"], sigma)
+
+    def test_global_fit_bounds_are_forwarded(self, simple_model, sample_data):
+        """Regression: _fit_global() used to never pass `bounds` to
+        MultiStartOrchestrator.fit() at all. A prior version of this test
+        only asserted `result is not None`, which passes regardless --
+        MultiStartOrchestrator infers bounds from data when bounds=None,
+        so a dropped `bounds` kwarg never produces a visible failure.
+        Spy on MultiStartOrchestrator.fit directly to assert the exact
+        bounds this call received."""
+        from nlsq.global_optimization.multi_start import MultiStartOrchestrator
+
+        x, y = sample_data
+        optimizer = create_optimizer(global_optimization=True, n_starts=3)
+        bounds = (np.array([0.0, -10.0]), np.array([10.0, 10.0]))
+
+        with patch.object(
+            MultiStartOrchestrator, "fit", return_value={"popt": np.array([1.0, 0.0])}
+        ) as mock_fit:
+            optimizer.fit(simple_model, x, y, p0=np.array([1.0, 0.0]), bounds=bounds)
+
+        mock_fit.assert_called_once()
+        received_bounds = mock_fit.call_args.kwargs["bounds"]
+        np.testing.assert_array_equal(received_bounds[0], bounds[0])
+        np.testing.assert_array_equal(received_bounds[1], bounds[1])
+
+
+class TestDiagnosticsKwargRegression:
+    """Regression: enable_diagnostics=True used to set the wrong kwarg name
+    (`diagnostics` instead of `compute_diagnostics`), so curve_fit's
+    **kwargs silently absorbed it and diagnostics never actually ran."""
+
+    def test_enable_diagnostics_sets_compute_diagnostics(self, simple_model):
+        curve_fit = configure_curve_fit(enable_diagnostics=True)
+        x = np.linspace(0, 10, 20)
+        y = 2.5 * x + 1.0
+        result = curve_fit(simple_model, x, y, p0=np.array([1.0, 0.0]))
+        # compute_diagnostics=True makes curve_fit return a CurveFitResult
+        # (with a .diagnostics attribute) instead of a bare (popt, pcov)
+        # tuple. Under the old `diagnostics=DiagnosticsConfig()` kwarg this
+        # never triggered, so the result stayed a bare tuple.
+        assert hasattr(result, "diagnostics")
+        assert result.diagnostics is not None
