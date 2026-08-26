@@ -1523,6 +1523,15 @@ class AdaptiveHybridStreamingOptimizer:
 
         new_params = optax.apply_updates(params, updates)
 
+        # Clip to bounds if available. Phase 2's Gauss-Newton step already
+        # does this (see _gauss_newton_iteration); L-BFGS was missing it,
+        # letting unconstrained descent drift outside the user's bounds in
+        # normalized space -- exposed once best-parameter tracking above was
+        # fixed to correctly pair loss with the point it was measured at.
+        if self.normalized_bounds is not None:
+            lb, ub = self.normalized_bounds
+            new_params = jnp.clip(new_params, lb, ub)
+
         # Validate updated parameters
         if not self._validate_numerics(new_params, context="after L-BFGS update"):
             # Fallback: keep old parameters
