@@ -4242,6 +4242,18 @@ class CurveFit:
                         "bounds": bounds,
                     }
 
+                    # ftol/xtol/tr_solver/x_scale/loss are forwarded explicitly
+                    # below (so recovery strategies can override them) - drop
+                    # them from the **kwargs spread or least_squares() raises
+                    # "got multiple values for keyword argument" whenever the
+                    # outer kwargs already set one (e.g. tr_solver is set
+                    # unconditionally above whenever _select_tr_solver
+                    # resolves a value).
+                    _recovery_passthrough_kwargs = {
+                        k: v
+                        for k, v in kwargs.items()
+                        if k not in ("ftol", "xtol", "tr_solver", "x_scale", "loss")
+                    }
                     success, result = self.recovery.recover_from_failure(
                         "optimization_error",
                         recovery_state,
@@ -4257,14 +4269,14 @@ class CurveFit:
                             transform=transform,
                             bounds=state["bounds"],
                             method=state["method"],
-                            ftol=state.get("ftol", DEFAULT_FTOL),
-                            xtol=state.get("xtol", DEFAULT_XTOL),
-                            tr_solver=state.get("tr_solver"),
-                            x_scale=state.get("x_scale", 1.0),
-                            loss=state.get("loss", "linear"),
+                            ftol=state.get("ftol", kwargs.get("ftol", DEFAULT_FTOL)),
+                            xtol=state.get("xtol", kwargs.get("xtol", DEFAULT_XTOL)),
+                            tr_solver=state.get("tr_solver", kwargs.get("tr_solver")),
+                            x_scale=state.get("x_scale", kwargs.get("x_scale", 1.0)),
+                            loss=state.get("loss", kwargs.get("loss", "linear")),
                             timeit=timeit,
                             callback=callback,
-                            **kwargs,
+                            **_recovery_passthrough_kwargs,
                         ),
                     )
 

@@ -254,6 +254,25 @@ class TestIdentifiabilityAnalyzer:
             report.correlation_matrix, report.correlation_matrix.T
         )
 
+    def test_correlation_matrix_uses_covariance_not_raw_fim(
+        self, analyzer: IdentifiabilityAnalyzer
+    ) -> None:
+        """Parameter-estimate correlation comes from the covariance (inverse
+        of the FIM), not the raw FIM normalized directly - those are
+        different quantities that can even disagree in sign. For
+        FIM=[[100,90],[90,100]], normalizing the raw FIM gives off-diagonal
+        +0.9 (cosine similarity of Jacobian columns - the old, wrong
+        behavior); normalizing inv(FIM) gives -0.9 (true parameter
+        correlation - the fixed behavior)."""
+        fim = np.array([[100.0, 90.0], [90.0, 100.0]])
+        correlation = analyzer._compute_correlation_matrix(fim)
+        assert correlation is not None
+        assert correlation[0, 1] < 0, (
+            f"expected negative parameter correlation, got {correlation[0, 1]} "
+            "(raw-FIM normalization gives +0.9; this must use inv(FIM))"
+        )
+        np.testing.assert_allclose(correlation[0, 1], -0.9, atol=1e-6)
+
     # Test highly correlated pairs detection
     def test_detect_highly_correlated_pairs(
         self, analyzer: IdentifiabilityAnalyzer, correlated_jacobian: np.ndarray

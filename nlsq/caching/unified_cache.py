@@ -23,11 +23,9 @@ Design Goals
 """
 
 import hashlib
-import itertools
 import logging
 import threading
 import time
-import weakref
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
@@ -37,28 +35,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from nlsq.caching._closure_serial import closure_serial as _closure_serial
+
 logger = logging.getLogger(__name__)
-
-_closure_serial_counter = itertools.count()
-_closure_serial_registry: "weakref.WeakKeyDictionary[Callable, int]" = (
-    weakref.WeakKeyDictionary()
-)
-_closure_serial_lock = threading.Lock()
-
-
-def _closure_serial(func: Callable) -> int:
-    """Stable per-object serial for ``func`` (see compilation_cache.py's twin).
-
-    Source text + signature alone collide for two distinct closures built
-    from the same factory (same code, different captured values) - mix in
-    this serial so they hash differently.
-    """
-    with _closure_serial_lock:
-        serial = _closure_serial_registry.get(func)
-        if serial is None:
-            serial = next(_closure_serial_counter)
-            _closure_serial_registry[func] = serial
-        return serial
 
 
 class UnifiedCache:

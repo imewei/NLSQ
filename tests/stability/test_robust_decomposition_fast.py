@@ -47,3 +47,24 @@ def test_cholesky_via_eigen() -> None:
     matrix = jnp.array([[2.0, 0.0], [0.0, 1.0]])
     L = rd._cholesky_via_eigen(matrix, lower=True)
     assert L.shape == (2, 2)
+
+
+@pytest.mark.stability
+@pytest.mark.unit
+def test_numpy_decomp_cholesky_respects_lower() -> None:
+    """_numpy_decomp's cholesky branch used to ignore the `lower` arg and
+    always return the lower-triangular factor (np.linalg.cholesky's
+    default), unlike the JAX/SciPy backends which honor it correctly."""
+    module = importlib.import_module("nlsq.stability.robust_decomposition")
+    rd = module.RobustDecomposition()
+
+    matrix = jnp.array([[4.0, 2.0], [2.0, 3.0]])
+
+    L = rd._numpy_decomp(matrix, "cholesky", True)
+    U = rd._numpy_decomp(matrix, "cholesky", False)
+
+    L_np, U_np = np.array(L), np.array(U)
+    assert np.allclose(np.tril(L_np), L_np), "lower=True must be lower-triangular"
+    assert np.allclose(np.triu(U_np), U_np), "lower=False must be upper-triangular"
+    assert np.allclose(U_np, L_np.T)
+    np.testing.assert_allclose(L_np @ L_np.T, np.array(matrix), atol=1e-10)
