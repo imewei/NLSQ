@@ -170,5 +170,18 @@ class TestRecoveryErrorPaths:
 
         assert not self.recovery._check_recovery_success(result)
 
+    def test_check_recovery_success_true_with_nan_params_is_rejected(self):
+        """An explicit success=True must not bypass NaN/Inf validation --
+        a result like {"success": True, "x": [nan], "cost": nan} is not a
+        valid recovery just because the flag says so."""
+        result = {"success": True, "x": np.array([np.nan, 1.0]), "cost": np.nan}
+        assert not self.recovery._check_recovery_success(result)
+
+    def test_check_recovery_success_true_with_huge_cost_is_rejected(self):
+        """An explicit success=True with a blown-up (but finite) cost must
+        also be rejected."""
+        result = {"success": True, "x": np.array([1.0, 2.0]), "cost": 1e12}
+        assert not self.recovery._check_recovery_success(result)
+
 
 # Total: 11 comprehensive tests covering recovery error paths

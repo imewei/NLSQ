@@ -142,8 +142,11 @@ def solve_with_cholesky_fallback(
     # Eigenvalue fallback
     def eigenvalue_solve():
         eigvals, eigvecs = jnp.linalg.eigh(A)
-        # Regularize small/negative eigenvalues
-        eps = jnp.finfo(A.dtype).eps * jnp.max(jnp.abs(eigvals))
+        # Regularize small/negative eigenvalues. Use an absolute floor of 1
+        # in addition to the relative scale: for an all-zero (or near-zero)
+        # matrix, jnp.max(jnp.abs(eigvals)) is 0, which would make eps 0 and
+        # divide-by-zero below, returning NaN instead of a damped solution.
+        eps = jnp.finfo(A.dtype).eps * jnp.maximum(jnp.max(jnp.abs(eigvals)), 1.0)
         eigvals_safe = jnp.maximum(eigvals, eps)
         return eigvecs @ (eigvecs.T @ b / eigvals_safe)
 
@@ -258,10 +261,16 @@ class NumericalStabilityGuard:
         # JIT-compiled fast Jacobian check (for large Jacobians - NaN/Inf only)
         @jit
         def _check_jacobian_fast_jit(J):
-            """Fast NaN/Inf check for large Jacobians."""
-            has_invalid = jnp.any(~jnp.isfinite(J))
+            """Fast NaN/Inf check for large Jacobians.
+
+            Computes has_nan/has_inf independently *inside* the JIT region so
+            the caller needs only one host sync (via the returned arrays)
+            instead of separately syncing on jnp.any(isnan)/jnp.any(isinf).
+            """
+            has_nan = jnp.any(jnp.isnan(J))
+            has_inf = jnp.any(jnp.isinf(J))
             J_fixed = jnp.where(jnp.isfinite(J), J, 0.0)
-            return J_fixed, has_invalid
+            return J_fixed, has_nan, has_inf
 
         # JIT-compiled gradient checking
         @jit
@@ -322,15 +331,19 @@ class NumericalStabilityGuard:
         # SVD of (m, n) matrix is O(min(m,n)^2 * max(m,n)) which is very expensive
         # for large matrices (e.g., 10^6 x 7 = 7M elements)
         if n_elements > self.max_jacobian_elements_for_svd:
-            # Fast path: JIT-compiled NaN/Inf check only (10-50x faster)
-            J_fixed, has_invalid = self._check_jacobian_fast_jit(J)
-            if has_invalid:
+            # Fast path: JIT-compiled NaN/Inf check only (10-50x faster).
+            # has_nan/has_inf are computed inside the jit'd function so this
+            # is a single host sync, not three.
+            J_fixed, has_nan, has_inf = self._check_jacobian_fast_jit(J)
+            has_nan = bool(has_nan)
+            has_inf = bool(has_inf)
+            if has_nan or has_inf:
                 warnings.warn(
                     "Jacobian contains NaN or Inf values, replacing with zeros",
                 )
             issues: dict[str, object] = {
-                "has_nan": bool(has_invalid),
-                "has_inf": bool(has_invalid),
+                "has_nan": has_nan,
+                "has_inf": has_inf,
                 "is_ill_conditioned": False,
                 "condition_number": None,
                 "regularized": False,
@@ -339,19 +352,30 @@ class NumericalStabilityGuard:
             }
             return J_fixed, issues
 
-        # Standard path: Check for NaN/Inf
-        has_invalid = jnp.any(~jnp.isfinite(J))
+        # Standard path: Check for NaN/Inf (tracked independently so that
+        # detection isn't lost if remediation below turns the matrix into
+        # something that no longer contains NaN/Inf, e.g. an all-NaN
+        # Jacobian being zeroed and then hitting the all-zero branch).
+        has_nan = bool(jnp.any(jnp.isnan(J)))
+        has_inf = bool(jnp.any(jnp.isinf(J)))
+        has_invalid = has_nan or has_inf
         if has_invalid:
             warnings.warn("Jacobian contains NaN or Inf values, replacing with zeros")
             J = jnp.where(jnp.isfinite(J), J, 0.0)
 
-        # Check if matrix is all zeros - use broadcast add (more memory efficient)
+        # Check if matrix is all zeros
         if jnp.allclose(J, 0.0):
             warnings.warn("Jacobian is all zeros, adding small perturbation")
-            J = J + self.eps  # Broadcasting is more memory efficient than jnp.ones
+            # Perturb the diagonal in place (same low-memory pattern used
+            # below for regularization) rather than a uniform scalar add:
+            # adding the same eps to every element makes every column
+            # identical (rank 1), which is still singular for n > 1 and
+            # doesn't actually fix conditioning.
+            diag_indices = jnp.arange(min(m, n))
+            J = J.at[diag_indices, diag_indices].add(self.eps)
             return J, {
-                "has_nan": False,
-                "has_inf": False,
+                "has_nan": has_nan,
+                "has_inf": has_inf,
                 "is_ill_conditioned": True,
                 "condition_number": np.inf,
                 "regularized": True,
@@ -406,8 +430,8 @@ class NumericalStabilityGuard:
             regularized = True
 
         issues = {
-            "has_nan": bool(has_invalid),
-            "has_inf": bool(has_invalid),
+            "has_nan": has_nan,
+            "has_inf": has_inf,
             "is_ill_conditioned": condition_number > self.condition_threshold,
             "condition_number": condition_number,
             "regularized": regularized,

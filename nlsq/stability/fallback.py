@@ -82,6 +82,19 @@ class FallbackStrategy:
         """
         raise NotImplementedError("Subclasses must implement apply()")
 
+    def reset(self) -> None:
+        """Reset per-fit progressive state before a new fit_with_fallback() run.
+
+        Subclasses that advance through a sequence across successive apply()
+        calls within one fit (e.g. trying loss functions or perturbations in
+        order) must override this to reset that sequence position -- without
+        it, a second fit on a reused orchestrator instance silently resumes
+        wherever the previous fit's sequence left off (or has already
+        exhausted it, making the strategy a permanent no-op). `attempts` and
+        `successes` are intentionally NOT reset here: they are lifetime
+        statistics across every fit this strategy instance has taken part in.
+        """
+
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(name='{self.name}', priority={self.priority})"
@@ -109,6 +122,10 @@ class AlternativeMethodStrategy(FallbackStrategy):
             modified["method"] = self.method_sequence[self.current_index]
             self.current_index += 1
         return modified
+
+    def reset(self) -> None:
+        """Restart the method sequence from the beginning for a new fit."""
+        self.current_index = 0
 
 
 class PerturbInitialGuessStrategy(FallbackStrategy):
@@ -147,6 +164,10 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
 
         return modified
 
+    def reset(self) -> None:
+        """Restart the perturbation budget from zero for a new fit."""
+        self.perturbation_count = 0
+
 
 class AdjustTolerancesStrategy(FallbackStrategy):
     """Relax optimization tolerances."""
@@ -176,6 +197,10 @@ class AdjustTolerancesStrategy(FallbackStrategy):
         modified["gtol"] = gtol * self.current_factor
 
         return modified
+
+    def reset(self) -> None:
+        """Restart the relaxation factor from 1.0 (unrelaxed) for a new fit."""
+        self.current_factor = 1.0
 
 
 class AddParameterBoundsStrategy(FallbackStrategy):
@@ -252,6 +277,10 @@ class UseRobustLossStrategy(FallbackStrategy):
             self.current_index += 1
 
         return modified
+
+    def reset(self) -> None:
+        """Restart the loss-function sequence from the beginning for a new fit."""
+        self.current_index = 0
 
 
 class RescaleProblemStrategy(FallbackStrategy):
@@ -422,6 +451,15 @@ class FallbackOrchestrator:
         from nlsq.core.minpack import (
             curve_fit,  # Deferred import to avoid circular dependency
         )
+
+        # Reset per-fit state: this orchestrator instance is commonly reused
+        # across multiple fits, but total_attempts and each strategy's
+        # progressive sequence position (e.g. which robust loss function or
+        # tolerance relaxation to try next) must start fresh for *this* fit,
+        # not resume wherever the previous fit's sequence left off.
+        self.total_attempts = 0
+        for strategy in self.strategies:
+            strategy.reset()
 
         # Inject xdata/ydata for strategies that need it
         kwargs["_xdata"] = xdata

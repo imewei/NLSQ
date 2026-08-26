@@ -386,12 +386,15 @@ class OptimizationRecovery:
                 return obj.get(key, default)
             return getattr(obj, key, default)
 
-        # Check for explicit success flag
+        # An explicit False is unambiguous -- trust it immediately.
         success = _get_value(result, "success")
-        if success is not None:
-            return success
+        if success is False:
+            return False
 
-        # Check for valid parameters
+        # Validate parameters/cost whenever available. Even an explicit
+        # success=True must not bypass this: a result like
+        # {"success": True, "x": [nan], "cost": nan} is not a valid
+        # recovery just because the flag says so.
         params = _get_value(result, "x")
         if params is None:
             params = _get_value(result, "params")
@@ -407,5 +410,10 @@ class OptimizationRecovery:
                     return False
 
             return True
+
+        # No parameters to validate against -- fall back to the explicit
+        # success flag, if any was given.
+        if success is not None:
+            return success
 
         return False

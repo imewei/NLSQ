@@ -744,6 +744,108 @@ class TestBugFixRegressions(unittest.TestCase):
             "just because co_code matches",
         )
 
+    def test_stability_auto_rescale_data_flag_is_noop(self):
+        """curve_fit(..., stability='auto') used to silently rescale
+        xdata/ydata to [0, 1] when ill-conditioned, returning fitted
+        parameters in the wrong coordinate system for an arbitrary
+        nonlinear model (not soundly invertible). rescale_data=True and
+        rescale_data=False must now produce identical popt, and a warning
+        must explain that rescaling was skipped."""
+
+        def model(x, a, b):
+            return a * jnp.exp(-b * x)
+
+        x = np.linspace(0, 1e5, 100)  # large x_range triggers the old rescale
+        y = np.asarray(2.5 * np.exp(-3e-5 * x))
+        p0 = [1.0, 1e-4]
+
+        popt_true, _ = curve_fit(
+            model, x, y, p0=p0, stability="auto", rescale_data=True
+        )
+        popt_false, _ = curve_fit(
+            model, x, y, p0=p0, stability="auto", rescale_data=False
+        )
+        np.testing.assert_allclose(popt_true, popt_false)
+
+        with self.assertLogs("nlsq.minpack", level="WARNING") as cm:
+            curve_fit(model, x, y, p0=p0, stability="auto", rescale_data=True)
+        self.assertTrue(
+            any("NOT applied" in msg for msg in cm.output),
+            f"expected a 'NOT applied' warning, got: {cm.output}",
+        )
+
+    def test_streaming_strategy_forwards_memory_config(self):
+        """_curve_fit_auto_memory's 'streaming' branch used to drop the
+        memory-budget-derived HybridStreamingConfig on the floor, silently
+        falling back to the optimizer's own default chunk size instead of
+        the one the memory-budget selection just computed."""
+        from unittest.mock import MagicMock, patch
+
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        def model(x, a, b):
+            return a * jnp.exp(-b * x)
+
+        x = np.linspace(0, 5, 20)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+        real_config = HybridStreamingConfig(chunk_size=12_345)
+
+        with (
+            patch(
+                "nlsq.core.workflow.MemoryBudgetSelector.select",
+                return_value=("streaming", real_config),
+            ),
+            patch.object(CurveFit, "_curve_fit_hybrid_streaming") as mock_stream,
+        ):
+            mock_result = MagicMock()
+            mock_stream.return_value = mock_result
+            cf = CurveFit()
+            cf._curve_fit_auto_memory(
+                f=model,
+                xdata=x,
+                ydata=y,
+                p0=[1.0, 1.0],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(-np.inf, np.inf),
+                callback=None,
+                verbose=0,
+            )
+
+        self.assertIs(mock_stream.call_args.kwargs["config"], real_config)
+
+    def test_singular_matrix_failure_routes_to_numerical_recovery(self):
+        """A caught LinAlgError used to always be classified as the generic
+        'optimization_error', which never matches
+        OptimizationRecovery._adjust_regularization's
+        ["numerical", "ill_conditioned"] gate -- that recovery strategy
+        (regularization boost + LSMR switch) was therefore unreachable.
+        Verify a LinAlgError now routes through recovery and the fit still
+        succeeds instead of propagating the exception."""
+
+        def model(x, a, b):
+            return a * jnp.exp(-b * x)
+
+        x = np.linspace(0, 5, 20)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+
+        cf = CurveFit(enable_recovery=True)
+        real_least_squares = cf.ls.least_squares
+        calls = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise np.linalg.LinAlgError("Singular matrix")
+            return real_least_squares(*args, **kwargs)
+
+        cf.ls.least_squares = flaky
+        popt, _ = cf.curve_fit(model, x, y, p0=[1.0, 1.0])
+
+        self.assertGreaterEqual(calls["n"], 2)
+        self.assertTrue(np.all(np.isfinite(popt)))
+
 
 if __name__ == "__main__":
     unittest.main()

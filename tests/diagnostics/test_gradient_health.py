@@ -483,6 +483,10 @@ class TestEdgeCases:
 
         report = monitor.get_report()
         assert report.has_numerical_issues is True
+        # NaN/Inf must surface as a real issue and escalate status to
+        # CRITICAL, not just quietly deduct 0.2 from the health score.
+        assert any(i.code == "GRAD-005" for i in report.issues)
+        assert report.health_status == HealthStatus.CRITICAL
 
     def test_inf_in_gradient(self) -> None:
         """Test handling of Inf values in gradient."""
@@ -494,6 +498,8 @@ class TestEdgeCases:
 
         report = monitor.get_report()
         assert report.has_numerical_issues is True
+        assert any(i.code == "GRAD-005" for i in report.issues)
+        assert report.health_status == HealthStatus.CRITICAL
 
     def test_zero_gradient(self) -> None:
         """Test handling of zero gradient."""

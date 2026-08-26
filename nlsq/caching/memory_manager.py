@@ -205,7 +205,7 @@ class MemoryManager:
         When adaptive_ttl is enabled, the effective TTL is adjusted based on
         call frequency to further reduce overhead for streaming optimization.
         """
-        now = time.time()
+        now = time.monotonic()
 
         # Track call timestamp for adaptive TTL
         if self._adaptive_ttl:
@@ -229,11 +229,20 @@ class MemoryManager:
                 self._available_memory_cache_time = now
                 return mem.available
             except Exception as e:
-                # Fallback if psutil fails - log for debugging
-                logger.debug(f"psutil memory check failed (non-critical): {e}")
+                # Fallback if psutil fails - warn (not debug-log): a fabricated
+                # estimate that's wrong in the optimistic direction can let a
+                # memory-constrained caller (e.g. a small container) admit an
+                # allocation that OOMs the process, so this must be visible.
+                logger.warning(
+                    f"psutil memory check failed, using fallback estimate "
+                    f"of 16 GB available (non-critical, but downstream memory "
+                    f"budget decisions will be based on this guess): {e}",
+                )
 
-        # Conservative fallback estimate (4 GB)
-        return 4.0 * 1024**3
+        # Conservative fallback estimate. Matches the 16 GB fallback used by
+        # MemoryEstimator.get_available_memory_gb() (nlsq/streaming/large_dataset.py)
+        # for consistency between NLSQ's two memory-estimation code paths.
+        return 16.0 * 1024**3
 
     def get_memory_usage_bytes(self) -> float:
         """Get current memory usage in bytes.
@@ -247,7 +256,7 @@ class MemoryManager:
         -----
         Uses TTL-based caching to reduce psutil system call overhead by 90%.
         """
-        now = time.time()
+        now = time.monotonic()
 
         # Return cached value if still valid
         if (
@@ -265,9 +274,17 @@ class MemoryManager:
                 self._memory_usage_cache_time = now
                 return usage
             except Exception as e:
-                logger.debug(f"psutil process memory check failed (non-critical): {e}")
+                logger.warning(
+                    f"psutil process memory check failed, falling back to a "
+                    f"pool-only estimate that undercounts true process memory "
+                    f"(non-critical, but usage-fraction decisions will be too "
+                    f"optimistic): {e}",
+                )
 
-        # Fallback: try to estimate from Python's view
+        # Fallback: try to estimate from Python's view. NOTE: this only
+        # counts the memory pool's own arrays, not actual process RSS
+        # (interpreter, JAX/XLA buffers, etc.), so it systematically
+        # undercounts true usage when psutil is unavailable.
         import sys
 
         return sys.getsizeof(self.memory_pool) + sum(
@@ -286,7 +303,7 @@ class MemoryManager:
         -----
         Uses TTL-based caching to reduce psutil system call overhead by 90%.
         """
-        now = time.time()
+        now = time.monotonic()
 
         # Return cached value if still valid
         if (

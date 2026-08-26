@@ -34,6 +34,40 @@ def test_compute_svd_with_fallback_cpu_path(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.stability
 @pytest.mark.unit
+def test_compute_svd_with_fallback_nan_result_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A backend can 'succeed' (no exception) while still returning NaN/Inf
+    factors on numerical failure. That must be treated the same as a raised
+    exception and fall through to the next tier, not be accepted as-is."""
+    module = importlib.import_module("nlsq.stability.svd_fallback")
+
+    calls = {"count": 0}
+
+    def _fake_svd(matrix, full_matrices=False):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            n = min(matrix.shape)
+            return (
+                jnp.full((matrix.shape[0], n), jnp.nan),
+                jnp.zeros(n),
+                jnp.full((n, matrix.shape[1]), jnp.nan),
+            )
+        return jnp.eye(2), jnp.array([2.0, 1.0]), jnp.eye(2)
+
+    monkeypatch.setattr(module, "jax_svd", _fake_svd)
+
+    with pytest.warns(RuntimeWarning):
+        U, s, V = module.compute_svd_with_fallback(jnp.eye(2), full_matrices=False)
+
+    assert bool(jnp.all(jnp.isfinite(U)))
+    assert bool(jnp.all(jnp.isfinite(s)))
+    assert bool(jnp.all(jnp.isfinite(V)))
+    assert np.allclose(np.array(s), np.array([2.0, 1.0]))
+
+
+@pytest.mark.stability
+@pytest.mark.unit
 def test_compute_svd_with_fallback_cuda_ffi_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

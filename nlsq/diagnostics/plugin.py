@@ -336,11 +336,15 @@ def run_plugins(
     plugins = PluginRegistry.all()
     results: dict[str, PluginResult] = {}
 
-    for plugin in plugins:
-        plugin_name = plugin.name
+    for index, plugin in enumerate(plugins):
+        # Fallback key in case reading `.name` itself raises -- exception
+        # isolation must cover *any* plugin misbehavior, not just analyze().
+        plugin_name = f"<unnamed plugin #{index}>"
         start_time = time.perf_counter()
 
         try:
+            plugin_name = plugin.name
+
             result = plugin.analyze(
                 jacobian=jacobian,
                 parameters=parameters,
@@ -348,33 +352,38 @@ def run_plugins(
                 **context,
             )
 
-            # Handle None return (treat as empty result)
-            if result is None:
-                result = PluginResult(
-                    plugin_name=plugin_name,
-                    available=True,
-                    data={},
-                    issues=[],
-                )
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-            # Handle invalid return type (not PluginResult)
-            # Use duck typing to handle module identity issues with pytest-xdist
-            if not (
+            # Handle None or malformed return: a plugin that returns None or
+            # something that isn't a PluginResult did not actually complete
+            # its analysis, so it must be reported unavailable -- not
+            # silently converted into an empty, issue-free "success".
+            # Use duck typing to handle module identity issues with pytest-xdist.
+            if result is None or not (
                 hasattr(result, "plugin_name")
+                and hasattr(result, "available")
                 and hasattr(result, "data")
                 and hasattr(result, "issues")
             ):
-                result = PluginResult(
+                results[plugin_name] = PluginResult(
                     plugin_name=plugin_name,
-                    available=True,
+                    available=False,
+                    error_message=(
+                        f"Plugin '{plugin_name}' returned "
+                        f"{result!r} instead of a PluginResult"
+                    ),
                     data={},
                     issues=[],
+                    computation_time_ms=elapsed_ms,
                 )
+                continue
 
-            # Ensure computation time is recorded
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            result = PluginResult(
-                plugin_name=result.plugin_name,
+            # Attribute the result to the registered key, not whatever
+            # `plugin_name` the plugin itself claims in its return value --
+            # otherwise a plugin can misreport its identity and corrupt
+            # report/serialization attribution under a different key.
+            results[plugin_name] = PluginResult(
+                plugin_name=plugin_name,
                 available=result.available,
                 error_message=result.error_message,
                 data=result.data,
@@ -382,10 +391,8 @@ def run_plugins(
                 computation_time_ms=elapsed_ms,
             )
 
-            results[plugin_name] = result
-
         except Exception as e:
-            # Exception isolation per FR-014
+            # Exception isolation per FR-014 -- covers name access too.
             elapsed_ms = (time.perf_counter() - start_time) * 1000
 
             # Emit warning about plugin failure

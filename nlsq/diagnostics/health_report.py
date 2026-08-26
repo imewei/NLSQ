@@ -102,7 +102,13 @@ def create_health_report(
     all_issues = _sort_issues(all_issues)
 
     # Determine overall status from issues
-    status = _determine_status(all_issues, identifiability, gradient_health)
+    status = _determine_status(
+        all_issues,
+        identifiability,
+        gradient_health,
+        sloppy_model,
+        plugin_results,
+    )
 
     # Compute health score
     health_score = _compute_health_score(
@@ -224,13 +230,18 @@ def _determine_status(
     all_issues: list[ModelHealthIssue],
     identifiability: IdentifiabilityReport | None,
     gradient_health: GradientHealthReport | None,
+    sloppy_model: ParameterSensitivityReport | None = None,
+    plugin_results: dict[str, PluginResult] | None = None,
 ) -> HealthStatus:
     """Determine overall health status from issues.
 
     Logic (Contract B1):
     - If any CRITICAL severity issue exists: CRITICAL
     - Else if any WARNING severity issue exists: WARNING
-    - Else if all components unavailable or None: WARNING
+    - Else if no component was provided (all None): WARNING
+    - Else if any *provided* component reports available=False (analysis was
+      attempted but failed): WARNING -- a failed component must not be
+      silently dropped just because a sibling component succeeded.
     - Else: HEALTHY
 
     Parameters
@@ -241,6 +252,10 @@ def _determine_status(
         Identifiability report for checking availability.
     gradient_health : GradientHealthReport | None
         Gradient health report for checking availability.
+    sloppy_model : ParameterSensitivityReport | None
+        Sloppy model report for checking availability.
+    plugin_results : dict[str, PluginResult] | None
+        Plugin results for checking availability.
 
     Returns
     -------
@@ -255,11 +270,25 @@ def _determine_status(
     if any(issue.severity.name == "WARNING" for issue in all_issues):
         return HealthStatus.WARNING
 
-    # Check if all components are unavailable or None (per contract error handling)
-    ident_unavailable = identifiability is None or not identifiability.available
-    grad_unavailable = gradient_health is None or not gradient_health.available
+    components: list[
+        IdentifiabilityReport
+        | GradientHealthReport
+        | ParameterSensitivityReport
+        | PluginResult
+        | None
+    ] = [identifiability, gradient_health, sloppy_model]
+    if plugin_results:
+        components.extend(plugin_results.values())
 
-    if ident_unavailable and grad_unavailable:
+    provided = [c for c in components if c is not None]
+
+    # No component was requested/provided at all.
+    if not provided:
+        return HealthStatus.WARNING
+
+    # A provided component that failed (available=False) must not be
+    # masked just because another provided component succeeded.
+    if any(not c.available for c in provided):
         return HealthStatus.WARNING
 
     return HealthStatus.HEALTHY

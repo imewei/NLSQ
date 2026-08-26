@@ -14,6 +14,7 @@ import pytest
 from nlsq.stability.fallback import (
     AddParameterBoundsStrategy,
     AdjustTolerancesStrategy,
+    AlternativeMethodStrategy,
     FallbackOrchestrator,
     FallbackResult,
     FallbackStrategy,
@@ -329,6 +330,59 @@ class TestFallbackOrchestrator:
             _ = orchestrator.fit_with_fallback(exponential_decay, x, y, p0=[1, 0.5, 1])
 
         assert orchestrator.total_attempts <= 3
+
+    def test_second_fit_resets_total_attempts(self):
+        """total_attempts must not accumulate across fit_with_fallback()
+        calls on a reused orchestrator instance -- a second fit should not
+        start already partway through its attempt budget."""
+        np.random.seed(42)
+        x = np.linspace(0, 10, 50)
+        y = 2.5 * np.exp(-0.5 * x) + 1.0 + 0.1 * np.random.randn(50)
+
+        orchestrator = FallbackOrchestrator(verbose=False, max_attempts=10)
+        orchestrator.fit_with_fallback(exponential_decay, x, y, p0=[2, 0.5, 1])
+        first_attempts = orchestrator.total_attempts
+        assert first_attempts >= 1
+
+        orchestrator.fit_with_fallback(exponential_decay, x, y, p0=[2, 0.5, 1])
+        # If state leaked, the second fit's total_attempts would start from
+        # first_attempts and only grow -- it must reset to a fresh count.
+        assert orchestrator.total_attempts <= first_attempts
+
+    def test_reset_restores_every_default_strategy_to_fresh_state(self):
+        """Every stateful strategy in DEFAULT_STRATEGIES must return to its
+        just-constructed state after reset() -- guards against a future
+        strategy adding progressive state without overriding reset()."""
+        orchestrator = FallbackOrchestrator(verbose=False)
+        # Advance every strategy's internal sequence position.
+        for strategy in orchestrator.strategies:
+            strategy.apply(
+                {
+                    "p0": np.array([1.0]),
+                    "_xdata": np.arange(5.0),
+                    "_ydata": np.arange(5.0),
+                },
+            )
+
+        for strategy, factory in zip(
+            orchestrator.strategies,
+            orchestrator.DEFAULT_STRATEGIES,
+            strict=True,
+        ):
+            strategy.reset()
+            fresh = factory()
+            assert vars(strategy) == vars(fresh), (
+                f"{type(strategy).__name__}.reset() left stale state: "
+                f"{vars(strategy)} != fresh {vars(fresh)}"
+            )
+
+    def test_alternative_method_strategy_reset(self):
+        """Direct unit test for the specific reset() this PR added."""
+        strategy = AlternativeMethodStrategy()
+        strategy.apply({})
+        assert strategy.current_index == 1
+        strategy.reset()
+        assert strategy.current_index == 0
 
 
 class TestFallbackResult:

@@ -1789,11 +1789,14 @@ def _apply_stability_checks(
     stability : {'auto', 'check'}
         Stability mode - 'check' warns, 'auto' applies fixes.
     rescale_data : bool
-        Whether to rescale data when applying automatic fixes.
+        When True and stability='auto', warn (rather than silently do
+        nothing) if data rescaling/parameter normalization would have
+        triggered. The rescale/normalize is never actually applied here --
+        see the "auto" fix note in this function's implementation for why.
     args : tuple
-        Positional arguments (may be modified if p0 is updated).
+        Positional arguments.
     kwargs : dict
-        Keyword arguments (may be updated with fixed p0).
+        Keyword arguments.
 
     Returns
     -------
@@ -1837,33 +1840,79 @@ def _apply_stability_checks(
             logger.info(
                 f"Applying automatic fixes for {len(stability_report['issues'])} stability issues...",
             )
-            if not rescale_data:
-                logger.info(
-                    "  (rescale_data=False: data rescaling disabled for applications requiring unit preservation)",
-                )
 
-            xdata_fixed, ydata_fixed, p0_fixed, fix_info = apply_automatic_fixes(
+            # NOTE: apply_automatic_fixes() can also rescale xdata/ydata to
+            # [0, 1] (Fix 1/2) and split p0 by order of magnitude (Fix 4).
+            # Those two are NOT applied here: they change the coordinate
+            # system / initial-guess semantics that `f` is evaluated in
+            # without reparameterizing `f` itself, so the popt this function
+            # (and curve_fit) ultimately returns would be silently wrong --
+            # in the wrong units for a rescaled fit, or started from a
+            # nonsensical point for a "normalized" p0, with no way to invert
+            # either for an arbitrary nonlinear model. Only the NaN/Inf
+            # replacement (always safe -- it never changes the coordinate
+            # system) is applied here, forcing rescale_data=False regardless
+            # of the caller's rescale_data argument.
+            xdata_fixed, ydata_fixed, _p0_unused, fix_info = apply_automatic_fixes(
                 xdata,
                 ydata,
                 p0,
                 stability_report=stability_report,
-                rescale_data=rescale_data,
+                rescale_data=False,
             )
 
-            # Update data and parameters
+            # Update data (NaN/Inf replacement only)
             xdata = xdata_fixed
             ydata = ydata_fixed
 
-            if p0_fixed is not None:
-                # Update p0 in kwargs (move from args if needed)
-                kwargs["p0"] = p0_fixed
-                # If p0 was in args, we need to remove it from args
-                if args and len(args) >= 1:
-                    args = args[1:]
-
-            # Log applied fixes
+            # Log applied fixes -- excluding the p0-normalization message.
+            # apply_automatic_fixes()'s Fix 4 (p0 order-of-magnitude
+            # normalization) is unconditional in guard.py, not gated by
+            # rescale_data like Fix 1/2 are, so it still runs and appends
+            # "Normalized p0..." to applied_fixes even though we deliberately
+            # discard p0_fixed (_p0_unused) above. Logging that message would
+            # claim a fix happened when the fit is actually still using the
+            # original, un-normalized p0.
             for fix in fix_info["applied_fixes"]:
-                logger.info(f"  - {fix}")
+                if "Normalized p0" not in fix:
+                    logger.info(f"  - {fix}")
+
+            # Inform the caller when a fix would have triggered but was
+            # skipped, since it is now a no-op rather than a silent-but-wrong
+            # transform.
+            cond = stability_report["condition_number"]
+            x_range = np.ptp(np.asarray(xdata)) if np.size(xdata) else 0
+            y_range = np.ptp(np.asarray(ydata)) if np.size(ydata) else 0
+            would_rescale_data = (
+                (cond is not None and cond > 1e10) or x_range > 1e4 or y_range > 1e4
+            )
+            # Matches Fix 4's own trigger condition in guard.py exactly (it
+            # is unconditional, not gated by rescale_data).
+            would_normalize_p0 = (
+                p0 is not None
+                and stability_report["parameter_scale_ratio"]
+                and stability_report["parameter_scale_ratio"] > 1e6
+            )
+            if rescale_data and would_rescale_data:
+                logger.warning(
+                    "  Data rescaling was NOT applied: automatically rescaling "
+                    "xdata/ydata cannot be soundly inverted back to your model's "
+                    "original units for an arbitrary nonlinear model, so it would "
+                    "silently return parameters in the wrong coordinate system. "
+                    "If conditioning is a problem, pass x_scale='jac' (or an "
+                    "explicit per-parameter scale) to curve_fit, or rescale your "
+                    "data yourself and interpret the fitted parameters accordingly.",
+                )
+            if would_normalize_p0:
+                logger.warning(
+                    "  p0 normalization was NOT applied: rescaling your initial "
+                    "guess to unit order of magnitude without also "
+                    "reparameterizing the model would start the optimizer from "
+                    "a point that no longer matches the model's actual "
+                    "parameter units. If p0 components span many orders of "
+                    "magnitude, pass x_scale='jac' to curve_fit or rescale p0 "
+                    "yourself alongside the model.",
+                )
 
     return xdata, ydata, args
 
@@ -2292,21 +2341,28 @@ def curve_fit(
     stability : {'auto', 'check', False}, optional
         Control numerical stability checks and automatic fixes:
 
-        - 'auto': Check for stability issues and automatically apply fixes
-          (optionally rescale data, normalize parameters, handle NaN/Inf)
+        - 'auto': Check for stability issues and automatically fix the ones
+          that are safe to fix (handle NaN/Inf); warn about the rest
         - 'check': Check for stability issues and warn, but don't apply fixes
         - False: Skip stability checks entirely (default)
 
-        When 'auto', detected issues are fixed before optimization:
+        When 'auto', detected issues are handled before optimization:
 
-        - Ill-conditioned data (condition number > 1e10) is rescaled to [0, 1]
-          (only if rescale_data=True)
-        - Large data ranges (> 1e4) are normalized (only if rescale_data=True)
-        - NaN/Inf values are replaced with mean
-        - Parameter scale mismatches (ratio > 1e6) are normalized
+        - NaN/Inf values in xdata/ydata are replaced with the mean (always
+          safe, applied automatically)
+        - Ill-conditioned data (condition number > 1e10), large data ranges
+          (> 1e4), and parameter scale mismatches (ratio > 1e6) are *not*
+          automatically rescaled/normalized: doing so would silently return
+          fitted parameters in the wrong coordinate system for an arbitrary
+          nonlinear model function, since the rescale can't be soundly
+          inverted. A warning names these cases instead; pass ``x_scale``
+          (e.g. ``x_scale='jac'``) to curve_fit for solver-internal scaling
+          that doesn't have this problem, or rescale your data yourself.
 
         Default: False.
     rescale_data : bool, optional
+        Reserved for forward/backward compatibility with the (currently
+        disabled -- see ``stability`` above) automatic data-rescaling fix.
         When stability='auto', controls whether data is automatically rescaled
         to [0, 1] for ill-conditioned or large-range data. Set to False for
         applications where data must maintain physical units (e.g.,
@@ -4040,7 +4096,11 @@ class CurveFit:
 
         # Route to appropriate strategy
         if strategy == "streaming":
-            # Delegate to hybrid streaming optimizer
+            # Delegate to hybrid streaming optimizer. Pass the memory-derived
+            # config through (as the "chunked" branch below already does) --
+            # without it, _curve_fit_hybrid_streaming falls back to its own
+            # default HybridStreamingConfig() and silently ignores the
+            # memory-budget-computed batch/chunk size that was just selected.
             return self._curve_fit_hybrid_streaming(
                 f=f,
                 xdata=xdata,
@@ -4051,6 +4111,7 @@ class CurveFit:
                 check_finite=check_finite,
                 bounds=bounds,
                 callback=callback,
+                config=config,
                 **kwargs,
             )
 
@@ -4270,8 +4331,38 @@ class CurveFit:
                         for k, v in kwargs.items()
                         if k not in ("ftol", "xtol", "tr_solver", "x_scale", "loss")
                     }
+                    # Classify the failure so recovery strategies gated on
+                    # failure_type (e.g. OptimizationRecovery._adjust_regularization,
+                    # which only boosts regularization / switches to LSMR for
+                    # "numerical"/"ill_conditioned") actually activate instead
+                    # of silently no-op'ing on a generic "optimization_error".
+                    import re as _re
+
+                    _err_msg = str(e).lower()
+                    _numerical_failure = (
+                        isinstance(e, np.linalg.LinAlgError)
+                        # "nan"/"inf" as whole words only: a bare substring
+                        # match would misclassify ordinary messages like
+                        # "insufficient information" or "infeasible" as a
+                        # numerical failure.
+                        or bool(_re.search(r"\b(nan|inf)\b", _err_msg))
+                        or any(
+                            kw in _err_msg
+                            for kw in (
+                                "singular",
+                                "ill-conditioned",
+                                "ill conditioned",
+                                "condition number",
+                                "cholesky",
+                                "svd",
+                            )
+                        )
+                    )
+                    failure_type = (
+                        "numerical" if _numerical_failure else "optimization_error"
+                    )
                     success, result = self.recovery.recover_from_failure(
-                        "optimization_error",
+                        failure_type,
                         recovery_state,
                         lambda **state: self.ls.least_squares(
                             f_to_use,

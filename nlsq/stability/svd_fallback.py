@@ -85,15 +85,32 @@ def compute_svd_with_fallback(
     V : jnp.ndarray
         Right singular vectors (note: V is transposed back, NOT Vt)
     """
+
+    def _finite_or_raise(U, s, V, tier: str):
+        # A backend can "succeed" (no exception) while still returning
+        # NaN/Inf factors on numerical failure (e.g. a degenerate/singular
+        # input on some cuSolver paths). Accepting those silently would
+        # poison the trust-region step with NaN that never triggers the
+        # fallback chain below. Treat non-finite output the same as a raised
+        # exception so the next tier gets a chance.
+        if not (
+            jnp.all(jnp.isfinite(U))
+            and jnp.all(jnp.isfinite(s))
+            and jnp.all(jnp.isfinite(V))
+        ):
+            raise FloatingPointError(f"{tier} SVD returned non-finite factors")
+        return U, s, V
+
     try:
         # First attempt: Direct GPU computation
         U, s, Vt = jax_svd(J_h, full_matrices=full_matrices)
-        return U, s, Vt.T
+        return _finite_or_raise(U, s, Vt.T, "GPU")
     except Exception as gpu_error:
-        # Check if it's a GPU-specific error (cuSolver or CUDA FFI)
-        if is_gpu_error(gpu_error):
+        # Check if it's a GPU-specific error (cuSolver or CUDA FFI), or a
+        # non-finite result caught by _finite_or_raise above.
+        if is_gpu_error(gpu_error) or isinstance(gpu_error, FloatingPointError):
             warnings.warn(
-                "GPU SVD failed with cuSolver error, attempting CPU fallback",
+                f"GPU SVD failed ({gpu_error}), attempting CPU fallback",
                 RuntimeWarning,
             )
 
@@ -104,7 +121,7 @@ def compute_svd_with_fallback(
                     # Move data to CPU
                     J_h_cpu = jax.device_put(J_h, cpu_device)
                     U, s, Vt = jax_svd(J_h_cpu, full_matrices=full_matrices)
-                    return U, s, Vt.T
+                    return _finite_or_raise(U, s, Vt.T, "CPU")
             except Exception as cpu_error:
                 # Third attempt: Use numpy as last resort
                 warnings.warn(
@@ -122,7 +139,9 @@ def compute_svd_with_fallback(
                 s = jnp.array(s_np)
                 V = jnp.array(Vt_np.T)
 
-                return U, s, V
+                # No further fallback tier exists -- fail loudly rather than
+                # silently returning a NaN-poisoned factorization.
+                return _finite_or_raise(U, s, V, "NumPy")
         else:
             # Not a GPU-specific error, re-raise
             raise

@@ -9,6 +9,7 @@ Key Features (Task Group 5):
 - Adaptive sizing: Small arrays (1KB buckets), medium (10KB), large (100KB)
 """
 
+import threading
 import warnings
 from typing import Any
 
@@ -98,6 +99,10 @@ class MemoryPool:
         self.max_pool_size = max_pool_size
         self.enable_stats = enable_stats
         self.enable_bucketing = enable_bucketing
+        # Guards pools/allocated/stats: without this, concurrent
+        # allocate()/release() calls can pop or mutate the same entry
+        # twice (e.g. KeyError on self.allocated.pop) or lose an update.
+        self._lock = threading.Lock()
 
         if enable_stats:
             self.stats = {
@@ -170,38 +175,40 @@ class MemoryPool:
         """
         pool_key = self._get_pool_key(shape, dtype)
 
-        if self.enable_stats:
-            self.stats["total_operations"] += 1
+        with self._lock:
+            if self.enable_stats:
+                self.stats["total_operations"] += 1
 
-        # Try to reuse from pool
-        if self.pools.get(pool_key):
-            pooled_arr = self.pools[pool_key].pop()
+            # Try to reuse from pool
+            if self.pools.get(pool_key):
+                pooled_arr = self.pools[pool_key].pop()
+
+                if self.enable_stats:
+                    self.stats["reuses"] += 1
+
+                # Reuse the pooled array if its shape matches exactly;
+                # otherwise allocate with the exact requested shape
+                # (bucketed pool keys may group different shapes together)
+                if pooled_arr.shape == shape and pooled_arr.dtype == dtype:
+                    arr = jnp.zeros_like(pooled_arr)
+                else:
+                    arr = jnp.zeros(shape, dtype=dtype)
+                self.allocated[id(arr)] = (shape, dtype)
+                return arr
+
+            # Allocate new array
+            arr = jnp.zeros(shape, dtype=dtype)
+            self.allocated[id(arr)] = (shape, dtype)
 
             if self.enable_stats:
-                self.stats["reuses"] += 1
+                self.stats["allocations"] += 1
+                current_mem = sum(
+                    np.prod(k[0]) * np.dtype(k[1]).itemsize
+                    for k in self.allocated.values()
+                )
+                self.stats["peak_memory"] = max(self.stats["peak_memory"], current_mem)
 
-            # Reuse the pooled array if its shape matches exactly;
-            # otherwise allocate with the exact requested shape
-            # (bucketed pool keys may group different shapes together)
-            if pooled_arr.shape == shape and pooled_arr.dtype == dtype:
-                arr = jnp.zeros_like(pooled_arr)
-            else:
-                arr = jnp.zeros(shape, dtype=dtype)
-            self.allocated[id(arr)] = (shape, dtype)
             return arr
-
-        # Allocate new array
-        arr = jnp.zeros(shape, dtype=dtype)
-        self.allocated[id(arr)] = (shape, dtype)
-
-        if self.enable_stats:
-            self.stats["allocations"] += 1
-            current_mem = sum(
-                np.prod(k[0]) * np.dtype(k[1]).itemsize for k in self.allocated.values()
-            )
-            self.stats["peak_memory"] = max(self.stats["peak_memory"], current_mem)
-
-        return arr
 
     def release(self, arr: jnp.ndarray):
         """Return array to pool for reuse.
@@ -218,39 +225,41 @@ class MemoryPool:
         """
         arr_id = id(arr)
 
-        if arr_id not in self.allocated:
-            warnings.warn("Attempting to release array not from pool")
-            return
+        with self._lock:
+            if arr_id not in self.allocated:
+                warnings.warn("Attempting to release array not from pool")
+                return
 
-        actual_key = self.allocated.pop(arr_id)
-        shape, dtype = actual_key
+            actual_key = self.allocated.pop(arr_id)
+            shape, dtype = actual_key
 
-        # Get pool key (with bucketing if enabled)
-        pool_key = self._get_pool_key(shape, dtype)
+            # Get pool key (with bucketing if enabled)
+            pool_key = self._get_pool_key(shape, dtype)
 
-        # Add to pool if not full
-        if pool_key not in self.pools:
-            self.pools[pool_key] = []
+            # Add to pool if not full
+            if pool_key not in self.pools:
+                self.pools[pool_key] = []
 
-        if len(self.pools[pool_key]) < self.max_pool_size:
-            self.pools[pool_key].append(arr)
+            if len(self.pools[pool_key]) < self.max_pool_size:
+                self.pools[pool_key].append(arr)
 
-            if self.enable_stats:
-                self.stats["releases"] += 1
+                if self.enable_stats:
+                    self.stats["releases"] += 1
 
     def clear(self):
         """Clear all pools and reset statistics."""
-        self.pools.clear()
-        self.allocated.clear()
+        with self._lock:
+            self.pools.clear()
+            self.allocated.clear()
 
-        if self.enable_stats:
-            self.stats = {
-                "allocations": 0,
-                "reuses": 0,
-                "releases": 0,
-                "peak_memory": 0,
-                "total_operations": 0,
-            }
+            if self.enable_stats:
+                self.stats = {
+                    "allocations": 0,
+                    "reuses": 0,
+                    "releases": 0,
+                    "peak_memory": 0,
+                    "total_operations": 0,
+                }
 
     def get_stats(self) -> dict:
         """Get pool usage statistics.
@@ -265,27 +274,28 @@ class MemoryPool:
         reuse_rate = reused_allocations / total_allocations
         With bucketing enabled, expect 5x higher reuse rates.
         """
-        if not self.enable_stats:
-            return {"enabled": False}
+        with self._lock:
+            if not self.enable_stats:
+                return {"enabled": False}
 
-        total_ops = self.stats["allocations"] + self.stats["reuses"]
-        reuse_rate = self.stats["reuses"] / total_ops if total_ops > 0 else 0.0
+            total_ops = self.stats["allocations"] + self.stats["reuses"]
+            reuse_rate = self.stats["reuses"] / total_ops if total_ops > 0 else 0.0
 
-        stats_dict = {
-            **self.stats,
-            "reuse_rate": reuse_rate,
-            "pool_sizes": {k: len(v) for k, v in self.pools.items()},
-            "currently_allocated": len(self.allocated),
-            "bucketing_enabled": self.enable_bucketing,
-        }
+            stats_dict = {
+                **self.stats,
+                "reuse_rate": reuse_rate,
+                "pool_sizes": {k: len(v) for k, v in self.pools.items()},
+                "currently_allocated": len(self.allocated),
+                "bucketing_enabled": self.enable_bucketing,
+            }
 
-        # Add reuse statistics (Task 5.5)
-        if total_ops > 0:
-            stats_dict["total_allocations"] = total_ops
-            stats_dict["reused_allocations"] = self.stats["reuses"]
-            stats_dict["new_allocations"] = self.stats["allocations"]
+            # Add reuse statistics (Task 5.5)
+            if total_ops > 0:
+                stats_dict["total_allocations"] = total_ops
+                stats_dict["reused_allocations"] = self.stats["reuses"]
+                stats_dict["new_allocations"] = self.stats["allocations"]
 
-        return stats_dict
+            return stats_dict
 
     def __enter__(self):
         """Context manager entry."""
@@ -372,6 +382,7 @@ class TRFMemoryPool:
 
 # Global memory pool (optional, for convenience)
 _global_pool: MemoryPool | None = None
+_global_pool_lock = threading.Lock()
 
 
 def get_global_pool(enable_stats: bool = False) -> MemoryPool:
@@ -388,13 +399,19 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
         Global memory pool instance
     """
     global _global_pool  # noqa: PLW0603
-    if _global_pool is None:
-        _global_pool = MemoryPool(enable_stats=enable_stats)
-    else:
-        # Update enable_stats on existing pool to handle parallel test execution
-        if enable_stats:
-            # Ensure stats dict exists when enabling stats
-            if not hasattr(_global_pool, "stats"):
+    # Every call takes the lock once regardless of branch (the "already
+    # exists" path below re-acquires it too, to update enable_stats), so
+    # there's no double-checked-locking fast path to gain here -- just lock
+    # unconditionally. Without the lock, two threads racing on first access
+    # could both construct a MemoryPool, with the second assignment silently
+    # discarding the first instance and anything already pooled in it.
+    with _global_pool_lock:
+        if _global_pool is None:
+            _global_pool = MemoryPool(enable_stats=enable_stats)
+        else:
+            # Update enable_stats on existing pool to handle parallel test execution
+            if enable_stats and not hasattr(_global_pool, "stats"):
+                # Ensure stats dict exists when enabling stats
                 _global_pool.stats = {
                     "allocations": 0,
                     "reuses": 0,
@@ -402,8 +419,8 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
                     "peak_memory": 0,
                     "total_operations": 0,
                 }
-        _global_pool.enable_stats = enable_stats
-    return _global_pool
+            _global_pool.enable_stats = enable_stats
+        return _global_pool
 
 
 def clear_global_pool():
@@ -415,6 +432,7 @@ def clear_global_pool():
     forcing fresh initialization on next access.
     """
     global _global_pool  # noqa: PLW0603
-    if _global_pool is not None:
-        _global_pool.clear()
-        _global_pool = None
+    with _global_pool_lock:
+        if _global_pool is not None:
+            _global_pool.clear()
+            _global_pool = None

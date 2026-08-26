@@ -84,6 +84,14 @@ RECOMMENDATIONS = Recommendations(
             "(2) Tightening parameter bounds, or (3) Enabling stability checks "
             "(``stability='check'``) to guard against ill-conditioning."
         ),
+        "GRAD-005": (
+            "Non-finite gradient values detected: NaN or Inf appeared in the "
+            "gradient during optimization, indicating the optimizer likely "
+            "diverged or evaluated the model outside its valid domain. "
+            "Consider: (1) Checking the model function for divide-by-zero or "
+            "log/sqrt of negative values, (2) Adding parameter bounds, or "
+            "(3) Using a more conservative initial guess."
+        ),
         # Conditioning issues
         "COND-001": (
             "Ill-conditioned Jacobian detected: The Jacobian matrix has a high condition "
@@ -107,6 +115,15 @@ RECOMMENDATIONS = Recommendations(
             "be overparameterized for the available data. Consider: (1) Reducing the "
             "number of parameters, (2) Collecting more informative data, or "
             "(3) Accepting that only certain parameter combinations can be determined."
+        ),
+        "SENS-003": (
+            "Zero effective dimensionality detected: the Fisher Information "
+            "Matrix has no positive eigenvalues, meaning the Jacobian carries "
+            "no usable information about any parameter combination. Consider: "
+            "(1) Checking that the model function actually depends on the "
+            "parameters at the evaluated point, (2) Verifying the data is not "
+            "degenerate (e.g. all identical x values), or (3) Checking for a "
+            "bug in the model or Jacobian computation."
         ),
         # Convergence issues
         "CONV-001": (
