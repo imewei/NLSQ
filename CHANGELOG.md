@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Conda package published to [anaconda.org/imewei/nlsq](https://anaconda.org/imewei/nlsq)
+  (`conda install -c imewei -c conda-forge nlsq`); `conda-recipe/` and
+  `make conda-build`/`conda-upload` targets added for maintainers.
+
+### Fixed
+- **Multi-round three-brain (Codex + Claude) correctness review** across the full stack —
+  curve_fit/fit/LargeDatasetFitter, core orchestration decomposition, the caching layer,
+  global optimization (CMA-ES/multi-start), streaming (AdaptiveHybridStreamingOptimizer's
+  4-phase pipeline), infrastructure/interfaces, stability/precision/diagnostics, the JAX
+  runtime, and the Qt GUI/CLI. Each PR closes several independently repro-verified bugs
+  found via automated code review, with regression tests added for every fix. Highlights:
+  - `curve_fit()`/`fit()`: fixed CMA-ES config rebuilding on slotted dataclasses, corrupted
+    positional-argument reindexing under `stability='auto'`, dropped `sigma`/`absolute_sigma`
+    on `LargeDatasetFitter` delegation, and crashes on `timeit`/`return_eval`/`full_output=True`.
+  - Streaming/large-dataset: per-chunk sigma misalignment, `gc_chunk_interval=0`
+    division-by-zero, multistart amplitude-guess corruption for non-amplitude first
+    parameters, and dtype upcasting in `ChunkBufferPool`.
+  - Orchestration (`DataPreprocessor`/`OptimizationSelector`/`CovarianceComputer`/
+    `StreamingCoordinator`): NaN/Inf data silently reduced to zero points instead of
+    raising, asymmetric sigma matrices, non-PD 2D sigma reaching a NaN-producing Cholesky,
+    and inconsistent memory-estimation formulas.
+  - Caching: JIT/result cache keys could collide across distinct closures with identical
+    bytecode; disambiguated by `id(func)`.
+  - GUI/CLI: closed sandbox-escape bypasses and crash bugs in the model-loading/validation
+    path.
+  - `nlsq/caching/memory_manager.py`: a prior `allocate_array` pool-semantics change was
+    reverted to restore its original behavior after it regressed downstream callers.
+
 ## [0.7.1] - 2026-08-06
 
 ### Fixed

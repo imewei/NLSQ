@@ -37,6 +37,14 @@ pip install nlsq
 
 This installs with CPU-only JAX (works on all platforms: Linux, macOS, Windows).
 
+### Conda Installation
+
+```bash
+conda install -c imewei -c conda-forge nlsq
+```
+
+Package published at [anaconda.org/imewei/nlsq](https://anaconda.org/imewei/nlsq).
+
 ### GPU Installation (Linux + System CUDA)
 
 **Performance Impact:** 20-100x speedup for large datasets (>1M points)
