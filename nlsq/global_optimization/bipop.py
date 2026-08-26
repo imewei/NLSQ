@@ -44,6 +44,12 @@ class BIPOPRestarter:
     min_fitness_spread : float, optional
         Minimum fitness spread threshold for stagnation detection.
         Default is 1e-12.
+    seed : int | None, optional
+        Seed for the small-population-size draw in ``get_next_popsize()``.
+        Without one, popsize (and everything downstream of it) is not
+        reproducible across runs -- even ones seeding the CMA-ES search
+        itself -- since a fresh, OS-entropy-seeded generator is otherwise
+        created per instance. Default is None (unseeded).
 
     Attributes
     ----------
@@ -70,13 +76,17 @@ class BIPOPRestarter:
     n_params: int
     max_restarts: int = 9
     min_fitness_spread: float = 1e-12
+    seed: int | None = None
 
     # Internal state
     restart_count: int = field(default=0, init=False)
     _use_large_pop: bool = field(default=True, init=False)
     _best_solution: jax.Array | None = field(default=None, init=False)
     _best_fitness: float = field(default=float("inf"), init=False)
-    _rng: np.random.Generator = field(default_factory=np.random.default_rng, init=False)
+    _rng: np.random.Generator = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._rng = np.random.default_rng(self.seed)
 
     @property
     def exhausted(self) -> bool:
@@ -174,3 +184,7 @@ class BIPOPRestarter:
         self._use_large_pop = True
         self._best_solution = None
         self._best_fitness = float("inf")
+        # Reseed so a reused, seeded instance replays the same popsize
+        # sequence -- without this, "reset to initial state" would be a lie
+        # for the one piece of state `seed` exists to make reproducible.
+        self._rng = np.random.default_rng(self.seed)

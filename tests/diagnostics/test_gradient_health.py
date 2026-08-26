@@ -192,6 +192,29 @@ class TestVanishingGradientDetection:
         assert len(grad_001_issues) > 0
         assert report.health_status in (HealthStatus.WARNING, HealthStatus.CRITICAL)
 
+    def test_vanishing_gradient_flat_from_start(self) -> None:
+        """Test vanishing gradients are detected even when flat from iteration 1.
+
+        Regression test: the relative threshold (initial_gradient_norm *
+        vanishing_threshold) becomes even smaller than an already-tiny
+        initial gradient when the optimizer starts in a flat region, so a
+        purely relative check never fires. An absolute-threshold check must
+        catch this case too.
+        """
+        config = DiagnosticsConfig(vanishing_threshold=1e-6)
+        monitor = GradientMonitor(config)
+
+        # Gradient is already tiny at iteration 0 -- no "normal" phase first.
+        for _ in range(30):
+            gradient = np.array([1.7e-9, 1.7e-9, 1.7e-9])
+            monitor.record_gradient(gradient, cost=5.0)
+
+        report = monitor.get_report()
+
+        grad_001_issues = [issue for issue in report.issues if issue.code == "GRAD-001"]
+        assert len(grad_001_issues) > 0
+        assert bool(report.vanishing_detected)
+
     def test_small_gradient_at_convergence_not_flagged(self) -> None:
         """Test that small gradients near convergence are not flagged."""
         config = DiagnosticsConfig(vanishing_threshold=1e-6)
@@ -303,6 +326,47 @@ class TestGradientStagnationDetection:
         # Should not detect stagnation
         grad_003_issues = [issue for issue in report.issues if issue.code == "GRAD-003"]
         assert len(grad_003_issues) == 0
+
+
+class TestExplodingGradientDetection:
+    """Tests for exploding gradient detection (GRAD-004)."""
+
+    def test_exploding_gradient_detected(self) -> None:
+        """Test that exploding gradients are detected.
+
+        A uniformly huge but finite, balanced gradient triggers neither
+        has_numerical_issues (no NaN/Inf) nor GRAD-002 (no cross-parameter
+        imbalance -- all components equal), so this requires a dedicated
+        absolute-magnitude check.
+        """
+        config = DiagnosticsConfig(exploding_threshold=1e8)
+        monitor = GradientMonitor(config)
+
+        for _ in range(15):
+            gradient = np.array([1e12, 1e12, 1e12])
+            monitor.record_gradient(gradient, cost=100.0)
+
+        report = monitor.get_report()
+
+        grad_004_issues = [issue for issue in report.issues if issue.code == "GRAD-004"]
+        assert len(grad_004_issues) > 0
+        assert grad_004_issues[0].severity == IssueSeverity.CRITICAL
+        assert report.exploding_detected is True
+
+    def test_normal_gradient_not_flagged_as_exploding(self) -> None:
+        """Test that a normal, decaying gradient is not flagged as exploding."""
+        config = DiagnosticsConfig(exploding_threshold=1e8)
+        monitor = GradientMonitor(config)
+
+        for i in range(20):
+            gradient = np.array([1.0, 0.9, 1.1]) / (i + 1)
+            monitor.record_gradient(gradient, cost=10.0 / (i + 1))
+
+        report = monitor.get_report()
+
+        grad_004_issues = [issue for issue in report.issues if issue.code == "GRAD-004"]
+        assert len(grad_004_issues) == 0
+        assert report.exploding_detected is False
 
 
 class TestHealthScore:

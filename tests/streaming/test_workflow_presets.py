@@ -322,6 +322,34 @@ class TestHPCWorkflow:
             assert result is not None
             assert result.success
 
+    def test_hpc_checkpoint_dir_warns_not_implemented(self):
+        """workflow='hpc' must warn when checkpoint_dir is passed, since
+        checkpoint/crash-recovery infrastructure is not implemented: no
+        checkpoint file is written and checkpoint_interval is ignored.
+        Silently accepting these params would give a false sense of safety.
+        """
+        import tempfile
+
+        from nlsq import fit
+
+        np.random.seed(42)
+        x = jnp.linspace(0, 5, 100)
+        y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.warns(UserWarning, match="checkpoint"),
+        ):
+            fit(
+                model,
+                x,
+                y,
+                p0=[1.0, 0.5],
+                workflow="hpc",
+                bounds=([0.0, 0.0], [10.0, 10.0]),
+                checkpoint_dir=tmpdir,
+            )
+
 
 # =============================================================================
 # US4: Removed Presets Tests (T049-T051)

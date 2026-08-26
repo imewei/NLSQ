@@ -4800,6 +4800,11 @@ class CurveFit:
 
         # Compute diagnostics if requested
         if compute_diagnostics:
+            # Fetched outside the try block below: this already succeeded
+            # (or was never computed) before identifiability/sensitivity
+            # analysis runs, so a failure in either of those must not cause
+            # an already-computed gradient-health report to be discarded.
+            gradient_health_report = res.get("gradient_health_report")
             try:
                 from nlsq.diagnostics.health_report import create_health_report
                 from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
@@ -4814,9 +4819,6 @@ class CurveFit:
                 # Run identifiability analysis
                 analyzer = IdentifiabilityAnalyzer(config=config)
                 ident_report = analyzer.analyze(jacobian)
-
-                # Get gradient health report if available from optimization
-                gradient_health_report = res.get("gradient_health_report")
 
                 # Run parameter sensitivity analysis if diagnostics_level is FULL (User Story 4)
                 sloppy_model_report = None
@@ -4854,6 +4856,7 @@ class CurveFit:
                 self.logger.warning(
                     "Failed to compute diagnostics",
                     error=str(e),
+                    exc_info=True,
                 )
                 # Create unavailable diagnostics report
                 from nlsq.diagnostics.health_report import create_health_report
@@ -4868,9 +4871,24 @@ class CurveFit:
                     n_params=n,
                     health_status=HealthStatus.CRITICAL,
                 )
+                # Preserve gradient_health_report fetched above -- a failure
+                # in identifiability/sensitivity analysis shouldn't discard
+                # an already-successfully-computed gradient-health result.
+                # Respect the caller's own emit_warnings setting instead of
+                # hardcoding False, so a caller who asked for warnings still
+                # gets them on this degraded path.
+                fallback_config = DiagnosticsConfig(
+                    verbose=False,
+                    emit_warnings=(
+                        _resolved_diag_config.emit_warnings
+                        if _resolved_diag_config is not None
+                        else True
+                    ),
+                )
                 health_report = create_health_report(
                     identifiability=unavailable_ident,
-                    config=DiagnosticsConfig(verbose=False, emit_warnings=False),
+                    gradient_health=gradient_health_report,
+                    config=fallback_config,
                 )
                 result["_diagnostics_report"] = health_report
 

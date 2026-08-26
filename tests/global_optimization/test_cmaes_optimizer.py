@@ -212,6 +212,20 @@ class TestCMAESOptimizerFit:
         popt = result["popt"]
         assert len(popt) == 2
 
+        # Regression test for CMA-ES fitness-sign inversion: with
+        # refine_with_nlsq=False there is no local polish to mask a search
+        # that was actually walking toward the *worst* fit. Verify the
+        # search converged toward the true parameters (a=2.0, b=0.5), and
+        # that reported best_fitness equals the actual SSR at popt (raw,
+        # positive-valued) -- both would fail under an inverted sign.
+        residuals = np.asarray(y) - np.asarray(simple_model(x, *popt))
+        actual_ssr = float(np.sum(residuals**2))
+        assert actual_ssr < 1.0, f"CMA-ES did not converge: SSR={actual_ssr}"
+
+        reported_best_fitness = result["cmaes_diagnostics"]["best_fitness"]
+        assert reported_best_fitness >= 0, "fitness must be raw (non-negative) SSR"
+        np.testing.assert_allclose(reported_best_fitness, actual_ssr, rtol=1e-6)
+
 
 class TestCMAESOptimizerMultiScale:
     """Tests for multi-scale parameter optimization."""

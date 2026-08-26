@@ -210,6 +210,30 @@ class TestIdentifiabilityAnalyzer:
         assert report.available is True
         assert report.condition_number > 1e8  # Above threshold
 
+    def test_condition_number_matches_analytic_svd(
+        self, analyzer: IdentifiabilityAnalyzer, ill_conditioned_jacobian: np.ndarray
+    ) -> None:
+        """cond(FIM) must match cond(J)**2 to high precision.
+
+        Regression test for forming FIM = J.T @ J explicitly and then SVD-ing
+        that (squares J's condition number *before* analysis, losing many
+        orders of magnitude of precision in float64 -- the fixture's singular
+        values [1e10, 1, 1e-5] give an explicit-J.T@J-then-SVD condition
+        number ~14 orders of magnitude below the analytic value). The
+        identifiability analyzer must derive condition_number directly from
+        SVD(jacobian), not from an explicitly-formed normal-equations matrix.
+        """
+        singular_values = np.linalg.svd(ill_conditioned_jacobian, compute_uv=False)
+        analytic_condition_number = (singular_values.max() / singular_values.min()) ** 2
+
+        report = analyzer.analyze(ill_conditioned_jacobian)
+
+        np.testing.assert_allclose(
+            report.condition_number,
+            analytic_condition_number,
+            rtol=5e-2,
+        )
+
     def test_numerical_rank_full_rank(
         self, analyzer: IdentifiabilityAnalyzer, well_conditioned_jacobian: np.ndarray
     ) -> None:

@@ -570,6 +570,81 @@ class TestBugFixRegressions(unittest.TestCase):
         with self.assertRaises(ValueError):
             LDMemoryConfig(gc_chunk_interval=0)
 
+    def test_chunked_fit_on_ordered_x_matches_direct_fit(self):
+        """Contiguous chunking on ordered/monotonic x used to silently bias
+        chunked fits: each chunk covered only a narrow, unrepresentative
+        x-window, so per-chunk local optima landed on different points of a
+        degenerate manifold and the precision-weighted GLS combination was
+        invalid. Fixed by shuffling once before chunking. This test would
+        have failed under the pre-fix contiguous-chunking behavior (the
+        original three-brain finding measured a 60-chunk fit on this same
+        shape of data landing 60%+ off; the shuffle fix brought it to
+        <0.1% off)."""
+
+        def model(x, a, b, c):
+            return a * jnp.exp(-b * x) + c
+
+        rng = np.random.default_rng(0)
+        n = 20_000
+        x = np.linspace(0, 20, n)  # ordered/monotonic -- the failure shape
+        true_params = [2.5, 0.3, 1.0]
+        y = np.asarray(model(x, *true_params)) + rng.normal(0, 0.01, n)
+
+        direct_popt, _ = curve_fit_large(model, x, y, p0=[1.0, 1.0, 1.0])
+
+        config = LDMemoryConfig(
+            memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500
+        )
+        fitter = LargeDatasetFitter(config=config)
+        chunked_result = fitter.fit(model, x, y, p0=[1.0, 1.0, 1.0])
+
+        self.assertTrue(chunked_result.success)
+        np.testing.assert_allclose(chunked_result.popt, true_params, rtol=0.05)
+        np.testing.assert_allclose(chunked_result.popt, direct_popt, rtol=0.05)
+
+    def test_chunked_fit_rejects_mismatched_sigma_length(self):
+        """A sigma whose length doesn't match xdata used to silently index
+        into only the first n_points entries via shuffle_idx (fancy
+        indexing on a too-long sigma succeeds instead of raising) --
+        verify it now raises loudly instead."""
+
+        def model(x, a):
+            return a * jnp.ones_like(x)
+
+        n = 2000
+        x = np.arange(n, dtype=float)
+        y = np.full(n, 5.0)
+        mismatched_sigma = np.full(n + 10, 1.0)  # too long
+
+        config = LDMemoryConfig(
+            memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500
+        )
+        fitter = LargeDatasetFitter(config=config)
+        with self.assertRaisesRegex(ValueError, "sigma length"):
+            fitter.fit(model, x, y, p0=[1.0], sigma=mismatched_sigma)
+
+    def test_chunked_fit_rejects_2d_sigma(self):
+        """A 2-D covariance sigma happens to satisfy the length check (its
+        len() equals n_points for a square (m, m) matrix) but is not
+        actually supported by the shuffle/per-chunk reslicing logic --
+        verify it's rejected explicitly rather than silently corrupted or
+        failing later with an unrelated shape error."""
+
+        def model(x, a):
+            return a * jnp.ones_like(x)
+
+        n = 2000
+        x = np.arange(n, dtype=float)
+        y = np.full(n, 5.0)
+        covariance_sigma = np.eye(n)  # 2-D, len() == n_points
+
+        config = LDMemoryConfig(
+            memory_limit_gb=0.001, min_chunk_size=100, max_chunk_size=500
+        )
+        fitter = LargeDatasetFitter(config=config)
+        with self.assertRaisesRegex(ValueError, "2-D covariance sigma"):
+            fitter.fit(model, x, y, p0=[1.0], sigma=covariance_sigma)
+
     def test_chunked_fit_respects_sigma_weighting(self):
         """sigma used to be silently dropped when LargeDatasetFitter chunked
         the fit -- verify a chunked, sigma-weighted fit is dominated by the

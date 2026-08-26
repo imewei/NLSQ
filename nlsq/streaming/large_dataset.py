@@ -2373,25 +2373,44 @@ class LargeDatasetFitter:
         full_sigma = kwargs.pop("sigma", None)
         if full_sigma is not None:
             full_sigma = np.asarray(full_sigma)
+            if full_sigma.ndim != 1:
+                # A 2-D (m, m) covariance matrix happens to satisfy the
+                # length check below (len() on it equals m, same as
+                # len(xdata)), but the shuffle/per-chunk reslicing further
+                # down only handles 1-D sigma correctly: shuffling permutes
+                # rows only (corrupting row/column correspondence) and the
+                # per-chunk reslice produces a non-square (valid_length, m)
+                # array. Reject explicitly here instead of failing later
+                # with a shape error that gives no hint the real cause is
+                # this chunked path's row-only shuffle.
+                raise ValueError(
+                    "2-D covariance sigma is not supported for chunked "
+                    f"large-dataset fitting (got shape {full_sigma.shape}); "
+                    "pass a 1-D sigma of per-point uncertainties instead.",
+                )
+            if len(full_sigma) != len(xdata):
+                raise ValueError(
+                    f"sigma length ({len(full_sigma)}) does not match "
+                    f"xdata length ({len(xdata)})",
+                )
 
-        # Chunking processes contiguous index ranges. For ordered/monotonic x
-        # (time series, sensor sweeps -- the common shape of "large scientific
-        # dataset"), that means each chunk only covers a narrow, unrepresentative
-        # x-window. Each chunk's local optimum can then land on a different
-        # point of a degenerate manifold for weakly-identified nonlinear
-        # models, and the precision-weighted GLS combination across chunks is
-        # only valid when every chunk is estimating the same thing. Shuffling
-        # once here (a fixed seed keeps fits reproducible per CLAUDE.md) makes
-        # every chunk a representative sample of the full x-range and fixes
-        # this silently-biased-fit failure mode; xdata/ydata/full_sigma are
-        # permuted together so they stay aligned, and the sigma re-slicing
-        # below can keep assuming contiguous chunk boundaries.
+        # Contiguous chunking biases fits on ordered/monotonic x (each chunk
+        # covers only a narrow x-window, so per-chunk local optima can land
+        # on different points of a degenerate manifold for weakly-identified
+        # models). Shuffle once (fixed seed for reproducibility) so every
+        # chunk is a representative sample of the full x-range; xdata/ydata/
+        # full_sigma are permuted together to stay aligned, so the sigma
+        # re-slicing below can keep assuming contiguous chunk boundaries.
         n_points = len(xdata)
         shuffle_idx = np.random.default_rng(0).permutation(n_points)
         xdata = np.asarray(xdata)[shuffle_idx]
         ydata = np.asarray(ydata)[shuffle_idx]
         if full_sigma is not None:
             full_sigma = full_sigma[shuffle_idx]
+        self.logger.debug(
+            f"Shuffled {n_points} points before chunking (seed=0) to avoid "
+            "biased per-chunk fits on ordered x",
+        )
 
         # Initialize state variables
         (

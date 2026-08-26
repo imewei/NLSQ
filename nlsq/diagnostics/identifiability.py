@@ -217,7 +217,7 @@ class IdentifiabilityAnalyzer:
     def _compute_svd_from_jacobian(
         self,
         jacobian: np.ndarray,
-    ) -> tuple[np.ndarray, float, int, np.ndarray]:
+    ) -> tuple[np.ndarray, float, int, np.ndarray, float]:
         """Compute FIM eigenstructure directly from SVD(jacobian).
 
         FIM = J.T @ J has eigenvalues s**2 and eigenvectors V, where
@@ -231,8 +231,8 @@ class IdentifiabilityAnalyzer:
 
         Returns
         -------
-        fim_eigenvalues : np.ndarray
-            Eigenvalues of the FIM (s**2).
+        s : np.ndarray
+            Singular values of J (not squared).
         condition_number : float
             cond(FIM) = (s_max / s_min)**2.
         numerical_rank : int
@@ -240,6 +240,11 @@ class IdentifiabilityAnalyzer:
         v : np.ndarray
             Right singular vectors of J, shape (n_params, k) -- used to
             build the correlation matrix without forming FIM.
+        tol : float
+            Rank tolerance used above -- returned so the correlation-matrix
+            computation can reuse it instead of recomputing with a
+            different shape reference (which previously let the two
+            disagree about which singular values count as "zero").
         """
         try:
             from nlsq.stability.svd_fallback import compute_svd_with_fallback
@@ -254,6 +259,10 @@ class IdentifiabilityAnalyzer:
 
         max_s = float(np.max(s)) if s.size else 0.0
         nonzero_s = s[s > 0]
+        float_dtype = (
+            jacobian.dtype if np.issubdtype(jacobian.dtype, np.floating) else np.float64
+        )
+        tol = max_s * max(jacobian.shape) * np.finfo(float_dtype).eps
 
         if max_s == 0 or len(nonzero_s) == 0:
             condition_number = float("inf")
@@ -261,21 +270,15 @@ class IdentifiabilityAnalyzer:
         else:
             min_s = float(np.min(nonzero_s))
             condition_number = (max_s / min_s) ** 2
-
-            float_dtype = (
-                jacobian.dtype
-                if np.issubdtype(jacobian.dtype, np.floating)
-                else np.float64
-            )
-            tol = max_s * max(jacobian.shape) * np.finfo(float_dtype).eps
             numerical_rank = int(np.sum(s > tol))
 
-        return s**2, condition_number, numerical_rank, v
+        return s, condition_number, numerical_rank, v, tol
 
     def _compute_correlation_matrix_from_svd(
         self,
         s: np.ndarray,
         v: np.ndarray,
+        tol: float,
     ) -> np.ndarray | None:
         """Compute the correlation matrix directly from SVD(jacobian).
 
@@ -290,6 +293,11 @@ class IdentifiabilityAnalyzer:
             Singular values of the Jacobian (not squared).
         v : np.ndarray
             Right singular vectors of the Jacobian, shape (n_params, k).
+        tol : float
+            Rank tolerance from ``_compute_svd_from_jacobian`` -- reused
+            here so a singular value at/near the rank cutoff can't be
+            declared "absent" for `numerical_rank` while still being
+            inverted into the reported covariance/correlation.
 
         Returns
         -------
@@ -299,7 +307,6 @@ class IdentifiabilityAnalyzer:
         try:
             if s.size == 0:
                 return None
-            tol = float(np.max(s)) * max(v.shape) * np.finfo(np.float64).eps
             safe_s = np.where(s > 0, s, 1.0)
             inv_s2 = np.where(s > tol, 1.0 / safe_s**2, 0.0)
             covariance = (v * inv_s2) @ v.T
@@ -346,10 +353,11 @@ class IdentifiabilityAnalyzer:
         health_status = HealthStatus.HEALTHY
 
         try:
-            fim_eigenvalues, condition_number, numerical_rank, v = (
-                self._compute_svd_from_jacobian(jacobian)
+            s, condition_number, numerical_rank, v, tol = (
+                self._compute_svd_from_jacobian(
+                    jacobian,
+                )
             )
-            s = np.sqrt(np.abs(fim_eigenvalues))
         except Exception as e:
             computation_time = (time.perf_counter() - start_time) * 1000
             return IdentifiabilityReport(
@@ -365,7 +373,7 @@ class IdentifiabilityAnalyzer:
                 computation_time_ms=computation_time,
             )
 
-        correlation_matrix = self._compute_correlation_matrix_from_svd(s, v)
+        correlation_matrix = self._compute_correlation_matrix_from_svd(s, v, tol)
 
         highly_correlated_pairs = self._detect_highly_correlated_pairs(
             correlation_matrix,

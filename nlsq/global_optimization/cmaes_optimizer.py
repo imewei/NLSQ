@@ -725,6 +725,7 @@ class CMAESOptimizer:
             n_params=n_params,
             max_restarts=self.config.max_restarts,
             min_fitness_spread=self.config.tol_fun,
+            seed=self.config.seed,
         )
 
         # Initialize random key
@@ -846,14 +847,27 @@ class CMAESOptimizer:
             # uniformly from the unbounded-space search region (explore) --
             # true BIPOP (Hansen 2009) randomizes large-population restarts
             # so a bad first basin doesn't anchor every subsequent run.
-            key, subkey = jax.random.split(key)
-            choice = jax.random.uniform(subkey)
+            #
+            # `key` is split unconditionally into three keys (key, choice_key,
+            # explore_key) on every iteration regardless of which branch
+            # fires below -- consuming a *variable* number of splits per
+            # branch would make the RNG stream for every later restart
+            # depend on which branch upstream floating-point comparisons
+            # (restarter.best_solution) happened to take, so two runs that
+            # should be bitwise-identical (e.g. same seed, different
+            # population_batch_size) could silently diverge after the first
+            # restart whose branch choice differs between them. Only the
+            # *split* needs to be unconditional for this guarantee -- the
+            # actual (n_params,) array draw from explore_key is a pure,
+            # side-effect-free function of that key, so it's only computed
+            # in the branch that uses it.
+            key, choice_key, explore_key = jax.random.split(key, 3)
+            choice = jax.random.uniform(choice_key)
             if choice < 1.0 / 3.0 and restarter.best_solution is not None:
                 initial_solution = restarter.best_solution
             elif choice < 2.0 / 3.0:
-                key, subkey = jax.random.split(key)
                 initial_solution = jax.random.uniform(
-                    subkey,
+                    explore_key,
                     shape=(n_params,),
                     minval=-2.0,
                     maxval=2.0,

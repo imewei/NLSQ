@@ -1027,3 +1027,26 @@ def test_fp32_gh12991():
 
 #         assert_raises(ValueError, least_squares, fun_trivial, 2.0,
 #                       method='lm', loss='huber')
+
+
+class TestMethodLM:
+    """Regression tests for method='lm' -- previously always raised
+    ValueError regardless of bounds, despite being documented as a valid
+    unbounded option. trf_no_bounds() is algorithmically LM without CL
+    scaling, so 'lm' is now accepted as an alias when unbounded."""
+
+    def test_lm_unbounded_converges(self):
+        """method='lm' on an unbounded problem must actually converge."""
+        res = least_squares(fun_2d_trivial, [2.0, 2.0], method="lm")
+        assert_allclose(res.x, [0.0, 0.0], atol=1e-6)
+        assert res.success
+
+    def test_lm_with_bounds_raises(self):
+        """method='lm' with finite bounds must raise, matching scipy."""
+        with pytest.raises(ValueError, match=r"lm.*bounds"):
+            least_squares(
+                fun_2d_trivial,
+                [2.0, 2.0],
+                bounds=([-3.0, -3.0], [3.0, 3.0]),
+                method="lm",
+            )
