@@ -567,6 +567,12 @@ class TestParameterSensitivityAnalyzer:
         assert report.available is True
         # All-zero Jacobian should have zero eigenvalues -> wide spread
         assert report.is_sloppy is True or report.eigenvalue_range == 0.0
+        # Zero effective dimensionality (no positive eigenvalues at all) is
+        # worse than merely "sloppy" -- it means no parameter combination is
+        # determined by the data at all, and must escalate to CRITICAL with
+        # a dedicated SENS-003 issue rather than staying HEALTHY/INFO.
+        assert report.health_status == HealthStatus.CRITICAL
+        assert any(i.code == "SENS-003" for i in report.issues)
 
     # Test computation time tracking
     def test_computation_time_tracked(

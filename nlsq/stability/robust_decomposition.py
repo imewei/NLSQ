@@ -532,8 +532,13 @@ class RobustDecomposition:
                     y = jnp.linalg.solve(L, Atb)
                     x = jnp.linalg.solve(L.T, y)
                     return x
-                except (np.linalg.LinAlgError, ValueError):
-                    # Ultimate fallback: direct solve with regularization
+                except (np.linalg.LinAlgError, ValueError, RuntimeError):
+                    # RuntimeError: self.cholesky() now raises (rather than
+                    # returning a NaN factor) when every fallback tier,
+                    # including the eigendecomposition last resort, fails to
+                    # produce a finite result -- must be caught here too, or
+                    # this "ultimate fallback" is unreachable for exactly the
+                    # failure it exists to handle.
                     x = jnp.linalg.solve(AtA, Atb)
                     return x
 

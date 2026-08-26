@@ -40,6 +40,57 @@ def test_solve_least_squares_fallback_to_qr(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.stability
 @pytest.mark.unit
+def test_cholesky_all_tiers_nan_raises_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every fallback_chain tier (and the eigendecomposition last resort)
+    returning a NaN factor must raise RuntimeError, not silently return
+    NaN. JAX's Cholesky commonly returns NaN rather than raising on a
+    non-positive-definite input, so `result is not None` alone was not
+    sufficient to detect failure."""
+    module = importlib.import_module("nlsq.stability.robust_decomposition")
+    rd = module.RobustDecomposition()
+
+    nan_2x2 = jnp.full((2, 2), jnp.nan)
+    monkeypatch.setattr(rd, "fallback_chain", [("nan_tier", lambda *a, **k: nan_2x2)])
+    monkeypatch.setattr(rd, "_cholesky_via_eigen", lambda *a, **k: nan_2x2)
+
+    with pytest.raises(RuntimeError, match=r"non-finite|failed"):
+        rd.cholesky(jnp.eye(2))
+
+
+@pytest.mark.stability
+@pytest.mark.unit
+def test_solve_least_squares_catches_cholesky_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """solve_least_squares()'s normal-equations fallback must catch the
+    RuntimeError cholesky() now raises when every tier fails, and continue
+    to its own 'ultimate fallback' (direct regularized solve) instead of
+    propagating the exception uncaught."""
+    module = importlib.import_module("nlsq.stability.robust_decomposition")
+    rd = module.RobustDecomposition()
+
+    monkeypatch.setattr(
+        rd, "svd", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
+    monkeypatch.setattr(
+        rd, "qr", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
+    monkeypatch.setattr(
+        rd,
+        "cholesky",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("all tiers failed")),
+    )
+
+    A = jnp.eye(2)
+    b = jnp.array([1.0, 2.0])
+    x = rd.solve_least_squares(A, b)
+    assert bool(jnp.all(jnp.isfinite(x)))
+
+
+@pytest.mark.stability
+@pytest.mark.unit
 def test_cholesky_via_eigen() -> None:
     module = importlib.import_module("nlsq.stability.robust_decomposition")
     rd = module.RobustDecomposition()

@@ -693,6 +693,10 @@ class TestPartialComponentAvailability:
         assert report.identifiability is not None
         assert report.identifiability.available is False
         assert report.gradient_health is not None
+        # A provided-but-failed component must force WARNING even though
+        # the sibling gradient component succeeded -- it must not be
+        # silently dropped from status aggregation.
+        assert report.status.name == "WARNING"
 
     def test_unavailable_gradient_report(
         self,
@@ -711,6 +715,9 @@ class TestPartialComponentAvailability:
         assert report.identifiability is not None
         assert report.gradient_health is not None
         assert report.gradient_health.available is False
+        # Same as above, mirrored: a failed gradient component must force
+        # WARNING even though identifiability succeeded.
+        assert report.status.name == "WARNING"
 
     def test_all_components_unavailable(
         self,
@@ -738,6 +745,46 @@ class TestPartialComponentAvailability:
         )
 
         # Per contract: all unavailable returns WARNING with note
+        assert report.status.name == "WARNING"
+
+    def test_unavailable_sloppy_model_forces_warning(
+        self,
+        healthy_identifiability_report: IdentifiabilityReport,
+    ) -> None:
+        """A failed sloppy_model component must force WARNING too, not
+        just identifiability/gradient_health -- _determine_status fans out
+        to sloppy_model and plugin_results as well."""
+        from nlsq.diagnostics.health_report import create_health_report
+        from nlsq.diagnostics.types import ParameterSensitivityReport
+
+        unavailable_sloppy_model = ParameterSensitivityReport(
+            available=False,
+            error_message="Eigenvalue computation failed",
+            computation_time_ms=0.0,
+        )
+        report = create_health_report(
+            identifiability=healthy_identifiability_report,
+            sloppy_model=unavailable_sloppy_model,
+        )
+        assert report.status.name == "WARNING"
+
+    def test_unavailable_plugin_result_forces_warning(
+        self,
+        healthy_identifiability_report: IdentifiabilityReport,
+    ) -> None:
+        """A failed plugin result must force WARNING too."""
+        from nlsq.diagnostics.health_report import create_health_report
+        from nlsq.diagnostics.types import PluginResult
+
+        unavailable_plugin = PluginResult(
+            plugin_name="custom-plugin",
+            available=False,
+            error_message="Plugin raised an exception",
+        )
+        report = create_health_report(
+            identifiability=healthy_identifiability_report,
+            plugin_results={"custom-plugin": unavailable_plugin},
+        )
         assert report.status.name == "WARNING"
 
 

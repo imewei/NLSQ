@@ -1865,31 +1865,54 @@ def _apply_stability_checks(
             xdata = xdata_fixed
             ydata = ydata_fixed
 
-            # Log applied fixes
+            # Log applied fixes -- excluding the p0-normalization message.
+            # apply_automatic_fixes()'s Fix 4 (p0 order-of-magnitude
+            # normalization) is unconditional in guard.py, not gated by
+            # rescale_data like Fix 1/2 are, so it still runs and appends
+            # "Normalized p0..." to applied_fixes even though we deliberately
+            # discard p0_fixed (_p0_unused) above. Logging that message would
+            # claim a fix happened when the fit is actually still using the
+            # original, un-normalized p0.
             for fix in fix_info["applied_fixes"]:
-                logger.info(f"  - {fix}")
+                if "Normalized p0" not in fix:
+                    logger.info(f"  - {fix}")
 
-            # Inform the caller when data rescaling/parameter normalization
-            # would have triggered (i.e. rescale_data requested it and the
-            # thresholds are met), since it is now a no-op rather than a
-            # silent-but-wrong transform.
-            if rescale_data:
-                cond = stability_report.get("condition_number", 0)
-                x_range = np.ptp(np.asarray(xdata)) if np.size(xdata) else 0
-                y_range = np.ptp(np.asarray(ydata)) if np.size(ydata) else 0
-                would_rescale = (
-                    (cond is not None and cond > 1e10) or x_range > 1e4 or y_range > 1e4
+            # Inform the caller when a fix would have triggered but was
+            # skipped, since it is now a no-op rather than a silent-but-wrong
+            # transform.
+            cond = stability_report["condition_number"]
+            x_range = np.ptp(np.asarray(xdata)) if np.size(xdata) else 0
+            y_range = np.ptp(np.asarray(ydata)) if np.size(ydata) else 0
+            would_rescale_data = (
+                (cond is not None and cond > 1e10) or x_range > 1e4 or y_range > 1e4
+            )
+            # Matches Fix 4's own trigger condition in guard.py exactly (it
+            # is unconditional, not gated by rescale_data).
+            would_normalize_p0 = (
+                p0 is not None
+                and stability_report["parameter_scale_ratio"]
+                and stability_report["parameter_scale_ratio"] > 1e6
+            )
+            if rescale_data and would_rescale_data:
+                logger.warning(
+                    "  Data rescaling was NOT applied: automatically rescaling "
+                    "xdata/ydata cannot be soundly inverted back to your model's "
+                    "original units for an arbitrary nonlinear model, so it would "
+                    "silently return parameters in the wrong coordinate system. "
+                    "If conditioning is a problem, pass x_scale='jac' (or an "
+                    "explicit per-parameter scale) to curve_fit, or rescale your "
+                    "data yourself and interpret the fitted parameters accordingly.",
                 )
-                if would_rescale:
-                    logger.warning(
-                        "  Data rescaling was NOT applied: automatically rescaling "
-                        "xdata/ydata cannot be soundly inverted back to your model's "
-                        "original units for an arbitrary nonlinear model, so it would "
-                        "silently return parameters in the wrong coordinate system. "
-                        "If conditioning is a problem, pass x_scale='jac' (or an "
-                        "explicit per-parameter scale) to curve_fit, or rescale your "
-                        "data yourself and interpret the fitted parameters accordingly.",
-                    )
+            if would_normalize_p0:
+                logger.warning(
+                    "  p0 normalization was NOT applied: rescaling your initial "
+                    "guess to unit order of magnitude without also "
+                    "reparameterizing the model would start the optimizer from "
+                    "a point that no longer matches the model's actual "
+                    "parameter units. If p0 components span many orders of "
+                    "magnitude, pass x_scale='jac' to curve_fit or rescale p0 "
+                    "yourself alongside the model.",
+                )
 
     return xdata, ydata, args
 
@@ -4313,18 +4336,26 @@ class CurveFit:
                     # which only boosts regularization / switches to LSMR for
                     # "numerical"/"ill_conditioned") actually activate instead
                     # of silently no-op'ing on a generic "optimization_error".
+                    import re as _re
+
                     _err_msg = str(e).lower()
-                    _numerical_failure = isinstance(e, np.linalg.LinAlgError) or any(
-                        kw in _err_msg
-                        for kw in (
-                            "singular",
-                            "nan",
-                            " inf",
-                            "ill-conditioned",
-                            "ill conditioned",
-                            "condition number",
-                            "cholesky",
-                            "svd",
+                    _numerical_failure = (
+                        isinstance(e, np.linalg.LinAlgError)
+                        # "nan"/"inf" as whole words only: a bare substring
+                        # match would misclassify ordinary messages like
+                        # "insufficient information" or "infeasible" as a
+                        # numerical failure.
+                        or bool(_re.search(r"\b(nan|inf)\b", _err_msg))
+                        or any(
+                            kw in _err_msg
+                            for kw in (
+                                "singular",
+                                "ill-conditioned",
+                                "ill conditioned",
+                                "condition number",
+                                "cholesky",
+                                "svd",
+                            )
                         )
                     )
                     failure_type = (

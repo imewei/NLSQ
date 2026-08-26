@@ -142,6 +142,7 @@ class IdentifiabilityAnalyzer:
                 available=False,
                 error_message=validation_result,
                 n_params=fim.shape[0] if fim.ndim == 2 else 0,
+                health_status=HealthStatus.CRITICAL,
             )
 
         n_params = fim.shape[0]
@@ -166,6 +167,7 @@ class IdentifiabilityAnalyzer:
                 available=False,
                 error_message="Empty Jacobian matrix",
                 n_params=jacobian.shape[1] if jacobian.ndim == 2 else 0,
+                health_status=HealthStatus.CRITICAL,
             )
 
         # Check dimensions
@@ -174,6 +176,7 @@ class IdentifiabilityAnalyzer:
                 available=False,
                 error_message=f"Jacobian must be 2D, got {jacobian.ndim}D",
                 n_params=0,
+                health_status=HealthStatus.CRITICAL,
             )
 
         # Check for NaN
@@ -182,6 +185,7 @@ class IdentifiabilityAnalyzer:
                 available=False,
                 error_message="Jacobian contains NaN values",
                 n_params=jacobian.shape[1],
+                health_status=HealthStatus.CRITICAL,
             )
 
         # Check for Inf
@@ -190,6 +194,7 @@ class IdentifiabilityAnalyzer:
                 available=False,
                 error_message="Jacobian contains Inf values",
                 n_params=jacobian.shape[1],
+                health_status=HealthStatus.CRITICAL,
             )
 
         return None

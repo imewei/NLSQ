@@ -1,8 +1,10 @@
 """Tests for memory_pool module."""
 
+import threading
 import unittest
 
 import jax.numpy as jnp
+import numpy as np
 
 from nlsq.caching.memory_pool import (
     MemoryPool,
@@ -175,6 +177,50 @@ class TestGlobalPool(unittest.TestCase):
         # Get new pool instance
         new_pool = get_global_pool()
         self.assertEqual(len(new_pool.pools), 0)
+
+    def test_get_global_pool_race_returns_single_instance(self):
+        """Concurrent first-access calls must not each construct their own
+        MemoryPool -- the double-checked-locking singleton must yield
+        exactly one instance, with none silently discarded."""
+        results = []
+
+        def worker():
+            results.append(get_global_pool())
+
+        threads = [threading.Thread(target=worker) for _ in range(16)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len({id(p) for p in results}), 1)
+
+
+class TestMemoryPoolConcurrency(unittest.TestCase):
+    """Thread-safety tests for MemoryPool.allocate()/release()."""
+
+    def test_concurrent_allocate_release_no_crash(self):
+        """Concurrent allocate/release on a shared pool must not raise
+        (e.g. KeyError from two threads popping the same bookkeeping entry)
+        or lose track of allocated arrays."""
+        pool = MemoryPool(max_pool_size=20, enable_stats=True)
+        errors = []
+
+        def worker():
+            try:
+                for _ in range(100):
+                    arr = pool.allocate((8, 8), np.float64)
+                    pool.release(arr)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

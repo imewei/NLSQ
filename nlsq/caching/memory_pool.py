@@ -399,21 +399,19 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
         Global memory pool instance
     """
     global _global_pool  # noqa: PLW0603
-    # Double-checked locking (mirrors get_memory_manager()'s singleton
-    # pattern): without the lock, two threads racing on first access can
-    # both construct a MemoryPool and the second assignment silently
-    # discards the first instance and anything already pooled in it.
-    if _global_pool is None:
-        with _global_pool_lock:
-            if _global_pool is None:
-                _global_pool = MemoryPool(enable_stats=enable_stats)
-                return _global_pool
-
-    # Update enable_stats on existing pool to handle parallel test execution
+    # Every call takes the lock once regardless of branch (the "already
+    # exists" path below re-acquires it too, to update enable_stats), so
+    # there's no double-checked-locking fast path to gain here -- just lock
+    # unconditionally. Without the lock, two threads racing on first access
+    # could both construct a MemoryPool, with the second assignment silently
+    # discarding the first instance and anything already pooled in it.
     with _global_pool_lock:
-        if enable_stats:
-            # Ensure stats dict exists when enabling stats
-            if not hasattr(_global_pool, "stats"):
+        if _global_pool is None:
+            _global_pool = MemoryPool(enable_stats=enable_stats)
+        else:
+            # Update enable_stats on existing pool to handle parallel test execution
+            if enable_stats and not hasattr(_global_pool, "stats"):
+                # Ensure stats dict exists when enabling stats
                 _global_pool.stats = {
                     "allocations": 0,
                     "reuses": 0,
@@ -421,8 +419,8 @@ def get_global_pool(enable_stats: bool = False) -> MemoryPool:
                     "peak_memory": 0,
                     "total_operations": 0,
                 }
-        _global_pool.enable_stats = enable_stats
-    return _global_pool
+            _global_pool.enable_stats = enable_stats
+        return _global_pool
 
 
 def clear_global_pool():

@@ -51,6 +51,15 @@ class TestSolveWithCholeskyFallback:
         # Should not crash, solution may be regularized
         assert all(np.isfinite(x))
 
+    def test_all_zero_matrix_returns_finite(self):
+        """An all-zero matrix used to make the eigenvalue fallback's eps
+        floor 0 (dtype_eps * max(|eigvals|)), causing a divide-by-zero
+        that returned NaN. eps now has an absolute floor."""
+        A = jnp.zeros((3, 3))
+        b = jnp.array([1.0, 2.0, 3.0])
+        x, _used_cholesky = solve_with_cholesky_fallback(A, b)
+        assert bool(jnp.all(jnp.isfinite(x)))
+
     def test_identity_matrix(self):
         """Test with identity matrix (trivial case)."""
         A = jnp.eye(3)
@@ -259,6 +268,9 @@ class TestNumericalStabilityGuardJacobianCheck:
             assert any("NaN" in str(warning.message) for warning in w)
 
         assert issues["has_nan"] is True
+        # has_nan/has_inf are tracked independently -- a NaN-only Jacobian
+        # must not also report has_inf.
+        assert issues["has_inf"] is False
         # NaN should be replaced with 0
         assert jnp.isfinite(J_fixed).all()
 
@@ -271,6 +283,7 @@ class TestNumericalStabilityGuardJacobianCheck:
             J_fixed, issues = self.guard.check_and_fix_jacobian(J)
 
         assert issues["has_inf"] is True
+        assert issues["has_nan"] is False
         assert jnp.isfinite(J_fixed).all()
 
     def test_check_jacobian_all_zeros(self):
@@ -284,6 +297,10 @@ class TestNumericalStabilityGuardJacobianCheck:
         # Should add small perturbation (eps ~ 2.22e-16)
         # Use exact comparison since the values should be exactly eps
         assert jnp.any(J_fixed != 0.0)
+        # The perturbation must be diagonal-only, not a uniform add to every
+        # element -- a uniform add makes every column identical (rank 1),
+        # which is still singular for n > 1 and doesn't fix conditioning.
+        assert np.linalg.matrix_rank(np.asarray(J_fixed)) == 2
 
     def test_check_jacobian_large_skips_svd(self):
         """Test that large Jacobians skip SVD computation."""
