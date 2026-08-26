@@ -330,6 +330,20 @@ class _SafeASTValidator(ast.NodeVisitor):
             "threading",
             "concurrent",
             "asyncio",
+            # Parity with cli/model_validation.py's DANGEROUS_MODULES — this
+            # validator had drifted and missed all of these serialization/
+            # introspection/reflection modules (e.g. `pickle.loads(...)`
+            # passed this validator untouched despite being blocked in the
+            # CLI's file-loading path for the exact same "custom model"
+            # concept).
+            "pickle",
+            "dill",
+            "cloudpickle",
+            "inspect",
+            "dis",
+            "operator",
+            "pydoc",
+            "telnetlib",
         },
     )
 
@@ -379,6 +393,10 @@ class _SafeASTValidator(ast.NodeVisitor):
             "attrgetter",
             "methodcaller",
             "locate",
+            # pickle/dill/cloudpickle attribute-call parity (see
+            # DANGEROUS_MODULES above)
+            "loads",
+            "load",
         },
     )
 
@@ -394,6 +412,7 @@ class _SafeASTValidator(ast.NodeVisitor):
         "__builtins__",
         "__code__",
         "__import__",
+        "__loader__",
     )
 
     def __init__(self) -> None:
@@ -471,13 +490,11 @@ class _SafeASTValidator(ast.NodeVisitor):
                 self.errors.append(
                     f"Call to '{node.func.value.id}.{node.func.attr}' is not allowed",
                 )
-            # Check the method name itself regardless of the receiver, so
-            # `sys.modules["os"].system(...)` or a subclass-derived Popen
-            # instance can't dodge the DANGEROUS_MODULES-on-Name check above.
-            if node.func.attr in self.DANGEROUS_ATTRS:
-                self.errors.append(
-                    f"Call to '.{node.func.attr}(...)' is not allowed",
-                )
+            # No need to also check `node.func.attr in DANGEROUS_ATTRS` here:
+            # generic_visit below descends into node.func, and when node.func
+            # is this same Attribute node, visit_Attribute already checks
+            # `.attr in DANGEROUS_ATTRS` — checking it again here just
+            # duplicated the violation message for the same call site.
         self.generic_visit(node)
 
     def validate(self, code: str) -> None:

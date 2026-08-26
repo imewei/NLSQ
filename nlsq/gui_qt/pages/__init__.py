@@ -100,20 +100,12 @@ class PageState:
         # data/model, so changing either mid-fit would leave the eventual
         # Results page showing a fit computed against data that no longer
         # matches what's displayed.
-        if self.fit_running:
-            access_rules = {
-                "data_loading": False,
-                "model_selection": False,
-                "fitting_options": True,
-                "results": self.fit_complete,
-                "export": self.fit_complete,
-            }
-        else:
-            access_rules = {
-                "data_loading": True,
-                "model_selection": self.data_loaded,
-                "fitting_options": self.data_loaded and self.model_selected,
-                "results": self.fit_complete,
-                "export": self.fit_complete,
-            }
+        access_rules = {
+            "data_loading": not self.fit_running,
+            "model_selection": self.data_loaded and not self.fit_running,
+            "fitting_options": self.fit_running
+            or (self.data_loaded and self.model_selected),
+            "results": self.fit_complete,
+            "export": self.fit_complete,
+        }
         return access_rules.get(page, True)

@@ -175,9 +175,7 @@ class HistogramPlotWidget(QWidget):
         mean = np.mean(finite_data)
         std = np.std(finite_data)
 
-        # `std <= 0` is always False for NaN, so a NaN std would otherwise
-        # fall through and build an all-NaN overlay curve.
-        if not (std > 0):
+        if std <= 0:
             return
 
         # Create x values for curve

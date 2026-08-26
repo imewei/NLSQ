@@ -55,6 +55,15 @@ def _parse_model_parameters(
             p0_values.append(param["initial"])
         if "bounds" in param:
             bounds = param["bounds"]
+            if len(bounds) != 2:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Parameter 'bounds' expected 2 elements [lower, upper], "
+                    "got %d: %r — malformed entries default to unbounded",
+                    len(bounds),
+                    bounds,
+                )
             lower = bounds[0] if len(bounds) > 0 and bounds[0] is not None else None
             upper = bounds[1] if len(bounds) > 1 and bounds[1] is not None else None
             lower_bounds.append(float("-inf") if lower is None else lower)
