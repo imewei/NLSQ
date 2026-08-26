@@ -239,7 +239,7 @@ class TournamentSelector:
                 break
 
             try:
-                self._run_single_round(data_batch_iterator, model, round_num)
+                self._run_single_round(data_batch_iterator, model, round_num, top_m)
             except StopIteration:
                 self.logger.warning(
                     f"Data exhausted during round {round_num}, returning best so far",
@@ -260,6 +260,7 @@ class TournamentSelector:
         data_batch_iterator: Iterator[tuple[np.ndarray, np.ndarray]],
         model: Callable,
         round_number: int,
+        top_m: int = 1,
     ) -> None:
         """Run a single elimination round.
 
@@ -271,6 +272,12 @@ class TournamentSelector:
             Model function.
         round_number : int
             Current round number (0-indexed).
+        top_m : int, default=1
+            Number of survivors the caller ultimately needs -- elimination
+            within this round must never drop the survivor count below
+            this, even though run_tournament()'s own early-stop check only
+            runs BETWEEN rounds (so a single round could otherwise
+            over-eliminate past top_m in one step).
         """
         n_survivors_before = self.n_survivors
 
@@ -317,9 +324,16 @@ class TournamentSelector:
         self.cumulative_losses += avg_round_losses
         self.evaluation_counts += round_loss_counts
 
-        # Perform elimination
+        # Perform elimination. Capped so this round can never drop the
+        # survivor count below top_m (the public contract of
+        # get_top_candidates/run_tournament) -- previously only bounded by
+        # "leave at least 1 survivor", which could eliminate straight past
+        # top_m in a single round when top_m > 1.
         n_to_eliminate = int(n_survivors_before * self.config.elimination_fraction)
-        n_to_eliminate = max(0, min(n_to_eliminate, n_survivors_before - 1))
+        n_to_eliminate = max(
+            0,
+            min(n_to_eliminate, n_survivors_before - max(1, top_m)),
+        )
 
         if n_to_eliminate > 0:
             self._eliminate_worst(n_to_eliminate, avg_round_losses)
@@ -468,9 +482,20 @@ class TournamentSelector:
             # Fall back to any surviving candidate
             valid_indices = np.where(self.survival_mask)[0]
             if len(valid_indices) == 0:
-                # Fall back to first candidate
-                self.logger.warning("No valid survivors, returning first candidate")
-                return [self.candidates[0].copy()]
+                # No survivors at all (every candidate produced a
+                # non-finite loss every round) -- raise rather than
+                # silently returning an arbitrary, unevaluated candidate
+                # as if selection had succeeded. The sole caller
+                # (AdaptiveHybridStreamingOptimizer._select_starting_point)
+                # wraps run_tournament() in try/except specifically to
+                # fall back to p0 on a genuine selection failure; a silent
+                # return here bypasses that intended fallback entirely.
+                msg = (
+                    "Tournament selection failed: no valid survivors "
+                    "(every candidate produced a non-finite loss)."
+                )
+                self.logger.warning(msg)
+                raise RuntimeError(msg)
 
         # Sort by cumulative loss
         losses = self.cumulative_losses[valid_indices]

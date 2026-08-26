@@ -1071,6 +1071,7 @@ def _fit_with_auto_global(
     n_points: int,
     n_params: int,
     goal: Any,
+    _workflow_name: str = "auto_global",
     **kwargs: Any,
 ) -> CurveFitResult:
     """Memory-aware global optimization workflow (T026-T035).
@@ -1137,9 +1138,9 @@ def _fit_with_auto_global(
     lb, ub = prepare_bounds(bounds, n_params)
     if np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)):
         raise ValueError(
-            "workflow='auto_global' requires bounds. "
+            f"workflow='{_workflow_name}' requires bounds. "
             "Provide bounds as (lower, upper) arrays:\n"
-            "    fit(model, x, y, workflow='auto_global', bounds=([0, 0], [10, 10]))",
+            f"    fit(model, x, y, workflow='{_workflow_name}', bounds=([0, 0], [10, 10]))",
         )
     # Partially-unbounded (e.g. one parameter's upper bound left at +inf)
     # previously slipped past the fully-unbounded check above, then fed an
@@ -1148,14 +1149,26 @@ def _fit_with_auto_global(
     # which underflows to exactly 0.0) is nan. Require every bound finite.
     if not (np.all(np.isfinite(lb)) and np.all(np.isfinite(ub))):
         raise ValueError(
-            "workflow='auto_global' requires every parameter to have a "
+            f"workflow='{_workflow_name}' requires every parameter to have a "
             "finite lower AND upper bound (no +/-inf). "
             f"Got lower={lb}, upper={ub}.",
         )
     if np.any(lb > ub):
         raise ValueError(
-            f"workflow='auto_global' bounds are inverted: lower={lb} must "
+            f"workflow='{_workflow_name}' bounds are inverted: lower={lb} must "
             f"be <= upper={ub} for every parameter.",
+        )
+    # Individually-finite bounds can still overflow when subtracted (e.g.
+    # lb=-1e308, ub=1e308): ub-lb -> inf reproduces the exact NaN failure
+    # mode the finite-bounds check above exists to prevent, since
+    # transform_to_bounds computes lb + (ub-lb)*sigmoid(x). Range, not just
+    # the endpoints, must be finite.
+    if not np.all(np.isfinite(ub - lb)):
+        raise ValueError(
+            f"workflow='{_workflow_name}' requires each parameter's bound range "
+            "(upper - lower) to be finite -- the bounds are individually "
+            f"finite but too far apart to subtract without overflow. Got "
+            f"lower={lb}, upper={ub}.",
         )
 
     # Log bounds information
@@ -1401,6 +1414,7 @@ def _fit_with_hpc(
         n_points=n_points,
         n_params=n_params,
         goal=goal,
+        _workflow_name="hpc",
         **kwargs,
     )
 
