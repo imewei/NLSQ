@@ -2373,6 +2373,21 @@ class LargeDatasetFitter:
         full_sigma = kwargs.pop("sigma", None)
         if full_sigma is not None:
             full_sigma = np.asarray(full_sigma)
+            if full_sigma.ndim != 1:
+                # A 2-D (m, m) covariance matrix happens to satisfy the
+                # length check below (len() on it equals m, same as
+                # len(xdata)), but the shuffle/per-chunk reslicing further
+                # down only handles 1-D sigma correctly: shuffling permutes
+                # rows only (corrupting row/column correspondence) and the
+                # per-chunk reslice produces a non-square (valid_length, m)
+                # array. Reject explicitly here instead of failing later
+                # with a shape error that gives no hint the real cause is
+                # this chunked path's row-only shuffle.
+                raise ValueError(
+                    "2-D covariance sigma is not supported for chunked "
+                    f"large-dataset fitting (got shape {full_sigma.shape}); "
+                    "pass a 1-D sigma of per-point uncertainties instead.",
+                )
             if len(full_sigma) != len(xdata):
                 raise ValueError(
                     f"sigma length ({len(full_sigma)}) does not match "

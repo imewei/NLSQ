@@ -848,27 +848,30 @@ class CMAESOptimizer:
             # true BIPOP (Hansen 2009) randomizes large-population restarts
             # so a bad first basin doesn't anchor every subsequent run.
             #
-            # `key` is split exactly twice on every iteration regardless of
-            # which branch fires below (choice_key + explore_key, always
-            # both consumed) -- consuming a *variable* number of splits per
+            # `key` is split unconditionally into three keys (key, choice_key,
+            # explore_key) on every iteration regardless of which branch
+            # fires below -- consuming a *variable* number of splits per
             # branch would make the RNG stream for every later restart
             # depend on which branch upstream floating-point comparisons
             # (restarter.best_solution) happened to take, so two runs that
             # should be bitwise-identical (e.g. same seed, different
             # population_batch_size) could silently diverge after the first
-            # restart whose branch choice differs between them.
+            # restart whose branch choice differs between them. Only the
+            # *split* needs to be unconditional for this guarantee -- the
+            # actual (n_params,) array draw from explore_key is a pure,
+            # side-effect-free function of that key, so it's only computed
+            # in the branch that uses it.
             key, choice_key, explore_key = jax.random.split(key, 3)
             choice = jax.random.uniform(choice_key)
-            random_point = jax.random.uniform(
-                explore_key,
-                shape=(n_params,),
-                minval=-2.0,
-                maxval=2.0,
-            )
             if choice < 1.0 / 3.0 and restarter.best_solution is not None:
                 initial_solution = restarter.best_solution
             elif choice < 2.0 / 3.0:
-                initial_solution = random_point
+                initial_solution = jax.random.uniform(
+                    explore_key,
+                    shape=(n_params,),
+                    minval=-2.0,
+                    maxval=2.0,
+                )
             else:
                 initial_solution = original_solution
 

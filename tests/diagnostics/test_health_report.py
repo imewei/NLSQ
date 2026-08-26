@@ -1404,3 +1404,60 @@ class TestCreateHealthReportFunction:
         )
 
         assert isinstance(report, ModelHealthReport)
+
+
+class TestModelHealthReportToDict:
+    """Regression tests for ModelHealthReport.to_dict() field completeness.
+
+    exploding_threshold/exploding_detected were added to DiagnosticsConfig
+    and GradientHealthReport but were missing from to_dict()'s serialized
+    output -- silent data loss for any consumer reading the dict form
+    (e.g. a consumer that can't recover *why* GRAD-004 fired without the
+    threshold that triggered it).
+    """
+
+    def test_to_dict_includes_exploding_threshold_in_config(
+        self,
+        healthy_identifiability_report: IdentifiabilityReport,
+    ) -> None:
+        from nlsq.diagnostics.health_report import create_health_report
+
+        config = DiagnosticsConfig(exploding_threshold=1e9)
+        report = create_health_report(
+            identifiability=healthy_identifiability_report,
+            config=config,
+        )
+
+        d = report.to_dict()
+        assert d["config"]["exploding_threshold"] == 1e9
+
+    def test_to_dict_includes_exploding_detected_in_gradient_health(
+        self,
+        healthy_identifiability_report: IdentifiabilityReport,
+    ) -> None:
+        from nlsq.diagnostics.health_report import create_health_report
+
+        gradient_report = GradientHealthReport(
+            n_iterations=100,
+            health_score=0.7,
+            mean_gradient_norm=1e12,
+            final_gradient_norm=1e12,
+            mean_gradient_magnitudes=np.array([1e12, 1e12, 1e12]),
+            variance_gradient_magnitudes=np.array([0.0, 0.0, 0.0]),
+            max_imbalance_ratio=1.0,
+            has_numerical_issues=False,
+            vanishing_detected=False,
+            exploding_detected=True,
+            imbalance_detected=False,
+            stagnation_detected=False,
+            issues=[],
+            health_status=HealthStatus.CRITICAL,
+            computation_time_ms=2.0,
+        )
+        report = create_health_report(
+            identifiability=healthy_identifiability_report,
+            gradient_health=gradient_report,
+        )
+
+        d = report.to_dict()
+        assert d["gradient_health"]["exploding_detected"] is True

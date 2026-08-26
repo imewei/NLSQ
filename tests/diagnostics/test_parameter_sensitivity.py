@@ -338,6 +338,38 @@ class TestParameterSensitivityAnalyzer:
         # Eigenvalue range should be log10(10000/1) = 4
         assert abs(report.eigenvalue_range - 4.0) < 0.5  # Allow some tolerance
 
+    def test_eigenvalue_range_matches_analytic_svd(
+        self, analyzer: ParameterSensitivityAnalyzer
+    ) -> None:
+        """eigenvalue_range must match the analytic SVD-derived value to
+        high precision, even for an extremely ill-conditioned Jacobian.
+
+        Regression test mirroring
+        test_identifiability.py::test_condition_number_matches_analytic_svd:
+        this analyzer received the same fix (deriving eigenvalues directly
+        from SVD(jacobian) instead of forming FIM = J.T @ J explicitly and
+        then eigendecomposing that, which squares J's condition number
+        *before* analysis and loses many orders of magnitude of precision
+        in float64). The existing eigenvalue-range tests in this file only
+        span 2-4 orders of magnitude -- well inside float64 precision even
+        under the old bug -- so they can't discriminate between the two
+        implementations. This fixture spans 15 orders of magnitude in J's
+        singular values (30 in the FIM eigenvalues), which the old
+        J.T@J-then-eig path cannot represent accurately.
+        """
+        np.random.seed(42)
+        n, p = 100, 3
+        U = np.linalg.qr(np.random.randn(n, p))[0]
+        s = np.array([1e10, 1.0, 1e-5])
+        V = np.linalg.qr(np.random.randn(p, p))[0]
+        J = U @ np.diag(s) @ V.T
+
+        analytic_eigenvalue_range = np.log10((s.max() / s.min()) ** 2)
+
+        report = analyzer.analyze(J)
+
+        assert abs(report.eigenvalue_range - analytic_eigenvalue_range) < 1.0
+
     # Test stiff/sloppy direction classification
     def test_stiff_sloppy_classification(
         self, analyzer: ParameterSensitivityAnalyzer, wide_spread_jacobian: np.ndarray

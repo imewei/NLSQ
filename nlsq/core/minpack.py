@@ -4765,6 +4765,7 @@ class CurveFit:
                 self.logger.warning(
                     "Failed to compute diagnostics",
                     error=str(e),
+                    exc_info=True,
                 )
                 # Create unavailable diagnostics report
                 from nlsq.diagnostics.health_report import create_health_report

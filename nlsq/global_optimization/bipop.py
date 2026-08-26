@@ -184,3 +184,7 @@ class BIPOPRestarter:
         self._use_large_pop = True
         self._best_solution = None
         self._best_fitness = float("inf")
+        # Reseed so a reused, seeded instance replays the same popsize
+        # sequence -- without this, "reset to initial state" would be a lie
+        # for the one piece of state `seed` exists to make reproducible.
+        self._rng = np.random.default_rng(self.seed)

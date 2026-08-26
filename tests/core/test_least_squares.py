@@ -1043,11 +1043,10 @@ class TestMethodLM:
 
     def test_lm_with_bounds_raises(self):
         """method='lm' with finite bounds must raise, matching scipy."""
-        assert_raises(
-            ValueError,
-            least_squares,
-            fun_2d_trivial,
-            [2.0, 2.0],
-            bounds=([-3.0, -3.0], [3.0, 3.0]),
-            method="lm",
-        )
+        with pytest.raises(ValueError, match=r"lm.*bounds"):
+            least_squares(
+                fun_2d_trivial,
+                [2.0, 2.0],
+                bounds=([-3.0, -3.0], [3.0, 3.0]),
+                method="lm",
+            )

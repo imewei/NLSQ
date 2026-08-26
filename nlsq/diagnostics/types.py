@@ -882,6 +882,9 @@ def _format_model_health_summary(
                 f"Vanishing gradients: {'Yes' if report.gradient_health.vanishing_detected else 'No'}",
             )
             lines.append(
+                f"Exploding gradients: {'Yes' if report.gradient_health.exploding_detected else 'No'}",
+            )
+            lines.append(
                 f"Gradient imbalance: {'Yes' if report.gradient_health.imbalance_detected else 'No'}",
             )
         else:
