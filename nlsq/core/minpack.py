@@ -3584,7 +3584,8 @@ class CurveFit:
         check_finite: bool,
         nan_policy: str = "raise",
         bounds: tuple | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, int, int]:
+        sigma: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, int, int, np.ndarray | None]:
         """Preprocess input data with optional feature flag routing.
 
         Routes to either the new DataPreprocessor component or the original
@@ -3602,6 +3603,10 @@ class CurveFit:
             Initial parameter guess
         check_finite : bool
             Whether to check for finite values
+        sigma : np.ndarray, optional
+            Uncertainties/weights. When nan_policy='omit', rows dropped for
+            non-finite x/y (or a non-finite 1D sigma entry) are also dropped
+            from sigma, so the returned sigma stays aligned with xdata/ydata.
 
         Returns
         -------
@@ -3613,6 +3618,8 @@ class CurveFit:
             Data length
         xdims : int
             X data dimensionality
+        sigma : np.ndarray | None
+            Sigma, filtered consistently with xdata/ydata under nan_policy='omit'
         """
         # Check feature flag for new implementation
         from nlsq.core.feature_flags import get_feature_flags
@@ -3628,6 +3635,7 @@ class CurveFit:
                 f=f,
                 xdata=xdata,
                 ydata=ydata,
+                sigma=sigma,
                 check_finite=check_finite,
                 nan_policy=nan_policy,
             )
@@ -3635,12 +3643,21 @@ class CurveFit:
             # Convert JAX arrays back to numpy for compatibility with rest of pipeline
             xdata = np.asarray(data.xdata)
             ydata = np.asarray(data.ydata)
+            sigma = np.asarray(data.sigma) if data.sigma is not None else None
             m = data.n_points
             xdims = xdata.ndim
 
-            return xdata, ydata, m, xdims
+            return xdata, ydata, m, xdims, sigma
 
         # Original implementation (old code path)
+        # Defer finiteness raising when nan_policy handles it instead (mirrors
+        # DataPreprocessor.preprocess's effective_check_finite): 'omit' filters
+        # invalid rows below, 'propagate' intentionally keeps NaN/Inf.
+        effective_check_finite = check_finite and nan_policy not in (
+            "omit",
+            "propagate",
+        )
+
         # Step 6: Validate and sanitize inputs (if stability enabled).
         # Forward bounds + check_finite so bounds-consistency and finiteness
         # checks are actually exercised (previously they were silently dropped).
@@ -3650,16 +3667,80 @@ class CurveFit:
             ydata,
             p0,
             bounds=bounds,
-            check_finite=check_finite,
+            check_finite=effective_check_finite,
         )
 
         # Step 7: Convert to arrays and validate finiteness
-        xdata, ydata = self._convert_and_validate_arrays(xdata, ydata, check_finite)
+        xdata, ydata = self._convert_and_validate_arrays(
+            xdata,
+            ydata,
+            effective_check_finite,
+        )
 
         # Step 8: Validate data lengths
         m, xdims = self._validate_data_lengths(xdata, ydata)
 
-        return xdata, ydata, m, xdims
+        if nan_policy == "omit":
+            xdata, ydata, sigma, m = self._omit_nonfinite_rows(
+                xdata,
+                ydata,
+                sigma,
+                xdims,
+            )
+
+        return xdata, ydata, m, xdims, sigma
+
+    def _omit_nonfinite_rows(
+        self,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        sigma: np.ndarray | None,
+        xdims: int,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, int]:
+        """Drop rows with non-finite x/y (or a non-finite 1D sigma entry).
+
+        Legacy-path counterpart to DataPreprocessor._handle_nan_omit, used
+        when the NLSQ_PREPROCESSOR_IMPL feature flag routes to the original
+        (default) code path rather than the new DataPreprocessor component.
+
+        Parameters
+        ----------
+        xdata, ydata : np.ndarray
+            Data to filter.
+        sigma : np.ndarray | None
+            1D sigma is filtered alongside xdata/ydata; a 2D covariance sigma
+            is left untouched (dropping a point requires dropping its whole
+            row/column, not just a NaN entry, so it's out of scope here).
+        xdims : int
+            xdata.ndim, to select row-wise vs column-wise masking.
+
+        Returns
+        -------
+        xdata, ydata, sigma, m : filtered data and new data length.
+        """
+        y_valid = np.isfinite(ydata)
+        x_valid = (
+            np.isfinite(xdata) if xdims == 1 else np.all(np.isfinite(xdata), axis=0)
+        )
+        valid_mask = y_valid & x_valid
+
+        sigma_1d = sigma is not None and np.asarray(sigma).ndim == 1
+        if sigma_1d:
+            valid_mask = valid_mask & np.isfinite(np.asarray(sigma))
+
+        if not np.any(valid_mask):
+            msg = (
+                "nan_policy='omit' removed all data points "
+                "(every row contained NaN/Inf)."
+            )
+            raise ValueError(msg)
+
+        ydata = ydata[valid_mask]
+        xdata = xdata[valid_mask] if xdims == 1 else xdata[:, valid_mask]
+        if sigma_1d:
+            sigma = np.asarray(sigma)[valid_mask]
+
+        return xdata, ydata, sigma, len(ydata)
 
     def _apply_padding_if_needed(
         self,
@@ -3723,6 +3804,7 @@ class CurveFit:
         check_finite: bool,
         data_mask: np.ndarray | None,
         kwargs: dict,
+        sigma: np.ndarray | None = None,
     ) -> tuple[
         int,
         np.ndarray,
@@ -3736,6 +3818,7 @@ class CurveFit:
         int,
         bool,
         bool,
+        np.ndarray | None,
     ]:
         """Prepare and validate inputs for curve fitting.
 
@@ -3768,6 +3851,8 @@ class CurveFit:
             Whether padding is needed
         none_mask : bool
             Whether data_mask was None on input
+        sigma : np.ndarray | None
+            Sigma, filtered consistently with xdata/ydata under nan_policy='omit'
         """
         # Step 1: Determine parameter count and auto-estimate p0 if needed
         n, p0 = self._determine_parameter_count(f, p0, xdata, ydata)
@@ -3800,20 +3885,12 @@ class CurveFit:
         # Step 4: Prepare bounds and initial guess
         lb, ub, p0 = self._prepare_bounds_and_initial_guess(bounds, n, p0)
 
-        # Step 5: Select optimization method
-        method = self._select_optimization_method(
-            method,
-            f,
-            xdata,
-            ydata,
-            p0,
-            bounds,
-            kwargs,
-        )
-
-        # Steps 6-8: Preprocess data (validation, conversion, length check)
-        # Use new DataPreprocessor when feature flag enabled
-        xdata, ydata, m, xdims = self._preprocess_input_data(
+        # Steps 5-7: Preprocess data (validation, conversion, length check,
+        # NaN handling) BEFORE method/algorithm auto-selection below — auto
+        # selection's data-driven heuristics (percentile/diff/ptp) must not
+        # run against NaN/Inf-contaminated data that nan_policy='omit' asked
+        # to have removed.
+        xdata, ydata, m, xdims, sigma = self._preprocess_input_data(
             f,
             xdata,
             ydata,
@@ -3824,6 +3901,18 @@ class CurveFit:
             # which may be scalar (-inf, inf)) so the validator's bounds checks
             # receive per-parameter arrays of the expected shape.
             bounds=(lb, ub),
+            sigma=sigma,
+        )
+
+        # Step 8: Select optimization method (on cleaned data)
+        method = self._select_optimization_method(
+            method,
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds,
+            kwargs,
         )
 
         # Step 9: Setup data mask and padding parameters
@@ -3855,6 +3944,7 @@ class CurveFit:
             len_diff,
             should_pad,
             none_mask,
+            sigma,
         )
 
     def _curve_fit_hybrid_streaming(
@@ -4672,6 +4762,7 @@ class CurveFit:
             len_diff,
             _should_pad,
             none_mask,
+            sigma,
         ) = self._prepare_curve_fit_inputs(
             f,
             xdata,
@@ -4684,9 +4775,11 @@ class CurveFit:
             check_finite,
             data_mask,
             kwargs,
+            sigma=sigma,
         )
 
-        # Setup sigma transformation
+        # Setup sigma transformation (sigma is already filtered consistently
+        # with xdata/ydata above when nan_policy='omit' dropped rows)
         transform = self._setup_sigma_transform(sigma, ydata, data_mask, len_diff, m)
 
         # If gradient-health diagnostics were requested, wire a GradientMonitor

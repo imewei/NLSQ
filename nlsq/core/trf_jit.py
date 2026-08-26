@@ -177,14 +177,15 @@ def _solve_tr_subproblem_cg(
     d: jnp.ndarray,
     Delta: float,
     alpha: float = 0.0,
+    tol: float = DEFAULT_TOLERANCE,
 ) -> jnp.ndarray:
     """Solve trust region subproblem using conjugate gradient."""
-    p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(J, f, d, 0.0)
+    p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(J, f, d, 0.0, tol)
 
     p_gn_norm = jnp.linalg.norm(p_gn)
 
     def compute_regularized():
-        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, alpha)
+        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, alpha, tol)
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
         # If regularized step is within trust region, use it directly;
         # otherwise scale to trust region boundary (no arbitrary clamping)
@@ -207,6 +208,7 @@ def _solve_tr_subproblem_cg_bounds(
     f_zeros: jnp.ndarray,
     Delta: float,
     alpha: float = 0.0,
+    tol: float = DEFAULT_TOLERANCE,
 ) -> jnp.ndarray:
     """Solve trust region subproblem with bounds using conjugate gradient."""
     J_augmented = jnp.concatenate([J * d[None, :], J_diag])
@@ -218,6 +220,7 @@ def _solve_tr_subproblem_cg_bounds(
         f_augmented,
         d_augmented,
         0.0,
+        tol,
     )
 
     p_gn_norm = jnp.linalg.norm(p_gn)
@@ -228,6 +231,7 @@ def _solve_tr_subproblem_cg_bounds(
             f_augmented,
             d_augmented,
             alpha,
+            tol,
         )
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
         # If regularized step is within trust region, use it directly;
