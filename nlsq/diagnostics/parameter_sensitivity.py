@@ -33,6 +33,7 @@ from nlsq.diagnostics.types import (
     IssueSeverity,
     ModelHealthIssue,
     ParameterSensitivityReport,
+    _validate_fim,
 )
 
 
@@ -167,10 +168,11 @@ class ParameterSensitivityAnalyzer:
         start_time = time.perf_counter()
 
         # Validate FIM
-        if fim.ndim != 2 or fim.shape[0] != fim.shape[1]:
+        validation_error = _validate_fim(fim)
+        if validation_error is not None:
             return ParameterSensitivityReport(
                 available=False,
-                error_message="FIM must be a square matrix",
+                error_message=validation_error,
                 is_sloppy=False,
                 eigenvalues=np.array([]),
                 eigenvectors=None,
@@ -388,9 +390,18 @@ class ParameterSensitivityAnalyzer:
             issues.append(issue)
             health_status = HealthStatus.WARNING
 
-        # Check for low effective dimensionality (SENS-002)
-        # Threshold: effective_dim < n_params / 2
-        if effective_dimensionality < n_params / 2.0:
+        # Zero effective dimensionality means the FIM has no positive
+        # eigenvalues at all -- no parameter combination is determined by
+        # the data. This is a critical identifiability failure, not merely
+        # "sloppy" (eigenvalue_range is 0.0 in this case since there is no
+        # non-zero spread to measure, so it must not be reported healthy).
+        if effective_dimensionality <= 0.0:
+            issue = self._create_sens_003_issue(n_params)
+            issues.append(issue)
+            health_status = HealthStatus.CRITICAL
+        elif effective_dimensionality < n_params / 2.0:
+            # Check for low effective dimensionality (SENS-002)
+            # Threshold: effective_dim < n_params / 2
             issue = self._create_sens_002_issue(effective_dimensionality, n_params)
             issues.append(issue)
             # Keep as INFO since this is informational, not necessarily a problem
@@ -679,6 +690,33 @@ class ParameterSensitivityAnalyzer:
                 "threshold_orders_of_magnitude": threshold,
             },
             recommendation=get_recommendation("SENS-001"),
+        )
+
+    def _create_sens_003_issue(self, n_params: int) -> ModelHealthIssue:
+        """Create SENS-003 issue for zero effective dimensionality.
+
+        Parameters
+        ----------
+        n_params : int
+            Total number of parameters.
+
+        Returns
+        -------
+        ModelHealthIssue
+            Issue describing a completely uninformative FIM/Jacobian.
+        """
+        return ModelHealthIssue(
+            category=IssueCategory.SENSITIVITY,
+            severity=IssueSeverity.CRITICAL,
+            code="SENS-003",
+            message=(
+                "Zero effective dimensionality: the Fisher Information Matrix "
+                f"has no positive eigenvalues across all {n_params} parameters. "
+                "No parameter combination is determined by the data at all."
+            ),
+            affected_parameters=None,
+            details={"n_params": n_params},
+            recommendation=get_recommendation("SENS-003"),
         )
 
     def _create_sens_002_issue(

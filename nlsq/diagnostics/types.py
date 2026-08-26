@@ -18,6 +18,43 @@ from typing import Any
 import numpy as np
 
 
+def _validate_fim(fim: np.ndarray) -> str | None:
+    """Validate a pre-computed Fisher Information Matrix.
+
+    A FIM must be square, finite, symmetric, and positive semi-definite
+    (it is J.T @ J for some real Jacobian J). Skipping these checks lets a
+    caller-supplied matrix that cannot be a real FIM (e.g. containing NaN,
+    asymmetric, or with negative eigenvalues) pass through eigendecomposition
+    and get silently reported as a healthy/identifiable model.
+
+    Parameters
+    ----------
+    fim : np.ndarray
+        Candidate Fisher Information Matrix.
+
+    Returns
+    -------
+    str | None
+        A human-readable error message if invalid, otherwise None.
+    """
+    if fim.ndim != 2 or fim.shape[0] != fim.shape[1]:
+        return "FIM must be a square matrix"
+
+    if not np.all(np.isfinite(fim)):
+        return "FIM contains non-finite (NaN/Inf) values"
+
+    if not np.allclose(fim, fim.T, rtol=1e-8, atol=1e-10):
+        return "FIM must be symmetric"
+
+    eigvals = np.linalg.eigvalsh(fim)
+    max_abs_eig = float(np.max(np.abs(eigvals))) if eigvals.size else 0.0
+    tol = fim.shape[0] * np.finfo(np.float64).eps * max(max_abs_eig, 1.0)
+    if eigvals.size and float(np.min(eigvals)) < -tol:
+        return "FIM must be positive semi-definite"
+
+    return None
+
+
 class HealthStatus(Enum):
     """Overall model health status.
 
@@ -680,24 +717,31 @@ class DiagnosticsConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration values after initialization."""
-        # Validate thresholds are positive
-        if self.condition_threshold <= 0:
+        # Validate thresholds are finite and positive. A bare `<= 0` check
+        # silently accepts NaN (NaN <= 0 is False in IEEE 754), which would
+        # disable the corresponding detector rather than reject the config.
+        if not math.isfinite(self.condition_threshold) or self.condition_threshold <= 0:
             raise ValueError("condition_threshold must be positive")
-        if self.correlation_threshold <= 0 or self.correlation_threshold > 1:
+        if not math.isfinite(self.correlation_threshold) or not (
+            0 < self.correlation_threshold <= 1
+        ):
             raise ValueError("correlation_threshold must be in (0, 1]")
-        if self.imbalance_threshold <= 0:
+        if not math.isfinite(self.imbalance_threshold) or self.imbalance_threshold <= 0:
             raise ValueError("imbalance_threshold must be positive")
-        if self.vanishing_threshold <= 0:
+        if not math.isfinite(self.vanishing_threshold) or self.vanishing_threshold <= 0:
             raise ValueError("vanishing_threshold must be positive")
-        if self.exploding_threshold <= 0:
+        if not math.isfinite(self.exploding_threshold) or self.exploding_threshold <= 0:
             raise ValueError("exploding_threshold must be positive")
-        if self.sloppy_threshold <= 0:
+        if not math.isfinite(self.sloppy_threshold) or self.sloppy_threshold <= 0:
             raise ValueError("sloppy_threshold must be positive")
         if self.gradient_window_size <= 0:
             raise ValueError("gradient_window_size must be positive")
         if self.stagnation_window <= 0:
             raise ValueError("stagnation_window must be positive")
-        if self.stagnation_tolerance <= 0:
+        if (
+            not math.isfinite(self.stagnation_tolerance)
+            or self.stagnation_tolerance <= 0
+        ):
             raise ValueError("stagnation_tolerance must be positive")
 
 

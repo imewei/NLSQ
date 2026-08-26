@@ -11,6 +11,7 @@ during optimization iterations. It detects:
   for multiple iterations
 - Exploding gradients (GRAD-004): Gradient magnitude grows very large,
   independent of NaN/Inf or cross-parameter imbalance
+- Non-finite gradients (GRAD-005): NaN or Inf values appear in the gradient
 
 Memory usage is bounded at <1KB regardless of iteration count using:
 - Sliding window for gradient norm history (configurable, default 100)
@@ -336,11 +337,15 @@ class GradientMonitor:
                 # that preserves the norm without fabricating component ratios.
                 gradient_norm = info["gradient_norm"]
                 n_params = len(params)
-                gradient = (
-                    np.ones(n_params) * (gradient_norm / np.sqrt(n_params))
-                    if gradient_norm > 0
-                    else np.ones(n_params)
-                )
+                if not np.isfinite(gradient_norm):
+                    # Preserve the non-finite signal so record_gradient flags it
+                    # as a numerical issue instead of masking it as healthy.
+                    gradient = np.full(n_params, np.nan)
+                elif gradient_norm > 0:
+                    gradient = np.ones(n_params) * (gradient_norm / np.sqrt(n_params))
+                else:
+                    # A true zero norm means convergence, not a missing signal.
+                    gradient = np.zeros(n_params)
             # No gradient info - estimate from parameters
             elif self._last_params is not None:
                 gradient = -(params - self._last_params)
@@ -435,6 +440,11 @@ class GradientMonitor:
         exploding_detected = self._detect_exploding_gradients(norm_history)
         if exploding_detected:
             issues.append(self._create_grad_004_issue(norm_history))
+
+        # Check for non-finite gradients (GRAD-005) — must surface as an issue,
+        # not just a silent score deduction, so status aggregation sees it.
+        if self._has_numerical_issues:
+            issues.append(self._create_grad_005_issue())
 
         # Compute health score
         health_score = self._compute_health_score(
@@ -780,6 +790,27 @@ class GradientMonitor:
                 "threshold": self.config.exploding_threshold,
             },
             recommendation=get_recommendation("GRAD-004"),
+        )
+
+    def _create_grad_005_issue(self) -> ModelHealthIssue:
+        """Create GRAD-005 issue for non-finite (NaN/Inf) gradient values.
+
+        Returns
+        -------
+        ModelHealthIssue
+            Issue describing detected NaN/Inf gradient components.
+        """
+        return ModelHealthIssue(
+            category=IssueCategory.GRADIENT,
+            severity=IssueSeverity.CRITICAL,
+            code="GRAD-005",
+            message=(
+                "Non-finite gradient values detected: one or more gradient "
+                "components were NaN or Inf during optimization."
+            ),
+            affected_parameters=None,
+            details={"final_gradient_norm": self._last_gradient_norm},
+            recommendation=get_recommendation("GRAD-005"),
         )
 
     def _create_grad_002_issue(self) -> ModelHealthIssue:

@@ -27,6 +27,7 @@ from nlsq.diagnostics.types import (
     IssueCategory,
     IssueSeverity,
     ModelHealthIssue,
+    _validate_fim,
 )
 
 _logger = logging.getLogger(__name__)
@@ -135,10 +136,11 @@ class IdentifiabilityAnalyzer:
         start_time = time.perf_counter()
 
         # Validate FIM
-        if fim.ndim != 2 or fim.shape[0] != fim.shape[1]:
+        validation_result = _validate_fim(fim)
+        if validation_result is not None:
             return IdentifiabilityReport(
                 available=False,
-                error_message="FIM must be a square matrix",
+                error_message=validation_result,
                 n_params=fim.shape[0] if fim.ndim == 2 else 0,
             )
 
