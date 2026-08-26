@@ -139,6 +139,11 @@ class JAXConfig:
 
     _instance: JAXConfig | None = None
     _lock: threading.RLock = threading.RLock()
+    # Dedicated lock for precision_context's enter/yield/exit span, kept
+    # separate from `_lock` (singleton construction, memory config, etc.)
+    # so a long-running precision_context body on one thread doesn't block
+    # unrelated JAXConfig operations on another thread.
+    _precision_lock: threading.RLock = threading.RLock()
     _x64_enabled: bool = False
     _initialized: bool = False
     _memory_config: MemoryConfig | None = None
@@ -182,7 +187,7 @@ class JAXConfig:
         self._configure_persistent_cache(config)
 
         # Configure GPU memory if specified
-        self._configure_gpu_memory(config)
+        self._configure_gpu_memory()
 
     def _configure_persistent_cache(self, config):
         """Configure JAX persistent compilation cache.
@@ -194,11 +199,22 @@ class JAXConfig:
         if os.getenv("NLSQ_DISABLE_PERSISTENT_CACHE") == "1":
             return
 
-        # Set cache directory
-        cache_dir = os.getenv(
-            "NLSQ_JAX_CACHE_DIR",
-            os.path.expanduser("~/.cache/nlsq/jax_cache"),
-        )
+        # Set cache directory. Honor the standard JAX_COMPILATION_CACHE_DIR
+        # if the user already set it, so NLSQ doesn't silently redirect a
+        # pre-existing JAX cache configuration to its own default location.
+        cache_dir = os.getenv("JAX_COMPILATION_CACHE_DIR")
+        if cache_dir:
+            nlsq_cache_dir = os.getenv("NLSQ_JAX_CACHE_DIR")
+            if nlsq_cache_dir:
+                logging.info(
+                    f"Using JAX_COMPILATION_CACHE_DIR={cache_dir} "
+                    f"(NLSQ_JAX_CACHE_DIR={nlsq_cache_dir} ignored)",
+                )
+        else:
+            cache_dir = os.getenv(
+                "NLSQ_JAX_CACHE_DIR",
+                os.path.expanduser("~/.cache/nlsq/jax_cache"),
+            )
 
         try:
             # Create cache directory if it doesn't exist
@@ -222,7 +238,7 @@ class JAXConfig:
                 "Cold-start may be slower.",
             )
 
-    def _configure_gpu_memory(self, config):
+    def _configure_gpu_memory(self):
         """Configure GPU memory settings via XLA environment variables.
 
         Sets XLA_PYTHON_CLIENT_PREALLOCATE and XLA_PYTHON_CLIENT_MEM_FRACTION
@@ -262,16 +278,13 @@ class JAXConfig:
                     stacklevel=2,
                 )
 
-        # Configure memory preallocation via JAX config if explicitly requested
+        # Configure memory preallocation if explicitly requested. JAX has no
+        # documented config key for this — only the XLA_PYTHON_CLIENT_PREALLOCATE
+        # env var actually works — so set it directly, overriding any prior
+        # XLA_PYTHON_CLIENT_PREALLOCATE=true.
         if os.getenv("NLSQ_DISABLE_GPU_PREALLOCATION") == "1":
-            try:
-                config.update("jax_preallocate_gpu_memory", False)
-                logging.info("Disabled GPU memory preallocation via JAX config")
-            except AttributeError:
-                # JAX version may not support this option
-                logging.warning(
-                    "JAX version does not support jax_preallocate_gpu_memory option",
-                )
+            os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+            logging.info("Disabled GPU memory preallocation via XLA env var")
 
         self._gpu_memory_configured = True
 
@@ -400,13 +413,22 @@ class JAXConfig:
         >>> # Back to previous precision setting
         """
         instance = cls()
-        original_state = instance._x64_enabled
 
-        try:
-            cls.enable_x64(use_x64)
-            yield
-        finally:
-            cls.enable_x64(original_state)
+        # Hold _precision_lock for the whole enter/yield/exit span, not just
+        # each enable_x64() call individually. jax_enable_x64 is one
+        # process-wide flag; without this, two overlapping precision_context
+        # calls on different threads can each snapshot the other's transient
+        # state and restore the wrong value on exit. This uses a dedicated
+        # lock (not the general `_lock`) so a long-running body here doesn't
+        # block unrelated JAXConfig operations (singleton construction,
+        # memory config) on other threads.
+        with cls._precision_lock:
+            original_state = instance._x64_enabled
+            try:
+                cls.enable_x64(use_x64)
+                yield
+            finally:
+                cls.enable_x64(original_state)
 
     # Memory configuration methods
     @classmethod

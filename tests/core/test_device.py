@@ -574,6 +574,64 @@ class TestGPUDetectionWithMultipleDevices:
             assert output_str == "", f"Expected no output, got: {output_str}"
 
 
+class _StrOnlyDevice:
+    """Device stand-in with no `.platform` attribute, only `__str__`.
+
+    Used to exercise the string-fallback branch of `_is_accelerator_device`
+    the way a bare mock or an unusual JAX device object would.
+    """
+
+    def __init__(self, s: str):
+        self._s = s
+
+    def __str__(self) -> str:
+        return self._s
+
+
+class TestAcceleratorDeviceDetection:
+    """Regression tests: GPU/TPU detection must use `.platform`, not a
+    'cuda'-only substring match (previously misreported TPU/ROCm as CPU)."""
+
+    def test_platform_gpu_is_accelerator(self):
+        d = MagicMock()
+        d.platform = "gpu"
+        assert nlsq.device._is_accelerator_device(d) is True
+
+    def test_platform_tpu_is_accelerator(self):
+        d = MagicMock()
+        d.platform = "tpu"
+        assert nlsq.device._is_accelerator_device(d) is True
+
+    def test_platform_cpu_is_not_accelerator(self):
+        d = MagicMock()
+        d.platform = "cpu"
+        assert nlsq.device._is_accelerator_device(d) is False
+
+    def test_fallback_cuda_string(self):
+        assert nlsq.device._is_accelerator_device(_StrOnlyDevice("cuda:0")) is True
+
+    def test_fallback_tpu_string(self):
+        assert nlsq.device._is_accelerator_device(_StrOnlyDevice("TPU_0")) is True
+
+    def test_fallback_cpu_string(self):
+        assert nlsq.device._is_accelerator_device(_StrOnlyDevice("cpu:0")) is False
+
+    def test_get_device_info_counts_tpu_devices(self):
+        """get_device_info() must count TPU devices as accelerators."""
+        mock_tpu = MagicMock()
+        mock_tpu.platform = "tpu"
+        mock_jax = MagicMock()
+        mock_jax.__version__ = "0.0.0"
+        mock_jax.default_backend.return_value = "tpu"
+        mock_jax.devices.return_value = [mock_tpu, mock_tpu]
+
+        with patch.dict("sys.modules", {"jax": mock_jax}):
+            info = nlsq.device.get_device_info()
+
+        assert info["gpu_count"] == 2
+        assert info["using_gpu"] is True
+
+
 class TestPlatformGuard:
     """Test that GPU functions exit early on non-Linux platforms."""
 

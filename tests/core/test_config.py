@@ -124,6 +124,42 @@ class TestJAXConfig(unittest.TestCase):
         # Should restore to original
         self.assertEqual(is_x64_enabled(), original)
 
+    def test_precision_context_concurrent_threads_restore_true_original(self):
+        """Regression test: concurrent precision_context calls on different
+        threads must fully serialize and always restore the true original
+        x64 state. Before precision_context held a lock across its whole
+        enter/yield/exit span, a "crossing" (non-nested) overlap between two
+        threads could restore a transient state instead of the real
+        original — e.g. thread A sets False, thread B (reading the
+        transient False as its "original") sets True then restores to
+        False, then A's later restore-to-True is a no-op because A's
+        snapshot was already True. Full serialization prevents this."""
+        import threading
+
+        original = is_x64_enabled()
+        errors = []
+
+        def worker(use_x64):
+            try:
+                with precision_context(use_x64=use_x64):
+                    if is_x64_enabled() != use_x64:
+                        errors.append(
+                            f"expected {use_x64}, got {is_x64_enabled()}",
+                        )
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=worker, args=(i % 2 == 0,)) for i in range(8)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(is_x64_enabled(), original)
+
 
 class TestJAXConfigIntegration(unittest.TestCase):
     """Integration tests for JAXConfig with JAX library."""
@@ -162,6 +198,57 @@ class TestJAXConfigIntegration(unittest.TestCase):
 
         except ImportError:
             self.skipTest("JAX not installed")
+
+    def test_persistent_cache_honors_standard_jax_env_var(self):
+        """A pre-existing JAX_COMPILATION_CACHE_DIR must win over NLSQ's
+        own default, so NLSQ doesn't silently redirect a cache location the
+        user (or embedding process) already configured."""
+        import tempfile
+        from unittest.mock import MagicMock
+
+        config = JAXConfig()
+        mock_jax_config = MagicMock()
+
+        with tempfile.TemporaryDirectory() as standard_dir:
+            with patch.dict(
+                os.environ,
+                {
+                    "JAX_COMPILATION_CACHE_DIR": standard_dir,
+                    "NLSQ_JAX_CACHE_DIR": "/tmp/should-not-be-used",
+                },
+            ):
+                os.environ.pop("NLSQ_DISABLE_PERSISTENT_CACHE", None)
+                config._configure_persistent_cache(mock_jax_config)
+
+            mock_jax_config.update.assert_any_call(
+                "jax_compilation_cache_dir",
+                standard_dir,
+            )
+
+    def test_disable_gpu_preallocation_sets_xla_env_var(self):
+        """NLSQ_DISABLE_GPU_PREALLOCATION=1 must force
+        XLA_PYTHON_CLIENT_PREALLOCATE=false. The JAX config key this used
+        to call ("jax_preallocate_gpu_memory") doesn't exist on current JAX
+        and silently no-ops (AttributeError), so the env var is the only
+        mechanism that actually works."""
+        config = JAXConfig()
+        was_configured = config._gpu_memory_configured
+        config._gpu_memory_configured = False
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "NLSQ_DISABLE_GPU_PREALLOCATION": "1",
+                    "XLA_PYTHON_CLIENT_PREALLOCATE": "true",
+                },
+            ):
+                config._configure_gpu_memory()
+                self.assertEqual(
+                    os.environ.get("XLA_PYTHON_CLIENT_PREALLOCATE"),
+                    "false",
+                )
+        finally:
+            config._gpu_memory_configured = was_configured
 
 
 class TestMemoryConfig(unittest.TestCase):

@@ -190,7 +190,8 @@ Configure stability defaults via environment:
    # Disable persistent JAX cache
    export NLSQ_DISABLE_PERSISTENT_CACHE=1
 
-   # Custom JAX cache directory
+   # Custom JAX cache directory. The standard JAX_COMPILATION_CACHE_DIR, if
+   # set, takes precedence over this.
    export NLSQ_JAX_CACHE_DIR=/tmp/nlsq_cache
 
    # Minimum compilation time to cache
