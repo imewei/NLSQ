@@ -275,6 +275,36 @@ class AdaptiveHybridStreamingOptimizer:
                 exc_info=True,
             )
 
+    def _update_global_best(
+        self,
+        loss_value: float,
+        params: jnp.ndarray,
+        n_points: int,
+    ) -> None:
+        """Update self.best_cost_global/best_params_global from a Phase 1 loss.
+
+        Converts Phase 1's MSE to an SSR-equivalent (* n_points) so it stays
+        comparable with Phase 2's SSR-based cost tracking in the SAME
+        best_cost_global (see _run_phase2_gauss_newton) -- without this,
+        Phase 2's `new_cost < best_cost_global` could essentially never fire
+        once Phase 1 has run, silently freezing best_params_global at
+        wherever Phase 1 left it.
+
+        Skipped entirely when residual weighting is enabled: Phase 1's
+        weighted loss (sum(w*r^2)/sum(w)) is not convertible to unweighted
+        SSR by a simple n_points scale, and Phase 2 never applies residual
+        weighting (it's a Phase-1-only feature), so a weighted Phase 1 loss
+        is not comparable to Phase 2's cost at all. Silently storing an
+        incomparable number here would be worse than leaving the tracker
+        alone for Phase 2 (or a prior fit's None/inf) to set.
+        """
+        if self.config.enable_residual_weighting:
+            return
+        ssr_equivalent = float(loss_value) * n_points
+        if ssr_equivalent < self.best_cost_global:
+            self.best_cost_global = ssr_equivalent
+            self.best_params_global = params
+
     def _setup_normalization(
         self,
         model: Callable,
@@ -1507,20 +1537,8 @@ class AdaptiveHybridStreamingOptimizer:
         # params (see jax.value_and_grad(loss_fn)(params, ...) above), not at
         # new_params -- pairing it with new_params here mislabeled the just-
         # taken (possibly divergent) step with the previous step's loss.
-        #
-        # loss_value is Phase 1's MSE (jnp.mean(residuals**2)), but Phase 2
-        # compares SSR (jnp.sum(residuals**2)) into this SAME best_cost_global
-        # (see _run_phase2_gauss_newton below). For n_points > 1, SSR >> MSE,
-        # so without converting units here, Phase 2's `new_cost < best_cost_global`
-        # would essentially never fire once Phase 1 has run -- best_params_global
-        # would silently freeze at wherever Phase 1 left it, and fit()'s
-        # Phase-2 exception-fallback path would return Phase 1's endpoint
-        # while discarding all of Phase 2's actual progress. Convert to an
-        # SSR-equivalent so both phases populate this tracker in the same units.
-        ssr_equivalent = float(loss_value) * len(x_batch)
-        if ssr_equivalent < self.best_cost_global:
-            self.best_cost_global = ssr_equivalent
-            self.best_params_global = params
+        # See _update_global_best for the MSE->SSR unit conversion this needs.
+        self._update_global_best(float(loss_value), params, len(x_batch))
 
         # Store optimizer state for checkpointing
         self.phase1_optimizer_state = new_opt_state
@@ -2263,11 +2281,29 @@ class AdaptiveHybridStreamingOptimizer:
                 )
 
                 if should_switch:
+                    # loss_value is the loss at params_before_step (the point
+                    # BEFORE the just-taken step), not at current_params (the
+                    # step's result) -- see the pairing-fix comment above.
+                    # That means the final step's own improvement was never
+                    # compared against best_loss (there's no next iteration
+                    # to do it), so best_params could silently lag one step
+                    # behind current_params. Evaluate once, here, to close
+                    # that gap and to report the correct final_loss for
+                    # final_params (loss_value would mislabel it too).
+                    final_loss_value = float(loss_fn(current_params, x_data, y_data))
+                    if final_loss_value < best_loss:
+                        best_loss = final_loss_value
+                        best_params = current_params
+                    self._update_global_best(
+                        final_loss_value,
+                        current_params,
+                        len(x_data),
+                    )
                     return self._build_phase1_result(
                         final_params=current_params,
                         best_params=best_params,
                         best_loss=best_loss,
-                        final_loss=loss_value,
+                        final_loss=final_loss_value,
                         iterations=iteration + 1,
                         switch_reason=reason,
                         lr_mode=lr_mode,
@@ -2284,11 +2320,17 @@ class AdaptiveHybridStreamingOptimizer:
             prev_loss = loss_value
 
         # Maximum iterations reached (this shouldn't happen if max_iter criterion active)
+        # Same final-step evaluation gap as the should_switch exit above.
+        final_loss_value = float(loss_fn(current_params, x_data, y_data))
+        if final_loss_value < best_loss:
+            best_loss = final_loss_value
+            best_params = current_params
+        self._update_global_best(final_loss_value, current_params, len(x_data))
         return self._build_phase1_result(
             final_params=current_params,
             best_params=best_params,
             best_loss=best_loss,
-            final_loss=loss_value,
+            final_loss=final_loss_value,
             iterations=self.config.max_warmup_iterations,
             switch_reason="Maximum iterations reached",
             lr_mode=lr_mode,

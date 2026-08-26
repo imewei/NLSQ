@@ -595,3 +595,123 @@ class TestGroupVarianceBestCostSeedIncludesRegularization:
         # should have pulled a and b together from their p0 spread of 4.
         assert abs(float(jnp.mean(jnp.asarray(final_params))) - 4.0) < 0.5
         assert abs(final_params[0] - final_params[1]) < abs(p0[0] - p0[1])
+
+
+class TestPhase1FinalStepCapturedInBestParams:
+    """Codex (final verification pass) PR review finding: because loss_value
+    is paired with params_before_step (the pre-step point), the LAST L-BFGS
+    step's own improvement is never compared against best_loss -- there's no
+    NEXT iteration to evaluate a loss at the step's result. With exactly one
+    Phase 1 iteration, best_params could silently stay at p0 even though the
+    single step demonstrably improved the loss, and fit() seeds Phase 2 from
+    best_params (not final_params).
+    """
+
+    def test_single_iteration_improvement_is_captured(self):
+        config = HybridStreamingConfig(
+            normalize=False,
+            warmup_iterations=1,
+            max_warmup_iterations=1,  # forces exactly one Phase 1 step
+            lbfgs_initial_step_size=1.0,
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        def model(x, a, b):
+            return a * x + b
+
+        x = jnp.linspace(0, 1, 50)
+        y = 2.0 * x + 1.0
+        # p0 far enough from the optimum that one L-BFGS step measurably
+        # reduces the loss.
+        p0 = jnp.array([10.0, 10.0])
+
+        result = optimizer._run_phase1_warmup((x, y), model, p0, None)
+        loss_fn = optimizer._create_warmup_loss_fn()
+
+        loss_at_p0 = float(loss_fn(p0, x, y))
+        loss_at_final = float(loss_fn(result["final_params"], x, y))
+        assert loss_at_final < loss_at_p0, (
+            "test setup invalid: the single step must actually improve the loss"
+        )
+
+        # The one step's improvement must be captured: best_params should be
+        # final_params (there's only one step, so "best" can't be p0 if the
+        # step improved things), and best_loss must match the true final loss.
+        np.testing.assert_allclose(
+            np.asarray(result["best_params"]),
+            np.asarray(result["final_params"]),
+        )
+        assert result["best_loss"] == pytest.approx(loss_at_final, rel=1e-6)
+        assert result["best_loss"] < loss_at_p0
+
+    def test_global_best_tracker_also_captures_final_step(self):
+        config = HybridStreamingConfig(
+            normalize=False,
+            warmup_iterations=1,
+            max_warmup_iterations=1,
+            lbfgs_initial_step_size=1.0,
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        def model(x, a, b):
+            return a * x + b
+
+        x = jnp.linspace(0, 1, 50)
+        y = 2.0 * x + 1.0
+        p0 = jnp.array([10.0, 10.0])
+
+        result = optimizer._run_phase1_warmup((x, y), model, p0, None)
+
+        np.testing.assert_allclose(
+            np.asarray(optimizer.best_params_global),
+            np.asarray(result["final_params"]),
+        )
+
+
+class TestResidualWeightingDoesNotCorruptGlobalBestTracker:
+    """Codex (final verification pass) PR review finding: the MSE->SSR
+    conversion for the cross-phase best_cost_global tracker is only valid
+    for UNWEIGHTED Phase 1 loss. With enable_residual_weighting=True, Phase 1
+    returns sum(w*r^2)/sum(w), which is not convertible to unweighted SSR by
+    a simple n_points scale -- Phase 2 never applies residual weighting, so
+    the two would be compared in incompatible units. _update_global_best must
+    skip the cross-phase tracker update entirely in that case rather than
+    store an incomparable number.
+    """
+
+    def test_global_tracker_untouched_when_residual_weighting_enabled(self):
+        config = HybridStreamingConfig(
+            normalize=False,
+            enable_residual_weighting=True,
+            residual_weights=[1.0, 2.0],
+        )
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        def model(x, a, b):
+            return a * x[:, 1] + b
+
+        x = jnp.stack([jnp.zeros(20), jnp.linspace(0, 1, 20)], axis=1)
+        x = x.at[:10, 0].set(0).at[10:, 0].set(1)  # group index in column 0
+        y = 2.0 * x[:, 1] + 1.0
+        optimizer._setup_normalization(model, jnp.array([1.0, 1.0]), None)
+
+        assert optimizer.best_cost_global == float("inf")
+        optimizer._update_global_best(0.01, jnp.array([2.0, 1.0]), len(x))
+        assert optimizer.best_cost_global == float("inf"), (
+            "best_cost_global must stay untouched when residual weighting "
+            "is enabled -- the weighted loss is not comparable to Phase 2's "
+            "unweighted SSR via a simple n_points scale"
+        )
+        assert optimizer.best_params_global is None
+
+    def test_global_tracker_updates_normally_when_weighting_disabled(self):
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(normalize=False),
+        )
+        assert optimizer.best_cost_global == float("inf")
+        optimizer._update_global_best(0.01, jnp.array([2.0, 1.0]), 20)
+        assert optimizer.best_cost_global == pytest.approx(0.2)
+        np.testing.assert_allclose(
+            np.asarray(optimizer.best_params_global),
+            np.array([2.0, 1.0]),
+        )
