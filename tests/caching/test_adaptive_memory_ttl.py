@@ -106,7 +106,9 @@ class TestAdaptiveMemoryTTL(unittest.TestCase):
         self.assertEqual(len(manager._call_frequency_tracker), 5)
 
         # All timestamps should be recent (generous 10s window for slow CI)
-        now = time.time()
+        # MemoryManager records these with time.monotonic() (not time.time())
+        # so TTL expiry can't be fooled by a wall-clock adjustment.
+        now = time.monotonic()
         for ts in manager._call_frequency_tracker:
             self.assertLess(now - ts, 10.0)
 
