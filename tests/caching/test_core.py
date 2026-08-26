@@ -347,13 +347,14 @@ class TestFunctionComparison(unittest.TestCase):
         adder3 = make_adder(2)
 
         # get_function_hash keys closures by per-object identity (not just
-        # source text), so two closures never collide even when they
-        # happen to capture the same value - this is what prevents the
-        # real bug this cache exists to avoid: two closures built by the
-        # same factory capturing *different* data silently sharing a
-        # compiled-function cache entry (see test_closures_with_same_bytecode_
-        # different_constants_dont_collide in test_compilation_cache.py for
-        # the regression that motivated this).
+        # source text), so two distinct closure objects never collide -
+        # whether they capture the same value or different values. That's
+        # what prevents the real bug this cache exists to avoid: two
+        # closures built by the same factory capturing *different* data
+        # silently sharing a compiled-function cache entry (see
+        # test_closures_with_same_bytecode_different_constants_dont_collide
+        # in test_compilation_cache.py for the regression that motivated
+        # this).
         self.assertFalse(compare_functions(adder1, adder2))
         self.assertFalse(compare_functions(adder1, adder3))
 
