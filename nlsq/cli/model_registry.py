@@ -45,6 +45,7 @@ from typing import Any
 from nlsq.cli.errors import ModelError
 from nlsq.cli.model_validation import (
     get_audit_logger,
+    resource_limits,
     validate_model,
     validate_path,
 )
@@ -440,7 +441,8 @@ class ModelRegistry:
                 )
 
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            with resource_limits():
+                spec.loader.exec_module(module)
             return module
         except SyntaxError as e:
             raise ModelError(

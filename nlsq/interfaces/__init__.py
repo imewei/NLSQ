@@ -67,7 +67,11 @@ from nlsq.interfaces.orchestration_protocol import (
     StreamingCoordinatorProtocol,
     StreamingDecision,
 )
-from nlsq.interfaces.result_protocol import ResultProtocol
+from nlsq.interfaces.result_protocol import (
+    CurveFitResultProtocol,
+    LeastSquaresResultProtocol,
+    ResultProtocol,
+)
 
 __all__ = [
     "ArrayDataSource",
@@ -77,11 +81,13 @@ __all__ = [
     "CovarianceComputerProtocol",
     "CovarianceResult",
     "CurveFitProtocol",
+    "CurveFitResultProtocol",
     "DataPreprocessorProtocol",
     "DataSourceProtocol",
     "DictCache",
     "JacobianProtocol",
     "LeastSquaresOptimizerProtocol",
+    "LeastSquaresResultProtocol",
     "OptimizationConfig",
     "OptimizationSelectorProtocol",
     "OptimizerProtocol",

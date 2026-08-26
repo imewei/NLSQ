@@ -118,6 +118,8 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "dis",
         "code",
         "codeop",
+        # Alternate code-execution entry points (bypass the exec/eval name check)
+        "runpy",
     },
 )
 
@@ -363,6 +365,31 @@ def _accelerator_backend_active() -> bool:
         return False
 
 
+def _current_virtual_memory_bytes() -> int | None:
+    """Current virtual address-space size (VmSize) of this process, in bytes.
+
+    Used as the baseline for the RLIMIT_AS cap in ``resource_limits`` so the
+    cap reflects headroom above what the interpreter already holds, rather
+    than an absolute ceiling that ignores it (a process that has already
+    imported JAX/NumPy routinely sits well above a few hundred MB before any
+    model code runs).
+
+    Returns None when VSZ cannot be measured (e.g. no /proc, as on macOS).
+    Peak RSS is NOT an acceptable substitute here: it can sit far below VSZ
+    for a JAX process, which would under-set the cap and reproduce the very
+    "next allocation fails" failure this baseline exists to avoid.
+    """
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmSize:"):
+                    # Format: "VmSize:\t  123456 kB"
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 @contextmanager
 def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     """Context manager for resource-limited execution.
@@ -445,27 +472,43 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     # MemoryError, which would take down the whole process rather than sandbox
     # it. So when a JAX accelerator backend is already active we skip the AS cap
     # and rely on the timeout alone.
-    enforce_mem = not _accelerator_backend_active()
+    accelerator_active = _accelerator_backend_active()
+    current_vsize = None if accelerator_active else _current_virtual_memory_bytes()
+    enforce_mem = current_vsize is not None
     # Placeholders (ints) so mypy sees a concrete tuple type for setrlimit; they
     # are always reassigned from getrlimit before use when enforce_mem is True,
     # and only read inside `if enforce_mem` guards.
     old_soft = old_hard = 0
     effective_limit = 0
     if enforce_mem:
+        assert current_vsize is not None  # guaranteed by enforce_mem's definition
         old_soft, old_hard = resource.getrlimit(resource.RLIMIT_AS)
         limit_bytes = memory_mb * 1024 * 1024
+        # memory_mb is a budget ON TOP OF whatever virtual address space the
+        # interpreter already holds, not an absolute ceiling. A process that
+        # has already imported JAX/NumPy routinely sits at several hundred MB
+        # of VSZ before any model code runs; capping RLIMIT_AS at a bare
+        # memory_mb would leave zero headroom and fail the very next
+        # allocation (even a new thread stack) instead of the model's own
+        # memory use.
+        effective_limit = current_vsize + limit_bytes
         # Only tighten the limit, never loosen it
-        effective_limit = limit_bytes
         if old_hard != resource.RLIM_INFINITY:
             effective_limit = min(effective_limit, old_hard)
         if old_soft != resource.RLIM_INFINITY:
             effective_limit = min(effective_limit, old_soft)
-    else:
+    elif accelerator_active:
         logger.warning(
             "JAX accelerator backend active; skipping RLIMIT_AS memory cap "
             "(virtual address-space limits are incompatible with GPU/TPU "
             "runtimes and crash CUDA initialization). Timeout enforcement still "
             "applies.",
+        )
+    else:
+        logger.debug(
+            "Could not determine current virtual memory size on this platform; "
+            "skipping RLIMIT_AS memory cap to avoid under-setting it below "
+            "already-committed address space. Timeout enforcement still applies.",
         )
 
     try:

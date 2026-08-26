@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     import jax
+    import numpy as np
 
     from nlsq.result.optimize_result import OptimizeResult
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
@@ -109,7 +110,7 @@ class DataPreprocessorProtocol(Protocol):
         self,
         sigma: ArrayLike | None,
         ydata_shape: tuple[int, ...],
-    ) -> jax.Array | None:
+    ) -> np.ndarray | None:
         """Validate and convert sigma to appropriate format.
 
         Args:
@@ -117,7 +118,7 @@ class DataPreprocessorProtocol(Protocol):
             ydata_shape: Shape of ydata for compatibility check
 
         Returns:
-            Validated JAX array or None
+            Validated NumPy array or None
 
         Raises:
             ValueError: If sigma shape is incompatible with ydata
