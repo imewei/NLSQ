@@ -31,6 +31,18 @@ class StreamingCoordinator:
     3. Strategy selection based on memory pressure
     4. Configuration of chunked/hybrid strategies
 
+    .. warning::
+       Not currently wired into the live ``fit()``/``curve_fit()`` workflow
+       path -- ``workflow='auto'`` uses ``nlsq.core.workflow.MemoryBudgetSelector``
+       instead, which is not the same code and uses a different, more
+       conservative memory-decision formula (a 1.3x SVD-workspace multiplier,
+       fixed solver overhead, and a 10% safety margin on top of the chunked
+       threshold; see ``_decide_auto`` below, which intentionally does not
+       replicate that). If this coordinator is ever wired into the live path,
+       its strategy boundary will disagree with ``MemoryBudgetSelector``'s
+       right at the point where the two diverge -- reconcile the formulas
+       before doing so.
+
     Example:
         >>> coordinator = StreamingCoordinator()
         >>> decision = coordinator.decide(
@@ -337,7 +349,9 @@ class StreamingCoordinator:
         peak_mb = data_mb + jacobian_mb
         pressure_note = f" (memory pressure {memory_pressure:.2f})"
 
-        # Decision tree from MemoryBudgetSelector
+        # Decision tree independent of MemoryBudgetSelector -- see the
+        # class-level warning above about the formula intentionally not
+        # matching that class's.
         if data_mb > usable_mb:
             # Data alone exceeds memory -> streaming
             config = self.configure_hybrid(n_data, n_params, usable_mb)

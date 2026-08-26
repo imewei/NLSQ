@@ -138,11 +138,18 @@ class ParameterSensitivityAnalyzer:
 
         n_params = jacobian.shape[1]
 
-        # Compute FIM
-        fim = self._compute_fim(jacobian)
-
-        # Analyze FIM eigenvalue spectrum
-        return self._analyze_eigenvalue_spectrum(fim, n_params, start_time)
+        # Analyze the eigenvalue spectrum directly from SVD(jacobian) rather
+        # than forming FIM = J.T @ J first. Forming the normal equations
+        # squares J's condition number before analysis, which can lose
+        # several orders of magnitude of precision to float64 rounding in
+        # the explicit matrix product -- exactly in the ill-conditioned
+        # ("sloppy") regime this diagnostic exists to characterize.
+        return self._analyze_eigenvalue_spectrum(
+            jacobian,
+            n_params,
+            start_time,
+            from_jacobian=True,
+        )
 
     def analyze_from_fim(self, fim: np.ndarray) -> ParameterSensitivityReport:
         """Analyze parameter sensitivity spectrum from a pre-computed FIM.
@@ -285,20 +292,28 @@ class ParameterSensitivityAnalyzer:
 
     def _analyze_eigenvalue_spectrum(
         self,
-        fim: np.ndarray,
+        fim_or_jacobian: np.ndarray,
         n_params: int,
         start_time: float,
+        from_jacobian: bool = False,
     ) -> ParameterSensitivityReport:
         """Analyze the eigenvalue spectrum of the FIM.
 
         Parameters
         ----------
-        fim : np.ndarray
-            Fisher Information Matrix.
+        fim_or_jacobian : np.ndarray
+            Fisher Information Matrix, or the Jacobian itself when
+            ``from_jacobian=True``.
         n_params : int
             Number of parameters.
         start_time : float
             Start time for timing computation.
+        from_jacobian : bool
+            If True, ``fim_or_jacobian`` is the Jacobian and eigenstructure
+            is computed directly from SVD(jacobian) without ever forming
+            FIM = J.T @ J. If False, ``fim_or_jacobian`` is a pre-computed
+            FIM (used by ``analyze_from_fim``, where the caller already
+            chose to form it).
 
         Returns
         -------
@@ -310,7 +325,16 @@ class ParameterSensitivityAnalyzer:
 
         # Compute eigenvalue decomposition
         try:
-            eigenvalues, eigenvectors = self._compute_eigendecomposition(fim)
+            if from_jacobian:
+                eigenvalues, eigenvectors = (
+                    self._compute_eigendecomposition_from_jacobian(
+                        fim_or_jacobian,
+                    )
+                )
+            else:
+                eigenvalues, eigenvectors = self._compute_eigendecomposition(
+                    fim_or_jacobian,
+                )
         except Exception as e:
             # Graceful degradation on eigenvalue computation failure
             computation_time = (time.perf_counter() - start_time) * 1000
@@ -435,6 +459,52 @@ class ParameterSensitivityAnalyzer:
             sort_idx = np.argsort(eigenvalues)[::-1]
             eigenvalues = eigenvalues[sort_idx]
             eigenvectors = eigenvectors[:, sort_idx]
+
+        # Ensure eigenvalues are non-negative (numerical precision may give tiny negatives)
+        eigenvalues = np.maximum(eigenvalues, 0.0)
+
+        return eigenvalues, eigenvectors
+
+    def _compute_eigendecomposition_from_jacobian(
+        self,
+        jacobian: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Compute FIM eigendecomposition directly from SVD(jacobian).
+
+        FIM = J.T @ J has eigenvalues s**2 and eigenvectors V, where
+        J = U @ diag(s) @ V.T is the SVD of J -- this is analytically
+        exact and avoids ever forming or decomposing J.T @ J, which would
+        square J's condition number before analysis.
+
+        Parameters
+        ----------
+        jacobian : np.ndarray
+            Jacobian matrix of shape (n_data, n_params).
+
+        Returns
+        -------
+        eigenvalues : np.ndarray
+            Eigenvalues (s**2) sorted in descending order.
+        eigenvectors : np.ndarray
+            Eigenvectors as columns, corresponding to sorted eigenvalues.
+        """
+        try:
+            from nlsq.stability.svd_fallback import compute_svd_with_fallback
+
+            # compute_svd_with_fallback returns V already (not transposed)
+            _, s, eigenvectors = compute_svd_with_fallback(jacobian)
+            s = np.asarray(s)
+            eigenvectors = np.asarray(eigenvectors)
+        except ImportError:
+            _, s, vt = np.linalg.svd(jacobian, full_matrices=False)
+            eigenvectors = vt.T
+
+        eigenvalues = s**2
+
+        # Sort in descending order (should already be sorted by SVD)
+        sort_idx = np.argsort(eigenvalues)[::-1]
+        eigenvalues = eigenvalues[sort_idx]
+        eigenvectors = eigenvectors[:, sort_idx]
 
         # Ensure eigenvalues are non-negative (numerical precision may give tiny negatives)
         eigenvalues = np.maximum(eigenvalues, 0.0)

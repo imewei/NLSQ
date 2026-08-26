@@ -9,6 +9,8 @@ during optimization iterations. It detects:
   across parameters
 - Gradient stagnation (GRAD-003): Gradient norm remains nearly constant
   for multiple iterations
+- Exploding gradients (GRAD-004): Gradient magnitude grows very large,
+  independent of NaN/Inf or cross-parameter imbalance
 
 Memory usage is bounded at <1KB regardless of iteration count using:
 - Sliding window for gradient norm history (configurable, default 100)
@@ -429,11 +431,17 @@ class GradientMonitor:
         if stagnation_detected:
             issues.append(self._create_grad_003_issue(norm_history))
 
+        # Check for exploding gradients (GRAD-004)
+        exploding_detected = self._detect_exploding_gradients(norm_history)
+        if exploding_detected:
+            issues.append(self._create_grad_004_issue(norm_history))
+
         # Compute health score
         health_score = self._compute_health_score(
             vanishing_detected,
             imbalance_detected,
             stagnation_detected,
+            exploding_detected,
         )
 
         # Determine overall health status
@@ -452,6 +460,7 @@ class GradientMonitor:
             max_imbalance_ratio=self._max_imbalance_ratio,
             has_numerical_issues=self._has_numerical_issues,
             vanishing_detected=vanishing_detected,
+            exploding_detected=exploding_detected,
             imbalance_detected=imbalance_detected,
             stagnation_detected=stagnation_detected,
             issues=issues,
@@ -527,12 +536,49 @@ class GradientMonitor:
         # Cost is significant if it's above a small epsilon
         cost_significant = avg_recent_cost > 1e-10
 
-        # Also check if gradient has dropped significantly from initial
+        # Check if gradient has dropped significantly from initial (catches
+        # decay from a normal-sized start).
         gradient_dropped = (
             self._initial_gradient_norm > 0 and avg_recent_norm < relative_threshold
         )
 
-        return gradient_dropped and cost_significant
+        # Also check the absolute threshold directly. If the gradient is
+        # already small at iteration 1 (stuck in a flat region from the
+        # start), relative_threshold becomes even smaller than the
+        # already-tiny gradient and gradient_dropped never fires -- this
+        # catches that case independent of what the initial norm was.
+        gradient_absolutely_small = avg_recent_norm < threshold
+
+        return (gradient_dropped or gradient_absolutely_small) and cost_significant
+
+    def _detect_exploding_gradients(self, norm_history: list[float]) -> bool:
+        """Detect if gradients are exploding to very large magnitudes.
+
+        Complements has_numerical_issues (NaN/Inf) and the cross-parameter
+        imbalance check (GRAD-002): a uniformly huge but finite, balanced
+        gradient triggers neither of those, so this checks the absolute
+        magnitude directly.
+
+        Parameters
+        ----------
+        norm_history : list[float]
+            Recent gradient norm history.
+
+        Returns
+        -------
+        bool
+            True if exploding gradients detected.
+        """
+        if len(norm_history) < 1:
+            return False
+
+        recent_norms = norm_history[-10:] if len(norm_history) >= 10 else norm_history
+        max_recent_norm = np.max(recent_norms)
+
+        return bool(
+            np.isfinite(max_recent_norm)
+            and max_recent_norm > self.config.exploding_threshold,
+        )
 
     def _detect_gradient_imbalance(self) -> bool:
         """Detect if gradient magnitudes are severely imbalanced across parameters.
@@ -591,6 +637,7 @@ class GradientMonitor:
         vanishing: bool,
         imbalance: bool,
         stagnation: bool,
+        exploding: bool = False,
     ) -> float:
         """Compute overall gradient health score.
 
@@ -604,6 +651,8 @@ class GradientMonitor:
             Whether gradient imbalance was detected.
         stagnation : bool
             Whether gradient stagnation was detected.
+        exploding : bool
+            Whether exploding gradients were detected.
 
         Returns
         -------
@@ -619,6 +668,8 @@ class GradientMonitor:
             score -= 0.3
         if stagnation:
             score -= 0.2
+        if exploding:
+            score -= 0.3
         if self._has_numerical_issues:
             score -= 0.2
 
@@ -696,6 +747,39 @@ class GradientMonitor:
                 "initial_gradient_norm": self._initial_gradient_norm,
             },
             recommendation=get_recommendation("GRAD-001"),
+        )
+
+    def _create_grad_004_issue(self, norm_history: list[float]) -> ModelHealthIssue:
+        """Create GRAD-004 issue for exploding gradients.
+
+        Parameters
+        ----------
+        norm_history : list[float]
+            Recent gradient norm history.
+
+        Returns
+        -------
+        ModelHealthIssue
+            Issue describing exploding gradients.
+        """
+        recent_norms = norm_history[-10:] if len(norm_history) >= 10 else norm_history
+        max_recent_norm = float(np.max(recent_norms))
+
+        return ModelHealthIssue(
+            category=IssueCategory.GRADIENT,
+            severity=IssueSeverity.CRITICAL,
+            code="GRAD-004",
+            message=(
+                f"Exploding gradients detected: gradient norm ({max_recent_norm:.2e}) "
+                f"exceeds threshold ({self.config.exploding_threshold:.2e}), "
+                "indicating a near-singular Jacobian or numerical instability."
+            ),
+            affected_parameters=None,
+            details={
+                "max_recent_gradient_norm": max_recent_norm,
+                "threshold": self.config.exploding_threshold,
+            },
+            recommendation=get_recommendation("GRAD-004"),
         )
 
     def _create_grad_002_issue(self) -> ModelHealthIssue:

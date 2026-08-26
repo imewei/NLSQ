@@ -743,9 +743,17 @@ def curve_fit_large(
     """Curve fitting with automatic memory management for large datasets.
 
     Automatically selects processing strategy based on dataset size:
-    - Small (< 1M points): Standard curve_fit
-    - Medium (1M - 100M points): Chunked processing
-    - Large (> 100M points): Streaming optimization
+    - Below ``size_threshold`` (default 1M points): standard ``curve_fit``
+    - At or above ``size_threshold``: chunked processing (each chunk is
+      fit independently and combined via precision-weighted GLS)
+
+    There is currently no automatic escalation to a separate "streaming"
+    algorithm for very large datasets -- chunked processing is used
+    regardless of how far above ``size_threshold`` the dataset is. To use
+    the full-dataset streaming optimizer (``AdaptiveHybridStreamingOptimizer``,
+    which accumulates Gauss-Newton statistics across the whole dataset
+    instead of fitting each chunk independently) explicitly, pass
+    ``method="hybrid_streaming"``.
 
     Parameters
     ----------

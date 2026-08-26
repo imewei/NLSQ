@@ -46,7 +46,9 @@ def _create_fitness_function(  # noqa: C901
 ) -> Callable[[jax.Array], jax.Array]:
     """Create a fitness function for CMA-ES optimization.
 
-    CMA-ES maximizes fitness, so we return negative SSR (sum of squared residuals).
+    evosax's CMA-ES minimizes fitness (best_solution/best_fitness are tracked
+    via argmin, and default fitness-shaping ranks ascending), so we return the
+    raw SSR (sum of squared residuals) directly -- do not negate it.
 
     Parameters
     ----------
@@ -167,7 +169,7 @@ def _create_fitness_function(  # noqa: C901
                     valid_mask,
                 )
 
-            return jnp.where(jnp.isfinite(ssr_total), -ssr_total, -jnp.inf)
+            return jnp.where(jnp.isfinite(ssr_total), ssr_total, jnp.inf)
 
         fitness_single = fitness_single_streaming
 
@@ -200,7 +202,7 @@ def _create_fitness_function(  # noqa: C901
             ssr = jnp.sum(residuals**2)
 
             # Handle NaN/Inf (assign worst fitness)
-            fitness = jnp.where(jnp.isfinite(ssr), -ssr, -jnp.inf)
+            fitness = jnp.where(jnp.isfinite(ssr), ssr, jnp.inf)
 
             return fitness
 
@@ -608,9 +610,9 @@ class CMAESOptimizer:
         key, subkey = jax.random.split(key)
         state = es.init(subkey, initial_solution, params)
 
-        # Track best solution
+        # Track best solution (evosax/NLSQ fitness is raw SSR: lower is better)
         best_solution = initial_solution
-        best_fitness = jnp.array(-jnp.inf)
+        best_fitness = jnp.array(jnp.inf)
         convergence_reason = "max_generations"
 
         # Progress milestones for logging (25%, 50%, 75%)
@@ -636,8 +638,8 @@ class CMAESOptimizer:
             # Update CMA-ES state
             state, _metrics = es.tell(key_tell, population, fitness, state, params)
 
-            # Track best (CMA-ES maximizes, so higher is better)
-            if state.best_fitness > best_fitness:
+            # Track best (fitness is raw SSR, so lower is better)
+            if state.best_fitness < best_fitness:
                 best_fitness = state.best_fitness
                 best_solution = state.best_solution
 
@@ -734,6 +736,7 @@ class CMAESOptimizer:
         total_generations = 0
         convergence_reason = "max_restarts"
         final_sigma = self.config.sigma
+        original_solution = initial_solution
 
         while not restarter.exhausted:
             # Get population size for this run
@@ -754,9 +757,9 @@ class CMAESOptimizer:
             key, subkey = jax.random.split(key)
             state = es.init(subkey, initial_solution, params)
 
-            # Track best for this run
+            # Track best for this run (fitness is raw SSR: lower is better)
             run_best_solution = initial_solution
-            run_best_fitness = jnp.array(-jnp.inf)
+            run_best_fitness = jnp.array(jnp.inf)
 
             # Run optimization loop
             stagnation_counter = 0
@@ -768,8 +771,8 @@ class CMAESOptimizer:
                 fitness = fitness_fn(population)
                 state, _metrics = es.tell(key_tell, population, fitness, state, params)
 
-                # Track best for this run
-                if state.best_fitness > run_best_fitness:
+                # Track best for this run (fitness is raw SSR: lower is better)
+                if state.best_fitness < run_best_fitness:
                     run_best_fitness = state.best_fitness
                     run_best_solution = state.best_solution
 
@@ -838,19 +841,31 @@ class CMAESOptimizer:
             # Register restart for next iteration
             restarter.register_restart()
 
-            # Use current best as starting point for next run
-            # (adds exploitation around best solution)
-            if restarter.best_solution is not None:
-                # 50% chance to restart from best, 50% from origin
+            # Choose the next run's starting point: best-so-far (exploit),
+            # the original starting point, or a fresh random point drawn
+            # uniformly from the unbounded-space search region (explore) --
+            # true BIPOP (Hansen 2009) randomizes large-population restarts
+            # so a bad first basin doesn't anchor every subsequent run.
+            key, subkey = jax.random.split(key)
+            choice = jax.random.uniform(subkey)
+            if choice < 1.0 / 3.0 and restarter.best_solution is not None:
+                initial_solution = restarter.best_solution
+            elif choice < 2.0 / 3.0:
                 key, subkey = jax.random.split(key)
-                if jax.random.uniform(subkey) > 0.5:
-                    initial_solution = restarter.best_solution
+                initial_solution = jax.random.uniform(
+                    subkey,
+                    shape=(n_params,),
+                    minval=-2.0,
+                    maxval=2.0,
+                )
+            else:
+                initial_solution = original_solution
 
         # Get global best
         best_solution, best_fitness = restarter.get_best()
         if best_solution is None:
             best_solution = initial_solution
-            best_fitness = float("-inf")
+            best_fitness = float("inf")
 
         logger.info(
             f"BIPOP completed: {restarter.restart_count} restarts, "

@@ -76,6 +76,14 @@ RECOMMENDATIONS = Recommendations(
             "Consider: (1) Trying different initial guesses, (2) Using a global optimization "
             "method first, or (3) Checking for model implementation issues."
         ),
+        "GRAD-004": (
+            "Exploding gradients detected: The gradient norm grew to a very large magnitude "
+            "during optimization. This may indicate: (1) A near-singular Jacobian, "
+            "(2) Poor parameter scaling causing large sensitivities, or (3) An unstable "
+            "model formulation. Consider: (1) Rescaling parameters or data, "
+            "(2) Tightening parameter bounds, or (3) Enabling stability checks "
+            "(``stability='check'``) to guard against ill-conditioning."
+        ),
         # Conditioning issues
         "COND-001": (
             "Ill-conditioned Jacobian detected: The Jacobian matrix has a high condition "

@@ -8,7 +8,12 @@ Security Features
 -----------------
 - AST-based pattern detection for dangerous operations
 - Path traversal prevention for file operations
-- Resource limits (timeout, memory) for model execution
+- Resource limits (timeout, memory) around module *load* time only --
+  ``resource_limits()`` wraps ``exec_module()``, not the many repeated
+  calls to the model function during ``curve_fit()``'s optimization loop.
+  An AST-clean model whose function body blocks or leaks memory only at
+  call time (e.g. an infinite loop with no dangerous names) is not caught
+  by this or by the AST validator; that is a known gap, not enforced here.
 - Audit logging for model loading attempts
 
 Dangerous Patterns Blocked
