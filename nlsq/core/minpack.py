@@ -4073,7 +4073,11 @@ class CurveFit:
 
         # Route to appropriate strategy
         if strategy == "streaming":
-            # Delegate to hybrid streaming optimizer
+            # Delegate to hybrid streaming optimizer. Pass the memory-derived
+            # config through (as the "chunked" branch below already does) --
+            # without it, _curve_fit_hybrid_streaming falls back to its own
+            # default HybridStreamingConfig() and silently ignores the
+            # memory-budget-computed batch/chunk size that was just selected.
             return self._curve_fit_hybrid_streaming(
                 f=f,
                 xdata=xdata,
@@ -4084,6 +4088,7 @@ class CurveFit:
                 check_finite=check_finite,
                 bounds=bounds,
                 callback=callback,
+                config=config,
                 **kwargs,
             )
 
