@@ -1608,8 +1608,18 @@ def _fit_global_multistart(
             multistart=True,
             n_starts=n_starts,
             check_finite=check_finite,
+            absolute_sigma=absolute_sigma,
             **kwargs,
         )
+        # LargeDatasetFitter's own exception handling returns a
+        # "successful-looking" OptimizeResult with success=False on failure
+        # rather than raising -- check it explicitly rather than silently
+        # treating a failed chunked fit as a normal result.
+        if not result.get("success", True):
+            raise RuntimeError(
+                "workflow='auto_global' chunked multi-start fit failed: "
+                f"{result.get('message', 'unknown error')}",
+            )
         if not isinstance(result, CurveFitResult):
             result = CurveFitResult(result)
             result["model"] = f
@@ -3985,13 +3995,27 @@ class CurveFit:
         # A user-supplied data_mask is sized to the ORIGINAL data length; if
         # nan_policy='omit' dropped rows, realign it the same way so it isn't
         # rejected by _setup_data_mask_and_padding's length check below.
-        if (
+        if data_mask is not None and omit_mask is not None:
+            if len(data_mask) == len(omit_mask) and len(data_mask) != m:
+                data_mask = np.asarray(data_mask)[omit_mask]
+        elif (
             data_mask is not None
-            and omit_mask is not None
-            and len(data_mask) == len(omit_mask)
+            and kwargs.get("nan_policy", "raise") == "omit"
             and len(data_mask) != m
         ):
-            data_mask = np.asarray(data_mask)[omit_mask]
+            # omit_mask is None here because the gated new-DataPreprocessor
+            # route was used (NLSQ_PREPROCESSOR_IMPL='new'/rollout>0) --
+            # it doesn't expose the pre-omit mask needed to realign
+            # data_mask, unlike the default legacy path above. Fail with a
+            # clear, actionable error instead of the generic length
+            # mismatch _setup_data_mask_and_padding would otherwise raise.
+            raise NotImplementedError(
+                "Combining an explicit data_mask with nan_policy='omit' is "
+                "not supported on the NLSQ_PREPROCESSOR_IMPL='new' code "
+                "path (it cannot realign data_mask after omitting rows). "
+                "Use the default preprocessor implementation, or omit one "
+                "of data_mask / nan_policy='omit'.",
+            )
 
         # Step 8: Select optimization method (on cleaned data)
         method = self._select_optimization_method(
@@ -4358,8 +4382,21 @@ class CurveFit:
                 p0=p0,
                 bounds=bounds,
                 check_finite=check_finite,
+                absolute_sigma=absolute_sigma,
                 **kwargs,
             )
+
+            # LargeDatasetFitter's own exception handlers catch every
+            # failure (including this function's own NotImplementedError
+            # guards, if a caller reaches them via a nested chunked fit) and
+            # return a "successful-looking" OptimizeResult with success=False
+            # rather than raising -- check it explicitly instead of silently
+            # treating a failed fit as a normal result.
+            if not result.get("success", True):
+                raise RuntimeError(
+                    "method='auto' chunked fit failed: "
+                    f"{result.get('message', 'unknown error')}",
+                )
 
             # Convert OptimizeResult to CurveFitResult format
             popt = result.x

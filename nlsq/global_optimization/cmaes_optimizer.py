@@ -993,6 +993,13 @@ class CMAESOptimizer:
                 "nlsq_result": result,  # Include full result for diagnostics
             }
 
+        except NotImplementedError:
+            # A caller explicitly asked for something curve_fit() cannot
+            # honor (e.g. sigma on a chunked/streaming refinement fit) --
+            # silently falling back to the unrefined CMA-ES result here
+            # would defeat that same "fail loudly instead of silently
+            # dropping it" contract one level up. Let it propagate.
+            raise
         except Exception as e:
             logger.warning(f"NLSQ refinement failed: {e}. Using CMA-ES result.")
             # Return CMA-ES result if refinement fails
