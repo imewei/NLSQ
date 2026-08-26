@@ -408,14 +408,17 @@ class CMAESOptimizer:
         if popsize is None:
             popsize = compute_default_popsize(n_params)
 
-        # Double population for cmaes-global preset
-        # (detected by max_generations == 200 and bipop)
-        if (
-            self.config.max_generations == 200
-            and self.config.restart_strategy == "bipop"
-        ):
-            popsize = popsize * 2
-            logger.debug("CMA-ES: Using 2x population for cmaes-global preset")
+            # Double population for cmaes-global preset
+            # (detected by max_generations == 200 and bipop). Only applies
+            # to the auto-computed default -- an explicit user popsize must
+            # never be silently doubled (matches the reference logic in
+            # nlsq/core/minpack.py's own auto-memory popsize estimate).
+            if (
+                self.config.max_generations == 200
+                and self.config.restart_strategy == "bipop"
+            ):
+                popsize = popsize * 2
+                logger.debug("CMA-ES: Using 2x population for cmaes-global preset")
 
         # Log memory optimization settings
         if self.config.population_batch_size is not None:
@@ -990,6 +993,13 @@ class CMAESOptimizer:
                 "nlsq_result": result,  # Include full result for diagnostics
             }
 
+        except NotImplementedError:
+            # A caller explicitly asked for something curve_fit() cannot
+            # honor (e.g. sigma on a chunked/streaming refinement fit) --
+            # silently falling back to the unrefined CMA-ES result here
+            # would defeat that same "fail loudly instead of silently
+            # dropping it" contract one level up. Let it propagate.
+            raise
         except Exception as e:
             logger.warning(f"NLSQ refinement failed: {e}. Using CMA-ES result.")
             # Return CMA-ES result if refinement fails

@@ -1071,6 +1071,7 @@ def _fit_with_auto_global(
     n_points: int,
     n_params: int,
     goal: Any,
+    _workflow_name: str = "auto_global",
     **kwargs: Any,
 ) -> CurveFitResult:
     """Memory-aware global optimization workflow (T026-T035).
@@ -1137,22 +1138,41 @@ def _fit_with_auto_global(
     lb, ub = prepare_bounds(bounds, n_params)
     if np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)):
         raise ValueError(
-            "workflow='auto_global' requires bounds. "
+            f"workflow='{_workflow_name}' requires bounds. "
             "Provide bounds as (lower, upper) arrays:\n"
-            "    fit(model, x, y, workflow='auto_global', bounds=([0, 0], [10, 10]))",
+            f"    fit(model, x, y, workflow='{_workflow_name}', bounds=([0, 0], [10, 10]))",
+        )
+    # Partially-unbounded (e.g. one parameter's upper bound left at +inf)
+    # previously slipped past the fully-unbounded check above, then fed an
+    # infinite range into the CMA-ES sigmoid bounds transform
+    # (lb + (ub-lb)*sigmoid(x)): inf * (a sufficiently negative x's sigmoid,
+    # which underflows to exactly 0.0) is nan. Require every bound finite.
+    if not (np.all(np.isfinite(lb)) and np.all(np.isfinite(ub))):
+        raise ValueError(
+            f"workflow='{_workflow_name}' requires every parameter to have a "
+            "finite lower AND upper bound (no +/-inf). "
+            f"Got lower={lb}, upper={ub}.",
+        )
+    if np.any(lb > ub):
+        raise ValueError(
+            f"workflow='{_workflow_name}' bounds are inverted: lower={lb} must "
+            f"be <= upper={ub} for every parameter.",
+        )
+    # Individually-finite bounds can still overflow when subtracted (e.g.
+    # lb=-1e308, ub=1e308): ub-lb -> inf reproduces the exact NaN failure
+    # mode the finite-bounds check above exists to prevent, since
+    # transform_to_bounds computes lb + (ub-lb)*sigmoid(x). Range, not just
+    # the endpoints, must be finite.
+    if not np.all(np.isfinite(ub - lb)):
+        raise ValueError(
+            f"workflow='{_workflow_name}' requires each parameter's bound range "
+            "(upper - lower) to be finite -- the bounds are individually "
+            f"finite but too far apart to subtract without overflow. Got "
+            f"lower={lb}, upper={ub}.",
         )
 
     # Log bounds information
     _logger.debug(f"workflow='auto_global' bounds: lower={lb}, upper={ub}")
-
-    # Compute parameter scale ratio for method selection logging
-    scale_range = ub - lb
-    scale_ratio = (
-        float(np.max(scale_range) / np.min(scale_range))
-        if np.min(scale_range) > 0
-        else 1.0
-    )
-    _logger.debug(f"workflow='auto_global' parameter scale ratio: {scale_ratio:.1f}")
 
     # Extract optional parameters
     n_starts = kwargs.pop("n_starts", 10)
@@ -1207,6 +1227,12 @@ def _fit_with_auto_global(
 
     # FR-005: Select global method (CMA-ES vs Multi-Start)
     method_selector = MethodSelector()
+    # Compute via the same helper .select() uses internally, so this
+    # logged ratio can never diverge from the one that actually drove
+    # the method decision (a hand-rolled re-derivation here previously
+    # collapsed to 1.0 for any zero/negative-width bound instead of
+    # filtering it out the way compute_scale_ratio does).
+    scale_ratio = method_selector.compute_scale_ratio(lb, ub)
     global_method = method_selector.select(
         requested_method="auto",
         lower_bounds=lb,
@@ -1388,6 +1414,7 @@ def _fit_with_hpc(
         n_points=n_points,
         n_params=n_params,
         goal=goal,
+        _workflow_name="hpc",
         **kwargs,
     )
 
@@ -1468,6 +1495,10 @@ def _fit_global_cmaes(
         p0=np.asarray(p0) if p0 is not None else None,
         bounds=bounds,
         sigma=np.asarray(sigma) if sigma is not None else None,
+        # absolute_sigma has no dedicated param on CMAESOptimizer.fit(), but
+        # its **kwargs flows through to _nlsq_refinement's curve_fit() call,
+        # which does accept it -- forward it there instead of dropping it.
+        absolute_sigma=absolute_sigma,
         **kwargs,
     )
 
@@ -1534,6 +1565,20 @@ def _fit_global_multistart(
             **kwargs,
         )
     if strategy == "chunked":
+        # sigma would need to be sliced consistently with each chunk, which
+        # LargeDatasetFitter's chunked-fit dispatch (each chunk goes through
+        # its own curve_fit() call) doesn't do -- fail loudly instead of
+        # silently returning an unweighted fit. Matches the identical fix
+        # already applied to _curve_fit_auto_memory's chunked strategy.
+        if sigma is not None:
+            raise NotImplementedError(
+                "workflow='auto_global' chunked multi-start strategy does "
+                "not support the 'sigma' parameter yet (chunking splits the "
+                "data and sigma is not sliced consistently across chunks). "
+                "Use a memory_limit_gb override that avoids the chunked "
+                "strategy, or omit sigma.",
+            )
+
         # Chunked processing with multi-start
         from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
@@ -1562,8 +1607,19 @@ def _fit_global_multistart(
             method="trf",
             multistart=True,
             n_starts=n_starts,
+            check_finite=check_finite,
+            absolute_sigma=absolute_sigma,
             **kwargs,
         )
+        # LargeDatasetFitter's own exception handling returns a
+        # "successful-looking" OptimizeResult with success=False on failure
+        # rather than raising -- check it explicitly rather than silently
+        # treating a failed chunked fit as a normal result.
+        if not result.get("success", True):
+            raise RuntimeError(
+                "workflow='auto_global' chunked multi-start fit failed: "
+                f"{result.get('message', 'unknown error')}",
+            )
         if not isinstance(result, CurveFitResult):
             result = CurveFitResult(result)
             result["model"] = f
@@ -3159,31 +3215,42 @@ class CurveFit:
         outputs = self.covariance_svd(res.jac)
         # Convert JAX arrays to NumPy more efficiently using np.asarray
         s, VT = (np.asarray(output) for output in outputs)
-        if len(s) == 0:
-            n_params = res.jac.shape[1]
-            return np.full((n_params, n_params), np.inf), True
-        # Use ysize (true data count) not res.jac.shape[0] (may be padded) for
-        # the threshold, so padding doesn't cause over-aggressive SV truncation.
-        threshold = np.finfo(float).eps * max(ysize, res.jac.shape[1]) * s[0]
-        valid_mask = s > threshold
-        s = s[valid_mask]
-        VT = VT[valid_mask]
-        pcov = np.dot(VT.T / s**2, VT)
+
+        n_params = res.jac.shape[1]
+        # NaN/Inf in res.jac (e.g. a numerically unstable model at the solution)
+        # propagates into s via SVD; without this check, the threshold below is
+        # NaN and `s > threshold` is all-False, silently producing a deceptive
+        # all-ZERO pcov (reads as "perfectly determined") instead of the correct
+        # all-inf fallback.
+        singular = len(s) == 0 or not np.all(np.isfinite(s))
+        if not singular:
+            # Use ysize (true data count) not res.jac.shape[0] (may be padded) for
+            # the threshold, so padding doesn't cause over-aggressive SV truncation.
+            threshold = np.finfo(float).eps * max(ysize, res.jac.shape[1]) * s[0]
+            valid_mask = s > threshold
+            s = s[valid_mask]
+            VT = VT[valid_mask]
+            singular = len(s) == 0
 
         warn_cov = False
-        if not absolute_sigma:
-            if ysize > p0.size:
-                s_sq = cost / (ysize - p0.size)
-                pcov = pcov * s_sq
-            else:
-                pcov.fill(np.inf)
-                warn_cov = True
+        if singular:
+            pcov = np.full((n_params, n_params), np.inf)
+            warn_cov = True
+            reason = "singular_jacobian"
+        else:
+            pcov = np.dot(VT.T / s**2, VT)
+            reason = None
+            if not absolute_sigma:
+                if ysize > p0.size:
+                    s_sq = cost / (ysize - p0.size)
+                    pcov = pcov * s_sq
+                else:
+                    pcov.fill(np.inf)
+                    warn_cov = True
+                    reason = "insufficient_data"
 
         if warn_cov:
-            self.logger.warning(
-                "Covariance could not be estimated",
-                reason="insufficient_data" if ysize <= p0.size else "singular_jacobian",
-            )
+            self.logger.warning("Covariance could not be estimated", reason=reason)
             warnings.warn(
                 "Covariance of the parameters could not be estimated",
                 stacklevel=2,
@@ -3584,7 +3651,8 @@ class CurveFit:
         check_finite: bool,
         nan_policy: str = "raise",
         bounds: tuple | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, int, int]:
+        sigma: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, int, int, np.ndarray | None, np.ndarray | None]:
         """Preprocess input data with optional feature flag routing.
 
         Routes to either the new DataPreprocessor component or the original
@@ -3602,6 +3670,10 @@ class CurveFit:
             Initial parameter guess
         check_finite : bool
             Whether to check for finite values
+        sigma : np.ndarray, optional
+            Uncertainties/weights. When nan_policy='omit', rows dropped for
+            non-finite x/y (or a non-finite 1D sigma entry) are also dropped
+            from sigma, so the returned sigma stays aligned with xdata/ydata.
 
         Returns
         -------
@@ -3613,6 +3685,13 @@ class CurveFit:
             Data length
         xdims : int
             X data dimensionality
+        sigma : np.ndarray | None
+            Sigma, filtered consistently with xdata/ydata under nan_policy='omit'
+        omit_mask : np.ndarray | None
+            Boolean mask (over the ORIGINAL pre-omit length) used to filter
+            rows, so a caller-supplied data_mask can be realigned the same
+            way. None when nan_policy != 'omit' or the new-DataPreprocessor
+            route was used (it doesn't expose this mask).
         """
         # Check feature flag for new implementation
         from nlsq.core.feature_flags import get_feature_flags
@@ -3628,6 +3707,7 @@ class CurveFit:
                 f=f,
                 xdata=xdata,
                 ydata=ydata,
+                sigma=sigma,
                 check_finite=check_finite,
                 nan_policy=nan_policy,
             )
@@ -3635,12 +3715,23 @@ class CurveFit:
             # Convert JAX arrays back to numpy for compatibility with rest of pipeline
             xdata = np.asarray(data.xdata)
             ydata = np.asarray(data.ydata)
+            sigma = np.asarray(data.sigma) if data.sigma is not None else None
             m = data.n_points
             xdims = xdata.ndim
 
-            return xdata, ydata, m, xdims
+            # DataPreprocessor doesn't expose the pre-omit valid-row mask, so
+            # a caller-supplied data_mask can't be re-aligned on this route.
+            return xdata, ydata, m, xdims, sigma, None
 
         # Original implementation (old code path)
+        # Defer finiteness raising when nan_policy handles it instead (mirrors
+        # DataPreprocessor.preprocess's effective_check_finite): 'omit' filters
+        # invalid rows below, 'propagate' intentionally keeps NaN/Inf.
+        effective_check_finite = check_finite and nan_policy not in (
+            "omit",
+            "propagate",
+        )
+
         # Step 6: Validate and sanitize inputs (if stability enabled).
         # Forward bounds + check_finite so bounds-consistency and finiteness
         # checks are actually exercised (previously they were silently dropped).
@@ -3650,16 +3741,94 @@ class CurveFit:
             ydata,
             p0,
             bounds=bounds,
-            check_finite=check_finite,
+            check_finite=effective_check_finite,
         )
 
         # Step 7: Convert to arrays and validate finiteness
-        xdata, ydata = self._convert_and_validate_arrays(xdata, ydata, check_finite)
+        xdata, ydata = self._convert_and_validate_arrays(
+            xdata,
+            ydata,
+            effective_check_finite,
+        )
 
         # Step 8: Validate data lengths
         m, xdims = self._validate_data_lengths(xdata, ydata)
 
-        return xdata, ydata, m, xdims
+        omit_mask = None
+        if nan_policy == "omit":
+            xdata, ydata, sigma, m, omit_mask = self._omit_nonfinite_rows(
+                xdata,
+                ydata,
+                sigma,
+                xdims,
+            )
+
+        return xdata, ydata, m, xdims, sigma, omit_mask
+
+    def _omit_nonfinite_rows(
+        self,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        sigma: np.ndarray | None,
+        xdims: int,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
+        """Drop rows with non-finite x/y (or a non-finite 1D sigma entry).
+
+        Legacy-path counterpart to DataPreprocessor._handle_nan_omit, used
+        when the NLSQ_PREPROCESSOR_IMPL feature flag routes to the original
+        (default) code path rather than the new DataPreprocessor component.
+
+        Parameters
+        ----------
+        xdata, ydata : np.ndarray
+            Data to filter.
+        sigma : np.ndarray | None
+            1D sigma is filtered alongside xdata/ydata (rows with a
+            non-finite sigma entry are also dropped). A 2D covariance-matrix
+            sigma is row/column-extracted to match the same mask (matches
+            DataPreprocessor._handle_nan_omit's handling of 2D sigma).
+        xdims : int
+            xdata.ndim, to select row-wise vs column-wise masking.
+
+        Returns
+        -------
+        xdata, ydata, sigma, m, omit_mask : filtered data, new data length, and
+            the boolean mask (over the ORIGINAL, pre-omit length) used to
+            filter — so a caller-supplied data_mask can be filtered the same
+            way to stay aligned.
+        """
+        y_valid = np.isfinite(ydata)
+        x_valid = (
+            np.isfinite(xdata) if xdims == 1 else np.all(np.isfinite(xdata), axis=0)
+        )
+        valid_mask = y_valid & x_valid
+
+        sigma_arr = np.asarray(sigma) if sigma is not None else None
+        sigma_1d = sigma_arr is not None and sigma_arr.ndim == 1
+        if sigma_1d:
+            valid_mask = valid_mask & np.isfinite(sigma_arr)
+
+        if not np.any(valid_mask):
+            msg = (
+                "nan_policy='omit' removed all data points "
+                "(every row contained NaN/Inf)."
+            )
+            raise ValueError(msg)
+
+        omit_mask = valid_mask
+        ydata = ydata[valid_mask]
+        xdata = xdata[valid_mask] if xdims == 1 else xdata[:, valid_mask]
+        if sigma_1d:
+            sigma = sigma_arr[valid_mask]
+        elif sigma_arr is not None and sigma_arr.ndim == 2:
+            sigma = sigma_arr[np.ix_(valid_mask, valid_mask)]
+            if not np.all(np.isfinite(sigma)):
+                raise ValueError(
+                    "Sigma covariance matrix contains non-finite values in "
+                    "valid data rows/columns after NaN filtering",
+                )
+
+        return xdata, ydata, sigma, len(ydata), omit_mask
 
     def _apply_padding_if_needed(
         self,
@@ -3723,6 +3892,7 @@ class CurveFit:
         check_finite: bool,
         data_mask: np.ndarray | None,
         kwargs: dict,
+        sigma: np.ndarray | None = None,
     ) -> tuple[
         int,
         np.ndarray,
@@ -3736,6 +3906,7 @@ class CurveFit:
         int,
         bool,
         bool,
+        np.ndarray | None,
     ]:
         """Prepare and validate inputs for curve fitting.
 
@@ -3768,6 +3939,8 @@ class CurveFit:
             Whether padding is needed
         none_mask : bool
             Whether data_mask was None on input
+        sigma : np.ndarray | None
+            Sigma, filtered consistently with xdata/ydata under nan_policy='omit'
         """
         # Step 1: Determine parameter count and auto-estimate p0 if needed
         n, p0 = self._determine_parameter_count(f, p0, xdata, ydata)
@@ -3800,20 +3973,12 @@ class CurveFit:
         # Step 4: Prepare bounds and initial guess
         lb, ub, p0 = self._prepare_bounds_and_initial_guess(bounds, n, p0)
 
-        # Step 5: Select optimization method
-        method = self._select_optimization_method(
-            method,
-            f,
-            xdata,
-            ydata,
-            p0,
-            bounds,
-            kwargs,
-        )
-
-        # Steps 6-8: Preprocess data (validation, conversion, length check)
-        # Use new DataPreprocessor when feature flag enabled
-        xdata, ydata, m, xdims = self._preprocess_input_data(
+        # Steps 5-7: Preprocess data (validation, conversion, length check,
+        # NaN handling) BEFORE method/algorithm auto-selection below — auto
+        # selection's data-driven heuristics (percentile/diff/ptp) must not
+        # run against NaN/Inf-contaminated data that nan_policy='omit' asked
+        # to have removed.
+        xdata, ydata, m, xdims, sigma, omit_mask = self._preprocess_input_data(
             f,
             xdata,
             ydata,
@@ -3824,6 +3989,43 @@ class CurveFit:
             # which may be scalar (-inf, inf)) so the validator's bounds checks
             # receive per-parameter arrays of the expected shape.
             bounds=(lb, ub),
+            sigma=sigma,
+        )
+
+        # A user-supplied data_mask is sized to the ORIGINAL data length; if
+        # nan_policy='omit' dropped rows, realign it the same way so it isn't
+        # rejected by _setup_data_mask_and_padding's length check below.
+        if data_mask is not None and omit_mask is not None:
+            if len(data_mask) == len(omit_mask) and len(data_mask) != m:
+                data_mask = np.asarray(data_mask)[omit_mask]
+        elif (
+            data_mask is not None
+            and kwargs.get("nan_policy", "raise") == "omit"
+            and len(data_mask) != m
+        ):
+            # omit_mask is None here because the gated new-DataPreprocessor
+            # route was used (NLSQ_PREPROCESSOR_IMPL='new'/rollout>0) --
+            # it doesn't expose the pre-omit mask needed to realign
+            # data_mask, unlike the default legacy path above. Fail with a
+            # clear, actionable error instead of the generic length
+            # mismatch _setup_data_mask_and_padding would otherwise raise.
+            raise NotImplementedError(
+                "Combining an explicit data_mask with nan_policy='omit' is "
+                "not supported on the NLSQ_PREPROCESSOR_IMPL='new' code "
+                "path (it cannot realign data_mask after omitting rows). "
+                "Use the default preprocessor implementation, or omit one "
+                "of data_mask / nan_policy='omit'.",
+            )
+
+        # Step 8: Select optimization method (on cleaned data)
+        method = self._select_optimization_method(
+            method,
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds,
+            kwargs,
         )
 
         # Step 9: Setup data mask and padding parameters
@@ -3855,6 +4057,7 @@ class CurveFit:
             len_diff,
             should_pad,
             none_mask,
+            sigma,
         )
 
     def _curve_fit_hybrid_streaming(
@@ -3867,6 +4070,7 @@ class CurveFit:
         absolute_sigma: bool = False,
         check_finite: bool = True,
         bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
+        data_mask: np.ndarray | None = None,
         callback: Callable | None = None,
         **kwargs,
     ) -> CurveFitResult:
@@ -3894,10 +4098,13 @@ class CurveFit:
             Check for finite input values
         bounds : tuple, optional
             Parameter bounds as (lower, upper)
+        data_mask : array_like, optional
+            Not supported by this method; passing one raises NotImplementedError
+            (AdaptiveHybridStreamingOptimizer has no per-point masking).
         callback : callable, optional
             Progress callback function
         **kwargs
-            Additional parameters (verbose, config overrides)
+            Additional parameters (verbose, config overrides, nan_policy)
 
         Returns
         -------
@@ -3907,13 +4114,39 @@ class CurveFit:
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
+        # data_mask has no way to reach AdaptiveHybridStreamingOptimizer.fit()
+        # (no per-point masking support) -- fail loudly instead of silently
+        # ignoring it, matching fit()'s own sigma NotImplementedError below.
+        if data_mask is not None:
+            raise NotImplementedError(
+                "method='hybrid_streaming' does not support the 'data_mask' "
+                "parameter yet. Use a different method (e.g. 'trf') if you "
+                "need to exclude specific data points, or omit data_mask.",
+            )
+
+        nan_policy = kwargs.pop("nan_policy", "raise")
+        # Defer finiteness raising when 'omit' handles it instead (mirrors
+        # DataPreprocessor.preprocess's effective_check_finite).
+        effective_check_finite = check_finite and nan_policy not in (
+            "omit",
+            "propagate",
+        )
+
         # Convert inputs to arrays
-        if check_finite:
+        if effective_check_finite:
             xdata = np.asarray_chkfinite(xdata, float)
             ydata = np.asarray_chkfinite(ydata, float)
         else:
             xdata = np.asarray(xdata, float)
             ydata = np.asarray(ydata, float)
+
+        if nan_policy == "omit":
+            xdata, ydata, sigma, _m, _omit_mask = self._omit_nonfinite_rows(
+                xdata,
+                ydata,
+                sigma,
+                xdata.ndim,
+            )
 
         # Determine parameter count and prepare p0
         if p0 is None:
@@ -4110,12 +4343,28 @@ class CurveFit:
                 absolute_sigma=absolute_sigma,
                 check_finite=check_finite,
                 bounds=bounds,
+                data_mask=data_mask,
                 callback=callback,
                 config=config,
                 **kwargs,
             )
 
         if strategy == "chunked":
+            # sigma/data_mask would need to be sliced consistently with each
+            # chunk, which LargeDatasetFitter doesn't do -- fail loudly
+            # instead of silently returning an unweighted/unmasked fit
+            # (matches AdaptiveHybridStreamingOptimizer.fit()'s own sigma
+            # NotImplementedError for the same reason).
+            if sigma is not None or data_mask is not None:
+                raise NotImplementedError(
+                    "method='auto' chunked strategy does not support the "
+                    "'sigma' or 'data_mask' parameters yet (chunking splits "
+                    "the data and neither is sliced consistently across "
+                    "chunks). Use method='trf' directly, or a "
+                    "memory_limit_gb override that avoids the chunked "
+                    "strategy.",
+                )
+
             # Delegate to LargeDatasetFitter
             from nlsq.streaming.large_dataset import LargeDatasetFitter
 
@@ -4132,8 +4381,22 @@ class CurveFit:
                 ydata=ydata_arr,
                 p0=p0,
                 bounds=bounds,
+                check_finite=check_finite,
+                absolute_sigma=absolute_sigma,
                 **kwargs,
             )
+
+            # LargeDatasetFitter's own exception handlers catch every
+            # failure (including this function's own NotImplementedError
+            # guards, if a caller reaches them via a nested chunked fit) and
+            # return a "successful-looking" OptimizeResult with success=False
+            # rather than raising -- check it explicitly instead of silently
+            # treating a failed fit as a normal result.
+            if not result.get("success", True):
+                raise RuntimeError(
+                    "method='auto' chunked fit failed: "
+                    f"{result.get('message', 'unknown error')}",
+                )
 
             # Convert OptimizeResult to CurveFitResult format
             popt = result.x
@@ -4472,6 +4735,7 @@ class CurveFit:
                 absolute_sigma=absolute_sigma,
                 check_finite=check_finite,
                 bounds=bounds,
+                data_mask=data_mask,
                 callback=callback,
                 **kwargs,
             )
@@ -4672,6 +4936,7 @@ class CurveFit:
             len_diff,
             _should_pad,
             none_mask,
+            sigma,
         ) = self._prepare_curve_fit_inputs(
             f,
             xdata,
@@ -4684,9 +4949,11 @@ class CurveFit:
             check_finite,
             data_mask,
             kwargs,
+            sigma=sigma,
         )
 
-        # Setup sigma transformation
+        # Setup sigma transformation (sigma is already filtered consistently
+        # with xdata/ydata above when nan_policy='omit' dropped rows)
         transform = self._setup_sigma_transform(sigma, ydata, data_mask, len_diff, m)
 
         # If gradient-health diagnostics were requested, wire a GradientMonitor
@@ -4744,7 +5011,13 @@ class CurveFit:
         )
 
         st = time.time()
-        ysize = m
+        # Degrees-of-freedom/SVD-threshold must reflect the EFFECTIVE point
+        # count. data_mask is always a concrete array by this point (built by
+        # _setup_data_mask_and_padding even when the caller didn't supply
+        # one): all-True over the first m real rows, False over any padding.
+        # A caller-supplied data_mask can additionally exclude real points,
+        # so np.sum(data_mask) (not the raw m) is the correct count.
+        ysize = int(np.sum(data_mask))
         cost = 2 * res.cost  # res.cost is half sum of squares!
 
         # Compute covariance matrix
@@ -4813,8 +5086,13 @@ class CurveFit:
                 # to construct the GradientMonitor) instead of rebuilding it.
                 config = _resolved_diag_config
 
-                # Get Jacobian from result
-                jacobian = np.asarray(res.jac)
+                # Get Jacobian from result, dropping padded/masked-out rows
+                # (jnp.where(data_mask, ..., 0) zeros them in res.jac already,
+                # but keeping them inflates jacobian.shape[0] and makes the
+                # analyzer's rank/conditioning threshold over-aggressive —
+                # the same padding-count bug _compute_covariance's SVD
+                # threshold already guards against via `ysize`).
+                jacobian = np.asarray(res.jac)[np.asarray(data_mask, dtype=bool)]
 
                 # Run identifiability analysis
                 analyzer = IdentifiabilityAnalyzer(config=config)

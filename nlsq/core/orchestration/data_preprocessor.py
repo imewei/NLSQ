@@ -237,6 +237,15 @@ class DataPreprocessor:
 
         valid_mask = y_valid & x_valid
 
+        # A 1D sigma's own NaN/Inf must also be omitted, or _validate_sigma raises
+        # on a row that x/y-based masking left in. A 2D covariance sigma can't be
+        # row-omitted this way (dropping a point needs dropping its whole row/col),
+        # so that case is validated as a submatrix below instead.
+        if sigma is not None:
+            sigma_arr_for_mask = np.asarray(sigma)
+            if sigma_arr_for_mask.ndim == 1:
+                valid_mask = valid_mask & np.isfinite(sigma_arr_for_mask)
+
         # Track what was removed
         has_nans = bool(np.any(np.isnan(ydata)) or np.any(np.isnan(xdata)))
         has_infs = bool(np.any(np.isinf(ydata)) or np.any(np.isinf(xdata)))

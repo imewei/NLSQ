@@ -327,7 +327,7 @@ class GradientMonitor:
                 Additional keyword arguments (ignored).
             """
             # Extract gradient information
-            if info is not None and "gradient" in info:
+            if info is not None and info.get("gradient") is not None:
                 # Direct gradient available
                 gradient = np.asarray(info["gradient"])
             elif info is not None and "gradient_norm" in info:

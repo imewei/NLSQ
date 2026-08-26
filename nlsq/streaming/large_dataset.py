@@ -1715,9 +1715,14 @@ class LargeDatasetFitter:
                 success=False,
                 message=f"Fit failed: {e}",
             )
-            # Add empty popt and pcov for consistency
+            # popt here is just the unfitted p0, not a real optimum -- pcov
+            # must read as "not estimated" (all-inf, the convention used
+            # everywhere else in this codebase, e.g. _compute_covariance's
+            # singular/NaN fallback), not identity, which looks like a
+            # legitimate unit-variance/zero-correlation result and could be
+            # used downstream by a caller that doesn't check `.success`.
             result["popt"] = result.x
-            result["pcov"] = np.eye(len(result.x))
+            result["pcov"] = np.full((len(result.x), len(result.x)), np.inf)
             return result
 
     def _fit_with_streaming(

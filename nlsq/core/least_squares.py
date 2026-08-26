@@ -1152,6 +1152,24 @@ class LeastSquares:
         if "options" in timeout_kwargs:
             raise TypeError("'options' is not a supported keyword argument")
 
+        # NLSQ always computes exact Jacobians via JAX autodiff, so it has no
+        # finite-difference path (diff_step) or sparsity-pattern-guided
+        # differencing (jac_sparsity) to honor. Warn instead of silently
+        # ignoring an explicit caller value.
+        if diff_step is not None:
+            warn(
+                "diff_step is ignored: NLSQ always uses exact JAX-autodiff "
+                "Jacobians, never finite differences.",
+                stacklevel=2,
+            )
+        if jac_sparsity is not None:
+            warn(
+                "jac_sparsity is ignored: NLSQ auto-detects Jacobian sparsity "
+                "internally (see tr_solver='sparse') rather than accepting a "
+                "user-supplied pattern.",
+                stacklevel=2,
+            )
+
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
 
@@ -1201,7 +1219,14 @@ class LeastSquares:
         # Use ydata length as proxy for n_residuals to avoid redundant forward pass.
         # This is correct because for standard NLSQ, n_residuals == len(ydata).
         # The actual m is verified after initial evaluation at Step 5.
-        if jac is None and xdata is not None and ydata is not None:
+        if jac is not None:
+            # Analytical Jacobian supplied - AD mode selection isn't used.
+            jacobian_mode_selected = "fwd"
+            jacobian_rationale = "analytical Jacobian supplied; AD mode not used"
+            self.logger.debug(
+                f"Jacobian mode: '{jacobian_mode_selected}'. Rationale: {jacobian_rationale}",
+            )
+        elif xdata is not None and ydata is not None:
             m_estimate = (
                 len(ydata) if hasattr(ydata, "__len__") else np.asarray(ydata).size
             )
@@ -1217,10 +1242,27 @@ class LeastSquares:
             self.logger.debug(
                 f"Jacobian mode: '{jacobian_mode_selected}' (from {jacobian_mode_source}). Rationale: {jacobian_rationale}",
             )
+        elif jacobian_mode_config in ("fwd", "rev"):
+            # Direct least_squares() call (no xdata/ydata) with an explicit
+            # mode override - honor it, the dimension heuristic isn't needed
+            # since jacobian_mode_selector ignores n/m for a non-'auto' mode.
+            jacobian_mode_selected, jacobian_rationale = jacobian_mode_selector(
+                n,
+                n,
+                mode=jacobian_mode_config,
+            )
+            self.logger.debug(
+                f"Jacobian mode: '{jacobian_mode_selected}' (from {jacobian_mode_source}). Rationale: {jacobian_rationale}",
+            )
         else:
-            # Analytical Jacobian or SciPy mode - use default forward mode
+            # 'auto' mode with no xdata/ydata to estimate residual count from
+            # (direct least_squares() call) - can't apply the dimension
+            # heuristic, so default to forward mode.
             jacobian_mode_selected = "fwd"
-            jacobian_rationale = "analytical Jacobian or SciPy compatibility mode"
+            jacobian_rationale = (
+                "auto mode with unknown residual count (no xdata/ydata); "
+                "defaulting to fwd"
+            )
             self.logger.debug(
                 f"Jacobian mode: '{jacobian_mode_selected}'. Rationale: {jacobian_rationale}",
             )
@@ -1327,6 +1369,9 @@ class LeastSquares:
 
         # Step 9: Check memory and adjust solver if needed
         tr_solver = self._check_memory_and_adjust_solver(m, n, method, tr_solver)
+        # The memory check can silently swap "sparse" for "lsmr" above; keep the
+        # sparsity diagnostic honest about which solver actually ran.
+        sparse_solver_selected = sparse_solver_selected and tr_solver == "sparse"
 
         # Step 10: Create stable wrappers for residual and Jacobian functions
         rfunc, jac_func = self._create_stable_wrappers(rfunc, jac_func)

@@ -625,6 +625,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     verbose,
                     solver,
                     callback,
+                    diagnostics=diagnostics,
                     **kwargs,
                 )
             return self.trf_no_bounds(
@@ -651,6 +652,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 solver,
                 callback,
                 profiler=TRFProfiler(),
+                diagnostics=diagnostics,
             )
         return self.trf_bounds(
             fun,
@@ -675,6 +677,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             verbose,
             solver,
             callback,
+            diagnostics=diagnostics,
             **kwargs,
         )
 
@@ -811,6 +814,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         Delta: float,
         alpha: float,
         solver: str,
+        gtol: float = 1e-8,
     ) -> dict[str, Any]:
         """Solve the trust region subproblem.
 
@@ -860,7 +864,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         if solver in ("cg", "lsmr"):
             # Conjugate gradient solver
             J_h = J * d
-            step_h = self.solve_tr_subproblem_cg(J, f, d, Delta, alpha)
+            step_h = self.solve_tr_subproblem_cg(J, f, d, Delta, alpha, gtol)
             result.update(
                 {
                     "J_h": J_h,
@@ -942,6 +946,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         xtol: float,
         max_nfev: int,
         nfev: int,
+        gtol: float = 1e-8,
     ) -> dict[str, Any]:
         """Evaluate step acceptance through inner trust region loop.
 
@@ -1050,7 +1055,14 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             # Solve subproblem (reuse step or compute new one)
             if solver in ("cg", "lsmr"):
                 if inner_loop_count > 1:
-                    step_h = self.solve_tr_subproblem_cg(J, f, d_jnp, Delta, alpha)
+                    step_h = self.solve_tr_subproblem_cg(
+                        J,
+                        f,
+                        d_jnp,
+                        Delta,
+                        alpha,
+                        gtol,
+                    )
                 _n_iter = 1  # Dummy value for compatibility
             else:
                 step_h, alpha, _n_iter = solve_lsq_trust_region_jax(
@@ -1206,6 +1218,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         nfev: int,
         step_norm: float | None,
         actual_reduction: float | None,
+        g: jnp.ndarray | None = None,
     ) -> int | None:
         """Invoke user callback with proper exception handling.
 
@@ -1243,6 +1256,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 params=np.array(x),  # JAX array -> NumPy array
                 info={
                     "gradient_norm": float(g_norm),
+                    "gradient": np.asarray(g) if g is not None else None,
                     "nfev": nfev,
                     "step_norm": float(step_norm) if step_norm is not None else None,
                     "actual_reduction": float(actual_reduction)
@@ -1335,6 +1349,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         alpha: float,
         solver: str,
         n: int,
+        gtol: float = 1e-8,
     ) -> dict[str, Any]:
         """Solve trust region subproblem with bounds.
 
@@ -1394,6 +1409,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 f_zeros,
                 Delta,
                 alpha,
+                gtol,
             )
             s, V, uf = None, None, None
         elif solver == "sparse":
@@ -1461,6 +1477,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         nfev: int,
         n: int,
         m: int,
+        gtol: float = 1e-8,
     ) -> dict[str, Any]:
         """Evaluate inner loop for bounds optimization.
 
@@ -1544,6 +1561,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         f_zeros,
                         Delta,
                         alpha,
+                        gtol,
                     )
                 _n_iter = 1
             else:
@@ -1775,6 +1793,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         solver: str = "exact",
         callback: Callable[..., Any] | None = None,
         profiler: TRFProfiler | NullProfiler | None = None,
+        diagnostics: OptimizationDiagnostics | None = None,
         **kwargs: Any,
     ) -> OptimizeResult:
         """Unbounded version of the trust-region reflective algorithm.
@@ -1960,6 +1979,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     Delta=Delta,
                     alpha=alpha,
                     solver=solver,
+                    gtol=gtol,
                 )
 
                 # Extract subproblem solution
@@ -2001,6 +2021,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     solver=solver,
                     ftol=ftol,
                     xtol=xtol,
+                    gtol=gtol,
                     max_nfev=max_nfev,
                     nfev=nfev,
                 )
@@ -2033,6 +2054,15 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     termination_status = acceptance_result["termination_status"]
                 iteration += 1
 
+                if diagnostics is not None:
+                    diagnostics.record_iteration(
+                        iteration=iteration,
+                        x=np.asarray(x),
+                        cost=float(cost),
+                        gradient=np.asarray(g),
+                        step_size=float(step_norm) if step_norm is not None else None,
+                    )
+
                 # Invoke user callback if provided using helper
                 if callback is not None:
                     callback_status = self._invoke_callback(
@@ -2044,6 +2074,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         nfev=nfev,
                         step_norm=step_norm,
                         actual_reduction=actual_reduction,
+                        g=g,
                     )
                     if callback_status is not None:
                         termination_status = callback_status
@@ -2090,6 +2121,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
         verbose: int,
         solver: str = "exact",
         callback: Callable[..., Any] | None = None,
+        diagnostics: OptimizationDiagnostics | None = None,
         **kwargs: Any,
     ) -> OptimizeResult:
         """Bounded version of the trust-region reflective algorithm.
@@ -2262,6 +2294,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha=alpha,
                 solver=solver,
                 n=n,
+                gtol=gtol,
             )
 
             # theta controls step back step ratio from the bounds; must be < 1
@@ -2302,6 +2335,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 solver=solver,
                 ftol=ftol,
                 xtol=xtol,
+                gtol=gtol,
                 max_nfev=max_nfev,
                 nfev=nfev,
                 n=n,
@@ -2343,6 +2377,15 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
             iteration += 1
 
+            if diagnostics is not None:
+                diagnostics.record_iteration(
+                    iteration=iteration,
+                    x=np.asarray(x),
+                    cost=float(cost),
+                    gradient=np.asarray(g),
+                    step_size=float(step_norm) if step_norm is not None else None,
+                )
+
             # Invoke user callback using helper
             if callback is not None:
                 callback_status = self._invoke_callback(
@@ -2354,6 +2397,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     nfev=nfev,
                     step_norm=step_norm,
                     actual_reduction=actual_reduction,
+                    g=g,
                 )
                 if callback_status is not None:
                     termination_status = callback_status

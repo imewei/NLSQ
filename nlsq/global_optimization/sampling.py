@@ -455,6 +455,13 @@ def center_samples_around_p0(
     lb = jnp.asarray(lb)
     ub = jnp.asarray(ub)
 
+    # Clamp p0 into [lb, ub] first -- an out-of-bounds p0 (e.g. a bad user
+    # guess) would otherwise shift the centered region so far that
+    # jnp.maximum(centered_lb, lb)/jnp.minimum(centered_ub, ub) below can
+    # produce an inverted [centered_lb, centered_ub] interval, generating
+    # samples outside the true [lb, ub] bounds.
+    p0 = jnp.clip(p0, lb, ub)
+
     # Compute the exploration range
     full_range = ub - lb
     half_width = scale_factor * full_range / 2.0
