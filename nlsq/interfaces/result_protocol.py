@@ -56,8 +56,8 @@ class LeastSquaresResultProtocol(Protocol):
         Final cost value (0.5 * sum(residuals**2)).
     fun : np.ndarray
         Residuals at the solution.
-    jac : np.ndarray
-        Jacobian at the solution.
+    jac : np.ndarray | None
+        Jacobian at the solution, or None if not retained.
     success : bool
         Whether optimization converged successfully.
     message : str
@@ -84,8 +84,8 @@ class LeastSquaresResultProtocol(Protocol):
         ...
 
     @property
-    def jac(self) -> np.ndarray:
-        """Jacobian at the solution."""
+    def jac(self) -> np.ndarray | None:
+        """Jacobian at the solution, or None if not retained."""
         ...
 
     @property

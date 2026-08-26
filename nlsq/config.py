@@ -361,12 +361,13 @@ class JAXConfig:
 
         instance = cls()
 
-        if enable and not instance._x64_enabled:
-            config.update("jax_enable_x64", True)
-            instance._x64_enabled = True
-        elif not enable and instance._x64_enabled:
-            config.update("jax_enable_x64", False)
-            instance._x64_enabled = False
+        with cls._lock:
+            if enable and not instance._x64_enabled:
+                config.update("jax_enable_x64", True)
+                instance._x64_enabled = True
+            elif not enable and instance._x64_enabled:
+                config.update("jax_enable_x64", False)
+                instance._x64_enabled = False
 
     @classmethod
     def is_x64_enabled(cls) -> bool:

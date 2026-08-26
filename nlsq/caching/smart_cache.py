@@ -294,18 +294,21 @@ class SmartCache:
         # Prefix with cache version to invalidate old cache entries
         return f"{CACHE_VERSION}_{hash_hex}"
 
-    def get(self, key: str) -> Any | None:
+    def get(self, key: str, default: Any | None = None) -> Any | None:
         """Get value from cache.
 
         Parameters
         ----------
         key : str
             Cache key
+        default : Any, optional
+            Value to return if key not found (default: None). Matches
+            CacheProtocol.get signature.
 
         Returns
         -------
         value : Any or None
-            Cached value or None if not found
+            Cached value or default if not found
         """
         # Check memory cache first (under lock for atomic LRU update)
         with self._lock:
@@ -362,7 +365,7 @@ class SmartCache:
             if self.enable_stats:
                 self.cache_stats["misses"] += 1
 
-        return None
+        return default
 
     def set(self, key: str, value: Any):
         """Set value in cache.

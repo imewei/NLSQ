@@ -32,19 +32,54 @@ class SafeSerializationError(Exception):
     """Exception raised when serialization/deserialization fails."""
 
 
+# Every reserved key-marker prefix. A literal string key that happens to
+# start with one of these must be escaped (via _STR_KEY_PREFIX) so it can't
+# be misread as a typed key on deserialization.
+_KEY_PREFIXES = (
+    "__bool_key__",
+    "__int_key__",
+    "__float_key__",
+    "__str_key__",
+)
+_STR_KEY_PREFIX = "__str_key__"
+
+
 def _serialize_dict_key(key: Any) -> str:
     """Convert a dict key to a collision-resistant string for JSON serialization."""
+    # bool must come before int since bool is a subclass of int
+    if isinstance(key, (bool, np.bool_)):
+        return f"__bool_key__{bool(key)}"
     if isinstance(key, str):
+        # Escape a literal string that would otherwise be misread as a
+        # typed-key marker on deserialization (e.g. the string "__int_key__7").
+        if key.startswith(_KEY_PREFIXES):
+            return f"{_STR_KEY_PREFIX}{key}"
         return key
-    if isinstance(key, int):
-        return f"__int_key__{key}"
-    if isinstance(key, float):
-        return f"__float_key__{key}"
-    return f"__key_{type(key).__name__}__{key}"
+    if isinstance(key, (int, np.integer)):
+        return f"__int_key__{int(key)}"
+    if isinstance(key, (float, np.floating)):
+        return f"__float_key__{float(key)}"
+    # Any other key type cannot be restored on deserialization — fail loud
+    # rather than silently producing a mangled, unrestorable string key.
+    raise SafeSerializationError(
+        f"Cannot safely serialize dict key of type {type(key).__name__}. "
+        "Only str, int, float, and bool keys are supported.",
+    )
 
 
-def _deserialize_dict_key(key: str) -> str | int | float:
+def _deserialize_dict_key(key: str) -> str | int | float | bool:
     """Restore original dict key type from serialized string form."""
+    # Escaped string keys take priority: strip exactly one escape layer and
+    # return the remainder as a literal string, whatever it looks like.
+    if key.startswith(_STR_KEY_PREFIX):
+        return key[len(_STR_KEY_PREFIX) :]
+    if key.startswith("__bool_key__"):
+        value = key[len("__bool_key__") :]
+        if value not in ("True", "False"):
+            raise SafeSerializationError(
+                f"Malformed boolean key in serialized data: {key!r}",
+            )
+        return value == "True"
     if key.startswith("__int_key__"):
         try:
             return int(key[len("__int_key__") :])
@@ -60,6 +95,33 @@ def _deserialize_dict_key(key: str) -> str | int | float:
                 f"Malformed float key in serialized data: {key!r}",
             ) from e
     return key
+
+
+def _convert_dict_to_serializable(obj: dict) -> dict:
+    """Convert a dict to its JSON-serializable form.
+
+    Raises
+    ------
+    SafeSerializationError
+        On key collision after string-encoding, or if the dict uses the
+        reserved "__nlsq_type__" marker key (which would be misread as an
+        internal type marker on deserialization).
+    """
+    result = {}
+    for key, value in obj.items():
+        str_key = _serialize_dict_key(key)
+        if str_key in result:
+            raise SafeSerializationError(
+                f"Key collision during serialization: {key!r} maps to "
+                f"existing key {str_key!r}",
+            )
+        result[str_key] = _convert_to_serializable(value)
+    if "__nlsq_type__" in result:
+        raise SafeSerializationError(
+            "Cannot serialize dict containing reserved key '__nlsq_type__'; "
+            "this key is reserved for internal type markers.",
+        )
+    return result
 
 
 def _convert_to_serializable(obj: Any) -> Any:
@@ -115,16 +177,7 @@ def _convert_to_serializable(obj: Any) -> Any:
 
     # Handle dicts
     if isinstance(obj, dict):
-        result = {}
-        for key, value in obj.items():
-            str_key = _serialize_dict_key(key)
-            if str_key in result:
-                raise SafeSerializationError(
-                    f"Key collision during serialization: {key!r} maps to "
-                    f"existing key {str_key!r}",
-                )
-            result[str_key] = _convert_to_serializable(value)
-        return result
+        return _convert_dict_to_serializable(obj)
 
     # Handle numpy arrays (small ones only - large arrays should use HDF5)
     if isinstance(obj, np.ndarray):

@@ -149,6 +149,52 @@ class TestModelRegistryCustomModels:
         result = model(x, 1.0, 1.0, 0.0)
         assert result is not None
 
+    def test_custom_model_loading_enforces_resource_limits(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        """Regression: exec_module() of a custom model must run inside
+        resource_limits() so the documented timeout/memory security feature
+        is not dead code (three-brain review finding)."""
+        monkeypatch.chdir(tmp_path)
+        model_file = tmp_path / "resource_limited_model.py"
+        model_file.write_text(
+            textwrap.dedent("""
+            def my_model(x, a):
+                return a * x
+        """)
+        )
+
+        entered = []
+        real_resource_limits = __import__(
+            "nlsq.cli.model_validation",
+            fromlist=["resource_limits"],
+        ).resource_limits
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def spy_resource_limits(*args, **kwargs):
+            entered.append(True)
+            with real_resource_limits(*args, **kwargs):
+                yield
+
+        monkeypatch.setattr(
+            "nlsq.cli.model_registry.resource_limits",
+            spy_resource_limits,
+        )
+
+        registry = ModelRegistry()
+        config = {
+            "type": "custom",
+            "path": str(model_file),
+            "function": "my_model",
+        }
+        registry.get_model(str(model_file), config)
+
+        assert entered, "exec_module() must run inside resource_limits()"
+
     def test_custom_model_with_estimate_p0(self, tmp_path: Path, monkeypatch):
         """Test that custom models can have optional estimate_p0 method."""
         # Change to tmp_path so validate_path allows the model file

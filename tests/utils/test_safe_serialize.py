@@ -567,3 +567,41 @@ class TestAdversarialSecurity:
         data = {"payload": "before\x00after"}
         result = safe_loads(safe_dumps(data))
         assert result["payload"] == "before\x00after"
+
+
+class TestDictKeyRoundTrip:
+    """Regression tests for dict-key round-trip bugs found by three-brain review."""
+
+    def test_bool_key_round_trips(self):
+        """bool dict keys must survive a save/load cycle (bool is an int subclass)."""
+        data = {True: "yes", False: "no"}
+        result = safe_loads(safe_dumps(data))
+        assert result == {True: "yes", False: "no"}
+        assert isinstance(next(iter(result)), bool)
+
+    def test_numpy_bool_key_round_trips(self):
+        data = {np.bool_(True): "yes"}
+        result = safe_loads(safe_dumps(data))
+        assert result == {True: "yes"}
+
+    def test_marker_prefixed_string_key_round_trips(self):
+        """A literal string key that looks like an internal marker must not
+        be reinterpreted as that marker's type on load."""
+        data = {"__int_key__7": "literal string, not an int"}
+        result = safe_loads(safe_dumps(data))
+        assert result == {"__int_key__7": "literal string, not an int"}
+
+    def test_unsupported_key_type_raises_instead_of_corrupting(self):
+        """Key types with no restore path must fail loudly, not silently
+        produce an unrestorable mangled string key."""
+        with pytest.raises(SafeSerializationError, match="dict key"):
+            safe_dumps({(1, 2): "tuple key"})
+        with pytest.raises(SafeSerializationError, match="dict key"):
+            safe_dumps({None: "none key"})
+
+    def test_reserved_type_marker_key_collision_raises(self):
+        """A plain dict that happens to use the reserved '__nlsq_type__' key
+        must be rejected rather than silently misread as an internal tuple/
+        float/ndarray marker on deserialization."""
+        with pytest.raises(SafeSerializationError, match="reserved key"):
+            safe_dumps({"__nlsq_type__": "tuple", "value": [1, 2]})
