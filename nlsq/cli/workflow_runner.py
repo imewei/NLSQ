@@ -410,6 +410,11 @@ class WorkflowRunner:
                     "success": True,
                     "message": "Optimization converged",
                     "nfev": 0,  # Not available in tuple return
+                    # Needed by ResultExporter._calculate_statistics for
+                    # r_squared; the CurveFitResult branch below already
+                    # sets this, so omitting it here silently drops
+                    # r_squared only for callers that get a plain tuple back.
+                    "ydata": ydata.tolist(),
                 }
             else:
                 # CurveFitResult object

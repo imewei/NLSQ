@@ -255,18 +255,31 @@ class ResidualsPlotWidget(QWidget):
         Returns:
             List of QBrush objects
         """
-        # Normalize by standard deviation or max
-        std = np.std(residuals)
-        if std > 0:
-            normalized = np.abs(residuals) / (2 * std)
+        # Normalize by standard deviation or max, computed over finite values
+        # only — a NaN std/max_val would otherwise make every check below
+        # false (NaN comparisons are always False) and fall through to
+        # `normalized = zeros`, miscoloring NaN/Inf residuals as "good".
+        finite_mask = np.isfinite(residuals)
+        finite_residuals = residuals[finite_mask]
+        if finite_residuals.size > 0:
+            std = np.std(finite_residuals)
+            if std > 0:
+                normalized = np.abs(residuals) / (2 * std)
+            else:
+                max_val = np.max(np.abs(finite_residuals))
+                normalized = (
+                    np.abs(residuals) / max_val
+                    if max_val > 0
+                    else np.zeros_like(residuals)
+                )
         else:
-            max_val = np.max(np.abs(residuals))
-            normalized = (
-                np.abs(residuals) / max_val if max_val > 0 else np.zeros_like(residuals)
-            )
+            normalized = np.zeros_like(residuals)
 
-        # Clip to [0, 1]
+        # Clip to [0, 1]; force non-finite residuals to 1.0 ("bad") instead of
+        # letting NaN propagate through clip (NaN stays NaN) or silently
+        # reading as "good".
         normalized = np.clip(normalized, 0, 1)
+        normalized = np.where(finite_mask, normalized, 1.0)
 
         # Parse theme semantic colors for the gradient endpoints
         c_good = pg.mkColor(self._theme.stat_good)

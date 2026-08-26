@@ -349,8 +349,14 @@ class AdvancedOptionsWidget(QWidget):
 
     def _set_checkbox_options(self, options: dict[str, Any]) -> None:
         """Set checkbox values from options dict."""
+        # get_options() emits "workflow": "auto"/"auto_global" (matching the
+        # presets in presets.py), never "enable_multistart" — that key was a
+        # dead mapping entry no producer ever set, so presets like Robust/
+        # Quality silently left the Multi-Start checkbox unchecked.
+        if "workflow" in options:
+            self._multistart_check.setChecked(options["workflow"] == "auto_global")
+
         checkbox_mapping = {
-            "enable_multistart": self._multistart_check,
             "center_on_p0": self._center_check,
             "normalize": self._normalize_check,
             "layer1_enabled": self._layer1_check,

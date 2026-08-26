@@ -203,6 +203,8 @@ def _generate_visualization(
                 logger.info(f"  - {path}")
 
     except Exception as e:
-        # Visualization errors should not fail the fit
-        if verbose:
-            logger.warning(f"Visualization generation failed: {e}")
+        # Visualization errors should not fail the fit, but must still be
+        # visible: gating this behind `verbose` meant a bad `export.formats`
+        # entry (e.g. an unsupported extension) silently produced zero plots
+        # on a default run with no indication anything went wrong.
+        logger.warning(f"Visualization generation failed: {e}")

@@ -95,11 +95,25 @@ class PageState:
         Returns:
             True if the page can be accessed
         """
-        access_rules = {
-            "data_loading": True,
-            "model_selection": self.data_loaded,
-            "fitting_options": self.data_loaded and self.model_selected,
-            "results": self.fit_complete,
-            "export": self.fit_complete,
-        }
+        # Block navigating to Data Loading/Model Selection while a fit is
+        # running: the background worker holds a snapshot of the current
+        # data/model, so changing either mid-fit would leave the eventual
+        # Results page showing a fit computed against data that no longer
+        # matches what's displayed.
+        if self.fit_running:
+            access_rules = {
+                "data_loading": False,
+                "model_selection": False,
+                "fitting_options": True,
+                "results": self.fit_complete,
+                "export": self.fit_complete,
+            }
+        else:
+            access_rules = {
+                "data_loading": True,
+                "model_selection": self.data_loaded,
+                "fitting_options": self.data_loaded and self.model_selected,
+                "results": self.fit_complete,
+                "export": self.fit_complete,
+            }
         return access_rules.get(page, True)

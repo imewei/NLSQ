@@ -759,7 +759,9 @@ class ExportPage(QWidget):
         if result is None or state.xdata is None:
             return None
 
-        popt = getattr(result, "x", None) or getattr(result, "popt", None)
+        popt = getattr(result, "x", None)
+        if popt is None:
+            popt = getattr(result, "popt", None)
         if popt is None:
             return None
 

@@ -120,8 +120,15 @@ class HistogramPlotWidget(QWidget):
         # Clear existing items
         self._plot_widget.clear()
 
+        # np.histogram autodetects its range from data.min()/max(); NaN/Inf
+        # values (e.g. from a diverged fit) make that range non-finite and
+        # raise ValueError, crashing the Results page.
+        finite_data = self._data[np.isfinite(self._data)]
+        if finite_data.size == 0:
+            return
+
         # Compute histogram
-        counts, bin_edges = np.histogram(self._data, bins=self._n_bins)
+        counts, bin_edges = np.histogram(finite_data, bins=self._n_bins)
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
         bin_width = bin_edges[1] - bin_edges[0]
 
@@ -160,25 +167,33 @@ class HistogramPlotWidget(QWidget):
         if self._data is None:
             return
 
-        # Compute mean and std
-        mean = np.mean(self._data)
-        std = np.std(self._data)
+        finite_data = self._data[np.isfinite(self._data)]
+        if finite_data.size == 0:
+            return
 
-        if std <= 0:
+        # Compute mean and std
+        mean = np.mean(finite_data)
+        std = np.std(finite_data)
+
+        # `std <= 0` is always False for NaN, so a NaN std would otherwise
+        # fall through and build an all-NaN overlay curve.
+        if not (std > 0):
             return
 
         # Create x values for curve
-        x_min = np.min(self._data)
-        x_max = np.max(self._data)
+        x_min = np.min(finite_data)
+        x_max = np.max(finite_data)
         x_range = x_max - x_min
         x = np.linspace(x_min - 0.1 * x_range, x_max + 0.1 * x_range, 200)
 
         # Normal distribution PDF
         y = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mean) / std) ** 2)
 
-        # Scale to match histogram
+        # Scale to match histogram — must use the same sample count as the
+        # bars (finite_data), not the raw (possibly non-finite-containing)
+        # self._data, or the overlay is inflated relative to the bars.
         bin_width = bin_edges[1] - bin_edges[0]
-        n_samples = len(self._data)
+        n_samples = finite_data.size
         y_scaled = y * n_samples * bin_width
 
         # Create curve — use theme fit_line color for the normal overlay

@@ -386,7 +386,12 @@ class DataLoadingPage(QWidget):
             self._column_selector.set_columns(self._column_names)
             self._update_preview()
 
-        except ValueError as e:
+        except Exception as e:
+            # Broadened from ValueError: numpy/str parsing on arbitrary
+            # pasted text can also raise other exception types (matches the
+            # broad `except Exception` used elsewhere in this file), and an
+            # uncaught one here would crash the page instead of showing the
+            # existing "Parse Error" dialog.
             self._show_error("Parse Error", str(e))
 
     def _on_column_selection_changed(self, selection: dict[str, int | None]) -> None:

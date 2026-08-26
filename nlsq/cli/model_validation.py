@@ -88,6 +88,15 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "mro",
         # Interactive debugger (can execute arbitrary code interactively)
         "breakpoint",
+        # sys.modules dict-access bypass: reaches already-imported os/subprocess
+        # etc. without a literal `import os` this visitor would otherwise catch
+        "modules",
+        # String-based getattr equivalents (operator.attrgetter/methodcaller,
+        # pydoc.locate) resolve dotted names at runtime, bypassing the
+        # Attribute/Name checks above
+        "attrgetter",
+        "methodcaller",
+        "locate",
     },
 )
 
@@ -120,7 +129,26 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "codeop",
         # Alternate code-execution entry points (bypass the exec/eval name check)
         "runpy",
+        # String-based getattr equivalents
+        "operator",
+        "pydoc",
     },
+)
+
+# Dunder substrings that are dangerous even inside a plain string constant,
+# because str.format()/str.format_map() resolve dotted attribute chains at
+# runtime from a format-spec string (e.g. "{0.__class__.__bases__}".format(x)),
+# which never appears as an ast.Attribute node for the visitor above to catch.
+_DANGEROUS_STRING_SUBSTRINGS: tuple[str, ...] = (
+    "__class__",
+    "__base__",
+    "__mro__",
+    "__subclasses__",
+    "__globals__",
+    "__builtins__",
+    "__code__",
+    "__import__",
+    "__loader__",
 )
 
 
@@ -201,6 +229,21 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                         self.violations.append(
                             f"File write operation: open(..., mode='{keyword.value.value}')",
                         )
+
+    def visit_Constant(self, node: ast.Constant) -> Any:
+        """Check string constants for dunder chains used in format-string escapes.
+
+        `"{0.__class__.__bases__}".format(x)` resolves the dotted chain at
+        runtime from inside the string itself, never producing an ast.Attribute
+        node, so it must be caught here instead of in visit_Attribute.
+        """
+        if isinstance(node.value, str):
+            for pattern in _DANGEROUS_STRING_SUBSTRINGS:
+                if pattern in node.value:
+                    self.violations.append(
+                        f"Dangerous string content (format-string escape risk): {pattern}",
+                    )
+        self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> Any:
         """Check for dangerous attribute accesses, including uncalled dunder chains.

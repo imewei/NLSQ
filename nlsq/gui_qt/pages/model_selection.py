@@ -418,6 +418,7 @@ class ModelSelectionPage(QWidget):
             self._on_function_selected(0)
         else:
             self._function_combo.setEnabled(False)
+            self._current_model = None
             self._equation_label.setText("")
             self._param_list.setText("Parameters: (define a function)")
             self._info_p0.setText("Auto initial guess: No")
@@ -466,6 +467,12 @@ class ModelSelectionPage(QWidget):
             self._info_jit.setText(f"JIT compatible: {'Likely' if is_jit else 'Check'}")
 
         except Exception as e:
+            # Clear the stale (previous) callable so _on_apply's `is None`
+            # guard actually blocks Apply — otherwise _current_model_type/
+            # _current_config already point at this failing code above, but
+            # _current_model itself would still be the last *successfully*
+            # parsed function, letting Apply silently reuse it.
+            self._current_model = None
             self._equation_label.setText(f"<span style='color: red;'>Error: {e}</span>")
             self._param_list.setText("Parameters: (error)")
 
