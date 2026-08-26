@@ -463,7 +463,7 @@ class MemoryBudgetSelector:
                     f"[NLSQ] Strategy: chunked (peak {budget.peak_gb:.2f} GB > "
                     f"safety threshold {budget.chunked_threshold_gb:.2f} GB)",
                 )
-            return self._create_chunked_config(budget, n_params, goal)
+            return self._create_chunked_config(budget, n_params, goal, n_points)
 
         # 3. else → STANDARD
         if verbose:
@@ -513,6 +513,7 @@ class MemoryBudgetSelector:
         budget: MemoryBudget,
         n_params: int,
         goal: "OptimizationGoal | None",
+        n_points: int,
     ) -> tuple[str, "LDMemoryConfig"]:
         """Create configuration for chunked strategy.
 
@@ -524,6 +525,10 @@ class MemoryBudgetSelector:
             Number of fit parameters.
         goal : OptimizationGoal | None
             Optimization goal.
+        n_points : int
+            Number of data points. Used to cap min_chunk_size so it can
+            never exceed the dataset itself -- see min_chunk_size comment
+            below.
 
         Returns
         -------
@@ -535,12 +540,26 @@ class MemoryBudgetSelector:
         # Compute chunk size based on available memory
         chunk_size = self._compute_chunk_size(budget, n_params)
 
+        # min_chunk_size exists to bound the number of chunks (avoid
+        # per-chunk overhead from thousands of tiny chunks) for large
+        # datasets -- it must not itself force a small-n_points/huge-n_params
+        # dataset back into a single unchunked fit. LargeDatasetFitter's own
+        # chunk-size estimate (a separate, independent calculation from
+        # this selector's) floors at LDMemoryConfig.min_chunk_size too; if
+        # that floor is >= n_points, LargeDatasetFitter collapses to one
+        # chunk containing the whole dataset regardless of memory pressure,
+        # silently defeating the very reason "chunked" was selected. Scale
+        # the floor down for small n_points (no-op for n_points >= 10_000,
+        # where it's still exactly 1_000 as before) so real chunking stays
+        # possible.
+        min_chunk_size = min(1_000, max(1, n_points // 10))
+
         return (
             "chunked",
             LDMemoryConfig(
                 memory_limit_gb=budget.threshold_gb,
                 safety_factor=self.safety_factor,
-                min_chunk_size=1_000,
+                min_chunk_size=min_chunk_size,
                 max_chunk_size=1_000_000,
                 streaming_batch_size=chunk_size,
             ),

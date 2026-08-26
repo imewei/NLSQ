@@ -770,3 +770,52 @@ class TestMemoryBudgetSelectorRegressions:
             mock_compute.assert_not_called()
 
         assert strategy == "standard"
+
+    def test_chunked_config_min_chunk_size_never_exceeds_n_points(self):
+        """MemoryBudgetSelector._create_chunked_config hardcoded
+        min_chunk_size=1_000 in the LDMemoryConfig it returns, regardless
+        of n_points. LargeDatasetFitter.calculate_optimal_chunk_size floors
+        its own chunk size at that same min_chunk_size -- so whenever
+        n_points < 1_000 (a case only reachable now that _fit_with_config
+        no longer bypasses LargeDatasetFitter below 1M points, per PR #8),
+        the fitter had no valid chunk size below n_points and silently
+        collapsed to a single unchunked fit of the whole (small-n_points,
+        huge-n_params) dataset -- exactly defeating the memory-based
+        'chunked' decision this PR exists to enforce (found by an
+        independent Codex review pass on PR #8).
+
+        min_chunk_size must scale down for small n_points so real
+        chunking stays possible, while staying exactly 1_000 (unchanged)
+        for n_points large enough that the floor was never the problem."""
+        from nlsq.core.workflow import MemoryBudgetSelector
+        from nlsq.streaming.large_dataset import LargeDatasetFitter
+
+        selector = MemoryBudgetSelector(safety_factor=0.75)
+
+        # Small n_points, huge n_params, tight memory limit -- the exact
+        # reproduction from the Codex review.
+        strategy, config = selector.select(
+            n_points=500, n_params=20_000, memory_limit_gb=0.25
+        )
+        assert strategy == "chunked"
+        assert config.min_chunk_size <= 500
+        assert config.min_chunk_size < 1_000  # the old hardcoded floor
+
+        # LargeDatasetFitter's own (independent) chunk-size estimate must
+        # now actually split the dataset instead of collapsing to 1 chunk.
+        fitter = LargeDatasetFitter(
+            memory_limit_gb=config.memory_limit_gb, config=config
+        )
+        stats = fitter.estimate_requirements(500, 20_000)
+        assert stats.n_chunks > 1, (
+            f"expected real chunking, got n_chunks={stats.n_chunks} "
+            f"(chunk_size={stats.recommended_chunk_size})"
+        )
+
+        # Existing large-n_points behavior must be unchanged: the floor
+        # stays exactly 1_000 once n_points is large enough that it was
+        # never the problem (n_points // 10 >= 1_000).
+        _strategy_large, config_large = selector.select(
+            n_points=1_000_000, n_params=100, memory_limit_gb=1.0
+        )
+        assert config_large.min_chunk_size == 1_000

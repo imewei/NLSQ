@@ -475,6 +475,52 @@ class TestBugFixRegressions(unittest.TestCase):
                 self.assertIsNotNone(used_config)
                 self.assertEqual(used_config.data_chunk_size, expected_chunk_size)
 
+    def test_fit_global_cmaes_clamps_budget_chunk_size_below_cmaes_minimum(self):
+        """MemoryBudgetSelector's own chunk-size floor is 1_000 (FR-007),
+        but CMAESConfig.data_chunk_size requires >= 1024 and raises
+        ValueError otherwise. Passing a memory_config whose budget-derived
+        chunk size falls in [1000, 1023] into _fit_global_cmaes used to
+        pass that value straight through to CMAESConfig unclamped,
+        crashing exactly the streaming/chunked auto_global CMA-ES runs
+        this PR's memory_config threading was meant to make safer (found
+        by an independent Codex review pass on PR #8)."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_global_cmaes
+        from nlsq.global_optimization.cmaes_config import CMAESConfig
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        x = np.linspace(0, 5, 50)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+        # 1_000 is exactly MemoryBudgetSelector's own floor -- below
+        # CMAESConfig's hard minimum of 1024.
+        memory_config = HybridStreamingConfig(chunk_size=1_000)
+
+        with patch(
+            "nlsq.global_optimization.cmaes_optimizer.CMAESOptimizer"
+        ) as mock_optimizer_cls:
+            mock_optimizer_cls.return_value.fit.return_value = {
+                "popt": np.array([2.0, 0.5]),
+                "pcov": np.eye(2),
+            }
+            _fit_global_cmaes(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y,
+                p0=np.array([1.0, 1.0]),
+                sigma=None,
+                absolute_sigma=False,
+                bounds=(np.array([0.0, 0.0]), np.array([10.0, 5.0])),
+                strategy="streaming",
+                cmaes_config=CMAESConfig(data_chunk_size=None),
+                memory_config=memory_config,
+            )
+
+        mock_optimizer_cls.assert_called_once()
+        _args, ctor_kwargs = mock_optimizer_cls.call_args
+        used_config = ctor_kwargs.get("config") or (_args[0] if _args else None)
+        self.assertGreaterEqual(used_config.data_chunk_size, 1024)
+
     def test_fit_global_multistart_streaming_reuses_real_memory_config(self):
         """_fit_global_multistart's streaming branch (strategy not
         'standard' or 'chunked') builds a fresh HybridStreamingConfig()

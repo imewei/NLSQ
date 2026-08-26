@@ -1415,9 +1415,17 @@ def _fit_global_cmaes(
 
     # Budget-derived chunk size (HybridStreamingConfig.chunk_size for
     # streaming, LDMemoryConfig.streaming_batch_size for chunked).
+    # MemoryBudgetSelector's own floor for these is 1_000 (or lower for
+    # small n_points -- see MemoryBudgetSelector._create_chunked_config),
+    # but CMAESConfig.data_chunk_size requires >= 1024 (numerical
+    # stability) and raises ValueError otherwise -- clamp up to that
+    # CMA-ES-specific minimum rather than passing the budget's value
+    # through unchanged.
     budget_chunk_size = getattr(memory_config, "chunk_size", None) or getattr(
         memory_config, "streaming_batch_size", None
     )
+    if budget_chunk_size is not None:
+        budget_chunk_size = max(budget_chunk_size, 1024)
 
     # FR-003: Set data_chunk_size for streaming/chunked strategies
     if strategy == "streaming":
