@@ -615,12 +615,12 @@ class MemoryManager:
         """
         key = (shape, dtype)
 
-        # Check pool for existing array. Pop it out (not just move_to_end) -
-        # a checked-out array is not free anymore, and leaving it in the pool
-        # lets a second allocate_array() call with the same (shape, dtype)
-        # hand out the same ndarray object before free_array() returns it.
+        # Check pool for existing array
         if key in self.memory_pool:
-            arr = self.memory_pool.pop(key)
+            arr = self.memory_pool[key]
+            # Task Group 7 (1.2a): Move to end for LRU tracking
+            # This marks the array as recently used
+            self.memory_pool.move_to_end(key)
             if zero:
                 arr.fill(0)
             return arr
