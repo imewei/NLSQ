@@ -4,7 +4,51 @@ import sys
 import textwrap
 import time
 
+import numpy as np
 import pytest
+
+from nlsq.global_optimization.cmaes_config import CMAESConfig
+from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+
+def _exponential_decay(x, a, b):
+    import jax.numpy as jnp
+
+    return a * jnp.exp(-b * x)
+
+
+def test_signal_handlers_restored_after_normal_fit(tmp_path):
+    """fit()'s `with self._preemption_handling(...):` registers SIGTERM/
+    SIGUSR1 handlers on entry and must restore whatever was previously
+    installed on exit -- including the ordinary, non-preempted completion
+    path, not just the CMAESPreempted path. A library silently leaving its
+    own handler installed after returning would break the caller's own
+    SIGTERM handling for the rest of the process lifetime; this only
+    surfaces by comparing disposition before/after, never by output alone."""
+    previous_term = signal.getsignal(signal.SIGTERM)
+    previous_usr1 = signal.getsignal(signal.SIGUSR1)
+
+    x = np.linspace(0, 5, 50)
+    y = np.asarray(_exponential_decay(x, 2.5, 0.5))
+    config = CMAESConfig(
+        max_generations=5,
+        restart_strategy="none",
+        seed=19,
+        model_id="exponential_decay_v1",
+        checkpoint_dir=str(tmp_path),
+        checkpoint_interval=5,
+        run_id="handler-restore-test",
+    )
+    CMAESOptimizer(config=config).fit(
+        _exponential_decay,
+        x,
+        y,
+        bounds=([0.0, 0.0], [10.0, 2.0]),
+        refine_with_nlsq=False,
+    )
+
+    assert signal.getsignal(signal.SIGTERM) == previous_term
+    assert signal.getsignal(signal.SIGUSR1) == previous_usr1
 
 
 def test_sigterm_mid_run_leaves_valid_checkpoint(tmp_path):

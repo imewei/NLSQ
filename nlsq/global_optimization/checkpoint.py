@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import h5py  # type: ignore[import-untyped,import-not-found]
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from nlsq.utils.safe_serialize import safe_dumps, safe_loads
@@ -80,14 +81,18 @@ def serialize_key(key: jax.Array) -> np.ndarray:
 
 def deserialize_key(data: np.ndarray) -> jax.Array:
     """Reconstruct a typed JAX PRNG key from `serialize_key`'s output."""
-    import jax.numpy as jnp
 
     return jax.random.wrap_key_data(jnp.asarray(data, dtype=jnp.uint32))
 
 
-def serialize_evosax_state(state: EvosaxState) -> dict[str, np.ndarray | int]:
-    """Convert an evosax CMA_ES State (a JAX-array-valued flax.struct.dataclass) to a
-    plain dict of numpy arrays, safe for HDF5 storage."""
+def serialize_evosax_state(
+    state: EvosaxState | CMAESCheckpointState,
+) -> dict[str, np.ndarray | int]:
+    """Convert an evosax CMA_ES State (a JAX-array-valued flax.struct.dataclass)
+    -- or a `CMAESCheckpointState`, which duck-types the same field names --
+    to a plain dict of numpy arrays, safe for HDF5 storage. `HPCCheckpointManager.save()`
+    calls this directly so the code path real checkpoints go through is the
+    same one this module's serialization round-trip tests exercise."""
     out: dict[str, np.ndarray | int] = {
         "generation_counter": int(state.generation_counter),
     }
@@ -106,7 +111,6 @@ def deserialize_evosax_state(
     `es.init(...)` call with the same popsize/n_params) -- only its field
     values are replaced, not its structure.
     """
-    import jax.numpy as jnp
 
     replacements: dict[str, Any] = {
         name: jnp.asarray(d[name]) for name in _EVOSAX_ARRAY_FIELDS
@@ -115,7 +119,11 @@ def deserialize_evosax_state(
     return template_state.replace(**replacements)
 
 
-__all__ += ["HPCCheckpointManager", "compute_fingerprint"]
+__all__ += [
+    "CheckpointFingerprintMismatch",
+    "HPCCheckpointManager",
+    "compute_fingerprint",
+]
 
 _VERSION = "1.0"
 
@@ -180,12 +188,33 @@ _FINGERPRINT_COMPARISON_KEYS = (
 )
 
 
+class CheckpointFingerprintMismatch(ValueError):
+    """Raised when a checkpoint's stored fingerprint doesn't match the
+    current run's inputs. A `ValueError` subclass for backward
+    compatibility with generic `except ValueError` handling, but distinct
+    from the plain `ValueError`s `_load_one` raises for a torn write or
+    version mismatch: those mean the file is unusable and `.bak` is a
+    legitimate recovery (FR8); this means the file loaded and parsed fine,
+    it just belongs to a different run (FR6's deliberate hard stop) --
+    `HPCCheckpointManager.load()` never falls back to `.bak` for this one.
+    """
+
+
 class HPCCheckpointManager:
     """Owns all checkpoint file I/O for CMA-ES resume. CMAESOptimizer calls
     this; it never touches h5py directly (keeps the optimizer a pure
     numerical engine, per the three-brain architecture review)."""
 
     VERSION = _VERSION
+
+    @staticmethod
+    def bak_path(path: str | Path) -> Path:
+        """The `.bak` path `save()`/`load()` use for a given checkpoint
+        path -- the single source of truth for this naming convention, so
+        callers (e.g. CMAESOptimizer's resume-on-entry check) never need to
+        reconstruct it independently."""
+        path = Path(path)
+        return path.with_suffix(path.suffix + ".bak")
 
     def save(
         self,
@@ -195,19 +224,15 @@ class HPCCheckpointManager:
     ) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        bak_path = path.with_suffix(path.suffix + ".bak")
+        bak_path = self.bak_path(path)
         tmp_path = path.with_suffix(path.suffix + ".tmp")
 
         with h5py.File(tmp_path, "w") as f:
             f.attrs["timestamp"] = time.time()
 
             state_group = f.create_group("state")
-            state_group.create_dataset(
-                "generation_counter",
-                data=state.generation_counter,
-            )
-            for name in _EVOSAX_ARRAY_FIELDS:
-                state_group.create_dataset(name, data=np.asarray(getattr(state, name)))
+            for name, value in serialize_evosax_state(state).items():
+                state_group.create_dataset(name, data=value)
             state_group.create_dataset("key_data", data=state.key_data)
             state_group.create_dataset("popsize", data=state.popsize)
             state_group.create_dataset(
@@ -248,10 +273,19 @@ class HPCCheckpointManager:
         expected_fingerprint: dict[str, Any],
     ) -> CMAESCheckpointState:
         path = Path(path)
-        bak_path = path.with_suffix(path.suffix + ".bak")
+        bak_path = self.bak_path(path)
 
         try:
             return self._load_one(path, expected_fingerprint)
+        except CheckpointFingerprintMismatch:
+            # The primary loaded and parsed fine -- it just doesn't belong
+            # to this run. Never fall back to .bak for this: the .bak
+            # almost always shares the primary's fingerprint (both come
+            # from the same run), so a fallback would just re-raise this
+            # same mismatch after a misleading "falling back to .bak" log
+            # message. Re-raise immediately as the clean, unambiguous
+            # hard stop FR6 requires.
+            raise
         except (FileNotFoundError, OSError, ValueError) as primary_error:
             if not bak_path.exists():
                 raise
@@ -288,7 +322,7 @@ class HPCCheckpointManager:
                 expected_v = expected_fingerprint[k]
                 actual_v = fp_group.attrs.get(k)
                 if actual_v != expected_v:
-                    raise ValueError(
+                    raise CheckpointFingerprintMismatch(
                         f"Checkpoint fingerprint mismatch on field {k!r}: "
                         f"checkpoint has {actual_v!r}, current run has "
                         f"{expected_v!r}. Refusing to resume from an "
@@ -306,6 +340,6 @@ class HPCCheckpointManager:
                 ),
             }
             for name in _EVOSAX_ARRAY_FIELDS:
-                kwargs[name] = jax.numpy.asarray(state_group[name][()])
+                kwargs[name] = jnp.asarray(state_group[name][()])
 
             return CMAESCheckpointState(**kwargs)

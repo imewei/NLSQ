@@ -727,6 +727,7 @@ class CMAESOptimizer:
             CMAESCheckpointState,
             deserialize_evosax_state,
             deserialize_key,
+            serialize_evosax_state,
             serialize_key,
         )
 
@@ -763,9 +764,7 @@ class CMAESOptimizer:
             assert checkpoint_path is not None
             assert checkpoint_manager is not None
             assert checkpoint_fingerprint is not None
-            checkpoint_bak_path = checkpoint_path.with_suffix(
-                checkpoint_path.suffix + ".bak"
-            )
+            checkpoint_bak_path = checkpoint_manager.bak_path(checkpoint_path)
             # Check for .bak too, not just the primary: if a crash deleted or
             # never finished writing the primary but a prior successful
             # save's rotated .bak survives, resume must still attempt it --
@@ -777,19 +776,12 @@ class CMAESOptimizer:
                 loaded = checkpoint_manager.load(
                     checkpoint_path, checkpoint_fingerprint
                 )
+                # serialize_evosax_state duck-types on `loaded`'s field
+                # names (a CMAESCheckpointState) exactly like it does on a
+                # real evosax State -- single source of truth for the
+                # field list instead of hand-writing it again here.
                 state = deserialize_evosax_state(
-                    {
-                        "generation_counter": loaded.generation_counter,
-                        "mean": loaded.mean,
-                        "std": loaded.std,
-                        "p_std": loaded.p_std,
-                        "p_c": loaded.p_c,
-                        "C": loaded.C,
-                        "B": loaded.B,
-                        "D": loaded.D,
-                        "best_solution": loaded.best_solution,
-                        "best_fitness": loaded.best_fitness,
-                    },
+                    serialize_evosax_state(loaded),
                     state,
                 )
                 key = deserialize_key(loaded.key_data)

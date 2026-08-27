@@ -352,7 +352,8 @@ def estimate_cmaes_memory_gb(
     peak_bytes = eff_pop * bytes_per_candidate
 
     # Add overhead for input data (xdata, ydata)
-    # When data_chunk_size is set, we use dynamic_slice which doesn't copy
+    # When data_chunk_size is set, chunks are read via reshape + indexing
+    # (not a copying operation) instead of holding xdata/ydata in full
     if data_chunk_size is None:
         peak_bytes += n_data * 8 * 2  # xdata + ydata
 

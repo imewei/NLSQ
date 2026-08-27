@@ -393,6 +393,42 @@ def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
     assert (tmp_path / "hpc-e2e-test.h5").exists()
 
 
+def test_auto_global_cmaes_route_actually_checkpoints(tmp_path):
+    """workflow='auto_global' called directly (not via workflow='hpc') must
+    forward checkpoint_dir into CMAESConfig too -- checkpoint_dir was
+    previously only recognized inside _fit_with_hpc's own kwargs handling,
+    so a caller reaching CMAESOptimizer through workflow='auto_global'
+    (which is itself a fully documented, directly-callable entry point)
+    got checkpoint_dir silently swallowed as an unrecognized kwarg with no
+    warning and no checkpoint file ever written."""
+    from nlsq import fit
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
+
+    x = jnp.linspace(0, 5, 100)
+    y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        result = fit(
+            model,
+            x,
+            y,
+            p0=[1.0, 0.5],
+            workflow="auto_global",
+            bounds=([0.0, 0.0], [10.0, 10.0]),
+            checkpoint_dir=str(tmp_path),
+            checkpoint_interval=5,
+            run_id="auto-global-e2e-test",
+            model_id="auto-global-e2e-model",
+            seed=1,
+            method="cmaes",
+            cmaes_config=CMAESConfig(restart_strategy="none"),
+        )
+
+    assert result is not None
+    assert (tmp_path / "auto-global-e2e-test.h5").exists()
+
+
 def test_auto_global_method_cmaes_actually_selects_cmaes():
     """FR9, isolated from checkpointing: workflow='auto_global' with
     method='cmaes' must force the CMA-ES route even when the data's scale

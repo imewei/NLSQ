@@ -1182,6 +1182,29 @@ def _fit_with_auto_global(
     cmaes_config = kwargs.pop("cmaes_config", None)
     memory_limit_gb = kwargs.pop("memory_limit_gb", None)
 
+    # Checkpoint/resume is implemented only for the CMA-ES route
+    # (restart_strategy="none") -- see
+    # docs/superpowers/plans/2026-08-27-cmaes-checkpoint-resume-spec.md.
+    # This extraction lives here (not only in _fit_with_hpc) so checkpoint_dir
+    # works identically regardless of entry point: workflow='hpc' forwards its
+    # kwargs through unconverted and hits this same logic, and a direct
+    # workflow='auto_global' call (which never passes through _fit_with_hpc)
+    # gets the same capability instead of checkpoint_dir silently riding
+    # through as an unrecognized kwarg. Whether the CMA-ES route is even
+    # selected depends on MethodSelector's choice below, so thread the
+    # checkpoint kwargs through unconditionally and let _fit_global_cmaes wire
+    # them into CMAESConfig; every OTHER route (multistart/chunked/streaming)
+    # still needs the warning, which _fit_global_multistart already emits.
+    checkpoint_dir = kwargs.pop("checkpoint_dir", None)
+    checkpoint_interval = kwargs.pop("checkpoint_interval", None)
+    run_id = kwargs.pop("run_id", None)
+    model_id = kwargs.pop("model_id", None)
+    if checkpoint_dir is not None:
+        kwargs["_hpc_checkpoint_dir"] = checkpoint_dir
+        kwargs["_hpc_checkpoint_interval"] = checkpoint_interval
+        kwargs["_hpc_run_id"] = run_id
+        kwargs["_hpc_model_id"] = model_id
+
     # FR-000: Select memory strategy with detailed logging
     selector = MemoryBudgetSelector(safety_factor=0.75)
 
@@ -1364,32 +1387,12 @@ def _fit_with_hpc(
             "    fit(model, x, y, workflow='hpc', bounds=([0, 0], [10, 10]))",
         )
 
-    # Extract HPC-specific parameters
-    checkpoint_dir = kwargs.pop("checkpoint_dir", None)
-    checkpoint_interval = kwargs.pop("checkpoint_interval", 5)
-    run_id = kwargs.pop("run_id", None)
-    model_id = kwargs.pop("model_id", None)
-
-    # Checkpoint/resume is implemented only for the CMA-ES route
-    # (restart_strategy="none") -- see
-    # docs/superpowers/plans/2026-08-27-cmaes-checkpoint-resume-spec.md.
-    # Whether the CMA-ES route is even selected depends on
-    # MethodSelector's choice inside _fit_with_auto_global, which this
-    # function doesn't know yet at this point -- so thread the
-    # checkpoint kwargs through unconditionally and let
-    # _fit_global_cmaes wire them into CMAESConfig; every OTHER route
-    # (multistart/chunked/streaming) still needs the warning, and
-    # _fit_global_cmaes doesn't see kwargs meant for those routes, so
-    # the warning must be emitted from wherever the route is actually
-    # decided. Since that decision lives inside _fit_with_auto_global's
-    # MethodSelector (not yet reached here), pass a marker through
-    # kwargs and let _fit_global_cmaes consume it silently while
-    # _fit_with_auto_global's other route functions keep warning.
-    if checkpoint_dir is not None:
-        kwargs["_hpc_checkpoint_dir"] = checkpoint_dir
-        kwargs["_hpc_checkpoint_interval"] = checkpoint_interval
-        kwargs["_hpc_run_id"] = run_id
-        kwargs["_hpc_model_id"] = model_id
+    # checkpoint_dir/checkpoint_interval/run_id/model_id are intentionally
+    # NOT extracted here: they're forwarded unconverted in **kwargs to
+    # _fit_with_auto_global below, which does the checkpoint_dir ->
+    # _hpc_checkpoint_dir marker conversion itself -- this way the
+    # conversion happens identically whether the caller reaches CMA-ES
+    # through workflow='hpc' (here) or workflow='auto_global' directly.
 
     # Detect cluster environment
     from nlsq.core.workflow import ClusterDetector
@@ -1465,19 +1468,30 @@ def _fit_global_cmaes(
         cmaes_config = CMAESConfig()
 
     checkpoint_dir = kwargs.pop("_hpc_checkpoint_dir", None)
-    checkpoint_interval = kwargs.pop("_hpc_checkpoint_interval", 5)
+    checkpoint_interval = kwargs.pop("_hpc_checkpoint_interval", None)
     run_id = kwargs.pop("_hpc_run_id", None)
     model_id = kwargs.pop("_hpc_model_id", None)
     seed = kwargs.pop("seed", None)
+
+    # seed applies whenever provided, independent of checkpoint_dir -- it's
+    # the general CMA-ES reproducibility knob, not a checkpoint-only concern.
+    if seed is not None:
+        cmaes_config = dataclasses.replace(cmaes_config, seed=seed)
 
     if checkpoint_dir is not None:
         cmaes_config = dataclasses.replace(
             cmaes_config,
             checkpoint_dir=checkpoint_dir,
-            checkpoint_interval=checkpoint_interval,
+            # No literal default here: fall back to CMAESConfig's own
+            # checkpoint_interval default (10) instead of silently using a
+            # different, undocumented one when the caller doesn't specify it.
+            checkpoint_interval=(
+                checkpoint_interval
+                if checkpoint_interval is not None
+                else cmaes_config.checkpoint_interval
+            ),
             run_id=run_id,
             model_id=model_id,
-            seed=seed if seed is not None else cmaes_config.seed,
         )
 
     # Budget-derived chunk size (HybridStreamingConfig.chunk_size for

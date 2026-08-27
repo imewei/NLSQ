@@ -59,10 +59,8 @@ def test_checkpoint_state_construction():
     assert state.popsize == 8
 
 
-import hashlib
-from pathlib import Path
-
 from nlsq.global_optimization.checkpoint import (
+    CheckpointFingerprintMismatch,
     HPCCheckpointManager,
     compute_fingerprint,
 )
@@ -103,6 +101,48 @@ def _sample_fingerprint():
     )
 
 
+def test_compute_fingerprint_config_hash_changes_with_sigma():
+    """`config_fields["sigma"]` (and the other CMAESConfig fields
+    compute_fingerprint hashes) must actually be reflected in `config_hash`
+    -- fp construction was previously untested beyond fp comparison, so a
+    caller silently dropping a field from `config_fields` (e.g. forgetting
+    `sigma` at the fit()-level call site) would type-check and pass every
+    existing test while letting a resume silently proceed against
+    materially different config."""
+    base_kwargs = {
+        "model_id": "test_model_v1",
+        "xdata": np.linspace(0, 1, 10),
+        "ydata": np.linspace(0, 1, 10),
+        "sigma": None,
+        "bounds": (np.array([0.0, 0.0, 0.0]), np.array([10.0, 10.0, 10.0])),
+    }
+    fp_a = compute_fingerprint(
+        **base_kwargs,
+        config_fields={
+            "popsize": 8,
+            "sigma": 0.5,
+            "tol_fun": 1e-8,
+            "tol_x": 1e-8,
+            "seed": 1,
+        },
+    )
+    fp_b = compute_fingerprint(
+        **base_kwargs,
+        config_fields={
+            "popsize": 8,
+            "sigma": 0.75,  # only this differs
+            "tol_fun": 1e-8,
+            "tol_x": 1e-8,
+            "seed": 1,
+        },
+    )
+    assert fp_a["config_hash"] != fp_b["config_hash"]
+    # Every other fingerprint field is identical -- config_hash is the only
+    # thing that should move.
+    for key in ("model_id", "data_hash", "n_params", "bounds_hash"):
+        assert fp_a[key] == fp_b[key]
+
+
 def test_save_load_round_trip(tmp_path):
     manager = HPCCheckpointManager()
     fp = _sample_fingerprint()
@@ -129,6 +169,36 @@ def test_load_fingerprint_mismatch_raises(tmp_path):
     bad_fp["data_hash"] = "deadbeef" * 8
     with pytest.raises(ValueError, match="fingerprint"):
         manager.load(path, bad_fp)
+
+
+def test_load_fingerprint_mismatch_with_bak_present_does_not_fall_back(
+    tmp_path, caplog
+):
+    """A fingerprint mismatch is FR6's deliberate hard stop, not an FR8
+    recoverable failure -- it must raise immediately as
+    CheckpointFingerprintMismatch without touching .bak, even when .bak
+    exists (and, since save() rotates the same fingerprint into .bak, would
+    otherwise produce a misleading "falling back to .bak" log message
+    before ultimately re-raising the identical mismatch)."""
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    manager.save(path, _sample_state(), fp)
+    state2 = _sample_state()
+    state2.generation_counter = 10
+    manager.save(path, state2, fp)  # rotates state1 into .bak; both share fp
+    assert (tmp_path / "run1.h5.bak").exists()
+
+    bad_fp = dict(fp)
+    bad_fp["data_hash"] = "deadbeef" * 8
+    import logging
+
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.raises(CheckpointFingerprintMismatch, match="fingerprint"),
+    ):
+        manager.load(path, bad_fp)
+    assert "falling back to" not in caplog.text
 
 
 def test_save_is_atomic_leaves_no_tmp_file(tmp_path):
