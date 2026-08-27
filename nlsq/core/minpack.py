@@ -1204,6 +1204,21 @@ def _fit_with_auto_global(
         kwargs["_hpc_checkpoint_interval"] = checkpoint_interval
         kwargs["_hpc_run_id"] = run_id
         kwargs["_hpc_model_id"] = model_id
+    elif checkpoint_interval is not None or run_id is not None or model_id is not None:
+        # These only make sense alongside checkpoint_dir -- e.g. a caller
+        # passing run_id='job-042' to override a run_id already baked into
+        # a pre-built cmaes_config, expecting it to parameterize that
+        # config's checkpoint file. Without checkpoint_dir at the top
+        # level there is no marker for _fit_global_cmaes to apply these
+        # against, so they would otherwise be silently discarded here.
+        warnings.warn(
+            "checkpoint_interval/run_id/model_id were provided without "
+            "checkpoint_dir -- they have no effect. If checkpoint_dir is "
+            "set on a pre-built cmaes_config, pass these overrides on "
+            "that CMAESConfig directly instead of as fit() kwargs.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     # FR-000: Select memory strategy with detailed logging
     selector = MemoryBudgetSelector(safety_factor=0.75)
@@ -1412,8 +1427,9 @@ def _fit_with_hpc(
     else:
         _logger.info("workflow='hpc' running on local machine (no cluster detected)")
 
-    # For now, delegate to auto_global
-    # TODO: Add checkpoint infrastructure in Phase 5 (T042-T048)
+    # Delegates to auto_global, which does the checkpoint_dir ->
+    # _hpc_checkpoint_dir marker conversion for the CMA-ES route (see the
+    # comment on that conversion in _fit_with_auto_global).
     return _fit_with_auto_global(
         f=f,
         xdata=xdata,

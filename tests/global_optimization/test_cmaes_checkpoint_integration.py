@@ -117,15 +117,15 @@ def test_resume_matches_uninterrupted_run(tmp_path, monkeypatch):
     assert len(load_calls) == 1
 
     np.testing.assert_array_equal(resume_result["popt"], ref_result["popt"])
-    # `load_calls == 1` only proves load() was *called*, not that its return
-    # value was actually threaded into `state`/`key` -- a regression that
-    # called load() then ignored the result would still reproduce ref_result
-    # bit-exactly here (same seed, same total generation count). Comparing
-    # the interrupted run's own generation-by-generation fitness_history
-    # against the resumed run's first 15 entries can only match if the
-    # loaded state was genuinely picked up: a fresh restart's trajectory
-    # from generation 0 would not coincide with the *partial* run's history
-    # the way it coincides with the *complete* reference run's final popt.
+    # NOTE: neither `load_calls == 1` nor the fitness_history comparison
+    # below actually discriminates "loaded state genuinely used" from
+    # "load() called then ignored" -- CMA-ES's trajectory is a pure
+    # function of (seed, popsize, initial_solution), independent of
+    # max_generations, so ref/part/resume all sharing seed=11 makes
+    # part_history a prefix of ref_history regardless of whether resume
+    # actually threads the loaded state through. See
+    # test_resume_genuinely_uses_loaded_state_not_a_fresh_restart below
+    # for the test that actually proves this via sentinel injection.
     resume_history = resume_result["cmaes_diagnostics"]["fitness_history"]
     assert len(resume_history) == 30
     np.testing.assert_array_equal(resume_history[:15], part_history)
@@ -248,3 +248,74 @@ def test_resume_from_already_converged_checkpoint_is_a_noop(tmp_path):
 
     assert result["cmaes_diagnostics"]["total_generations"] == 10
     assert checkpoint_path.stat().st_mtime_ns == mtime_before
+
+
+def test_resume_genuinely_uses_loaded_state_not_a_fresh_restart(tmp_path):
+    """Neither `load_calls == 1` (proves load() was called) nor a
+    fitness_history-prefix comparison (CMA-ES's trajectory is a pure
+    function of seed/popsize/initial_solution, independent of
+    max_generations -- confirmed empirically: a fresh restart with the
+    same seed reproduces the interrupted run's own history regardless of
+    whether resume ever executes) can distinguish "loaded state genuinely
+    threaded through" from "load() called, then its return value ignored
+    and the optimizer restarted from scratch." This test can: it injects
+    an artificial best_fitness into the on-disk checkpoint that is
+    strictly better than any value CMA-ES could organically reach on this
+    problem in the generations available, then resumes. Only a genuine
+    load can produce that exact sentinel in the final result -- a fresh
+    restart could never beat it, so it would report its own (much worse,
+    organically-reached) best_fitness instead."""
+    import h5py
+
+    x = np.linspace(0, 5, 50)
+    y = np.asarray(exponential_decay(x, 2.5, 0.5))
+    bounds = ([0.0, 0.0], [10.0, 2.0])
+    checkpoint_dir = tmp_path / "sentinel-resume"
+
+    part_config = CMAESConfig(
+        restart_strategy="none",
+        seed=23,
+        model_id="exponential_decay_v1",
+        max_generations=15,
+        checkpoint_dir=str(checkpoint_dir),
+        checkpoint_interval=15,
+        run_id="sentinel-test",
+    )
+    CMAESOptimizer(config=part_config).fit(
+        exponential_decay,
+        x,
+        y,
+        bounds=bounds,
+        refine_with_nlsq=False,
+    )
+    checkpoint_path = checkpoint_dir / "sentinel-test.h5"
+    assert checkpoint_path.exists()
+
+    # exponential_decay's SSR-based fitness is always >= 0 for real data;
+    # a negative sentinel is organically unreachable in this problem, so
+    # if it survives to the final result, the on-disk value was genuinely
+    # loaded and threaded into both the tracked best_solution/best_fitness
+    # and evosax's own internal state.best_fitness (best_fitness is one of
+    # the fields serialize/deserialize_evosax_state round-trips).
+    sentinel_fitness = -1_000_000.0
+    with h5py.File(checkpoint_path, "r+") as f:
+        f["state"]["best_fitness"][...] = sentinel_fitness
+
+    resume_config = CMAESConfig(
+        restart_strategy="none",
+        seed=23,
+        model_id="exponential_decay_v1",
+        max_generations=17,  # a couple more generations past the checkpoint
+        checkpoint_dir=str(checkpoint_dir),
+        checkpoint_interval=15,
+        run_id="sentinel-test",
+    )
+    result = CMAESOptimizer(config=resume_config).fit(
+        exponential_decay,
+        x,
+        y,
+        bounds=bounds,
+        refine_with_nlsq=False,
+    )
+
+    assert result["cmaes_diagnostics"]["best_fitness"] == sentinel_fitness

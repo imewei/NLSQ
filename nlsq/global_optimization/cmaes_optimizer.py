@@ -620,6 +620,21 @@ class CMAESOptimizer:
             yield preemption_event
             return
 
+        if not hasattr(signal, "SIGUSR1"):
+            # SIGUSR1 doesn't exist on Windows (signal.SIGTERM does, but
+            # Windows' signal handling is not POSIX-equivalent either way).
+            # Same degradation as the off-main-thread case above: log and
+            # fall back to periodic interval saves rather than crashing on
+            # an AttributeError for an attribute that's simply absent here.
+            logger.warning(
+                "Checkpointing enabled but SIGUSR1 is not available on this "
+                "platform (Windows): SIGTERM/SIGUSR1 preemption handling is "
+                "unavailable here. Periodic interval saves still apply.",
+            )
+            preemption_event = None
+            yield preemption_event
+            return
+
         preemption_event = threading.Event()
 
         def _handle_preemption(signum: int, frame: Any) -> None:

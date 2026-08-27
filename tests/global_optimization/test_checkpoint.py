@@ -4,7 +4,10 @@ import numpy as np
 import pytest
 
 from nlsq.global_optimization.checkpoint import (
+    CheckpointFingerprintMismatch,
     CMAESCheckpointState,
+    HPCCheckpointManager,
+    compute_fingerprint,
     deserialize_evosax_state,
     deserialize_key,
     serialize_evosax_state,
@@ -57,13 +60,6 @@ def test_checkpoint_state_construction():
     )
     assert state.generation_counter == 5
     assert state.popsize == 8
-
-
-from nlsq.global_optimization.checkpoint import (
-    CheckpointFingerprintMismatch,
-    HPCCheckpointManager,
-    compute_fingerprint,
-)
 
 
 def _sample_state():

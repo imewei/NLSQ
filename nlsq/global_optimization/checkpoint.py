@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from nlsq.utils.safe_serialize import safe_dumps, safe_loads
+from nlsq.utils.safe_serialize import SafeSerializationError, safe_dumps, safe_loads
 
 if TYPE_CHECKING:
     from evosax.algorithms.distribution_based.cma_es import (  # type: ignore[import-not-found,import-untyped]
@@ -68,7 +68,10 @@ class CMAESCheckpointState:
     B: jax.Array
     D: jax.Array
     best_solution: jax.Array
-    best_fitness: float
+    best_fitness: float | jax.Array  # jax.Array after a load(): best_fitness
+    # is one of _EVOSAX_ARRAY_FIELDS, so _load_one reconstructs it via
+    # jnp.asarray(...) like the other evosax array fields, not as a plain
+    # float. Consumers already coerce with float()/jnp.asarray() as needed.
     key_data: np.ndarray
     fitness_history: list[float] = field(default_factory=list)
     popsize: int = 0
@@ -261,11 +264,15 @@ class HPCCheckpointManager:
         # guarantees the file's *contents* survive a crash, not that the
         # rename's directory-entry update does (POSIX rename durability
         # requires syncing the directory that holds the renamed entry).
-        dir_fd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+        # os.open() cannot open a directory on Windows -- this hardening
+        # step is POSIX-only; skip it there rather than crash (the file
+        # rename itself, via os.replace() above, already happened).
+        if os.name != "nt":
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
 
     def load(
         self,
@@ -286,7 +293,13 @@ class HPCCheckpointManager:
             # message. Re-raise immediately as the clean, unambiguous
             # hard stop FR6 requires.
             raise
-        except (FileNotFoundError, OSError, ValueError) as primary_error:
+        except (
+            FileNotFoundError,
+            OSError,
+            ValueError,
+            KeyError,
+            SafeSerializationError,
+        ) as primary_error:
             if not bak_path.exists():
                 raise
             logger.warning(

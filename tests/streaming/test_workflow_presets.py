@@ -355,9 +355,15 @@ class TestHPCWorkflow:
             )
 
 
-def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
-    """workflow='hpc' with bounds narrow enough to select CMA-ES must
-    forward checkpoint_dir into CMAESConfig instead of discarding it.
+@pytest.mark.parametrize("workflow", ["hpc", "auto_global"])
+def test_cmaes_route_actually_checkpoints(tmp_path, workflow):
+    """workflow='hpc' and workflow='auto_global' (called directly, not
+    just via workflow='hpc') must both forward checkpoint_dir into
+    CMAESConfig instead of discarding it -- checkpoint_dir was previously
+    only recognized inside _fit_with_hpc's own kwargs handling, so a
+    caller reaching CMAESOptimizer through the directly-documented
+    workflow='auto_global' entry point got it silently swallowed as an
+    unrecognized kwarg with no warning and no checkpoint file written.
 
     Must pass cmaes_config with restart_strategy="none" explicitly --
     CMAESConfig defaults to restart_strategy="bipop", and Task 3's
@@ -370,6 +376,7 @@ def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
 
     x = jnp.linspace(0, 5, 100)
     y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+    run_id = f"{workflow}-e2e-test"
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
@@ -378,55 +385,49 @@ def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
             x,
             y,
             p0=[1.0, 0.5],
-            workflow="hpc",
+            workflow=workflow,
             bounds=([0.0, 0.0], [10.0, 10.0]),
             checkpoint_dir=str(tmp_path),
             checkpoint_interval=5,
-            run_id="hpc-e2e-test",
-            model_id="hpc-e2e-model",
+            run_id=run_id,
+            model_id=f"{workflow}-e2e-model",
             seed=1,
             method="cmaes",
             cmaes_config=CMAESConfig(restart_strategy="none"),
         )
 
     assert result is not None
-    assert (tmp_path / "hpc-e2e-test.h5").exists()
+    assert (tmp_path / f"{run_id}.h5").exists()
 
 
-def test_auto_global_cmaes_route_actually_checkpoints(tmp_path):
-    """workflow='auto_global' called directly (not via workflow='hpc') must
-    forward checkpoint_dir into CMAESConfig too -- checkpoint_dir was
-    previously only recognized inside _fit_with_hpc's own kwargs handling,
-    so a caller reaching CMAESOptimizer through workflow='auto_global'
-    (which is itself a fully documented, directly-callable entry point)
-    got checkpoint_dir silently swallowed as an unrecognized kwarg with no
-    warning and no checkpoint file ever written."""
+def test_cmaes_seed_applied_without_checkpoint_dir():
+    """`seed=` must actually reach CMAESConfig on the CMA-ES route even
+    when no checkpoint_dir is set -- _fit_global_cmaes previously only
+    applied `seed` inside the `checkpoint_dir is not None` branch,
+    silently discarding it otherwise. Two identically-seeded, non-
+    checkpointed runs must be bit-identical; a regression reintroducing
+    the drop would let each run use its own OS-entropy seed instead."""
     from nlsq import fit
     from nlsq.global_optimization.cmaes_config import CMAESConfig
 
     x = jnp.linspace(0, 5, 100)
-    y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+    y = 2.5 * jnp.exp(-0.5 * x)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)
-        result = fit(
-            model,
-            x,
-            y,
-            p0=[1.0, 0.5],
-            workflow="auto_global",
-            bounds=([0.0, 0.0], [10.0, 10.0]),
-            checkpoint_dir=str(tmp_path),
-            checkpoint_interval=5,
-            run_id="auto-global-e2e-test",
-            model_id="auto-global-e2e-model",
-            seed=1,
-            method="cmaes",
-            cmaes_config=CMAESConfig(restart_strategy="none"),
-        )
+    kwargs = {
+        "f": model,
+        "xdata": x,
+        "ydata": y,
+        "p0": [1.0, 0.5],
+        "workflow": "auto_global",
+        "bounds": ([0.0, 0.0], [10.0, 10.0]),
+        "method": "cmaes",
+        "seed": 42,
+        "cmaes_config": CMAESConfig(restart_strategy="none", max_generations=20),
+    }
+    result_a = fit(**kwargs)
+    result_b = fit(**kwargs)
 
-    assert result is not None
-    assert (tmp_path / "auto-global-e2e-test.h5").exists()
+    np.testing.assert_array_equal(result_a.x, result_b.x)
 
 
 def test_auto_global_method_cmaes_actually_selects_cmaes():
