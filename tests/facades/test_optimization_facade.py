@@ -22,16 +22,34 @@ class TestLazyImportBehavior:
 
     def test_facade_import_does_not_load_global_optimization(self) -> None:
         """Test importing facade doesn't eagerly load global_optimization."""
-        # Clear modules to test fresh import
+        # Clear modules to test fresh import. Snapshot and restore afterward
+        # -- leaving these deleted would leak into every later test in this
+        # worker process: anything that imports e.g.
+        # nlsq.global_optimization.checkpoint.HPCCheckpointManager before
+        # this test runs (module-level `from ... import X`) keeps a
+        # reference to the now-orphaned class, while code that re-imports
+        # it after this test (like CMAESOptimizer's lazy internal import)
+        # gets a distinct, freshly-reloaded class object -- breaking
+        # anything that does `monkeypatch.setattr(X, ...)` on the stale
+        # reference (observed in CI as
+        # test_resume_matches_uninterrupted_run's HPCCheckpointManager.load
+        # spy silently not firing).
         modules_to_clear = [k for k in sys.modules if "global_optimization" in k]
+        saved_modules = {mod: sys.modules[mod] for mod in modules_to_clear}
         for mod in modules_to_clear:
             del sys.modules[mod]
 
-        # Import facade - should use lazy loading
-        from nlsq.facades import OptimizationFacade
+        try:
+            # Import facade - should use lazy loading
+            from nlsq.facades import OptimizationFacade
 
-        # The test passes if no import error occurs
-        # Full validation would check sys.modules but that's implementation-specific
+            # The test passes if no import error occurs
+            # Full validation would check sys.modules but that's implementation-specific
+        finally:
+            for mod in list(sys.modules):
+                if "global_optimization" in mod and mod not in saved_modules:
+                    del sys.modules[mod]
+            sys.modules.update(saved_modules)
 
     def test_facade_provides_access_to_cmaes(self) -> None:
         """Test facade provides access to CMA-ES optimizer."""
