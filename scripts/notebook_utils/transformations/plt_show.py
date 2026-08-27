@@ -22,9 +22,19 @@ def find_figure_variable(source: list[str], show_line_idx: int) -> str:
         line = source[i]
 
         # Match patterns like: fig = plt.figure() or fig, ax = plt.subplots()
-        fig_match = re.search(r"(\w+)\s*[,=].*plt\.(figure|subplots)", line)
+        fig_match = re.search(r"([\w\s,]+?)\s*=\s*plt\.(figure|subplots)", line)
         if fig_match:
-            return fig_match.group(1)
+            names = [n.strip() for n in fig_match.group(1).split(",") if n.strip()]
+            if len(names) <= 1:
+                return names[0] if names else "plt.gcf()"
+            # Multiple bound names (e.g. "fig, ax = plt.subplots()"): prefer
+            # whichever looks like it holds the Figure rather than assuming
+            # canonical first-position ordering, falling back to the first
+            # bound name when none match.
+            for name in names:
+                if "fig" in name.lower():
+                    return name
+            return names[0]
 
     # Default: use plt.gcf() to get current figure
     return "plt.gcf()"
@@ -123,7 +133,9 @@ class PltShowReplacementTransformer(NotebookTransformer):
 
             source = cell.get("source", [])
             if isinstance(source, str):
-                source = [source]
+                # A single multi-line string must become one entry per line,
+                # or the line-anchored regexes below only ever see line 1.
+                source = source.splitlines(keepends=True)
 
             modified_source, num_replacements = replace_plt_show(source)
 

@@ -15,7 +15,9 @@ def patch_savefig():
     if not output_dir:
         return
 
-    script_name = os.environ.get("NLSQ_CURRENT_SCRIPT", "unknown")
+    # Sanitize to a bare filename: script_name feeds directly into the output
+    # path below, and an env var containing ".." would escape output_dir.
+    script_name = Path(os.environ.get("NLSQ_CURRENT_SCRIPT", "unknown")).name
 
     # We store the original methods
     _orig_fig_savefig = matplotlib.figure.Figure.savefig
@@ -30,12 +32,10 @@ def patch_savefig():
         # But fname could be absolute or relative
         p = Path(fname)
 
-        # If it's absolute, we extract the name
-        # If relative, we use it as is
-        if p.is_absolute():
-            rel_path = p.name
-        else:
-            rel_path = p
+        # Drop any ".."/absolute-root components so fname can't escape
+        # target_dir (e.g. "../../../evil.png" or an absolute path).
+        safe_parts = [part for part in p.parts if part not in ("..", ".", p.anchor)]
+        rel_path = Path(*safe_parts) if safe_parts else Path(p.name)
 
         # If users do "figures/fig1.png", we get "artifacts/script_name/figures/fig1.png"
         final_path = target_dir / rel_path

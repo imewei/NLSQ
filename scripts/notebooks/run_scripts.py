@@ -9,6 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+# One hanging example (network call, stray input(), JAX compile stall) must
+# not wedge the whole sequential batch indefinitely.
+SCRIPT_TIMEOUT_SECONDS = 300
+
 
 def _script_paths(args: list[str]) -> list[Path]:
     if args:
@@ -68,8 +72,16 @@ def main() -> int:
                     env=script_env,
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
+                    timeout=SCRIPT_TIMEOUT_SECONDS,
                 )
                 print(f"Success. Output saved to {log_path}")
+            except subprocess.TimeoutExpired:
+                print(
+                    f"Timed out after {SCRIPT_TIMEOUT_SECONDS}s running {script}. "
+                    f"Check {log_path}",
+                    file=sys.stderr,
+                )
+                failures.append(script)
             except subprocess.CalledProcessError as e:
                 print(f"Error running {script}. Check {log_path}", file=sys.stderr)
                 failures.append(script)

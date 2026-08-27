@@ -12,6 +12,7 @@ that the caching is effective and measures the svdvals() optimization.
 
 import json
 import time
+from pathlib import Path
 from typing import Any
 
 import jax
@@ -60,7 +61,7 @@ def benchmark_svdvals_vs_full_svd() -> dict[str, Any]:
             jax.block_until_ready(s)
         t_full_svd = (time.perf_counter() - t0) / n_trials
 
-        speedup = t_full_svd / t_svdvals
+        speedup = t_full_svd / t_svdvals if t_svdvals > 0 else float("inf")
 
         print(
             f"  {m}x{n}: svdvals={t_svdvals * 1000:.2f}ms, full_svd={t_full_svd * 1000:.2f}ms, speedup={speedup:.1f}x"
@@ -141,7 +142,9 @@ def benchmark_svd_caching_pattern() -> dict[str, Any]:
             jax.block_until_ready(uf)
     t_with_cache = time.perf_counter() - t0
 
-    improvement = (t_no_cache - t_with_cache) / t_no_cache * 100
+    improvement = (
+        (t_no_cache - t_with_cache) / t_no_cache * 100 if t_no_cache > 0 else 0.0
+    )
 
     print(f"  Without caching: {t_no_cache * 1000:.2f}ms")
     print(f"  With caching:    {t_with_cache * 1000:.2f}ms")
@@ -229,7 +232,13 @@ def main() -> None:
     print(f"\n  Overall: {'ALL TESTS PASSED' if all_passed else 'SOME TESTS FAILED'}")
 
     # Save results
-    output_path = "specs/002-performance-optimizations/benchmark_us2_results.json"
+    output_path = (
+        Path(__file__).parent.parent
+        / "specs"
+        / "002-performance-optimizations"
+        / "benchmark_us2_results.json"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         # Convert numpy types for JSON serialization
         def convert(obj: Any) -> Any:

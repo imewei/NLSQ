@@ -41,7 +41,7 @@ class ProcessingTracker:
         try:
             with open(self.state_file) as f:
                 return json.load(f)
-        except Exception as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.warning(f"Failed to load state file: {e}")
             return {}
 
@@ -81,18 +81,16 @@ class ProcessingTracker:
         Returns:
             True if notebook should be processed
         """
-        # Convert to relative path for storage
-        try:
-            rel_path = str(notebook_path.relative_to(Path.cwd()))
-        except ValueError:
-            # Path not relative to cwd, use absolute
-            rel_path = str(notebook_path.absolute())
+        # Key by resolved absolute path: a cwd-relative key would silently
+        # change (and defeat the checksum-based skip) when this tool runs
+        # from a different working directory across invocations.
+        path_key = str(notebook_path.resolve())
 
         # Check if we have state for this notebook
-        if rel_path not in self.state:
+        if path_key not in self.state:
             return True
 
-        state_entry = self.state[rel_path]
+        state_entry = self.state[path_key]
 
         # Check if transformations changed
         if set(state_entry.get("transformations", [])) != set(transformations):
@@ -115,17 +113,14 @@ class ProcessingTracker:
             transformations: List of transformation names applied
             stats: Optional statistics from processing
         """
-        # Convert to relative path for storage
-        try:
-            rel_path = str(notebook_path.relative_to(Path.cwd()))
-        except ValueError:
-            rel_path = str(notebook_path.absolute())
+        # Key by resolved absolute path (see needs_processing for why).
+        path_key = str(notebook_path.resolve())
 
         # Compute checksum
         checksum = self._compute_checksum(notebook_path)
 
         # Update state
-        self.state[rel_path] = {
+        self.state[path_key] = {
             "checksum": checksum,
             "transformations": sorted(transformations),
             "last_processed": datetime.now().isoformat(),

@@ -132,6 +132,7 @@ def benchmark_condition_estimation() -> dict[str, Any]:
     for _ in range(10):
         _U, s, _Vt = jnp.linalg.svd(A, full_matrices=False)
         cond = s[0] / s[-1]
+        jax.block_until_ready(cond)
     full_svd_time = (time.perf_counter() - start) / 10
 
     # Singular values only
@@ -139,6 +140,7 @@ def benchmark_condition_estimation() -> dict[str, Any]:
     for _ in range(10):
         s = jnp.linalg.svdvals(A)
         cond = s[0] / s[-1]
+        jax.block_until_ready(cond)
     svdvals_time = (time.perf_counter() - start) / 10
 
     return {
@@ -165,6 +167,7 @@ def benchmark_cholesky_vs_eigenvalue() -> dict[str, Any]:
     for _ in range(10):
         L = jnp.linalg.cholesky(A)
         x_chol = jax.scipy.linalg.cho_solve((L, True), b)
+        jax.block_until_ready(x_chol)
     chol_time = (time.perf_counter() - start) / 10
 
     # Eigenvalue solve
@@ -172,6 +175,7 @@ def benchmark_cholesky_vs_eigenvalue() -> dict[str, Any]:
     for _ in range(10):
         eigvals, eigvecs = jnp.linalg.eigh(A)
         x_eigh = eigvecs @ (eigvecs.T @ b / eigvals)
+        jax.block_until_ready(x_eigh)
     eigh_time = (time.perf_counter() - start) / 10
 
     return {

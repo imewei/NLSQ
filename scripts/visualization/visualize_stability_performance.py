@@ -70,6 +70,7 @@ def plot_svd_cost_scaling():
     plt.tight_layout()
     plt.savefig("stability_svd_cost_scaling.png", dpi=300, bbox_inches="tight")
     print("Saved: stability_svd_cost_scaling.png")
+    plt.close()
 
 
 def plot_stability_overhead():
@@ -140,6 +141,7 @@ def plot_stability_overhead():
     plt.tight_layout()
     plt.savefig("stability_overhead_comparison.png", dpi=300, bbox_inches="tight")
     print("Saved: stability_overhead_comparison.png")
+    plt.close()
 
 
 def plot_threshold_sensitivity():
@@ -197,6 +199,7 @@ def plot_threshold_sensitivity():
     plt.tight_layout()
     plt.savefig("stability_threshold_sensitivity.png", dpi=300, bbox_inches="tight")
     print("Saved: stability_threshold_sensitivity.png")
+    plt.close()
 
 
 def plot_rescale_impact():
@@ -307,6 +310,7 @@ def plot_rescale_impact():
     plt.tight_layout()
     plt.savefig("stability_rescale_impact.png", dpi=300, bbox_inches="tight")
     print("Saved: stability_rescale_impact.png")
+    plt.close()
 
 
 def generate_all_plots():
