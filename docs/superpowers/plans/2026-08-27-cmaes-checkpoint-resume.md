@@ -28,7 +28,7 @@
 - Test: `tests/global_optimization/test_checkpoint.py`
 
 **Interfaces:**
-- Produces: `CMAESCheckpointState` (dataclass, fields per spec §5), `serialize_evosax_state(state) -> dict[str, np.ndarray]`, `deserialize_evosax_state(d: dict, template_state) -> evosax State` (uses `template_state._replace(...)` — evosax `State` is a `NamedTuple`-like structure supporting `._replace`), `serialize_key(key: jax.Array) -> np.ndarray`, `deserialize_key(data: np.ndarray) -> jax.Array`.
+- Produces: `CMAESCheckpointState` (dataclass, fields per spec §5), `serialize_evosax_state(state) -> dict[str, np.ndarray]`, `deserialize_evosax_state(d: dict, template_state) -> evosax State` (uses `template_state.replace(...)` — evosax `State` is a `flax.struct.dataclass`, verified via direct introspection: `hasattr(state, '_replace')` is `False`, `hasattr(state, 'replace')` is `True`; do not use `._replace`, that is the NamedTuple API and does not exist on this type), `serialize_key(key: jax.Array) -> np.ndarray`, `deserialize_key(data: np.ndarray) -> jax.Array`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -178,7 +178,7 @@ def deserialize_key(data: np.ndarray) -> jax.Array:
 
 
 def serialize_evosax_state(state: EvosaxState) -> dict[str, np.ndarray | int]:
-    """Convert an evosax CMA_ES State (a JAX-array-valued NamedTuple) to a
+    """Convert an evosax CMA_ES State (a JAX-array-valued flax.struct.dataclass) to a
     plain dict of numpy arrays, safe for HDF5 storage."""
     out: dict[str, np.ndarray | int] = {
         "generation_counter": int(state.generation_counter),
@@ -194,7 +194,7 @@ def deserialize_evosax_state(
 ) -> EvosaxState:
     """Rebuild an evosax State from `serialize_evosax_state`'s output.
 
-    `template_state` supplies the NamedTuple shape/type (from a fresh
+    `template_state` supplies the dataclass shape/type (from a fresh
     `es.init(...)` call with the same popsize/n_params) -- only its field
     values are replaced, not its structure.
     """
@@ -202,7 +202,7 @@ def deserialize_evosax_state(
 
     replacements = {name: jnp.asarray(d[name]) for name in _EVOSAX_ARRAY_FIELDS}
     replacements["generation_counter"] = int(d["generation_counter"])
-    return template_state._replace(**replacements)
+    return template_state.replace(**replacements)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1112,17 +1112,36 @@ Inside the loop, right after the `diagnostics.fitness_history.append(...)` line 
 if checkpointing and preemption_requested.is_set():
     jax.block_until_ready((state.mean, state.C, state.best_solution))
     _save_checkpoint(gen, key)
-    for sig, handler in previous_handlers.items():
-        signal.signal(sig, handler)
     raise CMAESPreempted(gen + 1)
 ```
 
-After the loop (and after the existing unconditional `if checkpointing: _save_checkpoint(gen, key)` line added in Task 4), restore handlers on normal exit too:
+(handler restoration moves to a `finally` below -- not repeated here, so this
+path stays a plain raise rather than duplicating the restore-and-raise
+sequence in every exit path.)
+
+Wrap the entire `for gen in range(...)` loop (and the existing unconditional
+`if checkpointing: _save_checkpoint(gen, key)` line added in Task 4 that
+follows it) in `try`/`finally`, so handlers are restored on **every** exit
+path -- normal completion, the `CMAESPreempted` raise above, or an
+unrelated exception from `fitness_fn`/`es.tell`/anywhere else in the loop
+body. Without this, an unhandled exception mid-loop leaves the process's
+SIGTERM/SIGUSR1 handlers permanently pointed at `_handle_preemption` even
+after `_run_cmaes_single` has returned control to a caller who never asked
+for that (caught by design review -- a bare "restore on normal exit only"
+version silently leaks handlers on any other exception):
 
 ```python
-if checkpointing:
-    for sig, handler in previous_handlers.items():
-        signal.signal(sig, handler)
+try:
+    gen = start_gen - 1
+    for gen in range(start_gen, self.config.max_generations):
+        ...  # unchanged loop body, including the preemption check above
+
+    if checkpointing:
+        _save_checkpoint(gen, key)
+finally:
+    if checkpointing:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1155,8 +1174,16 @@ git commit -m "feat(global_optimization): flag-based SIGTERM/SIGUSR1 preemption 
 # append to tests/streaming/test_workflow_presets.py
 def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
     """workflow='hpc' with bounds narrow enough to select CMA-ES must
-    forward checkpoint_dir into CMAESConfig instead of discarding it."""
+    forward checkpoint_dir into CMAESConfig instead of discarding it.
+
+    Must pass cmaes_config with restart_strategy="none" explicitly --
+    CMAESConfig defaults to restart_strategy="bipop", and Task 3's
+    validation correctly raises NotImplementedError for bipop +
+    checkpoint_dir (spec FR3). Omitting this override would make this
+    test fail on that guard rather than exercising the checkpoint path.
+    """
     from nlsq import fit
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
 
     x = jnp.linspace(0, 5, 100)
     y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
@@ -1176,6 +1203,7 @@ def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
             model_id="hpc-e2e-model",
             seed=1,
             method="cmaes",
+            cmaes_config=CMAESConfig(restart_strategy="none"),
         )
 
     assert result is not None
@@ -1403,3 +1431,5 @@ git commit -m "docs(global_optimization): checkpoint latency benchmark + changel
 **Placeholder scan:** every step has real, complete code; no "TODO"/"similar to Task N"/"add validation" left unfilled.
 
 **Type consistency:** `CMAESCheckpointState` fields defined in Task 1 are used identically (same names) in Tasks 2, 4, 5, 8. `HPCCheckpointManager.save(path, state, fingerprint)`/`.load(path, expected_fingerprint)` signatures from Task 2 are called identically in Tasks 4/5. `compute_fingerprint(...)` keyword names match between Task 2's definition and Tasks 4/8's call sites.
+
+**Known limitation, not addressed in this plan (external design review, three-brain Agy pass):** Tasks 4-6's `_run_cmaes_single` constructs its own `checkpoint_path`, builds its own fingerprint dict, and registers its own signal handlers directly, rather than receiving a pre-built `HPCCheckpointManager` + fingerprint + path from `fit()`. This is real I/O/orchestration logic living inside the optimizer method, not the "pure state capture only" separation this plan's Architecture section claims. It doesn't block correctness -- every test above still passes as designed -- but a follow-up refactor should move path/fingerprint construction into `fit()` and pass the ready-made manager/fingerprint/path into `_run_cmaes_single` as parameters, leaving the method itself only calling `manager.save(...)`/`manager.load(...)` with values it didn't build. Deferred here rather than expanding this plan's scope further.
