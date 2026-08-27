@@ -202,6 +202,12 @@ def _generate_visualization(
             for path in output_paths:
                 logger.info(f"  - {path}")
 
+    except ValueError as e:
+        # A ValueError from the visualizer signals a structural mismatch
+        # (e.g. multi-dimensional xdata) that will never succeed on retry,
+        # unlike a transient plotting glitch - log it at error level so it
+        # isn't mistaken for a one-off warning.
+        logger.error(f"Visualization generation failed: {e}")
     except Exception as e:
         # Visualization errors should not fail the fit, but must still be
         # visible: gating this behind `verbose` meant a bad `export.formats`
