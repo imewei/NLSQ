@@ -15,7 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`restart_strategy="bipop"`, the default) and the multistart/chunked/
   streaming `workflow='hpc'` routes still raise/warn as not-yet-implemented
   -- see `docs/superpowers/plans/2026-08-27-cmaes-checkpoint-resume-spec.md`
-  for scope.
+  for scope. A preemption signal (SIGTERM/SIGUSR1) received after
+  checkpointing is enabled triggers a safe-point checkpoint save followed by
+  `CMAESPreempted` (a `SystemExit` subclass, exit code 75, now exported from
+  `nlsq.global_optimization`), letting a wrapping resubmission script
+  distinguish a clean checkpointed stop from a crash.
 
 ### Fixed
 - `fit()`'s `method` parameter was silently dropped for `workflow='auto_global'`

@@ -5,15 +5,15 @@ The ``hpc`` workflow is designed for long-running optimization jobs on High
 Performance Computing (HPC) clusters. It wraps ``auto_global`` with automatic
 cluster detection (PBS/SLURM).
 
-.. warning::
+.. note::
 
-   **Checkpointing is not yet implemented.** ``hpc`` currently accepts
-   ``checkpoint_dir``/``checkpoint_interval`` for forward API compatibility
-   and emits a ``UserWarning`` that they are ignored -- no checkpoint file is
-   ever written, and there is no crash recovery. Everything in the
-   "Checkpointing" section below describes planned, not current, behavior.
-   Today, ``hpc`` behaves identically to ``auto_global`` plus the cluster
-   detection described further down this page.
+   **Checkpoint/resume is implemented for the CMA-ES route only**
+   (``method="cmaes"`` with ``CMAESConfig(restart_strategy="none")``). BIPOP
+   restarts (``restart_strategy="bipop"``, the default) and the
+   multistart/chunked/streaming ``workflow='hpc'`` routes do not support
+   checkpointing yet -- passing ``checkpoint_dir`` on those routes emits a
+   ``UserWarning`` and is silently ignored. See the "Checkpointing" section
+   below for the working CMA-ES example.
 
 When to Use
 -----------
@@ -52,18 +52,18 @@ Basic Usage
        bounds=([0, 0, -1], [10, 5, 1]),
    )
 
-Checkpointing (planned, not yet implemented)
----------------------------------------------
+Checkpointing (CMA-ES route only)
+----------------------------------
 
-.. warning::
-
-   Nothing in this section works today -- see the warning at the top of this
-   page. ``checkpoint_dir``/``checkpoint_interval`` are accepted but ignored.
-
-The eventual design is for checkpoints to be saved periodically during
-optimization:
+Checkpoint/resume works for the CMA-ES route with
+``CMAESConfig(restart_strategy="none")``. To use it, request the CMA-ES
+method explicitly, pass a fixed ``seed``, and provide ``checkpoint_dir``
+along with two stable identifiers, ``run_id`` and ``model_id``:
 
 .. code-block:: python
+
+   from nlsq import fit
+   from nlsq.global_optimization import CMAESConfig
 
    popt, pcov = fit(
        model,
@@ -72,21 +72,62 @@ optimization:
        p0=[...],
        workflow="hpc",
        bounds=bounds,
-       checkpoint_dir="/scratch/checkpoints",  # currently ignored
-       checkpoint_interval=10,  # currently ignored
+       method="cmaes",
+       cmaes_config=CMAESConfig(restart_strategy="none"),
+       checkpoint_dir="/scratch/checkpoints",
+       checkpoint_interval=10,  # generations between checkpoint saves
+       run_id="experiment-42",  # stable string identifying this run
+       model_id="exp_decay_v1",  # stable string identifying the model function
+       seed=42,  # required: checkpoint/resume needs a fixed seed
    )
 
-**Planned checkpoint contents:**
+``checkpoint_dir``, ``run_id``, ``model_id``, and ``seed`` are all required
+together -- omitting any one of them raises a ``ValueError`` when
+``checkpoint_dir`` is set. Combining ``checkpoint_dir`` with the default
+``restart_strategy="bipop"`` raises ``NotImplementedError``; use
+``restart_strategy="none"`` as shown above.
 
-- Current best parameters
-- Optimization state
-- Iteration number
-- All explored starting points
+**Checkpoint contents:**
 
-**Planned automatic recovery:**
+- Current best parameters and their fitness
+- CMA-ES optimizer state (mean, covariance, step size, evolution paths)
+- Generation number
+- A fingerprint of the run (data shape, bounds, seed, ``model_id``,
+  ``run_id``) used to validate a resume matches the original run
 
-If a job crashes and restarts, NLSQ would automatically detect existing
-checkpoints and resume from the last saved state. This does not happen yet.
+**Automatic recovery:**
+
+To resume, call ``fit`` again with the *same* ``checkpoint_dir``, ``run_id``,
+``seed``, ``model_id``, data, and bounds as the original run. NLSQ
+auto-detects the existing checkpoint file, verifies the fingerprint matches,
+and continues from the last saved generation. If the fingerprint doesn't
+match (e.g. different data or bounds reused the same ``run_id``), ``fit``
+raises a ``ValueError`` rather than silently starting over or resuming with
+mismatched state.
+
+**Handling preemption (SIGTERM/SIGUSR1):**
+
+On a preemptible HPC queue, the scheduler typically sends a warning signal
+before killing the job. When checkpointing is enabled, NLSQ catches
+``SIGTERM``/``SIGUSR1``, saves a checkpoint at the next safe point, and then
+raises ``CMAESPreempted`` -- a ``SystemExit`` subclass carrying exit code 75
+-- out of ``fit()``. A wrapping shell/SLURM script can check for that exit
+code to distinguish a clean checkpointed stop from a crash and resubmit:
+
+.. code-block:: bash
+
+   #!/bin/bash
+   #SBATCH --job-name=nlsq_fit
+   #SBATCH --time=04:00:00
+   #SBATCH --signal=B:TERM@60  # send SIGTERM 60s before the time limit
+
+   python fit_job.py
+   status=$?
+
+   if [ "$status" -eq 75 ]; then
+       echo "Preempted after checkpoint save -- resubmitting"
+       sbatch "$0"
+   fi
 
 Cluster Detection
 -----------------
@@ -212,11 +253,14 @@ Estimate based on:
 
 **2. Handle preemption:**
 
-There is currently no checkpoint/resume support (see the warning at the top
-of this page) -- on preemptible queues, a preempted job restarts the fit from
-scratch. Prefer non-preemptible queues for long ``hpc`` jobs until
-checkpointing lands, or reduce ``n_starts``/walltime to fit inside a single
-preemption window.
+For the CMA-ES route (``method="cmaes"``, ``restart_strategy="none"``), pass
+``checkpoint_dir`` as shown in "Checkpointing" above so a preempted job
+resumes from the last saved generation instead of restarting from scratch --
+see that section for the ``CMAESPreempted``/exit-code-75 resubmission
+pattern. The multistart/chunked/streaming ``hpc`` routes don't support
+checkpointing yet: prefer non-preemptible queues for long jobs on those
+routes, or reduce ``n_starts``/walltime to fit inside a single preemption
+window.
 
 Complete HPC Example
 --------------------
@@ -289,10 +333,10 @@ Comparison: auto_global vs hpc
      - ``hpc``
    * - Checkpointing
      - No
-     - No (planned, not yet implemented)
+     - CMA-ES route only (``method="cmaes"``, ``restart_strategy="none"``)
    * - Crash recovery
      - No
-     - No (planned, not yet implemented)
+     - CMA-ES route only (see above)
    * - Cluster detection
      - No
      - Yes
@@ -310,8 +354,9 @@ Troubleshooting HPC
 
 - Increase walltime
 - Reduce ``n_starts``
-- (Resume-from-checkpoint is not available yet -- see the warning at the top
-  of this page)
+- On the CMA-ES route, pass ``checkpoint_dir`` (see "Checkpointing" above) so
+  a resubmitted job resumes instead of restarting from scratch. The
+  multistart/chunked/streaming routes don't support resume yet.
 
 **Multi-GPU not detected:**
 
