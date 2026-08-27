@@ -4,7 +4,7 @@
 
 **Goal:** Give `CMAESOptimizer` (with `restart_strategy="none"`) crash/preemption-safe checkpoint and resume, so a long HPC fit killed mid-run can continue from its last saved generation instead of losing all progress.
 
-**Architecture:** New standalone module `nlsq/global_optimization/checkpoint.py` (state dataclass + HDF5 manager, no dependency on the existing `nlsq/streaming/phases/checkpoint.py`). `CMAESOptimizer._run_cmaes_single` gains a save hook (periodic + signal-triggered) and a resume-on-entry check, both driven by new `CMAESConfig` fields. `_fit_with_hpc` in `minpack.py` passes those fields through instead of warning-and-discarding.
+**Architecture:** New standalone module `nlsq/global_optimization/checkpoint.py` (state dataclass + HDF5 manager, no dependency on the existing `nlsq/streaming/phases/checkpoint.py`). `CMAESOptimizer.fit()` builds the `HPCCheckpointManager`, checkpoint path, fingerprint, and signal-handling `threading.Event` up front (main-thread-guarded), then passes them as plain parameters into `_run_cmaes`/`_run_cmaes_single`; the loop itself only calls `.save()`/`.load()` and checks the event -- it never constructs a path, a fingerprint, or touches the `signal` module. `fit()`'s own `try`/`finally` restores signal handlers on every exit path. `_fit_with_hpc`/`_fit_with_auto_global` in `minpack.py` pass checkpoint fields (and, separately, a previously-dropped `method` override) through instead of discarding them.
 
 **Tech Stack:** Python 3.12+, JAX (typed PRNG keys via `jax.random.key`/`key_data`/`wrap_key_data`), evosax `CMA_ES`, h5py, `nlsq.utils.safe_serialize.safe_dumps`/`safe_loads`.
 
@@ -13,10 +13,14 @@
 ## Global Constraints
 
 - Checkpointing requires `config.seed` to be an explicit `int` (spec FR2) — never silently proceed with an OS-entropy seed.
-- Checkpointing requires `config.model_id` to be an explicit non-`None` string (spec FR4) — never fingerprint the model closure.
+- Checkpointing requires `config.model_id` **and** `config.run_id` to be explicit non-`None` strings (spec FR4) — never fingerprint the model closure, never let an unset run_id silently collide with an unrelated run sharing the same `checkpoint_dir`.
 - `restart_strategy="bipop"` + checkpointing raises `NotImplementedError` (spec FR3) — out of scope for this plan.
-- Every save is atomic: tmp file + `os.replace`, prior good file rotated to `.bak` (spec FR8).
+- Every save is atomic: tmp file + fsync + `os.replace`, prior good file rotated to `.bak`, containing directory fsynced after the rename (spec FR8).
+- `load()` falls back to `.bak` whenever the primary exists but fails to load — this is mandatory, not best-effort (spec FR8).
 - A fingerprint mismatch on load raises `ValueError` — never silently starts fresh in the same file (spec FR6).
+- `fit()`, not `_run_cmaes_single`, constructs the checkpoint manager/path/fingerprint and registers/restores signal handlers; the optimizer method only receives these as parameters (grilling-session architecture decision).
+- Signal handler registration only happens on the main thread; off it, periodic interval saves remain the only crash-safety mechanism (spec FR7).
+- `fit()`'s `method` parameter must actually reach `MethodSelector.select()` for every `workflow='auto_global'`/`'hpc'` caller, not only when checkpointing is enabled (spec FR9).
 - No code in this plan touches `MultiStartOrchestrator`, `LargeDatasetFitter`, `AdaptiveHybridStreamingOptimizer`, or multi-device paths.
 
 ---
@@ -227,7 +231,7 @@ git commit -m "feat(global_optimization): add CMA-ES checkpoint state + serializ
 
 **Interfaces:**
 - Consumes: `CMAESCheckpointState` (Task 1).
-- Produces: `compute_fingerprint(model_id: str, xdata: np.ndarray, ydata: np.ndarray, sigma: np.ndarray | None, bounds: tuple[np.ndarray, np.ndarray], config_fields: dict) -> dict[str, str]`, `HPCCheckpointManager` with `.save(path: Path, state: CMAESCheckpointState, fingerprint: dict) -> None` and `.load(path: Path, expected_fingerprint: dict) -> CMAESCheckpointState` (raises `ValueError` on fingerprint mismatch, `FileNotFoundError` if absent).
+- Produces: `compute_fingerprint(model_id: str, xdata: np.ndarray, ydata: np.ndarray, sigma: np.ndarray | None, bounds: tuple[np.ndarray, np.ndarray], config_fields: dict) -> dict[str, Any]` (string/int fields for equality comparison plus raw `bounds_lower`/`bounds_upper` arrays for auditability), `HPCCheckpointManager` with `.save(path: Path, state: CMAESCheckpointState, fingerprint: dict) -> None` and `.load(path: Path, expected_fingerprint: dict) -> CMAESCheckpointState` (raises `ValueError` on fingerprint mismatch, `FileNotFoundError` only when neither the primary nor its `.bak` exist; falls back to `.bak` — logging a warning — whenever the primary exists but fails to load).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -328,6 +332,48 @@ def test_save_rotates_previous_to_bak(tmp_path):
     assert restored_bak.generation_counter == 5
     restored_current = manager.load(path, fp)
     assert restored_current.generation_counter == 10
+
+
+def test_load_falls_back_to_bak_when_primary_is_corrupt(tmp_path):
+    """FR8: a torn/corrupt primary must NOT be a load failure as long as
+    the rotated .bak (written by the previous successful save) is intact
+    -- save() rotates specifically so this fallback always has something
+    to recover from."""
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    state1 = _sample_state()
+    manager.save(path, state1, fp)  # only save -- path has no .bak yet
+    bak_path = tmp_path / "run1.h5.bak"
+    # Simulate a second, torn save: rotate the good primary to .bak by hand
+    # (mirroring what save() does), then corrupt what would be the new
+    # primary, since we can't easily interrupt save() mid-write here.
+    path.replace(bak_path)
+    path.write_bytes(b"not a valid hdf5 file")
+
+    restored = manager.load(path, fp)
+    assert restored.generation_counter == 5  # recovered from .bak
+
+
+def test_fingerprint_includes_actual_bounds_arrays(tmp_path):
+    """Spec section 6 requires the fingerprint group to store the real
+    bounds arrays for auditability, not only a hash -- a hash alone can't
+    be inspected by a human debugging a mismatch."""
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    manager.save(path, _sample_state(), fp)
+    import h5py
+
+    with h5py.File(path, "r") as f:
+        np.testing.assert_array_equal(
+            f["fingerprint"]["bounds_lower"][()],
+            [0.0, 0.0, 0.0],
+        )
+        np.testing.assert_array_equal(
+            f["fingerprint"]["bounds_upper"][()],
+            [10.0, 10.0, 10.0],
+        )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -369,11 +415,16 @@ def compute_fingerprint(
     sigma: np.ndarray | None,
     bounds: tuple[np.ndarray, np.ndarray],
     config_fields: dict[str, Any],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Compute the identity fingerprint stored with a checkpoint and
     checked on resume (spec section 6). Never includes checkpoint_dir/
     checkpoint_interval/run_id/model_id-as-a-config-field -- those are
-    orchestration knobs, not identity of the optimization problem."""
+    orchestration knobs, not identity of the optimization problem.
+
+    Returns a mix of string/int fields (compared by equality on load) and
+    the raw bounds_lower/bounds_upper arrays (stored for human
+    auditability per spec section 6 -- not used for the equality check,
+    bounds_hash covers that)."""
     data_hasher = hashlib.sha256()
     data_hasher.update(_hash_array(np.asarray(xdata)).encode())
     data_hasher.update(_hash_array(np.asarray(ydata)).encode())
@@ -384,16 +435,28 @@ def compute_fingerprint(
         safe_dumps({k: config_fields[k] for k in sorted(config_fields)}),
     ).hexdigest()
 
-    lb, ub = bounds
+    lb, ub = np.asarray(bounds[0]), np.asarray(bounds[1])
     return {
         "model_id": model_id,
         "data_hash": data_hasher.hexdigest(),
         "n_params": str(len(np.atleast_1d(lb))),
-        "bounds_hash": hashlib.sha256(
-            np.asarray(lb).tobytes() + np.asarray(ub).tobytes(),
-        ).hexdigest(),
+        "bounds_hash": hashlib.sha256(lb.tobytes() + ub.tobytes()).hexdigest(),
         "config_hash": config_hash,
+        "bounds_lower": lb,
+        "bounds_upper": ub,
     }
+
+
+# Fingerprint fields compared for equality on load(); bounds_lower/upper are
+# stored for auditability only (bounds_hash already covers their identity
+# check, and array-valued attrs would need special-cased comparison).
+_FINGERPRINT_COMPARISON_KEYS = (
+    "model_id",
+    "data_hash",
+    "n_params",
+    "bounds_hash",
+    "config_hash",
+)
 
 
 class HPCCheckpointManager:
@@ -407,7 +470,7 @@ class HPCCheckpointManager:
         self,
         path: str | Path,
         state: CMAESCheckpointState,
-        fingerprint: dict[str, str],
+        fingerprint: dict[str, Any],
     ) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -433,7 +496,10 @@ class HPCCheckpointManager:
 
             fp_group = f.create_group("fingerprint")
             for k, v in fingerprint.items():
-                fp_group.attrs[k] = v
+                if isinstance(v, np.ndarray):
+                    fp_group.create_dataset(k, data=v)
+                else:
+                    fp_group.attrs[k] = v
 
             # Written last: load() treats its absence as a torn write.
             f.attrs["version"] = self.VERSION
@@ -445,12 +511,48 @@ class HPCCheckpointManager:
             path.replace(bak_path)
         os.replace(tmp_path, path)
 
+        # fsync the containing directory too: a bare file fsync only
+        # guarantees the file's *contents* survive a crash, not that the
+        # rename's directory-entry update does (POSIX rename durability
+        # requires syncing the directory that holds the renamed entry).
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+
     def load(
         self,
         path: str | Path,
-        expected_fingerprint: dict[str, str],
+        expected_fingerprint: dict[str, Any],
     ) -> CMAESCheckpointState:
         path = Path(path)
+        bak_path = path.with_suffix(path.suffix + ".bak")
+
+        try:
+            return self._load_one(path, expected_fingerprint)
+        except (FileNotFoundError, OSError, ValueError) as primary_error:
+            if not path.exists():
+                # No primary at all (e.g. first-ever save never happened) --
+                # a .bak fallback here would silently resume from an even
+                # older, more-stale state than the caller expects. Only
+                # fall back when the primary exists but is unusable.
+                raise
+            if not bak_path.exists():
+                raise
+            logger.warning(
+                "Primary checkpoint %s failed to load (%s); falling back " "to %s",
+                path,
+                primary_error,
+                bak_path,
+            )
+            return self._load_one(bak_path, expected_fingerprint)
+
+    def _load_one(
+        self,
+        path: Path,
+        expected_fingerprint: dict[str, Any],
+    ) -> CMAESCheckpointState:
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
 
@@ -458,8 +560,7 @@ class HPCCheckpointManager:
             if not bool(f.attrs.get("completion_marker", False)):
                 raise ValueError(
                     f"Checkpoint at {path} is missing its completion marker "
-                    "(torn write) -- refusing to load. Check for a "
-                    f"{path.with_suffix(path.suffix + '.bak')} fallback.",
+                    "(torn write) -- refusing to load.",
                 )
             version = f.attrs.get("version")
             if version != self.VERSION:
@@ -468,7 +569,8 @@ class HPCCheckpointManager:
                 )
 
             fp_group = f["fingerprint"]
-            for k, expected_v in expected_fingerprint.items():
+            for k in _FINGERPRINT_COMPARISON_KEYS:
+                expected_v = expected_fingerprint[k]
                 actual_v = fp_group.attrs.get(k)
                 if actual_v != expected_v:
                     raise ValueError(
@@ -494,10 +596,14 @@ class HPCCheckpointManager:
             return CMAESCheckpointState(**kwargs)
 ```
 
+Add `import logging` and `logger = logging.getLogger(__name__)` to the
+module's top-level imports (alongside the existing `import hashlib` /
+`import os` / `import time` block).
+
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/global_optimization/test_checkpoint.py -v`
-Expected: PASS (8 tests total)
+Expected: PASS (10 tests total)
 
 - [ ] **Step 5: Commit**
 
@@ -527,13 +633,29 @@ from nlsq.global_optimization.cmaes_config import CMAESConfig
 
 
 def test_checkpoint_requires_seed():
+    # model_id and run_id both supplied so this isolates the seed check.
     with pytest.raises(ValueError, match="seed"):
-        CMAESConfig(checkpoint_dir="/tmp/ckpt", model_id="m1", seed=None)
+        CMAESConfig(
+            checkpoint_dir="/tmp/ckpt",
+            model_id="m1",
+            run_id="r1",
+            seed=None,
+        )
 
 
 def test_checkpoint_requires_model_id():
+    # seed and run_id both supplied so this isolates the model_id check.
     with pytest.raises(ValueError, match="model_id"):
-        CMAESConfig(checkpoint_dir="/tmp/ckpt", seed=1, model_id=None)
+        CMAESConfig(checkpoint_dir="/tmp/ckpt", seed=1, run_id="r1", model_id=None)
+
+
+def test_checkpoint_requires_run_id():
+    # seed and model_id both supplied so this isolates the run_id check.
+    # Required for the same reason model_id/seed are (grilling-session
+    # decision): an unset run_id defaulting to a shared filename would let
+    # unrelated runs collide on the same checkpoint file.
+    with pytest.raises(ValueError, match="run_id"):
+        CMAESConfig(checkpoint_dir="/tmp/ckpt", seed=1, model_id="m1", run_id=None)
 
 
 def test_checkpoint_rejects_bipop():
@@ -542,15 +664,17 @@ def test_checkpoint_rejects_bipop():
             checkpoint_dir="/tmp/ckpt",
             seed=1,
             model_id="m1",
+            run_id="r1",
             restart_strategy="bipop",
         )
 
 
-def test_checkpoint_with_none_strategy_and_seed_and_model_id_succeeds():
+def test_checkpoint_with_none_strategy_and_all_required_fields_succeeds():
     config = CMAESConfig(
         checkpoint_dir="/tmp/ckpt",
         seed=1,
         model_id="m1",
+        run_id="r1",
         restart_strategy="none",
     )
     assert config.checkpoint_dir == "/tmp/ckpt"
@@ -563,6 +687,7 @@ def test_checkpoint_interval_must_be_positive():
             checkpoint_dir="/tmp/ckpt",
             seed=1,
             model_id="m1",
+            run_id="r1",
             restart_strategy="none",
             checkpoint_interval=0,
         )
@@ -601,6 +726,12 @@ if self.checkpoint_dir is not None:
             "identifying the model function) -- the closure cannot "
             "be safely fingerprinted automatically.",
         )
+    if self.run_id is None:
+        raise ValueError(
+            "checkpoint_dir requires run_id (a stable string identifying "
+            "this run) -- an unset run_id would silently collide with "
+            "unrelated runs sharing the same checkpoint_dir.",
+        )
     if self.restart_strategy == "bipop":
         raise NotImplementedError(
             "Checkpoint/resume is not implemented for "
@@ -616,7 +747,7 @@ if self.checkpoint_dir is not None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/global_optimization/test_cmaes_config.py -v -k checkpoint`
-Expected: PASS (5 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -635,7 +766,7 @@ git commit -m "feat(global_optimization): add checkpoint fields + validation to 
 
 **Interfaces:**
 - Consumes: `CMAESCheckpointState`, `HPCCheckpointManager`, `compute_fingerprint`, `serialize_key` (Tasks 1-2); `CMAESConfig.checkpoint_dir/checkpoint_interval/run_id/model_id` (Task 3).
-- Produces: `_run_cmaes_single` now accepts the raw `xdata`/`ydata`/`sigma`/`bounds` needed to compute a fingerprint (threaded through from `fit()` — see Step 3), and saves a checkpoint every `checkpoint_interval` generations plus unconditionally at loop exit, when `self.config.checkpoint_dir` is set.
+- Produces: `fit()` builds the `HPCCheckpointManager`, `checkpoint_path`, and `fingerprint` dict (it already has `xdata`/`ydata`/`sigma`/bounds) and passes them into `_run_cmaes`/`_run_cmaes_single` as plain parameters -- per the grilling-session decision, `_run_cmaes_single` never constructs a path or fingerprint itself, it only calls `manager.save(...)` with values it was handed. Saves a checkpoint every `checkpoint_interval` generations plus unconditionally at loop exit, when `checkpoint_manager` is not `None`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -687,7 +818,116 @@ Expected: FAIL — no checkpoint file exists (feature not wired yet)
 
 - [ ] **Step 3: Write the implementation**
 
-`_run_cmaes_single` needs the fitted `xdata`/`ydata`/`sigma`/`bounds` to compute a fingerprint. Thread them through from `fit()` (which already has all of them) via new parameters, and add the save hook inside the loop:
+Per the grilling-session decision, path/fingerprint construction moves to
+`fit()` (which already has `xdata_jax`/`ydata_jax`/`sigma_jax`/
+`lower_bounds`/`upper_bounds` and computes `popsize`); `_run_cmaes`/
+`_run_cmaes_single` receive them as plain parameters and never build
+anything themselves.
+
+In `fit()`, right after the existing `popsize` computation block and
+before the existing `# Track wall time` / `start_time = time.perf_counter()`
+lines, insert:
+
+```python
+from nlsq.global_optimization.checkpoint import (
+    HPCCheckpointManager,
+    compute_fingerprint,
+)
+
+checkpoint_manager = None
+checkpoint_path = None
+checkpoint_fingerprint = None
+if self.config.checkpoint_dir is not None:
+    from pathlib import Path
+
+    checkpoint_manager = HPCCheckpointManager()
+    checkpoint_path = Path(self.config.checkpoint_dir) / f"{self.config.run_id}.h5"
+    checkpoint_fingerprint = compute_fingerprint(
+        model_id=self.config.model_id,
+        xdata=np.asarray(xdata_jax),
+        ydata=np.asarray(ydata_jax),
+        sigma=np.asarray(sigma_jax) if sigma_jax is not None else None,
+        bounds=(np.asarray(lower_bounds), np.asarray(upper_bounds)),
+        config_fields={
+            "popsize": popsize,
+            "sigma": self.config.sigma,
+            "tol_fun": self.config.tol_fun,
+            "tol_x": self.config.tol_x,
+            "seed": self.config.seed,
+        },
+    )
+```
+
+(`self.config.run_id`/`self.config.model_id` are guaranteed non-`None`
+here -- Task 3's validation raises at `CMAESConfig` construction time if
+`checkpoint_dir` is set without them.)
+
+Then change the existing call
+
+```python
+best_params_unbounded, best_fitness, generations = self._run_cmaes(
+    fitness_fn,
+    initial_solution,
+    popsize,
+    n_params,
+    diagnostics,
+)
+```
+
+to
+
+```python
+best_params_unbounded, best_fitness, generations = self._run_cmaes(
+    fitness_fn,
+    initial_solution,
+    popsize,
+    n_params,
+    diagnostics,
+    checkpoint_manager=checkpoint_manager,
+    checkpoint_path=checkpoint_path,
+    checkpoint_fingerprint=checkpoint_fingerprint,
+)
+```
+
+`_run_cmaes` gains matching keyword-only parameters and forwards them only
+to `_run_cmaes_single` (never to `_run_cmaes_with_bipop` -- Task 3's guard
+means checkpointing is never enabled when `restart_strategy="bipop"`, so
+that function's signature is untouched in this plan):
+
+```python
+def _run_cmaes(
+    self,
+    fitness_fn: Callable,
+    initial_solution: jax.Array,
+    popsize: int,
+    n_params: int,
+    diagnostics: CMAESDiagnostics,
+    *,
+    checkpoint_manager: HPCCheckpointManager | None = None,
+    checkpoint_path: Path | None = None,
+    checkpoint_fingerprint: dict[str, Any] | None = None,
+) -> tuple[jax.Array, jax.Array, int]:
+    if self.config.restart_strategy == "bipop":
+        return self._run_cmaes_with_bipop(
+            fitness_fn,
+            initial_solution,
+            popsize,
+            n_params,
+            diagnostics,
+        )
+    return self._run_cmaes_single(
+        fitness_fn,
+        initial_solution,
+        popsize,
+        n_params,
+        diagnostics,
+        checkpoint_manager=checkpoint_manager,
+        checkpoint_path=checkpoint_path,
+        checkpoint_fingerprint=checkpoint_fingerprint,
+    )
+```
+
+And `_run_cmaes_single` itself:
 
 ```python
 def _run_cmaes_single(
@@ -698,44 +938,18 @@ def _run_cmaes_single(
     n_params: int,
     diagnostics: CMAESDiagnostics,
     *,
-    xdata: jax.Array | None = None,
-    ydata: jax.Array | None = None,
-    sigma: jax.Array | None = None,
-    bounds: tuple[jax.Array, jax.Array] | None = None,
+    checkpoint_manager: HPCCheckpointManager | None = None,
+    checkpoint_path: Path | None = None,
+    checkpoint_fingerprint: dict[str, Any] | None = None,
 ) -> tuple[jax.Array, jax.Array, int]:
     from evosax.algorithms import CMA_ES
 
     from nlsq.global_optimization.checkpoint import (
         CMAESCheckpointState,
-        HPCCheckpointManager,
-        compute_fingerprint,
         serialize_key,
     )
 
-    checkpointing = self.config.checkpoint_dir is not None
-    manager: HPCCheckpointManager | None = None
-    checkpoint_path = None
-    fingerprint: dict[str, str] | None = None
-    if checkpointing:
-        from pathlib import Path
-
-        manager = HPCCheckpointManager()
-        run_id = self.config.run_id or "default"
-        checkpoint_path = Path(self.config.checkpoint_dir) / f"{run_id}.h5"
-        fingerprint = compute_fingerprint(
-            model_id=self.config.model_id,
-            xdata=np.asarray(xdata),
-            ydata=np.asarray(ydata),
-            sigma=np.asarray(sigma) if sigma is not None else None,
-            bounds=(np.asarray(bounds[0]), np.asarray(bounds[1])),
-            config_fields={
-                "popsize": popsize,
-                "sigma": self.config.sigma,
-                "tol_fun": self.config.tol_fun,
-                "tol_x": self.config.tol_x,
-                "seed": self.config.seed,
-            },
-        )
+    checkpointing = checkpoint_manager is not None
 
     logger.info(
         f"Starting CMA-ES: popsize={popsize}, max_gen={self.config.max_generations}",
@@ -760,7 +974,7 @@ def _run_cmaes_single(
     # `diagnostics.fitness_history` if a valid checkpoint exists.)
 
     milestones: dict[int, str] = {}
-    for pct, label in ((0.25, "50%"), (0.50, "50%"), (0.75, "75%")):
+    for pct, label in ((0.25, "25%"), (0.50, "50%"), (0.75, "75%")):
         gen_idx = int(self.config.max_generations * pct)
         if gen_idx not in milestones:
             milestones[gen_idx] = label
@@ -781,7 +995,9 @@ def _run_cmaes_single(
             fitness_history=list(diagnostics.fitness_history),
             popsize=popsize,
         )
-        manager.save(checkpoint_path, checkpoint_state, fingerprint)
+        checkpoint_manager.save(
+            checkpoint_path, checkpoint_state, checkpoint_fingerprint
+        )
 
     gen = start_gen - 1
     for gen in range(start_gen, self.config.max_generations):
@@ -831,7 +1047,10 @@ def _run_cmaes_single(
     return best_solution, best_fitness, gen + 1
 ```
 
-Also update the two call sites: `_run_cmaes` passes `xdata`/`ydata`/`sigma`/`bounds` through to `_run_cmaes_single` (it needs new parameters too, threaded from `fit()`), and `fit()` passes its own `xdata_jax`/`ydata_jax`/`sigma_jax`/`(lower_bounds, upper_bounds)` into `_run_cmaes`. `_run_cmaes_with_bipop`'s signature is unchanged in this task — Task 3's `NotImplementedError` guard means it's never called with checkpointing on.
+Add `from pathlib import Path` and `from typing import Any` to
+`cmaes_optimizer.py`'s top-level imports if not already present (`Any` is
+already imported per the existing `from typing import TYPE_CHECKING, Any`
+line; `Path` is new).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -933,11 +1152,7 @@ Insert this block in `_run_cmaes_single`, right after `state = es.init(subkey, i
 
 ```python
 if checkpointing and checkpoint_path.exists():
-    from nlsq.global_optimization.checkpoint import (
-        HPCCheckpointManager as _Manager,
-    )
-
-    loaded = manager.load(checkpoint_path, fingerprint)
+    loaded = checkpoint_manager.load(checkpoint_path, checkpoint_fingerprint)
     state = deserialize_evosax_state(
         {
             "generation_counter": loaded.generation_counter,
@@ -964,20 +1179,20 @@ if checkpointing and checkpoint_path.exists():
     )
 ```
 
-Add the missing import at the top of the method's evosax import block:
+Extend Task 4's `from nlsq.global_optimization.checkpoint import (...)`
+block inside `_run_cmaes_single` to also pull in `deserialize_evosax_state`
+and `deserialize_key` (still no `HPCCheckpointManager`/`compute_fingerprint`
+import here -- those stay in `fit()` only, per the grilling-session
+architecture decision):
 
 ```python
 from nlsq.global_optimization.checkpoint import (
     CMAESCheckpointState,
-    HPCCheckpointManager,
-    compute_fingerprint,
     deserialize_evosax_state,
     deserialize_key,
     serialize_key,
 )
 ```
-
-(replacing the narrower import added in Task 4).
 
 Also change the loop's exit condition to guard against a checkpoint whose `generation_counter` already reached `max_generations` (fully-converged-and-resumed edge case): if `start_gen >= self.config.max_generations`, skip the `for` loop entirely and go straight to `diagnostics.final_sigma = float(state.std)` using the loaded state's `std`.
 
@@ -1002,25 +1217,34 @@ git commit -m "feat(global_optimization): resume CMA-ES from checkpoint on entry
 - Test: `tests/global_optimization/test_cmaes_signal_handling.py`
 
 **Interfaces:**
-- Produces: `_run_cmaes_single` registers `SIGTERM`/`SIGUSR1` handlers (only when `checkpointing` is true) that set a `threading.Event`; the loop checks the event once per completed generation and, if set, saves and raises `CMAESPreempted` (new exception class, exported from `cmaes_optimizer.py`).
+- Produces: `fit()` (not `_run_cmaes_single` -- moved per the grilling-session
+  architecture decision, same reasoning as Task 4's path/fingerprint move)
+  creates a `threading.Event`, registers `SIGTERM`/`SIGUSR1` handlers that
+  set it -- only on the main thread, and only when checkpointing is enabled
+  -- and wraps the `_run_cmaes(...)` call in `try`/`finally` to restore the
+  original handlers afterward. `_run_cmaes`/`_run_cmaes_single` receive the
+  event as a plain parameter; the loop only checks it once per completed
+  generation and, if set, saves and raises `CMAESPreempted` (new exception
+  class, exported from `cmaes_optimizer.py`). Neither function touches the
+  `signal` module.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/global_optimization/test_cmaes_signal_handling.py
-import os
 import signal
 import subprocess
 import sys
 import textwrap
+import time
 
 import pytest
 
 
 def test_sigterm_mid_run_leaves_valid_checkpoint(tmp_path):
+    checkpoint_path = tmp_path / "sigterm-test.h5"
     script = textwrap.dedent(
         f"""
-        import time
         import numpy as np
         from nlsq.global_optimization.cmaes_config import CMAESConfig
         from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
@@ -1053,13 +1277,30 @@ def test_sigterm_mid_run_leaves_valid_checkpoint(tmp_path):
         stderr=subprocess.PIPE,
         text=True,
     )
-    time.sleep(2.0)  # let it get partway through generations
+    # Bounded readiness handshake instead of a fixed sleep: cold JAX/evosax
+    # imports and JIT warmup can take longer than any single fixed delay,
+    # and the SIGTERM handler is only installed once fit() actually starts
+    # checkpointing -- signalling before that point would hit Python's
+    # default SIGTERM disposition (process exits -15, not 75). Wait for
+    # generation 1's checkpoint (checkpoint_interval=1) to prove the loop
+    # -- and therefore the handler -- is live.
+    deadline = time.monotonic() + 60.0
+    while not checkpoint_path.exists():
+        if proc.poll() is not None:
+            stdout, stderr = proc.communicate()
+            pytest.fail(
+                f"process exited before writing any checkpoint: "
+                f"returncode={proc.returncode} stdout={stdout} stderr={stderr}",
+            )
+        if time.monotonic() > deadline:
+            proc.kill()
+            pytest.fail("timed out waiting for first checkpoint to appear")
+        time.sleep(0.05)
+
     proc.send_signal(signal.SIGTERM)
     stdout, stderr = proc.communicate(timeout=30)
 
     assert "EXIT_CODE:75" in stdout, f"stderr={stderr}"
-
-    checkpoint_path = tmp_path / "sigterm-test.h5"
     assert checkpoint_path.exists()
     import h5py
 
@@ -1087,61 +1328,81 @@ class CMAESPreempted(SystemExit):
         self.generation = generation
 ```
 
-Add `__all__ = ["CMAESOptimizer", "CMAESPreempted"]`.
+Add `__all__ = ["CMAESOptimizer", "CMAESPreempted"]`. Add `import threading`
+to the module's top-level imports.
 
-Inside `_run_cmaes_single`, right before the `for gen in range(...)` loop, when `checkpointing` is true:
+In `fit()`, extend the checkpoint setup block added in Task 4 (right after
+building `checkpoint_manager`/`checkpoint_path`/`checkpoint_fingerprint`):
 
 ```python
-preemption_requested = threading.Event()
+preemption_event = None
 previous_handlers: dict[int, Any] = {}
-if checkpointing:
-    import signal
+if checkpoint_manager is not None:
+    if threading.current_thread() is threading.main_thread():
+        import signal
 
-    def _handle_preemption(signum: int, frame: Any) -> None:
-        preemption_requested.set()
+        preemption_event = threading.Event()
 
-    for sig in (signal.SIGTERM, signal.SIGUSR1):
-        previous_handlers[sig] = signal.signal(sig, _handle_preemption)
+        def _handle_preemption(signum: int, frame: Any) -> None:
+            preemption_event.set()
+
+        for sig in (signal.SIGTERM, signal.SIGUSR1):
+            previous_handlers[sig] = signal.signal(sig, _handle_preemption)
+    else:
+        # signal.signal() raises ValueError off the main thread. Periodic
+        # interval saves (Task 4) remain the crash-safety net when
+        # CMAESOptimizer.fit() is called from a worker thread; this is a
+        # documented reduction in coverage, not a silent no-op -- log it.
+        logger.warning(
+            "Checkpointing enabled but fit() was not called on the main "
+            "thread: SIGTERM/SIGUSR1 preemption handling is unavailable "
+            "here (Python's signal.signal() requires the main thread). "
+            "Periodic interval saves still apply.",
+        )
 ```
 
-Add `import threading` to the module's imports.
-
-Inside the loop, right after the `diagnostics.fitness_history.append(...)` line and before the existing `if checkpointing and (gen + 1) % ...` save check, add:
-
-```python
-if checkpointing and preemption_requested.is_set():
-    jax.block_until_ready((state.mean, state.C, state.best_solution))
-    _save_checkpoint(gen, key)
-    raise CMAESPreempted(gen + 1)
-```
-
-(handler restoration moves to a `finally` below -- not repeated here, so this
-path stays a plain raise rather than duplicating the restore-and-raise
-sequence in every exit path.)
-
-Wrap the entire `for gen in range(...)` loop (and the existing unconditional
-`if checkpointing: _save_checkpoint(gen, key)` line added in Task 4 that
-follows it) in `try`/`finally`, so handlers are restored on **every** exit
-path -- normal completion, the `CMAESPreempted` raise above, or an
-unrelated exception from `fitness_fn`/`es.tell`/anywhere else in the loop
-body. Without this, an unhandled exception mid-loop leaves the process's
-SIGTERM/SIGUSR1 handlers permanently pointed at `_handle_preemption` even
-after `_run_cmaes_single` has returned control to a caller who never asked
-for that (caught by design review -- a bare "restore on normal exit only"
-version silently leaks handlers on any other exception):
+Change the existing `_run_cmaes(...)` call (already updated in Task 4 to
+pass the checkpoint parameters) to also pass `preemption_event=
+preemption_event`, and wrap the call in `try`/`finally` to restore
+whatever handlers were actually installed:
 
 ```python
 try:
-    gen = start_gen - 1
-    for gen in range(start_gen, self.config.max_generations):
-        ...  # unchanged loop body, including the preemption check above
-
-    if checkpointing:
-        _save_checkpoint(gen, key)
+    best_params_unbounded, best_fitness, generations = self._run_cmaes(
+        fitness_fn,
+        initial_solution,
+        popsize,
+        n_params,
+        diagnostics,
+        checkpoint_manager=checkpoint_manager,
+        checkpoint_path=checkpoint_path,
+        checkpoint_fingerprint=checkpoint_fingerprint,
+        preemption_event=preemption_event,
+    )
 finally:
-    if checkpointing:
-        for sig, handler in previous_handlers.items():
-            signal.signal(sig, handler)
+    for sig, handler in previous_handlers.items():
+        signal.signal(sig, handler)
+```
+
+(`CMAESPreempted` is a `SystemExit` subclass, so it propagates through this
+`finally` and out of `fit()` uncaught, exactly like the test above expects
+-- no explicit `except CMAESPreempted` needed here.)
+
+`_run_cmaes` and `_run_cmaes_single` both gain a matching
+`preemption_event: threading.Event | None = None` keyword-only parameter,
+threaded through the same way as the Task 4 checkpoint parameters (add it
+to `_run_cmaes`'s signature and its `_run_cmaes_single(...)` call; add it to
+`_run_cmaes_single`'s signature).
+
+Inside the loop, right after the `diagnostics.fitness_history.append(...)`
+line and before the existing `if checkpointing and (gen + 1) % ...` save
+check, add:
+
+```python
+if preemption_event is not None and preemption_event.is_set():
+    jax.block_until_ready((state.mean, state.C, state.best_solution))
+    _save_checkpoint(gen, key)
+    raise CMAESPreempted(gen + 1)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1166,7 +1427,14 @@ git commit -m "feat(global_optimization): flag-based SIGTERM/SIGUSR1 preemption 
 
 **Interfaces:**
 - Consumes: `CMAESConfig` checkpoint fields (Task 3).
-- Produces: When `workflow='hpc'` resolves to the CMA-ES route (not multistart/chunked/streaming), `checkpoint_dir`/`checkpoint_interval` passed to `fit()` are forwarded into a `CMAESConfig` instead of being discarded; the existing `UserWarning` in `_fit_with_hpc` is narrowed to only fire for the routes that still don't support it.
+- Produces: (a) `fit()`'s `method` parameter actually forces the CMA-ES/
+  multi-start route via `MethodSelector`, for every `workflow='auto_global'`/
+  `'hpc'` caller (spec FR9) -- previously it was silently dropped. (b) When
+  `workflow='hpc'` resolves to the CMA-ES route (not multistart/chunked/
+  streaming), `checkpoint_dir`/`checkpoint_interval` passed to `fit()` are
+  forwarded into a `CMAESConfig` instead of being discarded; the existing
+  `UserWarning` in `_fit_with_hpc` is narrowed to only fire for the routes
+  that still don't support it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1208,16 +1476,127 @@ def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
 
     assert result is not None
     assert (tmp_path / "hpc-e2e-test.h5").exists()
+
+
+def test_auto_global_method_cmaes_actually_selects_cmaes():
+    """FR9, isolated from checkpointing: workflow='auto_global' with
+    method='cmaes' must force the CMA-ES route even when the data's scale
+    ratio would otherwise auto-select multi-start (bounds here are
+    single-scale, ratio ~1, well under MethodSelector's ~1000x threshold).
+    """
+    from nlsq import fit
+
+    x = jnp.linspace(0, 5, 100)
+    y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+
+    result = fit(
+        model,
+        x,
+        y,
+        p0=[1.0, 0.5],
+        workflow="auto_global",
+        bounds=([0.0, 0.0], [10.0, 10.0]),
+        method="cmaes",
+    )
+
+    assert result is not None
+    # _fit_global_cmaes sets result["cmaes_diagnostics"] (minpack.py:1518-1519);
+    # the multi-start route instead sets result["multistart_diagnostics"]
+    # (minpack.py:2132/2755) -- these two keys are mutually exclusive
+    # discriminators for which route actually ran.
+    assert "cmaes_diagnostics" in result
+    assert "multistart_diagnostics" not in result
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/streaming/test_workflow_presets.py::test_hpc_cmaes_route_actually_checkpoints -v`
-Expected: FAIL — `UserWarning` still raised (converted to error by `simplefilter`), since `_fit_with_hpc` unconditionally warns today.
+Run: `pytest tests/streaming/test_workflow_presets.py -v -k "hpc_cmaes_route_actually_checkpoints or auto_global_method_cmaes"`
+Expected: FAIL — the first on the still-unconditional `UserWarning`
+(`_fit_with_hpc` warns regardless today); the second because `method`
+never reaches `MethodSelector`, so multi-start (not CMA-ES) is selected
+and no `cmaes_diagnostics` appears on the result.
 
 - [ ] **Step 3: Write the implementation**
 
-In `_fit_with_hpc` (`minpack.py`), replace the unconditional warn block:
+**First, fix the `method`-threading gap (spec FR9)** -- without this,
+`method="cmaes"` in the test above silently does nothing and the test
+would fail on the "route doesn't support checkpointing" warning instead of
+actually exercising the checkpoint path (found in code review: `fit()` has
+an explicit `method: str | None = None` parameter, but its dispatch calls
+to `_fit_with_auto_global`/`_fit_with_hpc` only forward `**kwargs` --
+`method` is a named parameter, not part of `kwargs`, so it never reaches
+either function; `_fit_with_auto_global` then hardcodes
+`requested_method="auto"` to `MethodSelector.select()` regardless).
+
+In `fit()`'s two dispatch call sites, add `method=method,`:
+
+```python
+if workflow_lower == "auto_global":
+    # Memory-aware global optimization (requires bounds)
+    return _fit_with_auto_global(
+        f=f,
+        xdata=xdata_arr,
+        ydata=ydata_arr,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
+        bounds=bounds,
+        n_points=n_points,
+        n_params=n_params,
+        goal=goal_enum,
+        method=method,
+        **kwargs,
+    )
+
+if workflow_lower == "hpc":
+    # HPC workflow with checkpointing (wraps auto_global)
+    return _fit_with_hpc(
+        f=f,
+        xdata=xdata_arr,
+        ydata=ydata_arr,
+        p0=p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
+        bounds=bounds,
+        n_points=n_points,
+        n_params=n_params,
+        goal=goal_enum,
+        method=method,
+        **kwargs,
+    )
+```
+
+Add `method: str | None = None` to both `_fit_with_auto_global`'s and
+`_fit_with_hpc`'s signatures (same pattern already used by the existing
+`_fit_with_config`/`_fit_with_preset` functions in this file). In
+`_fit_with_hpc`'s own call into `_fit_with_auto_global`, add `method=method,`.
+In `_fit_with_auto_global`, change:
+
+```python
+global_method = method_selector.select(
+    requested_method="auto",
+    lower_bounds=lb,
+    upper_bounds=ub,
+)
+```
+
+to:
+
+```python
+global_method = method_selector.select(
+    requested_method=method or "auto",
+    lower_bounds=lb,
+    upper_bounds=ub,
+)
+```
+
+(`MethodSelector.select()` already handles `requested_method="cmaes"`/
+`"multi-start"` explicitly and falls through to scale-ratio auto-selection
+for anything else, including `None` -- no change needed there.)
+
+**Then, wire the checkpoint kwargs through.** In `_fit_with_hpc` (`minpack.py`), replace the unconditional warn block:
 
 ```python
 checkpoint_dir = kwargs.pop("checkpoint_dir", None)
@@ -1286,10 +1665,10 @@ if kwargs.pop("_hpc_checkpoint_dir", None) is not None:
     kwargs.pop("_hpc_model_id", None)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/streaming/test_workflow_presets.py -v -k hpc`
-Expected: PASS — includes the pre-existing `test_hpc_requires_bounds`, `test_hpc_with_bounds_succeeds`, `test_hpc_accepts_checkpoint_parameters`, `test_hpc_checkpoint_dir_warns_not_implemented` (still passes for non-CMA-ES route selection), and the new `test_hpc_cmaes_route_actually_checkpoints`.
+Run: `pytest tests/streaming/test_workflow_presets.py -v`
+Expected: PASS — includes the pre-existing `test_hpc_requires_bounds`, `test_hpc_with_bounds_succeeds`, `test_hpc_accepts_checkpoint_parameters`, `test_hpc_checkpoint_dir_warns_not_implemented` (still passes for non-CMA-ES route selection), and the two new tests `test_hpc_cmaes_route_actually_checkpoints` and `test_auto_global_method_cmaes_actually_selects_cmaes`.
 
 - [ ] **Step 5: Commit**
 
@@ -1413,6 +1792,13 @@ Add under `## [Unreleased]` → `### Added`:
   streaming `workflow='hpc'` routes still raise/warn as not-yet-implemented
   -- see `docs/superpowers/plans/2026-08-27-cmaes-checkpoint-resume-spec.md`
   for scope.
+
+### Fixed
+- `fit()`'s `method` parameter was silently dropped for `workflow='auto_global'`
+  and `workflow='hpc'` -- `method="cmaes"`/`"multi-start"` had no effect and
+  route selection always fell back to automatic scale-ratio-based selection.
+  `method` now actually reaches `MethodSelector`, for every caller of those
+  two workflows, not only when checkpointing is enabled.
 ```
 
 - [ ] **Step 4: Commit**
@@ -1426,10 +1812,12 @@ git commit -m "docs(global_optimization): checkpoint latency benchmark + changel
 
 ## Self-Review
 
-**Spec coverage:** FR1 → Task 3 (fields). FR2 → Task 3 (seed validation). FR3 → Task 3 (bipop guard). FR4 → Task 3 (model_id validation). FR5 → Task 4 (periodic + final save). FR6 → Task 5 (resume + fingerprint check via `HPCCheckpointManager.load`, Task 2). FR7 → Task 6 (signal handling). FR8 → Task 2 (atomic write + rotation + completion marker). NFR1 → Task 5's `test_resume_matches_uninterrupted_run`. NFR2 → Task 8. Scope §2's non-goals → no task touches those files; Task 7 explicitly preserves the warning for them.
+**Spec coverage:** FR1 → Task 3 (fields). FR2 → Task 3 (seed validation). FR3 → Task 3 (bipop guard). FR4 → Task 3 (model_id + run_id validation). FR5 → Task 4 (periodic + final save). FR6 → Task 5 (resume + fingerprint check via `HPCCheckpointManager.load`, Task 2). FR7 → Task 6 (signal handling, main-thread-guarded, registered in `fit()`). FR8 → Task 2 (atomic write, directory fsync, mandatory `.bak` fallback, rotation, completion marker). FR9 → Task 7 (`method` threading fix). NFR1 → Task 5's `test_resume_matches_uninterrupted_run`. NFR2 → Task 8. Scope §2's non-goals → no task touches those files; Task 7 explicitly preserves the warning for them.
 
 **Placeholder scan:** every step has real, complete code; no "TODO"/"similar to Task N"/"add validation" left unfilled.
 
-**Type consistency:** `CMAESCheckpointState` fields defined in Task 1 are used identically (same names) in Tasks 2, 4, 5, 8. `HPCCheckpointManager.save(path, state, fingerprint)`/`.load(path, expected_fingerprint)` signatures from Task 2 are called identically in Tasks 4/5. `compute_fingerprint(...)` keyword names match between Task 2's definition and Tasks 4/8's call sites.
+**Type consistency:** `CMAESCheckpointState` fields defined in Task 1 are used identically (same names) in Tasks 2, 4, 5, 8. `HPCCheckpointManager.save(path, state, fingerprint)`/`.load(path, expected_fingerprint)` signatures from Task 2 are called identically in Tasks 4/5. `compute_fingerprint(...)` keyword names match between Task 2's definition and Tasks 4/7's call sites. `checkpoint_manager`/`checkpoint_path`/`checkpoint_fingerprint`/`preemption_event` are threaded identically through `fit()` → `_run_cmaes` → `_run_cmaes_single` across Tasks 4 and 6.
 
-**Known limitation, not addressed in this plan (external design review, three-brain Agy pass):** Tasks 4-6's `_run_cmaes_single` constructs its own `checkpoint_path`, builds its own fingerprint dict, and registers its own signal handlers directly, rather than receiving a pre-built `HPCCheckpointManager` + fingerprint + path from `fit()`. This is real I/O/orchestration logic living inside the optimizer method, not the "pure state capture only" separation this plan's Architecture section claims. It doesn't block correctness -- every test above still passes as designed -- but a follow-up refactor should move path/fingerprint construction into `fit()` and pass the ready-made manager/fingerprint/path into `_run_cmaes_single` as parameters, leaving the method itself only calling `manager.save(...)`/`manager.load(...)` with values it didn't build. Deferred here rather than expanding this plan's scope further.
+**Resolved during grilling-session review (previously an open limitation):** the separation-of-concerns gap flagged by the three-brain Agy pass -- `_run_cmaes_single` building its own path/fingerprint/signal handlers instead of receiving them pre-built -- is fixed in this revision. `fit()` now owns all construction (`HPCCheckpointManager`, checkpoint path, fingerprint, `threading.Event`, signal registration/restoration); `_run_cmaes`/`_run_cmaes_single` only receive these as parameters and call `.save()`/`.load()`/check the event. No known architectural debt remains from that review round.
+
+**Two independent Codex correctness passes** (after the plan changed between them) found and this revision fixes: the evosax `State.replace()` vs `._replace()` API error (Task 1), a broken end-to-end test missing `restart_strategy="none"` (Task 7), a signal-handler leak on unhandled exceptions (Task 6, now via `fit()`'s own `try`/`finally`), a missing `.bak` load fallback (Task 2), a missing containing-directory fsync (Task 2), a fingerprint format that stored only a bounds hash instead of the spec-mandated raw arrays (Task 2), a racy fixed-`sleep()` in the SIGTERM test (Task 6), a missing main-thread guard on signal registration (Task 6), and the `method`-parameter-never-threaded-through bug that would have made Task 7's own end-to-end test fail (Task 7, new FR9).
