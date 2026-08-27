@@ -121,7 +121,7 @@ def benchmark_svd_caching_pattern() -> dict[str, Any]:
     for _ in range(n_outer_iters):
         for _ in range(n_inner_iters_per_outer):
             # No caching: compute SVD every inner iteration
-            _U, s, _Vt = jnp.linalg.svd(J_jax, full_matrices=False)
+            U, s, Vt = jnp.linalg.svd(J_jax, full_matrices=False)
             uf = U.T @ f_jax
             # Simulate trust-region solve (just matrix ops)
             _ = Vt.T @ (uf / (s + 1e-8))
