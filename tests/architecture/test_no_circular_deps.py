@@ -37,16 +37,32 @@ class TestPackageImports:
         This test catches the most obvious circular dependency issues that
         would cause ImportError at runtime.
         """
-        # Remove cached imports to test fresh import
+        # Remove cached imports to test fresh import. Snapshot the removed
+        # modules so they can be restored afterward -- leaving the reload
+        # in place would leak new class/module identities into every other
+        # test that runs later in this xdist worker process, breaking
+        # anything that does `monkeypatch.setattr(SomeClass, ...)` on a
+        # reference captured before this test ran (the patch would target
+        # the stale class while production code's lazily-reimported
+        # reference resolves to the fresh one -- observed in CI as
+        # `test_resume_matches_uninterrupted_run` silently not invoking its
+        # monkeypatched `HPCCheckpointManager.load` spy).
         modules_to_remove = [m for m in sys.modules if m.startswith(package)]
+        saved_modules = {m: sys.modules[m] for m in modules_to_remove}
         for m in modules_to_remove:
             del sys.modules[m]
 
-        # This should not raise ImportError
         try:
-            importlib.import_module(package)
-        except ImportError as e:
-            pytest.fail(f"Package {package} failed to import: {e}")
+            # This should not raise ImportError
+            try:
+                importlib.import_module(package)
+            except ImportError as e:
+                pytest.fail(f"Package {package} failed to import: {e}")
+        finally:
+            for m in list(sys.modules):
+                if m.startswith(package) and m not in saved_modules:
+                    del sys.modules[m]
+            sys.modules.update(saved_modules)
 
 
 class TestCircularDependencyDetection:

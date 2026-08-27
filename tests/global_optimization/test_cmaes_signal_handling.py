@@ -3,6 +3,7 @@ import subprocess
 import sys
 import textwrap
 import time
+from typing import Any
 
 import numpy as np
 import pytest
@@ -26,7 +27,12 @@ def test_signal_handlers_restored_after_normal_fit(tmp_path):
     SIGTERM handling for the rest of the process lifetime; this only
     surfaces by comparing disposition before/after, never by output alone."""
     previous_term = signal.getsignal(signal.SIGTERM)
-    previous_usr1 = signal.getsignal(signal.SIGUSR1)
+    # SIGUSR1 doesn't exist on Windows -- `_preemption_handling` disables
+    # all SIGTERM/SIGUSR1 registration there (see its Windows guard), so
+    # there's nothing to compare on that platform.
+    previous_usr1: Any = (
+        signal.getsignal(signal.SIGUSR1) if hasattr(signal, "SIGUSR1") else None
+    )
 
     x = np.linspace(0, 5, 50)
     y = np.asarray(_exponential_decay(x, 2.5, 0.5))
@@ -48,9 +54,19 @@ def test_signal_handlers_restored_after_normal_fit(tmp_path):
     )
 
     assert signal.getsignal(signal.SIGTERM) == previous_term
-    assert signal.getsignal(signal.SIGUSR1) == previous_usr1
+    if hasattr(signal, "SIGUSR1"):
+        assert signal.getsignal(signal.SIGUSR1) == previous_usr1
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason=(
+        "SIGUSR1 doesn't exist on Windows, so _preemption_handling disables "
+        "SIGTERM/SIGUSR1 registration entirely there (falls back to "
+        "periodic interval saves) -- this test's premise, a catchable "
+        "SIGTERM producing SystemExit(75), doesn't apply on that platform."
+    ),
+)
 def test_sigterm_mid_run_leaves_valid_checkpoint(tmp_path):
     checkpoint_path = tmp_path / "sigterm-test.h5"
     script = textwrap.dedent(
