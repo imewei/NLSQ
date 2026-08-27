@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -28,6 +29,8 @@ from nlsq.global_optimization.cmaes_diagnostics import CMAESDiagnostics
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
+
+    from nlsq.global_optimization.checkpoint import HPCCheckpointManager
 
 __all__ = ["CMAESOptimizer"]
 
@@ -456,6 +459,12 @@ class CMAESOptimizer:
             data_chunk_size=self.config.data_chunk_size,
         )
 
+        checkpoint_manager, checkpoint_path, checkpoint_fingerprint = (
+            self._setup_checkpointing(
+                xdata_jax, ydata_jax, sigma_jax, lower_bounds, upper_bounds, popsize
+            )
+        )
+
         # Track wall time
         import time
 
@@ -471,6 +480,9 @@ class CMAESOptimizer:
             popsize,
             n_params,
             diagnostics,
+            checkpoint_manager=checkpoint_manager,
+            checkpoint_path=checkpoint_path,
+            checkpoint_fingerprint=checkpoint_fingerprint,
         )
 
         # Update diagnostics
@@ -516,6 +528,51 @@ class CMAESOptimizer:
 
         return result
 
+    def _setup_checkpointing(
+        self,
+        xdata_jax: jax.Array,
+        ydata_jax: jax.Array,
+        sigma_jax: jax.Array | None,
+        lower_bounds: jax.Array,
+        upper_bounds: jax.Array,
+        popsize: int,
+    ) -> tuple[HPCCheckpointManager | None, Path | None, dict[str, Any] | None]:
+        """Build the checkpoint manager/path/fingerprint for `fit()`, or
+        `(None, None, None)` when `checkpoint_dir` is unset.
+
+        `self.config.model_id`/`self.config.run_id` are guaranteed non-`None`
+        here -- `CMAESConfig` validation raises at construction time if
+        `checkpoint_dir` is set without them.
+        """
+        if self.config.checkpoint_dir is None:
+            return None, None, None
+
+        from nlsq.global_optimization.checkpoint import (
+            HPCCheckpointManager,
+            compute_fingerprint,
+        )
+
+        assert self.config.model_id is not None
+        assert self.config.run_id is not None
+
+        manager = HPCCheckpointManager()
+        path = Path(self.config.checkpoint_dir) / f"{self.config.run_id}.h5"
+        fingerprint = compute_fingerprint(
+            model_id=self.config.model_id,
+            xdata=np.asarray(xdata_jax),
+            ydata=np.asarray(ydata_jax),
+            sigma=np.asarray(sigma_jax) if sigma_jax is not None else None,
+            bounds=(np.asarray(lower_bounds), np.asarray(upper_bounds)),
+            config_fields={
+                "popsize": popsize,
+                "sigma": self.config.sigma,
+                "tol_fun": self.config.tol_fun,
+                "tol_x": self.config.tol_x,
+                "seed": self.config.seed,
+            },
+        )
+        return manager, path, fingerprint
+
     def _run_cmaes(
         self,
         fitness_fn: Callable,
@@ -523,6 +580,10 @@ class CMAESOptimizer:
         popsize: int,
         n_params: int,
         diagnostics: CMAESDiagnostics,
+        *,
+        checkpoint_manager: HPCCheckpointManager | None = None,
+        checkpoint_path: Path | None = None,
+        checkpoint_fingerprint: dict[str, Any] | None = None,
     ) -> tuple[jax.Array, jax.Array, int]:
         """Run CMA-ES optimization loop with optional BIPOP restarts.
 
@@ -558,6 +619,9 @@ class CMAESOptimizer:
             popsize,
             n_params,
             diagnostics,
+            checkpoint_manager=checkpoint_manager,
+            checkpoint_path=checkpoint_path,
+            checkpoint_fingerprint=checkpoint_fingerprint,
         )
 
     def _run_cmaes_single(
@@ -567,6 +631,10 @@ class CMAESOptimizer:
         popsize: int,
         n_params: int,
         diagnostics: CMAESDiagnostics,
+        *,
+        checkpoint_manager: HPCCheckpointManager | None = None,
+        checkpoint_path: Path | None = None,
+        checkpoint_fingerprint: dict[str, Any] | None = None,
     ) -> tuple[jax.Array, jax.Array, int]:
         """Run single CMA-ES optimization without restarts.
 
@@ -591,6 +659,13 @@ class CMAESOptimizer:
         from evosax.algorithms import (  # type: ignore[import-not-found,import-untyped]
             CMA_ES,
         )
+
+        from nlsq.global_optimization.checkpoint import (
+            CMAESCheckpointState,
+            serialize_key,
+        )
+
+        checkpointing = checkpoint_manager is not None
 
         logger.info(
             f"Starting CMA-ES: popsize={popsize}, max_gen={self.config.max_generations}",
@@ -617,6 +692,12 @@ class CMAESOptimizer:
         best_solution = initial_solution
         best_fitness = jnp.array(jnp.inf)
         convergence_reason = "max_generations"
+        start_gen = 0
+
+        # (Resume-on-entry logic added in Task 5 goes here, before the
+        # milestones/loop setup below -- it would overwrite `state`, `key`,
+        # `start_gen`, `best_solution`, `best_fitness`, and
+        # `diagnostics.fitness_history` if a valid checkpoint exists.)
 
         # Progress milestones for logging (25%, 50%, 75%)
         # Build the dict from a list so later entries don't silently overwrite
@@ -627,9 +708,32 @@ class CMAESOptimizer:
             if gen_idx not in milestones:
                 milestones[gen_idx] = label
 
+        def _save_checkpoint(gen_idx: int, current_key: jax.Array) -> None:
+            assert checkpoint_manager is not None
+            assert checkpoint_path is not None
+            assert checkpoint_fingerprint is not None
+            checkpoint_state = CMAESCheckpointState(
+                generation_counter=gen_idx + 1,
+                mean=state.mean,
+                std=state.std,
+                p_std=state.p_std,
+                p_c=state.p_c,
+                C=state.C,
+                B=state.B,
+                D=state.D,
+                best_solution=best_solution,
+                best_fitness=float(best_fitness),
+                key_data=serialize_key(current_key),
+                fitness_history=list(diagnostics.fitness_history),
+                popsize=popsize,
+            )
+            checkpoint_manager.save(
+                checkpoint_path, checkpoint_state, checkpoint_fingerprint
+            )
+
         # Main optimization loop
-        gen = -1
-        for gen in range(self.config.max_generations):
+        gen = start_gen - 1
+        for gen in range(start_gen, self.config.max_generations):
             key, key_ask, key_tell = jax.random.split(key, 3)
 
             # Ask for new population
@@ -648,6 +752,9 @@ class CMAESOptimizer:
 
             # Record fitness history
             diagnostics.fitness_history.append(float(best_fitness))
+
+            if checkpointing and (gen + 1) % self.config.checkpoint_interval == 0:
+                _save_checkpoint(gen, key)
 
             # Simple convergence check based on std
             if float(state.std) < self.config.tol_x:
@@ -672,6 +779,9 @@ class CMAESOptimizer:
                     f"Generation {gen + 1}/{self.config.max_generations}: "
                     f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.6e}",
                 )
+
+        if checkpointing:
+            _save_checkpoint(gen, key)
 
         # Update diagnostics
         diagnostics.final_sigma = float(state.std)
