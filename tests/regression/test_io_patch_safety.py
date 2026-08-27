@@ -24,6 +24,7 @@ def savefig_spy(monkeypatch, tmp_path):
     return a list that captures every resolved path the patched savefig()
     is invoked with — without touching the filesystem via a real save.
     """
+    import matplotlib.figure
     import matplotlib.pyplot as plt
 
     calls: list[Path] = []
@@ -31,6 +32,19 @@ def savefig_spy(monkeypatch, tmp_path):
     def _spy(fname, *args, **kwargs):
         calls.append(Path(fname))
 
+    # io_patch.patch_savefig() patches matplotlib.figure.Figure.savefig via
+    # a raw class-attribute assignment (that's the production behavior
+    # being tested — io_patch.py is meant to monkeypatch globally for the
+    # life of a script-runner subprocess), not through pytest's monkeypatch
+    # fixture, so it's never undone on its own. Register it with
+    # monkeypatch here (before patch_savefig() reassigns it) so monkeypatch
+    # restores the true original at teardown regardless — otherwise this
+    # leaks a global Figure.savefig patch that silently redirects any
+    # OTHER test's fig.savefig() call to this test's tmp_path sandbox
+    # whenever pytest-xdist schedules it on the same worker afterward.
+    monkeypatch.setattr(
+        matplotlib.figure.Figure, "savefig", matplotlib.figure.Figure.savefig
+    )
     monkeypatch.setattr(plt, "savefig", _spy)
     monkeypatch.setenv("NLSQ_OUTPUT_DIR", str(tmp_path))
 
