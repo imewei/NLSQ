@@ -662,6 +662,8 @@ class CMAESOptimizer:
 
         from nlsq.global_optimization.checkpoint import (
             CMAESCheckpointState,
+            deserialize_evosax_state,
+            deserialize_key,
             serialize_key,
         )
 
@@ -694,10 +696,48 @@ class CMAESOptimizer:
         convergence_reason = "max_generations"
         start_gen = 0
 
-        # (Resume-on-entry logic added in Task 5 goes here, before the
-        # milestones/loop setup below -- it would overwrite `state`, `key`,
-        # `start_gen`, `best_solution`, `best_fitness`, and
-        # `diagnostics.fitness_history` if a valid checkpoint exists.)
+        if checkpointing:
+            assert checkpoint_path is not None
+            assert checkpoint_manager is not None
+            assert checkpoint_fingerprint is not None
+            checkpoint_bak_path = checkpoint_path.with_suffix(
+                checkpoint_path.suffix + ".bak"
+            )
+            # Check for .bak too, not just the primary: if a crash deleted or
+            # never finished writing the primary but a prior successful
+            # save's rotated .bak survives, resume must still attempt it --
+            # gating on the primary alone would silently skip
+            # HPCCheckpointManager.load()'s own mandatory .bak fallback (FR8)
+            # entirely and start fresh instead (caught in the third review
+            # pass).
+            if checkpoint_path.exists() or checkpoint_bak_path.exists():
+                loaded = checkpoint_manager.load(
+                    checkpoint_path, checkpoint_fingerprint
+                )
+                state = deserialize_evosax_state(
+                    {
+                        "generation_counter": loaded.generation_counter,
+                        "mean": loaded.mean,
+                        "std": loaded.std,
+                        "p_std": loaded.p_std,
+                        "p_c": loaded.p_c,
+                        "C": loaded.C,
+                        "B": loaded.B,
+                        "D": loaded.D,
+                        "best_solution": loaded.best_solution,
+                        "best_fitness": loaded.best_fitness,
+                    },
+                    state,
+                )
+                key = deserialize_key(loaded.key_data)
+                best_solution = loaded.best_solution
+                best_fitness = jnp.asarray(loaded.best_fitness)
+                diagnostics.fitness_history = list(loaded.fitness_history)
+                start_gen = loaded.generation_counter
+                logger.info(
+                    f"Resumed CMA-ES from checkpoint at generation {start_gen} "
+                    f"({checkpoint_path})",
+                )
 
         # Progress milestones for logging (25%, 50%, 75%)
         # Build the dict from a list so later entries don't silently overwrite
@@ -780,7 +820,11 @@ class CMAESOptimizer:
                     f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.6e}",
                 )
 
-        if checkpointing:
+        # `gen >= start_gen` is false only when a resumed checkpoint's
+        # generation_counter already reached max_generations, so the `for`
+        # loop above ran zero iterations (fully-converged-and-resumed edge
+        # case) -- skip re-saving a checkpoint that made no new progress.
+        if checkpointing and gen >= start_gen:
             _save_checkpoint(gen, key)
 
         # Update diagnostics
