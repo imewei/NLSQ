@@ -196,3 +196,23 @@ def test_fingerprint_includes_actual_bounds_arrays(tmp_path):
             f["fingerprint"]["bounds_upper"][()],
             [10.0, 10.0, 10.0],
         )
+
+
+def test_load_falls_back_to_bak_when_primary_is_entirely_missing(tmp_path):
+    """A crash between save()'s two renames (path.replace(bak_path) then
+    os.replace(tmp_path, path)) leaves the primary entirely absent while
+    .bak holds the last good checkpoint. load() must recover from .bak in
+    that case, not raise FileNotFoundError -- save() rotates unconditionally
+    specifically so this fallback always has something to recover from."""
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    state1 = _sample_state()
+    manager.save(path, state1, fp)
+    bak_path = tmp_path / "run1.h5.bak"
+    # Simulate a crash between save()'s two renames: the primary got
+    # rotated to .bak, but the new primary was never written.
+    path.replace(bak_path)
+
+    restored = manager.load(path, fp)
+    assert restored.generation_counter == 5  # recovered from .bak

@@ -253,12 +253,6 @@ class HPCCheckpointManager:
         try:
             return self._load_one(path, expected_fingerprint)
         except (FileNotFoundError, OSError, ValueError) as primary_error:
-            if not path.exists():
-                # No primary at all (e.g. first-ever save never happened) --
-                # a .bak fallback here would silently resume from an even
-                # older, more-stale state than the caller expects. Only
-                # fall back when the primary exists but is unusable.
-                raise
             if not bak_path.exists():
                 raise
             logger.warning(
