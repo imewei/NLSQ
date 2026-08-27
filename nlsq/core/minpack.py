@@ -590,6 +590,7 @@ def fit(  # noqa: C901
                 n_points=n_points,
                 n_params=n_params,
                 goal=goal_enum,
+                method=method,
                 **kwargs,
             )
 
@@ -607,6 +608,7 @@ def fit(  # noqa: C901
                 n_points=n_points,
                 n_params=n_params,
                 goal=goal_enum,
+                method=method,
                 **kwargs,
             )
 
@@ -1071,6 +1073,7 @@ def _fit_with_auto_global(
     n_points: int,
     n_params: int,
     goal: Any,
+    method: str | None = None,
     _workflow_name: str = "auto_global",
     **kwargs: Any,
 ) -> CurveFitResult:
@@ -1234,7 +1237,7 @@ def _fit_with_auto_global(
     # filtering it out the way compute_scale_ratio does).
     scale_ratio = method_selector.compute_scale_ratio(lb, ub)
     global_method = method_selector.select(
-        requested_method="auto",
+        requested_method=method or "auto",
         lower_bounds=lb,
         upper_bounds=ub,
     )
@@ -1306,6 +1309,7 @@ def _fit_with_hpc(
     n_points: int,
     n_params: int,
     goal: Any,
+    method: str | None = None,
     **kwargs: Any,
 ) -> CurveFitResult:
     """HPC workflow with automatic checkpointing (T042-T048).
@@ -1363,24 +1367,29 @@ def _fit_with_hpc(
     # Extract HPC-specific parameters
     checkpoint_dir = kwargs.pop("checkpoint_dir", None)
     checkpoint_interval = kwargs.pop("checkpoint_interval", 5)
+    run_id = kwargs.pop("run_id", None)
+    model_id = kwargs.pop("model_id", None)
 
-    # Checkpoint/crash-recovery infrastructure is not yet implemented (Phase 5,
-    # T042-T048) -- these params are accepted for forward API compatibility
-    # but silently discarded below, so a caller relying on them for HPC crash
-    # recovery must be told loudly rather than getting a false sense of safety.
+    # Checkpoint/resume is implemented only for the CMA-ES route
+    # (restart_strategy="none") -- see
+    # docs/superpowers/plans/2026-08-27-cmaes-checkpoint-resume-spec.md.
+    # Whether the CMA-ES route is even selected depends on
+    # MethodSelector's choice inside _fit_with_auto_global, which this
+    # function doesn't know yet at this point -- so thread the
+    # checkpoint kwargs through unconditionally and let
+    # _fit_global_cmaes wire them into CMAESConfig; every OTHER route
+    # (multistart/chunked/streaming) still needs the warning, and
+    # _fit_global_cmaes doesn't see kwargs meant for those routes, so
+    # the warning must be emitted from wherever the route is actually
+    # decided. Since that decision lives inside _fit_with_auto_global's
+    # MethodSelector (not yet reached here), pass a marker through
+    # kwargs and let _fit_global_cmaes consume it silently while
+    # _fit_with_auto_global's other route functions keep warning.
     if checkpoint_dir is not None:
-        warnings.warn(
-            "workflow='hpc': checkpoint_dir was provided, but checkpoint/crash-recovery "
-            "infrastructure is not yet implemented -- no checkpoint file will be written "
-            "and checkpoint_interval is ignored. workflow='hpc' currently behaves "
-            "identically to workflow='auto_global' plus HPC cluster detection.",
-            UserWarning,
-            stacklevel=2,
-        )
-    _logger.info(
-        f"workflow='hpc' checkpointing: NOT IMPLEMENTED "
-        f"(checkpoint_dir={checkpoint_dir!r} ignored, checkpoint_interval ignored)",
-    )
+        kwargs["_hpc_checkpoint_dir"] = checkpoint_dir
+        kwargs["_hpc_checkpoint_interval"] = checkpoint_interval
+        kwargs["_hpc_run_id"] = run_id
+        kwargs["_hpc_model_id"] = model_id
 
     # Detect cluster environment
     from nlsq.core.workflow import ClusterDetector
@@ -1414,6 +1423,7 @@ def _fit_with_hpc(
         n_points=n_points,
         n_params=n_params,
         goal=goal,
+        method=method,
         _workflow_name="hpc",
         **kwargs,
     )
@@ -1453,6 +1463,22 @@ def _fit_global_cmaes(
     # Create or use provided config
     if cmaes_config is None:
         cmaes_config = CMAESConfig()
+
+    checkpoint_dir = kwargs.pop("_hpc_checkpoint_dir", None)
+    checkpoint_interval = kwargs.pop("_hpc_checkpoint_interval", 5)
+    run_id = kwargs.pop("_hpc_run_id", None)
+    model_id = kwargs.pop("_hpc_model_id", None)
+    seed = kwargs.pop("seed", None)
+
+    if checkpoint_dir is not None:
+        cmaes_config = dataclasses.replace(
+            cmaes_config,
+            checkpoint_dir=checkpoint_dir,
+            checkpoint_interval=checkpoint_interval,
+            run_id=run_id,
+            model_id=model_id,
+            seed=seed if seed is not None else cmaes_config.seed,
+        )
 
     # Budget-derived chunk size (HybridStreamingConfig.chunk_size for
     # streaming, LDMemoryConfig.streaming_batch_size for chunked).
@@ -1549,6 +1575,19 @@ def _fit_global_multistart(
     n_starts : int
         Number of multi-start runs.
     """
+    if kwargs.pop("_hpc_checkpoint_dir", None) is not None:
+        warnings.warn(
+            "workflow='hpc': checkpoint_dir was provided, but this route "
+            "(non-CMA-ES) does not support checkpoint/crash-recovery yet "
+            "-- no checkpoint file will be written. Only the CMA-ES route "
+            "(restart_strategy='none') supports checkpointing currently.",
+            UserWarning,
+            stacklevel=2,
+        )
+        kwargs.pop("_hpc_checkpoint_interval", None)
+        kwargs.pop("_hpc_run_id", None)
+        kwargs.pop("_hpc_model_id", None)
+
     if strategy == "standard":
         # Standard curve_fit with multi-start
         return curve_fit(

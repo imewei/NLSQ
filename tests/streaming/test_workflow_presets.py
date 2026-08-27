@@ -14,6 +14,7 @@ Tests follow the 3-workflow system:
 
 from __future__ import annotations
 
+import warnings
 from unittest.mock import MagicMock, patch
 
 import jax.numpy as jnp
@@ -352,6 +353,74 @@ class TestHPCWorkflow:
                 bounds=([0.0, 0.0], [10.0, 10.0]),
                 checkpoint_dir=tmpdir,
             )
+
+
+def test_hpc_cmaes_route_actually_checkpoints(tmp_path):
+    """workflow='hpc' with bounds narrow enough to select CMA-ES must
+    forward checkpoint_dir into CMAESConfig instead of discarding it.
+
+    Must pass cmaes_config with restart_strategy="none" explicitly --
+    CMAESConfig defaults to restart_strategy="bipop", and Task 3's
+    validation correctly raises NotImplementedError for bipop +
+    checkpoint_dir (spec FR3). Omitting this override would make this
+    test fail on that guard rather than exercising the checkpoint path.
+    """
+    from nlsq import fit
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
+
+    x = jnp.linspace(0, 5, 100)
+    y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        result = fit(
+            model,
+            x,
+            y,
+            p0=[1.0, 0.5],
+            workflow="hpc",
+            bounds=([0.0, 0.0], [10.0, 10.0]),
+            checkpoint_dir=str(tmp_path),
+            checkpoint_interval=5,
+            run_id="hpc-e2e-test",
+            model_id="hpc-e2e-model",
+            seed=1,
+            method="cmaes",
+            cmaes_config=CMAESConfig(restart_strategy="none"),
+        )
+
+    assert result is not None
+    assert (tmp_path / "hpc-e2e-test.h5").exists()
+
+
+def test_auto_global_method_cmaes_actually_selects_cmaes():
+    """FR9, isolated from checkpointing: workflow='auto_global' with
+    method='cmaes' must force the CMA-ES route even when the data's scale
+    ratio would otherwise auto-select multi-start (bounds here are
+    single-scale, ratio ~1, well under MethodSelector's ~1000x threshold).
+    """
+    from nlsq import fit
+
+    x = jnp.linspace(0, 5, 100)
+    y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+
+    result = fit(
+        model,
+        x,
+        y,
+        p0=[1.0, 0.5],
+        workflow="auto_global",
+        bounds=([0.0, 0.0], [10.0, 10.0]),
+        method="cmaes",
+    )
+
+    assert result is not None
+    # _fit_global_cmaes sets result["cmaes_diagnostics"] (minpack.py:1518-1519);
+    # the multi-start route instead sets result["multistart_diagnostics"]
+    # (minpack.py:2132/2755) -- these two keys are mutually exclusive
+    # discriminators for which route actually ran.
+    assert "cmaes_diagnostics" in result
+    assert "multistart_diagnostics" not in result
 
 
 # =============================================================================
