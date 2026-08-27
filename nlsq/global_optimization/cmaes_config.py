@@ -103,6 +103,17 @@ class CMAESConfig:
         Whether to refine best solution with NLSQ TRF. Default: True.
     seed : int | None
         Random seed for reproducibility. If None, uses random seed.
+    checkpoint_dir : str | None
+        Directory to save checkpoints. If set, requires seed, model_id, run_id,
+        and restart_strategy='none'. Default: None.
+    checkpoint_interval : int
+        Number of generations between checkpoints. Default: 10.
+    run_id : str | None
+        Stable string identifying this run (required for checkpointing).
+        Default: None.
+    model_id : str | None
+        Stable string identifying the model function (required for checkpointing).
+        Default: None.
 
     Examples
     --------
@@ -139,6 +150,13 @@ class CMAESConfig:
 
     # Reproducibility
     seed: int | None = None
+
+    # Checkpoint/resume (CMA-ES with restart_strategy="none" only -- see
+    # docs/superpowers/plans/2026-08-27-cmaes-checkpoint-resume-spec.md)
+    checkpoint_dir: str | None = None
+    checkpoint_interval: int = 10
+    run_id: str | None = None
+    model_id: str | None = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -178,6 +196,8 @@ class CMAESConfig:
                 f"got '{self.restart_strategy}'",
             )
 
+        self._validate_checkpoint()
+
         if self.population_batch_size is not None and self.population_batch_size < 1:
             raise ValueError(
                 f"population_batch_size must be >= 1, got {self.population_batch_size}",
@@ -188,6 +208,45 @@ class CMAESConfig:
                 f"data_chunk_size must be >= 1024 for numerical stability, "
                 f"got {self.data_chunk_size}",
             )
+
+    def _validate_checkpoint(self) -> None:
+        """Validate checkpoint configuration parameters.
+
+        Raises
+        ------
+        ValueError
+            If checkpoint_dir is set but required fields are missing.
+        NotImplementedError
+            If checkpoint_dir is used with bipop restart strategy.
+        """
+        if self.checkpoint_dir is not None:
+            if self.seed is None:
+                raise ValueError(
+                    "checkpoint_dir requires a fixed seed for reproducible "
+                    "resume; set seed=<int>.",
+                )
+            if self.model_id is None:
+                raise ValueError(
+                    "checkpoint_dir requires model_id (a stable string "
+                    "identifying the model function) -- the closure cannot "
+                    "be safely fingerprinted automatically.",
+                )
+            if self.run_id is None:
+                raise ValueError(
+                    "checkpoint_dir requires run_id (a stable string identifying "
+                    "this run) -- an unset run_id would silently collide with "
+                    "unrelated runs sharing the same checkpoint_dir.",
+                )
+            if self.restart_strategy == "bipop":
+                raise NotImplementedError(
+                    "Checkpoint/resume is not implemented for "
+                    "restart_strategy='bipop' yet. Set restart_strategy="
+                    "'none' to use checkpointing.",
+                )
+            if self.checkpoint_interval < 1:
+                raise ValueError(
+                    f"checkpoint_interval must be >= 1, got {self.checkpoint_interval}",
+                )
 
     @classmethod
     def from_preset(cls, preset_name: str) -> CMAESConfig:

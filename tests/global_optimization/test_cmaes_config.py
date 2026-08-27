@@ -212,3 +212,70 @@ class TestCMAESConfigSlots:
         # unless they inherit from a class with __dict__
         # This test verifies the dataclass was created with slots=True
         assert not hasattr(config, "__dict__") or config.__dict__ == {}
+
+
+class TestCMAESConfigCheckpoint:
+    """Tests for CMAESConfig checkpoint/resume functionality."""
+
+    def test_checkpoint_requires_seed(self) -> None:
+        """Test that checkpoint_dir requires a fixed seed."""
+        # model_id and run_id both supplied so this isolates the seed check.
+        with pytest.raises(ValueError, match="seed"):
+            CMAESConfig(
+                checkpoint_dir="/tmp/ckpt",
+                model_id="m1",
+                run_id="r1",
+                seed=None,
+            )
+
+    def test_checkpoint_requires_model_id(self) -> None:
+        """Test that checkpoint_dir requires model_id."""
+        # seed and run_id both supplied so this isolates the model_id check.
+        with pytest.raises(ValueError, match="model_id"):
+            CMAESConfig(checkpoint_dir="/tmp/ckpt", seed=1, run_id="r1", model_id=None)
+
+    def test_checkpoint_requires_run_id(self) -> None:
+        """Test that checkpoint_dir requires run_id."""
+        # seed and model_id both supplied so this isolates the run_id check.
+        # Required for the same reason model_id/seed are (grilling-session
+        # decision): an unset run_id defaulting to a shared filename would let
+        # unrelated runs collide on the same checkpoint file.
+        with pytest.raises(ValueError, match="run_id"):
+            CMAESConfig(checkpoint_dir="/tmp/ckpt", seed=1, model_id="m1", run_id=None)
+
+    def test_checkpoint_rejects_bipop(self) -> None:
+        """Test that checkpoint_dir rejects bipop restart strategy."""
+        with pytest.raises(NotImplementedError, match="bipop"):
+            CMAESConfig(
+                checkpoint_dir="/tmp/ckpt",
+                seed=1,
+                model_id="m1",
+                run_id="r1",
+                restart_strategy="bipop",
+            )
+
+    def test_checkpoint_with_none_strategy_and_all_required_fields_succeeds(
+        self,
+    ) -> None:
+        """Test that checkpoint works with restart_strategy='none' and all required fields."""
+        config = CMAESConfig(
+            checkpoint_dir="/tmp/ckpt",
+            seed=1,
+            model_id="m1",
+            run_id="r1",
+            restart_strategy="none",
+        )
+        assert config.checkpoint_dir == "/tmp/ckpt"
+        assert config.checkpoint_interval == 10
+
+    def test_checkpoint_interval_must_be_positive(self) -> None:
+        """Test that checkpoint_interval must be >= 1."""
+        with pytest.raises(ValueError, match="checkpoint_interval"):
+            CMAESConfig(
+                checkpoint_dir="/tmp/ckpt",
+                seed=1,
+                model_id="m1",
+                run_id="r1",
+                restart_strategy="none",
+                checkpoint_interval=0,
+            )
