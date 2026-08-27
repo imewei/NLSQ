@@ -439,7 +439,7 @@ def compute_fingerprint(
     return {
         "model_id": model_id,
         "data_hash": data_hasher.hexdigest(),
-        "n_params": str(len(np.atleast_1d(lb))),
+        "n_params": int(len(np.atleast_1d(lb))),
         "bounds_hash": hashlib.sha256(lb.tobytes() + ub.tobytes()).hexdigest(),
         "config_hash": config_hash,
         "bounds_lower": lb,
@@ -959,7 +959,10 @@ def _run_cmaes_single(
     params = es.default_params
     params = params.replace(std_init=self.config.sigma)
 
-    key = jax.random.key(self.config.seed)
+    if self.config.seed is not None:
+        key = jax.random.key(self.config.seed)
+    else:
+        key = jax.random.key(np.random.randint(0, 2**31))
     key, subkey = jax.random.split(key)
     state = es.init(subkey, initial_solution, params)
 
@@ -1151,7 +1154,16 @@ Expected: FAIL — resumed run currently restarts from generation 0 (ignores exi
 Insert this block in `_run_cmaes_single`, right after `state = es.init(subkey, initial_solution, params)` and before `best_solution = initial_solution` (replacing the placeholder comment left in Task 4):
 
 ```python
-if checkpointing and checkpoint_path.exists():
+checkpoint_bak_path = None
+if checkpointing:
+    checkpoint_bak_path = checkpoint_path.with_suffix(checkpoint_path.suffix + ".bak")
+# Check for .bak too, not just the primary: if a crash deleted or never
+# finished writing the primary but a prior successful save's rotated .bak
+# survives, resume must still attempt it -- gating on the primary alone
+# would silently skip HPCCheckpointManager.load()'s own mandatory .bak
+# fallback (FR8) entirely and start fresh instead (caught in the third
+# review pass).
+if checkpointing and (checkpoint_path.exists() or checkpoint_bak_path.exists()):
     loaded = checkpoint_manager.load(checkpoint_path, checkpoint_fingerprint)
     state = deserialize_evosax_state(
         {
@@ -1328,8 +1340,11 @@ class CMAESPreempted(SystemExit):
         self.generation = generation
 ```
 
-Add `__all__ = ["CMAESOptimizer", "CMAESPreempted"]`. Add `import threading`
-to the module's top-level imports.
+Add `__all__ = ["CMAESOptimizer", "CMAESPreempted"]`. Add `import signal` and
+`import threading` to the module's top-level imports (not scoped inside
+`fit()` -- it's referenced later in a `finally` block, and importing at
+module level is the standard, unambiguous pattern used elsewhere in this
+codebase).
 
 In `fit()`, extend the checkpoint setup block added in Task 4 (right after
 building `checkpoint_manager`/`checkpoint_path`/`checkpoint_fingerprint`):
@@ -1339,8 +1354,6 @@ preemption_event = None
 previous_handlers: dict[int, Any] = {}
 if checkpoint_manager is not None:
     if threading.current_thread() is threading.main_thread():
-        import signal
-
         preemption_event = threading.Event()
 
         def _handle_preemption(signum: int, frame: Any) -> None:
@@ -1821,3 +1834,10 @@ git commit -m "docs(global_optimization): checkpoint latency benchmark + changel
 **Resolved during grilling-session review (previously an open limitation):** the separation-of-concerns gap flagged by the three-brain Agy pass -- `_run_cmaes_single` building its own path/fingerprint/signal handlers instead of receiving them pre-built -- is fixed in this revision. `fit()` now owns all construction (`HPCCheckpointManager`, checkpoint path, fingerprint, `threading.Event`, signal registration/restoration); `_run_cmaes`/`_run_cmaes_single` only receive these as parameters and call `.save()`/`.load()`/check the event. No known architectural debt remains from that review round.
 
 **Two independent Codex correctness passes** (after the plan changed between them) found and this revision fixes: the evosax `State.replace()` vs `._replace()` API error (Task 1), a broken end-to-end test missing `restart_strategy="none"` (Task 7), a signal-handler leak on unhandled exceptions (Task 6, now via `fit()`'s own `try`/`finally`), a missing `.bak` load fallback (Task 2), a missing containing-directory fsync (Task 2), a fingerprint format that stored only a bounds hash instead of the spec-mandated raw arrays (Task 2), a racy fixed-`sleep()` in the SIGTERM test (Task 6), a missing main-thread guard on signal registration (Task 6), and the `method`-parameter-never-threaded-through bug that would have made Task 7's own end-to-end test fail (Task 7, new FR9).
+
+**Third review pass (Agy) found and this revision fixes two further real bugs introduced by the second round's own restructuring** -- a sharp reminder that a large refactor needs re-review, not just its originating findings fixed:
+- **Critical regression:** rewriting `_run_cmaes_single`'s key initialization accidentally deleted the `seed is None` → OS-entropy fallback, hardcoding `jax.random.key(self.config.seed)` unconditionally. Since `seed` is only *required* when `checkpoint_dir` is set, this would have broken every ordinary (non-checkpointed) CMA-ES fit with `TypeError` the moment it ran, not just checkpoint-enabled ones. Restored the `if seed is not None: ... else: jax.random.key(np.random.randint(...))` branch in Task 4.
+- **High:** Task 5's resume-check gated on `checkpoint_path.exists()` alone (the primary file). If a crash removed the primary but the previous successful save's rotated `.bak` survived, resume would silently skip loading anything and start fresh -- bypassing `HPCCheckpointManager.load()`'s own mandatory `.bak` fallback (FR8) before it ever got a chance to run. Now checks for either the primary or `.bak` existing.
+- **Minor, also fixed:** `compute_fingerprint`'s `n_params` field was stringified (`str(len(...))`) though the spec's own file-format table documents it as `int`; `import signal` was scoped inside a conditional block in `fit()` though referenced later in an unconditional `finally` -- moved to the module's top-level imports for clarity even though Python's function-level (not block) scoping meant it wasn't a guaranteed crash.
+
+Agy separately suggested splitting Task 4 (it touches `fit()`, `_run_cmaes`, and `_run_cmaes_single`, and is revisited again in Tasks 5/6) into smaller sub-tasks. Not applied: those three functions change together as one coherent unit (the parameter-threading interface between them), and splitting purely by function would scatter one interface change across multiple tasks without making any single task meaningfully smaller to review -- the actual growth driver is Tasks 5/6 layering more behavior onto the same call chain, which is already reflected in them being separate tasks.
