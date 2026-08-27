@@ -117,9 +117,10 @@ only (`nlsq/global_optimization/cmaes_optimizer.py:_run_cmaes_single`).
 - **NFR2 — Save latency measured, not assumed.** Before this spec's
   acceptance, benchmark `HPCCheckpointManager.save()` wall time at
   `n_params` ∈ {10, 100, 1000} on the CI runner's filesystem; record the
-  numbers in the plan's final task. No hard latency requirement is set here
-  pending that data — this NFR exists so the number gets measured, not
-  guessed.
+  numbers in the plan's final task. Measured (mean / max per 5 runs):
+  n_params=10: 6.09ms / 13.28ms, n_params=100: 8.99ms / 16.62ms, n_params=1000:
+  16.27ms / 23.92ms. Well under a generation's compute time even at n_params=1000;
+  no wall-clock-interval option needed for v1.
 
 ## 5. State model
 
