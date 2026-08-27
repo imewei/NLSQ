@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.7.2 (2026-08-26)
+- Synced the Optimization Pipeline and Package Overview docs with the current module layout
+  after the three-brain review fix series.
+
 ## v0.7.1 (2026-08-06)
 - **Reverted the `[dev]`-extra packaging split.** An earlier iteration of v0.7.1 moved
   dev/docs/build tooling into a `[dev]` extra to slim down `pip install nlsq`. The split was

@@ -1,16 +1,17 @@
 {% set name = "nlsq" %}
-{% set version = "0.7.1" %}
+{% set version = "0.7.2" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  url: https://files.pythonhosted.org/packages/c6/2a/f7ce6c46ea8d42140f613ff585947c81447fd17fce9f8e4a20471f057afb/nlsq-{{ version }}.tar.gz
+  url: https://files.pythonhosted.org/packages/source/n/nlsq/nlsq-{{ version }}.tar.gz
+  # sha256: TODO fill from `sha256sum dist/nlsq-{{ version }}.tar.gz` after PyPI publish
   sha256: 2450145a29cdd1f33de6fa250f759fb0d6d4e79f90fc830f367695a59e36d136
 
 build:
-  number: 2
+  number: 0
   noarch: python
   script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
   entry_points:

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-26
+
 ### Added
 - Conda package published to [anaconda.org/imewei/nlsq](https://anaconda.org/imewei/nlsq)
   (`conda install -c imewei -c conda-forge nlsq`); `conda-recipe/` and
