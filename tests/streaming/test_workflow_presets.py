@@ -307,7 +307,10 @@ class TestHPCWorkflow:
         x = jnp.linspace(0, 5, 100)
         y = 2.5 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.warns(UserWarning, match="checkpoint"),
+        ):
             result = fit(
                 model,
                 x,

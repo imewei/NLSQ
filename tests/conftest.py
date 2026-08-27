@@ -71,8 +71,14 @@ def configure_jax_for_tests():
     This fixture only handles the compilation cache, which doesn't need
     to be set before import.
     """
-    # Enable persistent JAX compilation cache across test sessions
-    cache_dir = "/tmp/nlsq_jax_test_cache"
+    # Enable persistent JAX compilation cache across test sessions.
+    # Scoped per xdist worker: JAX's on-disk cache has no cross-process
+    # locking, so multiple workers sharing one directory can race a write
+    # against a read and produce a truncated/corrupted cache entry (surfaces
+    # as "Error reading persistent compilation cache entry ... incorrect
+    # header check" warnings under -n auto).
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    cache_dir = f"/tmp/nlsq_jax_test_cache_{worker_id}"
     os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_dir
 
     yield

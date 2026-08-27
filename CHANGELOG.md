@@ -39,6 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     reverted to restore its original behavior after it regressed downstream callers.
 - Fixed a malformed bullet list in `curve_fit_large()`'s docstring (missing blank line
   before the list) that broke `make html` under `-W` (warnings-as-errors).
+- `FallbackOrchestrator.get_statistics()["total_attempts"]` was reporting only the most
+  recent `fit_with_fallback()` call's attempt count instead of the lifetime total across
+  every call on a reused instance — regressed by the same fix that (correctly) made the
+  per-fit `total_attempts` attribute reset each call. Split into the per-fit attribute and
+  a separate never-reset lifetime counter so both are correct.
+- `tests/conftest.py`'s session-scoped JAX compilation-cache fixture pointed every
+  pytest-xdist worker at the same fixed `/tmp/nlsq_jax_test_cache` directory; concurrent
+  workers racing a write against a read on the shared cache produced corrupted/truncated
+  entries (`Error reading persistent compilation cache entry ... incorrect header check`).
+  Cache directory is now scoped per xdist worker.
+- Silenced two known-expected `UserWarning`s (`diff_step is ignored`, `workflow='hpc'`
+  checkpoint infra not implemented) at their call sites with `pytest.warns(...)` instead of
+  letting them leak into the test-run warnings summary.
 
 ## [0.7.1] - 2026-08-06
 
