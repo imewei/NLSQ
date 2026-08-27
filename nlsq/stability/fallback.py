@@ -367,7 +367,9 @@ class FallbackOrchestrator:
     strategies : list of FallbackStrategy
         Active fallback strategies, sorted by priority
     total_attempts : int
-        Total number of fit attempts made
+        Number of fit attempts made in the most recent ``fit_with_fallback()``
+        call; reset at the start of every call. ``get_statistics()`` reports
+        the lifetime total across every call this instance has made.
     successful_strategies : dict
         Count of successes per strategy
 
@@ -420,7 +422,14 @@ class FallbackOrchestrator:
         self.strategies.sort(key=lambda s: s.priority, reverse=True)
 
         self.max_attempts = max_attempts
+        # Per-fit attempt counter used for the max_attempts cutoff and for
+        # numbering attempts within the current fit; reset every call to
+        # fit_with_fallback() (see test_second_fit_resets_total_attempts).
         self.total_attempts = 0
+        # Lifetime stat across every fit_with_fallback() call this instance
+        # has made; exposed via get_statistics()["total_attempts"]. Never
+        # reset (see test_statistics_tracking).
+        self._lifetime_attempts = 0
         self.successful_strategies: dict[str, int] = {}
 
     def fit_with_fallback(self, f: Callable, xdata, ydata, **kwargs) -> FallbackResult:
@@ -457,6 +466,7 @@ class FallbackOrchestrator:
         # progressive sequence position (e.g. which robust loss function or
         # tolerance relaxation to try next) must start fresh for *this* fit,
         # not resume wherever the previous fit's sequence left off.
+        # self._lifetime_attempts is a lifetime stat and is NOT reset here.
         self.total_attempts = 0
         for strategy in self.strategies:
             strategy.reset()
@@ -467,6 +477,7 @@ class FallbackOrchestrator:
 
         # Try original parameters first
         self.total_attempts += 1
+        self._lifetime_attempts += 1
 
         if self.verbose:
             print(f"Attempt 1/{self.max_attempts}: Original parameters")
@@ -487,6 +498,7 @@ class FallbackOrchestrator:
                 break
 
             self.total_attempts += 1
+            self._lifetime_attempts += 1
             strategy.attempts += 1
 
             if self.verbose:
@@ -545,7 +557,7 @@ class FallbackOrchestrator:
             Dictionary with success rates and attempt counts
         """
         stats: dict[str, Any] = {
-            "total_attempts": self.total_attempts,
+            "total_attempts": self._lifetime_attempts,
             "strategies": [],
         }
 

@@ -743,6 +743,7 @@ def curve_fit_large(
     """Curve fitting with automatic memory management for large datasets.
 
     Automatically selects processing strategy based on dataset size:
+
     - Below ``size_threshold`` (default 1M points): standard ``curve_fit``
     - At or above ``size_threshold``: chunked processing (each chunk is
       fit independently and combined via precision-weighted GLS)
