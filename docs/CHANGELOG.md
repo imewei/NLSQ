@@ -5,6 +5,9 @@
 ## v0.7.2 (2026-08-26)
 - Synced the Optimization Pipeline and Package Overview docs with the current module layout
   after the three-brain review fix series.
+- Fixed a malformed bullet list in `curve_fit_large()`'s docstring that made `make html
+  SPHINXOPTS="-W --keep-going"` fail; full AST-based doc/API gap check found no other
+  gaps (no public API surface changed since the last docs sync).
 
 ## v0.7.1 (2026-08-06)
 - **Reverted the `[dev]`-extra packaging split.** An earlier iteration of v0.7.1 moved

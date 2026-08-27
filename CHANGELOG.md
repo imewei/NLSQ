@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     path.
   - `nlsq/caching/memory_manager.py`: a prior `allocate_array` pool-semantics change was
     reverted to restore its original behavior after it regressed downstream callers.
+- Fixed a malformed bullet list in `curve_fit_large()`'s docstring (missing blank line
+  before the list) that broke `make html` under `-W` (warnings-as-errors).
 
 ## [0.7.1] - 2026-08-06
 
