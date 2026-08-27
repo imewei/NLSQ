@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_ROOT = REPO_ROOT / "examples" / "scripts"
@@ -122,3 +123,42 @@ def test_example_script_runs(
             f"{script_path} failed with code {result.returncode}\n"
             f"stdout:\n{stdout_snip}\n\nstderr:\n{stderr_snip}"
         )
+
+
+# ==============================================================================
+# CLI workflow YAML schema drift
+# ==============================================================================
+# These example workflows are prose-and-config, never exercised by the tests
+# above, so a config schema change (or a copy-paste typo like the one fixed
+# alongside this test - model.custom.file/function instead of
+# model.path/function) can silently break `nlsq fit <workflow>.yaml` without
+# any test noticing. This resolves each custom model the same way the CLI
+# does, without running a full fit.
+
+CLI_WORKFLOWS_DIR = REPO_ROOT / "examples" / "scripts" / "10_cli-commands"
+CUSTOM_MODEL_WORKFLOWS = [
+    pytest.param(path, id=path.name)
+    for path in sorted((CLI_WORKFLOWS_DIR / "workflows").glob("*.yaml"))
+    if (yaml.safe_load(path.read_text()) or {}).get("model", {}).get("type") == "custom"
+]
+
+
+@pytest.mark.parametrize("workflow_path", CUSTOM_MODEL_WORKFLOWS)
+def test_cli_workflow_custom_model_resolves(
+    workflow_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Each custom-model workflow's model.path/function must resolve to a
+    callable, the same way `nlsq fit` resolves it at runtime."""
+    from nlsq.cli.model_registry import ModelRegistry
+
+    config = yaml.safe_load(workflow_path.read_text())
+    model_config = config["model"]
+
+    # model.path is resolved relative to the CWD, not the workflow file.
+    monkeypatch.chdir(CLI_WORKFLOWS_DIR)
+
+    registry = ModelRegistry()
+    model_name = model_config.get("name", model_config.get("path", ""))
+    model = registry.get_model(model_name, model_config)
+
+    assert callable(model)

@@ -183,6 +183,15 @@ class FitVisualizer:
         if not vis_config.get("enabled", True):
             return []
 
+        xdata = np.asarray(data.get("xdata", []))
+        if xdata.ndim > 1:
+            raise ValueError(
+                f"Automatic visualization only supports a 1D independent "
+                f"variable; got xdata.shape={xdata.shape}. Multi-dimensional "
+                f"fits (e.g. 2D surfaces) need custom plotting code - see "
+                f"examples/scripts/04_gallery/physics/surface_fitting_2d.py."
+            )
+
         output_paths: list[str] = []
         output_dir = Path(vis_config.get("output_dir", "figures"))
         output_dir.mkdir(parents=True, exist_ok=True)

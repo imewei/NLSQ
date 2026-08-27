@@ -62,9 +62,13 @@ data:
 # ==============================================================================
 model:
   type: "custom"
-  custom:
-    file: "models/physics_models.py"
-    function: "damped_oscillator"
+
+  # Path to Python file containing model function
+  # (relative to the current working directory, not this file's location)
+  path: "models/physics_models.py"
+
+  # Function name to use from the file
+  function: "damped_oscillator"
 
   # Disable auto estimation - we provide explicit bounds for CMA-ES
   auto_p0: false

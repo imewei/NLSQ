@@ -248,6 +248,34 @@ class TestCombinedLayout:
         assert len(fig.axes) == 2, f"Expected 2 subplots, got {len(fig.axes)}"
         plt.close(fig)
 
+    def test_multidimensional_xdata_raises_clear_error(
+        self,
+        sample_fit_result,
+        sample_model,
+        base_visualization_config,
+        tmp_path,
+    ):
+        """2D/N-D independent variables (e.g. surface fits) aren't plottable
+        by the 1D combined-figure layout; generate() should fail fast with an
+        actionable message instead of a cryptic matplotlib shape-mismatch
+        error surfacing from deep inside _plot_main."""
+        from nlsq.cli.visualization import FitVisualizer
+
+        config = base_visualization_config.copy()
+        config["visualization"]["output_dir"] = str(tmp_path)
+
+        visualizer = FitVisualizer()
+        xdata_2d = np.vstack([np.linspace(0, 10, 50), np.linspace(0, 5, 50)])
+        data = {"xdata": xdata_2d, "ydata": np.zeros(50), "sigma": None}
+
+        with pytest.raises(ValueError, match="1D independent variable"):
+            visualizer.generate(
+                result=sample_fit_result,
+                data=data,
+                model=sample_model,
+                config=config,
+            )
+
 
 class TestHistogram:
     """Test separate histogram of residuals generation."""
