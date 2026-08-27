@@ -414,6 +414,14 @@ def convert_directory(directory: Path, mode: str) -> int:
     int
         Number of files that failed to convert (0 = all succeeded), so
         callers can set a nonzero exit code instead of always exiting 0.
+
+    Raises
+    ------
+    ValueError
+        If `mode` is not a recognized conversion mode. This is a distinct
+        outcome from "N files failed" — an int return here would let a
+        caller that trusts the "failure count" contract read 1 as "one
+        file failed" instead of "no files were even attempted".
     """
     if mode == "notebook-to-script":
         pattern = "*.ipynb"
@@ -425,8 +433,7 @@ def convert_directory(directory: Path, mode: str) -> int:
         pattern = "*.ipynb"
         converter = configure_notebook_matplotlib
     else:
-        print(f"Error: Invalid mode '{mode}'")
-        return 1
+        raise ValueError(f"Invalid mode: {mode!r}")
 
     files = list(directory.rglob(pattern))
 

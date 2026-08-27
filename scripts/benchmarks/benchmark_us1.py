@@ -258,7 +258,10 @@ def main() -> None:
     print(
         f"SC-001 (No recompilation on final chunk): {'PASSED' if sc_001 else 'FAILED'}"
     )
-    print(f"SC-005 (Final chunk 2-3x faster): {'PASSED' if sc_005 else 'FAILED'}")
+    print(
+        f"SC-005 (Padded speedup >= 1.0x, target 2-3x): "
+        f"{'PASSED' if sc_005 else 'FAILED'}"
+    )
 
     if sc_001 and sc_005:
         print()

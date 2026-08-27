@@ -1,9 +1,9 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 7.0 (matches keys actually read by nlsq/cli/workflow_runner.py,
-#                model_registry.py, result_exporter.py, and visualization.py
-#                as of NLSQ v0.7.2 — every key below is live)
+# Version: 7.1 (every key below is read by the current CLI — no
+#                documented-but-dead configuration; keep it that way if you
+#                edit this file alongside nlsq/cli/*.py)
 #
 # This template provides configuration options for NLSQ curve fitting workflows.
 # Copy this file to your project and customize as needed.
@@ -216,6 +216,7 @@ visualization:
   style: "publication"
 
   figure_size: [6.0, 4.5]
+  dpi: 300
 
   # Output formats (list — one file per format)
   formats:
@@ -264,21 +265,30 @@ visualization:
       enabled: true
       show_r_squared: true
       show_rmse: true
+      show_chi_squared: false
       location: "upper right"
       fontsize: 9
 
   residuals_plot:
     enabled: true
     type: "scatter"       # "scatter", "line", "stem"
+    x_label: null         # null = "x"
     y_label: "Residual"
     show_zero_line: true
     marker: "o"
     size: 15
     alpha: 0.7
 
+    std_bands:
+      enabled: false
+      levels: [1, 2]
+      colors: ["#fff3cd", "#ffe69c"]
+      alpha: 0.4
+
   histogram:
     enabled: true
     bins: "auto"
+    x_label: null         # null = "Residual"
     show_normal_fit: true
     alpha: 0.7
     edgecolor: "white"
