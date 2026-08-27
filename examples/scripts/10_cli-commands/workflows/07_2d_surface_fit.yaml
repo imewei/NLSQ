@@ -87,12 +87,12 @@ export:
 # ==============================================================================
 # VISUALIZATION CONFIGURATION
 # ==============================================================================
-# Note: 2D surface fitting visualization shows projected 1D slices.
-# Full 3D surface plots require custom visualization scripts.
-# Style: "publication" with colorblind-safe palette.
+# The CLI's automatic plotter only supports a 1D independent variable, so it
+# is disabled here for this 2D (x, y) -> z surface fit. For contour/heatmap
+# plots of a 2D fit, see examples/scripts/04_gallery/physics/surface_fitting_2d.py.
 
 visualization:
-  enabled: true
+  enabled: false
   output_dir: "output/figures"
   filename_prefix: "07_2d_surface"
   formats: ["png", "pdf"]

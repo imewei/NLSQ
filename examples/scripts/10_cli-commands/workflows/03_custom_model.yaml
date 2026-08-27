@@ -45,7 +45,7 @@ model:
   type: "custom"
 
   # Path to Python file containing model function
-  # (relative to workflow file)
+  # (relative to the current working directory, not this file's location)
   path: "models/physics_models.py"
 
   # Function name to use from the file

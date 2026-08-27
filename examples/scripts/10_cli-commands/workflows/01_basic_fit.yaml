@@ -22,7 +22,7 @@ metadata:
 data:
   dataset_id: "exp_decay_001"
 
-  # Path to data file (relative to workflow file location)
+  # Path to data file (relative to the current working directory, not this file's location)
   input_file: "data/exponential_decay.csv"
 
   # File format (auto-detected from extension, or explicit)

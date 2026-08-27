@@ -224,11 +224,10 @@ def bounds():
 ```yaml
 model:
   type: "custom"
-  custom:
-    file: "models/my_model.py"
-    function: "my_model"
-    p0_function: "estimate_p0"      # Optional
-    bounds_function: "bounds"       # Optional
+  path: "models/my_model.py"          # Resolved relative to the CWD, not the workflow file
+  function: "my_model"
+  # estimate_p0() and bounds() in the module are picked up automatically
+  # (no separate p0_function/bounds_function keys)
 ```
 
 ### Polynomial Models
@@ -265,11 +264,8 @@ Physics model with automatic initial guesses:
 ```yaml
 model:
   type: "custom"
-  custom:
-    file: "../models/physics_models.py"
-    function: "damped_oscillator"
-    p0_function: "estimate_p0"
-    bounds_function: "bounds"
+  path: "models/physics_models.py"
+  function: "damped_oscillator"
 ```
 
 ### 3. Weighted Fitting (05_weighted_fit.yaml)
@@ -292,10 +288,14 @@ fitting:
 Multi-start optimization for complex landscapes:
 
 ```yaml
-fitting:
-  global_optimization:
-    n_starts: 15
-    sampling_method: "latin_hypercube"
+workflow: "auto_global"
+n_starts: 15
+sampler: "lhs"          # "lhs", "sobol", or "halton"
+
+global_optimization:
+  cmaes:
+    popsize: 16
+    max_generations: 150
 ```
 
 ### 5. 2D Surface Fitting (07_2d_surface_fit.yaml)
@@ -311,8 +311,8 @@ data:
 
 model:
   type: "custom"
-  custom:
-    function: "gaussian_2d"
+  path: "models/physics_models.py"
+  function: "gaussian_2d"
 ```
 
 ### 6. Batch Processing
