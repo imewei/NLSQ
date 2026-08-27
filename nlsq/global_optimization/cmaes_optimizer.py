@@ -7,8 +7,12 @@ parameter covariance estimation.
 
 from __future__ import annotations
 
+import contextlib
 import logging
-from collections.abc import Callable
+import signal
+import threading
+from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -29,9 +33,21 @@ from nlsq.global_optimization.cmaes_diagnostics import CMAESDiagnostics
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
-__all__ = ["CMAESOptimizer"]
+    from nlsq.global_optimization.checkpoint import HPCCheckpointManager
+
+__all__ = ["CMAESOptimizer", "CMAESPreempted"]
 
 logger = logging.getLogger(__name__)
+
+
+class CMAESPreempted(SystemExit):
+    """Raised when a preemption signal (SIGTERM/SIGUSR1) is caught after a
+    checkpoint has been safely written. Exit code 75 lets a wrapping HPC
+    resubmission script distinguish a clean checkpointed stop from a crash."""
+
+    def __init__(self, generation: int) -> None:
+        super().__init__(75)
+        self.generation = generation
 
 
 def _create_fitness_function(  # noqa: C901
@@ -456,6 +472,12 @@ class CMAESOptimizer:
             data_chunk_size=self.config.data_chunk_size,
         )
 
+        checkpoint_manager, checkpoint_path, checkpoint_fingerprint = (
+            self._setup_checkpointing(
+                xdata_jax, ydata_jax, sigma_jax, lower_bounds, upper_bounds, popsize
+            )
+        )
+
         # Track wall time
         import time
 
@@ -465,13 +487,18 @@ class CMAESOptimizer:
         diagnostics = CMAESDiagnostics()
 
         # Run CMA-ES optimization (diagnostics updated in place)
-        best_params_unbounded, best_fitness, generations = self._run_cmaes(
-            fitness_fn,
-            initial_solution,
-            popsize,
-            n_params,
-            diagnostics,
-        )
+        with self._preemption_handling(checkpoint_manager) as preemption_event:
+            best_params_unbounded, best_fitness, generations = self._run_cmaes(
+                fitness_fn,
+                initial_solution,
+                popsize,
+                n_params,
+                diagnostics,
+                checkpoint_manager=checkpoint_manager,
+                checkpoint_path=checkpoint_path,
+                checkpoint_fingerprint=checkpoint_fingerprint,
+                preemption_event=preemption_event,
+            )
 
         # Update diagnostics
         diagnostics.total_generations = generations
@@ -516,6 +543,111 @@ class CMAESOptimizer:
 
         return result
 
+    def _setup_checkpointing(
+        self,
+        xdata_jax: jax.Array,
+        ydata_jax: jax.Array,
+        sigma_jax: jax.Array | None,
+        lower_bounds: jax.Array,
+        upper_bounds: jax.Array,
+        popsize: int,
+    ) -> tuple[HPCCheckpointManager | None, Path | None, dict[str, Any] | None]:
+        """Build the checkpoint manager/path/fingerprint for `fit()`, or
+        `(None, None, None)` when `checkpoint_dir` is unset.
+
+        `self.config.model_id`/`self.config.run_id` are guaranteed non-`None`
+        here -- `CMAESConfig` validation raises at construction time if
+        `checkpoint_dir` is set without them.
+        """
+        if self.config.checkpoint_dir is None:
+            return None, None, None
+
+        from nlsq.global_optimization.checkpoint import (
+            HPCCheckpointManager,
+            compute_fingerprint,
+        )
+
+        assert self.config.model_id is not None
+        assert self.config.run_id is not None
+
+        manager = HPCCheckpointManager()
+        path = Path(self.config.checkpoint_dir) / f"{self.config.run_id}.h5"
+        fingerprint = compute_fingerprint(
+            model_id=self.config.model_id,
+            xdata=np.asarray(xdata_jax),
+            ydata=np.asarray(ydata_jax),
+            sigma=np.asarray(sigma_jax) if sigma_jax is not None else None,
+            bounds=(np.asarray(lower_bounds), np.asarray(upper_bounds)),
+            config_fields={
+                "popsize": popsize,
+                "sigma": self.config.sigma,
+                "tol_fun": self.config.tol_fun,
+                "tol_x": self.config.tol_x,
+                "seed": self.config.seed,
+            },
+        )
+        return manager, path, fingerprint
+
+    @contextlib.contextmanager
+    def _preemption_handling(
+        self,
+        checkpoint_manager: HPCCheckpointManager | None,
+    ) -> Iterator[threading.Event | None]:
+        """Register SIGTERM/SIGUSR1 handlers for `fit()` when checkpointing
+        is enabled and we're on the main thread, yielding the preemption
+        event (or `None` if unavailable); restores the original handlers
+        on exit, however `fit()`'s `_run_cmaes(...)` call inside the `with`
+        block returns or raises (including via `CMAESPreempted`, a
+        `SystemExit` subclass).
+        """
+        preemption_event: threading.Event | None = None
+        previous_handlers: dict[int, Any] = {}
+        if checkpoint_manager is None:
+            yield preemption_event
+            return
+
+        if threading.current_thread() is not threading.main_thread():
+            # signal.signal() raises ValueError off the main thread. Periodic
+            # interval saves (Task 4) remain the crash-safety net when
+            # CMAESOptimizer.fit() is called from a worker thread; this is a
+            # documented reduction in coverage, not a silent no-op -- log it.
+            logger.warning(
+                "Checkpointing enabled but fit() was not called on the main "
+                "thread: SIGTERM/SIGUSR1 preemption handling is unavailable "
+                "here (Python's signal.signal() requires the main thread). "
+                "Periodic interval saves still apply.",
+            )
+            yield preemption_event
+            return
+
+        if not hasattr(signal, "SIGUSR1"):
+            # SIGUSR1 doesn't exist on Windows (signal.SIGTERM does, but
+            # Windows' signal handling is not POSIX-equivalent either way).
+            # Same degradation as the off-main-thread case above: log and
+            # fall back to periodic interval saves rather than crashing on
+            # an AttributeError for an attribute that's simply absent here.
+            logger.warning(
+                "Checkpointing enabled but SIGUSR1 is not available on this "
+                "platform (Windows): SIGTERM/SIGUSR1 preemption handling is "
+                "unavailable here. Periodic interval saves still apply.",
+            )
+            preemption_event = None
+            yield preemption_event
+            return
+
+        preemption_event = threading.Event()
+
+        def _handle_preemption(signum: int, frame: Any) -> None:
+            preemption_event.set()
+
+        for sig in (signal.SIGTERM, signal.SIGUSR1):
+            previous_handlers[sig] = signal.signal(sig, _handle_preemption)
+        try:
+            yield preemption_event
+        finally:
+            for restore_sig, handler in previous_handlers.items():
+                signal.signal(restore_sig, handler)
+
     def _run_cmaes(
         self,
         fitness_fn: Callable,
@@ -523,6 +655,11 @@ class CMAESOptimizer:
         popsize: int,
         n_params: int,
         diagnostics: CMAESDiagnostics,
+        *,
+        checkpoint_manager: HPCCheckpointManager | None = None,
+        checkpoint_path: Path | None = None,
+        checkpoint_fingerprint: dict[str, Any] | None = None,
+        preemption_event: threading.Event | None = None,
     ) -> tuple[jax.Array, jax.Array, int]:
         """Run CMA-ES optimization loop with optional BIPOP restarts.
 
@@ -558,6 +695,10 @@ class CMAESOptimizer:
             popsize,
             n_params,
             diagnostics,
+            checkpoint_manager=checkpoint_manager,
+            checkpoint_path=checkpoint_path,
+            checkpoint_fingerprint=checkpoint_fingerprint,
+            preemption_event=preemption_event,
         )
 
     def _run_cmaes_single(
@@ -567,6 +708,11 @@ class CMAESOptimizer:
         popsize: int,
         n_params: int,
         diagnostics: CMAESDiagnostics,
+        *,
+        checkpoint_manager: HPCCheckpointManager | None = None,
+        checkpoint_path: Path | None = None,
+        checkpoint_fingerprint: dict[str, Any] | None = None,
+        preemption_event: threading.Event | None = None,
     ) -> tuple[jax.Array, jax.Array, int]:
         """Run single CMA-ES optimization without restarts.
 
@@ -591,6 +737,16 @@ class CMAESOptimizer:
         from evosax.algorithms import (  # type: ignore[import-not-found,import-untyped]
             CMA_ES,
         )
+
+        from nlsq.global_optimization.checkpoint import (
+            CMAESCheckpointState,
+            deserialize_evosax_state,
+            deserialize_key,
+            serialize_evosax_state,
+            serialize_key,
+        )
+
+        checkpointing = checkpoint_manager is not None
 
         logger.info(
             f"Starting CMA-ES: popsize={popsize}, max_gen={self.config.max_generations}",
@@ -617,6 +773,41 @@ class CMAESOptimizer:
         best_solution = initial_solution
         best_fitness = jnp.array(jnp.inf)
         convergence_reason = "max_generations"
+        start_gen = 0
+
+        if checkpointing:
+            assert checkpoint_path is not None
+            assert checkpoint_manager is not None
+            assert checkpoint_fingerprint is not None
+            checkpoint_bak_path = checkpoint_manager.bak_path(checkpoint_path)
+            # Check for .bak too, not just the primary: if a crash deleted or
+            # never finished writing the primary but a prior successful
+            # save's rotated .bak survives, resume must still attempt it --
+            # gating on the primary alone would silently skip
+            # HPCCheckpointManager.load()'s own mandatory .bak fallback (FR8)
+            # entirely and start fresh instead (caught in the third review
+            # pass).
+            if checkpoint_path.exists() or checkpoint_bak_path.exists():
+                loaded = checkpoint_manager.load(
+                    checkpoint_path, checkpoint_fingerprint
+                )
+                # serialize_evosax_state duck-types on `loaded`'s field
+                # names (a CMAESCheckpointState) exactly like it does on a
+                # real evosax State -- single source of truth for the
+                # field list instead of hand-writing it again here.
+                state = deserialize_evosax_state(
+                    serialize_evosax_state(loaded),
+                    state,
+                )
+                key = deserialize_key(loaded.key_data)
+                best_solution = loaded.best_solution
+                best_fitness = jnp.asarray(loaded.best_fitness)
+                diagnostics.fitness_history = list(loaded.fitness_history)
+                start_gen = loaded.generation_counter
+                logger.info(
+                    f"Resumed CMA-ES from checkpoint at generation {start_gen} "
+                    f"({checkpoint_path})",
+                )
 
         # Progress milestones for logging (25%, 50%, 75%)
         # Build the dict from a list so later entries don't silently overwrite
@@ -627,9 +818,32 @@ class CMAESOptimizer:
             if gen_idx not in milestones:
                 milestones[gen_idx] = label
 
+        def _save_checkpoint(gen_idx: int, current_key: jax.Array) -> None:
+            assert checkpoint_manager is not None
+            assert checkpoint_path is not None
+            assert checkpoint_fingerprint is not None
+            checkpoint_state = CMAESCheckpointState(
+                generation_counter=gen_idx + 1,
+                mean=state.mean,
+                std=state.std,
+                p_std=state.p_std,
+                p_c=state.p_c,
+                C=state.C,
+                B=state.B,
+                D=state.D,
+                best_solution=best_solution,
+                best_fitness=float(best_fitness),
+                key_data=serialize_key(current_key),
+                fitness_history=list(diagnostics.fitness_history),
+                popsize=popsize,
+            )
+            checkpoint_manager.save(
+                checkpoint_path, checkpoint_state, checkpoint_fingerprint
+            )
+
         # Main optimization loop
-        gen = -1
-        for gen in range(self.config.max_generations):
+        gen = start_gen - 1
+        for gen in range(start_gen, self.config.max_generations):
             key, key_ask, key_tell = jax.random.split(key, 3)
 
             # Ask for new population
@@ -648,6 +862,14 @@ class CMAESOptimizer:
 
             # Record fitness history
             diagnostics.fitness_history.append(float(best_fitness))
+
+            if preemption_event is not None and preemption_event.is_set():
+                jax.block_until_ready((state.mean, state.C, state.best_solution))
+                _save_checkpoint(gen, key)
+                raise CMAESPreempted(gen + 1)
+
+            if checkpointing and (gen + 1) % self.config.checkpoint_interval == 0:
+                _save_checkpoint(gen, key)
 
             # Simple convergence check based on std
             if float(state.std) < self.config.tol_x:
@@ -672,6 +894,13 @@ class CMAESOptimizer:
                     f"Generation {gen + 1}/{self.config.max_generations}: "
                     f"best_fitness={float(best_fitness):.6e}, std={float(state.std):.6e}",
                 )
+
+        # `gen >= start_gen` is false only when a resumed checkpoint's
+        # generation_counter already reached max_generations, so the `for`
+        # loop above ran zero iterations (fully-converged-and-resumed edge
+        # case) -- skip re-saving a checkpoint that made no new progress.
+        if checkpointing and gen >= start_gen:
+            _save_checkpoint(gen, key)
 
         # Update diagnostics
         diagnostics.final_sigma = float(state.std)

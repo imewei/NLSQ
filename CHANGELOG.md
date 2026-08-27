@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.2] - 2026-08-26
 
 ### Added
+- `CMAESOptimizer` (with `restart_strategy="none"`) supports checkpoint/
+  resume via `CMAESConfig.checkpoint_dir`/`checkpoint_interval`/`run_id`/
+  `model_id`, and `workflow='hpc'` now forwards `checkpoint_dir` into it
+  instead of discarding it with a warning. BIPOP restarts
+  (`restart_strategy="bipop"`, the default) and the multistart/chunked/
+  streaming `workflow='hpc'` routes still raise/warn as not-yet-implemented
+  -- see `docs/superpowers/plans/2026-08-27-cmaes-checkpoint-resume-spec.md`
+  for scope. A preemption signal (SIGTERM/SIGUSR1) received after
+  checkpointing is enabled triggers a safe-point checkpoint save followed by
+  `CMAESPreempted` (a `SystemExit` subclass, exit code 75, now exported from
+  `nlsq.global_optimization`), letting a wrapping resubmission script
+  distinguish a clean checkpointed stop from a crash.
+
+### Fixed
+- `fit()`'s `method` parameter was silently dropped for `workflow='auto_global'`
+  and `workflow='hpc'` -- `method="cmaes"`/`"multi-start"` had no effect and
+  route selection always fell back to automatic scale-ratio-based selection.
+  `method` now actually reaches `MethodSelector`, for every caller of those
+  two workflows, not only when checkpointing is enabled.
+
+## [0.7.2] - 2026-08-26
+
+### Added
 - Conda package published to [anaconda.org/imewei/nlsq](https://anaconda.org/imewei/nlsq)
   (`conda install -c imewei -c conda-forge nlsq`); `conda-recipe/` and
   `make conda-build`/`conda-upload` targets added for maintainers.

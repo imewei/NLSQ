@@ -76,7 +76,10 @@ Quick Reference
        model, x, y, p0=[1, 0.5], workflow="auto_global", bounds=([0, 0], [10, 5])
    )
 
-   # HPC with checkpointing (requires bounds)
+   # HPC with checkpointing (requires bounds; checkpoint/resume needs the
+   # CMA-ES route -- see the hpc workflow guide for the full explanation)
+   from nlsq.global_optimization import CMAESConfig
+
    popt, pcov = fit(
        model,
        x,
@@ -84,7 +87,12 @@ Quick Reference
        p0=[1, 0.5],
        workflow="hpc",
        bounds=([0, 0], [10, 5]),
+       method="cmaes",
+       cmaes_config=CMAESConfig(restart_strategy="none"),
        checkpoint_dir="/scratch/checkpoints",
+       run_id="experiment-42",
+       model_id="my_model_v1",
+       seed=42,
    )
 
 How Memory Selection Works

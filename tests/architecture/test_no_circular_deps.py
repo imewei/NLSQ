@@ -4,7 +4,7 @@ This module verifies that the NLSQ package structure doesn't have circular
 import dependencies that could cause ImportError at runtime.
 """
 
-import importlib
+import subprocess
 import sys
 
 import pytest
@@ -36,17 +36,30 @@ class TestPackageImports:
 
         This test catches the most obvious circular dependency issues that
         would cause ImportError at runtime.
-        """
-        # Remove cached imports to test fresh import
-        modules_to_remove = [m for m in sys.modules if m.startswith(package)]
-        for m in modules_to_remove:
-            del sys.modules[m]
 
-        # This should not raise ImportError
-        try:
-            importlib.import_module(package)
-        except ImportError as e:
-            pytest.fail(f"Package {package} failed to import: {e}")
+        Runs the import in a subprocess rather than deleting/reimporting
+        the package's sys.modules entries in-process: an in-process reload
+        re-executes every module's top-level code, which can leave global
+        state (module-level registries, cached class objects, etc.)
+        permanently diverged from what already-collected test modules
+        reference -- even after restoring the sys.modules mapping itself.
+        Observed in CI as monkeypatch.setattr(SomeClass, ...) silently not
+        taking effect in unrelated tests later in the same xdist worker
+        (e.g. HPCCheckpointManager.load, CurveFit) because production
+        code's lazy re-import resolved to a freshly-reloaded class distinct
+        from the one the patch targeted. A subprocess makes that
+        structurally impossible: whatever state the reload disturbs dies
+        with the child process.
+        """
+        result = subprocess.run(
+            [sys.executable, "-c", f"import {package}"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if result.returncode != 0:
+            pytest.fail(f"Package {package} failed to import: {result.stderr}")
 
 
 class TestCircularDependencyDetection:

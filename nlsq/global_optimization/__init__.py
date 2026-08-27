@@ -100,6 +100,7 @@ __all__ = [
     "CMAESConfig",
     "CMAESDiagnostics",
     "CMAESOptimizer",
+    "CMAESPreempted",
     "GlobalOptimizationConfig",
     "MethodSelector",
     "MultiStartOrchestrator",
@@ -120,11 +121,15 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    """Lazy import for CMAESOptimizer, BIPOPRestarter, MethodSelector to avoid importing evosax at package load."""
+    """Lazy import for CMAESOptimizer, CMAESPreempted, BIPOPRestarter, MethodSelector to avoid importing evosax at package load."""
     if name == "CMAESOptimizer":
         from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
 
         return CMAESOptimizer
+    if name == "CMAESPreempted":
+        from nlsq.global_optimization.cmaes_optimizer import CMAESPreempted
+
+        return CMAESPreempted
     if name == "BIPOPRestarter":
         from nlsq.global_optimization.bipop import BIPOPRestarter
 

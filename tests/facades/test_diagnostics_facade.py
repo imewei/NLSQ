@@ -22,17 +22,31 @@ class TestLazyImportBehavior:
 
     def test_facade_import_does_not_load_diagnostics_eagerly(self) -> None:
         """Test importing facade doesn't eagerly load diagnostics."""
-        # Clear modules to test fresh import
+        # Clear modules to test fresh import. Snapshot and restore afterward
+        # -- see test_optimization_facade.py's identical comment for why
+        # leaving this deletion in place pollutes module identity for
+        # every later test in this worker process.
         modules_to_clear = [
             k for k in sys.modules if "diagnostics" in k and "facade" not in k
         ]
+        saved_modules = {mod: sys.modules[mod] for mod in modules_to_clear}
         for mod in modules_to_clear:
             del sys.modules[mod]
 
-        # Import facade - should use lazy loading
-        from nlsq.facades import DiagnosticsFacade
+        try:
+            # Import facade - should use lazy loading
+            from nlsq.facades import DiagnosticsFacade
 
-        # The test passes if no import error occurs
+            # The test passes if no import error occurs
+        finally:
+            for mod in list(sys.modules):
+                if (
+                    "diagnostics" in mod
+                    and "facade" not in mod
+                    and mod not in saved_modules
+                ):
+                    del sys.modules[mod]
+            sys.modules.update(saved_modules)
 
     def test_facade_provides_access_to_diagnostic_level(self) -> None:
         """Test facade provides access to DiagnosticLevel enum."""
