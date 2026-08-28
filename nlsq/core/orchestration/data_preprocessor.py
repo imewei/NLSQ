@@ -241,6 +241,7 @@ class DataPreprocessor:
         # on a row that x/y-based masking left in. A 2D covariance sigma can't be
         # row-omitted this way (dropping a point needs dropping its whole row/col),
         # so that case is validated as a submatrix below instead.
+        sigma_arr_for_mask = None
         if sigma is not None:
             sigma_arr_for_mask = np.asarray(sigma)
             if sigma_arr_for_mask.ndim == 1:
@@ -249,6 +250,9 @@ class DataPreprocessor:
         # Track what was removed
         has_nans = bool(np.any(np.isnan(ydata)) or np.any(np.isnan(xdata)))
         has_infs = bool(np.any(np.isinf(ydata)) or np.any(np.isinf(xdata)))
+        if sigma_arr_for_mask is not None and sigma_arr_for_mask.ndim == 1:
+            has_nans = has_nans or bool(np.any(np.isnan(sigma_arr_for_mask)))
+            has_infs = has_infs or bool(np.any(np.isinf(sigma_arr_for_mask)))
 
         # Filter data
         ydata_clean = ydata[valid_mask]

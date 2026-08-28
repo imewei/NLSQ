@@ -185,7 +185,19 @@ def _solve_tr_subproblem_cg(
     p_gn_norm = jnp.linalg.norm(p_gn)
 
     def compute_regularized():
-        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, alpha, tol)
+        # alpha carries the LM damping parameter forward across outer
+        # iterations via a multiplicative rescale (trf.py), but starts at
+        # 0.0 (INITIAL_LEVENBERG_MARQUARDT_LAMBDA), and 0 * anything is
+        # still 0 -- without an initial nonzero seed here, this branch
+        # always regularizes with alpha=0, silently degrading to the
+        # unregularized Gauss-Newton solution merely rescaled to the trust
+        # region boundary. Seed from the standard LM initial estimate
+        # (||J^T f|| / Delta, per More 1978) whenever alpha hasn't been
+        # set yet by a previous iteration's rescale.
+        g_norm = jnp.linalg.norm((J * d[None, :]).T @ f)
+        seed_alpha = jnp.where(Delta > 0, g_norm / Delta, 0.0)
+        effective_alpha = jnp.where(alpha > 0, alpha, seed_alpha)
+        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, effective_alpha, tol)
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
         # If regularized step is within trust region, use it directly;
         # otherwise scale to trust region boundary (no arbitrary clamping)
@@ -226,11 +238,19 @@ def _solve_tr_subproblem_cg_bounds(
     p_gn_norm = jnp.linalg.norm(p_gn)
 
     def compute_regularized():
+        # See _solve_tr_subproblem_cg: alpha starts at 0.0 and is only ever
+        # rescaled multiplicatively, so it stays pinned at 0 without an
+        # initial nonzero seed here. Seed from the standard LM initial
+        # estimate (||J^T f|| / Delta, per More 1978) on the augmented
+        # system whenever alpha hasn't been set yet.
+        g_norm = jnp.linalg.norm(J_augmented.T @ f_augmented)
+        seed_alpha = jnp.where(Delta > 0, g_norm / Delta, 0.0)
+        effective_alpha = jnp.where(alpha > 0, alpha, seed_alpha)
         p_reg, _, _ = _conjugate_gradient_solve(
             J_augmented,
             f_augmented,
             d_augmented,
-            alpha,
+            effective_alpha,
             tol,
         )
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)

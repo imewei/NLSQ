@@ -279,7 +279,8 @@ class StreamingCoordinator:
             return self._cached_available_memory
         except ImportError:
             # Fallback if psutil not available
-            return _DEFAULT_FALLBACK_MEMORY_MB
+            self._cached_available_memory = _DEFAULT_FALLBACK_MEMORY_MB
+            return self._cached_available_memory
 
     def configure_hybrid(
         self,
@@ -311,8 +312,13 @@ class StreamingCoordinator:
         else:
             chunk_size = n_data
 
-        # Clamp to [1000, 100_000] then cap at n_data so chunk never exceeds data size
-        chunk_size = max(1000, min(chunk_size, 100_000))
+        # Clamp to at most 100_000 (never below what the memory budget
+        # actually computed -- flooring at 1000 here would let the chunk's
+        # Jacobian exceed target_jacobian_mb whenever n_params is large
+        # enough that the budget-safe size is under 1000, which is exactly
+        # the low-memory/high-n_params case this method exists to protect),
+        # then cap at n_data so chunk never exceeds data size.
+        chunk_size = max(1, min(chunk_size, 100_000))
         chunk_size = max(1, min(chunk_size, n_data))
 
         return HybridStreamingConfig(

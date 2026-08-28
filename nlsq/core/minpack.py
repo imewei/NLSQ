@@ -432,8 +432,12 @@ def fit(  # noqa: C901
     if n_points == 0:
         raise ValueError("`ydata` must not be empty!")
 
-    # Determine number of parameters
-    if p0 is not None:
+    # Determine number of parameters. p0="auto" is a sentinel requesting
+    # estimation (see _determine_parameter_count), not a literal parameter
+    # value -- np.atleast_1d("auto") would otherwise produce a 1-element
+    # string array, miscounting n_params as 1 regardless of the model's
+    # real parameter count.
+    if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
         p0_arr = np.atleast_1d(p0)
         n_params = len(p0_arr)
     else:
@@ -1799,8 +1803,10 @@ def _log_memory_budget_diagnostics(
 
     logger = get_logger("nlsq")
 
-    # Determine n_params from p0 or estimate from xdata/ydata shape
-    if p0 is not None:
+    # Determine n_params from p0 or estimate from xdata/ydata shape. p0="auto"
+    # is a sentinel requesting estimation, not a literal parameter value --
+    # np.atleast_1d("auto") would otherwise produce a 1-element string array.
+    if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
         n_params = len(np.atleast_1d(p0))
     else:
         n_params = 3  # Default estimate
@@ -1844,6 +1850,7 @@ def _log_memory_budget_diagnostics(
 
 
 def _apply_auto_bounds(
+    f: ModelFunction,
     xdata: ArrayLike,
     ydata: ArrayLike,
     p0: NDArray[np.floating[Any]] | None,
@@ -1857,12 +1864,15 @@ def _apply_auto_bounds(
 
     Parameters
     ----------
+    f : callable
+        Model function, used to estimate p0 when the caller did not supply one.
     xdata : array_like
         Independent variable data.
     ydata : array_like
         Dependent variable data.
     p0 : NDArray or None
-        Initial parameter guess.
+        Initial parameter guess. If None, one is estimated from the data so
+        that bounds inference still runs.
     bounds_safety_factor : float
         Safety multiplier for automatic bounds.
     kwargs : dict
@@ -1870,23 +1880,27 @@ def _apply_auto_bounds(
     """
     from nlsq.precision.bound_inference import infer_bounds, merge_bounds
 
-    if p0 is not None:
-        # Infer bounds from data
-        inferred_bounds = infer_bounds(
-            xdata,
-            ydata,
-            p0,
-            safety_factor=bounds_safety_factor,
-        )
+    if p0 is None:
+        from nlsq.precision.parameter_estimation import estimate_initial_parameters
 
-        # Get user-provided bounds if any
-        user_bounds = kwargs.get("bounds", (-np.inf, np.inf))
+        p0 = estimate_initial_parameters(f, xdata, ydata, p0)
 
-        # Merge inferred with user bounds (user takes precedence)
-        merged_bounds = merge_bounds(inferred_bounds, user_bounds)
+    # Infer bounds from data
+    inferred_bounds = infer_bounds(
+        xdata,
+        ydata,
+        p0,
+        safety_factor=bounds_safety_factor,
+    )
 
-        # Update kwargs with merged bounds
-        kwargs["bounds"] = merged_bounds
+    # Get user-provided bounds if any
+    user_bounds = kwargs.get("bounds", (-np.inf, np.inf))
+
+    # Merge inferred with user bounds (user takes precedence)
+    merged_bounds = merge_bounds(inferred_bounds, user_bounds)
+
+    # Update kwargs with merged bounds
+    kwargs["bounds"] = merged_bounds
 
 
 def _apply_stability_checks(
@@ -2155,6 +2169,16 @@ def _run_cmaes_optimization(
     # Extract sigma and absolute_sigma from kwargs if provided
     sigma = kwargs.get("sigma")
     absolute_sigma = kwargs.get("absolute_sigma", False)
+    # Forward remaining optimizer kwargs (ftol, xtol, gtol, max_nfev, ...) to
+    # the NLSQ refinement step -- mirrors _fit_global_cmaes, whose **kwargs
+    # flow through to the same CMAESOptimizer.fit() call. Without this, this
+    # entry point (method='cmaes') silently drops user tolerances/limits that
+    # the fit(workflow='auto_global', method='cmaes') entry point honors.
+    # p0/bounds/sigma/absolute_sigma are excluded since they're already
+    # passed explicitly below -- forwarding them too would raise
+    # "got multiple values for argument".
+    _already_passed = ("p0", "bounds", "sigma", "absolute_sigma")
+    extra_kwargs = {k: v for k, v in kwargs.items() if k not in _already_passed}
 
     # Run CMA-ES optimization
     result_dict = optimizer.fit(
@@ -2165,6 +2189,7 @@ def _run_cmaes_optimization(
         bounds=bounds,
         sigma=sigma,
         absolute_sigma=absolute_sigma,
+        **extra_kwargs,
     )
 
     # Convert dict result to CurveFitResult-like structure
@@ -2729,7 +2754,7 @@ def curve_fit(
 
     # Handle automatic bounds inference
     if auto_bounds:
-        _apply_auto_bounds(xdata, ydata, p0, bounds_safety_factor, kwargs)
+        _apply_auto_bounds(f, xdata, ydata, p0, bounds_safety_factor, kwargs)
 
     # Handle numerical stability checks and fixes
     if stability:
@@ -3702,10 +3727,10 @@ class CurveFit:
 
             if data_mask is None:
                 data_mask = np.ones(m, dtype=bool)
-                if should_pad and len_diff > 0:
-                    data_mask = np.concatenate(
-                        [data_mask, np.zeros(len_diff, dtype=bool)],
-                    )
+            if should_pad and len_diff > 0:
+                data_mask = np.concatenate(
+                    [data_mask, np.zeros(len_diff, dtype=bool)],
+                )
         elif data_mask is None:
             data_mask = np.ones(m, dtype=bool)
 
@@ -4362,8 +4387,11 @@ class CurveFit:
         ydata_arr = np.asarray(ydata, float)
         n_points = len(ydata_arr)
 
-        # Determine parameter count
-        if p0 is not None:
+        # Determine parameter count. p0="auto" is a sentinel requesting
+        # estimation, not a literal parameter value -- np.atleast_1d("auto")
+        # would otherwise produce a 1-element string array, miscounting
+        # n_params as 1 regardless of the model's real parameter count.
+        if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
             n_params = len(np.atleast_1d(p0))
         else:
             # Estimate parameter count by inspecting function signature

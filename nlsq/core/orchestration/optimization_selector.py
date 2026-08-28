@@ -210,9 +210,17 @@ class OptimizationSelector:
         # Step 3: Select method (pass bounds so lm+finite-bounds is rejected)
         selected_method = self._select_method(method, lb=lb, ub=ub)
 
-        # Step 4: Select trust region solver
+        # Step 4: Select trust region solver. Levenberg-Marquardt doesn't use
+        # a trust-region SVD/LSMR solver -- auto-selecting one for it would
+        # produce a semantically meaningless value that a downstream
+        # consumer could mistake for evidence of trust-region behavior.
+        # Still resolve it when the caller explicitly passed tr_solver, so
+        # an explicit choice isn't silently discarded.
         m = len(ydata_np)
-        selected_tr_solver = self._select_tr_solver(tr_solver, m, n_params)
+        if selected_method == "lm" and tr_solver is None:
+            selected_tr_solver = None
+        else:
+            selected_tr_solver = self._select_tr_solver(tr_solver, m, n_params)
 
         # Step 5: Calculate max_nfev if not provided
         if max_nfev is None:

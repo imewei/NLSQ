@@ -1145,8 +1145,16 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             if actual_reduction > 0:
                 break
 
-        # Check if inner loop hit iteration limit
-        if inner_loop_count >= max_inner_iterations:
+        # Check if inner loop hit iteration limit -- only when it actually
+        # exited without a successful step or another termination code.
+        # inner_loop_count can equal max_inner_iterations on the very
+        # iteration that accepts a step or satisfies ftol/xtol; without these
+        # guards this would clobber that legitimate outcome with -3.
+        if (
+            inner_loop_count >= max_inner_iterations
+            and termination_status is None
+            and actual_reduction <= 0
+        ):
             self.logger.warning(
                 "Inner optimization loop hit iteration limit",
                 inner_iterations=inner_loop_count,
@@ -1640,8 +1648,14 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha = min(raw_alpha if math.isfinite(raw_alpha) else 1e30, 1e30)
             Delta = Delta_new
 
-        # Check inner loop limit
-        if inner_loop_count >= max_inner_iterations:
+        # Check inner loop limit -- only when it actually exited without a
+        # successful step or another termination code (see matching guard in
+        # the no-bounds inner loop above for why this can't be unconditional).
+        if (
+            inner_loop_count >= max_inner_iterations
+            and termination_status is None
+            and actual_reduction <= 0
+        ):
             self.logger.warning(
                 "Inner optimization loop hit iteration limit",
                 inner_iterations=inner_loop_count,
@@ -1952,8 +1966,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                         g_norm,
                     )
 
-                if termination_status is not None or nfev == max_nfev:
-                    if nfev == max_nfev:
+                if termination_status is not None or nfev >= max_nfev:
+                    if nfev >= max_nfev:
                         self.logger.warning(
                             "Maximum number of function evaluations reached",
                             nfev=nfev,
@@ -2274,7 +2288,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                     g_norm,
                 )
 
-            if termination_status is not None or nfev == max_nfev:
+            if termination_status is not None or nfev >= max_nfev:
                 break
 
             # Update v with scaling
