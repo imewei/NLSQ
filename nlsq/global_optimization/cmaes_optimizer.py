@@ -57,6 +57,27 @@ class CMAESPreempted(SystemExit):
         self.generation = generation
 
 
+def _reject_stale_checkpoint(
+    start_gen: int,
+    max_generations: int,
+    checkpoint_path: Path,
+) -> None:
+    """Reject a checkpoint whose generation exceeds `max_generations`.
+
+    Equality is the legitimate already-done resume (a completed run's
+    generation_counter == max_generations exactly); only strictly-greater
+    means the caller lowered max_generations since the checkpoint was
+    written, which would otherwise silently return a stale result.
+    """
+    if start_gen > max_generations:
+        raise ValueError(
+            f"Checkpoint at {checkpoint_path} is already at generation "
+            f"{start_gen}, past this run's max_generations={max_generations}. "
+            "Raise max_generations to resume past it, or use a different "
+            "run_id/checkpoint_dir to start fresh.",
+        )
+
+
 def _create_fitness_function(  # noqa: C901
     model_func: Callable,
     xdata: jax.Array,
@@ -432,6 +453,28 @@ class CMAESOptimizer:
         ------
         ValueError
             If bounds are not provided (required for CMA-ES).
+
+        Notes
+        -----
+        Checkpointing (``checkpoint_dir``, ``restart_strategy="none"`` only)
+        has two known limitations, neither of which corrupts a checkpoint,
+        that a wrapping HPC job script should account for:
+
+        - No cross-process locking on ``(checkpoint_dir, run_id)``. Two
+          concurrent runs sharing the same pair (e.g. an accidental
+          duplicate job submission) will race saving/loading the same
+          file. Ensure your scheduler cannot submit the same run_id twice
+          concurrently.
+        - SIGTERM/SIGUSR1 preemption is only observed between generations
+          (after ``ask``/fitness/``tell`` for the current generation
+          completes), not mid-generation. If the scheduler's SIGKILL grace
+          period is shorter than one generation's wall-clock time
+          (dominated by the fitness function, e.g. large streaming
+          evaluations), the process can be killed before the preemption
+          checkpoint is written. Give the job a grace period longer than
+          the worst-case single-generation time, or lower
+          ``checkpoint_interval`` as a partial mitigation (periodic saves
+          still apply even when the preemption signal itself is missed).
         """
         # Validate bounds
         if bounds is None:
@@ -876,6 +919,9 @@ class CMAESOptimizer:
                 best_fitness = jnp.asarray(loaded.best_fitness)
                 diagnostics.fitness_history = list(loaded.fitness_history)
                 start_gen = loaded.generation_counter
+                _reject_stale_checkpoint(
+                    start_gen, self.config.max_generations, checkpoint_path
+                )
                 logger.info(
                     f"Resumed CMA-ES from checkpoint at generation {start_gen} "
                     f"({checkpoint_path})",
