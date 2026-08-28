@@ -476,21 +476,33 @@ class TournamentSelector:
         # cumulative_losses starts at 0.0 for every candidate, which is
         # finite -- so a candidate that was never actually evaluated (e.g.
         # data_batch_iterator yielded zero batches) would otherwise look
-        # identical to a genuine zero-loss winner. Only require
-        # evaluation_counts > 0 when a real selection among multiple
-        # candidates was possible (n_candidates > top_m): when top_m
-        # already covers every candidate (e.g. a single-candidate
-        # tournament), there is nothing to differentiate and returning the
-        # candidate(s) unevaluated is correct, not a fabricated winner.
+        # identical to a genuine zero-loss winner, or even outrank a
+        # candidate that WAS scored. Two gates close both gaps:
+        #   1. `evaluated` (eligibility): required whenever a real
+        #      selection among more candidates than top_m was possible
+        #      (selection_needed) -- otherwise an unevaluated candidate's
+        #      default 0.0 loss is indistinguishable from a genuine winner.
+        #      Skipped when top_m already covers every candidate (e.g. a
+        #      single-candidate tournament) -- there every candidate is
+        #      returned regardless, so nothing to gate.
+        #   2. `effective_losses` (ranking): once *any* candidate has real
+        #      evaluation data, an eligible-but-unevaluated survivor (the
+        #      selection_needed=False case above) must still never rank
+        #      ahead of one that was actually scored.
+        was_evaluated = self.evaluation_counts > 0
+        any_evaluated = bool(np.any(was_evaluated))
+
         selection_needed = self.n_candidates > top_m
-        evaluated = (
-            self.evaluation_counts > 0
-            if selection_needed
-            else np.ones(self.n_candidates, dtype=bool)
+        evaluated = was_evaluated if selection_needed else True
+
+        effective_losses = (
+            np.where(was_evaluated, self.cumulative_losses, np.inf)
+            if any_evaluated
+            else self.cumulative_losses
         )
 
         valid_indices = np.where(
-            self.survival_mask & np.isfinite(self.cumulative_losses) & evaluated,
+            self.survival_mask & np.isfinite(effective_losses) & evaluated,
         )[0]
 
         if len(valid_indices) == 0:
@@ -512,8 +524,8 @@ class TournamentSelector:
                 self.logger.warning(msg)
                 raise RuntimeError(msg)
 
-        # Sort by cumulative loss
-        losses = self.cumulative_losses[valid_indices]
+        # Sort by (evaluation-aware) loss
+        losses = effective_losses[valid_indices]
         sorted_order = np.argsort(losses)
 
         # Return top M

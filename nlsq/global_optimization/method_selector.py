@@ -167,7 +167,23 @@ class MethodSelector:
             logger.debug("Multi-start explicitly requested")
             return "multi-start"
 
-        # Auto selection (or None)
+        # Auto selection (or None). CMA-ES requires every bound to be
+        # finite (transform_to_bounds computes lb + (ub-lb)*sigmoid(x),
+        # which is NaN/inf for an infinite bound) -- never auto-select it
+        # for a partially-unbounded problem, regardless of scale_ratio: an
+        # infinite range dominates max_range/min_range, so without this
+        # check "auto" would actively *prefer* cmaes for exactly the case
+        # that breaks it. Multi-start has no such requirement (bound
+        # inference handles unbounded parameters).
+        lower_arr = np.asarray(lower_bounds)
+        upper_arr = np.asarray(upper_bounds)
+        if not (np.all(np.isfinite(lower_arr)) and np.all(np.isfinite(upper_arr))):
+            logger.debug(
+                "Auto method selection: non-finite bound present, "
+                "using multi-start (CMA-ES requires finite bounds).",
+            )
+            return "multi-start"
+
         scale_ratio = self.compute_scale_ratio(lower_bounds, upper_bounds)
         logger.debug(f"Auto method selection: scale_ratio={scale_ratio:.2f}")
 
