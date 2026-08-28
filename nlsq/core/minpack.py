@@ -1331,6 +1331,7 @@ def _fit_with_auto_global(
         strategy=strategy,
         memory_config=memory_config,
         n_starts=n_starts,
+        workflow_name=_workflow_name,
         **kwargs,
     )
 
@@ -1506,8 +1507,14 @@ def _fit_global_cmaes(
                 if checkpoint_interval is not None
                 else cmaes_config.checkpoint_interval
             ),
-            run_id=run_id,
-            model_id=model_id,
+            # Same None-preserves-existing-value treatment as
+            # checkpoint_interval above: a caller overriding only
+            # checkpoint_dir on a pre-built cmaes_config that already
+            # carries run_id/model_id must not have those wiped back to
+            # None here (which would then fail CMAESConfig's own
+            # checkpoint_dir-requires-run_id/model_id validation).
+            run_id=run_id if run_id is not None else cmaes_config.run_id,
+            model_id=(model_id if model_id is not None else cmaes_config.model_id),
         )
 
     # Budget-derived chunk size (HybridStreamingConfig.chunk_size for
@@ -1589,6 +1596,7 @@ def _fit_global_multistart(
     strategy: str,
     n_starts: int,
     memory_config: LDMemoryConfig | HybridStreamingConfig | None = None,
+    workflow_name: str = "auto_global",
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run multi-start optimization with memory-aware strategy.
@@ -1604,13 +1612,18 @@ def _fit_global_multistart(
         a hardcoded default.
     n_starts : int
         Number of multi-start runs.
+    workflow_name : str
+        The caller's actual `workflow=` value ('hpc' or 'auto_global') --
+        used only for accurate warning/error text below, since this
+        function is reached from both entry points.
     """
     if kwargs.pop("_hpc_checkpoint_dir", None) is not None:
         warnings.warn(
-            "workflow='hpc': checkpoint_dir was provided, but this route "
-            "(non-CMA-ES) does not support checkpoint/crash-recovery yet "
-            "-- no checkpoint file will be written. Only the CMA-ES route "
-            "(restart_strategy='none') supports checkpointing currently.",
+            f"workflow='{workflow_name}': checkpoint_dir was provided, but "
+            "this route (non-CMA-ES) does not support checkpoint/crash-"
+            "recovery yet -- no checkpoint file will be written. Only the "
+            "CMA-ES route (restart_strategy='none') supports checkpointing "
+            "currently.",
             UserWarning,
             stacklevel=2,
         )
@@ -1641,11 +1654,11 @@ def _fit_global_multistart(
         # already applied to _curve_fit_auto_memory's chunked strategy.
         if sigma is not None:
             raise NotImplementedError(
-                "workflow='auto_global' chunked multi-start strategy does "
-                "not support the 'sigma' parameter yet (chunking splits the "
-                "data and sigma is not sliced consistently across chunks). "
-                "Use a memory_limit_gb override that avoids the chunked "
-                "strategy, or omit sigma.",
+                f"workflow='{workflow_name}' chunked multi-start strategy "
+                "does not support the 'sigma' parameter yet (chunking "
+                "splits the data and sigma is not sliced consistently "
+                "across chunks). Use a memory_limit_gb override that "
+                "avoids the chunked strategy, or omit sigma.",
             )
 
         # Chunked processing with multi-start
@@ -1686,8 +1699,8 @@ def _fit_global_multistart(
         # treating a failed chunked fit as a normal result.
         if not result.get("success", True):
             raise RuntimeError(
-                "workflow='auto_global' chunked multi-start fit failed: "
-                f"{result.get('message', 'unknown error')}",
+                f"workflow='{workflow_name}' chunked multi-start fit "
+                f"failed: {result.get('message', 'unknown error')}",
             )
         if not isinstance(result, CurveFitResult):
             result = CurveFitResult(result)

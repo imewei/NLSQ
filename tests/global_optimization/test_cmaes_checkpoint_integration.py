@@ -250,6 +250,62 @@ def test_resume_from_already_converged_checkpoint_is_a_noop(tmp_path):
     assert checkpoint_path.stat().st_mtime_ns == mtime_before
 
 
+def test_resume_rejects_checkpoint_past_max_generations(tmp_path):
+    """Resuming with max_generations LOWER than the checkpoint's saved
+    generation_counter used to silently succeed: `range(start_gen,
+    max_generations)` ran zero iterations and the stale best_solution from
+    the longer original run was returned as if it were a normal result,
+    with convergence_reason left at its default 'max_generations' despite
+    no new work happening. Verify this now raises instead of silently
+    returning a misleading stale result -- unlike the exactly-converged
+    (start_gen == max_generations) case in
+    test_resume_from_already_converged_checkpoint_is_a_noop, which must
+    keep working as a legitimate no-op."""
+    import pytest
+
+    x = np.linspace(0, 5, 50)
+    y = np.asarray(exponential_decay(x, 2.5, 0.5))
+    bounds = ([0.0, 0.0], [10.0, 2.0])
+    checkpoint_dir = tmp_path / "stale-resume"
+
+    part_config = CMAESConfig(
+        restart_strategy="none",
+        seed=17,
+        model_id="exponential_decay_v1",
+        max_generations=10,
+        checkpoint_dir=str(checkpoint_dir),
+        checkpoint_interval=10,
+        run_id="stale-test",
+    )
+    CMAESOptimizer(config=part_config).fit(
+        exponential_decay,
+        x,
+        y,
+        bounds=bounds,
+        refine_with_nlsq=False,
+    )
+
+    # Resume with max_generations LOWER than the checkpoint's own
+    # generation_counter (10) -- must raise, not silently no-op.
+    resume_config = CMAESConfig(
+        restart_strategy="none",
+        seed=17,
+        model_id="exponential_decay_v1",
+        max_generations=5,
+        checkpoint_dir=str(checkpoint_dir),
+        checkpoint_interval=10,
+        run_id="stale-test",
+    )
+    with pytest.raises(ValueError, match="max_generations"):
+        CMAESOptimizer(config=resume_config).fit(
+            exponential_decay,
+            x,
+            y,
+            bounds=bounds,
+            refine_with_nlsq=False,
+        )
+
+
 def test_resume_genuinely_uses_loaded_state_not_a_fresh_restart(tmp_path):
     """Neither `load_calls == 1` (proves load() was called) nor a
     fitness_history-prefix comparison (CMA-ES's trajectory is a pure

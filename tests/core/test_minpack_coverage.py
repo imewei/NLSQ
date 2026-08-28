@@ -604,6 +604,120 @@ class TestBugFixRegressions(unittest.TestCase):
         self.assertTrue(used_config.enable_multistart)
         self.assertEqual(used_config.n_starts, 5)
 
+    def test_fit_global_multistart_labels_messages_with_actual_workflow(self):
+        """_fit_global_multistart used to hardcode 'hpc' in its
+        checkpoint-not-supported warning and 'auto_global' in its chunked
+        NotImplementedError/RuntimeError, regardless of which workflow=
+        value the caller actually used (both entry points route through
+        this same function). Verify the workflow_name parameter now
+        threads through into both messages correctly, for BOTH literal
+        values, so it can never be a coincidence that the old hardcoded
+        text happened to match."""
+        import warnings
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_global_multistart
+
+        x = np.linspace(0, 5, 50)
+        y = 2.0 * x + 1.0
+        bounds = (np.array([0.0, 0.0]), np.array([10.0, 5.0]))
+
+        # Checkpoint warning: must name the actual workflow, not a fixed 'hpc'.
+        with patch("nlsq.core.minpack.curve_fit") as mock_curve_fit:
+            mock_curve_fit.return_value = {"success": True}
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                _fit_global_multistart(
+                    f=lambda x, a, b: a * x + b,
+                    xdata=x,
+                    ydata=y,
+                    p0=[1.5, 0.5],
+                    sigma=None,
+                    absolute_sigma=False,
+                    check_finite=True,
+                    bounds=bounds,
+                    strategy="standard",
+                    n_starts=5,
+                    workflow_name="auto_global",
+                    _hpc_checkpoint_dir="/tmp/some-checkpoint-dir",
+                )
+        messages = [str(w.message) for w in caught]
+        assert any("workflow='auto_global'" in m for m in messages), messages
+        assert not any("workflow='hpc'" in m for m in messages), messages
+
+        # Chunked + sigma NotImplementedError: must name the actual workflow,
+        # not a fixed 'auto_global'.
+        with self.assertRaises(NotImplementedError) as excinfo:
+            _fit_global_multistart(
+                f=lambda x, a, b: a * x + b,
+                xdata=x,
+                ydata=y,
+                p0=[1.5, 0.5],
+                sigma=np.ones_like(y),
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=bounds,
+                strategy="chunked",
+                n_starts=5,
+                workflow_name="hpc",
+            )
+        self.assertIn("workflow='hpc'", str(excinfo.exception))
+        self.assertNotIn("workflow='auto_global'", str(excinfo.exception))
+
+    def test_fit_global_cmaes_checkpoint_dir_override_preserves_config_ids(self):
+        """_fit_global_cmaes's checkpoint_dir override used to unconditionally
+        replace a pre-built cmaes_config's run_id/model_id with the fit()
+        kwargs' values (None when the caller only overrides checkpoint_dir
+        at the top level), wiping out identifiers already set on the config
+        and crashing CMAESConfig's own checkpoint_dir-requires-run_id/
+        model_id validation. Verify a pre-built config's run_id/model_id
+        survive a checkpoint_dir-only override, matching the None-preserves
+        -existing-value treatment checkpoint_interval already gets."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_global_cmaes
+        from nlsq.global_optimization.cmaes_config import CMAESConfig
+
+        x = np.linspace(0, 5, 50)
+        y = np.asarray(2.0 * jnp.exp(-0.5 * x))
+        bounds = (np.array([0.0, 0.0]), np.array([10.0, 5.0]))
+
+        prebuilt_config = CMAESConfig(
+            restart_strategy="none",
+            seed=1,
+            run_id="prebuilt-run",
+            model_id="prebuilt-model",
+        )
+
+        with patch(
+            "nlsq.global_optimization.cmaes_optimizer.CMAESOptimizer"
+        ) as mock_optimizer_cls:
+            mock_optimizer_cls.return_value.fit.return_value = {
+                "popt": np.array([2.0, 0.5]),
+                "pcov": np.eye(2),
+            }
+            _fit_global_cmaes(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y,
+                p0=np.array([1.0, 1.0]),
+                sigma=None,
+                absolute_sigma=False,
+                bounds=bounds,
+                strategy="standard",
+                cmaes_config=prebuilt_config,
+                # Caller overrides checkpoint_dir only -- no run_id/model_id
+                # at this level -- so this must not fail CMAESConfig
+                # validation by wiping the config's own run_id/model_id.
+                _hpc_checkpoint_dir="/tmp/some-checkpoint-dir",
+            )
+
+        mock_optimizer_cls.assert_called_once()
+        _args, ctor_kwargs = mock_optimizer_cls.call_args
+        used_config = ctor_kwargs.get("config") or (_args[0] if _args else None)
+        self.assertEqual(used_config.run_id, "prebuilt-run")
+        self.assertEqual(used_config.model_id, "prebuilt-model")
+
     def test_fit_with_auto_global_reuses_precomputed_budget(self):
         """_fit_with_auto_global computes a MemoryBudget for logging and
         used to let selector.select() silently redetect memory a second
