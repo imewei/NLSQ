@@ -69,11 +69,21 @@ Class-based interface for large dataset fitting with more control.
 
    from nlsq import LargeDatasetFitter
 
-   fitter = LargeDatasetFitter(
-       memory_limit_gb=8.0, chunk_overlap=0.1  # 10% overlap between chunks
-   )
+   fitter = LargeDatasetFitter(memory_limit_gb=8.0)
 
    result = fitter.fit(model, x, y, p0=p0)
+
+Chunk sizing (``min_chunk_size``, ``max_chunk_size``, etc.) is controlled via
+an ``LDMemoryConfig`` passed as ``config=``, not a ``chunk_overlap`` argument:
+
+.. code-block:: python
+
+   from nlsq import LargeDatasetFitter
+   from nlsq.streaming.large_dataset import LDMemoryConfig
+
+   fitter = LargeDatasetFitter(
+       config=LDMemoryConfig(memory_limit_gb=8.0, max_chunk_size=500_000)
+   )
 
 AdaptiveHybridStreamingOptimizer
 --------------------------------
@@ -149,10 +159,11 @@ Estimate memory requirements before fitting:
 
    from nlsq import estimate_memory_requirements
 
-   mem = estimate_memory_requirements(n_points=10_000_000, n_params=5, dtype="float64")
+   stats = estimate_memory_requirements(n_points=10_000_000, n_params=5)
 
-   print(f"Estimated GPU memory: {mem['gpu_memory_gb']:.2f} GB")
-   print(f"Recommended chunk size: {mem['chunk_size']}")
+   print(f"Estimated memory: {stats.total_memory_estimate_gb:.2f} GB")
+   print(f"Recommended chunk size: {stats.recommended_chunk_size:,}")
+   print(f"Number of chunks: {stats.n_chunks}")
 
 Checkpointing
 -------------
@@ -169,21 +180,10 @@ AdaptiveHybridStreamingOptimizer supports checkpointing for long-running fits:
    )
    optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-   # If interrupted, resume from checkpoint
+   # Checkpoints are written every checkpoint_frequency iterations, but
+   # automatic resume from a saved checkpoint is not yet implemented --
+   # see :doc:`/howto/streaming_checkpoints` for details.
    result = optimizer.fit((x, y), model, p0=p0, verbose=1)
-
-Parallel Processing
--------------------
-
-For multi-GPU systems:
-
-.. code-block:: python
-
-   from nlsq import ParallelFitter
-
-   fitter = ParallelFitter(n_gpus=4, memory_per_gpu_gb=16.0)
-
-   result = fitter.fit(model, x, y, p0=p0)
 
 See Also
 --------

@@ -357,7 +357,7 @@ def fast_model(x, a, b, c):
 ```python
 from nlsq.streaming.large_dataset import LargeDatasetFitter
 
-fitter = LargeDatasetFitter(chunk_size=10000)  # Process in chunks
+fitter = LargeDatasetFitter(memory_limit_gb=8.0)  # Chunk size derived from memory limit
 
 popt, pcov = fitter.fit(model, x, y, p0=p0)
 ```
@@ -392,18 +392,27 @@ popt = transform_params(popt_scaled, x.mean(), x.std(), y.mean(), y.std())
 
 ### Sparse Jacobian (For Specific Problems)
 
-If your Jacobian has sparse structure, exploit it:
+`nlsq.core.sparse_jacobian` provides `SparseJacobianComputer` and
+`SparseOptimizer` for *detecting* Jacobian sparsity and estimating the
+resulting memory savings:
 
 ```python
-from nlsq.sparse_jacobian import SparseCurveFit
+from nlsq.core.sparse_jacobian import SparseJacobianComputer
 
-# Define sparsity pattern
-# (only if you know your Jacobian is sparse!)
-scf = SparseCurveFit(sparsity_pattern=pattern)
-popt, pcov = scf.curve_fit(model, x, y, p0=p0)
+computer = SparseJacobianComputer(sparsity_threshold=0.01)
+pattern, sparsity = computer.detect_sparsity_pattern(model, p0, x)
+memory_info = computer.estimate_memory_usage(len(x), len(p0), sparsity)
+print(
+    f"Detected sparsity: {sparsity:.1%}, savings: {memory_info['savings_percent']:.1f}%"
+)
 ```
 
-**Speedup**: 2-10x for problems with sparse Jacobians
+Note: `SparseOptimizer.optimize_with_sparsity()` falls back to dense
+`curve_fit()` when sparsity is below `min_sparsity`, but its sparse
+optimization path itself (`_optimize_sparse`) is not yet implemented and
+raises `NotImplementedError` for genuinely sparse problems — there is
+currently no way to get an actual sparse-Jacobian speedup on the
+optimization itself, only on the detection/estimation utilities above.
 
 ### Custom Jacobian
 

@@ -1,325 +1,185 @@
 Configuration Reference
 =======================
 
-NLSQ can be configured via YAML files, environment variables, and programmatic settings.
+NLSQ is configured via environment variables (read once at import time) and
+programmatic Python configuration objects. There is no auto-discovered
+``nlsq.yaml`` or ``~/.config/nlsq/config.yaml`` project config file, and no
+``Config`` class or ``config_context()`` helper.
 
-YAML Configuration
-------------------
+.. note::
 
-Create a ``nlsq.yaml`` file in your project directory:
-
-.. code-block:: yaml
-
-   # nlsq.yaml
-   optimization:
-     gtol: 1.0e-8
-     ftol: 1.0e-8
-     xtol: 1.0e-8
-     max_nfev: 500
-
-   memory:
-     limit_gb: 8.0
-     chunk_size: auto
-
-   logging:
-     level: INFO
-     diagnostics: true
-
-   cache:
-     enabled: true
-     directory: ~/.cache/nlsq
-
-Configuration File Locations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-NLSQ searches for configuration in this order:
-
-1. ``./nlsq.yaml`` (current directory)
-2. ``~/.config/nlsq/config.yaml`` (user config)
-3. Environment variables
-4. Built-in defaults
-
-Loading Configuration
-~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from nlsq import Config
-
-   # Load from default locations
-   config = Config.load()
-
-   # Load from specific file
-   config = Config.load("my_config.yaml")
-
-   # Access values
-   print(config.optimization.gtol)
-
-Configuration Sections
-----------------------
-
-optimization
-~~~~~~~~~~~~
-
-.. code-block:: yaml
-
-   optimization:
-     # Convergence tolerances
-     gtol: 1.0e-8      # Gradient tolerance
-     ftol: 1.0e-8      # Function tolerance
-     xtol: 1.0e-8      # Step tolerance
-
-     # Iteration limits
-     max_nfev: 500     # Max function evaluations
-     max_iter: 100     # Max iterations
-
-     # Algorithm selection
-     method: trf       # trf, dogbox, lm
-     tr_solver: svd    # svd, lsmr
-
-memory
-~~~~~~
-
-.. code-block:: yaml
-
-   memory:
-     # Memory limits
-     limit_gb: 8.0         # GPU memory limit
-     chunk_size: auto      # Automatic or specific size
-
-     # Memory management
-     pool_enabled: true    # Use memory pooling
-     pool_ttl: 300         # Pool TTL in seconds
-
-logging
-~~~~~~~
-
-.. code-block:: yaml
-
-   logging:
-     level: INFO           # DEBUG, INFO, WARNING, ERROR
-     diagnostics: true     # Enable convergence diagnostics
-     progress: true        # Show progress bars
-     verbosity: 1          # 0=quiet, 1=normal, 2=verbose
-
-cache
-~~~~~
-
-.. code-block:: yaml
-
-   cache:
-     enabled: true
-     directory: ~/.cache/nlsq
-     max_size_gb: 2.0
-     jit_cache: true       # JAX JIT compilation cache
-
-precision
-~~~~~~~~~
-
-.. code-block:: yaml
-
-   precision:
-     dtype: float64        # NLSQ requires float64 for numerical accuracy
-     jax_enable_x64: true  # Enable 64-bit in JAX
-
-streaming
-~~~~~~~~~
-
-.. code-block:: yaml
-
-   streaming:
-     chunk_size: 100000
-     checkpoint_interval: 50
-     checkpoint_dir: ./checkpoints
-     resume_on_error: true
+   The NLSQ **CLI** does support YAML *workflow* files (a different feature
+   from what this page describes) — see :doc:`/howto/configure_yaml` for the
+   ``paths`` / ``data`` / ``model`` / ``fitting`` / ``hybrid_streaming``
+   workflow schema used by the CLI runner.
 
 Environment Variables
----------------------
-
-All settings can be overridden via environment variables:
+----------------------
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 30 30
+   :widths: 30 50 20
 
    * - Variable
-     - Config Equivalent
+     - Effect
      - Default
-   * - ``NLSQ_GTOL``
-     - optimization.gtol
-     - 1e-8
-   * - ``NLSQ_FTOL``
-     - optimization.ftol
-     - 1e-8
-   * - ``NLSQ_XTOL``
-     - optimization.xtol
-     - 1e-8
-   * - ``NLSQ_MAX_NFEV``
-     - optimization.max_nfev
-     - 500
-   * - ``NLSQ_MEMORY_LIMIT_GB``
-     - memory.limit_gb
-     - auto
-   * - ``NLSQ_LOG_LEVEL``
-     - logging.level
-     - INFO
-   * - ``NLSQ_DEBUG``
-     - logging.level
-     - (sets DEBUG)
-   * - ``NLSQ_DISABLE_CACHE``
-     - cache.enabled
-     - (sets false)
    * - ``NLSQ_FORCE_CPU``
-     - -
-     - (forces CPU backend)
+     - Force the JAX CPU backend
+     - unset
+   * - ``NLSQ_DISABLE_X64``
+     - Skip enabling 64-bit precision in JAX
+     - unset (x64 enabled)
+   * - ``NLSQ_DISABLE_PERSISTENT_CACHE``
+     - Disable the JAX compilation cache
+     - unset (cache enabled)
+   * - ``NLSQ_JAX_CACHE_DIR``
+     - JAX compilation cache directory
+     - ``~/.cache/nlsq/jax_cache``
+   * - ``NLSQ_CACHE_MIN_COMPILE_TIME_SECS``
+     - Minimum compile time (seconds) before caching
+     - ``1``
+   * - ``NLSQ_GPU_MEMORY_FRACTION``
+     - Fraction of GPU memory XLA may claim (0.0-1.0)
+     - unset (grows as needed)
+   * - ``NLSQ_MEMORY_LIMIT_GB``
+     - Default ``MemoryConfig.memory_limit_gb``
+     - ``8.0``
+   * - ``NLSQ_CHUNK_SIZE_MB``
+     - Default ``MemoryConfig.chunk_size_mb``
+     - auto
+   * - ``NLSQ_OOM_STRATEGY``
+     - ``MemoryConfig.out_of_memory_strategy`` (``fallback``, ``reduce``, or ``error``)
+     - ``fallback``
+   * - ``NLSQ_SAFETY_FACTOR``
+     - ``MemoryConfig.safety_factor``
+     - ``0.8``
+   * - ``NLSQ_DISABLE_PROGRESS_REPORTING``
+     - Disable progress reporting for large operations
+     - unset (enabled)
+   * - ``NLSQ_DISABLE_AUTO_SOLVER_SELECTION``
+     - Disable automatic solver selection for large datasets
+     - unset (enabled)
+   * - ``NLSQ_JACOBIAN_MODE``
+     - Force Jacobian AD mode: ``auto``, ``fwd``, or ``rev``
+     - ``auto``
    * - ``NLSQ_SKIP_GPU_CHECK``
-     - -
-     - (skips GPU warning)
+     - Suppress the startup GPU availability warning
+     - unset
+   * - ``NLSQ_DEBUG``
+     - Enable debug-level logging
+     - unset
 
 **Example:**
 
 .. code-block:: bash
 
-   export NLSQ_GTOL=1e-10
+   export NLSQ_MEMORY_LIMIT_GB=16
    export NLSQ_DEBUG=1
    python my_script.py
 
 Programmatic Configuration
---------------------------
+----------------------------
 
-Override configuration in code:
+Memory settings
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   from nlsq import curve_fit, Config
-
-   # Method 1: Pass directly to functions
-   popt, pcov = curve_fit(model, x, y, gtol=1e-10, max_nfev=1000)
-
-   # Method 2: Use Config object
-   config = Config(
-       optimization={"gtol": 1e-10, "max_nfev": 1000}, memory={"limit_gb": 16.0}
+   from nlsq.config import (
+       MemoryConfig,
+       set_memory_limits,
+       get_memory_config,
+       memory_context,
    )
-   popt, pcov = curve_fit(model, x, y, config=config)
 
-   # Method 3: Context manager
-   from nlsq import config_context
+   # Set process-wide memory limits
+   set_memory_limits(memory_limit_gb=16.0, gpu_memory_fraction=0.8)
 
-   with config_context(gtol=1e-10):
-       popt, pcov = curve_fit(model, x, y)
+   # Inspect the current configuration
+   config = get_memory_config()
+   print(config.memory_limit_gb)
 
-Presets
--------
+   # Temporarily override for a block of code
+   with memory_context(MemoryConfig(memory_limit_gb=32.0)):
+       ...  # runs with the temporary limit
 
-Use presets for common configurations via the ``workflow`` argument (or ``preset`` in ``fit``):
+Large-dataset settings
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   from nlsq.config import (
+       configure_for_large_datasets,
+       LargeDatasetConfig,
+       large_dataset_context,
+   )
+
+   # One-shot setup for large-dataset workflows
+   configure_for_large_datasets(memory_limit_gb=16.0, progress_reporting=True)
+
+   # Or temporarily override solver-selection behavior
+   with large_dataset_context(LargeDatasetConfig(enable_automatic_solver_selection=False)):
+       ...
+
+Jacobian AD mode
+~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   from nlsq.config import get_jacobian_mode, set_jacobian_mode
+
+   mode, source = get_jacobian_mode()
+   print(f"Using {mode} mode from {source}")
+
+   set_jacobian_mode("rev")  # forces reverse-mode AD for this process
+
+``get_jacobian_mode()`` resolves in this order:
+
+1. ``NLSQ_JACOBIAN_MODE`` environment variable
+2. ``jacobian_mode`` key in ``~/.nlsq/config.json`` (JSON, not YAML)
+3. ``"auto"`` default
+
+``set_jacobian_mode()`` only sets the environment variable for the current
+process; to persist the choice, write it to ``~/.nlsq/config.json`` yourself.
+
+Fit Presets and Workflows
+----------------------------
+
+The unified ``fit()`` entry point selects a strategy via ``workflow`` (new,
+v0.6.3+) or the deprecated ``preset`` argument:
 
 .. code-block:: python
 
    from nlsq import fit
 
-   # Standard fitting
-   fit(model, x, y, workflow="standard")
+   # workflow-based selection
+   popt, pcov = fit(model, x, y, workflow="auto", goal="quality")
 
-   # High precision (multi-start)
-   fit(model, x, y, workflow="quality")
-
-   # Global optimization (CMA-ES)
-   fit(model, x, y, workflow="cmaes")
-
-**Available Presets:**
+   # legacy preset argument (deprecated but still supported)
+   popt, pcov = fit(model, x, y, preset="robust")
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 20 20 40
+   :widths: 25 75
 
-   * - Preset
-     - Tolerances
-     - Starts
-     - Notes
-   * - ``standard``
-     - 1e-8
-     - 1
-     - Default, general purpose
-   * - ``quality``
-     - 1e-10
-     - 20
-     - High precision, robust to local minima
+   * - ``preset`` value
+     - Behavior
    * - ``fast``
-     - 1e-6
-     - 1
-     - High speed, loose tolerances
-   * - ``global_auto``
-     - 1e-8
-     - Auto
-     - Smart CMA-ES/Multi-Start selection
-   * - ``cmaes``
-     - 1e-8
-     - BIPOP
-     - Global search (100 gens)
-   * - ``cmaes-global``
-     - 1e-8
-     - BIPOP
-     - Deep global search (200 gens, 2x pop)
-   * - ``large_robust``
-     - 1e-8
-     - 10
-     - Chunked processing for large data
+     - Single-start optimization for maximum speed
+   * - ``robust``
+     - Multi-start with 5 starts
+   * - ``global``
+     - Thorough global search with 20 starts
    * - ``streaming``
-     - 1e-7
-     - 1
-     - Out-of-core for huge data
-   * - ``hpc_distributed``
-     - 1e-6
-     - 10
-     - Checkpointing enabled for HPC
+     - Streaming optimization for large datasets with multi-start
+   * - ``large``
+     - Auto-detect dataset size and use the appropriate strategy
 
-Default Values
---------------
-
-Complete list of defaults:
-
-.. code-block:: yaml
-
-   # Full default configuration
-   optimization:
-     gtol: 1.0e-8
-     ftol: 1.0e-8
-     xtol: 1.0e-8
-     max_nfev: 500
-     max_iter: 100
-     method: trf
-     tr_solver: svd
-
-   memory:
-     limit_gb: null      # auto-detect
-     chunk_size: auto
-     pool_enabled: true
-     pool_ttl: 300
-
-   logging:
-     level: INFO
-     diagnostics: false
-     progress: true
-     verbosity: 1
-
-   cache:
-     enabled: true
-     directory: ~/.cache/nlsq
-     max_size_gb: 2.0
-     jit_cache: true
-
-   precision:
-     dtype: float64
-     jax_enable_x64: true
-
-   streaming:
-     chunk_size: 100000
-     checkpoint_interval: 50
-     checkpoint_dir: ./checkpoints
-     resume_on_error: false
+See the ``fit()`` API reference for the current ``workflow``/``goal``
+argument set, which supersedes ``preset``.
 
 See Also
---------
+----------
 
-- :doc:`/howto/configure_yaml` - Configuration how-to guide
+- :doc:`/howto/configure_yaml` - CLI workflow YAML file reference
 - :doc:`/howto/optimize_performance` - Performance tuning

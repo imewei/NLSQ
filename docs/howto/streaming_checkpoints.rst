@@ -1,27 +1,36 @@
 How to Use Streaming Checkpoints
 =================================
 
-For very long fits on large datasets, checkpointing allows you to save
-progress and resume if the process is interrupted.
+For very long fits on large datasets, ``AdaptiveHybridStreamingOptimizer``
+can periodically save its optimization state to disk. This lets you inspect
+progress on a fit that is still running, or recover the last-known state if
+the process is killed.
+
+.. note::
+
+   As of this writing, checkpoint **saving** is implemented, but automatic
+   **resuming** from a saved checkpoint is not. Setting
+   ``resume_from_checkpoint`` on the config raises ``NotImplementedError``
+   when you call ``fit()``. See `Resuming from Checkpoint`_ below.
 
 When to Use Checkpoints
------------------------
+------------------------
 
-Consider checkpointing when:
+Consider enabling checkpoints when:
 
 - Fit may take **> 1 hour**
 - Running on **unreliable infrastructure** (cloud spot instances)
 - Processing **very large datasets** (> 10 million points)
-- Doing **exploratory optimization** (may want to stop and restart)
+- You want visibility into optimizer state during a long run
 
 Basic Checkpoint Usage
-----------------------
+------------------------
 
-Enable checkpointing with the adaptive hybrid streaming optimizer:
+Enable checkpointing through ``HybridStreamingConfig``:
 
 .. code-block:: python
 
-   from nlsq import AdaptiveHybridStreamingOptimizer
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
    import jax.numpy as jnp
 
 
@@ -29,115 +38,72 @@ Enable checkpointing with the adaptive hybrid streaming optimizer:
        return a * jnp.exp(-b * x) + c
 
 
-   # Create optimizer with checkpointing
-   optimizer = AdaptiveHybridStreamingOptimizer(
-       model,
-       n_params=3,
-       checkpoint_dir="./checkpoints",  # Where to save
-       checkpoint_interval=60,  # Save every 60 seconds
+   config = HybridStreamingConfig(
+       checkpoint_dir="./checkpoints",  # Where to save (None disables saving)
+       checkpoint_frequency=100,  # Save every 100 iterations (default)
    )
 
-   # Start fit
-   result = optimizer.fit(x_data, y_data, p0=[2.0, 0.5, 0.3])
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-Resuming from Checkpoint
-------------------------
+   # data_source is currently a (x_data, y_data) tuple
+   result = optimizer.fit((x_data, y_data), model, p0=[2.0, 0.5, 0.3])
 
-If the fit is interrupted, resume from the last checkpoint:
-
-.. code-block:: python
-
-   # Resume from existing checkpoint
-   optimizer = AdaptiveHybridStreamingOptimizer(
-       model,
-       n_params=3,
-       checkpoint_dir="./checkpoints",
-   )
-
-   # This will automatically detect and resume from checkpoint
-   result = optimizer.fit(x_data, y_data, p0=[2.0, 0.5, 0.3], resume=True)
+``checkpoint_frequency`` counts optimizer **iterations**, not seconds.
+Checkpoints are only written if ``checkpoint_dir`` is set and
+``enable_checkpoints`` is ``True`` (the default).
 
 Checkpoint File Structure
--------------------------
+---------------------------
 
-Checkpoints are saved as JSON files:
+Checkpoints are saved as HDF5 files, one per checkpoint, named by phase and
+iteration number:
 
 .. code-block:: text
 
    ./checkpoints/
-   ├── checkpoint_20240101_120000.json
-   ├── checkpoint_20240101_121000.json
-   └── checkpoint_latest.json
+   ├── checkpoint_phase1_iter100.h5
+   ├── checkpoint_phase1_iter200.h5
+   ├── checkpoint_phase2_iter50.h5
+   └── checkpoint_phase2_iter100.h5
 
-Each checkpoint contains:
+Each checkpoint stores (format version ``3.0``):
 
-- Current parameter values
-- Iteration count
-- Accumulated gradients and state
-- Data chunk progress
-- Timing information
+- Current phase and normalized parameters
+- Phase 1 L-BFGS optimizer state (if applicable)
+- Phase 2 accumulated J^T J / J^T r matrices (if applicable)
+- Best parameters and cost found so far
+- Phase history and, if multi-start is enabled, tournament state
 
-Managing Checkpoints
---------------------
+Checkpoints are not pruned automatically; old files accumulate in
+``checkpoint_dir`` until you remove them yourself.
 
-Listing Checkpoints
-~~~~~~~~~~~~~~~~~~~
+Resuming from Checkpoint
+--------------------------
 
-.. code-block:: python
+``HybridStreamingConfig`` has a ``resume_from_checkpoint`` field, but
+``fit()`` does not currently act on it — passing it raises
+``NotImplementedError`` with guidance to either unset it or load state
+manually. There is no supported ``resume=True`` argument to ``fit()``.
 
-   import os
-   import json
-
-   checkpoint_dir = "./checkpoints"
-   checkpoints = sorted(
-       [
-           f
-           for f in os.listdir(checkpoint_dir)
-           if f.startswith("checkpoint_") and f.endswith(".json")
-       ]
-   )
-
-   for cp in checkpoints:
-       with open(os.path.join(checkpoint_dir, cp)) as f:
-           data = json.load(f)
-       print(f"{cp}: iteration {data['iteration']}, params {data['params']}")
-
-Cleaning Old Checkpoints
-~~~~~~~~~~~~~~~~~~~~~~~~
+If you need the saved state for inspection or a custom recovery path, load
+it directly with ``CheckpointManager``:
 
 .. code-block:: python
 
-   # Keep only the 5 most recent checkpoints
-   max_checkpoints = 5
-   checkpoints = sorted(
-       [
-           f
-           for f in os.listdir(checkpoint_dir)
-           if f.startswith("checkpoint_") and f != "checkpoint_latest.json"
-       ]
-   )
+   from nlsq.streaming.phases.checkpoint import CheckpointManager
 
-   for old_cp in checkpoints[:-max_checkpoints]:
-       os.remove(os.path.join(checkpoint_dir, old_cp))
-       print(f"Removed {old_cp}")
+   manager = CheckpointManager(config)
+   state = manager.load("./checkpoints/checkpoint_phase2_iter200.h5")
 
-Configuration Options
----------------------
+   print(state.current_phase, state.best_cost_global)
+   print(state.best_params_global)
 
-.. code-block:: python
-
-   optimizer = AdaptiveHybridStreamingOptimizer(
-       model,
-       n_params=3,
-       # Checkpoint settings
-       checkpoint_dir="./checkpoints",  # Directory for checkpoints
-       checkpoint_interval=120,  # Seconds between saves (default: 60)
-       max_checkpoints=10,  # Max files to keep (default: 5)
-       checkpoint_compression=True,  # Compress checkpoint files
-   )
+Wiring a loaded ``CheckpointState`` back into a fresh optimizer run is a
+manual, low-level operation — there is no public API that restarts ``fit()``
+from it today.
 
 Best Practices
---------------
+----------------
 
 1. **Use Absolute Paths**
 
@@ -147,18 +113,16 @@ Best Practices
 
       checkpoint_dir = os.path.abspath("./checkpoints")
 
-2. **Test Resume Before Long Runs**
+2. **Clean Up Checkpoints After a Successful Run**
+
+   Since checkpoints are never pruned automatically, remove them once a fit
+   completes if you don't need the intermediate history:
 
    .. code-block:: python
 
-      # Start a short fit
-      result = optimizer.fit(x[:1000], y[:1000], p0=p0, max_iter=10)
+      import shutil
 
-      # Verify checkpoint exists
-      assert os.path.exists("./checkpoints/checkpoint_latest.json")
-
-      # Test resume
-      result = optimizer.fit(x[:1000], y[:1000], p0=p0, resume=True)
+      shutil.rmtree(checkpoint_dir, ignore_errors=True)
 
 3. **Log Checkpoint Events**
 
@@ -168,23 +132,15 @@ Best Practices
 
       logging.basicConfig(level=logging.INFO)
 
-      # Now you'll see checkpoint saves in logs
-
-4. **Use Fast Storage**
-
-   Checkpoint files are small (~1KB), but frequent writes benefit from
-   fast storage (SSD preferred over network drives).
-
 Complete Example
-----------------
+------------------
 
 .. code-block:: python
 
    import numpy as np
    import jax.numpy as jnp
-   from nlsq import AdaptiveHybridStreamingOptimizer
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
    import os
-   import time
 
 
    def model(x, a, b, c, d):
@@ -198,78 +154,25 @@ Complete Example
    y = 2.0 * np.exp(-0.02 * x) * np.sin(0.5 * x) + 1.0
    y += 0.1 * np.random.randn(n)
 
-   # Setup checkpointing
    checkpoint_dir = os.path.abspath("./my_fit_checkpoints")
-   os.makedirs(checkpoint_dir, exist_ok=True)
 
-   print(f"Fitting {n:,} points with checkpointing")
-   print(f"Checkpoints will be saved to: {checkpoint_dir}")
-
-   # Create optimizer
-   optimizer = AdaptiveHybridStreamingOptimizer(
-       model,
-       n_params=4,
+   config = HybridStreamingConfig(
        checkpoint_dir=checkpoint_dir,
-       checkpoint_interval=30,  # Save every 30 seconds
+       checkpoint_frequency=100,
    )
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-   # Fit with optional resume
-   resume = os.path.exists(os.path.join(checkpoint_dir, "checkpoint_latest.json"))
-   if resume:
-       print("Resuming from checkpoint...")
+   result = optimizer.fit((x, y), model, p0=[2.0, 0.02, 0.5, 1.0], verbose=1)
 
-   start = time.time()
-   result = optimizer.fit(
-       x, y, p0=[2.0, 0.02, 0.5, 1.0], show_progress=True, resume=resume
-   )
-   elapsed = time.time() - start
-
-   print(f"\nCompleted in {elapsed:.1f}s")
-   print(f"Parameters: {result.popt}")
+   print(f"Parameters: {result['x']}")
 
    # Cleanup checkpoints after successful completion
-   for f in os.listdir(checkpoint_dir):
-       os.remove(os.path.join(checkpoint_dir, f))
-   os.rmdir(checkpoint_dir)
-   print("Cleaned up checkpoints")
-
-Troubleshooting
----------------
-
-"Checkpoint not found" error
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   # Check if checkpoint exists
-   import os
-
-   cp_file = "./checkpoints/checkpoint_latest.json"
-   if not os.path.exists(cp_file):
-       print("No checkpoint found, starting fresh")
-       resume = False
-   else:
-       resume = True
-
-"Incompatible checkpoint" error
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Checkpoints are tied to:
-
-- Model function (same signature)
-- Number of parameters
-- Optimizer settings
-
-If these change, delete old checkpoints and start fresh:
-
-.. code-block:: python
-
    import shutil
 
-   shutil.rmtree("./checkpoints", ignore_errors=True)
+   shutil.rmtree(checkpoint_dir, ignore_errors=True)
 
 See Also
---------
+----------
 
 - :doc:`handle_large_data` - Large dataset handling
 - :doc:`/tutorials/routine/data_handling/large_datasets` - Large dataset tutorial
