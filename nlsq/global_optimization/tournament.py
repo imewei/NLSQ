@@ -473,14 +473,29 @@ class TournamentSelector:
         if not isinstance(top_m, int) or isinstance(top_m, bool) or top_m < 1:
             raise ValueError(f"top_m must be a positive integer, got {top_m}")
 
-        # Get survivors with finite cumulative loss
+        # cumulative_losses starts at 0.0 for every candidate, which is
+        # finite -- so a candidate that was never actually evaluated (e.g.
+        # data_batch_iterator yielded zero batches) would otherwise look
+        # identical to a genuine zero-loss winner. Only require
+        # evaluation_counts > 0 when a real selection among multiple
+        # candidates was possible (n_candidates > top_m): when top_m
+        # already covers every candidate (e.g. a single-candidate
+        # tournament), there is nothing to differentiate and returning the
+        # candidate(s) unevaluated is correct, not a fabricated winner.
+        selection_needed = self.n_candidates > top_m
+        evaluated = (
+            self.evaluation_counts > 0
+            if selection_needed
+            else np.ones(self.n_candidates, dtype=bool)
+        )
+
         valid_indices = np.where(
-            self.survival_mask & np.isfinite(self.cumulative_losses),
+            self.survival_mask & np.isfinite(self.cumulative_losses) & evaluated,
         )[0]
 
         if len(valid_indices) == 0:
-            # Fall back to any surviving candidate
-            valid_indices = np.where(self.survival_mask)[0]
+            # Fall back to any surviving, evaluated candidate
+            valid_indices = np.where(self.survival_mask & evaluated)[0]
             if len(valid_indices) == 0:
                 # No survivors at all (every candidate produced a
                 # non-finite loss every round) -- raise rather than

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import jax
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
@@ -58,12 +59,12 @@ def transform_to_bounds(
     >>> transform_to_bounds(x, lb, ub)
     Array([0.5, 7.310586, 26.894142], dtype=float32)
     """
-    # Sigmoid: 1 / (1 + exp(-x))
-    sigmoid_x = jnp.where(
-        x_unbounded >= 0,
-        1.0 / (1.0 + jnp.exp(-x_unbounded)),
-        jnp.exp(x_unbounded) / (1.0 + jnp.exp(x_unbounded)),
-    )
+    # jax.nn.sigmoid is a numerically stable piecewise implementation (no
+    # exp() overflow for large |x|) and, unlike a two-branch jnp.where,
+    # never evaluates a diverging exp() in the branch not taken -- that
+    # inactive-branch overflow can still poison reverse-mode AD gradients
+    # through jnp.where.
+    sigmoid_x = jax.nn.sigmoid(x_unbounded)
 
     # Map to bounds: lb + (ub - lb) * sigmoid(x)
     return lower_bounds + (upper_bounds - lower_bounds) * sigmoid_x

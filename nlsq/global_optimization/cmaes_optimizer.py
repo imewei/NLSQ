@@ -247,6 +247,32 @@ def _create_fitness_function(  # noqa: C901
     return fitness_population_batched
 
 
+def _require_finite_bounds(lower_bounds: jax.Array, upper_bounds: jax.Array) -> None:
+    """Raise ``ValueError`` unless every bound -- and every range -- is finite.
+
+    ``transform_to_bounds`` computes ``lb + (ub - lb) * sigmoid(x)``: any
+    non-finite bound (or a finite-but-overflowing range, e.g.
+    ``lb=-1e308``/``ub=1e308``) turns every candidate's bounded parameters
+    into NaN/inf, so CMA-ES would silently search a NaN fitness landscape
+    forever. ``MethodSelector``'s scale-ratio heuristic can even prefer
+    ``"cmaes"`` for a partially-unbounded problem (an infinite range
+    dominates the ratio), so this must be enforced here -- the one place
+    every CMA-ES entry point (direct API use, ``method="cmaes"``, and
+    MethodSelector-selected ``"auto"``) funnels through -- not re-derived
+    per caller.
+    """
+    if not (
+        bool(jnp.all(jnp.isfinite(lower_bounds)))
+        and bool(jnp.all(jnp.isfinite(upper_bounds)))
+        and bool(jnp.all(jnp.isfinite(upper_bounds - lower_bounds)))
+    ):
+        raise ValueError(
+            "CMA-ES requires every parameter to have a finite lower AND "
+            "upper bound (no +/-inf, and no overflowing range). Got "
+            f"lower={np.asarray(lower_bounds)}, upper={np.asarray(upper_bounds)}.",
+        )
+
+
 class CMAESOptimizer:
     """CMA-ES global optimizer with NLSQ refinement using evosax.
 
@@ -404,6 +430,8 @@ class CMAESOptimizer:
                 lower_bounds = jnp.full(n_params_hint, lower_bounds)
             if upper_bounds.ndim == 0:
                 upper_bounds = jnp.full(n_params_hint, upper_bounds)
+
+        _require_finite_bounds(lower_bounds, upper_bounds)
         sigma_jax = jnp.asarray(sigma) if sigma is not None else None
 
         n_params = len(lower_bounds)
@@ -1012,8 +1040,19 @@ class CMAESOptimizer:
                 # Record fitness history
                 diagnostics.fitness_history.append(float(run_best_fitness))
 
-                # Check for stagnation
-                fitness_spread = float(jnp.max(fitness) - jnp.min(fitness))
+                # Check for stagnation. A single diverging candidate (fitness
+                # = inf, assigned by the fitness function on NaN/Inf
+                # residuals) would otherwise make max(fitness) inf and the
+                # spread inf forever, permanently masking real stagnation in
+                # the rest of the population -- restrict the spread to
+                # finite entries (falling back to 0.0, "stagnant", if every
+                # candidate in the generation failed).
+                finite_fitness = fitness[jnp.isfinite(fitness)]
+                fitness_spread = (
+                    float(jnp.max(finite_fitness) - jnp.min(finite_fitness))
+                    if finite_fitness.size > 0
+                    else 0.0
+                )
                 if restarter.check_stagnation(fitness_spread):
                     stagnation_counter += 1
                 else:
@@ -1098,11 +1137,14 @@ class CMAESOptimizer:
             if choice < 1.0 / 3.0 and restarter.best_solution is not None:
                 initial_solution = restarter.best_solution
             elif choice < 2.0 / 3.0:
+                # sigmoid(+-4.6) ~= 0.99/0.01: covers the outer 1% of each
+                # bound that +-2.0 (sigmoid(2)~=0.88) permanently excluded
+                # from every exploratory restart center.
                 initial_solution = jax.random.uniform(
                     explore_key,
                     shape=(n_params,),
-                    minval=-2.0,
-                    maxval=2.0,
+                    minval=-4.6,
+                    maxval=4.6,
                 )
             else:
                 initial_solution = original_solution
