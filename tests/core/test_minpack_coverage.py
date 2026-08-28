@@ -664,6 +664,77 @@ class TestBugFixRegressions(unittest.TestCase):
         self.assertIn("workflow='hpc'", str(excinfo.exception))
         self.assertNotIn("workflow='auto_global'", str(excinfo.exception))
 
+        # Chunked-fit-failed RuntimeError: must also name the actual
+        # workflow -- this is a third, independent interpolation site from
+        # the NotImplementedError above (only reached when sigma is None
+        # and LargeDatasetFitter itself reports failure).
+        with patch(
+            "nlsq.streaming.large_dataset.LargeDatasetFitter"
+        ) as mock_fitter_cls:
+            mock_fitter_cls.return_value.fit.return_value = {
+                "success": False,
+                "message": "synthetic failure",
+            }
+            with self.assertRaises(RuntimeError) as excinfo:
+                _fit_global_multistart(
+                    f=lambda x, a, b: a * x + b,
+                    xdata=x,
+                    ydata=y,
+                    p0=[1.5, 0.5],
+                    sigma=None,
+                    absolute_sigma=False,
+                    check_finite=True,
+                    bounds=bounds,
+                    strategy="chunked",
+                    n_starts=5,
+                    workflow_name="hpc",
+                )
+        self.assertIn("workflow='hpc'", str(excinfo.exception))
+        self.assertNotIn("workflow='auto_global'", str(excinfo.exception))
+
+    def test_fit_workflow_hpc_end_to_end_labels_checkpoint_warning_correctly(self):
+        """The unit test above supplies workflow_name= directly to
+        _fit_global_multistart -- it doesn't prove the real call chain
+        (fit(workflow='hpc') -> _fit_with_hpc -> _fit_with_auto_global ->
+        _fit_global_multistart) actually threads _workflow_name="hpc"
+        through. A future refactor dropping the
+        workflow_name=_workflow_name kwarg at the _fit_with_auto_global
+        call site would leave the direct unit test green while this real
+        bug reappeared. Runs fit() end-to-end (small dataset, multistart
+        selected since scale_ratio~1 stays under the CMA-ES threshold) and
+        checks the actual warning text."""
+        import tempfile
+        import warnings
+
+        from nlsq import fit
+
+        def model(x, a, b):
+            return a * jnp.exp(-b * x)
+
+        np.random.seed(42)
+        x = np.linspace(0, 5, 100)
+        y = 2.5 * np.exp(-0.5 * x) + np.random.normal(0, 0.01, 100)
+
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            warnings.catch_warnings(record=True) as caught,
+        ):
+            warnings.simplefilter("always")
+            fit(
+                model,
+                x,
+                y,
+                p0=[1.0, 0.5],
+                workflow="hpc",
+                bounds=([0.0, 0.0], [10.0, 10.0]),
+                checkpoint_dir=tmpdir,
+            )
+        messages = [str(w.message) for w in caught]
+        self.assertTrue(
+            any("workflow='hpc'" in m and "checkpoint" in m for m in messages),
+            messages,
+        )
+
     def test_fit_global_cmaes_checkpoint_dir_override_preserves_config_ids(self):
         """_fit_global_cmaes's checkpoint_dir override used to unconditionally
         replace a pre-built cmaes_config's run_id/model_id with the fit()

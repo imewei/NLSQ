@@ -1508,11 +1508,9 @@ def _fit_global_cmaes(
                 else cmaes_config.checkpoint_interval
             ),
             # Same None-preserves-existing-value treatment as
-            # checkpoint_interval above: a caller overriding only
-            # checkpoint_dir on a pre-built cmaes_config that already
-            # carries run_id/model_id must not have those wiped back to
-            # None here (which would then fail CMAESConfig's own
-            # checkpoint_dir-requires-run_id/model_id validation).
+            # checkpoint_interval above -- don't wipe a pre-built config's
+            # own run_id/model_id when the caller overrides checkpoint_dir
+            # alone.
             run_id=run_id if run_id is not None else cmaes_config.run_id,
             model_id=(model_id if model_id is not None else cmaes_config.model_id),
         )

@@ -55,17 +55,12 @@ def _reject_stale_checkpoint(
     max_generations: int,
     checkpoint_path: Path,
 ) -> None:
-    """Guard against resuming a checkpoint whose generation already exceeds
-    this run's `max_generations`.
+    """Reject a checkpoint whose generation exceeds `max_generations`.
 
-    A completed run's own post-loop save always writes
-    `generation_counter == max_generations` at the time it ran -- equality
-    is therefore the legitimate already-done resume (the caller's `range`
-    then runs zero iterations as a deliberate no-op). Anything strictly
-    greater is only reachable by lowering `max_generations` between the
-    original run and this resume, which would otherwise silently return a
-    stale result from that longer run without doing (or reporting) any new
-    work.
+    Equality is the legitimate already-done resume (a completed run's
+    generation_counter == max_generations exactly); only strictly-greater
+    means the caller lowered max_generations since the checkpoint was
+    written, which would otherwise silently return a stale result.
     """
     if start_gen > max_generations:
         raise ValueError(
