@@ -78,7 +78,7 @@ Controlling the Search
 
    from nlsq.global_optimization import CMAESConfig
 
-   config = CMAESConfig(n_generations=200)
+   config = CMAESConfig(max_generations=200)
    popt, pcov = fit(
        model,
        x,

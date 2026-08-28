@@ -60,7 +60,7 @@ Pass dependencies via constructor:
    from nlsq import CurveFit
    from nlsq.caching.smart_cache import SmartCache
 
-   pipeline = AnalysisPipeline(fitter=CurveFit(), cache=SmartCache(max_size=100))
+   pipeline = AnalysisPipeline(fitter=CurveFit(), cache=SmartCache(max_memory_items=100))
 
 Method Injection
 ----------------
@@ -188,9 +188,9 @@ Complete DI Example
 
    # Production configuration
    prod_pipeline = ProductionPipeline(
-       fitter=CurveFit(enable_diagnostics=True),
-       cache=SmartCache(max_size=1000),
-       stability_guard=NumericalStabilityGuard(strict=True),
+       fitter=CurveFit(enable_stability=True),
+       cache=SmartCache(max_memory_items=1000),
+       stability_guard=NumericalStabilityGuard(),
    )
 
    # Test configuration

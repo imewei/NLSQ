@@ -239,15 +239,16 @@ Warm up JIT compilation before production use:
 Batch Processing
 ----------------
 
-Vectorized Batch Fitting
-~~~~~~~~~~~~~~~~~~~~~~~~
+Fitting Many Datasets
+~~~~~~~~~~~~~~~~~~~~~
 
-Fit multiple datasets simultaneously:
+Fit multiple datasets that share the same model by reusing a single
+``CurveFit`` instance, so the JIT compilation from the first fit is reused
+for every subsequent one:
 
 .. code:: python
 
-   from nlsq import curve_fit_batch
-   import jax
+   from nlsq import CurveFit
 
    # Generate 100 datasets
    n_datasets = 100
@@ -258,13 +259,11 @@ Fit multiple datasets simultaneously:
        true_params = [2 + 0.5 * i / n_datasets, 1.3, 0.5]
        y_batch[i] = model(x, *true_params) + 0.01 * np.random.randn(1000)
 
-   # Vectorized batch fitting (uses vmap internally)
-   popt_batch, pcov_batch = curve_fit_batch(
-       model,
-       x,  # Same x for all datasets
-       y_batch,  # Shape: (n_datasets, n_points)
-       p0=[2, 1, 0],
-   )
+   # Reuse one fitter so compilation only happens once
+   fitter = CurveFit()
+   popt_batch = np.zeros((n_datasets, 3))
+   for i in range(n_datasets):
+       popt_batch[i], _ = fitter.curve_fit(model, x, y_batch[i], p0=[2, 1, 0])
 
    print(f"Fitted {n_datasets} datasets")
    print(f"Result shape: {popt_batch.shape}")  # (100, 3)
@@ -334,25 +333,20 @@ Memory Profiling
 
 .. code:: python
 
-   from nlsq.caching.memory_manager import MemoryProfiler
+   from nlsq import get_memory_stats
 
-   profiler = MemoryProfiler()
+   popt, pcov = curve_fit(model, x, y, p0=[2, 1, 0])
 
-   with profiler.profile():
-       popt, pcov = curve_fit(model, x, y, p0=[2, 1, 0])
-
-   print(profiler.summary())
+   stats = get_memory_stats()
+   print(f"Current usage: {stats['current_usage_gb']:.2f} GB")
+   print(f"Peak usage: {stats['peak_usage_gb']:.2f} GB")
 
 **Output:**
 
 ::
 
-   Memory Profile:
-   ├─ Peak usage: 2.34 GB
-   ├─ Average usage: 1.87 GB
-   ├─ Allocation events: 12
-   ├─ Largest allocation: 1.2 GB (Jacobian)
-   └─ Time in GC: 0.02s (0.5%)
+   Current usage: 1.87 GB
+   Peak usage: 2.34 GB
 
 Reducing Memory Footprint
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -800,11 +794,11 @@ Processing multiple datasets with different parameter counts:
 
    from nlsq import CurveFit
 
-   fitter = CurveFit(model)
+   fitter = CurveFit()
 
    for xdata, ydata, p0 in datasets:
        # Auto mode adapts to each dataset's dimensions
-       popt, pcov = fitter.fit(xdata, ydata, p0=p0, jacobian_mode="auto")
+       popt, pcov = fitter.curve_fit(model, xdata, ydata, p0=p0, jacobian_mode="auto")
 
 **Case 3: Performance-Critical Pipeline**
 

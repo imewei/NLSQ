@@ -629,13 +629,12 @@ large or very small values - Warning: “Covariance cannot be estimated”
 
 .. code:: python
 
-   from nlsq.diagnostics import check_condition_number
+   from nlsq import estimate_condition_number
 
-   result = curve_fit(model, x, y, p0=[2, 1])
-   cond = check_condition_number(result.jac)
+   cond = estimate_condition_number(x)
 
    if cond > 1e10:
-       print(f"Warning: Ill-conditioned (κ = {cond:.2e})")
+       print(f"Warning: Ill-conditioned data (κ = {cond:.2e})")
 
 --------------
 

@@ -151,10 +151,10 @@ Verifying NLSQ GPU Usage
 
 .. code-block:: python
 
-   from nlsq import get_device
+   from nlsq.device import get_device_info
 
-   device = get_device()
-   print(f"NLSQ device: {device}")
+   info = get_device_info()
+   print(f"NLSQ backend: {info['jax_backend']}, GPUs: {info['gpu_count']}")
 
    # Check if GPU is available
    import jax

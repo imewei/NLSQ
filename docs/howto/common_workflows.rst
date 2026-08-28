@@ -156,26 +156,7 @@ See :doc:`../reference/configuration` for detailed configuration.
 Python Script Run
 -----------------
 
-Use this when you want to run a workflow from a Python script using YAML configuration.
-
-.. code-block:: python
-
-   from nlsq import fit
-   from nlsq.core.workflow import load_yaml_config
-
-   # Load configuration from YAML file
-   config = load_yaml_config("./configs/experiment_01.yaml")
-
-   # Use the configuration
-   popt, pcov = fit(
-       model_func,
-       xdata,
-       ydata,
-       p0=config.get("model", {}).get("parameters", {}).get("p0"),
-       workflow=config.get("default_workflow", "standard"),
-   )
-
-Or use a preset directly:
+Use this when you want to run a workflow from a Python script using built-in presets.
 
 .. code-block:: python
 

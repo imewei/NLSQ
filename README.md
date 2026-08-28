@@ -355,23 +355,19 @@ result = fit(
     model, x, y, p0=[1, 1, 1], workflow="auto_global", bounds=([0, 0, 0], [10, 5, 10])
 )
 
-# workflow="hpc" - auto_global + checkpointing for HPC jobs
-result = fit(
-    model,
-    x,
-    y,
-    p0=[1, 1, 1],
-    workflow="hpc",
-    bounds=([0, 0, 0], [10, 5, 10]),
-    checkpoint_dir="/scratch/checkpoints",
-)
+# workflow="hpc" - auto_global with HPC cluster detection (PBS/SLURM)
+result = fit(model, x, y, p0=[1, 1, 1], workflow="hpc", bounds=([0, 0, 0], [10, 5, 10]))
+
+# hpc + checkpoint/resume needs the CMA-ES route explicitly, plus run_id/model_id/seed
+# result = fit(..., workflow="hpc", method="cmaes", cmaes_config=CMAESConfig(restart_strategy="none"),
+#              checkpoint_dir="/scratch/checkpoints", run_id="exp-42", model_id="exp_decay_v1", seed=42)
 ```
 
 | Workflow | Bounds | Use Case |
 |----------|--------|----------|
 | `auto` | Optional | Default. Local optimization with auto memory strategy |
 | `auto_global` | Required | Multi-modal problems, unknown initial guess |
-| `hpc` | Required | Long-running HPC jobs with checkpointing |
+| `hpc` | Required | Long-running HPC jobs; CMA-ES route supports checkpoint/resume ([docs](docs/tutorials/routine/three_workflows/hpc_workflow.rst)) |
 
 </details>
 

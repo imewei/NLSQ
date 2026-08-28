@@ -39,14 +39,13 @@ Constructor Options
 .. code-block:: python
 
    fitter = CurveFit(
-       # Diagnostics
-       enable_diagnostics=True,  # Collect convergence metrics
        enable_stability=True,  # Enable stability checks
-       # Caching
-       enable_caching=True,  # JIT compilation caching
-       # Recovery
-       enable_recovery=True,  # Auto-recovery from issues
+       enable_recovery=True,  # Auto-recovery from optimization failures
+       cache_config={"maxsize": 128},  # JIT compilation cache settings
    )
+
+   # Convergence diagnostics are requested per-call, not on the constructor:
+   popt, pcov = fitter.curve_fit(model, x, y, p0=[...], compute_diagnostics=True)
 
 curve_fit Method
 ----------------
@@ -126,13 +125,13 @@ Batch Processing Pattern
 
 
    # Create once
-   fitter = CurveFit(enable_diagnostics=True)
+   fitter = CurveFit()
 
    # Process many datasets
    results = []
    for data_file in data_files:
        x, y = load_data(data_file)
-       popt, pcov = fitter.curve_fit(model, x, y, p0=[2, 0.5])
+       popt, pcov = fitter.curve_fit(model, x, y, p0=[2, 0.5], compute_diagnostics=True)
        results.append(
            {"file": data_file, "params": popt, "errors": np.sqrt(np.diag(pcov))}
        )
@@ -144,8 +143,8 @@ Accessing Diagnostics
 
 .. code-block:: python
 
-   fitter = CurveFit(enable_diagnostics=True)
-   popt, pcov = fitter.curve_fit(model, x, y, p0=[...])
+   fitter = CurveFit()
+   popt, pcov = fitter.curve_fit(model, x, y, p0=[...], compute_diagnostics=True)
 
    # Access internal state (implementation-dependent)
    # Note: API may change between versions
@@ -166,7 +165,7 @@ Complete Example
 
 
    # Create fitter
-   fitter = CurveFit(enable_diagnostics=True)
+   fitter = CurveFit()
 
    # Generate test datasets
    np.random.seed(42)

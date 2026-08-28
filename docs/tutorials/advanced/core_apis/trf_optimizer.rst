@@ -24,25 +24,33 @@ Key Components
 
 Located in ``nlsq/core/trf.py`` (2544 lines):
 
+``TrustRegionReflective`` is a low-level engine, not meant to be driven
+directly. Its constructor only takes a stability flag; problem-specific
+settings (``ftol``, ``xtol``, ``tr_solver``, etc.) are supplied per-call
+through ``LeastSquares``, which owns the ``TrustRegionReflective`` instance:
+
 .. code-block:: python
 
    from nlsq.core.trf import TrustRegionReflective
+   from nlsq.core.least_squares import LeastSquares
 
-   trf = TrustRegionReflective(
-       fun=residual_func,
-       x0=initial_params,
-       lb=lower_bounds,
-       ub=upper_bounds,
-       f_scale=1.0,
+   trf = TrustRegionReflective(enable_stability=False)
+
+   # In practice, TRF is invoked internally by LeastSquares/curve_fit,
+   # which wires up the residual/Jacobian functions, bounds, and
+   # tolerances before calling `trf.trf(...)`.
+   ls = LeastSquares()
+   result = ls.least_squares(
+       residual_func,
+       initial_params,
+       jac=jac_func,
+       bounds=(lower_bounds, upper_bounds),
        ftol=1e-8,
        xtol=1e-8,
        gtol=1e-8,
        max_nfev=100,
        tr_solver="exact",
-       tr_options={},
    )
-
-   result = trf.solve()
 
 Iteration Steps
 ---------------
@@ -86,15 +94,19 @@ Trust Region Solvers
 JIT-Compiled Helpers
 --------------------
 
-Located in ``nlsq/core/trf_jit.py``:
+Located in ``nlsq/core/trf_jit.py``. The module-level JIT singletons are
+bound onto instance attributes by the ``TrustRegionJITFunctions`` mixin,
+which ``TrustRegionReflective`` inherits from:
 
 .. code-block:: python
 
-   from nlsq.core.trf_jit import (
-       compute_gradient_jit,
-       solve_lsq_trust_region_jit,
-       minimize_quadratic_1d_jit,
-   )
+   from nlsq.core.trf_jit import TrustRegionJITFunctions
+
+   jit_funcs = TrustRegionJITFunctions()
+   jit_funcs.compute_grad  # J^T @ f
+   jit_funcs.svd_no_bounds  # SVD-based trust-region step (no bounds)
+   jit_funcs.svd_bounds  # SVD-based trust-region step (bounds)
+   jit_funcs.conjugate_gradient_solve
 
 These functions are JIT-compiled for GPU acceleration.
 

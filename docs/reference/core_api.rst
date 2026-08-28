@@ -214,13 +214,13 @@ NLSQ raises informative exceptions:
 .. code-block:: python
 
    from nlsq import curve_fit
-   from nlsq.exceptions import ConvergenceError, ValidationError
+   from nlsq.utils.error_messages import OptimizationError
 
    try:
        popt, pcov = curve_fit(model, x, y, p0=p0)
-   except ConvergenceError as e:
+   except OptimizationError as e:
        print(f"Did not converge: {e}")
-   except ValidationError as e:
+   except ValueError as e:
        print(f"Invalid input: {e}")
 
 See Also
