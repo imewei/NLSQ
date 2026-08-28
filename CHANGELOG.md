@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-08-28
+
 ### Added
 - `CMAESOptimizer` (with `restart_strategy="none"`) supports checkpoint/
   resume via `CMAESConfig.checkpoint_dir`/`checkpoint_interval`/`run_id`/
