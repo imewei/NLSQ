@@ -31,12 +31,9 @@ through ``LeastSquares``, which owns the ``TrustRegionReflective`` instance:
 
 .. code-block:: python
 
-   from nlsq.core.trf import TrustRegionReflective
    from nlsq.core.least_squares import LeastSquares
 
-   trf = TrustRegionReflective(enable_stability=False)
-
-   # In practice, TRF is invoked internally by LeastSquares/curve_fit,
+   # TrustRegionReflective is invoked internally by LeastSquares/curve_fit,
    # which wires up the residual/Jacobian functions, bounds, and
    # tolerances before calling `trf.trf(...)`.
    ls = LeastSquares()

@@ -162,12 +162,9 @@ Use this when you want to run a workflow from a Python script using built-in pre
 
    from nlsq import fit
 
-   # Using built-in presets (no YAML needed)
+   # Using built-in presets (no YAML needed): "fast", "robust", "global",
+   # "streaming", "large" -- no domain-specific presets exist yet.
    popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], preset="robust")
-
-   # Scientific application presets
-   popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], preset="spectroscopy")
-   popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], preset="kinetics")
 
 Domain-Specific Examples
 ------------------------

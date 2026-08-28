@@ -90,7 +90,7 @@ it directly with ``CheckpointManager``:
 
 .. code-block:: python
 
-   from nlsq.streaming.phases.checkpoint import CheckpointManager
+   from nlsq.streaming.phases import CheckpointManager
 
    manager = CheckpointManager(config)
    state = manager.load("./checkpoints/checkpoint_phase2_iter200.h5")

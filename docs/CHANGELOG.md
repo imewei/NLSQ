@@ -1,16 +1,12 @@
 # Documentation Changelog
 
 ## Unreleased
-- Full AST/git-based doc sync after the CMA-ES checkpoint/resume feature (#21)
-  and the examples/scripts three-brain review fixes (#22, #23): fixed a
-  duplicated `[0.7.2]` heading in the root `CHANGELOG.md` (the CMA-ES/method-
-  forwarding entries belonged under `[Unreleased]`) and added missing entries
-  for #22/#23; fixed the top-level `README.md`'s `workflow="hpc"` quick-start
-  example, which passed `checkpoint_dir` alone and would now raise
-  (`checkpoint_dir`/`run_id`/`model_id`/`seed` are required together, and the
-  default `restart_strategy="bipop"` doesn't support checkpointing yet).
-  No other public-API doc gaps found; CMA-ES checkpoint/resume itself was
-  already fully documented in `docs/tutorials/routine/three_workflows/hpc_workflow.rst`.
+- Fixed a duplicated `[0.7.2]` heading in the root `CHANGELOG.md`, added
+  missing entries for #22/#23, and fixed README's `workflow="hpc"` example
+  (`checkpoint_dir` alone now raises -- `run_id`/`model_id`/`seed` are
+  required together).
+- Three-brain (Codex + Agy) review of `docs/`: fixed 26 stale/fictional API
+  examples across 17 files.
 
 ## v0.7.2 (2026-08-26)
 - Synced the Optimization Pipeline and Package Overview docs with the current module layout
