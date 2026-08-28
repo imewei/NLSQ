@@ -46,10 +46,16 @@ class DefenseLayerTelemetry:
 
     def __init__(self) -> None:
         """Initialize telemetry with zeroed counters."""
+        self._lock = threading.RLock()
         self.reset()
 
     def reset(self) -> None:
         """Reset all telemetry counters to zero."""
+        with self._lock:
+            self._reset_locked()
+
+    def _reset_locked(self) -> None:
+        """Reset counters; caller must hold self._lock."""
         self.layer1_warm_start_triggers: int = 0
         self.layer2_lr_mode_counts: dict[str, int] = {
             "refinement": 0,
@@ -71,7 +77,8 @@ class DefenseLayerTelemetry:
 
     def record_warmup_start(self) -> None:
         """Record start of a warmup phase."""
-        self.total_warmup_calls += 1
+        with self._lock:
+            self.total_warmup_calls += 1
 
     def record_layer1_trigger(self, relative_loss: float, threshold: float) -> None:
         """Record Layer 1 warm start detection trigger.
@@ -83,11 +90,12 @@ class DefenseLayerTelemetry:
         threshold : float
             Threshold value that was exceeded
         """
-        self.layer1_warm_start_triggers += 1
-        self._log_event(
-            "layer1_warm_start",
-            {"relative_loss": relative_loss, "threshold": threshold},
-        )
+        with self._lock:
+            self.layer1_warm_start_triggers += 1
+            self._log_event_locked(
+                "layer1_warm_start",
+                {"relative_loss": relative_loss, "threshold": threshold},
+            )
 
     def record_layer2_lr_mode(self, mode: str, relative_loss: float) -> None:
         """Record Layer 2 adaptive LR mode selection.
@@ -99,12 +107,13 @@ class DefenseLayerTelemetry:
         relative_loss : float
             Relative loss that determined the mode
         """
-        if mode in self.layer2_lr_mode_counts:
-            self.layer2_lr_mode_counts[mode] += 1
-        self._log_event(
-            "layer2_lr_mode",
-            {"mode": mode, "relative_loss": relative_loss},
-        )
+        with self._lock:
+            if mode in self.layer2_lr_mode_counts:
+                self.layer2_lr_mode_counts[mode] += 1
+            self._log_event_locked(
+                "layer2_lr_mode",
+                {"mode": mode, "relative_loss": relative_loss},
+            )
 
     def record_layer3_trigger(
         self,
@@ -123,11 +132,16 @@ class DefenseLayerTelemetry:
         iteration : int
             Iteration number when triggered
         """
-        self.layer3_cost_guard_triggers += 1
-        self._log_event(
-            "layer3_cost_guard",
-            {"cost_ratio": cost_ratio, "tolerance": tolerance, "iteration": iteration},
-        )
+        with self._lock:
+            self.layer3_cost_guard_triggers += 1
+            self._log_event_locked(
+                "layer3_cost_guard",
+                {
+                    "cost_ratio": cost_ratio,
+                    "tolerance": tolerance,
+                    "iteration": iteration,
+                },
+            )
 
     def record_layer4_clip(self, original_norm: float, max_norm: float) -> None:
         """Record Layer 4 step clipping activation.
@@ -139,11 +153,12 @@ class DefenseLayerTelemetry:
         max_norm : float
             Maximum allowed norm (clipping threshold)
         """
-        self.layer4_clip_triggers += 1
-        self._log_event(
-            "layer4_clip",
-            {"original_norm": original_norm, "max_norm": max_norm},
-        )
+        with self._lock:
+            self.layer4_clip_triggers += 1
+            self._log_event_locked(
+                "layer4_clip",
+                {"original_norm": original_norm, "max_norm": max_norm},
+            )
 
     def record_lbfgs_history_fill(self, iteration: int) -> None:
         """Record L-BFGS history buffer fill event.
@@ -156,11 +171,12 @@ class DefenseLayerTelemetry:
         iteration : int
             Iteration number when history buffer filled
         """
-        self.lbfgs_history_buffer_fill_events += 1
-        self._log_event(
-            "lbfgs_history_fill",
-            {"iteration": iteration},
-        )
+        with self._lock:
+            self.lbfgs_history_buffer_fill_events += 1
+            self._log_event_locked(
+                "lbfgs_history_fill",
+                {"iteration": iteration},
+            )
 
     def record_lbfgs_line_search_failure(
         self,
@@ -178,14 +194,15 @@ class DefenseLayerTelemetry:
         reason : str, optional
             Reason for line search failure
         """
-        self.lbfgs_line_search_failures += 1
-        self._log_event(
-            "lbfgs_line_search_failure",
-            {"iteration": iteration, "reason": reason},
-        )
+        with self._lock:
+            self.lbfgs_line_search_failures += 1
+            self._log_event_locked(
+                "lbfgs_line_search_failure",
+                {"iteration": iteration, "reason": reason},
+            )
 
-    def _log_event(self, event_type: str, data: dict) -> None:
-        """Log an event with timestamp.
+    def _log_event_locked(self, event_type: str, data: dict) -> None:
+        """Log an event with timestamp. Caller must hold self._lock.
 
         Parameters
         ----------
@@ -205,39 +222,44 @@ class DefenseLayerTelemetry:
         dict[str, float]
             Trigger rates for each layer as percentages (0-100)
         """
-        if self.total_warmup_calls == 0:
-            return {
-                "layer1_warm_start_rate": 0.0,
-                "layer2_refinement_rate": 0.0,
-                "layer2_careful_rate": 0.0,
-                "layer2_exploration_rate": 0.0,
-                "layer3_cost_guard_rate": 0.0,
-                "layer4_clip_rate": 0.0,
-                "lbfgs_history_buffer_fill_rate": 0.0,
-                "lbfgs_line_search_failure_rate": 0.0,
-            }
+        with self._lock:
+            if self.total_warmup_calls == 0:
+                return {
+                    "layer1_warm_start_rate": 0.0,
+                    "layer2_refinement_rate": 0.0,
+                    "layer2_careful_rate": 0.0,
+                    "layer2_exploration_rate": 0.0,
+                    "layer3_cost_guard_rate": 0.0,
+                    "layer4_clip_rate": 0.0,
+                    "lbfgs_history_buffer_fill_rate": 0.0,
+                    "lbfgs_line_search_failure_rate": 0.0,
+                }
 
-        total = self.total_warmup_calls
-        return {
-            "layer1_warm_start_rate": 100.0 * self.layer1_warm_start_triggers / total,
-            "layer2_refinement_rate": 100.0
-            * self.layer2_lr_mode_counts["refinement"]
-            / total,
-            "layer2_careful_rate": 100.0
-            * self.layer2_lr_mode_counts["careful"]
-            / total,
-            "layer2_exploration_rate": 100.0
-            * self.layer2_lr_mode_counts["exploration"]
-            / total,
-            "layer3_cost_guard_rate": 100.0 * self.layer3_cost_guard_triggers / total,
-            "layer4_clip_rate": 100.0 * self.layer4_clip_triggers / total,
-            "lbfgs_history_buffer_fill_rate": 100.0
-            * self.lbfgs_history_buffer_fill_events
-            / total,
-            "lbfgs_line_search_failure_rate": 100.0
-            * self.lbfgs_line_search_failures
-            / total,
-        }
+            total = self.total_warmup_calls
+            return {
+                "layer1_warm_start_rate": 100.0
+                * self.layer1_warm_start_triggers
+                / total,
+                "layer2_refinement_rate": 100.0
+                * self.layer2_lr_mode_counts["refinement"]
+                / total,
+                "layer2_careful_rate": 100.0
+                * self.layer2_lr_mode_counts["careful"]
+                / total,
+                "layer2_exploration_rate": 100.0
+                * self.layer2_lr_mode_counts["exploration"]
+                / total,
+                "layer3_cost_guard_rate": 100.0
+                * self.layer3_cost_guard_triggers
+                / total,
+                "layer4_clip_rate": 100.0 * self.layer4_clip_triggers / total,
+                "lbfgs_history_buffer_fill_rate": 100.0
+                * self.lbfgs_history_buffer_fill_events
+                / total,
+                "lbfgs_line_search_failure_rate": 100.0
+                * self.lbfgs_line_search_failures
+                / total,
+            }
 
     def get_summary(self) -> dict:
         """Get summary statistics for all defense layers.
@@ -247,34 +269,35 @@ class DefenseLayerTelemetry:
         dict
             Summary with counts and rates for each layer
         """
-        rates = self.get_trigger_rates()
-        return {
-            "total_warmup_calls": self.total_warmup_calls,
-            "layer1": {
-                "name": "warm_start_detection",
-                "triggers": self.layer1_warm_start_triggers,
-                "rate_pct": rates["layer1_warm_start_rate"],
-            },
-            "layer2": {
-                "name": "adaptive_lr_selection",
-                "mode_counts": self.layer2_lr_mode_counts.copy(),
-                "rates_pct": {
-                    "refinement": rates["layer2_refinement_rate"],
-                    "careful": rates["layer2_careful_rate"],
-                    "exploration": rates["layer2_exploration_rate"],
+        with self._lock:
+            rates = self.get_trigger_rates()
+            return {
+                "total_warmup_calls": self.total_warmup_calls,
+                "layer1": {
+                    "name": "warm_start_detection",
+                    "triggers": self.layer1_warm_start_triggers,
+                    "rate_pct": rates["layer1_warm_start_rate"],
                 },
-            },
-            "layer3": {
-                "name": "cost_increase_guard",
-                "triggers": self.layer3_cost_guard_triggers,
-                "rate_pct": rates["layer3_cost_guard_rate"],
-            },
-            "layer4": {
-                "name": "step_clipping",
-                "triggers": self.layer4_clip_triggers,
-                "rate_pct": rates["layer4_clip_rate"],
-            },
-        }
+                "layer2": {
+                    "name": "adaptive_lr_selection",
+                    "mode_counts": self.layer2_lr_mode_counts.copy(),
+                    "rates_pct": {
+                        "refinement": rates["layer2_refinement_rate"],
+                        "careful": rates["layer2_careful_rate"],
+                        "exploration": rates["layer2_exploration_rate"],
+                    },
+                },
+                "layer3": {
+                    "name": "cost_increase_guard",
+                    "triggers": self.layer3_cost_guard_triggers,
+                    "rate_pct": rates["layer3_cost_guard_rate"],
+                },
+                "layer4": {
+                    "name": "step_clipping",
+                    "triggers": self.layer4_clip_triggers,
+                    "rate_pct": rates["layer4_clip_rate"],
+                },
+            }
 
     def get_recent_events(self, n: int = 10) -> list[dict]:
         """Get most recent N events.
@@ -289,7 +312,8 @@ class DefenseLayerTelemetry:
         list[dict]
             Most recent events
         """
-        return list(self._event_log)[-n:]
+        with self._lock:
+            return list(self._event_log)[-n:]
 
     def export_metrics(self) -> dict:
         """Export metrics in a format suitable for monitoring systems.
@@ -299,21 +323,28 @@ class DefenseLayerTelemetry:
         dict
             Metrics with consistent naming for Prometheus/Grafana/etc.
         """
-        return {
-            "nlsq_defense_warmup_calls_total": self.total_warmup_calls,
-            "nlsq_defense_layer1_triggers_total": self.layer1_warm_start_triggers,
-            "nlsq_defense_layer2_refinement_total": self.layer2_lr_mode_counts[
-                "refinement"
-            ],
-            "nlsq_defense_layer2_careful_total": self.layer2_lr_mode_counts["careful"],
-            "nlsq_defense_layer2_exploration_total": self.layer2_lr_mode_counts[
-                "exploration"
-            ],
-            "nlsq_defense_layer3_triggers_total": self.layer3_cost_guard_triggers,
-            "nlsq_defense_layer4_triggers_total": self.layer4_clip_triggers,
-            "nlsq_defense_lbfgs_history_fill_total": self.lbfgs_history_buffer_fill_events,
-            "nlsq_defense_lbfgs_line_search_failures_total": self.lbfgs_line_search_failures,
-        }
+        with self._lock:
+            return {
+                "nlsq_defense_warmup_calls_total": self.total_warmup_calls,
+                "nlsq_defense_layer1_triggers_total": self.layer1_warm_start_triggers,
+                "nlsq_defense_layer2_refinement_total": self.layer2_lr_mode_counts[
+                    "refinement"
+                ],
+                "nlsq_defense_layer2_careful_total": self.layer2_lr_mode_counts[
+                    "careful"
+                ],
+                "nlsq_defense_layer2_exploration_total": self.layer2_lr_mode_counts[
+                    "exploration"
+                ],
+                "nlsq_defense_layer3_triggers_total": self.layer3_cost_guard_triggers,
+                "nlsq_defense_layer4_triggers_total": self.layer4_clip_triggers,
+                "nlsq_defense_lbfgs_history_fill_total": (
+                    self.lbfgs_history_buffer_fill_events
+                ),
+                "nlsq_defense_lbfgs_line_search_failures_total": (
+                    self.lbfgs_line_search_failures
+                ),
+            }
 
 
 # Global telemetry instance for monitoring

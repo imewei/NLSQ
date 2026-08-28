@@ -327,6 +327,7 @@ class TestValidateLbfgsConfig:
             line_search="wolfe",
             exploration_step_size=0.1,
             refinement_step_size=1.0,
+            careful_step_size=0.5,
         )
 
     def test_zero_history_size(self):
@@ -338,6 +339,7 @@ class TestValidateLbfgsConfig:
                 line_search="wolfe",
                 exploration_step_size=0.1,
                 refinement_step_size=1.0,
+                careful_step_size=0.5,
             )
 
     def test_invalid_line_search(self):
@@ -349,6 +351,7 @@ class TestValidateLbfgsConfig:
                 line_search="invalid",
                 exploration_step_size=0.1,
                 refinement_step_size=1.0,
+                careful_step_size=0.5,
             )
 
     def test_zero_step_size(self):
@@ -360,6 +363,7 @@ class TestValidateLbfgsConfig:
                 line_search="wolfe",
                 exploration_step_size=0.1,
                 refinement_step_size=1.0,
+                careful_step_size=0.5,
             )
 
 

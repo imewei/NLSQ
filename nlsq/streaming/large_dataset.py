@@ -197,7 +197,12 @@ class ChunkBufferPool:
     (8000,)
     """
 
-    def __init__(self, chunk_size: int, dtype: np.dtype = np.float64) -> None:
+    def __init__(
+        self,
+        chunk_size: int,
+        dtype: np.dtype = np.float64,
+        x_feature_shape: tuple[int, ...] = (),
+    ) -> None:
         """Initialize buffer pool with pre-allocated arrays.
 
         Parameters
@@ -206,11 +211,19 @@ class ChunkBufferPool:
             Size of each chunk buffer
         dtype : np.dtype
             Data type for buffers
+        x_feature_shape : tuple[int, ...], optional
+            Trailing dimensions of xdata beyond the point axis (e.g. `(k,)`
+            for `k` independent variables per point, shape `(N, k)`).
+            Empty for plain 1D xdata. The x buffer is allocated with shape
+            `(chunk_size, *x_feature_shape)` so it matches xdata's per-point
+            shape; without this, copying a multi-feature chunk into a 1D
+            buffer raises a broadcast error.
         """
-        self._x_buffer = np.empty(chunk_size, dtype=dtype)
+        self._x_buffer = np.empty((chunk_size, *x_feature_shape), dtype=dtype)
         self._y_buffer = np.empty(chunk_size, dtype=dtype)
         self._chunk_size = chunk_size
         self._dtype = dtype
+        self._x_feature_shape = x_feature_shape
 
     def get_buffers(self, size: int) -> tuple[np.ndarray, np.ndarray]:
         """Get buffer views of the specified size.
@@ -227,7 +240,10 @@ class ChunkBufferPool:
         """
         if size > self._chunk_size:
             # Fallback: allocate new if larger than pool
-            return np.empty(size, dtype=self._dtype), np.empty(size, dtype=self._dtype)
+            return (
+                np.empty((size, *self._x_feature_shape), dtype=self._dtype),
+                np.empty(size, dtype=self._dtype),
+            )
         return self._x_buffer[:size], self._y_buffer[:size]
 
     @property
@@ -239,6 +255,11 @@ class ChunkBufferPool:
     def dtype(self) -> np.dtype:
         """Return the pool's data type."""
         return self._dtype
+
+    @property
+    def x_feature_shape(self) -> tuple[int, ...]:
+        """Return the pool's xdata trailing feature shape."""
+        return self._x_feature_shape
 
 
 @dataclass(slots=True)
@@ -579,7 +600,17 @@ class MemoryEstimator:
         -------
         tuple[int, DatasetStats]
             Optimal chunk size and dataset statistics
+
+        Raises
+        ------
+        ValueError
+            If n_points is 0. Without this guard, n_points <= chunk_size
+            (always true for an empty dataset) sets chunk_size = n_points = 0,
+            which later hits a ZeroDivisionError in chunk-count math.
         """
+        if n_points == 0:
+            raise ValueError("xdata/ydata must not be empty (n_points=0)")
+
         estimator = MemoryEstimator()
 
         # Estimate memory per point
@@ -1047,7 +1078,7 @@ class LargeDatasetFitter:
         # Task Group 7 (5.1a): Model validation caching
         # Cache validated functions by (id(func), id(func.__code__)) to avoid
         # redundant validation across chunks. Provides 1-5% performance gain.
-        self._validated_functions: dict[tuple[int, int], bool] = {}
+        self._validated_functions: dict[tuple[str, bytes, tuple], bool] = {}
 
         # FR-006: Buffer pool for chunk reuse (initialized lazily)
         self._buffer_pool: ChunkBufferPool | None = None
@@ -1056,6 +1087,7 @@ class LargeDatasetFitter:
         self,
         chunk_size: int,
         dtype: np.dtype = np.float64,
+        x_feature_shape: tuple[int, ...] = (),
     ) -> ChunkBufferPool:
         """Get existing buffer pool or create new one if size or dtype changed.
 
@@ -1067,19 +1099,28 @@ class LargeDatasetFitter:
             Data type the pooled buffers must match (e.g. the input data's
             dtype). A pool allocated for the wrong dtype would silently
             upcast/downcast every chunk copied into it.
+        x_feature_shape : tuple[int, ...], optional
+            Trailing shape of xdata beyond the point axis (empty for plain
+            1D xdata). A pool allocated for the wrong feature shape would
+            crash (or silently misalign) when copying multi-feature chunks.
 
         Returns
         -------
         ChunkBufferPool
-            Buffer pool with appropriate size and dtype
+            Buffer pool with appropriate size, dtype, and feature shape
         """
         bucket_size = get_bucket_size(chunk_size)
         if (
             self._buffer_pool is None
             or self._buffer_pool.chunk_size < bucket_size
             or self._buffer_pool.dtype != dtype
+            or self._buffer_pool.x_feature_shape != x_feature_shape
         ):
-            self._buffer_pool = ChunkBufferPool(bucket_size, dtype=dtype)
+            self._buffer_pool = ChunkBufferPool(
+                bucket_size,
+                dtype=dtype,
+                x_feature_shape=x_feature_shape,
+            )
         return self._buffer_pool
 
     def _should_log_error(self, error_signature: str, current_time: float) -> bool:
@@ -1222,9 +1263,23 @@ class LargeDatasetFitter:
         Provides 1-5% performance gain in chunked processing.
         """
         # Task Group 7 (5.1a): Check validation cache
-        # Use function object and its code object directly (not id() which can be recycled by GC)
-        func_key = (f.__name__, f.__code__.co_code, f.__code__.co_consts)
-        if func_key in self._validated_functions:
+        # Use function object and its code object directly (not id() which
+        # can be recycled by GC). Callables without __code__ (functools.partial,
+        # callable class instances, some C extensions) have no stable
+        # content-based key -- skip caching for them rather than crashing or
+        # falling back to id() (which reintroduces the GC-recycling problem
+        # this cache design was built to avoid).
+        func_code = getattr(f, "__code__", None)
+        func_key = (
+            (
+                getattr(f, "__name__", type(f).__name__),
+                func_code.co_code,
+                func_code.co_consts,
+            )
+            if func_code is not None
+            else None
+        )
+        if func_key is not None and func_key in self._validated_functions:
             self.logger.debug("Model validation skipped (cached)")
             return
 
@@ -1317,8 +1372,10 @@ class LargeDatasetFitter:
                 f"f({x_test.shape}, {len(p0_test)} params) -> {output_test.shape}",
             )
 
-            # Task Group 7 (5.1a): Cache successful validation
-            self._validated_functions[func_key] = True
+            # Task Group 7 (5.1a): Cache successful validation (only when a
+            # stable content-based key was available)
+            if func_key is not None:
+                self._validated_functions[func_key] = True
 
         except (ValueError, TypeError) as e:
             # Re-raise validation errors with context (rate-limited logging)
@@ -2056,14 +2113,16 @@ class LargeDatasetFitter:
         bounds: tuple,
         method: str,
         solver: str,
+        valid_length: int | None = None,
         **kwargs,
     ) -> tuple[dict, np.ndarray | None]:
         """Retry a failed chunk with perturbed parameters.
 
         Args:
             f: Model function
-            x_chunk: Input data for this chunk
-            y_chunk: Output data for this chunk
+            x_chunk: Input data for this chunk (may be zero-padded to a
+                DataChunker bucket boundary)
+            y_chunk: Output data for this chunk (may be zero-padded)
             chunk_idx: Index of the chunk
             chunk_start_time: Start time of chunk processing
             chunk_times: List to append chunk duration to
@@ -2072,11 +2131,19 @@ class LargeDatasetFitter:
             bounds: Parameter bounds
             method: Optimization method
             solver: Solver type
+            valid_length: Number of real (non-padding) points at the start
+                of x_chunk/y_chunk. Required to avoid fitting the retry
+                against DataChunker's zero-padding. Defaults to the full
+                chunk length when not provided.
             **kwargs: Additional curve_fit arguments
 
         Returns:
             tuple: (chunk_result dict, updated_params or None)
         """
+        if valid_length is None:
+            valid_length = len(x_chunk)
+        x_valid = x_chunk[:valid_length]
+        y_valid = y_chunk[:valid_length]
         # Only retry if we have current parameter estimates
         if current_params is None:
             chunk_duration = time.time() - chunk_start_time
@@ -2101,8 +2168,8 @@ class LargeDatasetFitter:
             )
             popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
                 f,
-                x_chunk,
-                y_chunk,
+                x_valid,
+                y_valid,
                 p0=perturbed_params,
                 bounds=bounds,
                 method=method,
@@ -2213,18 +2280,31 @@ class LargeDatasetFitter:
         param_history: list,
         current_params: np.ndarray,
     ) -> np.ndarray:
-        """Compute approximate covariance matrix from parameter history.
+        """Compute the final covariance matrix for a chunked fit.
 
-        In chunked fitting, we estimate covariance from parameter variations
-        across chunks rather than from the Jacobian.
+        Prefers the precision-weighted GLS covariance
+        ``(sum_k C_k^{-1})^{-1}`` accumulated in ``self._accum_information``
+        during ``_update_parameters_convergence`` -- the same accumulator
+        that already determines the final *parameters* -- so the reported
+        uncertainty is consistent with how the parameters were actually
+        combined, rather than a cruder proxy from parameter-history variance.
 
         Args:
             param_history: List of parameter estimates from previous chunks
             current_params: Final parameter estimates
 
         Returns:
-            np.ndarray: Approximate covariance matrix
+            np.ndarray: Covariance matrix
         """
+        accum_information = getattr(self, "_accum_information", None)
+        if accum_information is not None:
+            try:
+                pcov = np.linalg.inv(accum_information)
+            except np.linalg.LinAlgError:
+                pcov = None
+            if pcov is not None and np.all(np.isfinite(pcov)):
+                return pcov
+
         if len(param_history) > 1:
             # Use last 10 parameter estimates for covariance estimation
             param_variations = np.array(param_history[-min(10, len(param_history)) :])
@@ -2437,9 +2517,11 @@ class LargeDatasetFitter:
         gc_chunk_interval = self.config.gc_chunk_interval
 
         # FR-006: Initialize buffer pool for chunk reuse
+        xdata_arr = np.asarray(xdata)
         buffer_pool = self._get_or_create_buffer_pool(
             stats.recommended_chunk_size,
-            dtype=np.asarray(xdata).dtype,
+            dtype=xdata_arr.dtype,
+            x_feature_shape=xdata_arr.shape[1:],
         )
 
         try:
@@ -2535,6 +2617,7 @@ class LargeDatasetFitter:
                         bounds=bounds,
                         method=method,
                         solver=solver,
+                        valid_length=valid_length,
                         **kwargs,
                     )
                     # Update params if retry succeeded. Only adopt the retry

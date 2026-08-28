@@ -419,6 +419,12 @@ class AdaptiveHybridStreamingOptimizer:
         - Heteroscedastic data (varying noise levels)
         - Emphasizing certain regions of the data
         - Domain-specific weighting schemes (e.g., XPCS shear-sensitivity)
+
+        Scope limitation: weighting is only applied in the L-BFGS warmup
+        loss (``_create_warmup_loss_fn``). Phase 2 Gauss-Newton refinement
+        (``_accumulate_jtj_jtr`` / ``_accumulate_jtj_jtr_scan``) does not
+        currently incorporate these weights, so the effective optimization
+        objective is weighted during warmup and unweighted afterward.
         """
         if not self.config.enable_residual_weighting:
             return
@@ -439,7 +445,9 @@ class AdaptiveHybridStreamingOptimizer:
         _logger.info(
             f"Residual weighting enabled: n_weights={len(self._residual_weights_jax)}, "
             f"weight_range=[{float(self._residual_weights_jax.min()):.3f}, "
-            f"{float(self._residual_weights_jax.max()):.3f}]",
+            f"{float(self._residual_weights_jax.max()):.3f}]. "
+            "Note: weighting applies only during the L-BFGS warmup phase, "
+            "not Phase 2 Gauss-Newton refinement -- see docstring above.",
         )
 
     def set_residual_weights(self, weights: np.ndarray) -> None:
@@ -742,6 +750,29 @@ class AdaptiveHybridStreamingOptimizer:
 
         return x_chunks, y_chunks, mask_chunks, n_points
 
+    @staticmethod
+    def _content_fingerprint(data: jnp.ndarray) -> tuple:
+        """Cheap content fingerprint used to invalidate _padded_cache.
+
+        Not a full hash (would need an O(n) host transfer on every call for
+        100M+-point datasets), but shape + first/last/sum/sum-of-squares
+        together make an accidental collision between two distinct real
+        datasets vanishingly unlikely -- sum-of-squares is nearly free here
+        since sum() already forces an O(n) device reduction.
+        """
+        flat = data.ravel()
+        if flat.size == 0:
+            return (data.shape, 0.0, 0.0, 0.0, 0.0)
+        return (
+            data.shape,
+            float(flat[0]),
+            float(flat[-1]),
+            float(jnp.sum(data)),
+            # vdot fuses the multiply+reduce into one pass without
+            # materializing a full-size (data * data) temporary.
+            float(jnp.vdot(flat, flat)),
+        )
+
     def _get_padded_data(
         self,
         x_data: jnp.ndarray,
@@ -765,24 +796,14 @@ class AdaptiveHybridStreamingOptimizer:
         n_chunks : int
             Number of chunks
         """
-        # Check cache validity using data content hash (not id() which can be recycled by GC)
+        # Check cache validity using data content hash (not id() which can be
+        # recycled by GC -- see clear_cache()/_padded_cache history for why
+        # identity-based invalidation was rejected).
         cache = getattr(self, "_padded_cache", None)
         if cache is not None:
             c_hash_x, c_hash_y, c_cs, c_xp, c_yp, c_np, c_nc = cache
-            # Use shape + first/last/sum as a fast content fingerprint
-            x_flat = x_data.ravel()
-            x_hash = (
-                x_data.shape,
-                float(x_flat[0]),
-                float(x_flat[-1]),
-                float(jnp.sum(x_data)),
-            )
-            y_hash = (
-                y_data.shape,
-                float(y_data.ravel()[0]),
-                float(y_data.ravel()[-1]),
-                float(jnp.sum(y_data)),
-            )
+            x_hash = self._content_fingerprint(x_data)
+            y_hash = self._content_fingerprint(y_data)
             if c_hash_x == x_hash and c_hash_y == y_hash and c_cs == chunk_size:
                 return c_xp, c_yp, c_np, c_nc
 
@@ -800,20 +821,8 @@ class AdaptiveHybridStreamingOptimizer:
             x_padded = x_data
             y_padded = y_data
 
-        x_flat_w = x_data.ravel()
-        x_hash = (
-            x_data.shape,
-            float(x_flat_w[0]),
-            float(x_flat_w[-1]),
-            float(jnp.sum(x_data)),
-        )
-        y_flat_w = y_data.ravel()
-        y_hash = (
-            y_data.shape,
-            float(y_flat_w[0]),
-            float(y_flat_w[-1]),
-            float(jnp.sum(y_data)),
-        )
+        x_hash = self._content_fingerprint(x_data)
+        y_hash = self._content_fingerprint(y_data)
         self._padded_cache = (
             x_hash,
             y_hash,
@@ -1630,6 +1639,20 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Base loss: weighted or unweighted MSE
             if enable_weighting:
+                # group_idx comes from column 0 of x_batch (see docstring);
+                # x_batch.ndim is static at trace time, so this check runs
+                # once per distinct input shape, not per element. Without
+                # it, 1D xdata (the common case) hits a cryptic
+                # "too many indices for array" deep inside this jit'd
+                # function instead of a clear, actionable error.
+                if x_batch.ndim < 2:
+                    raise ValueError(
+                        "enable_residual_weighting=True requires xdata "
+                        "shaped (N, k) with k>=1 -- column 0 must hold "
+                        f"each point's group index. Got 1D xdata of shape "
+                        f"{x_batch.shape}. Disable residual weighting or "
+                        "provide xdata as a 2D array.",
+                    )
                 group_idx = x_batch[:, 0].astype(jnp.int32)
                 assert residual_weights is not None
                 weights = residual_weights[group_idx]
@@ -1907,7 +1930,7 @@ class AdaptiveHybridStreamingOptimizer:
                 lr_mode = "refinement"
             elif relative_loss < 1.0:
                 # Careful mode: reasonable starting point
-                initial_step = 0.5  # Intermediate step size
+                initial_step = self.config.lbfgs_careful_step_size
                 lr_mode = "careful"
             else:
                 # Exploration mode: far from optimal, use small step to prevent overshoot
@@ -2528,10 +2551,18 @@ class AdaptiveHybridStreamingOptimizer:
         UTb = U.T @ JTr
 
         # Solve diagonal system with regularization
-        # Filter out small singular values
+        # Filter out small singular values via truncated pseudo-inverse:
+        # zero their contribution (1/s -> 0) rather than flooring s to
+        # s_threshold, which would instead divide by a near-zero floor and
+        # amplify null-space noise components by up to ~1/threshold.
         s_threshold = jnp.max(s) * 1e-10
-        s_safe = jnp.where(s > s_threshold, s, s_threshold)
-        step_hat = UTb / s_safe
+        # Guard the denominator itself (not just its result) so 1.0/s never
+        # evaluates 1/0 -> inf for an exactly-zero singular value before
+        # `where` discards it -- transient inf/nan can otherwise trip
+        # NLSQ's own stability guard even though it never reaches step_hat.
+        s_safe = jnp.where(s > s_threshold, s, 1.0)
+        s_inv = jnp.where(s > s_threshold, 1.0 / s_safe, 0.0)
+        step_hat = UTb * s_inv
 
         # Transform back to parameter space
         step = Vt.T @ step_hat
@@ -3491,28 +3522,39 @@ class AdaptiveHybridStreamingOptimizer:
                 self._consecutive_rejections = 0  # Reset rejection counter on success
 
                 # Recompute J^T J at new params for Phase 3
-                # This ensures we have J^T J at the final parameters
+                # This ensures we have J^T J at the final parameters.
+                # Dispatch between JAX scan (GPU/TPU) and Python loops (CPU),
+                # same as the initial accumulation above and the Phase 2
+                # failure fallback below -- the unconditional Python-loop
+                # path here previously ran on every accepted GN iteration
+                # even on GPU/TPU, defeating the scan path's XLA fusion.
                 x_data, y_data = data_source
                 n_params = len(current_params)
-                chunk_size = self.config.chunk_size
 
-                JTJ = jnp.zeros((n_params, n_params))
-                JTr = jnp.zeros(n_params)
-                residual_sum_sq = 0.0
-
-                n_points = len(x_data)
-                for i in range(0, n_points, chunk_size):
-                    x_chunk = x_data[i : i + chunk_size]
-                    y_chunk = y_data[i : i + chunk_size]
-
-                    JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
-                        x_chunk,
-                        y_chunk,
+                if self._use_scan_for_accumulation():
+                    JTJ, JTr, residual_sum_sq = self._accumulate_jtj_jtr_scan(
+                        x_data,
+                        y_data,
                         current_params,
-                        JTJ,
-                        JTr,
                     )
-                    residual_sum_sq += res_sq
+                else:
+                    chunk_size = self.config.chunk_size
+                    n_points = len(x_data)
+                    JTJ = jnp.zeros((n_params, n_params))
+                    JTr = jnp.zeros(n_params)
+                    residual_sum_sq = 0.0
+                    for i in range(0, n_points, chunk_size):
+                        x_chunk = x_data[i : i + chunk_size]
+                        y_chunk = y_data[i : i + chunk_size]
+
+                        JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
+                            x_chunk,
+                            y_chunk,
+                            current_params,
+                            JTJ,
+                            JTr,
+                        )
+                        residual_sum_sq += res_sq
 
                 final_JTJ = JTJ
                 final_residual_sum_sq = residual_sum_sq

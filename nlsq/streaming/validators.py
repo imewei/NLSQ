@@ -5,6 +5,7 @@ extracted from the monolithic __post_init__ method to reduce complexity and
 improve testability.
 """
 
+import math
 from typing import Any
 
 
@@ -54,7 +55,9 @@ def validate_positive(value: float, param_name: str) -> None:
     ConfigValidationError
         If value is not positive.
     """
-    if value <= 0:
+    # `value <= 0` is False for NaN (all IEEE-754 comparisons involving NaN
+    # are False), so a plain `<=` check silently lets NaN through.
+    if math.isnan(value) or value <= 0:
         raise ConfigValidationError(f"{param_name} must be positive")
 
 
@@ -73,7 +76,7 @@ def validate_non_negative(value: float, param_name: str) -> None:
     ConfigValidationError
         If value is negative.
     """
-    if value < 0:
+    if math.isnan(value) or value < 0:
         raise ConfigValidationError(f"{param_name} must be non-negative")
 
 
@@ -143,7 +146,7 @@ def validate_less_than_or_equal(
     ConfigValidationError
         If value1 > value2.
     """
-    if value1 > value2:
+    if math.isnan(value1) or math.isnan(value2) or value1 > value2:
         raise ConfigValidationError(f"{name1} ({value1}) must be <= {name2} ({value2})")
 
 
@@ -221,6 +224,7 @@ def validate_lbfgs_config(
     line_search: str,
     exploration_step_size: float,
     refinement_step_size: float,
+    careful_step_size: float,
 ) -> None:
     """Validate L-BFGS configuration parameters.
 
@@ -236,6 +240,8 @@ def validate_lbfgs_config(
         Step size for exploration mode.
     refinement_step_size : float
         Step size for refinement mode.
+    careful_step_size : float
+        Step size for careful (intermediate relative-loss) mode.
 
     Raises
     ------
@@ -247,6 +253,7 @@ def validate_lbfgs_config(
     validate_lbfgs_line_search(line_search)
     validate_positive(exploration_step_size, "lbfgs_exploration_step_size")
     validate_positive(refinement_step_size, "lbfgs_refinement_step_size")
+    validate_positive(careful_step_size, "lbfgs_careful_step_size")
 
 
 def validate_gauss_newton_config(
@@ -576,7 +583,7 @@ def validate_residual_weighting_config(
     if len(weights_arr) == 0:
         raise ConfigValidationError("residual_weights must not be empty")
 
-    if np.any(weights_arr <= 0):
+    if np.any(np.isnan(weights_arr)) or np.any(weights_arr <= 0):
         raise ConfigValidationError("residual_weights must all be positive")
 
 
