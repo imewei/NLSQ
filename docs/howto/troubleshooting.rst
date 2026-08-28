@@ -627,15 +627,19 @@ large or very small values - Warning: “Covariance cannot be estimated”
 
 3. **Check condition number:**
 
+``estimate_condition_number`` is a cheap pre-flight heuristic on the raw
+``x`` data (a ``[1, x, x**2]`` design matrix), not the fit's actual
+Jacobian -- treat a high value as a signal to investigate, not a precise
+diagnosis of the model's Jacobian conditioning.
+
 .. code:: python
 
-   from nlsq.diagnostics import check_condition_number
+   from nlsq import estimate_condition_number
 
-   result = curve_fit(model, x, y, p0=[2, 1])
-   cond = check_condition_number(result.jac)
+   cond = estimate_condition_number(x)
 
    if cond > 1e10:
-       print(f"Warning: Ill-conditioned (κ = {cond:.2e})")
+       print(f"Warning: Ill-conditioned data (κ = {cond:.2e})")
 
 --------------
 

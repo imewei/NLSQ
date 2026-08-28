@@ -1,6 +1,12 @@
 # Documentation Changelog
 
 ## Unreleased
+- Fixed a duplicated `[0.7.2]` heading in the root `CHANGELOG.md`, added
+  missing entries for #22/#23, and fixed README's `workflow="hpc"` example
+  (`checkpoint_dir` alone now raises -- `run_id`/`model_id`/`seed` are
+  required together).
+- Three-brain (Codex + Agy) review of `docs/`: fixed 26 stale/fictional API
+  examples across 17 files.
 
 ## v0.7.2 (2026-08-26)
 - Synced the Optimization Pipeline and Package Overview docs with the current module layout

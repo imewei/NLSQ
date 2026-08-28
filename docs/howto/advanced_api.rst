@@ -64,38 +64,33 @@ Monitor optimization health and numerical stability.
 
 .. code:: python
 
-   from nlsq.diagnostics import DiagnosticMonitor
+   from nlsq import DiagnosticLevel
 
-   monitor = DiagnosticMonitor(
-       check_condition_number=True,
-       check_gradient_norm=True,
-       check_step_quality=True,
-       log_level="INFO",
+   result = curve_fit(
+       exponential,
+       x,
+       y,
+       p0=[2, 0.5],
+       compute_diagnostics=True,
+       diagnostics_level=DiagnosticLevel.FULL,
    )
 
-   popt, pcov = curve_fit(exponential, x, y, p0=[2, 0.5], diagnostics=monitor)
-
-   print(monitor.summary())
+   popt, pcov = result.popt, result.pcov
+   print(result.diagnostics.gradient_health.available)
+   print(result.diagnostics.identifiability.available)
 
 Sparse Jacobian Optimization
 ----------------------------
 
-For models with sparse Jacobian structure, provide a sparsity pattern for
-significant speedups.
+NLSQ auto-detects Jacobian sparsity internally rather than accepting a
+user-supplied pattern -- ``curve_fit``'s ``jac_sparsity`` parameter is
+accepted for SciPy-compatibility but ignored (a ``UserWarning`` is raised).
+For models with sparse Jacobian structure, request the sparse solver
+explicitly instead:
 
 .. code:: python
 
-   import scipy.sparse as sp
-
-
-   def complex_model(x, *params): ...
-
-
-   sparsity = sp.lil_matrix((len(x), len(p0)))
-   sparsity[0:50, 0:2] = 1
-   sparsity[50:100, 2:4] = 1
-
-   popt, pcov = curve_fit(complex_model, x, y, p0=p0, jac_sparsity=sparsity)
+   popt, pcov = curve_fit(complex_model, x, y, p0=p0, tr_solver="sparse")
 
 Adaptive Hybrid Streaming
 -------------------------

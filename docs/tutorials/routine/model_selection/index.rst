@@ -28,9 +28,9 @@ Quick Reference
 .. code-block:: python
 
    # Built-in exponential decay
-   from nlsq.functions import exponential_decay
+   from nlsq.core.functions import exponential_decay
 
-   popt, pcov = fit(exponential_decay, x, y, p0=[1, 0.5])
+   popt, pcov = fit(exponential_decay, x, y, p0=[1, 0.5, 0])
 
    # Custom model
    import jax.numpy as jnp

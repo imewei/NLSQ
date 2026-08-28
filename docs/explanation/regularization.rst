@@ -182,8 +182,6 @@ For XPCS laminar flow analysis with 23 angular positions:
            (0, 23),  # Regularize contrast group
            (23, 46),  # Regularize offset group
        ],
-       # Other settings
-       precision="float64",
        gauss_newton_tol=1e-10,
    )
 

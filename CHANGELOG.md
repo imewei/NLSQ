@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.2] - 2026-08-26
-
 ### Added
 - `CMAESOptimizer` (with `restart_strategy="none"`) supports checkpoint/
   resume via `CMAESConfig.checkpoint_dir`/`checkpoint_interval`/`run_id`/
@@ -29,6 +27,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   route selection always fell back to automatic scale-ratio-based selection.
   `method` now actually reaches `MethodSelector`, for every caller of those
   two workflows, not only when checkpointing is enabled.
+- `examples/scripts/10_cli-commands/workflows/06_global_optimization.yaml` used
+  the obsolete `model.custom.file`/`function` nesting the CLI parser never
+  reads (it looks at `model.path`/`function`); its README also documented that
+  wrong schema plus two fictional `p0_function`/`bounds_function` keys.
+  `FitVisualizer.generate()` now fails fast with an actionable message for
+  multi-dimensional `xdata` instead of a cryptic matplotlib crash, and the 2D
+  surface-fit example points at the manual-plotting gallery script instead of
+  the (unsupported) auto-plotter.
+- Three-brain review of `scripts/` and `templates/`: a crash in
+  `configure_notebooks.py` (missing `import logging`) and a stale-variable bug
+  in `benchmark_us2.py`'s no-cache SVD loop; a path-traversal bypass in
+  `io_patch.py`'s sandboxed `savefig()` redirect; `templates/workflow_config_template.yaml`
+  documented ~15 keys the CLI never reads (rewritten to match
+  `workflow_runner.py`/`model_registry.py`/`result_exporter.py`); and assorted
+  correctness/robustness fixes across the benchmark and notebook-conversion
+  scripts (async-timing bugs, zero-division guards, sandbox path resolution).
 
 ## [0.7.2] - 2026-08-26
 

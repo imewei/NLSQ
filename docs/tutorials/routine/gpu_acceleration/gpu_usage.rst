@@ -17,11 +17,12 @@ NLSQ detects available GPUs automatically (on Linux):
 
 .. code-block:: python
 
-   from nlsq import fit, get_device
+   from nlsq import fit
+   from nlsq.device import get_device_info
    import jax.numpy as jnp
 
    # Check current device
-   print(f"Using device: {get_device()}")
+   print(f"Using backend: {get_device_info()['jax_backend']}")
 
 
    def model(x, a, b, c):
@@ -168,10 +169,11 @@ Complete Example
 
    import numpy as np
    import jax.numpy as jnp
-   from nlsq import fit, get_device
+   from nlsq import fit
+   from nlsq.device import get_device_info
 
    # Check device
-   print(f"Running on: {get_device()}")
+   print(f"Running on: {get_device_info()['jax_backend']}")
 
    # Large dataset
    np.random.seed(42)
