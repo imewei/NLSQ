@@ -312,12 +312,12 @@ class StreamingCoordinator:
         else:
             chunk_size = n_data
 
-        # Clamp to at most 100_000 (never below what the memory budget
-        # actually computed -- flooring at 1000 here would let the chunk's
+        # Clamp to an upper ceiling only -- never floor above what the memory
+        # budget actually computed. A floor here would let the chunk's
         # Jacobian exceed target_jacobian_mb whenever n_params is large
-        # enough that the budget-safe size is under 1000, which is exactly
-        # the low-memory/high-n_params case this method exists to protect),
-        # then cap at n_data so chunk never exceeds data size.
+        # enough that the budget-safe size falls below it, which is exactly
+        # the low-memory/high-n_params case this method exists to protect.
+        # Then cap at n_data so chunk never exceeds data size.
         chunk_size = max(1, min(chunk_size, 100_000))
         chunk_size = max(1, min(chunk_size, n_data))
 

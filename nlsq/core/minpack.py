@@ -310,6 +310,17 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
+def _is_auto_p0(p0: object) -> bool:
+    """True if p0 is the "auto" sentinel requesting parameter estimation.
+
+    p0="auto" is a control-flow sentinel, not literal parameter data --
+    np.atleast_1d("auto")/np.asarray("auto") would otherwise treat it as a
+    1-element string array, miscounting n_params as 1 regardless of the
+    model's real parameter count.
+    """
+    return isinstance(p0, str) and p0 == "auto"
+
+
 def fit(  # noqa: C901
     f: ModelFunction,
     xdata: ArrayLike,
@@ -432,12 +443,8 @@ def fit(  # noqa: C901
     if n_points == 0:
         raise ValueError("`ydata` must not be empty!")
 
-    # Determine number of parameters. p0="auto" is a sentinel requesting
-    # estimation (see _determine_parameter_count), not a literal parameter
-    # value -- np.atleast_1d("auto") would otherwise produce a 1-element
-    # string array, miscounting n_params as 1 regardless of the model's
-    # real parameter count.
-    if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
+    # Determine number of parameters (see _determine_parameter_count/_is_auto_p0).
+    if p0 is not None and not _is_auto_p0(p0):
         p0_arr = np.atleast_1d(p0)
         n_params = len(p0_arr)
     else:
@@ -1803,10 +1810,8 @@ def _log_memory_budget_diagnostics(
 
     logger = get_logger("nlsq")
 
-    # Determine n_params from p0 or estimate from xdata/ydata shape. p0="auto"
-    # is a sentinel requesting estimation, not a literal parameter value --
-    # np.atleast_1d("auto") would otherwise produce a 1-element string array.
-    if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
+    # Determine n_params from p0 or estimate from xdata/ydata shape.
+    if p0 is not None and not _is_auto_p0(p0):
         n_params = len(np.atleast_1d(p0))
     else:
         n_params = 3  # Default estimate
@@ -1880,10 +1885,10 @@ def _apply_auto_bounds(
     """
     from nlsq.precision.bound_inference import infer_bounds, merge_bounds
 
-    if p0 is None:
+    if p0 is None or _is_auto_p0(p0):
         from nlsq.precision.parameter_estimation import estimate_initial_parameters
 
-        p0 = estimate_initial_parameters(f, xdata, ydata, p0)
+        p0 = estimate_initial_parameters(f, xdata, ydata, None)
 
     # Infer bounds from data
     inferred_bounds = infer_bounds(
@@ -2176,8 +2181,21 @@ def _run_cmaes_optimization(
     # the fit(workflow='auto_global', method='cmaes') entry point honors.
     # p0/bounds/sigma/absolute_sigma are excluded since they're already
     # passed explicitly below -- forwarding them too would raise
-    # "got multiple values for argument".
-    _already_passed = ("p0", "bounds", "sigma", "absolute_sigma")
+    # "got multiple values for argument". timeit/return_eval/full_output are
+    # excluded because they make the nested curve_fit() call inside NLSQ
+    # refinement return a tuple instead of a CurveFitResult; _nlsq_refinement
+    # then does result.x on that tuple, which raises AttributeError, which is
+    # swallowed by a broad except and silently falls back to the unrefined
+    # CMA-ES point estimate (pcov=inf) while still reporting success=True.
+    _already_passed = (
+        "p0",
+        "bounds",
+        "sigma",
+        "absolute_sigma",
+        "timeit",
+        "return_eval",
+        "full_output",
+    )
     extra_kwargs = {k: v for k, v in kwargs.items() if k not in _already_passed}
 
     # Run CMA-ES optimization
@@ -3383,19 +3401,14 @@ class CurveFit:
             Validated p0 array (or None if auto-estimation not requested)
         """
         # If p0 is explicitly provided (not None or 'auto'), use it
-        if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
+        if p0 is not None and not _is_auto_p0(p0):
             p0 = np.atleast_1d(p0)
             n = p0.size
             return n, p0
 
         # Only auto-estimate if p0='auto' is explicitly requested
         # (not when p0=None, to preserve backward compatibility)
-        if (
-            isinstance(p0, str)
-            and p0 == "auto"
-            and xdata is not None
-            and ydata is not None
-        ):
+        if _is_auto_p0(p0) and xdata is not None and ydata is not None:
             try:
                 # Lazy import to reduce module dependencies
                 from nlsq.precision.parameter_estimation import (
@@ -4387,11 +4400,8 @@ class CurveFit:
         ydata_arr = np.asarray(ydata, float)
         n_points = len(ydata_arr)
 
-        # Determine parameter count. p0="auto" is a sentinel requesting
-        # estimation, not a literal parameter value -- np.atleast_1d("auto")
-        # would otherwise produce a 1-element string array, miscounting
-        # n_params as 1 regardless of the model's real parameter count.
-        if p0 is not None and not (isinstance(p0, str) and p0 == "auto"):
+        # Determine parameter count.
+        if p0 is not None and not _is_auto_p0(p0):
             n_params = len(np.atleast_1d(p0))
         else:
             # Estimate parameter count by inspecting function signature

@@ -915,6 +915,32 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         return result
 
+    def _check_inner_loop_limit(
+        self,
+        inner_loop_count: int,
+        max_inner_iterations: int,
+        termination_status: int | None,
+        actual_reduction: float,
+    ) -> int | None:
+        """Flag inner-loop exhaustion, without clobbering a real termination.
+
+        inner_loop_count can equal max_inner_iterations on the very iteration
+        that accepts a step or satisfies ftol/xtol, so this only fires when
+        the loop actually exited empty-handed.
+        """
+        if (
+            inner_loop_count >= max_inner_iterations
+            and termination_status is None
+            and actual_reduction <= 0
+        ):
+            self.logger.warning(
+                "Inner optimization loop hit iteration limit",
+                inner_iterations=inner_loop_count,
+                actual_reduction=actual_reduction,
+            )
+            return -3  # Inner loop limit exceeded
+        return termination_status
+
     def _evaluate_step_acceptance(
         self,
         fun: Callable[..., Any],
@@ -1145,22 +1171,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             if actual_reduction > 0:
                 break
 
-        # Check if inner loop hit iteration limit -- only when it actually
-        # exited without a successful step or another termination code.
-        # inner_loop_count can equal max_inner_iterations on the very
-        # iteration that accepts a step or satisfies ftol/xtol; without these
-        # guards this would clobber that legitimate outcome with -3.
-        if (
-            inner_loop_count >= max_inner_iterations
-            and termination_status is None
-            and actual_reduction <= 0
-        ):
-            self.logger.warning(
-                "Inner optimization loop hit iteration limit",
-                inner_iterations=inner_loop_count,
-                actual_reduction=actual_reduction,
-            )
-            termination_status = -3  # Inner loop limit exceeded
+        termination_status = self._check_inner_loop_limit(
+            inner_loop_count,
+            max_inner_iterations,
+            termination_status,
+            actual_reduction,
+        )
 
         # Prepare result
         result: dict[str, Any] = {
@@ -1648,20 +1664,12 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha = min(raw_alpha if math.isfinite(raw_alpha) else 1e30, 1e30)
             Delta = Delta_new
 
-        # Check inner loop limit -- only when it actually exited without a
-        # successful step or another termination code (see matching guard in
-        # the no-bounds inner loop above for why this can't be unconditional).
-        if (
-            inner_loop_count >= max_inner_iterations
-            and termination_status is None
-            and actual_reduction <= 0
-        ):
-            self.logger.warning(
-                "Inner optimization loop hit iteration limit",
-                inner_iterations=inner_loop_count,
-                actual_reduction=actual_reduction,
-            )
-            termination_status = -3
+        termination_status = self._check_inner_loop_limit(
+            inner_loop_count,
+            max_inner_iterations,
+            termination_status,
+            actual_reduction,
+        )
 
         return {
             "accepted": actual_reduction > 0,

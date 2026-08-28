@@ -187,7 +187,7 @@ def _solve_tr_subproblem_cg(
     def compute_regularized():
         # alpha carries the LM damping parameter forward across outer
         # iterations via a multiplicative rescale (trf.py), but starts at
-        # 0.0 (INITIAL_LEVENBERG_MARQUARDT_LAMBDA), and 0 * anything is
+        # its unset value of 0.0, and 0 * anything is
         # still 0 -- without an initial nonzero seed here, this branch
         # always regularizes with alpha=0, silently degrading to the
         # unregularized Gauss-Newton solution merely rescaled to the trust
