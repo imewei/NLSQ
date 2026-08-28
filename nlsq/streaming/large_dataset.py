@@ -25,6 +25,7 @@ import numpy as np
 import psutil
 
 # Initialize JAX configuration through central config
+from nlsq.caching._closure_serial import closure_serial
 from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
@@ -1078,7 +1079,7 @@ class LargeDatasetFitter:
         # Task Group 7 (5.1a): Model validation caching
         # Cache validated functions by (id(func), id(func.__code__)) to avoid
         # redundant validation across chunks. Provides 1-5% performance gain.
-        self._validated_functions: dict[tuple[str, bytes, tuple], bool] = {}
+        self._validated_functions: dict[int, bool] = {}
 
         # FR-006: Buffer pool for chunk reuse (initialized lazily)
         self._buffer_pool: ChunkBufferPool | None = None
@@ -1263,23 +1264,20 @@ class LargeDatasetFitter:
         Provides 1-5% performance gain in chunked processing.
         """
         # Task Group 7 (5.1a): Check validation cache
-        # Use function object and its code object directly (not id() which
-        # can be recycled by GC). Callables without __code__ (functools.partial,
-        # callable class instances, some C extensions) have no stable
-        # content-based key -- skip caching for them rather than crashing or
-        # falling back to id() (which reintroduces the GC-recycling problem
-        # this cache design was built to avoid).
-        func_code = getattr(f, "__code__", None)
-        func_key = (
-            (
-                getattr(f, "__name__", type(f).__name__),
-                func_code.co_code,
-                func_code.co_consts,
-            )
-            if func_code is not None
-            else None
-        )
-        if func_key is not None and func_key in self._validated_functions:
+        # Use closure_serial(f) rather than (name, __code__.co_code,
+        # __code__.co_consts): two closures built by the same factory share
+        # identical bytecode/consts but capture different free variables
+        # (in __closure__, not co_consts), so a code-only key would let the
+        # second closure silently skip validation on a false cache hit --
+        # exactly the bug class nlsq.caching.smart_cache/compilation_cache
+        # already guard against (see their _closure_serial usage). Plain
+        # id(f) is unsafe too: CPython can reuse a GC'd object's address.
+        # closure_serial's WeakKeyDictionary gives each live function object
+        # a stable, never-reused key and works uniformly for plain
+        # functions, functools.partial, and callable class instances alike
+        # (no __code__ required), so no separate "uncacheable" branch needed.
+        func_key = closure_serial(f)
+        if func_key in self._validated_functions:
             self.logger.debug("Model validation skipped (cached)")
             return
 
@@ -1372,10 +1370,8 @@ class LargeDatasetFitter:
                 f"f({x_test.shape}, {len(p0_test)} params) -> {output_test.shape}",
             )
 
-            # Task Group 7 (5.1a): Cache successful validation (only when a
-            # stable content-based key was available)
-            if func_key is not None:
-                self._validated_functions[func_key] = True
+            # Task Group 7 (5.1a): Cache successful validation
+            self._validated_functions[func_key] = True
 
         except (ValueError, TypeError) as e:
             # Re-raise validation errors with context (rate-limited logging)
@@ -2289,6 +2285,17 @@ class LargeDatasetFitter:
         uncertainty is consistent with how the parameters were actually
         combined, rather than a cruder proxy from parameter-history variance.
 
+        ``_accum_information`` is a sum of per-chunk PSD precision matrices,
+        so it is essentially never exactly singular (that would require every
+        chunk to be singular in the same direction) -- the realistic failure
+        mode is instead a high condition number, which np.linalg.inv "solves"
+        without error, returning finite but numerically meaningless entries.
+        A plain finiteness check (as used pre-fix) would silently accept that
+        confident-looking garbage, so this also gates on condition number,
+        mirroring the same 1e12 threshold and symmetrize step
+        NumericalStabilityGuard/`_chunk_precision` use for the analogous
+        per-chunk problem.
+
         Args:
             param_history: List of parameter estimates from previous chunks
             current_params: Final parameter estimates
@@ -2298,12 +2305,27 @@ class LargeDatasetFitter:
         """
         accum_information = getattr(self, "_accum_information", None)
         if accum_information is not None:
-            try:
-                pcov = np.linalg.inv(accum_information)
-            except np.linalg.LinAlgError:
-                pcov = None
-            if pcov is not None and np.all(np.isfinite(pcov)):
-                return pcov
+            singular_values = np.linalg.svd(accum_information, compute_uv=False)
+            condition_number = (
+                float(singular_values[0] / singular_values[-1])
+                if singular_values[-1] > 0
+                else np.inf
+            )
+            if condition_number <= 1e12:
+                try:
+                    pcov = np.linalg.inv(accum_information)
+                except np.linalg.LinAlgError:
+                    pcov = None
+                if pcov is not None:
+                    pcov = 0.5 * (pcov + pcov.T)  # symmetrize
+                    if np.all(np.isfinite(pcov)):
+                        return pcov
+            self.logger.warning(
+                f"Accumulated information matrix is ill-conditioned or "
+                f"singular (condition number: {condition_number:.2e}); "
+                "falling back to parameter-history covariance proxy instead "
+                "of the precision-weighted GLS covariance.",
+            )
 
         if len(param_history) > 1:
             # Use last 10 parameter estimates for covariance estimation
