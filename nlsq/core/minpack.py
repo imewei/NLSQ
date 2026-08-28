@@ -427,6 +427,13 @@ def fit(  # noqa: C901
     xdata_arr = np.asarray(xdata)
     ydata_arr = np.asarray(ydata)
     n_points = len(ydata_arr)
+    # Multi-dimensional xdata is (n_points, n_features) per the convention
+    # InputValidator._validate_and_convert_arrays already uses -- feed the
+    # real feature count into MemoryBudget.compute() below so its data_gb
+    # estimate isn't silently 1/n_features too small for e.g. 2D surface
+    # fits, which could pick STANDARD/CHUNKED when the real data needs
+    # STREAMING.
+    n_features = xdata_arr.shape[1] if xdata_arr.ndim == 2 else 1
 
     # Handle empty data
     if n_points == 0:
@@ -515,6 +522,7 @@ def fit(  # noqa: C901
             budget = MemoryBudget.compute(
                 n_points=n_points,
                 n_params=n_params,
+                n_features=n_features,
                 memory_limit_gb=memory_limit_gb,
             )
             _logger.info(
@@ -527,6 +535,7 @@ def fit(  # noqa: C901
             _strategy, config = selector.select(
                 n_points=n_points,
                 n_params=n_params,
+                n_features=n_features,
                 memory_limit_gb=memory_limit_gb,
                 goal=goal_enum,
                 budget=budget,
@@ -690,7 +699,23 @@ def _fit_with_config(
 
     if isinstance(config, HybridStreamingConfig):
         # Streaming optimization path
+        import dataclasses
+
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+
+        # AdaptiveHybridStreamingOptimizer.fit() has no check_finite
+        # parameter and its 4-phase pipeline does not validate the raw
+        # input for NaN/Inf itself (unlike LargeDatasetFitter/curve_fit(),
+        # which do) -- without this, a NaN in xdata/ydata silently runs to
+        # a bogus success=True result (parameters stuck at p0, NaN std
+        # errors) instead of the documented check_finite=True behavior.
+        if check_finite:
+            if not np.all(np.isfinite(xdata)):
+                n_bad = int(np.sum(~np.isfinite(xdata)))
+                raise ValueError(f"xdata contains {n_bad} NaN or Inf values")
+            if not np.all(np.isfinite(ydata)):
+                n_bad = int(np.sum(~np.isfinite(ydata)))
+                raise ValueError(f"ydata contains {n_bad} NaN or Inf values")
 
         # Prepare p0
         if p0 is None:
@@ -709,6 +734,17 @@ def _fit_with_config(
             if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
             else None
         )
+
+        # AdaptiveHybridStreamingOptimizer.fit() has no gtol/ftol/xtol
+        # parameters -- its single convergence knob is
+        # config.gauss_newton_tol, set at construction time. Without this,
+        # the goal-derived (or user-supplied) gtol computed into kwargs
+        # above is silently dropped for this route -- matching the
+        # gauss_newton_tol=kwargs.get("gtol", ...) treatment
+        # _fit_global_multistart's streaming branch already applies.
+        # ftol/xtol have no streaming equivalent to map to.
+        if "gtol" in kwargs:
+            config = dataclasses.replace(config, gauss_newton_tol=kwargs["gtol"])
 
         optimizer = AdaptiveHybridStreamingOptimizer(config=config)
         result_dict = optimizer.fit(
@@ -1223,10 +1259,16 @@ def _fit_with_auto_global(
     # FR-000: Select memory strategy with detailed logging
     selector = MemoryBudgetSelector(safety_factor=0.75)
 
+    # Multi-dimensional xdata is (n_points, n_features) -- see the matching
+    # comment in fit()'s workflow='auto' branch. Same underestimate applies
+    # here for workflow='auto_global'/'hpc'.
+    n_features = xdata.shape[1] if xdata.ndim == 2 else 1
+
     # Compute memory budget for logging
     budget = MemoryBudget.compute(
         n_points=n_points,
         n_params=n_params,
+        n_features=n_features,
         memory_limit_gb=memory_limit_gb,
     )
     _logger.info(
@@ -1239,6 +1281,7 @@ def _fit_with_auto_global(
     strategy, memory_config = selector.select(
         n_points=n_points,
         n_params=n_params,
+        n_features=n_features,
         memory_limit_gb=memory_limit_gb,
         goal=goal,
         budget=budget,

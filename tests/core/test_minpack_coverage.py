@@ -643,6 +643,147 @@ class TestBugFixRegressions(unittest.TestCase):
 
         mock_compute.assert_called_once()
 
+    def test_workflow_auto_and_auto_global_pass_real_n_features(self):
+        """fit(workflow='auto', ...) and _fit_with_auto_global (workflow=
+        'auto_global'/'hpc') both used to call MemoryBudget.compute()/
+        selector.select() with the default n_features=1 regardless of
+        xdata's actual shape, silently underestimating data_gb for
+        multi-dimensional xdata (shape (n_points, n_features), per
+        InputValidator's own convention) -- e.g. a 2D surface fit's memory
+        estimate came out ~1/n_features too small, which could pick
+        STANDARD/CHUNKED when the real data needs STREAMING. Verify the
+        real n_features (2, here) now reaches MemoryBudget.compute() from
+        both entry points."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_with_auto_global, fit
+        from nlsq.core.workflow import MemoryBudget
+
+        def model(xy, a, b):
+            x, y = xy[:, 0], xy[:, 1]
+            return a * x + b * y
+
+        n_points = 30
+        xdata_2d = np.stack(
+            [np.linspace(0, 10, n_points), np.linspace(0, 5, n_points)], axis=1
+        )
+        ydata = 2.0 * xdata_2d[:, 0] + 1.0 * xdata_2d[:, 1]
+
+        with (
+            patch.object(
+                MemoryBudget, "compute", wraps=MemoryBudget.compute
+            ) as mock_compute,
+            patch("nlsq.core.minpack._fit_with_config") as mock_fit_with_config,
+        ):
+            mock_fit_with_config.return_value = {"success": True}
+            fit(model, xdata_2d, ydata, p0=[1.5, 0.5], workflow="auto")
+
+        _args, ctor_kwargs = mock_compute.call_args
+        self.assertEqual(ctor_kwargs.get("n_features"), 2)
+
+        with (
+            patch.object(
+                MemoryBudget, "compute", wraps=MemoryBudget.compute
+            ) as mock_compute,
+            patch("nlsq.core.minpack._fit_global_multistart") as mock_multistart,
+            patch("nlsq.core.minpack._fit_global_cmaes") as mock_cmaes,
+        ):
+            mock_multistart.return_value = {"success": True}
+            mock_cmaes.return_value = {"success": True}
+            _fit_with_auto_global(
+                f=model,
+                xdata=xdata_2d,
+                ydata=ydata,
+                p0=[1.5, 0.5],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=([0.0, 0.0], [10.0, 5.0]),
+                n_points=n_points,
+                n_params=2,
+                goal=None,
+            )
+
+        _args, ctor_kwargs = mock_compute.call_args
+        self.assertEqual(ctor_kwargs.get("n_features"), 2)
+
+    def test_fit_with_config_streaming_forwards_gtol_to_gauss_newton_tol(self):
+        """_fit_with_config's HybridStreamingConfig branch used to ignore
+        both goal-derived and any user-supplied gtol kwarg entirely --
+        AdaptiveHybridStreamingOptimizer.fit() has no tolerance parameters
+        of its own, so gtol must be baked into config.gauss_newton_tol
+        before construction, the same way _fit_global_multistart's
+        streaming branch already does. Verify a goal='quality'-derived
+        gtol actually reaches gauss_newton_tol instead of the config's
+        untouched default."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_with_config
+        from nlsq.core.workflow import OptimizationGoal
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        x = np.linspace(0, 5, 200)
+        y = np.asarray(2.5 * np.exp(-0.5 * x))
+        default_tol = HybridStreamingConfig().gauss_newton_tol
+
+        with patch(
+            "nlsq.streaming.adaptive_hybrid.AdaptiveHybridStreamingOptimizer"
+        ) as mock_optimizer_cls:
+            mock_optimizer_cls.return_value.fit.return_value = {
+                "popt": np.array([2.0, 0.5]),
+                "pcov": np.eye(2),
+                "success": True,
+            }
+            _fit_with_config(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y,
+                p0=[1.0, 1.0],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(-np.inf, np.inf),
+                method=None,
+                config=HybridStreamingConfig(chunk_size=50),
+                goal=OptimizationGoal.QUALITY,
+            )
+
+        mock_optimizer_cls.assert_called_once()
+        _args, ctor_kwargs = mock_optimizer_cls.call_args
+        used_config = ctor_kwargs.get("config") or (_args[0] if _args else None)
+        self.assertNotEqual(used_config.gauss_newton_tol, default_tol)
+
+    def test_fit_with_config_streaming_enforces_check_finite(self):
+        """_fit_with_config's HybridStreamingConfig branch used to never
+        validate xdata/ydata for NaN/Inf -- AdaptiveHybridStreamingOptimizer
+        has no check_finite parameter and doesn't do this validation
+        itself, so a NaN silently ran to a bogus success=True result
+        (parameters stuck at p0, NaN covariance) instead of the documented
+        check_finite=True default raising a clear error, like the
+        chunked/standard/fallback routes already do."""
+        from nlsq.core.minpack import _fit_with_config
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        x = np.linspace(0, 5, 50)
+        x[10] = np.nan
+        y = np.asarray(2.5 * np.exp(-0.5 * np.nan_to_num(x)))
+
+        with self.assertRaises(ValueError) as excinfo:
+            _fit_with_config(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y,
+                p0=[1.0, 1.0],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(-np.inf, np.inf),
+                method=None,
+                config=HybridStreamingConfig(chunk_size=10),
+                goal=None,
+            )
+        self.assertIn("NaN or Inf", str(excinfo.exception))
+
     def test_log_memory_budget_diagnostics_reuses_precomputed_budget(self):
         """_log_memory_budget_diagnostics computes a MemoryBudget then used
         to let selector.select() redetect memory again internally. Verify
