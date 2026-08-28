@@ -657,7 +657,7 @@ class TestBugFixRegressions(unittest.TestCase):
         from unittest.mock import patch
 
         from nlsq.core.minpack import _fit_with_auto_global, fit
-        from nlsq.core.workflow import MemoryBudget
+        from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
 
         def model(xy, a, b):
             x, y = xy[:, 0], xy[:, 1]
@@ -673,21 +673,31 @@ class TestBugFixRegressions(unittest.TestCase):
             patch.object(
                 MemoryBudget, "compute", wraps=MemoryBudget.compute
             ) as mock_compute,
+            patch.object(MemoryBudgetSelector, "select") as mock_select,
             patch("nlsq.core.minpack._fit_with_config") as mock_fit_with_config,
         ):
+            mock_select.return_value = ("standard", None)
             mock_fit_with_config.return_value = {"success": True}
             fit(model, xdata_2d, ydata, p0=[1.5, 0.5], workflow="auto")
 
         _args, ctor_kwargs = mock_compute.call_args
         self.assertEqual(ctor_kwargs.get("n_features"), 2)
+        # MemoryBudgetSelector.select() is what actually drives the
+        # STANDARD/CHUNKED/STREAMING decision -- MemoryBudget.compute()
+        # alone is only used for the logged estimate, so both must carry
+        # the real n_features, not just the one used for logging.
+        _args, select_kwargs = mock_select.call_args
+        self.assertEqual(select_kwargs.get("n_features"), 2)
 
         with (
             patch.object(
                 MemoryBudget, "compute", wraps=MemoryBudget.compute
             ) as mock_compute,
+            patch.object(MemoryBudgetSelector, "select") as mock_select,
             patch("nlsq.core.minpack._fit_global_multistart") as mock_multistart,
             patch("nlsq.core.minpack._fit_global_cmaes") as mock_cmaes,
         ):
+            mock_select.return_value = ("standard", None)
             mock_multistart.return_value = {"success": True}
             mock_cmaes.return_value = {"success": True}
             _fit_with_auto_global(
@@ -706,6 +716,8 @@ class TestBugFixRegressions(unittest.TestCase):
 
         _args, ctor_kwargs = mock_compute.call_args
         self.assertEqual(ctor_kwargs.get("n_features"), 2)
+        _args, select_kwargs = mock_select.call_args
+        self.assertEqual(select_kwargs.get("n_features"), 2)
 
     def test_fit_with_config_streaming_forwards_gtol_to_gauss_newton_tol(self):
         """_fit_with_config's HybridStreamingConfig branch used to ignore
@@ -753,6 +765,46 @@ class TestBugFixRegressions(unittest.TestCase):
         used_config = ctor_kwargs.get("config") or (_args[0] if _args else None)
         self.assertNotEqual(used_config.gauss_newton_tol, default_tol)
 
+    def test_fit_with_config_streaming_forwards_directly_supplied_gtol(self):
+        """The fix's `if "gtol" in kwargs` branch (and its own docstring)
+        cover any user-supplied gtol, not just goal-derived ones -- verify
+        a directly passed gtol=1e-11 kwarg (no goal at all) reaches
+        gauss_newton_tol."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_with_config
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        x = np.linspace(0, 5, 200)
+        y = np.asarray(2.5 * np.exp(-0.5 * x))
+
+        with patch(
+            "nlsq.streaming.adaptive_hybrid.AdaptiveHybridStreamingOptimizer"
+        ) as mock_optimizer_cls:
+            mock_optimizer_cls.return_value.fit.return_value = {
+                "popt": np.array([2.0, 0.5]),
+                "pcov": np.eye(2),
+                "success": True,
+            }
+            _fit_with_config(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y,
+                p0=[1.0, 1.0],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(-np.inf, np.inf),
+                method=None,
+                config=HybridStreamingConfig(chunk_size=50),
+                goal=None,
+                gtol=1e-11,
+            )
+
+        _args, ctor_kwargs = mock_optimizer_cls.call_args
+        used_config = ctor_kwargs.get("config") or (_args[0] if _args else None)
+        self.assertEqual(used_config.gauss_newton_tol, 1e-11)
+
     def test_fit_with_config_streaming_enforces_check_finite(self):
         """_fit_with_config's HybridStreamingConfig branch used to never
         validate xdata/ydata for NaN/Inf -- AdaptiveHybridStreamingOptimizer
@@ -781,6 +833,90 @@ class TestBugFixRegressions(unittest.TestCase):
                 method=None,
                 config=HybridStreamingConfig(chunk_size=10),
                 goal=None,
+            )
+        self.assertIn("NaN or Inf", str(excinfo.exception))
+
+    def test_fit_with_config_streaming_check_finite_covers_ydata_and_inf(self):
+        """The check_finite guard has two independent branches (xdata,
+        ydata), each with its own raise -- verify the ydata branch (not
+        just xdata) and an Inf value (not just NaN) are both caught, and
+        that check_finite=False actually bypasses the check (the fix must
+        not accidentally always validate regardless of the flag)."""
+        from unittest.mock import patch
+
+        from nlsq.core.minpack import _fit_with_config
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        x = np.linspace(0, 5, 50)
+        y_with_inf = np.asarray(2.5 * np.exp(-0.5 * x))
+        y_with_inf[5] = np.inf
+
+        with self.assertRaises(ValueError) as excinfo:
+            _fit_with_config(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y_with_inf,
+                p0=[1.0, 1.0],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(-np.inf, np.inf),
+                method=None,
+                config=HybridStreamingConfig(chunk_size=10),
+                goal=None,
+            )
+        self.assertIn("ydata contains", str(excinfo.exception))
+        self.assertIn("NaN or Inf", str(excinfo.exception))
+
+        with patch(
+            "nlsq.streaming.adaptive_hybrid.AdaptiveHybridStreamingOptimizer"
+        ) as mock_optimizer_cls:
+            mock_optimizer_cls.return_value.fit.return_value = {
+                "popt": np.array([2.0, 0.5]),
+                "pcov": np.eye(2),
+                "success": True,
+            }
+            _fit_with_config(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y_with_inf,
+                p0=[1.0, 1.0],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=False,
+                bounds=(-np.inf, np.inf),
+                method=None,
+                config=HybridStreamingConfig(chunk_size=10),
+                goal=None,
+            )
+        mock_optimizer_cls.assert_called_once()
+
+    def test_fit_global_multistart_streaming_enforces_check_finite(self):
+        """_fit_global_multistart's streaming fallthrough branch (reached
+        via workflow='auto_global'/'hpc' when the memory strategy selects
+        streaming) had the identical check_finite gap as
+        _fit_with_config's HybridStreamingConfig branch -- same
+        AdaptiveHybridStreamingOptimizer, same missing validation. Verify
+        it's now covered too, via the shared _check_finite_for_streaming
+        helper."""
+        from nlsq.core.minpack import _fit_global_multistart
+
+        x = np.linspace(0, 5, 50)
+        x[10] = np.nan
+        y = np.asarray(2.5 * np.exp(-0.5 * np.nan_to_num(x)))
+
+        with self.assertRaises(ValueError) as excinfo:
+            _fit_global_multistart(
+                f=lambda x, a, b: a * jnp.exp(-b * x),
+                xdata=x,
+                ydata=y,
+                p0=[1.0, 1.0],
+                sigma=None,
+                absolute_sigma=False,
+                check_finite=True,
+                bounds=(np.array([0.0, 0.0]), np.array([10.0, 5.0])),
+                strategy="streaming",
+                n_starts=5,
             )
         self.assertIn("NaN or Inf", str(excinfo.exception))
 

@@ -310,6 +310,17 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
+def _infer_n_features(xdata: np.ndarray) -> int:
+    """Number of independent variables in xdata: 1 for a plain 1D array,
+    or xdata.shape[1] for the (n_points, n_features) 2D convention
+    InputValidator._validate_and_convert_arrays already uses (e.g. a 2D
+    surface fit). Feeds MemoryBudget.compute()/MemoryBudgetSelector.select()
+    the real feature count so their data_gb estimate isn't silently
+    1/n_features too small.
+    """
+    return xdata.shape[1] if xdata.ndim == 2 else 1
+
+
 def fit(  # noqa: C901
     f: ModelFunction,
     xdata: ArrayLike,
@@ -427,13 +438,7 @@ def fit(  # noqa: C901
     xdata_arr = np.asarray(xdata)
     ydata_arr = np.asarray(ydata)
     n_points = len(ydata_arr)
-    # Multi-dimensional xdata is (n_points, n_features) per the convention
-    # InputValidator._validate_and_convert_arrays already uses -- feed the
-    # real feature count into MemoryBudget.compute() below so its data_gb
-    # estimate isn't silently 1/n_features too small for e.g. 2D surface
-    # fits, which could pick STANDARD/CHUNKED when the real data needs
-    # STREAMING.
-    n_features = xdata_arr.shape[1] if xdata_arr.ndim == 2 else 1
+    n_features = _infer_n_features(xdata_arr)
 
     # Handle empty data
     if n_points == 0:
@@ -649,6 +654,31 @@ def fit(  # noqa: C901
     )
 
 
+def _check_finite_for_streaming(
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    check_finite: bool,
+) -> None:
+    """Validate xdata/ydata for NaN/Inf before an AdaptiveHybridStreamingOptimizer
+    call. That optimizer has no check_finite parameter and its 4-phase
+    pipeline never validates raw input itself (unlike LargeDatasetFitter/
+    curve_fit(), which do) -- without this, a NaN/Inf silently runs to a
+    bogus success=True result (parameters stuck at p0, NaN std errors)
+    instead of the documented check_finite=True behavior. Shared by every
+    reachable caller that constructs that optimizer directly, so a new
+    caller can't reintroduce the gap by copy-pasting the construction
+    without the check.
+    """
+    if not check_finite:
+        return
+    if not np.all(np.isfinite(xdata)):
+        n_bad = int(np.sum(~np.isfinite(xdata)))
+        raise ValueError(f"xdata contains {n_bad} NaN or Inf values")
+    if not np.all(np.isfinite(ydata)):
+        n_bad = int(np.sum(~np.isfinite(ydata)))
+        raise ValueError(f"ydata contains {n_bad} NaN or Inf values")
+
+
 def _fit_with_config(
     f: ModelFunction,
     xdata: np.ndarray,
@@ -703,19 +733,7 @@ def _fit_with_config(
 
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 
-        # AdaptiveHybridStreamingOptimizer.fit() has no check_finite
-        # parameter and its 4-phase pipeline does not validate the raw
-        # input for NaN/Inf itself (unlike LargeDatasetFitter/curve_fit(),
-        # which do) -- without this, a NaN in xdata/ydata silently runs to
-        # a bogus success=True result (parameters stuck at p0, NaN std
-        # errors) instead of the documented check_finite=True behavior.
-        if check_finite:
-            if not np.all(np.isfinite(xdata)):
-                n_bad = int(np.sum(~np.isfinite(xdata)))
-                raise ValueError(f"xdata contains {n_bad} NaN or Inf values")
-            if not np.all(np.isfinite(ydata)):
-                n_bad = int(np.sum(~np.isfinite(ydata)))
-                raise ValueError(f"ydata contains {n_bad} NaN or Inf values")
+        _check_finite_for_streaming(xdata, ydata, check_finite)
 
         # Prepare p0
         if p0 is None:
@@ -1259,10 +1277,7 @@ def _fit_with_auto_global(
     # FR-000: Select memory strategy with detailed logging
     selector = MemoryBudgetSelector(safety_factor=0.75)
 
-    # Multi-dimensional xdata is (n_points, n_features) -- see the matching
-    # comment in fit()'s workflow='auto' branch. Same underestimate applies
-    # here for workflow='auto_global'/'hpc'.
-    n_features = xdata.shape[1] if xdata.ndim == 2 else 1
+    n_features = _infer_n_features(xdata)
 
     # Compute memory budget for logging
     budget = MemoryBudget.compute(
@@ -1741,6 +1756,8 @@ def _fit_global_multistart(
     # Streaming with multi-start (FR-004)
     from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+    _check_finite_for_streaming(xdata, ydata, check_finite)
 
     # Prepare p0
     if p0 is None:
