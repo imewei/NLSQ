@@ -1,7 +1,9 @@
 # ==============================================================================
 # NLSQ Workflow Configuration Template
 # ==============================================================================
-# Version: 6.8 (NLSQ v0.6.12 - Comprehensive Configuration)
+# Version: 7.1 (every key below is read by the current CLI — no
+#                documented-but-dead configuration; keep it that way if you
+#                edit this file alongside nlsq/cli/*.py)
 #
 # This template provides configuration options for NLSQ curve fitting workflows.
 # Copy this file to your project and customize as needed.
@@ -10,8 +12,8 @@
 # │ CLI USAGE                                                                   │
 # ├─────────────────────────────────────────────────────────────────────────────┤
 # │ Single fit:    nlsq fit workflow.yaml                                       │
-# │ Batch fits:    nlsq batch w1.yaml w2.yaml w3.yaml                           │
-# │                nlsq batch configs/*.yaml                                    │
+# │ Batch fits:    nlsq batch w1.yaml w2.yaml w3.yaml --workers 4               │
+# │                nlsq batch configs/*.yaml --summary batch_summary.json       │
 # │ System info:   nlsq info                                                    │
 # │ Get template:  nlsq config --workflow                                       │
 # └─────────────────────────────────────────────────────────────────────────────┘
@@ -28,101 +30,25 @@
 #   model:
 #     type: "builtin"
 #     name: "exponential_decay"
-#     auto_p0: true
 #   export:
 #     results_file: "results.json"
+#
+# `nlsq fit` currently always runs a single local nlsq.curve_fit() call —
+# there is no global/multi-start/CMA-ES/streaming/checkpointing workflow
+# selector wired up in the CLI yet, so this template does not document one.
+# `--workers`/`--summary` for batch mode are CLI flags on `nlsq batch`, not
+# YAML keys (a per-file `batch:` section in the YAML is never read).
 #
 # Requirements: Python >=3.12, JAX >=0.8.0, NumPy >=2.2, SciPy >=1.16.0
 # Documentation: https://nlsq.readthedocs.io/
 # ==============================================================================
 
-# ==============================================================================
-# 3-WORKFLOW SYSTEM (v0.6.3+)
-# ==============================================================================
-#
-# NLSQ uses a simplified 3-workflow system that automatically selects optimal
-# processing strategies based on dataset size and available memory.
-#
-# ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ WORKFLOW OPTIONS                                                            │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │                                                                             │
-# │ workflow: "auto" (DEFAULT)                                                  │
-# │   Memory-aware local optimization                                           │
-# │   - Automatic strategy: direct fit → chunked → streaming based on size     │
-# │   - Single starting point (uses p0 or auto-estimated initial guess)        │
-# │   - Best for: unimodal problems, good initial guesses, speed priority      │
-# │                                                                             │
-# │ workflow: "auto_global"                                                     │
-# │   Memory-aware global optimization (REQUIRES BOUNDS)                        │
-# │   - Multi-start Latin Hypercube Sampling or CMA-ES                          │
-# │   - Automatic strategy selection based on parameter scale                   │
-# │   - CMA-ES triggered when bounds span > 3 orders of magnitude              │
-# │   - Use n_starts to control number of starting points (default: 10)        │
-# │   - Best for: multi-modal problems, unknown initial guesses                 │
-# │                                                                             │
-# │ workflow: "hpc"                                                             │
-# │   auto_global + checkpointing for HPC environments                          │
-# │   - Fault-tolerant with automatic resume capability                         │
-# │   - Multi-GPU/node support via PBS_NODEFILE or SLURM_JOB_NODELIST          │
-# │   - Best for: cluster computing, very large datasets, long-running fits    │
-# │                                                                             │
-# └─────────────────────────────────────────────────────────────────────────────┘
-#
-# ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ COMMON PATTERNS                                                             │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │                                                                             │
-# │ Local optimization (fast, single start):                                    │
-# │   workflow: "auto"                                                          │
-# │                                                                             │
-# │ Global optimization (multi-start):                                          │
-# │   workflow: "auto_global"                                                   │
-# │   n_starts: 10                                                              │
-# │   model:                                                                    │
-# │     auto_bounds: true  # or define bounds in parameters                     │
-# │                                                                             │
-# │ High-precision global search:                                               │
-# │   workflow: "auto_global"                                                   │
-# │   n_starts: 20                                                              │
-# │   fitting:                                                                  │
-# │     termination:                                                            │
-# │       gtol: 1.0e-10                                                         │
-# │       ftol: 1.0e-10                                                         │
-# │                                                                             │
-# │ HPC cluster with checkpointing:                                             │
-# │   workflow: "hpc"                                                           │
-# │   n_starts: 20                                                              │
-# │   checkpointing:                                                            │
-# │     enabled: true                                                           │
-# │     directory: "checkpoints"                                                │
-# │                                                                             │
-# └─────────────────────────────────────────────────────────────────────────────┘
-#
-# ==============================================================================
-
+# Workflow metadata (read for logging/labeling only, not fit behavior)
 metadata:
   workflow_name: "example_workflow"
   description: "NLSQ workflow configuration"
-  version: "6.5"
+  version: "1.0"
   author: ""
-
-# ==============================================================================
-# WORKFLOW SELECTION
-# ==============================================================================
-
-# Primary workflow selection: "auto", "auto_global", or "hpc"
-workflow: "auto"
-
-# Number of starting points for global optimization (auto_global, hpc only)
-# Ignored when workflow="auto"
-n_starts: 10
-
-# Sampling method for multi-start: "lhs" (Latin Hypercube), "sobol", "halton"
-sampler: "lhs"
-
-# Memory limit in GB for automatic strategy selection (null = auto-detect)
-memory_limit_gb: null
 
 # ==============================================================================
 # DATA
@@ -149,13 +75,16 @@ data:
     delimiter: ","
     header: true
     encoding: "utf-8"
-    skip_rows: 0      # Skip N rows at start of file
+    skip_header: 0    # Skip N rows at start of file
+    missing_values: ["", "NA", "null", "NaN"]
 
   # ASCII options (.txt, .dat)
   ascii:
     delimiter: null   # null = any whitespace
     comment_char: "#"
     skip_header: 0
+    skip_footer: 0
+    dtype: "float64"
 
   # NPZ options
   npz:
@@ -171,11 +100,11 @@ data:
     z_path: null
     sigma_path: null
 
-  # Validation
-  validation:
-    require_finite: true
-    min_points: 2
-    max_points: null  # null = no limit
+# Data validation — this is a TOP-LEVEL key, not nested under `data:`
+# (the loader merges it into the data config internally).
+validation:
+  require_finite: true
+  min_points: 2
 
 # ==============================================================================
 # MODEL
@@ -183,7 +112,7 @@ data:
 # Model function configuration.
 #
 # Types:
-#   "builtin"    - Use nlsq.functions library
+#   "builtin"    - Use nlsq.core.functions library
 #   "custom"     - Load from external Python file
 #   "polynomial" - Generate polynomial of specified degree
 #
@@ -208,304 +137,53 @@ model:
   # Builtin model name (when type: "builtin")
   name: "exponential_decay"
 
-  # Automatic initial parameter estimation
-  auto_p0: true
+  # --- Custom model (when type: "custom") — flat keys, not nested ---
+  # path: "models.py"
+  # function: "my_model"
+  # trusted: false  # set true only for files you trust (skips AST safety scan)
 
-  # Automatic bounds from model defaults (required for auto_global/hpc)
-  auto_bounds: false
+  # --- Polynomial model (when type: "polynomial") — flat key, not nested ---
+  # degree: 3
 
-  # Custom model configuration (when type: "custom")
-  custom:
-    file: "models.py"
-    function: "my_model"
-
-  # Polynomial configuration (when type: "polynomial")
-  polynomial:
-    degree: 3
-
-  # Manual parameter configuration
-  # Required when auto_p0=false or auto_bounds=false
-  # IMPORTANT: Bounds are REQUIRED for workflow="auto_global" or "hpc"
-  parameters:
-    - name: "amplitude"
-      initial: 1.0
-      bounds: [0.0, 10.0]
-      fixed: false
-    - name: "decay_rate"
-      initial: 0.1
-      bounds: [0.001, 1.0]
-      fixed: false
-    - name: "offset"
-      initial: 0.0
-      bounds: [-1.0, 1.0]
-      fixed: false
+  # Optional: parameter names for export/result labeling only. This does NOT
+  # set initial guesses or bounds — those go under `fitting:` below.
+  # parameter_names: ["amplitude", "decay_rate", "offset"]
 
 # ==============================================================================
 # FITTING
 # ==============================================================================
-# Core fitting algorithm configuration.
+# Core fitting algorithm configuration. Every key here maps 1:1 to a
+# nlsq.curve_fit() keyword argument.
 
 fitting:
-  # Convergence tolerances
-  termination:
-    gtol: 1.0e-8       # Gradient tolerance (gradient norm)
-    ftol: 1.0e-8       # Function tolerance (relative cost reduction)
-    xtol: 1.0e-8       # Parameter tolerance (relative parameter change)
-    max_iterations: 200
-    max_function_evals: 2000
+  # Initial parameter guess: a list, or "auto"/omit to use the model's
+  # estimate_p0() (falls back to nlsq.curve_fit's own default if unavailable).
+  p0: "auto"
 
-  # Robust loss function for outlier handling
-  # Options: "none", "huber", "soft_l1", "cauchy", "arctan"
-  robust_loss: "none"
+  # Bounds: either {lower: [...], upper: [...]} or [[lower...], [upper...]].
+  # If omitted, falls back to the model's bounds() method if it defines one.
+  # bounds:
+  #   lower: [0.0, 0.001, -1.0]
+  #   upper: [10.0, 1.0, 1.0]
 
-  # Jacobian computation mode
-  # "auto" - Use JAX autodiff (recommended)
-  # "fwd"  - Forward-mode differentiation (better for n_params > n_data)
-  # "rev"  - Reverse-mode differentiation (better for n_data > n_params)
-  jacobian_mode: "auto"
+  # Optimization method (omit to let nlsq.curve_fit choose automatically)
+  # method: "trf"
 
-  # Finite difference step size (only used if autodiff unavailable)
-  diff_step: null     # null = automatic
+  # Convergence tolerances (top-level, not nested under `termination:`)
+  gtol: 1.0e-8       # Gradient tolerance (gradient norm)
+  ftol: 1.0e-8       # Function tolerance (relative cost reduction)
+  xtol: 1.0e-8       # Parameter tolerance (relative parameter change)
+  max_nfev: 2000     # Maximum function evaluations
 
-  # Parameter scaling for better conditioning
-  # "jac" - Scale by Jacobian column norms (default)
-  # array - Custom scale factors per parameter
-  x_scale: "jac"
+  # Robust loss function for outlier handling.
+  # Options: "linear" (default, no robustness), "huber", "soft_l1", "cauchy", "arctan"
+  loss: "linear"
 
-# ==============================================================================
-# GLOBAL OPTIMIZATION (for workflow="auto_global" or "hpc")
-# ==============================================================================
-# Multi-start and CMA-ES configuration.
-#
-# ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ GLOBAL OPTIMIZATION PRESETS                                                 │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │ Preset       │ n_starts │ Method         │ Use Case                         │
-# ├──────────────┼──────────┼────────────────┼──────────────────────────────────┤
-# │ fast         │ 5        │ multi-start    │ Quick exploration                │
-# │ robust       │ 10       │ multi-start    │ General purpose (default)        │
-# │ global       │ 20       │ CMA-ES/multi   │ Thorough search                  │
-# │ thorough     │ 50       │ CMA-ES/multi   │ Difficult problems               │
-# └─────────────────────────────────────────────────────────────────────────────┘
+  # sigma is treated as an absolute uncertainty (not relative weighting)
+  absolute_sigma: false
 
-global_optimization:
-  # Multi-start sampling options
-  center_on_p0: true         # Center samples around initial guess
-  scale_factor: 1.0          # Exploration region scale (1.0 = full bounds)
-
-  # Tournament elimination (for multi-start)
-  elimination_rounds: 3      # Number of elimination rounds
-  elimination_fraction: 0.5  # Fraction eliminated per round
-
-  # CMA-ES configuration (evosax>=0.2.0 included in nlsq dependencies)
-  # Automatically used when bounds span > 3 orders of magnitude
-  cmaes:
-    # Preset: "cmaes-fast" (50 gens), "cmaes" (100 gens), "cmaes-global" (200 gens)
-    preset: null             # null = use settings below
-
-    # Population size (null = automatic: 4 + 3*log(n_params))
-    popsize: null
-
-    # Maximum generations before stopping
-    max_generations: 100
-
-    # Initial step size (standard deviation in normalized space)
-    # 0.5 is good default; smaller = more local search
-    sigma: 0.5
-
-    # Restart strategy for escaping local minima
-    # "none"  - No restarts (faster but may get stuck)
-    # "bipop" - Bi-population with alternating large/small populations
-    restart_strategy: "bipop"
-    max_restarts: 9
-
-    # Convergence tolerances
-    tol_fun: 1.0e-8          # Stop when function improvement < tol_fun
-    tol_x: 1.0e-8            # Stop when parameter change < tol_x
-
-    # Memory management for large datasets
-    population_batch_size: null  # null = evaluate all candidates at once
-    data_chunk_size: null        # null = use full dataset (set for >10M points)
-
-    # Refine best CMA-ES solution with NLSQ TRF optimizer
-    refine_with_nlsq: true
-
-    # Random seed for reproducibility (null = random)
-    seed: null
-
-# ==============================================================================
-# CHECKPOINTING (for workflow="hpc" or large datasets)
-# ==============================================================================
-
-checkpointing:
-  enabled: false
-  directory: "checkpoints"
-  frequency: 100             # Save every N iterations
-  resume_from: null          # Path to checkpoint file to resume from
-
-# ==============================================================================
-# RUNTIME
-# ==============================================================================
-# Execution environment settings.
-
-runtime:
-  # Device: "cpu" or "gpu" (GPU requires Linux + NVIDIA + CUDA 12.x/13.x)
-  device: "cpu"
-
-  # Random seed for reproducibility (affects multi-start, CMA-ES)
-  random_seed: 42
-
-  # Verbosity: 0 (silent), 1 (progress), 2 (detailed), 3 (debug)
-  verbosity: 1
-
-  # Number of threads for parallel operations
-  threads: null              # null = auto-detect
-
-# ==============================================================================
-# MEMORY MANAGEMENT
-# ==============================================================================
-# Configuration for memory-aware processing.
-
-memory:
-  # Maximum memory usage in GB (null = 80% of available)
-  limit_gb: null
-
-  # Safety factor for memory estimation (0.0-1.0)
-  safety_factor: 0.8
-
-  # Out-of-memory handling strategy
-  # "fallback" - Switch to streaming/chunked processing
-  # "reduce"   - Reduce batch size and retry
-  # "error"    - Raise an error
-  oom_strategy: "fallback"
-
-  # Minimum chunk size for chunked processing
-  min_chunk_size: 1000
-
-  # Maximum chunk size (null = auto based on memory)
-  max_chunk_size: null
-
-# ==============================================================================
-# STREAMING OPTIMIZER (Advanced)
-# ==============================================================================
-# Configuration for large dataset processing.
-# Automatically used by "auto" and "auto_global" when datasets exceed memory.
-#
-# ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ STREAMING OPTIMIZATION PHASES                                               │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │ Phase 1: L-BFGS Warmup                                                      │
-# │   - Fast approximate optimization using limited-memory BFGS                 │
-# │   - Processes data in chunks to reduce memory usage                         │
-# │   - Uses line search for step size selection                                │
-# │                                                                             │
-# │ Phase 2: Gauss-Newton Refinement                                            │
-# │   - High-precision refinement using Trust Region Reflective (TRF)          │
-# │   - Computes Jacobian for accurate covariance estimation                    │
-# │   - Uses conjugate gradient for large systems                               │
-# └─────────────────────────────────────────────────────────────────────────────┘
-
-streaming:
-  # Chunk size (points per batch)
-  chunk_size: 10000
-
-  # Parameter normalization strategy
-  # "auto"   - Automatic selection based on problem structure
-  # "bounds" - Normalize to [0, 1] using bounds
-  # "p0"     - Normalize relative to initial guess
-  # "none"   - No normalization
-  normalization_strategy: "auto"
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Phase 1: L-BFGS Warmup Configuration
-  # ─────────────────────────────────────────────────────────────────────────────
-  warmup_iterations: 200
-  max_warmup_iterations: 500
-  lbfgs_history_size: 10
-  lbfgs_initial_step_size: 0.1
-
-  # Line search method: "wolfe", "strong_wolfe", "backtracking"
-  lbfgs_line_search: "wolfe"
-
-  # Learning rate for different phases
-  lbfgs_exploration_step_size: 0.1
-  lbfgs_refinement_step_size: 1.0
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Phase 2: Gauss-Newton Refinement Configuration
-  # ─────────────────────────────────────────────────────────────────────────────
-  gauss_newton_max_iterations: 100
-  gauss_newton_tol: 1.0e-8
-  trust_region_initial: 1.0
-  regularization_factor: 1.0e-10
-
-  # Conjugate gradient solver settings
-  cg_max_iterations: 100
-  cg_relative_tolerance: 1.0e-4
-  cg_absolute_tolerance: 1.0e-10
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Defense Layers (prevent divergence near optimum)
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Presets:
-  #   "default"    - Balanced protection (recommended)
-  #   "strict"     - Strong protection for near-optimal starts
-  #   "relaxed"    - Minimal protection for exploration
-  #   "disabled"   - No protection (fastest, may diverge)
-  #   "scientific" - Tuned for physics-based models
-  defense_layers:
-    preset: "default"
-
-    # Individual layer configuration (when preset: null)
-    # layer1_warm_start:
-    #   enabled: true
-    #   threshold: 0.01      # Skip warmup if loss < 1% of variance
-    # layer2_adaptive_lr:
-    #   enabled: true
-    #   refinement_lr: 1.0e-6
-    #   careful_lr: 1.0e-5
-    # layer3_cost_guard:
-    #   enabled: true
-    #   tolerance: 0.05      # Abort if loss increases > 5%
-    # layer4_step_clipping:
-    #   enabled: true
-    #   max_step_size: 0.1
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Advanced Streaming Options
-  # ─────────────────────────────────────────────────────────────────────────────
-
-  # Loop strategy for chunk processing
-  # "auto" - Automatic selection (recommended)
-  # "scan" - Use jax.lax.scan (memory efficient)
-  # "loop" - Use Python loop (debugging)
-  loop_strategy: "auto"
-
-  # Group variance regularization (for hierarchical models)
-  enable_group_variance_regularization: false
-  group_variance_lambda: 0.01
-  group_variance_indices: null  # List of (start, end) tuples
-
-  # Residual weighting (for heteroscedastic data)
-  enable_residual_weighting: false
-  residual_weights: null  # Path to weights file or array
-
-  # Multi-device support
-  enable_multi_device: false
-
-  # Fault tolerance
-  enable_fault_tolerance: true
-  max_retries_per_batch: 2
-  min_success_rate: 0.5
-  validate_numerics: true
-
-  # Garbage collection
-  gc_chunk_interval: 10
-
-  # Telemetry for monitoring
-  telemetry:
-    enabled: false
-    export_format: "json"  # "json", "prometheus"
+  # Validate xdata/ydata for NaN/Inf before fitting
+  check_finite: true
 
 # ==============================================================================
 # EXPORT
@@ -513,29 +191,16 @@ streaming:
 # Output configuration.
 
 export:
-  # Results file path (required for CLI)
+  # Results file path (required unless using --stdout)
   results_file: "output/fit_results.json"
 
-  # What to include in results
-  include:
-    parameters: true
-    covariance: true
-    uncertainties: true
-    statistics: true
-    convergence_info: true
-    residuals: false         # Can be large for big datasets
-    fitted_values: false
-    jacobian: false          # Very large, rarely needed
-
-  # Output formats
-  formats:
-    - "json"
-    - "csv"
+  # Output format: "json" or "csv" (singular — one format per run)
+  format: "json"
 
 # ==============================================================================
 # VISUALIZATION
 # ==============================================================================
-# Publication-quality figure generation.
+# Publication-quality figure generation (nlsq/cli/visualization.py).
 
 visualization:
   enabled: true
@@ -550,18 +215,10 @@ visualization:
   #   "minimal"       - Minimal decoration
   style: "publication"
 
-  # Resolution
-  dpi: 300
   figure_size: [6.0, 4.5]
+  dpi: 300
 
-  # Color scheme presets:
-  #   "default"       - Standard colors
-  #   "colorblind"    - Colorblind-safe palette
-  #   "grayscale"     - B&W printing compatible
-  #   "high_contrast" - High visibility
-  color_scheme: "default"
-
-  # Output formats
+  # Output formats (list — one file per format)
   formats:
     - "pdf"
     - "png"
@@ -611,12 +268,11 @@ visualization:
       show_chi_squared: false
       location: "upper right"
       fontsize: 9
-      box_alpha: 0.8
 
   residuals_plot:
     enabled: true
     type: "scatter"       # "scatter", "line", "stem"
-    x_label: null
+    x_label: null         # null = "x"
     y_label: "Residual"
     show_zero_line: true
     marker: "o"
@@ -624,44 +280,16 @@ visualization:
     alpha: 0.7
 
     std_bands:
-      enabled: true
+      enabled: false
       levels: [1, 2]
-      alpha: 0.3
+      colors: ["#fff3cd", "#ffe69c"]
+      alpha: 0.4
 
   histogram:
     enabled: true
     bins: "auto"
+    x_label: null         # null = "Residual"
     show_normal_fit: true
     alpha: 0.7
     edgecolor: "white"
     title: "Residual Distribution"
-
-# ==============================================================================
-# BATCH PROCESSING
-# ==============================================================================
-# Configuration for `nlsq batch` command.
-
-batch:
-  max_workers: null          # null = auto-detect
-  continue_on_error: true
-  summary_file: "output/batch_summary.json"
-
-  # Aggregation options
-  aggregate_results: true
-  comparison_plots: true
-
-# ==============================================================================
-# LOGGING
-# ==============================================================================
-
-logging:
-  log_file: "logs/workflow.log"
-  console: true
-
-  # Log levels: "DEBUG", "INFO", "WARNING", "ERROR"
-  log_level: "INFO"
-
-  rotation:
-    enabled: true
-    max_bytes: 10485760      # 10 MB
-    backup_count: 5

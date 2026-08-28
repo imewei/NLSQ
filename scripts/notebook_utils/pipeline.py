@@ -48,8 +48,6 @@ class TransformationPipeline:
             return {}
 
         cells = notebook.get("cells", [])
-        if not cells:
-            return {}
 
         # Apply transformations with rollback support
         original = cells.copy()
@@ -79,10 +77,11 @@ class TransformationPipeline:
                 logger.debug(f"{transformer.name()} stats: {stats}")
 
         except Exception as e:
-            # Rollback on error
+            # Re-raise before touching notebook["cells"]/write_notebook below,
+            # so the original notebook is simply never overwritten — there is
+            # no separate rollback write to perform.
             logger.error(f"Transformation failed: {e}")
-            logger.info("Rolling back to original cells")
-            cells = original
+            logger.info("Aborting: original notebook left untouched on disk")
             raise
 
         # Update notebook

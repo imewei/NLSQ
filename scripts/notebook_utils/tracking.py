@@ -39,18 +39,22 @@ class ProcessingTracker:
             return {}
 
         try:
-            with open(self.state_file) as f:
+            with open(self.state_file, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as e:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            # All three are "state file missing/corrupt" — recoverable by
+            # treating it as fresh state. A narrower except than this would
+            # also hide real bugs; a broader one (bare Exception, as before)
+            # would silently swallow them instead of surfacing here.
             logger.warning(f"Failed to load state file: {e}")
             return {}
 
     def _save_state(self) -> None:
         """Save processing state to file."""
         try:
-            with open(self.state_file, "w") as f:
+            with open(self.state_file, "w", encoding="utf-8") as f:
                 json.dump(self.state, f, indent=2)
-        except Exception as e:
+        except OSError as e:
             logger.error(f"Failed to save state file: {e}")
 
     def _compute_checksum(self, notebook_path: Path) -> str:
@@ -71,6 +75,16 @@ class ProcessingTracker:
 
         return sha256.hexdigest()
 
+    def _path_key(self, notebook_path: Path) -> str:
+        """Resolve a notebook path to its state-dict key.
+
+        A cwd-relative key would silently change (and defeat the
+        checksum-based skip) when this tool runs from a different working
+        directory across invocations, so state is always keyed by the
+        resolved absolute path.
+        """
+        return str(notebook_path.resolve())
+
     def needs_processing(self, notebook_path: Path, transformations: list[str]) -> bool:
         """Check if notebook needs processing.
 
@@ -81,18 +95,13 @@ class ProcessingTracker:
         Returns:
             True if notebook should be processed
         """
-        # Convert to relative path for storage
-        try:
-            rel_path = str(notebook_path.relative_to(Path.cwd()))
-        except ValueError:
-            # Path not relative to cwd, use absolute
-            rel_path = str(notebook_path.absolute())
+        path_key = self._path_key(notebook_path)
 
         # Check if we have state for this notebook
-        if rel_path not in self.state:
+        if path_key not in self.state:
             return True
 
-        state_entry = self.state[rel_path]
+        state_entry = self.state[path_key]
 
         # Check if transformations changed
         if set(state_entry.get("transformations", [])) != set(transformations):
@@ -115,17 +124,13 @@ class ProcessingTracker:
             transformations: List of transformation names applied
             stats: Optional statistics from processing
         """
-        # Convert to relative path for storage
-        try:
-            rel_path = str(notebook_path.relative_to(Path.cwd()))
-        except ValueError:
-            rel_path = str(notebook_path.absolute())
+        path_key = self._path_key(notebook_path)
 
         # Compute checksum
         checksum = self._compute_checksum(notebook_path)
 
         # Update state
-        self.state[rel_path] = {
+        self.state[path_key] = {
             "checksum": checksum,
             "transformations": sorted(transformations),
             "last_processed": datetime.now().isoformat(),

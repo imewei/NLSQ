@@ -775,9 +775,13 @@ def planck_radiation(
     c = 299792458.0  # Speed of light (m/s)
     k = 1.380649e-23  # Boltzmann constant (J/K)
 
-    # Avoid overflow by limiting exponent
-    exponent = jnp.clip(h * c / (wavelength * k * temperature), 0, 700)
-    return amplitude * (2 * h * c**2 / wavelength**5) / (jnp.exp(exponent) - 1)
+    # Avoid overflow by limiting exponent, and avoid the exp(exponent)-1
+    # denominator hitting zero if the optimizer pushes wavelength/temperature
+    # non-positive mid-fit (no bounds() ships with this example).
+    exponent = jnp.clip(h * c / (wavelength * k * temperature), 1e-10, 700)
+    denom = jnp.exp(exponent) - 1
+    safe_denom = jnp.where(jnp.abs(denom) < 1e-10, 1e-10, denom)
+    return amplitude * (2 * h * c**2 / wavelength**5) / safe_denom
 
 
 # -----------------------------------------------------------------------------

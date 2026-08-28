@@ -15,7 +15,17 @@ def patch_savefig():
     if not output_dir:
         return
 
-    script_name = os.environ.get("NLSQ_CURRENT_SCRIPT", "unknown")
+    def _safe_name(raw: str, fallback: str) -> str:
+        # Path("..").name == ".." (not ""), so .name alone doesn't strip a
+        # traversal token — reject it explicitly instead of trusting .name.
+        name = Path(raw).name
+        return name if name not in ("", "..", ".") else fallback
+
+    # Sanitize to a bare filename: script_name feeds directly into the output
+    # path below, and an env var containing ".." would escape output_dir.
+    script_name = _safe_name(
+        os.environ.get("NLSQ_CURRENT_SCRIPT", "unknown"), "unknown"
+    )
 
     # We store the original methods
     _orig_fig_savefig = matplotlib.figure.Figure.savefig
@@ -25,20 +35,20 @@ def patch_savefig():
         out_root = Path(output_dir)
         # Create a dedicated directory for artifacts of this script/notebook
         target_dir = out_root / "artifacts" / script_name
+        resolved_target_dir = target_dir.resolve()
 
         # We try to preserve "figures/..." structure if present in fname
         # But fname could be absolute or relative
         p = Path(fname)
 
-        # If it's absolute, we extract the name
-        # If relative, we use it as is
-        if p.is_absolute():
-            rel_path = p.name
-        else:
-            rel_path = p
-
-        # If users do "figures/fig1.png", we get "artifacts/script_name/figures/fig1.png"
-        final_path = target_dir / rel_path
+        # Resolve() collapses "..", "." and symlinks, so is_relative_to()
+        # catches escapes a token-based filter can't (e.g. an fname made
+        # entirely of ".." segments, or a symlink inside target_dir that
+        # points outside it) — same idiom as
+        # nlsq.cli.model_validation.validate_path().
+        final_path = (target_dir / p).resolve()
+        if not final_path.is_relative_to(resolved_target_dir):
+            final_path = resolved_target_dir / _safe_name(fname, "figure.png")
 
         # Ensure directory exists
         final_path.parent.mkdir(parents=True, exist_ok=True)

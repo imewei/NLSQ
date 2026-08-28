@@ -132,11 +132,15 @@ def _patch_jax(max_samples: int) -> None:
 
 
 def _configure_matplotlib(tmp_dir: str | None) -> None:
+    # MPLCONFIGDIR must be set before `import matplotlib` triggers its own
+    # config-dir resolution, or the per-worker isolation below (needed for
+    # pytest-xdist parallel runs) silently has no effect.
+    if tmp_dir:
+        os.environ.setdefault("MPLCONFIGDIR", tmp_dir)
+
     import matplotlib
 
     matplotlib.use("Agg")
-    if tmp_dir:
-        os.environ.setdefault("MPLCONFIGDIR", tmp_dir)
 
 
 if os.environ.get("NLSQ_EXAMPLES_QUICK"):

@@ -406,8 +406,23 @@ def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Pa
     return output_path
 
 
-def convert_directory(directory: Path, mode: str):
-    """Convert all files in a directory."""
+def convert_directory(directory: Path, mode: str) -> int:
+    """Convert all files in a directory.
+
+    Returns
+    -------
+    int
+        Number of files that failed to convert (0 = all succeeded), so
+        callers can set a nonzero exit code instead of always exiting 0.
+
+    Raises
+    ------
+    ValueError
+        If `mode` is not a recognized conversion mode. This is a distinct
+        outcome from "N files failed" — an int return here would let a
+        caller that trusts the "failure count" contract read 1 as "one
+        file failed" instead of "no files were even attempted".
+    """
     if mode == "notebook-to-script":
         pattern = "*.ipynb"
         converter = notebook_to_script
@@ -418,15 +433,15 @@ def convert_directory(directory: Path, mode: str):
         pattern = "*.ipynb"
         converter = configure_notebook_matplotlib
     else:
-        print(f"Error: Invalid mode '{mode}'")
-        return
+        raise ValueError(f"Invalid mode: {mode!r}")
 
     files = list(directory.rglob(pattern))
 
     if not files:
         print(f"No {pattern} files found in {directory}")
-        return
+        return 0
 
+    failures = 0
     if mode == "configure-matplotlib":
         print(f"Configuring {len(files)} notebooks for matplotlib inline plotting...")
         modified_count = 0
@@ -436,6 +451,7 @@ def convert_directory(directory: Path, mode: str):
                     modified_count += 1
             except Exception as e:
                 print(f"  ✗ Error configuring {file_path.name}: {e}")
+                failures += 1
         print("=" * 80)
         print(f"Modified {modified_count} / {len(files)} notebooks")
     else:
@@ -446,6 +462,9 @@ def convert_directory(directory: Path, mode: str):
                 print(f"  ✓ {file_path.name} → {output.name}")
             except Exception as e:
                 print(f"  ✗ Error converting {file_path.name}: {e}")
+                failures += 1
+
+    return failures
 
 
 def main():
@@ -490,7 +509,9 @@ def main():
         sys.exit(1)
 
     if path.is_dir():
-        convert_directory(path, mode)
+        failures = convert_directory(path, mode)
+        if failures:
+            sys.exit(1)
     elif mode == "notebook-to-script":
         output = notebook_to_script(path)
         print(f"✓ Converted: {path.name} → {output.name}")

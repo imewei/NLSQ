@@ -10,7 +10,10 @@ def find_figure_variable(source: list[str], show_line_idx: int) -> str:
     """Find the figure variable name by looking backwards from plt.show().
 
     Args:
-        source: Source code lines
+        source: Source code lines, one physical line per element (a cell
+            source that's still a single multi-line string will make this
+            search see only whichever line happens to occupy index 0/1/etc,
+            not the actual physical line — split it first).
         show_line_idx: Index of line containing plt.show()
 
     Returns:
@@ -22,9 +25,24 @@ def find_figure_variable(source: list[str], show_line_idx: int) -> str:
         line = source[i]
 
         # Match patterns like: fig = plt.figure() or fig, ax = plt.subplots()
-        fig_match = re.search(r"(\w+)\s*[,=].*plt\.(figure|subplots)", line)
+        fig_match = re.search(r"([\w\s,]+?)\s*=\s*plt\.(figure|subplots)", line)
         if fig_match:
-            return fig_match.group(1)
+            names = [n.strip() for n in fig_match.group(1).split(",") if n.strip()]
+            if len(names) <= 1:
+                return names[0] if names else "plt.gcf()"
+            # Multiple bound names (e.g. "fig, ax = plt.subplots()"): prefer
+            # whichever looks like it holds the Figure rather than assuming
+            # canonical first-position ordering, falling back to the first
+            # bound name when none match. Only counts "fig" at the start of
+            # the identifier or as its own underscore-separated segment
+            # (fig, fig1, figure, real_fig, my_fig_2), not a plain substring
+            # match, so "configure"/"prefigure" don't false-positive.
+            for name in names:
+                name_lower = name.lower()
+                segments = re.split(r"[_\d]+", name_lower)
+                if name_lower.startswith("fig") or "fig" in segments:
+                    return name
+            return names[0]
 
     # Default: use plt.gcf() to get current figure
     return "plt.gcf()"
@@ -123,7 +141,9 @@ class PltShowReplacementTransformer(NotebookTransformer):
 
             source = cell.get("source", [])
             if isinstance(source, str):
-                source = [source]
+                # A single multi-line string must become one entry per line,
+                # or the line-anchored regexes below only ever see line 1.
+                source = source.splitlines(keepends=True)
 
             modified_source, num_replacements = replace_plt_show(source)
 
