@@ -124,6 +124,46 @@ def _convert_dict_to_serializable(obj: dict) -> dict:
     return result
 
 
+def _sanitize_array_data(data: Any) -> Any:
+    """Recursively wrap NaN/Inf floats in nested list data from ndarray.tolist().
+
+    Mirrors the scalar float handling in ``_convert_to_serializable`` so that
+    NaN/Inf values inside arrays round-trip through standard JSON instead of
+    emitting non-standard ``NaN``/``Infinity`` tokens.
+    """
+    if isinstance(data, list):
+        return [_sanitize_array_data(item) for item in data]
+    if isinstance(data, float):
+        if np.isnan(data):
+            return {"__nlsq_type__": "float", "value": "nan"}
+        if np.isinf(data):
+            return {"__nlsq_type__": "float", "value": "inf" if data > 0 else "-inf"}
+    return data
+
+
+def _unsanitize_array_data(data: Any) -> Any:
+    """Reverse ``_sanitize_array_data``, restoring NaN/Inf floats in array data."""
+    if isinstance(data, list):
+        return [_unsanitize_array_data(item) for item in data]
+    if isinstance(data, dict):
+        if data.get("__nlsq_type__") == "float":
+            value = data.get("value")
+            if value == "nan":
+                return float("nan")
+            if value == "inf":
+                return float("inf")
+            if value == "-inf":
+                return float("-inf")
+            raise SafeSerializationError(
+                f"Unknown float value in serialized array data: {value!r}",
+            )
+        raise SafeSerializationError(
+            f"Unrecognized type marker in serialized array data: "
+            f"{data.get('__nlsq_type__')!r}",
+        )
+    return data
+
+
 def _convert_to_serializable(obj: Any) -> Any:
     """Convert object to JSON-serializable form.
 
@@ -190,7 +230,7 @@ def _convert_to_serializable(obj: Any) -> Any:
             "__nlsq_type__": "ndarray",
             "dtype": str(obj.dtype),
             "shape": list(obj.shape),
-            "data": obj.tolist(),
+            "data": _sanitize_array_data(obj.tolist()),
         }
 
     # Handle JAX arrays (convert to numpy first, then serialize)
@@ -209,7 +249,7 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
     """Reconstruct a numpy array from its serialized dict representation."""
     try:
         dtype = np.dtype(obj["dtype"])
-        data = obj["data"]
+        data = _unsanitize_array_data(obj["data"])
         shape = tuple(obj["shape"])
     except KeyError as e:
         raise SafeSerializationError(
@@ -292,6 +332,10 @@ def _convert_from_serializable(obj: Any) -> Any:
 
             if type_name == "ndarray":
                 return _deserialize_ndarray(obj)
+
+            raise SafeSerializationError(
+                f"Unrecognized __nlsq_type__ tag in serialized data: {type_name!r}",
+            )
 
         # Regular dict — restore non-string keys from prefixed encoding
         return {

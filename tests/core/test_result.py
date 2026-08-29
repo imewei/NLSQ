@@ -255,6 +255,38 @@ def test_prediction_interval_custom_x(simple_result):
     assert pi.shape == (len(x_new), 2)
 
 
+def test_prediction_interval_varies_with_x_and_wider_than_confidence_band():
+    """Prediction interval must be x-dependent (via the Jacobian) and wider
+    than the confidence band at every point by the residual-variance term.
+
+    Regression test: previously se_pred was a constant
+    sqrt(s2 * (1 + trace(pcov)/p)) that ignored x entirely.
+    """
+
+    def linear(x, a, b):
+        return a * x + b
+
+    np.random.seed(0)
+    x = np.linspace(0, 10, 50)
+    y = 2 * x + 1 + np.random.normal(0, 0.3, size=len(x))
+
+    result = curve_fit(linear, x, y, p0=[1.0, 0.0])
+
+    x_eval = np.linspace(0, 10, 20)
+    pi = result.prediction_interval(x=x_eval, alpha=0.95)
+    pi_width = pi[:, 1] - pi[:, 0]
+
+    lower_band, upper_band = result.confidence_band(x=x_eval, alpha=0.95)
+    band_width = upper_band - lower_band
+
+    # Old bug: constant width regardless of x.
+    assert not np.allclose(pi_width, pi_width[0])
+
+    # PI variance = confidence-band variance + residual variance, so PI must
+    # be strictly wider than the confidence band at every evaluated point.
+    assert np.all(pi_width > band_width)
+
+
 # ============================================================================
 # Unit Tests - Plotting
 # ============================================================================
@@ -377,6 +409,48 @@ def test_aic_zero_rss():
 
         # May warn about undefined AIC if RSS is exactly zero
         # AIC may be NaN or very negative
+
+
+def test_summary_with_none_pcov_does_not_crash():
+    """summary() must not crash when pcov is None (e.g. singular Jacobian).
+
+    Regression test: `hasattr(self, "pcov")` was always True because the
+    `pcov` property returns None gracefully instead of raising, so summary()
+    used to fall into the pcov branch and crash on np.diag(None).
+    """
+    import sys
+    from io import StringIO
+
+    from nlsq.result import OptimizeResult
+
+    def model(x, a, b):
+        return a * x + b
+
+    x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    y = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
+
+    result = CurveFitResult(OptimizeResult())
+    result["x"] = np.array([2.0, 0.0])
+    result["pcov"] = None
+    result["model"] = model
+    result["xdata"] = x
+    result["ydata"] = y
+    result["success"] = True
+    result["message"] = "test"
+    result["nfev"] = 1
+    result["cost"] = 0.0
+    result["optimality"] = 0.0
+
+    old_stdout = sys.stdout
+    sys.stdout = buffer = StringIO()
+    try:
+        result.summary()  # Should not raise
+        output = buffer.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    assert "Curve Fit Summary" in output
+    assert "p0" in output
 
 
 def test_missing_model_in_result():

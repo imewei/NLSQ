@@ -318,8 +318,12 @@ class InputValidator:
             else:
                 lb, ub = bounds
                 if lb is not None and ub is not None:
-                    lb = np.asarray(lb)
-                    ub = np.asarray(ub)
+                    lb = np.asarray(lb, dtype=float)
+                    ub = np.asarray(ub, dtype=float)
+                    if lb.ndim == 0:
+                        lb = np.resize(lb, n_params)
+                    if ub.ndim == 0:
+                        ub = np.resize(ub, n_params)
 
                     if len(lb) != n_params or len(ub) != n_params:
                         errors.append(
@@ -887,8 +891,12 @@ class InputValidator:
         # Validate bounds structure
         try:
             lb, ub = bounds
-            lb = np.asarray(lb)
-            ub = np.asarray(ub)
+            lb = np.asarray(lb, dtype=float)
+            ub = np.asarray(ub, dtype=float)
+            if lb.ndim == 0:
+                lb = np.resize(lb, len(x0))
+            if ub.ndim == 0:
+                ub = np.resize(ub, len(x0))
 
             if len(lb) != len(x0) or len(ub) != len(x0):
                 errors.append("bounds must have same length as x0")

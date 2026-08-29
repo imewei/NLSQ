@@ -191,6 +191,26 @@ class TestNumpyTypes:
         assert isinstance(result, np.ndarray)
         np.testing.assert_array_almost_equal(result, data)
 
+    def test_numpy_array_with_nan_inf_round_trips(self):
+        """Array elements with NaN/Inf must round-trip and avoid bare JSON tokens."""
+        data = np.array([1.0, np.nan, np.inf, -np.inf, 2.5])
+        serialized = safe_dumps(data)
+        # The raw JSON text must not contain non-standard NaN/Infinity tokens.
+        text = serialized.decode("utf-8")
+        assert "NaN" not in text
+        assert "Infinity" not in text
+        result = safe_loads(serialized)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, data, equal_nan=True)
+
+    def test_numpy_2d_array_with_nan_inf_round_trips(self):
+        """NaN/Inf handling must work for multi-dimensional arrays too."""
+        data = np.array([[1.0, np.nan], [np.inf, -np.inf]])
+        result = safe_loads(safe_dumps(data))
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (2, 2)
+        assert np.array_equal(result, data, equal_nan=True)
+
     def test_large_array_rejected(self):
         """Test that large numpy arrays are rejected."""
         data = np.ones(10_001)
@@ -605,3 +625,11 @@ class TestDictKeyRoundTrip:
         float/ndarray marker on deserialization."""
         with pytest.raises(SafeSerializationError, match="reserved key"):
             safe_dumps({"__nlsq_type__": "tuple", "value": [1, 2]})
+
+    def test_unrecognized_nlsq_type_tag_raises_loud(self):
+        """An unrecognized __nlsq_type__ value must fail loud, not silently
+        degrade into a plain dict (matching this module's fail-loud design
+        for every other malformed case)."""
+        malformed_json = b'{"__nlsq_type__": "totally_bogus_type", "value": 1}'
+        with pytest.raises(SafeSerializationError, match="Unrecognized __nlsq_type__"):
+            safe_loads(malformed_json)
