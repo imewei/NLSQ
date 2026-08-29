@@ -213,19 +213,23 @@ class HistogramPlotWidget(QWidget):
 
         from scipy import stats
 
+        finite_data = self._data[np.isfinite(self._data)]
+        if finite_data.size == 0:
+            return {}
+
         # Normality test
         try:
             _, p_value = stats.shapiro(
-                self._data[:5000] if len(self._data) > 5000 else self._data,
+                finite_data[:5000] if len(finite_data) > 5000 else finite_data,
             )
         except Exception:
             p_value = None
 
         return {
-            "mean": float(np.mean(self._data)),
-            "std": float(np.std(self._data)),
-            "skewness": float(stats.skew(self._data)),
-            "kurtosis": float(stats.kurtosis(self._data)),
+            "mean": float(np.mean(finite_data)),
+            "std": float(np.std(finite_data)),
+            "skewness": float(stats.skew(finite_data)),
+            "kurtosis": float(stats.kurtosis(finite_data)),
             "normality_p": float(p_value) if p_value is not None else None,
         }
 

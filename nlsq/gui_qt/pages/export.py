@@ -703,8 +703,12 @@ class ExportPage(QWidget):
                     r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
                     rmse = float(np.sqrt(np.mean(residuals**2)))
 
-                    data["statistics"]["r_squared"] = r_squared
-                    data["statistics"]["rmse"] = rmse
+                    # json.dumps emits non-standard NaN/Infinity tokens for
+                    # non-finite floats; normalize to null for a diverged fit.
+                    data["statistics"]["r_squared"] = (
+                        r_squared if np.isfinite(r_squared) else None
+                    )
+                    data["statistics"]["rmse"] = rmse if np.isfinite(rmse) else None
                     data["statistics"]["n_points"] = len(state.xdata)
 
         # Model info

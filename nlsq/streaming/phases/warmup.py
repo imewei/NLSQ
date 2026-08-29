@@ -443,13 +443,23 @@ class WarmupPhase:
             # Variance regularization via lax.fori_loop (fixed XLA trace
             # regardless of number of groups)
             if enable_var_reg:
+                # dynamic_slice clamps its start index to keep a fixed-size
+                # window in bounds. For a group whose (start + max_group_size)
+                # overruns len(params) -- e.g. the trailing group when group
+                # sizes are unequal -- that silently shifts the window to
+                # include elements from the PREVIOUS group instead of raising.
+                # Pad params so every max_group_size window fits without ever
+                # needing to clamp; the mask below already ignores the padding.
+                padded_params = jnp.concatenate(
+                    [params, jnp.zeros(max_group_size, dtype=params.dtype)],
+                )
 
                 def var_body(i, penalty):
                     start = group_starts[i]
                     size = group_sizes[i]
                     # Extract with fixed max_group_size, mask to actual size
                     group_params = jax.lax.dynamic_slice(
-                        params,
+                        padded_params,
                         (start,),
                         (max_group_size,),
                     )

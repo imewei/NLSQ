@@ -191,6 +191,26 @@ class TestNumpyTypes:
         assert isinstance(result, np.ndarray)
         np.testing.assert_array_almost_equal(result, data)
 
+    def test_numpy_array_with_nan_inf_round_trips(self):
+        """Array elements with NaN/Inf must round-trip and avoid bare JSON tokens."""
+        data = np.array([1.0, np.nan, np.inf, -np.inf, 2.5])
+        serialized = safe_dumps(data)
+        # The raw JSON text must not contain non-standard NaN/Infinity tokens.
+        text = serialized.decode("utf-8")
+        assert "NaN" not in text
+        assert "Infinity" not in text
+        result = safe_loads(serialized)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, data, equal_nan=True)
+
+    def test_numpy_2d_array_with_nan_inf_round_trips(self):
+        """NaN/Inf handling must work for multi-dimensional arrays too."""
+        data = np.array([[1.0, np.nan], [np.inf, -np.inf]])
+        result = safe_loads(safe_dumps(data))
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (2, 2)
+        assert np.array_equal(result, data, equal_nan=True)
+
     def test_large_array_rejected(self):
         """Test that large numpy arrays are rejected."""
         data = np.ones(10_001)
@@ -434,6 +454,29 @@ class TestAdversarialSecurity:
         # Stored as inert string data
         assert result["__class__"] == "subprocess.Popen"
 
+    def test_object_dtype_array_rejected_before_unsanitize_runs(self):
+        """A hand-crafted (or corrupted) checkpoint claiming an object-dtype
+        ndarray whose data contains an arbitrary dict (not the NaN/Inf
+        sentinel shape) must be rejected with the clear 'non-numeric dtype'
+        error -- not have _unsanitize_array_data run on it first, which
+        would raise a confusing 'unrecognized type marker' error instead of
+        surfacing the real problem (object dtype is never allowed). The
+        dtype check must run BEFORE unsanitize is given a chance to
+        misinterpret array elements it was never meant to see."""
+        import json
+
+        payload = json.dumps(
+            {
+                "__nlsq_type__": "ndarray",
+                "dtype": "object",
+                "shape": [1],
+                "data": [{"some_key": "arbitrary_user_dict_data"}],
+            }
+        ).encode()
+
+        with pytest.raises(SafeSerializationError, match="non-numeric dtype"):
+            safe_loads(payload)
+
     def test_rejects_object_with_eval(self):
         """Test that objects claiming eval capability are rejected."""
 
@@ -605,3 +648,11 @@ class TestDictKeyRoundTrip:
         float/ndarray marker on deserialization."""
         with pytest.raises(SafeSerializationError, match="reserved key"):
             safe_dumps({"__nlsq_type__": "tuple", "value": [1, 2]})
+
+    def test_unrecognized_nlsq_type_tag_raises_loud(self):
+        """An unrecognized __nlsq_type__ value must fail loud, not silently
+        degrade into a plain dict (matching this module's fail-loud design
+        for every other malformed case)."""
+        malformed_json = b'{"__nlsq_type__": "totally_bogus_type", "value": 1}'
+        with pytest.raises(SafeSerializationError, match="Unrecognized __nlsq_type__"):
+            safe_loads(malformed_json)

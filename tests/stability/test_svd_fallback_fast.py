@@ -68,6 +68,51 @@ def test_compute_svd_with_fallback_nan_result_falls_back(
 
 @pytest.mark.stability
 @pytest.mark.unit
+@pytest.mark.parametrize("bad_factor", ["U", "s", "V"])
+def test_finite_check_catches_non_finite_in_any_single_factor(
+    monkeypatch: pytest.MonkeyPatch, bad_factor: str
+) -> None:
+    """`_finite_or_raise` combines the three per-factor `jnp.all(isfinite(...))`
+    reductions with a single host sync (`&` then one `bool(...)`) instead of
+    Python `and` (which would sync once per operand). Verify the combined
+    check still individually catches a non-finite U, s, or V -- not just the
+    case where all three are non-finite together -- and shapes may differ
+    between U/s/V so each check must run on its own array, not a stacked one.
+    """
+    module = importlib.import_module("nlsq.stability.svd_fallback")
+
+    calls = {"count": 0}
+
+    def _fake_svd(matrix, full_matrices=False):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            n = min(matrix.shape)
+            U = jnp.eye(matrix.shape[0], n)
+            s = jnp.array([2.0, 1.0])
+            V = jnp.eye(n, matrix.shape[1])
+            if bad_factor == "U":
+                U = U.at[0, 0].set(jnp.nan)
+            elif bad_factor == "s":
+                s = s.at[0].set(jnp.inf)
+            else:
+                V = V.at[0, 0].set(jnp.nan)
+            return U, s, V
+        return jnp.eye(2), jnp.array([2.0, 1.0]), jnp.eye(2)
+
+    monkeypatch.setattr(module, "jax_svd", _fake_svd)
+
+    with pytest.warns(RuntimeWarning):
+        U, s, V = module.compute_svd_with_fallback(jnp.eye(2), full_matrices=False)
+
+    assert calls["count"] == 2
+    assert bool(jnp.all(jnp.isfinite(U)))
+    assert bool(jnp.all(jnp.isfinite(s)))
+    assert bool(jnp.all(jnp.isfinite(V)))
+    assert np.allclose(np.array(s), np.array([2.0, 1.0]))
+
+
+@pytest.mark.stability
+@pytest.mark.unit
 def test_compute_svd_with_fallback_cuda_ffi_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

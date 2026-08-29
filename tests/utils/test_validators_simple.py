@@ -45,6 +45,21 @@ class TestValidatorIntegration:
         )
         assert popt is not None
 
+    def test_with_scalar_bounds(self):
+        """Test scipy-style scalar bounds (0, np.inf) broadcast to all params."""
+
+        def model(x, a, b):
+            return a * x + b
+
+        popt, _pcov = curve_fit(
+            model,
+            np.array([1, 2, 3]),
+            np.array([2, 4, 6]),
+            bounds=(0, np.inf),
+        )
+        assert popt is not None
+        assert np.all(popt >= 0)
+
     def test_with_sigma(self):
         """Test weighted fit."""
 

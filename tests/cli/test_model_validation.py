@@ -565,3 +565,93 @@ system = pydoc.locate("os.system")
         visitor.visit(tree)
 
         assert any("locate" in v for v in visitor.violations)
+
+    def test_detects_types_module_bypass(self):
+        """types module can construct/run arbitrary bytecode, bypassing exec/eval."""
+        import ast
+
+        source = "import types\nf = types.FunctionType\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("types" in v for v in visitor.violations)
+
+    def test_detects_sys_module_import(self):
+        """`import sys` alone must be blocked (frame/stack introspection
+        surface)."""
+        import ast
+
+        source = "import sys\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("sys" in v.lower() for v in visitor.violations)
+
+    def test_detects_getframe_attribute_pattern_independent_of_sys_import(self):
+        """The `_getframe` attribute-pattern fix must be caught on its own,
+        not merely as a side effect of the separate `sys` module block --
+        this source never imports sys, isolating the two."""
+        import ast
+
+        source = "frame = obj._getframe()\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("_getframe" in v for v in visitor.violations)
+
+    def test_detects_type_builtin(self):
+        """type() reaches the same sandbox-escape surface as __class__."""
+        import ast
+
+        source = "t = type(1)\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("type" in v for v in visitor.violations)
+
+    def test_detects_setattr_delattr_hasattr(self):
+        """setattr/delattr/hasattr are getattr's blocked siblings."""
+        import ast
+
+        source = "setattr(obj, 'x', 1)\ndelattr(obj, 'x')\nhasattr(obj, 'x')\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        found = set(visitor.violations)
+        assert any("setattr" in v for v in found)
+        assert any("delattr" in v for v in found)
+        assert any("hasattr" in v for v in found)
+
+    def test_detects_open_read_write_plus_mode(self):
+        """open(..., 'r+') is write-capable and must not bypass the w/a/x check."""
+        import ast
+
+        source = "open('file.txt', 'r+')\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("write" in v.lower() for v in visitor.violations)
+
+    def test_detects_format_call_on_concatenated_string(self):
+        """Concatenated string literals defeat the substring scan; block .format() itself."""
+        import ast
+
+        source = "template = '{0.__cla' + 'ss__}'\nresult = template.format(x)\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("format" in v for v in visitor.violations)

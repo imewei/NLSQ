@@ -96,6 +96,24 @@ class TestConvergenceMonitor(unittest.TestCase):
         self.assertEqual(len(stag_result), 2)
         self.assertEqual(len(div_result), 2)
 
+    def test_detect_divergence_uses_non_overlapping_windows(self):
+        """For 5 <= len(cost_history) < 10, the recent/older comparison
+        windows must not share elements -- a shared-element overlap dampens
+        the divergence ratio and can mask real divergence.
+
+        With 7 points [1,1,1,1,1,1,3], the old overlapping windows
+        (older=costs[:5], recent=costs[-5:], sharing indices 2-4) give
+        ratio (4+3)/5 = 1.4 <= threshold 1.5 -> divergence missed. The
+        correct non-overlapping halves (older=costs[:3], recent=costs[-3:])
+        give ratio (2+3)/3 = 1.667 > 1.5 -> divergence correctly detected.
+        """
+        monitor = ConvergenceMonitor()
+        for cost in [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0]:
+            monitor.update(cost, np.array([0.0]))
+
+        is_diverging, _ = monitor.detect_divergence()
+        self.assertTrue(bool(is_diverging))
+
     @given(
         costs=st.lists(
             st.floats(

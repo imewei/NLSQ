@@ -283,6 +283,18 @@ class UseRobustLossStrategy(FallbackStrategy):
         self.current_index = 0
 
 
+def _rescale_sigma(sigma: Any, y_scale: float) -> np.ndarray:
+    """Rescale a `sigma` uncertainty under y' = (y - y_offset) / y_scale.
+
+    1-D sigma is a std-dev, which scales linearly with y; a 2-D sigma is a
+    covariance matrix, which scales quadratically.
+    """
+    sigma_arr = np.asarray(sigma)
+    if sigma_arr.ndim == 2:
+        return sigma_arr / (y_scale**2)
+    return sigma_arr / y_scale
+
+
 class RescaleProblemStrategy(FallbackStrategy):
     """Rescale data for numerical stability."""
 
@@ -515,8 +527,40 @@ class FallbackOrchestrator:
                 modified_kwargs.pop("_xdata", None)
                 modified_kwargs.pop("_ydata", None)
 
+                # RescaleProblemStrategy can't rewrite xdata/ydata/f itself
+                # (its apply() only sees kwargs), so it signals a rescaled
+                # fit via these internal keys instead. Build the actual
+                # rescaled data/model here so popt comes back in original
+                # units with no separate inverse-transform step.
+                x_scale = modified_kwargs.pop("_x_scale", None)
+                y_scale = modified_kwargs.pop("_y_scale", None)
+                x_offset = modified_kwargs.pop("_x_offset", None)
+                y_offset = modified_kwargs.pop("_y_offset", None)
+                is_scaled = modified_kwargs.pop("_scaled", False)
+
+                fit_f, fit_xdata, fit_ydata = f, xdata, ydata
+                if is_scaled:
+                    fit_xdata = (xdata - x_offset) / x_scale
+                    fit_ydata = (ydata - y_offset) / y_scale
+
+                    def fit_f(
+                        x_scaled,
+                        *params,
+                        _f=f,
+                        _xs=x_scale,
+                        _xo=x_offset,
+                        _yo=y_offset,
+                        _ys=y_scale,
+                    ):
+                        return (_f(x_scaled * _xs + _xo, *params) - _yo) / _ys
+
+                    if modified_kwargs.get("sigma") is not None:
+                        modified_kwargs["sigma"] = _rescale_sigma(
+                            modified_kwargs["sigma"], y_scale
+                        )
+
                 # Try fit with modified parameters
-                result = curve_fit(f, xdata, ydata, **modified_kwargs)
+                result = curve_fit(fit_f, fit_xdata, fit_ydata, **modified_kwargs)
 
                 # Success!
                 strategy.successes += 1

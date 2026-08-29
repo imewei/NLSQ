@@ -138,7 +138,13 @@ class AlgorithmSelector:
             analysis["memory_constrained"] = False
 
         # Bounds analysis
-        analysis["has_bounds"] = bounds is not None and bounds != (-np.inf, np.inf)
+        if bounds is None:
+            analysis["has_bounds"] = False
+        else:
+            lb, ub = bounds
+            analysis["has_bounds"] = not (
+                np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))
+            )
 
         # Parameter scale analysis
         if p0 is not None:

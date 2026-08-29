@@ -73,6 +73,7 @@ class AppState(QObject):
         self._state.ydata = ydata
         self._state.sigma = sigma
         self._state.data_file_name = file_name
+        self._clear_fit_result()
         self.data_changed.emit()
         self.page_access_changed.emit()
 
@@ -104,8 +105,20 @@ class AppState(QObject):
             if hasattr(self._state, key):
                 setattr(self._state, key, value)
 
+        self._clear_fit_result()
         self.model_changed.emit()
         self.page_access_changed.emit()
+
+    def _clear_fit_result(self) -> None:
+        """Invalidate a stale fit result when data or model changes.
+
+        Without this, Results/Export pages stay accessible (they gate purely
+        on ``fit_result is not None``) and read live xdata/ydata/model_func
+        alongside a fit computed against the previous data or model.
+        """
+        if self._state.fit_result is not None:
+            self._state.fit_result = None
+            self.fit_completed.emit(None)
 
     def set_fit_running(self, running: bool) -> None:
         """Set the fit running state.
@@ -113,6 +126,13 @@ class AppState(QObject):
         Args:
             running: True if fit is in progress
         """
+        if running:
+            # A previous fit_result is about to be superseded. Clear it now
+            # (not just on success) so a re-fit that errors or is aborted
+            # doesn't leave Results/Export showing a now-unrelated result --
+            # PageState.can_access() gates purely on fit_result is not None,
+            # with no regard for fit_running/fit_aborted.
+            self._clear_fit_result()
         self._state.fit_running = running
         if running:
             self.fit_started.emit()
@@ -157,7 +177,10 @@ class AppState(QObject):
 
     def reset(self) -> None:
         """Reset state to initial values."""
+        had_fit_result = self._state.fit_result is not None
         self._state = SessionState()
+        if had_fit_result:
+            self.fit_completed.emit(None)
         self.data_changed.emit()
         self.model_changed.emit()
         self.page_access_changed.emit()

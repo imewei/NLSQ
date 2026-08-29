@@ -290,6 +290,7 @@ class DataLoadingPage(QWidget):
         )
         self._clear_btn.clicked.connect(self.reset)
         self._apply_btn.clicked.connect(self._on_apply)
+        self._app_state.data_changed.connect(self._on_app_state_data_changed)
 
     def _on_browse(self) -> None:
         """Handle browse button click."""
@@ -546,6 +547,37 @@ class DataLoadingPage(QWidget):
             f"Successfully loaded {len(self._ydata):,} data points.\n"
             "You can now proceed to Model Selection.",
         )
+
+    def _on_app_state_data_changed(self) -> None:
+        """Refresh the page when AppState data changes from outside this page.
+
+        This page's own `_on_apply` also triggers `data_changed`, but in that
+        case the state arrays are the exact objects already displayed (same
+        identity), so this is a no-op then. It only does real work for
+        external changes such as crash-recovery restoring a session.
+        """
+        state = self._app_state.state
+        if state.xdata is None or state.ydata is None:
+            return
+        if state.xdata is self._xdata and state.ydata is self._ydata:
+            return
+
+        self._xdata = state.xdata
+        self._ydata = state.ydata
+        self._sigma = state.sigma
+
+        if self._sigma is not None:
+            self._raw_data = np.column_stack([self._xdata, self._ydata, self._sigma])
+            self._column_names = ["x", "y", "sigma"]
+        else:
+            self._raw_data = np.column_stack([self._xdata, self._ydata])
+            self._column_names = ["x", "y"]
+
+        self._file_path_label.setText(state.data_file_name or "(Restored session)")
+        self._file_path_label.setStyleSheet("color: green;")
+        self._column_selector.set_columns(self._column_names)
+        self._update_preview()
+        self._validate_and_update_stats()
 
     def _show_error(self, title: str, message: str) -> None:
         """Show an error dialog.

@@ -174,23 +174,24 @@ def latin_hypercube_sample(
     if rng_key is None:
         rng_key = jax.random.PRNGKey(0)
 
-    # Split the key for different random operations
-    keys = jax.random.split(rng_key, n_dims + 1)
+    # Split the key for different random operations: 2 independent keys per
+    # dimension (one for the permutation, one for the within-stratum offset).
+    # A single key-per-dimension scheme would reuse keys[i] as both key_perm
+    # for dimension i-1 and key_uniform for dimension i, correlating dims.
+    keys = jax.random.split(rng_key, 2 * n_dims)
 
     samples_list = []
     for dim in range(n_dims):
         # Generate random positions within each stratum
-        key_uniform = keys[dim]
-        key_perm = (
-            keys[dim + 1] if dim + 1 < len(keys) else jax.random.fold_in(keys[0], dim)
-        )
+        key_perm = keys[2 * dim]
+        key_uniform = keys[2 * dim + 1]
 
         # Random offset within each stratum
-        uniform_samples = jax.random.uniform(key_perm, shape=(n_samples,))
+        uniform_samples = jax.random.uniform(key_uniform, shape=(n_samples,))
 
         # Create stratum indices and shuffle them
         stratum_indices = jnp.arange(n_samples)
-        shuffled_indices = jax.random.permutation(key_uniform, stratum_indices)
+        shuffled_indices = jax.random.permutation(key_perm, stratum_indices)
 
         # Place samples: stratum_start + offset_within_stratum
         # stratum i starts at i/n_samples, has width 1/n_samples

@@ -384,6 +384,25 @@ class TestValidateBounds:
         errors, _warnings = self.validator._validate_bounds(bounds, 2, None)
         assert errors == []
 
+    def test_scalar_bounds_broadcast(self):
+        """Test scipy-style scalar bounds (0, np.inf) broadcast to all params."""
+        bounds = (0, np.inf)
+        errors, _warnings = self.validator._validate_bounds(bounds, 3, None)
+        assert errors == []
+
+    def test_scalar_bounds_with_p0_outside(self):
+        """Test scalar bounds correctly broadcast when checking p0."""
+        bounds = (0, np.inf)
+        p0 = np.array([-1.0, 2.0, 3.0])
+        _errors, warnings = self.validator._validate_bounds(bounds, 3, p0)
+        assert any("outside bounds" in w for w in warnings)
+
+    def test_one_scalar_one_array_bounds(self):
+        """Test mixed scalar lower bound with array upper bound."""
+        bounds = (0, [10.0, 20.0, 30.0])
+        errors, _warnings = self.validator._validate_bounds(bounds, 3, None)
+        assert errors == []
+
 
 class TestValidateSigma:
     """Tests for _validate_sigma method."""

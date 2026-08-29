@@ -15,6 +15,7 @@ From command line:
 import shutil
 from pathlib import Path
 
+from nlsq.cli.model_validation import validate_path
 from nlsq.cli.templates import get_custom_model_template, get_workflow_template
 
 
@@ -70,6 +71,9 @@ def run_config(
         src = get_workflow_template()
         dest_name = output or "workflow_config.yaml"
         dest = cwd / dest_name
+        if not validate_path(dest, base_dir=cwd):
+            msg = f"Output path '{dest_name}' escapes the current directory."
+            raise ValueError(msg)
 
         if dest.exists() and not force:
             msg = f"File '{dest}' already exists. Use --force to overwrite."
@@ -86,6 +90,9 @@ def run_config(
         src = get_custom_model_template()
         dest_name = output or "custom_model.py"
         dest = cwd / dest_name
+        if not validate_path(dest, base_dir=cwd):
+            msg = f"Output path '{dest_name}' escapes the current directory."
+            raise ValueError(msg)
 
         if dest.exists() and not force:
             msg = f"File '{dest}' already exists. Use --force to overwrite."

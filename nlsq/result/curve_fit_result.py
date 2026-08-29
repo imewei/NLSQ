@@ -504,6 +504,25 @@ class CurveFitResult(OptimizeResult):
 
         return intervals
 
+    def _finite_diff_jacobian(self, x, popt, eps: float = 1e-8):
+        """Compute y_pred and the finite-difference Jacobian of ``self.model``
+        w.r.t. ``popt`` at ``x``. Shared by ``prediction_interval`` and
+        ``confidence_band``, which both need the same parameter-uncertainty
+        propagation through the model.
+        """
+        n_points = len(x)
+        n_params = len(popt)
+
+        y_pred = np.array(self.model(x, *popt))
+        jacobian = np.zeros((n_points, n_params))
+        for i in range(n_params):
+            params_plus = popt.copy()
+            params_plus[i] += eps
+            y_plus = np.array(self.model(x, *params_plus))
+            jacobian[:, i] = (y_plus - y_pred) / eps
+
+        return y_pred, jacobian
+
     def prediction_interval(self, x=None, alpha: float = 0.95):
         """Compute prediction interval at x values.
 
@@ -550,21 +569,27 @@ class CurveFitResult(OptimizeResult):
                 )
             x = self.xdata
 
-        # Predictions at x
-        y_pred = np.array(self.model(x, *self.popt))
+        x = np.asarray(x)
+        popt = self.popt
+        pcov = self.pcov
+        n_params = len(popt)
 
-        # Residual variance
+        y_pred, jacobian = self._finite_diff_jacobian(x, popt)
+
+        # Variance of the mean response (parameter-uncertainty contribution),
+        # same as confidence_band: J @ pcov @ J.T (diagonal)
+        variance = np.sum((jacobian @ pcov) * jacobian, axis=1)
+
+        # Residual variance (inherent data variability)
         n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
-        p = len(self.popt)
-        dof = max(n - p, 1)
+        dof = max(n - n_params, 1)
         s2 = np.sum(self.residuals**2) / dof
 
         # t-value
         t_val = stats.t.ppf((1 + alpha) / 2, dof)
 
-        # Prediction interval (simplified - assumes diagonal pcov dominance)
-        # Full calculation would require Jacobian at new x
-        se_pred = np.sqrt(s2 * (1 + np.trace(self.pcov) / p))
+        # Prediction interval = confidence band variance + residual variance
+        se_pred = np.sqrt(np.maximum(variance, 0) + s2)
 
         lower = y_pred - t_val * se_pred
         upper = y_pred + t_val * se_pred
@@ -614,21 +639,9 @@ class CurveFitResult(OptimizeResult):
         x = np.asarray(x)
         popt = self.popt
         pcov = self.pcov
-
-        # Jacobian calculation (finite difference)
-        n_points = len(x)
         n_params = len(popt)
-        eps = 1e-8
 
-        # Calculate base prediction
-        y0 = np.array(self.model(x, *popt))
-        jacobian = np.zeros((n_points, n_params))
-
-        for i in range(n_params):
-            params_plus = popt.copy()
-            params_plus[i] += eps
-            y_plus = np.array(self.model(x, *params_plus))
-            jacobian[:, i] = (y_plus - y0) / eps
+        y0, jacobian = self._finite_diff_jacobian(x, popt)
 
         # Variance of the mean response: J @ pcov @ J.T (diagonal)
         # element-wise for diagonal
@@ -808,7 +821,7 @@ class CurveFitResult(OptimizeResult):
         print("\nFitted Parameters:")
         print("-" * 70)
 
-        if hasattr(self, "pcov"):
+        if self.pcov is not None:
             perr = np.sqrt(np.diag(self.pcov))
             print(f"{'Parameter':<15} {'Value':>12} {'Std Error':>12} {'95% CI':>25}")
             print("-" * 70)

@@ -43,34 +43,6 @@ from typing import Any
 import numpy as np
 
 
-class OptimizationDiagnostics:
-    """Collect and analyze optimization diagnostics.
-
-    Parameters
-    ----------
-    result : OptimizeResult
-        Optimization result object
-
-    Attributes
-    ----------
-    cost : float or None
-        Final cost function value
-    gradient_norm : float or None
-        Norm of final gradient
-    nfev : int
-        Number of function evaluations
-    nit : int
-        Number of iterations
-    """
-
-    def __init__(self, result):
-        self.result = result
-        self.cost = getattr(result, "cost", None)
-        self.gradient_norm = getattr(result, "grad", None)
-        self.nfev = getattr(result, "nfev", 0)
-        self.nit = getattr(result, "nit", 0)
-
-
 def analyze_failure(
     result,
     gtol: float,

@@ -40,11 +40,18 @@ class TestValidateCurveFitInputs:
         assert result is not None
 
     def test_function_not_callable_raises(self):
-        """Test non-callable function returns error."""
+        """Test non-callable function returns error.
+
+        The function-callable check only runs when fast_mode=False (it's
+        skipped by default for performance), so use a non-fast validator
+        here to actually exercise it.
+        """
         xdata = np.array([1, 2, 3])
         ydata = np.array([2, 4, 6])
 
-        errors, _warnings, _xd, _yd = self.validator.validate_curve_fit_inputs(
+        errors, _warnings, _xd, _yd = InputValidator(
+            fast_mode=False,
+        ).validate_curve_fit_inputs(
             f="not_a_function",  # Invalid!
             xdata=xdata,
             ydata=ydata,
@@ -53,7 +60,7 @@ class TestValidateCurveFitInputs:
             bounds=(-np.inf, np.inf),
         )
 
-        # Should return error (may be about function evaluation or bounds processing)
+        # Should return error about function evaluation
         assert len(errors) > 0
 
     def test_xdata_ydata_shape_mismatch_raises(self):

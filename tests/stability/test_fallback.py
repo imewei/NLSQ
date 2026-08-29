@@ -213,6 +213,130 @@ class TestRescaleProblemStrategy:
         assert "_y_offset" in modified
         assert modified["_scaled"] is True
 
+    def test_rescaled_fit_recovers_original_units(self):
+        """Regression: previously the computed scale/offset were never
+        applied to xdata/ydata, so the strategy was a functional no-op.
+        A real curve_fit call using the strategy's scale/offset (the same
+        transform FallbackOrchestrator now applies) must recover parameters
+        directly in ORIGINAL units on a problem with wildly mismatched x/y
+        scales (x in [0, 1], y of order 1e7)."""
+        from nlsq.core.minpack import curve_fit
+
+        np.random.seed(0)
+        xdata = np.linspace(0, 1, 200)
+        true_a, true_c = 5e7, -3e7
+        ydata = true_a * xdata + true_c + 10.0 * np.random.randn(len(xdata))
+
+        strategy = RescaleProblemStrategy()
+        p0 = np.array([1e7, 0.0])  # order-of-magnitude guess, not exact
+        modified = strategy.apply({"p0": p0, "_xdata": xdata, "_ydata": ydata})
+        assert modified["_scaled"] is True
+
+        x_scale = modified["_x_scale"]
+        y_scale = modified["_y_scale"]
+        x_offset = modified["_x_offset"]
+        y_offset = modified["_y_offset"]
+
+        xdata_scaled = (xdata - x_offset) / x_scale
+        ydata_scaled = (ydata - y_offset) / y_scale
+
+        def scaled_linear(x_scaled, a, c):
+            return (linear(x_scaled * x_scale + x_offset, a, c) - y_offset) / y_scale
+
+        popt, _pcov = curve_fit(scaled_linear, xdata_scaled, ydata_scaled, p0=p0)
+
+        np.testing.assert_allclose(popt, [true_a, true_c], rtol=1e-3)
+
+
+class TestFallbackOrchestratorRescaleDispatch:
+    """Regression tests for FallbackOrchestrator actually using the scaled
+    data/model that RescaleProblemStrategy computes, instead of silently
+    refitting with the original unscaled xdata/ydata (the previous no-op
+    bug) or leaking the internal `_x_scale`/`_y_scale`/... keys into
+    curve_fit's kwargs (which would raise TypeError)."""
+
+    def test_orchestrator_builds_rescaled_model_and_data(self, monkeypatch):
+        xdata = np.linspace(1e6, 1e6 + 100, 50)
+        true_a, true_c = 2.0, 1.0
+        ydata = true_a * xdata + true_c
+
+        calls = []
+
+        def fake_curve_fit(f, xd, yd, **kw):
+            calls.append((f, xd, yd, kw))
+            if len(calls) == 1:
+                raise RuntimeError("simulated failure of original-scale fit")
+
+            # The second attempt (RescaleProblemStrategy) must receive data
+            # rescaled to an O(1) range, and no leaked internal scale keys.
+            assert np.ptp(xd) == pytest.approx(1.0)
+            assert np.ptp(yd) == pytest.approx(1.0)
+            for leaked_key in (
+                "_x_scale",
+                "_y_scale",
+                "_x_offset",
+                "_y_offset",
+                "_scaled",
+            ):
+                assert leaked_key not in kw
+
+            # The wrapped model, given the TRUE original-space params, must
+            # reproduce the rescaled ydata exactly -- i.e. popt found in this
+            # call is already in original units with no further transform.
+            reproduced = f(xd, true_a, true_c)
+            np.testing.assert_allclose(reproduced, yd, atol=1e-8)
+
+            class FakeResult:
+                x = np.array([true_a, true_c])
+
+            return FakeResult()
+
+        monkeypatch.setattr("nlsq.core.minpack.curve_fit", fake_curve_fit)
+
+        orchestrator = FallbackOrchestrator(
+            strategies=[RescaleProblemStrategy()], max_attempts=5
+        )
+        result = orchestrator.fit_with_fallback(linear, xdata, ydata, p0=[1.0, 1.0])
+
+        assert result.fallback_strategy_used == "rescale_problem"
+        assert len(calls) == 2
+
+    def test_orchestrator_scales_2d_sigma_quadratically(self, monkeypatch):
+        """1-D sigma is a std-dev and scales linearly with y (sigma/y_scale),
+        but a 2-D sigma is a covariance matrix and must scale quadratically
+        (sigma/y_scale**2) under y' = (y - y_offset) / y_scale -- variance
+        scales as the square of a linear transform's factor."""
+        xdata = np.linspace(1e6, 1e6 + 100, 5)
+        true_a, true_c = 2.0, 1.0
+        ydata = true_a * xdata + true_c
+        y_scale = np.ptp(ydata)
+        cov_2d = np.eye(5) * 4.0
+
+        calls = []
+
+        def fake_curve_fit(f, xd, yd, **kw):
+            calls.append(kw)
+            if len(calls) == 1:
+                raise RuntimeError("simulated failure of original-scale fit")
+
+            np.testing.assert_allclose(kw["sigma"], cov_2d / (y_scale**2), rtol=1e-10)
+
+            class FakeResult:
+                x = np.array([true_a, true_c])
+
+            return FakeResult()
+
+        monkeypatch.setattr("nlsq.core.minpack.curve_fit", fake_curve_fit)
+
+        orchestrator = FallbackOrchestrator(
+            strategies=[RescaleProblemStrategy()], max_attempts=5
+        )
+        orchestrator.fit_with_fallback(
+            linear, xdata, ydata, p0=[1.0, 1.0], sigma=cov_2d
+        )
+
+        assert len(calls) == 2
+
 
 class TestFallbackOrchestrator:
     """Test FallbackOrchestrator class."""

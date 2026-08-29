@@ -202,8 +202,16 @@ class ConvergenceMonitor:
 
         # Check if cost is increasing
         if len(costs) >= 5:
-            recent = costs[-5:]
-            older = costs[-10:-5] if len(costs) >= 10 else costs[:5]
+            if len(costs) >= 10:
+                recent = costs[-5:]
+                older = costs[-10:-5]
+            else:
+                # Non-overlapping halves — costs[:5] would otherwise share
+                # elements with costs[-5:] for 5 <= len(costs) < 10, damping
+                # the divergence ratio.
+                half = len(costs) // 2
+                recent = costs[-half:]
+                older = costs[:half]
 
             mean_recent = np.mean(recent)
             mean_older = np.mean(older)

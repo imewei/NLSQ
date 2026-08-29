@@ -126,6 +126,29 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         self.assertTrue(np.all(popt >= bounds[0]))
         self.assertTrue(np.all(popt <= bounds[1]))
 
+    def test_with_array_bounds_small_dataset_does_not_crash(self):
+        """Regression: ndarray bounds on the small-dataset (auto_size_detection)
+        path must not raise ValueError (ambiguous truth value) from
+        `bounds != (-inf, inf)`-style comparisons."""
+        xdata = np.linspace(0, 10, 100)
+        ydata = 2.0 * xdata + 1.0
+
+        bounds = (np.array([0.0, -10.0]), np.array([10.0, 10.0]))
+
+        popt, _pcov = curve_fit_large(
+            self.linear_func,
+            xdata,
+            ydata,
+            bounds=bounds,
+            size_threshold=1000,  # keeps this on the small-dataset path
+        )
+
+        self.assertIsInstance(popt, np.ndarray)
+        self.assertEqual(len(popt), 2)
+        self.assertTrue(np.all(popt >= bounds[0]))
+        self.assertTrue(np.all(popt <= bounds[1]))
+        np.testing.assert_allclose(popt, [2.0, 1.0], atol=0.01)
+
     def test_with_sigma(self):
         """Test curve_fit_large with sigma (uncertainties)."""
         xdata = np.linspace(0, 10, 15000)  # Large dataset

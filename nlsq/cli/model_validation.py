@@ -74,9 +74,13 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "__spec__",
         # Reflection / sandbox escape
         "getattr",
+        "setattr",
+        "delattr",
+        "hasattr",
         "globals",
         "locals",
         "vars",
+        "type",
         "__builtins__",
         "__subclasses__",
         # Dunder attribute chain traversal (used in sandbox escape: ().__class__.__bases__...)
@@ -91,6 +95,13 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "__getattr__",
         "__base__",
         "mro",
+        # Frame introspection (non-dunder equivalents of __globals__/__code__
+        # that reach the same objects via sys._getframe() / traceback frames)
+        "_getframe",
+        "f_globals",
+        "f_back",
+        "f_locals",
+        "f_code",
         # Interactive debugger (can execute arbitrary code interactively)
         "breakpoint",
         # sys.modules dict-access bypass: reaches already-imported os/subprocess
@@ -109,6 +120,7 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
 DANGEROUS_MODULES: frozenset[str] = frozenset(
     {
         "os",
+        "sys",
         "subprocess",
         "shutil",
         "socket",
@@ -121,6 +133,9 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "cffi",
         "multiprocessing",
         "concurrent",
+        # Bytecode/function construction — bypasses exec/eval detection by
+        # building and running arbitrary code objects directly
+        "types",
         # Serialization modules that execute arbitrary code during deserialization
         "pickle",
         "marshal",
@@ -210,6 +225,15 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             # Check for open() with write modes (e.g., builtins.open)
             if node.func.attr == "open":
                 self._check_open_call(node)
+            # str.format()/str.format_map() can resolve dunder attribute
+            # chains at runtime from a format-spec string, defeating the
+            # literal-substring scan in visit_Constant when the string is
+            # built via concatenation. Block the call itself.
+            if node.func.attr in ("format", "format_map"):
+                self.violations.append(
+                    f"Dangerous method call: .{node.func.attr}() "
+                    "(format-string escape risk)",
+                )
 
         self.generic_visit(node)
 
@@ -219,7 +243,7 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         if len(node.args) >= 2:
             mode_arg = node.args[1]
             if isinstance(mode_arg, ast.Constant) and isinstance(mode_arg.value, str):
-                if any(c in mode_arg.value for c in "wax"):
+                if any(c in mode_arg.value for c in "wax+"):
                     self.violations.append(
                         f"File write operation: open(..., '{mode_arg.value}')",
                     )
@@ -230,7 +254,7 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                     keyword.value.value,
                     str,
                 ):
-                    if any(c in keyword.value.value for c in "wax"):
+                    if any(c in keyword.value.value for c in "wax+"):
                         self.violations.append(
                             f"File write operation: open(..., mode='{keyword.value.value}')",
                         )
