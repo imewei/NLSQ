@@ -191,6 +191,31 @@ class ConfiguredOptimizer:
         # Merge config kwargs with call kwargs
         merged_kwargs = {**self._config.extra_kwargs, **kwargs}
 
+        # Apply configuration. curve_fit()'s diagnostics flag is named
+        # `compute_diagnostics`; without this, enable_diagnostics and
+        # diagnostics_config were accepted, stored, and silently discarded --
+        # documented features of create_optimizer() that never took effect
+        # (mirrors the wiring configure_curve_fit() already does below).
+        #
+        # enable_recovery is deliberately NOT wired to curve_fit(fallback=...)
+        # here: fallback=True makes curve_fit() take an early-return path
+        # (nlsq/core/minpack.py's `if fallback: return
+        # _run_fallback_optimization(...)`) that returns a FallbackResult
+        # instead of the (popt, pcov) tuple this method's docstring promises
+        # -- and enable_recovery defaults to True, so wiring it naively
+        # breaks the documented return contract for the common case. Needs
+        # a FallbackResult-aware unwrap before this can be closed.
+        if (
+            self._config.enable_diagnostics
+            and "compute_diagnostics" not in merged_kwargs
+        ):
+            merged_kwargs["compute_diagnostics"] = True
+        if (
+            self._diagnostics_config is not None
+            and "diagnostics_config" not in merged_kwargs
+        ):
+            merged_kwargs["diagnostics_config"] = self._diagnostics_config
+
         # Handle global optimization
         if self._config.enable_global:
             return self._fit_global(f, xdata, ydata, p0, sigma, bounds, **merged_kwargs)
@@ -323,6 +348,15 @@ def configure_curve_fit(
         # curve_fit's **kwargs and silently does nothing.
         if enable_diagnostics and "compute_diagnostics" not in merged:
             merged["compute_diagnostics"] = True
+
+        # enable_recovery is deliberately NOT wired to curve_fit(fallback=...)
+        # here: fallback=True makes curve_fit() take an early-return path
+        # that returns a FallbackResult instead of the (popt, pcov) tuple
+        # this callable's return type promises -- and enable_recovery
+        # defaults to True, so wiring it naively would break the documented
+        # return contract for the common case. Needs a FallbackResult-aware
+        # unwrap before this can be closed (see create_optimizer() above,
+        # same issue).
 
         # curve_fit()'s own default bounds is (-inf, inf), never None; passing
         # bounds=None through unconditionally crashes in prepare_bounds().

@@ -171,6 +171,18 @@ def _conjugate_gradient_solve(
 
 
 @jit
+def _seed_lm_alpha(g_norm: jnp.ndarray, alpha: float, Delta: float) -> jnp.ndarray:
+    """Standard LM initial damping estimate (||J^T f|| / Delta, per More 1978).
+
+    Used only when alpha is not already positive -- see the CG/lsmr trust
+    region solvers below for why alpha reaches them still at its unset
+    value of 0.0 on every call.
+    """
+    seed_alpha = jnp.where(Delta > 0, g_norm / Delta, 0.0)
+    return jnp.where(alpha > 0, alpha, seed_alpha)
+
+
+@jit
 def _solve_tr_subproblem_cg(
     J: jnp.ndarray,
     f: jnp.ndarray,
@@ -185,7 +197,17 @@ def _solve_tr_subproblem_cg(
     p_gn_norm = jnp.linalg.norm(p_gn)
 
     def compute_regularized():
-        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, alpha, tol)
+        # alpha is meant to carry the LM damping parameter forward across
+        # outer iterations via a multiplicative rescale (trf.py), but the
+        # value this CG solver seeds internally is never written back to
+        # that outer-loop alpha, so alpha reaches here still at its unset
+        # value of 0.0 on every call, and 0 * anything is still 0 --
+        # without a nonzero seed here, this branch always regularizes with
+        # alpha=0, silently degrading to the unregularized Gauss-Newton
+        # solution merely rescaled to the trust region boundary.
+        g_norm = jnp.linalg.norm((J * d[None, :]).T @ f)
+        effective_alpha = _seed_lm_alpha(g_norm, alpha, Delta)
+        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, effective_alpha, tol)
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
         # If regularized step is within trust region, use it directly;
         # otherwise scale to trust region boundary (no arbitrary clamping)
@@ -226,11 +248,15 @@ def _solve_tr_subproblem_cg_bounds(
     p_gn_norm = jnp.linalg.norm(p_gn)
 
     def compute_regularized():
+        # See _solve_tr_subproblem_cg for why this seed is needed on every
+        # call (alpha reaches here still at its unset value of 0.0).
+        g_norm = jnp.linalg.norm(J_augmented.T @ f_augmented)
+        effective_alpha = _seed_lm_alpha(g_norm, alpha, Delta)
         p_reg, _, _ = _conjugate_gradient_solve(
             J_augmented,
             f_augmented,
             d_augmented,
-            alpha,
+            effective_alpha,
             tol,
         )
         p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)

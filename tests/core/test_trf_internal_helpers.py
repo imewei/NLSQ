@@ -38,6 +38,9 @@ def _make_optimizer() -> SimpleNamespace:
         opt, cls
     )
     opt._evaluate_step_acceptance = cls._evaluate_step_acceptance.__get__(opt, cls)
+    opt._maybe_flag_inner_loop_limit = cls._maybe_flag_inner_loop_limit.__get__(
+        opt, cls
+    )
     return opt
 
 

@@ -259,13 +259,23 @@ class FeatureFlags:
             New FeatureFlags instance with overridden values
         """
         return FeatureFlags(
-            preprocessor_impl=preprocessor_impl or self.preprocessor_impl,
-            selector_impl=selector_impl or self.selector_impl,
-            covariance_impl=covariance_impl or self.covariance_impl,
-            streaming_impl=streaming_impl or self.streaming_impl,
-            rollout_percent=rollout_percent
-            if rollout_percent is not None
-            else self.rollout_percent,
+            preprocessor_impl=(
+                preprocessor_impl
+                if preprocessor_impl is not None
+                else self.preprocessor_impl
+            ),
+            selector_impl=(
+                selector_impl if selector_impl is not None else self.selector_impl
+            ),
+            covariance_impl=(
+                covariance_impl if covariance_impl is not None else self.covariance_impl
+            ),
+            streaming_impl=(
+                streaming_impl if streaming_impl is not None else self.streaming_impl
+            ),
+            rollout_percent=(
+                rollout_percent if rollout_percent is not None else self.rollout_percent
+            ),
             _session_id=self._session_id,
         )
 
