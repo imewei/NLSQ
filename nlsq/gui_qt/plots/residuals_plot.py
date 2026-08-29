@@ -337,12 +337,16 @@ class ResidualsPlotWidget(QWidget):
         if self._residuals is None:
             return {}
 
+        finite_residuals = self._residuals[np.isfinite(self._residuals)]
+        if finite_residuals.size == 0:
+            return {}
+
         return {
-            "mean": float(np.mean(self._residuals)),
-            "std": float(np.std(self._residuals)),
-            "min": float(np.min(self._residuals)),
-            "max": float(np.max(self._residuals)),
-            "median": float(np.median(self._residuals)),
+            "mean": float(np.mean(finite_residuals)),
+            "std": float(np.std(finite_residuals)),
+            "min": float(np.min(finite_residuals)),
+            "max": float(np.max(finite_residuals)),
+            "median": float(np.median(finite_residuals)),
         }
 
     def clear(self) -> None:
