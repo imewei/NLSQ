@@ -93,6 +93,47 @@ class TestRestoreStateValidation:
 
         assert mock_state.state.sigma is None
 
+    def test_mismatched_xdata_ydata_length_rejected(self, tmp_path):
+        """xdata/ydata of different lengths must not be restored (would silently
+        misalign points)."""
+        manager, mock_state = self._make_manager(tmp_path)
+        data = {"xdata": [1.0, 2.0, 3.0], "ydata": [4.0, 5.0]}
+
+        manager._restore_state(data)
+
+        assert mock_state.state.xdata is None
+        assert mock_state.state.ydata is None
+
+    def test_mismatched_sigma_length_rejected(self, tmp_path):
+        """sigma of a different length than xdata/ydata must not be restored."""
+        manager, mock_state = self._make_manager(tmp_path)
+        data = {
+            "xdata": [1.0, 2.0, 3.0],
+            "ydata": [4.0, 5.0, 6.0],
+            "sigma": [0.1, 0.2],
+        }
+
+        manager._restore_state(data)
+
+        assert mock_state.state.xdata is None
+        assert mock_state.state.ydata is None
+        assert mock_state.state.sigma is None
+
+    def test_matched_lengths_all_restored(self, tmp_path):
+        """Equal-length xdata/ydata/sigma must all be restored."""
+        manager, mock_state = self._make_manager(tmp_path)
+        data = {
+            "xdata": [1.0, 2.0, 3.0],
+            "ydata": [4.0, 5.0, 6.0],
+            "sigma": [0.1, 0.2, 0.3],
+        }
+
+        manager._restore_state(data)
+
+        np.testing.assert_array_equal(mock_state.state.xdata, [1.0, 2.0, 3.0])
+        np.testing.assert_array_equal(mock_state.state.ydata, [4.0, 5.0, 6.0])
+        np.testing.assert_array_almost_equal(mock_state.state.sigma, [0.1, 0.2, 0.3])
+
     def test_bounds_numpy_floats_restored(self, tmp_path):
         """Bounds saved as Python floats must round-trip cleanly."""
         manager, mock_state = self._make_manager(tmp_path)

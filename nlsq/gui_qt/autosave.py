@@ -164,6 +164,24 @@ class AutosaveManager(QObject):
 
         return data
 
+    @staticmethod
+    def _validate_restored_array(
+        raw: Any, *, positive: bool = False
+    ) -> np.ndarray | None:
+        """Validate a 1-D array restored from autosave JSON.
+
+        Args:
+            raw: Raw list from the serialized dictionary.
+            positive: If True, require strictly positive values (accepting
+                +inf, the SciPy convention for "no weight" on sigma) instead
+                of the default finite-values check.
+        """
+        arr = np.array(raw, dtype=np.float64)
+        if arr.ndim != 1:
+            return None
+        valid = np.all(arr > 0) if positive else np.all(np.isfinite(arr))
+        return arr if valid else None
+
     def _restore_state(self, data: dict[str, Any]) -> None:
         """Restore session state from a dictionary.
 
@@ -174,20 +192,28 @@ class AutosaveManager(QObject):
 
         # Restore data arrays — validate before accepting to avoid emitting
         # data_changed with NaN/Inf-contaminated or malformed arrays.
-        if "xdata" in data:
-            arr = np.array(data["xdata"], dtype=np.float64)
-            if arr.ndim == 1 and np.all(np.isfinite(arr)):
-                state.xdata = arr
-        if "ydata" in data:
-            arr = np.array(data["ydata"], dtype=np.float64)
-            if arr.ndim == 1 and np.all(np.isfinite(arr)):
-                state.ydata = arr
-        if "sigma" in data:
-            arr = np.array(data["sigma"], dtype=np.float64)
-            # arr > 0 accepts +inf (SciPy convention: sigma=inf = no weight on point)
-            # and rejects NaN, 0, and negative values.
-            if arr.ndim == 1 and np.all(arr > 0):
-                state.sigma = arr
+        xdata = (
+            self._validate_restored_array(data["xdata"]) if "xdata" in data else None
+        )
+        ydata = (
+            self._validate_restored_array(data["ydata"]) if "ydata" in data else None
+        )
+        sigma = (
+            self._validate_restored_array(data["sigma"], positive=True)
+            if "sigma" in data
+            else None
+        )
+
+        # Cross-validate lengths — independently-valid arrays of mismatched
+        # length would silently pair the wrong sigma/y with the wrong x.
+        lengths = {len(a) for a in (xdata, ydata, sigma) if a is not None}
+        if len(lengths) <= 1:
+            if xdata is not None:
+                state.xdata = xdata
+            if ydata is not None:
+                state.ydata = ydata
+            if sigma is not None:
+                state.sigma = sigma
 
         # Restore model config
         if "model_config" in data:
