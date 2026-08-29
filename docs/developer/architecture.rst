@@ -370,8 +370,6 @@ The ``result/`` package (1,221 lines) provides optimization result containers:
      - Purpose
    * - ``OptimizeResult``
      - dict subclass with attribute access, SciPy-compatible
-   * - ``OptimizeResultV2``
-     - Frozen dataclass with ``__slots__`` (~40% memory reduction, ~2x faster access)
    * - ``CurveFitResult``
      - Enhanced result with R-squared, RMSE, AIC/BIC, confidence intervals, prediction bands, ``summary()``, ``plot()``
    * - ``OptimizeWarning``

@@ -676,7 +676,7 @@ def fit(
         absolute_sigma=absolute_sigma,
         check_finite=check_finite,
         bounds=bounds,
-        method=method,  # type: ignore[arg-type]
+        method=method,
         multistart=effective_multistart,
         n_starts=effective_n_starts,
         sampler=sampler,
