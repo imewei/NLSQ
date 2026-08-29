@@ -159,9 +159,12 @@ class TestRetryFailedChunkFeedsAccumulator:
         np.testing.assert_array_equal(chunk_result["pcov_chunk"], expected_pcov)
 
     def test_retry_success_after_accumulation_started_updates_accumulator(self):
-        """Closes the actual call-site bug, not just the return-value plumbing:
-        a retry succeeding AFTER _accum_information is already non-None must
-        fold into it via _update_parameters_convergence, not be dropped."""
+        """Exercises the "accumulate into an already-started _accum_information"
+        branch directly on _update_parameters_convergence (not through the
+        _retry_failed_chunk call site itself, which every other test in this
+        class covers only up to the return value): a retry succeeding AFTER
+        _accum_information is already non-None must fold into it, not be
+        dropped or overwrite it."""
         fitter = LargeDatasetFitter()
         fitter._accum_information = np.array([[4.0, 0.0], [0.0, 2.0]])
         fitter._accum_info_vector = np.array([8.0, 4.0])  # theta=[2,2] so far

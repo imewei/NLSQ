@@ -106,6 +106,14 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "f_builtins",
         "gi_frame",
         "tb_frame",
+        # Coroutine/async-generator frame introspection -- same technique as
+        # gi_frame/tb_frame above, reached via a coroutine or async generator
+        # object (e.g. `c = coro(); c.cr_frame.f_builtins["exec"](...)`)
+        # instead of a plain generator or traceback. Not covered by banning
+        # `asyncio`: these are built-in coroutine-object attributes, not
+        # asyncio symbols, so they're reachable without importing asyncio.
+        "cr_frame",
+        "ag_frame",
         # Interactive debugger (can execute arbitrary code interactively)
         "breakpoint",
         # sys.modules dict-access bypass: reaches already-imported os/subprocess
@@ -121,9 +129,19 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         # asyncio subprocess spawners (bypass the subprocess/Popen name check)
         "create_subprocess_shell",
         "create_subprocess_exec",
-        # pathlib file-mutation methods (bypass the open()-write-mode check)
+        # pathlib file-mutation methods (bypass the open()-write-mode check;
+        # no open()/os/shutil call needed to delete, rename, or repermission
+        # a file through a Path object)
         "write_text",
         "write_bytes",
+        "unlink",
+        "rmdir",
+        "rename",
+        "replace",
+        "chmod",
+        "touch",
+        "symlink_to",
+        "hardlink_to",
     },
 )
 

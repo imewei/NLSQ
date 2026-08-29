@@ -82,6 +82,11 @@ jobs:
       # Limit pytest-xdist workers on ubuntu to prevent OOM (JAX per-worker memory
       # exceeds runner RAM with auto workers). macOS/Windows use auto.
       PYTEST_XDIST_WORKERS: ${{ matrix.os == 'ubuntu-latest' && '2' || 'auto' }}
+      # ubuntu-latest runners have no X server; without this, Qt's default
+      # "xcb" platform plugin aborts (SIGABRT) the instant a QApplication is
+      # created in the serial GUI test suite. macOS (cocoa) and Windows
+      # (windows) platform plugins don't need this.
+      QT_QPA_PLATFORM: ${{ matrix.os == 'ubuntu-latest' && 'offscreen' || '' }}
       # Override pyproject.toml addopts (-q conflicts with -v, hiding CI failures).
       PYTEST_ADDOPTS: "-ra --strict-markers --strict-config --durations=10"
 
