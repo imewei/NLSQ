@@ -107,6 +107,15 @@ class CLIError(Exception):
             merged into ``context`` — subclasses accept these without
             needing their own ``__init__``.
         """
+        if context is not None and not isinstance(context, dict):
+            raise TypeError(
+                f"{type(self).__name__}'s second positional argument is "
+                f"'context' (a dict), got {type(context).__name__}. The "
+                "per-subclass positional constructors (e.g. "
+                "ConfigError(message, config_file, key)) were removed -- "
+                "pass named fields as keyword arguments instead, e.g. "
+                f"{type(self).__name__}(message, config_file=...).",
+            )
         self.message = message
         merged = {**(context or {}), **named_context}
         # Stringify Path values (e.g. config_file=, file_path=) so context

@@ -4293,13 +4293,6 @@ class CurveFit:
                 if hasattr(HybridStreamingConfig, key):
                     config_overrides[key] = kwargs.pop(key)
 
-            if kwargs:
-                raise TypeError(
-                    "Unrecognized keyword argument(s) for method="
-                    f"'hybrid_streaming': {sorted(kwargs)}. These are not "
-                    "HybridStreamingConfig fields.",
-                )
-
             config = (
                 HybridStreamingConfig(**config_overrides)
                 if config_overrides
@@ -4308,6 +4301,17 @@ class CurveFit:
         elif not isinstance(config, HybridStreamingConfig):
             raise TypeError(
                 f"config must be a HybridStreamingConfig, got {type(config).__name__}",
+            )
+
+        # Applies whether config came from individual kwargs or was passed
+        # directly: a leftover kwarg in the config= case is just as much an
+        # error (e.g. a typo'd option) as one that didn't match a
+        # HybridStreamingConfig field above.
+        if kwargs:
+            raise TypeError(
+                "Unrecognized keyword argument(s) for method="
+                f"'hybrid_streaming': {sorted(kwargs)}. These are not "
+                "HybridStreamingConfig fields.",
             )
 
         # Create optimizer

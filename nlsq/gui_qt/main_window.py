@@ -519,8 +519,7 @@ class MainWindow(QMainWindow):
         # A fit still running on a background QThread would otherwise keep
         # emitting progress/finished/error signals into page widgets that
         # this close is about to tear down (RuntimeError: C++ object already
-        # deleted), and _cleanup_cache()'s rmtree could race the fit thread's
-        # own reads/writes of the same on-disk cache.
+        # deleted).
         if getattr(self._app_state.state, "fit_running", False):
             from PySide6.QtWidgets import QMessageBox
 
@@ -572,18 +571,6 @@ class MainWindow(QMainWindow):
         self._autosave.stop()
         self._autosave.clear_recovery()
 
-        # Clean up disk cache directory — skip if a fit thread may still be
-        # running/finishing, to avoid deleting the cache out from under it.
-        if not getattr(self._app_state.state, "fit_running", False):
-            self._cleanup_cache()
-
         # Save window state before closing
         self._save_state()
         event.accept()
-
-    def _cleanup_cache(self) -> None:
-        """Remove the .nlsq_cache directory on clean shutdown."""
-        import shutil
-
-        if os.path.isdir(".nlsq_cache"):
-            shutil.rmtree(".nlsq_cache", ignore_errors=True)
