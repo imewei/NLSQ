@@ -123,7 +123,8 @@ class TestModelValidationCaching:
         assert isinstance(fitter._validated_functions, dict)
 
     def test_validation_cache_uses_composite_key(self):
-        """Test that validation caching uses content-based key (name, bytecode, consts)."""
+        """Test that validation caching keys on closure identity (closure_serial)."""
+        from nlsq.caching._closure_serial import closure_serial
         from nlsq.streaming.large_dataset import LargeDatasetFitter
 
         fitter = LargeDatasetFitter()
@@ -138,14 +139,13 @@ class TestModelValidationCaching:
 
         fitter._validate_model_function(model, x, y, p0)
 
-        # Check that validation cache has the content-based key
-        expected_key = (
-            model.__name__,
-            model.__code__.co_code,
-            model.__code__.co_consts,
-        )
+        # Check that validation cache has the closure-identity key. Plain
+        # (name, co_code, co_consts) would collide for two distinct closures
+        # from the same factory (see db7d23d) -- closure_serial(func) is
+        # what _validate_model_function now stores instead.
+        expected_key = closure_serial(model)
         assert expected_key in fitter._validated_functions, (
-            "Expected content-based key in _validated_functions"
+            "Expected closure-identity key in _validated_functions"
         )
 
     def test_validation_skipped_for_same_function(self):
@@ -355,8 +355,10 @@ class TestIntegration:
         assert cache_size_2 == 1, "Second validation should use cache (no new entry)"
         assert cache_size_3 == 1, "Third validation should use cache (no new entry)"
 
-        # Verify the function is in the cache (content-based key)
-        func_key = (model.__name__, model.__code__.co_code, model.__code__.co_consts)
+        # Verify the function is in the cache (closure-identity key)
+        from nlsq.caching._closure_serial import closure_serial
+
+        func_key = closure_serial(model)
         assert func_key in fitter._validated_functions, (
             "Model function should be in validation cache"
         )

@@ -104,6 +104,11 @@ class HybridStreamingConfig:
         L-BFGS initial step size for exploration mode (high relative loss).
         Small value prevents first "Hessian=Identity" step from overshooting.
 
+    lbfgs_careful_step_size : float, default=0.5
+        L-BFGS initial step size for careful mode (intermediate relative
+        loss, 0.1 <= relative_loss < 1.0). Between the exploration and
+        refinement step sizes.
+
     lbfgs_refinement_step_size : float, default=1.0
         L-BFGS initial step size for refinement mode (low relative loss).
         Larger value leverages L-BFGS's near-Newton convergence speed when
@@ -307,6 +312,7 @@ class HybridStreamingConfig:
     lbfgs_initial_step_size: float = 0.1  # Cold start scaffolding
     lbfgs_line_search: Literal["wolfe", "strong_wolfe", "backtracking"] = "wolfe"
     lbfgs_exploration_step_size: float = 0.1  # For high relative loss (exploration)
+    lbfgs_careful_step_size: float = 0.5  # For intermediate relative loss (careful)
     lbfgs_refinement_step_size: float = 1.0  # For low relative loss (refinement)
 
     # Optax enhancements
@@ -441,6 +447,7 @@ class HybridStreamingConfig:
                 line_search=self.lbfgs_line_search,
                 exploration_step_size=self.lbfgs_exploration_step_size,
                 refinement_step_size=self.lbfgs_refinement_step_size,
+                careful_step_size=self.lbfgs_careful_step_size,
             )
 
             # Validate Phase 2 Gauss-Newton configuration
