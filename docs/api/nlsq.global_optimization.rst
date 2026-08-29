@@ -129,6 +129,44 @@ Evolution strategy optimizer for multi-scale parameter problems:
    :undoc-members:
    :show-inheritance:
 
+Checkpoint/Resume
+^^^^^^^^^^^^^^^^^
+
+``CMAESOptimizer.fit()`` (with ``restart_strategy="none"``) supports
+checkpoint/resume via ``CMAESConfig.checkpoint_dir``/``checkpoint_interval``/
+``run_id``/``model_id`` -- see :class:`CMAESConfig` above for the required
+fields. ``workflow='hpc'`` forwards ``checkpoint_dir`` into it automatically.
+BIPOP restarts (``restart_strategy="bipop"``, the default) and the
+multistart/chunked/streaming ``workflow='hpc'`` routes do not support
+checkpointing yet.
+
+A preemption signal (``SIGTERM``/``SIGUSR1``) received after checkpointing is
+enabled triggers a safe-point checkpoint save followed by
+:class:`CMAESPreempted`, letting a wrapping HPC resubmission script
+distinguish a clean checkpointed stop from a crash:
+
+.. code-block:: python
+
+   from nlsq.global_optimization import CMAESConfig, CMAESOptimizer, CMAESPreempted
+
+   config = CMAESConfig(
+       checkpoint_dir="/scratch/checkpoints",
+       checkpoint_interval=10,
+       run_id="run-001",
+       model_id="exponential-decay",
+       seed=42,
+   )
+   try:
+       optimizer = CMAESOptimizer(config=config)
+       result = optimizer.fit(model, x, y, bounds=bounds)
+   except CMAESPreempted as exc:
+       # exc.generation: last checkpointed generation; process exit code is 75
+       print(f"Preempted at generation {exc.generation}, resubmit to resume")
+
+.. autoclass:: CMAESPreempted
+   :members:
+   :show-inheritance:
+
 Method Selection
 ----------------
 
