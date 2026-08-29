@@ -222,8 +222,9 @@ ifeq ($(PLATFORM),linux)
 	SM_VERSION=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.'); \
 	SM_DISPLAY=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1); \
 	GPU_NAME=$$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1); \
-	if [ -z "$$SM_VERSION" ]; then \
-		echo "$(RED)Error: Could not detect GPU (nvidia-smi failed)$(RESET)"; \
+	if ! echo "$$SM_VERSION" | grep -qE '^[0-9]+$$'; then \
+		echo "$(RED)Error: Could not detect GPU (nvidia-smi failed: $${SM_VERSION:-no output})$(RESET)"; \
+		echo "Run 'nvidia-smi' to check driver/GPU state."; \
 		exit 1; \
 	fi; \
 	echo "Detected GPU: $$GPU_NAME (SM $$SM_DISPLAY)"; \
