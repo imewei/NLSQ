@@ -1,6 +1,11 @@
 """Tests for AppState — stale fit_result invalidation on data/model change."""
 
 import numpy as np
+import pytest
+
+# GUI tests crash xdist workers on headless CI (see test_gui_startup.py) --
+# run on a single dedicated worker to avoid taking down the shared pool.
+pytestmark = pytest.mark.serial
 
 
 class TestFitResultInvalidation:

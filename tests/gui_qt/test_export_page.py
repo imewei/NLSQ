@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 
 import numpy as np
+import pytest
+
+# GUI tests crash xdist workers on headless CI (see test_gui_startup.py) --
+# run on a single dedicated worker to avoid taking down the shared pool.
+pytestmark = pytest.mark.serial
 
 
 class FakeFitResult:
