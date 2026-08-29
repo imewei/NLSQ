@@ -96,23 +96,34 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "__base__",
         "mro",
         # Frame introspection (non-dunder equivalents of __globals__/__code__
-        # that reach the same objects via sys._getframe() / traceback frames)
+        # that reach the same objects via sys._getframe() / traceback frames /
+        # generator frames)
         "_getframe",
         "f_globals",
         "f_back",
         "f_locals",
         "f_code",
+        "f_builtins",
+        "gi_frame",
+        "tb_frame",
         # Interactive debugger (can execute arbitrary code interactively)
         "breakpoint",
         # sys.modules dict-access bypass: reaches already-imported os/subprocess
         # etc. without a literal `import os` this visitor would otherwise catch
         "modules",
         # String-based getattr equivalents (operator.attrgetter/methodcaller,
-        # pydoc.locate) resolve dotted names at runtime, bypassing the
-        # Attribute/Name checks above
+        # pydoc.locate, pkgutil.resolve_name) resolve dotted names at runtime,
+        # bypassing the Attribute/Name checks above
         "attrgetter",
         "methodcaller",
         "locate",
+        "resolve_name",
+        # asyncio subprocess spawners (bypass the subprocess/Popen name check)
+        "create_subprocess_shell",
+        "create_subprocess_exec",
+        # pathlib file-mutation methods (bypass the open()-write-mode check)
+        "write_text",
+        "write_bytes",
     },
 )
 
@@ -158,6 +169,11 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         # String-based getattr equivalents
         "operator",
         "pydoc",
+        "pkgutil",
+        # timeit.timeit()/asyncio.create_subprocess_*() execute arbitrary code
+        # strings / spawn processes without tripping exec/subprocess checks
+        "timeit",
+        "asyncio",
     },
 )
 

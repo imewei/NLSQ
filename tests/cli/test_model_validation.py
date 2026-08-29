@@ -251,6 +251,70 @@ def model(x, a):
         assert not result.is_valid
         assert any("os.path" in v for v in result.violations)
 
+    def test_generator_frame_builtins_blocked(self, tmp_path: Path):
+        """gi_frame.f_builtins reaches exec() without tripping name-based checks."""
+        model_file = tmp_path / "malicious_gi_frame.py"
+        model_file.write_text("""
+def model(x, a):
+    gen = (i for i in [1])
+    b = gen.gi_frame.f_builtins
+    b["exec"]("import os; os.system('pwned')")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("gi_frame" in v or "f_builtins" in v for v in result.violations)
+
+    def test_pkgutil_resolve_name_blocked(self, tmp_path: Path):
+        """pkgutil.resolve_name resolves a dotted string path without an import."""
+        model_file = tmp_path / "malicious_pkgutil.py"
+        model_file.write_text("""
+import pkgutil
+
+def model(x, a):
+    pkgutil.resolve_name("posix:system")("pwned")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("pkgutil" in v.lower() for v in result.violations)
+
+    def test_timeit_code_string_blocked(self, tmp_path: Path):
+        """timeit.timeit() executes an arbitrary code string."""
+        model_file = tmp_path / "malicious_timeit.py"
+        model_file.write_text("""
+import timeit
+
+def model(x, a):
+    timeit.timeit("import os; os.system('pwned')", number=1)
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("timeit" in v.lower() for v in result.violations)
+
+    def test_pathlib_write_text_blocked(self, tmp_path: Path):
+        """Path.write_text() mutates files without tripping the open()-mode check."""
+        model_file = tmp_path / "malicious_pathlib_write.py"
+        model_file.write_text("""
+from pathlib import Path
+
+def model(x, a):
+    Path("/tmp/pwned.txt").write_text("arbitrary write")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("write_text" in v for v in result.violations)
+
     def test_trusted_bypasses_validation(self, tmp_path: Path):
         """trusted=True should bypass validation."""
         model_file = tmp_path / "malicious_but_trusted.py"

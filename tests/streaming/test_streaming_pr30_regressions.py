@@ -158,6 +158,42 @@ class TestRetryFailedChunkFeedsAccumulator:
         assert "pcov_chunk" in chunk_result
         np.testing.assert_array_equal(chunk_result["pcov_chunk"], expected_pcov)
 
+    def test_retry_success_after_accumulation_started_updates_accumulator(self):
+        """Closes the actual call-site bug, not just the return-value plumbing:
+        a retry succeeding AFTER _accum_information is already non-None must
+        fold into it via _update_parameters_convergence, not be dropped."""
+        fitter = LargeDatasetFitter()
+        fitter._accum_information = np.array([[4.0, 0.0], [0.0, 2.0]])
+        fitter._accum_info_vector = np.array([8.0, 4.0])  # theta=[2,2] so far
+        prior_information = fitter._accum_information.copy()
+
+        retry_popt = np.array([2.5, 1.5])
+        retry_pcov = np.diag([0.01, 0.02])
+
+        current_params, _history, _metric, _stop = (
+            fitter._update_parameters_convergence(
+                current_params=np.array([2.0, 2.0]),
+                popt_chunk=retry_popt,
+                pcov_chunk=retry_pcov,
+                param_history=[np.array([2.0, 2.0])],
+                convergence_metric=1.0,
+                chunk_idx=1,
+                n_chunks=2,
+            )
+        )
+
+        # Accumulator must have grown by this chunk's precision contribution.
+        assert not np.allclose(fitter._accum_information, prior_information)
+        expected_prec = np.linalg.inv(retry_pcov)
+        np.testing.assert_allclose(
+            fitter._accum_information,
+            prior_information + expected_prec,
+        )
+        # Combined estimate must differ from both the prior and the raw retry
+        # popt -- proof it was actually blended, not overwritten or dropped.
+        assert not np.allclose(current_params, [2.0, 2.0])
+        assert not np.allclose(current_params, retry_popt)
+
 
 class TestSVDPseudoInverseNullSpaceHandling:
     """Critical: the SVD Gauss-Newton solve floored small singular values to
