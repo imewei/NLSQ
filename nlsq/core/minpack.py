@@ -3672,6 +3672,33 @@ class CurveFit:
         ydata : np.ndarray
             Cleaned Y data
         """
+        # Security constraints (array-size/Jacobian-overflow DoS limits,
+        # bounds/parameter range checks) must run regardless of
+        # enable_stability -- self.enable_stability defaults to False on
+        # both CurveFit and the public curve_fit() wrapper, and these
+        # checks were previously only reachable through the full
+        # validate_curve_fit_inputs() pipeline gated behind it, making them
+        # dead code on the default "drop-in scipy.optimize.curve_fit
+        # replacement" path.
+        security_validator = getattr(self, "validator", None) or InputValidator(
+            fast_mode=True,
+        )
+        n_params = security_validator._estimate_n_params(f, p0)
+        security_errors, security_warnings = (
+            security_validator.validate_security_constraints(
+                len(ydata),
+                n_params,
+                bounds,
+                p0,
+            )
+        )
+        if security_errors:
+            error_msg = f"Input validation failed: {'; '.join(security_errors)}"
+            self.logger.error("Input validation failed", error=error_msg)
+            raise ValueError(error_msg)
+        for warning in security_warnings:
+            self.logger.warning("Input validation warning", warning=warning)
+
         if self.enable_stability:
             try:
                 errors, warnings_list, xdata_clean, ydata_clean = (

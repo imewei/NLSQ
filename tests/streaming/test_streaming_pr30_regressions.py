@@ -109,6 +109,56 @@ class TestRetryFailedChunkUsesValidLength:
         assert len(call_args.args[1]) == len(x_chunk)
 
 
+class TestRetryFailedChunkFeedsAccumulator:
+    """Important: a successfully retried chunk must not be silently
+    dropped once precision-weighted accumulation (_accum_information) has
+    started.
+
+    Regression test: _retry_failed_chunk used to return an ad-hoc
+    EMA-blended params array that the caller only adopted when
+    self._accum_information was still None (i.e. only the very first
+    chunk) -- every later retry's fit was thrown away entirely, never
+    reaching _update_parameters_convergence. The fix returns the raw
+    popt_chunk plus its covariance (via chunk_result["pcov_chunk"]) so the
+    caller can route it through the same accumulator every other
+    successful chunk uses.
+    """
+
+    def test_retry_returns_raw_popt_and_pcov_for_accumulation(self):
+        fitter = LargeDatasetFitter()
+        expected_popt = np.array([2.5, 1.5])
+        expected_pcov = np.diag([0.01, 0.02])
+        fitter.curve_fit.curve_fit = MagicMock(
+            return_value=(expected_popt, expected_pcov),
+        )
+
+        x_chunk = np.linspace(0, 1, 20)
+        y_chunk = 2.5 * x_chunk + 1.5
+
+        def model(x, a, b):
+            return a * x + b
+
+        chunk_result, returned_params = fitter._retry_failed_chunk(
+            f=model,
+            x_chunk=x_chunk,
+            y_chunk=y_chunk,
+            chunk_idx=1,
+            chunk_start_time=0.0,
+            chunk_times=[],
+            current_params=np.array([1.0, 1.0]),
+            initial_error=RuntimeError("initial fit failed"),
+            bounds=(-np.inf, np.inf),
+            method="trf",
+            solver="auto",
+        )
+
+        # Raw popt_chunk, not an EMA blend with current_params -- the
+        # caller now does the (precision-weighted) blending itself.
+        np.testing.assert_array_equal(returned_params, expected_popt)
+        assert "pcov_chunk" in chunk_result
+        np.testing.assert_array_equal(chunk_result["pcov_chunk"], expected_pcov)
+
+
 class TestSVDPseudoInverseNullSpaceHandling:
     """Critical: the SVD Gauss-Newton solve floored small singular values to
     s_threshold and divided by that floor instead of zeroing their inverse

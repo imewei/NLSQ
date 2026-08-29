@@ -1832,7 +1832,14 @@ class LargeDatasetFitter:
                 fun=result_dict.get("fun"),
             )
             result["popt"] = result.x
-            result["pcov"] = result_dict.get("pcov", np.eye(len(result.x)))
+            # Not-estimated convention (used correctly elsewhere in this
+            # file): all-inf, not identity -- an identity here would look
+            # like a spuriously precise finite covariance to any caller
+            # that inspects .pcov without checking .success/whether
+            # result_dict actually carried one.
+            result["pcov"] = result_dict.get(
+                "pcov", np.full((len(result.x), len(result.x)), np.inf)
+            )
 
             self.logger.info(
                 "Streaming fit completed. "
@@ -1849,7 +1856,9 @@ class LargeDatasetFitter:
                 message=f"Streaming fit failed: {e}",
             )
             result["popt"] = result.x
-            result["pcov"] = np.eye(len(result.x))
+            # Not-estimated convention: all-inf, not identity (see comment
+            # on the success-path fallback above).
+            result["pcov"] = np.full((len(result.x), len(result.x)), np.inf)
             return result
 
     @staticmethod
@@ -2134,7 +2143,10 @@ class LargeDatasetFitter:
             **kwargs: Additional curve_fit arguments
 
         Returns:
-            tuple: (chunk_result dict, updated_params or None)
+            tuple: (chunk_result dict, raw retry popt or None). On success,
+            chunk_result also carries "pcov_chunk" so the caller can fold
+            this chunk into its precision-weighted accumulator the same
+            way every other successful chunk does.
         """
         if valid_length is None:
             valid_length = len(x_chunk)
@@ -2146,8 +2158,8 @@ class LargeDatasetFitter:
             chunk_times.append(chunk_duration)
             chunk_result = self._create_chunk_result(
                 chunk_idx=chunk_idx,
-                x_chunk=x_chunk,
-                y_chunk=y_chunk,
+                x_chunk=x_valid,
+                y_chunk=y_valid,
                 chunk_duration=chunk_duration,
                 success=False,
                 error=initial_error,
@@ -2162,7 +2174,7 @@ class LargeDatasetFitter:
             perturbed_params = current_params * (
                 1 + 0.01 * np.random.randn(len(current_params))
             )
-            popt_chunk, _pcov_chunk = self.curve_fit.curve_fit(
+            popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                 f,
                 x_valid,
                 y_valid,
@@ -2173,26 +2185,26 @@ class LargeDatasetFitter:
                 **kwargs,
             )
 
-            # Retry succeeded - use result with lower weight
-            adaptive_lr = 0.1  # Lower weight for retry results
-            updated_params = (
-                1 - adaptive_lr
-            ) * current_params + adaptive_lr * popt_chunk
-
             chunk_duration = time.time() - chunk_start_time
             chunk_times.append(chunk_duration)
 
             chunk_result = self._create_chunk_result(
                 chunk_idx=chunk_idx,
-                x_chunk=x_chunk,
-                y_chunk=y_chunk,
+                x_chunk=x_valid,
+                y_chunk=y_valid,
                 chunk_duration=chunk_duration,
                 success=True,
                 popt_chunk=popt_chunk,
                 is_retry=True,
             )
+            # Stash the retry's own covariance so the caller can fold this
+            # chunk into the same precision-weighted accumulator every
+            # other successful chunk goes through (_update_parameters_
+            # convergence), instead of it being silently dropped once
+            # _accum_information has started accumulating.
+            chunk_result["pcov_chunk"] = pcov_chunk
 
-            return chunk_result, updated_params
+            return chunk_result, popt_chunk
 
         except Exception as retry_e:
             # Retry also failed
@@ -2202,8 +2214,8 @@ class LargeDatasetFitter:
 
             chunk_result = self._create_chunk_result(
                 chunk_idx=chunk_idx,
-                x_chunk=x_chunk,
-                y_chunk=y_chunk,
+                x_chunk=x_valid,
+                y_chunk=y_valid,
                 chunk_duration=chunk_duration,
                 success=False,
                 error=initial_error,
@@ -2438,7 +2450,9 @@ class LargeDatasetFitter:
             result["popt"] = (
                 current_params if current_params is not None else np.ones(2)
             )
-            result["pcov"] = np.eye(len(result["popt"]))
+            # Not-estimated convention: all-inf, not identity (see comment
+            # on the streaming-fit failure fallback above).
+            result["pcov"] = np.full((len(result["popt"]), len(result["popt"])), np.inf)
             return result
 
         # Success - assemble final result
@@ -2614,11 +2628,13 @@ class LargeDatasetFitter:
                     chunk_duration = time.time() - chunk_start_time
                     chunk_times.append(chunk_duration)
 
-                    # Create successful chunk result
+                    # Create successful chunk result. n_points/data_stats
+                    # must reflect the real (valid_length) points, not the
+                    # zero-padded DataChunker bucket.
                     chunk_result = self._create_chunk_result(
                         chunk_idx=chunk_idx,
-                        x_chunk=x_chunk,
-                        y_chunk=y_chunk,
+                        x_chunk=x_valid,
+                        y_chunk=y_valid,
                         chunk_duration=chunk_duration,
                         success=True,
                         popt_chunk=popt_chunk,
@@ -2642,13 +2658,26 @@ class LargeDatasetFitter:
                         valid_length=valid_length,
                         **kwargs,
                     )
-                    # Update params if retry succeeded. Only adopt the retry
-                    # chunk's params outright when we have no accumulated
-                    # information yet; otherwise keep the precision-weighted
-                    # estimate so a single retried chunk cannot clobber the
-                    # full-dataset fit.
-                    if retry_params is not None and self._accum_information is None:
-                        current_params = retry_params
+                    # Fold a successful retry into the same precision-weighted
+                    # accumulator every other successful chunk goes through
+                    # (_update_parameters_convergence), instead of only
+                    # adopting it when _accum_information hasn't started yet
+                    # and silently dropping it for every later chunk.
+                    if retry_params is not None:
+                        (
+                            current_params,
+                            param_history,
+                            convergence_metric,
+                            _should_stop,
+                        ) = self._update_parameters_convergence(
+                            current_params,
+                            retry_params,
+                            chunk_result.get("pcov_chunk"),
+                            param_history,
+                            convergence_metric,
+                            chunk_idx,
+                            stats.n_chunks,
+                        )
 
                 chunk_results.append(chunk_result)
 
@@ -2679,7 +2708,9 @@ class LargeDatasetFitter:
             result["popt"] = (
                 current_params if current_params is not None else np.ones(2)
             )
-            result["pcov"] = np.eye(len(result["popt"]))
+            # Not-estimated convention: all-inf, not identity (see comment
+            # on the streaming-fit failure fallback above).
+            result["pcov"] = np.full((len(result["popt"]), len(result["popt"])), np.inf)
             return result
 
     @contextmanager
