@@ -99,12 +99,15 @@ def log_iteration_async(
     # concrete jax.Array (not a plain int) for JIT-friendly counters, so
     # `isinstance(iteration, int)` alone never throttled those callers;
     # fall back to int() and only skip the check for a traced value, where
-    # the concrete count can't be known.
+    # the concrete count can't be known. Only ConcretizationTypeError is
+    # swallowed here -- a bare TypeError (e.g. iteration=None, or a
+    # multi-element array) means the caller passed a malformed argument and
+    # must surface as a real error, not silently log every iteration.
     if verbose == 1:
         try:
             if int(iteration) % 10 != 0:
                 return
-        except (TypeError, jax.errors.ConcretizationTypeError):
+        except jax.errors.ConcretizationTypeError:
             pass
 
     # Define pure callback function (executed asynchronously on host)

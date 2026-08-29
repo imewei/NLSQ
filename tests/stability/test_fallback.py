@@ -301,6 +301,42 @@ class TestFallbackOrchestratorRescaleDispatch:
         assert result.fallback_strategy_used == "rescale_problem"
         assert len(calls) == 2
 
+    def test_orchestrator_scales_2d_sigma_quadratically(self, monkeypatch):
+        """1-D sigma is a std-dev and scales linearly with y (sigma/y_scale),
+        but a 2-D sigma is a covariance matrix and must scale quadratically
+        (sigma/y_scale**2) under y' = (y - y_offset) / y_scale -- variance
+        scales as the square of a linear transform's factor."""
+        xdata = np.linspace(1e6, 1e6 + 100, 5)
+        true_a, true_c = 2.0, 1.0
+        ydata = true_a * xdata + true_c
+        y_scale = np.ptp(ydata)
+        cov_2d = np.eye(5) * 4.0
+
+        calls = []
+
+        def fake_curve_fit(f, xd, yd, **kw):
+            calls.append(kw)
+            if len(calls) == 1:
+                raise RuntimeError("simulated failure of original-scale fit")
+
+            np.testing.assert_allclose(kw["sigma"], cov_2d / (y_scale**2), rtol=1e-10)
+
+            class FakeResult:
+                x = np.array([true_a, true_c])
+
+            return FakeResult()
+
+        monkeypatch.setattr("nlsq.core.minpack.curve_fit", fake_curve_fit)
+
+        orchestrator = FallbackOrchestrator(
+            strategies=[RescaleProblemStrategy()], max_attempts=5
+        )
+        orchestrator.fit_with_fallback(
+            linear, xdata, ydata, p0=[1.0, 1.0], sigma=cov_2d
+        )
+
+        assert len(calls) == 2
+
 
 class TestFallbackOrchestrator:
     """Test FallbackOrchestrator class."""

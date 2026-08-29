@@ -77,6 +77,29 @@ class TestAsyncLogging:
             log_iteration_async(jnp.array(i), cost, grad_norm, verbose=1)
         assert len(calls) == 2  # iterations 0 and 10 only
 
+    def test_log_iteration_async_surfaces_malformed_iteration(self):
+        """A bare TypeError from int(iteration) -- e.g. a multi-element
+        array or None -- means the caller passed a malformed argument and
+        must propagate as a real error, not be silently swallowed into
+        'log every iteration' alongside the intended traced-value case
+        (jax.errors.ConcretizationTypeError)."""
+        cost = jnp.array(1.0)
+        grad_norm = jnp.array(1.0)
+        with pytest.raises(TypeError):
+            log_iteration_async(jnp.array([1, 2, 3]), cost, grad_norm, verbose=1)
+
+    def test_log_iteration_async_does_not_throttle_traced_iteration(self):
+        """A traced iteration (inside jit) raises ConcretizationTypeError
+        on int(), which IS the intended case to swallow -- verbose=1 must
+        fall through to logging every call rather than raising."""
+
+        @jax.jit
+        def run(i, c, g):
+            log_iteration_async(i, c, g, verbose=1)
+            return i
+
+        run(jnp.array(3), jnp.array(1.0), jnp.array(1.0))
+
 
 class TestTransferProfiling:
     """Test Task 2.6: Transfer profiling infrastructure."""

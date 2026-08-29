@@ -126,6 +126,13 @@ class AppState(QObject):
         Args:
             running: True if fit is in progress
         """
+        if running:
+            # A previous fit_result is about to be superseded. Clear it now
+            # (not just on success) so a re-fit that errors or is aborted
+            # doesn't leave Results/Export showing a now-unrelated result --
+            # PageState.can_access() gates purely on fit_result is not None,
+            # with no regard for fit_running/fit_aborted.
+            self._clear_fit_result()
         self._state.fit_running = running
         if running:
             self.fit_started.emit()

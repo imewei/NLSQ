@@ -249,19 +249,24 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
     """Reconstruct a numpy array from its serialized dict representation."""
     try:
         dtype = np.dtype(obj["dtype"])
-        data = _unsanitize_array_data(obj["data"])
+        raw_data = obj["data"]
         shape = tuple(obj["shape"])
     except KeyError as e:
         raise SafeSerializationError(
             f"Malformed ndarray in serialized data: missing key {e}",
         ) from e
     # Only allow numeric dtypes — object dtype arrays can hold arbitrary Python
-    # objects, defeating the security guarantee of this module
+    # objects, defeating the security guarantee of this module. Reject this
+    # BEFORE unsanitizing: a rejected object-dtype array's "data" may itself
+    # contain legitimate dict elements that happen to look like the
+    # NaN/Inf sentinel shape, which _unsanitize_array_data must not be given
+    # a chance to misinterpret.
     if dtype.kind not in ("b", "i", "u", "f", "c"):
         raise SafeSerializationError(
             f"Refusing to deserialize array with non-numeric dtype "
             f"{dtype!r}. Only numeric dtypes are allowed.",
         )
+    data = _unsanitize_array_data(raw_data)
     # Validate each dimension is a non-negative integer. A zero dimension
     # makes n_elements=0 which bypasses the limit check while allowing
     # an arbitrarily large logical shape through reshape.

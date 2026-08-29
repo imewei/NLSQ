@@ -283,6 +283,18 @@ class UseRobustLossStrategy(FallbackStrategy):
         self.current_index = 0
 
 
+def _rescale_sigma(sigma: Any, y_scale: float) -> np.ndarray:
+    """Rescale a `sigma` uncertainty under y' = (y - y_offset) / y_scale.
+
+    1-D sigma is a std-dev, which scales linearly with y; a 2-D sigma is a
+    covariance matrix, which scales quadratically.
+    """
+    sigma_arr = np.asarray(sigma)
+    if sigma_arr.ndim == 2:
+        return sigma_arr / (y_scale**2)
+    return sigma_arr / y_scale
+
+
 class RescaleProblemStrategy(FallbackStrategy):
     """Rescale data for numerical stability."""
 
@@ -543,8 +555,8 @@ class FallbackOrchestrator:
                         return (_f(x_scaled * _xs + _xo, *params) - _yo) / _ys
 
                     if modified_kwargs.get("sigma") is not None:
-                        modified_kwargs["sigma"] = (
-                            np.asarray(modified_kwargs["sigma"]) / y_scale
+                        modified_kwargs["sigma"] = _rescale_sigma(
+                            modified_kwargs["sigma"], y_scale
                         )
 
                 # Try fit with modified parameters

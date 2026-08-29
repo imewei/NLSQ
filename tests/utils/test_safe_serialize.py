@@ -454,6 +454,29 @@ class TestAdversarialSecurity:
         # Stored as inert string data
         assert result["__class__"] == "subprocess.Popen"
 
+    def test_object_dtype_array_rejected_before_unsanitize_runs(self):
+        """A hand-crafted (or corrupted) checkpoint claiming an object-dtype
+        ndarray whose data contains an arbitrary dict (not the NaN/Inf
+        sentinel shape) must be rejected with the clear 'non-numeric dtype'
+        error -- not have _unsanitize_array_data run on it first, which
+        would raise a confusing 'unrecognized type marker' error instead of
+        surfacing the real problem (object dtype is never allowed). The
+        dtype check must run BEFORE unsanitize is given a chance to
+        misinterpret array elements it was never meant to see."""
+        import json
+
+        payload = json.dumps(
+            {
+                "__nlsq_type__": "ndarray",
+                "dtype": "object",
+                "shape": [1],
+                "data": [{"some_key": "arbitrary_user_dict_data"}],
+            }
+        ).encode()
+
+        with pytest.raises(SafeSerializationError, match="non-numeric dtype"):
+            safe_loads(payload)
+
     def test_rejects_object_with_eval(self):
         """Test that objects claiming eval capability are rejected."""
 
