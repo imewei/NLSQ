@@ -54,3 +54,11 @@ def test_run_config_file_exists_error(tmp_path: Path) -> None:
         monkeypatch.chdir(tmp_path)
         with pytest.raises(FileExistsError, match="already exists"):
             config_module.run_config(workflow=True)
+
+
+def test_run_config_rejects_path_traversal_output(tmp_path: Path) -> None:
+    """--output escaping cwd via '..' or an absolute path must be rejected."""
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="escapes the current directory"):
+            config_module.run_config(workflow=True, output="../evil.yaml")
