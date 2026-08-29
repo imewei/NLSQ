@@ -358,7 +358,7 @@ class TestDefenseLayerTelemetryThreadSafety:
         telemetry = DefenseLayerTelemetry()
         # Kept under DefenseLayerTelemetry's _event_log deque cap (maxlen
         # 1000, an intentional bound -- not the bug under test) so the
-        # get_recent_events() length assertion below is meaningful.
+        # _event_log length assertion below is meaningful.
         n_threads = 8
         calls_per_thread = 100
 
@@ -373,6 +373,4 @@ class TestDefenseLayerTelemetryThreadSafety:
             t.join()
 
         assert telemetry.layer1_warm_start_triggers == n_threads * calls_per_thread
-        assert (
-            len(telemetry.get_recent_events(n=10_000)) == n_threads * calls_per_thread
-        )
+        assert len(telemetry._event_log) == n_threads * calls_per_thread
