@@ -93,11 +93,12 @@ def compute_svd_with_fallback(
         # poison the trust-region step with NaN that never triggers the
         # fallback chain below. Treat non-finite output the same as a raised
         # exception so the next tier gets a chance.
-        if not (
+        all_finite = (
             jnp.all(jnp.isfinite(U))
-            and jnp.all(jnp.isfinite(s))
-            and jnp.all(jnp.isfinite(V))
-        ):
+            & jnp.all(jnp.isfinite(s))
+            & jnp.all(jnp.isfinite(V))
+        )
+        if not bool(all_finite):
             raise FloatingPointError(f"{tier} SVD returned non-finite factors")
         return U, s, V
 

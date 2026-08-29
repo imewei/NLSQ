@@ -347,6 +347,37 @@ class TestProblemAnalysis(unittest.TestCase):
 
         self.assertTrue(analysis["has_bounds"])
 
+    def test_analyze_with_array_bounds_does_not_crash(self):
+        """Multi-element ndarray bounds must not raise ValueError (ambiguous
+        truth value) from `bounds != (-np.inf, np.inf)`-style comparisons."""
+
+        def linear3(x, a, b, c):
+            return a * x**2 + b * x + c
+
+        x = np.linspace(0, 10, 100)
+        y = 2 * x**2 + x + 1
+        p0 = np.array([1.0, 1.0, 1.0])
+        bounds = (np.zeros(3), np.full(3, 10.0))
+
+        analysis = self.selector.analyze_problem(linear3, x, y, p0, bounds=bounds)
+
+        self.assertTrue(analysis["has_bounds"])
+
+    def test_analyze_with_default_array_bounds_reports_no_bounds(self):
+        """All-infinite ndarray bounds should report has_bounds=False."""
+
+        def linear3(x, a, b, c):
+            return a * x**2 + b * x + c
+
+        x = np.linspace(0, 10, 100)
+        y = 2 * x**2 + x + 1
+        p0 = np.array([1.0, 1.0, 1.0])
+        bounds = (np.full(3, -np.inf), np.full(3, np.inf))
+
+        analysis = self.selector.analyze_problem(linear3, x, y, p0, bounds=bounds)
+
+        self.assertFalse(analysis["has_bounds"])
+
     @pytest.mark.serial
     def test_analyze_with_memory_limit(self):
         """Test analysis with memory constraint."""

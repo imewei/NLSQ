@@ -946,7 +946,10 @@ def curve_fit_large(
             fit_kwargs["p0"] = p0
         if sigma is not None:
             fit_kwargs["sigma"] = sigma
-        if bounds != (-float("inf"), float("inf")):
+        _lb, _ub = bounds
+        _lb = np.atleast_1d(np.asarray(_lb, dtype=float))
+        _ub = np.atleast_1d(np.asarray(_ub, dtype=float))
+        if not (np.all(np.isneginf(_lb)) and np.all(np.isposinf(_ub))):
             fit_kwargs["bounds"] = bounds
         if method is not None:
             fit_kwargs["method"] = method
