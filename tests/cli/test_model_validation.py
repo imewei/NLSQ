@@ -578,17 +578,32 @@ system = pydoc.locate("os.system")
 
         assert any("types" in v for v in visitor.violations)
 
-    def test_detects_sys_getframe_bypass(self):
-        """sys._getframe() reaches frame globals without a dunder chain."""
+    def test_detects_sys_module_import(self):
+        """`import sys` alone must be blocked (frame/stack introspection
+        surface)."""
         import ast
 
-        source = "import sys\nframe = sys._getframe()\n"
+        source = "import sys\n"
         tree = ast.parse(source)
 
         visitor = DangerousPatternVisitor()
         visitor.visit(tree)
 
-        assert any("_getframe" in v or "sys" in v.lower() for v in visitor.violations)
+        assert any("sys" in v.lower() for v in visitor.violations)
+
+    def test_detects_getframe_attribute_pattern_independent_of_sys_import(self):
+        """The `_getframe` attribute-pattern fix must be caught on its own,
+        not merely as a side effect of the separate `sys` module block --
+        this source never imports sys, isolating the two."""
+        import ast
+
+        source = "frame = obj._getframe()\n"
+        tree = ast.parse(source)
+
+        visitor = DangerousPatternVisitor()
+        visitor.visit(tree)
+
+        assert any("_getframe" in v for v in visitor.violations)
 
     def test_detects_type_builtin(self):
         """type() reaches the same sandbox-escape surface as __class__."""

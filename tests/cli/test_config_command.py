@@ -62,3 +62,14 @@ def test_run_config_rejects_path_traversal_output(tmp_path: Path) -> None:
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValueError, match="escapes the current directory"):
             config_module.run_config(workflow=True, output="../evil.yaml")
+
+
+def test_run_config_model_rejects_path_traversal_output(tmp_path: Path) -> None:
+    """The custom-model branch's --output guard must reject path traversal
+    too -- it's a separately copy-pasted validate_path() call from the
+    workflow branch above, so a bug specific to this copy would otherwise
+    go untested."""
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="escapes the current directory"):
+            config_module.run_config(model=True, output="../evil.py")
