@@ -1,6 +1,8 @@
 # Documentation Changelog
 
 ## Unreleased
+
+## v0.7.3 (2026-08-29)
 - `/dev-suite:docs update --full` pass: AST-based public-API docstring scan
   (0 real gaps -- all 64 flagged symbols were nested closures, not public
   API) and an automodule/autoclass coverage cross-check against every
@@ -12,8 +14,6 @@
   and the rest of the API reference were confirmed already in sync (no
   stale references to modules removed by the ponytail-audit PR); full
   `sphinx-build -W --keep-going` stays warning-free.
-
-## v0.7.3 (2026-08-29)
 - Fixed a duplicated `[0.7.2]` heading in the root `CHANGELOG.md`, added
   missing entries for #22/#23, and fixed README's `workflow="hpc"` example
   (`checkpoint_dir` alone now raises -- `run_id`/`model_id`/`seed` are
