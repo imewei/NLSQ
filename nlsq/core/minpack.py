@@ -690,7 +690,7 @@ def _fit_with_config(
             f=f,
             xdata=xdata,
             ydata=ydata,
-            p0=np.asarray(p0) if p0 is not None else None,
+            p0=np.asarray(p0) if p0 is not None and not _is_auto_p0(p0) else None,
             bounds=bounds,
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
@@ -704,7 +704,7 @@ def _fit_with_config(
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 
         # Prepare p0
-        if p0 is None:
+        if p0 is None or _is_auto_p0(p0):
             sig = signature(f)
             args = sig.parameters
             if len(args) < 2:
@@ -999,7 +999,7 @@ def _fit_with_preset(  # noqa: C901
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
         # Prepare p0
-        if p0 is None:
+        if p0 is None or _is_auto_p0(p0):
             sig = signature(f)
             args = sig.parameters
             if len(args) < 2:
@@ -1711,7 +1711,7 @@ def _fit_global_multistart(
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
     # Prepare p0
-    if p0 is None:
+    if p0 is None or _is_auto_p0(p0):
         sig = signature(f)
         args = sig.parameters
         n_params = len(args) - 1
@@ -1858,7 +1858,7 @@ def _apply_auto_bounds(
     f: ModelFunction,
     xdata: ArrayLike,
     ydata: ArrayLike,
-    p0: NDArray[np.floating[Any]] | None,
+    p0: NDArray[np.floating[Any]] | Literal["auto"] | None,
     bounds_safety_factor: float,
     kwargs: dict[str, Any],
 ) -> None:
@@ -1875,9 +1875,9 @@ def _apply_auto_bounds(
         Independent variable data.
     ydata : array_like
         Dependent variable data.
-    p0 : NDArray or None
-        Initial parameter guess. If None, one is estimated from the data so
-        that bounds inference still runs.
+    p0 : NDArray, "auto", or None
+        Initial parameter guess. If None or "auto", one is estimated from
+        the data so that bounds inference still runs.
     bounds_safety_factor : float
         Safety multiplier for automatic bounds.
     kwargs : dict

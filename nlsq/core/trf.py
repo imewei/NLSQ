@@ -915,7 +915,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
 
         return result
 
-    def _check_inner_loop_limit(
+    def _maybe_flag_inner_loop_limit(
         self,
         inner_loop_count: int,
         max_inner_iterations: int,
@@ -1171,7 +1171,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             if actual_reduction > 0:
                 break
 
-        termination_status = self._check_inner_loop_limit(
+        termination_status = self._maybe_flag_inner_loop_limit(
             inner_loop_count,
             max_inner_iterations,
             termination_status,
@@ -1664,7 +1664,7 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
                 alpha = min(raw_alpha if math.isfinite(raw_alpha) else 1e30, 1e30)
             Delta = Delta_new
 
-        termination_status = self._check_inner_loop_limit(
+        termination_status = self._maybe_flag_inner_loop_limit(
             inner_loop_count,
             max_inner_iterations,
             termination_status,

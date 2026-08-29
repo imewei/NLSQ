@@ -7,14 +7,23 @@ corresponding source-level explanation of each bug.
 
 import time
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq import curve_fit
+from nlsq import curve_fit, fit
 from nlsq.core.factories import ConfiguredOptimizer, OptimizerConfig
-from nlsq.core.minpack import CurveFit, _apply_auto_bounds, _is_auto_p0
+from nlsq.core.minpack import (
+    CurveFit,
+    _apply_auto_bounds,
+    _fit_global_multistart,
+    _is_auto_p0,
+)
+from nlsq.core.orchestration.data_preprocessor import DataPreprocessor
 from nlsq.core.orchestration.optimization_selector import OptimizationSelector
 from nlsq.core.orchestration.streaming_coordinator import StreamingCoordinator
+from nlsq.core.trf_jit import _seed_lm_alpha
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 
 def _linear(x, a, b):
@@ -212,15 +221,221 @@ class TestFeatureFlagsFalsyOverride:
     """with_override used `x or self.x` for 4 of 5 fields, silently
     discarding falsy-but-valid override values."""
 
-    def test_with_override_accepts_falsy_rollout_percent_style_values(self):
+    def test_with_override_accepts_falsy_rollout_percent(self):
         from nlsq.core.feature_flags import FeatureFlags
 
-        base = FeatureFlags(preprocessor_impl="new")
-        # "old" is a valid, falsy-adjacent-looking string override that the
-        # buggy `x or self.x` pattern would still have accepted (strings are
-        # never falsy here) -- the real regression is float/int-like fields;
-        # rollout_percent=0 is the one field that was already correct before
-        # this fix and serves as the reference behavior the other 4 fields
-        # were brought in line with.
+        base = FeatureFlags(rollout_percent=50)
         overridden = base.with_override(rollout_percent=0)
         assert overridden.rollout_percent == 0
+
+    def test_with_override_does_not_silently_keep_old_value_for_falsy_impl_string(self):
+        # ImplChoice is typed Literal["old","new","auto"] (never falsy) at
+        # the type-check level, but nothing stops a caller from passing an
+        # empty string at runtime. Pre-fix `x or self.x` would silently
+        # discard "" and keep the old value instead of the caller's
+        # override; the fix (`x is not None`) must apply it as given.
+        from nlsq.core.feature_flags import FeatureFlags
+
+        base = FeatureFlags(
+            preprocessor_impl="new",
+            selector_impl="new",
+            covariance_impl="new",
+            streaming_impl="new",
+        )
+        overridden = base.with_override(
+            preprocessor_impl="",
+            selector_impl="",
+            covariance_impl="",
+            streaming_impl="",
+        )
+        assert overridden.preprocessor_impl == ""
+        assert overridden.selector_impl == ""
+        assert overridden.covariance_impl == ""
+        assert overridden.streaming_impl == ""
+
+
+class TestAutoP0RemainingFitSites:
+    """Round-2 finding: the p0="auto" guard was applied at 4-5 call sites in
+    round 1 but missed 3 more identical-pattern sites in fit()'s
+    workflow-config branches (_fit_with_config's HybridStreamingConfig
+    branch, _fit_with_preset's streaming-tier branch,
+    _fit_global_multistart's streaming-strategy branch), each of which
+    crashed the same way: `ValueError: could not convert string to float`
+    from np.atleast_1d("auto") flowing into prepare_bounds()."""
+
+    def test_hybrid_streaming_config_branch_does_not_crash_on_p0_auto(
+        self, linear_data
+    ):
+
+        x, y = linear_data
+        result = fit(_linear, x, y, p0="auto", workflow=HybridStreamingConfig())
+        assert result is not None
+
+    def test_streaming_preset_branch_does_not_crash_on_p0_auto(self, linear_data):
+        from nlsq.core.minpack import _fit_with_preset
+
+        x, y = linear_data
+        # The "streaming"/"hpc_distributed" WORKFLOW_PRESETS entries (tier
+        # STREAMING/STREAMING_CHECKPOINT) are unreachable from the public
+        # fit()/curve_fit() string-workflow API -- both are blocked by
+        # REMOVED_PRESETS before the preset lookup. This branch is
+        # unreachable-but-not-deleted dead code from the public surface, so
+        # it's called directly here to still cover the fix.
+        result = _fit_with_preset(
+            f=_linear,
+            xdata=x,
+            ydata=y,
+            p0="auto",
+            sigma=None,
+            absolute_sigma=False,
+            check_finite=True,
+            bounds=(-np.inf, np.inf),
+            method=None,
+            preset={"tier": "STREAMING", "description": "test"},
+            goal=None,
+            n_points=len(y),
+        )
+        assert result is not None
+
+    def test_global_multistart_streaming_strategy_does_not_crash_on_p0_auto(
+        self, linear_data
+    ):
+
+        x, y = linear_data
+        result = _fit_global_multistart(
+            f=_linear,
+            xdata=x,
+            ydata=y,
+            p0="auto",
+            sigma=None,
+            absolute_sigma=False,
+            check_finite=True,
+            bounds=(-np.inf, np.inf),
+            strategy="streaming",
+            n_starts=2,
+        )
+        assert result is not None
+
+
+class TestMaybeFlagInnerLoopLimit:
+    """Round-2 finding: _maybe_flag_inner_loop_limit (extracted in round 1
+    from duplicated inline code, renamed in round 2 for clarity) was bound
+    onto the test double in test_trf_internal_helpers.py but never actually
+    called by any test. Direct unit coverage of its 3 branches."""
+
+    @staticmethod
+    def _call(
+        inner_loop_count, max_inner_iterations, termination_status, actual_reduction
+    ):
+        import importlib
+
+        trf_module = importlib.import_module("nlsq.core.trf")
+        opt = type("Opt", (), {})()
+        opt.logger = type(
+            "Logger", (), {"warning": staticmethod(lambda *_a, **_k: None)}
+        )()
+        bound = trf_module.TrustRegionReflective._maybe_flag_inner_loop_limit.__get__(
+            opt, trf_module.TrustRegionReflective
+        )
+        return bound(
+            inner_loop_count, max_inner_iterations, termination_status, actual_reduction
+        )
+
+    def test_limit_not_hit_leaves_termination_status_untouched(self):
+        result = self._call(
+            inner_loop_count=5,
+            max_inner_iterations=100,
+            termination_status=None,
+            actual_reduction=-1.0,
+        )
+        assert result is None
+
+    def test_limit_hit_with_no_reduction_flags_minus_three(self):
+        result = self._call(
+            inner_loop_count=100,
+            max_inner_iterations=100,
+            termination_status=None,
+            actual_reduction=-0.5,
+        )
+        assert result == -3
+
+    def test_limit_hit_but_step_already_accepted_does_not_clobber(self):
+        # inner_loop_count can equal max_inner_iterations on the very
+        # iteration that accepts a step -- must not overwrite that success.
+        result = self._call(
+            inner_loop_count=100,
+            max_inner_iterations=100,
+            termination_status=None,
+            actual_reduction=0.5,
+        )
+        assert result is None
+
+    def test_limit_hit_but_real_termination_already_set_does_not_clobber(self):
+        result = self._call(
+            inner_loop_count=100,
+            max_inner_iterations=100,
+            termination_status=1,
+            actual_reduction=-0.5,
+        )
+        assert result == 1
+
+
+class TestSeedLMAlpha:
+    """Round-1 fix: CG/lsmr trust-region solvers' LM damping alpha stayed
+    pinned at 0.0 (INITIAL_LEVENBERG_MARQUARDT_LAMBDA never carries forward
+    for these solvers), silently degrading the "regularized" branch to
+    unregularized Gauss-Newton. Direct numerical test of the extracted
+    _seed_lm_alpha helper (round-2 extraction) plus an end-to-end check that
+    cg/lsmr now agree with the exact solver on a rank-deficient problem."""
+
+    def test_seed_lm_alpha_seeds_when_alpha_unset(self):
+        g_norm = jnp.array(2.0)
+        result = _seed_lm_alpha(g_norm, alpha=0.0, Delta=4.0)
+        assert float(result) == pytest.approx(0.5)  # g_norm / Delta
+
+    def test_seed_lm_alpha_preserves_existing_positive_alpha(self):
+        g_norm = jnp.array(2.0)
+        result = _seed_lm_alpha(g_norm, alpha=1.5, Delta=4.0)
+        assert float(result) == pytest.approx(1.5)
+
+    def test_cg_solver_matches_exact_on_rank_deficient_model(self):
+        # Two parameters that only ever appear as a sum -> rank-deficient
+        # Jacobian, exactly the case LM regularization exists to handle.
+        def redundant(x, a, b):
+            return (a + b) * x
+
+        rng = np.random.default_rng(1)
+        x = np.linspace(0, 5, 30)
+        y = 3.0 * x + rng.normal(scale=1e-3, size=x.shape)
+
+        popt_exact, _ = curve_fit(redundant, x, y, p0=[1.0, 1.0], tr_solver="exact")
+        popt_cg, _ = curve_fit(redundant, x, y, p0=[1.0, 1.0], tr_solver="cg")
+
+        # The sum a+b is well-determined even though a, b individually
+        # aren't -- compare the identifiable quantity, not the raw params.
+        assert (popt_exact[0] + popt_exact[1]) == pytest.approx(
+            popt_cg[0] + popt_cg[1], rel=0.1
+        )
+        assert np.all(np.isfinite(popt_cg))
+
+
+class TestDataPreprocessorSigmaNaNInf:
+    """Round-1 fix: sigma's NaN/Inf values weren't folded into
+    has_nans_removed/has_infs_removed, so a sigma-only NaN/Inf that caused a
+    row to be dropped was mis-reported as "no NaN/Inf removed"."""
+
+    def test_sigma_nan_flags_has_nans_removed(self):
+        x = np.array([0.0, 1.0, 2.0, 3.0])
+        y = np.array([0.0, 1.0, 2.0, 3.0])
+        sigma = np.array([1.0, np.nan, 1.0, 1.0])
+
+        preprocessor = DataPreprocessor()
+        result = preprocessor.preprocess(
+            _linear,
+            x,
+            y,
+            sigma=sigma,
+            check_finite=True,
+            nan_policy="omit",
+        )
+        assert result.has_nans_removed is True
